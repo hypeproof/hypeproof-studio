@@ -733,6 +733,7 @@ export class StartPage {
       return;
     }
     if (msg.type === 'selectActivity') {
+      this.joinLink = undefined; // the learner chose a saved activity instead of the link's class
       this.busy = true;
       try {
         const record = await connections?.candidate(msg.ref);
@@ -854,8 +855,11 @@ export class StartPage {
     if (looksLikeIssuerTokenUnverified(token)) {
       this.error = "강사용 코드입니다. 수강생 참여 코드를 입력하세요."; await this.refresh(); return;
     }
-    // REQ-STUDIO-JOIN-LINK — a code that names another class than the link is refused before it is
-    // sent anywhere. A code whose class cannot be read is left to the Service, as without a link.
+    // REQ-STUDIO-JOIN-LINK — only the form that shows the link's class is constrained by it. A code
+    // from any other form (the learner left the link's form) drops the stale link. On the link's
+    // form, a code that names another class is refused before it is sent anywhere; a code whose
+    // class cannot be read is left to the Service, as without a link.
+    if (this.joinLink && msg.joinClass !== this.joinLink.classId) this.joinLink = undefined;
     const codeClass = this.joinLink ? classOfCode(token) : undefined;
     if (this.joinLink && codeClass && codeClass !== this.joinLink.classId) {
       this.error = JOIN_LINK_COPY.mismatch; await this.refresh(); return;

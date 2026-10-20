@@ -1376,7 +1376,7 @@ handler checks). The class id is the Chalk cohort id: exactly one `class` parame
 `[A-Za-z0-9_-]{1,128}` (the Chalk `#cohort` field pattern); the whole query is capped at 1024
 characters. The link carries no code, token, password or learner identity. It is untrusted input:
 any other parameter (`code=`, `token=`, identity, tracking) and any fragment are ignored, never
-used, and only their names (sanitized, ≤32 characters) are logged. The handler never fetches,
+used, and only their count is logged (no names: a pasted code can sit in the name position). The handler never fetches,
 stores, enters a class, starts a turn or changes a setting. The learner types the code and presses
 코드 확인하기 and then 시작 themselves, through the unchanged REQ-B1/B3 path (preview first, then
 explicit entry).
@@ -1388,14 +1388,19 @@ explicit entry).
   another class (or is another kind of seat), a modal asks first ("지금 AI가 대답하고 있어요." /
   "지금 다른 활동에 연결돼 있어요." + "이 링크의 수업 참여 화면을 열까요?", detail "참여 화면만
   열려요. 참여 코드를 넣고 직접 시작하기 전까지 지금 하던 것은 그대로예요.", action 참여 화면 열기).
-  Closing it changes nothing. Even after 참여 화면 열기, entry still refuses while a turn runs (the
+  Closing it changes nothing. Only one question is open at a time: a link that arrives while it is
+  open (repeated clicks, a slow launch, a page firing the link in a loop) replaces the class it
+  will open and shows no second dialog. Even after 참여 화면 열기, entry still refuses while a turn runs (the
   existing "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요.").
 - **Same class**: a link for the class already stored only says "이미 이 수업에 참여하고 있어요."
 - **Join form**: "참여 링크로 연 수업 <id>" and "링크에는 참여 코드가 들어 있지 않아요. 선생님께 받은
   코드를 직접 입력해 주세요." above the empty code field (type password, focused; 14px+ text).
   A later refresh of the start page does not close the form; 링크 닫기 drops the link. Each press
-  of a link refocuses the form.
-- **Wrong class's code**: a code whose unverified payload names another class (`c`) is refused
+  of a link refocuses the form. Leaving the form by any path (시작 방법 다시 선택, 기존 활동으로
+  돌아가기, choosing a saved activity, a code submitted from any other form) drops the link, so it
+  constrains only the form that shows it together with 링크 닫기.
+- **Wrong class's code**: on the link's form (the webview sends `joinClass` only from there), a
+  code whose unverified payload names another class (`c`) is refused
   before it is sent anywhere: "이 참여 코드는 링크로 연 수업의 코드가 아니에요. 선생님께 받은 코드를
   다시 확인해 주세요." A code whose class cannot be read (not that token shape) is left to the
   Service, as without a link. The Service still decides what a code grants; the unverified read
@@ -1414,11 +1419,13 @@ lookup exists, so the id is shown); "unknown class → neutral start screen" (St
 unknown class from a real one without a code); IME-off for the code field; the code error is
 shown in the card's error area, not directly under the field. Tests:
 `extensions/hypeproof-chat/test/join-link.smoke.mjs` (parse with code=/token=/password=/identity
-ignored and their values never leaving the parser, 13 malformed links, decision, the URI host
-with ask/decline, the real StartPage: class preselected, no fetch, no write, no entry, another
-class's code refused before any Service call, wiring) and `e2e/start-page/join-link.mjs` (built
+ignored and neither values nor names leaving the parser or the log, 13 malformed links, decision,
+the URI host with ask/decline, ten links in a row giving one dialog, the real StartPage: class preselected, no fetch, no write, no entry, another
+class's code refused before any Service call, a code from a form without the link not refused and
+the stale link dropped, wiring) and `e2e/start-page/join-link.mjs` (built
 start page in Chromium at 390 and 1280: class named, code field empty and focused, refresh-stable,
-링크 닫기, re-press). Chalk side: REQ-CHALK-JOIN-LINK in
+링크 닫기, re-press, 시작 방법 다시 선택 and 기존 활동으로 돌아가기 dropping the link, a trial code
+carrying no class). Chalk side: REQ-CHALK-JOIN-LINK in
 [classroom-admin.md](requirements/classroom-admin.md#join-link-20261020).
 
 ## Curriculum runtime proposal — 2026-09-29

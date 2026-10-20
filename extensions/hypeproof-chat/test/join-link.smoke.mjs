@@ -32,10 +32,10 @@ const code = (c) => Buffer.from(JSON.stringify({ c, u: "synthetic-student", role
 
 // ── 1. Parse: the class id is the only thing read ─────────────────────────────────────────────
 {
-  assert.deepEqual(J.parseJoinLink(uri("class=dental-0729"), SCHEME), { kind: "join", classId: "dental-0729", ignored: [] });
+  assert.deepEqual(J.parseJoinLink(uri("class=dental-0729"), SCHEME), { kind: "join", classId: "dental-0729", ignored: 0 });
   const max = "a".repeat(J.CLASS_ID_MAX);
-  assert.deepEqual(J.parseJoinLink(uri(`class=${max}`), SCHEME), { kind: "join", classId: max, ignored: [] }, "positive control: the longest allowed id");
-  assert.deepEqual(J.parseJoinLink(uri("class=A_b-9"), SCHEME), { kind: "join", classId: "A_b-9", ignored: [] });
+  assert.deepEqual(J.parseJoinLink(uri(`class=${max}`), SCHEME), { kind: "join", classId: max, ignored: 0 }, "positive control: the longest allowed id");
+  assert.deepEqual(J.parseJoinLink(uri("class=A_b-9"), SCHEME), { kind: "join", classId: "A_b-9", ignored: 0 });
   // Not a join link: another scheme, another extension, the account return, a near-miss path.
   assert.equal(J.parseJoinLink(uri("class=a", { scheme: "vscode" }), SCHEME).kind, "other");
   assert.equal(J.parseJoinLink(uri("class=a", { authority: "evil.ext" }), SCHEME).kind, "other");
@@ -44,20 +44,22 @@ const code = (c) => Buffer.from(JSON.stringify({ c, u: "synthetic-student", role
   ok("parse: a valid link yields only the class id; other links are not join links");
 }
 {
-  // Credentials and identity in the link are ignored: never returned, never used, only their names noted.
+  // Credentials and identity in the link are ignored: never returned, never used, only counted.
   const secret = "SECRET-VALUE-" + "z".repeat(20);
   const r = J.parseJoinLink(uri(`class=dental-0729&code=${secret}&token=${secret}&password=${secret}&student=kim&utm_source=x`), SCHEME);
   assert.equal(r.kind, "join");
   assert.equal(r.classId, "dental-0729");
-  assert.deepEqual(r.ignored, ["code", "token", "password", "student", "utm_source"]);
+  assert.equal(r.ignored, 5);
   assert.ok(!JSON.stringify(r).includes(secret), "no value of an ignored parameter leaves the parser");
   assert.ok(!JSON.stringify(r).includes("kim"));
   // The class id is not taken from anywhere else (a fragment, a code parameter).
   const f = J.parseJoinLink(uri("class=a", { fragment: "code=" + secret }), SCHEME);
-  assert.equal(f.classId, "a"); assert.deepEqual(f.ignored, ["#fragment"]); assert.ok(!JSON.stringify(f).includes(secret));
-  // A parameter name is noted in a safe spelling only.
-  const weird = J.parseJoinLink(uri("class=a&%3Cscript%3E=1&" + "k".repeat(80) + "=1"), SCHEME);
-  assert.ok(weird.ignored.every((n) => /^[A-Za-z0-9_#?-]{1,32}$/.test(n)), JSON.stringify(weird.ignored));
+  assert.equal(f.classId, "a"); assert.equal(f.ignored, 1); assert.ok(!JSON.stringify(f).includes(secret));
+  // A value written in the parameter-name position never leaves the parser either (F3): only a count.
+  const payload = "eyJjIjoiYSIsInUiOiJzdHVkZW50In0";
+  const named = J.parseJoinLink(uri(`class=a&${payload}.SIG&code%3Dsecretvalue=1`), SCHEME);
+  assert.equal(named.ignored, 2);
+  assert.ok(!JSON.stringify(named).includes(payload.slice(0, 12)) && !JSON.stringify(named).includes("secretvalue"));
   ok("parse: code=/token=/password=/identity parameters are ignored, their values never leave the parser");
 }
 {
@@ -118,9 +120,14 @@ function fakeHost({ activeTurn = false, currentClass, answer = false } = {}) {
   h = fakeHost();
   await J.handleJoinLink(h.host, uri(`class=dental-0729&code=${secret}&token=${secret}`));
   assert.deepEqual(h.opened, ["dental-0729"], "only the class id is handed on");
-  assert.ok(h.logs.some((l) => /code/.test(l) && /token/.test(l)), "the ignored names are logged");
+  assert.deepEqual(h.logs, ["[joinLink] ignored 2 parameter(s)"], "only a count is logged");
   assert.ok(!h.logs.join("\n").includes(secret), "no value is logged");
-  ok("host: code=/token= are ignored, logged by name only, never handed to the join form");
+  // F3 — a value in the name position is not logged either.
+  h = fakeHost();
+  await J.handleJoinLink(h.host, uri(`class=dental-0729&eyJjIjoiYSIsInUiOiJzdHVkZW50In0.SIG&code%3Dsecretvalue=1`));
+  assert.deepEqual(h.logs, ["[joinLink] ignored 2 parameter(s)"]);
+  assert.ok(!/eyJ|secretvalue|codesecret/.test(h.logs.join("\n")), h.logs.join("\n"));
+  ok("host: code=/token= are ignored, only their count is logged, never handed to the join form");
 
   h = fakeHost();
   assert.equal(await J.handleJoinLink(h.host, uri("class=a%2Fb&code=" + secret)), true);
@@ -146,6 +153,35 @@ function fakeHost({ activeTurn = false, currentClass, answer = false } = {}) {
   await J.handleJoinLink(h.host, uri("class=dental-0729"));
   assert.deepEqual(h.opened, []); assert.deepEqual(h.notices, [J.JOIN_LINK_COPY.sameClass]); assert.equal(h.asks.length, 0);
   ok("host: mid-turn or another class asks first (decline = nothing changes); the same class only says so");
+}
+{
+  // F2 — one confirm in flight. Ten links in a row while a turn runs: exactly one dialog; the newest
+  // link replaces the pending target; one open after the learner answers.
+  const h = fakeHost({ activeTurn: true });
+  let answer;
+  h.host.ask = (m, detail, action) => { h.asks.push({ m, detail, action }); return new Promise((r) => { answer = r; }); };
+  const runs = [];
+  for (let i = 0; i < 10; i++) runs.push(J.handleJoinLink(h.host, uri(`class=class-${i}`)));
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(h.asks.length, 1, "exactly one dialog for ten links");
+  assert.deepEqual(h.opened, []);
+  answer(true);
+  await Promise.all(runs);
+  assert.deepEqual(h.opened, ["class-9"], "the newest link is the one opened, once");
+  assert.ok(h.logs.some((l) => /replaced/.test(l)));
+  // Positive control: after the answer, the next link asks again.
+  h.host.ask = async (m, detail, action) => { h.asks.push({ m, detail, action }); return false; };
+  await J.handleJoinLink(h.host, uri("class=later"));
+  assert.equal(h.asks.length, 2); assert.deepEqual(h.opened, ["class-9"]);
+  // Declining the one dialog opens nothing, however many links queued behind it.
+  const d = fakeHost({ currentClass: "other" });
+  let no;
+  d.host.ask = () => { d.asks.push(1); return new Promise((r) => { no = r; }); };
+  const queued = [1, 2, 3].map((i) => J.handleJoinLink(d.host, uri(`class=c${i}`)));
+  await new Promise((r) => setTimeout(r, 0));
+  no(false); await Promise.all(queued);
+  assert.equal(d.asks.length, 1); assert.deepEqual(d.opened, []);
+  ok("host: ten links in a row give one dialog; the newest target wins; declining opens nothing");
 }
 
 // ── 5. The real StartPage: preselect the class, never join by itself ─────────────────────────
@@ -185,21 +221,21 @@ function fakeHost({ activeTurn = false, currentClass, answer = false } = {}) {
   assert.equal(page.joinLink.classId, "dental-0729");
   ok("StartPage: refuses an invalid class id even if a caller skipped the parser");
 
-  // The learner types a code for another class: refused before any Service call.
-  await page.handle({ type: "connectCourse", token: code("other-class") });
+  // The learner types a code for another class on the link's form: refused before any Service call.
+  await page.handle({ type: "connectCourse", token: code("other-class"), joinClass: "dental-0729" });
   assert.equal(fetches, 0, "a code for another class is not sent anywhere");
   assert.equal(last().error, J.JOIN_LINK_COPY.mismatch);
   assert.equal(last().joinLink.classId, "dental-0729"); assert.equal(page.candidate, undefined);
   assert.ok(!JSON.stringify(states).includes(code("other-class")), "the code never goes back to the webview");
   // Positive control: the right class's code takes the ordinary path (preview only).
-  await page.handle({ type: "connectCourse", token: code("dental-0729") });
+  await page.handle({ type: "connectCourse", token: code("dental-0729"), joinClass: "dental-0729" });
   assert.equal(fetches, 1); assert.equal(last().candidate, true); assert.equal(last().error, undefined);
   assert.equal(last().joinLink, undefined, "the link has done its job once the code is confirmed");
   assert.equal(stored, "stored-old"); assert.equal(writes, 0); assert.equal(starts, 0, "still a preview: the learner presses 시작 themselves");
   await page.handle({ type: "cancelCandidate" });
   // A code whose class cannot be read (not this token shape) is left to the Service, as today.
   await page.openJoinLink("dental-0729");
-  await page.handle({ type: "connectCourse", token: "opaque-pass-code" });
+  await page.handle({ type: "connectCourse", token: "opaque-pass-code", joinClass: "dental-0729" });
   assert.equal(fetches, 2); assert.equal(last().candidate, true);
   await page.handle({ type: "cancelCandidate" });
   ok("StartPage: another class's code is refused locally; the linked class's code previews as usual");
@@ -209,6 +245,26 @@ function fakeHost({ activeTurn = false, currentClass, answer = false } = {}) {
   assert.equal(last().joinLink, undefined, "링크 닫기 drops the class");
   assert.equal(page.candidate, undefined);
   ok("StartPage: the learner can drop the link");
+
+  // F1 — the learner left the link's form (시작 방법 다시 선택 → 체험) and submits a trial code from a form
+  // that does not show the link: it is not refused, and the stale link is dropped.
+  const f0 = fetches;
+  await page.openJoinLink("dental-0729");
+  await page.handle({ type: "connectCourse", token: code("trial-cohort") });
+  assert.equal(fetches, f0 + 1, "a code from a form without the link goes to the Service as usual");
+  assert.notEqual(last().error, J.JOIN_LINK_COPY.mismatch);
+  assert.equal(page.joinLink, undefined, "the stale link no longer constrains input");
+  await page.handle({ type: "cancelCandidate" });
+  // A stale form that names another class than the current link is not the link's form either.
+  await page.openJoinLink("dental-0729");
+  await page.handle({ type: "connectCourse", token: code("trial-cohort"), joinClass: "older-class" });
+  assert.equal(fetches, f0 + 2); assert.equal(page.joinLink, undefined);
+  await page.handle({ type: "cancelCandidate" });
+  // Choosing a saved activity drops the link too.
+  await page.openJoinLink("dental-0729");
+  await page.handle({ type: "selectActivity", ref: "missing" });
+  assert.equal(page.joinLink, undefined, "choosing a saved activity drops the link");
+  ok("StartPage: leaving the link's form by any path drops the link; only the link's form is constrained");
 
   stored = code("stored-class");
   assert.equal(await page.currentClassId(), "stored-class");

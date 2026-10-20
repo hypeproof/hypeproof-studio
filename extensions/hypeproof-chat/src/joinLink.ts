@@ -6,7 +6,8 @@
  * learner, who types it into the ordinary join form. The link is untrusted input from any web page
  * or chat, so it may only bring the join form forward with the class named; it never joins, sends,
  * stores or changes a setting. Any other parameter (`code=`, `token=`, identity, tracking) is
- * ignored and only its name is logged.
+ * ignored and only counted: neither its value nor its name is logged, because a pasted code can
+ * sit in the name position.
  *
  * Pure decisions live here; the URI handler in extension.ts and StartPage call them.
  */
@@ -39,10 +40,7 @@ export interface LinkUri { scheme: string; authority: string; path: string; quer
 export type JoinLinkParse =
   | { kind: "other" }
   | { kind: "malformed" }
-  | { kind: "join"; classId: string; ignored: string[] };
-
-/** A parameter name as it may appear in a log line: never a value, never more than 32 safe chars. */
-const safeName = (name: string): string => (name.replace(/[^A-Za-z0-9_-]/g, "") || "?").slice(0, 32);
+  | { kind: "join"; classId: string; ignored: number };
 
 /**
  * Read a join link. `other`: not a join link for this extension (left to the next handler).
@@ -55,13 +53,9 @@ export function parseJoinLink(uri: LinkUri, scheme: string): JoinLinkParse {
   try { query = new URLSearchParams(uri.query); } catch { return { kind: "malformed" }; }
   const classes = query.getAll("class");
   if (classes.length !== 1 || !isClassId(classes[0])) return { kind: "malformed" };
-  const ignored: string[] = [];
-  for (const key of query.keys()) {
-    if (key === "class") continue;
-    const name = safeName(key);
-    if (!ignored.includes(name)) ignored.push(name);
-  }
-  if (uri.fragment) ignored.push("#fragment");
+  let ignored = 0;
+  for (const key of query.keys()) if (key !== "class") ignored++;
+  if (uri.fragment) ignored++;
   return { kind: "join", classId: classes[0], ignored };
 }
 
@@ -99,6 +93,13 @@ export interface JoinLinkHost {
   log?(line: string): void;
 }
 
+/**
+ * One confirm in flight per host. While the learner has not answered, a newer link replaces the
+ * pending target and returns without a second dialog (a slow launch or a page firing the URI in a
+ * loop must not stack modals).
+ */
+const pendingAsk = new WeakMap<JoinLinkHost, { classId: string }>();
+
 /** Handle a URI if it is a join link. Returns false when it is not ours to handle. */
 export async function handleJoinLink(host: JoinLinkHost, uri: LinkUri): Promise<boolean> {
   const parsed = parseJoinLink(uri, host.scheme);
@@ -108,15 +109,27 @@ export async function handleJoinLink(host: JoinLinkHost, uri: LinkUri): Promise<
     host.notify(JOIN_LINK_COPY.malformed);
     return true;
   }
-  if (parsed.ignored.length) host.log?.(`[joinLink] ignored parameters: ${parsed.ignored.join(", ")}`);
-  let currentClass: string | undefined;
-  try { currentClass = await host.currentClass(); } catch { currentClass = undefined; }
-  const decision = joinLinkDecision({ activeTurn: host.activeTurn(), currentClass, linkClass: parsed.classId });
-  if (decision === "same-class") { host.notify(JOIN_LINK_COPY.sameClass); return true; }
-  if (decision === "ask-turn" || decision === "ask-class") {
-    const yes = await host.ask(decision === "ask-turn" ? JOIN_LINK_COPY.askTurn : JOIN_LINK_COPY.askClass, JOIN_LINK_COPY.askDetail, JOIN_LINK_COPY.open);
-    if (!yes) return true;
+  if (parsed.ignored) host.log?.(`[joinLink] ignored ${parsed.ignored} parameter(s)`);
+  const pending = pendingAsk.get(host);
+  if (pending) {
+    pending.classId = parsed.classId;
+    host.log?.("[joinLink] replaced the target of the pending question");
+    return true;
   }
-  await host.open(parsed.classId);
+  // The slot is taken before the first await, so links arriving while this one is decided or asked
+  // only replace its target.
+  const slot = { classId: parsed.classId };
+  pendingAsk.set(host, slot);
+  try {
+    let currentClass: string | undefined;
+    try { currentClass = await host.currentClass(); } catch { currentClass = undefined; }
+    const decision = joinLinkDecision({ activeTurn: host.activeTurn(), currentClass, linkClass: slot.classId });
+    if (decision === "same-class") { host.notify(JOIN_LINK_COPY.sameClass); return true; }
+    if (decision === "ask-turn" || decision === "ask-class") {
+      const yes = await host.ask(decision === "ask-turn" ? JOIN_LINK_COPY.askTurn : JOIN_LINK_COPY.askClass, JOIN_LINK_COPY.askDetail, JOIN_LINK_COPY.open);
+      if (!yes) return true;
+    }
+  } finally { if (pendingAsk.get(host) === slot) pendingAsk.delete(host); }
+  await host.open(slot.classId);
   return true;
 }

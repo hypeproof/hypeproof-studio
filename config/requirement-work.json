@@ -4087,6 +4087,39 @@
         "chalk/src/index.ts"
       ],
       "verification_inputs": []
+    },
+    {
+      "id": "class-join-link",
+      "title": "Chalk class join link opens the Studio join form; the code is never in the link (CGP-SHELL-R-005)",
+      "issue": 2123,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "ids": [
+            "ADM-01"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Review and merge feat/cgp-join-link; then open a Chalk-copied link in an installed Studio (macOS and Windows) during a turn, with another class stored, and with a malformed link, and record the screens.",
+      "design_delta": "Chalk /manage copies hypeproof-studio://hypeproof.hypeproof-chat/join?class=<cohort id> (no code). Studio's single URI handler reads only `class` ([A-Za-z0-9_-]{1,128}), logs only a count of ignored parameters, keeps one confirm in flight, and opens the ordinary join form with the class named; the learner types the code and starts the class themselves.",
+      "positive_control": "A valid link preselects the class with an empty focused code field and no fetch or write; the linked class's code previews as usual; Chalk copies the class-only link (128-character id accepted).",
+      "negative_control": "code=/token=/identity parameters and name-position values never leave the parser or the log; 13 malformed links refused; ten links in a row give one dialog; declining opens nothing; another class's code on the link form is refused before any Service call; leaving the form drops the link; Chalk refuses invalid ids and never adds a code.",
+      "evidence_required": "Studio commit, extension/Chalk test output (join-link.smoke.mjs, chalk/test/join-link.test.mjs, e2e/start-page/join-link.mjs) and screenshots. An installed-app URL dispatch on macOS and Windows is required before completion; the Chromium webview run is not an installed-app result.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/joinLink.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "extensions/hypeproof-chat/src/startPage.ts",
+        "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx",
+        "chalk/src/ui/manage.html"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/join-link.smoke.mjs",
+        "chalk/test/join-link.test.mjs",
+        "e2e/start-page/join-link.mjs"
+      ]
     }
   ]
 }

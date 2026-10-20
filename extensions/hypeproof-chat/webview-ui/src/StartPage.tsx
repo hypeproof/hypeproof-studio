@@ -42,7 +42,10 @@ export function StartPage() {
   const connect = (e: React.FormEvent) => {
     e.preventDefault(); if (!token.trim() || state.checking) return;
     setState(s => ({ ...s, checking: true, error: undefined }));
-    postToHost({ type: "connectCourse", token });
+    // REQ-STUDIO-JOIN-LINK — only the form that shows the link's class says so; the host constrains
+    // nothing else.
+    const joinClass = entry === "classroom" ? state.joinLink?.classId : undefined;
+    postToHost({ type: "connectCourse", token, ...(joinClass ? { joinClass } : {}) });
     // A submitted credential is never retained in the document, VS Code state or storage.
     setToken("");
   };
@@ -89,6 +92,8 @@ export function StartPage() {
   const purchaseTitle = purchase?.stage === "waiting" ? "브라우저에서 결제를 기다리고 있어요" : purchase?.stage === "connecting" ? "이용권을 넣고 있어요" : purchase?.stage === "stopped" ? "구매를 마치지 못했어요" : "어떤 이용권으로 시작할까요?";
   const won = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
   // Leaving keeps a saved order: the host stops waiting and the choice list offers it again.
+  // Leaving the link's form by any path drops the link on the host, so it never constrains another form.
+  const dropJoin = () => { if (state.joinLink) postToHost({ type: "joinLinkDismiss" }); };
   const leavePurchase = () => { postToHost({ type: purchase?.order ? "purchaseHide" : "purchaseCancel" }); setEntry(null); };
   // "GitHub에서 이어하기": only while a code is being confirmed.
   const gh = state.candidate ? state.github : undefined;
@@ -190,7 +195,7 @@ export function StartPage() {
           <button className="studio-choice" disabled={state.checking} onClick={() => choose("classroom")}>수업에 참여하기 <span aria-hidden="true">→</span></button>
           {/* REQ-L12 — a third peer choice, drawn only when the Service sells passes. Chosen by the person; never opened for them. */}
           {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={openPurchase}>이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
-          {state.profile && <button className="studio-text-button" onClick={() => setEditing(false)}>기존 활동으로 돌아가기</button>}
+          {state.profile && <button className="studio-text-button" onClick={() => { dropJoin(); setEditing(false); }}>기존 활동으로 돌아가기</button>}
           {purchase?.order && !purchase.stage && <button className="studio-text-button" disabled={state.checking} onClick={() => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseRetry" }); }}>결제 중인 이용권 이어서 보기 · {purchase.order.label}</button>}
         </div> : <form onSubmit={connect}>
           {joinClass && <div className="studio-join-link" id="join-link-note">
@@ -201,9 +206,9 @@ export function StartPage() {
           <input ref={input} id="course-code" type="password" value={token} onChange={e => setToken(e.target.value)} placeholder="받은 코드를 여기에 붙여넣으세요" autoComplete="off" spellCheck={false} disabled={state.checking} aria-describedby={joinClass ? "join-link-note code-help connection-error" : "code-help connection-error"}/>
           <p id="code-help" className="studio-help">코드는 이 기기에 안전하게 저장됩니다.</p>
           <button className="studio-primary" disabled={state.checking || !token.trim()} type="submit">{state.checking ? "코드 확인 중…" : "코드 확인하기"}<span aria-hidden="true">→</span></button>
-          {state.profile && <button className="studio-text-button" type="button" onClick={() => setEditing(false)}>기존 활동으로 돌아가기</button>}
+          {state.profile && <button className="studio-text-button" type="button" onClick={() => { dropJoin(); setEditing(false); }}>기존 활동으로 돌아가기</button>}
           {joinClass && <button className="studio-text-button" type="button" disabled={state.checking} onClick={() => postToHost({ type: "joinLinkDismiss" })}>링크 닫기</button>}
-          <button className="studio-text-button" type="button" disabled={state.checking} onClick={() => { setEntry(null); setToken(""); }}>{free ? "돌아가기" : "시작 방법 다시 선택"}</button>
+          <button className="studio-text-button" type="button" disabled={state.checking} onClick={() => { dropJoin(); setEntry(null); setToken(""); }}>{free ? "돌아가기" : "시작 방법 다시 선택"}</button>
         </form>}
         {!!state.activities?.length && !state.candidate && <nav aria-label="저장된 활동" className="studio-saved-activities"><h3>저장된 활동</h3>{state.activities.map(a => <button className="studio-text-button" key={a.ref} disabled={state.checking} onClick={() => postToHost({type:"selectActivity",ref:a.ref})}>{activityLabel(a.kind, a.pass, undefined, !!a.free)} · {a.name}<small>{a.workspace}</small></button>)}</nav>}
         {state.legacyConnection && !state.profile && <p className="studio-help">이전 연결은 이 기기에 보관돼 있습니다. 사용할 서버의 참여 코드를 다시 입력해 주세요.</p>}

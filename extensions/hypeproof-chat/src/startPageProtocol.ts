@@ -89,7 +89,8 @@ export type StartRequest =
   | { type: "openLocalReview" }
   | { type: "openStudioFiles" }
   | { type: "openStudioSettings" }
-  | { type: "connectCourse"; token: string }
+  /** `joinClass`: sent only by the join form that shows a join link's class (REQ-STUDIO-JOIN-LINK). */
+  | { type: "connectCourse"; token: string; joinClass?: string }
   | { type: "beginCourse" }
   | { type: "disconnectCourse" }
   | { type: "cancelCandidate" }
