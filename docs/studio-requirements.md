@@ -2038,6 +2038,61 @@ panel draws no list.)
 
 Native app run: NOT RUN.
 
+## Page card after a coach turn (CGP-ART-R-010)
+
+`REQ-STUDIO-PAGE-CARD` (CGP-ART-R-010 / REQ-ART-10 of the ChatGPT desktop study, P1, 2026-10-20,
+scoped by the audit note to the card and its two actions). When a coach turn creates or changes an
+HTML page in the work folder, the chat shows one card under that turn, in personal and classroom
+chat (never on the instructor surface, which takes no restore point):
+
+- **Source of truth.** The card comes from the same turn-end folder comparison as the review bar
+  (REQ-STUDIO-TURN-RESTORE, `endTurnRestore`): files the turn added, then files it changed, whose
+  posix relative path ends in `.html`/`.htm` (any case) with no hidden segment, no `..` and no
+  absolute or drive path (`src/pageCard.ts` `isPagePath`). Deleted pages are not rows. A turn with no
+  page among its changes, or with no changes, gets no card. A stopped or failed turn gets the card for
+  what changed so far, because the comparison runs after a stop too. No restore point (no work
+  folder, a folder too large to record) means no card.
+- **Only files inside the work folder.** Each row is resolved by `src/pageCardHost.ts`
+  `resolvePageInFolder`: the folder is canonicalised with folder consent's `canonicalFolder`, every
+  path segment is checked with lstat and any link is refused (a link to an outside file or folder
+  gives no row), the target must be a regular file, and its real path must stay inside the folder
+  (`isInsideFolder`). A row that fails is dropped when the card is built.
+- **Copy and layout.** Title "AI가 만들거나 고친 페이지"; each row shows the path and "새로 만듦" or
+  "고침", with **열기** and **폴더에서 보기** (aria labels "<path> 열기" / "<path> 폴더에서 보기"), each a
+  44px target with a visible focus ring. At most 3 rows; more pages read "외 N개". No capability
+  labels, scores or evaluation words.
+- **Actions.** The webview posts `pageCardOpen` / `pageCardReveal` with the turn id and path. The
+  host acts only when the turn is a card it issued for the current task, the path is one of that
+  card's rows, and the path still resolves inside the card's folder at press time (a row swapped for
+  a link after the turn is refused). 열기 reads the file and shows it in the Studio preview panel
+  (`PreviewProvider.show` with the page's own folder as base, plus `watchForReload` on that file);
+  it never rewrites `index.html` the way a coach reveal does. 폴더에서 보기 runs `revealFileInOS`. A
+  refused press puts one line on the card: "이 페이지를 열 수 없어요. 작업 폴더 안에 그대로 있는지
+  확인해 주세요."
+- **Placement.** The card is drawn right after the turn's last transcript row (the last
+  non-`pending-` item of the turn's timeline, else the reply id). A card whose row is not in the
+  shown transcript (another task, an older edit version) is not drawn.
+- **Not persisted.** Cards are held in host memory per task (newest 50), re-sent on `ready` and on
+  the panel's `pageCardsRequest`. Nothing new is written to the transcript or to disk, so a window
+  reload or an extension host restart shows no card for earlier turns.
+
+Not built: the thumbnail, page title, short version id and verified state of CGP-ART-R-010 /
+CGP-ART-D-010 (no version ids exist yet; CR-81 verification state is separate work), live-server
+cohorts opening the card's page in the native browser (the card uses the iframe preview for every
+cohort), and cards after a reload. Verification: U (`extensions/hypeproof-chat/test/page-card.smoke.mjs`
+— real temp folder: page change gives the right rows, non-HTML / deleted / missing give no card,
+file and directory links to outside give no row, 3 + 외 N개, the host gate passes open/reveal the real
+path and refuses climbs, absolute paths, links, paths not on the card, another task's card and a row
+swapped for a link after the turn; `extensions/hypeproof-chat/test/page-card.test.tsx` — card copy,
+44px buttons, no capability words, default chat render has no card, then mounted `ChatPanel` in
+personal and classroom chat: the card appears under its turn from `pageCardsState`, 열기 and 폴더에서
+보기 post `pageCardOpen` / `pageCardReveal`, an unknown anchor and the instructor surface draw none;
+`extensions/hypeproof-chat/test/page-card-host.test.mjs` — the real provider on the task-workspace
+harness: a CSS-only turn posts no card but keeps the review bar, a page turn posts one card (a link to
+an outside page is not a row), 열기 reaches the preview with the page's folder as base, 폴더에서 보기
+runs `revealFileInOS` with the real path, climbs, absolute paths and links are refused with the card
+notice, and `pageCardsRequest` re-sends the card). Native app run: NOT RUN.
+
 ## Personal trial interaction coverage (#758)
 
 | ID | Requirement | Verification |

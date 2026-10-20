@@ -10,15 +10,15 @@ const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from
 export async function createTaskHarness(root, onMessage = () => {}, { profile = null, turnTools, configExtras = {}, beforeReadDir } = {}) {
   const opened = [], posts = [], state = new Map(), module = { exports: {} };
   const browserState = { failOpen: false, failReturn: false, tabs: [], commands: [] };
-  const vscode = { ViewColumn: { One: 1, Two: 2, Beside: 2 },
-    commands: { executeCommand: async name => { if (browserState.failReturn) throw Error('Synthetic focus failure'); browserState.commands.push(name); } },
+  const vscode = { ViewColumn: { One: 1, Two: 2, Beside: 2 }, Uri: { file: fsPath => ({ fsPath, scheme: 'file' }) },
+    commands: { executeCommand: async (name, ...args) => { if (browserState.failReturn) throw Error('Synthetic focus failure'); browserState.commands.push(name); browserState.commandArgs = [...(browserState.commandArgs ?? []), [name, ...args]]; } },
     window: { browserTabs: browserState.tabs, openBrowserTab: async (url, options) => {
       if (browserState.beforeOpen) await browserState.beforeOpen();
       if (browserState.failOpen) throw Error('Synthetic browser open failure');
       opened.push({ url, options });
       const tab = { url, title: new URL(url).hostname, close: async () => { const at = browserState.tabs.indexOf(tab); if (at >= 0) browserState.tabs.splice(at, 1); } };
       browserState.tabs.push(tab); return tab;
-    } }, workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) } };
+    } }, workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }), fs: { readFile: async uri => require('node:fs/promises').readFile(uri.fsPath) } } };
   vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : id === 'node:fs/promises' && beforeReadDir ? { ...require(id), readdir: async (...args) => { await beforeReadDir(...args); return require(id).readdir(...args); } } : require(id), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder, crypto: webcrypto });
   const { ChatPanelProvider, ActivityConnections, TaskWorkspaceStore } = module.exports;
   const activity = { id: 'synthetic-personal-a', workspace: root, kind: 'personal', name: '내 작업' };

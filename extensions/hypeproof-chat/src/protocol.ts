@@ -673,6 +673,10 @@ export type WebviewMessage = (
   | { type: "turnReviewClose"; turnId: string }
   // REQ-STUDIO-ARTIFACT-PROVENANCE — the 작업 자료 panel asks for the work folder's provenance list.
   | { type: "artifactProvenanceRequest" }
+  // REQ-STUDIO-PAGE-CARD — a press on a page card row; the host acts only on a row of a card it issued, inside the work folder.
+  | { type: "pageCardsRequest" }
+  | { type: "pageCardOpen"; turnId: string; path: string }
+  | { type: "pageCardReveal"; turnId: string; path: string }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
@@ -760,6 +764,8 @@ export type HostMessage = (
   | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — one label per work-folder file, from recorded events only; null when there is no folder. */
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
+  /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
+  | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
   | { type: "history"; messages: ChatMessage[] }
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — first saved message the next model call still sends, when older ones are clamped. */
