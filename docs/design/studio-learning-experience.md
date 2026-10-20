@@ -273,7 +273,15 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-line: #35483A;            /* start.css --studio-line · 장식 구분선 전용 */
   --hp-control-line: #748F79;    /* 필수 컨트롤 경계(버튼·입력) · DES-11 3:1 */
   --hp-muted: #ACB9A5;           /* start.css --studio-muted · AI 설명, 보조 문구 */
+  /* 포커스 링 하나(CGP-DS-R-017). 웹뷰 바탕은 VS Code 테마를 따르므로 테마의 focusBorder를 쓴다.
+     fallback은 HypeProof Studio 테마의 focusBorder와 같은 lime */
+  --hp-ring: var(--vscode-focusBorder, #D5F279);
+  /* 입력란 placeholder(CGP-DS-R-019). 테마 설명 글자 70% + 입력 글자 30%. opacity를 쓰지 않는다 */
+  --hp-placeholder: color-mix(in srgb, var(--vscode-descriptionForeground, #ACB9A5) 70%, var(--vscode-input-foreground, #F2F4E8));
 }
+/* 자기 바탕을 HP 토큰으로 칠하는 어두운 면: 테마와 상관없이 lime 링, 자기 바탕을 칠한 입력란은 --hp-muted */
+.studio-start, .studio-disconnected, .hp-mission { --hp-ring: var(--hp-accent); }
+.studio-start, .studio-disconnected, .hp-surface { --hp-placeholder: var(--hp-muted); }
 [data-surface="growth"], .hp-reflection {
   --hp-bg: var(--hp-paper);
   --hp-panel: #FFFFFF;
@@ -281,6 +289,13 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-muted: #4B5A4F;
   --hp-line: #D7DDD2;
   --hp-control-line: #76837A;
+  --hp-ring: #4D6B12;
+  --hp-placeholder: #4B5A4F;
+}
+/* 모든 포커스 가능한 컨트롤의 기본 링. VS Code 웹뷰 기본 스타일의
+   `a/input/select/textarea:focus { outline: 1px … ; outline-offset: -1px }`보다 뒤에 오고 구체성이 같거나 높다 */
+:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--hp-ring); outline-offset: 2px;
 }
 ```
 
@@ -307,6 +322,8 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
 | 학생 글이 AI 글보다 위(SX-53) | `.hp-student-text`: `--hp-ink`, 16px, 좌측 3px `--hp-accent` 선, 라벨 "내가 쓴 것". `.hp-ai-text`: `--hp-muted`, 14px, 라벨 "AI가 만든 것". 같은 블록에 둘이 있으면 학생 글이 먼저 온다 |
 | 작업 화면은 저대비, 회고는 Paper(SX-54) | 작업 중 표면은 `--hp-bg`/`--hp-panel`에 `--hp-ink` 본문, 강조는 accent 한 곳. E와 F는 `data-surface="growth"` 토큰으로 Paper 전환 |
 | 실제/AI 예시 라벨·색 분리(SX-12) | 외부 반응 인용은 `--hp-ink` + "실제 반응", AI 예시는 `--hp-muted` + "AI 예시". 색이 같아도 라벨이 갈린다 |
+| 포커스 링 하나(CGP-DS-R-017, DES-06/11) | 포커스를 받는 모든 컨트롤은 `outline: 2px solid var(--hp-ring); outline-offset: 2px`. 스크롤 목록 안의 촘촘한 행(`.tw-task-list`, `.tw-source-list`)만 `-2px` 안쪽 링. `outline: none`은 같은 요소의 `:focus-visible` 규칙이나 조상의 `:focus-within` 링이 있을 때만 쓴다. 예외는 프로그램으로 포커스를 옮기는 제목(`.cp-preview h3`, `tabIndex=-1`) 하나 |
+| placeholder 4.5:1(CGP-DS-R-019, DES-11) | 모든 `::placeholder`는 `color: var(--hp-placeholder)`, opacity를 낮추지 않는다. 링은 컨트롤 밖 2px 틈 너머 바탕 위에 그려지므로 링 대비는 그 바탕과 잰다 |
 
 대비. 상대 휘도로 계산한 근사값이며 구현 시 검사 도구로 다시 확인한다.
 
@@ -323,6 +340,14 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
 | Line(#35483A) on Deep forest / Panel | 1.75:1 / 1.48:1 | 장식 구분선만. 버튼·입력 경계로 쓰지 않는다(DES-11) |
 | Control line(#748F79) on Deep forest / Panel | 4.9:1 / 4.1:1 | 필수 컨트롤 경계 |
 | Control line on Paper(#76837A) on Paper / White | 3.6:1 / 4.0:1 | 필수 컨트롤 경계 |
+| Ring(#D5F279, `--hp-accent`) on Deep forest / Panel / 시작 화면 그라데이션(#1B271B) | 13.8:1 / 11.6:1 / 12.4:1 | HP 어두운 면의 포커스 링 |
+| Ring fallback(#D5F279) on HypeProof Studio 테마 sideBar·input(#18231C) / editor(#151D19) | 13.0:1 / 13.8:1 | 테마 변수가 없을 때도 같은 값 |
+| Ring on Paper(#4D6B12) on Paper / White | 5.6:1 / 6.1:1 | 회고·보고서 면의 포커스 링 |
+| 테마 focusBorder on sideBar / editor — Dark Modern #0078D4 · Light Modern #005FB8 · Dark+ #007FD4 · Light+ #0090F1 · HC Dark #F38518 · HC Light #006BBD · 2026 Dark #3994BC(70%) · 2026 Light #0069CC | 3.9/3.6 · 5.9/6.3 · 3.6/4.0 · 3.0/3.4 · 8.2/8.2 · 5.5/5.5 · 3.2/3.3 · 5.2/5.4 | VS Code 기본 테마의 값. 다른 테마는 그 테마가 책임진다 |
+| Placeholder on HP 입력란 — `--hp-muted` on Deep forest / 연결 입력(#1B1E1A) | 8.4:1 / 8.2:1 | `.hp-surface`, 시작 화면 |
+| Placeholder on Paper(#4B5A4F) on Paper / White | 6.7:1 / 7.3:1 | Paper 면 입력란 |
+| `--hp-placeholder` 혼합 on 테마 input 바탕 — HypeProof Studio · Dark Modern · Light Modern · Dark+ · Light+ · HC Dark · HC Light · 2026 Dark · 2026 Light | 9.6 · 5.7 · 11.2 · 5.0 · 5.3 · 12.8 · 7.3 · 6.3 · 8.5 :1 | 개인 대화·수업 대화 입력란. 가장 낮은 Dark+도 4.5:1 위 |
+| `--hp-placeholder` fallback(#C1CBB9) on fallback 입력 바탕(#292D33 / #2A2D2E / #1E1E1E) | 8.2 / 8.3 / 9.9 :1 | 테마 변수가 없는 브라우저 렌더 |
 
 기존 스타일 이행:
 

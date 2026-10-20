@@ -102,6 +102,42 @@ start-page control whose literal border fails 3:1 on its own background. Not yet
 personal-chat `--tw-line` family (fallback #34383e) and legacy `--vscode-*` fallbacks in
 `styles.css`; tracked as the next DES-11 slice.
 
+`REQ-STUDIO-FOCUS-AND-PLACEHOLDER` (CGP-DS-R-017 / REQ-CGP-DS-18 and CGP-DS-R-019 /
+REQ-CGP-DS-21 + REQ-CGP-DS-42, 2026-10-20), extending DES-06 and DES-11 for every chat-webview
+stylesheet (`webview-ui/src/*.css`: chat panel, personal chat detail, task workspace, citation
+preview, start page, local review). Focus: one token, `--hp-ring`, drawn as `outline: 2px solid
+var(--hp-ring); outline-offset: 2px` on `:focus-visible` (inputs may use `:focus`, which matches
+the same moments); only tight rows inside the scrolling task and source lists use a -2px inset.
+A baseline in `tokens.css` covers every focusable element and replaces VS Code's injected webview
+default (`a/input/select/textarea:focus`, 1px, -1px offset). `--hp-ring` is
+`var(--vscode-focusBorder, #D5F279)` on theme-following surfaces, `--hp-accent` #D5F279 on
+surfaces that paint their own HP dark background (start page, mission header: 13.8:1 on
+`--hp-bg`, 11.6:1 on `--hp-panel`, 12.4:1 on the start gradient) and #4D6B12 on Paper (5.6:1,
+6.1:1 on white). Measured against the surface around the control (the 2px offset leaves a gap of
+that surface): HypeProof Studio theme 13.0:1, and VS Code's default themes from 3.0:1 (Light+ on
+its side bar) to 8.2:1; the fallback #D5F279 is at least 12.4:1 on every literal surface fallback.
+`outline: none` is allowed only with a `--hp-ring` replacement on the same element or an
+ancestor `:focus-within` (the personal composer), plus one programmatic focus target that is not
+a control (`.cp-preview h3`, `tabIndex=-1`). Placeholder: every `::placeholder` rule uses
+`--hp-placeholder` at opacity 1, never a lowered opacity. On theme-following fields it is
+`color-mix(in srgb, var(--vscode-descriptionForeground, #ACB9A5) 70%, var(--vscode-input-foreground,
+#F2F4E8))`: 9.6:1 in the HypeProof Studio theme and at least 5.0:1 (Dark+) in VS Code's default
+themes, where plain `descriptionForeground` would be 4.3:1 in Dark+ and the theme's own
+`input.placeholderForeground` 2.3:1 in 2026 Dark; fallback #C1CBB9 at least 8.2:1. Fields that
+paint their own HP background use `--hp-muted` (8.4:1 on `--hp-bg`, 8.2:1 on the start page's
+token field) and Paper uses #4B5A4F (6.7:1, 7.3:1 on white). This covers the personal composer,
+the classroom composer (which used the browser default until now), the verdict note, the lesson
+criterion/decision fields and the start page token field. Values are recorded in
+`docs/design/studio-learning-experience.md` §디자인 시스템. Test:
+`test/focus-placeholder.smoke.mjs` computes the ratios from `tokens.css`, the shipped theme
+`media/hypeproof-theme.json` and a recorded table of VS Code default themes (re-derived from
+`vscodium-base` theme-defaults when it is checked out), rejects any focus rule that is not the
+token ring, any outline removal without a replacement, any placeholder rule with opacity or a
+colour other than the token, and any placeholder rule it has not measured, with negative controls.
+Not covered: Chalk pages, VS Code's own chrome and native widgets, third-party themes (the ring
+and placeholder follow the theme's own colours), the HP rail cards drawn with `--hp-ink` on the
+theme background under non-HP themes, and a recorded keyboard walk in the built app.
+
 CGP-DS-R-015 (2026-10-19), extending CP-R1's "disabled under reduced motion": an explicit
 preference wins over the OS default. With VS Code's `workbench.reduceMotion` set to "on", every
 Studio webview (chat panel, start page, local review) renders with `data-reduced-motion="true"`

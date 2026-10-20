@@ -1,0 +1,278 @@
+// CGP-DS-R-017 / CGP-DS-R-019 (REQ-STUDIO-FOCUS-AND-PLACEHOLDER) — one focus ring and readable
+// placeholders across the chat webview CSS, measured from tokens.css.
+//   node --experimental-strip-types test/focus-placeholder.smoke.mjs
+//
+// 1. Every focus rule in webview-ui/src/*.css draws `2px solid var(--hp-ring)` with a 2px offset
+//    (-2px only inside the tight scrolling rows listed below), and nothing removes an outline
+//    without a ring replacement.
+// 2. Every `::placeholder` rule uses `var(--hp-placeholder)` and never lowers opacity.
+// 3. The ring is >=3:1 and the placeholder >=4.5:1 on the surfaces they sit on: HP dark, Paper,
+//    the HypeProof Studio theme, VS Code's default themes, and the CSS fallbacks.
+import assert from "node:assert/strict";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+
+const SRC = new URL("../webview-ui/src/", import.meta.url);
+const read = (f) => readFileSync(new URL(f, SRC), "utf8");
+const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
+
+// ---------- colour maths (WCAG relative luminance; color-mix in srgb) ----------
+const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const alpha = (hex) => (hex.length === 9 ? parseInt(hex.slice(7), 16) / 255 : 1);
+const toHex = (c) => "#" + c.map((n) => Math.round(n).toString(16).padStart(2, "0")).join("").toUpperCase();
+const mix = (a, b, p) => { const [x, y] = [rgb(a), rgb(b)]; return toHex(x.map((v, i) => v * p + y[i] * (1 - p))); };
+// A translucent theme colour is what it looks like over the surface it is painted on.
+const flat = (hex, under) => (alpha(hex) === 1 ? hex.slice(0, 7).toUpperCase() : mix(hex.slice(0, 7), under, alpha(hex)));
+const lum = (hex) => {
+  const c = rgb(hex).map((n) => n / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const meets = (fg, bg, min) => ratio(fg, bg) >= min;
+
+// ---------- tokens ----------
+const tokensRaw = read("tokens.css");
+const tokens = strip(tokensRaw);
+const [rootBlock, paperBlock] = tokens.split('[data-surface="growth"]');
+const decl = (block, name) => new RegExp(`--hp-${name}:\\s*([^;]+);`).exec(block)?.[1].trim();
+const hex = (block, name) => /^#[0-9A-Fa-f]{6}$/.exec(decl(block, name) ?? "")?.[0];
+const HP = { bg: hex(rootBlock, "bg"), panel: hex(rootBlock, "panel"), accent: hex(rootBlock, "accent"), muted: hex(rootBlock, "muted"), line: hex(rootBlock, "line"), paper: hex(rootBlock, "paper") };
+const PAPER = { bg: HP.paper, panel: hex(paperBlock, "panel"), ring: hex(paperBlock, "ring"), placeholder: hex(paperBlock, "placeholder") };
+
+const ringDecl = /^var\(--vscode-focusBorder,\s*(#[0-9A-Fa-f]{6})\)$/.exec(decl(rootBlock, "ring") ?? "");
+assert.ok(ringDecl, `:root --hp-ring is the theme focusBorder with a literal fallback, got "${decl(rootBlock, "ring")}"`);
+const RING_FALLBACK = ringDecl[1];
+const phDecl = /^color-mix\(in srgb,\s*var\(--vscode-descriptionForeground,\s*(#[0-9A-Fa-f]{6})\)\s+(\d+)%,\s*var\(--vscode-input-foreground,\s*(#[0-9A-Fa-f]{6})\)\)$/.exec(decl(rootBlock, "placeholder") ?? "");
+assert.ok(phDecl, `:root --hp-placeholder mixes descriptionForeground into input-foreground, got "${decl(rootBlock, "placeholder")}"`);
+const PH = { descFallback: phDecl[1], share: Number(phDecl[2]) / 100, inFgFallback: phDecl[3] };
+const placeholderOn = (desc, inFg, input, share = PH.share) => mix(flat(desc, input), flat(inFg, input), share);
+assert.ok(PAPER.ring && PAPER.placeholder && PAPER.panel, "Paper surface defines --hp-ring and --hp-placeholder as literals");
+
+// Surfaces that paint their own HP background fix the token to an HP value.
+const scopeOf = (value) => {
+  const m = [...tokens.matchAll(/([^{}]+)\{([^{}]*)\}/g)].find(([, , body]) => body.replace(/\s+/g, "").includes(value));
+  return m ? m[1].split(",").map((s) => s.trim()) : [];
+};
+const limeScope = scopeOf("--hp-ring:var(--hp-accent)");
+const mutedScope = scopeOf("--hp-placeholder:var(--hp-muted)");
+assert.ok(limeScope.includes(".studio-start") && limeScope.includes(".hp-mission"), `lime ring scope: ${limeScope}`);
+assert.ok(mutedScope.includes(".hp-surface") && mutedScope.includes(".studio-start"), `muted placeholder scope: ${mutedScope}`);
+
+// The design doc is the canonical source (tokens.css header): every new declaration is recorded there.
+const doc = readFileSync(new URL("../../../docs/design/studio-learning-experience.md", import.meta.url), "utf8").replace(/\s+/g, " ");
+for (const [block, name] of [[rootBlock, "ring"], [rootBlock, "placeholder"], [paperBlock, "ring"], [paperBlock, "placeholder"]]) {
+  const line = `--hp-${name}: ${decl(block, name)};`.replace(/\s+/g, " ");
+  assert.ok(doc.includes(line), `design doc §디자인 시스템 records "${line}"`);
+}
+
+// ---------- themes ----------
+// The default theme ships with the extension; read it, never copy it.
+const studioTheme = JSON.parse(readFileSync(new URL("../media/hypeproof-theme.json", import.meta.url), "utf8")).colors;
+// VS Code default themes (vscode extensions/theme-defaults/themes/*.json, include chains resolved)
+// and, where a theme leaves a key out, the colour registry defaults
+// (src/vs/platform/theme/common/colors/{baseColors,inputColors}.ts, src/vs/workbench/common/theme.ts):
+//   foreground        dark #CCCCCC  light #616161  hcDark #FFFFFF  hcLight #292929
+//   focusBorder       dark #007FD4  light #0090F1  hcDark #F38518  hcLight #006BBD
+//   descriptionForeground  light #717171, otherwise foreground at 70% (B3)
+//   input.background  dark #3C3C3C  light #FFFFFF  hcDark #000000  hcLight #FFFFFF
+//   input.foreground  = foreground;  sideBar.background dark #252526  light #F3F3F3
+const THEMES = [
+  { name: "HypeProof Studio", kind: "dark", side: studioTheme["sideBar.background"], editor: studioTheme["editor.background"], input: studioTheme["input.background"], focus: studioTheme.focusBorder, desc: studioTheme.descriptionForeground ?? `${studioTheme.foreground}B3`, inFg: studioTheme["input.foreground"] ?? studioTheme.foreground },
+  { name: "Dark Modern", kind: "dark", side: "#181818", editor: "#1F1F1F", input: "#313131", focus: "#0078D4", desc: "#9D9D9D", inFg: "#CCCCCC" },
+  { name: "Light Modern", kind: "light", side: "#F8F8F8", editor: "#FFFFFF", input: "#FFFFFF", focus: "#005FB8", desc: "#3B3B3B", inFg: "#3B3B3B" },
+  { name: "Dark+", kind: "dark", side: "#252526", editor: "#1E1E1E", input: "#3C3C3C", focus: "#007FD4", desc: "#CCCCCCB3", inFg: "#CCCCCC" },
+  { name: "Light+", kind: "light", side: "#F3F3F3", editor: "#FFFFFF", input: "#FFFFFF", focus: "#0090F1", desc: "#717171", inFg: "#616161" },
+  { name: "HC Dark", kind: "hcDark", side: "#000000", editor: "#000000", input: "#000000", focus: "#F38518", desc: "#FFFFFFB3", inFg: "#FFFFFF" },
+  { name: "HC Light", kind: "hcLight", side: "#FFFFFF", editor: "#FFFFFF", input: "#FFFFFF", focus: "#006BBD", desc: "#292929B3", inFg: "#292929" },
+  { name: "2026 Dark", kind: "dark", side: "#191A1B", editor: "#121314", input: "#191A1B", focus: "#3994BCB3", desc: "#8C8C8C", inFg: "#BFBFBF" },
+  { name: "2026 Light", kind: "light", side: "#FAFAFD", editor: "#FFFFFF", input: "#FFFFFF", focus: "#0069CCFF", desc: "#606060", inFg: "#202020" },
+];
+// When the vscodium-base submodule is checked out (or VSCODE_THEME_DEFAULTS_DIR points at a copy), re-derive the explicit theme keys so the table cannot drift.
+const THEME_DIR = process.env.VSCODE_THEME_DEFAULTS_DIR
+  ? new URL(`file://${process.env.VSCODE_THEME_DEFAULTS_DIR.replace(/\/?$/, "/")}`)
+  : new URL("../../../vscodium-base/vscode/extensions/theme-defaults/themes/", import.meta.url);
+const THEME_FILES = { "Dark Modern": "dark_modern.json", "Light Modern": "light_modern.json", "Dark+": "dark_plus.json", "Light+": "light_plus.json", "HC Dark": "hc_black.json", "HC Light": "hc_light.json", "2026 Dark": "2026-dark.json", "2026 Light": "2026-light.json" };
+if (existsSync(new URL("dark_modern.json", THEME_DIR))) {
+  // Theme files are JSONC: drop // and /* */ comments outside strings, then trailing commas.
+  const jsonc = (text) => {
+    let out = "", str = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (str) { out += c; if (c === "\\") out += text[++i]; else if (c === '"') str = false; continue; }
+      if (c === '"') { str = true; out += c; }
+      else if (c === "/" && text[i + 1] === "/") { while (i < text.length && text[i] !== "\n") i++; out += "\n"; }
+      else if (c === "/" && text[i + 1] === "*") { i = text.indexOf("*/", i + 2) + 1; }
+      else out += c;
+    }
+    return JSON.parse(out.replace(/,(\s*[}\]])/g, "$1"));
+  };
+  const load = (url) => {
+    const j = jsonc(readFileSync(url, "utf8"));
+    return { ...(j.include ? load(new URL(j.include, url)) : {}), ...(j.colors ?? {}) };
+  };
+  const KEYS = { side: "sideBar.background", editor: "editor.background", input: "input.background", focus: "focusBorder", desc: "descriptionForeground", inFg: "input.foreground" };
+  for (const t of THEMES.slice(1)) {
+    const c = load(new URL(THEME_FILES[t.name], THEME_DIR));
+    for (const [k, key] of Object.entries(KEYS)) if (c[key]) assert.equal(t[k].toUpperCase(), c[key].toUpperCase(), `${t.name} ${key} matches theme-defaults`);
+  }
+  console.log("  theme table re-derived from vscodium-base theme-defaults");
+} else console.log("  vscodium-base not checked out: theme table taken as recorded (sources in the comment above)");
+
+// ---------- ratios ----------
+const rows = [];
+const need = (label, fg, bg, min) => { rows.push([label, fg, bg, ratio(fg, bg).toFixed(2)]); assert.ok(meets(fg, bg, min), `${label}: ${fg} on ${bg} is ${ratio(fg, bg).toFixed(2)}:1 < ${min}:1`); };
+
+// Ring — HP dark surfaces (lime scope), including the start page's radial highlight.
+const startCss = strip(read("start.css"));
+const gradient = /radial-gradient\([^,]*,\s*(#[0-9A-Fa-f]{8})/.exec(startCss)?.[1];
+assert.ok(gradient, "start page gradient colour found");
+for (const [label, bg] of [["--hp-bg", HP.bg], ["--hp-panel", HP.panel], ["start gradient", flat(gradient, HP.bg)]]) need(`ring (lime) on ${label}`, HP.accent, bg, 3);
+assert.match(strip(read("styles.css")), /\.hp-mission\s*\{[^}]*background:\s*var\(--hp-panel\)/, "the lime-ring scope .hp-mission paints --hp-panel itself");
+// Ring — Paper.
+need("ring on Paper", PAPER.ring, PAPER.bg, 3);
+need("ring on Paper white panel", PAPER.ring, PAPER.panel, 3);
+// Ring — theme-following surfaces: each theme's focusBorder on the surfaces the webview paints with it.
+// The 2px offset leaves a gap of that surface between control and ring, so the surface is the adjacent colour.
+for (const t of THEMES) for (const s of ["side", "editor"]) need(`ring ${t.name} on ${s}`, flat(t.focus, t[s]), t[s], 3);
+// Ring — fallback when no --vscode-* variable is set: every literal surface fallback the theme-following CSS uses.
+const surfaceFallbacks = new Set();
+for (const f of ["styles.css", "taskWorkspace.css"]) {
+  for (const m of strip(read(f)).matchAll(/--vscode-(?:sideBar|editor)-background,\s*(#[0-9A-Fa-f]{6})\)/g)) surfaceFallbacks.add(m[1].toUpperCase());
+}
+assert.ok(surfaceFallbacks.size >= 3, `surface fallbacks found: ${[...surfaceFallbacks]}`);
+for (const bg of surfaceFallbacks) need("ring fallback on fallback surface", RING_FALLBACK, bg, 3);
+
+// Placeholder — every rule, against the field background it is drawn on.
+const placeholderToken = {
+  theme: (t) => placeholderOn(t.desc, t.inFg, t.input),
+  fallback: (input) => placeholderOn(PH.descFallback, PH.inFgFallback, input),
+};
+for (const t of THEMES) need(`placeholder ${t.name} on input`, placeholderToken.theme(t), t.input, 4.5);
+need("placeholder (--hp-muted) on --hp-bg field", HP.muted, HP.bg, 4.5);
+need("placeholder on Paper", PAPER.placeholder, PAPER.bg, 4.5);
+need("placeholder on Paper white", PAPER.placeholder, PAPER.panel, 4.5);
+
+// ---------- CSS scan ----------
+const RING = "2px solid var(--hp-ring)";
+const INSET_OK = [".tw-task-list", ".tw-source-list"]; // tight rows in scrolling lists
+// Programmatic focus targets (tabIndex=-1 headings), not controls: no ring by design.
+const NO_RING_OK = [".cp-preview h3:focus"];
+// State markers that are not focus: the local review's current-page tab keeps its own outline.
+const STATE_OUTLINE_OK = [".local-review [aria-current=page]"];
+const norm = (s) => s.replace(/\s+/g, " ").trim();
+const rulesOf = (css) => [...strip(css).matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map(([, sel, body]) => ({
+  parts: sel.split(",").map(norm).filter(Boolean),
+  decls: body.split(";").map((d) => d.split(":")).filter((d) => d.length >= 2).map(([k, ...v]) => [k.trim(), norm(v.join(":")).replace(/\s*!important$/, "")]),
+}));
+const isFocus = (part) => /:focus(-visible|-within)?\b/.test(part);
+
+function scanFocus(files) {
+  const bad = [];
+  const rules = Object.entries(files).flatMap(([f, css]) => rulesOf(css).map((r) => ({ ...r, f })));
+  const ringParts = new Set(rules.filter((r) => r.decls.some(([k, v]) => k === "outline" && v === RING)).flatMap((r) => r.parts));
+  let ringRules = 0;
+  for (const { f, parts, decls } of rules) {
+    const focus = parts.some(isFocus);
+    for (const [k, v] of decls) {
+      if (!k.startsWith("outline")) continue;
+      const removes = (k === "outline" && /^(none|0)$/.test(v)) || (k === "outline-style" && v === "none") || (k === "outline-width" && /^0(px)?$/.test(v));
+      if (removes) {
+        for (const p of parts) {
+          if (NO_RING_OK.includes(p)) continue;
+          const base = p.replace(/:focus(-visible)?$/, "");
+          const ancestors = base.split(" ").slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join(" "));
+          const replaced = ringParts.has(`${base}:focus-visible`) || ringParts.has(`${base}:focus`) || ancestors.some((a) => ringParts.has(`${a}:focus-within`));
+          if (!replaced) bad.push(`${f}: "${p}" removes the outline without a --hp-ring replacement`);
+        }
+        continue;
+      }
+      if (!focus && parts.every((p) => STATE_OUTLINE_OK.includes(p)) && k === "outline") continue;
+      if (!focus) { bad.push(`${f}: "${parts[0]}" sets ${k} outside a focus rule`); continue; }
+      if (k === "outline") { if (v === RING) ringRules++; else bad.push(`${f}: "${parts[0]}" focus ring is "${v}", not "${RING}"`); }
+      else if (k === "outline-offset") {
+        if (v === "-2px") { if (!parts.every((p) => INSET_OK.some((s) => p.includes(s)))) bad.push(`${f}: "${parts[0]}" insets the ring outside a tight scroll row`); }
+        else if (v !== "2px") bad.push(`${f}: "${parts[0]}" outline-offset ${v}, not 2px`);
+      } else bad.push(`${f}: "${parts[0]}" sets ${k}; use the outline shorthand with --hp-ring`);
+    }
+  }
+  return { bad, ringRules };
+}
+
+function scanPlaceholder(files) {
+  const bad = [];
+  const found = [];
+  for (const [f, css] of Object.entries(files)) for (const { parts, decls } of rulesOf(css)) {
+    if (!parts.some((p) => p.includes("::placeholder"))) continue;
+    found.push(...parts);
+    const color = decls.find(([k]) => k === "color")?.[1];
+    if (color !== "var(--hp-placeholder)") bad.push(`${f}: "${parts[0]}" placeholder colour is "${color}", not var(--hp-placeholder)`);
+    for (const [k, v] of decls) if (k === "opacity" && Number(v) !== 1) bad.push(`${f}: "${parts[0]}" placeholder opacity ${v}`);
+  }
+  return { bad, found };
+}
+
+const cssFiles = Object.fromEntries(readdirSync(SRC).filter((f) => f.endsWith(".css")).map((f) => [f, read(f)]));
+const focus = scanFocus(cssFiles);
+assert.deepEqual(focus.bad, [], focus.bad.join("\n"));
+assert.ok(focus.ringRules >= 20, `focus scan saw ${focus.ringRules} ring rules: the scan is not reading the CSS`);
+const ph = scanPlaceholder(cssFiles);
+assert.deepEqual(ph.bad, [], ph.bad.join("\n"));
+
+// The baseline in tokens.css replaces VS Code's injected webview default
+// (`a:focus, input:focus, select:focus, textarea:focus { outline: 1px solid -webkit-focus-ring-color; outline-offset: -1px }`).
+const baseline = rulesOf(tokensRaw).find((r) => r.parts.includes(":focus-visible"));
+assert.ok(baseline, "tokens.css has a :focus-visible baseline");
+for (const el of ["a", "input", "select", "textarea"]) assert.ok(baseline.parts.includes(`${el}:focus-visible`), `baseline covers ${el}:focus-visible`);
+assert.deepEqual(Object.fromEntries(baseline.decls), { outline: RING, "outline-offset": "2px" });
+
+// Every placeholder rule, measured on the background its field paints. A new placeholder rule
+// has to be added here, with its field, before it can pass.
+const bgFallback = (file, selector) => {
+  const r = rulesOf(cssFiles[file]).find((x) => x.parts.includes(selector));
+  assert.ok(r, `${file}: field rule "${selector}"`);
+  return r.decls.find(([k]) => k === "background" || k === "background-color")?.[1];
+};
+const lastHex = (v) => [...(v ?? "").matchAll(/#[0-9A-Fa-f]{6}\b/g)].pop()?.[0];
+const PLACEHOLDERS = {
+  '.hps-shell[data-chat-detail="personal"] .hps-input textarea::placeholder': ["theme", "chatDetails.css", '.hps-shell[data-chat-detail="personal"] .hps-input'],
+  ".hps-verdict-note textarea::placeholder": ["theme", "chatDetails.css", ".hps-verdict-note textarea"],
+  ".hps-input textarea::placeholder": ["theme", "styles.css", ".hps-input textarea"],
+  ".hp-surface textarea::placeholder": ["muted", "styles.css", ".hp-surface textarea"],
+  ".hp-surface input::placeholder": ["muted", "styles.css", ".hp-surface input"],
+  ".studio-connect input::placeholder": ["muted", "start.css", ".studio-connect input"],
+};
+assert.deepEqual([...ph.found].sort(), Object.keys(PLACEHOLDERS).sort(), "every ::placeholder rule is in the measured map");
+for (const [sel, [scope, file, field]] of Object.entries(PLACEHOLDERS)) {
+  const bg = bgFallback(file, field);
+  if (scope === "theme") {
+    assert.match(bg, /var\(--vscode-input-background\b/, `${sel}: field paints the theme input background`);
+    need(`placeholder fallback ${sel}`, placeholderToken.fallback(lastHex(bg)), lastHex(bg), 4.5);
+  } else {
+    assert.ok(mutedScope.some((s) => sel.startsWith(s) || sel.includes(`${s} `)) || (sel.startsWith(".studio-connect") && mutedScope.includes(".studio-start")), `${sel}: inside the --hp-muted placeholder scope`);
+    const literal = bg === "var(--hp-bg)" ? HP.bg : lastHex(bg);
+    assert.ok(literal, `${sel}: field background "${bg}" resolves to a literal`);
+    need(`placeholder (--hp-muted) ${sel}`, HP.muted, literal, 4.5);
+  }
+}
+
+// ---------- negative controls ----------
+const neg = (css) => scanFocus({ "neg.css": css }).bad;
+assert.equal(neg("button:focus { outline: none; }").length, 1, "control: outline:none with no replacement is caught");
+assert.equal(neg("button:focus { outline: 0; }").length, 1, "control: outline:0 is caught");
+assert.equal(neg(".a:focus-visible { outline: 1px solid var(--hp-ring); outline-offset: 2px; }").length, 1, "control: a 1px ring is caught");
+assert.equal(neg(".a:focus-visible { outline: 2px solid var(--vscode-focusBorder, #799ed7); outline-offset: 2px; }").length, 1, "control: a ring that bypasses the token is caught");
+assert.equal(neg(".a:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 3px; }").length, 1, "control: a 3px offset is caught");
+assert.equal(neg(".a:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: -2px; }").length, 1, "control: an inset ring outside a scroll row is caught");
+assert.equal(neg(".a:focus-visible { outline-color: red; }").length, 1, "control: a longhand outline colour is caught");
+assert.deepEqual(neg(".w .f { outline: none; } .w:focus-within { outline: 2px solid var(--hp-ring); outline-offset: 2px; }"), [], "control: an ancestor :focus-within ring is a valid replacement");
+assert.deepEqual(neg(".f { outline: none; } .f:focus-visible { outline: 2px solid var(--hp-ring); }"), [], "control: a :focus-visible ring on the same element is a valid replacement");
+const negPh = (css) => scanPlaceholder({ "neg.css": css }).bad;
+assert.equal(negPh(".f::placeholder { color: var(--hp-placeholder); opacity: .5; }").length, 1, "control: placeholder opacity .5 is caught");
+assert.equal(negPh(".f::placeholder { color: #8f8f8f; }").length, 1, "control: a literal placeholder colour is caught");
+assert.ok(!meets("#8F8F8F", "#FFFFFF", 4.5), "control: ChatGPT's tertiary #8f8f8f on white really is below 4.5:1");
+assert.ok(!meets(HP.line, HP.bg, 3), "control: --hp-line would be too faint for a ring");
+assert.ok(!meets(HP.accent, PAPER.bg, 3), "control: the lime ring would vanish on Paper, which is why Paper has its own");
+const darkPlus = THEMES.find((t) => t.name === "Dark+");
+assert.ok(!meets(placeholderOn(darkPlus.desc, darkPlus.inFg, darkPlus.input, 1), darkPlus.input, 4.5), "control: plain descriptionForeground fails Dark+, which is why the token mixes in input text");
+
+for (const r of rows) console.log(`  ${r[3].padStart(6)}:1  ${r[0]} (${r[1]} on ${r[2]})`);
+console.log(`focus-placeholder smoke OK (${focus.ringRules} ring rules, ${ph.found.length} placeholder rules)`);

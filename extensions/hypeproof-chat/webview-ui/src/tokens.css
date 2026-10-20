@@ -28,7 +28,18 @@
   --hp-line: #35483A;            /* start.css --studio-line · decorative dividers only (1.75:1) */
   --hp-control-line: #748F79;    /* required control boundary (buttons, fields) · DES-11 3:1: 4.9:1 on bg, 4.1:1 on panel */
   --hp-muted: #ACB9A5;           /* start.css --studio-muted · AI explanation, secondary copy */
+  /* CGP-DS-R-017 — the one focus-ring colour. The webview body follows the VS Code theme, so the
+   * ring is the theme's own focusBorder; the fallback is the HypeProof Studio theme's value. */
+  --hp-ring: var(--vscode-focusBorder, #D5F279);
+  /* CGP-DS-R-019 — field placeholder: 70% theme description colour, 30% input text. Never opacity.
+   * Lowest measured default theme: Dark+ 5.0:1 on its input background. */
+  --hp-placeholder: color-mix(in srgb, var(--vscode-descriptionForeground, #ACB9A5) 70%, var(--vscode-input-foreground, #F2F4E8));
 }
+
+/* Dark surfaces that paint their own HP background keep the lime ring whatever the theme
+ * (13.8:1 on bg, 11.6:1 on panel); fields that paint their own HP background use --hp-muted. */
+.studio-start, .studio-disconnected, .hp-mission { --hp-ring: var(--hp-accent); }
+.studio-start, .studio-disconnected, .hp-surface { --hp-placeholder: var(--hp-muted); }
 
 /* Reading surfaces (retrospective · growth record · reports) flip to Paper (SX-54).
  * Amber on Paper is 2.0:1 contrast, so it is never used for text — icon/border plus
@@ -40,6 +51,18 @@
   --hp-muted: #4B5A4F;
   --hp-line: #D7DDD2;
   --hp-control-line: #76837A;    /* 3.6:1 on Paper, 4.0:1 on white */
+  --hp-ring: #4D6B12;            /* 5.6:1 on Paper, 6.1:1 on white */
+  --hp-placeholder: #4B5A4F;     /* 6.7:1 on Paper, 7.3:1 on white */
+}
+
+/* CGP-DS-R-017 — the baseline ring for every focusable control: 2px solid, 2px offset, drawn on
+ * the surface around the control. The element selectors match the specificity of VS Code's
+ * injected webview default `a/input/select/textarea:focus { outline: 1px …; outline-offset: -1px }`
+ * and come later, so they replace it. Component rules may only restate the same ring, or use a
+ * -2px inset inside tight scroll rows (test/focus-placeholder.smoke.mjs). */
+:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--hp-ring);
+  outline-offset: 2px;
 }
 
 /* CGP-DS-R-015: `workbench.reduceMotion: "on"` stops nonessential motion even when the OS allows
