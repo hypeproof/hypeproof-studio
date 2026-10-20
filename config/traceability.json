@@ -7349,6 +7349,53 @@
           "path": "extensions/hypeproof-chat/test/answer-to-wiki.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-BROWSER-TARGET-HOST",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## E. Manual-approve modal"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-BROWSER-TARGET-HOST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BROWSER-TARGET-HOST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/browserTargetHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/previewRecovery.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-BROWSER-TARGET-HOST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BROWSER-TARGET-HOST",
+        "ST-IMP-BROWSER-TARGET-HOST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/browser-target-host.test.mjs"
+        }
+      ]
     }
   ]
 }

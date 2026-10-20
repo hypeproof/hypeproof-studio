@@ -184,6 +184,7 @@ import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
+import { browserTargetDetail } from "./browserTargetHost";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
@@ -7418,7 +7419,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const buttons = REMEMBER ? ["열기", REMEMBER] : ["열기"];
       onPrompted?.();
     const pick = await vscode.window.showWarningMessage(
-        `${browserApprovalTitle(this.coachDisplayName())}\n\n${url || req.description}`,
+        // REQ-E3 / CGP-AGENT-R-006: the host on its own line + 내 미리보기 / 인터넷, never the full URL.
+        `${browserApprovalTitle(this.coachDisplayName())}\n\n${browserTargetDetail(url)}`,
         { modal: true },
         ...buttons,
       );
