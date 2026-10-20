@@ -103,6 +103,17 @@ await t("negative controls: no folder, or a failed write, records nothing", asyn
   eq(writes, [], "no record without a write");
 });
 
+await t("negative control: a folder-consent refusal (읽기만) writes nothing and records nothing", async () => {
+  const before = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  h.folderWriteRefusalFor = () => "이 폴더는 읽기만 해요.";
+  try {
+    await h.revealBuilt(page("refused"), { artifactSource: "assistant_response", engineJs: "x" });
+    await h.saveAgentMdIfPresent("```agent-md\n# refused\n```\n");
+  } finally { delete h.folderWriteRefusalFor; }
+  eq(writes, [], "no record");
+  eq(fs.readFileSync(path.join(root, "index.html"), "utf8"), before, "file untouched");
+});
+
 await t("learner uploads of a send: pasted and attached photos recorded as 내가 올림 (recordLearnerUploads)", async () => {
   h.recordLearnerUploads(["assets/pasted-1.png"], "[첨부한 사진]\n- images/외관.jpg");
   eq(writes.map((w) => [w.rel, w.actor]), [["assets/pasted-1.png", "learner_upload"], ["images/외관.jpg", "learner_upload"]], "writes");
