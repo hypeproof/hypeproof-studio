@@ -185,6 +185,23 @@ cases:
       kind: design
     automated_by: scripts/release/test/install-kit.test.mjs
 
+  - id: BB-026
+    journey: CUJ-1
+    priority: P1
+    title: Windows x64 설치본도 무료 시작 카드까지 간다
+    requirements: [PRA-09, REQ-STUDIO-FREE-START, TUX-SP-14]
+    steps:
+      - Windows 11 x64 PC 에서 rc 릴리스의 Windows x64 설치 파일(UserSetup x64 .exe)을 받아 실행한다
+      - SmartScreen 경고가 뜨면 추가 정보 → 실행 을 누르고 설치를 마친다
+      - 시작 메뉴에서 HypeProof Studio 를 연다
+    expect:
+      - 설치가 끝나고 Studio 가 열린다
+      - BB-004 와 같은 시작 카드(바로 시작할 수 있습니다, 로그인 없이 바로 시작합니다., 만 14세 이상인가요?)가 나온다
+      - 네, 만 14세 이상입니다 를 누르면 채팅이 작업 폴더에서 열린다
+    origin:
+      kind: design
+    notes: Windows 는 2026-10-20(#2139)부터 다시 출시한다. 설치 파일은 서명되지 않아 SmartScreen 경고가 정상이다(scripts/install-win.ps1). 사전 테스터는 Mac 에서만 돌므로 사람이 한다.
+
   # ── CUJ-2 무료 사용량 소진 → Google 로그인으로 이용권 구매 ────────────────────────
 
   - id: BB-011
