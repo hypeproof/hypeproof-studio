@@ -29,6 +29,8 @@ export interface SeatInputs {
   settingRuntime: "proxy" | "agent-sdk";
   /** An agent-sdk -> proxy fallback happened this session (REQ-M7): turns run on proxy. */
   fallback: boolean;
+  /** Effective machine approval setting; display only, never a grant. */
+  requiredApprovals?: readonly string[];
 }
 
 /** The runtime a profile's turns resolve to under the setting, as `postConfig` resolves `toolRuntime`. */
@@ -43,7 +45,7 @@ export function seatRuntime(profile: ResolvedProfile, settingRuntime: "proxy" | 
  * card both use this, so the change card can never report a row the card does not show.
  */
 export function seatAiCapabilities(profile: ResolvedProfile, inputs: SeatInputs): AiCapability[] {
-  return aiCapabilities(accessProfile(profile, inputs.choice), inputs.fallback ? "proxy" : seatRuntime(profile, inputs.settingRuntime));
+  return aiCapabilities(accessProfile(profile, inputs.choice), inputs.fallback ? "proxy" : seatRuntime(profile, inputs.settingRuntime), inputs.requiredApprovals);
 }
 
 /**

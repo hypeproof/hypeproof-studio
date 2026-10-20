@@ -8183,6 +8183,70 @@
           "path": "extensions/hypeproof-chat/test/write-approval-paths.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-CAPABILITY-CARD-D002",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/agents-codex-automation.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CAPABILITY-CARD-D002",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CAPABILITY-CARD-D002"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/aiCapabilities.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/capabilityChange.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CAPABILITY-CARD-D002",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CAPABILITY-CARD-D002",
+        "ST-IMP-CAPABILITY-CARD-D002"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/ai-can-do.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/ai-capability-card-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
+        }
+      ]
     }
   ]
 }

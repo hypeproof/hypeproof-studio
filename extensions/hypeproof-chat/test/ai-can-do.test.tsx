@@ -4,7 +4,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
-import { AI_CAPABILITY_LABELS, aiCapabilities } from "../src/aiCapabilities";
+import { AI_CAPABILITY_LABELS, aiCapabilities, aiCapabilityState } from "../src/aiCapabilities";
 import type { ChatConfig } from "../src/protocol";
 
 (globalThis as unknown as Record<string, unknown>).window = { acquireVsCodeApi: undefined };
@@ -51,8 +51,8 @@ t("card renders every row with 해요 / 안 해요 and stays closed", () => {
   // REQ-STUDIO-UI-POLISH-1: the summary also says how many things the AI does here (kidsFiles: read, write).
   if (!html.includes('<details class="hp-rail-lesson hp-ai-can-do"><summary><span class="hp-ai-can-do-title">이 수업에서 AI가 할 수 있는 일</span><span class="hp-ai-can-do-count">6가지 중 2가지')) throw new Error("card missing or open");
   eq((html.match(/data-capability="/g) ?? []).length, 6, "rows");
-  if (!/data-capability="read" data-on="true">[\s\S]*?<span class="hp-ai-can-do-state">해요<\/span>/.test(html)) throw new Error("read on");
-  if (!/data-capability="shell" data-on="false">[\s\S]*?<span class="hp-ai-can-do-state">안 해요<\/span>/.test(html)) throw new Error("shell off");
+  if (!/data-capability="read" data-on="true"[^>]*>[\s\S]*?<span class="hp-ai-can-do-state">해요<\/span>/.test(html)) throw new Error("read on");
+  if (!/data-capability="shell" data-on="false"[^>]*>[\s\S]*?<span class="hp-ai-can-do-state">안 해요<\/span>/.test(html)) throw new Error("shell off");
 });
 t("negative control: no card without capabilities", () => {
   if (renderToStaticMarkup(<ChatPanel {...PROPS} config={config()} instructor={false} />).includes("hp-ai-can-do")) throw new Error("card without data");
@@ -63,6 +63,37 @@ t("solo seats get no classroom or teacher words (trial diagnosis D3)", () => {
   const card = /<details class="hp-rail-lesson hp-ai-can-do">[\s\S]*?<\/details>/.exec(html)?.[0] ?? "";
   if (!card.includes("여기서 AI가 할 수 있는 일")) throw new Error("solo title missing");
   for (const word of ["수업", "선생님"]) if (card.includes(word)) throw new Error(`solo card says ${word}`);
+});
+
+// CGP-AGENT-D-002: assert the rendered words and names, never infer from colour.
+t("approval-aware rows keep grants authoritative and expose a complete accessible name", () => {
+  const rows = aiCapabilities(adult, "agent-sdk", ["writeFile", "delegateAgent", "webSearch"]);
+  eq(rows.map(aiCapabilityState), ["해요", "물어봐요", "물어봐요", "물어봐요", "물어봐요", "물어봐요"]);
+  const html = renderToStaticMarkup(<ChatPanel {...PROPS} config={config(rows)} instructor={false} />);
+  for (const row of rows) {
+    const rendered = new RegExp(`<li[^>]*data-capability="${row.key}"[^>]*>[\\s\\S]*?</li>`).exec(html)?.[0] ?? "";
+    if (!rendered.includes(`aria-label="${row.label}: ${aiCapabilityState(row)}"`)) throw new Error(`missing complete name: ${row.key}`);
+    if (!rendered.includes(`<span class="hp-ai-can-do-state">${aiCapabilityState(row)}</span>`)) throw new Error(`missing state: ${row.key}`);
+    if (!rendered.includes(`data-icon="${row.asks ? 'info' : 'check'}"`)) throw new Error(`wrong icon: ${row.key}`);
+  }
+  if (!html.includes("이미 허락했거나 확인이 필요 없는 동작은 바로 할 수 있어요.")) throw new Error("conditional approval explanation missing");
+  const denied = [{ key: "write" as const, label: "파일 고치기", on: false, asks: true }];
+  const deniedHtml = renderToStaticMarkup(<ChatPanel {...PROPS} config={config(denied)} instructor={false} />);
+  if (!deniedHtml.includes('data-icon="minus"')) throw new Error("denied icon");
+  if (!deniedHtml.includes('aria-label="파일 고치기: 안 해요"') || deniedHtml.includes("물어봐요")) throw new Error("denied capability must never promise an approval path");
+  const askHtml = renderToStaticMarkup(<ChatPanel {...PROPS} config={config([{ ...denied[0], on: true }])} instructor={false} />);
+  if (!askHtml.includes('aria-label="파일 고치기: 물어봐요"')) throw new Error("approval accessible name");
+  if (renderToStaticMarkup(<ChatPanel {...PROPS} config={config(rows)} instructor={true} />).includes('hp-ai-can-do')) throw new Error("instructor card");
+});
+
+t("the browser row asks only where an approval exists: agent-sdk asks, proxy and a fallback run without a modal", () => {
+  const grants = { ...adult, browser_control: { enabled: true } };
+  const browserOf = (rows: ReturnType<typeof aiCapabilities>) => aiCapabilityState(rows.find((r) => r.key === "browser")!);
+  eq(browserOf(aiCapabilities(grants, "agent-sdk")), "물어봐요");
+  eq(browserOf(aiCapabilities(grants, "proxy")), "해요");
+  eq(browserOf(aiCapabilities({ ...grants, browser_control: { enabled: false } }, "proxy")), "안 해요");
+  const html = renderToStaticMarkup(<ChatPanel {...PROPS} config={config(aiCapabilities({ browser_control: { enabled: true } } as never, "proxy"))} instructor={false} />);
+  if (html.includes("물어봐요")) throw new Error("a proxy-only browser seat must not promise a prompt or explain one");
 });
 
 // CGP-SHELL-R-024 — the one-time "what the AI can do changed" card (REQ-STUDIO-CAPABILITY-CHANGE).

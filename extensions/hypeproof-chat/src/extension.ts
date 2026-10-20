@@ -359,6 +359,8 @@ export async function activate(context: vscode.ExtensionContext) {
   // CGP-DS-R-015: a reduce-motion change reaches the open chat panel without a reload.
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
     if (event.affectsConfiguration("workbench.reduceMotion")) void provider.refreshConfig();
+    // CGP-AGENT-D-002: the card must follow the policy used by the next action.
+    if (event.affectsConfiguration("hypeproofChat.requireApprovalFor")) void provider.refreshConfig();
   }));
   void classroomOps.resume();
   context.subscriptions.push(

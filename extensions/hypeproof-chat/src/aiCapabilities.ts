@@ -7,7 +7,7 @@
 import type { ResolvedProfile } from "./protocol";
 
 export type AiCapabilityKey = "read" | "write" | "shell" | "subagents" | "browser" | "web_search";
-export interface AiCapability { key: AiCapabilityKey; label: string; on: boolean }
+export interface AiCapability { key: AiCapabilityKey; label: string; on: boolean; asks?: boolean }
 
 export const AI_CAPABILITY_LABELS: Record<AiCapabilityKey, string> = {
   read: "작업 폴더의 파일 읽기",
@@ -32,6 +32,7 @@ export interface CapabilityChange { id: string; added: string[]; removed: string
 export function aiCapabilities(
   profile: Pick<ResolvedProfile, "sdk_tools" | "tools" | "browser_control"> | null | undefined,
   runtime: "proxy" | "agent-sdk",
+  requiredApprovals: readonly string[] = [],
 ): AiCapability[] {
   const sdk = runtime === "agent-sdk";
   const t = profile?.sdk_tools;
@@ -43,5 +44,22 @@ export function aiCapabilities(
     browser: sdk ? t?.browser === true : profile?.browser_control?.enabled === true,
     web_search: profile?.tools?.web_search === true,
   };
-  return (Object.keys(AI_CAPABILITY_LABELS) as AiCapabilityKey[]).map((key) => ({ key, label: AI_CAPABILITY_LABELS[key], on: on[key] }));
+  // Display only: grants still win. Shell has a conditional, non-configurable confirmation path.
+  // The browser asks only on the agent-sdk runtime (browser_open approval); the proxy browser loop
+  // runs without a per-action modal (browserControl.ts), so there it reads 해요, like any auto-run row.
+  // write/delegation/search follow the host's effective settings.
+  const asks: Record<AiCapabilityKey, boolean> = {
+    read: false,
+    write: requiredApprovals.includes("writeFile"),
+    shell: true,
+    subagents: requiredApprovals.includes("delegateAgent"),
+    browser: sdk,
+    web_search: sdk && requiredApprovals.includes("webSearch"),
+  };
+  return (Object.keys(AI_CAPABILITY_LABELS) as AiCapabilityKey[]).map((key) => ({ key, label: AI_CAPABILITY_LABELS[key], on: on[key], ...(on[key] && asks[key] ? { asks: true } : {}) }));
+}
+
+/** Denial always wins, even when an older host payload carries an approval hint. */
+export function aiCapabilityState(item: AiCapability): string {
+  return !item.on ? "안 해요" : item.asks === true ? "물어봐요" : "해요";
 }
