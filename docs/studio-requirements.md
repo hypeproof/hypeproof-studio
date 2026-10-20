@@ -456,13 +456,17 @@ feedback stays inside the existing heading so removing it cannot move the
 transcript. Its status still explains that switching tasks requires stopping the
 active work. Draft, selection and explicit latest-message behavior remain intact.
 
-CGP-CHAT-R-001 (2026-10-19): the response lifecycle reaches assistive tech once per turn, in
-personal and classroom chat. One visually hidden polite live region announces "답변을 시작했어요"
-when a classroom turn starts (personal mode keeps `ResponsePending` as its start announcement, so
-nothing is said twice) and "답변이 끝났어요" when any turn completes. A turn ended by Stop or an
-error is not also announced as completed; the stop notice and the error banner speak for it.
-Token chunks are never announced, and opening or reopening the panel announces nothing. Screen
-reader runs (VoiceOver, NVDA) are not yet recorded. Test: `test/response-announcer.test.tsx`.
+CGP-CHAT-R-001, extended by CGP-CHAT-D-001 (2026-10-20): one stable, visually hidden
+polite response live region stays outside the transcript scroll container in personal
+and classroom chat. It announces "답변을 시작했어요", "답변이 끝났어요", or
+"답변을 멈췄어요" once per observed lifecycle transition. Visible pending and stop
+content keeps its appearance without separate live semantics. Errors keep their own
+alert and do not also announce completion. Token/code chunks never repeat lifecycle
+announcements. Opening or switching an activity/task stays quiet and cancels pending
+completion announcements. The region uses the existing sr-only styling; no visible
+layout changes. ARIA properties must pass axe aria rules. VoiceOver/NVDA and installed
+visual acceptance remain separate. Tests: `test/response-announcer.test.tsx` and
+`test/response-lifecycle.test.tsx` (actual DOM text writes, stable node and scroll ancestry).
 
 CGP-DS-R-027 / CGP-DS-R-028 (2026-10-19), extending TUX-CHAT-03 and DES-03 for the chat
 webview in every mode. While an IME composition is open (`isComposing` or legacy `keyCode` 229),
