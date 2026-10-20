@@ -54,6 +54,22 @@
   --hp-dur-runner-hop: .42s;
   --hp-dur-runner-puff: .9s;
   --hp-dur-runner-blink: 1.4s;
+  /* CGP-DS-R-008 — the text-size step (CGP-DS-R-009): 0px here; the personal chat shell sets 2px
+   * for 크게 and 4px for 아주 크게 (chatDetails.css). */
+  --hp-text-step: 0px;
+}
+/* CGP-DS-R-008 — semantic type scale (REQ-STUDIO-TYPE-SCALE, DES-CGP-DS-09, DES-02 via DEC-29).
+ * Learner-read text takes one of these sizes; the smallest step is 14px. A custom property is
+ * substituted where it is declared and inherited as a value, so the size tokens are declared on
+ * .hps-shell too: there they pick up the shell's own --hp-text-step and every token-sized text in
+ * the chat grows with the learner's text-size choice instead of fighting it
+ * (test/type-scale.smoke.mjs). Line heights: 1.5 for labels, 1.65 for Hangul prose. */
+:root, .hps-shell {
+  --hp-text-caption: calc(14px + var(--hp-text-step));   /* labels, metadata, captions, controls */
+  --hp-text-body: calc(16px + var(--hp-text-step));      /* message bodies, the composer */
+  --hp-text-lead: calc(18px + var(--hp-text-step));      /* the empty-chat greeting */
+  --hp-leading-label: 1.5;
+  --hp-leading-prose: 1.65;
 }
 /* VS Code's 2026 themes ship a placeholder below 4.5:1 (Dark 2026 #555555: 2.3:1, Light 2026
  * #999999: 2.8:1); the webview body carries the theme id, and there the mix is used instead. */

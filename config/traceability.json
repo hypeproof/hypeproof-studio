@@ -6596,6 +6596,19 @@
       ]
     },
     {
+      "id": "ST-TEST-TYPE-SCALE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-CONTROL-CONTRAST",
       "stage": "test",
       "owner": "jayleekr",

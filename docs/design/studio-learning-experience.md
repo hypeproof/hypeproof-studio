@@ -297,6 +297,18 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-dur-runner-hop: .42s;
   --hp-dur-runner-puff: .9s;
   --hp-dur-runner-blink: 1.4s;
+  /* 글자 크기 단계(CGP-DS-R-008/-009). 여기서는 0px, 개인 대화 셸이 크게 2px · 아주 크게 4px로 바꾼다 */
+  --hp-text-step: 0px;
+}
+/* 의미 글자 크기(CGP-DS-R-008, DES-CGP-DS-09, DEC-29로 DES-02를 개인 대화에 확장). 학생이 읽는 글은 이 단계만 쓰고
+   가장 작은 단계가 14px이다. custom property는 선언한 요소에서 값이 정해져 그 값으로 상속되므로 .hps-shell에서도
+   다시 선언한다. 그래야 셸의 --hp-text-step을 받아 글자 크기 선택을 따라간다 */
+:root, .hps-shell {
+  --hp-text-caption: calc(14px + var(--hp-text-step));   /* 라벨, 메타 정보, 캡션, 컨트롤 */
+  --hp-text-body: calc(16px + var(--hp-text-step));      /* 메시지 본문, 입력창 */
+  --hp-text-lead: calc(18px + var(--hp-text-step));      /* 빈 대화 인사말 */
+  --hp-leading-label: 1.5;
+  --hp-leading-prose: 1.65;
 }
 /* 자기 placeholder가 4.5:1에 못 미치는 VS Code 2026 테마는 웹뷰 body의 테마 id로 골라 mix를 쓴다 */
 body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] { --hp-placeholder: var(--hp-placeholder-mix); }
@@ -353,6 +365,7 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
 | 움직임은 토큰으로(CGP-DS-R-014, DES-CGP-DS-15) | 웹뷰 CSS의 transition/animation 시간은 `--hp-dur-*`만 쓴다. 컨트롤 hover/press `--hp-dur-press` 140ms, 제자리 확인 `--hp-dur-content` 160ms, 들어오는 면 `--hp-dur-enter` 180ms, 곡선은 `--hp-ease` 하나. 상태 반복(응답 점 1.2s×3, 진행 표시, 러너)은 기존 시간을 토큰으로 옮겼다. 줄인 움직임 규칙이 늘 이긴다 |
 | 본문 한 줄 길이(CGP-DS-R-020, DES-CGP-DS-22) | 개인 대화의 AI 본문(`.hps-prose`)은 `max-inline-size: 40em`, 한 줄에 한글 약 40자. 상한일 뿐이라 좁은 창에서는 창에 맞춰 줄바꿈하고, 표와 코드는 그 안에서 자기 스크롤을 가진다 |
 | 스크롤 막대 자리(CGP-DS-R-031, DES-CGP-DS-36) | 개인 대화 대화 목록(`.hps-messages`)은 `scrollbar-gutter: stable`. 답이 길어져 스크롤 막대가 생겨도 본문이 옆으로 밀리지 않는다 |
+| 의미 글자 크기와 14px 바닥(CGP-DS-R-008, DES-CGP-DS-09, DEC-29) | 개인 작업 화면(작업 목록, 작업 제목 줄, 대화 셸, 자료 패널, 대화 설정)에서 학생이 읽는 글은 `--hp-text-caption` 14px, `--hp-text-body` 16px, `--hp-text-lead` 18px 셋 중 하나다. 메타 정보도 예외가 아니다: 역할 줄, 도구 줄, 인용 칩, 시간·대화 수, 출처 주소가 10~13px에서 14px이 된다. 줄 높이는 라벨 1.5, 한글 본문 1.65. 글자 크기 선택(기본 · 크게 · 아주 크게)은 셸의 `--hp-text-step` 하나(0 · 2 · 4px)라서 셸 안의 모든 단계가 같이 커지고, 44px 대상과 컨트롤 높이는 그대로다(min-height만 있다). 14px 아래로 남는 것: 화면에 보이지 않는 키보드 안내, 장식 글리프, 접근 이름이 있는 글리프 버튼(×). 수업 채팅은 이번에 바꾸지 않는다(같은 클래스는 개인 셸 아래에서만 올린다) |
 | 강제 색상(CGP-DS-R-016, DES-CGP-DS-17) | Windows 고대비에서는 시스템 색만 남고 그림자와 그라데이션은 사라진다. 모든 컨트롤은 `1px solid ButtonText` 테두리, 포커스는 `--hp-ring`이 `Highlight`가 된 같은 outline, 눌림·선택·현재 상태는 `Highlight`/`HighlightText`. 색이나 배경만으로 그리던 표시(음성 캡처 점, 응답 점, 음성 막대, 인용 신뢰 단계, 검증 상태 칩, 강사 배지, 학생 말풍선)는 테두리나 모양을 얻는다. `forced-color-adjust: none`은 QR 코드 두 곳뿐이다. 보통 화면은 바뀌지 않는다 |
 
 대비. 상대 휘도로 계산한 근사값이며 구현 시 검사 도구로 다시 확인한다.

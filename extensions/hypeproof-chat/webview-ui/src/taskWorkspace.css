@@ -1,10 +1,13 @@
+/* CGP-DS-R-008 (REQ-STUDIO-TYPE-SCALE, DEC-29): every learner-read size in the task workspace is a
+   --hp-text-* token from tokens.css, so the rail, heading and sources panel never drop below 14px;
+   metadata (time, message count, run state, host names, the source policy line) included. */
 .tw-workspace {
   --tw-panel: var(--vscode-sideBar-background, #17191d);
   --tw-canvas: var(--vscode-editor-background, #202226);
   --tw-line: var(--vscode-panel-border, #34383e);
   --tw-muted: var(--vscode-descriptionForeground, #a4aab3);
   display: grid; grid-template-columns: 204px minmax(0, 1fr); height: 100%; min-height: 0;
-  container-type: inline-size; position: relative; background: var(--tw-canvas); font-size: 14px;
+  container-type: inline-size; position: relative; background: var(--tw-canvas); font-size: var(--hp-text-caption);
 }
 .tw-workspace[data-sources-open="true"] { grid-template-columns: 204px minmax(0, 1fr) 280px; }
 .tw-workspace button, .tw-workspace input { font: inherit; }
@@ -22,21 +25,21 @@
 .tw-new { padding: 10px 12px; text-align: left; border: 1px solid var(--tw-line); border-radius: 9px; color: inherit; background: var(--tw-canvas); }
 .tw-new span { margin-right: 7px; }
 .tw-new:hover:not(:disabled), .tw-quiet:hover:not(:disabled), .tw-task:hover:not(:disabled), .tw-title-button:hover:not(:disabled), .tw-source-list button:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
-.tw-search { display: flex; flex-direction: column; gap: 7px; margin: 22px 4px 18px; color: var(--tw-muted); font-size: 12px; }
-.tw-search input { width: 100%; box-sizing: border-box; padding: 8px; font-size: 12px; }
-.tw-rail-heading { color: var(--tw-muted); display: flex; justify-content: space-between; margin: 0 8px 7px; font-size: 11px; }
+.tw-search { display: flex; flex-direction: column; gap: 7px; margin: 22px 4px 18px; color: var(--tw-muted); font-size: var(--hp-text-caption); }
+.tw-search input { width: 100%; box-sizing: border-box; padding: 8px; font-size: var(--hp-text-caption); }
+.tw-rail-heading { color: var(--tw-muted); display: flex; justify-content: space-between; margin: 0 8px 7px; font-size: var(--hp-text-caption); }
 .tw-task-list, .tw-source-list { list-style: none; padding: 0; margin: 0; overflow: auto; min-height: 0; overscroll-behavior: contain; }
 .tw-task-list { flex: 1; }
 .tw-task-list li, .tw-source-list li { content-visibility: auto; contain-intrinsic-size: auto 65px; }
 .tw-task { width: 100%; border: 1px solid transparent; border-radius: 8px; padding: 11px 9px; color: inherit; text-align: left; background: transparent; margin: 2px 0; }
 .tw-task[aria-current="page"] { background: var(--vscode-list-inactiveSelectionBackground, #30353d); border-color: var(--tw-line); }
-.tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.tw-task-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; margin-top: 7px; color: var(--tw-muted); font-variant-numeric: tabular-nums; }
-.tw-local-note { color: var(--tw-muted); margin: 18px 8px 4px; font-size: 11px; }
-.tw-empty-search { font-size: 12px; line-height: 1.6; padding: 0 8px; color: var(--tw-muted); }
+.tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-text-caption); }
+.tw-task-meta { display: flex; justify-content: space-between; gap: 8px; font-size: var(--hp-text-caption); margin-top: 7px; color: var(--tw-muted); font-variant-numeric: tabular-nums; }
+.tw-local-note { color: var(--tw-muted); margin: 18px 8px 4px; font-size: var(--hp-text-caption); }
+.tw-empty-search { font-size: var(--hp-text-caption); line-height: 1.6; padding: 0 8px; color: var(--tw-muted); }
 .tw-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .tw-heading { display: flex; align-items: center; gap: 12px; min-height: 57px; padding: 0 20px; border-bottom: 1px solid var(--tw-line); }
-.tw-heading h1 { font-size: 14px; font-weight: 550; margin: 0; min-width: 0; flex: 1; }
+.tw-heading h1 { font-size: var(--hp-text-caption); font-weight: 550; margin: 0; min-width: 0; flex: 1; }
 .tw-title-button { background: transparent; border: 0; border-radius: 6px; padding: 7px 0; max-width: 100%; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; text-align: left; color: inherit; }
 .tw-title-button span { margin-left: 10px; color: var(--tw-muted); }
 .tw-quiet { background: transparent; color: inherit; border: 1px solid var(--tw-line); border-radius: 7px; padding: 7px 10px; white-space: nowrap; }
@@ -46,31 +49,33 @@
 .tw-conversation .hps-shell { background: var(--tw-canvas); }
 .tw-conversation .hps-header { border-bottom: 0; padding: 10px 20px; }
 .tw-conversation .hps-messages { padding: 20px max(20px, calc((100% - 740px) / 2)); gap: 25px; }
-.tw-conversation .hps-msg-body { font-size: 14px; line-height: 1.75; }
+.tw-conversation .hps-msg-body { font-size: var(--hp-text-body); line-height: 1.75; }
 .tw-conversation .hps-msg-assistant .hps-msg-body { background: transparent; border: 0; padding: 0; max-width: 100%; }
 .tw-conversation .hps-msg-assistant .hps-msg-role > span::before { content: none; }
 .tw-conversation .hps-msg-user .hps-msg-body { background: var(--vscode-list-inactiveSelectionBackground, #343a44); color: inherit; border-radius: 14px; }
 .tw-error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 10px 20px; padding: 10px 12px; border: 1px solid var(--vscode-inputValidation-errorBorder, #d07575); border-radius: 6px; line-height: 1.6; }
-.tw-run-note { flex: 0 0 auto; color: var(--tw-muted); font-size: 12px; white-space: nowrap; }
+/* CGP-DS-R-008: at 14px the busy line must not crowd the trial count out of a 390px heading, so it
+   may shrink and wrap between words (its title keeps the full sentence). */
+.tw-run-note { flex: 0 1 auto; min-width: 0; color: var(--tw-muted); font-size: var(--hp-text-caption); line-height: 1.3; word-break: keep-all; }
 .tw-run-help { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .tw-sources { border-left: 1px solid var(--tw-line); background: var(--tw-panel); overflow-y: auto; min-width: 0; overscroll-behavior: contain; }
 .tw-sources[hidden] { display: none; }
 .tw-sources > header { display: flex; align-items: center; justify-content: space-between; padding: 13px 17px; border-bottom: 1px solid var(--tw-line); }
-.tw-sources h2 { font-size: 13px; font-weight: 550; margin: 0; }
+.tw-sources h2 { font-size: var(--hp-text-caption); font-weight: 550; margin: 0; }
 .tw-source-detail { padding: 25px 18px 20px; }
-.tw-source-domain { color: var(--tw-muted); font-size: 11px; overflow-wrap: anywhere; }
-.tw-sources h3 { font-size: 16px; line-height: 1.6; font-weight: 550; overflow-wrap: anywhere; margin: 9px 0; text-wrap: pretty; }
-.tw-source-detail p, .tw-source-empty p { font-size: 12px; color: var(--tw-muted); line-height: 1.8; }
+.tw-source-domain { color: var(--tw-muted); font-size: var(--hp-text-caption); overflow-wrap: anywhere; }
+.tw-sources h3 { font-size: var(--hp-text-body); line-height: 1.6; font-weight: 550; overflow-wrap: anywhere; margin: 9px 0; text-wrap: pretty; }
+.tw-source-detail p, .tw-source-empty p { font-size: var(--hp-text-caption); color: var(--tw-muted); line-height: 1.8; }
 .tw-open-source { width: 100%; margin-top: 10px; color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #365d95); border: 0; padding: 10px; border-radius: 8px; }
 .tw-open-source:hover { background: var(--vscode-button-hoverBackground, #426faa); }
 .tw-pin { width: 100%; margin-top: 9px; }
-.tw-source-detail .tw-source-policy { font-size: 10px; margin-bottom: 0; }
-.tw-sources .tw-source-list-title { font-size: 11px; color: var(--tw-muted); padding: 0 18px; margin-top: 14px; }
+.tw-source-detail .tw-source-policy { font-size: var(--hp-text-caption); margin-bottom: 0; }
+.tw-sources .tw-source-list-title { font-size: var(--hp-text-caption); color: var(--tw-muted); padding: 0 18px; margin-top: 14px; }
 .tw-source-list { padding: 0 10px 20px; }
 .tw-source-list button { display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left; border: 1px solid transparent; background: transparent; color: inherit; padding: 10px 8px; border-radius: 7px; }
 .tw-source-list button[aria-pressed="true"] { border-color: var(--tw-line); }
-.tw-source-list span { overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
-.tw-source-list small { font-size: 10px; color: var(--tw-muted); overflow-wrap: anywhere; }
+.tw-source-list span { overflow-wrap: anywhere; font-size: var(--hp-text-caption); line-height: 1.6; }
+.tw-source-list small { font-size: var(--hp-text-caption); color: var(--tw-muted); overflow-wrap: anywhere; }
 .tw-source-empty { padding: 64px 22px; }
 .tw-source-empty > span { display: block; font-size: 28px; color: var(--tw-muted); margin-bottom: 20px; }
 .tw-rail-toggle { display: none; }
@@ -85,7 +90,7 @@
   .tw-workspace[data-rail-open="true"] .tw-rail { display: flex; position: absolute; top: 58px; bottom: 0; left: 0; z-index: 4; width: min(260px, calc(100% - 25px)); box-sizing: border-box; }
   .tw-rail-toggle { display: inline-block; }
   .tw-heading { padding: 0 12px; gap: 8px; }
-  .tw-heading h1 { font-size: 13px; }
+  .tw-heading h1 { font-size: var(--hp-text-caption); }
   .tw-rename { flex-wrap: wrap; padding: 8px 0; }
   .tw-rename input { flex-basis: 100%; }
   .tw-conversation .hps-messages { padding: 15px; }
@@ -113,7 +118,7 @@
 .tw-chat-menu { position: relative; }
 .tw-workspace .hps-header .tw-chat-menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; padding: 0; margin: 0; border-radius: 7px; }
 .tw-chat-menu-panel { position: absolute; z-index: 5; top: calc(100% + 6px); right: 0; width: min(224px, calc(100vw - 32px)); padding: 6px; box-sizing: border-box; border: 1px solid var(--tw-line); border-radius: 9px; background: var(--tw-panel); color: var(--vscode-foreground, #e1e1e1); box-shadow: 0 6px 22px rgb(0 0 0 / 20%); }
-.tw-workspace .hps-header .tw-chat-menu-panel > button { display: block; width: 100%; min-width: 44px; min-height: 44px; box-sizing: border-box; margin: 0; padding: 10px 12px; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; border-radius: 5px; }
+.tw-workspace .hps-header .tw-chat-menu-panel > button { display: block; width: 100%; min-width: 44px; min-height: 44px; box-sizing: border-box; margin: 0; padding: 10px 12px; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: var(--hp-text-caption); line-height: 1.5; border-radius: 5px; }
 
 /* Personal menu contrast follows the active theme, including hover and focus. */
 .tw-workspace .hps-header .tw-chat-menu-toggle,
@@ -127,17 +132,19 @@
 .tw-heading .hps-header { display: contents; }
 .tw-heading .hps-trial-left { color: var(--tw-muted); margin-inline: 0 4px; }
 .tw-heading .tw-chat-menu { order: 1; }
-.tw-workspace .tw-heading .tw-sources-toggle { border-color: transparent; background: transparent; padding: 0 12px; font-size: 13px; color: var(--vscode-foreground, #e1e1e1); }
+.tw-workspace .tw-heading .tw-sources-toggle { border-color: transparent; background: transparent; padding: 0 12px; font-size: var(--hp-text-caption); color: var(--vscode-foreground, #e1e1e1); }
 .tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background: var(--vscode-list-inactiveSelectionBackground, #30353d); }
 /* The task title keeps its place; the remaining line gives way (ellipsis, full text in its title). */
 .tw-heading h1 { flex: 1 1 0; min-width: min(120px, 30%); }
 .tw-heading .hps-trial-left { flex: 0 1 auto; min-width: 0; }
 /* US-05 current activity: muted, and it yields before the remaining count does. */
-.tw-heading .hps-activity-now { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--tw-muted); }
+.tw-heading .hps-activity-now { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-text-caption); color: var(--tw-muted); }
 /* Narrow header (sidebar, 390-560px): the remaining count stays whole; only "· …까지" gives way. */
 @media (max-width: 640px) {
   .tw-heading h1 { min-width: min(72px, 22%); }
   .tw-heading .hps-trial-until { display: none; }
+  /* TUX-SP-13B: the remaining count stays whole; the title and the run note give way first. */
+  .tw-heading .hps-trial-left { flex-shrink: 0; }
   /* The name is still read by screen readers and kept in the title. The kind stays on screen unless a
      trial's remaining line needs the room: that line already says the seat is a trial, and its count
      must stay whole (TUX-SP-13B). */
@@ -147,7 +154,7 @@
 .tw-workspace .tw-heading .tw-rail-toggle { border-color: transparent; }
 .tw-workspace .tw-heading .tw-rail-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
 /* REQ-STUDIO-TASK-RUN-STATE — words plus a symbol; colour is never the only carrier. */
-.tw-task-state { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 1px 6px; border: 1px solid var(--tw-line); border-radius: 999px; font-size: 11px; line-height: 1.5; }
+.tw-task-state { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 1px 6px; border: 1px solid var(--tw-line); border-radius: 999px; font-size: var(--hp-text-caption); line-height: 1.5; }
 .tw-task-state-symbol { font-weight: 700; }
 .tw-task-state[data-run-state="approval"], .tw-task-state[data-run-state="error"] { font-weight: 700; border-width: 2px; }
 

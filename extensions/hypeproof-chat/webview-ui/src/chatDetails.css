@@ -2,7 +2,7 @@
 .hps-shell[data-chat-detail="personal"] { min-height: 0; --chat-column: 740px; }
 .hps-shell[data-chat-detail="personal"] .hps-header { color: var(--tw-muted); padding-block: 12px; }
 /* US-05 — the current activity (kind · name) in the personal header; it yields before the remaining line. */
-.hps-activity-now { flex: 0 1000 auto; min-width: 0; margin-inline: 8px 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hps-activity-now { flex: 0 1000 auto; min-width: 0; margin-inline: 8px 0; font-size: var(--hp-text-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* TUX-SP-13 — the trial's passive remaining line: quiet text beside the AI name, never a control. */
 .hps-trial-left { flex: 0 1 auto; min-width: 0; margin-inline: 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hps-shell[data-chat-detail="personal"] .hps-messages {
@@ -15,8 +15,8 @@
 }
 .hps-shell[data-chat-detail="personal"] .hps-messages > * { flex-shrink: 0; min-width: 0; }
 .hps-shell[data-chat-detail="personal"] .hps-msg { gap: 10px; }
-.hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: 15px; line-height: 1.8; overflow-wrap: anywhere; min-width: 0; }
-.hps-shell[data-chat-detail="personal"] .hps-msg-role { opacity: 1; color: var(--tw-muted); letter-spacing: 0; font-size: 12px; }
+.hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-text-body); line-height: 1.8; overflow-wrap: anywhere; min-width: 0; }
+.hps-shell[data-chat-detail="personal"] .hps-msg-role { opacity: 1; color: var(--tw-muted); letter-spacing: 0; font-size: var(--hp-text-caption); }
 .hps-shell[data-chat-detail="personal"] .hps-msg-role > span { display: inline-flex; align-items: center; gap: 8px; font-weight: 550; }
 .hps-shell[data-chat-detail="personal"] .hps-assistant-mark {
   display: inline-grid; place-items: center; width: 22px; height: 22px;
@@ -43,14 +43,14 @@
 }
 .hps-shell[data-chat-detail="personal"] .hps-tool-log-line {
   align-self: flex-start; max-width: 100%; box-sizing: border-box; padding: 3px 0;
-  border: 0; background: transparent; font-size: 12px; color: var(--tw-muted); gap: 8px;
+  border: 0; background: transparent; font-size: var(--hp-text-caption); color: var(--tw-muted); gap: 8px;
 }
 .hps-shell[data-chat-detail="personal"] .hps-tool-label { overflow-wrap: anywhere; min-width: 0; }
 .hps-shell[data-chat-detail="personal"] .hps-tool-mark { color: inherit; }
 .hps-shell[data-chat-detail="personal"] .hps-cit-rack { margin-top: 3px; max-width: 100%; gap: 7px; }
 .hps-shell[data-chat-detail="personal"] .hps-cit-chip {
   border: 1px solid var(--tw-line); background: var(--tw-panel); color: inherit;
-  border-radius: 9px; padding: 7px 10px; max-width: 100%; font-size: 12px;
+  border-radius: 9px; padding: 7px 10px; max-width: 100%; font-size: var(--hp-text-caption);
 }
 .hps-shell[data-chat-detail="personal"] .hps-cit-index { font-variant-numeric: tabular-nums; color: var(--tw-muted); }
 .hps-shell[data-chat-detail="personal"] .hps-cit-domain { color: var(--tw-muted); opacity: 1; }
@@ -67,7 +67,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-input textarea {
   border: 0; background: transparent; outline: none; padding: 10px 12px;
   min-height: 44px; max-height: 192px; overflow-y: auto; border-radius: 12px;
-  line-height: 1.6; font-size: 15px; scrollbar-width: thin;
+  line-height: 1.6; font-size: var(--hp-text-body); scrollbar-width: thin;
 }
 .hps-shell[data-chat-detail="personal"] .hps-input textarea::placeholder { color: var(--hp-placeholder); opacity: 1; }
 .hps-shell[data-chat-detail="personal"] .hps-input-buttons { align-items: center; padding: 0 2px 2px 12px; gap: 8px; }
@@ -84,11 +84,11 @@
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send:disabled { opacity: .42; }
 .hps-answer-actions { display: flex; align-items: center; gap: 10px; min-height: 28px; color: var(--tw-muted); }
 .hps-copy-answer { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 6px; padding: 5px 7px; margin-left: -7px; color: inherit; background: transparent; }
-.tw-workspace .hps-copy-answer { font-size: 11px; }
+.tw-workspace .hps-copy-answer { font-size: var(--hp-text-caption); }
 .hps-copy-answer:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
 .hps-copy-status { font-size: 11px; line-height: 1.5; }
 .hps-copy-status:not(:empty) { animation: chat-feedback var(--hp-dur-content) var(--hp-ease); }
-.hps-response-pending { display: flex; align-items: center; gap: 10px; color: var(--tw-muted); font-size: 12px; margin: 8px 0; }
+.hps-response-pending { display: flex; align-items: center; gap: 10px; color: var(--tw-muted); font-size: var(--hp-text-caption); margin: 8px 0; }
 .hps-response-dots { display: inline-flex; align-items: center; gap: 4px; }
 .hps-response-dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: chat-pending var(--hp-dur-pending) ease-in-out 3; }
 .hps-response-dots i:nth-child(2) { animation-delay: var(--hp-dur-stagger); }
@@ -96,13 +96,13 @@
 .hps-msg-live { animation: chat-feedback var(--hp-dur-enter) var(--hp-ease); }
 .hps-catchup { position: relative; height: 0; flex-shrink: 0; display: flex; justify-content: center; z-index: 1; }
 .hps-catchup button { position: absolute; bottom: 8px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--tw-line); border-radius: 20px; background: var(--tw-panel); color: inherit; box-shadow: 0 3px 12px #0002; animation: chat-feedback var(--hp-dur-content) var(--hp-ease); }
-.tw-workspace .hps-catchup button { font-size: 12px; }
+.tw-workspace .hps-catchup button { font-size: var(--hp-text-caption); }
 @keyframes chat-feedback { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes chat-pending { 0%, 70%, 100% { opacity: .45; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-2px); } }
 @media (max-width: 700px) {
   .hps-shell[data-chat-detail="personal"] .hps-messages { padding: 18px 18px 24px; gap: 24px; }
   .hps-shell[data-chat-detail="personal"] .hps-input-area { padding: 10px 12px 14px; }
-  .hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: 14px; }
+  .hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-text-body); }
   .hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body { max-width: 88%; padding: 10px 14px; }
   .hps-shell[data-chat-detail="personal"] .hps-cit-domain { display: none; }
   .hps-shell[data-chat-detail="personal"] .hps-cit-title { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
@@ -121,7 +121,7 @@
   column-gap: 8px; row-gap: 8px; padding: 5px 8px; border-radius: 28px;
 }
 .hps-shell[data-chat-detail="personal"] .hps-input textarea {
-  min-height: 24px; padding: 0 8px; font-size: 16px; line-height: 24px; resize: none;
+  min-height: 24px; padding: 0 8px; font-size: var(--hp-text-body); line-height: var(--hp-leading-label); resize: none;
   box-sizing: border-box; min-width: 0; width: 100%; border-radius: 0;
 }
 .hps-shell[data-chat-detail="personal"] .hps-input-buttons { padding: 0; justify-self: end; gap: 4px; }
@@ -131,7 +131,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] textarea { grid-column: 1 / -1; }
 .hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] .hps-input-buttons { grid-column: 2; }
 .hps-composer-hint { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: 16px; line-height: 1.625; }
+.hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-text-body); line-height: var(--hp-leading-prose); }
 
 /* Tools share the editing surface; only a selected tool adds a context row. */
 .hps-shell[data-chat-detail="personal"] .hps-input { position: relative; grid-template-columns: 44px minmax(0, 1fr) 44px; }
@@ -142,16 +142,16 @@
 .tw-workspace .hps-tool-trigger { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; background: transparent; color: inherit; border: 0; border-radius: 50%; }
 .hps-tool-trigger:hover { background: var(--vscode-list-hoverBackground, #ffffff0a); }
 .hps-tools-menu { position: absolute; bottom: calc(100% + 14px); left: 0; width: min(304px, calc(100vw - 56px)); max-height: min(320px, 50vh); overflow-y: auto; padding: 6px; z-index: 20; border: 1px solid var(--tw-line); border-radius: 16px; background: var(--tw-panel); color: var(--vscode-foreground); box-shadow: 0 8px 32px #0002; animation: chat-feedback var(--hp-dur-enter) var(--hp-ease); }
-.tw-workspace .hps-tools-menu button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 52px; padding: 12px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; font-size: 14px; }
+.tw-workspace .hps-tools-menu button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 52px; padding: 12px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; font-size: var(--hp-text-caption); }
 .hps-tools-menu button > svg { flex-shrink: 0; margin-top: 1px; }
 .hps-tools-menu button > span { flex: 1; min-width: 0; }
 .hps-tools-menu button small { display: block; margin-top: 4px; font-size: 12px; color: var(--tw-muted); line-height: 1.5; }
 .hps-tools-menu button:hover { background: var(--vscode-list-hoverBackground, #ffffff0a); }
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-tools-menu button:hover { transform: none; }
 .hps-tools-menu button[aria-disabled="true"] { cursor: default; }
-.tw-workspace .hps-selected-tool { grid-row: 2; grid-column: 2; justify-self: start; display: flex; align-items: center; gap: 7px; min-height: 44px; max-width: 100%; border: 0; border-radius: 22px; padding: 8px 12px; background: var(--vscode-list-inactiveSelectionBackground, #30353d); color: inherit; font-size: 13px; }
+.tw-workspace .hps-selected-tool { grid-row: 2; grid-column: 2; justify-self: start; display: flex; align-items: center; gap: 7px; min-height: 44px; max-width: 100%; border: 0; border-radius: 22px; padding: 8px 12px; background: var(--vscode-list-inactiveSelectionBackground, #30353d); color: inherit; font-size: var(--hp-text-caption); }
 .hps-selected-tool:disabled { opacity: .8; }
-.hps-user-tool { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; color: var(--tw-muted); font-size: 12px; }
+.hps-user-tool { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; color: var(--tw-muted); font-size: var(--hp-text-caption); }
 .hps-shell[data-chat-detail="personal"] .hps-queued { flex-wrap: wrap; }
 .hps-queued-send { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: inherit; }
 .hps-shell[data-chat-detail="personal"] .hps-copy-answer,
@@ -188,23 +188,23 @@
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action {
   display: inline-flex; align-items: center; gap: 6px; min-width: 44px; min-height: 44px; margin: 0;
   padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--tw-muted);
-  font-size: 12px; line-height: 1.4; opacity: 1;
+  font-size: var(--hp-text-caption); line-height: 1.4; opacity: 1;
 }
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions > .hps-answer-action:first-child { margin-left: -8px; }
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action:hover { background: var(--vscode-list-hoverBackground, #2b3037); color: var(--vscode-foreground, #e1e1e1); opacity: 1; }
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
-.hps-shell[data-chat-detail="personal"] .hps-copy-status { font-size: 12px; margin-left: 4px; }
+.hps-shell[data-chat-detail="personal"] .hps-copy-status { font-size: var(--hp-text-caption); margin-left: 4px; }
 
 /* CGP-CHAT-R-005 — answer verdict. The two buttons share the ghost action style above; pressed state is
    a check mark plus aria-pressed, never colour alone. Reasons are a small wrapped group under the row. */
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-verdict[aria-pressed="true"] { color: var(--vscode-foreground, #e1e1e1); background: var(--vscode-list-inactiveSelectionBackground, #2b3037); }
-.hps-verdict-reasons { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; color: var(--tw-muted, var(--vscode-descriptionForeground, #9aa0a6)); font-size: 12px; }
+.hps-verdict-reasons { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; color: var(--tw-muted, var(--vscode-descriptionForeground, #9aa0a6)); font-size: var(--hp-text-caption); }
 .hps-verdict-reason-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .hps-verdict-reason { min-height: 44px; min-width: 44px; padding: 4px 12px; border-radius: 22px; border: 1px solid var(--hp-control-line, #748F79); background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .hps-verdict-reason[aria-pressed="true"] { color: var(--vscode-foreground, #e1e1e1); background: var(--vscode-list-inactiveSelectionBackground, #2b3037); }
 .hps-verdict-reason:focus-visible, .hps-verdict-note textarea:focus-visible, .hps-verdict-note button:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
 .hps-verdict-note { display: flex; flex-direction: column; gap: 4px; }
-.hps-verdict-note textarea { min-height: 56px; resize: vertical; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--hp-control-line, #748F79); background: var(--vscode-input-background, var(--vscode-editor-background, #1e1e1e)); color: var(--vscode-input-foreground, var(--vscode-foreground, #e1e1e1)); font: inherit; font-size: 13px; }
+.hps-verdict-note textarea { min-height: 56px; resize: vertical; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--hp-control-line, #748F79); background: var(--vscode-input-background, var(--vscode-editor-background, #1e1e1e)); color: var(--vscode-input-foreground, var(--vscode-foreground, #e1e1e1)); font: inherit; font-size: var(--hp-text-caption); }
 .hps-verdict-note textarea::placeholder { color: var(--hp-placeholder); opacity: 1; }
 .hps-verdict-note-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .hps-verdict-note-actions button { min-width: 44px; min-height: 44px; padding: 4px 14px; border-radius: 8px; border: 1px solid var(--hp-control-line, #748F79); background: transparent; color: inherit; font: inherit; cursor: pointer; }
@@ -215,7 +215,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-codepill-toggle {
   display: inline-flex; align-items: center; gap: 6px; min-height: 32px; margin-left: -8px;
   padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--tw-muted);
-  font-size: 12px; line-height: 1.4;
+  font-size: var(--hp-text-caption); line-height: 1.4;
 }
 .hps-shell[data-chat-detail="personal"] .hps-codepill-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); color: var(--vscode-foreground, #e1e1e1); }
 
@@ -228,36 +228,36 @@
 /* Personal chat keeps secondary controls behind settings and the conversation in view. */
 .hps-shell[data-chat-detail="personal"] .hps-header { padding-block: 4px; min-height: 36px; }
 .hps-shell[data-chat-detail="personal"] .hps-ai-disclosure {
-  border: 0; padding: 0; margin: 0; background: transparent; color: var(--tw-muted); font-size: 11px; line-height: 1.5;
+  border: 0; padding: 0; margin: 0; background: transparent; color: var(--tw-muted); font-size: var(--hp-text-caption); line-height: 1.5;
 }
 .hps-shell[data-chat-detail="personal"] .hps-empty { padding: 16px 0 0; }
-.hps-shell[data-chat-detail="personal"] .hps-empty-greeting { font-size: 17px; line-height: 1.65; max-width: 640px; }
+.hps-shell[data-chat-detail="personal"] .hps-empty-greeting { font-size: var(--hp-text-lead); line-height: var(--hp-leading-prose); max-width: 640px; }
 .hps-shell[data-chat-detail="personal"] .hps-chips-rack { margin: 0; padding: 0; gap: 10px; }
-.hps-shell[data-chat-detail="personal"] .hps-chips-label { font-size: 11px; color: var(--tw-muted); opacity: 1; }
+.hps-shell[data-chat-detail="personal"] .hps-chips-label { font-size: var(--hp-text-caption); color: var(--tw-muted); opacity: 1; }
 .hps-shell[data-chat-detail="personal"] .hps-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 8px; }
 .hps-shell[data-chat-detail="personal"] .hps-chip { padding: 12px; border: 1px solid var(--tw-line); border-radius: 10px; text-align: left; background: transparent; min-height: 44px; }
-.hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: 13px; line-height: 1.5; }
-.hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: 11px; line-height: 1.5; font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: 5px; }
+.hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: var(--hp-text-caption); line-height: 1.5; }
+.hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: var(--hp-text-caption); line-height: 1.5; font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: 5px; }
 .hps-preferences { box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; color: var(--vscode-foreground, #f2f4e8); background: var(--tw-panel); border: 1px solid var(--tw-line); border-radius: 16px; box-shadow: 0 12px 48px #0005; overflow: auto; }
 .hps-preferences::backdrop { background: #0006; }
 .hps-preferences > header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--tw-line); }
-.hps-preferences h2 { font-size: 16px; font-weight: 600; margin: 0; }
+.hps-preferences h2 { font-size: var(--hp-text-body); font-weight: 600; margin: 0; }
 .hps-preferences > header button { width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: inherit; font-size: 24px; border-radius: 8px; }
-.hps-preferences-body { padding: 8px 20px 16px; font-size: 13px; line-height: 1.6; }
+.hps-preferences-body { padding: 8px 20px 16px; font-size: var(--hp-text-caption); line-height: 1.6; }
 .hps-preferences-body > details { border: 0; border-bottom: 1px solid var(--tw-line); border-radius: 0; padding: 8px 0; margin: 0; max-height: none; }
 .hps-preferences summary { min-height: 44px; align-content: center; cursor: pointer; font-weight: 500; }
 .hps-preferences .hps-model-selection, .hps-preferences .hps-effort { margin: 12px 0; padding: 0; }
-.hps-preferences select { max-width: 100%; min-height: 36px; font-size: 13px; }
+.hps-preferences select { max-width: 100%; min-height: 36px; font-size: var(--hp-text-caption); }
 .hps-preferences p, .hps-preferences small { color: var(--tw-muted); overflow-wrap: anywhere; }
 .hps-preferences .hps-all-settings { margin-top: 12px; padding: 8px 0; border: 0; min-height: 44px; background: transparent; color: inherit; }
-.hps-access-attention { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--tw-muted); font-size: 12px; }
+.hps-access-attention { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--tw-muted); font-size: var(--hp-text-caption); }
 .hps-access-attention button { color: inherit; background: transparent; border: 0; text-decoration: underline; min-height: 32px; }
 .hps-reply-choices { display: flex; flex-direction: column; gap: 6px; margin: 16px 0 4px; }
-.hps-shell[data-chat-detail="personal"] .hps-reply-choices button { display: flex; align-items: baseline; gap: 12px; width: 100%; padding: 10px 12px; min-height: 44px; text-align: left; font-size: 14px; line-height: 1.55; border: 1px solid var(--tw-line); border-radius: 9px; color: inherit; background: transparent; }
+.hps-shell[data-chat-detail="personal"] .hps-reply-choices button { display: flex; align-items: baseline; gap: 12px; width: 100%; padding: 10px 12px; min-height: 44px; text-align: left; font-size: var(--hp-text-caption); line-height: 1.55; border: 1px solid var(--tw-line); border-radius: 9px; color: inherit; background: transparent; }
 .hps-reply-choices button:hover { background: var(--vscode-list-hoverBackground, #ffffff0a); }
-.hps-choice-number { color: var(--tw-muted); flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
-.hps-choice-help { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--tw-muted); font-size: 11px; }
-.hps-choice-help button { border: 0; background: transparent; color: inherit; text-decoration: underline; min-height: 44px; padding: 0 8px; font-size: 12px; }
+.hps-choice-number { color: var(--tw-muted); flex-shrink: 0; font-size: var(--hp-text-caption); font-variant-numeric: tabular-nums; }
+.hps-choice-help { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--tw-muted); font-size: var(--hp-text-caption); }
+.hps-choice-help button { border: 0; background: transparent; color: inherit; text-decoration: underline; min-height: 44px; padding: 0 8px; font-size: var(--hp-text-caption); }
 @media (max-height: 500px) {
   .hps-shell[data-chat-detail="personal"] .hps-empty { padding-top: 0; }
   .hps-shell[data-chat-detail="personal"] .hps-messages { gap: 16px; }
@@ -266,21 +266,127 @@
 /* CGP-DS-R-028: personal prose keeps eojeol line breaks too. */
 .hps-shell[data-chat-detail="personal"] .hps-msg-body { word-break: keep-all; }
 
-/* CGP-DS-R-009: chat text size in personal chat (the picker lives in 대화 설정). Base stays as above
-   (16px body and composer); 크게 / 아주 크게 add 2px / 4px to the body, the composer and the
-   reply-choice text inside answers. Control heights and 44px targets do not change. */
-.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-msg-body,
-.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-input textarea { font-size: 18px; }
-.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-msg-body,
-.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-input textarea { font-size: 20px; }
-.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-reply-choices button { font-size: 16px; }
-.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-reply-choices button { font-size: 18px; }
-.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-choice-number { font-size: 14px; }
-.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-choice-number { font-size: 16px; }
-.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-choice-help { font-size: 13px; }
-.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-choice-help { font-size: 15px; }
-.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-choice-help button { font-size: 14px; }
-.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-choice-help button { font-size: 16px; }
+/* CGP-DS-R-009 / CGP-DS-R-008: chat text size in personal chat (the picker lives in 대화 설정). The
+   shell sets the step; every --hp-text-* size inside it follows (tokens.css), so 크게 / 아주 크게 add
+   2px / 4px to the body, the composer, reply choices and every caption alike. Control heights and
+   44px targets do not change (min-heights only). */
+.hps-shell[data-chat-detail="personal"][data-text-size="large"] { --hp-text-step: 2px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] { --hp-text-step: 4px; }
+
+/* CGP-DS-R-008 (REQ-STUDIO-TYPE-SCALE, DEC-29): learner text in the personal chat reads at 14px or
+   more. The shell's own size is the caption step, so text that only inherits follows the step too.
+   The rules below are the shared chat classes whose base size in styles.css (or in a component file
+   the classroom also loads) is below 14px; the classroom keeps those sizes, and this personal scope
+   raises them to the caption step. Each selector is the base selector under the personal shell, so
+   it always outranks its base rule (test/type-scale.smoke.mjs computes the cascade). */
+.hps-shell[data-chat-detail="personal"] { font-size: var(--hp-text-caption); }
+.hps-shell[data-chat-detail="personal"] .hps-user-actions button,
+.hps-shell[data-chat-detail="personal"] .hps-version-pager,
+.hps-shell[data-chat-detail="personal"] .hps-version-note,
+.hps-shell[data-chat-detail="personal"] .hps-edit-note,
+.hps-shell[data-chat-detail="personal"] .hps-cit-domain,
+.hps-shell[data-chat-detail="personal"] .hps-msg-run,
+.hps-shell[data-chat-detail="personal"] .hps-msg-retry,
+.hps-shell[data-chat-detail="personal"] .hps-naming-btn-ghost,
+.hps-shell[data-chat-detail="personal"] .hps-thinking-details pre,
+.hps-shell[data-chat-detail="personal"] .hps-code-progress,
+.hps-shell[data-chat-detail="personal"] .hps-codepill-body,
+.hps-shell[data-chat-detail="personal"] .hps-empty-sub,
+.hps-shell[data-chat-detail="personal"] .hps-error,
+.hps-shell[data-chat-detail="personal"] .hps-hint,
+.hps-shell[data-chat-detail="personal"] .hps-hint code,
+.hps-shell[data-chat-detail="personal"] .hps-input button,
+.hps-shell[data-chat-detail="personal"] .hps-queued,
+.hps-shell[data-chat-detail="personal"] .hps-img-note,
+.hps-shell[data-chat-detail="personal"] .hps-image-preparing,
+.hps-shell[data-chat-detail="personal"] .hps-attachment-name,
+.hps-shell[data-chat-detail="personal"] .hps-roll-hint,
+.hps-shell[data-chat-detail="personal"] .hps-roll-original,
+.hps-shell[data-chat-detail="personal"] .hps-roll-cancel,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-title,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-msg,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-retry,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-dismiss,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-report,
+.hps-shell[data-chat-detail="personal"] .hps-error-banner-rid,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-title,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-sub,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-notes,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-toggle,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-install,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-dismiss,
+.hps-shell[data-chat-detail="personal"] .hps-page-notice,
+.hps-shell[data-chat-detail="personal"] .hps-element-context,
+.hps-shell[data-chat-detail="personal"] .hps-stop-notice,
+.hps-shell[data-chat-detail="personal"] .hps-turn-review,
+.hps-shell[data-chat-detail="personal"] .hps-effort,
+.hps-shell[data-chat-detail="personal"] .hps-access,
+.hps-shell[data-chat-detail="personal"] .hps-verify,
+.hps-shell[data-chat-detail="personal"] .hps-verify-ai,
+.hps-shell[data-chat-detail="personal"] .hps-publish,
+.hps-shell[data-chat-detail="personal"] .hps-publish-note,
+.hps-shell[data-chat-detail="personal"] .hps-publish-timing,
+.hps-shell[data-chat-detail="personal"] .hps-publish-declare legend,
+.hps-shell[data-chat-detail="personal"] .hps-evidence,
+.hps-shell[data-chat-detail="personal"] .hps-evidence-meta,
+.hps-shell[data-chat-detail="personal"] .hps-trial-end-card-fact,
+.hps-shell[data-chat-detail="personal"] .hps-trial-end-card-primary,
+.hps-shell[data-chat-detail="personal"] .hps-trial-end-card-escape,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin-input,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin-submit,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin-consent,
+.hps-shell[data-chat-detail="personal"] .hps-notify-optin-withdraw,
+.hps-shell[data-chat-detail="personal"] .hps-recovery-notice,
+.hps-shell[data-chat-detail="personal"] .hps-recovered,
+.hps-shell[data-chat-detail="personal"] .hps-page-attachment,
+.hps-shell[data-chat-detail="personal"] .hps-page-attachment-note,
+.hps-shell[data-chat-detail="personal"] .hps-file-attach-notice,
+.hps-shell[data-chat-detail="personal"] .hps-file-attach-error,
+.hps-shell[data-chat-detail="personal"] .hps-input:not([data-expanded]) .hps-tools-menu button,
+.hps-shell[data-chat-detail="personal"] .hps-tools-menu button small,
+.hps-shell[data-chat-detail="personal"] .hps-codeblock-tool,
+.hps-shell[data-chat-detail="personal"] .cp-citation-number,
+.hps-shell[data-chat-detail="personal"] .cp-citation-title,
+.hps-shell[data-chat-detail="personal"] .cp-citation-domain,
+.hps-shell[data-chat-detail="personal"] .hps-context-note,
+.hps-shell[data-chat-detail="personal"] .hps-quote-action,
+.hps-shell[data-chat-detail="personal"] .hps-quote-note,
+.hps-shell[data-chat-detail="personal"] .hps-offline-banner,
+.hps-shell[data-chat-detail="personal"] .hp-mission-week,
+.hps-shell[data-chat-detail="personal"] .hp-rail-lesson-meta,
+.hps-shell[data-chat-detail="personal"] .hp-rail-lesson-note,
+.hps-shell[data-chat-detail="personal"] .hp-goal-heading,
+.hps-shell[data-chat-detail="personal"] .hp-goal-error,
+.hps-shell[data-chat-detail="personal"] .hp-complete-why,
+.hps-shell[data-chat-detail="personal"] .hp-complete-note,
+.hps-shell[data-chat-detail="personal"] .hp-complete-notice,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-verify,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-form label,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-filter,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-empty,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-group h4,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-meta,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-adopted,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-previous,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-diff summary,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-diff-criterion,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-diff-note,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-compare h5,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-compare pre,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-compare small,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-aside h5,
+.hps-shell[data-chat-detail="personal"] .hp-evidence-hint,
+.hps-shell[data-chat-detail="personal"] .hp-inbox-meta,
+.hps-shell[data-chat-detail="personal"] .hp-inbox-link-url,
+.hps-shell[data-chat-detail="personal"] .hp-help-label,
+.hps-shell[data-chat-detail="personal"] .hp-help-consent,
+.hps-shell[data-chat-detail="personal"] .hp-help-modes legend { font-size: var(--hp-text-caption); }
+/* The naming screen shows the activity line above the card, inside the workspace but outside the shell. */
+.tw-workspace .hps-activity-header { font-size: var(--hp-text-caption); }
+/* The personal header is drawn into the task heading (outside the shell, so it keeps the base step). */
+.tw-heading .hps-coach-name, .tw-heading .hps-header button, .tw-heading .hps-trial-left,
+.hps-shell[data-chat-detail="personal"] .hps-coach-name, .hps-shell[data-chat-detail="personal"] .hps-header button, .hps-shell[data-chat-detail="personal"] .hps-trial-left { font-size: var(--hp-text-caption); }
 .hps-text-size { border: 0; border-bottom: 1px solid var(--tw-line); margin: 0; padding: 8px 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .hps-text-size legend { padding: 0; font-weight: 500; min-height: 32px; }
 .hps-text-size label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }

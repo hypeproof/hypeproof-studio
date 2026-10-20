@@ -43,19 +43,24 @@ t("base size adds no attribute (existing renders unchanged)", () => ok(!/data-te
 for (const size of ["large", "xlarge"]) t(`${size} marks the shell`, () => ok(renderToStaticMarkup(<ChatPanel {...PROPS} config={config(size)} instructor={false} />).includes(`data-text-size="${size}"`), "missing"));
 
 const css = readFileSync("webview-ui/src/chatDetails.css", "utf8");
-// Effective size = the last rule in the file for that selector that sets font-size (same
+const tokens = readFileSync("webview-ui/src/tokens.css", "utf8");
+// Effective value = the last rule in the file for that selector that sets font-size (same
 // specificity, so the later one wins; media-query overrides are earlier in the file).
-const lastPx = (sel: string) => { let px = NaN; for (let i = css.indexOf(sel); i >= 0; i = css.indexOf(sel, i + 1)) { const m = /font-size: (\d+)px/.exec(css.slice(i, css.indexOf("}", i))); if (m) px = +m[1]; } return px; };
+const lastSize = (sel: string) => { let v = ""; for (let i = css.indexOf(sel); i >= 0; i = css.indexOf(sel, i + 1)) { const m = /font-size: ([^;]+);/.exec(css.slice(i, css.indexOf("}", i))); if (m) v = m[1]; } return v; };
 const P = '.hps-shell[data-chat-detail="personal"]';
+// CGP-DS-R-008: sizes come from the semantic scale in tokens.css; the text-size choice is one step
+// variable on the shell. The computed sizes (16/18/20 body, every caption +2/+4) are checked by
+// test/type-scale.smoke.mjs, which runs the cascade.
 t("personal base is 16px for body and composer (the steps build on the real base)", () => {
-  ok(lastPx(`${P} .hps-msg-body {`) === 16, `body base ${lastPx(`${P} .hps-msg-body {`)}`);
-  ok(lastPx(`${P} .hps-input textarea {`) === 16, `composer base ${lastPx(`${P} .hps-input textarea {`)}`);
+  ok(lastSize(`${P} .hps-msg-body {`) === "var(--hp-text-body)", `body base ${lastSize(`${P} .hps-msg-body {`)}`);
+  ok(lastSize(`${P} .hps-input textarea {`) === "var(--hp-text-body)", `composer base ${lastSize(`${P} .hps-input textarea {`)}`);
+  ok(/--hp-text-body: calc\(16px \+ var\(--hp-text-step\)\);/.test(tokens) && /--hp-text-step: 0px;/.test(tokens), "body token is 16px at step 0");
 });
 t("크게 / 아주 크게 are +2 / +4px over base for body, composer and reply choices", () => {
-  for (const [part, base] of [[".hps-msg-body", 16], [".hps-input textarea", 16], [".hps-reply-choices button", 14], [".hps-choice-help button", 12]] as const) {
-    ok(lastPx(`${P}[data-text-size="large"] ${part}`) === base + 2, `${part} large`);
-    ok(lastPx(`${P}[data-text-size="xlarge"] ${part}`) === base + 4, `${part} xlarge`);
-  }
+  ok(css.includes(`${P}[data-text-size="large"] { --hp-text-step: 2px; }`), "large step");
+  ok(css.includes(`${P}[data-text-size="xlarge"] { --hp-text-step: 4px; }`), "xlarge step");
+  ok(/:root, \.hps-shell \{[^}]*--hp-text-caption: calc\(14px \+ var\(--hp-text-step\)\)/.test(tokens), "size tokens are re-declared on the shell, where the step is set");
+  for (const part of [".hps-reply-choices button", ".hps-choice-help button"]) ok(/^var\(--hp-text-[a-z]+\)$/.test(lastSize(`${P} ${part}`) || lastSize(`${part} {`)), `${part} uses a size token`);
 });
 t("no dead classroom rules: every size rule is scoped to personal chat", () => ok(!/\.hps-shell\[data-text-size=/.test(css), "classroom-only size rule present"));
 
