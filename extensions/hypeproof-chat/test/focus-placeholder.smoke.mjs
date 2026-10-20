@@ -272,7 +272,7 @@ const inScope = (part) => part.split(/\s+/).some((seg) => mutedScope.some((s) =>
 let fields = 0;
 for (const [f, css] of Object.entries(cssFiles)) for (const { parts, decls } of rulesOf(css)) {
   for (const part of parts) {
-    if (!/\b(input|textarea)\b/.test(part) || /::|:(focus|hover|disabled|active)|type="?(radio|checkbox)/.test(part)) continue;
+    if (!/(^|[\s>+~(])(input|textarea)\b/.test(part) || /::|:(focus|hover|disabled|active)|type="?(radio|checkbox)/.test(part)) continue;
     const bg = decls.find(([k]) => k === "background" || k === "background-color")?.[1];
     if (!bg || /^(transparent|none)$/.test(bg) || /--vscode-(button|foreground)/.test(bg)) continue;
     fields++;
