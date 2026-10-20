@@ -16,6 +16,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { createHash } from "crypto";
 import { noteHostWrite, type HostWriteActor } from "./artifactProvenance.ts";
+import { verdictTargets } from "./answerVerdict.ts";
+import type { ChatMessage } from "./protocol";
 
 /** The cohort's specialization, as /v1/profile serves it under `learning_wiki.plan`. Every field is optional. */
 // The plan shape lives in protocol.ts (the webview build imports protocol.ts and has no Node types).
@@ -122,6 +124,107 @@ export function turnsFromEvents(eventsJsonl: string): Turn[] {
     else t.coach = e.text.slice(0, 700);
   }
   return order.map((k, i) => ({ ...byTurn.get(k)!, id: `t${i + 1}` })).filter((t) => t.student || t.coach);
+}
+
+/** Characters kept per side when one answer is filed (the whole-session ingest keeps 700 per turn). */
+const ANSWER_SOURCE_MAX = 4000;
+
+/**
+ * CGP-KNOW-R-004 (REQ-STUDIO-ANSWER-TO-WIKI) — the sources for filing ONE finished answer: the
+ * learner's question that prompted it and that answer (every bubble of the turn, so a turn split by
+ * tool lines stays whole), as one turn whose id is the answer's message id (the turn's base id, so
+ * every citation reads `s<session>·<message id>`). No notes. Null when `messageId` is not the last
+ * bubble of a finished answer (verdictTargets, the same rule the answer's other actions use) or when
+ * there is no question above it.
+ */
+export function answerSources(messages: readonly ChatMessage[], messageId: string): Sources | null {
+  if (!verdictTargets(messages, false).has(messageId)) return null;
+  const end = messages.findIndex((m) => m.id === messageId);
+  let start = end;
+  while (start > 0 && messages[start - 1].role !== "user") start--;
+  const student = start > 0 ? messages[start - 1].content.trim() : "";
+  const coach = messages.slice(start, end + 1).filter((m) => m.role === "assistant").map((m) => m.content.trim()).filter(Boolean).join("\n\n");
+  if (!student || !coach) return null;
+  return { turns: [{ id: messageId.split("#")[0], student: student.slice(0, ANSWER_SOURCE_MAX), coach: coach.slice(0, ANSWER_SOURCE_MAX) }], notes: {} };
+}
+
+/** The id the one-answer prompt shows its single turn under: the prompt's own rule ("t1, t2 …"). */
+export const ANSWER_PROMPT_TURN = "t1";
+
+/** The one-answer sources as the prompt shows them: the same turn, numbered like a session's. */
+export const answerPromptSources = (sources: Sources): Sources => ({ turns: sources.turns.map((t) => ({ ...t, id: ANSWER_PROMPT_TURN })), notes: {} });
+
+/**
+ * A model proposal for one answer with its "t1" citations mapped back to the answer's message id,
+ * so applyWikiProposal (which keeps only citations of the sources' turn) files them as
+ * `s<session>·<message id>`. A citation of the message id itself is kept as it is; anything else
+ * stays and is dropped by applyWikiProposal.
+ */
+export function answerProposal(proposal: WikiProposal, turnId: string): WikiProposal {
+  const map = (c: unknown) => (Array.isArray(c) ? c.map((x) => (String(x) === ANSWER_PROMPT_TURN ? turnId : x)) : c);
+  const each = <T extends { cite?: unknown }>(items: T[] | undefined) => (Array.isArray(items) ? items.map((i) => (i && typeof i === "object" ? { ...i, cite: map(i.cite) } : i)) : items);
+  const one = <T extends { cite?: unknown }>(item: T | null | undefined) => (item && typeof item === "object" ? { ...item, cite: map(item.cite) } : item);
+  return {
+    ...proposal,
+    problem: one(proposal.problem) as WikiProposal["problem"],
+    hypotheses: each(proposal.hypotheses) as WikiProposal["hypotheses"],
+    evidence: each(proposal.evidence) as WikiProposal["evidence"],
+    decisions: each(proposal.decisions) as WikiProposal["decisions"],
+    changes: each(proposal.changes) as WikiProposal["changes"],
+    next: one(proposal.next) as WikiProposal["next"],
+  };
+}
+
+/** Limits of the confirmation the learner reads before a one-answer filing (a native modal). */
+export const PREVIEW_ITEMS = 12;
+/** Graphemes per item line, its citations included. */
+export const PREVIEW_ITEM_MAX = 200;
+/** Characters for all item lines together; with 200-grapheme lines it binds before PREVIEW_ITEMS. */
+export const PREVIEW_TOTAL_MAX = 2000;
+const PREVIEW_CITES = 2;
+const PREVIEW_CITE_MAX = 60;
+
+/** The user-perceived characters of `t` (a surrogate pair, a ZWJ emoji or an NFD syllable is one). */
+const graphemes = (t: string): string[] => Array.from(new Intl.Segmenter("ko", { granularity: "grapheme" }).segment(t), (x) => x.segment);
+/** `t` cut to at most `n` graphemes, the last one "…" when it was cut. */
+const cutGraphemes = (t: string, n: number): string => {
+  const g = graphemes(t);
+  return g.length > n ? `${g.slice(0, Math.max(0, n - 1)).join("")}…` : t;
+};
+/** One line: every whitespace and line-break class (\r, \n, U+0085, U+2028, U+2029 …) becomes one space. */
+const oneLine = (t: string) => t.replace(/[\s\u0085]+/g, " ").trim();
+
+/**
+ * What applying a proposal would add, one line per item, for the learner to confirm. Model text is
+ * flattened to one line (a line break in it cannot draw a separate, fake item). Each line is at most
+ * PREVIEW_ITEM_MAX graphemes with its citations: those are deduplicated and capped (two shown, the
+ * rest counted, the list itself cut) so they never crowd out the item's content, and the text is cut
+ * by grapheme with "…". At most PREVIEW_ITEMS items within PREVIEW_TOTAL_MAX characters are listed;
+ * the rest are counted in one "외 N개" line.
+ */
+export function proposalPreview(prev: WikiState, next: WikiState): string[] {
+  const items: Array<{ head: string; text: string; cite: string[] }> = [];
+  if (!prev.problem && next.problem) items.push({ head: "문제", text: next.problem.text, cite: next.problem.cite });
+  for (const h of next.H.slice(prev.H.length)) items.push({ head: `가설 ${h.id}`, text: h.text, cite: h.cite });
+  for (const e of next.E.slice(prev.E.length)) items.push({ head: `근거 ${e.id}`, text: e.text, cite: e.cite });
+  for (const d of next.D.slice(prev.D.length)) items.push({ head: `결정 ${d.id}`, text: d.therefore, cite: d.cite });
+  for (const c of next.changes.slice(prev.changes.length)) items.push({ head: "바뀐 것", text: c.text, cite: c.cite });
+  if (next.next && JSON.stringify(next.next) !== JSON.stringify(prev.next)) items.push({ head: "다음 행동", text: next.next.text, cite: next.next.cite });
+  const out: string[] = [];
+  let total = 0;
+  for (const item of items) {
+    const unique = [...new Set(item.cite.map((c) => oneLine(String(c))))].filter(Boolean);
+    const list = unique.slice(0, PREVIEW_CITES).join(", ") + (unique.length > PREVIEW_CITES ? ` 외 ${unique.length - PREVIEW_CITES}곳` : "");
+    const cite = unique.length ? ` (${cutGraphemes(list, PREVIEW_CITE_MAX)})` : "";
+    const head = `${item.head}: `;
+    const room = Math.max(1, PREVIEW_ITEM_MAX - graphemes(head).length - graphemes(cite).length);
+    const line = `${head}${cutGraphemes(oneLine(item.text), room)}${cite}`;
+    if (out.length >= PREVIEW_ITEMS || total + line.length > PREVIEW_TOTAL_MAX) break;
+    out.push(line);
+    total += line.length + 1;
+  }
+  if (items.length > out.length) out.push(`외 ${items.length - out.length}개 항목도 함께 정리돼요.`);
+  return out;
 }
 
 /** A stable id for "this conversation and these notes in this session", so it is not ingested twice. */
@@ -474,6 +577,15 @@ export function writeFiles(dir: string, files: Record<string, string>, writer: H
     fs.writeFileSync(path.join(dir, rel), content, "utf8");
     noteHostWrite([{ absPath: path.join(dir, rel), data: content }], writer);
   }
+}
+
+/**
+ * The one write of a model's wiki proposal: the state file, then every page as the AI's
+ * (REQ-STUDIO-ARTIFACT-PROVENANCE). Shared by the session ingest and the one-answer filing.
+ */
+export function writeWiki(dir: string, s: WikiState, plan?: LearningWikiPlan): void {
+  saveState(dir, s);
+  writeFiles(dir, renderWikiPages(s, plan), "ai");
 }
 
 /** Creates the wiki folder (pages, notes/, raw/) once; an existing wiki is left as it is. */

@@ -154,6 +154,8 @@ interface Props {
   /** REQ-STUDIO-DELEGATION-ROW — the stream running now; a delegation row is live only for it. */
   runningStreamId?: string | null;
   onVerdict?: (messageId: string, next: VerdictState | null) => void;
+  /** CGP-KNOW-R-004 — "팀 브레인에 정리하기" on one finished answer. Absent: no action. */
+  onAnswerToWiki?: (messageId: string) => void;
   onDismissError: () => void;
   onCancel: () => void;
   onClear: () => void;
@@ -1184,6 +1186,9 @@ export function ChatPanel(props: Props) {
   // CGP-CHAT-R-005 — verdicts sit on the last answer bubble of each finished turn, personal task chat only
   // (SX-06 lists what a classroom/lesson rail may show; a verdict control is not on that list).
   const judgeable = personalWorkspace && !props.instructor && props.onVerdict ? verdictTargets(shown.items, streaming) : null;
+  // CGP-KNOW-R-004 — same answers, and only where the served profile turns team brain on (the session
+  // command's own switch); the host re-checks the switch and asks before writing anything.
+  const wikiTargets = personalWorkspace && !props.instructor && props.onAnswerToWiki && config?.profile?.learning_wiki?.enabled === true ? judgeable ?? verdictTargets(shown.items, streaming) : null;
   const saveEdit = (original: ChatMessage, text: string, images: string[]) => {
     const editOf = original.editOf ?? original.id;
     if (!sendWhenOnline(() => props.onEditResend?.(original, editOf, text, images), 'edit')) return;
@@ -1496,6 +1501,7 @@ export function ChatPanel(props: Props) {
               onSaveEdit={(text, images) => saveEdit(m, text, images)}
               verdict={judgeable?.has(m.id) ? props.verdicts?.[m.id] ?? null : undefined}
               onVerdict={judgeable?.has(m.id) && props.onVerdict ? (next) => props.onVerdict?.(m.id, next) : undefined}
+              onToWiki={wikiTargets?.has(m.id) && props.onAnswerToWiki ? () => props.onAnswerToWiki?.(m.id) : undefined}
               quotable={m.role === 'assistant' && !(streaming && m.id === streamingId)}
               quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
             />
@@ -2321,6 +2327,7 @@ function MessageItem({
   onEditChange,
   verdict,
   onVerdict,
+  onToWiki,
   quotable = false,
   quoteAction,
 }: {
@@ -2362,6 +2369,8 @@ function MessageItem({
   /** CGP-CHAT-R-005 — present (null = no verdict yet) on an answer that offers a verdict. */
   verdict?: VerdictState | null;
   onVerdict?: (next: VerdictState | null) => void;
+  /** CGP-KNOW-R-004 — present on an answer that may be filed to the team brain. */
+  onToWiki?: () => void;
   /** CGP-CHAT-R-007 — a finished answer whose text may be quoted, and its 인용하기 button. */
   quotable?: boolean;
   quoteAction?: ReactNode;
@@ -2454,7 +2463,8 @@ function MessageItem({
         content={message.content}
         onRun={renderable ? () => onRunCode(renderable) : undefined}
         onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined}
-        verdict={onVerdict ? <VerdictButtons state={verdict ?? undefined} onChange={onVerdict} /> : undefined} />}
+        verdict={onVerdict ? <VerdictButtons state={verdict ?? undefined} onChange={onVerdict} /> : undefined}
+        onToWiki={onToWiki} />}
       {personal && onVerdict && verdict?.verdict === 'fix' && !isStreamingThis && <VerdictReasons state={verdict} onChange={onVerdict} />}
     </div>
   );

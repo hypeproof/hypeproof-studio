@@ -1038,6 +1038,64 @@ steered turn's own end sends nothing again, a later turn can be steered again, t
 disappears on `inputRejected` or an error, and negative controls:
 no parked text draws no action, plain Stop sends nothing and restores the draft).
 
+`REQ-STUDIO-ANSWER-TO-WIKI` (CGP-KNOW-R-004, CGP-KNOW-D-004, P1; built 2026-10-20): a finished AI
+answer in personal task chat offers one action, **팀 브레인에 정리하기**, in the answer action row with
+복사 and the verdict buttons (REQ-STUDIO-ANSWER-VERDICT): the shared ghost action, 44 px target, at
+least 14 px on the type scale (REQ-STUDIO-TYPE-SCALE), Korean label, no capability labels. It goes on
+the same answers as the verdict (the last bubble of each finished turn, with text; never a user line,
+never the turn still streaming). Seat gate: the session team brain's own switch,
+`learning_wiki.enabled` on the served profile (REQ-STUDIO-LEARNING-WIKI), plus its folder-consent
+refusal, narrowed to where the answer row exists (personal task chat; never a lesson, a classroom
+seat or instructor mode). With the switch off or absent the action is not drawn, and the host
+re-checks the switch and refuses the message anyway. The proposal is the session ingest's own:
+`wikiPrompt` over a one-turn source holding only that answer (every bubble of its turn) and the
+learner question that prompted it, cut to 4000 characters each, no notes and no other turn. The
+prompt shows that turn as `t1` (the prompt's own id rule) and the host maps `t1` back to the answer's
+message id before `applyWikiProposal`, so every kept item cites `s<session>·<message id>` (a citation
+of the message id itself is also kept, any other id is dropped); the session
+is the one a chat call would pick (`defaultIngestSession`, asked only when ambiguous).
+`applyWikiProposal` is pure, so its result is shown before anything is written: a modal
+`팀 브레인에 이렇게 정리할까요?` lists each item it would add with its citation, and only `정리하기`
+writes; closing it writes nothing (no wiki folder is created) and says "정리하지 않았어요. 팀 브레인은
+그대로예요." The list stays readable whatever the model returns: each item is flattened to one line
+(every line-break class, `\r`, `\n`, U+0085, U+2028, U+2029, becomes a space, so model text cannot
+draw a separate item); each line is at most 200 graphemes including its citations, which are
+deduplicated and capped (two shown, the rest counted as "외 N곳", the list cut to 60 graphemes) so
+they never crowd out the content; text is cut by grapheme (`Intl.Segmenter`, never inside a
+surrogate pair, a ZWJ emoji or an NFD syllable) with "…"; at most 12 items within 2000 characters are
+listed, and the rest counted as "외 N개 항목도 함께 정리돼요." Folder
+consent is checked before the model call: 읽기만 and an undecided folder (fail closed, never asked on
+this path) refuse with `folderReadOnlyNotice()`, AI 안 씀 with `folderNoAiCopy()` (the session ingest
+still words AI 안 씀 as read-only; unchanged). The seat (lesson, instructor, switch), the folder
+consent and the wiki state are re-checked after the modal, and a late refusal says why with the same
+copy. The
+write is the session ingest's writer (`writeWiki`: the state file, then every page as the AI's), so
+each file goes through the provenance hook (`noteHostWrite`, REQ-STUDIO-ARTIFACT-PROVENANCE); there
+is no second write path. A proposal with nothing citing that turn asks nothing and writes nothing.
+The same answer is not filed twice (`sessionHash`). The result is an in-chat notice like the
+command's. Not built: the inline confirmation card and hover-only glyph of CGP-KNOW-D-004 (the
+confirmation is the modal the other wiki writes and file deletes use, and the action is a text
+label like its row); the action in classroom seats, where SX-06 fixes what the rail may show. Tests:
+`test/answer-to-wiki.smoke.mjs` (the real provider handler with fake VS Code and a scripted model:
+the prompt's sources are that answer and question only; the modal shows the items and the cited
+turn; cancel leaves no file and no host write; confirm writes through `applyWikiProposal` with the
+`s1·<id>` citation and its log line, every file on disk reported to the hook with pages as `ai`; the
+same answer twice writes nothing; a proposal citing another turn is dropped with nothing to confirm;
+a model citing `t1` or the message id is kept, `t2` or another answer's id is dropped; 300 items of
+2000 characters with a newline-made fake line give one-line cut items stopped by the 2000-character
+total before the 12-item cap, and the "외 N개" line; 20 short items show 12; a citation repeated 500
+times shows once and 500 distinct ones are capped inside the line with the next item still shown;
+every line-break class is flattened; cuts keep surrogate pairs, ZWJ emoji, flags and NFD Hangul
+whole; instructor mode, a lesson or the switch turned off while the modal is open writes nothing; real consent choices over the real store: 읽기만, AI 안 씀 and undecided refuse with
+their own copy before the model with no modal, full writes, and a choice changed while the modal is
+open refuses with its copy and writes nothing;
+team brain off, absent, a lesson or instructor mode never reaches the model; a streaming answer and
+non-answer ids are refused, each with a control) and `test/answer-to-wiki.test.tsx` (the real
+ChatPanel on `fixtures/mini-dom.mjs`: one action per finished answer under its last bubble, a click
+hands that id to App, placed in the answer row with copy and verdict, none on the streaming answer,
+none with team brain off or absent, in a lesson, a classroom seat, instructor mode or without the
+handler, each with a control); `test/type-scale.smoke.mjs` probes the button.
+
 Acceptance CG-01–CG-06 in [the verification contract](testing/task-workspace.md)
 is revision-bound. Matched screenshots and independent interaction review are
 required; local synthetic success is separate from live SDK/account, signed
