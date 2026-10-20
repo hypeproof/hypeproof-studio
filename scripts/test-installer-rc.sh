@@ -128,6 +128,7 @@ else
       'NONINTERACTIVE="${T_NONINTERACTIVE:-0}"; STUDIO_APP="$T_APP"; PATH_RC_CHANGED="${T_CHANGED:-0}"; finish'
   }
   out="$(finish_case interactive T_APP="$APP")"
+  # studio-launch: interactive -- asserts the stubbed open log of the installer, nothing is launched
   if [ "$(cat "$LOG/open.log" 2>/dev/null)" = "-a $APP" ]; then pass "interactive: opens the installed app with open -a"
   else bad "interactive: open.log is '$(cat "$LOG/open.log" 2>/dev/null)'"; fi
   if printf '%s' "$out" | grep -q -F 'Studio를 열었습니다. 시작 화면에서 바로 시작하세요.'; then pass "interactive: prints the Korean open line"
