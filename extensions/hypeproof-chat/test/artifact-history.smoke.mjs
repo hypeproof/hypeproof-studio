@@ -145,6 +145,7 @@ try {
   const after = await H.listRestorePoints(storeB);
   const recovery = after.find(p => p.files[0].sha256 === hash(three));
   assert(recovery, 'pre-restore copy exists after restore');
+  assert.equal(recovery.turnId, 'artifact-unknown', 'pre-restore recovery copy is 기록 없음, never 나');
   assert.equal(after[0].turnId, 'artifact-learner', 'restored head is 나'); assert.equal(after[0].files[0].sha256, hash('b2'));
   assert.deepEqual(await H.restoreArtifactVersion({ store: storeB, root, rel: 'b.txt', id: recovery.id, expected: hash('b2') }), { ok: true });
   assert.deepEqual(await fs.readFile(fileB), three, 'recovery copy holds the exact pre-restore bytes');
@@ -178,6 +179,29 @@ try {
   await hookOn.turnStart(root, { turnId: 't3', createdAt: 3000, files: big });
   let capturedBig = 0; for (const f of big) capturedBig += (await turns(f.path)).length ? 1 : 0;
   assert.equal(capturedBig, 2, 'turnStart byte cap');
+  // turnEnd: only added/changed files get AI; an unchanged file with an unknown revision stays unknown.
+  await fs.writeFile(path.join(root, 'e-chg.txt'), 'e1'); await fs.writeFile(path.join(root, 'e-same.txt'), 'e2'); await fs.writeFile(path.join(root, 'e-new.txt'), 'e3');
+  await hookOn.hostWrote(root, [{ absPath: path.join(root, 'e-same.txt'), data: 'e2' }], 'studio');
+  await hookOn.hostWrote(root, [{ absPath: path.join(root, 'e-chg.txt'), data: 'e1' }], 'studio');
+  await fs.writeFile(path.join(root, 'e-chg.txt'), 'e1b');
+  const eafter = [{ path: 'e-chg.txt', sha256: hash('e1b') }, { path: 'e-same.txt', sha256: hash('e2') }, { path: 'e-new.txt', sha256: hash('e3') }];
+  await hookOn.turnEnd(root, { turnId: 't4', createdAt: 4000, files: [] }, { added: ['e-new.txt'], changed: ['e-chg.txt'], deleted: [] }, eafter);
+  assert.deepEqual(await turns('e-chg.txt'), ['artifact-ai', 'artifact-unknown'], 'turnEnd changed file is AI');
+  assert.deepEqual(await turns('e-new.txt'), ['artifact-ai'], 'turnEnd added file is AI');
+  assert.deepEqual(await turns('e-same.txt'), ['artifact-unknown'], 'turnEnd leaves an unchanged file unknown');
+  // turnEnd capture is bounded by file count and total bytes (and a skipped big file does not stop later small ones).
+  const { TURN_END_HISTORY_LIMITS: ELIM } = await import('../src/artifactProvenance.ts');
+  assert.deepEqual([ELIM.files, ELIM.bytes], [25, 4 * 1024 * 1024]);
+  const eMany = [];
+  for (let i = 0; i < 30; i++) { const rel = `emany-${i}.txt`; await fs.writeFile(path.join(root, rel), `x${i}`); eMany.push({ path: rel, sha256: hash(`x${i}`) }); }
+  await hookOn.turnEnd(root, { turnId: 't5', createdAt: 5000, files: [] }, { added: eMany.map(f => f.path), changed: [], deleted: [] }, eMany);
+  let eCount = 0; for (const f of eMany) eCount += (await turns(f.path)).length ? 1 : 0;
+  assert.equal(eCount, ELIM.files, 'turnEnd file cap');
+  const eBig = [];
+  for (let i = 0; i < 3; i++) { const data = Buffer.alloc(1.5 * 1024 * 1024, i + 9), rel = `ebig-${i}.bin`; await fs.writeFile(path.join(root, rel), data); eBig.push({ path: rel, sha256: hash(data) }); }
+  await fs.writeFile(path.join(root, 'ebig-small.txt'), 'small'); eBig.push({ path: 'ebig-small.txt', sha256: hash('small') });
+  await hookOn.turnEnd(root, { turnId: 't6', createdAt: 6000, files: [] }, { added: eBig.map(f => f.path), changed: [], deleted: [] }, eBig);
+  assert.deepEqual(await Promise.all(eBig.map(async f => (await turns(f.path)).length)), [1, 1, 0, 1], 'turnEnd byte cap skips the file over budget, later small file still fits');
   // A context switch during queued metadata/blob IO must not commit a new revision.
   await fs.writeFile(file, 'pending-context');
   const beforeRace = (await H.listRestorePoints(store)).map(p => p.id);

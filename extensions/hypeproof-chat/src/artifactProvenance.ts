@@ -75,6 +75,8 @@ interface FileHash { path: string; sha256: string }
 
 /** CGP-KNOW-R-017: most files and bytes of history captured before one coach turn (REQ-STUDIO-ARTIFACT-HISTORY). */
 export const TURN_START_HISTORY_LIMITS = { files: 25, bytes: 4 * 1024 * 1024 } as const;
+/** The same bound after a coach turn: files beyond it are not versioned (they keep no AI label in history). */
+export const TURN_END_HISTORY_LIMITS = { files: 25, bytes: 4 * 1024 * 1024 } as const;
 /** A folder scan (`scanFolder`) or just its files. */
 export type ScanLike = readonly FileHash[] | { files: readonly FileHash[]; notCovered?: readonly { path: string }[] };
 
@@ -399,7 +401,16 @@ export class ArtifactProvenanceRecorder {
     this.bump();
     const at = Math.max(this.now(), point.createdAt + 1);
     return this.run(async () => {
-      for (const f of filesOf(after)) if (this.historyEnabled() && (diff.added.includes(f.path) || diff.changed.includes(f.path))) await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "ai", f.sha256, this.historyEnabled).catch(() => null);
+      // Bounded like turnStart: at most N files / M bytes per turn end; a file over the byte budget is skipped, later small ones still fit.
+      let files = 0, bytes = 0;
+      for (const f of filesOf(after)) {
+        if (!this.historyEnabled() || files >= TURN_END_HISTORY_LIMITS.files) break;
+        if (!(diff.added.includes(f.path) || diff.changed.includes(f.path))) continue;
+        const size = await fs.stat(path.join(root, f.path)).then((st) => st.size, () => -1);
+        if (size < 0 || bytes + size > TURN_END_HISTORY_LIMITS.bytes) continue;
+        files++; bytes += size;
+        await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "ai", f.sha256, this.historyEnabled).catch(() => null);
+      }
       return this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff }, after));
     });
   }

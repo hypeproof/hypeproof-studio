@@ -3126,8 +3126,9 @@ The picker explains that 나 includes confirmed edits, uploads and restores.
 History reuses the turn-restore manifest and content-addressed blob format in
 extension storage, partitioned by real work-folder path and artifact path. Capture
 runs before/after measured coach turns, after recorded host writes and editor saves,
-and when opening this file's list. Capture before a coach turn is capped at 25 files and
-4 MiB in total per turn (files beyond the cap are simply not versioned for that turn).
+and when opening this file's list. Capture before a coach turn and capture after it are each capped at 25 files and
+4 MiB in total per turn (files beyond the cap are simply not versioned for that turn
+and so carry no AI version label from it).
 It does not reconstruct unobserved past changes.
 The latest 20 captured versions per file are kept under the existing per-file size
 cap. No upload or model request is introduced.
