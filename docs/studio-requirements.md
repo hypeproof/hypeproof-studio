@@ -627,6 +627,16 @@ dialog, so they keep the base size. Since `REQ-STUDIO-TYPE-SCALE` the choice is 
 variable on the shell, so every caption in the personal chat (code pills included) follows it too.
 Test: `test/text-size.test.tsx`.
 
+CGP-CHAT-D-002 (D65, 2026-10-20) extends this edit flow: the latest prompt's
+44px edit control has a 16px pencil and the Korean label `수정`. It remains visible
+and keyboard-focusable, including without hover. The inline composer-style textarea
+keeps `취소` and `다시 보내기` underneath; its width and wrapping actions fit a 320px
+viewport. Native IME signals and composition-event state suppress Enter/Escape until
+composition ends. Prompt versions use the shared `AttemptPager` navigation component
+for D64/D65, with contextual labels. This does not add answer regeneration or selection
+storage; those retain their separate requirement scope. Browser layout and installed
+screen-reader verification remain separate from DOM interaction tests.
+
 `REQ-STUDIO-CHAT-EDIT-RESEND` (CGP-CHAT-R-002, 2026-10-20, DEC-08): the learner can edit their
 latest sent prompt and resend it, in personal task chat and classroom chat. A ghost `수정` button
 (44px target, `aria-label="보낸 메시지 수정"`) sits under the latest user line only, and only while
@@ -637,7 +647,7 @@ not in the composer, so the composer's saved draft, queue and tool mode are unto
 (or Escape outside IME composition) restores the original exactly. While the editor is open the
 composer does not send (send, friend button, idea expansion): it says `고치던 메시지가 열려 있어요. 먼저
 보내거나 취소해 주세요. 입력한 내용은 그대로입니다.` and keeps both texts. The original's in-memory images
-are shown and can be removed one by one. `보내기` sends a new request with a new id that carries
+are shown and can be removed one by one. `다시 보내기` sends a new request with a new id that carries
 the original's tool mode (REQ-STUDIO-CHAT-REFERENCE) and the kept images; the saved user line
 records `editOf` = the root id of its prompt group. The host accepts it only for the latest prompt
 group (the saved transcript plus a newer failed request) and refuses anything else back into the
