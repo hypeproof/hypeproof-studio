@@ -6488,6 +6488,19 @@
       ]
     },
     {
+      "id": "ST-TEST-FORCED-COLORS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/forced-colors.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-CONTROL-CONTRAST",
       "stage": "test",
       "owner": "jayleekr",

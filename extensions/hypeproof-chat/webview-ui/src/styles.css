@@ -1904,3 +1904,30 @@ html, body, #root {
 .hps-input:not([data-expanded]) > .hps-composer-tools .hps-tool-trigger { min-width: 44px; min-height: 44px; padding: 0; display: grid; place-items: center; background: transparent; color: inherit; }
 .hps-input:not([data-expanded]) .hps-tools-menu { background: var(--vscode-editorWidget-background, #252526); border-color: var(--vscode-panel-border, #444); }
 .hps-input:not([data-expanded]) .hps-tools-menu button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 44px; padding: 10px; background: transparent; color: inherit; text-align: left; font-weight: 400; font-size: 13px; }
+
+/* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Marks drawn only in colour, or only as a
+   background (which forced colors repaints as Canvas), get a line or a shape. Normal mode is unchanged. */
+@media (forced-colors: active) {
+  /* The learner's bubble keeps its outline (DES-CGP-DS-17). */
+  .hps-msg-user .hps-msg-body { border: 1px solid CanvasText; }
+  /* Citation trust tiers: one line style each instead of four colours. Personal chat draws no tier
+     line in normal mode, so it draws none here either. */
+  .hps-cit-chip.hps-cit-tier-1 { border-left: 3px solid CanvasText !important; }
+  .hps-cit-chip.hps-cit-tier-2 { border-left: 3px double CanvasText !important; }
+  .hps-cit-chip.hps-cit-tier-3 { border-left: 3px dashed CanvasText !important; }
+  .hps-cit-chip.hps-cit-tier-4 { border-left: 3px dotted CanvasText !important; }
+  .hps-shell[data-chat-detail="personal"] .hps-cit-chip { border-left: 1px solid ButtonText !important; }
+  /* Voice capture: hollow while closed, filled while open. A shape, not a red dot. */
+  .hps-voice-dot { border: 1px solid CanvasText; background: Canvas; }
+  .hps-voice-dot-on { background: Highlight; border-color: Highlight; }
+  /* Level and progress marks painted as backgrounds. The idle meter stays grey. */
+  .hps-voice-bar, .hps-runner-dust { background: CanvasText; }
+  .hps-voice-meter:not(.hps-voice-meter-live) .hps-voice-bar { background: GrayText; }
+  /* Chips whose shape was a tinted background; their words remain the state. */
+  .hps-verify-state, .hps-instructor-badge { border: 1px solid CanvasText; }
+  /* Small controls drawn over an image keep an opaque plate under their glyph. */
+  .hps-attachment-remove, .hps-edit-image button { background: ButtonFace; color: ButtonText; }
+  /* CGP-DS-R-016 — forced-color-adjust: a QR code has to stay dark on light to scan, and forced
+     colors would repaint its white plate as Canvas, which is black in dark high-contrast themes. */
+  .hps-publish-link img { forced-color-adjust: none; }
+}

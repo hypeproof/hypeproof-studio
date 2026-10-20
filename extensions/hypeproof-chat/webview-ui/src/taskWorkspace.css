@@ -150,3 +150,15 @@
 .tw-task-state { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 1px 6px; border: 1px solid var(--tw-line); border-radius: 999px; font-size: 11px; line-height: 1.5; }
 .tw-task-state-symbol { font-weight: 700; }
 .tw-task-state[data-run-state="approval"], .tw-task-state[data-run-state="error"] { font-weight: 700; border-width: 2px; }
+
+/* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). The open sources toggle was marked by a
+   background only; it takes the system selection pair like the current task. */
+@media (forced-colors: active) {
+  /* The current task and the selected source are filled with Highlight, and the ring is Highlight too:
+     the inset ring of these tight rows would sit on its own colour. Outside the row it sits on Canvas,
+     and the scrolling lists get 4px of room so they do not clip it. */
+  .tw-workspace .tw-task-list button:focus-visible, .tw-workspace .tw-source-list button:focus-visible { outline-offset: 2px; }
+  .tw-workspace .tw-task-list { padding: 4px; }
+  .tw-workspace .tw-source-list { padding-block-start: 4px; }
+  .tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background-color: Highlight; color: HighlightText; border-color: Highlight !important; }
+}

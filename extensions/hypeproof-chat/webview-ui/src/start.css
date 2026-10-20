@@ -484,3 +484,12 @@
 .studio-guardian-pay img { background:#fff; border-radius:6px; padding:6px; }
 .studio-guardian-pay .studio-help { margin:0; text-align:center; }
 .studio-guardian-pay .studio-text-button { margin:0; }
+
+/* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Normal mode is unchanged. */
+@media (forced-colors: active) {
+  /* The chosen repository row: its radio already shows the choice, and the row's edge follows it. */
+  .studio-repo-list label:has(input:checked) { border: 2px solid Highlight; }
+  /* CGP-DS-R-016 — forced-color-adjust: the guardian payment QR code keeps its white plate so it
+     still scans in dark high-contrast themes. */
+  .studio-guardian-pay img { forced-color-adjust: none; }
+}
