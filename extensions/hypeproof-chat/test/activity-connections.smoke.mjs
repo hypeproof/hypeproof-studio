@@ -46,25 +46,87 @@ try{
  const undoPass=await store.commit('synthetic-c',pass('c',a),a);
  assert.throws(()=>store.prepare(a,profile('a'),()=>assert.fail('an activity that is not a pass cannot take it back')),/다른 활동/);
  await undoPass();assert.equal(fs.readFileSync(store['bindingPath'](a),'utf8'),beforePass);
- // A lost free credential (reinstall, cleared keychain) claims a new free seat; it continues in its home.
+ // REQ-L12 ⑭ / REQ-STUDIO-FREE-START — a new free seat takes over its home from the machine owner's
+ // earlier solo use (free seat, code-issued trial, lost record) and never from a class, a lesson or a pass.
  {
-  const home=path.join(tmp,'free-home');fs.mkdirSync(home);
   const own=()=>{const c=context(),m=new Map();return {...c,secrets:{...c.secrets,keys:async()=>[...m.keys()],get:async k=>m.get(k),store:async(k,v)=>{m.set(k,v);},delete:async k=>m.delete(k)}};};
-  const free=(id)=>({...profile(id),profile_id:'studio-open-trial',workspace_root:home});
-  const freeStore=new ActivityConnections(own(),()=>origin,()=>home,async()=>free('f'));
-  await freeStore.commit('synthetic-f',free('f'),home);
-  assert.equal(JSON.parse(fs.readFileSync(freeStore['bindingPath'](home),'utf8')).free,true,'a free binding is marked');
-  const lost=new ActivityConnections(own(),()=>origin,()=>home,async()=>free('e'));
-  let prepared=false;lost.prepare(home,free('e'),()=>{prepared=true;});assert.equal(prepared,true,'a new free seat prepares its home over an earlier free seat');
-  await lost.commit('synthetic-e',free('e'),home);assert.equal(await lost.token(),'synthetic-e');
-  // Negative controls: a class seat in that folder is not taken over, and a free seat takes over only its home.
-  const classHome=path.join(tmp,'class-home');fs.mkdirSync(classHome);
-  await new ActivityConnections(own(),()=>origin,()=>classHome,async()=>profile('d')).commit('synthetic-d',profile('d'),classHome);
-  assert.throws(()=>lost.prepare(classHome,{...free('9'),workspace_root:classHome},()=>assert.fail('a free seat must not take over a class folder')),/다른 활동/);
-  assert.throws(()=>lost.prepare(a,free('9'),()=>assert.fail('a free seat takes over only its home folder')),/다른 활동/);
-  // A pass bought later takes the folder; a new free seat cannot take it back.
-  await lost.commit('synthetic-p',{...pass('7',home)},home);
-  assert.throws(()=>lost.prepare(home,free('8'),()=>assert.fail('a free seat must not take back a pass folder')),/다른 활동/);
+  // One machine: one SecretStorage shared by every activity, as the OS keychain is.
+  const machine=own();const onMachine=()=>({...context(),secrets:machine.secrets});
+  const at=(name)=>{const d=path.join(tmp,name);fs.mkdirSync(d);return d;};
+  const freeAt=(id,home)=>({...profile(id),profile_id:'studio-open-trial',workspace_root:home});
+  const codeTrialAt=(id,home)=>({...profile(id),profile_id:'studio-native-trial',workspace_root:home});
+  const classAt=(id,home)=>({...profile(id),activity_kind:'classroom',profile_id:'dental-seminar',workspace_root:home});
+  const enter=async(ctx,p,home,token='synthetic-'+p.activity_id.slice(0,1))=>{const s=new ActivityConnections(ctx,()=>origin,()=>home,async()=>p);await s.commit(token,p,home);return s;};
+  const prepares=async(s,home,p)=>{let ok=false;s.prepare(home,p,()=>{ok=true;},await s.folderOwners(home));return ok;};
+  const taken=async(s,home,p,why)=>{const owners=await s.folderOwners(home);assert.throws(()=>s.prepare(home,p,()=>assert.fail(why),owners),/다른 활동/,why);};
+  const fresh=(p,home)=>new ActivityConnections(onMachine(),()=>origin,()=>home,async()=>p);
+
+  // Positive 1 — Jay 2026-10-20: a code trial ("HypeProofDentalSeminar" trial) holds ~/HypeProofTrial; free start reuses it.
+  const trialHome=at('trial-home');
+  const codeTrial=await enter(onMachine(),codeTrialAt('1',trialHome),trialHome);
+  const trialRef=codeTrial.current.ref;
+  const newcomer=fresh(freeAt('2',trialHome),trialHome);
+  assert.deepEqual([...(await newcomer.folderOwners(trialHome)).values()],['trial'],'a code-issued trial resolves as a trial owner');
+  assert.throws(()=>newcomer.prepare(trialHome,freeAt('2',trialHome),()=>assert.fail('without the owner lookup the old rule holds')),/다른 활동/,'control: no lookup, no takeover');
+  assert.equal(await prepares(newcomer,trialHome,freeAt('2',trialHome)),true,'a free seat prepares its home over a code-issued trial');
+  assert.equal(await newcomer.freeWorkspace(freeAt('2',trialHome)),trialHome,'free start picks the home itself');
+  await newcomer.commit('synthetic-2',freeAt('2',trialHome),trialHome);assert.equal(await newcomer.token(),'synthetic-2');
+  // Files stay; the earlier trial keeps its record and reports the folder as taken when chosen again.
+  assert.ok(await machine.secrets.get(trialRef),'the earlier trial keeps its saved record');
+  await taken(fresh(codeTrialAt('1',trialHome),trialHome),trialHome,codeTrialAt('1',trialHome),'the earlier trial cannot take the folder back');
+  await assert.rejects(()=>fresh(codeTrialAt('1',trialHome),trialHome).commit('synthetic-1b',codeTrialAt('1',trialHome),trialHome),/다른 활동/);
+
+  // Positive 2 — an earlier free seat (lost free credential: reinstall, cleared keychain).
+  const freeHome=at('free-home');
+  await enter(own(),freeAt('f',freeHome),freeHome);
+  const lost=fresh(freeAt('e',freeHome),freeHome);
+  assert.equal(await prepares(lost,freeHome,freeAt('e',freeHome)),true,'a new free seat prepares its home over an earlier free seat');
+  await lost.commit('synthetic-e',freeAt('e',freeHome),freeHome);assert.equal(await lost.token(),'synthetic-e');
+
+  // Positive 3 — an owner whose record is gone (another keychain): unknown counts as the machine owner's own.
+  const lostHome=at('lost-home');
+  await enter(own(),codeTrialAt('3',lostHome),lostHome);
+  const afterReset=fresh(freeAt('4',lostHome),lostHome);
+  assert.deepEqual([...(await afterReset.folderOwners(lostHome)).values()],['unknown']);
+  assert.equal(await prepares(afterReset,lostHome,freeAt('4',lostHome)),true,'a free seat takes over a folder whose record is lost');
+  await afterReset.commit('synthetic-4',freeAt('4',lostHome),lostHome);
+
+  // Negative 1 — a class (lesson) on this machine holds the home: refused; free start moves on to home-2.
+  const classHome=at('class-home');
+  await enter(onMachine(),classAt('d',classHome),classHome);
+  const blocked=fresh(freeAt('9',classHome),classHome);
+  assert.deepEqual([...(await blocked.folderOwners(classHome)).values()],['held']);
+  await taken(blocked,classHome,freeAt('9',classHome),'a free seat must not take over a class folder');
+  await assert.rejects(()=>blocked.commit('synthetic-9',freeAt('9',classHome),classHome),/다른 활동/,'commit refuses the class folder as prepare does');
+  assert.equal(await blocked.freeWorkspace(freeAt('9',classHome)),classHome+'-2','held home: the next numbered folder');
+  fs.mkdirSync(classHome+'-2');fs.writeFileSync(path.join(classHome+'-2','mine.txt'),'someone else');
+  assert.equal(await blocked.freeWorkspace(freeAt('9',classHome)),classHome+'-3','an unbound sibling with files is never reused');
+  assert.equal(await prepares(blocked,classHome+'-3',freeAt('9',classHome)),true);
+  await blocked.commit('synthetic-9',freeAt('9',classHome),classHome+'-3');
+  assert.equal(await fresh(freeAt('8',classHome),classHome).freeWorkspace(freeAt('8',classHome)),classHome+'-3','a later free seat continues in the free sibling');
+  // Negative 2 — a pass holds the home.
+  const passHome=at('pass-home');
+  await enter(onMachine(),pass('7',passHome),passHome);
+  await taken(fresh(freeAt('6',passHome),passHome),passHome,freeAt('6',passHome),'a free seat must not take over a pass folder');
+  // A personal activity is not the free seat's either.
+  const personalHome=at('personal-home');
+  await enter(onMachine(),{...profile('5'),activity_kind:'personal',workspace_root:personalHome},personalHome);
+  await taken(fresh(freeAt('6',personalHome),personalHome),personalHome,freeAt('6',personalHome),'a free seat must not take over a personal folder');
+  // Negative 3 — a non-home folder, even when its owner is a trial.
+  await taken(fresh(freeAt('6',trialHome),a),a,freeAt('6',trialHome),'a free seat takes over only its own folders');
+  // A pass bought later takes the free folder; a new free seat cannot take it back.
+  await lost.commit('synthetic-p',pass('7',freeHome),freeHome);
+  await taken(fresh(freeAt('8',freeHome),freeHome),freeHome,freeAt('8',freeHome),'a free seat must not take back a pass folder');
+
+  // Mutation check: a build that lets `held` through must fail the class control above.
+  const src=fs.readFileSync(new URL('../src/activityConnections.ts',import.meta.url),'utf8');
+  const mutated=src.replace("owner === 'free' || owner === 'trial' || owner === 'unknown'","owner !== undefined");
+  assert.notEqual(mutated,src,'the mutation site exists');
+  const mb=await build({stdin:{contents:mutated,resolveDir:new URL('../src',import.meta.url).pathname,loader:'ts'},bundle:true,platform:'node',format:'cjs',write:false});
+  const mm={exports:{}};vm.runInNewContext(mb.outputFiles[0].text,{module:mm,exports:mm.exports,require,process,URL});
+  const mutant=new mm.exports.ActivityConnections(onMachine(),()=>origin,()=>classHome,async()=>freeAt('c',classHome));
+  let mutantPrepared=false;mutant.prepare(classHome,freeAt('c',classHome),()=>{mutantPrepared=true;},await mutant.folderOwners(classHome));
+  assert.equal(mutantPrepared,true,'mutation check: the mutant takes the class folder, so the class control can fail');
  }
  await undo();assert.equal(store.current.ref,first.ref,'failed navigation rolls back exact old reference');
  root=a;origin='https://different.invalid/v1';assert.equal(await store.token(),undefined,'changed server gets no saved credential');origin='https://synthetic.invalid/v1';

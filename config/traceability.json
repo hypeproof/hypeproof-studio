@@ -1504,6 +1504,9 @@
           "path": "extensions/hypeproof-chat/test/activity-connections.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/free-start-folder.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/pass-takeover-transaction.smoke.mjs"
         },
         {

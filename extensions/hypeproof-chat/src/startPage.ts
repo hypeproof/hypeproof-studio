@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { AccountError, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
-import { ActivityConnectionError, activityConnections, passTakesOver } from "./activityConnections";
+import { ActivityConnectionError, FOLDER_TAKEN_MESSAGE, activityConnections, passTakesOver } from "./activityConnections";
 import { carryoverAdvertised, carryoverOfferKey, carryoverSourceOf, newOffer, validOffer } from "./trialCarryoverHelpers";
 import { fetchProfileResult, verifyActivity, ProxyTransportError } from "./proxyClient";
 import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace } from "./chatPanelHelpers";
@@ -354,7 +354,24 @@ export class StartPage {
       // From here the issued token takes the ordinary entry path, without a preview or a folder choice:
       // the served profile names the workspace (~/HypeProofTrial), created if missing.
       await this.handle({ type: "connectCourse", token: result.code });
-      if (this.candidate?.token === result.code && !this.error) await this.handle({ type: "beginCourse" });
+      if (this.candidate?.token !== result.code || this.error) return;
+      // REQ-STUDIO-FREE-START (Jay 2026-10-20: "자동으로 돼야지") — a free start never stops on a
+      // folder and never asks. The home is reused when the machine owner's earlier trial or free use
+      // holds it; when a class or a pass holds it, the next numbered folder (~/HypeProofTrial-2, …)
+      // is used instead. Files in the held folder stay where they are.
+      const connections = activityConnections(this.context), tried = new Set<string>();
+      for (let attempt = 0; ; attempt++) {
+        const c: Candidate | undefined = this.candidate;
+        if (!c) break;
+        if (connections && (!c.workspace || tried.has(c.workspace))) {
+          const folder = await connections.freeWorkspace(c.profile, tried).catch(() => undefined);
+          if (folder) c.workspace = folder;
+        }
+        await this.handle({ type: "beginCourse" });
+        // Taken between the choice and the claim (another window): the next folder, silently.
+        if (this.error !== FOLDER_TAKEN_MESSAGE || attempt >= 2 || this.candidate !== c || !c.workspace) break;
+        tried.add(c.workspace); this.error = undefined;
+      }
     } catch {
       this.freeRefusal = { code: "network", message: "연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요." };
     } finally {
