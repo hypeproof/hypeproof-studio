@@ -30,6 +30,17 @@ const ok = (label) => { passed++; console.log(`  ok   ${label}`); };
 const check = async (label, fn) => { try { await fn(); ok(label); } catch (e) { failures.push(label); console.error(`  FAIL ${label}: ${e.message.split("\n")[0]}`); } };
 
 // ─── CSS: rules with their media context ────────────────────────────────────────────────────────
+/** Split a selector list on commas outside parentheses (":has(a, b)" stays one selector). */
+function splitTop(list) {
+  const out = []; let depth = 0, cur = "";
+  for (const ch of list) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) { out.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  return [...out, cur].map((x) => x.trim()).filter(Boolean);
+}
 function rules(raw) {
   const css = raw.replace(/\/\*[\s\S]*?\*\//g, "");
   const out = [];
@@ -46,7 +57,7 @@ function rules(raw) {
         const body = css.slice(open + 1, j - 1);
         const decls = {};
         for (const d of body.split(";")) { const k = d.indexOf(":"); if (k > 0) decls[d.slice(0, k).trim()] = d.slice(k + 1).trim(); }
-        out.push({ selectors: head.split(",").map((s) => s.replace(/\s+/g, " ").trim()), decls, media });
+        out.push({ selectors: splitTop(head).map((s) => s.replace(/\s+/g, " ").trim()), decls, media });
       }
       i = j;
     }
@@ -127,13 +138,36 @@ const checks = {
     const bad = [];
     const pill = ".tw-heading .tw-run-note:not(:empty)";
     if (!/^1px solid/.test(value(css, pill, "border") ?? "")) bad.push("run state is not a bordered pill");
-    if (!/border-inline-start: 1px solid/.test(Object.entries(all(css).find((r) => r.selectors.includes(".tw-workspace .tw-heading .tw-sources-toggle::before"))?.decls ?? {}).map(([k, v]) => `${k}: ${v}`).join(";"))) bad.push("no divider before the actions");
+    const dividers = all(css).filter((r) => r.selectors.some((x) => x.endsWith(".tw-sources-toggle::before")) && /1px solid/.test(r.decls["border-inline-start"] ?? ""));
+    if (!dividers.length) bad.push("no divider before the actions");
+    // Classroom: nothing precedes 자료 while idle, so an unconditional divider floats alone (verify N1).
+    for (const r of dividers) for (const x of r.selectors) if (!/:has\([^)]*\.hps-activity-now/.test(x)) bad.push(`divider drawn without anything before 자료: ${x}`);
     if (!value(css, ".tw-heading .hps-activity-kind", "font-weight")) bad.push("activity kind has no weight of its own");
     const forced = all(css).find((r) => r.media.includes("forced-colors") && r.selectors.includes(`${pill}::before`));
     if (forced?.decls.background !== "CanvasText") bad.push("forced colors: the pill dot (a background) would vanish");
     return bad;
   },
+  "3b narrow running heading keeps the kind and moves the name to the title": (css) => {
+    const r = all(css).find((x) => x.media === "(max-width: 900px)" && x.selectors.includes(".tw-heading:has(.tw-run-note:not(:empty)) .hps-activity-name"));
+    return r && r.decls["clip-path"] === "inset(50%)" && r.decls.position === "absolute" ? [] : ["below 900px a running heading still ellipsizes the track name"];
+  },
+  "1d quiet card text follows the theme at ≥4.5:1": (css) => {
+    const bad = [];
+    const token = value(css, ".hp-ai-can-do", "--hp-ai-can-do-muted");
+    if (token !== "var(--vscode-descriptionForeground, var(--hp-muted))") bad.push(`muted token ${token}`);
+    for (const sel of [".hp-ai-can-do-count", ".hp-ai-can-do > summary::before", '.hp-ai-can-do li[data-on="false"]']) {
+      if (value(css, sel, "color") !== "var(--hp-ai-can-do-muted)") bad.push(`${sel} uses ${value(css, sel, "color")} (a dark-only colour is 2.05:1 on white)`);
+    }
+    // The values that token resolves to: harness light, VS Code Light+ and the HP dark fallback.
+    for (const [fg, bg, name] of [["#626873", "#FFFFFF", "harness light"], ["#717171", "#FFFFFF", "Light+"], ["#ACB9A5", "#151D19", "HP dark"]]) {
+      if (contrast(fg, bg) < 4.5) bad.push(`${name} ${contrast(fg, bg).toFixed(2)}:1`);
+    }
+    return bad;
+  },
+  "1e chevron is not read aloud": (css) => (value(css, ".hp-ai-can-do > summary::before", "content") === '"›" / ""' ? [] : ["the › is part of the summary's accessible name"]),
 };
+const lum = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 const mutate = (file, fn) => ({ ...real, [file]: fn(real[file]) });
 const NEGATIVE = [
   ["1a", "card back at full width", mutate("chatDetails.css", (s) => s.replace("margin: 12px max(20px, calc((100% - var(--chat-column)) / 2)) 0;", "margin: 8px 12px;"))],
@@ -142,6 +176,11 @@ const NEGATIVE = [
   ["1c", "summary content-box (the 64px box)", mutate("styles.css", (s) => s.replace("flex-wrap: wrap; box-sizing: border-box; min-height: 44px;", "flex-wrap: wrap; min-height: 44px;"))],
   ["1c", "summary padding back at 10px", mutate("styles.css", (s) => s.replace("padding: 6px 8px; border-radius: 8px; list-style: none;", "padding: 10px 4px; border-radius: 8px; list-style: none;"))],
   ["2", "access line without the notice surface", mutate("styles.css", (s) => s.replace(".hps-offline-banner, .hps-notice-caution { margin", ".hps-offline-banner { margin"))],
+  ["3", "divider on every heading (classroom stray line)", mutate("taskWorkspace.css", (s) => s.replace(".tw-workspace .tw-heading:has(.hps-activity-now, .hps-trial-left, .tw-run-note:not(:empty)) .tw-sources-toggle::before {", ".tw-workspace .tw-heading .tw-sources-toggle::before {"))],
+  ["3b", "running heading ellipsizes the name again", mutate("taskWorkspace.css", (s) => s.replace("@media (max-width: 900px) {\n  .tw-heading:has(.tw-run-note:not(:empty)) .hps-activity-name", "@media (max-width: 900px) {\n  .tw-heading:has(.tw-run-note:not(:empty)) .hps-activity-kind"))],
+  ["1d", "count back on the dark-only --hp-muted", mutate("styles.css", (s) => s.replace(".hp-ai-can-do-count { color: var(--hp-ai-can-do-muted); }", ".hp-ai-can-do-count { color: var(--hp-muted); }"))],
+  ["1d", "classroom off rows back on --hp-muted", mutate("styles.css", (s) => s.replace('.hp-ai-can-do li[data-on="false"] { color: var(--hp-ai-can-do-muted); }', '.hp-ai-can-do li[data-on="false"] { color: var(--hp-muted); }'))],
+  ["1e", "chevron read aloud", mutate("styles.css", (s) => s.replace('content: "›" / "";', 'content: "›";'))],
   ["3", "no divider", mutate("taskWorkspace.css", (s) => s.replace("border-inline-start: 1px solid var(--tw-line); pointer-events: none;", "pointer-events: none;"))],
 ];
 for (const [name, fn] of Object.entries(checks)) await check(`css ${name}`, () => assert.deepEqual(fn(real), [], fn(real).join("; ")));
@@ -186,11 +225,11 @@ try {
   const panel = (extra) => renderToStaticMarkup(h(ChatPanel, { ...PROPS, config: config(extra) }));
   const personal = panel({ taskWorkspace: view, access: { status: "unknown" } });
 
-  await check("render 1: closed card, count summary, six rows of mark · label · one state word, no <strong>", () => {
+  await check("render 1: closed card, 6가지 중 4가지 summary, six rows of mark · label · one state word, no <strong>", () => {
   const card = /<details class="hp-rail-lesson hp-ai-can-do">[\s\S]*?<\/details>/.exec(personal)?.[0] ?? "";
   assert.ok(card, "card missing in the personal chat");
   assert.ok(!/<details[^>]*\bopen\b/.test(card.slice(0, 80)), "card is drawn open");
-  assert.ok(card.includes('<span class="hp-ai-can-do-title">여기서 AI가 할 수 있는 일</span><span class="hp-ai-can-do-count">4가지<span class="hp-ai-can-do-more"> · 자세히</span></span>'), "one-line summary with the count");
+  assert.ok(card.includes('<span class="hp-ai-can-do-title">여기서 AI가 할 수 있는 일</span><span class="hp-ai-can-do-count">6가지 중 4가지<span class="hp-ai-can-do-more"> · 자세히</span></span>'), "one-line summary with the count");
   assert.ok(!card.includes("<strong"), "raw bold state words");
   const rows = [...card.matchAll(/<li data-capability="(\w+)" data-on="(true|false)">([\s\S]*?)<\/li>/g)];
   assert.equal(rows.length, 6, "six rows");

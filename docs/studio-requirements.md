@@ -761,14 +761,18 @@ CP-R1 / DES-CGP-DS-22; 18px like the messages below 700px), on a quiet panel (`-
 (DES-CGP-DS-11; `box-sizing: border-box` and a centred flex row, so the old `min-height: 44px` plus
 10px padding no longer makes a 64px box with empty space under the label), and the card has 6px
 inner padding and no scroller, so the one focus ring (CGP-DS-R-017, 2px offset) hugs the row and is
-never clipped. The native ▶ marker gives way to one chevron that turns when open, through
+never clipped. The native ▶ marker gives way to one chevron (`content: "›" / ""`, so it is not read
+as part of the summary's name) that turns when open, through
 `--hp-dur-press` (CGP-DS-R-014), declared only under `prefers-reduced-motion: no-preference`. Each of the six rows is a mark
 (✓ in a solid circle, – in a dashed one, aria-hidden), the label and one state word, `해요` or
 `안 해요`, in the same weight (no `<strong>`); off rows are muted, so the state is a shape, a word
-and a colour, never colour alone (SX-50). The footnote is the caption step (14px) under a hairline.
+and a colour, never colour alone (SX-50). The card's quiet text (count, chevron, off rows, footnote)
+uses `--hp-ai-can-do-muted` = `var(--vscode-descriptionForeground, var(--hp-muted))`, so it follows a
+light theme too: `--hp-muted` alone is a dark-only constant, 2.05:1 on white (≥4.5:1 now: 5.6:1 on
+the harness light theme, 4.9:1 on Light+). The footnote is the caption step (14px) under a hairline.
 **Closed by default, always**, with a one-line summary that already carries the essential fact:
-"여기서 AI가 할 수 있는 일 · 4가지 · 자세히" (new copy: the count of capabilities that are on, or
-`지금은 없음`; `자세히` hides while open). Chosen over "open until seen once" because that needs a
+"여기서 AI가 할 수 있는 일 · 6가지 중 4가지 · 자세히" (new copy: of the listed capabilities, how many
+are on, so the count matches the rows that open; `지금은 없음` when none is; `자세히` hides while open). Chosen over "open until seen once" because that needs a
 per-learner seen flag the host would have to store and sync between windows, and a learner who
 dismissed it would get no summary at all; a capability change is already announced on its own by the
 CGP-SHELL-R-024 card, so nothing depends on the learner opening this one. The markup was already
@@ -781,7 +785,11 @@ CGP-DS-R-016), aligned to the composer by the input area's padding, and its one 
 target. (3) The task heading reads as three groups without dropping a word: where I am (the
 activity kind at weight 550, its name muted), what is happening (the run note, drawn only while a turn
 runs, becomes a bordered pill with a dot; the dot is CanvasText under forced colors), and what I can
-do (자료 at weight 550 after a 1px `--tw-line` divider, then the menu). All of it stays at the
+do (자료 at weight 550 after a 1px `--tw-line` divider, then the menu). The divider is drawn only
+when the activity, the remaining line or the run pill precedes 자료 (`:has()`), so the classroom
+heading, which has none of them while idle, shows no stray line. Below 900px while a turn runs, the
+track name moves into the activity's title (kind · name) and the kind stays, instead of the name
+ending in an ellipsis next to the pill. All of it stays at the
 caption step (REQ-STUDIO-TYPE-SCALE); the busy line may still shrink and wrap at 390px. (4) The rail
 card shows one state: a task with no stored message reads `시작 전` only when it has no run state
 (`taskCountLine`), because the first turn is stored when it ends and "작업 중" next to "시작 전" said
@@ -798,7 +806,8 @@ class and absent in classroom chat or without an access problem, and at most one
 rail card for every run state with 0 and 3 messages, `시작 전` still shown when idle, no ▶),
 `test/ai-can-do.test.tsx` (summary and state-word markup) and `test/type-scale.smoke.mjs` (the new
 row, count and notice text probed at ≥14px; the 12px mark glyph classified as decorative). The red
-run against the unchanged sources fails all 16 checks; screenshots before and after at 1420×874 and
+run against the unchanged sources fails all 16 first-round checks, and the second round (verify
+N1, N2, N3, N5 and the count copy) adds 8 checks that each fail on the first-round commit; screenshots before and after at 1420×874 and
 800×874 are in the slice report, not in the repository.
 
 ### Chat reference interaction (CG-IMPL-R1)

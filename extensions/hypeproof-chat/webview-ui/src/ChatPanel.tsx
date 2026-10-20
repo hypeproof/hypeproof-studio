@@ -1912,8 +1912,8 @@ export function ChatPanel(props: Props) {
 
 /**
  * CGP-AGENT-R-003: every REQ-M38 key is listed; an off key reads "안 해요" so nothing is implied.
- * REQ-STUDIO-UI-POLISH-1: always closed, with a one-line summary that already says how many things
- * the AI does here; each row is a mark, the label and one state word in the same quiet style.
+ * REQ-STUDIO-UI-POLISH-1: always closed, with a one-line summary that already says how many of the
+ * listed things the AI does here ("6가지 중 4가지", so the count matches the rows that open); each row is a mark, the label and one state word in the same quiet style.
  */
 function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilities']>; solo: boolean }) {
   const onCount = items.filter(item => item.on).length;
@@ -1921,7 +1921,7 @@ function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilitie
   return <details className="hp-rail-lesson hp-ai-can-do">
     <summary>
       <span className="hp-ai-can-do-title">{solo ? '여기서 AI가 할 수 있는 일' : '이 수업에서 AI가 할 수 있는 일'}</span>
-      <span className="hp-ai-can-do-count">{onCount ? `${onCount}가지` : '지금은 없음'}<span className="hp-ai-can-do-more"> · 자세히</span></span>
+      <span className="hp-ai-can-do-count">{onCount ? `${items.length}가지 중 ${onCount}가지` : '지금은 없음'}<span className="hp-ai-can-do-more"> · 자세히</span></span>
     </summary>
     <ul>
       {items.map(item => <li key={item.key} data-capability={item.key} data-on={item.on ? 'true' : 'false'}>

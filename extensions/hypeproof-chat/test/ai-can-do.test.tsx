@@ -49,7 +49,7 @@ const config = (caps?: ReturnType<typeof aiCapabilities>) => ({
 t("card renders every row with 해요 / 안 해요 and stays closed", () => {
   const html = renderToStaticMarkup(<ChatPanel {...PROPS} config={config(aiCapabilities(kidsFiles, "agent-sdk"))} instructor={false} />);
   // REQ-STUDIO-UI-POLISH-1: the summary also says how many things the AI does here (kidsFiles: read, write).
-  if (!html.includes('<details class="hp-rail-lesson hp-ai-can-do"><summary><span class="hp-ai-can-do-title">이 수업에서 AI가 할 수 있는 일</span><span class="hp-ai-can-do-count">2가지')) throw new Error("card missing or open");
+  if (!html.includes('<details class="hp-rail-lesson hp-ai-can-do"><summary><span class="hp-ai-can-do-title">이 수업에서 AI가 할 수 있는 일</span><span class="hp-ai-can-do-count">6가지 중 2가지')) throw new Error("card missing or open");
   eq((html.match(/data-capability="/g) ?? []).length, 6, "rows");
   if (!/data-capability="read" data-on="true">[\s\S]*?<span class="hp-ai-can-do-state">해요<\/span>/.test(html)) throw new Error("read on");
   if (!/data-capability="shell" data-on="false">[\s\S]*?<span class="hp-ai-can-do-state">안 해요<\/span>/.test(html)) throw new Error("shell off");

@@ -1954,14 +1954,18 @@ html, body, #root {
   padding: 6px 8px; border-radius: 8px; list-style: none;
 }
 .hp-ai-can-do > summary::-webkit-details-marker { display: none; }
+/* Quiet text in the card follows the host theme (light themes included); --hp-muted is a dark-only
+   constant, 2.05:1 on white. The fallback keeps the HP value where no theme value exists. */
+.hp-ai-can-do { --hp-ai-can-do-muted: var(--vscode-descriptionForeground, var(--hp-muted)); }
+/* The chevron is decoration: empty alternative text keeps it out of the summary's name. */
 .hp-ai-can-do > summary::before {
-  content: "›"; display: inline-block; width: 1em; text-align: center; color: var(--hp-muted);
+  content: "›" / ""; display: inline-block; width: 1em; text-align: center; color: var(--hp-ai-can-do-muted);
 }
 /* The turn moves only when motion is welcome (the voice meter's pattern), so no reduce block is needed. */
 @media (prefers-reduced-motion: no-preference) { .hp-ai-can-do > summary::before { transition: transform var(--hp-dur-press) var(--hp-ease); } }
 .hp-ai-can-do[open] > summary::before { transform: rotate(90deg); }
 .hp-ai-can-do-title { font-weight: 550; }
-.hp-ai-can-do-count { color: var(--hp-muted); }
+.hp-ai-can-do-count { color: var(--hp-ai-can-do-muted); }
 .hp-ai-can-do[open] .hp-ai-can-do-more { display: none; }
 .hp-ai-can-do ul { margin: 4px 0 8px; padding: 0; list-style: none; display: grid; gap: 2px; }
 .hp-ai-can-do li { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 8px; overflow-wrap: anywhere; word-break: keep-all; }
@@ -1969,8 +1973,8 @@ html, body, #root {
 .hp-ai-can-do li[data-on="false"] .hp-ai-can-do-mark { border-style: dashed; }
 .hp-ai-can-do-label { flex: 1 1 auto; min-width: 0; }
 .hp-ai-can-do-state { flex: none; font-weight: 400; }
-.hp-ai-can-do li[data-on="false"] { color: var(--hp-muted); }
-.hp-ai-can-do > .hp-rail-lesson-note { margin: 0; padding: 8px 8px 4px; border-top: 1px solid var(--hp-line); }
+.hp-ai-can-do li[data-on="false"] { color: var(--hp-ai-can-do-muted); }
+.hp-ai-can-do > .hp-rail-lesson-note { margin: 0; padding: 8px 8px 4px; border-top: 1px solid var(--hp-line); color: var(--hp-ai-can-do-muted); }
 
 /* CGP-ART-R-007: page text going with the next message. */
 .hps-page-attachment { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--vscode-panel-border, #6b6b6b); border-radius: 8px; font-size: 13px; }
