@@ -29,6 +29,6 @@ test('missing package labels follow the platform set', () => {
   assert.deepEqual(missingAssets(ALL_PLATFORMS, [mac, ...win]), []);
 });
 
-test('this checkout ships Mac only (2026-10-19 decision)', () => {
-  assert.deepEqual(checkoutPlatforms(), ['darwin-arm64']);
+test('this checkout ships Mac and Windows (2026-10-20 decision)', () => {
+  assert.deepEqual(checkoutPlatforms(), ['darwin-arm64', 'win32-x64']);
 });

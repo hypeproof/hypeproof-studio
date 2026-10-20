@@ -21,8 +21,9 @@ const run = (cwd, env, ...args) => spawnSync(process.execPath, [cli, ...args], {
 
 test('release-cut dispatches pin both builders; managed draft separates final version from RC identity', () => {
   for (const managedDraft of [false, true]) {
-    // Mac only by default (config/release-platforms.json); both when Windows is configured again.
-    assert.deepEqual(buildDispatches(plan, {managedDraft}).map(d => d.workflow), ['build-mac.yml']);
+    // This checkout's config/release-platforms.json ships both; Mac only when configured so.
+    assert.deepEqual(buildDispatches(plan, {managedDraft}).map(d => d.workflow), ['build-mac.yml', 'build-windows.yml']);
+    assert.deepEqual(buildDispatches(plan, {managedDraft, platforms: ['darwin-arm64']}).map(d => d.workflow), ['build-mac.yml']);
     const dispatches = buildDispatches(plan, {managedDraft, platforms: ['darwin-arm64', 'win32-x64']});
     assert.deepEqual(dispatches.map(d => d.workflow), ['build-mac.yml', 'build-windows.yml']);
     for (const dispatch of dispatches) {
