@@ -6638,6 +6638,42 @@
           "path": "chalk/test/row-actions.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-CHAT-FILE-ATTACH",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/fileAttachment.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/dataTag.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHAT-FILE-ATTACH",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE",
+        "ST-IMP-CHAT-FILE-ATTACH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/file-attachment.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/file-attachment.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/file-attachment-kids-render.smoke.mjs"
+        }
+      ]
     }
   ]
 }

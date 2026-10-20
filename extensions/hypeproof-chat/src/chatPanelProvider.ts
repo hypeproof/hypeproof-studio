@@ -183,6 +183,7 @@ import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { aiCapabilities } from "./aiCapabilities";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
+import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE } from "./fileAttachment";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import {
@@ -589,6 +590,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           this.orchestratorState = undefined;
           // CGP-ART-R-007 — queued page text belongs to the conversation it was attached in.
           if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingPageAttachment) this.clearPageAttachment();
+          // CGP-CHAT-R-011 — so does an attached work-folder file.
+          if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingFileAttachment) this.clearFileAttachment();
           await this.postConfig();
           await this.postHistory();
         } finally {
@@ -1125,6 +1128,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private pendingPageImage: string | null = null;
   /** CGP-ART-R-007 — what the learner sees for the queued page text (null when none). */
   private pendingPageAttachment: PageAttachmentPreview | null = null;
+  /** CGP-CHAT-R-011 — the work-folder file queued for the next message: what the learner sees, what the model gets, and from which folder. */
+  private pendingFileAttachment: { preview: import("./protocol").FileAttachmentPreview; modelText: string; root: string } | null = null;
+  /** CGP-CHAT-R-011 — user turns of this window that carried a file (a retry of one says the file was not resent). */
+  private fileTurnIds?: Set<string>;
   // #308 — inline "붙였어요" notice queued for the webview. post() silently
   // drops messages while the view is unresolved, and extension.ts calls
   // attachPageContext() BEFORE panel.focus creates the view — so the notice
@@ -2145,6 +2152,43 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the guest reacting in the next message is enough. Attached quietly to the next
     // turn only, with no notification.
   }
+  /**
+   * CGP-CHAT-R-011 — "작업 폴더 파일 붙이기": a picker that starts in the work folder; the choice is
+   * re-checked here (inside the folder, no links, no hidden paths, text only, size caps).
+   */
+  private async attachWorkspaceFile(): Promise<void> {
+    const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
+    const refuse = (error: string) => void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, error });
+    if (!fileAttachAllowed(profile, this._instructorMode.isInstructor === true)) {
+      refuse(denialCopy({ source: "lesson", feature: "작업 폴더 파일 붙이기" }, "neutral"));
+      return;
+    }
+    const root = this.resolveCoachCwd();
+    if (!root) { refuse(FILE_REFUSAL_COPY["no-workspace"]); return; }
+    const picked = await vscode.window.showOpenDialog({
+      defaultUri: vscode.Uri.file(root), canSelectFiles: true, canSelectFolders: false, canSelectMany: false,
+      openLabel: "붙이기", title: "작업 폴더에서 붙일 파일 고르기",
+    });
+    if (!picked?.[0]) return;
+    // The folder may have changed while the dialog was open.
+    if (this.resolveCoachCwd() !== root) { refuse(FILE_REFUSAL_COPY.changed); return; }
+    const read = readWorkspaceTextFile(root, picked[0].fsPath);
+    if (!read.ok) { refuse(read.reason); return; }
+    this.pendingFileAttachment = { preview: read.preview, modelText: read.modelText, root };
+    void this.post({ type: "fileAttachment", attachment: read.preview });
+  }
+  /** CGP-CHAT-R-011 — remove the queued file; nothing from it is sent. */
+  private clearFileAttachment(): void {
+    this.pendingFileAttachment = null;
+    void this.post({ type: "fileAttachment", attachment: null });
+  }
+  /** CGP-CHAT-R-011 — hand the queued file text to the send that is starting, and stop showing it as going out. */
+  private takeFileAttachment(): string | null {
+    const file = this.pendingFileAttachment;
+    if (!file) return null;
+    this.clearFileAttachment();
+    return file.modelText;
+  }
   /** CGP-ART-R-007 — remove queued page text, screenshot and notice; nothing from the page is sent. */
   private clearPageAttachment(): void {
     if (!this.pendingPageAttachment) return;
@@ -2741,6 +2785,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (this.clearingHistory || this.taskChanging || this.connectionChanging || this.hasActiveStream()) return;
     this.clearingHistory = true;
     if (this.pendingPageAttachment) this.clearPageAttachment(); // CGP-ART-R-007 — a new conversation starts without the old page
+    if (this.pendingFileAttachment) this.clearFileAttachment(); // CGP-CHAT-R-011 — and without the old file
     const key = this.historyKey();
     const taskStore = this.currentTaskStore?.();
     const taskId = taskStore?.getView().activeTaskId;
@@ -4852,6 +4897,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (this.elementQueue.queued) this.postElementPreview();
         // CGP-ART-R-007 — and the page text that is queued to go.
         if (this.pendingPageAttachment) void this.post({ type: "pageAttachment", attachment: this.pendingPageAttachment });
+        // CGP-CHAT-R-011 — and the work-folder file that is queued to go.
+        if (this.pendingFileAttachment) void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment.preview });
         // #320 — AI disclosure at session start (REQ-C14). First "ready" of
         // a session shows the notice; hide/show remounts within the same
         // session return null here and stay silent. A history clear resets
@@ -4927,7 +4974,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case "sendMessage":
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf);
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true); // CGP-CHAT-R-011 — a fresh send may carry the attached file
         return;
       case "stageImage":
         await this.stageAttachedImage(msg.stageId, msg.name, msg.mime, msg.base64);
@@ -5004,6 +5051,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "saveCoach":
         await this.saveCoachFromWebview(msg.name, msg.personality);
+        return;
+      case "attachWorkspaceFile":
+        await this.attachWorkspaceFile();
+        return;
+      case "removeFileContext":
+        // CGP-CHAT-R-011 — removed before sending: nothing from the file goes with the next turn.
+        this.clearFileAttachment();
         return;
       case "removePageContext":
         // CGP-ART-R-007 — removed before sending: nothing from the page goes with the next turn.
@@ -5208,6 +5262,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     userMessageId?: string,
     retrySourceId?: string,
     editOf?: string,
+    /** CGP-CHAT-R-011 — a fresh send (never a retry) takes the attached file when its model turn starts. */
+    carryFile = false,
   ): Promise<void> {
     const mode = turnToolMode(requestedMode);
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
@@ -5383,7 +5439,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.pendingPageNotice = null;
     // CR-09 — the picked element goes with this turn only, and only while the switch is on.
     const element = this.elementQueue.take(this.isCurriculumRuntimeEnabled());
-    let userTextForModel = withElementText(pageContext ? `${pageContext}\n\n${text}` : text, element);
+    // CGP-CHAT-R-011 — the attached file rides in front of the learner's text, model-only, as quoted data.
+    // It is taken only here, where the model turn starts: a send turned away earlier leaves the chip
+    // (host-owned; the webview never clears it on its own) and the file pending.
+    const fileContext = carryFile ? this.takeFileAttachment() : null;
+    const withFile = fileContext && fileAttachAllowed(profile, this._instructorMode.isInstructor === true) ? `${fileContext}\n\n${text}` : text;
+    if (withFile !== text) (this.fileTurnIds ??= new Set()).add(userId);
+    // A retry of a turn that carried a file does not resend it; say so instead of implying it did.
+    if (!carryFile && retrySourceId !== undefined && this.fileTurnIds?.has(retrySourceId)) {
+      void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, notice: FILE_RETRY_NOTICE });
+    }
+    let userTextForModel = withElementText(pageContext ? `${pageContext}\n\n${withFile}` : withFile, element);
     // cr-verify — a test run or fix request rides with the student's own sentence, model-only, while the switch is on.
     const verifyContextText = this.verifySession.takeCoachContext();
     if (verifyContextText && this.isCurriculumRuntimeEnabled()) userTextForModel = `${verifyContextText}\n\n${userTextForModel}`;
@@ -7100,6 +7166,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       type: "config",
       config: {
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
+        ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
         ...(toolProfile && !local && !isInstructor ? { aiCapabilities: aiCapabilities(toolProfile, this.fallbackNoticeShown ? 'proxy' : toolRuntime) } : {}),
         proxyUrl,
@@ -7128,6 +7195,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-ART-R-007 — a config for another activity or task resets the webview's state; queued page
     // text must stay visible for as long as it would be sent.
     if (this.pendingPageAttachment) void this.post({ type: "pageAttachment", attachment: this.pendingPageAttachment });
+    // CGP-CHAT-R-011 — a file from another work folder, or on a seat that lost the gate, is dropped; a pending one is re-shown.
+    if (this.pendingFileAttachment) {
+      if (this.pendingFileAttachment.root !== this.resolveCoachCwd() || !fileAttachAllowed(toolProfile, isInstructor)) this.clearFileAttachment();
+      else void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment.preview });
+    }
     // #649 — when the webview remounts (panel hide → show, reload) the highlight
     // disappears. Announce the currently open world once more to restore the strip's
     // aria-pressed.

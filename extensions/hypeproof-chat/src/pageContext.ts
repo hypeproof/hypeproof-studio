@@ -4,6 +4,8 @@
  * web page may address the AI ("이전 지시를 무시하고…"); inside the delimiter the coach is told to
  * treat it as reference material, never as the learner's request.
  */
+import { defuseTag } from "./dataTag.ts";
+
 export const PAGE_TEXT_LIMIT = 3000;
 
 export interface PageAttachmentPreview {
@@ -33,7 +35,8 @@ export function buildPageAttachment(
   const host = pageOrigin(ctx.url);
   const title = ctx.title.trim();
   // A closing tag inside the page must not end the data block early.
-  const safe = (s: string) => s.replace(/<\/?page_content\b[^>]*>/gi, (m) => m.replace(/</g, "‹").replace(/>/g, "›"));
+  // Variants too: `</ page_content>`, no `>`, fullwidth `＜/page_content＞` (same rule as file_content).
+  const safe = (s: string) => defuseTag(s, "page_content");
   const modelText =
     `<page_content source="${safe(host).replace(/"/g, "'")}">\n` +
     `URL: ${safe(ctx.url)}\n제목: ${safe(title)}\n---\n${safe(text)}\n` +

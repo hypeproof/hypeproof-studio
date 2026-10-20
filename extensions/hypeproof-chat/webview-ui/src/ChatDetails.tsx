@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
-export function ChatIcon({ kind, size = 18 }: { kind: 'send' | 'stop' | 'copy' | 'check' | 'down' | 'plus' | 'globe' | 'image' | 'retry' | 'code' | 'play' | 'chevron'; size?: number }) {
+export function ChatIcon({ kind, size = 18 }: { kind: 'send' | 'stop' | 'copy' | 'check' | 'down' | 'plus' | 'globe' | 'image' | 'retry' | 'code' | 'play' | 'chevron' | 'file'; size?: number }) {
   return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {kind === 'plus' && <path d="M12 5v14M5 12h14" />}
     {kind === 'globe' && <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z" /></>}
@@ -14,6 +14,7 @@ export function ChatIcon({ kind, size = 18 }: { kind: 'send' | 'stop' | 'copy' |
     {kind === 'code' && <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />}
     {kind === 'play' && <path d="M8 5.5v13l10.5-6.5L8 5.5Z" />}
     {kind === 'chevron' && <path d="m9 6 6 6-6 6" />}
+    {kind === 'file' && <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>}
   </svg>;
 }
 

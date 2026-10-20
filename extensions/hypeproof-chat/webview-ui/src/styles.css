@@ -1894,3 +1894,13 @@ html, body, #root {
 .hps-page-attachment pre { max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; font: inherit; margin: 6px 0 0; }
 .hps-page-attachment-note { margin: 6px 0 0; font-size: 12px; }
 .hps-page-attachment-meta { margin: 6px 0 0; overflow-wrap: anywhere; }
+
+/* CGP-CHAT-R-011: work-folder file going with the next message (chip shares the page-attachment layout). */
+.hps-file-attachment strong { font-weight: 600; }
+.hps-file-attach-notice { margin: 6px 0; font-size: 13px; overflow-wrap: anywhere; word-break: keep-all; }
+.hps-file-attach-error { margin: 6px 0; font-size: 13px; color: var(--vscode-errorForeground, #f48771); overflow-wrap: anywhere; word-break: keep-all; }
+/* A classroom composer (no data-expanded) has no personal-workspace tokens: give its menu its own frame. */
+.hps-input:not([data-expanded]) > .hps-composer-tools { align-self: flex-start; }
+.hps-input:not([data-expanded]) > .hps-composer-tools .hps-tool-trigger { min-width: 44px; min-height: 44px; padding: 0; display: grid; place-items: center; background: transparent; color: inherit; }
+.hps-input:not([data-expanded]) .hps-tools-menu { background: var(--vscode-editorWidget-background, #252526); border-color: var(--vscode-panel-border, #444); }
+.hps-input:not([data-expanded]) .hps-tools-menu button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 44px; padding: 10px; background: transparent; color: inherit; text-align: left; font-weight: 400; font-size: 13px; }
