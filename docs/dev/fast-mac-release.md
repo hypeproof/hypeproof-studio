@@ -138,6 +138,11 @@ What the script does, in order. It writes nothing until the safety checks pass.
    through `scripts/seed-sdk-binary.sh --tarball`, fetched at the source commit and checked
    against its SHA-256, as Lab's open install does. A failure is a warning: Studio offers to
    fetch the seed itself on first use (REQ-M46).
+6. Sends one anonymous install outcome to the Service (PRA-15, CONV-DEC-08):
+   `{"result":"ok","step":"done","os":"macos","app_version":"<version>"}`, or `fail` with the
+   step that was running. No id or error text, one request per run, 3 s cap, never retried,
+   never changes the exit code (`curl -q` ignores `~/.curlrc`). `HPS_NO_INSTALL_PING=1` skips it. The Service route stays
+   404 until `HPS_INSTALL_EVENTS=enabled`.
 
 `START-<version>.command` keeps secrets in the macOS keychain. `--use-inmemory-secretstorage`
 broke the free start on 2026-10-19 (the claim and install id are lost on the reload, a second
@@ -160,7 +165,7 @@ gh release upload <tag> /path/to/scratch/* --repo hypeproof/hypeproof-studio
 ```
 
 Controls: `node --test scripts/release/test/install-kit.test.mjs` (baked values, wrong-sha
-abort, layouts, refusals and shellcheck; the install runs need macOS and use a scratch HOME).
+abort, layouts, refusals, the install outcome ping against a local stub and shellcheck; the install runs need macOS and use a scratch HOME).
 
 ## Release platforms
 

@@ -22,6 +22,7 @@ People outside the organization install from a class kit (PRA-08, #1617).
 | PRA-12 | The Windows installer (`install.ps1`) accepts Git Bash in any install scope as the POSIX shell: Program Files, `%LOCALAPPDATA%\Programs\Git` (winget user scope, which the installer requests first) or the Git root of the `git.exe` on PATH. A user-scope Git therefore never reaches the WSL install offer. WSL counts only when `wsl -l -q` exits 0 and lists a distribution; the inbox `wsl.exe` stub alone does not pass the doctor. `C:\Windows\System32\bash.exe` (the WSL launcher) is never treated as Git Bash. Trial diagnosis I11. |
 | PRA-13 | Learner-facing installer copy is Korean on both installers (`install.sh`, `install.ps1`): every question a learner answers (Homebrew consent, nvm fallback, WSL fallback) with its answer hint, every step header, and the doctor verdict and final line. Tool names may stay inside a Korean sentence; package-manager output and diagnostic/log lines are not translated. A static check rejects any `confirm`/`Confirm-Or`/`Read-Host`/step-header literal without Hangul. Because the questions are Korean, both installers read a Korean or Korean-IME answer the way the learner meant it: an explicit no (`아니요`, `ㄴ`, `ㅜ` for n, `n`/`no`) is no, an explicit yes (`네`, `예`, `ㅇ`, `ㅛ` for y, `y`/`yes`) or Enter on a default-yes question is yes, and an answer that is not understood is asked again and, after three tries, taken as no. |
 | PRA-14 | The macOS installer (`install.sh`) serves a person who only uses the app. PATH edits go to the account's login shell from the account database (`dscl` on macOS, `getent` on Linux, `$SHELL` only as a fallback), not to the shell running the script: zsh gets `${ZDOTDIR:-~}/.zprofile` (a line an older installer left in `~/.zshrc` is not duplicated), bash keeps `~/.bash_profile` on macOS and `~/.bashrc` on Linux. The kit step header is neutral (`설치 파일 확인`, no class wording), happy-path status lines and the seeder's progress lines are Korean, and Homebrew runs with `HOMEBREW_NO_AUTO_UPDATE=1` and `HOMEBREW_NO_ENV_HINTS=1`. At the end an interactive install opens Studio with `open -a` and says `Studio를 열었습니다. 시작 화면에서 바로 시작하세요.`; an unattended run, CI, the `HPS_APPS_DIR` test seam and `HPS_NO_OPEN=1` (the Lab one-liner, which opens the app itself) never open it. A new terminal is mentioned only when this run changed a PATH file, and as optional. |
+| PRA-15 | The per-release Mac installer (`scripts/release/templates/install-mac.sh`, the release one-liner and the Test Kit) sends one anonymous, count-only install outcome at the end of a run (CONV-INSTALL-R-003, CONV-DEC-08): `POST https://api.hypeproof-ai.xyz/v1/install/events` with `content-type: application/json` and a body of exactly `{"result","step","os","app_version"}` (at most 256 bytes). `result` is `ok` with `step` `done`, or `fail` with the step that was running (`preflight`, `dependencies`, `download`, `verify`, `extract`, `place`, `other`); `os` is `macos`; `app_version` is the baked version without `v`, or `unknown`. No id, path, hostname or error text. At most one request per run, whether the run ends in `fail()`, an unexpected exit or success; `--help` sends nothing. A failed SDK seed is still `ok` (the app is installed). `HPS_NO_INSTALL_PING=1` sends nothing. The request has a 2 s connect and 3 s total timeout, no retry (`curl -q`, so a `~/.curlrc` cannot add one), ignores every status and never changes the exit code. The VS Code telemetry setting stays off. `HPS_INSTALL_PING_URL` takes a base URL or the full endpoint, as the Lab open install does. |
 
 ## Validation
 
@@ -66,6 +67,16 @@ calls a stub `open -a` only for an interactive run and never for unattended, CI,
 `HPS_NO_OPEN=1` or a missing app, and mentions a new terminal only after a PATH change) and
 `scripts/test-installer-kit.sh` (the kit install output has no class wording and none of the
 English status lines it used to print, and a stub `open` is never called).
+
+PRA-15 controls: `scripts/release/test/install-kit.test.mjs` with a local stub for the
+Service route (macOS): a successful install sends exactly one `ok`/`done` request with only
+the four fields; wrong SHA-256, a missing asset, an Intel Mac and an unknown option each send
+exactly one `fail` with `verify`, `download`, `preflight`, `preflight`; `--help` sends none;
+`HPS_NO_INSTALL_PING=1` sends none on success or failure, with a positive control that the
+same stub receives the ping without it; a stub answering 404, 500, never answering, or not
+listening leaves the exit codes at 0 and 1; a base URL reaches the same endpoint, and a
+retrying `~/.curlrc` against a 500 still yields one request. Existing install runs set `HPS_NO_INSTALL_PING=1`
+so tests never reach production.
 
 PRA-08 controls: `scripts/test-installer-kit.sh` (macOS: kit built and installed
 without GitHub, damaged kits refused) and `scripts/tests/install-kit-fixture.ps1`
