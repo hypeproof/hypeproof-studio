@@ -2,7 +2,7 @@
 .cp-rack > [role="listitem"] { min-width: 0; max-width: 100%; }
 .cp-citation { display: flex; align-items: center; gap: 8px; min-height: 44px; max-width: 280px; padding: 7px 10px; border: 1px solid var(--tw-line, var(--vscode-panel-border, #34383e)); border-radius: 9px; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; touch-action: manipulation; }
 .cp-citation:hover:not(:disabled), .cp-citation[aria-expanded="true"] { background: var(--vscode-list-hoverBackground, #2b3037); }
-.cp-citation:focus-visible { outline: 2px solid var(--tw-accent, var(--vscode-focusBorder, #799ed7)); outline-offset: 3px; }
+.cp-citation:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
 .cp-citation:disabled { cursor: default; opacity: .65; }
 .cp-citation-number { color: var(--tw-muted, var(--vscode-descriptionForeground, #a4aab3)); font-size: 11px; min-width: 1ch; flex: none; }
 .cp-citation-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -11,6 +11,7 @@
 .cp-citation > svg { flex: none; width: 14px; height: 14px; color: var(--tw-muted, var(--vscode-descriptionForeground, #a4aab3)); }
 .cp-preview .cp-preview-domain { display: flex; align-items: center; gap: 7px; line-height: 1.6; }
 .cp-preview-domain svg { flex: none; }
+/* Programmatic focus target (tabIndex=-1) after the preview opens: not a control, no ring. */
 .cp-preview h3:focus { outline: none; }
 .cp-preview .cp-source-context { margin: 8px 0; }
 .cp-preview .cp-source-url { margin: 0 0 16px; padding: 9px 10px; border: 1px solid var(--tw-line); border-radius: 6px; color: inherit; font-size: 11px; line-height: 1.65; overflow-wrap: anywhere; user-select: text; text-align: left; }

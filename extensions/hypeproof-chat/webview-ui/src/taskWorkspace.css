@@ -3,7 +3,6 @@
   --tw-canvas: var(--vscode-editor-background, #202226);
   --tw-line: var(--vscode-panel-border, #34383e);
   --tw-muted: var(--vscode-descriptionForeground, #a4aab3);
-  --tw-accent: var(--vscode-focusBorder, #799ed7);
   display: grid; grid-template-columns: 204px minmax(0, 1fr); height: 100%; min-height: 0;
   container-type: inline-size; position: relative; background: var(--tw-canvas); font-size: 14px;
 }
@@ -11,7 +10,9 @@
 .tw-workspace button, .tw-workspace input { font: inherit; }
 .tw-workspace button { touch-action: manipulation; cursor: pointer; }
 .tw-workspace button:disabled { cursor: default; opacity: .5; }
-.tw-workspace button:focus-visible, .tw-workspace input:focus-visible, .tw-skip:focus-visible { outline: 2px solid var(--tw-accent); outline-offset: 3px; }
+.tw-workspace button:focus-visible, .tw-workspace input:focus-visible, .tw-skip:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+/* Tight rows inside the scrolling task and source lists: inset ring so the list never clips it. */
+.tw-workspace .tw-task-list button:focus-visible, .tw-workspace .tw-source-list button:focus-visible { outline-offset: -2px; }
 .tw-workspace input { min-width: 0; background: var(--vscode-input-background, #25282e); color: inherit; border: 1px solid var(--tw-line); border-radius: 7px; }
 .tw-skip { position: absolute; z-index: 10; top: 6px; left: 220px; padding: 10px; background: var(--tw-canvas); color: inherit; transform: translateY(-150%); }
 .tw-skip:focus { transform: none; }
@@ -128,7 +129,6 @@
 .tw-heading .tw-chat-menu { order: 1; }
 .tw-workspace .tw-heading .tw-sources-toggle { border-color: transparent; background: transparent; padding: 0 12px; font-size: 13px; color: var(--vscode-foreground, #e1e1e1); }
 .tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background: var(--vscode-list-inactiveSelectionBackground, #30353d); }
-.tw-workspace .tw-heading .tw-sources-toggle:focus-visible { outline-offset: 1px; }
 /* The task title keeps its place; the remaining line gives way (ellipsis, full text in its title). */
 .tw-heading h1 { flex: 1 1 0; min-width: min(120px, 30%); }
 .tw-heading .hps-trial-left { flex: 0 1 auto; min-width: 0; }

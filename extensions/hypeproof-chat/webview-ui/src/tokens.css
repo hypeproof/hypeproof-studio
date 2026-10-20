@@ -28,7 +28,23 @@
   --hp-line: #35483A;            /* start.css --studio-line · decorative dividers only (1.75:1) */
   --hp-control-line: #748F79;    /* required control boundary (buttons, fields) · DES-11 3:1: 4.9:1 on bg, 4.1:1 on panel */
   --hp-muted: #ACB9A5;           /* start.css --studio-muted · AI explanation, secondary copy */
+  /* CGP-DS-R-017 — the one focus-ring colour. The webview body follows the VS Code theme, so the
+   * ring is the theme's own focusBorder; the fallback is the HypeProof Studio theme's value. */
+  --hp-ring: var(--vscode-focusBorder, #D5F279);
+  /* CGP-DS-R-019 — field placeholder: the theme's own input placeholder colour, so it stays apart
+   * from typed text (Light Modern #767676: 4.5:1 on white, 2.5:1 from #3B3B3B text). Never opacity.
+   * Without theme variables: 70% description colour + 30% input text (#C1CBB9). */
+  --hp-placeholder-mix: color-mix(in srgb, var(--vscode-descriptionForeground, #ACB9A5) 70%, var(--vscode-input-foreground, #F2F4E8));
+  --hp-placeholder: var(--vscode-input-placeholderForeground, var(--hp-placeholder-mix));
 }
+/* VS Code's 2026 themes ship a placeholder below 4.5:1 (Dark 2026 #555555: 2.3:1, Light 2026
+ * #999999: 2.8:1); the webview body carries the theme id, and there the mix is used instead. */
+body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] { --hp-placeholder: var(--hp-placeholder-mix); }
+
+/* Dark surfaces that paint their own HP background keep the lime ring whatever the theme
+ * (13.8:1 on bg, 11.6:1 on panel); fields that paint their own HP background use --hp-muted. */
+.studio-start, .studio-disconnected, .hp-mission { --hp-ring: var(--hp-accent); }
+.studio-start, .studio-disconnected, .hp-surface, .hp-evidence-form, .hps-instructor-model-input { --hp-placeholder: var(--hp-muted); }
 
 /* Reading surfaces (retrospective · growth record · reports) flip to Paper (SX-54).
  * Amber on Paper is 2.0:1 contrast, so it is never used for text — icon/border plus
@@ -40,6 +56,25 @@
   --hp-muted: #4B5A4F;
   --hp-line: #D7DDD2;
   --hp-control-line: #76837A;    /* 3.6:1 on Paper, 4.0:1 on white */
+  --hp-ring: #4D6B12;            /* 5.6:1 on Paper, 6.1:1 on white */
+  --hp-placeholder: #4B5A4F;     /* 6.7:1 on Paper, 7.3:1 on white */
+}
+
+/* CGP-DS-R-017 / CGP-DS-R-019 — baselines for every focusable control and every field. VS Code
+ * injects its webview defaults (`a/input/select/textarea:focus { outline: 1px …; outline-offset: -1px }`)
+ * inside `@layer vscode-default` (webview pre/index.html), and unlayered author rules beat layered
+ * ones whatever their specificity, so these plain rules replace them. The ring is 2px solid with a
+ * 2px offset, drawn on the surface around the control; component rules may only restate it, or
+ * use a -2px inset inside tight scroll rows. Every placeholder takes the token, never the browser
+ * default (#757575 is 2.4:1 on Dark+ input) and never a lowered opacity
+ * (test/focus-placeholder.smoke.mjs). */
+:focus-visible {
+  outline: 2px solid var(--hp-ring);
+  outline-offset: 2px;
+}
+::placeholder {
+  color: var(--hp-placeholder);
+  opacity: 1;
 }
 
 /* CGP-DS-R-015: `workbench.reduceMotion: "on"` stops nonessential motion even when the OS allows
