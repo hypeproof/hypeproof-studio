@@ -7535,6 +7535,71 @@
           "path": "extensions/hypeproof-chat/test/browser-target-host.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-JOIN-LINK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UNIFIED",
+        "ST-REQ-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Class join link (CGP-SHELL-R-005)"
+        },
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 수업 참여 링크 · 2026-10-20 (ADM-01 · CGP-SHELL-R-005)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-JOIN-LINK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-JOIN-LINK",
+        "ST-IMP-UNIFIED-ENTRY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/joinLink.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-JOIN-LINK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-JOIN-LINK",
+        "ST-IMP-JOIN-LINK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/join-link.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/join-link.test.mjs"
+        },
+        {
+          "path": "e2e/start-page/join-link.mjs"
+        }
+      ]
     }
   ]
 }

@@ -15,6 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StartPage } from "./startPage";
+import { handleJoinLink, type JoinLinkHost } from "./joinLink";
 import { ACCOUNTS_ENABLED_DEFAULT, AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
 import { accountLock } from "./accountLock";
 import { ChatPanelProvider } from "./chatPanelProvider";
@@ -241,16 +242,30 @@ export async function activate(context: vscode.ExtensionContext) {
   // Studio without member access. Read at each check; the setting `publicUpdates` still works alone.
   registerPublicUpdateSignal(() => startPage.freeStartSignal());
   context.subscriptions.push({ dispose: () => registerPublicUpdateSignal(null) });
+  // One URI handler per extension. REQ-STUDIO-JOIN-LINK (CGP-SHELL-R-005): a Chalk class join link
+  // only brings the join form forward with the class named; it is handled whether or not accounts are
+  // on. The account return below stays exactly as strict as before.
+  const joinLinkHost: JoinLinkHost = {
+    scheme: vscode.env.uriScheme,
+    activeTurn: () => provider.hasActiveStream(),
+    currentClass: () => startPage.currentClassId(),
+    open: classId => startPage.openJoinLink(classId),
+    notify: message => vscode.window.showInformationMessage(message),
+    ask: async (message, detail, action) => (await vscode.window.showInformationMessage(message, { modal: true, detail }, action)) === action,
+    log: line => console.info(line),
+  };
+  context.subscriptions.push(vscode.window.registerUriHandler({
+    handleUri: async uri => {
+      if (await handleJoinLink(joinLinkHost, uri)) return;
+      if (!accounts) return;
+      if (uri.scheme !== vscode.env.uriScheme || uri.authority !== 'hypeproof.hypeproof-chat' || uri.path !== '/account-return' || uri.fragment) return;
+      const query = new URLSearchParams(uri.query);
+      if ([...query.keys()].some(key => key !== 'state' && key !== 'windowId') || query.getAll('state').length !== 1) return;
+      const state = query.get('state') ?? '';
+      if (/^[a-f0-9]{64}$/.test(state)) await accounts.browserReturned(state);
+    },
+  }));
   if (accounts) {
-    context.subscriptions.push(vscode.window.registerUriHandler({
-      handleUri: async uri => {
-        if (uri.scheme !== vscode.env.uriScheme || uri.authority !== 'hypeproof.hypeproof-chat' || uri.path !== '/account-return' || uri.fragment) return;
-        const query = new URLSearchParams(uri.query);
-        if ([...query.keys()].some(key => key !== 'state' && key !== 'windowId') || query.getAll('state').length !== 1) return;
-        const state = query.get('state') ?? '';
-        if (/^[a-f0-9]{64}$/.test(state)) await accounts.browserReturned(state);
-      },
-    }));
     const accountWatch = setInterval(() => { void accounts.refreshView(); }, 15_000);
     context.subscriptions.push({dispose: () => { clearInterval(accountWatch); accounts.dispose(); }});
   }

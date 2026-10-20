@@ -493,3 +493,9 @@
      still scans in dark high-contrast themes. */
   .studio-guardian-pay img { forced-color-adjust: none; }
 }
+
+/* REQ-STUDIO-JOIN-LINK (DES-SHELL-04) — the class a join link named, above the empty code field. */
+.studio-join-link { margin:0 0 18px; padding:12px 14px; border:1px solid var(--studio-line); border-left:3px solid var(--studio-accent); border-radius:7px; background:#1c1f1b; }
+.studio-join-class { margin:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; font-size:14px; color:var(--studio-muted); }
+.studio-join-class strong { color:var(--studio-text); font-size:16px; font-weight:600; overflow-wrap:anywhere; }
+.studio-join-help { margin:6px 0 0; font-size:14px; line-height:1.5; color:var(--studio-muted); word-break:keep-all; overflow-wrap:anywhere; }

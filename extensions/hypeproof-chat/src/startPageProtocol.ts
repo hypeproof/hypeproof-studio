@@ -39,6 +39,12 @@ export interface StartState {
    */
   freeStart?: FreeStartView;
   /**
+   * REQ-STUDIO-JOIN-LINK — a class join link brought the join form forward for this class.
+   * Only the class id: a link never carries a code. `seq` changes on every link press so the
+   * webview reopens and refocuses the empty code field.
+   */
+  joinLink?: { classId: string; seq: number };
+  /**
    * "GitHub에서 이어하기" while a code is being confirmed (candidate): what this seat's GitHub
    * holds. Absent when the cohort does not publish to GitHub.
    *   checking — looking; found — sites to continue (most recent first); none — nothing yet;
@@ -83,10 +89,12 @@ export type StartRequest =
   | { type: "openLocalReview" }
   | { type: "openStudioFiles" }
   | { type: "openStudioSettings" }
-  | { type: "connectCourse"; token: string }
+  /** `joinClass`: sent only by the join form that shows a join link's class (REQ-STUDIO-JOIN-LINK). */
+  | { type: "connectCourse"; token: string; joinClass?: string }
   | { type: "beginCourse" }
   | { type: "disconnectCourse" }
   | { type: "cancelCandidate" }
+  | { type: "joinLinkDismiss" }
   | { type: "purchaseHide" }
   | { type: "openLocalFolder" }
   | { type: "purchaseOpen" }
