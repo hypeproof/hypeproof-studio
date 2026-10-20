@@ -1,0 +1,20 @@
+# Decisions for the conversion loop
+
+Jay's decisions come first, with their date and where they are recorded in the code or docs.
+The rows after them are defaults the loop chose so that rows can proceed. Each default is
+reversible and stays "Confirmed by Jay: no" until he says otherwise.
+
+| DEC | Choice | Why / source | Default state | Confirmed by Jay |
+|---|---|---|---|---|
+| CONV-DEC-01 | No login until purchase. The first screen has no sign-in, only the age question. | Jay 2026-10-19. REQ-STUDIO-FREE-START, TUX-SP-14 ("No 체험 wording, no login") | On | yes (2026-10-19) |
+| CONV-DEC-02 | Google login is mandatory at purchase, with no anonymous fallback. The Service refuses an order without an account (401 `account_required`). | Jay 2026-10-19, "결제할때 구글로그인 필수로 하자" (`startPage.ts` loginAtPurchase). REQ-L12 (14), REQ-L13 (6), TUX-SP-17, Service `HPS_PURCHASE_ACCOUNT_REQUIRED` | On | yes (2026-10-19) |
+| CONV-DEC-03 | No allowance count is shown on a free seat while it is in use: not on the start card, the connected card, the chat header, the composer or Lab pages. Only the end card speaks. | Jay 2026-10-19, TUX-SP-14 "(무료 범위 줄 없음 — 2026-10-19 Jay)", TUX-SP-13. Constrains CGP-SHELL-R-029 (CGP DEC-35) | On | yes (2026-10-19) |
+| CONV-DEC-04 | Free-start money limits are in USD: a ceiling of $1.50 per free seat and a cap of $70 per day across all free seats. They are priced by the USD price revisions. | Jay 2026-10-19 (10 turns, 24 h from the first message, $1.50 per seat, about ₩100k a day = $70). Service docs still show KRW examples: CONV-OPS-R-004/005 | On | yes (2026-10-19) |
+| CONV-DEC-05 | Notarization is deferred. The Mac app ships through the terminal one-liner (no quarantine). Raw browser downloads stay off under free start. | Jay 2026-10-20: notarization needs an Apple Developer ID cert and notary key. Install pages stop teaching Gatekeeper bypasses (Lab #1355, Studio #2150) | On | yes (2026-10-20) |
+| CONV-DEC-06 | Free start never blocks. There is no folder question, preview or consent wall. A taken folder gets a numbered sibling. Daily-cap and pause states are calm notices, not errors. | Jay 2026-10-20 (folder-conflict bug on a real Mac). Studio #2094, #2150. REQ-STUDIO-FREE-START, TUX-SP-16 | On | yes (2026-10-20) |
+| CONV-DEC-07 | At most one session release candidate (`-rc`) every 10 ticks, for testing only. The loop never cuts a stable release, never moves `latest` and never deploys. | Jay 2026-10-20. Only a stable tag moves the private mirror's latest (release reach) | On | yes (2026-10-20) |
+| CONV-DEC-08 | Installers send one anonymous, count-only install outcome (`ok` or `fail` plus step, os, app version) to the Service. It carries no id and no IP is stored, and `HPS_NO_INSTALL_PING=1` skips it. A failed ping never fails the install. | Must-have "install success signal" (CONV-INSTALL-R-002/003). This is the smallest signal that answers "did the install finish". The installer turns off VS Code telemetry and keeps it off | Ships with the rows; Service route behind a flag, default off | no |
+| CONV-DEC-09 | Funnel counts are unique keys per step ("ever reached"), bucketed by the KST day of the event. Conversion uses the Service's 14-day definition. A step with no event source is shown as `not_measured`. | Service dedupe semantics (`trial-funnel.ts:118-134`), `free-start-conversion.ts:10` | On | no |
+| CONV-DEC-10 | The owner funnel view lives in the Service owner console and the Lab proxies it. There is no third-party analytics. Lab steps are counted server-side. | GA4 scaffold in Lab is not configured in production. Server counts need no cookie consent and keep one source of truth | On | no |
+| CONV-DEC-11 | Email opt-ins are export only: CSV from the owner console. No HypeProof system sends to them until Jay approves consent copy, retention and the 14-18 policy. | REQ-STUDIO-FREE-NOTIFY-OPTIN "No email is sent by this change". Service keeps 365 days | On | no |
+| CONV-DEC-12 | Starter prompts on a free seat's first chat screen are not added for now. | They may undercut FRAMING (the learner frames the task). Waits for Jay (CONV-FIRST10-R-005) | Off | no |
