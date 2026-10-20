@@ -53,8 +53,8 @@ jobs:
       HPS_ACCEPTANCE_ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
       HYPEPROOF_READ_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
   verify:
-    needs: [resolve, activity-compatibility]
-    if: ${{ always() && needs.resolve.result == 'success' && (!inputs.run_activity_compatibility || needs.activity-compatibility.result == 'success') }}
+    needs: [resolve]
+    if: ${{ needs.resolve.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -122,3 +122,24 @@ jobs:
           # absent, and skips (exit 0) when neither is configured — see #412.
           HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
         run: bash scripts/run-sdk-contract.sh
+
+      # Safety net for job cancellation (SIGKILL skips the trap in run-sdk-contract.sh).
+      # Calls the close endpoint without a jti, which ends any open session on the cohort.
+      # run-sdk-contract.sh's cleanup() handles normal exits; this step handles hard kills.
+      - name: Close canary session (always)
+        if: ${{ always() && inputs.verify_prod }}
+        env:
+          HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
+        run: |
+          [[ -z "${HPS_CANARY_ISSUER:-}" ]] && exit 0
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+            -X POST "https://api.hypeproof-ai.xyz/admin/cohorts/canary-internal/session/close" \
+            -H "Authorization: Bearer $HPS_CANARY_ISSUER" \
+            -H 'content-type: application/json' \
+            -d '{}' 2>/dev/null)"
+          if [[ "$code" == "200" ]]; then
+            echo "canary session closed (or already closed — endpoint is idempotent)"
+          else
+            echo "::error::canary session close returned HTTP $code"
+            exit 1
+          fi
