@@ -308,7 +308,9 @@ export class ArtifactProvenanceRecorder {
   private gen = 0;
   private readonly base: string;
   private readonly now: () => number;
-  constructor(base: string, now: () => number = Date.now) {
+  private readonly historyEnabled: () => boolean;
+  constructor(base: string, now: () => number = Date.now, historyEnabled: () => boolean = () => false) {
+    this.historyEnabled = historyEnabled;
     this.base = base;
     this.now = now;
   }
@@ -365,7 +367,7 @@ export class ArtifactProvenanceRecorder {
         let sha = w.sha256;
         if (!sha) { try { sha = sha256Of(await fs.readFile(w.absPath)); } catch { continue; } }
         out.push({ path: rel, sha256: sha });
-        await captureArtifactVersion(artifactHistoryStore(this.base, root, rel), root, rel, actor === "ai" ? "ai" : actor === "learner_upload" ? "learner" : "unknown", sha).catch(() => null);
+        if (this.historyEnabled()) await captureArtifactVersion(artifactHistoryStore(this.base, root, rel), root, rel, actor === "ai" ? "ai" : actor === "learner_upload" ? "learner" : "unknown", sha, this.historyEnabled).catch(() => null);
       }
       if (!out.length) return null;
       return this.apply(root, (l) => recordHostWrite(l, out, { at, actor }));
@@ -376,7 +378,7 @@ export class ArtifactProvenanceRecorder {
   turnStart(root: string, point: PointLike): Promise<unknown> {
     this.bump();
     return this.run(async () => {
-      for (const f of point.files) await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "unknown", f.sha256).catch(() => null);
+      for (const f of point.files) if (this.historyEnabled()) await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "unknown", f.sha256, this.historyEnabled).catch(() => null);
       return this.observe(root, point, point.createdAt);
     });
   }
@@ -386,7 +388,7 @@ export class ArtifactProvenanceRecorder {
     this.bump();
     const at = Math.max(this.now(), point.createdAt + 1);
     return this.run(async () => {
-      for (const f of filesOf(after)) if (diff.added.includes(f.path) || diff.changed.includes(f.path)) await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "ai", f.sha256).catch(() => null);
+      for (const f of filesOf(after)) if (this.historyEnabled() && (diff.added.includes(f.path) || diff.changed.includes(f.path))) await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "ai", f.sha256, this.historyEnabled).catch(() => null);
       return this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff }, after));
     });
   }

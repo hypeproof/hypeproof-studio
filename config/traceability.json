@@ -28,6 +28,9 @@
       ],
       "sources": [
         {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/turnRestore.ts"
         },
         {

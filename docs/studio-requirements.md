@@ -3108,12 +3108,20 @@ rc; the expected copy is read from source at `f9bde411`, not from a running app.
 (learner control over their work; OWNERSHIP without a score).
 
 The Explorer file menu and command palette offer `이 파일의 이전 버전` for all
-learner seats, including minors. The native list shows recorded time and AI, 나
-(for an explicit upload or restore), or 기록 없음 when authorship is unproven.
+known learner seats, including minors, when machine-default-off
+`hypeproofChat.artifactHistoryEnabled` is explicitly enabled. Unknown/instructor
+profiles and activity transitions cannot enable capture. The native list shows
+recorded time and AI, 나 (an explicit upload, restore or confirmed manual revision),
+or 기록 없음 when authorship is unproven.
 Editor save events are captured but never treated as proof of learner authorship;
 the measured event-order limitation in REQ-STUDIO-ARTIFACT-PROVENANCE still applies.
-Thus the research row's literal AI/나 attribution for every manual edit remains
-partial; no blanket authorship claim is made.
+Selecting the current unknown version offers “이 내용을 직접 수정했나요?” with
+“내 수정으로 기록”. Confirmation binds exact saved bytes, activity and profile;
+it records learner attestation, not automatic authorship detection. Cancel, dirty
+buffers, changed bytes or changed context leave the attribution unchanged. Existing
+AI attribution cannot be overwritten by a confirmation of identical bytes. Measured
+AI evidence enriches a matching unknown revision even when a save arrived first.
+The picker explains that 나 includes confirmed edits, uploads and restores.
 
 History reuses the turn-restore manifest and content-addressed blob format in
 extension storage, partitioned by real work-folder path and artifact path. Capture

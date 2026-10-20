@@ -461,6 +461,12 @@
     "configuration": {
       "title": "HypeProof Chat",
       "properties": {
+        "hypeproofChat.artifactHistoryEnabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "활동 파일의 이전 버전을 이 기기에 보관합니다. 수업·미성년자 활동도 기본은 꺼짐이며, 파일마다 최근 20개를 보관합니다."
+        },
         "hypeproofChat.proxyUrl": {
           "type": "string",
           "default": "https://api.hypeproof-ai.xyz/v1",

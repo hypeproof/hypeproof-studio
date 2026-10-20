@@ -526,30 +526,60 @@ export function artifactHistoryStore(base: string, root: string, rel: string): s
   return turnRestoreStoreDir(base, root, `artifact-${sha256(rel).slice(0, 32)}`);
 }
 
-export async function captureArtifactVersion(store: string, root: string, rel: string, actor: "ai" | "learner" | "unknown", expected?: string): Promise<RestoreManifest | null> {
+export async function captureArtifactVersion(store: string, root: string, rel: string, actor: "ai" | "learner" | "unknown", expected?: string, stillCurrent?: () => boolean): Promise<RestoreManifest | null> {
   return accountLock(store)(async () => {
     if (!await safeToChange(root, rel, "file")) return null;
     if ((await fs.stat(path.join(root, rel))).size > TURN_RESTORE_LIMITS.fileMax) return null;
     const data = await fs.readFile(path.join(root, rel));
     if (data.length > TURN_RESTORE_LIMITS.fileMax) return null;
     const hash = sha256(data);
-    if (expected && expected !== hash) return null;
+    if ((expected && expected !== hash) || stillCurrent?.() === false) return null;
     const latest = (await listRestorePoints(store))[0];
-    if (latest?.files[0]?.sha256 === hash) return latest;
-    const point = await saveArtifactVersion(store, rel, data, actor);
+    const guard = () => stillCurrent?.() !== false && sha256(syncFs.readFileSync(path.join(root, rel))) === hash;
+    if (!await safeToChange(root, rel, "file") || !guard()) return null;
+    if (latest?.files[0]?.sha256 === hash) {
+      // Enrich only an unknown revision with exact-byte positive evidence.
+      // A repeated scan or learner confirmation never rewrites an existing AI event.
+      if (expected === hash && actor !== "unknown" && latest.turnId === "artifact-unknown") {
+        if (stillCurrent?.() === false || sha256(syncFs.readFileSync(path.join(root, rel))) !== hash) return null;
+        latest.turnId = `artifact-${actor}`;
+        writeArtifactManifestSync(store, latest, guard);
+      }
+      return latest;
+    }
+    const point = await saveArtifactVersion(store, rel, data, actor, guard);
     await pruneRestorePoints(store, 20, [point.id]);
     return point;
-  });
+  }).catch(() => null);
 }
 
-async function saveArtifactVersion(store: string, rel: string, data: Buffer, actor: string): Promise<RestoreManifest> {
+function writeArtifactManifestSync(store: string, point: RestoreManifest, guard: () => boolean): void {
+  const target = pointPath(store, point.id), temp = `${target}.${randomUUID()}.tmp`;
+  syncFs.mkdirSync(path.dirname(target), { recursive: true });
+  try {
+    syncFs.writeFileSync(temp, JSON.stringify(point), { flag: "wx", mode: 0o600 });
+    if (!guard()) throw new Error("artifact_changed");
+    syncFs.renameSync(temp, target);
+  } finally { try { syncFs.unlinkSync(temp); } catch { /* committed or never created */ } }
+}
+
+async function saveArtifactVersion(store: string, rel: string, data: Buffer, actor: string, guard?: () => boolean): Promise<RestoreManifest> {
   const hash = sha256(data), id = randomUUID();
   const at = Math.max(Date.now(), ((await listRestorePoints(store))[0]?.createdAt ?? 0) + 1);
   await writeAtomic(blobPath(store, hash), data);
   const files = [{ path: rel, size: data.length, sha256: hash }];
   const point: RestoreManifest = { version: 1, id, kind: "turn", turnId: `artifact-${actor}`, createdAt: at, files, dirs: [], notCovered: [], complete: true, digest: manifestDigest(files) };
-  await writeAtomic(pointPath(store, id), JSON.stringify(point));
-  return point;
+  try {
+    if (guard) writeArtifactManifestSync(store, point, guard);
+    else await writeAtomic(pointPath(store, id), JSON.stringify(point));
+    return point;
+  } catch (error) {
+    // Failed/disabled captures must not leave a new unreferenced copy behind.
+    if (!(await listRestorePoints(store)).some(p => p.files.some(f => f.sha256 === hash))) {
+      await fs.unlink(blobPath(store, hash)).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 /** No whole-folder restore: preserve current bytes first, refuse stale or unsafe targets. */
