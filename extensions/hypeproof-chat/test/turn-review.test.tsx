@@ -18,13 +18,13 @@ const OPEN: TurnReviewView = { turnId: "t1", state: "open", added: ["game/one.js
 
 t("open bar: count, grouped list, both choices", () => {
   const html = bar(OPEN);
-  has(html, "AI가 이번에 바꾼 파일 4개");
+  has(html, "이번 요청 동안 바뀐 파일 4개");
   has(html, "<summary>바뀐 파일 보기</summary>");
   has(html, '<div class="hps-turn-review-group" data-kind="added"><strong>새로 만듦 2개</strong>');
   has(html, '<div class="hps-turn-review-group" data-kind="changed"><strong>바뀜 1개</strong>');
   has(html, '<div class="hps-turn-review-group" data-kind="deleted"><strong>지움 1개</strong>');
   has(html, "<code>game/one.js</code>");
-  has(html, ">되돌리기</button>");
+  has(html, ">모두 되돌리기</button>");
   has(html, ">이대로 둘게요</button>");
   has(html, "AI가 일하는 동안 내가 직접 고친 파일도 함께 셌어요.");
   has(html, "작업 폴더 밖에서 바뀐 것은 되돌리지 않아요");
@@ -32,7 +32,7 @@ t("open bar: count, grouped list, both choices", () => {
 });
 t("empty groups are not drawn", () => {
   const html = bar({ ...OPEN, added: [], deleted: [] });
-  has(html, "AI가 이번에 바꾼 파일 1개");
+  has(html, "이번 요청 동안 바뀐 파일 1개");
   lacks(html, 'data-kind="added"');
   lacks(html, 'data-kind="deleted"');
 });
@@ -43,7 +43,7 @@ t("not-covered files are named on the open bar", () => {
 t("restoring: both buttons disabled", () => {
   const html = bar({ ...OPEN, state: "restoring" });
   has(html, "되돌리는 중…");
-  if ((html.match(/disabled=""/g) ?? []).length !== 2) throw new Error("buttons not disabled");
+  if ((html.match(/disabled=""/g) ?? []).length !== 6) throw new Error("buttons not disabled");
 });
 t("busy refusal is a notice on the same bar", () => {
   has(bar({ ...OPEN, notice: "진행 중인 작업이 끝난 뒤에 되돌릴 수 있어요." }), "진행 중인 작업이 끝난 뒤에 되돌릴 수 있어요.");
@@ -54,7 +54,7 @@ t("restored: verified count, kept pre-restore state, external note, no choice bu
   has(html, "되돌리기 직전 상태도 따로 보관해 뒀어요.");
   has(html, "작업 폴더 밖에서 바뀐 것은 되돌리지 않아요");
   has(html, ">확인</button>");
-  lacks(html, ">되돌리기</button>");
+  lacks(html, ">모두 되돌리기</button>");
 });
 t("negative control: a partial failure never reads as success and names the files", () => {
   const html = bar({ ...OPEN, state: "failed", restoredCount: 3, failed: ["index.html"], beforeRestoreKept: true });

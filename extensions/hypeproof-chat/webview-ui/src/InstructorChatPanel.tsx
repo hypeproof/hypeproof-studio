@@ -27,7 +27,10 @@ interface Props {
   streamingId: string | null;
   /** REQ-STUDIO-DELEGATION-ROW — passed through to ChatPanel. */
   runningStreamId?: string | null;
+  refusal?: boolean;
+  onDismissRefusal?: () => void;
   error: string | null;
+  activityUnavailable?: import("../../src/activityAvailability").ActivityUnavailable;
   errorRequestId: string | null;
   errorRunbookUrl: string | null;
   canRetryLast: boolean;

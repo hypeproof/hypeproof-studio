@@ -34,6 +34,7 @@ export async function runClaude({
   messages,
   signal,
   onDelta,
+  onRefusal,
   toolServer,
 }) {
   claudeStatus(executable);
@@ -85,6 +86,8 @@ export async function runClaude({
       input: JSON.stringify(messages.filter((m) => m.role !== "system")),
       signal,
       onEvent: (event) => {
+        if ((event.type === "result" && event.stop_reason === "refusal") ||
+            (event.type === "system" && event.subtype === "model_refusal_no_fallback")) onRefusal?.();
         const delta =
           event.type === "stream_event" &&
           event.event?.type === "content_block_delta" &&

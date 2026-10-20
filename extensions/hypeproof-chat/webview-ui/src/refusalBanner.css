@@ -1,0 +1,39 @@
+.hps-refusal-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  margin-block-end: 8px;
+  min-inline-size: 0;
+  /* The surface and the text come from the same theme: when the theme defines no widget background,
+     the surface is a tint of the text colour itself (as on every other card here), so the pair stays
+     readable in light and dark. The dark-only --hp-panel is never paired with a theme text colour. */
+  color: var(--vscode-foreground, var(--hp-ink));
+  background: var(--vscode-editorWidget-background, color-mix(in srgb, var(--vscode-foreground, var(--hp-ink)) 8%, transparent));
+  border: 1px solid var(--hp-control-line);
+  border-radius: 8px;
+  font-size: var(--hp-text-caption);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  animation: none;
+  transition: none;
+  transform: none;
+}
+.hps-refusal-banner > div { flex: 1; min-inline-size: 0; }
+.hps-refusal-banner p { margin: 4px 0 0; }
+.hps-refusal-banner button {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--hp-control-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.hps-refusal-banner button:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+@media (forced-colors: active) {
+  .hps-refusal-banner { border-color: CanvasText; }
+  .hps-refusal-banner button { border-color: ButtonText; }
+}

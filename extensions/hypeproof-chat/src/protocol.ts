@@ -150,6 +150,7 @@ export interface ChatConfig {
   /** CGP-CHAT-R-011 — this seat may attach a work-folder text file (sdk_tools.read, never instructors). */
   fileAttach?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
+  activityUnavailable?: import("./activityAvailability").ActivityUnavailable;
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus;
     /** Free start (SPEC iteration 4 §2.4) — the seat is the free allowance (`studio-open-trial`, no pass): its copy says 무료 사용, never 체험. */
     free?:boolean};
@@ -526,6 +527,7 @@ export type WebviewMessage = (
    */
   | { type: 'voiceCapabilityProbeResult'; probeId: string;
       observations: import('./voiceCapabilityHelpers').VoiceProbeObservations }
+  | {type:'activityLocalFile'; action:'open'|'export'}
   | {type:'refreshAccess'}
   | {type:'selectFunding';id:string}
   /** REQ-L12 ⑫ — the learner's explicit answer to the trial carry-over offer. */
@@ -684,7 +686,7 @@ export type WebviewMessage = (
   /** REQ-STUDIO-PREVIEW-RECOVERY — ask for the preview's measured state; run the one action its cause line names. */
   | { type: "previewRecoveryRequest" }
   | { type: "previewRecoveryAction"; action: string }
-  | { type: "turnRevert"; turnId: string }
+  | { type: "turnRevert"; turnId: string; path?: string }
   | { type: "turnKeep"; turnId: string }
   | { type: "turnReviewClose"; turnId: string }
   // REQ-STUDIO-ARTIFACT-PROVENANCE — the 작업 자료 panel asks for the work folder's provenance list.
@@ -826,6 +828,7 @@ export type HostMessage = (
   // toast stops the integrated browser with "Paused due to Notification" (core
   // behaviour), so this is announced on the chat panel's inline status line instead
   // of a toast.
+  | { type: "denialNotice"; id: string; label: string; at: number }
   | { type: "pageAttached"; label: string }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
   | { type: "elementAttached"; element: ElementPreview | null }
@@ -878,7 +881,8 @@ export type HostMessage = (
       message?: string;
     }
   /** `retry: false` — resending cannot help (REQ-M45 missing SDK binary); the panel hides "다시 보내기". `retryable: false` (#1819) — the answer could not be saved; same effect. */
-  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView }
+  | { type: "streamRefusal"; streamId: string }
+  | { type: "streamError"; streamId: string; error: string; activityUnavailable?: import("./activityAvailability").ActivityUnavailable; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView }
   | { type: "actionResult"; requestId: string; approved: boolean }
   /** TUX-COND-08 — the answer to notifyOptinSubmit / notifyOptinWithdraw. Never carries the address. */
   | { type: "notifyOptinResult"; state: "subscribed" | "withdrawn" | "error"; message?: string }

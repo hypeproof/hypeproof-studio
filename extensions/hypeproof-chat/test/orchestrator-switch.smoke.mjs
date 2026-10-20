@@ -200,7 +200,8 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }
     sdk,
     zod: fakeZod(),
     onDelta: (d) => seen.deltas.push(d),
-    onActivity: (a) => seen.activities.push(a.kind === "approval" ? { ...a, at: 0 } : a),
+    // D006 adds presentation provenance; exclude only that field from the pre-existing runtime identity digest.
+    onActivity: (a) => { const { denialSource, ...unchanged } = a; seen.activities.push(a.kind === "approval" ? { ...unchanged, at: 0 } : a); },
     onUsage: (u) => seen.usage.push(u),
     onCitations: () => {},
     onAssetScore: () => {},

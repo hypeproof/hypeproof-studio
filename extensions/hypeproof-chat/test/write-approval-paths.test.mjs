@@ -162,7 +162,8 @@ const vscode = {
 const mod = { exports: {} };
 vm.runInNewContext(source, { module: mod, exports: mod.exports, require: (id) => (id === 'vscode' ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder });
 const P = mod.exports.ChatPanelProvider.prototype;
-const host = { approvedCommandSignatures: new Set(), approvedBrowserOrigins: new Set(), coachDisplayName: () => '코치', sitePublisher: () => ({ allowed: () => false }), resolveCoachCwd: () => WS };
+const denialSources = [];
+const host = { postDenialNotice: async source => { denialSources.push(source); }, approvedCommandSignatures: new Set(), approvedBrowserOrigins: new Set(), coachDisplayName: () => '코치', sitePublisher: () => ({ allowed: () => false }), resolveCoachCwd: () => WS };
 host.writeApprovalScope=()=>WS;
 host.context={secrets:{get:async()=> 'token'}};
 host.confirmWriteFiles=(...args)=>P.confirmWriteFiles.call(host,...args);
@@ -202,6 +203,7 @@ test('an outside, .. or symlinked path is refused before any modal, and the noti
   for (const [label, p] of [['outside', path.join(OUT, 'secret.txt')], ['.. escape', path.join(WS, '..', 'elsewhere', 'e.txt')], ['symlink', path.join(WS, 'link', 'via.txt')]]) {
     const r = await ask(`refused: ${label}`, { payload: { path: path.join(WS, 'ok.txt'), paths: [{ path: path.join(WS, 'ok.txt') }, { path: p }] } }, () => '저장');
     assert.equal(r.approved, false, label);
+    assert.equal(denialSources.at(-1), "safety", "outside path carries authoritative source");
     assert.equal(r.modals.length, 1, `${label}: one notice`);
     assert.equal(r.modals[0].options, undefined, `${label}: a notice, not a modal`);
     assert.match(r.modals[0].message, /작업 폴더 밖 · /, label);

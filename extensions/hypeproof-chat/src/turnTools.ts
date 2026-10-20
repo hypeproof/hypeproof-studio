@@ -1,4 +1,4 @@
-import { classifyDenial, denialCopy, lessonFeatureOff, type DenialAudience } from './denialSource.ts';
+import { classifyDenial, denialCopy, lessonFeatureOff, type DenialAudience, type DenialSource } from './denialSource.ts';
 import { accessRemovedFeatures } from './accessClient.ts';
 import { profileAudience } from './seatVocabulary.ts';
 import type { ChatMessage, ResolvedProfile } from './protocol';
@@ -14,6 +14,13 @@ export function turnToolMode(value: unknown): TurnToolMode {
   return value;
 }
 
+export function turnToolsDenialSource(args: { profile: ResolvedProfile | null | undefined; runtime: 'proxy' | 'agent-sdk'; local?: boolean; instructor?: boolean }): DenialSource | undefined {
+  if (args.local || args.instructor) return 'runtime';
+  if (!args.profile) return 'unknown';
+  if (args.profile.tools?.web_search !== true) return accessRemovedFeatures(args.profile).has('web_search') ? 'access' : 'lesson';
+  return args.runtime !== 'agent-sdk' ? 'runtime' : undefined;
+}
+
 export function turnToolsAvailability(args: {
   profile: ResolvedProfile | null | undefined;
   runtime: 'proxy' | 'agent-sdk';
@@ -25,16 +32,17 @@ export function turnToolsAvailability(args: {
   // (수업 설정), or no profile yet (확인 안 됨).
   const audience = profileAudience(args.profile);
   const feature = '웹 검색';
+  const source = turnToolsDenialSource(args);
   const reason = args.local || args.instructor
     // No teacher sentence: the reader may be the instructor, or a local developer.
     ? denialCopy({ source: 'runtime', feature, reason: '이 로컬 구독 연결은 웹 검색 선택을 아직 지원하지 않아요', next: '웹 검색 없이 이어서 해 주세요' }, audience)
-    : !args.profile
+    : source === 'unknown'
       ? denialCopy({ source: 'unknown', feature, reason: '수업 정보를 아직 받지 못했어요' }, 'neutral')
-      : args.profile.tools?.web_search !== true
-        ? accessRemovedFeatures(args.profile).has('web_search')
+      : source === 'access' || source === 'lesson'
+        ? source === 'access'
           ? denialCopy({ source: classifyDenial('access_choice_narrowed'), feature }, audience)
           : lessonFeatureOff(feature, audience)
-        : args.runtime !== 'agent-sdk'
+        : source === 'runtime'
           ? denialCopy({ source: 'runtime', feature, reason: '지금 실행 환경은 웹 검색 선택을 지원하지 않아요' }, audience)
           : undefined;
   return { webSearch: reason ? { available: false, reason } : { available: true } };

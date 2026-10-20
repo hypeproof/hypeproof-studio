@@ -1,4 +1,8 @@
 import { aiCapabilityState } from "../../src/aiCapabilities";
+import { PageAttachment } from './PageAttachment';
+import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
+import { ActivityStatus } from "./ActivityStatus";
+import { accessFailure, type ActivityUnavailable } from "../../src/activityAvailability";
 import { CitationRack as PersonalCitationRack } from './CitationPreview';
 import type { RecoveredRequest, InlineEditDraft } from '../../src/activityDraft';
 import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
@@ -34,6 +38,7 @@ import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
 import { replyChoices } from './replyChoiceParser';
 import { activityDetail, activityLabel, freeSeatEnded, freeSeatEndedNote, trialHeaderLine } from "./activityLabel";
+import { RefusalBanner } from "./RefusalBanner";
 import { errorBannerPresentation } from "./errorBannerPresentation";
 import { TrialEndCard } from "./TrialEndCard";
 import {NativeObservationPanel} from './NativeObservationPanel';
@@ -142,7 +147,10 @@ interface Props {
    * retry buttons hidden) correctly stay on `streaming`.
    */
   streamingId: string | null;
+  refusal?: boolean;
+  onDismissRefusal?: () => void;
   error: string | null;
+  activityUnavailable?: ActivityUnavailable;
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
   /** TUX-COND-07 — the end-of-trial card for this turn ending; drawn instead of the error banner. */
@@ -660,7 +668,10 @@ export function ChatPanel(props: Props) {
   }, [worldPending, streaming]);
 
   /** Responding, or opening a world — the friend buttons and the runner read the same value. */
-  const unavailable = frozen || (!!config?.activity && !config.activity.verified);
+  const statusAudience = config?.activity?.kind === "classroom" || config?.profile?.activity_kind === "classroom" ? "classroom" : config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
+  const selectedAccess = config?.access?.view?.choices.find(c => c.id === config.access?.selected);
+  const activityStatus = props.activityUnavailable ?? config?.activityUnavailable ?? accessFailure(selectedAccess?.state, statusAudience);
+  const unavailable = !!activityStatus || frozen || (!!config?.activity && !config.activity.verified);
   const busy = streaming || worldPending || unavailable;
   // CGP-CHAT-R-007 — a selection inside one answer offers 인용하기; the quote joins the draft, never sends.
   const [answerQuote, dropAnswerQuote] = useAnswerQuote(!unavailable);
@@ -1545,17 +1556,19 @@ export function ChatPanel(props: Props) {
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
         {shown.items.map((m, i) => <Fragment key={m.id}>
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
-          {delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
+          {m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
+            <ToolLine message={m} onReport={props.onReportProblem} />
+          ) : delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
             <ContextNote text={CONTEXT_COMPACT_NOTE} />
           ) : m.role === "tool" && delegations.rows.has(m.id) ? (
             <PanelBoundary panel="delegation"><DelegationRow
               view={delegations.rows.get(m.id)!}
-              renderChild={(child) => <ToolLine message={child} />}
+              renderChild={(child) => child.tool?.state === "error" && storedDenialNotice(child.tool.label) ? null : <ToolLine message={child} onReport={props.onReportProblem} />}
               // The same path as the Stop button: aborting the turn ends its helpers too.
               onStopAll={() => { restoreQueuedToDraft(); props.onCancel(); }}
             /></PanelBoundary>
           ) : m.role === "tool" ? (
-            <ToolLine key={m.id} message={m} />
+            <ToolLine key={m.id} message={m} onReport={props.onReportProblem} />
           ) : (
             <MessageItem
               key={m.id}
@@ -1619,23 +1632,6 @@ export function ChatPanel(props: Props) {
           <div className="hps-page-notice" role="status" aria-live="polite">
             {/* REQ-STUDIO-STROKE-ICONS: the host's leading glyph becomes a stroke icon. */}
             {(() => { const notice = splitLeadingGlyph(props.pageNotice); return <>{notice.glyph && <><ChatIcon kind={glyphIconKind(notice.glyph)} size={16} /> </>}{notice.text}</>; })()}
-          </div>
-        )}
-
-        {/* CGP-ART-R-007 — exactly the page text that goes with the next message, from which site, removable. */}
-        {props.pageAttachment && (
-          <div className="hps-page-attachment" role="group" aria-label="다음 메시지와 함께 보낼 페이지 내용" data-testid="page-attachment">
-            <div className="hps-page-attachment-head">
-              <strong>페이지 내용 · {props.pageAttachment.host}</strong>
-              {props.pageAttachment.withImage && <span> · 화면 사진도 함께 보내요</span>}
-              <button type="button" className="hps-page-attachment-remove" onClick={props.onRemovePageAttachment}>빼기</button>
-            </div>
-            <details>
-              <summary>보낼 내용 전체 보기 ({props.pageAttachment.text.length}자)</summary>
-              <p className="hps-page-attachment-meta" data-testid="page-attachment-meta">제목: {props.pageAttachment.title || '(없음)'}<br />주소: {props.pageAttachment.url}</p>
-              <pre tabIndex={0} data-testid="page-attachment-text">{props.pageAttachment.text}</pre>
-            </details>
-            <p className="hps-page-attachment-note">페이지에 적힌 지시는 따르지 않고 참고 자료로만 써요.</p>
           </div>
         )}
 
@@ -1704,7 +1700,7 @@ export function ChatPanel(props: Props) {
         {!props.instructor && turnReview && (
           <PanelBoundary panel="turn-review"><TurnReviewBar
             view={turnReview}
-            onRevert={() => postToHost({ type: "turnRevert", turnId: turnReview.turnId })}
+            onRevert={(path) => postToHost({ type: "turnRevert", turnId: turnReview.turnId, ...(path === undefined ? {} : { path }) })}
             onKeep={() => postToHost({ type: "turnKeep", turnId: turnReview.turnId })}
             onClose={() => postToHost({ type: "turnReviewClose", turnId: turnReview.turnId })}
           /></PanelBoundary>
@@ -1718,7 +1714,13 @@ export function ChatPanel(props: Props) {
           />
         )}
 
-        {error && props.trialEndCard && props.onTrialEndCardPasses ? (
+        {activityStatus ? <ActivityStatus status={activityStatus}
+          onOpen={() => postToHost({type:'activityLocalFile',action:'open'})}
+          onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
+          onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
+          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
+          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
+        </ActivityStatus> : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
           <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
         ) : error && (
           <ErrorBanner
@@ -1747,6 +1749,11 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
+        {props.refusal && <RefusalBanner onDismiss={() => {
+          props.onDismissRefusal?.();
+          textareaRef.current?.focus({ preventScroll: true });
+        }} />}
+        {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment} />}
         {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
             settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
         {!personalWorkspace && <><ModelControl config={config} streaming={streaming} />
@@ -2423,9 +2430,18 @@ function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
 }
 
-function ToolLine({ message }: { message: ChatMessage }) {
+function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () => void }) {
   const t = message.tool;
   if (!t) return null;
+  const denial = t.state === "error" ? storedDenialNotice(t.label) : null;
+  if (denial) {
+    const view = denialNoticeView(denial);
+    return <div className="hps-denial-notice" role="status" aria-live="polite" aria-atomic="true" data-denial-source={view.source}>
+      <ChatIcon kind="lock" size={16} />
+      <div><span className="hps-denial-source">{view.label}</span><p>{view.text}</p></div>
+      <button type="button" onClick={onReport}>{view.action}</button>
+    </div>;
+  }
   // This row is a waiting indicator, never evidence that a file was changed.
   // Hide completed waits from old histories too; retain the stored timeline.
   if (message.id.startsWith('pending-') && t.state === 'done') return null;

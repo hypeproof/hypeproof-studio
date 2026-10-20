@@ -178,6 +178,8 @@ export interface SdkCoachArgs {
    */
   previewUrl?: string;
   onDelta: (delta: string) => void;
+  /** Explicit model refusal, never inferred from generated text. */
+  onRefusal?: () => void;
   /**
    * #414 — what the coach is DOING (thinking / tool calls / results), so the
    * student sees real work instead of a static "만드는 중" line. Optional: the
@@ -192,7 +194,7 @@ export interface SdkCoachArgs {
   onCitations: (citations: Citation[]) => void;
   onAssetScore: (score: AssetScoreChunk) => void;
   /** Manual-approve gate. Resolves true to allow the tool. */
-  requestApproval: (action: CoachToolAction) => Promise<boolean | {approved: boolean; actor: 'user'|'policy'}>;
+  requestApproval: (action: CoachToolAction) => Promise<boolean | {approved: boolean; actor: 'user'|'policy'; denialSource?: import('./denialSource').DenialSource}>;
   /**
    * #282 P2 slice 2 — host capabilities behind the in-process "hypeproof" MCP
    * browser tools. Optional: when absent (or the profile doesn't grant
@@ -718,9 +720,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // absent for ungranted cohorts, so the model never even sees the tools.
     ...(mcpServers ? { mcpServers } : {}),
     canUseTool: async (name, input, options) => {
-      const decision = (allowed: boolean, actor: 'user'|'policy' = 'policy') => {
+      const decision = (allowed: boolean, actor: 'user'|'policy' = 'policy', denialSource?: import('./denialSource').DenialSource) => {
         if (!allowed) webCitations.deny(options.toolUseID);
-        args.onActivity?.({kind:'approval',id:options.toolUseID,name,input,allowed,actor,at:Date.now()});
+        args.onActivity?.({kind:'approval',id:options.toolUseID,name,input,allowed,actor,...(denialSource ? { denialSource } : {}),at:Date.now()});
       };
       lastToolCallAt = Date.now();
       // A browser-only turn cannot turn a model's mistaken authoring plan into writes,
@@ -784,7 +786,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         } else {
           console.warn(`[coach] tool denied (${verdict.source}): ${name} — ${verdict.reason}`);
         }
-        decision(false);
+        decision(false, 'policy', verdict.source);
         return { behavior: "deny" as const, message: verdict.friendly };
       }
       if (verdict.decision === "allow") {
@@ -802,7 +804,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
           (input as { url?: unknown } | undefined)?.url);
         // CR-11 — with the switch on, an out-of-scope open is denied with its reason, not asked.
         const crRefused = openUrl ? await crBrowserOpenRefusal(args.browserHost, openUrl) : null;
-        if (crRefused) { decision(false); return { behavior: "deny" as const, message: crRefused }; }
+        if (crRefused) { decision(false, 'policy', 'safety'); return { behavior: "deny" as const, message: crRefused }; }
         if (alreadyOpen) { decision(true); return { behavior: "allow" as const, updatedInput: input }; }
       }
       // #403 — the modal blocks the SDK stream for as long as the human takes
@@ -822,7 +824,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
           ...(verdict.destructive ? { destructive: true } : {}),
         });
         ok = typeof approval === 'boolean' ? approval : approval.approved;
-        decision(ok, typeof approval === 'boolean' ? 'policy' : approval.actor);
+        decision(ok, typeof approval === 'boolean' ? 'policy' : approval.actor, typeof approval === 'boolean' ? undefined : approval.denialSource);
       } finally {
         awaitingUser -= 1;
         // The tool runs from NOW, not from when it was requested. Without this restamp a long
@@ -905,6 +907,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         : new ProxyAuthError("other", GATEWAY_BAD_REQUEST_FRIENDLY);
     },
     onDelta: args.onDelta,
+    onRefusal: args.onRefusal,
     ...(args.onActivity ? { onActivity: args.onActivity } : {}),
     ...(args.onUsage ? { onUsage: args.onUsage } : {}),
     stallMs,

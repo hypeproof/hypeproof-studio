@@ -34,11 +34,13 @@ const BANNER_POSTED_ARROW =
 //   logLevel: the --log-level value; null means esbuild's default (flag omitted)
 const OVERRIDES = {
   "write-approval-dialog": { banner: BANNER_POSTED },
+  "refusal-banner": { banner: BANNER_POSTED },
   "instructor-render": { logLevel: null },
   "missing-task-folder": { banner: BANNER_POSTED },
   "preview-recovery": { banner: BANNER_POSTED },
   "ask-about-file": { banner: BANNER_POSTED_ARROW },
   "trial-end-card-dismiss": { banner: BANNER_POSTED },
+  "activity-status-chatpanel": { banner: BANNER_POSTED },
 };
 
 // Tests in test/ that this runner must skip, because they have their own build step

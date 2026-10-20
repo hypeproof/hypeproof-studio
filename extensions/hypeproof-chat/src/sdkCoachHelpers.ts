@@ -1,3 +1,4 @@
+import { responseEvidence } from "./activityAvailability.ts";
 // #282 — PURE mapping from a resolved cohort profile to Claude Agent SDK
 // options, plus the SDK-tool → host-approval mapping. No `vscode`, no SDK
 // import: safe to unit-test and typecheck standalone (extension pure/
@@ -1781,7 +1782,7 @@ const STALLED = Symbol("sdk-stream-stalled");
 // loop already renders.
 
 export type SdkActivity = (
-  | { kind: 'approval'; id: string; name: string; input: unknown; actor: 'user'|'policy'; allowed: boolean }
+  | { kind: 'approval'; id: string; name: string; input: unknown; actor: 'user'|'policy'; allowed: boolean; denialSource?: DenialSource }
   /** Running token estimate while the model thinks (Claude Code's "✻ …" counter). */
   | { kind: "thinking_tokens"; tokens: number }
   /** A completed thinking block. Raw model text — NOT translated (it is usually English). */
@@ -2095,6 +2096,8 @@ export interface SdkStreamHandlers {
   /** Build the student-friendly auth error thrown on a fatal 400/401. */
   makeFatalAuthError: (status: number) => Error;
   onDelta: (delta: string) => void;
+  /** Explicit model refusal, never inferred from generated text. */
+  onRefusal?: () => void;
   /**
    * #414 — everything the coach is DOING (thinking, tool calls, their results).
    * Optional so the fast-fail/stall tests can ignore it; when absent the stream
@@ -2267,7 +2270,12 @@ export async function consumeSdkStream(
   /** The refusal as the real SDK throws it, so passSpentNotice / bindingRefusalCode / the spool read the same. */
   const cliRefusal = (text: string, status: number | undefined): Error => {
     const err = new Error(`Claude Code returned an error result: ${text}`);
-    if (status !== undefined) Object.defineProperty(err, "status", { value: status, enumerable: false });
+    if (status !== undefined) {
+      Object.defineProperty(err, "status", { value: status, enumerable: false });
+      // This is a CLI-generated error, never model text. Only parse a complete JSON body.
+      const bodyAt = text.indexOf('{');
+      Object.defineProperty(err, "evidence", {value: responseEvidence(status, bodyAt < 0 ? '' : text.slice(bodyAt))});
+    }
     return err;
   };
   /**
@@ -2445,6 +2453,8 @@ export async function consumeSdkStream(
       // REQ-M44 — a turn the gateway refused ends in the banner with the Service's sentence, once. The generic
       // REQ-M39 notice ("다시 한 번 부탁하거나…") would only add a second, futile message to the bubble.
       if (failure && cliError !== undefined) throw cliRefusal(cliError, failure.status ?? sdkCliErrorStatus(cliError));
+      if ((type === "result" && msg["stop_reason"] === "refusal") ||
+          (type === "system" && msg["subtype"] === "model_refusal_no_fallback")) h.onRefusal?.();
       const notice = sdkResultNotice(msg);
       if (notice) {
         console.warn(`[coach] SDK 종료 오류 subtype=${String(msg["subtype"] ?? "(none)")}`);
