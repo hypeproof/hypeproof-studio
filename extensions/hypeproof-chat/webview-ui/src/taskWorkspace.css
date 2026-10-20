@@ -160,6 +160,31 @@
 .tw-task-state-symbol { font-weight: 700; }
 .tw-task-state[data-run-state="approval"], .tw-task-state[data-run-state="error"] { font-weight: 700; border-width: 2px; }
 
+/* REQ-STUDIO-UI-POLISH-1 — the heading reads as three groups: where I am (the activity kind, then
+   its name, quieter), what is happening (the run state, a bordered pill with a dot, drawn only while
+   a turn runs), and what I can do (자료 and the menu, after a hairline divider). Nothing is dropped;
+   the groups differ by weight, colour and a separator, not by size (every word stays 14px). */
+.tw-heading .hps-activity-kind { color: var(--vscode-foreground, #e1e1e1); font-weight: 550; }
+.tw-heading .hps-activity-name { color: var(--tw-muted); }
+.tw-heading .tw-run-note:not(:empty) {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px;
+  border: 1px solid var(--tw-line); border-radius: 999px; color: var(--vscode-foreground, #e1e1e1);
+}
+.tw-heading .tw-run-note:not(:empty)::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.tw-workspace .tw-heading .tw-sources-toggle { position: relative; font-weight: 550; }
+/* The divider separates the actions from something: only when the activity, the remaining line or the
+   run pill precedes 자료. The classroom heading has none of them while idle, so it draws no stray line. */
+.tw-workspace .tw-heading:has(.hps-activity-now, .hps-trial-left, .tw-run-note:not(:empty)) .tw-sources-toggle { margin-inline-start: 9px; }
+.tw-workspace .tw-heading:has(.hps-activity-now, .hps-trial-left, .tw-run-note:not(:empty)) .tw-sources-toggle::before {
+  content: ""; position: absolute; inset-block: 12px; inset-inline-start: -11px; border-inline-start: 1px solid var(--tw-line); pointer-events: none;
+}
+
+/* Split-pane widths while a turn runs: the pill takes the room the track name had, so the name moves
+   into the activity's title (kind · name) instead of ending in an ellipsis. The kind stays. */
+@media (max-width: 900px) {
+  .tw-heading:has(.tw-run-note:not(:empty)) .hps-activity-name { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). The open sources toggle was marked by a
    background only; it takes the system selection pair like the current task. */
 @media (forced-colors: active) {
@@ -170,4 +195,6 @@
   .tw-workspace .tw-task-list { padding: 4px; }
   .tw-workspace .tw-source-list { padding-block-start: 4px; }
   .tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background-color: Highlight; color: HighlightText; border-color: Highlight !important; }
+  /* REQ-STUDIO-UI-POLISH-1: the run pill's dot is a background, which forced colors repaints as Canvas. */
+  .tw-heading .tw-run-note:not(:empty)::before { background: CanvasText; }
 }

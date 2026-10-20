@@ -1944,10 +1944,37 @@ html, body, #root {
   overflow-wrap: anywhere;
 }
 
-/* CGP-AGENT-R-003: capability card rows. State is a symbol plus the word (SX-50), never colour alone. */
-.hp-ai-can-do ul { margin: 6px 0; padding: 0; list-style: none; }
-.hp-ai-can-do li { margin: 4px 0; overflow-wrap: anywhere; word-break: keep-all; }
-.hp-ai-can-do li[data-on="false"] { color: var(--hp-muted); }
+/* CGP-AGENT-R-003: capability card rows. State is a symbol plus the word (SX-50), never colour alone.
+   REQ-STUDIO-UI-POLISH-1: the summary is one 44px row (border-box, so padding does not add to the
+   44px), its text centred in it, so the focus ring hugs the row instead of a 64px box with empty
+   space under the label. The native marker gives way to one chevron that turns when open. Each row
+   is mark · label · state word; the state word is plain text in one weight, never <strong>. */
+.hp-ai-can-do > summary {
+  display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; box-sizing: border-box; min-height: 44px;
+  padding: 6px 8px; border-radius: 8px; list-style: none;
+}
+.hp-ai-can-do > summary::-webkit-details-marker { display: none; }
+/* Quiet text in the card follows the host theme (light themes included); --hp-muted is a dark-only
+   constant, 2.05:1 on white. The fallback keeps the HP value where no theme value exists. */
+.hp-ai-can-do { --hp-ai-can-do-muted: var(--vscode-descriptionForeground, var(--hp-muted)); }
+/* The chevron is decoration: empty alternative text keeps it out of the summary's name. */
+.hp-ai-can-do > summary::before {
+  content: "›" / ""; display: inline-block; width: 1em; text-align: center; color: var(--hp-ai-can-do-muted);
+}
+/* The turn moves only when motion is welcome (the voice meter's pattern), so no reduce block is needed. */
+@media (prefers-reduced-motion: no-preference) { .hp-ai-can-do > summary::before { transition: transform var(--hp-dur-press) var(--hp-ease); } }
+.hp-ai-can-do[open] > summary::before { transform: rotate(90deg); }
+.hp-ai-can-do-title { font-weight: 550; }
+.hp-ai-can-do-count { color: var(--hp-ai-can-do-muted); }
+.hp-ai-can-do[open] .hp-ai-can-do-more { display: none; }
+.hp-ai-can-do ul { margin: 4px 0 8px; padding: 0; list-style: none; display: grid; gap: 2px; }
+.hp-ai-can-do li { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 8px; overflow-wrap: anywhere; word-break: keep-all; }
+.hp-ai-can-do-mark { flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; box-sizing: border-box; border: 1px solid currentColor; border-radius: 50%; font-size: 12px; line-height: 1; }
+.hp-ai-can-do li[data-on="false"] .hp-ai-can-do-mark { border-style: dashed; }
+.hp-ai-can-do-label { flex: 1 1 auto; min-width: 0; }
+.hp-ai-can-do-state { flex: none; font-weight: 400; }
+.hp-ai-can-do li[data-on="false"] { color: var(--hp-ai-can-do-muted); }
+.hp-ai-can-do > .hp-rail-lesson-note { margin: 0; padding: 8px 8px 4px; border-top: 1px solid var(--hp-line); color: var(--hp-ai-can-do-muted); }
 
 /* CGP-ART-R-007: page text going with the next message. */
 .hps-page-attachment { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--vscode-panel-border, #6b6b6b); border-radius: 8px; font-size: 13px; }
@@ -1969,8 +1996,10 @@ html, body, #root {
 .hps-input:not([data-expanded]) .hps-tools-menu button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 44px; padding: 10px; background: transparent; color: inherit; text-align: left; font-weight: 400; font-size: 13px; }
 
 /* CGP-SHELL-R-011: offline banner above the message list. Text keeps the panel foreground (the
-   stop-notice pattern); amber is only the 4px edge, so contrast does not depend on --hp-warn. */
-.hps-offline-banner { margin: 6px 0; padding: 8px 10px; border-left: 4px solid var(--hp-warn); border-radius: 4px; background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08)); color: var(--vscode-foreground, inherit); font-size: 13px; line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere; }
+   stop-notice pattern); amber is only the 4px edge, so contrast does not depend on --hp-warn.
+   REQ-STUDIO-UI-POLISH-1: `.hps-notice-caution` is the same surface under a name that is not about
+   the network, for any other "please check this" line (the personal access line). */
+.hps-offline-banner, .hps-notice-caution { margin: 6px 0; padding: 8px 10px; border-left: 4px solid var(--hp-warn); border-radius: 4px; background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08)); color: var(--vscode-foreground, inherit); font-size: 13px; line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere; }
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Marks drawn only in colour, or only as a
    background (which forced colors repaints as Canvas), get a line or a shape. Normal mode is unchanged. */
 @media (forced-colors: active) {
@@ -1997,5 +2026,5 @@ html, body, #root {
      colors would repaint its white plate as Canvas, which is black in dark high-contrast themes. */
   .hps-publish-link img { forced-color-adjust: none; }
   /* CGP-SHELL-R-011 offline banner: the amber edge becomes a text-coloured line. */
-  .hps-offline-banner { border-left-color: CanvasText; }
+  .hps-offline-banner, .hps-notice-caution { border-left-color: CanvasText; }
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ChatMessage, Citation } from '../../src/protocol';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
-import { TASK_RUN_STATE_LABELS, taskRunAccessibleName, type TaskRunState } from '../../src/taskRunState';
+import { TASK_RUN_STATE_LABELS, taskCountLine, taskRunAccessibleName, type TaskRunState } from '../../src/taskRunState';
 import { onHostMessage, postToHost } from './vscode';
 import { CitationPreview, CitationPreviewContext, SourceIcon, citationAddress } from './CitationPreview';
 import { HeadingSlotContext } from './headingSlot';
@@ -377,7 +377,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={taskRunAccessibleName(task.title, state)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
             <span className="tw-task-title">{task.title}</span>
             {state && <span className="tw-task-state" data-run-state={state}><span aria-hidden="true" className="tw-task-state-symbol">{TASK_RUN_STATE_LABELS[state].symbol}</span>{TASK_RUN_STATE_LABELS[state].label}</span>}
-            <span id={metaId} className="tw-task-meta"><span>{task.messageCount ? `대화 ${task.messageCount}` : '시작 전'}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
+            <span id={metaId} className="tw-task-meta"><span>{taskCountLine(task.messageCount, state)}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
         </li>;
         })}

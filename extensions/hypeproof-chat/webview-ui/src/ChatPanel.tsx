@@ -1680,7 +1680,7 @@ export function ChatPanel(props: Props) {
         {!personalWorkspace && <><ModelControl config={config} streaming={streaming} />
           <EffortControl config={config} post={postToHost} />
           <AccessControl config={config} streaming={streaming} post={postToHost} /></>}
-        {personalWorkspace && accessNeedsAttention && <div className="hps-access-attention" role="status">
+        {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
         {folderMissing && missingFolder && <MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} />}
@@ -1945,14 +1945,24 @@ export function ChatPanel(props: Props) {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-/** CGP-AGENT-R-003: every REQ-M38 key is listed; an off key reads "안 해요" so nothing is implied. */
+/**
+ * CGP-AGENT-R-003: every REQ-M38 key is listed; an off key reads "안 해요" so nothing is implied.
+ * REQ-STUDIO-UI-POLISH-1: always closed, with a one-line summary that already says how many of the
+ * listed things the AI does here ("6가지 중 4가지", so the count matches the rows that open); each row is a mark, the label and one state word in the same quiet style.
+ */
 function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilities']>; solo: boolean }) {
+  const onCount = items.filter(item => item.on).length;
   // Trial diagnosis D3: a solo seat (trial, pass, personal) has no lesson and no teacher.
   return <details className="hp-rail-lesson hp-ai-can-do">
-    <summary>{solo ? '여기서 AI가 할 수 있는 일' : '이 수업에서 AI가 할 수 있는 일'}</summary>
+    <summary>
+      <span className="hp-ai-can-do-title">{solo ? '여기서 AI가 할 수 있는 일' : '이 수업에서 AI가 할 수 있는 일'}</span>
+      <span className="hp-ai-can-do-count">{onCount ? `${items.length}가지 중 ${onCount}가지` : '지금은 없음'}<span className="hp-ai-can-do-more"> · 자세히</span></span>
+    </summary>
     <ul>
       {items.map(item => <li key={item.key} data-capability={item.key} data-on={item.on ? 'true' : 'false'}>
-        <span aria-hidden="true">{item.on ? '✓' : '–'}</span> {item.label}: <strong>{item.on ? '해요' : '안 해요'}</strong>
+        <span className="hp-ai-can-do-mark" aria-hidden="true">{item.on ? '✓' : '–'}</span>
+        <span className="hp-ai-can-do-label">{item.label}</span>
+        <span className="hp-ai-can-do-state">{item.on ? '해요' : '안 해요'}</span>
       </li>)}
     </ul>
     <p className="hp-rail-lesson-note">{solo ? '지금 쓰는 체험·이용권에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>

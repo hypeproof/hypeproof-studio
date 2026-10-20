@@ -6711,6 +6711,19 @@
       ]
     },
     {
+      "id": "ST-TEST-UI-POLISH-1",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/ui-polish-1.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-CONTROL-CONTRAST",
       "stage": "test",
       "owner": "jayleekr",

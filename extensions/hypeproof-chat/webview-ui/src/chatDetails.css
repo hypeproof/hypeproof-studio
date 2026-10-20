@@ -250,8 +250,13 @@
 .hps-preferences select { max-width: 100%; min-height: 36px; font-size: var(--hp-text-caption); }
 .hps-preferences p, .hps-preferences small { color: var(--tw-muted); overflow-wrap: anywhere; }
 .hps-preferences .hps-all-settings { margin-top: 12px; padding: 8px 0; border: 0; min-height: 44px; background: transparent; color: inherit; }
-.hps-access-attention { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--tw-muted); font-size: var(--hp-text-caption); }
-.hps-access-attention button { color: inherit; background: transparent; border: 0; text-decoration: underline; min-height: 32px; }
+/* REQ-STUDIO-UI-POLISH-1: the access line is an inline notice (.hps-notice-caution, the offline
+   banner's surface in styles.css) inside the composer's column, not loose text above it. Its one
+   action keeps a 44px target; the notice's block padding shrinks so the row stays one line tall. */
+.hps-access-attention { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+.hps-shell[data-chat-detail="personal"] .hps-access-attention { margin: 0; padding-block: 0; }
+.hps-access-attention button { color: inherit; background: transparent; border: 0; border-radius: 6px; text-decoration: underline; min-height: 44px; padding: 0 8px; font: inherit; cursor: pointer; }
+.hps-access-attention button:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
 .hps-reply-choices { display: flex; flex-direction: column; gap: 6px; margin: 16px 0 4px; }
 .hps-shell[data-chat-detail="personal"] .hps-reply-choices button { display: flex; align-items: baseline; gap: 12px; width: 100%; padding: 10px 12px; min-height: 44px; text-align: left; font-size: var(--hp-text-caption); line-height: 1.55; border: 1px solid var(--tw-line); border-radius: 9px; color: inherit; background: transparent; }
 .hps-reply-choices button:hover { background: var(--vscode-list-hoverBackground, #ffffff0a); }
@@ -356,6 +361,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-delegation,
 .hps-shell[data-chat-detail="personal"] .hps-delegation-stop,
 .hps-shell[data-chat-detail="personal"] .hps-page-card,
+.hps-shell[data-chat-detail="personal"] .hps-notice-caution,
 .hps-shell[data-chat-detail="personal"] .hp-mission-week,
 .hps-shell[data-chat-detail="personal"] .hp-rail-lesson-meta,
 .hps-shell[data-chat-detail="personal"] .hp-rail-lesson-note,
@@ -410,4 +416,24 @@
   .hps-shell[data-chat-detail="personal"] .hps-input textarea { border-style: none !important; }
   /* Response dots are painted with currentColor as a background, which forced colors repaints as Canvas. */
   .hps-response-dots i { background: CanvasText; }
+}
+
+/* REQ-STUDIO-UI-POLISH-1 — the "여기서 AI가 할 수 있는 일" card sits in the reading column: the same
+   740px centred measure as the messages and the composer (the margin is the input area's padding,
+   so the left edges line up), on a quiet panel with a hairline border. 6px of inner padding gives
+   the summary's 2px focus ring room inside the card, and nothing in the card clips (no scroller). */
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do {
+  box-sizing: border-box; max-height: none; overflow: visible;
+  margin: 12px max(20px, calc((100% - var(--chat-column)) / 2)) 0;
+  padding: 6px; border: 1px solid var(--tw-line); border-radius: 12px;
+  background: var(--tw-panel); font-size: var(--hp-text-caption); line-height: var(--hp-leading-label);
+}
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do > summary { padding-inline: 10px; }
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do-count,
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do > summary::before,
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do li[data-on="false"] { color: var(--tw-muted); }
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do li { padding-inline: 10px; }
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do > .hp-rail-lesson-note { padding: 10px 10px 8px; border-top-color: var(--tw-line); color: var(--tw-muted); line-height: var(--hp-leading-label); }
+@media (max-width: 700px) {
+  .hps-shell[data-chat-detail="personal"] .hp-ai-can-do { margin-inline: 18px; }
 }
