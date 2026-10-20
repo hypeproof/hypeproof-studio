@@ -54,6 +54,10 @@ jobs:
             echo "::error::the native SDK seed hard-codes both platforms"; exit 1
           fi
           node --test scripts/release/test/sdk-seed-assets.test.mjs
+          # Every published release carries its own pinned install-mac.sh + Test Kit.
+          grep -q 'install-kit.mjs render' .github/workflows/verify-unified-release.yml
+          grep -q 'dist/install-mac.sh' .github/workflows/mirror-release.yml
+          node --test scripts/release/test/install-kit.test.mjs
 
       - name: Summary
         run: |

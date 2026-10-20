@@ -33,8 +33,16 @@ The rc builds take one to two hours for each OS. They run the automatic E2E on m
 Windows. Then they publish the rc as a prerelease.
 
 - [ ] Make sure that `verify-unified-release` passed for the rc tag.
-- [ ] Download the rc build from the prerelease page. The release PR has the link.
-- [ ] Install it. Make sure that the product version is the rc version.
+- [ ] Install the rc build with the one-liner at the top of the prerelease notes. It
+      installs beside the main App, in `~/Applications/HypeProof-RC-<version>/` with its own
+      profile, and checks the zip's SHA-256 and the product version:
+
+      ```bash
+      curl -fsSL https://github.com/hypeproof/hypeproof-studio/releases/download/<rc tag>/install-mac.sh | bash
+      ```
+
+- [ ] Testers who want double-click files get `HypeProof-<rc tag>-Test-Kit.zip` from the
+      same page. A browser download of a Mac zip is quarantined; the one-liner is not.
 
 Installed Apps do not update to a prerelease. Install the rc build by hand.
 

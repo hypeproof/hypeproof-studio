@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import {assertReceipt,sha256} from '../e2e/unified-release/artifact.mjs';
+import {assertReceipt,isAppPackage,sha256} from '../e2e/unified-release/artifact.mjs';
 import {releasePlatforms} from './release/platforms.mjs';
 const [directory,sha,version]=process.argv.slice(2);
 try{
  if(!directory||!/^[a-f0-9]{40}$/.test(sha??'')||!version)throw Error('Usage: check-unified-release.mjs ASSET_DIRECTORY SOURCE_SHA VERSION');
  const evidence=JSON.parse(fs.readFileSync(path.join(directory,'unified-acceptance.json'),'utf8'));
- const assets=Object.fromEntries(fs.readdirSync(directory).filter(n=>/\.(exe|zip)$/.test(n)).map(n=>[n,sha256(path.join(directory,n))]));
+ const assets=Object.fromEntries(fs.readdirSync(directory).filter(isAppPackage).map(n=>[n,sha256(path.join(directory,n))]));
  // The release's own config/release-platforms.json decides which OS receipts are required;
  // a commit without it (every release before 2026-10-19) requires both.
  const platforms=releasePlatforms(sha);

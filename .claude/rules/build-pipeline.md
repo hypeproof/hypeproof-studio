@@ -88,6 +88,14 @@ Discovered during Phase 1: missing any of these causes silent or confusing failu
 | `Request https://api.github.com/repos/.../releases/tags/v0.1.0 failed with status code: 404` during `bundle-marketplace-extensions-build` | Extension listed in `product.json.builtInExtensions` triggers a marketplace/GH download. The download target doesn't exist (no release yet) | Don't list bundled extensions in `builtInExtensions`. Place them in `vscode/extensions/` only — VSCodium picks them up automatically as built-ins (same as `git`, `npm`, etc.) |
 | `npm error ELSPROBLEMS / missing: <pkg>, required by hypeproof-chat` during `vscode-min-prepack` (#349, killed the v0.1.17 tag builds) | The injected extension ships pre-built with NO `node_modules`, but its `package.json` declared a runtime `dependencies` entry — `npm list --production` then fails on the copy | Runtime deps of hypeproof-chat must live in `devDependencies`; the packaged build loads them from `dist/vendor` (#343). Never add a `dependencies` entry to the extension |
 
+## Per-release Mac installer
+
+Every published release carries `install-mac.sh` and `HypeProof-<tag>-Test-Kit.zip`,
+rendered by `scripts/release/install-kit.mjs` in `verify-unified-release.yml` from
+`scripts/release/templates/`. Edit the templates, not a generated copy. The installer must
+keep reusing `scripts/seed-sdk-binary.sh` for the SDK seed; never inline seeding. Details:
+`docs/dev/fast-mac-release.md` "Per-release Mac installer and Test Kit".
+
 ## Restarting a stuck/failed build
 
 ```bash

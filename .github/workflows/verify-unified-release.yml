@@ -297,6 +297,35 @@ jobs:
           node scripts/release/sdk-seed-assets.mjs manifest "$seed" "$version" "$platforms"
           gh release upload "$TAG" "$seed"/* --clobber
           gh release view "$TAG" --json assets | node scripts/release/sdk-seed-assets.mjs list "$version" "$platforms"
+      # Per-release Mac installer (2026-10-20), rc and stable alike. The zip is not
+      # notarized, so a browser download is quarantined and Gatekeeper refuses it; curl
+      # adds no quarantine flag. install-mac.sh is pinned to this tag and to the accepted
+      # zip's SHA-256 (dist/ was just checked against the receipts), seeds the coach SDK
+      # from the seed attached above and is the release body's one-liner. The Test Kit zip
+      # wraps the same script in INSTALL/START .command files with a Korean READ-ME.
+      # check-unified-release.mjs leaves the kit zip out of the accepted bytes. Attached
+      # while still a draft, so a published release never lacks its installer.
+      - name: Attach the per-release Mac installer and Test Kit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          zip=dist/HypeProof-Studio-darwin-arm64.zip
+          if [[ ! -f "$zip" ]]; then echo "no Mac package in $TAG; no Mac installer"; exit 0; fi
+          seeds=("$RUNNER_TEMP"/sdk-seed/claude-agent-sdk-darwin-arm64-*.tgz)
+          [[ ${#seeds[@]} -eq 1 && -f "${seeds[0]}" ]] || { echo "::error::expected one darwin-arm64 SDK seed"; exit 1; }
+          out="$RUNNER_TEMP/install-kit"
+          node scripts/release/install-kit.mjs render --tag "$TAG" --source-sha "$SOURCE_SHA" \
+            --zip-sha256 "$(sha256sum "$zip" | cut -d' ' -f1)" \
+            --seed-name "$(basename "${seeds[0]}")" --seed-sha256 "$(sha256sum "${seeds[0]}" | cut -d' ' -f1)" \
+            --seeder-sha256 "$(git show "$SOURCE_SHA:scripts/seed-sdk-binary.sh" | sha256sum | cut -d' ' -f1)" \
+            --out "$out"
+          gh release upload "$TAG" "$out"/* --clobber
+          gh release view "$TAG" --json body --jq .body | node scripts/release/install-kit.mjs notes --tag "$TAG" > "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          echo "Install: curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/install-mac.sh | bash" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish and dispatch the public mirror
         env:
           GH_TOKEN: ${{ github.token }}
