@@ -24,7 +24,9 @@ t("waiting with a link: 링크 복사 under the reopen button, user code still s
   ok(html.indexOf("로그인 창 다시 열기") < html.indexOf("링크 복사"), "copy sits after the reopen action");
   ok(html.includes("HPDX-4K7Q"), "the user code stays on screen");
   ok(!html.includes("studio/connect"), "the URL itself is not in the page before a failure");
-  ok(/class="studio-signin-copy-hint"[^>]*>[^<]*다른 브라우저/.test(html), "says what the link is for");
+  // Device-code phishing (REQ-L13 ⑧): the hint says the link is for the learner's own browser or device only.
+  ok(SIGN_IN_LINK_COPY.hint === "내 다른 브라우저나 기기에서만 여세요. 이 링크를 다른 사람에게 보내지 마세요.", `hint is ${SIGN_IN_LINK_COPY.hint}`);
+  ok(html.includes(`class="studio-signin-copy-hint">${SIGN_IN_LINK_COPY.hint}<`), "the hint is rendered");
 });
 t("negative control: no link, no button (waiting, signed out, signed in)", () => {
   ok(!button.test(render(waiting())), "waiting without a link drew a button");

@@ -86,7 +86,10 @@ function session({ start = {}, opens = true } = {}) {
 {
   // Positive controls.
   assert.equal(copyableSignInLink(LINK, SITE, CODE, ["device-secret"]), LINK);
-  assert.equal(copyableSignInLink(`${SITE}/studio/connect`, SITE, CODE, ["device-secret"]), `${SITE}/studio/connect`);
+  // L1: the copy is the parsed, normalised URL, never the server's raw string (whitespace, a backslash
+  // or a tab would split or disguise the link in a chat app or QR tool on the other device).
+  assert.equal(copyableSignInLink(` ${SITE}\\studio/con\tnect?code=${CODE}\n`, SITE, CODE, ["device-secret"]), LINK, "normalised href");
+  assert.equal(copyableSignInLink(`http://LOCALHOST:3193/studio/connect?code=${CODE}`, SITE, CODE, []), LINK, "host case normalised");
   // Negative controls: each must refuse.
   const bad = [
     `${SITE}/studio/connect?code=OTHER-CODE`,            // a code that is not the one on screen
@@ -99,8 +102,30 @@ function session({ start = {}, opens = true } = {}) {
     `https://other.test/studio/connect?code=${CODE}`,
     `${SITE}/account?code=${CODE}`,
     "not a url",
+    // L2: the link must carry the on-screen code (REQ-L13 ⑧); a bare or empty code is refused.
+    `${SITE}/studio/connect`,
+    `${SITE}/studio/connect?`,
+    `${SITE}/studio/connect?code=`,
+    // M1: lookalike hosts, subdomains, another port and another scheme — each alone.
+    `http://evil-localhost:3193/studio/connect?code=${CODE}`,
+    `http://localhost.evil.test:3193/studio/connect?code=${CODE}`,
+    `http://sub.localhost:3193/studio/connect?code=${CODE}`,
+    `http://localhost:3194/studio/connect?code=${CODE}`,
+    `http://localhost/studio/connect?code=${CODE}`,
+    `https://localhost:3193/studio/connect?code=${CODE}`,
   ];
   for (const url of bad) assert.equal(copyableSignInLink(url, SITE, CODE, ["device-secret"]), undefined, url);
+  // M1 on the production origin: https with the default port only.
+  const PROD = "https://hypeproof-ai.xyz", PROD_LINK = `${PROD}/studio/connect?code=${CODE}`;
+  assert.equal(copyableSignInLink(PROD_LINK, PROD, CODE, []), PROD_LINK, "positive control: the production link");
+  const prodBad = [
+    `https://evil-hypeproof-ai.xyz/studio/connect?code=${CODE}`,
+    `https://hypeproof-ai.xyz.evil.com/studio/connect?code=${CODE}`,
+    `https://www.hypeproof-ai.xyz/studio/connect?code=${CODE}`,
+    `https://hypeproof-ai.xyz:8443/studio/connect?code=${CODE}`,
+    `http://hypeproof-ai.xyz/studio/connect?code=${CODE}`,
+  ];
+  for (const url of prodBad) assert.equal(copyableSignInLink(url, PROD, CODE, []), undefined, url);
   assert.equal(copyableSignInLink(`${SITE}/studio/connect?code=device-secret`, SITE, "device-secret", ["device-secret"]), undefined, "a secret never leaves even when it equals the code");
   // The session follows the guard: a start whose verification URL carries a different code offers no copy.
   const { client } = session({ opens: false, start: { verification_uri_complete: `${SITE}/studio/connect?code=OTHER-CODE` } });
@@ -110,7 +135,7 @@ function session({ start = {}, opens = true } = {}) {
   assert.doesNotMatch(client.view().message ?? "", /링크를 복사해/, "no copy is promised when there is none");
   let writes = 0; await client.copyLink(async () => { writes++; }); assert.equal(writes, 0);
   client.dispose();
-  ok(`copy guard: 2 positive controls, ${bad.length + 1} refusals, and the session offers no button for a mismatched link`);
+  ok(`copy guard: 5 positive controls, ${bad.length + prodBad.length + 1} refusals, and the session offers no button for a mismatched link`);
 }
 
 // ── 5. The real StartPage hands the copy to vscode.env.clipboard ───────────────────────────────
