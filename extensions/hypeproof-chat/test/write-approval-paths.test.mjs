@@ -299,3 +299,127 @@ test('local runtime: a symlink swapped in during the approval is refused, not wr
   assert.ok(!fs.existsSync(path.join(OUT, 'x.txt')), 'nothing written outside');
   fs.rmSync(dir, { force: true });
 });
+
+// ── Verify round 1: dangling links, the ln policy, `..name`, dedupe, refusal copy ──
+const { canonicalWriteTarget } = await import('../src/writeApprovalPaths.ts');
+const { canonicalizeExistingPath, resolvePathThroughLinks } = await import('../src/workspaceRouting.ts');
+const { evaluateSdkToolUse, isPathContained } = await import('../src/sdkCoachHelpers.ts');
+const { linkCommandVerdict } = await import('../src/shellLinkPolicy.ts');
+const LINK = process.platform === 'win32' ? 'junction' : 'file';
+const freshOut = (name) => { const p = path.join(OUT, name); fs.rmSync(p, { force: true }); return p; };
+
+test('F1: a dangling leaf link is judged by its target in all three normalisers (and a live one stays a control)', async () => {
+  const planted = freshOut('planted.txt');
+  const link = path.join(WS, 'dangling.txt');
+  fs.rmSync(link, { force: true });
+  fs.symlinkSync(planted, link, LINK);
+  assert.ok(!fs.existsSync(planted), 'the target does not exist: the link dangles');
+  // 1. the approval list
+  assert.equal(canonicalWriteTarget(link), planted);
+  assert.deepEqual(writePathEntries([{ path: link }], WS).map((e) => [e.display, e.outside]), [['작업 폴더 밖 · planted.txt', true]]);
+  // 2. the SDK gate's canonicalizer (evaluateSdkToolUse)
+  assert.equal(canonicalizeExistingPath(link), planted);
+  const v = evaluateSdkToolUse({ toolName: 'Write', input: { file_path: link, content: 'x' }, permittedTools: ['Write'], workspaceRoot: WS, canonicalize: canonicalizeExistingPath });
+  assert.equal(v.decision, 'deny', JSON.stringify(v));
+  // 3. the local runtime
+  const { workspaceTools } = await import('../src/localRuntime/tools.ts');
+  const tools = workspaceTools({ cwd: WS, profile: { profile_id: 'homepage-practice-s1', game: { template_tier: 'website' }, sdk_tools: { read: true, write: true } }, signal: new AbortController().signal, approve: async () => true });
+  await assert.rejects(tools.call('Write', { file_path: 'dangling.txt', content: 'x' }), /작업 폴더 밖/);
+  assert.ok(!fs.existsSync(planted), 'nothing planted outside');
+  // positive control: a dangling link to an inside target is inside
+  const inLink = path.join(WS, 'inlink.txt');
+  fs.rmSync(inLink, { force: true });
+  fs.symlinkSync(path.join(WS, 'not-yet.txt'), inLink, LINK);
+  assert.deepEqual(writePathEntries([{ path: inLink }], WS).map((e) => [e.display, e.outside]), [['작업 폴더/not-yet.txt', false]]);
+  assert.equal(evaluateSdkToolUse({ toolName: 'Write', input: { file_path: inLink, content: 'x' }, permittedTools: ['Write'], workspaceRoot: WS, canonicalize: canonicalizeExistingPath }).decision, 'ask');
+  fs.rmSync(link, { force: true }); fs.rmSync(inLink, { force: true });
+});
+
+test('F1: a relative dangling link and a link loop are outside / undecidable, never inside', () => {
+  const rel = path.join(WS, 'rel.txt');
+  fs.rmSync(rel, { force: true });
+  fs.symlinkSync('../elsewhere/rel-target.txt', rel, LINK);
+  assert.equal(writePathEntries([{ path: rel }], WS)[0].outside, true);
+  const a = path.join(WS, 'loopA'), b = path.join(WS, 'loopB');
+  for (const p of [a, b]) fs.rmSync(p, { force: true });
+  fs.symlinkSync(b, a, LINK); fs.symlinkSync(a, b, LINK);
+  assert.equal(resolvePathThroughLinks(a), null, 'a loop cannot be decided');
+  assert.equal(writePathEntries([{ path: a }], WS)[0].outside, true, 'undecidable → refused as outside');
+  assert.equal(isPathContained(WS, canonicalizeExistingPath(a)), false);
+  for (const p of [rel, a, b]) fs.rmSync(p, { force: true });
+});
+
+test('F1-C: a dangling link swapped in while the modal is open is refused (SDK and local runtime)', async () => {
+  const target = path.join(WS, 'page.html');
+  fs.rmSync(target, { force: true });
+  const stolen = freshOut('stolen.html');
+  const r = await sdkTurn([['Write', { file_path: target, content: 'x' }]], async () => { fs.symlinkSync(stolen, target, LINK); });
+  assert.equal(r.decisions[0].behavior, 'deny', JSON.stringify(r.decisions[0]));
+  fs.rmSync(target, { force: true });
+  const { workspaceTools } = await import('../src/localRuntime/tools.ts');
+  const tools = workspaceTools({
+    cwd: WS, profile: { profile_id: 'homepage-practice-s1', game: { template_tier: 'website' }, sdk_tools: { read: true, write: true } }, signal: new AbortController().signal,
+    approve: async () => { fs.symlinkSync(stolen, target, LINK); return true; },
+  });
+  await assert.rejects(tools.call('Write', { file_path: 'page.html', content: 'x' }), /경로가 바뀌었습니다|작업 폴더 밖/);
+  assert.ok(!fs.existsSync(stolen), 'nothing landed outside');
+  fs.rmSync(target, { force: true });
+});
+
+test('ln policy: a link to outside is refused, a link created outside asks, an inside link runs as before', () => {
+  const v = (cmd) => evaluateSdkToolUse({ toolName: 'Bash', input: { command: cmd }, permittedTools: ['Bash'], workspaceRoot: WS, canonicalize: canonicalizeExistingPath });
+  for (const cmd of [
+    'ln -s ~/Library/LaunchAgents/x.plist page.html', 'ln -sf /etc/hosts a', 'ln -s ../out link', 'ln -s ../elsewhere/x',
+    `ln -s ${OUT}/a.txt b.txt`, 'ln /etc/passwd p', 'ln -s "$HOME/x" y', 'ln -s $(pwd)/../x y', 'cd src && ln -s ../../x y',
+    'ls && ln -s /etc/hosts h', '/bin/ln -s /etc/hosts h', 'ln -s -- /etc/hosts h', 'ln -t . -s /etc/hosts', 'ln -s link/via.txt v',
+  ]) assert.equal(v(cmd).decision, 'deny', cmd);
+  assert.match(v('ln -s /etc/hosts h').friendly, /바로가기/);
+  // a relative symlink target resolves against the LINK's folder, so `ln -s style.css <out>/a.css` points outside
+  assert.equal(v(`ln -s style.css ${OUT}/alias.css`).decision, 'deny');
+  for (const cmd of [`ln -s ${WS}/style.css ${OUT}/alias.css`, "sh -c 'ln -s /etc/hosts h'", "bash -c \"ln -s x y\""]) {
+    const r = v(cmd);
+    assert.deepEqual([r.decision, r.destructive], ['ask', true], cmd);
+  }
+  // positive controls: inside links and look-alikes run without a modal, as before
+  for (const cmd of ['ln -s style.css alias.css', 'ln -s src/app.js app.js', 'ln -s ../app.js src/alias.js', 'ls -ln', 'echo kiln', 'ls']) {
+    assert.equal(v(cmd).decision, 'allow', cmd);
+  }
+  assert.equal(linkCommandVerdict('ln -s a b', undefined, (p) => p).decision, 'deny', 'no work folder → refuse');
+});
+
+test('F3: a name that starts with .. is inside; a real .. segment is not', () => {
+  const inside = writePathEntries([{ path: path.join(WS, '..notes.txt') }, { path: '..notes.txt' }, { path: path.join(WS, 'src', '...x') }], WS);
+  assert.deepEqual(inside.map((e) => [e.display, e.outside]), [['작업 폴더/..notes.txt', false], ['작업 폴더/src/...x', false]]);
+  assert.equal(isPathContained(WS, path.join(WS, '..notes.txt')), true);
+  assert.equal(isPathContained(WS, path.join(WS, '..', 'x')), false, 'negative control');
+  assert.equal(evaluateSdkToolUse({ toolName: 'Write', input: { file_path: path.join(WS, '..notes.txt'), content: 'x' }, permittedTools: ['Write'], workspaceRoot: WS, canonicalize: canonicalizeExistingPath }).decision, 'ask');
+});
+
+test('F5: two spellings of one file are one line, and the count is of files', () => {
+  const alias = path.join(WS, 'app-alias.js');
+  fs.rmSync(alias, { force: true });
+  fs.symlinkSync(path.join(WS, 'src', 'app.js'), alias, LINK);
+  const e = writePathEntries(writeTargetsFromPayload({ paths: ['src/app.js', './src/app.js', path.join(WS, 'src/app.js'), alias, 'b.js'] }), WS);
+  assert.deepEqual(e.map((x) => x.display), ['작업 폴더/src/app.js', '작업 폴더/b.js']);
+  assert.deepEqual(writeTargetsOf('Write', { file_path: 'a', path: './a' }).length, 2, 'raw targets keep both spellings');
+  assert.equal(writePathEntries(writeTargetsOf('Write', { file_path: 'a', path: './a' }), WS).length, 1);
+  fs.rmSync(alias, { force: true });
+});
+
+test('F4: the refusal names the place once; a solo seat is not told to ask a teacher', async () => {
+  const req = { payload: { paths: [{ path: path.join(OUT, 'secret.txt') }] } };
+  const classroom = await ask('refusal copy: classroom', req);
+  assert.equal(classroom.modals[0].message, '안전을 위해 Studio가 막았어요 — 저장하려는 곳: 작업 폴더 밖 · secret.txt. 궁금하면 선생님께 물어봐 주세요.');
+  for (const kind of ['personal', 'trial']) {
+    host.cachedProfile = { activity_kind: kind };
+    const solo = await ask(`refusal copy: ${kind}`, req);
+    assert.match(solo.modals[0].message, /^안전을 위해 Studio가 막았어요 — 저장하려는 곳: 작업 폴더 밖 · secret\.txt\./);
+    assert.ok(!solo.modals[0].message.includes('선생님'), solo.modals[0].message);
+  }
+  delete host.cachedProfile;
+  const out = process.env.WRITE_PATHS_CAPTURE;
+  if (out) {
+    const norm = (s) => String(s).split(scratch).join('<SCRATCH>');
+    fs.appendFileSync(out, '\n' + captured.slice(-3).map((c) => [`=== ${c.label} → approved=${c.approved}`, ...c.modals.map((m) => `--- notice\n${norm(m.message)}`)].join('\n')).join('\n\n') + '\n');
+  }
+});

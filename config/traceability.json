@@ -7726,6 +7726,15 @@
           "path": "extensions/hypeproof-chat/src/writeApprovalPaths.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/shellLinkPolicy.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/workspaceRouting.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/localRuntime/tools.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/browserTargetHost.ts"
         },
         {

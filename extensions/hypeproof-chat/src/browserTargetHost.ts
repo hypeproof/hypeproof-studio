@@ -19,6 +19,7 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isLoopbackPreview } from "./previewRecovery.ts";
+import { relativeEscapes } from "./workspaceRouting.ts";
 
 export type BrowserTargetPlace = "preview" | "internet" | "file";
 export const BROWSER_TARGET_LABELS: Record<BrowserTargetPlace, string> = {
@@ -73,7 +74,7 @@ function localFileDisplay(url: URL, opts: BrowserTargetOptions): string {
 export function workFolderPathDisplay(filePath: string, root: string | null): { text: string; inside: boolean } {
   if (root) {
     const rel = path.relative(root, filePath);
-    if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
+    if (rel && !relativeEscapes(rel)) {
       const parts = rel.split(/[\\/]+/).map(cleanName).filter(Boolean);
       if (parts.length) return { text: `${WORK_FOLDER_TEXT}/${parts.join("/")}`, inside: true };
     }

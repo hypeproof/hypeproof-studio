@@ -5,8 +5,9 @@
 // What the learner reads, one line per path:
 //   작업 폴더/src/app.js · 바꿈      — inside the work folder, relative to it;
 //   작업 폴더 밖 · secrets.txt       — outside it, including a `..` escape and a symlink that resolves outside.
-// Paths are compared after canonicalization (symlinks resolved on the nearest existing ancestor, the #2065
-// `canonicalFolder` spelling), so `작업 폴더/link/x` where `link` points elsewhere is outside.
+// Paths are compared where the write would really land: every segment is lstat-ed and a symlink is followed with
+// readlink even when its target does not exist yet (a dangling `page.html -> ~/elsewhere/x` is outside), with the
+// #2065 `canonicalFolder` spelling for the work folder.
 // Names are cleaned with the #2136 `cleanName` (C0/C1 controls, DEL, U+2028/2029, bidi controls), so a file name
 // cannot fake a line or reorder the list.
 //
@@ -24,6 +25,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { OUTSIDE_WORK_FOLDER_TEXT, WORK_FOLDER_TEXT, workFolderPathDisplay } from "./browserTargetHost.ts";
 import { canonicalFolder } from "./folderConsent.ts";
+import { resolvePathThroughLinks, unresolvablePath, type LinkResolverFs } from "./workspaceRouting.ts";
 
 export { OUTSIDE_WORK_FOLDER_TEXT, WORK_FOLDER_TEXT };
 
@@ -90,24 +92,14 @@ export function writeTargetsFromPayload(payload: unknown): WriteTarget[] {
 type Realpath = (p: string) => string;
 
 /**
- * One spelling of a write target: the nearest EXISTING ancestor through `canonicalFolder` (#2065: symlinks
- * resolved, on-disk case, upper-case drive), the not-yet-existing tail re-appended. A new file has no realpath
- * of its own, so the folder it lands in decides where it really goes.
+ * Where a write to `p` really lands: the shared `resolvePathThroughLinks` (lstat each segment; a symlink is
+ * followed with readlink even when it dangles), with the on-disk case from `realpath.native` as `canonicalFolder`
+ * (#2065) spells folders. A path the resolver cannot decide (a link loop) gets a spelling no folder contains, so
+ * it is refused as outside.
  */
 export function canonicalWriteTarget(p: string, realpath: Realpath = fs.realpathSync.native): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      const real = canonicalFolder(base, realpath);
-      return tail.length ? path.join(real, ...tail.reverse()) : real;
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p);
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
+  const io: LinkResolverFs = { realpath, lstat: (x) => fs.lstatSync(x), readlink: (x) => fs.readlinkSync(x) };
+  return resolvePathThroughLinks(p, io) ?? unresolvablePath(p);
 }
 
 export interface WritePathEntry {
@@ -129,12 +121,16 @@ export function writePathEntries(
   if (workspaceRoot) {
     try { root = canonicalFolder(workspaceRoot, realpath); } catch { root = path.resolve(workspaceRoot); }
   }
-  return targets.map((t) => {
+  // One line per file: two spellings that resolve to the same place (`a`, `./a`, a link to it) are listed once.
+  const out: WritePathEntry[] = [];
+  for (const t of targets) {
     const abs = root && !path.isAbsolute(t.path) ? path.resolve(root, t.path) : path.resolve(t.path);
     const key = canonicalWriteTarget(abs, realpath);
+    if (out.some((e) => e.key === key)) continue;
     const shown = workFolderPathDisplay(key, root);
-    return { display: shown.text, outside: !shown.inside, ...(t.change ? { change: t.change } : {}), key };
-  });
+    out.push({ display: shown.text, outside: !shown.inside, ...(t.change ? { change: t.change } : {}), key });
+  }
+  return out;
 }
 
 export const writePathLine = (e: WritePathEntry): string => (e.change ? `${e.display} · ${WRITE_CHANGE_TEXT[e.change]}` : e.display);

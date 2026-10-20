@@ -35,19 +35,76 @@ import * as path from "node:path";
  * caller (#384 for the symlink half) so the copies cannot drift again.
  */
 export function canonicalizeExistingPath(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      const real = fs.realpathSync(base);
-      return (tail.length === 0 ? real : path.join(real, ...tail.reverse())).replace(/^[a-z]:/, (d) => d.toUpperCase());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p).replace(/^[a-z]:/, (d) => d.toUpperCase());
-      tail.push(path.basename(base));
-      base = parent;
+  return resolvePathThroughLinks(p) ?? unresolvablePath(p);
+}
+
+/**
+ * Does a `path.relative(root, target)` result leave `root`? By SEGMENT: `..` or `../x` leaves, `..notes.txt`
+ * (a file whose name starts with two dots) does not (CGP-AGENT-R-005 verify F3).
+ */
+export function relativeEscapes(rel: string): boolean {
+  return rel === ".." || rel.startsWith(`..${path.sep}`) || rel.startsWith("../") || path.isAbsolute(rel);
+}
+
+/** Filesystem calls the resolver needs; injectable so a test can count or vary them. */
+export interface LinkResolverFs {
+  realpath(p: string): string;
+  lstat(p: string): { isSymbolicLink(): boolean };
+  readlink(p: string): string;
+}
+const NODE_LINK_FS: LinkResolverFs = { realpath: (p) => fs.realpathSync(p), lstat: (p) => fs.lstatSync(p), readlink: (p) => fs.readlinkSync(p) };
+/** Links followed before giving up (the kernel's own limit on macOS and Linux is 32/40). */
+const MAX_LINK_HOPS = 40;
+
+const upperDrive = (p: string) => p.replace(/^[a-z]:/, (d) => d.toUpperCase());
+const isMissing = (e: unknown) => {
+  const code = (e as NodeJS.ErrnoException | undefined)?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+};
+
+/**
+ * Where a write to `p` would really land (CGP-AGENT-R-005 verify F1). Segment by segment: an existing entry is
+ * followed with lstat, and a symlink is followed with readlink EVEN WHEN ITS TARGET DOES NOT EXIST — a dangling
+ * link at `<ws>/page.html` pointing outside makes `fs.writeFile` create the file outside, so the path must be
+ * judged by the link's target, not by the link's own name. Only a segment that truly does not exist (lstat ENOENT)
+ * ends the walk; the rest is re-appended. Null when it cannot be decided (a link loop, an unreadable link): callers
+ * refuse rather than guess.
+ */
+export function resolvePathThroughLinks(p: string, io: LinkResolverFs = NODE_LINK_FS): string | null {
+  let pending = path.resolve(p);
+  for (let hops = 0; hops <= MAX_LINK_HOPS; ) {
+    const { root } = path.parse(pending);
+    const segments = pending.slice(root.length).split(/[\\/]+/).filter(Boolean);
+    let cur: string;
+    try { cur = io.realpath(root); } catch { cur = root; }
+    let followed = false;
+    for (let i = 0; i < segments.length; i++) {
+      const next = path.join(cur, segments[i]);
+      let st: { isSymbolicLink(): boolean };
+      try { st = io.lstat(next); } catch (e) {
+        if (!isMissing(e)) return null;
+        return upperDrive(path.join(next, ...segments.slice(i + 1)));
+      }
+      if (st.isSymbolicLink()) {
+        let target: string;
+        try { target = io.readlink(next); } catch { return null; }
+        pending = path.resolve(cur, target, ...segments.slice(i + 1));
+        hops += 1;
+        followed = true;
+        break;
+      }
+      // Not a link: its real spelling (on-disk case where realpath reports it).
+      try { cur = io.realpath(next); } catch { cur = next; }
     }
+    if (!followed) return upperDrive(cur);
   }
+  return null;
+}
+
+/** A spelling no work folder can contain, for a path the resolver could not decide: every containment check fails. */
+export function unresolvablePath(p: string): string {
+  const { root } = path.parse(path.resolve(p));
+  return path.join(root, "\u0000unresolvable-link", path.basename(p));
 }
 
 export type WorkspaceSwitchDecision =

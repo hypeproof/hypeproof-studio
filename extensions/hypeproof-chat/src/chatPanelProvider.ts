@@ -4,7 +4,7 @@ import type { BrowserToolsForLocal } from './localRuntime';
 import { FREE_DAILY_CAP_NOTICE, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { catalogueWithin, endCardAdvertised, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
-import { canonicalizeExistingPath } from "./workspaceRouting";
+import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
 import { chalkToolsEnabled } from './chalk/tools';
@@ -7535,7 +7535,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const outside = writeEntries.filter((e, i) => (root ? e.outside : !isInsideWorkspace(targets[i].path)));
       if (outside.length > 0) {
         vscode.window.showWarningMessage(
-          denialCopy({ source: classifyDenial("path_outside_workspace"), reason: `작업 폴더 밖의 경로예요: ${outside.map((e) => e.display).join(", ")}` }),
+          // One 작업 폴더 밖 token per path; a solo seat (personal, trial, pass) is never told to ask a teacher.
+          denialCopy({ source: classifyDenial("path_outside_workspace"), reason: `저장하려는 곳: ${outside.map((e) => e.display).join(", ")}` }, profileAudience(this.cachedProfile)),
         );
         return false;
       }
@@ -8127,7 +8128,7 @@ function isInsideWorkspace(targetPath: string): boolean {
   for (const f of folders) {
     const root = canonicalizeForCompare(f.uri.fsPath);
     const rel = path.relative(root, resolved);
-    if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
+    if (rel === "" || !relativeEscapes(rel)) {
       return true;
     }
   }
