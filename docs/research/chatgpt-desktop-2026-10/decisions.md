@@ -54,3 +54,13 @@ a new human agreement or a claim that every write needs approval by default.
 | DEC-D022 (changed-file panel) | Extend the existing last-request restore point with bounded physical-line comparisons and exact selected-file/all restore, one count-bearing native confirmation and stale-context refusal. | Preserve the existing scope and recovery format; task-start checkpoints are not synthesized from a last-turn snapshot. Binary/large comparisons say unavailable. Direct edits during a turn are disclosed, not attributed to AI. | Existing learner restore permission; no new network access | no |
 
 | DEC-KNOW-09 (interim) | Require fresh per-copy confirmation for every content export, including resumed collections and help-request retries; Cancel ends that collection batch. Name existing recipient roles and actual endpoint hosts, never invent personal identities. Exclude app-owned private stores and configured wiki paths; user-selected page/help prose is disclosed content. Gallery publication keeps the 2026-08-21 post-publish session-record upload, listed as its own block in the same confirmation (recipient `수업 기록 운영자 · <proxy host>`, each spool file with its byte size); exactly the listed bytes go up after the page is published, and Cancel sends neither. The problem report (`문제 신고하기`), the budget-request note and the observation assessment are confirmed the same way | Existing broad collection consent and repository registration cannot describe the bytes of a later export. Conservative choice uses existing authorized recipients and no remembered send approval. Keeping the gallery session record preserves the 2026-08-21 operations decision (guardian pre-survey consent; report material survives a missed "기록 보내기") while still disclosing it | On as a restrictive gate; existing feature/profile opt-ins remain unchanged | no |
+
+## Attachment recovery (CGP-KNOW-R-020)
+
+Conservative implementation choice, not a new human policy agreement: a Send
+press may save explicitly attached files into their existing activity directories
+before the model request starts. Retain failed staging and reuse verified successful
+copies for targeted retry. Persist only failed filenames/reasons and photo metadata
+in the webview session; lost browser handles require explicit native repicking.
+Never infer encryption or add an unsupported document parser. No new recipient,
+capability grant, background upload or persistent minor-content store is added.

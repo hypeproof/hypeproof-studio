@@ -48,7 +48,7 @@ async function scenario(name, run) {
   const page = await browser.newPage({ viewport: { width: 1100, height: 850 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.addInitScript(() => { window.acquireVsCodeApi = () => ({ postMessage: m => window.hostEvents.push(m), getState: () => undefined, setState: () => {} }); });
+  await page.addInitScript(() => { window.acquireVsCodeApi = () => ({ postMessage: m => { window.hostEvents.push(m); if(m.type==='prepareAttachments')setTimeout(()=>window.dispatchEvent(new MessageEvent('message',{data:{type:'attachmentsPrepared',requestId:m.requestId,failures:[]}}))); }, getState: () => undefined, setState: () => {} }); });
   const input = page.locator('.hps-input textarea');
   const queue = page.locator('.hps-queued:not(.hps-recovered)');
   const render = over => page.evaluate(over => window.render(over), over);

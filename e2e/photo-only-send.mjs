@@ -19,15 +19,16 @@ const server=createServer(async(req,res)=>{res.setHeader('content-type',req.url=
 const browser=await chromium.launch();
 try {
  const p=await browser.newPage();await p.setContent('<body style="background:green">owned fixture</body>');const photo=await p.screenshot();
- await p.addInitScript(()=>{window.sends=[];window.hostEvents=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.hostEvents.push(m),getState:()=>undefined,setState:()=>{}})});
+ await p.addInitScript(()=>{window.sends=[];window.hostEvents=[];window.acquireVsCodeApi=()=>({postMessage:m=>{window.hostEvents.push(m);if(m.type==='prepareAttachments')setTimeout(()=>window.dispatchEvent(new MessageEvent('message',{data:{type:'attachmentsPrepared',requestId:m.requestId,failures:[]}})));},getState:()=>undefined,setState:()=>{}})});
  await p.goto('http://127.0.0.1:'+server.address().port);const send=p.getByRole('button',{name:'보내기',exact:true});const input=p.locator('.hps-input textarea');
  const ack=async(stage,type='imageStagedByHost')=>p.evaluate(({stage,type})=>window.dispatchEvent(new MessageEvent('message',{data:{type,stageId:stage.stageId,name:stage.name,reason:'test refusal'}})),{stage,type});
  async function drop(){const n=await p.evaluate(()=>window.hostEvents.filter(x=>x.type==='stageImage').length);const dt=await p.evaluateHandle(b64=>{const d=new DataTransfer();d.items.add(new File([Uint8Array.from(atob(b64),c=>c.charCodeAt(0))],'sample.png',{type:'image/png'}));return d},photo.toString('base64'));await p.locator('.hps-shell').dispatchEvent('drop',{dataTransfer:dt});await p.waitForFunction(n=>window.hostEvents.filter(x=>x.type==='stageImage').length>n,n);return p.evaluate(()=>window.hostEvents.filter(x=>x.type==='stageImage').at(-1));}
  const first=await drop();await p.locator('.hps-attachment-file img').waitFor();await expect(send).toBeDisabled();await input.press('Enter');assert.equal(await p.evaluate(()=>window.sends.length),0,'no send before host staging acknowledgement');
- await ack(first);await expect(send).toBeEnabled();await send.click();assert.equal(await p.evaluate(()=>window.sends.length),1,'photo-only button sends');
- const second=await drop();await ack(second);await expect(send).toBeEnabled();await input.press('Enter');assert.equal(await p.evaluate(()=>window.sends.length),2,'photo-only Enter sends');
+ await ack(first);await expect(send).toBeEnabled();await send.click();await expect.poll(()=>p.evaluate(()=>window.sends.length),{message:'photo-only button sends'}).toBe(1);
+ const second=await drop();await ack(second);await expect(send).toBeEnabled();await input.press('Enter');await expect.poll(()=>p.evaluate(()=>window.sends.length),{message:'photo-only Enter sends'}).toBe(2);
  const last=await p.evaluate(()=>window.sends.at(-1));assert.equal(last[0],'');assert.equal(last[1],undefined);assert.equal(last[3][0].id,second.stageId,'file paths travel as attachments, not vision images');
- const refused=await drop();await ack(refused,'imageStageRefused');await expect(p.locator('.hps-attachment-file')).toHaveCount(0);await expect(send).toBeDisabled();
+ // REQ-STUDIO-ATTACHMENT-FAILURE: a refused photo keeps its chip and blocks Send until it is removed.
+ const refused=await drop();await ack(refused,'imageStageRefused');await expect(p.locator('.hps-attachment-file')).toHaveCount(1);await expect(send).toBeDisabled();await p.getByRole('button',{name:'sample.png 빼기',exact:true}).click();await expect(p.locator('.hps-attachment-file')).toHaveCount(0);
  const removed=await drop();await p.getByRole('button',{name:'sample.png 빼기',exact:true}).click();await ack(removed);await expect(p.locator('.hps-attachment-file')).toHaveCount(0);
  // A sibling staging acknowledgement is not recovery from another photo's failure.
  for (const failureFirst of [true,false]) {
@@ -41,12 +42,12 @@ try {
    await expect(p.getByTestId('attachment-announcer')).toHaveText('test refusal');
    await expect(p.locator('.hps-img-note').filter({hasText:'test refusal'})).toBeVisible();
    await expect(input).toHaveValue('사진 보관 실패 후에도 남길 초안');
-   await expect(p.locator('.hps-attachment-file')).toHaveCount(1);
+   await expect(p.locator('.hps-attachment-file')).toHaveCount(2); // the failed chip is kept next to its sibling
    assert.equal(await p.evaluate(()=>window.sends.length),2,'mixed staging does not send');
    const retry=await drop();
    await expect(p.getByTestId('attachment-announcer')).toHaveText('');
    await ack(retry);
-   await expect(p.locator('.hps-attachment-file')).toHaveCount(2);
+   await expect(p.locator('.hps-attachment-file')).toHaveCount(3);
    await expect(input).toHaveValue('사진 보관 실패 후에도 남길 초안');
    assert.equal(await p.evaluate(()=>window.sends.length),2,'retry does not send');
    while(await p.getByRole('button',{name:'sample.png 빼기',exact:true}).count()) await p.getByRole('button',{name:'sample.png 빼기',exact:true}).first().click();

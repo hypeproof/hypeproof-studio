@@ -120,7 +120,7 @@ try {
   assert.deepEqual(dialogs, []); assert.deepEqual(appErrors, []); await app.screenshot({ path: path.join(out, 'learner-prompt-import.png'), fullPage: true }); await app.close();
   // ── E2b (P2·P3·P4·P5·P7): a draft + TWO attachments + a parked message, keyboard only, 390px and 200%, then a withdrawal ──
   const app2 = await browser.newPage({ viewport: { width: 390, height: 844 } }); const app2Errors = []; app2.on('pageerror', (e) => app2Errors.push(e.message));
-  await app2.addInitScript(() => { window.sent = []; window.acquireVsCodeApi = () => ({ postMessage: (m) => window.sent.push(m), getState: () => undefined, setState: () => {} }); });
+  await app2.addInitScript(() => { window.sent = []; window.acquireVsCodeApi = () => ({ postMessage: (m) => { window.sent.push(m); if(m.type==='prepareAttachments')setTimeout(()=>window.dispatchEvent(new MessageEvent('message',{data:{type:'attachmentsPrepared',requestId:m.requestId,failures:[]}}))); }, getState: () => undefined, setState: () => {} }); });
   await app2.goto('http://127.0.0.1:' + webviewServer.address().port + '/'); await app2.waitForFunction(() => window.sent.some((m) => m.type === 'ready'));
   const host2 = (m) => app2.evaluate((m) => window.dispatchEvent(new MessageEvent('message', { data: m })), m), sends2 = async () => (await app2.evaluate(() => window.sent)).filter((m) => m.type === 'sendMessage');
   await host2({ type: 'config', config: { proxyUrl: 'http://controlled-host.invalid/v1', model: 'controlled-host-only', hasToken: true, coach: { name: '코치', personality: '', configured: true }, profile: profile1 } }); await host2({ type: 'inboxState', inbox: view });

@@ -118,7 +118,7 @@ async function test(id, title, fn, { surface = 'chat', profile = native, cfg = {
   p.on('pageerror', e => errors.push(e.message));
   await p.addInitScript(() => {
     window.sent = [];
-    window.acquireVsCodeApi = () => ({ postMessage: m => window.sent.push(m), getState: () => undefined, setState: () => { throw Error('unexpected webview persistence'); } });
+    window.acquireVsCodeApi = () => ({ postMessage: m => { window.sent.push(m); /* controlled host: KNOW-R-020 send-time preparation succeeds */ if(m.type==='prepareAttachments')setTimeout(()=>window.dispatchEvent(new MessageEvent('message',{data:{type:'attachmentsPrepared',requestId:m.requestId,failures:[]}}))); }, getState: () => undefined, setState: () => { throw Error('unexpected webview persistence'); } });
   });
   const row = { id, title, status: 'FAIL', scope: 'built React + controlled host messages', screenshots: [] };
   try {

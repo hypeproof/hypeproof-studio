@@ -3448,3 +3448,46 @@ Automated checks use real temporary files and the actual provider handler plus r
 UI interactions. The CSS clauses (unified below 1024px and split from it, 44px summaries,
 the 14px caption token, focus ring, added/removed tint, forced-colours border) are locked
 by `test/turn-review-css.smoke.mjs` with negative controls. Browser, installed-shell and live classroom evidence remain distinct.
+
+### Attachment failure retention — REQ-STUDIO-ATTACHMENT-FAILURE
+
+CGP-KNOW-R-020 / REQ-KNOW-37 extends REQ-STUDIO-CHAT-FILE-ATTACH and
+REQ-STUDIO-CHAT-PHOTO-FILES. Product Intent #1/#4: preserve the learner's question
+and make an attachment problem actionable without restarting the whole request.
+
+Implemented attachment preparation and recovery:
+
+- Text attachment failures distinguish a zero-byte file from whitespace-only text,
+  byte and character limits, unsupported binary content and permission errors.
+- A failed workspace/native-file read has an ID, filename and Korean reason. Its
+  retry re-reads the host-owned path under the same task/root and current grants;
+  it sends no model request and leaves a previously attached file in place on failure.
+- Browser photo staging preserves a failed chip; retry reads only that photo.
+  Browser image conversion and native-image read failures have individual failure
+  rows. Asynchronous image reads/conversion use a 15-second deadline.
+- Failed items block composer Send until retried or removed. Native-path retry
+  cancellation ignores late read completion, and grant refusal terminates busy state.
+- Unsupported/encrypted document extraction is not implemented: never infer
+  encryption from a filename or claim a dedicated runtime diagnosis. The corrected
+  research verification record explicitly excludes unsupported document parsers.
+
+- Send first prepares actual attachment writes while the draft and chips remain.
+  A failed preparation calls no model. Successful destinations are cached and
+  hash-checked, so retry submits only the selected failed attachment and never
+  creates another copy of a successful sibling. Pasted images keep `assets/`;
+  attached photos keep `images/`. Final send rechecks current gates before consuming
+  text/page attachments or starting a stream. A late refusal restores photo chips.
+- Preparation IDs reject late responses after removal, timeout or task changes;
+  a changed draft or send-lock state never auto-sends a newer request.
+- Webview-session failure/photo metadata retains names and causes without retaining
+  browser File handles or new raw image copies. Reload offers “이 파일 다시 선택”;
+  its native picker rechecks scope/grants, Cancel preserves the row, and success
+  resolves only that failure. Existing draft persistence owns text and pasted images.
+- Known image grants and folder write consent still govern every seat. Unknown
+  or transitioning activities deny preparation; instructor image behavior keeps
+  existing grants and text attachments keep their instructor refusal. Stage ownership binds root
+  and task; another activity cannot consume old staging IDs.
+
+Behavioral tests cover filesystem failure/retry, actual host preparation, native
+repick and the real preparation hook's request lifecycle. Native/browser visual
+acceptance remains separate; the owner captures the sandbox-blocked matrix.

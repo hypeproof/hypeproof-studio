@@ -1,3 +1,4 @@
+import { ATTACHMENT_FAILURE_COPY } from "./attachmentFailure.ts";
 /**
  * CGP-CHAT-R-011 (REQ-STUDIO-CHAT-FILE-ATTACH) — a learner attaches one text file from the current
  * work folder as context for the next message. The chip shows exactly the text the model receives,
@@ -20,7 +21,7 @@ export type { FileAttachmentPreview };
 
 export type FileRefusalCause =
   | "no-workspace" | "outside" | "link" | "hidden" | "not-file" | "missing" | "permission"
-  | "empty" | "too-large" | "too-many-chars" | "binary" | "changed" | "unreadable";
+  | "empty" | "empty-text" | "timeout" | "too-large" | "too-many-chars" | "binary" | "changed" | "unreadable";
 
 /** One Korean learner message per refusal cause, each with a next step. */
 export const FILE_REFUSAL_COPY: Record<FileRefusalCause, string> = {
@@ -31,7 +32,9 @@ export const FILE_REFUSAL_COPY: Record<FileRefusalCause, string> = {
   "not-file": "폴더가 아니라 파일 하나를 골라 주세요.",
   missing: "파일을 찾을 수 없어요. 다시 골라 주세요.",
   permission: "이 파일을 읽을 권한이 없어요. 다른 파일을 골라 주세요.",
-  empty: "빈 파일이라 붙일 내용이 없어요. 내용을 쓴 뒤에 붙여 주세요.",
+  empty: ATTACHMENT_FAILURE_COPY.empty,
+  "empty-text": ATTACHMENT_FAILURE_COPY.emptyText,
+  timeout: ATTACHMENT_FAILURE_COPY.timeout,
   "too-large": `파일이 너무 커요(${FILE_ATTACH_MAX_BYTES / 1024}KB까지). 필요한 부분만 새 파일로 나눠서 붙여 주세요.`,
   "too-many-chars": `글자가 너무 많아요(${FILE_ATTACH_MAX_CHARS.toLocaleString("en-US")}자까지). 필요한 부분만 새 파일로 나눠서 붙여 주세요.`,
   binary: "글자로 된 파일(.txt, .md, .html 같은 파일)만 붙일 수 있어요. 사진은 이미지 첨부로 보내 주세요.",
@@ -122,12 +125,13 @@ export function readWorkspaceTextFile(workspaceRoot: string | undefined, chosen:
     if (after.isSymbolicLink() || after.dev !== stat.dev || after.ino !== stat.ino || bytes.length !== stat.size) return refuse("changed");
     const text = decodeTextFile(bytes);
     if (text === null) return refuse("binary");
-    if (text.trim() === "") return refuse("empty");
+    if (text.trim() === "") return refuse("empty-text");
     if (text.length > FILE_ATTACH_MAX_CHARS) return refuse("too-many-chars");
     const rel = parts.join("/");
     return { ok: true, ...buildFileAttachment(rel, text, bytes.length) };
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
+    if (code === "ETIMEDOUT") return refuse("timeout");
     if (code === "ENOENT") return refuse("missing");
     if (code === "EACCES" || code === "EPERM") return refuse("permission");
     if (code === "EISDIR") return refuse("not-file");
