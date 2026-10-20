@@ -50,6 +50,7 @@ export async function runInstructorTurn(args: {
   browserTools?: BrowserToolsForLocal;
   signal: AbortSignal;
   onDelta: (text: string) => void;
+  onRefusal?: () => void;
   onActivity?: (a: SdkActivity) => void;
   requestApproval: (
     a: CoachToolAction,
@@ -69,6 +70,7 @@ export async function runInstructorTurn(args: {
     browserTools: args.browserTools,
     signal: args.signal,
     onDelta: args.onDelta,
+    onRefusal: args.onRefusal,
     onActivity: args.onActivity,
     requestApproval: args.requestApproval,
   });

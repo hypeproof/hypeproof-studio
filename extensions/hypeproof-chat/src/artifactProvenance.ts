@@ -189,9 +189,15 @@ export function markUnobserved(ledger: ProvenanceLedger): ProvenanceLedger {
  * after that moment described bytes the revert discarded, so it goes; the restored folder is then
  * compared with the point's state, and any file the revert could not put back reads 기록 없음.
  */
-export function recordRevert(ledger: ProvenanceLedger, revert: { pointAt: number; pointFiles: readonly FileHash[]; at: number }, after: ScanLike): ProvenanceLedger {
-  const events = ledger.events.filter((e) => e.at <= revert.pointAt);
-  return observeOutsideTurn({ version: 1, baseline: toMap(revert.pointFiles), stale: true, stalePaths: ledger.stalePaths ?? [], events }, after, { at: revert.at });
+export function recordRevert(ledger: ProvenanceLedger, revert: { pointAt: number; pointFiles: readonly FileHash[]; at: number; paths?: readonly string[] }, after: ScanLike): ProvenanceLedger {
+  const selected = revert.paths ? new Set(revert.paths) : null;
+  const events = ledger.events.filter((e) => (selected && !selected.has(e.path)) || e.at <= revert.pointAt);
+  const baseline = selected ? { ...(ledger.baseline ?? {}) } : toMap(revert.pointFiles);
+  if (selected) for (const p of selected) {
+    const old = revert.pointFiles.find(f => f.path === p);
+    if (old) baseline[p] = old.sha256; else delete baseline[p];
+  }
+  return observeOutsideTurn({ version: 1, baseline, stale: true, stalePaths: ledger.stalePaths ?? [], events }, after, { at: revert.at });
 }
 
 /** One entry per file of the last observation; newest recorded event first, then 기록 없음 by path. */
@@ -432,12 +438,12 @@ export class ArtifactProvenanceRecorder {
   }
 
   /** After "되돌리기" to `point`, with a fresh scan of the folder (or null when none could be taken). */
-  reverted(root: string, point: PointLike, after: ScanLike | null): Promise<unknown> {
+  reverted(root: string, point: PointLike, after: ScanLike | null, paths?: readonly string[]): Promise<unknown> {
     this.bump();
     const at = Math.max(this.now(), point.createdAt + 1);
     return this.run(() => this.apply(root, (l) => after
-      ? recordRevert(l, { pointAt: point.createdAt, pointFiles: point.files, at }, after)
-      : markUnobserved({ ...l, events: l.events.filter((e) => e.at <= point.createdAt) })));
+      ? recordRevert(l, { pointAt: point.createdAt, pointFiles: point.files, at, paths }, after)
+      : markUnobserved({ ...l, events: l.events.filter((e) => (paths && !paths.includes(e.path)) || e.at <= point.createdAt) })));
   }
 
   /**

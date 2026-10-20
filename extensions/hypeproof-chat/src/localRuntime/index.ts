@@ -132,10 +132,11 @@ export async function runLocalCoach(args: {
   userText: string;
   signal: AbortSignal;
   onDelta: (text: string) => void;
+  onRefusal?: () => void;
   onActivity?: (a: SdkActivity) => void;
   requestApproval: (
     a: CoachToolAction,
-  ) => Promise<boolean | { approved: boolean; actor: "user" | "policy" }>;
+  ) => Promise<boolean | { approved: boolean; actor: "user" | "policy"; denialSource?: import("../denialSource").DenialSource }>;
   // #1298 — when set, overrides the default student-coach system prompt.
   // Used by instructor mode to inject the versioned instructor-brief.
   systemPrompt?: string;
@@ -189,6 +190,7 @@ export async function runLocalCoach(args: {
           messages,
           signal,
           onDelta: args.onDelta,
+          onRefusal: args.onRefusal,
           toolServer: server,
         });
       } finally {

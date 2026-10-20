@@ -146,6 +146,7 @@ function workspacePreview(f) {
   };
   f.vscode.Uri.joinPath = (uri, name) => ({ fsPath: path.join(uri.fsPath, name) });
   f.h.resolveCoachCwd = () => f.root;
+  f.vscode.workspace.workspaceFolders = [{ uri: { fsPath: f.root } }];
   f.h.emitArtifactChanged = () => {};
   f.h.isLiveServerPreview = () => false;
   f.h.preview = { show: async html => { shown.push(html); } };
@@ -341,6 +342,7 @@ test('missing SDK never falls back for explicit search; legacy auto still falls 
     await f.h.handleMessage({ type: 'sendMessage', text: 'Question', history: [], toolMode: mode, userMessageId: 'missing-sdk' });
     assert.equal(f.calls.sdk.length, 1);
     assert.equal(f.calls.proxy.length, mode === 'auto' ? 1 : 0);
+    if (mode === 'web-search') assert.ok(f.history.some(m => m.tool?.label.startsWith('[앱 버전/환경]')), 'runtime refusal persists');
     if (mode === 'web-search') {
       assert.equal(f.posts.find(event => event.type === 'inputRejected')?.toolMode, 'web-search');
       assert.ok(f.posts.some(event => event.type === 'streamError' && /웹 검색 실행 환경/.test(event.error)));
@@ -380,7 +382,7 @@ test('real SDK request narrows tools and preserves approval; observed typed resu
     assert.equal((await args.options.canUseTool('WebSearch', { query: 'source question' }, { toolUseID: 'web-1' })).behavior, 'allow');
     for (const event of events) yield event;
   })(); } };
-  const args = { sdk, binaryResolution: { available: true, reasons: [] }, gatewayUrl: 'http://127.0.0.1:1/v1', token: 'test', model: 'fixture', profile: copy(profile), systemPrompt: '', history: [], userText: 'source question', toolMode: 'web-search', signal: new AbortController().signal, stallTimeoutMs: 0, onDelta() {}, onCitations: values => citations.push(...values), requestApproval: async action => { approvals.push(action); return true; }, browserHost: {} };
+  const args = { sdk, binaryResolution: { available: true, reasons: [] }, gatewayUrl: 'http://127.0.0.1:1/v1', token: 'test', model: 'fixture', profile: { ...copy(profile), game: { template_tier: 'website' } }, systemPrompt: '', history: [], userText: 'source question', toolMode: 'web-search', signal: new AbortController().signal, stallTimeoutMs: 0, onDelta() {}, onCitations: values => citations.push(...values), requestApproval: async action => { approvals.push(action); return true; }, browserHost: {} };
   await f.runSdkCoach(args);
   assert.deepEqual(copy(captured[0].options.tools), ['WebSearch', 'WebFetch']);
   assert.deepEqual(copy(captured[0].options.allowedTools), []);
@@ -483,4 +485,275 @@ test('actual events distinguish success, failure and no search without reading m
   observed.observe({ kind: 'tool_result', id: 'fetch', isError: false });
   assert.match(observed.completion(0).label, /출처 링크를 받지 못했습니다/);
   assert.equal(observed.completion(1), null);
+});
+
+// CGP-AGENT-D-007 fix round 1: the provider turn itself must hand every runtime the refusal
+// callback, and the callback must reach the webview as one `streamRefusal` for that turn's stream.
+for (const [runtimeMode, key] of [['agent-sdk', 'sdk'], ['proxy', 'proxy']]) {
+  test(`real ${runtimeMode} provider turn passes onRefusal and posts one streamRefusal for its stream`, async t => {
+    const f = fixture(t, { runtimeMode, resolvedProfile: { ...copy(profile), coach_runtime: runtimeMode } });
+    f.runtime[key] = async args => {
+      f.calls[key].push(args);
+      assert.equal(typeof args.onRefusal, 'function', `${key} call receives onRefusal`);
+      args.onRefusal(); args.onRefusal();
+      return key === 'sdk' ? { kind: 'success' } : { text: '', toolUses: [] };
+    };
+    await f.h.handleMessage({ type: 'sendMessage', text: '요청', history: [], toolMode: 'auto', userMessageId: `refusal-${key}` });
+    assert.equal(f.calls[key].length, 1);
+    const start = f.posts.find(p => p.type === 'streamStart');
+    assert.ok(start?.streamId, 'the turn announced its stream');
+    const refusals = f.posts.filter(p => p.type === 'streamRefusal');
+    assert.equal(refusals.length, 1, 'a repeated runtime signal shows one banner');
+    assert.equal(refusals[0].streamId, start.streamId, 'the banner belongs to this turn');
+    assert.deepEqual(Object.keys(refusals[0]).sort(), ['streamId', 'type'], 'no model text rides along');
+  });
+}
+
+test('provider refusal notice is dropped after Stop and after the turn settled', async t => {
+  const f = fixture(t);
+  let late;
+  f.runtime.sdk = async args => { f.calls.sdk.push(args); late = args.onRefusal; return { kind: 'success' }; };
+  await f.h.handleMessage({ type: 'sendMessage', text: '요청', history: [], toolMode: 'auto', userMessageId: 'refusal-late' });
+  late();
+  assert.equal(f.posts.filter(p => p.type === 'streamRefusal').length, 0, 'a settled turn never raises a banner');
+  const g = fixture(t);
+  g.runtime.sdk = async args => { g.calls.sdk.push(args); for (const c of g.h.activeStreams.values()) c.abort(); args.onRefusal(); return { kind: 'success' }; };
+  await g.h.handleMessage({ type: 'sendMessage', text: '요청', history: [], toolMode: 'auto', userMessageId: 'refusal-stop' });
+  assert.equal(g.posts.filter(p => p.type === 'streamRefusal').length, 0, 'a stopped turn never raises a banner');
+});
+
+// CGP-AGENT-D-006: real send path, not a rendering-only fixture.
+test('denial rows survive summary mode, raw runtime errors, and a turn that fails without an answer', async t => {
+  const { storedDenialNotice } = await import('../src/denialNotice.ts');
+  for (const mode of ['summary', 'detailed']) for (const fails of [false, true]) {
+    const f = fixture(t, { resolvedProfile: { ...copy(profile), tool_activity: mode } });
+    f.runtime.sdk = async args => {
+      args.onActivity({ kind: 'tool_use', id: 'denied-write', name: 'Write', input: { file_path: 'work.txt' } });
+      args.onActivity({ kind: 'approval', id: 'denied-write', name: 'Write', input: {}, actor: 'policy', allowed: false, denialSource: 'safety' });
+      args.onActivity({ kind: 'tool_result', id: 'denied-write', isError: true, reason: 'SECRET_TOKEN\nError: raw\n at /private/path:8' });
+      args.onActivity({ kind: 'tool_result', id: 'legacy-local', isError: true, reason: '[폴더 권한] SECRET_TOKEN' });
+      args.onActivity({ kind: 'tool_result', id: 'failed-runtime', isError: true, reason: 'Bearer PRIVATE_KEY\u202e<script>bad()</script>' });
+      if (fails) throw new Error('synthetic transport failed');
+      args.onDelta('다른 질문을 기다려요.');
+      return { kind: 'success' };
+    };
+    await f.h.handleMessage({ type: 'sendMessage', text: '작업을 확인해줘', history: [], toolMode: 'auto', userMessageId: `denial-${mode}-${fails}` });
+    const rows = f.history.filter(m => m.tool && storedDenialNotice(m.tool.label));
+    assert.equal(rows.length, 3, `${mode}, failure=${fails}: persisted notices`);
+    assert.equal(storedDenialNotice(rows.find(m => m.id === 'legacy-local').tool.label).source, 'folder');
+    assert.equal(storedDenialNotice(rows.find(m => m.id === 'denied-write').tool.label).source, 'safety');
+    assert.equal(storedDenialNotice(rows.find(m => m.id === 'failed-runtime').tool.label).source, 'unknown');
+    for (const row of rows) assert.deepEqual(Object.keys(row.tool).sort(), ['icon', 'label', 'state'], 'old task file schema');
+    const shown = JSON.stringify(f.posts.filter(m => m.type === 'toolLog'));
+    assert.doesNotMatch(shown, /SECRET_TOKEN|PRIVATE_KEY|private\/path|<script>|Error: raw/);
+    assert.equal(f.calls.network, 0);
+  }
+});
+
+test('disabled notices persist to captured task, reopen, serialize concurrent notices, and stay off a newly selected task', async t => {
+  const { storedDenialNotice } = await import('../src/denialNotice.ts');
+  const f = fixture(t), store = new TaskWorkspaceStore(f.root, 'denial-activity');
+  await store.initialize();
+  const taskA = store.getView().activeTaskId;
+  f.h.currentTaskStore = () => store;
+  await Promise.all([f.h.postDenialNotice('lesson'), f.h.postDenialNotice('runtime')]);
+  let reopened = new TaskWorkspaceStore(f.root, 'denial-activity');
+  assert.equal(reopened.getHistory(taskA).filter(m => storedDenialNotice(m.tool?.label)).length, 2);
+  let release, entered;
+  const gate = new Promise(r => { release = r; }), saving = new Promise(r => { entered = r; });
+  const append = store.appendDenial.bind(store);
+  store.appendDenial = async (...args) => { entered(); await gate; return append(...args); };
+  const pending = f.h.postDenialNotice('safety');
+  await saving;
+  const queued = f.h.postDenialNotice("folder");
+  await store.create("B", { taskId: store.getView().activeTaskId, revision: store.getView().revision });
+  const taskB = store.getView().activeTaskId;
+  const before = f.posts.length;
+  release(); await pending; await queued;
+  assert.equal(f.posts.length, before, 'late notice must not render in task B');
+  reopened = new TaskWorkspaceStore(f.root, 'denial-activity');
+  assert.equal(reopened.getHistory(taskA).filter(m => storedDenialNotice(m.tool?.label)).length, 4);
+  assert.equal(reopened.getHistory(taskB).length, 0);
+  store.appendDenial = async () => { throw Error('token-in-storage-error'); };
+  await f.h.postDenialNotice('folder');
+  assert.match(f.posts.at(-1).error, /저장하지 못했어요/);
+  assert.doesNotMatch(JSON.stringify(f.posts), /token-in-storage-error/);
+});
+
+test('denial store rejects arbitrary messages, deduplicates, and merges two windows without changing task selection', async t => {
+  const { denialNotice, denialNoticeLabel } = await import('../src/denialNotice.ts');
+  const root = temporary(t), a = new TaskWorkspaceStore(root, 'notice-lock'); await a.initialize();
+  const b = new TaskWorkspaceStore(root, 'notice-lock'), taskId = a.getView().activeTaskId;
+  const row = { id: 'n1', role: 'tool', content: '', createdAt: 1, tool: { icon: '🔒', state: 'error', label: denialNoticeLabel(denialNotice('safety')) } };
+  for (const bad of [{ ...row, id: '' }, { ...row, role: 'assistant' }, { ...row, content: 'raw token' }, { ...row, tool: { ...row.tool, state: 'done' } }, { ...row, tool: { ...row.tool, label: '[안전 규칙] raw token' } }])
+    await assert.rejects(a.appendDenial(taskId, bad), e => e.code === 'invalid');
+  const concurrent = await Promise.allSettled([a.appendDenial(taskId, row), b.appendDenial(taskId, { ...row, id: 'n2' })]);
+  for (const result of concurrent) if (result.status === 'rejected') assert.ok(['locked', 'stale'].includes(result.reason.code), 'existing lock/revision check fails closed');
+  // Retry the same IDs after the lock is released; no overwrite or duplicate.
+  await new TaskWorkspaceStore(root, 'notice-lock').appendDenial(taskId, row);
+  await new TaskWorkspaceStore(root, 'notice-lock').appendDenial(taskId, { ...row, id: 'n2' });
+  await new TaskWorkspaceStore(root, 'notice-lock').appendDenial(taskId, row);
+  const reopened = new TaskWorkspaceStore(root, 'notice-lock');
+  assert.equal(reopened.getHistory(taskId).length, 2);
+  assert.equal(reopened.getView().activeTaskId, taskId);
+});
+
+test('local tool refusals before execution emit a classified activity instead of disappearing', async t => {
+  const { workspaceTools } = await import('../src/localRuntime/tools.ts');
+  const events = [], root = temporary(t);
+  const tools = workspaceTools({ cwd: root, profile: { sdk_tools: { read: true } }, signal: new AbortController().signal, approve: async () => true, activity: e => events.push(e) });
+  await assert.rejects(tools.call('Write', { file_path: 'not-written.txt', content: 'x' }), /수업 설정/);
+  await assert.rejects(tools.call('Read', {}), /확인 안 됨/);
+  assert.equal(events.length, 2);
+  assert.ok(events.every(e => e.kind === 'tool_result' && e.isError));
+  assert.match(events[0].reason, /^\[수업 설정\]/);
+  assert.match(events[1].reason, /^\[확인 안 됨\]/);
+  assert.equal(fs.existsSync(path.join(root, 'not-written.txt')), false);
+});
+
+test('real SDK denial gate emits observed policy source before a tool result exists', async t => {
+  const f = fixture(t), activity = [];
+  const schema = new Proxy(() => schema, { get: () => schema });
+  const sdk = { createSdkMcpServer: o => o, tool: (name, description, inputSchema, handler) => ({ name, description, inputSchema, handler }), query: args => (async function* () {
+    await args.options.canUseTool('Bash', { command: 'echo safe' }, { toolUseID: 'lesson-deny' });
+    await args.options.canUseTool('Write', { file_path: '/outside/work.txt', content: 'x' }, { toolUseID: 'safety-deny' });
+    await args.options.canUseTool('FutureUnknownTool', {}, { toolUseID: 'runtime-deny' });
+    await args.options.canUseTool('Write', { file_path: path.join(f.root, 'file.txt'), content: 'x' }, { toolUseID: 'host-deny' });
+    await args.options.canUseTool(MCP_BROWSER_OPEN, { url: 'https://example.test' }, { toolUseID: 'browser-deny' });
+    yield { type: 'result', subtype: 'success', is_error: false };
+  })() };
+  await f.runSdkCoach({ sdk, zod: schema, cwd: f.root, binaryResolution: { available: true, reasons: [] }, gatewayUrl: 'http://127.0.0.1:1/v1', token: 'test', model: 'fixture', profile: { ...copy(profile), game: { template_tier: 'website' } }, systemPrompt: '', history: [], userText: 'check', toolMode: 'auto', signal: new AbortController().signal, stallTimeoutMs: 0, onDelta() {}, onActivity: e => activity.push(e), requestApproval: async () => ({ approved: false, actor: 'policy', denialSource: 'folder' }), browserHost: { crEnabled: () => true, crScope: () => ({ ok: false, reason: 'outside preview' }) } });
+  const denied = activity.filter(e => e.kind === 'approval' && !e.allowed);
+  assert.deepEqual(denied.map(e => [e.id, e.denialSource]), [['lesson-deny', 'lesson'], ['safety-deny', 'safety'], ['runtime-deny', 'runtime'], ['host-deny', 'folder'], ['browser-deny', 'safety']]);
+});
+
+test('proxy browser refusal becomes a safe persisted notice', async t => {
+  const { storedDenialNotice } = await import('../src/denialNotice.ts');
+  const f = fixture(t, { runtimeMode: 'proxy', resolvedProfile: { ...copy(profile), coach_runtime: 'proxy', browser_control: { enabled: true } } });
+  f.BrowserControl.prototype.execute = async () => ({ isError: true, content: [{ type: 'text', text: '[안전 규칙] Bearer PRIVATE_KEY\n at /private/file:1' }] });
+  let calls = 0;
+  f.runtime.proxy = async args => {
+    if (++calls === 1) return { text: '', toolUses: [{ id: 'proxy-deny', name: 'browser_navigate', input: { url: 'https://example.test/' } }] };
+    args.onDelta('확인했어요.'); return { text: '확인했어요.', toolUses: [] };
+  };
+  await f.h.handleMessage({ type: 'sendMessage', text: '사이트를 살펴봐줘', history: [], toolMode: 'auto', userMessageId: 'proxy-denied-turn' });
+  const row = f.history.find(m => m.id === 'proxy-deny');
+  assert.ok(row, 'proxy refusal saved');
+  assert.equal(storedDenialNotice(row.tool.label)?.source, 'safety');
+  assert.doesNotMatch(JSON.stringify(f.posts.filter(p => p.type === 'toolLog')), /PRIVATE_KEY|private\/file/);
+});
+
+test('legacy denial captures its history key and drops late display after principal scope changes', async t => {
+  const f = fixture(t), oldKey = f.h.historyKey();
+  let release, entered;
+  const gate = new Promise(r => { release = r; }), writing = new Promise(r => { entered = r; });
+  const update = f.h.context.workspaceState.update;
+  f.h.context.workspaceState.update = async (...args) => { entered(); await gate; return update(...args); };
+  const pending = f.h.postDenialNotice('lesson');
+  await writing;
+  const queued = f.h.postDenialNotice('safety');
+  f.h.nativeHistoryScope = 'another-principal';
+  release(); await pending; await queued;
+  assert.equal(f.posts.length, 0);
+  assert.equal(f.h.context.workspaceState.get(oldKey).length, 2);
+  assert.equal(f.h.context.workspaceState.get(f.h.historyKey(), []).length, 0);
+});
+
+test('disabled feature handlers persist their lesson-source notice before returning the panel refusal', async t => {
+  const { storedDenialNotice } = await import('../src/denialNotice.ts');
+  for (const [method, type] of [['handlePublishMessage', 'publishOpen'], ['handleVerifyMessage', 'verifyOpen'], ['handleEvidenceMessage', 'evidenceOpen'], ['handleSkillsMessage', 'skillsOpen'], ['handleReviewMessage', 'reviewOpen'], ['handleMemoryMessage', 'memoryOpen']]) {
+    const f = fixture(t);
+    await f.h[method]({ type });
+    const notice = f.posts.find(p => p.type === 'denialNotice');
+    assert.ok(notice, method);
+    assert.equal(storedDenialNotice(notice.label).source, 'lesson', method);
+    assert.equal(f.h.context.workspaceState.get(f.h.historyKey()).length, 1, method);
+    assert.equal(f.calls.sdk.length + f.calls.proxy.length + f.calls.network, 0);
+  }
+  const f = fixture(t);
+  await f.h.publishTestVersion(); await f.h.denialWrites;
+  assert.equal(f.posts.filter(p => p.type === 'denialNotice').length, 1, 'command route');
+});
+
+test('approval gates report authoritative source without changing the refusal or opening a modal', async t => {
+  const f = fixture(t), observed = [];
+  f.vscode.window.showInformationMessage = () => {};
+  f.vscode.window.showWarningMessage = () => {};
+  f.h.resolveCoachCwd = () => f.root;
+  f.vscode.workspace.workspaceFolders = [{ uri: { fsPath: f.root } }];
+  f.h.taskCommandAllowState = () => ({ key: 'task', refusal: 'read-only folder' });
+  f.h.taskCommandAllows = { observe() {} };
+  f.h.sitePublisher = () => ({ allowed: () => false });
+  for (const [req, source] of [
+    [{ kind: 'executeShell', payload: { command: 'echo x' } }, 'folder'],
+    [{ kind: 'readFile', payload: { path: '/outside/file.txt' } }, 'safety'],
+    [{ kind: 'writeFile', payload: { path: '/outside/file.txt' } }, 'safety'],
+    [{ kind: 'publishSite', payload: {} }, 'unknown'],
+  ]) {
+    assert.equal(await f.h.resolveActionApprovalTracked({ requestId: 'r', ...req }, () => { throw Error('must not prompt'); }, s => observed.push(s)), false);
+    assert.equal(observed.at(-1), source);
+  }
+  assert.equal(observed.length, 4);
+  const { workspaceTools } = await import('../src/localRuntime/tools.ts');
+  const activity = [];
+  const tools = workspaceTools({ cwd: f.root, profile: copy(profile), signal: new AbortController().signal, approve: async () => ({ approved: false, actor: 'policy', denialSource: 'folder' }), activity: e => activity.push(e) });
+  await assert.rejects(tools.call('Write', { file_path: 'declined.txt', content: 'x' }));
+  assert.equal(activity.find(e => e.kind === 'approval').denialSource, 'folder');
+  assert.equal(fs.existsSync(path.join(f.root, 'declined.txt')), false);
+});
+
+test('history reload waits for queued standalone denial persistence', async t => {
+  const f = fixture(t);
+  delete f.h.getHistory;
+  f.h.postContextTrim = async () => {};
+  f.h.postVerdicts = async () => {};
+  let release, entered;
+  const gate = new Promise(r => { release = r; }), started = new Promise(r => { entered = r; });
+  const update = f.h.context.workspaceState.update;
+  f.h.context.workspaceState.update = async (...args) => { entered(); await gate; return update(...args); };
+  const save = f.h.postDenialNotice('lesson');
+  await started;
+  const reload = f.h.postHistory();
+  await new Promise(r => setImmediate(r));
+  assert.equal(f.posts.filter(p => p.type === 'history').length, 0);
+  release(); await save; await reload;
+  assert.equal(f.posts.find(p => p.type === 'history').messages.length, 1);
+});
+
+// CGP-AGENT-D-006 fix round 1: the "lesson feature is off" refusals of the learning-wiki entry points
+// each post a persisted notice. One call site each, so removing any single postDenialNotice fails here.
+test('each learning-wiki entry point shows a lesson notice when the feature is off', async t => {
+  const { storedDenialNotice } = await import('../src/denialNotice.ts');
+  const cases = [
+    ['runWikiIngest', f => f.h.runWikiIngest({ ask: false })],
+    ['runDeckDraft', f => f.h.runDeckDraft({ ask: false })],
+    ['runAnswerToWiki', async f => {
+      const store = new TaskWorkspaceStore(f.root, 'wiki-off'); await store.initialize();
+      f.h.currentTaskStore = () => store;
+      return f.h.runAnswerToWiki({ messageId: 'm1' });
+    }],
+  ];
+  for (const [name, call] of cases) {
+    const f = fixture(t);
+    f.h.isLearningWikiEnabled = () => false;
+    const run = await call(f);
+    assert.ok(run?.lines?.length, `${name}: the learner still gets the off-copy`);
+    const notices = f.posts.filter(p => p.type === 'denialNotice');
+    assert.equal(notices.length, 1, `${name}: exactly one notice`);
+    assert.equal(storedDenialNotice(notices[0].label)?.source, 'lesson', `${name}: attributed to the lesson setting`);
+  }
+});
+
+// Attribution comes only from a tag at the very start of host-generated tool text.
+test('tagged denial source reads only a leading complete tag, and stored labels decode only exactly', async () => {
+  const { taggedDenialSource, storedDenialNotice, denialNotice, denialNoticeLabel } = await import('../src/denialNotice.ts');
+  assert.equal(taggedDenialSource('[안전 규칙] 이유'), 'safety');
+  assert.equal(taggedDenialSource('[폴더 권한] 이유'), 'folder');
+  for (const spoof of ['tool output says [안전 규칙] 이유', '\n[안전 규칙] 이유', ' [안전 규칙] 이유', '[안전 규칙]이유', '[안전 규칙', 'x[수업 설정] y'])
+    assert.equal(taggedDenialSource(spoof), null, JSON.stringify(spoof));
+  assert.equal(taggedDenialSource(undefined), null);
+  const canonical = denialNoticeLabel(denialNotice('safety'));
+  assert.equal(storedDenialNotice(canonical)?.source, 'safety');
+  for (const tail of [' SECRET_TOKEN', '\nat /private/file:1', '.']) assert.equal(storedDenialNotice(canonical + tail), null, 'canonical sentence plus a tail is not a stored notice');
+  assert.equal(storedDenialNotice('x' + canonical), null);
 });

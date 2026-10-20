@@ -825,6 +825,8 @@ words in every state element, no state on inactive tasks or without evidence, bu
 switching still blocked; reducer outcomes for complete, stop, instructor stop, error, failed result,
 dismissed banner and new send).
 
+CGP-AGENT-D-019 / DES-CGP-AGENT-46 follows this corrected active-task-only scope: the existing six badges sit on their own right-aligned line under the title of each active task row, with count/date below. The title keeps the whole row width, so a short title such as 발표 자료 만들기 is not truncated by the badge in the fixed 204px rail. Approval has text plus a heavier border; forced-colour mode uses system colours and a double approval border. No input-waiting state is inferred. The existing conversation skip link now advertises Alt+Shift+J (or Enter on the link), moves actual focus to the current conversation and draws the shared theme-aware focus ring. The shortcut is local to this workspace, ignores composition/repeat/unrelated modifiers and does not escape a rail/source dialog. It does not claim to focus a native approval modal or a nonexistent next waiting task. Tests: `test/task-badge.test.tsx` mounts all states and executes jump/keyboard behavior with CSS contracts as secondary evidence; `e2e/task-workspace/task-rail-badge.mjs` runs the real layout in headless Chromium (title not clipped, badge right-aligned on its own line, 14px text, no overflow, both states and widths).
+
 `REQ-STUDIO-MOTION-MEASURE-GUTTER` (CGP-DS-R-014 / -020 / -031, 2026-10-20; REQ-CGP-DS-15, -22,
 -36; DES-CGP-DS-15, -22, -36). Motion: every transition and animation time in webview CSS comes
 from a `--hp-dur-*` token in `tokens.css`, whose values are recorded first in
@@ -2010,8 +2012,9 @@ their pinned wording (they already name the runtime and a next step); `crBrowser
 consult codes are not split per source; `imageEditClient` refusals (no seat context there, seat-neutral
 wording kept); voice popup, free-start `app_too_old`, update-checker and publish-contract messages;
 Service moderation text (not classified client-side); the learner's own modal "Deny" (not a source
-denial); and the DES-CGP-AGENT-08 inline timeline row with its one action button and `aria-live`
-(denials still show as the tool-log failure line or a page notice). Tests:
+denial); the learner's own approval choice remains separate from policy attribution.
+
+CGP-AGENT-D-006 / DES-CGP-AGENT-08 now renders a persistent 14px-token timeline notice with a source label, polite atomic announcement and at most one action (the existing problem-report dialog). Fixed Korean sentences replace arbitrary runtime prose; source enums are normalized and unknown stays unknown. SDK policy-denial activities carry the observed source; SDK/local failed results and proxy tool errors retain classified tags where present and otherwise say the cause is unknown. Summary mode does not suppress these rows, and a failed turn with no answer still saves them. Disabled feature commands and unavailable explicit web search save a scoped notice even outside a turn. The dedicated non-stream bridge event survives idle App filtering. Task/activity/history scope is captured before asynchronous writes; late completion saves to the original task and never displays in the new task. Concurrent task-file writers retain the existing lock. Backward compatibility: persistent tool records keep exactly icon/label/state; only a complete canonical source-and-copy sentence decodes as a denial notice. The narrow appendDenial method accepts only canonical tool notices and may finish after task selection changes; normal append retains its active-task guard. No raw error, credential, path or stack enters the new notice body. Legacy history clamping preserves standalone notices; history reload waits for queued writes. SDK-unavailable failures and host folder/path gates carry their authoritative sources without changing permission decisions. Browser scope refusals identify safety. Tests: `test/turn-tools.test.mjs` exercises actual host/SDK/proxy/local methods, captured destinations, concurrent store retries and disabled handlers; `test/denial-notice.test.tsx` mounts App/ChatPanel for source/copy/action, scope filtering and restoration; `test/type-scale.smoke.mjs` models both seat layouts. Actual browser geometry and screen-reader announcements require owner verification when the sandbox blocks Chromium. Existing source tests:
 `test/denial-source.smoke.mjs` (the cause table and unknown for anything else, each source's copy in
 classroom, solo and neutral wording, web search removed by the 이용권 vs off in the profile with negative
 controls, the safety coach rule, one next step, no English identifier in learner copy, the tag, every gate
@@ -2102,7 +2105,7 @@ dev-host 검증(자동화 셸 불가). REQ-D3(iframe 샌드박싱)은 live_serve
 
 | REQ-N9 | 미리보기 주소는 추측하지 않는다 (#507, #470 재발) | 라이브 서버는 `listen(0)` 으로 매 실행 **다른 에페메랄 포트**를 받는다(실측 2026-07-28: 58085). 그런데 그 주소가 코치 컨텍스트로 가는 통로가 **아예 없었다** — Run 버튼은 확장이 `liveServer.ensure()` 로 URL 을 직접 받아 정상이고, 코치만 알 방법이 없어 `127.0.0.1:3000` 을 반사적으로 찍고 `ERR_CONNECTION_REFUSED` 로 멈췄다(코드·프롬프트 어디에도 `3000` 은 없다 — 모델의 추측이다. 그 포트는 사용 중이라서가 아니라 **비어 있어서** 죽는다). 계약 3겹: ① **주소를 준다** — `liveServer.currentUrl()`(떠 있을 때만, 시작 부작용 없음)을 `x-hps-preview-url` 헤더로 실어 보내고(프록시=요청 헤더, SDK=`ANTHROPIC_CUSTOM_HEADERS`, 작업 폴더 #431 과 같은 통로: 워커가 클라이언트 `system` 을 통째로 교체하므로 프롬프트에 붙이는 길은 없다), 워커가 `# 미리보기 (라이브 서버)` 블록을 만든다. **문구는 워커 소유**, 클라이언트는 주소만 — 값은 루프백 http(s) 만 통과(`sanitizeLoopbackUrl`)라 주입 통로가 되지 않는다. 서버가 없으면 블록도 없다(빈 블록이 곧 추측 유도); ② **추측을 교정한다** — `resolveLivePreviewUrl`(pure): 루프백→루프백만, 서버 주소를 **알 때만**, 경로·쿼리·해시 보존. 프록시 경로는 실행 직전(`retargetLoopbackNavigation`), SDK 경로는 `resolveAlreadyOpen` 안에서(모달과 핸들러가 같은 주소를 봐야 한다). 서버가 안 떠 있는 걸 **아는** 상태에서 루프백을 요청하면 그 주소는 반드시 틀렸으므로 `startLivePreview()` 로 띄우고 진짜 주소를 연다. 호스트가 `livePreviewUrl?()` 를 지원하지 않으면(=모름) **아무것도 바꾸지 않는다**; ③ **교정했으면 말한다** — 도구 결과에 원래 주소와 실제 주소를 함께 적는다. 조용히 고치면 다음 턴에 또 추측한다. 프롬프트 안전망은 런타임별 브라우저 규약 + live-server preview 계약(도구 이름 없이 — REQ-N8 ②) | U(`test/live-preview-url` — 양성/음성 대조군 + 미지원 호스트 무회귀) + R(`worker/test/messages-integration` — 전달·음성·주입 대조군) |
 | REQ-N11 | Chat links never bypass the safe browser (CGP-ART-R-008, 2026-10-19) | A link the learner clicks in chat (citation chip, classroom inbox link) goes through one exit, `openLearnerLink` → `routeExternalLink`. Minor cohorts (`browser_session.mode = "safe"`) open it in the integrated browser, whose hardened session enforces the cohort allowlist; before this row both paths called `vscode.env.openExternal` and left that allowlist. Every other cohort sees a modal "바깥 사이트를 열까요?" naming the host, with **열기** and **링크 복사**; only **열기** reaches the system browser. Anything but an absolute http(s) URL with a host is refused for everyone. **Fail closed**: without a loaded profile (first load, refetch, token expiry) the persisted `hypeproof.browser.safeSession` decides and an unknown value counts as safe; if the integrated browser cannot open, nothing falls back to the system browser. The chat webview has no raw `target="_blank"` anchor; the error-banner runbook link posts to the host like a citation chip. Not covered: account sign-in, pass and guardian checkout, and the learner's own published-site "열기" (`publish/publishHost.ts`), which use the system browser by design | U (`test/external-link-route.smoke.mjs`) |
-| REQ-N12 | Page text sent to the coach is visible, removable and quoted as data (CGP-ART-R-007, extends REQ-N3, 2026-10-19) | After "페이지를 코치에게" the composer area shows "페이지 내용 · {host}" with the exact text that will go with the next message (trimmed, capped at 3,000 characters, the same string the model receives), whether a screenshot goes too, and **빼기**. Removing it clears the page text, screenshot and notice, so nothing from the page is sent. The model receives the page inside `<page_content source="{host}">…</page_content>` followed by an instruction to treat it as reference material and not follow instructions inside it; a closing tag inside the page cannot end the block. The chip also shows the title and full URL, because both reach the model. A later quest result or experiment capture that reuses the same slot drops the preview; switching or creating a task and clearing the conversation drop the page itself; a config post re-shows a pending chip, so page text is never sent after the webview reset it from view. The chip is host-owned (2026-10-20, with REQ-STUDIO-CHAT-FILE-ATTACH): the webview no longer clears it on send, and the host releases it only where a model turn takes the page, so a send turned away before that (activity scope, edit/tool checks, instructor hold, activity switch, turn restore, product re-test) leaves it visible instead of sending it unseen later; closing-tag variants (`</ page_content>`, no `>`, fullwidth) are defused too. Gating is unchanged (REQ-N3: minors off) | U (`test/page-attachment.test.tsx`) |
+| REQ-N12 | Page text sent to the coach is visible, removable and quoted as data (CGP-ART-R-007, extends REQ-N3, 2026-10-19) | After "페이지를 코치에게" the composer area shows "페이지 내용 · {host}" with the exact text that will go with the next message (trimmed, capped at 3,000 characters, the same string the model receives), whether a screenshot goes too, and **빼기**. Removing it clears the page text, screenshot and notice, so nothing from the page is sent. The model receives the page inside `<page_content source="{host}">…</page_content>` followed by an instruction to treat it as reference material and not follow instructions inside it; a closing tag inside the page cannot end the block. The chip also shows the title and full URL, because both reach the model. A later quest result or experiment capture that reuses the same slot drops the preview; switching or creating a task and clearing the conversation drop the page itself; a config post re-shows a pending chip, so page text is never sent after the webview reset it from view. The chip is host-owned (2026-10-20, with REQ-STUDIO-CHAT-FILE-ATTACH): the webview no longer clears it on send, and the host releases it only where a model turn takes the page, so a send turned away before that (activity scope, edit/tool checks, instructor hold, activity switch, turn restore, product re-test) leaves it visible instead of sending it unseen later; closing-tag variants (`</ page_content>`, no `>`, fullwidth) are defused too. Gating is unchanged (REQ-N3: minors off). CGP-ART-D-007 / DES-ART-07 (PI#2 and PI#4; ADAPT): the composer footer keeps the origin chip visible; activating that native button expands a read-only region headed “보낼 페이지 내용”, with a monospace origin, full queued text in a 3px-left-border quote, and a single scrollable panel capped at 40vh. The independent 빼기 action remains available folded or expanded. A replacement capture starts folded; task changes/removal follow existing host ownership. Shown is sent (2026-10-21): the page text, title and URL pass one sanitizer (`sanitizePageString`) before both the preview and the model text. Bidi controls, Cf format characters, every Default_Ignorable_Code_Point (variation selectors, combining grapheme joiner, Hangul/Khmer fillers, Mongolian free variation selectors, the whole tag block), U+FFF0–U+FFF8, zero-width characters and C0/C1 controls except `\n` and `\t` are removed (emoji and Korean text keep their glyphs; only the invisible selector goes); CR, U+2028 and U+2029 become `\n`. The closing-tag defuse applies to the preview too, so the visible strings are byte for byte the queued ones. `user:password@` is removed from the URL shown and sent; a page without a host (data:, about:, blob:) is labelled "주소 없음 (scheme:)", never its raw address; the title is capped at 200 characters ending in "…"; the URL is capped at 2,048 characters ending in "…" and shown as readable text only when its percent-escapes decode to safe text (otherwise it stays percent-encoded), the same string in the chip and in the model text; the folded chip's "보낼 내용 전체 보기 (N자)" counts URL, title and text together. | U (`test/page-attachment.test.tsx`, `test/page-attachment-disclosure.test.tsx`); browser layout/keyboard acceptance separately |
 | REQ-N13 | Preview failures say why, with one action (`REQ-STUDIO-PREVIEW-RECOVERY`, CGP-ART-R-009 / REQ-ART-09, DES-ART-09; extends #751 U4, 2026-10-20) | When the learner's live preview tab cannot show its page, the chat panel (personal and classroom) shows one calm cause line and exactly **one** action. The cause comes from measured signals only (`previewFailure.ts`, pure): the live server's own state for the tab's address (`LiveServer.isListening()`, the socket, not the object), the page probe (HTTP status, a refused connection, or no answer in 3 s), and the webview's `navigator.onLine`. Error text is never read. **Off is decided from the server's state only**: on Studio's current address the server is off only when its socket no longer listens (closed or crashed); on an old Studio address only when the connection is refused (nothing listens on that port). A server that is listening but answers late is **slow**, never off. Causes: **server not running** → "미리보기 서버가 꺼져 있어요." + **다시 켜기**, the existing start path (`startLivePreview` → `LiveServer.ensure`, which drops a server whose socket no longer listens and starts a fresh one on a new port, then opens one tab); **page missing** (404 from the running Studio server) → "{file} 파일이 없어서 페이지를 열 수 없어요." naming the file only (decoded first, then cut at the last `/` or `\`, so an encoded separator never shows folders; names over 60 characters are shortened in the middle and keep their extension; a folder is its index.html) + **파일 목록 보기** (Explorer); **slow** → "미리보기가 응답이 늦어요." + **다시 시도**; **offline**, only for a page that needs the network (never the loopback preview) → "인터넷 연결이 끊겨서 미리보기를 열 수 없어요." + **다시 시도**; **unknown** (any other status, or another process answering or hanging on an old port) → "미리보기를 열지 못했어요." + **다시 시도** (reloads the tab through a tab-pinned CDP session), never naming a cause or a file. The technical code sits folded under 자세히 (DES-ART-09), never in the line. The action is a 44px target with text on the type-scale tokens (≥14px), keeps a ButtonText outline in forced colors, carries no capability label; the card sits in the personal chat's 740px reading column and, in classroom chat, inset like the composer. **Whose tab:** only tabs on an address Studio's preview server served are judged — this run's addresses, or ones remembered in `globalState` (at most 20, each forgotten after 7 days). 다시 켜기 closes only tabs on addresses this run's server served; a tab Studio did not open in this run (another localhost tool, or a tab restored from an earlier run) is never closed. **Every press is answered once** with its result (`done` / `refused` / `failed`, also when measuring or the action throws), which is the only thing that re-enables the button. The host measures again on every press and refuses an action that no longer fits (`previewActionFits`); a refused or failed press shows one more line: "지금 상태와 맞지 않아 실행하지 않았어요. 위 안내를 확인해 주세요.", "미리보기 상태가 바뀌어서 실행하지 않았어요." (no card left) or "실행하지 못했어요. 잠시 뒤 다시 눌러 주세요." (including a start path that could not run, e.g. no work folder). The panel asks on mount, focus and visibility; the host pushes after a browser tab opens, closes or changes. Not claimed: an in-app run (what the integrated browser's error page reports as the tab URL was not observed; if it is not the page's address, no card is drawn), the in-tab error page itself, focusing the action on load. | U (`test/preview-failure.test.mjs`: causes, slow ≠ off, file names, refusal, results and lines; `test/preview-recovery-provider.test.mjs`: the real provider over real loopback ports — another tool's tab gets no card, is never closed, a refused and a failed press are answered; `test/preview-recovery-host.smoke.mjs`: real `LiveServer` over HTTP — running, 404, slow, crash, the real `ensure` restart, old port, other process, memory cap and expiry; `test/preview-recovery.test.tsx`: real `ChatPanel` in personal and classroom) + headless Chromium screenshots |
 
 ## O. 미성년 안전·컴플라이언스 (#320)
@@ -3364,3 +3367,84 @@ new state chip; no Service thresholds, authorization, writes or raw logs change.
 
 Evidence: `chalk/test/board-status.test.mjs`, `chalk/test/board-status-css.test.mjs` (computed 3:1 boundary and 4.5:1 text contrast, dashed unknown, 44px targets, 14px text, focus ring, forced colours) and synthetic actual-page browser checks
 in the row report. Live Service and classroom acceptance remain separate.
+
+### REQ-STUDIO-REFUSAL-BANNER — explicit model refusal (CGP-AGENT-D-007)
+
+Extends REQ-M39 / REQ-CGP-AGENT-09 and DES-CGP-AGENT-09. Product Intent:
+minimum necessary intervention and human judgment stays visible. A learner can
+reframe their request (ADAPT) and inspect existing changes (VERIFY), without losing
+their current draft. Capability names remain outside working UI.
+
+An explicit model refusal presents a dismissible, polite banner in normal flow above
+the existing composer, with “이렇게 해 볼 수 있어요” and a next step. Arrival never
+focuses, disables, replaces or remounts the input; its draft, selection and ongoing
+Korean composition remain intact. The banner does not animate or slide in, including
+reduced-motion use. Closing it deliberately returns focus to the composer. Controls
+are at least 44px, text uses the 14px caption token, and foreground/background follow
+the host theme. Raw model policy text is never copied into this banner.
+
+A stream-bound host event owns visibility. Foreign/late streams are ignored; a new
+turn or activity/task scope clears the prior banner. Successful terminal completion
+keeps the guidance until dismissal or the next turn. SDK result refusal and terminal
+no-fallback events, local Claude structured refusal events, and proxy explicit
+refusal/content-filter finish reasons or nonempty refusal deltas feed the same UI.
+Fallback/retry events and prose matching the word refusal do not qualify. Local
+Codex has no observed refusal discriminator. The pinned Service testkit loses
+Anthropic refusal while translating to proxy finish_reason=stop; no client text
+heuristic repairs that missing upstream contract. That Service integration remains
+unverified and is not claimed as shipped by this design slice.
+
+Evidence: `test/refusal-banner.test.tsx`, `test/model-refusal.smoke.mjs`, and synthetic
+browser screenshots recorded in the row report. Native IME, installed-app acceptance
+and live Service behavior require separate evidence.
+
+## Activity unavailable (CGP-KNOW-R-036 / REQ-KNOW-68)
+
+The activity status uses structured transport/access evidence for authentication refusal,
+expiry, class ending, pause, exhaustion and outage. Unknown causes stay unknown. Local
+files can be opened or explicitly exported to a new filename without an AI token. No
+remote authorization is granted. Classroom status names the instructor and HypeProof
+support and has no purchase action. A remounted panel restores the current activity/task
+refusal; a new turn or explicit recovery clears it. Cancelled or stale file pickers do
+nothing, and exporting never silently overwrites a destination.
+
+## REQ-STUDIO-TURN-FILE-DIFF — inspect and selectively restore changed files
+
+Extends AE-05, AE-15 and REQ-CGP-AGENT-52 / DES-CGP-AGENT-52.
+Product Intent: make consequences inspectable before the learner decides to keep or
+reverse them; exposes VERIFY and OWNERSHIP without capability labels on the work screen.
+
+The existing last-request review bar shows measured added/changed/deleted paths,
+physical text-line additions/deletions, and an expandable inline before/after comparison.
+Unified rows show minus/plus glyphs alongside color below 1024px (including 320px);
+at 1024px and above the same comparison is split into previous/next columns. Text
+is escaped by React; control and bidi characters in displayed paths are explicit.
+The original exact path is used for the action, never normalized into another target.
+There is no new model request or outbound content transfer.
+
+Comparisons are bounded to 500 lines and 64 KiB per side, 200 files and 512 KiB
+aggregate bytes. Non-UTF8, binary, stale, unsafe and over-limit comparisons explicitly
+say unavailable; no invented counts. Counts use a physical-line LCS and retain newline
+changes. File recovery remains available under the existing snapshot limits.
+
+Each file and the entire displayed set can be restored. One native confirmation
+names the selected file count. Cancel leaves workspace bytes unchanged. The host
+validates exact issued paths, turn, task, profile, folder, idle runtime, connection
+state and canonical dirty-buffer paths; changed measured bytes require review again.
+The restore keeps a recoverable pre-restore snapshot, verifies selected restored
+bytes and serializes work-folder restores across windows. A file restore leaves
+other files and their provenance history intact; remaining changes stay visible.
+Restoring the entire displayed set also removes, deepest first, the empty directories
+the AI created (a directory the folder already had, or one that still holds anything, is
+kept); restoring one file never removes a directory.
+In-flight changes or links refuse mutation rather than following them. No browser,
+publication or changes outside the work folder are represented as restored.
+
+This design slice preserves the shipped last-request snapshot boundary, explicitly
+labelled in the panel. It does not implement a persistent task-start baseline or
+checkpoint history, and does not claim those broader R026 requirements complete.
+SDK, proxy and local learner turns share capture; instructor turns remain excluded.
+Automated checks use real temporary files and the actual provider handler plus rendered
+UI interactions. The CSS clauses (unified below 1024px and split from it, 44px summaries,
+the 14px caption token, focus ring, added/removed tint, forced-colours border) are locked
+by `test/turn-review-css.smoke.mjs` with negative controls. Browser, installed-shell and live classroom evidence remain distinct.

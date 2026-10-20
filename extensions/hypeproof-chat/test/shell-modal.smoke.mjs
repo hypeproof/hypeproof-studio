@@ -121,6 +121,7 @@ console.log(`  ok   modal — ${BYPASS_FORMS.length} bypass forms without the fl
 // two checks that the real provider tests cannot reach without legacy data:
 {
   const scoped = (scopeRef, store) => ({
+    postDenialNotice: async () => {},
     taskCommandAllows: store,
     taskCommandAllowState: () => ({ key: scopeRef.key, refusal: scopeRef.refusal }),
     approvedBrowserOrigins: new Set(),

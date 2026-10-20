@@ -2126,3 +2126,52 @@ html, body, #root {
   .hps-header:has(> .hps-access-header) { flex-wrap: wrap; row-gap: 2px; }
   .hps-header > .hps-access-header { order: 3; flex: 1 1 100%; }
 }
+/* CGP-ART-D-007: only the page disclosure, not the shared file attachment. */
+.hps-page-context { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.hps-page-context-toggle { font: inherit; color: inherit; min-height: 44px; min-width: 44px; max-width: 100%; display: flex; flex-wrap: wrap; gap: 4px 8px; text-align: start; white-space: normal; overflow-wrap: anywhere; }
+.hps-page-context-panel { max-height: 40vh; overflow: auto; }
+.hps-page-context-panel[hidden] { display: none; }
+.hps-page-context-panel h3 { margin: 8px 0; font-size: 1em; }
+.hps-page-context-origin { font-family: var(--vscode-editor-font-family, monospace); overflow-wrap: anywhere; }
+.hps-page-context-quote { margin: 8px 0; padding: 0 0 0 12px; border-left: 3px solid var(--hp-muted); }
+.hps-page-context-quote pre { max-height: none; overflow: visible; }
+.hps-page-context-toggle:focus-visible, .hps-page-context-quote pre:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+@media (forced-colors: active) {
+  .hps-page-context-quote { border-left-color: CanvasText; }
+}
+
+.hps-page-context .hps-page-attachment-remove { font: inherit; color: inherit; }
+/* CGP-AGENT-D-006: one persistent, readable row and one allowed action. */
+.hps-denial-notice { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin: 8px 0; padding: 10px; border: 1px solid var(--vscode-panel-border, currentColor); border-radius: 8px; font-size: var(--hp-text-caption); overflow-wrap: anywhere; }
+.hps-denial-notice > div { flex: 1 1 160px; min-width: 0; }
+.hps-denial-notice p { margin: 4px 0 0; }
+.hps-denial-source { font-weight: 600; }
+.hps-denial-notice button { min-height: 44px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 6px; padding: 6px 10px; }
+.hps-denial-notice button:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+
+/* REQ-KNOW-68: the status stays within the chat column in every theme. */
+.hps-activity-status { margin: 12px 0; padding: 16px; border: 1px solid var(--vscode-contrastBorder, currentColor); border-radius: 8px; font-size: var(--hp-text-caption); overflow-wrap: anywhere; }
+.hps-activity-status h3 { margin: 0 0 12px; font-size: var(--hp-text-body); }
+.hps-activity-status-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hps-activity-status button { min-height: 44px; font-size: var(--hp-text-caption); padding: 8px 12px; }
+.hps-activity-status button:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+@media (forced-colors: active) { .hps-activity-status { border-color: CanvasText; } }
+
+/* DES-CGP-AGENT-52: bounded local diff, glyphs alongside theme colors. */
+.hps-turn-review { min-width: 0; font-size: var(--hp-text-caption); }
+.hps-turn-file { min-width: 0; margin-block: 12px; overflow-wrap: anywhere; }
+.hps-turn-file > p { margin-block: 4px; }
+.hps-turn-diff { margin-block: 8px; min-width: 0; }
+.hps-turn-diff-line { display: grid; grid-template-columns: 1.25em minmax(0, 1fr); white-space: pre-wrap; overflow-wrap: anywhere; }
+.hps-turn-diff-line[data-kind="added"] { background: var(--vscode-diffEditor-insertedTextBackground, rgba(0,128,0,.12)); }
+.hps-turn-diff-line[data-kind="removed"] { background: var(--vscode-diffEditor-removedTextBackground, rgba(200,0,0,.12)); }
+.hps-turn-split { display: none; }
+.hps-turn-review summary { min-height: 44px; padding-block: 10px; box-sizing: border-box; cursor: pointer; }
+.hps-turn-review summary:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+@media (min-width: 1024px) {
+  .hps-turn-split { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; }
+  .hps-turn-unified { display: none; }
+}
+@media (forced-colors: active) {
+  .hps-turn-diff-line[data-kind="added"], .hps-turn-diff-line[data-kind="removed"] { border-inline-start: 1px solid CanvasText; }
+}

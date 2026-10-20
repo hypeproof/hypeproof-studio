@@ -17,12 +17,12 @@ const read = (f) => readFileSync(new URL(f, SRC), "utf8");
 // Stylesheet order in the built bundle (vite build, checked in dist/assets/index.css): main.tsx
 // imports tokens.css first, then modules pull in localReview/start/citationPreview/quoteAction/codeBlock/
 // quoteAction/taskWorkspace before the explicit styles.css and chatDetails.css imports.
-const ORDER = ["tokens.css", "localReview.css", "start.css", "writeApprovalDialog.css", "citationPreview.css", "quoteAction.css", "codeBlock.css", "taskWorkspace.css", "styles.css", "chatDetails.css"];
+const ORDER = ["tokens.css", "localReview.css", "start.css", "writeApprovalDialog.css", "citationPreview.css", "quoteAction.css", "codeBlock.css", "refusalBanner.css", "taskWorkspace.css", "styles.css", "chatDetails.css"];
 // The DEC-29 scope: files that style only the personal task workspace and its chat.
 const PERSONAL_FILES = ["chatDetails.css", "taskWorkspace.css", "citationPreview.css", "codeBlock.css"];
 const FLOOR = 14;
 // Files whose rules also style other surfaces (classroom chat, start page).
-const SHARED_FILES = ["styles.css", "start.css", "quoteAction.css", "writeApprovalDialog.css"];
+const SHARED_FILES = ["refusalBanner.css", "styles.css", "start.css", "quoteAction.css", "writeApprovalDialog.css"];
 const STEPS = { base: 0, large: 2, xlarge: 4 };
 
 // ─── CSS parsing ───────────────────────────────────────────────────────────────────────────────
@@ -340,6 +340,7 @@ const CLASSROOM_SHARED = {
 // chatDetails.css; classroom rendering is out of DEC-29's scope and unchanged.
 const SHARED_LEARNER = [
   ".hp-ai-can-do-label",
+  ".hps-denial-notice",
   ".hps-coach-name", ".hps-header button", ".hps-msg-role", ".hps-user-actions button", ".hps-version-pager", ".hps-version-note",
   ".hps-edit-note", ".hps-cit-chip", ".hps-cit-domain", ".hps-msg-run, .hps-msg-retry", ".hps-naming-btn-ghost", ".hps-thinking-details pre",
   ".hps-code-progress", ".hps-codepill-toggle", ".hps-codepill-body", ".hps-empty-sub", ".hps-chips-label", ".hps-chip-text", ".hps-chip-caption",
@@ -539,6 +540,9 @@ const TOKENS = {
 };
 // Elements whose size the scope files set through another selector or inherit (no own rule here).
 const EXTRA_PROBES = [
+  { label: "denial source", ctx: shellCtx, chain: ["div.hps-denial-notice", "div", "span.hps-denial-source"] },
+  { label: "denial text", ctx: shellCtx, chain: ["div.hps-denial-notice", "div", "p"] },
+  { label: "denial action", ctx: shellCtx, chain: ["div.hps-denial-notice", "button"] },
   { label: "personal assistant prose paragraph (inherits the body)", ctx: shellCtx, chain: ["div.hps-messages", "div.hps-msg.hps-msg-assistant", "div.hps-msg-body.hps-prose", "p"] },
   { label: "personal user bubble", ctx: shellCtx, chain: ["div.hps-messages", "div.hps-msg.hps-msg-user", "div.hps-msg-body"] },
   { label: "personal composer textarea", ctx: shellCtx, chain: ["footer.hps-input-area", "div.hps-input", "textarea"] },
@@ -609,6 +613,15 @@ const cardProperty = (selector, prop) => cardRule(selector)?.decls.find(d => d.p
 assert.equal(cardProperty(".hp-ai-can-do li", "min-height"), "44px", "capability row height floor");
 assert.equal(cardProperty(".hp-ai-can-do ul", "grid-template-columns"), "minmax(0, 1fr)", "one shrinkable column");
 assert.equal(cardProperty(".hp-ai-can-do li", "overflow-wrap"), "anywhere", "long labels wrap inside the column");
+// CGP-AGENT-D-006: denial body and action remain 14px in both seat layouts at 320px.
+{
+  const rules = []; for (const f of ORDER) rules.push(...parseCss(real[f], f, rules.length));
+  for (const ctx of [shellCtx("base"), ["body", "div.hps-shell"]]) for (const child of ["p", "button"]) {
+    assert.equal(compute(rules, [...ctx, "div.hps-denial-notice", ...(child === "p" ? ["div"] : []), child], { w: 320, h: 900, forced: false, reduce: false }).px, 14, "denial notice text floor");
+  }
+  const button = rules.find(r => r.text === ".hps-denial-notice button");
+  assert.equal(button?.decls.find(d => d.prop === "min-height")?.value, "44px", "denial action target floor");
+}
 
 const result = check(real);
 if (result.findings.length) {
@@ -627,7 +640,7 @@ const NEGATIVE = [
   ["a narrow-only rule below the floor (caught at 690px, not at 1280px)", mutate("styles.css", (s) => `${s}\n@media (max-width: 700px) { .tw-workspace .hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: 12px; } }\n`), /hps-cit-chip computes to 12px at 690x900/],
   ["a size token that is not defined", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-text-small); }\n`), /undefined custom property --hp-text-small/],
   ["an !important base rule outranks the personal override", mutate("styles.css", (s) => s.replace(".hps-edit-note { margin: 0; font-size: 12px;", ".hps-edit-note { margin: 0; font-size: 12px !important;")), /hps-edit-note computes to 12px/],
-  ["a shared class left without its personal override", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-turn-review,/, "\n")), /hps-turn-review computes to 12px/],
+  ["a shared class left without its personal override", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-effort,/, "\n")), /hps-effort computes to 12px/],
   ["the composer's tool buttons left at the compact-menu 13px", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input button,/, "\n").replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input:not\(\[data-expanded\]\) \.hps-tools-menu button,/, "\n")), /tools-menu button computes to 13px/],
   ["an unclassified new shared rule below 14px", mutate("styles.css", (s) => `${s}\n.hps-new-meta { font-size: 12px; }\n`), /hps-new-meta sets 12px and is not classified/],
   ["the text-size step rule removed", mutate("chatDetails.css", (s) => s.replace('.hps-shell[data-chat-detail="personal"][data-text-size="large"] { --hp-text-step: 2px; }', "")), /data-text-size="large"\] \{ --hp-text-step: 2px \} missing/],

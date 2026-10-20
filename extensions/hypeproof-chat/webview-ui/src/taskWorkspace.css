@@ -31,10 +31,11 @@
 .tw-task-list, .tw-source-list { list-style: none; padding: 0; margin: 0; overflow: auto; min-height: 0; overscroll-behavior: contain; }
 .tw-task-list { flex: 1; }
 .tw-task-list li, .tw-source-list li { content-visibility: auto; contain-intrinsic-size: auto 65px; }
-.tw-task { width: 100%; border: 1px solid transparent; border-radius: 8px; padding: 11px 9px; color: inherit; text-align: left; background: transparent; margin: 2px 0; }
+/* D019: one column. The badge sits on its own right-aligned line so the title keeps the whole row width. */
+.tw-task { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; width: 100%; border: 1px solid transparent; border-radius: 8px; padding: 11px 9px; color: inherit; text-align: left; background: transparent; margin: 2px 0; }
 .tw-task[aria-current="page"] { background: var(--vscode-list-inactiveSelectionBackground, #30353d); border-color: var(--tw-line); }
 .tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-text-caption); }
-.tw-task-meta { display: flex; justify-content: space-between; gap: 8px; font-size: var(--hp-text-caption); margin-top: 7px; color: var(--tw-muted); font-variant-numeric: tabular-nums; }
+.tw-task-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; font-size: var(--hp-text-caption); margin-top: 7px; color: var(--tw-muted); font-variant-numeric: tabular-nums; }
 .tw-local-note { color: var(--tw-muted); margin: 18px 8px 4px; font-size: var(--hp-text-caption); }
 .tw-empty-search { font-size: var(--hp-text-caption); line-height: 1.6; padding: 0 8px; color: var(--tw-muted); }
 .tw-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -168,7 +169,7 @@
 .tw-workspace .tw-heading .tw-rail-toggle { border-color: transparent; }
 .tw-workspace .tw-heading .tw-rail-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
 /* REQ-STUDIO-TASK-RUN-STATE — words plus a symbol; colour is never the only carrier. */
-.tw-task-state { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 1px 6px; border: 1px solid var(--tw-line); border-radius: 999px; font-size: var(--hp-text-caption); line-height: 1.5; }
+.tw-task-state { justify-self: end; max-width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 1px 6px; border: 1px solid var(--tw-line); border-radius: 999px; font-size: var(--hp-text-caption); line-height: 1.5; }
 .tw-task-state-symbol { font-weight: 700; }
 .tw-task-state[data-run-state="approval"], .tw-task-state[data-run-state="error"] { font-weight: 700; border-width: 2px; }
 
@@ -209,4 +210,11 @@
   .tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background-color: Highlight; color: HighlightText; border-color: Highlight !important; }
   /* REQ-STUDIO-UI-POLISH-1: the run pill's dot is a background, which forced colors repaints as Canvas. */
   .tw-heading .tw-run-note:not(:empty)::before { background: CanvasText; }
+}
+
+/* D019: the existing skip link moves actual focus, with the shared theme-aware focus ring. */
+.tw-conversation:focus { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+@media (forced-colors: active) {
+  .tw-task-state { border-color: CanvasText; color: CanvasText; background: Canvas; }
+  .tw-task-state[data-run-state="approval"] { border-style: double; border-width: 3px; }
 }

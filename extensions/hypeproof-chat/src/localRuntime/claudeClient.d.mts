@@ -10,5 +10,6 @@ export function runClaude(args: {
   messages: Array<{ role: string; content: string }>;
   signal: AbortSignal;
   onDelta: (text: string) => void;
+  onRefusal?: () => void;
   toolServer: { url: string; token: string };
 }): Promise<{ model: string; usage: unknown }>;

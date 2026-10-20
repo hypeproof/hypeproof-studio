@@ -28,6 +28,7 @@ import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as syncFs from "node:fs";
 import * as path from "node:path";
+import { compareTurnText, type TurnFileReview } from "./turnReviewView.ts";
 import { accountLock } from "./accountLock.ts";
 import { WORLD_ARCHIVE_DIR } from "./chatPanelHelpers.ts";
 
@@ -376,6 +377,11 @@ export interface RestoreRequest {
   now?: number;
   keep?: number;
   limits?: Partial<TurnRestoreLimits>;
+  paths?: readonly string[];
+  /** Remove empty directories the point did not have. Default: only when no `paths` filter is given. The host sets it for restore-all, where `paths` is the displayed list, not a single-file selection. */
+  sweepDirs?: boolean;
+  expectedDigest?: string;
+  stillCurrent?: () => boolean;
 }
 
 function inside(root: string, target: string): boolean {
@@ -408,6 +414,22 @@ async function safeToChange(realRoot: string, rel: string, kind: "file" | "dir")
   return true;
 }
 
+/** Revalidate synchronously in the same event-loop turn as a filesystem mutation. */
+function safeToChangeSync(root: string, rel: string): boolean {
+  if (!safeRel(rel)) return false;
+  let cur = root;
+  for (const part of rel.split("/")) {
+    cur = path.join(cur, part);
+    try {
+      const st = syncFs.lstatSync(cur);
+      if (st.isSymbolicLink() || !inside(root, syncFs.realpathSync(cur))) return false;
+      if (cur !== path.join(root, rel) && !st.isDirectory()) return false;
+      if (cur === path.join(root, rel) && !st.isFile()) return false;
+    } catch (e) { return errCode(e) === "ENOENT"; }
+  }
+  return true;
+}
+
 /** Create the missing parents of `rel` one level at a time, refusing any component that is not a real directory. */
 async function makeParents(realRoot: string, rel: string, onMade: () => void): Promise<boolean> {
   const parts = rel.split("/").slice(0, -1);
@@ -430,6 +452,10 @@ async function makeParents(realRoot: string, rel: string, onMade: () => void): P
  * directories the point did not have and are now empty, then rescan and verify.
  */
 export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcome> {
+  return accountLock(path.join(path.dirname(req.store), "restore-operation"))(() => restoreToPointLocked(req));
+}
+
+async function restoreToPointLocked(req: RestoreRequest): Promise<RestoreOutcome> {
   const failed: RestoreFailure[] = [];
   let root: string;
   try { root = await fs.realpath(path.resolve(req.root)); }
@@ -447,7 +473,19 @@ export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcom
   if (!before.complete) {
     return { ok: false, beforeRestore: before, restored: [], removed: [], failed: [], notCovered: [], touched: false, error: "folder_too_large" };
   }
-  const target = new Map(req.point.files.map((f) => [f.path, f]));
+  if ((req.expectedDigest && before.digest !== req.expectedDigest) || req.stillCurrent?.() === false) {
+    return { ok: false, beforeRestore: before, restored: [], removed: [], failed: [], notCovered: [], touched: false, error: "context_changed" };
+  }
+  const selected = req.paths ? new Set(req.paths) : null;
+  const selectedPath = (rel: string) => !selected || selected.has(rel);
+  const targetFiles = req.point.files.filter(f => selectedPath(f.path));
+  const target = new Map(targetFiles.map((f) => [f.path, f]));
+  const currentMatches = (rel: string): boolean => {
+    if (req.stillCurrent?.() === false || !safeToChangeSync(root, rel)) return false;
+    const expected = before.files.find(f => f.path === rel);
+    try { const data = syncFs.readFileSync(path.join(root, rel)); return !!expected && sha256(data) === expected.sha256; }
+    catch (error) { return !expected && errCode(error) === "ENOENT"; }
+  };
   const uncoveredInPoint = new Set(req.point.notCovered.map((n) => n.path));
   const notCovered = diffRestorePoint(req.point, before).notCovered;
 
@@ -455,16 +493,16 @@ export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcom
   //    Their bytes are in "복구 직전", so nothing is lost.
   const removed: string[] = [];
   for (const f of before.files) {
-    if (target.has(f.path) || uncoveredInPoint.has(f.path)) continue;
+    if (!selectedPath(f.path) || target.has(f.path) || uncoveredInPoint.has(f.path)) continue;
     const abs = path.join(root, ...f.path.split("/"));
     if (!inside(root, abs) || !(await safeToChange(root, f.path, "file"))) { failed.push({ path: f.path, reason: "unsafe_path" }); continue; }
-    try { await fs.unlink(abs); mark(); removed.push(f.path); } catch { failed.push({ path: f.path, reason: "remove_failed" }); }
+    try { if (!currentMatches(f.path)) throw new Error("changed"); syncFs.unlinkSync(abs); mark(); removed.push(f.path); } catch { failed.push({ path: f.path, reason: "remove_failed" }); }
   }
 
   // 2. Files whose bytes differ, or that are gone: write the pre-turn bytes.
   const current = new Map(before.files.map((f) => [f.path, f]));
   const restored: string[] = [];
-  for (const f of req.point.files) {
+  for (const f of targetFiles) {
     const now = current.get(f.path);
     if (now && now.sha256 === f.sha256 && now.size === f.size) continue;
     const abs = path.join(root, ...f.path.split("/"));
@@ -473,13 +511,16 @@ export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcom
     let data: Buffer;
     try { data = await fs.readFile(blobPath(req.store, f.sha256)); } catch { failed.push({ path: f.path, reason: "snapshot_damaged" }); continue; }
     if (sha256(data) !== f.sha256 || data.length !== f.size) { failed.push({ path: f.path, reason: "snapshot_damaged" }); continue; }
+    if (req.stillCurrent?.() === false) { failed.push({ path: f.path, reason: "unsafe_path" }); continue; }
     if (!(await makeParents(root, f.path, mark))) { failed.push({ path: f.path, reason: "unsafe_path" }); continue; }
     // Re-check right before writing: the parents were just made or verified.
     if (!(await safeToChange(root, f.path, "file"))) { failed.push({ path: f.path, reason: "unsafe_path" }); continue; }
+    if (!currentMatches(f.path)) { failed.push({ path: f.path, reason: "unsafe_path" }); continue; }
     const tmp = `${abs}.hps-restore-${randomUUID()}.tmp`;
     try {
-      await fs.writeFile(tmp, data, { flag: "wx" }); // never through an existing entry
-      await fs.rename(tmp, abs);
+      syncFs.writeFileSync(tmp, data, { flag: "wx" }); // never through an existing entry
+      if (!currentMatches(f.path)) throw new Error("changed");
+      syncFs.renameSync(tmp, abs);
       mark();
       restored.push(f.path);
     } catch {
@@ -489,9 +530,10 @@ export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcom
   }
 
   // 3. Directories the point did not have, deepest first, only when empty.
+  const sweepDirs = req.sweepDirs ?? !selected;
   const keepDirs = new Set(req.point.dirs);
   for (const d of [...before.dirs].sort((a, b) => b.length - a.length)) {
-    if (keepDirs.has(d) || uncoveredInPoint.has(d)) continue;
+    if (!sweepDirs || req.stillCurrent?.() === false || keepDirs.has(d) || uncoveredInPoint.has(d)) continue;
     if (!(await safeToChange(root, d, "dir"))) continue; // a link is never followed; it stays, and the scan names it
     try { await fs.rmdir(path.join(root, ...d.split("/"))); mark(); } catch { /* not empty (uncovered content) or gone: leave it */ }
   }
@@ -500,7 +542,7 @@ export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcom
   const after = await scanFolder(root, { limits: req.limits });
   const afterFiles = new Map(after.files.map((f) => [f.path, f]));
   const failedPaths = new Set(failed.map((x) => x.path));
-  for (const f of req.point.files) {
+  for (const f of targetFiles) {
     const got = afterFiles.get(f.path);
     if (got && got.sha256 === f.sha256 && got.size === f.size) continue;
     if (!failedPaths.has(f.path)) { failed.push({ path: f.path, reason: "verify_mismatch" }); failedPaths.add(f.path); }
@@ -630,4 +672,38 @@ export async function readArtifactVersion(store: string, id: string, rel: string
     if (data.length > TURN_RESTORE_LIMITS.fileMax || sha256(data) !== file.sha256 || data.includes(0)) return null;
     return new TextDecoder('utf-8', { fatal: true }).decode(data);
   } catch { return null; }
+}
+
+/** Read only the measured versions, never a newly swapped path. Contents stay local to this webview. */
+export async function reviewTurnFiles(store: string, root: string, point: RestoreManifest, now: FolderScan): Promise<TurnFileReview[]> {
+  const changes = diffRestorePoint(point, now);
+  let budget = 512 * 1024;
+  const output: TurnFileReview[] = [];
+  for (const rel of [...changes.added, ...changes.changed, ...changes.deleted]) {
+    try {
+      const before = point.files.find(f => f.path === rel), after = now.files.find(f => f.path === rel);
+      if (output.length >= 200 || (before?.size ?? 0) > 65536 || (after?.size ?? 0) > 65536 || (before?.size ?? 0) + (after?.size ?? 0) > budget) throw new Error("limit");
+      if (!safeRel(rel) || !await safeToChange(root, rel, "file")) throw new Error("path");
+      const read = async (file: ManifestFile | undefined, location: string) => {
+        if (!file) return "";
+        const fd = syncFs.openSync(location, syncFs.constants.O_RDONLY | syncFs.constants.O_NOFOLLOW);
+        let data: Buffer;
+        try {
+          const st = syncFs.fstatSync(fd);
+          if (!st.isFile() || st.size > 65536 || st.size !== file.size) throw new Error("size");
+          const buffer = Buffer.alloc(file.size + 1);
+          const count = syncFs.readSync(fd, buffer, 0, buffer.length, 0);
+          data = buffer.subarray(0, count);
+        } finally { syncFs.closeSync(fd); }
+        if (!safeToChangeSync(root, rel)) throw new Error("path");
+        if (data.length !== file.size || sha256(data) !== file.sha256 || data.includes(0)) throw new Error("bytes");
+        budget -= data.length;
+        return new TextDecoder("utf-8", { fatal: true }).decode(data);
+      };
+      const a = await read(before, before ? blobPath(store, before.sha256) : "");
+      const b = await read(after, path.join(root, rel));
+      output.push({ path: rel, ...compareTurnText(a, b) });
+    } catch { output.push({ path: rel, unavailable: "비교할 수 없는 파일이에요. 크기·형식 또는 변경된 상태를 확인해 주세요." }); }
+  }
+  return output;
 }

@@ -1,3 +1,4 @@
+import { responseEvidence } from "./activityAvailability.ts";
 import { OBSERVATION_FORMAT_V2, CAPABILITY_MODEL_HEADER } from "./nativeObservationContract.ts";
 import type { PassStatus } from "./protocol.ts";
 import { FREE_EXPIRED_FRIENDLY, FREE_EXPIRED_SERVICE, TRIAL_EXPIRED_FRIENDLY } from "./passPurchase.ts";
@@ -90,6 +91,8 @@ export type ProfileFailureReason =
   | "network";       // fetch threw — bad URL, offline, DNS, TLS
 
 export interface ProfileFailure {
+  /** Validated Service cause, retained for the activity status on reload. */
+  type?: string;
   reason: ProfileFailureReason;
   /** Participant-facing sentence. Names the cause AND the next action. */
   friendly: string;
@@ -145,13 +148,14 @@ export function classifyProfileFailure(status: number, bodyText: string): Profil
   } catch {
     parsed = null;
   }
-  const code = parsed?.error?.code;
+  const {code, type} = responseEvidence(status, bodyText);
   const requestId = parsed?.error?.request_id;
   const serviceLine = typeof parsed?.error?.message === "string" && parsed.error.message.length <= 200 ? parsed.error.message : null;
   const base = {
     status,
     ...(requestId ? { requestId } : {}),
     ...(code ? { code } : {}),
+    ...(type ? { type } : {}),
     ...(serviceLine ? { serviceMessage: serviceLine } : {}),
   };
 

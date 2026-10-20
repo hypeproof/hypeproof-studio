@@ -1,5 +1,6 @@
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
 import type {WriteApprovalPrompt} from "../../src/writeApprovalPrompt";
+import { storedDenialNotice } from "../../src/denialNotice";
 import type { TurnToolMode } from '../../src/turnTools';
 import { useEffect, useReducer, useState, useRef } from "react";
 import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage, TrialEndCardView } from "../../src/protocol";
@@ -51,6 +52,7 @@ interface State {
   streamId: string | null;
   error: string | null;
   errorRetryable: boolean;
+  activityUnavailable?: import("../../src/activityAvailability").ActivityUnavailable;
   errorRequestId: string | null;   // S-07 / #49 — surfaced in ErrorBanner
   /** TUX-COND-07 — the inline end-of-trial card the host sent with this turn's ending (drawn instead of the banner). */
   trialEndCard: TrialEndCardView | null;
@@ -128,7 +130,7 @@ type Action =
   | { type: "worldOpened"; id: string }
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
-  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView }
+  | { type: "streamError"; error: string; activityUnavailable?: import("../../src/activityAvailability").ActivityUnavailable; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView }
   | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string; editOf?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
@@ -287,6 +289,7 @@ function reducer(state: State, action: Action): State {
         streamId: null,
         timeline: timelineEnd(state.timeline, Date.now()),
         error: action.error,
+        activityUnavailable: action.activityUnavailable,
         errorRetryable: action.retryable !== false,
         errorRequestId: action.requestId ?? null,
         errorRunbookUrl: action.runbookUrl ?? null,
@@ -339,6 +342,7 @@ export { reducer as chatPanelReducer, initialState as chatPanelInitialState };
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [refusal, setRefusal] = useState(false);
   const scope = useRef<string | undefined>();
   const taskScope = useRef<string | undefined>();
   // The bridge can deliver an old turn after Stop. Update this synchronously,
@@ -394,6 +398,7 @@ export function App() {
           latestVerdictRequests.current.clear();
           ownVerdictRequests.current.clear();
           activeStream.current = null;
+          setRefusal(false);
           setApprovalPending(false); setWriteApproval(null);
         }
         scope.current = msg.config.activity?.id;
@@ -404,6 +409,7 @@ export function App() {
           // One turn owns this view; a repeated start must not clear its text.
           if (activeStream.current !== null) return;
           activeStream.current = msg.streamId;
+          setRefusal(false);
         } else if (msg.streamId !== activeStream.current) {
           // These host refusal codes are emitted before streamStart. They still
           // need to explain an idle preflight failure, never terminate a live turn.
@@ -419,6 +425,7 @@ export function App() {
         setApprovalPending(false); setWriteApproval(null);
       }
       switch (msg.type) {
+        case "streamRefusal": setRefusal(true); return;
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
         case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
         case 'approvalWait': setApprovalPending(msg.waiting === true); return;
@@ -464,6 +471,9 @@ export function App() {
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
         case "toolLog": dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}), ...(msg.step !== undefined && msg.since !== undefined ? { step: msg.step, since: msg.since } : {}) } }); break;
+        case "denialNotice":
+          if (storedDenialNotice(msg.label)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: '', label: msg.label, state: 'error', at: msg.at } });
+          break;
         case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
         case "elementAttached": dispatch({ type: "elementAttached", element: msg.element }); break;
         case "pageAttachment": dispatch({ type: "pageAttachment", attachment: msg.attachment }); break;
@@ -480,7 +490,7 @@ export function App() {
         case "publishResult": dispatch({ type: "publishResult", state: msg.state, url: msg.url, message: msg.message }); break;
         case "streamEnd":   dispatch({ type: "streamEnd", failed: msg.failed === true }); break;
         case "streamStopped": dispatch({ type: "streamStopped", by: msg.by }); break;
-        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retry: msg.retry, retryable: msg.retryable, trialEndCard: msg.trialEndCard }); break;
+        case "streamError": dispatch({ type: "streamError", error: msg.error, activityUnavailable: msg.activityUnavailable, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retry: msg.retry, retryable: msg.retryable, trialEndCard: msg.trialEndCard }); break;
         case "actionResult": /* not yet routed to UI */ break;
         case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now() }); break;
         case "webviewTestCrash": setShouldCrash(true); break;
@@ -717,7 +727,10 @@ export function App() {
           streaming={!!state.streamId}
           streamingId={state.timeline.openId}
           runningStreamId={state.streamId}
+          refusal={refusal}
+          onDismissRefusal={() => setRefusal(false)}
           error={state.error}
+          activityUnavailable={state.error ? state.activityUnavailable : undefined}
           errorRequestId={state.errorRequestId}
           errorRunbookUrl={state.errorRunbookUrl}
           canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId && state.errorRetry}
@@ -783,8 +796,11 @@ export function App() {
         streaming={!!state.streamId}
         streamingId={state.timeline.openId}
         runningStreamId={state.streamId}
+        refusal={refusal}
+        onDismissRefusal={() => setRefusal(false)}
         error={state.error}
-        errorRequestId={state.errorRequestId}
+        activityUnavailable={state.error ? state.activityUnavailable : undefined}
+          errorRequestId={state.errorRequestId}
         errorRunbookUrl={state.errorRunbookUrl}
         trialEndCard={state.trialEndCard}
         onTrialEndCardPasses={() => postToHost({ type: "trialEndCardPasses" })}

@@ -1,3 +1,4 @@
+import { storedDenialNotice } from "./denialNotice.ts";
 import { createHash, randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
@@ -322,6 +323,21 @@ export class TaskWorkspaceStore {
   rename(taskId: string, title: string): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => { task.title = normalizedTitle(title); task.titleOrigin = 'manual'; });
   }
+  /** A captured system notice may finish after selection changes; it never edits another task's content. */
+  appendDenial(taskId: string, message: ChatMessage): Promise<TaskWorkspaceView> {
+    if (!validIncoming(message) || message.role !== 'tool' || message.content !== '' || message.tool?.state !== 'error' || !storedDenialNotice(message.tool.label))
+      return Promise.reject(new TaskWorkspaceStoreError('invalid', '차단 안내 형식이 올바르지 않습니다.'));
+    const safe: ChatMessage = { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '🔒', label: message.tool.label, state: 'error' } };
+    return this.mutate(data => {
+      const current = this.requireData(data);
+      const task = this.requireTask(current, taskId);
+      if (!task.messages.some(m => m.id === safe.id)) task.messages.push(safe);
+      task.messageCount = task.messages.length;
+      task.updatedAt = Math.max(Date.now(), task.updatedAt);
+      return current;
+    });
+  }
+
   append(taskId: string, messages: ChatMessage[]): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, (task, versions) => {
       if (!Array.isArray(messages) || !messages.every(validIncoming)) fail('invalid', '저장할 대화 형식이 올바르지 않습니다.');

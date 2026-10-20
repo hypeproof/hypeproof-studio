@@ -15,12 +15,14 @@
 // 한 메시지가 텍스트와 툴을 동시에 내는 일이 없다. 즉 도착순 = 발생순이다.
 
 import type { ChatMessage } from "./protocol";
+import { storedDenialNotice } from "./denialNotice.ts";
 
 export interface ToolEntry {
   id: string;
   icon: string;
   label: string;
   state: "running" | "done" | "error";
+  denial?: import("./denialNotice").DenialNotice;
   /** SDK 가 실어 보낸 자기 시각(ISO). 없으면 호출자가 시계를 준다. */
   at?: number;
   /** REQ-STUDIO-LONG-STEP-HINT — the step in learner words and when it began (host clock, ms). */
@@ -266,6 +268,6 @@ export function clampTimeline(items: ChatMessage[], maxSpoken: number): ChatMess
     }
   }
   let out = items.slice(cut);
-  while (out.length > 0 && out[0].role === "tool") out = out.slice(1);
+  while (out.length > 0 && out[0].role === "tool" && !(out[0].tool?.state === "error" && storedDenialNotice(out[0].tool.label))) out = out.slice(1);
   return out;
 }

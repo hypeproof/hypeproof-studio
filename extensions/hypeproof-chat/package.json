@@ -603,7 +603,7 @@
     "build:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js",
     "build:webview": "cd webview-ui && npm install && npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths",
+    "test": "for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && node --experimental-strip-types --test test/turn-file-review.test.mjs",
     "test:activity-resume": "node --experimental-strip-types test/activity-resume.test.mjs",
     "test:instructor-render": "node scripts/run-tsx-tests.mjs instructor-render",
     "test:signin-copy-link": "node scripts/run-tsx-tests.mjs signin-copy-link",
@@ -646,7 +646,7 @@
     "test:reference-transport": "node --experimental-strip-types --test test/reference-transport.test.mjs",
     "test:trial-end-notice": "node --test test/sdk-trial-end-notice.test.mjs",
     "test:sdk-required": "node --experimental-strip-types --test test/sdk-required.test.mjs",
-    "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-workspace-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs"
+    "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.299",
