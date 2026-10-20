@@ -12,6 +12,7 @@ import {
 import { denialFor, denialToolText, toolFeatureName } from "../denialSource.ts";
 import { profileAudience } from "../seatVocabulary.ts";
 import { folderRemovedFeatures } from "../folderConsent.ts";
+import { canonicalizeExistingPath } from "../workspaceRouting.ts";
 
 const LIMIT = 200_000;
 const schema = (properties: Record<string, unknown>, required: string[]) => ({
@@ -47,15 +48,10 @@ const DEFINITIONS = [
   },
 ];
 
+// Where the write really lands (CGP-AGENT-R-005 verify F1): the shared resolver follows a symlink even when it
+// dangles, so `<ws>/page.html -> <outside>/x` is judged outside instead of by the link's own name.
 async function canonical(target: string): Promise<string> {
-  try {
-    return await fs.realpath(target);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    const parent = path.dirname(target);
-    if (parent === target) throw e;
-    return path.join(await canonical(parent), path.basename(target));
-  }
+  return canonicalizeExistingPath(target);
 }
 
 export function workspaceTools(args: {

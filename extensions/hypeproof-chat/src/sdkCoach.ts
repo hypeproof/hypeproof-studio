@@ -19,6 +19,7 @@ import { sdkPromptWithImages } from "./visionInput.ts";
 import { requireTurnTools, toolsForTurn, turnToolMode, turnToolsAvailability, userTextForTurn, type TurnToolMode } from './turnTools';
 import { SdkWebCitations } from './sdkWebCitations';
 import { canonicalizeExistingPath } from "./workspaceRouting.ts";
+import { isWriteToolName, withResolvedWritePath, WRITE_SCOPE_CHANGED_MESSAGE, writeScopeCovered, writeScopeKeys } from "./writeApprovalPaths.ts";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
@@ -809,10 +810,15 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       // doesn't read that (correct) silence as a wedged turn.
       awaitingUser += 1;
       let ok: boolean;
+      // REQ-E1 / CGP-AGENT-R-005 — a write approval covers exactly the paths the modal listed. The approver gets a
+      // copy (it cannot change what runs), and the scope is re-derived after the answer: a path that now resolves
+      // somewhere else (a symlink swapped in while the modal was open) is refused instead of written.
+      const writeScope = isWriteToolName(name) ? writeScopeKeys(name, input, args.cwd) : null;
       try {
         const approval = await args.requestApproval({
           toolName: name,
-          input,
+          // A JSON copy: tool inputs are JSON, and some hosts (vm-bundled tests) have no structuredClone.
+          input: writeScope ? (JSON.parse(JSON.stringify(input)) as typeof input) : input,
           ...(verdict.destructive ? { destructive: true } : {}),
         });
         ok = typeof approval === 'boolean' ? approval : approval.approved;
@@ -824,6 +830,13 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         // lose the modal's time from its stall-watchdog slack and be aborted mid-run.
         lastToolCallAt = Date.now();
       }
+      if (ok && writeScope && !writeScopeCovered(writeScope, writeScopeKeys(name, input, args.cwd))) {
+        console.warn(`[coach] write refused after approval: ${name} no longer writes the approved path`);
+        return { behavior: "deny" as const, message: WRITE_SCOPE_CHANGED_MESSAGE };
+      }
+      // The CLI writes the resolved path the gate judged, not the spelling it was given: no link or `..` in the
+      // spelling can be read differently by the CLI than by the gate (CGP-AGENT-R-005 verify 2 F1).
+      if (ok && writeScope) input = withResolvedWritePath(input, writeScope) as typeof input;
       return ok
         ? { behavior: "allow" as const, updatedInput: input }
         : { behavior: "deny" as const, message: "사용자가 이 작업을 허용하지 않았어요." };

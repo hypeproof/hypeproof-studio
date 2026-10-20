@@ -48,9 +48,15 @@ const sdkVerdict = (command) =>
   for (const c of BYPASS_FORMS) {
     assert.deepEqual(sdkVerdict(c), { decision: "ask", destructive: true }, `SDK strong confirm: ${JSON.stringify(c)}`);
   }
+  // CGP-AGENT-R-005 (shellLinkPolicy): at the SDK gate, commands that can materialise links (git checkout/switch/…)
+  // and commands this layer cannot read (command substitution) get the strong confirm, fail closed. They stay
+  // non-destructive for the modal's own check below.
+  const LINK_GATED = new Set(["git checkout main", "git checkout -b feature", 'echo "$(date)"']);
   for (const c of SAFE_COMMANDS) {
-    assert.deepEqual(sdkVerdict(c), { decision: "allow" }, `SDK auto-run: ${JSON.stringify(c)}`);
+    const want = LINK_GATED.has(c) ? { decision: "ask", destructive: true } : { decision: "allow" };
+    assert.deepEqual(sdkVerdict(c), want, `SDK verdict: ${JSON.stringify(c)}`);
   }
+  for (const c of LINK_GATED) assert.ok(SAFE_COMMANDS.includes(c), `LINK_GATED entry is in the table: ${c}`);
   console.log("✓ SDK canUseTool — every bypass form asks with the strong confirm; ordinary commands auto-run");
 }
 

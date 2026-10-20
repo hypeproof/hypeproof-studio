@@ -4,7 +4,7 @@ import type { BrowserToolsForLocal } from './localRuntime';
 import { FREE_DAILY_CAP_NOTICE, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { catalogueWithin, endCardAdvertised, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
-import { canonicalizeExistingPath } from "./workspaceRouting";
+import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
 import { chalkToolsEnabled } from './chalk/tools';
@@ -185,6 +185,7 @@ import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { browserRememberLabel, browserTargetDetail } from "./browserTargetHost";
+import { writeApprovalCopy, writePathEntries, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
@@ -7512,11 +7513,30 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
 
     // Tier 2 — file access must target the active workspace (write and read).
-    if (req.kind === "writeFile" || req.kind === "readFile") {
+    if (req.kind === "readFile") {
       const target = (req.payload as { path?: string } | null | undefined)?.path;
       if (typeof target === "string" && target.length > 0 && !isInsideWorkspace(target)) {
         vscode.window.showWarningMessage(
           denialCopy({ source: classifyDenial("path_outside_workspace"), reason: `작업 폴더 밖의 경로예요: ${target}` }),
+        );
+        return false;
+      }
+    }
+    // REQ-E1 / CGP-AGENT-R-005 — a write is checked for EVERY path it names (not only the first), canonically
+    // (a `..` escape or a symlink that resolves outside counts as outside), and refused before any modal. The
+    // notice names the path as the modal would (작업 폴더 밖 · <name>), never the full path.
+    let writeEntries: WritePathEntry[] = [];
+    const writeTargets = req.kind === "writeFile" ? writeTargetsFromPayload(req.payload) : [];
+    if (writeTargets.length > 0) {
+      const root = this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null;
+      const targets = writeTargets;
+      writeEntries = writePathEntries(targets, root);
+      // With a work folder, its canonical containment decides; without one, the open workspace folders do (as before).
+      const outside = writeEntries.filter((e, i) => (root ? e.outside : !isInsideWorkspace(targets[i].path)));
+      if (outside.length > 0) {
+        vscode.window.showWarningMessage(
+          // One 작업 폴더 밖 token per path; a solo seat (personal, trial, pass) is never told to ask a teacher.
+          denialCopy({ source: classifyDenial("path_outside_workspace"), reason: `저장하려는 곳: ${outside.map((e) => e.display).join(", ")}` }, profileAudience(this.cachedProfile)),
         );
         return false;
       }
@@ -7600,6 +7620,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       title: approvalFallbackTitle(coachName),
       verb: "허용",
     };
+    // REQ-E1 / CGP-AGENT-R-005 — the write modal lists every path (up to 8, then 외 N개 and a full-list button
+    // naming the real total). Looking at the full list is not an answer: it asks again with every path shown.
+    if (req.kind === "writeFile") {
+      const copy = writeApprovalCopy(title, writeEntries);
+      onPrompted?.();
+      const pick = await vscode.window.showWarningMessage(copy.message, { modal: true }, verb, ...(copy.allLabel ? [copy.allLabel] : []));
+      if (pick === verb) return true;
+      if (!copy.allLabel || pick !== copy.allLabel || !copy.allMessage) return false;
+      return (await vscode.window.showWarningMessage(copy.allMessage, { modal: true }, verb)) === verb;
+    }
     onPrompted?.();
     const pick = await vscode.window.showWarningMessage(
       `${title}\n\n${req.description}`,
@@ -8098,7 +8128,7 @@ function isInsideWorkspace(targetPath: string): boolean {
   for (const f of folders) {
     const root = canonicalizeForCompare(f.uri.fsPath);
     const rel = path.relative(root, resolved);
-    if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
+    if (rel === "" || !relativeEscapes(rel)) {
       return true;
     }
   }

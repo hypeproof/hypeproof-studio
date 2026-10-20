@@ -19,6 +19,7 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isLoopbackPreview } from "./previewRecovery.ts";
+import { relativeEscapes } from "./workspaceRouting.ts";
 
 export type BrowserTargetPlace = "preview" | "internet" | "file";
 export const BROWSER_TARGET_LABELS: Record<BrowserTargetPlace, string> = {
@@ -46,7 +47,8 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
 // U+2028/U+2029 line/paragraph separators, and every bidi control (ALM, LRM/RLM, LRE..RLO, LRI..PDI).
 const UNSAFE_NAME_CHARS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 
-const cleanName = (name: string): string => name.replace(UNSAFE_NAME_CHARS, "").trim();
+/** A name with every character that could fake a line or reorder text removed (shared with writeApprovalPaths). */
+export const cleanName = (name: string): string => name.replace(UNSAFE_NAME_CHARS, "").trim();
 
 /** How a local file target is shown. `workspaceRoot` undefined = not known (file name only); null = no work folder. */
 export interface BrowserTargetOptions {
@@ -60,17 +62,24 @@ function localFileDisplay(url: URL, opts: BrowserTargetOptions): string {
   } catch {
     filePath = url.pathname;
   }
-  const name = cleanName(path.basename(filePath)) || UNNAMED_FILE_TEXT;
-  if (!("workspaceRoot" in opts)) return name;
-  const root = opts.workspaceRoot;
+  if (!("workspaceRoot" in opts)) return cleanName(path.basename(filePath)) || UNNAMED_FILE_TEXT;
+  return workFolderPathDisplay(filePath, opts.workspaceRoot ?? null).text;
+}
+
+/**
+ * A local path as the learner reads it: `작업 폴더/<relative path>` inside `root`, otherwise
+ * `작업 폴더 밖 · <file name>` (never the full path). Every part is cleaned with `cleanName`.
+ * Both arguments are compared as given: a caller that must see through symlinks canonicalizes first.
+ */
+export function workFolderPathDisplay(filePath: string, root: string | null): { text: string; inside: boolean } {
   if (root) {
     const rel = path.relative(root, filePath);
-    if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
+    if (rel && !relativeEscapes(rel)) {
       const parts = rel.split(/[\\/]+/).map(cleanName).filter(Boolean);
-      if (parts.length) return `${WORK_FOLDER_TEXT}/${parts.join("/")}`;
+      if (parts.length) return { text: `${WORK_FOLDER_TEXT}/${parts.join("/")}`, inside: true };
     }
   }
-  return `${OUTSIDE_WORK_FOLDER_TEXT} · ${name}`;
+  return { text: `${OUTSIDE_WORK_FOLDER_TEXT} · ${cleanName(path.basename(filePath)) || UNNAMED_FILE_TEXT}`, inside: false };
 }
 
 const target = (host: string | null, place: BrowserTargetPlace, web: boolean): BrowserTarget =>

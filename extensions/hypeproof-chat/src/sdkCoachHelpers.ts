@@ -29,6 +29,9 @@ import * as path from "node:path";
 // literally; esbuild + tsc (allowImportingTsExtensions) accept them.
 import { BLANK_BROWSER_URL, browserOpenUrl, isLoopbackUrl } from "./browserControlHelpers.ts";
 import { browserTargetInline, UNKNOWN_HOST_TEXT } from "./browserTargetHost.ts";
+import { writeTargetsOf } from "./writeApprovalPaths.ts";
+import { relativeEscapes } from "./workspaceRouting.ts";
+import { linkCommandVerdict, shellUnreadable } from "./shellLinkPolicy.ts";
 import {
   MCP_BROWSER_OPEN,
   MCP_BROWSER_SCREENSHOT,
@@ -2726,7 +2729,8 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
     return {
       kind: "writeFile",
       description: path ? `${action.toolName} ${path}` : `${action.toolName} ${safeStringify(action.input)}`,
-      payload: { path },
+      // REQ-E1 / CGP-AGENT-R-005: every path the call writes, with 새 파일 / 바꿈 when the input says so.
+      payload: { path, paths: writeTargetsOf(action.toolName, action.input) },
     };
   }
   if (READ_TOOLS.has(name)) {
@@ -2785,6 +2789,7 @@ export type SdkToolVerdict =
 
 /** Reasons in the learner's words for the platform-safety denies (the copy builder adds the frame). */
 export const PATH_ESCAPE_REASON = "작업 폴더 밖의 파일이에요";
+export const LINK_OUTSIDE_REASON = "작업 폴더 밖을 가리키는 바로가기(링크)는 만들 수 없어요";
 export const URL_POLICY_REASON = "열 수 없는 주소예요";
 export const NEVER_FOR_LEARNERS_REASON = "Studio에서는 학생에게 주지 않는 도구예요";
 export const SUBAGENT_CATALOG_REASON = "Studio가 준비한 도우미만 부를 수 있어요";
@@ -2840,7 +2845,7 @@ export function isPathContained(workspaceRoot: string, target: string): boolean 
   const root = path.resolve(workspaceRoot);
   const resolved = path.isAbsolute(target) ? path.resolve(target) : path.resolve(root, target);
   const rel = path.relative(root, resolved);
-  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+  return rel === "" || !relativeEscapes(rel);
 }
 
 const PATH_INPUT_KEYS = ["file_path", "path", "notebook_path"] as const;
@@ -3037,7 +3042,15 @@ export function evaluateSdkToolUse(args: {
     // 학생 작업을 날릴 수 있는 것은 강한 확인을 유지하고(「항상 허용」도 안 준다),
     // 나머지는 자동 실행한다. 파일 쓰기는 이미 워크스페이스 containment 가 지키고,
     // 셸의 위험은 그 containment 밖으로 나가는 명령이다 — 그게 정확히 이 목록이다.
-    if (isDestructiveCommand(command)) {
+    // CGP-AGENT-R-005 verify F1-B / verify 2 F2 — a link is how a write that looks inside lands outside. A plainly
+    // readable `ln` whose target is outside the work folder (or cannot be decided) is refused; any other
+    // link-making command gets the strong confirm. The write gates' resolver is the real defence.
+    const link = linkCommandVerdict(command, workspaceRoot, canon);
+    if (link?.decision === "deny") {
+      return denyVerdict("path_outside_workspace", link.reason, toolName, audience, LINK_OUTSIDE_REASON);
+    }
+    // A link-making tool anywhere, or a command this layer cannot read, gets the strong confirm (fail closed).
+    if (link?.decision === "ask" || shellUnreadable(command) || isDestructiveCommand(command)) {
       return { decision: "ask", destructive: true };
     }
     return { decision: "allow" };
