@@ -37,6 +37,7 @@ import issuerHtml from "./ui/issuer.html";
 import boardHtml from "./ui/board.html";
 // @ts-ignore — bundled as text by wrangler rules.
 import authoringHtml from "./ui/authoring.html";
+import { INSTRUCTION_DIFF_SCRIPT } from "./lib/instruction-diff.ts";
 // @ts-ignore — bundled as text by wrangler rules.
 import manageHtml from "./ui/manage.html";
 // @ts-ignore — bundled as text by wrangler rules.
@@ -70,7 +71,9 @@ app.get("/console", () => page(consoleHtml));
 app.get("/start", () => page(startHtml));
 app.get("/issuer", () => page(issuerHtml));
 app.get("/board", () => page(boardHtml));
-app.get("/authoring", () => page(authoringHtml));
+// The confirm step's instruction diff is a pure helper shared with the tests; it is inlined in place of its marker.
+const authoringPage = (authoringHtml as unknown as string).replace("/*@instruction-diff*/", () => INSTRUCTION_DIFF_SCRIPT);
+app.get("/authoring", () => page(authoringPage));
 app.get("/manage", () => page(manageHtml));
 app.get("/budgets", () => page(budgetsHtml));
 app.get("/sharing", () => page(sharingHtml));

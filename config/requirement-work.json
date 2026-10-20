@@ -279,6 +279,7 @@
         "SAVE-01",
         "VER-01",
         "VER-02",
+        "VER-03",
         "WEB-01",
         "WEB-02",
         "WEB-03",
@@ -290,7 +291,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "768aeca0ea452e8d00a275bf5630cc915f8f54b5a865f37d3c9d26113256420c",
+      "sha256": "8cc6bf5e5a60e33676dbe5babe7042c14743211507574e70b81ceb8081419e02",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -1232,7 +1233,8 @@
           "ids": [
             "RUN-01",
             "RUN-02",
-            "VER-02"
+            "VER-02",
+            "VER-03"
           ]
         }
       ],
