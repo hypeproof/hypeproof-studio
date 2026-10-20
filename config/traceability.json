@@ -6344,6 +6344,33 @@
       ]
     },
     {
+      "id": "ST-IMP-DENIAL-SOURCE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/denialSource.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-DENIAL-SOURCE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-IMP-DENIAL-SOURCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/denial-source.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-IME-GUARD",
       "stage": "implementation",
       "owner": "jayleekr",

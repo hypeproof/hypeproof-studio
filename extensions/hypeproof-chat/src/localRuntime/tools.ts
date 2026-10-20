@@ -8,6 +8,8 @@ import {
   type CoachToolAction,
   type SdkActivity,
 } from "../sdkCoachHelpers.ts";
+import { denialFor, denialToolText, toolFeatureName } from "../denialSource.ts";
+import { profileAudience } from "../seatVocabulary.ts";
 
 const LIMIT = 200_000;
 const schema = (properties: Record<string, unknown>, required: string[]) => ({
@@ -64,17 +66,18 @@ export function workspaceTools(args: {
   activity?: (a: SdkActivity) => void;
 }) {
   const permitted = permittedToolsFor(args.profile);
+  const audience = profileAudience(args.profile);
   const definitions = DEFINITIONS.filter((t) => permitted.includes(t.name));
   let queue: Promise<unknown> = Promise.resolve();
   async function execute(name: string, raw: unknown): Promise<string> {
     const id = randomUUID();
     const input = raw as Record<string, unknown>;
-    if (
-      !input ||
-      typeof input.file_path !== "string" ||
-      !definitions.some((t) => t.name === name)
-    )
-      throw Error("이 수업에서 사용할 수 없는 파일 도구입니다.");
+    // REQ-STUDIO-DENIAL-SOURCE — the two refusals have different sources: an ungranted
+    // tool is the lesson setting; a call without a path is malformed (source unknown).
+    if (!definitions.some((t) => t.name === name))
+      throw Error(denialToolText(denialFor("profile_tool_not_granted", { feature: toolFeatureName(name) }), audience));
+    if (!input || typeof input.file_path !== "string")
+      throw Error(denialToolText(denialFor("malformed_call", { feature: toolFeatureName(name), reason: "파일 경로가 비어 있었어요" }), audience));
     const file = path.resolve(args.cwd, input.file_path);
     const root = await canonical(path.resolve(args.cwd));
     const gate = async () => {
@@ -85,6 +88,7 @@ export function workspaceTools(args: {
         input: { ...input, file_path: actual },
         permittedTools: permitted,
         workspaceRoot: root,
+        audience,
       });
       if (verdict.decision === "deny") throw Error(verdict.friendly);
       return actual;

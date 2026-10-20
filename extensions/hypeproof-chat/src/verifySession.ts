@@ -21,6 +21,8 @@
 //   5. "검증됨" only for a version with an all-pass report bound to it (CR-81).
 
 import { randomUUID } from "node:crypto";
+import { denialToolText, lessonFeatureOff } from "./denialSource.ts";
+import type { SeatAudience } from "./seatVocabulary.ts";
 import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observation";
 import {
   CRITERIA_MAX,
@@ -64,6 +66,8 @@ export interface VerifyRecorderPort {
 
 export interface VerifyHostPorts {
   switchOn(): boolean;
+  /** Seat wording for the switch-off copy (REQ-STUDIO-DENIAL-SOURCE). Default classroom. */
+  audience?(): SeatAudience;
   recorder(): Promise<VerifyRecorderPort | null>;
   /** The preview entry page (live server URL), or null when the preview is off. */
   startUrl(): string | null;
@@ -90,7 +94,6 @@ const REFUSAL: Record<string, string> = {
   unconfirmed_ai_criterion: "코치가 제안한 조건은 내가 확인해야 쓸 수 있어요. '이대로 쓰기'를 누르거나 고쳐 써 주세요.",
   missing_adopted_from: "코치 제안을 확인하지 못했어요. 다시 골라 주세요.",
   duplicate_criterion: "같은 조건이 두 번 있어요.",
-  switch_off: "지금 수업에서는 제품 테스트를 쓸 수 없어요.",
   no_record: "이 수업에서는 테스트 기록을 남길 수 없어 시작하지 않았어요.",
   no_preview: "먼저 미리보기를 켜야 테스트할 수 있어요.",
   busy: "테스트가 이미 진행 중이에요.",
@@ -106,7 +109,11 @@ const REFUSAL: Record<string, string> = {
   turn_running: "코치가 답하는 중이에요. 답이 끝난 뒤에 다시 눌러 주세요.",
   record_failed: "조건을 기록하지 못해 테스트를 시작하지 않았어요. 다시 시도해 주세요.",
 };
-export const refusalText = (code: string): string => REFUSAL[code] ?? `처리하지 못했어요 (${code}).`;
+/** `switch_off` is the served switch, a lesson setting (REQ-STUDIO-DENIAL-SOURCE). */
+export const refusalText = (code: string, audience?: SeatAudience): string =>
+  code === "switch_off" ? lessonFeatureOff("제품 테스트", audience) : REFUSAL[code] ?? `처리하지 못했어요 (${code}).`;
+/** The same switch-off refusal as a coach-facing tool result: tagged with its source. */
+const switchOffToolText = (audience?: SeatAudience): string => denialToolText({ source: "lesson", feature: "제품 테스트" }, audience);
 
 export class VerifySession {
   private run: ActiveRun | null = null;
@@ -210,7 +217,7 @@ export class VerifySession {
 
   /** `verify_propose_criteria` from the coach: drafts the student must confirm (SX-14, HC-04). */
   async propose(input: Record<string, unknown>): Promise<ToolAnswer> {
-    if (!this.ports.switchOn()) return { isError: true, text: refusalText("switch_off") };
+    if (!this.ports.switchOn()) return { isError: true, text: switchOffToolText(this.ports.audience?.()) };
     const raw = input.criteria;
     let list: unknown = raw;
     if (typeof raw === "string") {
@@ -240,7 +247,7 @@ export class VerifySession {
    * the preview, record the verdict, and answer the coach with it (CR-13, CR-15).
    */
   async runTool(input: Record<string, unknown>): Promise<ToolAnswer> {
-    if (!this.ports.switchOn()) return { isError: true, text: refusalText("switch_off") };
+    if (!this.ports.switchOn()) return { isError: true, text: switchOffToolText(this.ports.audience?.()) };
     if (this.retesting) return { isError: true, text: refusalText("busy") };
     const run = this.run;
     if (!run) return { isError: true, text: `진행 중인 테스트가 없어요. 학생이 "테스트 시작"을 눌러야 ${VERIFY_TOOL}을 쓸 수 있어요.` };
@@ -454,7 +461,7 @@ export class VerifySession {
           .map((o) => verificationReport(events, o.run_id)?.criteria.find((c) => c.id === o.id))
           .filter((c): c is NonNullable<typeof c> => !!c)
       : [];
-    const reason = !on ? refusalText("switch_off") : !rec ? refusalText("no_record") : !this.ports.startUrl() ? refusalText("no_preview") : null;
+    const reason = !on ? refusalText("switch_off", this.ports.audience?.()) : !rec ? refusalText("no_record") : !this.ports.startUrl() ? refusalText("no_preview") : null;
     return { available: on && !!rec, reason, version, verification, report, held, run: this.run, proposals: [...this.proposals], running: this.running, notice: this.notice };
   }
 

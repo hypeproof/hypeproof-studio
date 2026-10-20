@@ -19,6 +19,7 @@ import { referenceCaptureMetadata, referenceCaptureText, type ReferenceCapture }
 //
 // Provider-neutral by construction (CR-03): plain data in and out, no model SDK types.
 
+import { denialToolText } from "./denialSource.ts";
 import { buildAxSnapshot, safeNavigateUrl } from "./browserControlHelpers.ts";
 
 export interface CdpLike {
@@ -1082,7 +1083,7 @@ export class CrExecutor {
     let target: string | null = null;
     if (name === "browser_navigate") {
       target = safeNavigateUrl(String(input.url ?? ""));
-      if (!target) return crFail(`허용되지 않은 주소예요: ${String(input.url ?? "")}`);
+      if (!target) return crFail(denialToolText({ source: "safety", reason: `열 수 없는 주소예요: ${String(input.url ?? "")}` }));
       const v = checkAgentOrigin(target, allowed);
       if (!v.ok) return crFail(v.reason);
     } else {

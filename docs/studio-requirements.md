@@ -746,6 +746,58 @@ Service 집행이 없다는 뜻이다.
 | REQ-M47 | The learner can see what the AI may do on this seat (CGP-AGENT-R-003, extends REQ-M38 and AE-07, 2026-10-19) | The coach rail shows a closed-by-default card "이 수업에서 AI가 할 수 있는 일" with one row per REQ-M38 key (`read · write · shell · subagents · browser · web_search`), each "해요" or "안 해요" with a symbol, never colour alone. Rows are derived from the same profile fields and resolved runtime the host uses to grant tools (`aiCapabilities`), so the card never lists a capability the seat lacks: file and command tools count only on the agent-sdk runtime, proxy browsing comes from `browser_control.enabled`. After an agent-sdk → proxy fallback in the session (REQ-M7) the card follows the proxy runtime; before the first turn it shows the configured runtime. Solo seats (trial, pass, personal) read "여기서 AI가 할 수 있는 일" with no lesson or teacher words (trial diagnosis D3). Not shown to an instructor or in local mode. The approval-preset line waits for DEC-11 | U (`test/ai-can-do.test.tsx`) |
 | REQ-STUDIO-TURN-ID | One `x-hps-turn-id` per user message, on every request of that message (open-trial svc-turn-allowance contract) | The host mints one UUID per user message (`chatPanelProvider` `streamId`) and every model request of that message carries it as `x-hps-turn-id`, on both runtimes: agent-sdk puts it in `ANTHROPIC_CUSTOM_HEADERS`, which is fixed for the CLI process of the turn, so tool steps, the CLI's automatic retries (529/5xx) and its side calls share it; proxy passes it on the plain call and on every browser-loop step; an SDK→proxy fallback keeps the turn's id. The next user message gets a new id. A learner-pressed retry of a failed message is a new turn with a new id, because the Service already closes a lesson-bound turn id (`lesson_turn_closed`) when the host ends the turn; the open-trial design charges no turn for a failed attempt, so this does not double-charge. The grammar is the Service's `validTurnId` (`^[a-zA-Z0-9_-]{1,128}$`) through one pure helper (`proxyClientHelpers.clientTurnIdHeader`); a malformed id is dropped rather than sent, since the Service refuses it as `invalid_turn_id`. The trial allowance itself is stricter: with `HPS_TRIAL_TURN_ALLOWANCE` on, a free-trial seat accepts only a UUID-shaped id (`NATIVE_TURN_ID_PATTERN` `^[a-f0-9-]{36}$`, else 400 `invalid_trial_turn_id`), so the host must keep minting `crypto.randomUUID()` — the smoke locks both the minting site and that UUIDs pass both grammars. The header predates this row (request settings, lesson-turn admission and budget jobs already join on it); the Service counts distinct ids for the trial allowance only behind its own default-off `HPS_TRIAL_TURN_ALLOWANCE` flag, so the App needs no flag. Not claimed: the header is a client claim, never an authority — a modified client can reuse an id, which the Service's per-turn attempt guard and currency ceiling bound | U + smoke (`test/turn-id-header.smoke.mjs` — real Agent SDK CLI against a local gateway over a 529 retry and a tool loop, proxy tool loop, malformed-id negative controls, host wiring lock) |
 
+`REQ-STUDIO-DENIAL-SOURCE` (extends [AE-12](requirements/learning-agent-experience.md) and REQ-M17;
+CGP-AGENT-R-007 / REQ-CGP-AGENT-08, 2026-10-20): every denied tool call or disabled feature names
+who decided it, in the learner's words, with one next step. One pure module,
+`extensions/hypeproof-chat/src/denialSource.ts`, holds the five sources, the copy builder and the
+classifier (`classifyDenial`: a fixed cause table; any other value is unknown). Copy:
+수업 설정 "이 수업에서는 {기능}을 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요." (solo seats,
+`profileAudience`: "지금 활동에서는 … 다른 방법으로 이어서 해 볼 수 있어요." with no teacher word);
+안전 규칙 "안전을 위해 Studio가 막았어요 — {이유}. 궁금하면 선생님께 물어봐 주세요." (solo: "‘문제 신고하기’로 알려
+주세요"; the next step never invites a workaround, and the coach-facing text replaces it with "안전 규칙이라
+우회하는 방법을 찾지 말고, 막힌 이유를 학생에게 그대로 알려 주세요.");
+이용권 선택 "지금 고른 이용권에서는 {기능}을 쓸 수 없어요. 다른 이용권을 고르거나 이 기능 없이 이어서 해 주세요." when the
+selected access choice removed it (`accessProfile` now records the REQ-M38 keys it removed under a symbol,
+read by `accessRemovedFeatures`; a key the profile itself had off stays 수업 설정);
+앱 버전/환경 "이 기능은 지금 앱에서 쓸 수 없어요 — {이유}. 앱을 업데이트하거나 선생님께 알려 주세요." (solo:
+"‘문제 신고하기’로 알려 주세요"); and 확인 안 됨 "지금은 {기능}을 쓸 수 없어요 — {이유}. 계속되면 …" for a site that
+cannot tell, so no site guesses a category. A backstop that does not know the seat uses `neutral`
+wording (no teacher word). Coach-facing tool results carry the same Korean label as a
+tag ("[수업 설정] …"), and the SDK shows that text in the learner's tool log line. Built, by site:
+the tool gate `evaluateSdkToolUse` (every deny branch now returns `source`: profile not granted →
+수업 설정; never-for-learners built-ins, path outside the workspace, browser_open URL policy, subagent
+outside the catalog, and publish_site/consult/site_check on a minor seat (`isMinorProfile`) → 안전 규칙; a tool whose feature
+key the selected 이용권 removed → 이용권 선택; consult/site_check not bound on an adult seat → 확인 안 됨;
+unclassified tool drift → 앱 버전/환경; an empty shell command → 확인 안 됨), with the seat's wording passed
+from `sdkCoach` canUseTool; the local runtime file tools (ungranted → 수업 설정, missing path → 확인 안 됨);
+the served lesson switches in `skillSession`, `reviewSession`, `memorySession`, `evidenceSession`,
+`publishSession`, `verifySession` (including its coach tool results), `browserControl.pickElement` and
+the chat panel's commands and panels for 제품 테스트, 사용자 테스트 공개, 실험 증거, 프로젝트 기억, the
+learning wiki, 덱 초안, 커리큘럼 스킬, 주간 리뷰 and 요소 고르기; web-search availability in `turnTools`
+(local subscription or instructor connection and non-SDK runtime → 앱 버전/환경 with no teacher sentence,
+removed by the selected 이용권 → 이용권 선택, profile without `web_search` → 수업 설정, no profile yet →
+확인 안 됨; the `toolsForTurn` backstop → 확인 안 됨) and the composer's fallback; the approval tier's path check,
+image-edit asset paths, `runBrowserOpen`, `browserControl` and `experimentBrowser` navigate URL
+refusals (안전 규칙); `browserMcp` tools the host did not wire (앱 버전/환경); and 확인 안 됨 for a
+Service 404 on the weekly review or gallery publish, element pick before the profile arrives, the
+director review overview, and the consult codes `orchestrator_off` / `agent_model_unavailable` (each
+covers causes of different sources). Not built: the SDK-missing notices in `sdkRequiredHelpers` keep
+their pinned wording (they already name the runtime and a next step); `crBrowserOpenRefusal` /
+`checkAgentOrigin` reasons mix a scope refusal with "preview not started" and are not tagged; the
+consult codes are not split per source; `imageEditClient` refusals (no seat context there, seat-neutral
+wording kept); voice popup, free-start `app_too_old`, update-checker and publish-contract messages;
+Service moderation text (not classified client-side); the learner's own modal "Deny" (not a source
+denial); and the DES-CGP-AGENT-08 inline timeline row with its one action button and `aria-live`
+(denials still show as the tool-log failure line or a page notice). Tests:
+`test/denial-source.smoke.mjs` (the cause table and unknown for anything else, each source's copy in
+classroom, solo and neutral wording, web search removed by the 이용권 vs off in the profile with negative
+controls, the safety coach rule, one next step, no English identifier in learner copy, the tag, every gate
+branch's source, and a source scan proving none of the 27 replaced sentences remains in `src/` or
+`webview-ui/src/`, with negative and positive controls); updated to the new copy: `cr-verify`,
+`cr-switch`, `cr-review`, `cr-memory`, `cr-skills`, `publish-panel`, `local-runtime`, and
+`orchestrator-switch` (A4 base digests re-taken: mapping each tagged deny message back to its old
+sentence reproduces all ten previous digests, so only the deny text changed).
+
 ## R. 음성 capability 계측 (#896 / #897 V0)
 
 계획된 팝업 UX (#939): [VO-36–47](requirements/voice-conversation.md) · [VO-T36–47](testing/voice-conversation.md). 큰 패널/작은 컨트롤과 관측 기반 움직임은 요구사항이며 현재 구현 완료를 뜻하지 않는다.

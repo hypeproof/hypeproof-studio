@@ -46,6 +46,7 @@ import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
 import { isDestructiveCommand } from "./shellPolicy.ts";
+import { denialFor, denialToolText, toolFeatureName, type DenialCause, type DenialSource } from "./denialSource.ts";
 
 /**
  * The only permission mode a coach session runs in. It must be passed
@@ -2740,14 +2741,58 @@ export type SdkToolVerdict =
   // never classified (isClassifiedSdkToolName === false) — i.e. possible Agent
   // SDK tool drift, not a routine profile/policy denial. The caller logs the
   // two at different volume/severity; the deny itself is identical.
-  | { decision: "deny"; reason: string; friendly: string; drift?: boolean };
+  //
+  // `source` (REQ-STUDIO-DENIAL-SOURCE): who decided the deny — the lesson setting, a
+  // platform safety rule, or this app/runtime. `friendly` is the tagged learner copy the
+  // SDK returns to the coach as the tool_result (and the tool log shows).
+  | { decision: "deny"; reason: string; friendly: string; source: DenialSource; drift?: boolean };
 
-/** Student-facing copy for a policy deny (tool not granted / never grantable). */
-export const TOOL_DENIED_FRIENDLY = "이 도구는 지금 수업에서는 사용할 수 없어요.";
-/** Student-facing copy for a workspace path-escape deny. */
-export const PATH_ESCAPE_FRIENDLY = "작업 폴더 밖의 파일에는 접근할 수 없어요.";
-/** Student-facing copy for a browser_open URL the policy rejects (#282 P2 slice 2). */
-export const URL_POLICY_FRIENDLY = "이 주소는 열 수 없어요.";
+/** Reasons in the learner's words for the platform-safety denies (the copy builder adds the frame). */
+export const PATH_ESCAPE_REASON = "작업 폴더 밖의 파일이에요";
+export const URL_POLICY_REASON = "열 수 없는 주소예요";
+export const NEVER_FOR_LEARNERS_REASON = "Studio에서는 학생에게 주지 않는 도구예요";
+export const SUBAGENT_CATALOG_REASON = "Studio가 준비한 도우미만 부를 수 있어요";
+export const TOOL_DRIFT_REASON = "이 앱이 아직 모르는 도구예요";
+export const MINOR_CLOSED_REASON = "어린이 학생에게는 열지 않는 도구예요";
+/**
+ * MCP tools the minor posture withholds whatever the profile says (permittedMcpToolsFor:
+ * publish via sitePublishAllowed(…, minor), consult/site_check via orchestratorBindingFor).
+ */
+const MINOR_CLOSED_MCP_TOOLS: ReadonlySet<string> = new Set([MCP_PUBLISH_SITE, MCP_CONSULT, MCP_SITE_CHECK]);
+
+/**
+ * The REQ-M38 feature key whose grant carries this tool (the keys accessProfile narrows), or
+ * undefined for tools no such key grants.
+ */
+export function toolFeatureKey(toolName: string): string | undefined {
+  const n = toolName.toLowerCase();
+  if ((SDK_READ_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "read";
+  if ((SDK_WRITE_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "write";
+  if (n === "bash" || n === "powershell") return "shell";
+  if ((SDK_AGENT_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "subagents";
+  if (n === "websearch" || n === "webfetch") return "web_search";
+  if (([...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS] as readonly string[]).includes(toolName)) return "browser";
+  return undefined;
+}
+
+/** One deny verdict: the classifier picks the source from the observed cause. */
+function denyVerdict(
+  cause: DenialCause | "malformed_call" | "orchestrator_unbound",
+  reason: string,
+  toolName: string,
+  audience: SeatAudience | undefined,
+  learnerReason?: string,
+  drift?: boolean,
+): SdkToolVerdict {
+  const d = denialFor(cause, { feature: toolFeatureName(toolName), ...(learnerReason ? { reason: learnerReason } : {}) });
+  return {
+    decision: "deny",
+    reason,
+    friendly: denialToolText(d, audience),
+    source: d.source,
+    ...(drift ? { drift: true } : {}),
+  };
+}
 
 /**
  * Is `target` inside `workspaceRoot`? Relative targets resolve AGAINST the
@@ -2861,19 +2906,28 @@ export function evaluateSdkToolUse(args: {
    * default: identity (unit tests stay fs-free).
    */
   canonicalize?: (p: string) => string;
+  /** Seat wording for the learner copy (solo seats get no teacher sentence). Default classroom. */
+  audience?: SeatAudience;
+  /**
+   * The seat is a minor (isMinorProfile). Only used to name the source of a Gate 1 deny:
+   * the tools the minor posture closes whatever the lesson says are a safety rule, not a
+   * lesson setting. It never changes the verdict itself.
+   */
+  minor?: boolean;
+  /**
+   * REQ-M38 feature keys the selected access choice (이용권) removed (accessRemovedFeatures).
+   * Only names the source of a Gate 1 deny; never changes the verdict.
+   */
+  accessRemoved?: ReadonlySet<string>;
 }): SdkToolVerdict {
-  const { toolName, input, permittedTools, workspaceRoot } = args;
+  const { toolName, input, permittedTools, workspaceRoot, audience } = args;
   const canon = args.canonicalize ?? ((p: string) => p);
 
   // Gate 0 (A2) — built-ins that never run for learners, whatever the permitted
   // set says. A routine denial (classified), with the reason logged host-side.
   const neverReason = sdkDeniedToolReason(toolName);
   if (neverReason !== undefined) {
-    return {
-      decision: "deny",
-      reason: `tool "${toolName}" is never available to learners: ${neverReason}`,
-      friendly: TOOL_DENIED_FRIENDLY,
-    };
+    return denyVerdict("never_for_learners", `tool "${toolName}" is never available to learners: ${neverReason}`, toolName, audience, NEVER_FOR_LEARNERS_REASON);
   }
 
   // Gate 1 — the profile's permitted set. Bash/WebFetch/anything not granted
@@ -2886,18 +2940,21 @@ export function evaluateSdkToolUse(args: {
     // dropping it. Both fail closed, but they are flagged apart so the caller
     // can surface drift loudly instead of burying it in the routine stream.
     if (!isClassifiedSdkToolName(toolName)) {
-      return {
-        decision: "deny",
-        drift: true,
-        reason: `unclassified tool "${toolName}" — the Phase 2 policy matrix has no rule for this name (possible Agent SDK tool drift)`,
-        friendly: TOOL_DENIED_FRIENDLY,
-      };
+      return denyVerdict("tool_drift", `unclassified tool "${toolName}" — the Phase 2 policy matrix has no rule for this name (possible Agent SDK tool drift)`, toolName, audience, TOOL_DRIFT_REASON, true);
     }
-    return {
-      decision: "deny",
-      reason: `tool "${toolName}" is not granted by the cohort profile`,
-      friendly: TOOL_DENIED_FRIENDLY,
-    };
+    if (args.minor === true && MINOR_CLOSED_MCP_TOOLS.has(toolName)) {
+      return denyVerdict("minor_protection", `tool "${toolName}" is closed to minor seats`, toolName, audience, MINOR_CLOSED_REASON);
+    }
+    const feature = toolFeatureKey(toolName);
+    if (feature && args.accessRemoved?.has(feature)) {
+      return denyVerdict("access_choice_narrowed", `tool "${toolName}" (${feature}) was removed by the selected access choice`, toolName, audience);
+    }
+    // consult/site_check follow the served roster, the host binding and the Service: the
+    // gate cannot tell which withheld them (consultTool treats the same state as unknowable).
+    if (toolName === MCP_CONSULT || toolName === MCP_SITE_CHECK) {
+      return denyVerdict("orchestrator_unbound", `tool "${toolName}" is not bound for this turn`, toolName, audience, "도우미 구성을 확인하지 못했어요");
+    }
+    return denyVerdict("profile_tool_not_granted", `tool "${toolName}" is not granted by the cohort profile`, toolName, audience);
   }
 
   const name = toolName.toLowerCase();
@@ -2919,11 +2976,8 @@ export function evaluateSdkToolUse(args: {
   if (SHELL_TOOLS.has(name)) {
     const command = firstString(input, ["command"]) ?? "";
     if (!command.trim()) {
-      return {
-        decision: "deny",
-        reason: "shell call carried no command string",
-        friendly: TOOL_DENIED_FRIENDLY,
-      };
+      // A malformed call: no rule decided it, so the source is unknown (never a guess).
+      return denyVerdict("malformed_call", "shell call carried no command string", toolName, audience, "명령이 비어 있었어요");
     }
     // 되돌리기 어려운 명령만 묻는다 (원장 결정 2026-07-27).
     //
@@ -2950,11 +3004,7 @@ export function evaluateSdkToolUse(args: {
     // (a general-purpose agent, a hallucinated name) dies here, fail closed.
     const subagentType = firstString(input, ["subagent_type"]) ?? "";
     if (!Object.prototype.hasOwnProperty.call(SUBAGENT_DEFINITIONS, subagentType)) {
-      return {
-        decision: "deny",
-        reason: `subagent_type "${subagentType || "(empty)"}" is not in the HypeProof subagent catalog`,
-        friendly: TOOL_DENIED_FRIENDLY,
-      };
+      return denyVerdict("subagent_not_in_catalog", `subagent_type "${subagentType || "(empty)"}" is not in the HypeProof subagent catalog`, toolName, audience, SUBAGENT_CATALOG_REASON);
     }
     // Delegation → ALWAYS the approval modal (kind "delegateAgent") — the
     // student's approve/deny IS the delegation_judgment pedagogy. The
@@ -2984,11 +3034,7 @@ export function evaluateSdkToolUse(args: {
     const raw = input && typeof input === "object" ? (input as Record<string, unknown>).url : null;
     const url = browserOpenUrl(raw);
     if (!url) {
-      return {
-        decision: "deny",
-        reason: `browser_open URL rejected by policy: ${url || "(empty)"}`,
-        friendly: URL_POLICY_FRIENDLY,
-      };
+      return denyVerdict("url_policy", `browser_open URL rejected by policy: ${url || "(empty)"}`, toolName, audience, URL_POLICY_REASON);
     }
     // 자기 워크스페이스를 보는 것은 바깥 행위가 아니다. live_preview_start 는
     // 이미 자동 허용인데(바로 아래), 그렇게 띄운 서버를 **열어서 보는 것**에
@@ -3048,11 +3094,7 @@ export function evaluateSdkToolUse(args: {
           ? canon(candidate)
           : candidate; // relative resolves against the (canonical) root inside isPathContained
         if (!isPathContained(canonRoot, canonCandidate)) {
-          return {
-            decision: "deny",
-            reason: `path escapes the workspace: ${candidate}`,
-            friendly: PATH_ESCAPE_FRIENDLY,
-          };
+          return denyVerdict("path_outside_workspace", `path escapes the workspace: ${candidate}`, toolName, audience, PATH_ESCAPE_REASON);
         }
       }
     }
@@ -3065,10 +3107,5 @@ export function evaluateSdkToolUse(args: {
 
   // Permitted but unclassified — should be unreachable; fail closed. If it ever
   // fires, the permitted set granted a name no gate handles: also drift (#375).
-  return {
-    decision: "deny",
-    drift: true,
-    reason: `unrecognized tool "${toolName}"`,
-    friendly: TOOL_DENIED_FRIENDLY,
-  };
+  return denyVerdict("tool_drift", `unrecognized tool "${toolName}"`, toolName, audience, TOOL_DRIFT_REASON, true);
 }

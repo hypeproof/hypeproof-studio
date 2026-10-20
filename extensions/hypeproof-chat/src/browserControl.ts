@@ -1,5 +1,6 @@
 import { captureReferenceScreenshot, referenceCaptureText } from "./referenceDesign.ts";
 import * as vscode from "vscode";
+import { denialCopy, denialToolText, lessonFeatureOff } from "./denialSource.ts";
 import { CdpSession } from "./cdpSession";
 import { safeNavigateUrl, quadCenter, buildAxSnapshot } from "./browserControlHelpers";
 import { CrExecutor, checkAgentOrigin, type CrHooks, type Observation } from "./experimentBrowser";
@@ -138,7 +139,12 @@ export class BrowserControl {
    */
   async pickElement(opts: { root: string | null; timeoutMs?: number }): Promise<ElementContext> {
     const cr = this.crExecutor();
-    if (!cr || !this.crOptions) throw new Error("지금 수업에서는 요소 고르기를 쓸 수 없어요.");
+    // REQ-STUDIO-DENIAL-SOURCE — no CR options means this control was built without the
+    // Experiment Browser hooks (source unknown); options present but no executor means the
+    // served switch is off (a lesson setting). The host checks the switch first with the
+    // seat's wording; this backstop does not know the seat, so it uses the neutral wording.
+    if (!this.crOptions) throw new Error(denialCopy({ source: "unknown", feature: "요소 고르기" }, "neutral"));
+    if (!cr) throw new Error(lessonFeatureOff("요소 고르기", "neutral"));
     const url = this.currentTab()?.url;
     if (!url) throw new Error("열린 미리보기 탭이 없어요. 먼저 미리보기를 여세요.");
     const scope = checkAgentOrigin(url, this.crOptions.allowedOrigins());
@@ -247,7 +253,7 @@ export class BrowserControl {
 
   private async navigate(rawUrl: string): Promise<BrowserToolResult> {
     const url = safeNavigateUrl(rawUrl);
-    if (!url) return fail(`허용되지 않은 주소예요: ${rawUrl} (http/https/localhost/file만 가능)`);
+    if (!url) return fail(denialToolText({ source: "safety", reason: `열 수 없는 주소예요: ${rawUrl}` }, undefined, "(http/https/localhost/file만 가능)"));
     await this.openOrNavigate(url);
     this.refs.clear(); // navigation invalidates old refs
     const active = this.currentTab();

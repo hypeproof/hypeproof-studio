@@ -13,6 +13,7 @@
 // SdkUnavailableError so the caller falls back to the proxy path instead of
 // surfacing a raw error to the student (REQ-M7).
 
+import { accessRemovedFeatures } from './accessClient.ts';
 import { sdkPromptWithImages } from "./visionInput.ts";
 import { requireTurnTools, toolsForTurn, turnToolMode, turnToolsAvailability, userTextForTurn, type TurnToolMode } from './turnTools';
 import { SdkWebCitations } from './sdkWebCitations';
@@ -56,6 +57,7 @@ import {
   buildSdkQueryOptions,
   consumeSdkStream,
   evaluateSdkToolUse,
+  isMinorProfile,
   sdkProviderErrorFriendly,
   SDK_STALL_FRIENDLY,
   SDK_STREAM_STALL_MS,
@@ -567,7 +569,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     orchestrator.on
       ? { model: args.model, systemPrompt: args.systemPrompt, orchestrator: orchestrator.roster }
       : { model: args.model, systemPrompt: args.systemPrompt },
-  ), mode);
+  ), mode, profileAudience(args.profile));
   const webCitations = new SdkWebCitations(opts.permittedTools);
   const orchestratorTurn: OrchestratorTurn | null =
     orchestrator.on && orchestratorHost && opts.orchestrator
@@ -754,6 +756,11 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         // containment and EVERY coach write auto-denies. Twin of
         // chatPanelProvider.canonicalizeForCompare.
         canonicalize: canonicalizeFsPath,
+        // REQ-STUDIO-DENIAL-SOURCE — solo seats get no teacher sentence in the deny copy.
+        audience: profileAudience(args.profile),
+        minor: isMinorProfile(args.profile),
+        // Feature keys the selected 이용권 removed: those denies are 이용권 선택, not 수업 설정.
+        accessRemoved: accessRemovedFeatures(args.profile),
       });
       if (verdict.decision === "deny") {
         if (verdict.drift) {
@@ -771,7 +778,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
               `handle this tool, or leave it denied deliberately.`,
           );
         } else {
-          console.warn(`[coach] tool denied: ${name} — ${verdict.reason}`);
+          console.warn(`[coach] tool denied (${verdict.source}): ${name} — ${verdict.reason}`);
         }
         decision(false);
         return { behavior: "deny" as const, message: verdict.friendly };

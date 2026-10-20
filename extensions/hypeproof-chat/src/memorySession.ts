@@ -7,11 +7,15 @@
 // state), the newest Project the student is a member of is read, never created. The student's
 // own writes are a decision (CR-38, author "user") and the version diff (CR-77).
 
+import { lessonFeatureOff } from "./denialSource.ts";
+import type { SeatAudience } from "./seatVocabulary.ts";
 import { curriculumRequest } from "./galleryPublish.ts";
 import { decisionFormProblems, type DecisionForm, type MemoryAnswer, type MemoryView, type VersionDiffView } from "./memoryView.ts";
 
 export interface MemoryPorts {
   switchOn(): boolean;
+  /** Seat wording for the switch-off copy (REQ-STUDIO-DENIAL-SOURCE). Default classroom. */
+  audience?(): SeatAudience;
   token(): Promise<string | null>;
   base(): string;
   fetchImpl?: typeof fetch;
@@ -27,7 +31,8 @@ export const MEMORY_MESSAGES: Record<string, string> = {
   same_version: "서로 다른 두 버전을 골라 주세요.",
 };
 
-const OFF = "이 수업에서는 프로젝트 기억을 쓸 수 없어요.";
+/** The served switch is off: a lesson setting (REQ-M38 features). */
+const OFF = (a?: SeatAudience) => lessonFeatureOff("프로젝트 기억", a);
 const SIGN_IN = "참여 코드를 먼저 입력해 주세요.";
 const msg = (r: { code: string; message: string; status?: number }) => MEMORY_MESSAGES[r.code] ?? (r.message.startsWith("공개하지 못했어요") ? `프로젝트 기억을 읽지 못했어요 (${r.status ?? "?"})` : r.message);
 
@@ -55,7 +60,7 @@ export class MemorySession {
   /** The panel's view, read now. */
   async view(): Promise<MemoryView> {
     const none = (notice: string): MemoryView => ({ available: false, memory: null, diff: null, notice });
-    if (!this.ports.switchOn()) return none(OFF);
+    if (!this.ports.switchOn()) return none(OFF(this.ports.audience?.()));
     const client = await this.client();
     if (!client) return none(SIGN_IN);
     const projectId = await this.project(client);
@@ -68,7 +73,7 @@ export class MemorySession {
 
   /** CR-77 — two versions of the Project, compared by the Service. */
   async compare(from: string, to: string): Promise<{ ok: true } | { ok: false; message: string }> {
-    if (!this.ports.switchOn()) return { ok: false, message: OFF };
+    if (!this.ports.switchOn()) return { ok: false, message: OFF(this.ports.audience?.()) };
     const client = await this.client();
     if (!client) return { ok: false, message: SIGN_IN };
     const projectId = await this.project(client);
@@ -83,7 +88,7 @@ export class MemorySession {
   async decide(form: DecisionForm): Promise<{ ok: true } | { ok: false; message: string }> {
     const problems = decisionFormProblems(form);
     if (problems.length) return { ok: false, message: problems.join(" ") };
-    if (!this.ports.switchOn()) return { ok: false, message: OFF };
+    if (!this.ports.switchOn()) return { ok: false, message: OFF(this.ports.audience?.()) };
     const client = await this.client();
     if (!client) return { ok: false, message: SIGN_IN };
     const projectId = await this.project(client);

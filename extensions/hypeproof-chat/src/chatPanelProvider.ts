@@ -164,6 +164,7 @@ import {
   shellApprovalTitle,
 } from "./coachIdentity.ts";
 import { isFreeSeat, profileAudience, type SeatAudience } from "./seatVocabulary.ts";
+import { classifyDenial, denialCopy, lessonFeatureOff } from "./denialSource.ts";
 // A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels,
 // the seat's session and the host arguments runSdkCoach takes.
 import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs } from "./orchestratorSurfaces";
@@ -394,6 +395,9 @@ export function orchestratorHostArgs(deps: {
     learnerGoal: deps.learnerGoal,
   };
 }
+
+/** The director overview did not open: no instructor token, the Service said no, or it did not answer (source unknown). */
+const DIRECTOR_REVIEW_UNAVAILABLE = denialCopy({ source: "unknown", feature: "주간 리뷰 디렉터 화면", reason: "강사 토큰이 없거나, 서비스가 이 화면을 열어 주지 않았어요", next: "강사 토큰을 확인한 뒤 다시 열어 보세요" });
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
@@ -1234,6 +1238,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** "Test my product": the session over the record, the preview and the CR executor. */
   private readonly verifySession = new VerifySession({
     switchOn: () => this.isCurriculumRuntimeEnabled(),
+    audience: () => this.getSeatAudience(),
     recorder: () => this.verifyRecorder(),
     startUrl: () => this.liveServer.currentUrl() ?? null,
     allowedOrigins: () => this.crBrowserOptions().allowedOrigins(),
@@ -1313,7 +1318,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CR-12 — the "Test my product" command: re-checks the served switch, then opens the panel. */
   async testMyProduct(): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      this.postPageNotice(refusalText("switch_off"));
+      this.postPageNotice(refusalText("switch_off", this.getSeatAudience()));
       return;
     }
     await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
@@ -1323,7 +1328,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** One verify action from the panel, each behind the served switch (a message can be posted without the panel). */
   private async handleVerifyMessage(msg: { type: "verifyOpen" } | { type: "verifyStart"; requestId: string; criteria: unknown } | { type: "verifyRetest" } | { type: "verifyFix"; requestId: string; criterionId: string; text: string }): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      await this.post({ type: "verifyState", view: null, error: refusalText("switch_off") });
+      await this.post({ type: "verifyState", view: null, error: refusalText("switch_off", this.getSeatAudience()) });
       return;
     }
     if (msg.type === "verifyOpen") return this.postVerifyState();
@@ -1355,6 +1360,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** "사용자 테스트용으로 공개": the session over the preview's files, the record and the Service. */
   private readonly publishSession = new PublishSession({
     switchOn: () => this.isCurriculumRuntimeEnabled(),
+    audience: () => this.getSeatAudience(),
     token: () => this.crProjectMemory.refresh(),
     base: () => curriculumBase(vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1")),
     root: () => this.liveServer.currentRoot() ?? null,
@@ -1387,7 +1393,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CR-17 — the "Publish for user test" command: re-checks the served switch, then opens the panel. */
   async publishTestVersion(): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      this.postPageNotice("이 수업에서는 사용자 테스트 공개를 쓸 수 없어요.");
+      this.postPageNotice(lessonFeatureOff("사용자 테스트 공개", this.getSeatAudience()));
       return;
     }
     await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
@@ -1397,7 +1403,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** One publish action from the panel, each behind the served switch (a message can be posted without the panel). */
   private async handlePublishMessage(msg: { type: "publishOpen"; manifest?: string[] } | { type: "publishSubmit"; form: import("./publishView").PublishForm } | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number } | { type: "publishRevoke"; linkId: string }): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      await this.post({ type: "publishState", view: null, error: "이 수업에서는 사용자 테스트 공개를 쓸 수 없어요." });
+      await this.post({ type: "publishState", view: null, error: lessonFeatureOff("사용자 테스트 공개", this.getSeatAudience()) });
       return;
     }
     if (msg.type === "publishOpen") {
@@ -1420,6 +1426,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** The evidence panel over the same Project the publish panel remembers; reads and writes go to the Service. */
   private readonly evidenceSession = new EvidenceSession({
     switchOn: () => this.isCurriculumRuntimeEnabled(),
+    audience: () => this.getSeatAudience(),
     token: () => this.crProjectMemory.refresh(),
     base: () => curriculumBase(vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1")),
     projectId: () => this.crProjectMemory.projectId(),
@@ -1437,7 +1444,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CR-24–CR-27 — the "실험 증거 보기" command: re-checks the served switch, then opens the panel. */
   async experimentEvidence(): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      this.postPageNotice("이 수업에서는 실험 증거를 쓸 수 없어요.");
+      this.postPageNotice(lessonFeatureOff("실험 증거", this.getSeatAudience()));
       return;
     }
     await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
@@ -1454,7 +1461,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       | { type: "evidenceDelete"; experimentId: string; sessionId?: string },
   ): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      await this.post({ type: "evidenceState", view: null, error: "이 수업에서는 실험 증거를 쓸 수 없어요." });
+      await this.post({ type: "evidenceState", view: null, error: lessonFeatureOff("실험 증거", this.getSeatAudience()) });
       return;
     }
     if (msg.type === "evidenceOpen") return this.postEvidenceState({}, msg.experimentId);
@@ -1483,6 +1490,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** The memory panel over the same Project the publish panel remembers; it reads the Service only, never chat history (CR-36). */
   private readonly memorySession = new MemorySession({
     switchOn: () => this.isCurriculumRuntimeEnabled(),
+    audience: () => this.getSeatAudience(),
     token: () => this.crProjectMemory.refresh(),
     base: () => curriculumBase(vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1")),
     projectId: () => this.crProjectMemory.projectId(),
@@ -1500,7 +1508,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CR-35/CR-36 — the "프로젝트 기억 보기" command: re-checks the served switch, then opens the panel. */
   async ventureMemory(): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      this.postPageNotice("이 수업에서는 프로젝트 기억을 쓸 수 없어요.");
+      this.postPageNotice(lessonFeatureOff("프로젝트 기억", this.getSeatAudience()));
       return;
     }
     await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
@@ -1589,7 +1597,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async runWikiIngest(opts: { ask: boolean; session?: number }): Promise<BrainRun | undefined> {
     const plan = this.learningWikiPlan();
     const name = brainName(plan);
-    if (!this.isLearningWikiEnabled()) return { lines: [`이 수업에서는 ${josa(name, "을", "를")} 쓸 수 없어요.`] };
+    if (!this.isLearningWikiEnabled()) return { lines: [lessonFeatureOff(name, this.getSeatAudience())] };
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) return { lines: ["작업 폴더를 먼저 열어 주세요."] };
     const label = sessionLabel(plan);
@@ -1643,7 +1651,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async runDeckDraft(opts: { ask: boolean }): Promise<BrainRun | undefined> {
     const plan = this.learningWikiPlan();
     const name = brainName(plan);
-    if (!this.isLearningWikiEnabled()) return { lines: ["이 수업에서는 덱 초안을 쓸 수 없어요."] };
+    if (!this.isLearningWikiEnabled()) return { lines: [lessonFeatureOff("덱 초안", this.getSeatAudience())] };
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder || !plan?.deck) return { lines: ["이 수업에는 덱 템플릿이 없어요."] };
     const dir = wikiDir(folder.uri.fsPath, plan);
@@ -1721,6 +1729,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private readonly skillSession = new SkillSession({
     switchOn: () => this.isCurriculumRuntimeEnabled(),
+    audience: () => this.getSeatAudience(),
     token: () => this.crProjectMemory.refresh(),
     base: () => curriculumBase(this.proxyUrl()),
     projectId: () => this.crProjectMemory.projectId(),
@@ -1756,7 +1765,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CR-43 — the "커리큘럼 스킬" command: re-checks the served switch, then opens the panel. */
   async curriculumSkills(): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      this.postPageNotice("이 수업에서는 커리큘럼 스킬을 쓸 수 없어요.");
+      this.postPageNotice(lessonFeatureOff("커리큘럼 스킬", this.getSeatAudience()));
       return;
     }
     await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
@@ -1766,7 +1775,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** One skills action from the panel, behind the served switch (a message can be posted without the panel). */
   private async handleSkillsMessage(msg: { type: "skillsOpen" } | { type: "skillRun"; skill: string; form: import("./skillView").SkillForm }): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      await this.post({ type: "skillsState", view: null, error: "이 수업에서는 커리큘럼 스킬을 쓸 수 없어요." });
+      await this.post({ type: "skillsState", view: null, error: lessonFeatureOff("커리큘럼 스킬", this.getSeatAudience()) });
       return;
     }
     if (msg.type === "skillsOpen") return this.postSkillsState();
@@ -1792,6 +1801,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private readonly reviewSession = new ReviewSession({
     switchOn: () => this.isCurriculumRuntimeEnabled(),
+    audience: () => this.getSeatAudience(),
     token: () => this.crProjectMemory.refresh(),
     directorToken: async () => (await resolveInstructorTokenFromSecrets(this.context.secrets)) ?? null,
     base: () => curriculumBase(this.proxyUrl()),
@@ -1839,7 +1849,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CR-49 — "주간 리뷰" (the student's): re-checks the served switch, then opens the panel. */
   async weeklyReview(): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      this.postPageNotice("이 수업에서는 주간 리뷰를 쓸 수 없어요.");
+      this.postPageNotice(lessonFeatureOff("주간 리뷰", this.getSeatAudience()));
       return;
     }
     await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
@@ -1849,7 +1859,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CR-50, CR-53 — "주간 리뷰 (디렉터)": re-checks the switch through the Service for the issuer token, then opens the overview. */
   async weeklyReviewDirector(): Promise<void> {
     if (!(await this.refreshCrDirectorContext(true))) {
-      this.postPageNotice("이 수업에서는 주간 리뷰를 쓸 수 없어요.");
+      this.postPageNotice(DIRECTOR_REVIEW_UNAVAILABLE);
       return;
     }
     this.reviewSession.select(null);
@@ -1860,7 +1870,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** The student's review actions, behind the served switch (a message can be posted without the panel). */
   private async handleReviewMessage(msg: { type: "reviewOpen"; week?: number } | { type: "reviewPrepare"; week?: number }): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      await this.post({ type: "reviewState", view: null, error: "이 수업에서는 주간 리뷰를 쓸 수 없어요." });
+      await this.post({ type: "reviewState", view: null, error: lessonFeatureOff("주간 리뷰", this.getSeatAudience()) });
       return;
     }
     const week = Number.isInteger(msg.week) ? msg.week : undefined;
@@ -1884,7 +1894,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     msg: { type: "reviewDirectorOpen"; projectId?: string | null; week?: number } | { type: "reviewDecision"; projectId: string; week: number; revision: number; form: import("./reviewView").DirectorDecisionForm },
   ): Promise<void> {
     if (!(await this.refreshCrDirectorContext())) {
-      await this.post({ type: "reviewState", view: null, error: "이 수업에서는 주간 리뷰를 쓸 수 없어요." });
+      await this.post({ type: "reviewState", view: null, error: DIRECTOR_REVIEW_UNAVAILABLE });
       return;
     }
     if (msg.type === "reviewDirectorOpen") {
@@ -1917,7 +1927,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     msg: { type: "memoryOpen" } | { type: "memoryDiff"; from: string; to: string } | { type: "memoryDecision"; form: import("./memoryView").DecisionForm },
   ): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      await this.post({ type: "memoryState", view: null, error: "이 수업에서는 프로젝트 기억을 쓸 수 없어요." });
+      await this.post({ type: "memoryState", view: null, error: lessonFeatureOff("프로젝트 기억", this.getSeatAudience()) });
       return;
     }
     if (msg.type === "memoryOpen") return this.postMemoryState();
@@ -2251,12 +2261,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   async pickElement(): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
-      this.postPageNotice("지금 수업에서는 요소 고르기를 쓸 수 없어요.");
+      this.postPageNotice(lessonFeatureOff("요소 고르기", this.getSeatAudience()));
       return;
     }
     // The switch above already requires a web-app workshop tier; age does not decide it (2026-10-05).
     if (!this.cachedProfile) {
-      this.postPageNotice("지금 수업에서는 요소 고르기를 쓸 수 없어요.");
+      // No served profile yet: the app cannot tell which setting applies (source unknown).
+      this.postPageNotice(denialCopy({ source: "unknown", feature: "요소 고르기", reason: "수업 정보를 아직 받지 못했어요" }, this.getSeatAudience()));
       return;
     }
     if (this.pickInProgress) {
@@ -6864,7 +6875,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const target = (req.payload as { path?: string } | null | undefined)?.path;
       if (typeof target === "string" && target.length > 0 && !isInsideWorkspace(target)) {
         vscode.window.showWarningMessage(
-          `작업 폴더 밖 경로는 쓸 수 없어요: ${target}`,
+          denialCopy({ source: classifyDenial("path_outside_workspace"), reason: `작업 폴더 밖의 경로예요: ${target}` }),
         );
         return false;
       }

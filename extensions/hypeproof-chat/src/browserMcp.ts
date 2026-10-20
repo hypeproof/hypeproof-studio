@@ -42,6 +42,11 @@ import {
 import { MCP_PUBLISH_SITE, PUBLISH_SITE_TOOL_NAME, type PublishSiteInput } from "./publish/publishContract.ts";
 // Type only (erased): the site-check runner's page port, which the host implements here.
 import type { SiteCheckPage } from "./siteCheckRunner.ts";
+import { classifyDenial, denialToolText } from "./denialSource.ts";
+
+/** REQ-STUDIO-DENIAL-SOURCE — this host did not wire the tool: the app/environment decided. */
+const HOST_LACKS = (feature: string): string =>
+  denialToolText({ source: "runtime", feature, reason: `이 연결에서는 ${feature} 도구가 준비되지 않았어요`, next: "코치 혼자 이어서 해 주세요" });
 
 /** Server key in the SDK `mcpServers` option → tool prefix `mcp__hypeproof__`. */
 export const HYPEPROOF_MCP_SERVER_NAME = "hypeproof";
@@ -706,7 +711,7 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw?: unknown): Promi
   const { url, current, alreadyOpen, redirectedFrom } = await resolveAlreadyOpen(host, raw);
   if (!url) {
     return {
-      content: [{ type: "text", text: `이 주소는 열 수 없어요: ${raw}` }],
+      content: [{ type: "text", text: denialToolText({ source: classifyDenial("url_policy"), reason: `열 수 없는 주소예요: ${raw}` }) }],
       isError: true,
     };
   }
@@ -914,7 +919,7 @@ export function buildHypeproofMcpServer(
 
   /** cr-verify — delegated to the host's VerifySession, the one the proxy path runs (CR-03). */
   const verifyOrFail = async (name: string, input: Record<string, unknown>): Promise<McpToolResult> =>
-    host.verify ? host.verify(name, input) : { content: [{ type: "text", text: "지금은 제품 테스트를 쓸 수 없어요." }], isError: true };
+    host.verify ? host.verify(name, input) : { content: [{ type: "text", text: HOST_LACKS("제품 테스트") }], isError: true };
 
   const browserRead = factory.tool(
     "browser_read",
@@ -1040,7 +1045,7 @@ export function buildHypeproofMcpServer(
           ...(typeof z.boolean === "function" ? { check_only: optionalSchema(z.boolean()) } : {}),
         },
         async (args: Record<string, unknown>) => {
-          if (!host.publishSite) return { content: [{ type: "text", text: "지금은 홈페이지 올리기를 쓸 수 없어요." }], isError: true };
+          if (!host.publishSite) return { content: [{ type: "text", text: HOST_LACKS("홈페이지 올리기") }], isError: true };
           return host.publishSite(publishInputFromArgs(args));
         },
       ),
