@@ -147,7 +147,8 @@ const vscode = {
 const mod = { exports: {} };
 vm.runInNewContext(source, { module: mod, exports: mod.exports, require: (id) => (id === 'vscode' ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder });
 const P = mod.exports.ChatPanelProvider.prototype;
-const host = { approvedCommandSignatures: new Set(), approvedBrowserOrigins: new Set(), coachDisplayName: () => '코치', sitePublisher: () => ({ allowed: () => false }) };
+const WORK = '/Users/kid/work';
+const host = { approvedCommandSignatures: new Set(), approvedBrowserOrigins: new Set(), coachDisplayName: () => '코치', sitePublisher: () => ({ allowed: () => false }), resolveCoachCwd: () => WORK };
 const ask = async (url) => {
   modals.length = 0;
   const approved = await P.resolveActionApproval.call(host, { requestId: 'r', kind: 'openBrowser', description: `브라우저 열기: ${url}`, payload: { url } });
@@ -183,9 +184,23 @@ test('the approval modal: host line, label and 항상 허용 button name the sam
   captured.push(idn);
 
   const file = await ask('file:///Users/kid/secret-folder/index.html');
-  assert.equal(file.message, '코치가 브라우저를 열려고 해요:\n\nindex.html\n내 컴퓨터 파일');
+  assert.equal(file.message, '코치가 브라우저를 열려고 해요:\n\n작업 폴더 밖 · index.html\n내 컴퓨터 파일');
   assert.deepEqual(file.buttons, ['열기'], 'no "항상 허용 (null)" for a file');
   captured.push(file);
+
+  const inside = await ask('file:///Users/kid/work/notes/a.txt');
+  assert.equal(inside.message, '코치가 브라우저를 열려고 해요:\n\n작업 폴더/notes/a.txt\n내 컴퓨터 파일');
+  captured.push(inside);
+
+  const remote = await ask('file://evil.com/share/x.html');
+  assert.equal(remote.message, '코치가 브라우저를 열려고 해요:\n\nevil.com\n인터넷');
+  captured.push(remote);
+
+  // A file name cannot fake extra lines: the body is always title, blank line, target, label.
+  const forged = await ask('file:///x/a%E2%80%A8%E2%80%A8127.0.0.1%E2%80%A8%EB%82%B4%20%EB%AF%B8%EB%A6%AC%EB%B3%B4%EA%B8%B0%E2%80%A8x.html');
+  assert.equal(forged.message.split(/[\n\r\u0085\u2028\u2029]/).length, 4, JSON.stringify(forged.message));
+  assert.match(forged.message, /\n내 컴퓨터 파일$/);
+  captured.push(forged);
 
   const out = process.env.HOST_LABEL_CAPTURE;
   if (out) {
@@ -197,4 +212,54 @@ test('the approval modal: host line, label and 항상 허용 button name the sam
 test('the detailed tool line is built with the host-only option (wiring)', () => {
   // The learner-facing label passes { urlHostOnly: true }; the observation call keeps the raw URL for research.
   assert.match(source, /summarizeToolInput\(a\.name, a\.input, 60, this\.resolveCoachCwd\(\), \{ urlHostOnly: true \}\)/);
+});
+
+test('file names lose every character that could fake a line or reorder text', () => {
+  const cases = [
+    ['file:///x/a%E2%80%A8b.html', 'ab.html'],          // U+2028 line separator
+    ['file:///x/a%E2%80%A9b.html', 'ab.html'],          // U+2029 paragraph separator
+    ['file:///x/a%C2%85b.html', 'ab.html'],             // U+0085 NEL (C1)
+    ['file:///x/a%C2%9Bb.html', 'ab.html'],             // U+009B CSI (C1)
+    ['file:///x/a%0Ab%0Dc.html', 'abc.html'],           // LF, CR (C0)
+    ['file:///x/%E2%81%A6evil%E2%81%A9.html', 'evil.html'], // LRI..PDI
+    ['file:///x/%D8%9Cname.html', 'name.html'],         // U+061C ALM
+  ];
+  for (const [url, name] of cases) {
+    assert.equal(browserTarget(url).host, name, url);
+    assert.equal(browserTargetDetail(url).split(/[\n\r\u0085\u2028\u2029]/).length, 2, url);
+  }
+});
+
+test('file: inside the work folder shows 작업 폴더/<relative path>; outside shows 작업 폴더 밖 · <name>', () => {
+  const opts = { workspaceRoot: '/Users/kid/work' };
+  assert.equal(browserTarget('file:///Users/kid/work/notes/a.txt', opts).host, '작업 폴더/notes/a.txt');
+  assert.equal(browserTarget('file:///Users/kid/work/index.html', opts).host, '작업 폴더/index.html');
+  assert.equal(browserTarget('file://localhost/Users/kid/work/a.html', opts).host, '작업 폴더/a.html');
+  assert.equal(browserTarget('file:///Users/kid/work/My%20Notes/a%20b.txt', opts).host, '작업 폴더/My Notes/a b.txt');
+  // outside: a sibling with the same prefix, a parent, a traversal, the folder itself, another place
+  assert.equal(browserTarget('file:///Users/kid/.ssh/id_rsa', opts).host, '작업 폴더 밖 · id_rsa');
+  assert.equal(browserTarget('file:///Users/kid/work2/a.txt', opts).host, '작업 폴더 밖 · a.txt');
+  assert.equal(browserTarget('file:///Users/kid/work/../.ssh/id_rsa', opts).host, '작업 폴더 밖 · id_rsa');
+  assert.equal(browserTarget('file:///Users/kid/work', opts).host, '작업 폴더 밖 · work');
+  assert.equal(browserTarget('file:///etc/passwd', opts).host, '작업 폴더 밖 · passwd');
+  // no work folder open → everything is outside
+  assert.equal(browserTarget('file:///Users/kid/work/a.txt', { workspaceRoot: null }).host, '작업 폴더 밖 · a.txt');
+  // the label stays 내 컴퓨터 파일 either way, and the full path never shows
+  for (const url of ['file:///Users/kid/work/notes/a.txt', 'file:///Users/kid/.ssh/id_rsa']) {
+    assert.equal(browserTarget(url, opts).label, '내 컴퓨터 파일');
+    assert.ok(!browserTargetDetail(url, opts).includes('/Users'), url);
+  }
+  // the learner-facing tool line uses the same rule
+  assert.equal(summarizeToolInput('mcp__hypeproof__browser_open', { url: 'file:///Users/kid/.ssh/id_rsa' }, 60, '/Users/kid/work', { urlHostOnly: true }), '작업 폴더 밖 · id_rsa · 내 컴퓨터 파일');
+  assert.equal(summarizeToolInput('mcp__hypeproof__browser_open', { url: 'file:///Users/kid/work/a.html' }, 60, '/Users/kid/work', { urlHostOnly: true }), '작업 폴더/a.html · 내 컴퓨터 파일');
+});
+
+test('file:// with a remote host is 인터넷 with that host', () => {
+  for (const [url, h] of [['file://evil.com/share/x.html', 'evil.com'], ['file://FILESERVER/share/a.txt', 'fileserver'], ['file://192.168.0.5/c/x', '192.168.0.5']]) {
+    const t = browserTarget(url, { workspaceRoot: '/Users/kid/work' });
+    assert.equal(t.label, '인터넷', url);
+    assert.equal(t.host, h, url);
+    assert.equal(browserRememberLabel(url), null, url);
+  }
+  assert.equal(browserTarget('file://localhost/Users/kid/a.txt').label, '내 컴퓨터 파일');
 });

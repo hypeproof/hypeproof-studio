@@ -7423,7 +7423,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       onPrompted?.();
     const pick = await vscode.window.showWarningMessage(
         // REQ-E3 / CGP-AGENT-R-006: the host on its own line + 내 미리보기 / 인터넷, never the full URL.
-        `${browserApprovalTitle(this.coachDisplayName())}\n\n${browserTargetDetail(url)}`,
+        `${browserApprovalTitle(this.coachDisplayName())}\n\n${browserTargetDetail(url, { workspaceRoot: this.resolveCoachCwd() ?? null })}`,
         { modal: true },
         ...buttons,
       );

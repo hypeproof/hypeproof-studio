@@ -11,9 +11,13 @@
 //                   server: plain `127.0.0.1` / `localhost`, a port, a path). A numeric or bracketed spelling that
 //                   only normalizes to loopback (`2130706433`, `0x7f000001`, `0177.0.0.1`, `127.1`,
 //                   `[::ffff:127.0.0.1]`) is not how Studio's preview is addressed, so it stays 인터넷;
-//   내 컴퓨터 파일 — a `file:` URL, shown by its file name only (never the folder path);
+//   내 컴퓨터 파일 — a local `file:` URL. Inside the work folder it shows as `작업 폴더/<relative path>`; outside it
+//                   (or with no work folder) as `작업 폴더 밖 · <file name>`, never the full path. A `file://<host>/`
+//                   URL naming a remote host is 인터넷 with that host, like any other remote target;
 //   인터넷         — everything else, including `localhost.evil.com`, `127.0.0.1.nip.io`, `localhost@evil.com`.
 
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { isLoopbackPreview } from "./previewRecovery.ts";
 
 export type BrowserTargetPlace = "preview" | "internet" | "file";
@@ -25,9 +29,11 @@ export const BROWSER_TARGET_LABELS: Record<BrowserTargetPlace, string> = {
 export const BLANK_TARGET_TEXT = "빈 브라우저";
 export const UNKNOWN_HOST_TEXT = "알 수 없는 주소";
 const UNNAMED_FILE_TEXT = "이름 없는 파일";
+export const WORK_FOLDER_TEXT = "작업 폴더";
+export const OUTSIDE_WORK_FOLDER_TEXT = "작업 폴더 밖";
 
 export interface BrowserTarget {
-  /** Normalized ASCII host (no scheme, userinfo, port, path, query, fragment), or a file's name. Null when none. */
+  /** Normalized ASCII host (no scheme, userinfo, port, path, query, fragment), or a local file's display. Null when none. */
   host: string | null;
   place: BrowserTargetPlace;
   label: string;
@@ -36,25 +42,49 @@ export interface BrowserTarget {
 }
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
-// Control and bidirectional-override characters could reorder a file name on screen (`gpj.exe` → `exe.jpg`).
-const UNSAFE_NAME_CHARS = /[\u0000-\u001f\u007f؜‎‏‪-‮⁦-⁩]/g;
+// Characters that could fake a line or reorder text in the modal: C0 and C1 controls (incl. U+0085 NEL), DEL,
+// U+2028/U+2029 line/paragraph separators, and every bidi control (ALM, LRM/RLM, LRE..RLO, LRI..PDI).
+const UNSAFE_NAME_CHARS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 
-function fileName(url: URL): string {
-  const last = url.pathname.split("/").filter(Boolean).pop() ?? "";
-  let name = last;
-  try { name = decodeURIComponent(last); } catch { /* keep the encoded form */ }
-  name = name.replace(UNSAFE_NAME_CHARS, "").trim();
-  return name || UNNAMED_FILE_TEXT;
+const cleanName = (name: string): string => name.replace(UNSAFE_NAME_CHARS, "").trim();
+
+/** How a local file target is shown. `workspaceRoot` undefined = not known (file name only); null = no work folder. */
+export interface BrowserTargetOptions {
+  workspaceRoot?: string | null;
+}
+
+function localFileDisplay(url: URL, opts: BrowserTargetOptions): string {
+  let filePath: string;
+  try {
+    filePath = fileURLToPath(new URL(url.pathname, "file:///"));
+  } catch {
+    filePath = url.pathname;
+  }
+  const name = cleanName(path.basename(filePath)) || UNNAMED_FILE_TEXT;
+  if (!("workspaceRoot" in opts)) return name;
+  const root = opts.workspaceRoot;
+  if (root) {
+    const rel = path.relative(root, filePath);
+    if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
+      const parts = rel.split(/[\\/]+/).map(cleanName).filter(Boolean);
+      if (parts.length) return `${WORK_FOLDER_TEXT}/${parts.join("/")}`;
+    }
+  }
+  return `${OUTSIDE_WORK_FOLDER_TEXT} · ${name}`;
 }
 
 const target = (host: string | null, place: BrowserTargetPlace, web: boolean): BrowserTarget =>
   ({ host, place, label: BROWSER_TARGET_LABELS[place], web });
 
-export function browserTarget(rawUrl: string | undefined): BrowserTarget {
+export function browserTarget(rawUrl: string | undefined, opts: BrowserTargetOptions = {}): BrowserTarget {
   const raw = (rawUrl ?? "").trim();
   let url: URL;
   try { url = new URL(raw); } catch { return target(null, "internet", false); }
-  if (url.protocol === "file:") return target(fileName(url), "file", false);
+  if (url.protocol === "file:") {
+    // `file://server/share/x.html` names another machine: it is a remote target, shown by its host.
+    if (url.hostname && url.hostname !== "localhost") return target(url.hostname, "internet", false);
+    return target(localFileDisplay(url, opts), "file", false);
+  }
   if ((url.protocol !== "http:" && url.protocol !== "https:") || !url.hostname) return target(null, "internet", false);
   const host = url.hostname;
   const preview = LOOPBACK_HOSTS.has(host) && isLoopbackPreview(raw);
@@ -64,16 +94,16 @@ export function browserTarget(rawUrl: string | undefined): BrowserTarget {
 const isBlank = (rawUrl: string | undefined): boolean => (rawUrl ?? "").trim() === "about:blank";
 
 /** The approval body: the host on its own line, the label on the next. `about:blank` names no target. */
-export function browserTargetDetail(rawUrl: string | undefined): string {
+export function browserTargetDetail(rawUrl: string | undefined, opts: BrowserTargetOptions = {}): string {
   if (isBlank(rawUrl)) return BLANK_TARGET_TEXT;
-  const t = browserTarget(rawUrl);
+  const t = browserTarget(rawUrl, opts);
   return `${t.host ?? UNKNOWN_HOST_TEXT}\n${t.label}`;
 }
 
 /** One-line form for tool lines and request descriptions: `host · label`. */
-export function browserTargetInline(rawUrl: string | undefined): string {
+export function browserTargetInline(rawUrl: string | undefined, opts: BrowserTargetOptions = {}): string {
   if (isBlank(rawUrl)) return BLANK_TARGET_TEXT;
-  const t = browserTarget(rawUrl);
+  const t = browserTarget(rawUrl, opts);
   return `${t.host ?? UNKNOWN_HOST_TEXT} · ${t.label}`;
 }
 

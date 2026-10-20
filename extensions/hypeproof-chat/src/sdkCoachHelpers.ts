@@ -1905,7 +1905,7 @@ export function summarizeToolInput(
   for (const key of ["file_path", "path", "command", "url", "query", "pattern", "prompt", "description"]) {
     const v = rec[key];
     if (typeof v === "string" && v.length > 0) {
-      if (key === "url" && opts.urlHostOnly) return clip(browserTargetInline(v));
+      if (key === "url" && opts.urlHostOnly) return clip(browserTargetInline(v, { workspaceRoot: workspaceRoot ?? null }));
       if (key !== "file_path" && key !== "path") return clip(v);
       // 파일 읽기는 **어디를 읽었는지**까지 보여 준다. 큰 파일을 다룰 때 코치는
       // Grep 으로 위치를 찾고 그 구간만 읽는 것이 정상 패턴인데(Claude Code 자신도
