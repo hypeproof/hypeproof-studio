@@ -150,6 +150,73 @@ const hidden = (status, seat = personal, extra = {}) => ({ status, chatVisible: 
   assert.equal(n.turnEnded({ status: "ok", chatVisible: false, seat: { activity_kind: "classroom" } }), null);
   assert.equal(ui.info.length, 3);
   ok("host: non-modal info message, one action, coalesced, action reveals view or editor panel, no answer text");
+
+  // ── 4b. A notice that never settles (its toast timed out into the bell) must not silence later turns ──
+  {
+    const opened = [];
+    let now = 1_000;
+    const fakeVs = vscode.window.showInformationMessage;
+    vscode.window.showInformationMessage = (message) => { opened.push(message); return new Promise(() => {}); };
+    const ev = () => { const fns = []; return { on: (fn) => { fns.push(fn); return { dispose() {} }; }, fire: () => fns.forEach((f) => f()) }; };
+    const viewEv = ev(), panelEv = ev();
+    const view = { visible: false, onDidChangeVisibility: viewEv.on };
+    const panel = { visible: false, onDidChangeViewState: panelEv.on, reveal() {} };
+    const fresh = () => host.createFinishNotifier({ view: () => view, editor: () => undefined }, { now: () => now });
+    const end = (nn) => nn.turnEnded({ status: "ok", chatVisible: false, seat: personal });
+
+    // Sidebar view becomes visible (activity bar, not the button) → the next hidden turn notifies again.
+    const a = fresh();
+    host.watchChatSurface(view, a);
+    assert.equal(end(a), "done");
+    assert.equal(end(a), null, "still coalesced while nobody looked");
+    view.visible = true; viewEv.fire();
+    view.visible = false; viewEv.fire();
+    assert.equal(end(a), "done", "chat seen → the next hidden turn notifies again");
+    // Negative control: a visibility event while still hidden releases nothing.
+    viewEv.fire();
+    assert.equal(end(a), null, "a hidden-state event is not 'seen'");
+
+    // Editor panel becomes visible → released too.
+    const b = fresh();
+    host.watchChatSurface(panel, b);
+    assert.equal(end(b), "done");
+    panel.visible = true; panelEv.fire(); panel.visible = false;
+    assert.equal(end(b), "done", "editor chat seen → notifies again");
+
+    // Next turn start (release) → released.
+    const c = fresh();
+    assert.equal(end(c), "done");
+    assert.equal(end(c), null);
+    c.release();
+    assert.equal(end(c), "done", "a new turn start ends the hold");
+
+    // Safety timeout: at 2 minutes the hold ends on its own.
+    const d = fresh();
+    assert.equal(end(d), "done");
+    now += 119_999;
+    assert.equal(end(d), null, "within the hold: coalesced");
+    now += 1;
+    assert.equal(end(d), "done", "after FINISH_NOTICE_HOLD_MS the next hidden turn notifies");
+    assert.equal(FN.FINISH_NOTICE_HOLD_MS, 120_000);
+
+    // An older notice settling late does not release a newer one.
+    let settleOld;
+    vscode.window.showInformationMessage = () => new Promise((r) => { settleOld = r; });
+    const e = fresh();
+    assert.equal(end(e), "done");
+    const oldSettle = settleOld;
+    e.release();
+    assert.equal(end(e), "done");
+    oldSettle(undefined);
+    await tick(); await tick();
+    assert.equal(end(e), null, "a stale notice settling does not end the newer hold");
+
+    // A surface without the event (test fixtures) is tolerated.
+    host.watchChatSurface({ visible: false }, fresh());
+    vscode.window.showInformationMessage = fakeVs;
+    assert.ok(opened.length >= 7);
+    ok("hold: released by the view or editor panel becoming visible, by the next turn start and after 2 minutes; stale settle ignored");
+  }
 }
 
 // ── 5. Wiring in the chat host ──
@@ -165,9 +232,13 @@ const hidden = (status, seat = personal, extra = {}) => ({ status, chatVisible: 
   assert.match(callLine, /status: finalSpoolStatus/);
   assert.match(callLine, /chatVisible: chatVisible\(/);
   assert.match(callLine, /instructor: this\._instructorMode\?\.isInstructor === true/);
+  assert.match(callLine, /seat: profile,/, "the seat is the turn's own profile, not the cached one");
+  assert.match(src, /view\.webview\.onDidReceiveMessage\([^\n]*\n\s*watchChatSurface\(view, this\.finishNotifier\);/, "sidebar view watched for becoming visible");
+  assert.match(src, /entry\.webview\.onDidReceiveMessage\([^\n]*\n\s*watchChatSurface\(entry, this\.finishNotifier\);/, "editor chat panel watched for becoming visible");
+  assert.match(src, /this\.activeStreams\.set\(streamId, ctrl\);\n\s*this\.finishNotifier\.release\(\);/, "the hold ends at the next turn start");
   assert.doesNotMatch(callLine, /assistantText|text:/, "no answer text reaches the notifier");
   assert.equal(src.split("this.finishNotifier.turnEnded(").length - 1, 1, "one call site");
-  ok("wiring: one call at turn end with the final status, both surfaces, instructor flag, no text");
+  ok("wiring: one call at turn end with the final status and the turn profile, both surfaces watched, release at turn start, no text");
 }
 
 console.log(`\nfinish-notice: ${passed} checks passed`);

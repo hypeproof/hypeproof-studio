@@ -19,7 +19,7 @@ import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from '.
 import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
 import { folderConsentProfile, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
-import { chatVisible, createFinishNotifier } from './finishNoticeHost';
+import { chatVisible, createFinishNotifier, watchChatSurface } from './finishNoticeHost';
 import { verifyActivity } from './proxyClient';
 import { fetchAccessView, sendBudgetRequest, accessProfile, type AccessState } from './accessClient';
 import { availableModelSelection, selectedModel, modelSelectionScope, type SavedModelChoice, selectedEffort, observedEffortResult, type SavedEffortChoice } from './modelSelection';
@@ -2591,6 +2591,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     const sidebarWebview=view.webview;
     view.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, view.webview));
+    watchChatSurface(view, this.finishNotifier);
     view.onDidDispose(() => {
       if (this.draftSource===sidebarWebview) this.draftSource=undefined;
       if (this.view === view) this.view = undefined;
@@ -2609,6 +2610,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       entry.title = 'AI와 작업';
       const dist = vscode.Uri.joinPath(this.context.extensionUri, 'webview-ui', 'dist');
       entry.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, entry.webview));
+      watchChatSurface(entry, this.finishNotifier);
       const editorWebview=entry.webview;
       entry.onDidDispose(() => {
         if(this.draftSource===editorWebview)this.draftSource=undefined;
@@ -5607,6 +5609,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const messageId = randomId();
     const ctrl = new AbortController();
     this.activeStreams.set(streamId, ctrl);
+    this.finishNotifier.release(); // a new turn is sent from the chat: the learner has seen it
 
     responseStarted(streamId);
     void this.post({ type: "streamStart", streamId, messageId });

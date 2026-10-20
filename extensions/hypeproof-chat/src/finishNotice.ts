@@ -62,35 +62,59 @@ export type FinishNoticeUi = {
   reveal(): PromiseLike<void> | void;
 };
 
+/** Longest a shown notice holds later ones back, about a toast's life plus a short read. */
+export const FINISH_NOTICE_HOLD_MS = 120_000;
+
 /**
- * At most one notice at a time. While a notice is still open, later turn ends are coalesced into
- * it (not stacked): the open notice already sends the learner to the chat, where every answer is.
+ * At most one notice at a time. While a notice is open, later turn ends are coalesced into it (not
+ * stacked): it already sends the learner to the chat, where every answer is.
+ *
+ * VS Code never settles the promise of an information message whose toast timed out into the
+ * notification center, so settling cannot be the only release. The hold also ends when the learner
+ * has seen the chat (`release()` on a chat surface becoming visible, and at the next turn start,
+ * which is sent from the chat) and after `holdMs` at the latest.
  */
 export class FinishNotifier {
-  private pending = false;
+  private shownAt: number | null = null;
+  private generation = 0;
   private readonly ui: FinishNoticeUi;
-  constructor(ui: FinishNoticeUi) { this.ui = ui; }
+  private readonly now: () => number;
+  private readonly holdMs: number;
+  constructor(ui: FinishNoticeUi, opts: { now?: () => number; holdMs?: number } = {}) {
+    this.ui = ui;
+    this.now = opts.now ?? Date.now;
+    this.holdMs = opts.holdMs ?? FINISH_NOTICE_HOLD_MS;
+  }
 
-  get isPending(): boolean { return this.pending; }
+  get isPending(): boolean {
+    return this.shownAt !== null && this.now() - this.shownAt < this.holdMs;
+  }
+
+  /** The learner has seen the chat (it became visible, or a new turn started): stop holding. */
+  release(): void { this.shownAt = null; this.generation++; }
 
   /** Returns the notice kind shown, or null when nothing was shown. Never throws. */
   turnEnded(input: FinishInput): "done" | "error" | null {
     const kind = finishNoticeKind(input);
-    if (!kind || this.pending) return null;
-    this.pending = true;
+    if (!kind || this.isPending) return null;
+    const mine = ++this.generation;
+    this.shownAt = this.now();
+    // Only this notice's own settling may end its hold; an older notice settling late must not
+    // release a newer one.
+    const settle = () => { if (this.generation === mine) this.shownAt = null; };
     let shown: PromiseLike<string | undefined>;
     try {
       shown = this.ui.show(FINISH_NOTICE_COPY[kind], FINISH_NOTICE_COPY.open);
     } catch {
-      this.pending = false;
+      settle();
       return null;
     }
     Promise.resolve(shown)
       .then(async (choice) => {
-        this.pending = false;
+        settle();
         if (choice === FINISH_NOTICE_COPY.open) await this.ui.reveal();
       })
-      .catch(() => { this.pending = false; });
+      .catch(settle);
     return kind;
   }
 }
