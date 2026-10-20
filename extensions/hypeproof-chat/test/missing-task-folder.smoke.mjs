@@ -484,6 +484,75 @@ try {
     ok("B1/B2: 다시 고르기 carries the task store to the new folder's scope (conversation and draft after the reload, old scope kept); a round trip and a retry after a half-done move let the moving copy win, back up the replaced copy and keep the target's own tasks; a symlink swap shows the notice");
   }
 
+  // ── 3c. The carry at store level: diverged copies stay visible, backups are never overwritten, a failed carry leaves verdicts alone ──
+  {
+    const { TaskWorkspaceStore } = await import("../src/taskWorkspaceStore.ts");
+    const { emptyActivityDraft } = await import("../src/activityDraft.ts");
+    const root = path.join(tmp, "store-level");
+    fs.mkdirSync(root);
+    const dir = path.join(root, "task-workspaces");
+    const msg = (id, role, content, createdAt) => ({ id, role, content, createdAt });
+    const seed = async (scope) => { const st = new TaskWorkspaceStore(root, scope); await st.initialize([], emptyActivityDraft()); return st; };
+
+    // N1: the target's copy has a turn the moving copy lacks → it stays as "<name> · 이전", and is backed up.
+    const a = await seed("A");
+    const id = a.getView().activeTaskId;
+    await a.rename(id, "고양이 게임");
+    await a.append(id, [msg("u1", "user", "고양이 게임 만들어 줘", 1)]);
+    const b = new TaskWorkspaceStore(root, "B");
+    await b.adoptFrom(a);
+    await b.append(id, [msg("b1", "assistant", "B에서 만든 답", 2)]);
+    await a.append(id, [msg("ua", "user", "A에서만 한 말", 3)]); // A was reopened elsewhere and used
+    await new TaskWorkspaceStore(root, "A").adoptFrom(b);
+    const backA = new TaskWorkspaceStore(root, "A");
+    const view = backA.getView();
+    assert.equal(view.activeTaskId, id, "the moved task is active");
+    assert.deepEqual(backA.getHistory(id).map((m) => m.id), ["u1", "b1"], "the moving copy wins");
+    const earlier = view.tasks.find((t) => t.title === "고양이 게임 · 이전");
+    assert.ok(earlier, "A's diverged copy stays visible as its own task");
+    assert.deepEqual(backA.getHistory(earlier.id).map((m) => m.id), ["u1", "ua"], "with the turn only A had");
+    assert.equal(fs.readdirSync(dir).filter((f) => f.includes(`.${id}.pre-rebind-`)).length, 1, "and it is still backed up");
+    // Control: a target copy whose turns are all in the moving copy adds no "· 이전" task.
+    await new TaskWorkspaceStore(root, "B").adoptFrom(backA);
+    assert.equal(new TaskWorkspaceStore(root, "B").getView().tasks.filter((t) => t.title.endsWith("· 이전")).length, 1, "only the one carried over, no new one");
+
+    // N3: a backup is never overwritten; the same millisecond picks the next free name and the move goes on.
+    const realNow = Date.now;
+    Date.now = () => 1700000000000;
+    try {
+      const c = await seed("C");
+      const cid = c.getView().activeTaskId;
+      await new TaskWorkspaceStore(root, "D").adoptFrom(c);
+      const D = new TaskWorkspaceStore(root, "D");
+      const first = path.join(dir, `${D.scope}.${cid}.pre-rebind-1700000000000.json`);
+      fs.writeFileSync(first, "SENTINEL");
+      await new TaskWorkspaceStore(root, "D").adoptFrom(c);
+      await new TaskWorkspaceStore(root, "D").adoptFrom(c);
+      assert.equal(fs.readFileSync(first, "utf8"), "SENTINEL", "an existing backup is never overwritten");
+      const same = fs.readdirSync(dir).filter((f) => f.startsWith(`${D.scope}.${cid}.pre-rebind-1700000000000`)).sort();
+      assert.deepEqual(same, [`${D.scope}.${cid}.pre-rebind-1700000000000-1.json`, `${D.scope}.${cid}.pre-rebind-1700000000000-2.json`, `${D.scope}.${cid}.pre-rebind-1700000000000.json`], "same-millisecond backups take unique names");
+      assert.equal(new TaskWorkspaceStore(root, "D").getView().activeTaskId, cid, "the moves completed");
+    } finally { Date.now = realNow; }
+
+    // N2: a carry whose task-file write fails leaves the target's verdicts as they were.
+    const e = await seed("E");
+    const eid = e.getView().activeTaskId;
+    await e.append(eid, [msg("u1", "user", "질문", 1), msg("a1", "assistant", "답", 2)]);
+    await e.recordVerdict(eid, { messageId: "a1", verdict: "right", at: 10 });
+    const f = new TaskWorkspaceStore(root, "F");
+    await f.adoptFrom(e);
+    await e.recordVerdict(eid, { messageId: "a1", verdict: "fix", at: 20 });
+    const target = new TaskWorkspaceStore(root, "F");
+    const verdictsBefore = fs.readFileSync(target.verdictsPath, "utf8");
+    const write = target.writeAtomic.bind(target);
+    target.writeAtomic = async (file, content, nonce) => { if (file === target.filePath) throw new Error("injected"); return write(file, content, nonce); };
+    await assert.rejects(target.adoptFrom(e));
+    assert.equal(fs.readFileSync(target.verdictsPath, "utf8"), verdictsBefore, "verdicts unchanged after a failed carry");
+    await new TaskWorkspaceStore(root, "F").adoptFrom(e);
+    assert.equal(new TaskWorkspaceStore(root, "F").getVerdicts(eid).a1?.verdict, "fix", "control: the retry carries the new verdict");
+    ok("store: a diverged target copy stays visible as '· 이전' and is backed up; backups are never overwritten and same-ms names are unique; a failed carry leaves verdicts untouched");
+  }
+
   // ── 4. Wiring ──
   {
     const read = (p) => fs.readFileSync(path.join(extRoot, p), "utf8");

@@ -119,8 +119,12 @@ every task (messages, drafts, earlier versions, verdicts; the source's active ta
 into the new scope under the store's lock and atomic writes. For a task the target scope already
 holds (a move back to a folder used before, or a retry after a half-done move) the copy being
 moved wins: the target's copy of that task, with its versions and verdicts, is first written to a
-backup file next to the store (`<scope>.<task>.pre-rebind-<ts>.json`, never overwritten) and then
-replaced; tasks only the target holds are kept. The copy is then read back from disk; the task moves only when the new scope holds the same
+backup file next to the store (`<scope>.<task>.pre-rebind-<ts>[-n].json`, created exclusively and
+never overwritten; the same millisecond takes the next suffix) and then replaced. If that copy
+holds turns the moving copy does not, it also stays visible as its own task, "<작업 이름> · 이전".
+Tasks only the target holds are kept. One store lock covers the carry, in the order backups,
+versions sidecar, task file (the commit point), verdict sidecar, so a carry that fails leaves the
+target's verdicts unchanged. The copy is then read back from disk; the task moves only when the new scope holds the same
 active task, conversation and draft. The old scope is never changed or deleted. The move itself
 is the path 프로젝트 변경 uses (`projectOpener`: activity commit under the canonical root,
 `ensureWorkspace`, window reload); the activity commit now tolerates a window whose own folder no
@@ -143,7 +147,10 @@ and a retry, the re-check, 다시 고르기 with consent, "AI 안 씀" and failu
 VS Code; the rebind with the real `TaskWorkspaceStore` and `ActivityConnections`: a message and a
 draft in the old folder are in the reopened store of the new one, and the old scope is kept; a
 round trip back to a folder used before and a retry after a half-done move with an edited draft
-both carry the moving copy, back up the replaced one and keep the target's own tasks;
+both carry the moving copy, back up the replaced one and keep the target's own tasks; at store
+level, a diverged target copy stays as "· 이전", an existing backup is never overwritten (a
+same-millisecond carry takes unique names), and a carry whose task-file write fails leaves the
+verdicts unchanged;
 wiring) and `test/missing-task-folder.test.tsx` (the real ChatPanel: notice, held send with the
 draft kept, re-check that sends the held draft once, 다시 고르기, cleared notice; classroom draws
 nothing).
