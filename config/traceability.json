@@ -181,6 +181,9 @@
           "path": "extensions/hypeproof-chat/test/shell-normalise.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/shell-modal.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/fixtures/shell-normalise-table.mjs"
         },
         {
