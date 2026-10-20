@@ -278,6 +278,7 @@ async function session(seed = {}) {
     put(rel, text);
     const fsPath = path.join(dir, rel);
     tracker.changed({ fsPath, scheme: "file", isDirty: true }, 1);
+    tracker.willSave({ fsPath, scheme: "file", isDirty: true });
     tracker.saved({ fsPath, scheme: "file", text });
   };
   return { dir, rec, put, save, list, coachTurn };
@@ -547,16 +548,17 @@ await t("NEW3. a background child surviving a restart never reads 내가 고침"
 await t("tracker: a reload from disk (clean document), an empty change, a closed document or another folder record no save", () => {
   const got = [];
   const tr = new LearnerEditTracker((p) => p.startsWith("/w/"), (p, text) => got.push([p, text]));
-  tr.changed({ fsPath: "/w/a", scheme: "file", isDirty: false }, 1); tr.saved({ fsPath: "/w/a", scheme: "file", text: "x" });
-  tr.changed({ fsPath: "/w/b", scheme: "file", isDirty: true }, 0); tr.saved({ fsPath: "/w/b", scheme: "file", text: "x" });
-  tr.changed({ fsPath: "/w/c", scheme: "file", isDirty: true }, 1); tr.closed({ fsPath: "/w/c" }); tr.saved({ fsPath: "/w/c", scheme: "file", text: "x" });
-  tr.changed({ fsPath: "/elsewhere/d", scheme: "file", isDirty: true }, 1); tr.saved({ fsPath: "/elsewhere/d", scheme: "file", text: "x" });
-  tr.changed({ fsPath: "/w/e", scheme: "untitled", isDirty: true }, 1); tr.saved({ fsPath: "/w/e", scheme: "untitled", text: "x" });
+  const cycle = (fsPath, dirty, n, scheme = "file") => { tr.changed({ fsPath, scheme, isDirty: dirty }, n); tr.willSave({ fsPath, scheme, isDirty: dirty }); tr.saved({ fsPath, scheme, text: "x" }); };
+  cycle("/w/a", false, 1);
+  cycle("/w/b", true, 0);
+  tr.changed({ fsPath: "/w/c", scheme: "file", isDirty: true }, 1); tr.closed({ fsPath: "/w/c" }); tr.willSave({ fsPath: "/w/c", scheme: "file", isDirty: true }); tr.saved({ fsPath: "/w/c", scheme: "file", text: "x" });
+  cycle("/elsewhere/d", true, 1);
+  cycle("/w/e", true, 1, "untitled");
   eq(got, [], "nothing");
-  tr.changed({ fsPath: "/w/f", scheme: "file", isDirty: true }, 2); tr.saved({ fsPath: "/w/f", scheme: "file", text: "typed" }); tr.saved({ fsPath: "/w/f", scheme: "file", text: "again" });
-  eq(got, [["/w/f", "typed"]], "one save per edit");
+  tr.changed({ fsPath: "/w/f", scheme: "file", isDirty: true }, 2); tr.willSave({ fsPath: "/w/f", scheme: "file", isDirty: true }); tr.saved({ fsPath: "/w/f", scheme: "file", text: "typed" });
+  tr.willSave({ fsPath: "/w/f", scheme: "file", isDirty: false }); tr.saved({ fsPath: "/w/f", scheme: "file", text: "again" });
+  eq(got, [["/w/f", "typed"]], "one save per edit; a forced clean save after it does not count");
 });
-
 await t("N2. a Studio write that lands during a list scan keeps its Studio label (the old-bytes scan is not applied)", async () => {
   const c = await session({ "index.html": "v0" });
   const g = c.rec.generation();
@@ -637,6 +639,78 @@ await t("generation: every recording call moves it, a read-only view does not", 
   const g = c.rec.generation();
   await c.rec.view(c.dir);
   eq(c.rec.generation(), g, "read-only view");
+});
+
+console.log("artifact provenance — verify round 5: the editor-save evidence");
+
+/** A VS Code TextDocument modelled after its documented events (as in the verifier's races5.mjs). */
+function editor(c) {
+  const tracker = new LearnerEditTracker((p) => { const r = path.relative(c.dir, p); return !!r && !r.startsWith("..") && !path.isAbsolute(r); });
+  const open = (rel) => { const fsPath = path.join(c.dir, rel); const text = fs.readFileSync(fsPath, "utf8"); return { fsPath, text, saved: text, undo: [] }; };
+  const fire = (d) => tracker.changed({ fsPath: d.fsPath, scheme: "file", isDirty: d.text !== d.saved }, 1);
+  const type = (d, s) => { d.undo.push(d.text); d.text += s; fire(d); };
+  const undo = (d) => { d.text = d.undo.pop(); fire(d); };
+  const revertFile = (d) => { d.text = fs.readFileSync(d.fsPath, "utf8"); d.saved = d.text; fire(d); };
+  const diskChanged = (d) => { if (d.text !== d.saved) return; const t = fs.readFileSync(d.fsPath, "utf8"); if (t === d.text) return; d.undo.push(d.text); d.text = t; d.saved = t; fire(d); };
+  /** Cmd+S: Studio binds it with force, so a clean document is saved too; a participant may edit during the save. */
+  const save = async (d, participant) => {
+    tracker.willSave({ fsPath: d.fsPath, scheme: "file", isDirty: d.text !== d.saved });
+    if (participant) { const t = participant(d.text); if (t !== d.text) { d.undo.push(d.text); d.text = t; fire(d); } }
+    fs.writeFileSync(d.fsPath, d.text); d.saved = d.text;
+    tracker.saved({ fsPath: d.fsPath, scheme: "file", text: d.text });
+    await new Promise((r) => setTimeout(r, 5));
+  };
+  return { open, type, undo, revertFile, diskChanged, save };
+}
+
+await t("R1. typed then undone, the AI rewrites, the clean editor reloads, Cmd+S: AI가 고침, never 내가 고침", async () => {
+  const c = await session({ "index.html": "<p>v0</p>" }); const e = editor(c);
+  const d = e.open("index.html"); e.type(d, "x"); e.undo(d);
+  await c.coachTurn(async () => { c.put("index.html", "<p>AI page</p>"); e.diskChanged(d); });
+  await e.save(d);
+  eq((await labelOf(c, "index.html"))[0], "AI가 고침", "R1");
+});
+
+await t("R1b. typed then Revert File, the AI rewrites, reload, Cmd+S: never 내가 고침", async () => {
+  const c = await session({ "index.html": "<p>v0</p>" }); const e = editor(c);
+  const d = e.open("index.html"); e.type(d, "x"); e.revertFile(d);
+  await c.coachTurn(async () => { c.put("index.html", "<p>AI page</p>"); e.diskChanged(d); });
+  await e.save(d);
+  eq((await labelOf(c, "index.html"))[0], "AI가 고침", "R1b");
+});
+
+await t("R1c. dirty, the AI rewrites on disk, the conflict is resolved to the disk version, later Cmd+S: never 내가 고침", async () => {
+  const c = await session({ "index.html": "<p>v0</p>" }); const e = editor(c);
+  const d = e.open("index.html"); e.type(d, "x");
+  await c.coachTurn(async () => { c.put("index.html", "<p>AI page</p>"); e.diskChanged(d); });
+  e.revertFile(d); await e.save(d);
+  eq((await labelOf(c, "index.html"))[0], "AI가 고침", "R1c");
+});
+
+await t("R2. Cmd+S on a clean AI file with a formatter on save (trim whitespace): never 내가 고침", async () => {
+  const c = await session({ "index.html": "<p>v0</p>\n" }); const e = editor(c);
+  const d = e.open("index.html");
+  await c.coachTurn(async () => { c.put("index.html", "<p>AI page</p>   \n"); e.diskChanged(d); });
+  await e.save(d, (s) => s.replace(/[ \t]+$/gm, ""));
+  if ((await labelOf(c, "index.html"))[0] === "내가 고침") throw new Error("a save participant counted as a learner edit");
+});
+
+await t("R2/R3 positive controls: the learner's own typing, with or without a formatter, and overwriting a newer AI disk version, read 내가 고침", async () => {
+  const c = await session({ "a.html": "<p>v0</p>", "b.html": "<p>v0</p>" }); const e = editor(c);
+  const a = e.open("a.html"); e.type(a, "<b>mine</b>   "); await e.save(a, (s) => s.replace(/[ \t]+$/gm, ""));
+  const b = e.open("b.html"); e.type(b, "<b>mine</b>");
+  await c.coachTurn(async () => { c.put("b.html", "<p>AI page</p>"); e.diskChanged(b); }); // dirty: not reloaded
+  await e.save(b); // the learner chose Overwrite
+  eq([(await labelOf(c, "a.html"))[0], (await labelOf(c, "b.html"))[0]], ["내가 고침", "내가 고침"], "learner's own bytes");
+});
+
+await t("a learner save of exactly the AI's bytes keeps the AI label (pasting a different block does not)", async () => {
+  const c = await session({ "a.html": "v0" });
+  await c.coachTurn(async () => c.put("a.html", "AI page"));
+  c.save("a.html", "AI page"); // typed something and typed it back, then saved: the AI's bytes
+  eq((await labelOf(c, "a.html"))[0], "AI가 고침", "same bytes");
+  c.save("a.html", "AI page\n<!-- pasted coach block -->"); // the learner placed new content
+  eq((await labelOf(c, "a.html"))[0], "내가 고침", "pasted and saved: by design");
 });
 
 setHostWriteSink(null);

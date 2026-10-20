@@ -1653,13 +1653,22 @@ measured). Built:
     `raw/`.
   - `내가 올림`: Studio committed it from a learner attachment (D-028 photo into `images/`, #421 pasted
     image into `assets/`).
-  - `내가 고침`: **positive evidence only.** The learner typed into the file in a VS Code editor
-    (`onDidChangeTextDocument` with a non-empty change that leaves the document dirty, inside the work
-    folder) and VS Code reported its save (`onDidSaveTextDocument`). The event carries the hash of the
-    text VS Code saved (`LearnerEditTracker` → `noteLearnerSave`). A reload from disk after someone
-    else's write leaves the document clean, so it never counts; Studio itself never edits documents.
-    If the saved text's bytes are not what is on disk (another encoding, a later write), no event
-    matches and the file reads `기록 없음`.
+  - `내가 고침`: **positive evidence only**, from VS Code's document events (`LearnerEditTracker` →
+    `noteLearnerSave`; Studio itself never edits documents):
+    - A non-empty change that leaves a work-folder document dirty marks it typed. **Any** change that
+      leaves it clean clears the mark: an undo back to the saved text, Revert File, a reload from disk
+      after someone else's write, or resolving a save conflict to the disk version.
+    - The save counts only if the document is typed **and** dirty at `onWillSaveTextDocument`, before
+      save participants run. Studio binds Cmd+S with force, so a clean document can still be saved.
+      Such a forced save never counts, even when a formatter on save (trim whitespace, format,
+      final newline) edits the text during it.
+    - `onDidSaveTextDocument` then records the hash of the saved text. If those bytes are exactly
+      what the AI or Studio last wrote there, the earlier writer keeps the label. If they are not what
+      is on disk (another encoding, a later write), no event matches and the file reads `기록 없음`.
+    - It records an editor action, not who authored the content. **By design**, pasting a coach code
+      block (the code block's copy button, #2070) into a file and saving it reads `내가 고침`: the
+      learner chose to place it there. The same holds when the learner overwrites a newer AI version
+      on disk with their own dirty buffer (VS Code's conflict "Overwrite").
   - `기록 없음`: every other change, whoever made it: a background process the coach started, a
     stopped turn's late write, git or another editor, a change made while Studio was closed, a GitHub
     pull, a write that races a scan. Scans only detect **that** bytes changed; they never attribute a
@@ -1737,11 +1746,17 @@ stopped turn's late write, a Studio write / GitHub pull / whole turn overlapping
 case, and a clean reload, an empty change, a closed document, another folder and an untitled document
 recording nothing); save-vs-AI order in one turn; the real `saveImageEditOutput`, `writeFiles` and
 `prepareWorkspaceDirectory` through the hook; the hash cache; Python environments skipped;
+the editor-save evidence modelled on VS Code's document events (round 5: typed then undone, typed
+then Revert File, and a dirty buffer resolved to the AI's disk version, each followed by an AI rewrite,
+a reload and a forced Cmd+S, read `AI가 고침`; a forced Cmd+S on a clean AI file with a formatter on
+save is not the learner's; the learner's own typing with a formatter, an Overwrite of a newer AI
+version and a pasted block read `내가 고침`; a save of exactly the AI's bytes keeps the AI label; the
+round-4 tracker fails R1, R1b, R1c and R2);
 `test/artifact-provenance-host.smoke.mjs` — the real `ChatPanelProvider` bundled with only VS Code
 I/O substituted: agent.md, index.html and engine.js saves and the `revealBuilt` writer choice per
 source, learner uploads, folder-consent refusals and failed writes recording nothing, an instructor
 turn leaving the ledger stale, a real editor save through the fake VS Code document events recorded
-as the learner's (and a clean reload or another folder not), and locks on the upload call site, the
+as the learner's (and a clean reload, a typed-then-undone forced save or another folder not), and locks on the upload call site, the
 list-scan generation and the before-and-after pull marks; reverting the scan default to `내가 고침`,
 dropping the dirty check or the in-turn order rule each fails cases;
 `extensions/hypeproof-chat/test/artifact-provenance.test.tsx` — row markup, symbol plus words, Studio

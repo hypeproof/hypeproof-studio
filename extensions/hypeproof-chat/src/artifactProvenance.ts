@@ -133,7 +133,11 @@ export function recordHostWrite(ledger: ProvenanceLedger, writes: readonly FileH
   const baseline = ledger.baseline ? { ...ledger.baseline } : null;
   const stalePaths = new Set(ledger.stalePaths ?? []);
   for (const w of writes) {
-    const existed = (baseline?.[w.path] !== undefined) || !!latestLive(events, w.path);
+    const live = latestLive(events, w.path);
+    // A learner save whose bytes are exactly what the AI or Studio last wrote there changed nothing
+    // the learner made: the earlier writer keeps the label.
+    if (opts.actor === "learner_save" && live?.sha256 === w.sha256 && /^(ai|studio)_/.test(live.kind)) continue;
+    const existed = (baseline?.[w.path] !== undefined) || !!live;
     const kind: ProvenanceEventKind = opts.actor === "learner_upload" ? "learner_uploaded"
       : opts.actor === "learner_save" ? "learner_changed"
       : opts.actor === "ai" ? (existed ? "ai_changed" : "ai_created")
@@ -455,15 +459,21 @@ export function noteLearnerSave(absPath: string, text: string): void {
 }
 
 /**
- * Positive evidence of a learner edit. VS Code's document events feed it (`changed` from
- * onDidChangeTextDocument, `saved` from onDidSaveTextDocument): a document counts as the learner's
- * once a non-empty change leaves it dirty (a reload from disk after someone else's write leaves it
- * clean, and Studio never edits documents), and its next save is recorded with the hash of the text
- * VS Code saved. If those bytes are not what is on disk (another encoding, a later write) no event
- * matches them and the file reads 기록 없음.
+ * Positive evidence of a learner edit, from VS Code's document events:
+ * - `changed` (onDidChangeTextDocument): a non-empty change that leaves the document dirty marks it
+ *   typed; ANY change that leaves it clean (undo back to the saved text, Revert File, a reload from
+ *   disk after someone else's write) clears the mark.
+ * - `willSave` (onWillSaveTextDocument): the save counts only if the document is typed AND dirty at
+ *   this moment, before save participants (format on save, trim whitespace) run. A forced save of a
+ *   clean document (Studio binds Cmd+S with force) never counts, even if a participant edits it.
+ * - `saved` (onDidSaveTextDocument): records the hash of the saved text. If those bytes are what the
+ *   AI or Studio last wrote there, the ledger keeps their label (`recordHostWrite`); if they are not
+ *   what is on disk (another encoding, a later write), no event matches and the file reads 기록 없음.
+ * Studio never edits documents itself.
  */
 export class LearnerEditTracker {
-  private readonly edited = new Set<string>();
+  private readonly typed = new Set<string>();
+  private readonly counting = new Set<string>();
   private readonly inFolder: (absPath: string) => boolean;
   private readonly record: (absPath: string, text: string) => void;
   constructor(inFolder: (absPath: string) => boolean, record: (absPath: string, text: string) => void = noteLearnerSave) {
@@ -471,15 +481,22 @@ export class LearnerEditTracker {
     this.record = record;
   }
   changed(doc: { fsPath: string; isDirty: boolean; scheme: string }, contentChanges: number): void {
-    if (doc.scheme !== "file" || contentChanges === 0 || !doc.isDirty || !this.inFolder(doc.fsPath)) return;
-    this.edited.add(doc.fsPath);
+    if (doc.scheme !== "file" || !this.inFolder(doc.fsPath)) return;
+    if (!doc.isDirty) { this.typed.delete(doc.fsPath); return; }
+    if (contentChanges > 0) this.typed.add(doc.fsPath);
+  }
+  willSave(doc: { fsPath: string; isDirty: boolean; scheme: string }): void {
+    if (doc.scheme === "file" && doc.isDirty && this.typed.has(doc.fsPath) && this.inFolder(doc.fsPath)) this.counting.add(doc.fsPath);
+    else this.counting.delete(doc.fsPath);
   }
   saved(doc: { fsPath: string; scheme: string; text: string }): void {
-    if (doc.scheme !== "file" || !this.edited.delete(doc.fsPath) || !this.inFolder(doc.fsPath)) return;
+    const counts = this.counting.delete(doc.fsPath);
+    this.typed.delete(doc.fsPath);
+    if (doc.scheme !== "file" || !counts || !this.inFolder(doc.fsPath)) return;
     this.record(doc.fsPath, doc.text);
   }
   /** A closed document's unsaved edits are gone. */
-  closed(doc: { fsPath: string }): void { this.edited.delete(doc.fsPath); }
+  closed(doc: { fsPath: string }): void { this.typed.delete(doc.fsPath); this.counting.delete(doc.fsPath); }
 }
 
 /**

@@ -4575,6 +4575,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const ws = vscode.workspace as Partial<typeof vscode.workspace>;
     const subs = [
       ws.onDidChangeTextDocument?.((e) => tracker.changed({ fsPath: e.document.uri.fsPath, scheme: e.document.uri.scheme, isDirty: e.document.isDirty }, e.contentChanges.length)),
+      ws.onWillSaveTextDocument?.((e) => tracker.willSave({ fsPath: e.document.uri.fsPath, scheme: e.document.uri.scheme, isDirty: e.document.isDirty })),
       ws.onDidSaveTextDocument?.((doc) => tracker.saved({ fsPath: doc.uri.fsPath, scheme: doc.uri.scheme, text: doc.getText() })),
       ws.onDidCloseTextDocument?.((doc) => tracker.closed({ fsPath: doc.uri.fsPath })),
     ];

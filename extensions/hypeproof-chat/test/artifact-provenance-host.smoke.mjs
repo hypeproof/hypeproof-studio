@@ -173,23 +173,30 @@ await t("a real editor save through VS Code's document events is recorded as the
   captureWrites(); // an earlier case installed a real recorder's sink
   const listeners = {};
   const on = (name) => (fn) => { listeners[name] = fn; return { dispose: () => {} }; };
-  Object.assign(vscode.workspace, { onDidChangeTextDocument: on("change"), onDidSaveTextDocument: on("save"), onDidCloseTextDocument: on("close") });
+  Object.assign(vscode.workspace, { onDidChangeTextDocument: on("change"), onWillSaveTextDocument: on("willSave"), onDidSaveTextDocument: on("save"), onDidCloseTextDocument: on("close") });
   const subscriptions = [];
   h.watchLearnerSaves({ subscriptions });
-  eq(subscriptions.length, 3, "three subscriptions, disposed with the extension");
+  eq(subscriptions.length, 4, "four subscriptions, disposed with the extension");
   const doc = (rel, text, isDirty) => ({ uri: { fsPath: path.join(root, rel), scheme: "file" }, isDirty, getText: () => text });
   fs.writeFileSync(path.join(root, "notes.md"), "typed by the learner");
   listeners.change({ document: doc("notes.md", "typed by the learner", true), contentChanges: [{ text: "x" }] });
+  listeners.willSave({ document: doc("notes.md", "typed by the learner", true) });
   listeners.save(doc("notes.md", "typed by the learner", false));
   eq(writes.map((w) => [w.rel, w.actor, w.data]), [["notes.md", "learner_save", "typed by the learner"]], "save recorded");
   writes = [];
   // negative controls: the coach's write reloaded into a clean editor, then saved; a file outside the folder
   listeners.change({ document: doc("index.html", "AI bytes", false), contentChanges: [{ text: "AI bytes" }] });
+  listeners.willSave({ document: doc("index.html", "AI bytes", false) });
+  listeners.save(doc("index.html", "AI bytes", false));
+  // typed then undone (clean again), then a forced Cmd+S: not the learner's
+  listeners.change({ document: doc("index.html", "AI bytesx", true), contentChanges: [{ text: "x" }] });
+  listeners.change({ document: doc("index.html", "AI bytes", false), contentChanges: [{ text: "" }] });
+  listeners.willSave({ document: doc("index.html", "AI bytes", false) });
   listeners.save(doc("index.html", "AI bytes", false));
   listeners.change({ document: { uri: { fsPath: path.join(os.tmpdir(), "elsewhere.md"), scheme: "file" }, isDirty: true, getText: () => "x" }, contentChanges: [{ text: "x" }] });
   listeners.save({ uri: { fsPath: path.join(os.tmpdir(), "elsewhere.md"), scheme: "file" }, isDirty: false, getText: () => "x" });
   eq(writes, [], "no learner record without a learner edit in the folder");
-  for (const k of ["onDidChangeTextDocument", "onDidSaveTextDocument", "onDidCloseTextDocument"]) delete vscode.workspace[k];
+  for (const k of ["onDidChangeTextDocument", "onWillSaveTextDocument", "onDidSaveTextDocument", "onDidCloseTextDocument"]) delete vscode.workspace[k];
 });
 
 setHostWriteSink(null);
