@@ -223,6 +223,19 @@ jobs:
           - \`HypeProof-Studio-darwin-arm64.zip\`
 
           EOF
+          # Per-release installer (verify-unified-release.yml): dist/* already carries
+          # install-mac.sh and the Test Kit zip. The one-liner points at the public
+          # source release, which needs no GitHub login and is not quarantined.
+          if [[ -f dist/install-mac.sh ]]; then
+            cat >> mirror-release-notes.md <<EOF
+          One command for this exact build (no GitHub login; curl downloads are not quarantined):
+
+          \`\`\`bash
+          curl -fsSL https://github.com/$SOURCE_REPO/releases/download/$TAG/install-mac.sh | bash
+          \`\`\`
+
+          EOF
+          fi
           if compgen -G 'dist/*.exe' >/dev/null; then
             cat >> mirror-release-notes.md <<EOF
           ### Windows

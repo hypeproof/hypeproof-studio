@@ -29,6 +29,12 @@ try{
  const file=path.join(directory,'unified-acceptance.json');
  const run=()=>spawnSync(process.execPath,[new URL('../../scripts/check-unified-release.mjs',import.meta.url).pathname,directory,sha,version],{encoding:'utf8'}).status;
  fs.writeFileSync(file,JSON.stringify(evidence));assert.equal(run(),0);
+ // The per-release Test Kit zip is generated after acceptance and is not an App package:
+ // its presence keeps the verdict (positive control); any other new zip still changes the set.
+ const kit=path.join(directory,'HypeProof-v1.2.3-Test-Kit.zip'),stray=path.join(directory,'HypeProof-v1.2.3-Extra.zip');
+ fs.writeFileSync(kit,'kit');assert.equal(run(),0);
+ fs.writeFileSync(stray,'stray');assert.notEqual(run(),0);
+ fs.unlinkSync(kit);fs.unlinkSync(stray);
  evidence.receipts[1].publicService.version='different';fs.writeFileSync(file,JSON.stringify(evidence));assert.notEqual(run(),0);
  evidence.receipts[1].publicService.version='w-test';fs.writeFileSync(file,JSON.stringify(evidence));
  fs.appendFileSync(path.join(directory,'HypeProof-Studio-darwin-arm64.zip'),'changed');assert.notEqual(run(),0);

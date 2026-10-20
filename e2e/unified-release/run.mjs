@@ -6,7 +6,7 @@ import path from 'node:path';
 import net from 'node:net';
 import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {appIdentity,treeHash,sha256,assertReceipt} from './artifact.mjs';
+import {appIdentity,treeHash,sha256,assertReceipt,isAppPackage} from './artifact.mjs';
 import {checkSeededSdk} from './sdk-seed.mjs';
 import {candidateService,assertCandidateServiceUnchanged,redactEvidence,assertServiceActivity} from './candidate-service.mjs';
 import {compatibilityEnvironment,assertCompatibilityOutputBound} from './output-bound.mjs';
@@ -38,7 +38,7 @@ try{
  // Without the per-user SDK binary the trial silently runs on the proxy and the Service refuses it (hypeproof/hypeprooflab#997).
  const sdk=checkSeededSdk(appDirectory);
  if(!sdk.ok)throw Error(`BLOCKED: Agent SDK ${sdk.version} binary not seeded for this user (${sdk.reason}: ${sdk.binary}); run scripts/seed-sdk-binary first`);
- const assets=Object.fromEntries(fs.readdirSync(assetDirectory).filter(n=>/\.(zip|exe)$/.test(n)).map(n=>[n,sha256(path.join(assetDirectory,n))]));
+ const assets=Object.fromEntries(fs.readdirSync(assetDirectory).filter(isAppPackage).map(n=>[n,sha256(path.join(assetDirectory,n))]));
  fs.mkdirSync(outputDirectory,{recursive:true});
  temporary=fs.mkdtempSync(path.join(os.tmpdir(),'hps-unified-acceptance-'));
  // App acceptance must exercise the same Service implementation as deployment,

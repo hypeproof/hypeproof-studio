@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 export const sha256=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+// The per-release Test Kit (scripts/release/install-kit.mjs) is a .zip generated after
+// acceptance from the accepted package's SHA-256. It is not an App package: acceptance
+// neither tests nor hashes it, so its presence never reads as a changed artifact set.
+export const TEST_KIT_ZIP=/^HypeProof-v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?-Test-Kit\.zip$/;
+export const isAppPackage=name=>/\.(zip|exe)$/.test(name)&&!TEST_KIT_ZIP.test(name);
 export function appIdentity(app,platform=process.platform) {
  const resources=path.join(app,platform==='darwin'?'Contents/Resources/app':'resources/app');
  const product=JSON.parse(fs.readFileSync(path.join(resources,'product.json'),'utf8'));

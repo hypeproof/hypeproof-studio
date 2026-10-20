@@ -99,6 +99,68 @@ REQUIRE_SDK_VENDOR=1 bash scripts/verify-branding.sh "/path/to/scratch/HypeProof
 `repack-mac.sh` stamps the source `extensions/hypeproof-chat/package.json`, as
 `inject-builtin-extensions.sh` always has. Restore it with `git checkout` after a local run.
 
+## Per-release Mac installer and Test Kit
+
+Every published release, rc and stable alike, carries two more assets, made by
+`scripts/release/install-kit.mjs` in the publish job of `verify-unified-release.yml` while
+the release is still a draft:
+
+| Asset | What it is |
+|---|---|
+| `install-mac.sh` | The one-liner at the top of the release notes. Pinned to the tag: the source commit, the SHA-256 of `HypeProof-Studio-darwin-arm64.zip`, the SDK seed tarball and the seeder are baked in. |
+| `HypeProof-<tag>-Test-Kit.zip` | `INSTALL-<version>.command`, `START-<version>.command`, the same `install-mac.sh` and a Korean `READ-ME.txt` worded for the version (no participation code from 2026.1020.0). |
+
+```bash
+curl -fsSL https://github.com/hypeproof/hypeproof-studio/releases/download/<tag>/install-mac.sh | bash
+curl -fsSL .../install-mac.sh | bash -s -- --system     # stable: /Applications instead
+curl -fsSL .../install-mac.sh | bash -s -- --layout kit # stable: side-by-side test install
+```
+
+Why curl: the zip is ad-hoc signed and not notarized. A browser download gets
+`com.apple.quarantine` and Gatekeeper refuses the app; curl adds no quarantine flag.
+
+What the script does, in order. It writes nothing until the safety checks pass.
+
+1. Refuses a non-arm64 Mac, root, a symlinked install or profile path, an existing
+   `HypeProof Studio.app` with another bundle id, a kit folder or profile it did not make
+   (`.hps-kit-<version>` marker), and a running copy of the target app.
+2. Downloads the zip with curl, checks the baked SHA-256, extracts it and checks the bundle
+   id and `CFBundleShortVersionString`.
+3. Installs. `app` layout (stable default): `~/Applications/HypeProof Studio.app`, or
+   `/Applications` with `--system` (never sudo). `kit` layout (rc default, and the Test Kit):
+   `~/Applications/HypeProof-RC-<version>/` with its own profile at
+   `~/Library/Application Support/HPS-<version>/` and `START-<version>.command`. The new copy
+   is staged beside the old one and swapped in; the old copy is restored if the swap fails.
+4. Clears quarantine on the curl path only, as `scripts/install.sh` does. The .command kit
+   never changes security settings.
+5. Seeds the coach SDK binary from this release's `claude-agent-sdk-darwin-arm64-<v>.tgz`
+   through `scripts/seed-sdk-binary.sh --tarball`, fetched at the source commit and checked
+   against its SHA-256, as Lab's open install does. A failure is a warning: Studio offers to
+   fetch the seed itself on first use (REQ-M46).
+
+`START-<version>.command` keeps secrets in the macOS keychain. `--use-inmemory-secretstorage`
+broke the free start on 2026-10-19 (the claim and install id are lost on the reload, a second
+claim mints a new seat). `HPS_KIT_INMEMORY_SECRETS=1` turns it on explicitly.
+
+`check-unified-release.mjs` and the acceptance receipt leave `HypeProof-v*-Test-Kit.zip` out
+of the accepted packages (`isAppPackage` in `e2e/unified-release/artifact.mjs`), so the kit
+added after acceptance does not read as a changed artifact set. `mirror-release.yml` copies
+both assets with `dist/*` and adds the public one-liner to the mirror notes.
+
+Releases published before this change have no `install-mac.sh`. Backfill one by hand:
+
+```bash
+node scripts/release/install-kit.mjs render --tag <tag> --source-sha <tag commit> \
+  --zip-sha256 <zip sha256 from unified-acceptance.json> \
+  --seed-name claude-agent-sdk-darwin-arm64-<v>.tgz --seed-sha256 <from the .sha256 asset> \
+  --seeder-sha256 "$(git show <tag commit>:scripts/seed-sdk-binary.sh | shasum -a 256 | cut -d' ' -f1)" \
+  --out /path/to/scratch
+gh release upload <tag> /path/to/scratch/* --repo hypeproof/hypeproof-studio
+```
+
+Controls: `node --test scripts/release/test/install-kit.test.mjs` (baked values, wrong-sha
+abort, layouts, refusals and shellcheck; the install runs need macOS and use a scratch HOME).
+
 ## Release platforms
 
 `config/release-platforms.json` lists the platforms a release ships. It is read at the
