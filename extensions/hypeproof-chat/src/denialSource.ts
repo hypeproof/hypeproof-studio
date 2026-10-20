@@ -10,6 +10,8 @@
 //             app does not know yet, a connection that does not support it);
 //   access  — 이용권 선택: the access/이용권 choice the learner selected narrowed the seat
 //             (accessProfile), not the lesson;
+//   folder  — 폴더 권한: the learner's own choice for this folder in a personal activity
+//             (REQ-STUDIO-FOLDER-CONSENT, folderConsent.ts), not the lesson and not a rule;
 //   unknown — 확인 안 됨: the site cannot tell which of the others it is. A site that cannot
 //             tell MUST use this rather than guess (AE-12: never mislabel the source).
 //
@@ -23,7 +25,7 @@
 
 import type { SeatAudience } from "./seatVocabulary.ts";
 
-export type DenialSource = "lesson" | "safety" | "runtime" | "access" | "unknown";
+export type DenialSource = "lesson" | "safety" | "runtime" | "access" | "folder" | "unknown";
 
 /** The learner-facing label of each source, also the tag in coach-facing tool results. */
 export const DENIAL_SOURCE_LABEL: Readonly<Record<DenialSource, string>> = {
@@ -31,6 +33,7 @@ export const DENIAL_SOURCE_LABEL: Readonly<Record<DenialSource, string>> = {
   safety: "안전 규칙",
   runtime: "앱 버전/환경",
   access: "이용권 선택",
+  folder: "폴더 권한",
   unknown: "확인 안 됨",
 };
 
@@ -58,6 +61,8 @@ export const DENIAL_CAUSES = {
   needs_newer_app: "runtime",
   // 이용권 선택 — the selected access choice removed it (accessRemovedFeatures).
   access_choice_narrowed: "access",
+  // 폴더 권한 — the learner's choice for this folder removed it (folderRemovedFeatures).
+  folder_choice_narrowed: "folder",
 } as const satisfies Record<string, Exclude<DenialSource, "unknown">>;
 
 export type DenialCause = keyof typeof DENIAL_CAUSES;
@@ -122,6 +127,9 @@ export function denialCopy(d: Denial, audience: DenialAudience = "classroom"): s
       return `${safetyFrame(d)} ${next(`궁금하면 ${solo ? SOLO_REPORT : "선생님께 물어봐 주세요"}`)}`;
     case "access":
       return `지금 고른 이용권에서는 ${object(feature)} 쓸 수 없어요. ${next("다른 이용권을 고르거나 이 기능 없이 이어서 해 주세요")}`;
+    case "folder":
+      // The learner's own choice: no teacher, no 이용권, the one command that changes it.
+      return `이 폴더에서는 ${object(feature)} 쓰지 않기로 골랐어요. ${next("바꾸려면 ‘이 폴더의 AI 권한 바꾸기’에서 다시 골라 주세요")}`;
     case "runtime":
       return `이 기능은 지금 앱에서 쓸 수 없어요 — ${clause(d.reason, "이 앱이 아직 지원하지 않아요")}. ${next(`앱을 업데이트하거나 ${solo ? SOLO_REPORT : "선생님께 알려 주세요"}`)}`;
     default:

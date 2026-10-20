@@ -52,6 +52,8 @@ import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from 
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
 import { uploadAllPending, scanUploadableSessions } from "./spoolUploader";
 import type { ResolvedProfile } from "./protocol";
+import { changeFolderConsent } from "./folderConsentHost";
+import { FOLDER_CONSENT_COMMAND } from "./folderConsent.ts";
 import { resolvePublishEndpoints, type PublishOverrideSource } from "./publish/publishConfig";
 
 const TOKEN_KEY = "hypeproofChat.workshopToken";
@@ -264,6 +266,12 @@ export async function activate(context: vscode.ExtensionContext) {
     await ensureWorkspace(profile, context, false, commit, folder);
   });
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.switchProject", () => provider.switchProject()));
+  // REQ-STUDIO-FOLDER-CONSENT — preview saves ask the same write question as the chat host.
+  preview.setWriteGuard((target) => provider.folderWriteRefusalFor(target));
+  // REQ-STUDIO-FOLDER-CONSENT — the one place a remembered folder choice is changed.
+  context.subscriptions.push(vscode.commands.registerCommand(FOLDER_CONSENT_COMMAND, async () => {
+    await changeFolderConsent(context, await provider.ensureProfile(), { servedRoot: provider.servedClassRoot, instructor: provider.isInstructor === true });
+  }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
 

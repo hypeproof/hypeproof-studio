@@ -6371,6 +6371,37 @@
       ]
     },
     {
+      "id": "ST-IMP-FOLDER-CONSENT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/folderConsent.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/folderConsentHost.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-FOLDER-CONSENT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-IMP-FOLDER-CONSENT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/folder-consent.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-IME-GUARD",
       "stage": "implementation",
       "owner": "jayleekr",

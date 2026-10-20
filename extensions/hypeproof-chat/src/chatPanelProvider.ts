@@ -18,6 +18,7 @@ const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
 import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
+import { folderConsentProfile, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { verifyActivity } from './proxyClient';
 import { fetchAccessView, sendBudgetRequest, accessProfile, type AccessState } from './accessClient';
 import { availableModelSelection, selectedModel, modelSelectionScope, type SavedModelChoice, selectedEffort, observedEffortResult, type SavedEffortChoice } from './modelSelection';
@@ -28,7 +29,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as os from "node:os";
 // hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
-import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel } from "./attachedImages";
+import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel, ATTACHED_IMAGE_DIR } from "./attachedImages";
 import { imagePathsFromNotes, selectReferencedImagePaths, readWorkspaceReferenceImages, referenceImageFailuresNote } from "./referenceImages";
 import { selectedExternalInstructions } from "./externalSkillCommands";
 import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
@@ -1021,6 +1022,27 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * deriving `<class folder>-<repo>` from it chained names (`…-sandbox-dental-homepage-3-…`).
    */
   private servedWorkspaceRoot: string | null = null;
+  /** The served class folder (REQ-STUDIO-FOLDER-CONSENT: the activity's own folder). */
+  get servedClassRoot(): string | null { return this.servedWorkspaceRoot; }
+  private folderConsentOpts() { return { servedRoot: this.servedWorkspaceRoot, instructor: this._instructorMode?.isInstructor === true }; }
+  /** REQ-STUDIO-FOLDER-CONSENT — the one write question (also asked by the preview). null = may write. */
+  folderWriteRefusalFor(target: string): string | null { return folderWriteRefusal(this.context, this.cachedProfile, this.folderConsentOpts(), target); }
+  private readonly folderWriteNoted = new Set<string>();
+  /** Every host write into the open folder passes here: true = blocked, with one 폴더 권한 line per turn. */
+  private folderWriteBlocked(target: string, streamId?: string): boolean {
+    const refusal = this.folderWriteRefusalFor(target);
+    if (!refusal) return false;
+    if (!streamId) this.postPageNotice(refusal);
+    else if (!this.folderWriteNoted.has(streamId)) { this.folderWriteNoted.add(streamId); this.postToolLog(streamId, { id: randomId(), icon: "🔒", label: refusal, state: "error" }); }
+    return true;
+  }
+  /** Every model call the host makes outside the chat turn's own check passes here: the refusal copy, or null. */
+  private async folderAiRefusal(): Promise<string | null> {
+    const profile = this.cachedProfile ?? (await this.ensureProfile().catch(() => null));
+    if (!profile) return null;
+    try { await folderConsentProfile(this.context, profile, this.folderConsentOpts()); return null; }
+    catch (error) { if (error instanceof FolderConsentRefusal) return error.message; throw error; }
+  }
   setProjectOpener(open: (folder: string) => Promise<void>): void {
     this.projectOpener = open;
   }
@@ -1609,6 +1631,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!folder) return { lines: ["작업 폴더를 먼저 열어 주세요."] };
     const label = sessionLabel(plan);
     const dir = wikiDir(folder.uri.fsPath, plan);
+    const folderBlocked = this.folderWriteRefusalFor(dir);
+    if (folderBlocked) return { lines: [folderBlocked] };
     const state = initWiki(dir, productTitle(folder.uri.fsPath) ?? folder.name, plan);
     const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
     const session = await this.ingestSession(state, plan, today, opts);
@@ -1662,6 +1686,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder || !plan?.deck) return { lines: ["이 수업에는 덱 템플릿이 없어요."] };
     const dir = wikiDir(folder.uri.fsPath, plan);
+    const folderBlocked = this.folderWriteRefusalFor(dir);
+    if (folderBlocked) return { lines: [folderBlocked] };
     const state = loadState(dir);
     if (!state || !state.sessions.length) return { lines: [`먼저 수업 내용을 ${name}에 정리해 주세요. "${name}에 정리해 줘"라고 말하면 돼요.`] };
     const last = Math.max(...state.sessions);
@@ -1753,6 +1779,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * (#751 U3), so a switched lesson version admits the request instead of refusing it.
    */
   private async completeSkill(prompt: string, headers: Record<string, string>): Promise<SkillCompletion> {
+    const folderRefusal = await this.folderAiRefusal();
+    if (folderRefusal) { this.postPageNotice(folderRefusal); return { ok: false }; }
     const token = await this.crProjectMemory.refresh();
     if (!token) return { ok: false };
     const profile = await this.ensureProfile().catch(() => null);
@@ -3093,6 +3121,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!md) return;
     const folders = vscode.workspace.workspaceFolders;
     if (!folders || folders.length === 0) return;
+    if (this.folderWriteBlocked(path.join(folders[0].uri.fsPath, "agent.md"), streamId)) return;
     try {
       const target = vscode.Uri.joinPath(folders[0].uri, "agent.md");
       await vscode.workspace.fs.writeFile(target, Buffer.from(md, "utf8"));
@@ -3236,9 +3265,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     void this.postLivenessEvent(ev);
   }
 
-  private async saveGameToWorkspace(html: string): Promise<void> {
+  /** False only when the folder choice kept it off disk (the reply still renders from memory). */
+  private async saveGameToWorkspace(html: string, streamId?: string): Promise<boolean> {
     const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) return;
+    if (!folders || folders.length === 0) return true;
+    if (this.folderWriteBlocked(path.join(folders[0].uri.fsPath, "index.html"), streamId)) return false;
     try {
       const root = folders[0].uri;
       const target = vscode.Uri.joinPath(root, "index.html");
@@ -3248,6 +3279,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch {
       // Non-fatal: preview still works even if the save fails.
     }
+    return true;
   }
 
   /** Developer record of an SdkUnavailableError, verbatim (REQ-M30 ③; REQ-M45 keeps it when no fallback runs). */
@@ -3322,6 +3354,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!images || images.length === 0) return empty;
     const cwd = this.resolveCoachCwd();
     if (!cwd) return empty;
+    if (this.folderWriteBlocked(path.join(cwd, PASTED_IMAGE_DIR), streamId)) return empty;
 
     const dir = vscode.Uri.joinPath(vscode.Uri.file(cwd), PASTED_IMAGE_DIR);
     const at = new Date();
@@ -3473,6 +3506,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(ids.length), state: "error" });
       return "";
     }
+    if (this.folderWriteBlocked(path.join(cwd, ATTACHED_IMAGE_DIR), streamId)) {
+      for (const id of ids) this.imageStaging.discard(id);
+      return "";
+    }
     const { relPaths, failed } = this.imageStaging.commit(ids, cwd);
     if (failed > 0) this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(failed), state: "error" });
     if (relPaths.length === 0) return "";
@@ -3523,6 +3560,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return null; // no file means there is nothing to archive
     }
     if (!shouldArchiveWorld(html, nextHtml)) return null;
+    if (this.folderWriteBlocked(path.join(cwd, WORLD_ARCHIVE_DIR), streamId)) return null;
     try {
       const dir = vscode.Uri.file(path.join(cwd, WORLD_ARCHIVE_DIR));
       await vscode.workspace.fs.createDirectory(dir);
@@ -3671,9 +3709,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** Saves engine.js into the work folder (beside the world HTML). A failure is rescued by the preview's inlining. */
-  private async saveEngineToWorkspace(js: string): Promise<void> {
+  private async saveEngineToWorkspace(js: string, streamId?: string): Promise<void> {
     const cwd = this.resolveCoachCwd();
     if (!cwd) return;
+    if (this.folderWriteBlocked(path.join(cwd, "engine.js"), streamId)) return;
     try {
       await vscode.workspace.fs.writeFile(vscode.Uri.file(path.join(cwd, "engine.js")), Buffer.from(js, "utf8"));
     } catch { /* the fallback rescues it by inlining */ }
@@ -3827,6 +3866,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (!roster?.checks.includes("archive_before_overwrite")) return;
       const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!root) return;
+      if (this.folderWriteBlocked(path.join(root, ".hypeproof", "history"), streamId)) return;
       const outcome = archiveBeforeOverwrite({
         seat: { profile: this.cachedProfile, orchestrator: true },
         workspaceRoot: root,
@@ -3928,9 +3968,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.archiveAdultPage(checked.html, opts?.streamId);
     // Swap the engine in **after** the archive is done (the archived copy takes the
     // old engine inlined).
-    if (opts?.engineJs !== undefined) await this.saveEngineToWorkspace(opts.engineJs);
-    await this.saveGameToWorkspace(checked.html);
-    if (this.isLiveServerPreview() && (await this.openInLiveServer())) {
+    if (opts?.engineJs !== undefined) await this.saveEngineToWorkspace(opts.engineJs, opts?.streamId);
+    // REQ-STUDIO-FOLDER-CONSENT — not saved (읽기만): the live server would show the old file, so the reply renders from memory.
+    const saved = await this.saveGameToWorkspace(checked.html, opts?.streamId);
+    if (saved && this.isLiveServerPreview() && (await this.openInLiveServer())) {
       logReveal("done", "미리보기를 열었어요");
       return true;
     }
@@ -4649,6 +4690,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void vscode.window.showWarningMessage("활동에 연결하고 작업 폴더를 연 뒤 이미지를 편집해 주세요.");
         return;
       }
+      // REQ-STUDIO-FOLDER-CONSENT — image editing calls the model and saves its result into the folder.
+      const folderRefusal = (await this.folderAiRefusal()) ?? this.folderWriteRefusalFor(cwd);
+      if (folderRefusal) { void vscode.window.showWarningMessage(folderRefusal); return; }
       await runImageEdit(this.context, { profile, token, cwd, proxyUrl: this.proxyUrl(),
         onSelected: async (relativePath) => {
           await this.postAppReply(`선택한 이미지: ${relativePath}. 다음 요청에 ‘선택한 이미지’라고 적으면 이 파일을 참고합니다. 원본은 그대로 보존됩니다.`);
@@ -5303,6 +5347,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // stops it, and then the learner's text and attachments go straight back into the composer.
     if (this.opsObserver?.switchPendingSetting) await this.lessonBindingPreflight();
     preflightComplete=true;
+    // REQ-STUDIO-FOLDER-CONSENT — decided before anything in this turn calls the model (team brain included).
+    if (this.cachedProfile) await folderConsentProfile(this.context, this.cachedProfile, this.folderConsentOpts());
     // DEC-08 — an edited resend is measured as its own event; the original attempt keeps its own turn record.
     if (editOf && editedFrom) this.spool?.recordWorkflow({ event: "edit_resend", payload: editResendPayload({
       editOf, fromMessageId: editedFrom.message.id, toMessageId: userId, versions,
@@ -5409,7 +5455,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.loadAccess();
     const fundingSource=this.accessState?.selected;
     const chosenAccess=this.accessState?.view?.choices.find(c=>c.id===fundingSource);
-    const profile=resolvedProfile?accessProfile(resolvedProfile,chosenAccess):null;
+    // REQ-STUDIO-FOLDER-CONSENT — a personal activity in a folder that is not its own asks once; the choice only narrows.
+    const profile=resolvedProfile?await folderConsentProfile(this.context,accessProfile(resolvedProfile,chosenAccess),{servedRoot:this.servedWorkspaceRoot,instructor:this._instructorMode.isInstructor===true}):null;
     // #751 U3 — captured ONCE for this turn: every request of the turn names the binding the turn started under.
     const bindingKey = profile?.lesson_binding?.enforced ? profile.lesson_binding.key : undefined;
     // #751 G2 — the step and help choice for THIS turn, from the focus at turn start against the turn's own lesson.

@@ -27,6 +27,64 @@ original task and unsaved input visible and editable.
 [Design](design/task-workspace.md) and [TW/CP acceptance](testing/task-workspace.md)
 separate filesystem/host/built-UI evidence from native, Windows and customer proof.
 
+`REQ-STUDIO-FOLDER-CONSENT` (CGP-KNOW-R-010 / REQ-KNOW-18, P1, 2026-10-20): a personal
+activity (activity kind personal or trial, or a bought pass; never a classroom seat, a
+seat with a served lesson or lesson binding, or the instructor surface) whose open folder
+is not its own work folder asks once, before the first model call in that folder, what
+Studio's AI may do there: "읽기만 허용 (고치기·명령은 안 함)" (offered first, so Enter
+never grants commands), "읽기·고치기·명령 실행 모두 허용", or "이 폴더에서는 AI를 쓰지 않음".
+Own folder = exactly the served `workspace_root` or a folder inside it; a look-alike
+sibling (`<home>-taxes`, `<home>Clinic`) and the siblings Studio itself creates
+(`<home>-N`, `<home>-<repo>`) ask once; with no served home every folder asks. The answer
+is stored in globalState (`hps.folderConsent.v1`) per local activity id per canonical
+folder (real path with symlinks resolved, on-disk case, upper-case drive letter); a
+malformed entry reads as undecided. Fail closed: closing the question refuses and
+remembers nothing; a personal seat with an outside folder but no activity id is refused
+(확인 안 됨 copy, "활동에 다시 연결한 뒤 보내 주세요"). The command "HypeProof: 이 폴더의 AI
+권한 바꾸기" changes the choice. Also outside the guard, by design: entry preparation creates a missing `index.html` in a folder the learner picks for the activity before the question (never overwrites, `wx`), and the learner's own 프로젝트 변경 GitHub pull (`publish/projectSwitch.ts` `pullInto`) replaces files on request. Not yet confirmed: `/observations/assess` has no folder check; it is served only with `observation.format` (lesson seats), so it should not reach a personal non-own folder.
+
+Enforcement has three parts. ① Model calls: one decision (`folderConsentProfile`) runs
+before every host model call from such a folder — the chat turn (before the team brain,
+the show shortcut and both runtimes), `completeSkill` (the learning wiki, the deck, the
+curriculum-skill and review panels call it; helper consults run inside the SDK turn) and image editing. "AI 안 씀" refuses each with the
+폴더 권한 copy "이 폴더에서는 AI를 쓰지 않기로 골랐어요. 바꾸려면 ‘이 폴더의 AI 권한 바꾸기’에서
+다시 골라 주세요." ② Tools: read-only narrows the turn's profile after the 이용권 narrowing
+(`narrowForFolder`: `sdk_tools.write`, `sdk_tools.shell` and site publishing off), so
+`permittedToolsFor` / `permittedMcpToolsFor`, the local runtime file tools and
+`evaluateSdkToolUse` see the narrower set and label denials 폴더 권한
+(`folder_choice_narrowed`); no grant is ever turned on. ③ Host writes: every host-side
+write into the open folder asks one question first (`folderWriteRefusal`, through the
+provider's `folderWriteBlocked`): the reply's `index.html`, `engine.js`, the `이전 세상/` and
+`.hypeproof/history` archives, `agent.md`, pasted (`assets/`) and attached (`images/`)
+photos, the learning wiki and deck, image-edit results, and the preview's
+`workshop-output/` saves. Only "모두 허용" writes; read-only, no-AI and undecided do not
+(the write question never opens the modal). Under 읽기만 the reply still renders in chat and
+in the srcdoc preview (the live server is skipped so it cannot show the old file), and the
+learner sees one line per turn: "이 폴더에서는 파일 저장을 쓰지 않기로 골랐어요. 답은 화면에서 볼
+수 있어요. 저장하려면 ‘이 폴더의 AI 권한 바꾸기’에서 다시 골라 주세요." Reading is allowed under
+읽기만: the live server and browser tools may serve and run the folder's existing files
+(that is reading them), but nothing is written.
+
+Not built / limits: the persistent "제한 모드" header chip and light/dark dialog styling of
+DES-KNOW-18 (the native modal is used); asking when the folder opens rather than at the
+first model call; follow-up: the REQ-M47 "AI가 할 수 있는 일" card still shows the profile
+before the folder narrowing. Outside the guard on purpose: the learner's own restore of a
+turn (`turnRestore`, it only reverts earlier coach changes), and entry preparation
+(`prepareWorkspaceDirectory`), which only creates a missing folder or starter file when
+the learner connects the activity to that folder, before the question. The choice is a
+client posture, not a Service boundary (same standing as REQ-M38 on the agent-sdk path).
+Tests: `test/folder-consent.smoke.mjs` — pure decisions (canonical path with symlink, case
+and drive letter; which seats ask; exact own folder with look-alike negative controls;
+store; fail closed without an activity id; 128 grant combinations proving narrowing never
+widens; gate source with lesson / 이용권 / other-key negative controls; copy), the real host
+module against a fake VS Code (ask once, symlink spelling shares, closing remembers
+nothing, command change, write question), the real chat host (`ChatPanelProvider`) under
+each choice (no-AI refuses `completeSkill` and image editing before the model; 읽기만 keeps
+every listed write off disk with one line; full, own-folder and classroom negative
+controls), and a source scan that every write call site in the chat host and preview
+passes the guard (a planted direct write fails it; each guard was removed once and the
+smoke failed). `test/denial-source.smoke.mjs` covers the sixth source.
+
 ### Personal chat detail (CP-R1)
 
 Proxy stream completion evidence (#1965; REQ-C1, REQ-C5):
@@ -838,7 +896,7 @@ Service 집행이 없다는 뜻이다.
 `REQ-STUDIO-DENIAL-SOURCE` (extends [AE-12](requirements/learning-agent-experience.md) and REQ-M17;
 CGP-AGENT-R-007 / REQ-CGP-AGENT-08, 2026-10-20): every denied tool call or disabled feature names
 who decided it, in the learner's words, with one next step. One pure module,
-`extensions/hypeproof-chat/src/denialSource.ts`, holds the five sources, the copy builder and the
+`extensions/hypeproof-chat/src/denialSource.ts`, holds the six sources, the copy builder and the
 classifier (`classifyDenial`: a fixed cause table; any other value is unknown). Copy:
 수업 설정 "이 수업에서는 {기능}을 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요." (solo seats,
 `profileAudience`: "지금 활동에서는 … 다른 방법으로 이어서 해 볼 수 있어요." with no teacher word);
@@ -850,7 +908,8 @@ selected access choice removed it (`accessProfile` now records the REQ-M38 keys 
 read by `accessRemovedFeatures`; a key the profile itself had off stays 수업 설정);
 앱 버전/환경 "이 기능은 지금 앱에서 쓸 수 없어요 — {이유}. 앱을 업데이트하거나 선생님께 알려 주세요." (solo:
 "‘문제 신고하기’로 알려 주세요"); and 확인 안 됨 "지금은 {기능}을 쓸 수 없어요 — {이유}. 계속되면 …" for a site that
-cannot tell, so no site guesses a category. A backstop that does not know the seat uses `neutral`
+cannot tell, so no site guesses a category; 폴더 권한 "이 폴더에서는 {기능}을 쓰지 않기로 골랐어요. 바꾸려면 …"
+for the learner's own folder choice (REQ-STUDIO-FOLDER-CONSENT), with no seat words. A backstop that does not know the seat uses `neutral`
 wording (no teacher word). Coach-facing tool results carry the same Korean label as a
 tag ("[수업 설정] …"), and the SDK shows that text in the learner's tool log line. Built, by site:
 the tool gate `evaluateSdkToolUse` (every deny branch now returns `source`: profile not granted →
