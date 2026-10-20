@@ -293,6 +293,8 @@ try {
   await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d', guardian: true });
   const order = svc.requests.find(r => r.path === '/v1/purchase/orders');
   assert.equal(order.free, TOKEN_FREE, 'the order carries the free credential');
+  // CONV-FUNNEL-R-007: the sign-in from this free seat gets the same credential for its device polls.
+  assert.equal(await h.page.freeSignInCredential(), TOKEN_FREE, 'a sign-in from a free seat links it with the grant token');
   assert.equal(order.auth, 'Bearer account-bearer-' + 'd'.repeat(40), 'and the account bearer');
   assert.deepEqual(h.world.opened, [], 'a guardian checkout opens no browser here');
   const g = h.state().purchase.guardian;
@@ -308,6 +310,17 @@ try {
   assert.equal(h.state().purchase.freeSeat, undefined);
   await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
   assert.equal(svc.requests.find(r => r.path === '/v1/purchase/orders').free, null, 'no free credential from a code-issued seat');
+  assert.equal(await h.page.freeSignInCredential(), undefined, 'CONV-FUNNEL-R-007: no sign-in link credential from a code-issued seat');
+  // CONV-FUNNEL-R-007 negative controls: a paid (pass) seat on the free profile id, and no seat at all.
+  {
+    const paid = harness({ current: { ...freeProfile, pass: { id: 'ord_paid', status: 'active' } } });
+    paid.world.secrets.set('hypeproofChat.workshopToken', 'paid-seat-token-' + 'p'.repeat(40));
+    await paid.page.handle({ type: 'startReady' }); await paid.settle();
+    assert.equal(await paid.page.freeSignInCredential(), undefined, 'CONV-FUNNEL-R-007: a paid seat sends no free credential');
+    const none = harness({ accounts: accountStub() });
+    await none.page.handle({ type: 'startReady' }); await none.settle();
+    assert.equal(await none.page.freeSignInCredential(), undefined, 'CONV-FUNNEL-R-007: no seat, no free credential');
+  }
   assert.equal(h.world.opened.length, 1, 'today: the browser opens');
   assert.equal(svc.requests.find(r => r.path === '/v1/purchase/orders').auth, null, 'today: a code-issued seat orders anonymously');
   // ...until the Service says `account_required`: then the same seat gets the gate, nothing is opened.

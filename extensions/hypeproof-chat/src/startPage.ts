@@ -280,6 +280,12 @@ export class StartPage {
     try { return (await activityConnections(this.context)?.token()) ?? await this.context.secrets.get(TOKEN_KEY); }
     catch { return undefined; }
   }
+  /**
+   * CONV-FUNNEL-R-007: the free seat's credential for a sign-in that starts now, so the Service can
+   * link that free seat to the account (same value and rule as the order header). Any other seat,
+   * or no readable token, gives undefined: no header.
+   */
+  async freeSignInCredential(): Promise<string | undefined> { return this.freeSeatNow ? await this.currentToken() : undefined; }
   private stopPurchaseWait(): void { if (this.purchaseTimer) clearTimeout(this.purchaseTimer); this.purchaseTimer = undefined; }
   /**
    * Login at purchase (Jay 2026-10-19, "결제할때 구글로그인 필수로 하자"). A free seat, a newcomer

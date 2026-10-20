@@ -3,6 +3,8 @@ import { copyableSignInLink, copySignInLink, type SignInLinkState } from './sign
 
 /** Host-only personal account credentials. Presentation state deliberately has no credential fields. */
 export const ACCOUNT_SECRET_KEY = 'hypeproofChat.personalAccount.v1';
+/** CONV-FUNNEL-R-007: longest wait for the free seat's credential before a sign-in starts without it. */
+export const FREE_CREDENTIAL_READ_MS = 2_000;
 export interface AccountIdentity { id: string; email: string; display_name: string }
 export interface AccountPass {
   id: string; product_name: string; status: string; requests_used: number; requests_limit: number;
@@ -29,6 +31,12 @@ interface Options {
   invalidated?(sessionId: string): Promise<void>;
   /** Serializes mutation across extension-host windows, not only concurrent requests in one host. */
   lock?<T>(work: () => Promise<T>): Promise<T>;
+  /**
+   * CONV-FUNNEL-R-007: the free seat's own credential when a sign-in starts on a free seat, else
+   * undefined. Sent as `x-hps-free-credential` on every device poll of that sign-in so the Service
+   * links the free seat to the account. Never the account token; never stored or shown.
+   */
+  freeCredential?(): PromiseLike<string | undefined>;
   fetch?: typeof fetch; now?: () => number;
 }
 const record = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -72,7 +80,7 @@ export class AccountSession {
   private readonly now: () => number;
   private serial: Promise<unknown> = Promise.resolve();
   private generation = 0;
-  private device?: { code: string; url: string; link?: string; expiresAt: number; interval: number; generation: number };
+  private device?: { code: string; url: string; link?: string; expiresAt: number; interval: number; generation: number; freeCredential?: string };
   private timer?: ReturnType<typeof setTimeout>;
   private browserReturn?: { state: string; uri: string; expiresAt: number; received: boolean };
   private polling?: Promise<void>;
@@ -97,10 +105,10 @@ export class AccountSession {
     if (!record(body) || typeof body.access_token !== 'string' || typeof body.refresh_token !== 'string' || typeof body.session_id !== 'string' || !Number.isFinite(body.expires_in) || body.expires_in <= 0) throw new AccountError('invalid_response', friendly('invalid_response'));
     return { service: this.options.service, accessToken: body.access_token, refreshToken: body.refresh_token, sessionId: body.session_id, expiresAt: this.now() + body.expires_in * 1000 };
   }
-  private async call(path: string, body?: unknown, token?: string): Promise<{ status: number; body: any }> {
+  private async call(path: string, body?: unknown, token?: string, freeCredential?: string): Promise<{ status: number; body: any }> {
     try {
       const r = await this.request(this.options.service.replace(/\/+$/, '') + path, {
-        method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(freeCredential ? { 'x-hps-free-credential': freeCredential } : {}) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: AbortSignal.timeout(12_000),
       });
       const value: any = await r.json();
@@ -169,6 +177,18 @@ export class AccountSession {
       const state = randomBytes(32).toString('hex');
       const returnUri = await this.options.createReturnUri?.(state);
       if (generation !== this.generation) return;
+      // CONV-FUNNEL-R-007: read once, here, so the link follows the seat the sign-in started from.
+      // A failed or empty read only means no header; it never blocks or changes the sign-in.
+      let freeCredential: string | undefined;
+      // Bounded: a read that hangs (e.g. an unanswered keychain prompt) gives no header, not a stuck sign-in.
+      if (this.options.freeCredential) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const value = await Promise.race([Promise.resolve(this.options.freeCredential()), new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), FREE_CREDENTIAL_READ_MS); })]);
+          if (typeof value === 'string' && value) freeCredential = value;
+        } catch { /* no header */ } finally { if (timer) clearTimeout(timer); }
+      }
+      if (generation !== this.generation) return;
       const { body: d } = await this.call('/auth/device/start', { label: this.options.label, ...(returnUri ? { return_uri: returnUri } : {}) });
       if (generation !== this.generation) return;
       const url = d.verification_uri_complete ?? d.verification_uri;
@@ -176,7 +196,7 @@ export class AccountSession {
       const expiresAt = this.now() + Math.min(d.expires_in, 600) * 1000;
       this.browserReturn = returnUri ? { state, uri: returnUri, expiresAt, received: false } : undefined;
       const link = copyableSignInLink(url, this.options.site, d.user_code, [d.device_code]);
-      this.device = { code: d.device_code, url, link, expiresAt, interval: Math.max(3, Number(d.interval) || 3) * 1000, generation };
+      this.device = { code: d.device_code, url, link, expiresAt, interval: Math.max(3, Number(d.interval) || 3) * 1000, generation, ...(freeCredential ? { freeCredential } : {}) };
       this.state = { status: 'waiting', userCode: d.user_code, expiresAt, message: '브라우저에서 Google 로그인 후 이 Studio 연결을 승인해 주세요.', ...(link ? { link: 'ready' as const } : {}) }; this.emit();
       if (!await this.options.openBrowser(url)) { this.state.message = link ? '브라우저를 열지 못했어요. 로그인 창 다시 열기를 누르거나 링크를 복사해 다른 브라우저에서 열어 주세요.' : '브라우저를 열지 못했어요. 로그인 창 다시 열기를 눌러 주세요.'; this.emit(); }
       this.schedule();
@@ -231,7 +251,7 @@ export class AccountSession {
     const d = this.device; if (!d) return;
     if (this.now() >= d.expiresAt) { this.cancel(false); this.state = { status: 'signedOut', message: friendly('device_expired') }; this.emit(); return; }
     try {
-      const result = await this.call('/auth/device/poll', { device_code: d.code });
+      const result = await this.call('/auth/device/poll', { device_code: d.code }, undefined, d.freeCredential);
       if (this.device !== d || d.generation !== this.generation) {
         // Cancellation during the final poll must revoke the just-created session, never install it.
         if (result.body?.access_token) await this.call('/auth/logout', {}, result.body.access_token).catch(() => undefined);
