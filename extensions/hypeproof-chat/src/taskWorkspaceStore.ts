@@ -385,10 +385,13 @@ export class TaskWorkspaceStore {
   /**
    * REQ-STUDIO-MISSING-TASK-FOLDER — carry another scope's tasks (messages, drafts, earlier versions
    * and verdicts) into this scope when the activity moves to a new folder (the scope names the
-   * folder). The source is only read: it is never changed or deleted. Tasks already in this scope are
-   * kept; a source task whose id is already here is not copied again. The source's active task
-   * becomes the active one. The verdict sidecar is written first, so a crash in between leaves only
-   * verdicts for tasks that are not here yet, which nothing draws.
+   * folder). The source — the store the learner is working in now — is only read: it is never
+   * changed or deleted. For a task both scopes hold (a move back to a folder used before, or a retry
+   * after a half-done move) the source's copy wins: this scope's copy of that task, with its versions
+   * and verdicts, is first written to a backup file next to the store
+   * (`<scope>.<task>.pre-rebind-<ts>.json`) and then replaced. Tasks only this scope holds are kept.
+   * The source's active task becomes the active one. Order: backups, verdict sidecar, versions and
+   * task file; the task file is the commit point.
    */
   async adoptFrom(source: TaskWorkspaceStore): Promise<TaskWorkspaceView> {
     if (source.scope === this.scope) return this.getView();
@@ -396,28 +399,54 @@ export class TaskWorkspaceStore {
     const from = clone(source.requireData(source.data));
     const fromVersions = clone(source.versions.tasks);
     const fromVerdicts = clone(source.verdicts.tasks);
-    await this.mergeVerdicts(fromVerdicts);
+    const ids = from.tasks.map(task => task.id);
+    await this.backupAndReplaceVerdicts(ids, fromVerdicts);
     return this.mutate((data, versions) => {
-      const have = new Set((data?.tasks ?? []).map(task => task.id));
-      const added = from.tasks.filter(task => !have.has(task.id));
-      for (const task of added) if (fromVersions[task.id]) versions.tasks[task.id] = fromVersions[task.id];
-      return { version: 1, scope: this.scope, revision: data?.revision ?? 0, activeTaskId: from.activeTaskId, tasks: [...(data?.tasks ?? []), ...added] };
+      const tasks = data?.tasks ?? [];
+      for (const task of from.tasks) {
+        const at = tasks.findIndex(existing => existing.id === task.id);
+        if (at >= 0) tasks[at] = task; else tasks.push(task);
+        if (fromVersions[task.id]) versions.tasks[task.id] = fromVersions[task.id];
+        else delete versions.tasks[task.id];
+      }
+      return { version: 1, scope: this.scope, revision: data?.revision ?? 0, activeTaskId: from.activeTaskId, tasks };
     });
   }
 
-  /** Adds verdict histories for tasks that have none here yet; existing entries are never replaced. */
-  private mergeVerdicts(tasks: Record<string, VerdictEvent[]>): Promise<void> {
+  /**
+   * Under the lock: back up this scope's copy of every task about to be replaced (task, versions,
+   * verdicts; one file per task, never overwritten), then give those tasks the source's verdicts.
+   */
+  private backupAndReplaceVerdicts(ids: string[], verdicts: Record<string, VerdictEvent[]>): Promise<void> {
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
-      if (!Object.keys(tasks).length) return;
       try {
         await this.prepareDirectory();
         const lock = await this.acquireLock();
         try {
-          const disk = await this.readVerdictsLocked(lock.owner.nonce);
-          const next = clone(disk);
-          for (const [id, events] of Object.entries(tasks)) if (!next.tasks[id] && events.length) next.tasks[id] = clone(events);
-          if (JSON.stringify(next) !== JSON.stringify(disk)) {
+          let disk: WorkspaceData | undefined;
+          try {
+            const stat = await lstat(this.filePath);
+            if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 기록 파일의 위치를 확인해야 합니다.');
+            disk = decode(await readFile(this.filePath, 'utf8'), this.scope);
+          } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
+          const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
+          const diskVerdicts = await this.readVerdictsLocked(lock.owner.nonce);
+          const stamp = Date.now();
+          for (const task of disk?.tasks ?? []) {
+            if (!ids.includes(task.id)) continue;
+            const backup = { version: 1, scope: this.scope, replacedAt: stamp, task, versions: diskVersions.tasks[task.id] ?? null, verdicts: diskVerdicts.tasks[task.id] ?? [] };
+            const target = join(this.directory, `${this.scope}.${task.id}.pre-rebind-${stamp}.json`);
+            const file = await open(target, 'wx', 0o600);
+            try { await file.writeFile(JSON.stringify(backup), 'utf8'); await file.sync(); }
+            finally { await file.close(); }
+          }
+          const next = clone(diskVerdicts);
+          for (const id of ids) {
+            if (verdicts[id]?.length) next.tasks[id] = clone(verdicts[id]);
+            else delete next.tasks[id];
+          }
+          if (JSON.stringify(next) !== JSON.stringify(diskVerdicts)) {
             const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
             decodeVerdicts(content, this.scope);
             await this.writeAtomic(this.verdictsPath, content, lock.owner.nonce);

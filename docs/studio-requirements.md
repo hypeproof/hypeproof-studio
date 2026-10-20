@@ -115,9 +115,12 @@ answering "이 폴더에서는 AI를 쓰지 않음" moves nothing ("이 폴더�
 옮기지 않았어요. 다른 폴더를 골라 주세요."). Then the draft is flushed (`setConnectionChanging`)
 and the task store is carried over: the store is scoped by activity id and canonical folder
 (`taskWorkspaceScope`), so the new folder has its own scope. `TaskWorkspaceStore.adoptFrom` copies
-every task (messages, drafts, earlier versions, verdicts; tasks already in the target scope are
-kept; the source's active task stays active) into the new scope under the store's lock and atomic
-writes, and the copy is read back from disk; the task moves only when the new scope holds the same
+every task (messages, drafts, earlier versions, verdicts; the source's active task stays active)
+into the new scope under the store's lock and atomic writes. For a task the target scope already
+holds (a move back to a folder used before, or a retry after a half-done move) the copy being
+moved wins: the target's copy of that task, with its versions and verdicts, is first written to a
+backup file next to the store (`<scope>.<task>.pre-rebind-<ts>.json`, never overwritten) and then
+replaced; tasks only the target holds are kept. The copy is then read back from disk; the task moves only when the new scope holds the same
 active task, conversation and draft. The old scope is never changed or deleted. The move itself
 is the path 프로젝트 변경 uses (`projectOpener`: activity commit under the canonical root,
 `ensureWorkspace`, window reload); the activity commit now tolerates a window whose own folder no
@@ -138,7 +141,9 @@ only the exact folder, as on the start page and in 프로젝트 변경). Tests:
 symlink swap and a transient error; consent for a picked folder; the real host's hold of a send
 and a retry, the re-check, 다시 고르기 with consent, "AI 안 씀" and failure notes, against a fake
 VS Code; the rebind with the real `TaskWorkspaceStore` and `ActivityConnections`: a message and a
-draft in the old folder are in the reopened store of the new one, and the old scope is kept;
+draft in the old folder are in the reopened store of the new one, and the old scope is kept; a
+round trip back to a folder used before and a retry after a half-done move with an edited draft
+both carry the moving copy, back up the replaced one and keep the target's own tasks;
 wiring) and `test/missing-task-folder.test.tsx` (the real ChatPanel: notice, held send with the
 draft kept, re-check that sends the held draft once, 다시 고르기, cleared notice; classroom draws
 nothing).

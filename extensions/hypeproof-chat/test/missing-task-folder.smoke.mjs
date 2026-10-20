@@ -425,13 +425,63 @@ try {
     assert.equal(old.scope, store.scope, "that is the store the old window used");
     assert.equal(J(old.getHistory()).length, 1, "the old scope keeps its copy");
 
+    const taskDir = path.join(taskWorkspaceRoot(storage), "task-workspaces");
+    const backups = () => fs.readdirSync(taskDir).filter((f) => f.includes(".pre-rebind-"));
+    const reopen = async () => { const h = host(); await h.prepareTaskWorkspace(false); return h; };
+
+    // B2 (a): A → B, keep working in B, then 다시 고르기 back to A. A's scope already holds the task;
+    // the copy from B (where the learner is now) wins, and A's older copy is kept as a backup.
+    await reopened.append(taskId, [{ id: "a1", role: "assistant", content: "고양이가 움직여요", createdAt: 2 }, { id: "u2", role: "user", content: "점프도 넣어 줘", createdAt: 3 }]);
+    await reopened.saveDraft(taskId, { ...emptyActivityDraft(), text: "B에서 쓴 초안" });
+    fs.mkdirSync(oldFolder, { recursive: true }); // the learner moved it back
+    fs.rmSync(newFolder, { recursive: true, force: true });
+    ws.folder = newFolder;
+    assert.equal(backups().length, 0, "no backup before any replacement");
+    ui.picked = oldFolder;
+    await after.repickTaskFolder();
+    assert.equal(conn.current.workspace, fs.realpathSync(oldFolder), "the round trip moves back to A");
+    const backA = (await reopen()).currentTaskStore();
+    assert.equal(backA.scope, store.scope, "A's own scope again");
+    assert.deepEqual(J(backA.getHistory(taskId)).map((m) => m.id), ["u1", "a1", "u2"], "B's conversation wins over A's older copy");
+    assert.equal(backA.getDraft(taskId).text, "B에서 쓴 초안", "B's draft wins");
+    const saved = backups();
+    assert.equal(saved.length, 1, "A's replaced copy is kept as one backup file");
+    const backup = JSON.parse(fs.readFileSync(path.join(taskDir, saved[0]), "utf8"));
+    assert.equal(backup.task.id, taskId);
+    assert.deepEqual(backup.task.messages.map((m) => m.id), ["u1"], "the backup holds A's copy as it was");
+    assert.equal(backup.task.draft.text, "점수판도 달아 줘");
+
+    // A task only the target holds is kept beside the moved ones.
+    const cFolder = path.join(home, "cat-game-c");
+    fs.mkdirSync(cFolder, { recursive: true });
+    const cScope = taskWorkspaceScope({ id: conn.current.id, workspace: fs.realpathSync(cFolder) });
+    const cOwn = new TaskWorkspaceStore(taskWorkspaceRoot(storage), cScope);
+    await cOwn.initialize([], emptyActivityDraft());
+    const cOwnTask = cOwn.getView().activeTaskId;
+
+    // B2 (b): a half-done move (the copy landed, the move did not), then the draft is edited, then a retry.
+    await new TaskWorkspaceStore(taskWorkspaceRoot(storage), cScope).adoptFrom(backA);
+    await backA.saveDraft(taskId, { ...emptyActivityDraft(), text: "고친 초안" });
+    const inA = await reopen();
+    fs.rmSync(oldFolder, { recursive: true, force: true });
+    ws.folder = oldFolder;
+    ui.picked = cFolder;
+    await inA.repickTaskFolder();
+    assert.equal(conn.current.workspace, fs.realpathSync(cFolder), "the retry moves");
+    const inC = (await reopen()).currentTaskStore();
+    assert.equal(inC.getView().activeTaskId, taskId, "the moved task is active");
+    assert.equal(inC.getDraft(taskId).text, "고친 초안", "the edited draft wins over the half-done copy");
+    assert.deepEqual(J(inC.getHistory(taskId)).map((m) => m.id), ["u1", "a1", "u2"]);
+    assert.ok(inC.getView().tasks.some((t) => t.id === cOwnTask), "the target's own task is kept");
+    assert.ok(backups().some((f) => f.startsWith(`${inC.scope}.${taskId}.pre-rebind-`)), "the half-done copy is backed up too");
+
     // M1 with the real record: the bound path swapped for a symlink to another tree → the notice.
     const elsewhere = path.join(tmp, "elsewhere");
     fs.mkdirSync(elsewhere);
-    fs.rmSync(newFolder, { recursive: true, force: true });
-    fs.symlinkSync(elsewhere, newFolder, "dir");
-    assert.equal(await after.missingTaskFolderPath(), path.resolve(newFolder), "a symlink swap is missing too");
-    ok("B1: 다시 고르기 carries the task store to the new folder's scope: after the reload the same task, conversation and draft are there; the old scope is kept; a symlink swap shows the notice");
+    fs.rmSync(cFolder, { recursive: true, force: true });
+    fs.symlinkSync(elsewhere, cFolder, "dir");
+    assert.equal(await (await reopen()).missingTaskFolderPath(), path.resolve(cFolder), "a symlink swap is missing too");
+    ok("B1/B2: 다시 고르기 carries the task store to the new folder's scope (conversation and draft after the reload, old scope kept); a round trip and a retry after a half-done move let the moving copy win, back up the replaced copy and keep the target's own tasks; a symlink swap shows the notice");
   }
 
   // ── 4. Wiring ──
