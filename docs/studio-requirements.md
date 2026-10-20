@@ -1437,8 +1437,28 @@ recovery entry. Small assistant branding and borderless answer actions use quiet
 
 Explicit, flat numbered answer invitations in the latest completed assistant turn
 can be clicked or activated by keyboard. Picking prepares an editable reply and
-preserves other draft text; only the normal Send action submits it. Instructions,
+preserves other draft text; only an explicit confirmation through the normal Send path submits it. Instructions,
 code, ambiguous lists, old turns and streaming fragments do not become choices.
+
+CGP-CHAT-D-003 / CGP-CHAT-D53 extends this existing personal-workspace card:
+its maximum width is the 740px reading column (shrinking with the pane), with
+radio-like options at least 44px tall and 8px apart. Only an explicit trailing
+`(추천)` or `[추천]` marks a recommendation; the visible `추천` badge has at least
+4.5:1 text contrast in both themes. The marker is removed from the prepared answer.
+Arrow keys move focus without selecting; Space selects without sending; Enter
+confirms only an existing selection. The separate confirmation button follows the
+same guarded send path and preserves the entire draft. Repeated Enter cannot send
+twice; composition cannot confirm. Draft edits invalidate the selection. Prose
+links keep their native keyboard behavior. There is no answer timer.
+
+On arrival the card receives focus unless the learner has a draft or is composing,
+or an active input contains text; then focus stays put and the inline status says
+`질문이 왔어요`. Selection belongs to the exact completed message and content;
+task/activity switches remount the panel. Streaming, frozen, unavailable, pending
+and locked states retain the existing plain-prose fallback. Classroom/lesson gates
+remain unchanged. This slice adds neither an AskUserQuestion transport nor skip
+records or instructor notifications.
+
 
 `REQ-STUDIO-CHAT-REFERENCE` distinguishes opening a general browser from previewing
 authored local files. A plain browser-open request without an address opens a blank

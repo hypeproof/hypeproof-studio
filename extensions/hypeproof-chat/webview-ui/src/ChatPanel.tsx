@@ -1131,7 +1131,7 @@ export function ChatPanel(props: Props) {
     if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
   };
 
-  const handleReplyChoice = (answer: string) => {
+  const handleReplyChoice = (answer: string, focusComposer = true) => {
     if (streaming || frozen || unavailable || props.sendLocked || props.sendPending) return;
     // A choice prepares an editable reply, never sends or replaces an existing draft.
     const messageId = messages.filter(message => message.role !== 'tool').at(-1)?.id ?? '';
@@ -1140,7 +1140,7 @@ export function ChatPanel(props: Props) {
       ? current.slice(0, -previous.answer.length) + answer
       : current.trim() ? `${current}\n${answer}` : answer);
     lastReplyChoice.current = { messageId, answer };
-    requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+    if (focusComposer) requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
   };
 
   const handleChip = (chip: SuggestionChip) => {
@@ -1563,8 +1563,16 @@ export function ChatPanel(props: Props) {
               personal={personalWorkspace}
               isLatest={m.id === latestAssistantId}
               freeSeat={!!config?.activity?.free}
-              onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? handleReplyChoice : undefined}
+              onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? (answer) => handleReplyChoice(answer, false) : undefined}
               onWriteReply={() => textareaRef.current?.focus({ preventScroll: true })}
+              replyTyping={composing || draft.length > 0}
+              replySelectionValid={lastReplyChoice.current?.messageId === m.id}
+              onSubmitReply={(answer) => {
+                const owned = lastReplyChoice.current;
+                const latest = messages.filter(message => message.role !== 'tool').at(-1);
+                if (!personalWorkspace || frozen || latest?.id !== m.id || owned?.messageId !== m.id || owned.answer !== answer) return false;
+                return submit();
+              }}
               pager={shown.pagers[m.id]}
               onPage={(key, index) => setVersionChoice((all) => ({ ...all, [key]: index }))}
               onEdit={m.id === editableId ? () => { setEditingId(m.id); setInlineEdit(current => current?.messageId === m.id ? current : {messageId:m.id,text:m.content,images:m.images ?? []}); } : undefined}
@@ -2453,6 +2461,9 @@ function MessageItem({
   freeSeat = false,
   onPickReply,
   onWriteReply,
+  onSubmitReply,
+  replyTyping,
+  replySelectionValid,
   pager,
   onPage,
   onEdit,
@@ -2492,6 +2503,9 @@ function MessageItem({
   freeSeat?: boolean;
   onPickReply?: (answer: string) => void;
   onWriteReply?: () => void;
+  onSubmitReply?: (answer: string) => boolean;
+  replyTyping?: boolean;
+  replySelectionValid?: boolean;
   /** CGP-CHAT-R-002 — this user line has earlier/later versions. */
   pager?: Pager;
   onPage?: (key: string, index: number) => void;
@@ -2563,8 +2577,8 @@ function MessageItem({
         onChange={onEditChange}
         revertNote={revertNote}
         onCancel={onCancelEdit}
-        onSave={onSaveEdit} /> : <div className="hps-msg-body" {...(quotable ? { [QUOTE_SCOPE_ATTR]: message.id } : {})}>
-        {question && onPickReply && onWriteReply ? <CodeBlockScope id={message.id}><ReplyChoices question={question} onPick={onPickReply} onWrite={onWriteReply} /></CodeBlockScope> : message.role === "assistant" ? (
+        onSave={onSaveEdit} /> : <div className={`hps-msg-body${question && onPickReply && onWriteReply ? " hps-msg-question" : ""}`} {...(quotable ? { [QUOTE_SCOPE_ATTR]: message.id } : {})}>
+        {question && onPickReply && onWriteReply ? <CodeBlockScope id={message.id}><ReplyChoices key={`${message.id}:${message.content}`} question={question} onPick={onPickReply} onWrite={onWriteReply} onSubmit={onSubmitReply} typing={replyTyping} selectionValid={replySelectionValid} /></CodeBlockScope> : message.role === "assistant" ? (
           <AssistantContent
             content={message.content}
             streaming={isStreamingThis}

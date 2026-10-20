@@ -6182,6 +6182,9 @@
           "path": "extensions/hypeproof-chat/test/reply-choices.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/question-card.test.tsx"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/browser-intent.smoke.mjs"
         },
         {
