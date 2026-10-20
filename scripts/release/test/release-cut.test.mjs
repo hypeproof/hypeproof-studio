@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import test from 'node:test';
-import {classify, howToCheck, parseTitle, render, smokeOf} from '../checklist.mjs';
+import {classify, howToCheck, managerCheckOf, parseTitle, render, smokeOf} from '../checklist.mjs';
 import s1 from '../smoke/checks/s1-service-health.mjs';
 import s3 from '../smoke/checks/s3-cohort-token.mjs';
 import s4 from '../smoke/checks/s4-chat-api.mjs';
@@ -252,4 +252,67 @@ test('smoke does not skip S3 and S4 when only S2 fails', async () => {
   const byId = Object.fromEntries(checks.map(c => [c.id, c]));
   assert.equal(byId.S3.result, 'PASS');
   assert.equal(byId.S4.result, 'PASS');
+});
+
+const MANAGER_NO = `## Release check
+
+Release manager check: no — release tooling only
+Smoke: no — internal change
+`;
+
+const MANAGER_YES = `## Release check
+
+Release manager check: yes — user sees the change in the App
+How to verify: App → start screen → the new onboarding flow appears
+Smoke: no — no server dependency
+`;
+
+const MANAGER_MISSING = `## Release check
+
+How to verify: App → start screen → something
+Smoke: no — no server dependency
+`;
+
+test('managerCheckOf: parses yes, no and absent', () => {
+  assert.deepEqual(managerCheckOf(MANAGER_NO), {answer: 'no', reason: 'release tooling only'});
+  assert.deepEqual(managerCheckOf(MANAGER_YES), {answer: 'yes', reason: 'user sees the change in the App'});
+  assert.equal(managerCheckOf(MANAGER_MISSING), null);
+  assert.equal(managerCheckOf(''), null);
+});
+
+test('classify: Release manager check no forces automatic regardless of title type or paths', () => {
+  // fix(release) would normally be a feature; no overrides it
+  const fixRelease = {number: 1, title: 'fix(release): adjust smoke order', body: MANAGER_NO,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  // workflow path would normally be dependency; no overrides it
+  const workflowPath = {number: 2, title: 'ci(release): update yml', body: MANAGER_NO,
+    author: {login: 'dev'}, files: {nodes: [{path: '.github/workflows/release-cut.yml'}]}, closingIssuesReferences: {nodes: []}};
+  // yes keeps today's grouping for a feature PR
+  const featureYes = {number: 3, title: 'feat(start): new onboarding', body: MANAGER_YES,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  // missing uses today's heuristics (fix = feature)
+  const missingFix = {number: 4, title: 'fix(chat): button color', body: MANAGER_MISSING,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+
+  const {groups} = classify([fixRelease, workflowPath, featureYes, missingFix]);
+  assert.deepEqual(groups.automatic.map(p => p.number).sort(), [1, 2]);
+  assert.deepEqual(groups.features.map(p => p.number).sort(), [3, 4]);
+  assert.deepEqual(groups.dependency, []);
+});
+
+test('render: no-check PRs appear in automatic with reason; rest stay in summary', () => {
+  const noCheck1 = {number: 10, title: 'fix(release): smoke order', body: MANAGER_NO,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  const noCheck2 = {number: 11, title: 'ci: update actions', body: MANAGER_NO,
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  const regular = {number: 12, title: 'chore: bump dep', body: '',
+    author: {login: 'dev'}, files: {nodes: []}, closingIssuesReferences: {nodes: []}};
+  const {groups} = classify([noCheck1, noCheck2, regular]);
+  const {automatic} = render({groups});
+  assert.match(automatic, /No release manager check needed/);
+  assert.match(automatic, /#10 fix\(release\): smoke order — @dev \(release tooling only\)/);
+  assert.match(automatic, /#11 ci: update actions — @dev \(release tooling only\)/);
+  // regular chore stays in the collapsible summary
+  assert.match(automatic, /#12/);
+  assert.match(automatic, /details/);
 });

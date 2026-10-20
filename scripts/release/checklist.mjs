@@ -2,8 +2,9 @@
 // PR numbers → GitHub GraphQL (title, author, body, files, closing issues) → three groups:
 //   dependency/deploy — touched Service pins, build/deploy/release workflows, migrations or wrangler config
 //   feature           — feat / fix / perf / revert, except ci/build/deps/test/docs scopes
-//   automatic         — everything else (chore, ci, build, docs, test, refactor, dependency updates)
+//   automatic         — everything else, including any PR with an explicit "Release manager check: no"
 // A dependency/deploy PR that is also a feature is listed under dependency/deploy only.
+// "Release manager check: no" overrides title type and paths and forces the PR into automatic (#1869).
 import {execFileSync} from 'node:child_process';
 
 export const DEPENDENCY_PATHS = [
@@ -46,6 +47,14 @@ export function howToCheck(body = '') {
   return null;
 }
 
+// The author's release manager check decision from the Release check section (#1869). null when absent.
+export function managerCheckOf(body = '') {
+  const section = releaseSection(body);
+  const m = (section && field(section, 'Release manager check') || '').match(/^(yes|no)\b\s*(?:[—–:-]+\s*)?(.*)$/i);
+  if (!m) return null;
+  return {answer: m[1].toLowerCase(), reason: m[2].trim()};
+}
+
 // The author's smoke decision from the Release check section (#1608 follow-up). null when absent.
 export function smokeOf(body = '') {
   const section = releaseSection(body);
@@ -71,11 +80,16 @@ export function classify(prs) {
     const login = pr.author?.login ?? 'unknown';
     if (!/dependabot/.test(login)) authors.add(login);
     const issues = (pr.closingIssuesReferences?.nodes ?? []).map(i => `#${i.number}`).join(', ');
-    const item = {...t, number: pr.number, title: pr.title, login, issues, check: howToCheck(pr.body ?? ''), smoke: smokeOf(pr.body ?? '')};
-    const depFiles = files.filter(f => DEPENDENCY_PATHS.some(re => re.test(f)));
-    if (depFiles.length) groups.dependency.push({...item, depFiles});
-    else if (FEATURE_TYPES.has(t.type) && !AUTOMATIC_SCOPES.has(t.scope)) groups.features.push(item);
-    else groups.automatic.push(item);
+    const managerCheck = managerCheckOf(pr.body ?? '');
+    const item = {...t, number: pr.number, title: pr.title, login, issues, check: howToCheck(pr.body ?? ''), smoke: smokeOf(pr.body ?? ''), managerCheck};
+    if (managerCheck?.answer === 'no') {
+      groups.automatic.push(item);
+    } else {
+      const depFiles = files.filter(f => DEPENDENCY_PATHS.some(re => re.test(f)));
+      if (depFiles.length) groups.dependency.push({...item, depFiles});
+      else if (FEATURE_TYPES.has(t.type) && !AUTOMATIC_SCOPES.has(t.scope)) groups.features.push(item);
+      else groups.automatic.push(item);
+    }
   }
   return {groups, authors: [...authors].sort()};
 }
@@ -110,14 +124,23 @@ export function render({groups}) {
     lines.push('\n</details>\n');
   }
 
+  const noCheck = groups.automatic.filter(a => a.managerCheck?.answer === 'no');
+  const rest = groups.automatic.filter(a => a.managerCheck?.answer !== 'no');
   const byType = new Map();
-  for (const a of groups.automatic) byType.set(a.type, [...(byType.get(a.type) ?? []), a]);
-  const automatic = groups.automatic.length
-    ? [`<details><summary>${groups.automatic.length} PRs</summary>\n`,
-      ...[...byType.entries()].sort((a, b) => b[1].length - a[1].length)
-        .map(([type, items]) => `- **${type}** ${items.length}: ${items.map(i => `#${i.number}`).join(' ')}`),
-      '\n</details>'].join('\n')
-    : 'None.';
+  for (const a of rest) byType.set(a.type, [...(byType.get(a.type) ?? []), a]);
+  const autoLines = [];
+  if (noCheck.length) {
+    autoLines.push('**No release manager check needed:**');
+    for (const a of noCheck) autoLines.push(`- #${a.number} ${a.title} — @${a.login}${a.managerCheck.reason ? ` (${a.managerCheck.reason})` : ''}`);
+    autoLines.push('');
+  }
+  if (rest.length) {
+    autoLines.push(`<details><summary>${rest.length} PRs</summary>\n`);
+    for (const [type, items] of [...byType.entries()].sort((a, b) => b[1].length - a[1].length))
+      autoLines.push(`- **${type}** ${items.length}: ${items.map(i => `#${i.number}`).join(' ')}`);
+    autoLines.push('\n</details>');
+  }
+  const automatic = groups.automatic.length ? autoLines.join('\n') : 'None.';
 
   return {dependency, features: lines.join('\n') || 'None.', automatic};
 }

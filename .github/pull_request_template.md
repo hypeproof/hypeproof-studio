@@ -32,13 +32,18 @@ Closes #<!-- issue number — required so the merge auto-closes it -->
 
 ## Release check
 
+Release manager check: <yes|no> — <reason>
 How to verify: <where> → <what to click or run> → <expected result>
 Smoke: <yes|no> — <reason>
 Smoke check: <scripts/release/smoke/checks/sN-*.mjs, or #follow-up-issue; only when the answer is yes>
 
 <!--
-Read the linked issue (the intent) and your diff, then fill the three lines above.
-The release manager reads the first line, so keep "How to verify" first.
+Read the linked issue (the intent) and your diff, then fill the lines above.
+Release manager check: yes = a user can see or meet the changed behavior in the rc App.
+  no = release tooling, CI, vendored tooling, or docs only — no app behavior change.
+  A "no" answer puts this PR in the automatic group in the release PR.
+How to verify is required only when Release manager check is yes.
+The release manager reads "How to verify" first, so write all three parts.
 Answer yes for Smoke when this adds a dependency on another repository or a server
 (Service, Chalk, ...). If the issue answered "Smoke needed?" with yes and you answer no,
 add a line "Smoke differs from issue" with the reason.
