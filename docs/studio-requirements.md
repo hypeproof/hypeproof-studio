@@ -73,6 +73,42 @@ turn (`turnRestore`, it only reverts earlier coach changes), and entry preparati
 (`prepareWorkspaceDirectory`), which only creates a missing folder or starter file when
 the learner connects the activity to that folder, before the question. The choice is a
 client posture, not a Service boundary (same standing as REQ-M38 on the agent-sdk path).
+
+`REQ-STUDIO-MISSING-TASK-FOLDER` (CGP-AGENT-R-028 / REQ-CGP-AGENT-57, DES-CGP-AGENT-57, P1;
+built 2026-10-20): when a personal task's folder (the open folder, or the activity's recorded
+folder when none is open) no longer exists or cannot be read as a folder — moved, renamed or
+deleted, before or while Studio is open, or gone across a restart — the chat shows one calm
+notice above the composer instead of a failed send: "이 작업의 폴더를 찾을 수 없어요. 옮기거나
+지웠다면 폴더를 다시 골라 주세요.", with one action, **다시 고르기** (44px target, learner text on
+the type-scale tokens, ≥14px; `role="status"`). Seats: the REQ-STUDIO-FOLDER-CONSENT seats
+with personal tasks (personal or trial activity, or a bought pass; never a classroom seat, a
+seat with a served lesson or lesson binding, or the instructor surface). Classroom and lesson
+seats get no notice: their folder is the class's, and they keep the existing, stricter refusal
+of the send ("활동 연결 또는 작업 폴더를 확인하지 못했습니다…" from the activity lock). While the
+folder is missing nothing is sent and no turn starts: the webview holds the send (Enter and the
+send button do nothing, a parked message stays parked) and the host holds it too, for a new message and a
+retry, before `handleSend` runs — the text goes back to the composer (`inputRejected`),
+the conversation is redrawn from history so no unsent bubble remains, and the notice is posted;
+no error banner and no VS Code toast. The draft and the conversation are kept: tasks are stored
+per activity, not per folder. The webview asks for the state on mount (each task), when the
+panel becomes visible and when the window regains focus. 다시 고르기 runs the folder picker
+("이 폴더로 이어서 하기") and moves the task with the same path 프로젝트 변경 uses (`projectOpener`:
+activity commit under the canonical root, `ensureWorkspace`, window reload), after flushing the
+draft (`setConnectionChanging`). The pick is resolved to its canonical folder first (symlinks,
+on-disk case, drive letter); a folder outside the activity's own asks the folder-consent
+question for that folder before the move, as usual (`folderConsentForFolder`), and closing it
+moves nothing. A pick that does not move the task keeps the notice with one extra line: not a
+folder ("고른 곳을 열 수 없어요. 다른 폴더를 골라 주세요."), consent closed, the activity's own
+reason (for example a folder bound to another activity), or a generic failure line; a raw error
+never reaches the learner. 다시 고르기 does nothing while a turn runs. Not built: the
+"다시 가져오기" (REQ-P4 source re-download) option of the register row, dropped by the audit to one
+action; a read-only draft view under a notice that replaces the composer (the composer stays,
+held). Known limit: re-entry from the start page with a saved activity whose folder is gone
+still recreates that folder empty (`openWorkspaceFolder` → `prepareWorkspaceDirectory`), so that
+path opens an empty folder rather than this notice. Tests: `test/missing-task-folder.smoke.mjs`
+(pure decisions, consent for a picked folder, the real host's hold and rebind against a fake VS
+Code, wiring) and `test/missing-task-folder.test.tsx` (the real ChatPanel: notice, held send with
+the draft kept, 다시 고르기, cleared notice sends; classroom draws nothing).
 Tests: `test/folder-consent.smoke.mjs` — pure decisions (canonical path with symlink, case
 and drive letter; which seats ask; exact own folder with look-alike negative controls;
 store; fail closed without an activity id; 128 grant combinations proving narrowing never

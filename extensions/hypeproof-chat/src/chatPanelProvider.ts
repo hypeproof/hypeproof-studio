@@ -18,7 +18,9 @@ const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
 import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
-import { folderConsentProfile, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
+import { folderConsentForFolder, folderConsentProfile, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
+import { folderConsentApplies, canonicalFolder } from './folderConsent';
+import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED } from './missingTaskFolder';
 import { chatVisible, createFinishNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
 import { verifyActivity } from './proxyClient';
@@ -1058,6 +1060,60 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!profile) return null;
     try { await folderConsentProfile(this.context, profile, this.folderConsentOpts()); return null; }
     catch (error) { if (error instanceof FolderConsentRefusal) return error.message; throw error; }
+  }
+  /**
+   * REQ-STUDIO-MISSING-TASK-FOLDER — the personal task's folder when it no longer exists or cannot be
+   * read, else null. Class and lesson seats, the instructor surface and seats without personal tasks
+   * never get the notice: their folder is the class's, and they keep the existing refusal.
+   */
+  private missingTaskFolderPath(): string | null {
+    return missingTaskFolder({
+      applies: !!this.currentTaskStore?.() && folderConsentApplies(this.cachedProfile, this._instructorMode?.isInstructor === true),
+      folder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? activityConnections(this.context)?.current?.workspace,
+    });
+  }
+  private async postMissingTaskFolder(note?: string): Promise<void> {
+    await this.post({ type: "missingTaskFolder", notice: missingTaskFolderNotice(this.missingTaskFolderPath(), note) });
+  }
+  /** A send while the folder is missing is held: the text goes back to the composer, the notice is shown, no turn starts. */
+  private async holdSendForMissingFolder(text: string, images: string[] | undefined, toolMode: TurnToolMode): Promise<void> {
+    await this.post({ type: "inputRejected", text, images, toolMode });
+    await this.postHistory();
+    await this.postMissingTaskFolder();
+  }
+  private repickingFolder = false;
+  /**
+   * 다시 고르기 — the existing folder picker, then the same move "프로젝트 변경" uses (projectOpener:
+   * activity commit under the canonical root, ensureWorkspace, reload). A folder outside the
+   * activity's own asks folder consent first (REQ-STUDIO-FOLDER-CONSENT). The draft is flushed
+   * before the window moves; a pick that does not move the task keeps the notice with one line why.
+   */
+  private async repickTaskFolder(): Promise<void> {
+    if (this.repickingFolder || this.hasActiveStream()) return;
+    if (!this.missingTaskFolderPath()) { await this.postMissingTaskFolder(); return; }
+    this.repickingFolder = true;
+    let note: string | undefined;
+    try {
+      const picked = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, openLabel: MISSING_TASK_FOLDER_PICK_LABEL, title: MISSING_TASK_FOLDER_PICK_TITLE });
+      const choice = repickedFolder(picked?.[0]?.fsPath, (p) => canonicalFolder(p));
+      if (choice.kind === "cancel") return;
+      if (choice.kind === "invalid") { note = MISSING_TASK_FOLDER_NOT_A_FOLDER; return; }
+      const profile = this.cachedProfile ?? (await this.ensureProfile());
+      if (!profile || !this.projectOpener) { note = MISSING_TASK_FOLDER_FAILED; return; }
+      let consent: Awaited<ReturnType<typeof folderConsentForFolder>>;
+      try { consent = await folderConsentForFolder(this.context, profile, this.folderConsentOpts(), choice.folder); }
+      catch (error) { if (error instanceof FolderConsentRefusal) { note = error.message; return; } throw error; }
+      if (!consent) { note = MISSING_TASK_FOLDER_UNDECIDED; return; }
+      await this.setConnectionChanging(true);
+      try { await this.projectOpener(choice.folder); }
+      catch (error) { note = error instanceof ActivityConnectionError ? error.message : MISSING_TASK_FOLDER_FAILED; }
+      finally { await this.setConnectionChanging(false); }
+    } catch {
+      note = MISSING_TASK_FOLDER_FAILED;
+    } finally {
+      this.repickingFolder = false;
+      await this.postMissingTaskFolder(note);
+    }
   }
   setProjectOpener(open: (folder: string) => Promise<void>): void {
     this.projectOpener = open;
@@ -5153,6 +5209,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case "inboxRequest": await this.postInbox(); return;
       case "turnReviewRequest": this.postTurnReview(); return;
+      case "missingTaskFolderRequest": await this.postMissingTaskFolder(); return;
+      case "missingTaskFolderRepick": await this.repickTaskFolder(); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "pageCardsRequest": this.postPageCards(); return;
       case "pageCardOpen":
@@ -5272,6 +5330,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
+        // REQ-STUDIO-MISSING-TASK-FOLDER — no turn starts in a folder that is gone; the draft stays.
+        if (this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(msg.text, msg.images, requestedMode); return; }
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
         await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true); // CGP-CHAT-R-011 — a fresh send may carry the attached file
         return;
@@ -5285,6 +5345,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #358 — carry the failed turn's image(s) through the retry so the
         // coach actually re-receives the screenshot (was text-only → "스크린샷을
         // 아직 못 받았어요").
+        if (this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(msg.prompt, msg.images, requestedMode); return; }
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.prompt, msg.images, requestedMode); return; }
         await this.handleSend(msg.prompt, msg.history, msg.images, undefined, undefined, requestedMode, msg.userMessageId, msg.sourceMessageId);
         return;

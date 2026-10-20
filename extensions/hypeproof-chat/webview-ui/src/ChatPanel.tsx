@@ -5,6 +5,7 @@ import type { TurnToolMode } from '../../src/turnTools';
 import { ComposerTools, SelectedTool } from './ComposerTools';
 import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
+import { MissingFolderNotice } from './MissingFolderNotice';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
@@ -564,6 +565,16 @@ export function ChatPanel(props: Props) {
     postToHost({ type: "pageCardsRequest" });
     return off;
   }, []);
+  // REQ-STUDIO-MISSING-TASK-FOLDER — the host says whether this task's folder is gone; asked again on mount,
+  // when the panel comes back into view and when the window regains focus (the folder may have moved meanwhile).
+  const [missingFolder, setMissingFolder] = useState<import("../../src/missingTaskFolder").MissingTaskFolderNotice | null>(null);
+  useEffect(() => {
+    const off = onHostMessage((msg) => { if (msg.type === "missingTaskFolder") setMissingFolder(msg.notice); });
+    const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "missingTaskFolderRequest" }); };
+    ask(); document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
+    const stop = () => { off(); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
+    return stop;
+  }, []);
   // #751 native help — the host reads the learner, class connection and Service again for every draw; nothing is kept here.
   const [help, setHelp] = useState<import("../../src/classroomHelp").HelpView | null>(null);
   useEffect(() => {
@@ -673,6 +684,8 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  // Sending is held (the draft stays) while the task's folder is missing.
+  const folderMissing = personalWorkspace && !props.instructor && !!missingFolder;
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error });
@@ -786,6 +799,8 @@ export function ChatPanel(props: Props) {
     // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
     if (imagePreparationBlocksSend()) return false;
+    // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays.
+    if (folderMissing) return false;
     const value = (text ?? draft).trim();
     if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked || props.sendPending) return false;
     if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return false; }
@@ -839,7 +854,7 @@ export function ChatPanel(props: Props) {
     // #751 U4 — a turn the instructor cut off hands the parked message back, exactly like the learner's own Stop. Never sent.
     if (queuedPaused) return;
     if (shouldRestoreQueue(prev, streaming, queued, cutOff)) { restoreQueuedToDraft(); return; }
-    if (queuedPaused || unavailable || !shouldFlushQueue(prev, streaming, queued, cutOff)) return;
+    if (queuedPaused || unavailable || folderMissing || !shouldFlushQueue(prev, streaming, queued, cutOff)) return;
     // cr-verify — a product test holds the tab: the parked message goes back to the draft, never lost.
     if (props.sendLocked) { restoreQueuedToDraft(); return; }
     const text = queued as string;
@@ -1655,6 +1670,7 @@ export function ChatPanel(props: Props) {
         {personalWorkspace && accessNeedsAttention && <div className="hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
+        {folderMissing && missingFolder && <MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} />}
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read
@@ -1879,7 +1895,7 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
-                disabled={preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
+                disabled={preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || folderMissing || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
                 title={personalWorkspace ? '메시지 보내기' : undefined}

@@ -56,9 +56,10 @@ function canonTarget(p: string): string {
 
 interface Scope { activityId?: string; folder: string; home?: string }
 
-function scopeFor(context: vscode.ExtensionContext, profile: ResolvedProfile, servedRoot: string | null | undefined): Scope | undefined {
+function scopeFor(context: vscode.ExtensionContext, profile: ResolvedProfile, servedRoot: string | null | undefined, target?: string): Scope | undefined {
   // A folder that cannot be resolved is still keyed (never skipped): unresolved means ask.
-  const open = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  // `target` is a folder the task is about to move to (REQ-STUDIO-MISSING-TASK-FOLDER), not yet open.
+  const open = target ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const folder = tryCanon(open) ?? (open ? path.resolve(open) : undefined);
   if (!folder) return undefined;
   const activityId = activityConnections(context)?.current?.id ?? profile.activity_id ?? undefined;
@@ -81,9 +82,9 @@ async function remember(context: vscode.ExtensionContext, activityId: string, fo
   await context.globalState.update(FOLDER_CONSENT_KEY, writeFolderConsent(context.globalState.get(FOLDER_CONSENT_KEY), activityId, folder, level));
 }
 
-function decide(context: vscode.ExtensionContext, profile: ResolvedProfile | null | undefined, opts: FolderConsentOpts) {
+function decide(context: vscode.ExtensionContext, profile: ResolvedProfile | null | undefined, opts: FolderConsentOpts, target?: string) {
   const applies = !!profile && folderConsentApplies(profile, opts.instructor === true);
-  const scope = applies && profile ? scopeFor(context, profile, opts.servedRoot) : undefined;
+  const scope = applies && profile ? scopeFor(context, profile, opts.servedRoot, target) : undefined;
   // The store is read only for a seat and folder that can ask.
   if (!scope) return { scope, decision: { kind: "skip" } as const };
   return { scope, decision: folderConsentDecision({ applies, activityId: scope.activityId, folder: scope.folder, home: scope.home, store: context.globalState.get(FOLDER_CONSENT_KEY) }) };
@@ -108,6 +109,22 @@ export async function folderConsentProfile(context: vscode.ExtensionContext, pro
   }
   if (level === "none") throw new FolderConsentRefusal(folderNoAiCopy());
   return narrowForFolder(profile, level === "full" ? "full" : "read");
+}
+
+/**
+ * REQ-STUDIO-MISSING-TASK-FOLDER — the same question for a folder the learner picked to move a
+ * task to, asked before the move (the window reloads into it). "own" = nothing to ask (the
+ * activity's own folder, or a seat that never asks); a level = remembered or just answered;
+ * undefined = the question was closed, nothing is remembered and the task does not move.
+ */
+export async function folderConsentForFolder(context: vscode.ExtensionContext, profile: ResolvedProfile, opts: FolderConsentOpts, folder: string): Promise<"own" | FolderConsentLevel | undefined> {
+  const { scope, decision } = decide(context, profile, opts, folder);
+  if (decision.kind === "skip" || !scope) return "own";
+  if (decision.kind === "refuse") throw new FolderConsentRefusal(decision.message);
+  if (decision.kind === "apply") return decision.level;
+  const level = await ask(decision.folder);
+  if (level) await remember(context, scope.activityId!, scope.folder, level);
+  return level;
 }
 
 /**
