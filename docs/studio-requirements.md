@@ -320,17 +320,25 @@ tools appear above the code once it is opened. `복사` (`aria-label="코드 복
 block's text (without Markdown's trailing newline) through the same confirmed-copy hook as the answer
 copy: `복사됨` and the status `코드를 복사했습니다` appear only after the clipboard write resolves, a
 rejected or missing clipboard says `복사하지 못했습니다. 코드를 선택해 복사해 주세요.`, and the
-feedback clears after 2.4s. `줄 바꿈` toggles soft wrap with `aria-pressed` and the label
-`줄 바꿈 켜기` / `줄 바꿈 끄기`; the default keeps each surface's existing behaviour (the pill body does
-not wrap, prose blocks wrap). The choice is remembered per block (keyed by its text, so identical
-blocks share it) for the webview session only: rerenders, streaming and remounting keep it, a reload
-forgets it, nothing is written to storage or the host. Both controls are buttons with 44px targets,
-reachable by Tab, with the shared focus ring. Not built: a fence-language label, download, and a
-per-task saved wrap choice (the research row CGP-CHAT-R39 asks for one; this slice keeps it
-session-only). Test: `test/code-block-tools.test.tsx` (tools per block in both modes, copied text
-equals the block text, confirmation only after the write, failure and missing clipboard, wrap
-attribute and `aria-pressed`, per-block memory, no tools outside code blocks, collapsed pill
-unchanged).
+feedback clears after 2.4s. An empty (or whitespace-only) block has its `복사` disabled, so it never
+claims a copy or clears the clipboard. `줄 바꿈` is a toggle with one fixed name (`aria-label="줄 바꿈"`)
+and `aria-pressed` for its state; the default keeps each surface's existing behaviour (the pill body
+does not wrap, prose blocks wrap). The choice is remembered per block for the webview session only.
+A block is identified by its position, not its text: conversation (activity and task) › message id ›
+answer segment › block start offset. So identical blocks, the same snippet in another task, and a
+new conversation never share a choice, and a block that is still streaming keeps its choice as it
+grows. Rerenders and remounts (task switch and back) keep it, a reload forgets it, and nothing is
+written to storage or the host. A block outside a full scope (a reply-choice question) keeps its
+choice only while mounted. Both controls are buttons with 44px targets, reachable by Tab, with the
+shared focus ring. Not built: a fence-language label, download, and a per-task saved wrap choice (the
+research row CGP-CHAT-R39 asks for one; this slice keeps it session-only). Test:
+`test/code-block-tools.test.tsx`. Static markup covers where tools render (both modes, no tools
+outside code blocks, collapsed pill unchanged). Mounted on a minimal DOM (`test/fixtures/mini-dom.mjs`),
+it clicks the real buttons with a stubbed clipboard that resolves, rejects or is missing, for the
+block copy and the answer copy (`CopyAnswer`), the empty block, the wrap toggle, per-block, per-task
+and streaming memory through `ChatPanel`, and opening a pill in personal and classroom chat.
+Reverting any of 13 behaviours (copy or wrap wired to a no-op, confirming before the write, success
+shown on failure, text-keyed memory, and others) fails it.
 
 `REQ-STUDIO-TASK-RUN-STATE` (extends [AE-03](requirements/learning-agent-experience.md);
 CGP-AGENT-R-022 / REQ-CGP-AGENT-46 recast after its "next waiting task" premise was refuted, 2026-10-20):

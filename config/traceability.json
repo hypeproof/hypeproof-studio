@@ -6337,6 +6337,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/code-block-tools.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/mini-dom.mjs"
         }
       ]
     },

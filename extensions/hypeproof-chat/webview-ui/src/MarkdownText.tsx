@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { postToHost } from './vscode';
 import { CodeBlock } from './CodeBlock';
 
-type HastNode = { type: string; value?: string; children?: HastNode[] };
+type HastNode = { type: string; value?: string; children?: HastNode[]; position?: { start?: { offset?: number } } };
 /** The raw text of a hast subtree: exactly what the block shows, without a trailing newline. */
 export const hastText = (node: HastNode | undefined): string =>
   !node ? '' : node.type === 'text' ? node.value ?? '' : (node.children ?? []).map(hastText).join('');
@@ -19,7 +19,12 @@ const components: Components = {
   table: ({ children }) => <div className="hps-markdown-table" role="region" aria-label="대화의 표" tabIndex={0}><table>{children}</table></div>,
   // CGP-CHAT-R-008: a code block in prose (indented or `~~~` fence) gets copy and wrap tools;
   // inline `code` does not. Prose blocks already wrap, so wrapping stays on by default.
-  pre: ({ node, children }) => <CodeBlock code={hastText(node as HastNode | undefined).replace(/\n$/, '')} defaultWrap><pre>{children}</pre></CodeBlock>,
+  // The block's start offset in this text is its key: it stays put while later text streams in.
+  pre: ({ node, children }) => {
+    const hast = node as HastNode | undefined;
+    const offset = hast?.position?.start?.offset;
+    return <CodeBlock code={hastText(hast).replace(/\n$/, '')} defaultWrap blockKey={offset == null ? undefined : `pre@${offset}`}><pre>{children}</pre></CodeBlock>;
+  },
   input: ({ checked }) => <span aria-label={checked ? '완료 항목' : '미완료 항목'}>{checked ? '☑' : '☐'}</span>,
 };
 
