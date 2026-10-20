@@ -7069,6 +7069,9 @@
           "path": "chalk/test/instruction-diff.test.mjs"
         },
         {
+          "path": "e2e/chalk-authoring/confirm-diff.mjs"
+        },
+        {
           "path": "docs/testing/chalk-authoring.md"
         }
       ]

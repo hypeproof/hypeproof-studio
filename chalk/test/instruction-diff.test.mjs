@@ -16,7 +16,7 @@ test('identical text produces no diff lines', () => {
   const text = '첫 줄\n둘째 줄\n셋째 줄';
   assert.deepEqual(kit.foldRows(kit.lineDiff(text, text)), []);
   const same = lesson(['홈페이지 열기', '미리보기를 연다\n제목을 바꾼다']);
-  assert.deepEqual(kit.instructionDiff(same, structuredClone(same)), { rows: [], added: 0, removed: 0 });
+  assert.deepEqual(kit.instructionDiff(same, structuredClone(same)), { skipped: false, rows: [], added: 0, removed: 0 });
   // Negative control: the instrument is not "always empty" — one changed word in the same lesson is reported.
   const changed = lesson(['홈페이지 열기', '미리보기를 연다\n부제목을 바꾼다']);
   assert.deepEqual(kit.instructionDiff(same, changed).rows.map((r) => r.kind).filter((k) => k !== 'same'), ['del', 'add']);
@@ -31,23 +31,14 @@ test('added and removed lines carry their own kind, independent of colour', () =
   assert.equal(d.removed, 1);
 });
 
-test('the served confirm step marks each line with a glyph AND a spoken word, never colour alone', async () => {
+test('the served page inlines the tested kit and names the reviewed base on confirm', async () => {
+  // Rendered behaviour (markers, escaping, fold, lock) is covered in a real browser: e2e/chalk-authoring/confirm-diff.mjs.
   const r = await chalk.fetch(new Request('https://chalk.test/authoring'), env, {});
   const html = await r.text();
-  assert.match(html, /const DIFF_WORDS=\{add:\['\+','추가'\],del:\['−','삭제'\],same:\['','변경 없음'\]\};/, 'visible +/− glyph and a 추가/삭제 word per kind');
-  assert.match(html, /className:'sr-only',textContent:word\+': '/, 'each line starts with its state word for screen readers');
-  assert.match(html, /document\.createElement\(kind==='add'\?'ins':kind==='del'\?'del':'span'\)/, 'added text is <ins> (underlined), removed is <del> (struck)');
-  assert.match(html, /#confirm-diff-lines ins\{text-decoration:underline/, 'added text is underlined');
-  assert.match(html, /#confirm-diff-lines del\{text-decoration:line-through/, 'removed text is struck through');
-  assert.match(html, /<ol id="confirm-diff-lines" aria-labelledby="confirm-diff-title" tabindex="0" hidden><\/ol>/, 'the list is a named, keyboard-scrollable region');
-  assert.doesNotMatch(html, /confirm-diff-lines'\)\.innerHTML/, 'lesson text is never rendered as HTML');
   assert.ok(!html.includes('/*@instruction-diff*/'), 'the marker is replaced by the kit');
   assert.ok(html.includes(INSTRUCTION_DIFF_SCRIPT), 'the page inlines exactly the tested kit');
-  // REQ-CGP-AGENT-28: confirm stays disabled until the diff for THIS candidate has loaded.
-  assert.match(html, /\|\|confirmDiff\?\.candidate!==readiness\?\.version\|\|confirmDiff\?\.state!=='ready';/);
-  // Both sides come from reads the page already makes; no new endpoint.
-  assert.match(html, /await call\(scope\(\)\+'\/versions'\);const base=list\.versions\.find\(x=>x\.confirmed&&x\.version!==r\.version\);/);
-  assert.match(html, /instructionDiffKit\.instructionDiff\(d\.module\?\.content,r\.content\)/);
+  assert.match(html, /\|\|confirmDiff\?\.candidate!==readiness\?\.version\|\|confirmDiff\?\.state!=='ready';/, 'confirm waits for the diff of THIS candidate');
+  assert.match(html, /compared_with:reviewed\.base\}/, 'the confirm request names the base it was reviewed against');
 });
 
 test('the inlined script runs standalone (no bundler helpers in scope)', () => {
@@ -81,7 +72,49 @@ test('CRLF and a trailing newline do not create a false diff', () => {
 });
 
 test('instruction text is step headers plus each step’s 안내 lines', () => {
-  assert.equal(kit.instructionText(lesson(['열기', '하나\n둘'], [' 고치기 ', ''])), '[1. 열기]\n하나\n둘\n[2. 고치기]');
+  assert.equal(kit.instructionText(lesson(['열기', '하나\n둘'], [' 고치기 ', ''])), '[단계] 열기\n하나\n둘\n[단계] 고치기');
   assert.equal(kit.instructionText({}), '');
   assert.equal(kit.instructionText(undefined), '');
+});
+
+test('inserting a step does not show later step headers as changed', () => {
+  const steps = [['열기', 'a'], ['고치기', 'b'], ['확인', 'c']];
+  const d = kit.instructionDiff(lesson(...steps), lesson(['준비', 'p'], ...steps));
+  assert.deepEqual([d.added, d.removed], [2, 0], 'only the new header and its line');
+});
+
+test('Myers diff is a minimal edit script (fuzz against a brute-force LCS)', () => {
+  const lcs = (a, b) => { const t = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) t[i][j] = a[i] === b[j] ? t[i + 1][j + 1] + 1 : Math.max(t[i + 1][j], t[i][j + 1]);
+    return t[0][0]; };
+  let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  for (let n = 0; n < 2000; n++) {
+    const pick = () => Array.from({ length: Math.floor(rnd() * 12) }, () => 'abcd'[Math.floor(rnd() * 4)]);
+    const a = pick(), b = pick(), rows = kit.lineDiff(a.join('\n'), b.join('\n'));
+    assert.equal(rows.filter((r) => r.kind === 'same').length, lcs(a, b), JSON.stringify([a, b]));
+    assert.deepEqual(rows.filter((r) => r.kind !== 'add').map((r) => r.text), a);
+    assert.deepEqual(rows.filter((r) => r.kind !== 'del').map((r) => r.text), b);
+  }
+});
+
+test('large lessons diff by line, never as a misleading full replace', () => {
+  const big = Array.from({ length: 3000 }, (_, i) => 'line ' + i), edited = [...big];
+  edited[0] = 'first'; edited[2999] = 'last';
+  const d = kit.instructionDiff(lesson(['A', big.join('\n')]), lesson(['B', edited.join('\n')]));
+  assert.equal(d.skipped, false);
+  assert.deepEqual([d.added, d.removed], [3, 3], 'renamed header + first + last, not 3000/3000');
+  // Beyond the edit limit the kit says it skipped; it does not invent thousands of 추가/삭제 lines.
+  const other = Array.from({ length: 3000 }, (_, i) => 'other ' + i);
+  const s = kit.instructionDiff(lesson(['A', big.join('\n')]), lesson(['A', other.join('\n')]));
+  assert.deepEqual([s.skipped, s.rows.length, s.added, s.limit], [true, 0, null, kit.MAX_EDITS]);
+  // Negative control: the same limit does not trip on a small change.
+  assert.equal(kit.instructionDiff(lesson(['A', 'x']), lesson(['A', 'y']), 2).skipped, false);
+});
+
+test('a whitespace-only change is flagged, and composed/decomposed Hangul is not a change', () => {
+  const rows = kit.lineDiff('abc\nx\ty', 'abc \nx y');
+  assert.deepEqual(rows.map((r) => r.kind + (r.ws ? '/ws' : '')), ['del/ws', 'del/ws', 'add/ws', 'add/ws']);
+  assert.deepEqual(kit.foldRows(kit.lineDiff('한글 수업'.normalize('NFD'), '한글 수업')), []);
+  // Negative control: a real text change is not flagged as whitespace.
+  assert.ok(kit.lineDiff('abc', 'abd').every((r) => !r.ws));
 });
