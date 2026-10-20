@@ -124,6 +124,15 @@ export interface EffortRequestRecord {
   /** Claude Code's purpose marker: main | subagent | workflow | compaction | auxiliary. */
   request_class?: string;
 }
+/** CGP-CHAT-R-011 — a work-folder text file queued for the next turn (node-free, shared with the webview). */
+export interface FileAttachmentPreview {
+  /** Path relative to the work folder, with forward slashes. */
+  path: string;
+  /** Exactly the file text that goes with the next message. */
+  text: string;
+  bytes: number;
+}
+
 export interface ChatConfig {
   /** CGP-AGENT-R-003: what the AI can do on this seat, one row per REQ-M38 key. */
   aiCapabilities?: import('./aiCapabilities').AiCapability[];
@@ -132,6 +141,8 @@ export interface ChatConfig {
   /** CGP-DS-R-015: `workbench.reduceMotion` is "on"; the webview stops nonessential motion. */
   reduceMotion?: boolean;
   turnTools?: import('./turnTools').TurnToolsAvailability;
+  /** CGP-CHAT-R-011 — this seat may attach a work-folder text file (sdk_tools.read, never instructors). */
+  fileAttach?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus;
     /** Free start (SPEC iteration 4 §2.4) — the seat is the free allowance (`studio-open-trial`, no pass): its copy says 무료 사용, never 체험. */
@@ -540,6 +551,10 @@ export type WebviewMessage = (
   | { type: "removeElementContext" }
   /** CGP-ART-R-007 — the learner removed the attached page; nothing from the page is sent. */
   | { type: "removePageContext" }
+  /** CGP-CHAT-R-011 — open the work-folder file picker (host re-checks the gate). */
+  | { type: "attachWorkspaceFile" }
+  /** CGP-CHAT-R-011 — the learner removed the attached file; nothing from it is sent. */
+  | { type: "removeFileContext" }
   // cr-verify — "Test my product" (CR-12–CR-16; CR switch only, re-checked by the host).
   | { type: "verifyOpen" }
   // `requestId`: the panel that asked; only it sends the resulting `sendText` (two chat views receive every post).
@@ -772,6 +787,8 @@ export type HostMessage = (
   | { type: "elementAttached"; element: ElementPreview | null }
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
   | { type: "pageAttachment"; attachment: import("./pageContext").PageAttachmentPreview | null }
+  /** CGP-CHAT-R-011 — the work-folder file queued for the next turn (null = none), or why it was refused. */
+  | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string }
   // cr-verify — the "Test my product" panel (null = hidden). `sendText`: the student's own
   // sentence the panel sends next through the normal send path (the coach context rides
   // with it, model-only). `error`: why the last action was refused.

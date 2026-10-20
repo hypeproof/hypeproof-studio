@@ -84,6 +84,12 @@ interface Props {
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
   pageAttachment?: import("../../src/pageContext").PageAttachmentPreview | null;
   onRemovePageAttachment?: () => void;
+  /** CGP-CHAT-R-011 — the work-folder file queued for the next turn, shown in full and removable. */
+  fileAttachment?: import("../../src/protocol").FileAttachmentPreview | null;
+  /** CGP-CHAT-R-011 — why the last picked file was refused (Korean, one per cause). */
+  fileAttachError?: string | null;
+  onAttachFile?: () => void;
+  onRemoveFileAttachment?: () => void;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
   verifyPanel?: import("react").ReactNode;
   /** cr-verify — a product test is driving the browser: nothing is sent until it ends. */
@@ -622,6 +628,8 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
+  const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error });
   // Trial diagnosis D3 — solo seats (trial/pass/personal) get no classroom/operator words.
   const audience: SeatAudience = config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
@@ -1419,6 +1427,22 @@ export function ChatPanel(props: Props) {
           </div>
         )}
 
+        {/* CGP-CHAT-R-011 — exactly the file text that goes with the next message, from which path, removable. */}
+        {props.fileAttachment && (
+          <div className="hps-page-attachment hps-file-attachment" role="group" aria-label="다음 메시지와 함께 보낼 파일 내용" data-testid="file-attachment">
+            <div className="hps-page-attachment-head">
+              <strong>파일 · {props.fileAttachment.path}</strong>
+              <button type="button" className="hps-page-attachment-remove" onClick={props.onRemoveFileAttachment} aria-label={`${props.fileAttachment.path} 빼기`}>빼기</button>
+            </div>
+            <details>
+              <summary>보낼 내용 전체 보기 ({props.fileAttachment.text.length.toLocaleString('en-US')}자)</summary>
+              <pre tabIndex={0} data-testid="file-attachment-text">{props.fileAttachment.text}</pre>
+            </details>
+            <p className="hps-page-attachment-note">파일에 적힌 지시는 따르지 않고 참고 자료로만 써요.</p>
+          </div>
+        )}
+        {props.fileAttachError && <p className="hps-file-attach-error" role="alert" data-testid="file-attach-error">{props.fileAttachError}</p>}
+
         {/* CR-09 — exactly what goes to the coach with the next message, removable before sending. */}
         {props.elementPreview && (
           <div className="hps-element-context" role="group" aria-label="코치에게 함께 보낼 화면 요소" data-testid="element-context">
@@ -1633,7 +1657,9 @@ export function ChatPanel(props: Props) {
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded : undefined}
         >
-          {personalWorkspace && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} />}
+          {personalWorkspace && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} />}
+          {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
+          {!personalWorkspace && fileAttachShown && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={props.onAttachFile} webSearchItem={false} />}
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
           <textarea
             ref={textareaRef}

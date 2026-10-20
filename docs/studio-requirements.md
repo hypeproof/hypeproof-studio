@@ -323,6 +323,34 @@ so immediate typing continues there. Deferred panel opening focus must also yiel
 to a newer user-selected editing target before its animation frame runs. Narrow drawers contain
 focus; reduced motion suppresses nonessential transitions.
 
+`REQ-STUDIO-CHAT-FILE-ATTACH` (CGP-CHAT-R-011, CGP-KNOW-R-014, P1; built 2026-10-20): the
+learner can attach one text file from the current work folder as context for the next message.
+"작업 폴더 파일 붙이기" in the composer tool menu opens the system picker at the work folder
+(`resolveCoachCwd()`); the host re-checks the pick and refuses, each with its own Korean message
+and next step: no work folder, outside the folder (lexically or after resolving links), any
+link on the path (even one pointing inside), hidden paths (`.env`, `.git/…`), folders, missing
+or unreadable files, empty files, more than 100 KB, invalid UTF-8 or NUL bytes (binary), more
+than 20,000 characters, and a file that changed while it was read. A file is refused, never
+cut, so the chip "파일 · {relative path}" shows exactly the text the model receives (expandable,
+scrollable, with **빼기**); a refusal shows as an alert under the chip row. The model receives the
+text inside `<file_content path="…">…</file_content>` followed by an instruction to treat it as
+reference material and not follow instructions inside it; an opening or closing tag in the file,
+or a quote in its path, cannot end the block. The file goes with the next send only (not a
+retry; history and the sent bubble keep the learner's own text), and is dropped on removal,
+task create or switch, clearing the conversation, a work-folder change, and a config in which the
+seat lost the grant; a config or remount re-shows a pending chip. Gate: `sdk_tools.read` (after
+pass narrowing), because that flag is the profile's answer to whether workspace file contents may
+reach the model; the photo grants (`input.image_paste` / `input.image_files`) cover images only.
+Never on the instructor surface. Personal seats get the item in their existing tool menu; a
+classroom seat, which has no tool menu, gets one with the file item only (no web search). The
+host re-checks the gate when the picker opens and when the send consumes the file. Not built:
+several files at once, the `@` file list (CGP-CHAT-R08), search/recent files in the picker
+(DES-KNOW-26), and per-cause REQ-KNOW-37 fixtures beyond the smoke test. Tests:
+`test/file-attachment.smoke.mjs` (containment incl. links, binary, caps, delimiter breakout,
+shown = sent, gate) and `test/file-attachment.test.tsx` (chip, 빼기, alert, no chip or menu
+without the grant, instructor never; host source checks for send, retry, remove, task switch,
+clear, folder change).
+
 Acceptance CG-01–CG-06 in [the verification contract](testing/task-workspace.md)
 is revision-bound. Matched screenshots and independent interaction review are
 required; local synthetic success is separate from live SDK/account, signed

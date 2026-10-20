@@ -55,6 +55,9 @@ interface State {
   elementPreview: ElementPreview | null;
   /** CGP-ART-R-007 — page text queued for the next turn. */
   pageAttachment: import('../../src/pageContext').PageAttachmentPreview | null;
+  /** CGP-CHAT-R-011 — the work-folder file queued for the next turn, and why the last pick was refused. */
+  fileAttachment: import('../../src/protocol').FileAttachmentPreview | null;
+  fileAttachError: string | null;
   /** cr-verify — the "내 제품 테스트" panel as the host computed it; null = hidden. */
   verify: VerifyView | null;
   verifyError: string | null;
@@ -95,6 +98,7 @@ type Action =
   | { type: "pageAttached"; label: string }
   | { type: "elementAttached"; element: ElementPreview | null }
   | { type: "pageAttachment"; attachment: import('../../src/pageContext').PageAttachmentPreview | null }
+  | { type: "fileAttachment"; attachment: import('../../src/protocol').FileAttachmentPreview | null; error?: string }
   | { type: "verifyState"; view: VerifyView | null; sendText?: string; error?: string }
   | { type: "verifyClose" }
   | { type: "testPublishState"; view: PublishView | null; error?: string; errorLines?: string[]; shareUrl?: string }
@@ -138,6 +142,8 @@ const initialState: State = {
   pageNotice: null,
   elementPreview: null,
   pageAttachment: null,
+  fileAttachment: null,
+  fileAttachError: null,
   verify: null,
   testPublish: null,
   evidence: null,
@@ -188,6 +194,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, elementPreview: action.element };
     case "pageAttachment":
       return { ...state, pageAttachment: action.attachment };
+    case "fileAttachment":
+      return { ...state, fileAttachment: action.attachment, fileAttachError: action.error ?? null };
     case "verifyState":
       return { ...state, verify: action.view, verifyError: action.error ?? null, verifySend: action.sendText ?? state.verifySend };
     case "verifyClose":
@@ -289,6 +297,8 @@ function reducer(state: State, action: Action): State {
         pageNotice: null,   // #308 — clear the "붙였어요" notice once the user sends
         elementPreview: null, // CR-09 — the picked element went with this turn
         pageAttachment: null, // CGP-ART-R-007 — the page text went with this turn
+        fileAttachment: null, // CGP-CHAT-R-011 — the attached file went with this turn
+        fileAttachError: null,
         stopNotice: null,   // #497 — 다시 입력했으면 중지 안내는 역할을 다했다
         lastOutcome: null,
         timeline: {
@@ -430,6 +440,7 @@ export function App() {
         case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
         case "elementAttached": dispatch({ type: "elementAttached", element: msg.element }); break;
         case "pageAttachment": dispatch({ type: "pageAttachment", attachment: msg.attachment }); break;
+        case "fileAttachment": dispatch({ type: "fileAttachment", attachment: msg.attachment, error: msg.error }); break;
         // Every chat view gets the post; only the one whose panel asked sends the sentence.
         case "verifyState": dispatch({ type: "verifyState", view: msg.view, sendText: msg.sendText && msg.requestId && verifyRequests.current.delete(msg.requestId) ? msg.sendText : undefined, error: msg.error }); break;
         case "publishState": dispatch({ type: "testPublishState", view: msg.view, error: msg.error, errorLines: msg.errorLines, shareUrl: msg.shareUrl }); break;
@@ -705,6 +716,13 @@ export function App() {
         onRemovePageAttachment={() => {
           dispatch({ type: "pageAttachment", attachment: null });
           postToHost({ type: "removePageContext" });
+        }}
+        fileAttachment={state.fileAttachment}
+        fileAttachError={state.fileAttachError}
+        onAttachFile={() => postToHost({ type: "attachWorkspaceFile" })}
+        onRemoveFileAttachment={() => {
+          dispatch({ type: "fileAttachment", attachment: null });
+          postToHost({ type: "removeFileContext" });
         }}
         verifyPanel={carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         sendLocked={!!state.verify?.running || !!workspace?.error}

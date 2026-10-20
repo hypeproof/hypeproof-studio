@@ -4,12 +4,16 @@ import { denialCopy } from '../../src/denialSource';
 import { ChatIcon } from './ChatDetails';
 
 /** Selection belongs to the next draft. Execution status comes from host tool events. */
-export function ComposerTools({ mode, onMode, webSearch, locked, onAttach }: {
+export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAttachFile, webSearchItem = true }: {
   mode: TurnToolMode;
   onMode: (mode: TurnToolMode) => void;
   webSearch?: { available: boolean; reason?: string };
   locked: boolean;
   onAttach?: () => void;
+  /** CGP-CHAT-R-011 — attach a work-folder text file to the next message. */
+  onAttachFile?: () => void;
+  /** False on a classroom seat, whose menu carries only the file item. */
+  webSearchItem?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -37,10 +41,11 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach }: {
       items[next]?.focus();
     }}>
       {onAttach && <button type="button" role="menuitem" onClick={() => { close(); onAttach(); }}><ChatIcon kind="image" /><span>이미지 첨부<small>이 메시지에 사진이나 화면 추가</small></span></button>}
-      <button type="button" role="menuitemcheckbox" aria-checked={mode === 'web-search'} aria-disabled={locked || !webSearch?.available} onClick={() => {
+      {onAttachFile && <button type="button" role="menuitem" onClick={() => { close(); onAttachFile(); }}><ChatIcon kind="file" /><span>작업 폴더 파일 붙이기<small>글로 된 파일 내용을 다음 메시지에 함께 보내요</small></span></button>}
+      {webSearchItem && <button type="button" role="menuitemcheckbox" aria-checked={mode === 'web-search'} aria-disabled={locked || !webSearch?.available} onClick={() => {
         if (locked || !webSearch?.available) return;
         onMode(mode === 'web-search' ? 'auto' : 'web-search'); close(); root.current?.closest('.hps-input')?.querySelector('textarea')?.focus({ preventScroll: true });
-      }}><ChatIcon kind="globe" /><span>웹 검색<small>{locked || !webSearch?.available ? reason : '웹 자료를 찾아 답변하도록 요청'}</small></span>{mode === 'web-search' && <ChatIcon kind="check" />}</button>
+      }}><ChatIcon kind="globe" /><span>웹 검색<small>{locked || !webSearch?.available ? reason : '웹 자료를 찾아 답변하도록 요청'}</small></span>{mode === 'web-search' && <ChatIcon kind="check" />}</button>}
     </div>}
   </div>;
 }
