@@ -50,6 +50,13 @@ async function run(){
  for(const marker of ['[추천]','(추천)'])assert.equal(replyChoices(text.replace('(추천)',marker))?.options[0].recommended,true);
  for(const marker of ['[추천)','추천하고 싶어요'])assert.equal(replyChoices(text.replace('(추천)',marker))?.options[0].recommended,undefined);
  for(const bad of ['\u202e숨김','\u0001제어','\u2066방향','\u2028분리','ab\tcd','<img>','x'.repeat(221)])assert.equal(replyChoices(text.replace('바로 만들기',bad)),null);
+ // Every Cf format character, C0/C1 control and line separator is refused in a label and in the surrounding text; Korean passes.
+ for(const cp of [0x200e,0x200f,0x061c,0x0085,0x009b,0x200b,0x200c,0x200d,0x2060,0xfeff,0x00ad,0x2063,0x202a,0x2069,0x2029,0x007f,0x0080,0x009f,0x0000,0x001f,0xe0041]){
+  const ch=String.fromCodePoint(cp),hex='U+'+cp.toString(16).toUpperCase().padStart(4,'0');
+  assert.equal(replyChoices(text.replace('바로 만들기','가'+ch+'나')),null,hex+' in a label');
+  assert.equal(replyChoices(text.replace('편하게','편'+ch+'하게')),null,hex+' in the surrounding text');
+ }
+ assert.ok(replyChoices(text.replace('바로 만들기','한글 ABC 123, 가나다 ㅎ'))!==null,'Korean label still passes');
  assert.equal(replyChoices('설치 순서입니다.\n1. 설치\n2. 실행'),null);
  {
   const v=await standalone(); assert.ok(document.activeElement===v.card(),'idle arrival focuses card');
@@ -121,7 +128,8 @@ async function run(){
   const host=mountPoint(),root=createRoot(host as unknown as HTMLElement),sent:string[]=[];
   const render=(ms=messages,extra:Record<string,unknown>={})=>root.render(<ChatPanel {...chatPanelProps()} config={base} messages={ms} onSend={v=>{sent.push(v);}} {...extra}/>);
   await act(()=>render());assert.equal(find(host,'status').some((e:any)=>e.textContent==='질문이 왔어요'),true);
-  await act(()=>click(find(host,'radio')[0]));assert.equal(host.findAll((e:any)=>e.tagName==='TEXTAREA')[0].value,'내 생각\n1. 먼저 계획하기','existing draft preserved');assert.equal(sent.length,0);
+  find(host,'radio')[0].focus();await act(()=>click(find(host,'radio')[0]));assert.equal(host.findAll((e:any)=>e.tagName==='TEXTAREA')[0].value,'내 생각\n1. 먼저 계획하기','existing draft preserved');assert.equal(sent.length,0);
+ await act(async()=>{await new Promise(r=>setTimeout(r,20));});assert.ok(document.activeElement===find(host,'radio')[0],'focus stays on the chosen option, not the composer');
   await act(()=>key(find(host,'radio')[0],'Enter'));assert.deepEqual(sent,['내 생각\n1. 먼저 계획하기'],'same normal send path sends composed draft');
   await act(()=>render([...messages,{id:'a2',role:'assistant',content:text,createdAt:3}]));assert.equal(find(host,'radio').length,2,'only latest turn is interactive');
   await act(()=>key(find(host,'radio')[0],'Enter'));assert.equal(sent.length,1,'new turn has no inherited selection');

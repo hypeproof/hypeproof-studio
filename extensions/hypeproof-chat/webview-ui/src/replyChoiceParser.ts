@@ -1,8 +1,13 @@
 export interface ReplyChoices { before: string; after: string; options: { number: number; label: string; recommended?: boolean }[] }
 
+// Cf covers bidi marks and overrides, zero-width and invisible characters, soft hyphen and tag characters.
+// The whole text may keep TAB, LF and CR; a label may keep none of the controls.
+const UNSAFE_TEXT = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029\p{Cf}]/u;
+const UNSAFE_LABEL = /[\p{Cc}\p{Cf}\u2028\u2029]/u;
+
 /** Only an explicit, flat invitation to choose becomes reply UI. Ordinary lists stay prose. */
 export function replyChoices(text: string): ReplyChoices | null {
-  if (text.length > 12000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u2028\u2029\u202a-\u202e\u2066-\u2069]/.test(text) || /```|~~~/.test(text)) return null;
+  if (text.length > 12000 || UNSAFE_TEXT.test(text) || /```|~~~/.test(text)) return null;
   const lines = text.split('\n');
   const start = lines.findIndex(line => /^1[.)]\s+\S/.test(line));
   if (start < 0) return null;
@@ -20,7 +25,7 @@ export function replyChoices(text: string): ReplyChoices | null {
     // Only an explicit trailing marker is a recommendation; never infer from prose.
     const recommended = /\s+(?:\[추천\]|\(추천\))$/.test(rawLabel);
     const label = recommended ? rawLabel.replace(/\s+(?:\[추천\]|\(추천\))$/, '').trim() : rawLabel;
-    if (!label || label.length > 220 || /[\u0000-\u001f\u007f\u2028\u2029\u202a-\u202e\u2066-\u2069]/.test(label) || /[<>`]|https?:|\[[^\]]*\]\(/.test(label)) return null;
+    if (!label || label.length > 220 || UNSAFE_LABEL.test(label) || /[<>`]|https?:|\[[^\]]*\]\(/.test(label)) return null;
     options.push({ number: Number(match[1]), label, ...(recommended ? { recommended: true } : {}) });
   }
   if (options.length < 2 || lines.slice(end).some(line => /^\s*\d+[.)]\s/.test(line))) return null;
