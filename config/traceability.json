@@ -8247,6 +8247,58 @@
           "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-BOARD-STATUS-CHIPS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-BOARD-STATUS-CHIPS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BOARD-STATUS-CHIPS"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/lib/board-status.ts"
+        },
+        {
+          "path": "chalk/src/ui/board.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-BOARD-STATUS-CHIPS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BOARD-STATUS-CHIPS",
+        "ST-IMP-BOARD-STATUS-CHIPS"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/board-status.test.mjs"
+        },
+        {
+          "path": "chalk/test/board-status-css.test.mjs"
+        }
+      ]
     }
   ]
 }

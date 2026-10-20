@@ -3333,3 +3333,34 @@ motion. No additional retention, upload or class permission is introduced. The
 existing native attribution picker remains reachable through 내 수정 확인; it is
 an explicit attestation, never automatic proof of authorship. This supports Product
 Intent #1/#2 and learner OWNERSHIP without exposing capability labels.
+
+### REQ-CHALK-BOARD-STATUS-CHIPS — metadata state presentation (CGP-AGENT-D-018)
+
+Extends ADM-09 / REQ-CGP-AGENT-45 / DES-CGP-AGENT-45. Product Intent:
+evidence over claims and human judgment stays visible. Instructors can identify
+where to inspect (VERIFY) without treating missing signals as learner inactivity.
+
+Both `/board` and `/manage` use one shared six-state presentation: 작업 중, 막힘,
+선생님 확인 필요, 쉬는 중, 끝남, 확인 불가. Every state has a distinct icon and
+text. Boundaries have at least 3:1 contrast. Unknown uses a neutral dashed boundary,
+including when its filter is selected; it never takes the completed state's green.
+Filters are native toggle buttons with `aria-pressed`, 44px targets and a visible
+focus ring. A refresh preserves focus; a second click clears the filter. Empty
+results explain how to clear filters. Disconnect/unavailable reads clear old counts.
+
+The legacy Service verdict maps ok to working, failing/stuck to blocked, and slowing
+to instructor review. Absent/quiet/silent/unrecognized states map to unknown; no
+legacy absence implies resting or completion. Legacy idle/done counts can be zero.
+Operations mapping requires a fresh seat signal and known attention: blocked/error
+wins, then help/caution, then running, then explicit wait (unknown), then a submitted
+or reviewed step with current basis, then runtime idle. A newer sample runtime_status
+overrides an older runtime slot. Unknown/previous step basis never proves completion.
+
+“쉬는 중” describes the reported AI runtime idle state, not a human leaving their
+seat. “끝남” describes the current step's submission/review, not whole-class success,
+instructor acceptance or task outcome quality. Titles disclose these boundaries.
+Original attention, approval, help and stage details remain available alongside the
+new state chip; no Service thresholds, authorization, writes or raw logs change.
+
+Evidence: `chalk/test/board-status.test.mjs`, `chalk/test/board-status-css.test.mjs` (computed 3:1 boundary and 4.5:1 text contrast, dashed unknown, 44px targets, 14px text, focus ring, forced colours) and synthetic actual-page browser checks
+in the row report. Live Service and classroom acceptance remain separate.
