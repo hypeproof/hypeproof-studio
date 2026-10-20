@@ -1,5 +1,5 @@
 // REQ-E1 / CGP-AGENT-R-005 — when `writeFile` is in requireApprovalFor, the write approval lists every path the
-// call will write, relative to the work folder (`작업 폴더/src/app.js`), up to 8 then "외 N개" with a full-list
+// call will write, relative to the work folder (`작업 폴더/src/app.js`), up to 5 then "외 N개" with a full-list
 // button that names the real total. Outside paths (absolute, `..`, a symlink that resolves outside) read
 // 작업 폴더 밖 and are refused before any modal. 새 파일 / 바꿈 only when the tool input says so. Names cannot fake
 // a line. The approval covers exactly the listed paths: a path that changes while the modal is open is refused.
@@ -68,20 +68,20 @@ test('single write: one path, relative to the work folder; change tag only when 
   assert.equal(copy.allLabel, undefined, 'nothing hidden → no full-list button');
 });
 
-test('multi-file write lists every path; over 8 shows 외 N개 and a full list with the real count', () => {
+test('multi-file write lists every path; over 5 shows 외 N개 and a full list with the real count', () => {
   const targets = Array.from({ length: 12 }, (_, i) => ({ path: path.join(WS, `p${String(i + 1).padStart(2, '0')}.html`) }));
   const entries = writePathEntries(targets, WS);
   assert.equal(entries.length, 12);
   const exact = writeApprovalCopy(TITLE, entries.slice(0, WRITE_PATHS_SHOWN));
-  assert.equal(exact.message.split('\n').length, 2 + 8, 'exactly 8: all listed, no 외');
+  assert.equal(exact.message.split('\n').length, 2 + 5, 'exactly 5: all listed, no 외');
   assert.ok(!exact.message.includes('외'));
   const three = writeApprovalCopy(TITLE, entries.slice(0, 3));
   assert.equal(three.message, `${TITLE}\n\n작업 폴더/p01.html\n작업 폴더/p02.html\n작업 폴더/p03.html`);
   const over = writeApprovalCopy(TITLE, entries);
-  assert.equal(WRITE_PATHS_SHOWN, 8);
-  assert.equal(over.hidden, 4);
-  assert.match(over.message, /\n작업 폴더\/p08\.html\n외 4개$/);
-  assert.ok(!over.message.includes('p09'), 'the ninth is not in the short list');
+  assert.equal(WRITE_PATHS_SHOWN, 5);
+  assert.equal(over.hidden, 7);
+  assert.match(over.message, /\n작업 폴더\/p05\.html\n외 7개$/);
+  assert.ok(!over.message.includes('p06'), 'the sixth is not in the short list');
   assert.equal(over.allLabel, '전체 목록 보기 (12개)');
   assert.equal(over.allMessage.split('\n').filter((l) => l.startsWith('작업 폴더/')).length, 12, 'the full list has every path');
   assert.match(over.allMessage, /모두 12개:/);
@@ -163,6 +163,10 @@ const mod = { exports: {} };
 vm.runInNewContext(source, { module: mod, exports: mod.exports, require: (id) => (id === 'vscode' ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder });
 const P = mod.exports.ChatPanelProvider.prototype;
 const host = { approvedCommandSignatures: new Set(), approvedBrowserOrigins: new Set(), coachDisplayName: () => '코치', sitePublisher: () => ({ allowed: () => false }), resolveCoachCwd: () => WS };
+host.writeApprovalScope=()=>WS;
+host.context={secrets:{get:async()=> 'token'}};
+host.confirmWriteFiles=(...args)=>P.confirmWriteFiles.call(host,...args);
+host.writeApprovalRequest={invalidate(){},confirm:async prompt=>{const m={message:prompt.title+'\n\n'+prompt.files.join('\n'),options:{modal:true},buttons:[prompt.verb],prompt};modals.push(m);return answer(m)===prompt.verb;}};
 const captured = [];
 const ask = async (label, req, pick) => {
   modals.length = 0;
@@ -182,21 +186,16 @@ test('the native modal lists the paths in Korean; 저장 approves; dismiss does 
   assert.ok(!one.modals[0].message.includes(scratch), 'no absolute path in the modal');
   const yes = await ask('single Write, approved', sdkToolToActionRequest({ toolName: 'Write', input: { file_path: path.join(WS, 'index.html'), content: 'x' } }), () => '저장');
   assert.equal(yes.approved, true);
+  assert.notEqual(yes.modals[0].prompt.id,one.modals[0].prompt.id,'repeated caller request id gets a fresh presentation id');
   assert.equal(yes.modals[0].message, `${TITLE}\n\n작업 폴더/index.html`);
 });
 
-test('over 8 paths: 외 N개, and 전체 목록 보기 (N개) opens every path before the answer', async () => {
-  const paths = Array.from({ length: 11 }, (_, i) => ({ path: path.join(WS, `pages/p${i + 1}.html`) }));
-  const r = await ask('11 paths, full list, approved', { payload: { path: paths[0].path, paths } }, (m) => (m.buttons.includes('전체 목록 보기 (11개)') ? '전체 목록 보기 (11개)' : '저장'));
-  assert.equal(r.modals.length, 2, 'short list, then the full list');
-  assert.match(r.modals[0].message, /\n외 3개$/);
-  assert.equal(r.modals[0].message.split('\n').filter((l) => l.startsWith('작업 폴더/')).length, 8);
-  assert.deepEqual(r.modals[0].buttons, ['저장', '전체 목록 보기 (11개)']);
-  assert.equal(r.modals[1].message.split('\n').filter((l) => l.startsWith('작업 폴더/')).length, 11);
-  assert.deepEqual(r.modals[1].buttons, ['저장']);
-  assert.equal(r.approved, true);
-  const dismissed = await ask('11 paths, full list, dismissed', { payload: { paths } }, (m) => (m.buttons.length > 1 ? '전체 목록 보기 (11개)' : undefined));
-  assert.equal(dismissed.approved, false, 'looking at the list is not approving it');
+test('the host sends every safe file to one chip dialog; dismissal is not approval', async () => {
+  const paths=Array.from({length:11},(_,i)=>({path:path.join(WS,`pages/p${i+1}.html`)}));
+  const r=await ask('11 paths',{payload:{paths}},()=> '저장');
+  assert.equal(r.modals.length,1);assert.equal(r.modals[0].prompt.files.length,11);
+  assert.equal(r.modals[0].prompt.files.at(-1),'작업 폴더/pages/p11.html');assert.equal(r.approved,true);
+  assert.equal((await ask('dismiss 11 paths',{payload:{paths}})).approved,false);
 });
 
 test('an outside, .. or symlinked path is refused before any modal, and the notice is marked, not the full path', async () => {
@@ -222,6 +221,59 @@ test('writeFile not in requireApprovalFor (the default): no modal, as before', a
     const norm = (s) => String(s).split(scratch).join('<SCRATCH>');
     fs.writeFileSync(out, captured.map((c) => [`=== ${c.label} → approved=${c.approved}`, ...c.modals.map((m) => `--- ${m.options?.modal ? 'modal' : 'notice'} (buttons: ${m.buttons.join(' | ') || '-'})\n${norm(m.message)}`)].join('\n')).join('\n\n') + '\n');
   }
+});
+
+test('approval stays bound across both secret reads and lifecycle cancellation',async()=>{
+ const {WriteApprovalRequest}=await import('../src/writeApprovalPrompt.ts');
+ const original=host.writeApprovalRequest, originalGet=host.context.secrets.get;
+ let scope='one', phase=0, mutate=()=>{}, seen=0;
+ host.writeApprovalScope=()=>scope;
+ host.context.secrets.get=async()=>{phase++;mutate(phase);return 'same-token'};
+ host.writeApprovalRequest=new WriteApprovalRequest({scope:()=>scope,present:async prompt=>{
+   if(prompt){seen++;await P.handleMessage.call(host,{type:'writeApprovalAnswer',id:prompt.id,approved:true});}
+   return true;
+ }},30);
+ const run=()=>P.confirmWriteFiles.call(host,'async','title','save',[{display:'a',outside:false,key:'a'}]);
+ assert.equal(await run(),true);assert.equal(seen,1);
+ phase=0;mutate=n=>{if(n===1)scope='changed-before-dialog'};
+ assert.equal(await run(),false);assert.equal(seen,1,'no old request bound to new scope');
+ phase=0;mutate=n=>{if(n===2)scope='changed-after-answer'};
+ assert.equal(await run(),false,'same token cannot approve a changed task after answer');
+ phase=0;mutate=n=>{if(n===1){const old=scope;scope='other';host.writeApprovalRequest.invalidate();scope=old;host.writeApprovalRequest.invalidate();}};
+ assert.equal(await run(),false,'switch away and back never revives stale approval');
+ phase=0;mutate=n=>{if(n===1)host.writeApprovalRequest.cancel()};
+ assert.equal(await run(),false,'terminal/dispose during token read invalidates request');
+ phase=0;mutate=n=>{if(n===2)host.writeApprovalRequest.cancel()};
+ assert.equal(await run(),false,'terminal/dispose during final token read invalidates approval');
+ phase=0;mutate=()=>{};let tokenReads=0;host.context.secrets.get=async()=>++tokenReads===1?'old':'new';
+ assert.equal(await run(),false,'account token changed');
+ host.writeApprovalRequest=original;host.writeApprovalScope=()=>WS;host.context.secrets.get=originalGet;
+});
+
+test('real host presentation requires a visible surface and terminal posts cancel pending approval',async()=>{
+ const posted=[];
+ const presentation={post:async msg=>{posted.push(msg);return true}};
+ const prompt={id:'p',title:'title',verb:'save',files:['a']};
+ assert.equal(await P.presentWriteApproval.call(presentation,prompt),false);assert.equal(posted.length,0);
+ presentation.view={visible:false};assert.equal(await P.presentWriteApproval.call(presentation,prompt),false);
+ presentation.view.visible=true;assert.equal(await P.presentWriteApproval.call(presentation,prompt),true);assert.equal(posted[0].prompt.id,'p');
+ presentation.view.visible=false;presentation.editorChat={visible:true};assert.equal(await P.presentWriteApproval.call(presentation,prompt),true);
+ presentation.editorChat.visible=false;
+ assert.equal(await P.presentWriteApproval.call(presentation,null),true,'closing is delivered even if hidden');
+ const {WriteApprovalRequest}=await import('../src/writeApprovalPrompt.ts');
+ const request=new WriteApprovalRequest({scope:()=> 'scope',present:async()=>true},30);
+ for(const type of ['streamStart','inputRejected','streamEnd','streamStopped','streamError']){
+  let ended=false;const pending=request.confirm(prompt).then(value=>{ended=true;return value});
+  await P.post.call({context:{},writeApprovalRequest:request},{type});
+  assert.equal(ended,true,type+' cancels promptly, without the timeout');
+  assert.equal(await pending,false,type+' invalidates approval');
+ }
+ for(const operation of ['opsRequestStop','invalidateProfile']){
+  let ended=false;const pending=request.confirm(prompt).then(value=>{ended=true;return value});
+  const lifecycle={writeApprovalRequest:request,activeStreams:new Map(),pendingApprovals:new Map(),profileGeneration:0,endTaskCommandAllows(){},refreshCrBytesContext:async()=>{},refreshSitePublishContext(){},_instructorMode:{reset(){}}};
+  P[operation].call(lifecycle);await Promise.resolve();assert.equal(ended,true,operation+' cancels even without a running stream');assert.equal(await pending,false);
+ }
+
 });
 
 // ── The SDK gate: the approval covers exactly the listed path ──

@@ -33,6 +33,7 @@ const BANNER_POSTED_ARROW =
 //   banner:   the --banner:js value
 //   logLevel: the --log-level value; null means esbuild's default (flag omitted)
 const OVERRIDES = {
+  "write-approval-dialog": { banner: BANNER_POSTED },
   "instructor-render": { logLevel: null },
   "missing-task-folder": { banner: BANNER_POSTED },
   "preview-recovery": { banner: BANNER_POSTED },

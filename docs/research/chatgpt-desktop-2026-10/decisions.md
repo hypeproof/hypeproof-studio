@@ -22,3 +22,15 @@ is recorded here before the slice that depends on it merges, so it can be revers
 | DEC-12 (trash encryption) | Every trashed file and its metadata is sealed with AES-256-GCM under a random 256-bit key per store, kept in VS Code SecretStorage (`hypeproof.activityTrash.<store>`), never on disk. Opaque file names (`<uuid>.blob`, `<uuid>.meta`); the additional data binds each file to its store, entry and kind. A missing, malformed or wrong key, or a tampered file, is refused and logged; no plaintext fallback, and a store with entries never gets a fresh key. The sweep deletes the key with the store | Verify2 R1: an auto-allowed SDK Bash has no path confinement (#2157, out of scope), and `find ~ -name '*.data'` plus `cat` printed a deleted file. Encryption makes what the shell finds useless without the keychain item. Follow-up for the owner, not changed here: turn restore keeps plaintext content-addressed copies (`blobs/<aa>/<sha256>`) and plaintext manifests with relative paths in the same global storage (`turnRestore.ts`), so the same shell can read them | Off, same flag | no |
 
 | DEC-26 | The header uses only the selected requests:count ledger and Service as_of. No access state, `configured:false` (Service access contracts off) or no chosen source means no line (the host never auto-selects); an unreachable Service or a missing/malformed ledger reads 미확인; no unresolvable 확인 중 is shown. Scope is DEC-35: pass and class seats, never free seats. A selected cohort/organization source is named and shows its own remaining count and no other number; classroom seats show it wherever the class funding data supports it. A selected source that is not available or not in state ready shows the usage panel's state word and no count. Reservations and unresolved counts stay separate. | No conversion from currency or un-timestamped pass limits can establish a confirmed remaining request count. | On, display only; no grant or funding switch | no |
+
+### CGP-AGENT-D-004 implementation choice — 2026-10-20
+
+Keep REQ-E1 write approval opt-in. Replace only the configured write-confirmation
+presentation with the shared chat webview's native HTML dialog; do not add a new
+write permission. Show five focusable chips and expand the remainder in place.
+Focus reveals the complete sanitized workspace-relative name; it does not open or
+modify the file. Default focus is refusal. An unavailable UI refuses rather than
+falling back to an unreviewable write. Bind the prompt to a fresh presentation id,
+current activity/task/folder/profile and lifecycle generation before credential
+reads, and recheck after them. This is a conservative implementation choice, not
+a new human agreement or a claim that every write needs approval by default.
