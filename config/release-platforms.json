@@ -1,5 +1,5 @@
 {
   "version": 1,
-  "_comment": "Platforms a Studio release ships. Read at the release's own commit by scripts/release/platforms.mjs (release-cut dispatch, unified acceptance, publish and mirror gates). Add \"win32-x64\" back to ship Windows again; build-windows.yml stays dispatch-only until then. See docs/dev/fast-mac-release.md.",
-  "platforms": ["darwin-arm64"]
+  "_comment": "Platforms a Studio release ships. Read at the release's own commit by scripts/release/platforms.mjs (release-cut dispatch, unified acceptance, publish and mirror gates). Windows ships again from 2026-10-20 (Jay); remove \"win32-x64\" for a Mac-only release. build-windows.yml stays dispatch-only; release-cut dispatches it when listed here. See docs/dev/fast-mac-release.md.",
+  "platforms": ["darwin-arm64", "win32-x64"]
 }

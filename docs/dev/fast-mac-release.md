@@ -1,6 +1,7 @@
 # Fast Mac releases (repack path)
 
-Studio releases are Mac only for now (Jay, 2026-10-19). Most releases change only
+Studio releases were Mac only from 2026-10-19; Windows ships again from 2026-10-20
+(Jay), through `config/release-platforms.json` below. Most releases change only
 `extensions/hypeproof-chat`, so `build-mac.yml` reuses the previously built VS Code
 base app and rebuilds only the extension. The full 1–2 h VS Code build runs only when
 the base changed.
