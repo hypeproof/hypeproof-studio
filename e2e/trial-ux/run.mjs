@@ -753,7 +753,7 @@ try {
     await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
     await expect(btn(p, '이용권으로 시작하기')).toHaveCount(0);
     await expect(btn(p, '참여 코드가 있어요')).toBeVisible();
-    await btn(p, '보호자 안내 보기 ↗').click();
+    await btn(p, '보호자 안내 보기').click();
     await request(p, { type: 'freeStartGuardian' });
     assert.equal(emitted(await requests(p), 'freeStartClaim').length, 0);
     await p.screenshot({ path: path.join(out, 'TUX-SP-15-under14-390.png'), fullPage: true });

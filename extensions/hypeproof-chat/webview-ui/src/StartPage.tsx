@@ -218,7 +218,7 @@ function FreeStartCard({ free, checking, calm, error, purchase, onCode, onPurcha
     {onBack && <button className="studio-text-button" disabled={busy} onClick={onBack}>기존 활동으로 돌아가기</button>}
   </div>;
   if (free.age === "under14") return <div className="studio-free" role="group" aria-labelledby="connect-title">
-    <button className="studio-text-button studio-free-guardian" onClick={() => postToHost({ type: "freeStartGuardian" })}>{FREE_START_COPY.guardianLink}</button>
+    <button className="studio-text-button studio-free-guardian" onClick={() => postToHost({ type: "freeStartGuardian" })}>{FREE_START_COPY.guardianLink} <ChatIcon kind="external" size={16} /></button>
     {links}
   </div>;
   // An ended free seat: what can follow, as peer choices (SX-04); the pass opens only on a press (REQ-L12 ①).

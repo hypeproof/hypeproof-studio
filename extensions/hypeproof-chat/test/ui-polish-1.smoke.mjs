@@ -234,7 +234,7 @@ try {
   const rows = [...card.matchAll(/<li data-capability="(\w+)" data-on="(true|false)">([\s\S]*?)<\/li>/g)];
   assert.equal(rows.length, 6, "six rows");
   for (const [, key, on, body] of rows) {
-    assert.match(body, /^<span class="hp-ai-can-do-mark" aria-hidden="true">(✓|–)<\/span><span class="hp-ai-can-do-label">[^<]+<\/span><span class="hp-ai-can-do-state">(해요|안 해요)<\/span>$/, `${key}: row shape`);
+    assert.match(body, /^<span class="hp-ai-can-do-mark"><svg [^>]*data-icon="(?:check|minus)"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg><\/span><span class="hp-ai-can-do-label">[^<]+<\/span><span class="hp-ai-can-do-state">(해요|안 해요)<\/span>$/, `${key}: row shape`);
     assert.equal(/state">해요</.test(body), on === "true", `${key}: state word disagrees with data-on`);
   }
   });
@@ -268,7 +268,8 @@ try {
   assert.ok(railCard(null, 0).includes("시작 전"), "positive control: an idle empty task still says 시작 전");
   assert.ok(railCard("running", 0).includes("작업 중") && !railCard("running", 0).includes("시작 전"), "running empty task");
   assert.equal(taskCountLine?.(3, "running"), "대화 3", "taskCountLine");
-  assert.ok(!Object.values(TASK_RUN_STATE_LABELS).some((l) => l.symbol === "▶"), "a state still uses ▶");
+  // REQ-STUDIO-STROKE-ICONS: run states draw stroke icons; none is the play triangle.
+  assert.ok(!Object.values(TASK_RUN_STATE_LABELS).some((l) => l.icon === "play" || l.symbol === "▶"), "a state still uses ▶");
   });
   console.error = consoleError;
 } finally {

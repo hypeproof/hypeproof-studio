@@ -7,7 +7,7 @@ import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
 import { bindComposerFocus } from './composerFocus';
-import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
+import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { glyphIconKind, splitLeadingGlyph, stripLeadingGlyph } from './glyphIcon';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
 import { VerdictButtons, VerdictReasons } from './AnswerVerdict';
@@ -774,8 +774,9 @@ export function ChatPanel(props: Props) {
         : appTone === "quest"
           ? "생각 중…"
           : "게임 만드는 중";
-  const namingEmoji =
-    appTone === "search" ? "🔍" : appTone === "site" ? "🌐" : appTone === "quest" ? "✨" : "🎮";
+  // REQ-STUDIO-STROKE-ICONS: the naming card's tone mark is a stroke icon, not an emoji.
+  const namingIcon: IconKind =
+    appTone === "search" ? "search" : appTone === "site" ? "globe" : appTone === "quest" ? "sparkle" : "game";
 
   // Show the kid-friendly naming card when: profile loaded, it asks the kid to
   // name the coach, and they haven't yet.
@@ -1059,7 +1060,7 @@ export function ChatPanel(props: Props) {
         namingPromptMd={config.profile.ux.coach.naming_prompt_md}
         personalityPromptMd={config.profile.ux.coach.personality_prompt_md}
         fallbackName={config.profile.ux.coach.fallback_name}
-        emoji={namingEmoji}
+        icon={namingIcon}
         onSave={(n, p) => {
           props.onSaveCoach(n, p);
           setForceNaming(false);
@@ -1288,8 +1289,8 @@ export function ChatPanel(props: Props) {
               {props.publish?.state === "uploading"
                 ? "올리는 중…"
                 : props.publish?.state === "done"
-                  ? "올렸어요 ✓"
-                  : "🖼️ 갤러리"}
+                  ? <>올렸어요 <ChatIcon kind="check" size={16} /></>
+                  : <><ChatIcon kind="image" size={16} /> 갤러리</>}
             </button>
           )}
           {/* One-click publish. The decision comes from the host (config.sitePublish) so it
@@ -1323,7 +1324,7 @@ export function ChatPanel(props: Props) {
           {/* Personal chat: usage opens the settings dialog on its usage section (the remaining line
               already shows the count). */}
           {personalWorkspace && config?.access && <button onClick={() => openPreferences(true)} title="이용권과 사용량 확인">이용권 · 사용량</button>}
-          <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
+          <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : <ChatIcon kind="settings" size={20} />}</button>
         </HeaderActions>
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
@@ -1976,7 +1977,7 @@ function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilitie
     </summary>
     <ul>
       {items.map(item => <li key={item.key} data-capability={item.key} data-on={item.on ? 'true' : 'false'}>
-        <span className="hp-ai-can-do-mark" aria-hidden="true">{item.on ? '✓' : '–'}</span>
+        <span className="hp-ai-can-do-mark"><ChatIcon kind={item.on ? 'check' : 'minus'} size={16} /></span>
         <span className="hp-ai-can-do-label">{item.label}</span>
         <span className="hp-ai-can-do-state">{item.on ? '해요' : '안 해요'}</span>
       </li>)}
@@ -2191,13 +2192,13 @@ function NamingCard({
   namingPromptMd,
   personalityPromptMd,
   fallbackName,
-  emoji,
+  icon,
   onSave,
 }: {
   namingPromptMd: string;
   personalityPromptMd: string;
   fallbackName: string;
-  emoji: string;
+  icon: IconKind;
   onSave: (name: string, personality: string) => void;
 }) {
   const [step, setStep] = useState<"name" | "personality">("name");
@@ -2222,7 +2223,7 @@ function NamingCard({
   return (
     <div className="hps-shell">
       <div className="hps-naming">
-        <div className="hps-naming-emoji">{emoji}</div>
+        <div className="hps-naming-emoji"><ChatIcon kind={icon} size={24} /></div>
         {step === "name" ? (
           <>
             <h2
@@ -2981,7 +2982,7 @@ export function HeaderActions({ personal, taskId, children }: { personal: boolea
       if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
         event.preventDefault(); firstFocus.current = event.key === 'ArrowUp' ? 'last' : 'first'; setOpen(true);
       }
-    }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg></button>
+    }}><ChatIcon kind="dots" size={20} /></button>
     {open && <div ref={panel} id={menuId} className="tw-chat-menu-panel" role="menu" aria-label="대화 메뉴" onClick={event => {
       if (event.target instanceof Element && event.target.closest('button[role="menuitem"]')) close(true);
     }}>{Children.map(children, child => isValidElement<{ role?: string; tabIndex?: number }>(child) && child.type === 'button' ? cloneElement(child, { role: 'menuitem', tabIndex: -1 }) : child)}</div>}

@@ -44,12 +44,13 @@ t("labels: one short Korean label and a symbol per state", () => {
   assert.deepEqual(Object.fromEntries(Object.entries(TASK_RUN_STATE_LABELS).map(([k, v]) => [k, v.label])), {
     preparing: "응답 준비 중", running: "작업 중", approval: "승인 기다리는 중", stopped: "멈춤", error: "오류", done: "끝남",
   });
-  for (const { label, symbol } of Object.values(TASK_RUN_STATE_LABELS)) {
+  // REQ-STUDIO-STROKE-ICONS: each state names a stroke icon (a ChatIcon kind), not a Unicode symbol.
+  for (const { label, icon } of Object.values(TASK_RUN_STATE_LABELS)) {
     assert.ok(label.split(" ").length <= 3, `${label} is longer than three words`);
-    assert.ok(symbol.length >= 1, `${label} has no symbol`);
+    assert.match(icon ?? "", /^[a-z-]+$/, `${label} has no icon`);
   }
-  const symbols = Object.values(TASK_RUN_STATE_LABELS).map((v) => v.symbol);
-  assert.equal(new Set(symbols).size, symbols.length, "two states share a symbol");
+  const icons = Object.values(TASK_RUN_STATE_LABELS).map((v) => v.icon);
+  assert.equal(new Set(icons).size, icons.length, "two states share an icon");
 });
 t("accessible name: title then state; none without a state", () => {
   assert.equal(taskRunAccessibleName("고양이 페이지", "approval"), "고양이 페이지, 승인 기다리는 중");

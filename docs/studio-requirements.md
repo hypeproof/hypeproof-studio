@@ -833,31 +833,35 @@ in front), tool and timeline lines, error and update banners, the error boundary
 notice, stop notices, the verify panel, panel close buttons, verdict and reason check marks, mission
 and completion-gate check boxes, the classroom build progress, retry, Run and code-pill controls, the
 gallery notice, the world-strip pointer, the assistant role mark, the sources panel icons (folded
-into the set) and the start page's external-link arrows. The host protocol is unchanged: a timeline
+into the set), the start page's external-link arrows (the free-start guardian link copy drops its
+trailing ↗ for the same icon), the classroom header's settings and gallery buttons, the personal
+header menu, the capability card's ✓ / – marks (check / minus inside the REQ-STUDIO-UI-POLISH-1
+circle), the task rail toggle, the naming card's tone mark, and the task rail run states
+(`TASK_RUN_STATE_LABELS` names an icon per state instead of a Unicode symbol: dots, dot, hand, stop,
+alert, check; the state words are unchanged and still carry the meaning). The host protocol is unchanged: a timeline
 line's `tool.icon` and an error banner's `icon` stay emoji strings (stored history and host tests
 depend on them) and are keys that `glyphIconKind` maps to a stroke icon; an unknown key draws a
 neutral dot, never the string, and the key stays readable to the e2e observers in `data-glyph`. A
 label that repeats its icon as its first character (`📏 390·1280px 확인`) drops that character. Korean
 copy is otherwise unchanged. Kept, by classification: learner content (the model's markdown task-list
-boxes, cohort world faces in the runner), the classroom naming card's tone mark (decorative; a
-follow-up), and the classroom header settings and gallery buttons, the capability card's ✓ / – marks
-and the task rail toggle, which `fix/ui-polish-personal-chat` (REQ-STUDIO-UI-POLISH-1) is reworking
-in the same round. Not covered: VS Code native dialogs and notifications the host raises
-(`imageAttachPrompt`, the free-start guardian link copy), the task rail run-state symbols in
-`taskRunState.ts` (same lane), Chalk, and a capture on a real high-contrast display.
+boxes, cohort world faces in the runner) and the protocol keys above, which are never drawn. Not
+covered: VS Code native dialogs and notifications the host raises (`imageAttachPrompt`), the artifact
+provenance marks (typographic symbols, not emoji), Chalk, and a capture on a real high-contrast
+display.
 Test: `test/stroke-icons.smoke.mjs` scans every webview source file outside comments for emoji and
 status marks against an allowlist with exact counts and reasons (stale entries fail), checks that
-every icon the host emits maps to a named stroke icon, and renders the real ChatPanel (classroom and
+every icon the host emits maps to a named stroke icon, that the run-state labels and free-start copy
+carry no glyph, and renders the real ChatPanel (classroom and
 personal) to check that no status glyph is drawn as text and every icon is `currentColor`, 16/20/24,
-and either hidden or named in Korean. It was red on origin/main (816e2b91) with 36 findings (58
-glyph uses in 15 files). Negative controls:
+and either hidden or named in Korean, including the header settings button and both capability card
+marks. It was red on origin/main (276ce083) with 41 findings (63 glyph uses in 16 files). Negative controls:
 a planted emoji in JSX, marks in a string literal, check boxes, CSS generated content, a URL before an
 emoji, an allowlisted file used for another glyph, a second use of an exempt glyph, a stale
 exemption, an unknown host key, the released disclosure markup, an 18px icon, an unlabelled visible
 icon and a fixed stroke colour; positive controls: comments, a stroke icon with plain punctuation,
 and labels whose words must not change. The A5 render digests were re-taken: the only markup change
-is each glyph becoming its icon, and substituting the old glyph markup back reproduces all four prior
-ChatPanel digests.
+is each glyph becoming its icon (including the classroom header's ⚙), and substituting the old glyph
+markup back reproduces all four prior ChatPanel digests.
 
 `REQ-STUDIO-TYPE-SCALE` (CGP-DS-R-008, 2026-10-20; REQ-CGP-DS-09; DES-CGP-DS-09; extends DES-02 to the
 personal chat surface by DEC-29). Learner-read text on the personal task workspace (task rail, task

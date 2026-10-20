@@ -15,7 +15,8 @@ export type IconKind =
   | 'info' | 'alert' | 'close' | 'search' | 'pencil' | 'terminal' | 'tool' | 'link' | 'external' | 'eye' | 'pointer'
   | 'back' | 'forward' | 'message' | 'chevron-down' | 'scroll' | 'flask' | 'bulb' | 'clock' | 'lock' | 'book' | 'package'
   | 'folder' | 'ruler' | 'dots' | 'sparkle' | 'square' | 'check-square' | 'help' | 'upload' | 'plug' | 'ticket' | 'moon'
-  | 'flag' | 'people' | 'camera' | 'keyboard' | 'thought' | 'dot' | 'open-window' | 'pin' | 'source' | 'return';
+  | 'flag' | 'people' | 'camera' | 'keyboard' | 'thought' | 'dot' | 'open-window' | 'pin' | 'source' | 'return'
+  | 'minus' | 'menu' | 'settings' | 'hand' | 'game';
 export type IconSize = 16 | 20 | 24;
 
 export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: IconSize; label?: string }) {
@@ -77,6 +78,11 @@ export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: Ic
     {kind === 'pin' && <path d="m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v6" />}
     {kind === 'source' && <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>}
     {kind === 'return' && <path d="m9 5-7 7 7 7M2 12h13a6 6 0 0 0 6-6" />}
+    {kind === 'minus' && <path d="M7 12h10" />}
+    {kind === 'game' && <><rect x="2.5" y="7" width="19" height="11" rx="4" /><path d="M7 10.5v4M5 12.5h4M15.5 12h.01M18 14h.01" /></>}
+    {kind === 'menu' && <path d="M4 7h16M4 12h16M4 17h16" />}
+    {kind === 'settings' && <><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" /><circle cx="12" cy="12" r="6.5" /></>}
+    {kind === 'hand' && <path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12m0-6.5v-1a1.5 1.5 0 0 1 3 0V12m0-6a1.5 1.5 0 0 1 3 0v6m0-3.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-5-2.7L4.6 15a1.5 1.5 0 0 1 2.5-1.7L8 14.5" />}
   </svg>;
 }
 

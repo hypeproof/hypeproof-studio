@@ -220,13 +220,14 @@ const OLD_SCREENS = {
 // stripping that exact element reproduces all nine prior digests.
 // REQ-STUDIO-STROKE-ICONS re-took the four ChatPanel digests: the only change is each status glyph
 // becoming its stroke icon (☐ mission marks → <svg data-icon="square" role="img" aria-label="아직">,
-// tool-row 🔧/🖼️ → <span data-glyph> + <svg aria-hidden>, ✓/⚠️/… marks → named <svg>). Substituting
+// tool-row 🔧/🖼️ → <span data-glyph> + <svg aria-hidden>, ✓/⚠️/… marks → named <svg>, the header's ⚙ →
+// <svg data-icon="settings" aria-hidden> inside the aria-label="설정" button). Substituting
 // the old glyph markup back into the HPS_A5_DUMP_DIR dumps reproduces all four prior digests.
 const BASE = {
-  "ChatPanel/adult-plain": "7317f206fdeffb935c78b840296802bce6f52188619e9c2d164565b7c7e980c4",
-  "ChatPanel/adult-effort-observed": "5870015ee91a0c25cdb623b6f65ace8a620a73b824437c34850b04a9e0c94b06",
-  "ChatPanel/adult-timeline": "4d405eb47b4d4d0d9fd73140e86f03083d84b1574ed4c22c882797a5d822f332",
-  "ChatPanel/kids": "03f80a24ee8bd411dd0076227f231b0bce34f227952833f4c8960158deddc074",
+  "ChatPanel/adult-plain": "c07dc5b7f7ba4c1b464f09bb7dde2b7bfc50500ae70c2b20b179c4de0104eecd",
+  "ChatPanel/adult-effort-observed": "6ba513121306c3ba9b60d9e06fa8f477a5d58ef4b81efeeb4aebd768b6024bd8",
+  "ChatPanel/adult-timeline": "8d1bdd50ef3ad69aeaa5fb75562a4d658d325f5a4bbeed493f4b62f11c476375",
+  "ChatPanel/kids": "d42a27a3d5c370c082cba1052856545929f3844d8cd14b1fa5714120e2467ee9",
   "EffortControl/policy-observed": "caea5b1eab6f88d737a96c6dde5f67369dec99657c24d5b25dca26117cd7b9ba",
   "EffortControl/policy-loading": "5d88d9a6ac8f18b171024b26f107bee0c59db5d31f7c7201b5c079aa37b05598",
   "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",

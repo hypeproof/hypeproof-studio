@@ -49,6 +49,8 @@ const GLYPH_ICONS: Record<string, IconKind> = {
   '🎟': 'ticket',
   '🧰': 'tool',
   '🔌': 'plug',
+  // Naming card tone marks (TONE_LABELS.namingEmoji, mirrored in ChatPanel's namingIcon).
+  '✨': 'sparkle', '🎮': 'game',
 };
 
 /** The stroke icon for a host glyph key; an unknown key gets the neutral dot. */

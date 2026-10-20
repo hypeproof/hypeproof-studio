@@ -26,6 +26,8 @@ const GLYPH = /\p{Extended_Pictographic}|[✓✗✕☑☐⚠▶◀▸▾☰⚙]/
 /** Typographic symbols that are text, not icons. */
 const TEXT_SYMBOLS = new Set(["©", "®", "™", "↔"]);
 
+const glyphsIn = (text) => [...text.matchAll(GLYPH)].map((m) => m[0]).filter((g) => !TEXT_SYMBOLS.has(g));
+
 /** Drop block comments and line comments; keep strings (a `//` after `:` is a URL, not a comment). */
 function stripComments(code) {
   return code
@@ -44,26 +46,18 @@ export function scanSource(code) {
 
 /**
  * The only places a glyph may stay, with the reason. `file` + `glyph` + exact `count` (default 1),
- * so an exempt glyph cannot hide a second, new use in the same file. `lane` names the other
- * branch that owns the surface (REQ-STUDIO-UI-POLISH-1 is reworking the capability card, the
- * header and the task rail at the same time, so this slice leaves them to it).
+ * so an exempt glyph cannot hide a second, new use in the same file. Two kinds remain: protocol
+ * keys that are never drawn (glyphIcon.ts maps them), and learner content.
  */
 const ALLOW = [
   // Keys, not drawn: the host protocol names icons with these strings; glyphIcon.ts maps them.
-  ...["🔍", "🔎", "✍", "📝", "✏", "⌨", "🖥", "🌐", "🔧", "🛠", "🤖", "💭", "🖼", "📸", "🔗", "↗", "👀", "👆", "🖱", "◀", "▶", "💬", "🔽", "↕", "🔄", "🧪", "💡", "⏳", "🔒", "📖", "📄", "📦", "🗂", "📏", "🤝", "⚠", "✓", "✅", "🌙", "🎟", "🧰", "🔌"]
+  ...["🔍", "🔎", "✍", "📝", "✏", "⌨", "🖥", "🌐", "🔧", "🛠", "🤖", "💭", "🖼", "📸", "🔗", "↗", "👀", "👆", "🖱", "◀", "▶", "💬", "🔽", "↕", "🔄", "🧪", "💡", "⏳", "🔒", "📖", "📄", "📦", "🗂", "📏", "🤝", "⚠", "✓", "✅", "🌙", "🎟", "🧰", "🔌", "✨", "🎮"]
     .map((glyph) => ({ file: "glyphIcon.ts", glyph, why: "icon key table" })),
   ...["🌙", "🎟", "⏳", "🧰", "🔒", "🔌", "⚠"].map((glyph) => ({ file: "errorBannerPresentation.ts", glyph, count: glyph === "⏳" ? 4 : 1, why: "banner icon key, drawn through glyphIconKind" })),
   // Learner content: cohort world faces and the model's markdown task-list boxes.
   { file: "runner.ts", glyph: "✨", why: "runner face before a world opens (cohort content)" },
   { file: "MarkdownText.tsx", glyph: "☑", why: "model answer task list, content" },
   { file: "MarkdownText.tsx", glyph: "☐", why: "model answer task list, content" },
-  // Decorative tone mark of the classroom naming card (not a status). Follow-up, not this slice.
-  ...["🔍", "🌐", "✨", "🎮"].map((glyph) => ({ file: "ChatPanel.tsx", glyph, why: "classroom naming card tone mark" })),
-  // Lane P (fix/ui-polish-personal-chat): header and capability card.
-  { file: "ChatPanel.tsx", glyph: "⚙", why: "classroom header settings button", lane: "P" },
-  { file: "ChatPanel.tsx", glyph: "🖼", why: "classroom header gallery button", lane: "P" },
-  { file: "ChatPanel.tsx", glyph: "✓", count: 2, why: "header gallery done label and capability card mark", lane: "P" },
-  { file: "TaskWorkspace.tsx", glyph: "☰", why: "personal heading rail toggle", lane: "P" },
 ];
 const allowed = (file, glyph) => ALLOW.some((a) => a.file === file && a.glyph === glyph);
 
@@ -110,7 +104,7 @@ const { offending, stale } = auditHits(new Map(files.map((file) => [file, scanSo
 assert.deepEqual(offending, [], `status glyphs in learner UI source (use ChatIcon, or allowlist with a reason):\n${offending.join("\n")}`);
 ok(`learner UI source: ${files.length} files, no status glyph outside the allowlist`);
 assert.deepEqual(stale, [], `allowlist entries that no longer match (update them):\n${stale.join("\n")}`);
-ok(`allowlist: all ${ALLOW.length} entries still match (${ALLOW.filter((a) => a.lane).length} left to lane P)`);
+ok(`allowlist: all ${ALLOW.length} entries still match (protocol keys and learner content only)`);
 
 // ── 2. Host glyph keys → stroke icons ──────────────────────────────────────────────────────
 
@@ -166,6 +160,17 @@ for (const message of ["알 수 없는 오류", "오늘 준비한 무료 사용�
   assert.match(AI_DISCLOSURE_TEXT, /^AI 코치와 대화하고 있어요\./, "the copy itself is unchanged apart from the dropped emoji");
   ok("AI disclosure copy has no leading emoji");
 }
+{
+  // Host copy and tables the webview draws as-is: no glyph may ride in on them.
+  const { TASK_RUN_STATE_LABELS } = await import("../src/taskRunState.ts");
+  const { FREE_START_COPY } = await import("../src/freeStart.ts");
+  const drawn = [...Object.values(TASK_RUN_STATE_LABELS).map((v) => v.label), ...Object.values(FREE_START_COPY).filter((v) => typeof v === "string")];
+  const carried = drawn.filter((text) => glyphsIn(text).length || /[↗•⋯■]/.test(text));
+  assert.deepEqual(carried, [], `host copy drawn in the webview carries a glyph: ${carried.join(" | ")}`);
+  assert.ok(Object.values(TASK_RUN_STATE_LABELS).every((v) => v.icon && !("symbol" in v)), "a run state still carries a Unicode symbol instead of a stroke icon");
+  assert.deepEqual(glyphsIn("작업 중 ▶ 보호자 안내 보기 ↗"), ["▶", "↗"], "negative control: the old run-state triangle and guardian arrow are caught");
+  ok(`host copy: ${drawn.length} run-state labels and free-start strings carry no glyph; run states name stroke icons`);
+}
 
 // ── 3. Render ──────────────────────────────────────────────────────────────────────────────
 
@@ -185,11 +190,6 @@ function auditIcons(html, where) {
   }
   return svgs;
 }
-/** Lane P owns the chat header and the capability card in this round; their marks are its call. */
-const withoutLaneP = (html) => html
-  .replace(/<header class="hps-header">[\s\S]*?<\/header>/g, "")
-  .replace(/<details class="[^"]*hp-ai-can-do[^"]*">[\s\S]*?<\/details>/g, "");
-const glyphsIn = (text) => [...text.matchAll(GLYPH)].map((m) => m[0]).filter((g) => !TEXT_SYMBOLS.has(g));
 
 const TOOL_LINES = [
   { id: "u1", role: "user", content: "내 소개 페이지를 만들어 줘", createdAt: 1 },
@@ -203,13 +203,14 @@ const status = rendererStatus();
 if (!status.available) {
   console.log(`NOT RUN stroke icon renders — ${status.detail}`);
 } else {
-  const classroom = chatPanelProps({ messages: TOOL_LINES, aiNotice: AI_DISCLOSURE_TEXT, pageNotice: "🖼 화면과 내용을 코치에게 붙였어요 — 제목", error: "알 수 없는 오류", canRetryLast: true });
-  const base = chatConfig();
+  const caps = [{ key: "read", label: "작업 폴더의 파일 읽기", on: true }, { key: "shell", label: "명령 실행하기", on: false }];
+  const base = { ...chatConfig(), aiCapabilities: caps };
+  const classroom = chatPanelProps({ config: base, messages: TOOL_LINES, aiNotice: AI_DISCLOSURE_TEXT, pageNotice: "🖼 화면과 내용을 코치에게 붙였어요 — 제목", error: "알 수 없는 오류", canRetryLast: true });
   const personalConfig = { ...base, profile: { ...base.profile, lesson: undefined }, taskWorkspace: { scope: "s", revision: 1, activeTaskId: "t1", tasks: [{ id: "t1", title: "작업", createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null } };
   const personal = { ...classroom, config: personalConfig };
   for (const [where, props] of [["classroom chat", classroom], ["personal chat", personal]]) {
     const html = await renderComponent("ChatPanel", props);
-    const svgs = auditIcons(withoutLaneP(html), where);
+    const svgs = auditIcons(html, where);
     assert.ok(html.includes("AI 코치와 대화하고 있어요"), `${where}: the disclosure did not render; the checks below would be vacuous`);
     const disclosure = html.match(/<div class="hps-ai-disclosure"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? "";
     assert.match(disclosure, /^<svg[^>]*data-icon="info"[^>]*aria-hidden="true"/, `${where}: the disclosure opens with the hidden info icon: ${disclosure}`);
@@ -218,8 +219,10 @@ if (!status.available) {
     assert.match(html, /data-glyph="🦄"><svg[^>]*data-icon="dot"/, `${where}: an unknown key draws the dot`);
     assert.ok(visibleText(html).includes("390·1280px 확인 — 통과") && !html.includes("📏 390"), `${where}: the label's leading glyph is dropped`);
     assert.ok(html.includes("화면과 내용을 코치에게 붙였어요"), `${where}: page notice text kept`);
-    assert.ok(html.includes('class="hps-header"'), `${where}: no header rendered; the lane P cut below would hide nothing`);
-    const left = glyphsIn(visibleText(withoutLaneP(html)));
+    assert.match(html, /<span class="hp-ai-can-do-mark"><svg [^>]*data-icon="check"/, `${where}: the capability card's on mark is a stroke icon`);
+    assert.match(html, /<span class="hp-ai-can-do-mark"><svg [^>]*data-icon="minus"/, `${where}: the capability card's off mark is a stroke icon`);
+    if (where === "classroom chat") assert.match(html, /aria-label="설정"><svg [^>]*data-icon="settings"[^>]*aria-hidden="true"/, "classroom header settings button draws the settings icon under its Korean name");
+    const left = glyphsIn(visibleText(html));
     assert.deepEqual(left, [], `${where}: status glyphs still drawn as text: ${left.join(" ")}`);
     ok(`${where}: ${svgs.length} stroke icons, each currentColor at 16/20/24 and hidden or named; no glyph in the visible text`);
   }

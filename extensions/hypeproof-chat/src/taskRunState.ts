@@ -29,15 +29,21 @@ export function deriveTaskRunState(input: TaskRunInputs): TaskRunState | null {
   return input.lastOutcome;
 }
 
-/** One short Korean label and a symbol per state. The words are always drawn; the symbol is decoration. */
-export const TASK_RUN_STATE_LABELS: Record<TaskRunState, { label: string; symbol: string }> = {
-  preparing: { label: '응답 준비 중', symbol: '⋯' },
-  // A dot, not ▶: in the rail ▶ reads as a disclosure triangle or a play control (REQ-STUDIO-UI-POLISH-1).
-  running: { label: '작업 중', symbol: '•' },
-  approval: { label: '승인 기다리는 중', symbol: '!' },
-  stopped: { label: '멈춤', symbol: '■' },
-  error: { label: '오류', symbol: '⚠' },
-  done: { label: '끝남', symbol: '✓' },
+/** The stroke icons (webview ChatIcon kinds) a run state may draw. */
+export type TaskRunIcon = 'dots' | 'dot' | 'hand' | 'stop' | 'alert' | 'check';
+
+/**
+ * One short Korean label and an icon per state. The words are always drawn; the icon is decoration,
+ * drawn from the stroke set (REQ-STUDIO-STROKE-ICONS) instead of a Unicode symbol.
+ */
+export const TASK_RUN_STATE_LABELS: Record<TaskRunState, { label: string; icon: TaskRunIcon }> = {
+  preparing: { label: '응답 준비 중', icon: 'dots' },
+  // A dot, not a play triangle: in the rail ▶ reads as a disclosure triangle or a play control (REQ-STUDIO-UI-POLISH-1).
+  running: { label: '작업 중', icon: 'dot' },
+  approval: { label: '승인 기다리는 중', icon: 'hand' },
+  stopped: { label: '멈춤', icon: 'stop' },
+  error: { label: '오류', icon: 'alert' },
+  done: { label: '끝남', icon: 'check' },
 };
 
 /** The rail button's accessible name: the task title, then the state in words. */
