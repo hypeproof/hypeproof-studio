@@ -825,6 +825,8 @@ words in every state element, no state on inactive tasks or without evidence, bu
 switching still blocked; reducer outcomes for complete, stop, instructor stop, error, failed result,
 dismissed banner and new send).
 
+CGP-AGENT-D-019 / DES-CGP-AGENT-46 follows this corrected active-task-only scope: the existing six badges sit on their own right-aligned line under the title of each active task row, with count/date below. The title keeps the whole row width, so a short title such as 발표 자료 만들기 is not truncated by the badge in the fixed 204px rail. Approval has text plus a heavier border; forced-colour mode uses system colours and a double approval border. No input-waiting state is inferred. The existing conversation skip link now advertises Alt+Shift+J (or Enter on the link), moves actual focus to the current conversation and draws the shared theme-aware focus ring. The shortcut is local to this workspace, ignores composition/repeat/unrelated modifiers and does not escape a rail/source dialog. It does not claim to focus a native approval modal or a nonexistent next waiting task. Tests: `test/task-badge.test.tsx` mounts all states and executes jump/keyboard behavior with CSS contracts as secondary evidence; `e2e/task-workspace/task-rail-badge.mjs` runs the real layout in headless Chromium (title not clipped, badge right-aligned on its own line, 14px text, no overflow, both states and widths).
+
 `REQ-STUDIO-MOTION-MEASURE-GUTTER` (CGP-DS-R-014 / -020 / -031, 2026-10-20; REQ-CGP-DS-15, -22,
 -36; DES-CGP-DS-15, -22, -36). Motion: every transition and animation time in webview CSS comes
 from a `--hp-dur-*` token in `tokens.css`, whose values are recorded first in

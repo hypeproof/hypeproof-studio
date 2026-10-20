@@ -8183,6 +8183,53 @@
           "path": "extensions/hypeproof-chat/test/write-approval-paths.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TASK-BADGE-D019",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "heading": "REQ-STUDIO-TASK-RUN-STATE"
+        }
+      ],
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-BADGE-D019",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-BADGE-D019"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-BADGE-D019",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-BADGE-D019",
+        "ST-IMP-TASK-BADGE-D019"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-badge.test.tsx"
+        },
+        {
+          "path": "e2e/task-workspace/task-rail-badge.mjs"
+        }
+      ]
     }
   ]
 }

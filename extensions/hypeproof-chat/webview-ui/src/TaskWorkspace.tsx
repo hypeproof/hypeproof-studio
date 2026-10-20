@@ -81,6 +81,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const renameButton = useRef<HTMLButtonElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const main = useRef<HTMLElement>(null);
+  const conversation = useRef<HTMLDivElement>(null);
   const rail = useRef<HTMLElement>(null);
   const sourcePanel = useRef<HTMLElement>(null);
   const sourceToggle = useRef<HTMLButtonElement>(null);
@@ -354,6 +355,12 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   };
 
   return <CitationPreviewContext.Provider value={{ previewSource, openSource, preview: sourcesOpen && previewSourceValue && preview ? { url: preview.url, messageId: preview.messageId } : null }}><div className="tw-workspace" data-sources-open={sourcesOpen} data-rail-open={railOpen} onKeyDown={event => {
+    // D019: a local current-conversation shortcut, never a claim to navigate native approvals.
+    if (event.code === 'KeyJ' && event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.repeat && !event.defaultPrevented && !imeComposing(event) && !(event.target as HTMLElement).closest?.('dialog[open], [aria-modal="true"]')) {
+      event.preventDefault();
+      conversation.current?.focus();
+      return;
+    }
     // Escape must work even in the frame before focus reaches the newly opened panel.
     if (sourcesOpen && event.key === 'Escape' && !event.defaultPrevented && !imeComposing(event)) {
       event.preventDefault();
@@ -364,7 +371,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       closeSources(undefined, panelOwnsFocus);
     }
   }}>
-    <a className="tw-skip" href="#task-conversation">대화로 바로 가기</a>
+    <a className="tw-skip" href="#task-conversation" title="대화로 바로 가기 (Alt+Shift+J 또는 Enter)" aria-keyshortcuts="Alt+Shift+J" onClick={event => { event.preventDefault(); conversation.current?.focus(); }}>대화로 바로 가기</a>
     <nav ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
@@ -420,7 +427,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         ? <button className="tw-quiet" disabled={blocked} onClick={() => postToHost({ type: 'taskRecoverDraft' })}>새 작업에 보관</button>
         : <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>)}</div>}
       {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
-      <div id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}>{children}</HeadingSlotContext.Provider></div>
+      <div ref={conversation} id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}>{children}</HeadingSlotContext.Provider></div>
     </section>
     {sourceDialog && <div className="tw-source-backdrop" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={() => closeSources()} />}
     <aside ref={sourcePanel} id="task-sources" className="tw-sources" aria-label="작업 자료" role={sourceDialog ? 'dialog' : undefined} aria-modal={sourceDialog || undefined} tabIndex={-1} hidden={!sourcesOpen} onKeyDown={event => { if (event.key === 'Escape' && !imeComposing(event)) { event.preventDefault(); closeSources(); } }}>
