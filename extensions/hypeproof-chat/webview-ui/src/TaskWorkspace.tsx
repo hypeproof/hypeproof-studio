@@ -12,6 +12,7 @@ import { imeComposing } from './imeGuard';
 import { ArtifactProvenanceList } from './ArtifactProvenanceList';
 import { actionable, returnFocus, returnFocusSoon, returnTarget, trapTab } from './dialogFocus';
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
+import { PanelBoundary } from './PanelBoundary';
 
 interface Props {
   view: TaskWorkspaceView;
@@ -369,6 +370,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
       <button className="tw-new" disabled={blocked} onClick={() => { setRailOpen(false); postToHost({ type: 'taskCreate' }); }}><span aria-hidden="true">＋</span> 새 작업</button>
       <label className="tw-search"><span>작업 찾기</span><input name="task-search" autoComplete="off" type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="작업 이름으로 찾기…" /></label>
+      {/* CGP-SHELL-R-013 — the task list fails alone; 새 작업, search and the chat keep working. */}
+      <PanelBoundary panel="task-rail">{() => <>
       <div className="tw-rail-heading">최근 작업 <span>{view.tasks.length}</span></div>
       <ul className="tw-task-list">
         {visibleTasks.map(task => {
@@ -385,6 +388,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         })}
       </ul>
       {!visibleTasks.length && <p className="tw-empty-search">찾는 이름이 없습니다. 다른 이름으로 찾아보세요.</p>}
+      </>}</PanelBoundary>
       <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
     <section ref={main} className="tw-main" aria-label="작업 공간">
@@ -423,6 +427,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <header><h2>작업 자료</h2><button type="button" className="tw-quiet tw-source-close" aria-label="자료 닫기" onClick={() => closeSources()}><SourceIcon kind="close" /></button></header>
       {request?.error && request.url !== selected?.url && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
       {request?.phase === 'opening' && request.url !== selected?.url && <p className="cp-other-source-status" role="status">출처 여는 중: {citationAddress(request.url)?.hostname}</p>}
+      <PanelBoundary panel="task-sources">{() => <>
       {selected ? <>
         <CitationPreview citation={selected} pinned={pinned} otherPinned={!!pinnedSource && !pinned} ephemeral={!!previewSourceValue}
           opening={selectedRequest?.phase === 'opening'} blocked={request?.phase === 'opening' || request?.phase === 'returning'} opened={selectedRequest?.phase === 'opened' || selectedRequest?.phase === 'returning'} returning={selectedRequest?.phase === 'returning'} error={selectedRequest?.error}
@@ -437,6 +442,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         if (sourceDialog) closeSources(null, false);
         onAskAboutFile(filePath);
       })} />}
+      </>}</PanelBoundary>
     </aside>
   </div></CitationPreviewContext.Provider>;
 }

@@ -69,6 +69,7 @@ import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { groupDelegations } from "../../src/delegationRow";
 import { activeLongStep, longStepHint, type ActiveLongStep } from "../../src/longStepHint";
 import { DelegationRow } from "./DelegationRow";
+import { guardHostPayload, PanelBoundary } from "./PanelBoundary";
 import { CONTEXT_COMPACT_NOTE, CONTEXT_TRIM_NOTE, isCompactionLine, trimMarkerIndex } from "../../src/contextTrim";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
@@ -411,8 +412,9 @@ export function ChatPanel(props: Props) {
   useEffect(() => { setGoalNote(null); }, [config?.profile?.lesson?.sha256]);
   useEffect(() => onHostMessage((msg) => {
     if (msg.type !== "goalState") return;
-    setGoalAnswer((prev) => acceptGoalView(prev, msg.view));
-    const note = goalNoteFor(msg, goalRequest.current);
+    // A malformed answer keeps the goal already shown.
+    setGoalAnswer((prev) => guardHostPayload("goal-state", () => acceptGoalView(prev, msg.view), prev));
+    const note = guardHostPayload("goal-state", () => goalNoteFor(msg, goalRequest.current), undefined);
     if (note === undefined) return;
     goalRequest.current = null;
     setGoalPending(false);
@@ -536,6 +538,9 @@ export function ChatPanel(props: Props) {
     const off = onHostMessage((msg) => {
       if (msg.type === "config") recordKeyNow.current = recordViewKey(msg.config);
       if (msg.type !== "learningState") return;
+      // A malformed state clears the evidence region and is reported once (a listener throw would fail
+      // silently). The checks are pure, so running them first changes nothing for a good state.
+      if (!guardHostPayload("learning-state", () => { void msg.state.task; stepViewOnState(stepView.current, msg.state); recordShownBy(msg.state); return true; }, false)) { setLearning(null); return; }
       setLearning(msg.state);
       learningTask.current = msg.state.task;
       const next = stepViewOnState(stepView.current, msg.state);
@@ -566,7 +571,8 @@ export function ChatPanel(props: Props) {
   // REQ-STUDIO-PAGE-CARD — page cards of this task's coach turns, keyed by the chat row each sits under.
   const [pageCards, setPageCards] = useState<Map<string, import("../../src/pageCard").PageCardView>>(() => new Map());
   useEffect(() => {
-    const off = onHostMessage((msg) => { if (msg.type === "pageCardsState") setPageCards(new Map(msg.cards.map((c) => [c.anchorId, c]))); });
+    // A malformed payload becomes no cards and one report (a listener throw would fail silently).
+    const off = onHostMessage((msg) => { if (msg.type === "pageCardsState") setPageCards(guardHostPayload("page-cards", () => new Map(msg.cards.map((c) => [c.anchorId, c])), new Map())); });
     postToHost({ type: "pageCardsRequest" });
     return off;
   }, []);
@@ -591,7 +597,7 @@ export function ChatPanel(props: Props) {
     const off = onHostMessage((msg) => {
       if (msg.type !== "previewRecovery") return;
       setPreviewSignals(msg.signals);
-      if (msg.result) { setPreviewBusy(false); setPreviewNote(previewRecoveryNote(msg.result, msg.signals)); }
+      if (msg.result) { setPreviewBusy(false); setPreviewNote(guardHostPayload("preview-recovery", () => previewRecoveryNote(msg.result!, msg.signals), null)); }
       else if (!msg.signals) setPreviewNote(null);
     });
     const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "previewRecoveryRequest" }); };
@@ -603,7 +609,7 @@ export function ChatPanel(props: Props) {
   const [help, setHelp] = useState<import("../../src/classroomHelp").HelpView | null>(null);
   useEffect(() => {
     // The host numbers its draws; one that arrives after a newer draw (an older learner's, or an older read) is not shown.
-    const off = onHostMessage((msg) => { if (msg.type === "helpState") setHelp((prev) => acceptHelp(prev, msg.help)); });
+    const off = onHostMessage((msg) => { if (msg.type === "helpState") setHelp((prev) => guardHostPayload("help", () => acceptHelp(prev, msg.help), null)); });
     const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "helpRequest" }); };
     ask(); document.addEventListener("visibilitychange", ask);
     const stop = () => { off(); document.removeEventListener("visibilitychange", ask); };
@@ -716,7 +722,8 @@ export function ChatPanel(props: Props) {
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error });
   // CGP-SHELL-R-011 — offline banner and reconnect line; nothing is sent on reconnect.
   const connectivity = useConnectivity();
-  const previewView = previewRecoveryView(previewSignals, connectivity.online);
+  // Malformed signals from the host draw no recovery line (and one report) instead of failing the chat's render.
+  const previewView = guardHostPayload("preview-recovery", () => previewRecoveryView(previewSignals, connectivity.online), null);
   // One live region: the most recent line wins, so a reconnect is heard after a finished turn.
   // REQ-STUDIO-LONG-STEP-HINT — the hint's 20 s and 60 s lines go through this always-mounted region.
   const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
@@ -1353,7 +1360,9 @@ export function ChatPanel(props: Props) {
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
 
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
-      {!props.instructor && !personalWorkspace && <MissionHeader
+      {/* CGP-SHELL-R-013 — each independent panel below fails alone (PanelBoundary); the composer,
+          the draft and the conversation keep working, and ChatErrorBoundary stays the last resort. */}
+      {!props.instructor && !personalWorkspace && <PanelBoundary panel="mission-header">{() => <MissionHeader
         lesson={config?.profile?.lesson ?? null}
         // SX-01·SX-50 — the completion items are checked off from the host's own gate verdict.
         // Without `learningState` (a seat that records no learning events) there is no verdict,
@@ -1388,7 +1397,7 @@ export function ChatPanel(props: Props) {
           name: config.activity.name,
           verified: !!config.activity.verified,
         } : null}
-      />}
+      />}</PanelBoundary>}
       {draftError && <p role="alert">{draftError}</p>}
       {updateBanner}
 
@@ -1396,20 +1405,20 @@ export function ChatPanel(props: Props) {
           Region A keeps drawing the lesson's own criteria from the design file; this block never touches them.
           Student-only, like region A (#1298). */}
       {!props.instructor && config?.profile?.lesson && (
-        <StudentGoal
-          lesson={config.profile.lesson}
-          view={goalOfLesson(studentGoal, config.profile.lesson)}
+        <PanelBoundary panel="student-goal">{() => <StudentGoal
+          lesson={config.profile!.lesson!}
+          view={goalOfLesson(studentGoal, config.profile!.lesson)}
           note={goalNote}
           pending={goalPending}
           onSave={sendGoalSave}
-        />
+        />}</PanelBoundary>
       )}
 
       {/* Region B's lesson info — inside the coach rail, **outside** the message stream
           (SX-05). Closed by default, and it opens only the current step. It used to
           expand all six steps at once and took up more room than the mission. */}
-      {config?.profile?.lesson && (() => {
-        const lesson = config.profile.lesson;
+      {config?.profile?.lesson && <PanelBoundary panel="lesson">{() => {
+        const lesson = config.profile!.lesson!;
         const steps = lesson.content.steps;
         const step = steps.find(s => s.id === currentStepId) ?? steps[0];
         if (!step) return null;
@@ -1424,7 +1433,7 @@ export function ChatPanel(props: Props) {
               <p>확인 기준: {step.acceptance}</p>
               <p className="hp-rail-lesson-note">안내를 읽은 것만으로 이 단계가 끝나지는 않습니다. 직접 만들고 확인한 기록이 남아야 합니다.</p>
             </details>
-            <LessonStepPanel lesson={lesson} step={step} rehearsal={config.profile.rehearsal} busy={streaming} post={postToHost}
+            <LessonStepPanel lesson={lesson} step={step} rehearsal={config.profile!.rehearsal} busy={streaming} post={postToHost}
               work={lessonWork?.sha256 === lesson.sha256 ? lessonWork.work : {}} rehearsalState={rehearsalResult} />
             {/* #751 F4 — a learner self-report for the current step, separate from region D's task completion gate. */}
             <p className="hp-rail-step-report">
@@ -1432,16 +1441,16 @@ export function ChatPanel(props: Props) {
             </p>
           </>
         );
-      })()}
+      }}</PanelBoundary>}
 
       {/* #751 U2 — instructor notices/materials: the coach rail's "강사 메시지" kind (SX-06), outside the message stream
           (SX-05), closed by default, no Primary (SX-04). Drawn with or without a lesson. */}
       {/* CGP-AGENT-R-003 — what the AI can do on this seat. Same rail, closed by default, no Primary. */}
-      {!props.instructor && config?.aiCapabilities && <AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} />}
-      <InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} />
+      {!props.instructor && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
+      <PanelBoundary panel="instructor-inbox"><InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} /></PanelBoundary>
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
-      {!props.instructor && classroomPanels.help && <HelpRequest view={help} post={postToHost} />}
+      {!props.instructor && classroomPanels.help && <PanelBoundary panel="help-request"><HelpRequest view={help} post={postToHost} /></PanelBoundary>}
       {/* #751 U1b — the learner's approval of their page as the class result, next to help (drawn only for a learner in class).
           Closed by default, no Primary; the button opens the host's question, which shows the exact version first. */}
       {/* #1298 — hidden for instructor mode. */}
@@ -1455,7 +1464,7 @@ export function ChatPanel(props: Props) {
           when the host sends `learningState`. On a connection that does not send it (a
           profile that does not use learning events), an empty drawer left on screen is
           decoration that does nothing when pressed. */}
-      {learning && (
+      {learning && <PanelBoundary panel="evidence">{() => (
         <section className="hp-evidence-region" aria-label="근거와 완료">
           {/* SX-14 gate and SX-55 phase, as the host decided them. The host made the judgment; this only draws it. */}
           <CompletionGate learning={learning} onSubmit={() => postToHost({ type: "submitTask", task: learning.task })} />
@@ -1473,7 +1482,7 @@ export function ChatPanel(props: Props) {
             }}
           />
         </section>
-      )}
+      )}</PanelBoundary>}
 
       {/* Both lines were originally pinned to `=== 'hps-observation/1'`. The moment `/2`
           opened, (a) the observation panel disappeared and (b) "관찰을 지원하지 않습니다"
@@ -1483,15 +1492,15 @@ export function ChatPanel(props: Props) {
           keep that off the work screen, and SX-59 names the remedy as "학습 경험 프로필에서
           비활성" rather than deletion, because the trial's own TUX-OBS-07 is to read it. So it
           follows the cohort's `assess` opt-in; recording keeps its own switch and stays on. */}
-      {!personalWorkspace && showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
+      {!personalWorkspace && showsObservationResults(config?.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
       {!connectivity.online && <div className="hps-offline-banner" role="status" data-testid="offline-banner">{OFFLINE_BANNER_TEXT}</div>}
-      {(previewView || previewNote) && <PreviewRecoveryNotice view={previewView} note={previewNote} busy={previewBusy} onAction={(action) => {
+      {(previewView || previewNote) && <PanelBoundary panel="preview-recovery"><PreviewRecoveryNotice view={previewView} note={previewNote} busy={previewBusy} onAction={(action) => {
         setPreviewBusy(true); setPreviewNote(null);
         let sent = false;
         try { postToHost({ type: "previewRecoveryAction", action }); sent = true; } finally { if (!sent) setPreviewBusy(false); }
-      }} />}
+      }} /></PanelBoundary>}
       <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
         {props.aiNotice && (
           // #320 — AI disclosure (Anthropic Usage Policy / ToS §D.3). Compact
@@ -1526,12 +1535,12 @@ export function ChatPanel(props: Props) {
           {delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
             <ContextNote text={CONTEXT_COMPACT_NOTE} />
           ) : m.role === "tool" && delegations.rows.has(m.id) ? (
-            <DelegationRow
+            <PanelBoundary panel="delegation"><DelegationRow
               view={delegations.rows.get(m.id)!}
               renderChild={(child) => <ToolLine message={child} />}
               // The same path as the Stop button: aborting the turn ends its helpers too.
               onStopAll={() => { restoreQueuedToDraft(); props.onCancel(); }}
-            />
+            /></PanelBoundary>
           ) : m.role === "tool" ? (
             <ToolLine key={m.id} message={m} />
           ) : (
@@ -1570,21 +1579,20 @@ export function ChatPanel(props: Props) {
             />
           )}
           {steerMarkAfter(m.id)}
-          {!props.instructor && pageCards.get(m.id) && (() => {
+          {!props.instructor && pageCards.get(m.id) && <PanelBoundary panel="page-card">{() => {
             const card = pageCards.get(m.id)!;
             return <PageCard view={card} onOpen={(path) => postToHost({ type: "pageCardOpen", turnId: card.turnId, path })} onReveal={(path) => postToHost({ type: "pageCardReveal", turnId: card.turnId, path })} />;
-          })()}
+          }}</PanelBoundary>}
         </Fragment>)}
         </CodeBlockScope>
 
         {/* REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019) — one calm hint under a tool step running 20 s+. */}
-        {longStep && <LongStepHintLine
-          key={`${longStep.id}@${longStep.since}`}
+        {longStep && <PanelBoundary key={`${longStep.id}@${longStep.since}`} panel="long-step"><LongStepHintLine
           step={longStep}
           turn={{ streaming, stalled: !!error }}
           onStop={() => { restoreQueuedToDraft(); props.onCancel(); }}
           onAnnounce={setLongStepAnnouncement}
-        />}
+        /></PanelBoundary>}
 
         {props.pageNotice && (
           <div className="hps-page-notice" role="status" aria-live="polite">
@@ -1670,17 +1678,17 @@ export function ChatPanel(props: Props) {
 
         {/* CGP-SHELL-R-024 — what the AI can do changed on a profile refresh. A system line, not a modal; never blocks sending. */}
         {!props.instructor && config?.capabilityChange && (
-          <CapabilityChangeCard change={config.capabilityChange} onDismiss={(id) => postToHost({ type: "dismissCapabilityChange", id })} />
+          <PanelBoundary panel="capability-change"><CapabilityChangeCard change={config.capabilityChange} onDismiss={(id) => postToHost({ type: "dismissCapabilityChange", id })} /></PanelBoundary>
         )}
 
         {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
         {!props.instructor && turnReview && (
-          <TurnReviewBar
+          <PanelBoundary panel="turn-review"><TurnReviewBar
             view={turnReview}
             onRevert={() => postToHost({ type: "turnRevert", turnId: turnReview.turnId })}
             onKeep={() => postToHost({ type: "turnKeep", turnId: turnReview.turnId })}
             onClose={() => postToHost({ type: "turnReviewClose", turnId: turnReview.turnId })}
-          />
+          /></PanelBoundary>
         )}
 
         {showFollowUpChips && (
@@ -1692,7 +1700,7 @@ export function ChatPanel(props: Props) {
         )}
 
         {error && props.trialEndCard && props.onTrialEndCardPasses ? (
-          <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={props.onDismissError} />
+          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={props.onDismissError} /></PanelBoundary>
         ) : error && (
           <ErrorBanner
             message={error}
@@ -1728,7 +1736,7 @@ export function ChatPanel(props: Props) {
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
-        {folderMissing && missingFolder && <MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} />}
+        {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} /></PanelBoundary>}
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read
@@ -1965,6 +1973,8 @@ export function ChatPanel(props: Props) {
         </div>
       </footer>
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
+        {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}
+        <PanelBoundary panel="settings">{() => <>
         <details className="hps-advanced-response"><summary>응답 고급 설정</summary>
           <p>선택한 설정은 다음 요청부터 적용됩니다.</p>
           <ModelControl config={config} streaming={streaming} />
@@ -1979,8 +1989,9 @@ export function ChatPanel(props: Props) {
           </label>)}
         </fieldset>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
-        {showsObservationResults(config.profile?.observation) && <NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} />}
+        {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
+        </>}</PanelBoundary>
       </ChatPreferences>}
     </div>
   );
@@ -2581,7 +2592,7 @@ function MessageItem({
         {onEdit && <EditAction onEdit={onEdit} />}
       </div>}
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
-        personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />
+        <PanelBoundary panel="citations">{personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />}</PanelBoundary>
       )}
       {/* Merge of #1814 polish and #1763: one ghost row (copy · preview · ask again), retry on the
           latest answer only and never on a free seat. */}

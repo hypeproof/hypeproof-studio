@@ -7506,6 +7506,56 @@
       ]
     },
     {
+      "id": "ST-REQ-PANEL-BOUNDARY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Panel error boundaries (CGP-SHELL-R-013)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PANEL-BOUNDARY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PANEL-BOUNDARY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/PanelBoundary.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatErrorBoundary.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PANEL-BOUNDARY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PANEL-BOUNDARY",
+        "ST-IMP-PANEL-BOUNDARY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/panel-boundary.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/panel-boundary.build.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/mini-dom.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-ANSWER-TO-WIKI",
       "stage": "implementation",
       "owner": "jayleekr",

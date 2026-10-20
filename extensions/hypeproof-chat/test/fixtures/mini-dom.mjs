@@ -39,6 +39,7 @@ class Node {
   get firstChild() { return this.childNodes[0] ?? null; }
   get lastChild() { return this.childNodes[this.childNodes.length - 1] ?? null; }
   get nextSibling() { const p = this.parentNode; if (!p) return null; return p.childNodes[p.childNodes.indexOf(this) + 1] ?? null; }
+  get previousSibling() { const p = this.parentNode; if (!p) return null; return p.childNodes[p.childNodes.indexOf(this) - 1] ?? null; }
   get parentElement() { return this.parentNode && this.parentNode.nodeType === 1 ? this.parentNode : null; }
   appendChild(child) { child.parentNode?.removeChild(child); child.parentNode = this; this.childNodes.push(child); return child; }
   insertBefore(child, ref) {

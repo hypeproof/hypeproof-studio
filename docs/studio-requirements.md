@@ -1639,7 +1639,7 @@ Adult instructor practice (`homepage-practice-s1`, #737) uses a separate `homepa
 | REQ-C4 | Clear conversation 명령 | workspaceState 비움 + 빈 history push | E |
 | REQ-C5 | Retry message | 직전 user prompt 그대로 다시 전송, history 에 새 assistant turn append. **(#358)** 실패 턴에 첨부 이미지가 있으면 `retryMessage.images` 로 재첨부(단발성이라 in-memory 메시지에서만 읽음) → 코치가 스크린샷을 다시 받음 | E |
 | REQ-C6 | Cancel in-flight stream | Stop → `cancelStream` → `AbortController.abort()` **그리고 호스트가 `streamStopped` 를 post** (#497). 이전 계약은 "streamEnd 도착하지 않음"이었는데, 그 상태를 푸는 메시지가 **아무것도** 없어서 웹뷰가 스트리밍 상태에 영구히 갇혔다 — Stop 이 먹통으로 보이고, 이후 입력은 REQ-C16 큐에 park 된 뒤 `streaming → idle` 엣지가 오지 않아 영영 flush 되지 않았다(2026-07-06 `2ae96bd` 회귀, 3주간 미검출). `streamStopped` 는 streamEnd 와 같은 상태 해제를 하되 **오류가 아니다** — `streamError` 배너("문제가 생겼어요" + 🚨 신고하기)는 정상 조작을 사고로 만들므로 쓰지 않고, 조용한 인라인 안내(`.hps-stop-notice`)로 "답변 생성이 중지되었습니다. 다시 채팅을 입력해주세요." 를 띄운다. 안내는 다음 턴 시작(`streamStart`) 또는 재입력(`userSent`) 시 사라진다. 잘린 턴을 히스토리에 커밋하지 않는 것은 REQ-M8 그대로 | E |
-| REQ-C7 | Webview crash 복구 (S-04 #48) | React render-time error → ErrorBoundary fallback + `webviewError` 호스트 로그 | E |
+| REQ-C7 | Webview crash 복구 (S-04 #48) | React render-time error → ErrorBoundary fallback + `webviewError` 호스트 로그. **Per-panel boundaries (CGP-SHELL-R-013, 2026-10-20):** a render error inside one independent panel (task rail, 작업 자료, lesson, evidence, verify, delegation row, page card, citations, …) replaces only that panel with "이 부분을 잠깐 보여 줄 수 없어요" + **다시 불러오기**; the composer, its draft, the transcript and the other panels keep working, and the top-level `ChatErrorBoundary` stays the last resort for the composer and everything outside a panel. Event-handler and host-listener errors are not caught by boundaries; listeners that parse host payloads are guarded instead. Contract: `## Panel error boundaries (CGP-SHELL-R-013)` (`REQ-STUDIO-PANEL-BOUNDARY`) | E + U (`test/panel-boundary.test.tsx`) |
 | REQ-C8 | request_id 가 error banner 에 표시 (S-07 #49) | 스트림 실패 시 `x-request-id` 8글자가 webview ErrorBanner 에 노출 | E |
 | REQ-C9 | Show-intent 단축 | "게임 보여줘"/"실행해" 같은 짧은 비-create 입력 → LLM 호출 없이 마지막 게임 preview 재오픈 | U + E |
 | REQ-C10 | 이미지 붙여넣기 첨부 (website-copyclone) | **profile `input.image_paste=true` 일 때만**: 입력창에 이미지 클립보드 paste(⌘V) → data URL 썸네일이 입력 영역에 표시 + × 로 제거 가능. image-only(텍스트 없이)도 전송 가능. 텍스트 paste 는 항상 기존 동작 유지(preventDefault 안 함) | E |
@@ -2533,6 +2533,100 @@ an outside page is not a row), 열기 reaches the preview with the page's folder
 runs `revealFileInOS` with the real path, climbs, absolute paths and links are refused with the card
 notice, a listed row swapped for a link after the turn is refused by both buttons (fails without the
 press-time re-check), the reload reader returns the checked bytes, and `pageCardsRequest` re-sends the card). Native app run: NOT RUN.
+
+## Panel error boundaries (CGP-SHELL-R-013)
+
+`REQ-STUDIO-PANEL-BOUNDARY` (CGP-SHELL-R-013 / REQ-SHELL-13, DES-SHELL-12 of the ChatGPT desktop
+study, P1, 2026-10-20; extends REQ-C7 / S-04 #48). A broken panel does not take down the chat.
+
+- **Scope.** Each independent panel sits in its own `PanelBoundary`
+  (`webview-ui/src/PanelBoundary.tsx`):
+  - In the task workspace: the task list (`task-rail`) and the 작업 자료 body (`task-sources`).
+  - In the chat: the mission header, 내 목표, the lesson step panel, the AI-can-do card, the
+    instructor inbox, the help request, the evidence and completion region, the observation panel,
+    each delegation row, each page card, each answer's citations, the preview recovery line, the
+    long-step hint, the capability-change card, the turn review bar, the trial end card, the
+    missing-folder notice, and the content of the settings dialog. The dialog and its close button
+    stay.
+  - In `App`: the verify, publish, evidence, memory, skills, carry-over and review panels. Each has
+    its own boundary, and there is no second boundary around the slot they share in the chat.
+  - Personal and classroom chat alike. The composer is deliberately outside every panel boundary.
+- **Fallback.** Only the failed panel is replaced, by one calm line, "이 부분을 잠깐 보여 줄 수
+  없어요", and one action, **다시 불러오기**.
+  - The action is a real button with a 44px target. The fallback has `role="status"` and an
+    `aria-hidden` stroke icon.
+  - A notice that holds sending (the missing-folder notice, the trial end card) keeps that meaning
+    in its fallback instead: "지금은 보낼 수 없어요. 다시 불러오기를 눌러 이유를 확인해 주세요."
+    A held send therefore never looks like a silent dead composer.
+  - No error text, stack or capability label is shown.
+  - Learner text uses the type-scale tokens (`--hp-text-body`, ≥14px in personal chat,
+    REQ-STUDIO-TYPE-SCALE).
+  - The panel keeps a real 1px border that turns CanvasText under forced colors, and the button
+    keeps the global forced-colors control boundary (REQ-STUDIO-FORCED-COLORS).
+- **What keeps working.** The composer node is not remounted and keeps its draft. Transcript rows
+  are not remounted. The other panels and the rest of the rail (새 작업, 작업 찾기) keep working.
+- **What is lost.** Unsaved input inside the failed panel itself (for example a half-written goal or
+  evidence note) is lost when that panel fails, and 다시 불러오기 starts the panel fresh. Input the
+  host has saved comes back with the host's next state.
+- **Retry.** 다시 불러오기 remounts only that panel's children.
+  - A later good update from the host does not swap the fallback out by itself; the learner's press
+    does.
+  - When the panel renders again, focus moves to its first focusable element, not `<body>`.
+  - If the panel throws again, the same fallback is shown with focus kept on 다시 불러오기. Nothing
+    retries on its own, so there is no loop.
+- **Report.** Each panel id is reported once per webview session through the existing
+  `webviewError` host log, as `panel render error: <panel> (<ErrorClass>)`, with an empty stack and
+  component stack. The error message is never sent, because it can quote learner text (a task
+  title, a draft, an answer). Hostile panel ids and error names are flattened.
+- **Host payloads.** React boundaries do not see errors thrown in event handlers or in
+  host-message listeners. The listeners that parse host payloads therefore parse through
+  `guardHostPayload`: `pageCardsState`, `learningState`, `helpState`, `goalState` and
+  `previewRecovery`, the last including the signals it reads on every render. A malformed payload
+  becomes that listener's empty state: no page cards, no evidence region, no help view, the goal
+  already shown, or no recovery line. It is reported once as `host payload error: <listener>
+  (<ErrorClass>)`, without the payload, instead of failing silently.
+- **Last resort.** The top-level `ChatErrorBoundary` (REQ-C7) still catches a throw in the composer
+  and anywhere outside a panel, including the `webviewTestCrash` injection.
+
+Evidence: `test/panel-boundary.test.tsx`, built by `test/panel-boundary.build.mjs`, runs the real
+`App`, `TaskWorkspace` and `ChatPanel` on `test/fixtures/mini-dom.mjs`.
+
+- **Every panel, data-driven.** The build instruments each panel's own component so that it can
+  throw from inside its body. For every row of the panel table, in personal or classroom chat:
+  - A control run reaches the component, with no fallback and no fatal screen. The other panels'
+    components are stubbed.
+  - A run where the component throws shows only that panel's fallback (the "보낼 수 없어요"
+    sentence for send-holding notices), no fatal screen, and a composer that still takes input,
+    with one report.
+  - A table check matches the rows one to one with the `PanelBoundary` ids in the sources.
+- **The task rail with real data.** A task with an invalid `updatedAt` makes the rail throw while
+  rendering. Only the rail falls back, while the composer keeps its draft and node and the
+  transcript rows stay. 다시 불러오기 remounts only the rail. A second throw shows the same fallback
+  without looping (a bounded render count that stays settled after waiting) and still sends one
+  report.
+- **Retry focus.** After a successful retry, focus is on the panel's first focusable element and
+  not on the button after it. A sibling panel's mount count stays unchanged.
+- **Host payloads.** A malformed `pageCardsState` draws no card and is reported once; a valid one
+  draws the card again. A malformed `learningState` and unreadable preview signals are each
+  reported once, with no fatal screen.
+- **Last resort.** A throw in the composer itself and the App crash injection still reach the fatal
+  screen.
+- **CSS.** The 44px target, the tokens and the forced-colors border.
+
+Negative controls: healthy panels draw no fallback. Each of these changes fails the test: moving
+`PageCard` outside its boundary, removing the page-cards guard, dropping `blocking` from the
+missing-folder notice, dropping the retry focus, dropping report-once, sending the error message,
+dropping the second-throw refocus, and removing the settings boundary.
+
+**Not claimed**:
+- Errors thrown in event handlers, timers and host-message listeners other than the five guarded
+  ones. They are not caught by any boundary, and they are not reported.
+- A real Windows high-contrast render.
+- A crash in host-side code.
+- Fallbacks for individual message bodies (CGP-CHAT-R-016, a separate row).
+- The REQ-H4 request id in the report: a render error has no request.
+- The `EvidenceDrawer` inside the evidence region is stubbed in the rendered rows, because mini-dom
+  has no `<select>`. That region's boundary is exercised through `CompletionGate`.
 
 ## Personal trial interaction coverage (#758)
 
