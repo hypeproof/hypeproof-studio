@@ -153,6 +153,18 @@
   .tw-heading .hps-activity-name,
   .tw-heading:has(.hps-trial-left) .hps-activity-now { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
+/* CONV-ENDCARD-R-003 — on an ended free seat the ended line already says 무료, and with the pass
+   link beside it a mid-width header would squeeze the activity line to a stray dot and cut the ended
+   line. The activity line gives its room there (screen readers keep it, as at 640px above). */
+@media (max-width: 1100px) {
+  .tw-heading:has(.hps-header-passes) .hps-activity-now { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+/* At sidebar width the ended line carries no count (a free seat never shows one), so unlike a
+   trial's count (TUX-SP-13B) it may shrink, down to nothing at 390px, rather than push 자료 and the
+   menu off the row. Its full text stays in its title, and the line above the composer says the same. */
+@media (max-width: 640px) {
+  .tw-heading:has(.hps-header-passes) .hps-trial-left { flex-shrink: 1; }
+}
 .tw-workspace .tw-heading .tw-rail-toggle { border-color: transparent; }
 .tw-workspace .tw-heading .tw-rail-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
 /* REQ-STUDIO-TASK-RUN-STATE — words plus a symbol; colour is never the only carrier. */

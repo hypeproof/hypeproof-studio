@@ -33,7 +33,7 @@ import { ChatPreferences } from './ChatPreferences';
 import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
 import { replyChoices } from './replyChoiceParser';
-import { activityDetail, activityLabel, trialHeaderLine } from "./activityLabel";
+import { activityDetail, activityLabel, freeSeatEnded, freeSeatEndedNote, trialHeaderLine } from "./activityLabel";
 import { errorBannerPresentation } from "./errorBannerPresentation";
 import { TrialEndCard } from "./TrialEndCard";
 import {NativeObservationPanel} from './NativeObservationPanel';
@@ -772,6 +772,10 @@ export function ChatPanel(props: Props) {
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
   const trialLine = personalWorkspace && config?.activity && !config.activity.pass ? trialHeaderLine(config.activity.trial, Date.now(), !!config.activity.free) : null;
+  // CONV-ENDCARD-R-003 — after the end card is closed (`오늘은 여기까지`) an ended free seat keeps the
+  // way back to the pass list one press away: a quiet header link and a line above the composer.
+  // While the card itself is on screen it is the only offer, so neither is drawn then.
+  const freeEnded = personalWorkspace && config?.activity && !(error && props.trialEndCard) ? freeSeatEnded(config.activity) : null;
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
@@ -1305,6 +1309,9 @@ export function ChatPanel(props: Props) {
         })()}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" title={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
+        {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
+            end_card and opens the pass list). A link, not a Primary: no count, no pressure (CU-13). */}
+        {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
         <AccessHeader config={config} />
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
@@ -1780,6 +1787,7 @@ export function ChatPanel(props: Props) {
         )}
         <div className="hps-sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-announcer">{imgNote || ''}</div>
         {imgNote && <div id={imageNoteId} className="hps-img-note">{imgNote}</div>}
+        {freeEnded && <p id="hps-free-ended-note" className="hps-free-ended-note">{freeSeatEndedNote(freeEnded)}</p>}
         {recoveryAtCapacity && <div className="hps-recovery-notice" role="status">보관한 메시지를 먼저 다시 보내거나 정리해 주세요. 새 메시지는 입력창에 남아 있습니다.</div>}
         {recovered.length > 0 && <div className="hps-recovery-list" aria-label={`보내지 못한 메시지 ${recovered.length}개`}>
           {recovered.map((request, index) => <div className="hps-queued hps-recovered" role="status" aria-live="polite" key={index}>
@@ -1877,7 +1885,7 @@ export function ChatPanel(props: Props) {
             autoFocus
             readOnly={unavailable}
             aria-label={composerLabel(coachName)}
-            aria-describedby={[personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
+            aria-describedby={[freeEnded ? "hps-free-ended-note" : '', personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
             value={draft}
             onChange={(e) => {
               // Manual edits own the entire draft, even if it ends with an old choice.
