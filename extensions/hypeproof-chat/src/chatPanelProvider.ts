@@ -183,8 +183,9 @@ import { buildPageCard, handlePageCardAction, PageCardRegistry, type PageCardMes
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
-import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
+import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { browserRememberLabel, browserTargetDetail } from "./browserTargetHost";
+import { measurePreview, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
@@ -2267,6 +2268,63 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push({ dispose: () => clearInterval(directorProbe) });
     // D-028 — staged photos that were never sent go with the window.
     context.subscriptions.push({ dispose: () => this.imageStaging?.dispose() });
+    // REQ-STUDIO-PREVIEW-RECOVERY — a browser tab opened, closed or changed address/title: measure the preview again.
+    for (const event of [vscode.window.onDidChangeBrowserTabState, vscode.window.onDidOpenBrowserTab, vscode.window.onDidCloseBrowserTab]) {
+      const d = event?.(() => this.schedulePreviewRecovery());
+      if (d) context.subscriptions.push(d);
+    }
+    context.subscriptions.push({ dispose: () => clearTimeout(this.previewRecoveryTimer) });
+  }
+
+  private previewRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
+  private previewRecoveryRunning = false;
+  private schedulePreviewRecovery(): void {
+    clearTimeout(this.previewRecoveryTimer);
+    this.previewRecoveryTimer = setTimeout(() => { void this.postPreviewRecovery(); }, 600);
+  }
+  /**
+   * REQ-STUDIO-PREVIEW-RECOVERY — the learner's preview tab: one on an address a Studio preview server has served
+   * (this run or an earlier one, so a tab restored after a restart counts), never another localhost tool. The tab the
+   * coach drives first, then the active one, then any.
+   */
+  private learnerPreviewTab(): vscode.BrowserTab | undefined {
+    const tabs = this.coachBrowserTabs();
+    const own = (t: vscode.BrowserTab | undefined): t is vscode.BrowserTab =>
+      !!t && tabs.includes(t) && isLoopbackPreview(t.url) && !previewPagePath(t.url).startsWith("/__hp_viewport") && !!this.liveServer?.servedBefore(t.url);
+    const pinned = this.mcpBrowser?.currentTab();
+    if (own(pinned)) return pinned;
+    const active = vscode.window.activeBrowserTab;
+    if (own(active)) return active;
+    return tabs.find(own);
+  }
+  /** Measured, never guessed: which server runs now (process state) and what the tab's page answered (HTTP status). */
+  private async previewSignals(): Promise<PreviewSignals | null> {
+    let tab: vscode.BrowserTab | undefined;
+    try { tab = this.learnerPreviewTab(); } catch { return null; }
+    if (!tab) return null;
+    return measurePreview(tab.url, this.liveServer?.currentUrl(), async (url) => (await fetch(url, { signal: AbortSignal.timeout(3000), redirect: "manual" })).status);
+  }
+  private async postPreviewRecovery(): Promise<void> {
+    await this.post({ type: "previewRecovery", signals: await this.previewSignals() });
+  }
+  /** The webview's one action. The host measures again and refuses an action that no longer fits (previewActionFits). */
+  private async runPreviewRecovery(action: unknown): Promise<void> {
+    if (this.previewRecoveryRunning) return;
+    this.previewRecoveryRunning = true;
+    try {
+      await runPreviewRecoveryAction(action, {
+        signals: () => this.previewSignals(),
+        restart: async () => { await this.startLivePreview(); },
+        showFiles: async () => { await vscode.commands.executeCommand("workbench.view.explorer"); },
+        retry: async () => {
+          const tab = this.learnerPreviewTab();
+          if (!tab) return;
+          const pinned = new BrowserControl(); pinned.setTargetTab(tab);
+          try { await pinned.loadInPinnedTab(tab.url); } finally { await pinned.dispose(); }
+        },
+        post: async (signals) => { await this.post({ type: "previewRecovery", signals }); },
+      });
+    } finally { this.previewRecoveryRunning = false; }
   }
 
   /**
@@ -5249,6 +5307,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "turnReviewRequest": this.postTurnReview(); return;
       case "missingTaskFolderRequest": await this.postMissingTaskFolder(); return;
       case "missingTaskFolderRepick": await this.repickTaskFolder(); return;
+      case "previewRecoveryRequest": await this.postPreviewRecovery(); return;
+      case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "pageCardsRequest": this.postPageCards(); return;
       case "pageCardOpen":

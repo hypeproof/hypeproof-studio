@@ -23,6 +23,17 @@ import { LIVERELOAD_PATH, serveStatic, staticResponseHeaders } from "./liveServe
 // Lifecycle is owned by the extension — dispose() on deactivate closes the
 // server + watcher + open SSE streams.
 
+const SERVED_ORIGINS_KEPT = 20;
+/** "http://127.0.0.1:5123" for either loopback spelling; undefined for anything else. */
+function loopbackOrigin(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    if (u.hostname !== "127.0.0.1" && u.hostname !== "localhost") return undefined;
+    return `${u.protocol}//127.0.0.1:${u.port}`;
+  } catch { return undefined; }
+}
+
 export class LiveServer {
   private server: http.Server | undefined;
   private root: string | undefined;
@@ -31,6 +42,23 @@ export class LiveServer {
   private readonly sseClients = new Set<http.ServerResponse>();
   private watcher: vscode.FileSystemWatcher | undefined;
   private reloadTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * REQ-STUDIO-PREVIEW-RECOVERY — addresses this Studio's preview server has served, kept across restarts by the
+   * caller (a restored tab on an old port is still the learner's preview; another localhost tool never is).
+   */
+  private readonly served: { get(): readonly string[]; set(origins: string[]): void } | undefined;
+  constructor(served?: { get(): readonly string[]; set(origins: string[]): void }) {
+    this.served = served;
+  }
+
+  /** True when `url` is on an address a Studio preview server served (now or before). */
+  servedBefore(url: string | undefined): boolean {
+    const origin = loopbackOrigin(url);
+    if (!origin) return false;
+    if (this.server && origin === loopbackOrigin(this.baseUrl)) return true;
+    return (this.served?.get() ?? []).includes(origin);
+  }
 
   /**
    * Ensure a server is running rooted at `root`. Returns its base URL. If a
@@ -123,6 +151,8 @@ export class LiveServer {
     const addr = server.address();
     const port = typeof addr === "object" && addr ? addr.port : 0;
     this.baseUrl = `http://127.0.0.1:${port}/`;
+    const origin = loopbackOrigin(this.baseUrl);
+    if (origin && this.served) this.served.set([origin, ...this.served.get().filter((o) => o !== origin)].slice(0, SERVED_ORIGINS_KEPT));
     this.startWatching(root);
     return this.baseUrl;
   }

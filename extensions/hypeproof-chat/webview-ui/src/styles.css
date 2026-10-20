@@ -2053,6 +2053,17 @@ html, body, #root {
    REQ-STUDIO-UI-POLISH-1: `.hps-notice-caution` is the same surface under a name that is not about
    the network, for any other "please check this" line (the personal access line). */
 .hps-offline-banner, .hps-notice-caution { margin: 6px 0; padding: 8px 10px; border-left: 4px solid var(--hp-warn); border-radius: 4px; background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08)); color: var(--vscode-foreground, inherit); font-size: 13px; line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere; }
+/* REQ-STUDIO-PREVIEW-RECOVERY (CGP-ART-R-009, DES-ART-09): the preview cannot show a page. One cause line at
+   body size, one 44px action, the technical code folded under 자세히. Personal and classroom chat share it, so
+   every size is a type-scale token (14px floor). The edge is the offline banner's amber; text keeps the foreground. */
+.hps-preview-recovery { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 6px 0; padding: 10px 12px; border-left: 4px solid var(--hp-warn); border-radius: 4px; background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08)); color: var(--vscode-foreground, inherit); word-break: keep-all; overflow-wrap: anywhere; }
+.hps-preview-recovery-text { margin: 0; flex: 1 1 220px; min-width: 0; font-size: var(--hp-text-body); line-height: var(--hp-leading-label); }
+.hps-preview-recovery-action { min-height: 44px; min-width: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid transparent; background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #ffffff); font-size: var(--hp-text-caption); font-weight: 600; cursor: pointer; }
+.hps-preview-recovery-action[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
+.hps-preview-recovery-action:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+.hps-preview-recovery-detail { flex: 1 1 100%; color: var(--vscode-descriptionForeground, inherit); font-size: var(--hp-text-caption); line-height: var(--hp-leading-label); }
+.hps-preview-recovery-detail summary { cursor: pointer; }
+.hps-preview-recovery-detail code { font-size: var(--hp-text-caption); }
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Marks drawn only in colour, or only as a
    background (which forced colors repaints as Canvas), get a line or a shape. Normal mode is unchanged. */
 @media (forced-colors: active) {
@@ -2082,6 +2093,9 @@ html, body, #root {
   .hps-offline-banner, .hps-notice-caution { border-left-color: CanvasText; }
   /* REQ-STUDIO-STROKE-ICONS: the assistant mark is a masked background; a system colour survives. */
   .hps-msg-assistant .hps-msg-role > span::before { background-color: CanvasText; }
+  /* REQ-STUDIO-PREVIEW-RECOVERY: the edge becomes a text line; the action keeps a button outline. */
+  .hps-preview-recovery { border-left-color: CanvasText; }
+  .hps-preview-recovery-action { border: 1px solid ButtonText; background: ButtonFace; color: ButtonText; }
 }
 
 /* CGP-DS-R-018 / REQ-STUDIO-STROKE-ICONS — the stroke icon set (ChatIcon). Icons sit on the text

@@ -558,6 +558,10 @@ const EXTRA_PROBES = [
   { label: "source list title (h3 that is also .tw-source-list-title)", ctx: () => SOURCES, chain: ["h3.tw-source-list-title"] },
   { label: "source preview policy line", ctx: () => SOURCES, chain: ["div.tw-source-detail.cp-preview", "p.tw-source-policy"] },
   { label: "task title in the heading at 320px", ctx: () => HEAD, chain: ["h1", "button.tw-title-button"] },
+  // REQ-STUDIO-PREVIEW-RECOVERY — the preview failure line, its one action and the folded detail (styles.css, shared).
+  { label: "preview recovery cause line", ctx: shellCtx, chain: ["div.hps-preview-recovery", "p.hps-preview-recovery-text"] },
+  { label: "preview recovery action (다시 켜기 / 파일 목록 보기 / 다시 시도)", ctx: shellCtx, chain: ["div.hps-preview-recovery", "button.hps-preview-recovery-action"] },
+  { label: "preview recovery 자세히 detail", ctx: shellCtx, chain: ["div.hps-preview-recovery", "details.hps-preview-recovery-detail", "code"] },
 ];
 
 // Learner text in the task heading. `titled` matches the element's own title attribute in its
