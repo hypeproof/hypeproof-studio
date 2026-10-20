@@ -2,7 +2,12 @@
 //   node --test scripts/release/test/create.test.mjs
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {actions, prToken} from '../create.mjs';
+import {execFile, execFileSync} from 'node:child_process';
+import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {actions, branchPushEnv, prToken} from '../create.mjs';
 import {nextRcTag, versionFor} from '../version.mjs';
 
 test('versionFor: v<year>.<month*100+day>.<n>, no leading zero, next n after a release that day', () => {
@@ -54,4 +59,53 @@ test('prToken: the PR step needs its own token, checked before any write', () =>
   assert.throws(() => prToken(steps, {RELEASE_PR_TOKEN: ''}), /RELEASE_PR_TOKEN is required/);
   // a smoke-failure issue opens no PR and needs no PR token
   assert.equal(prToken(['issue'], {}), null);
+});
+
+// Runs `git ls-remote` against a local server and returns the Authorization headers git sent.
+async function sentAuth(dir, env) {
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    const raw = req.rawHeaders;
+    for (let i = 0; i < raw.length; i += 2) if (raw[i].toLowerCase() === 'authorization') seen.push(raw[i + 1]);
+    res.statusCode = 404; res.end();
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${server.address().port}/`;
+  try {
+    const run = env => new Promise(resolve => execFile('git', ['-C', dir, 'ls-remote', `${url}repo.git`], {env}, () => resolve()));
+    await run(env(url));
+  } finally {
+    server.close();
+  }
+  return seen;
+}
+
+test('branchPushEnv: the release branch push sends only the App credential (#1973)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hps-push-env-'));
+  const workflow = 'AUTHORIZATION: basic d29ya2Zsb3c=';
+  const app = `basic ${Buffer.from('x-access-token:app-token').toString('base64')}`;
+  const clean = {...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_CONFIG_'))),
+    GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'false'};
+  try {
+    execFileSync('git', ['init', '-q', dir]);
+    // what actions/checkout persists for the origin: the workflow token as an extraheader
+    // (--replace-all: each call gets a fresh server port, so a fresh origin)
+    const withPersisted = make => url => {
+      execFileSync('git', ['-C', dir, 'config', '--local', '--replace-all', `http.${url}.extraheader`, workflow]);
+      return make(url);
+    };
+    assert.deepEqual(await sentAuth(dir, withPersisted(url => branchPushEnv('app-token', clean, url))), [app]);
+    // negative control: without the token git sends the workflow header
+    assert.deepEqual(await sentAuth(dir, withPersisted(() => branchPushEnv(null, clean))), ['basic d29ya2Zsb3c=']);
+    // negative control: the App header without the reset sends both
+    assert.equal((await sentAuth(dir, withPersisted(url => ({...clean, GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: `http.${url}.extraheader`, GIT_CONFIG_VALUE_0: `AUTHORIZATION: ${app}`})))).length, 2);
+    // existing GIT_CONFIG_* entries are kept, and ours follow them
+    const kept = branchPushEnv('app-token', {...clean, GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.abbrev', GIT_CONFIG_VALUE_0: '12'});
+    assert.equal(kept.GIT_CONFIG_COUNT, '3');
+    assert.equal(kept.GIT_CONFIG_KEY_0, 'core.abbrev');
+    assert.equal(kept.GIT_CONFIG_KEY_1, 'http.https://github.com/.extraheader');
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
 });
