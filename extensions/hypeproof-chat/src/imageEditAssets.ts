@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { inspectEditPng,imageBytesHash,type PngInfo } from './imageEditPng.ts';
 import type { ImageEditResult } from './imageEditClient.ts';
 import { classifyDenial, denialCopy } from './denialSource.ts';
+import { noteHostWrite } from './artifactProvenance.ts';
 export interface ImageEditAsset {relativePath:string;sha256:string;dataUrl:string;bytes:Uint8Array;info:PngInfo}
 function workspaceFile(cwd:string,rel:string,allowMissing=false):string{
  const root=fs.realpathSync(cwd);if(!rel||path.isAbsolute(rel)||/[\\\x00]/.test(rel)||rel.split('/').some(p=>!p||p==='.'||p==='..'))throw new Error('작업 폴더 안의 이미지 상대경로만 사용할 수 있어요.');
@@ -39,7 +40,7 @@ export async function saveImageEditOutput(cwd:string,original:ImageEditAsset,job
  const stem=path.basename(original.relativePath,path.extname(original.relativePath)).replace(/[^\p{L}\p{N}_-]/gu,'-').slice(0,48)||'image';
  const rel=`images/edited/${stem}-${job.id}-${sha256.slice(0,12)}.png`,file=workspaceFile(cwd,rel,true);
  fs.mkdirSync(path.dirname(file),{recursive:true});workspaceFile(cwd,rel,true);
- fs.writeFileSync(file,bytes,{flag:'wx'});return {relativePath:rel,sha256,info};
+ fs.writeFileSync(file,bytes,{flag:'wx'});noteHostWrite([{absPath:file,data:bytes}],'ai');return {relativePath:rel,sha256,info};
 }
 export function imageEditSelection(original:ImageEditAsset,editedPath:string,action:'adopt'|'restore'):string{if(action!=='adopt'&&action!=='restore')throw new Error('이미지 선택 동작이 올바르지 않아요.');return action==='restore'?original.relativePath:editedPath;}
 function escape(value:string):string{return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));}

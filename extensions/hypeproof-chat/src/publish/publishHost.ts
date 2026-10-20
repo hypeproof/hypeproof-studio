@@ -22,6 +22,7 @@ import { resultChatText, runPublishSite, stepLabel } from "./publishSite";
 import { markerSummary } from "./sitePreflight";
 import { cloneFolderFor, decideTarget, folderMatches, listSwitchTargets, localFiles, pullInto, type SwitchTarget, type TargetAction } from "./projectSwitch";
 import { consentDecision, PublishRegistry, registrationPrompt, type RegistryStore } from "./publishRegistry";
+import { noteFolderReplaced } from "../artifactProvenance";
 
 /** Context key the manifest gates the toolbar button on. */
 export const SITE_PUBLISH_CONTEXT_KEY = "hypeproof-chat.sitePublishEnabled";
@@ -415,6 +416,9 @@ export class SitePublisher {
     const matchesHead = present && head ? await folderMatches(api, login, repo.name, head, folder) : null;
     const action = decideTarget({ hasFolder: present, head, ...(reg?.lastPushedSha ? { lastPushedSha: reg.lastPushedSha } : {}), matchesHead });
     let backup: string | undefined;
+    // REQ-STUDIO-ARTIFACT-PROVENANCE — each clone, download, pull or sync below may replace files of
+    // `folder` (maybe the open one), even when it fails part way. GitHub's bytes have no recorded
+    // author here, so after each one the folder reads 기록 없음 until it is observed again.
     if (action === "clone") {
       if (!head) {
         // The start page offers "새로 하기" beside this; the switch has no such button.
@@ -422,10 +426,14 @@ export class SitePublisher {
         return failed("clone", "empty", "no commits");
       }
       if (this.host.endpoints.apiBase) {
+        noteFolderReplaced(folder); // before as well: a list scan overlapping the copy must not read it as the learner's
         const d = await downloadRepo(api, login, repo.name, repo.defaultBranch, folder);
+        noteFolderReplaced(folder);
         if (!d.ok) return failed("clone", d.code, d.detail);
       } else {
+        noteFolderReplaced(folder); // before as well: a list scan overlapping the copy must not read it as the learner's
         const c = await cloneRepo({ exec: this.exec, gh: await this.auth.bin(), login, repo: repo.name, branch: repo.defaultBranch, folder });
+        noteFolderReplaced(folder);
         if (!c.ok) return failed("clone", c.code, c.detail);
       }
     } else if (head) {
@@ -435,15 +443,19 @@ export class SitePublisher {
       const keepBackup = action === "pull" && matchesLast !== true;
       if (this.host.endpoints.apiBase) {
         if (action === "pull") {
+          noteFolderReplaced(folder); // before as well: a list scan overlapping the copy must not read it as the learner's
           const p = await pullInto(api, login, repo.name, repo.defaultBranch, folder, { keepBackup, stamp });
+          noteFolderReplaced(folder);
           if (!p.ok) return failed("pull", p.code, p.detail);
           backup = p.backup;
         }
       } else {
+        noteFolderReplaced(folder); // before as well: a list scan overlapping the copy must not read it as the learner's
         const s = await syncClone({
           exec: this.exec, gh: await this.auth.bin(), login, repo: repo.name, branch: repo.defaultBranch, folder,
           replace: action === "pull", ...(keepBackup ? { backup: `${folder}.before-pull-${stamp}` } : {}),
         });
+        noteFolderReplaced(folder);
         if (!s.ok) return failed(action, s.code, s.detail);
         backup = s.backup;
       }

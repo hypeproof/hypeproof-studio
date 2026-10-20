@@ -1575,7 +1575,8 @@ CGP-AGENT-R-026 of the ChatGPT desktop study, which extend AE-15; issue #673). B
 - **Restore point before each coach turn.** When a turn runs on any runtime (proxy, agent-sdk,
   local) and the coach has a work folder (`resolveCoachCwd`), `chatPanelProvider.beginTurnRestore`
   records it before the runtime starts: a manifest of every file (posix relative path, size,
-  sha256) plus a byte copy of each file (`src/turnRestore.ts`). `.git`, `node_modules`,
+  sha256) plus a byte copy of each file (`src/turnRestore.ts`). `.git`, `node_modules`, Python
+  environments and caches (`.venv`, `venv`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.tox`),
   `.hypeproof` (adult page history) and `이전 세상` (kids' world archive) are not recorded, nor
   `.DS_Store`/`Thumbs.db`. The copies live in the extension's global storage, one store per work
   folder (sha256 of its real path) and task (active task id, else `default`), never in the work
@@ -1632,6 +1633,134 @@ negative controls, a parent folder or target file swapped for a link to outside 
 bytes unchanged; both fail on the previous code), a deep nested positive control, host wiring lock; `extensions/hypeproof-chat/test/turn-review.test.tsx` — bar
 states and copy, partial failure never reads as success, default chat render has no bar). Native
 app run: NOT RUN.
+
+## Artifact provenance labels (CGP-KNOW-R-012)
+
+`REQ-STUDIO-ARTIFACT-PROVENANCE` (CGP-KNOW-R-012 / REQ-KNOW-21 of the ChatGPT desktop study,
+`docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md`; builds on
+`REQ-STUDIO-TURN-RESTORE`). Product Intent: the learner sees, without a score, which work the AI
+did, which Studio did and what they uploaded (OWNERSHIP may be exposed; no capability is measured).
+**CGP-KNOW-R-012 is partially implemented by this slice: the research row's `내가 고침` label is not
+built** (see below and "Not built"). Built:
+
+- **Labels from recorded events only.** Each work-folder file gets one label, derived by
+  `src/artifactProvenance.ts` and never from assistant prose:
+  - `AI가 만듦` / `AI가 고침`: the per-turn restore diff of a coach turn names it as added / changed,
+    or Studio wrote the coach's own output (a page revealed from this turn's answer or tool,
+    `agent.md`, an image-edit result, learning-wiki and deck pages built from a model proposal).
+  - `Studio가 만듦` / `Studio가 고침`: Studio wrote bytes whose author it has not recorded or that are
+    its own: a prebuilt world (`index.html`, `engine.js`), a page re-shown or run from a chat code
+    block, the starter page, a preview `append_artifact`, wiki templates and state, notes moved into
+    `raw/`.
+  - `내가 올림`: Studio committed it from a learner attachment (D-028 photo into `images/`, #421 pasted
+    image into `assets/`).
+  - No "learner changed it" label (`내가 고침`) exists in this slice. **The learner's own edits read
+    `기록 없음`.** Six verification rounds tried to infer learner authorship. First it came from
+    unexplained changes between scans, which every race fell into. Then it came from VS Code editor
+    events. The event order was measured in the shipped app (2026-10-20, probe extension, logs in
+    `test/fixtures/artifact-provenance/`), and it cannot attribute a save reliably:
+    - A change event reports `isDirty` from before the change.
+    - Save participants (trim whitespace, format, final newline) run before `onWillSaveTextDocument`.
+    - Save without Formatting fires no `onWillSaveTextDocument` at all.
+    - Studio binds Cmd+S with force, so a clean document holding the AI's bytes can be saved too.
+    So a learner's paste-and-save cannot be told from a formatter's edit or a forced save of AI bytes.
+    The host subscribes to no editor change or save event.
+  - `기록 없음`: every other change, whoever made it: the learner's own edits, a background process
+    the coach started, a stopped turn's late write, git or another editor, a change made while Studio
+    was closed, a GitHub pull, a write that races a scan. Scans only detect **that** bytes changed; they never attribute a
+    change to the learner. Every file already there at the first observation reads `기록 없음` too.
+  A file touched more than once shows the latest label and a short history, oldest first,
+  consecutive repeats folded, at most four steps ("지금까지: AI가 만듦 → 기록 없음 → Studio가 고침").
+- **Edits inside a turn window.** A change the learner makes while a coach turn runs is part of that
+  turn's restore diff, so it reads as the turn's (`AI가 고침`). The review bar already says so: "AI가
+  일하는 동안 내가 직접 고친 파일도 함께 셌어요".
+- **One host-write hook.** Every place Studio writes into the work folder file by file calls
+  `noteHostWrite([{ absPath, data }], "ai" | "studio" | "learner_upload")` right after the write,
+  inside or outside a turn (chatPanelProvider's page / engine / agent.md saves and the attachment
+  commit, `imageEditAssets.ts`, `learningWiki.ts`, `workspacePreparation.ts`, `previewProvider.ts`;
+  the send path's uploads go through `recordLearnerUploads`). The bytes are hashed at the call and
+  the record is queued in call order. A host write made inside the turn window keeps its own label
+  (the turn diff does not overwrite bytes Studio recorded during that turn), and an observation never
+  reads bytes a recorded event left behind as a change. The host waits (at most 10 s) for reveals
+  started during the stream before the post-turn scan. A hook can still lose its label to a racing
+  scan (the end scan or the restore-point scan reading the older bytes); the file then reads
+  `기록 없음`. The kids' world archive (`이전 세상`) and `.hypeproof` are outside the scan.
+- **Observations.** The restore point taken before each coach turn; the end of the turn (restore
+  diff against the rescan); opening the panel while no turn, send, revert, task switch or verify
+  run is active. A file deleted and made again loses its old history.
+- **Generation guard on the list scan.** The recorder keeps a generation that every host write,
+  folder replace, turn start and end, unmeasured window and revert bumps
+  synchronously. The list reads it before its scan and hands it to `view`; if it moved, the scan is
+  not applied and the list is drawn read-only. This keeps a Studio write or a whole turn that lands
+  during the scan from losing its Studio or AI label to `기록 없음`.
+- **Unconfirmed windows.** These mark the ledger stale: the first touch of a folder in a session, no
+  restore point (folder too large, store write failed), a rescan past its entry cap or a read failure
+  after a turn, a list scan past the entry cap, a GitHub clone, download, pull or sync into the
+  folder (`publishHost.bringRepo` calls `noteFolderReplaced` before and after each, also on failure),
+  an instructor-surface turn (it takes no restore point and Studio cannot tell its coach's changes
+  from the instructor's own edits), a ledger save failure and a damaged ledger. While the ledger is
+  stale the list confirms nothing: every row reads `기록 없음` under the note "지금 작업 폴더를 다
+  확인하지 못해서 모든 파일을 ‘기록 없음’으로 보여 줘요…". The next complete observation restores the
+  labels of files whose bytes still match their last event; a coach turn that starts from a stale
+  ledger labels nothing as AI. A folder that stays over the 20,000-entry cap therefore stays
+  `기록 없음`. A file the scan saw but could not hash (over 20 MB, past 5000 files or 200 MB, a link,
+  unreadable) is kept as a stale path: not listed, not recorded as removed, `기록 없음` when it fits.
+- **되돌리기.** After a revert to a turn's restore point, every event recorded after that point is
+  dropped and the restored folder is compared with the point: a file the revert could not put back
+  reads `기록 없음`.
+- **Local and cheap.** One ledger per work folder (sha256 of its real path) under the extension's
+  global storage (`artifact-provenance/<hash>.json`), never in the work folder and never uploaded:
+  the last observed path → sha256 map, the stale paths and at most 2000 events (oldest dropped first;
+  a file whose only event was dropped reads `기록 없음`). Paths and hashes only. The panel's rescan
+  reuses a per-folder in-memory hash for each file whose size, mtime and inode are unchanged
+  (`scanFolder({ cache })`), so only changed files are read; restore points never use the cache.
+- **Where it shows.** The personal/trial task workspace's 작업 자료 panel (`TaskWorkspace.tsx`), under
+  the citations, as "작업 폴더의 파일": one row per file (≥44px), path, a decorative shape symbol
+  (`✦` `↻` `▣` `▤` `⇡` `✎` `○`, `aria-hidden`) and the label in words, newest recorded event first and
+  `기록 없음` last, at most 100 rows with a "파일 N개는 더 있어서…" line. This panel was chosen because
+  it is the task workspace's only persistent listing surface; the turn review bar is replaced by the
+  next turn and the publish panel lists one version's files. No score, percentage or capability name.
+
+Not built: **the `내가 고침` label (CGP-KNOW-R-012 / REQ-KNOW-21, follow-up).** It needs a source of
+learner authorship that survives VS Code's measured event order: for example a Studio-owned editor
+command, or a diff against the last AI or Studio hash at a point where no participant can run. The
+probe logs and the six verification rounds' repros are kept for that follow-up. Also not built: the
+"내 작품" drawer (DES-KNOW-20) and grid view; labels in the classroom chat (it has no task
+workspace), on the turn review bar or in the editor's file explorer; the research doc's wording
+`확인 안 됨` (this slice uses `기록 없음` as requested in CGP-KNOW-R-012); attributing changes to shell
+or subagent tools; times of edits (none is shown); links to the creating turn (REQ-KNOW-29); 만듦 vs
+고침 for a host write into a folder never observed before (it reads 만듦); a cached hash when a file's
+bytes change with size, mtime and inode all unchanged; labels for an instructor's own turns (the
+folder reads 기록 없음 instead).
+Verification: U (`extensions/hypeproof-chat/test/artifact-provenance.smoke.mjs` — synthetic
+manifests and events with a planted answer per label, history order and folding, first observation,
+revert, caps, damaged ledger, and real temp folders driven through `takeRestorePoint` /
+`diffRestorePoint` / `restoreToPoint` and the host recorder. Every list a session draws is checked
+against the slice's label set (AI/Studio/올림/기록 없음 only). Cases covered:
+- every race the verifiers found: a prebuilt world copy, a reveal after the end scan, ▶ run during
+  the end scan, a Studio write during the restore-point scan followed by 되돌리기, a background child
+  after the turn and after a restart, a stopped turn's late write, and a Studio write / GitHub pull /
+  whole turn overlapping a list scan;
+- a real external process (`echo > file`);
+- the shipped app's recorded editor-event logs replayed onto AI-written files: the AI label holds
+  while its bytes stay, anything else reads 기록 없음;
+- a ledger file carrying a learner-change event is rejected as damaged;
+- a lock that the label table, event kinds, host-write actors, provider and webview contain no
+  `내가 고침`, no learner-save kind and no editor save subscription;
+- the real `saveImageEditOutput`, `writeFiles` and `prepareWorkspaceDirectory` through the hook;
+- the hash cache and skipped Python environments.
+
+`test/artifact-provenance-host.smoke.mjs` — the real `ChatPanelProvider` bundled with only VS Code I/O
+substituted: agent.md, index.html and engine.js saves and the `revealBuilt` writer choice per source,
+learner uploads, folder-consent refusals and failed writes recording nothing, an instructor turn
+leaving the ledger stale, the provider subscribing to no editor event, and locks on the upload call
+site, the list-scan generation and the before-and-after pull marks.
+
+`extensions/hypeproof-chat/test/artifact-provenance.test.tsx` — row markup, symbol plus words,
+Studio row, order, empty, loading and unconfirmed states, no score or capability words, the closed
+panel draws no list.)
+
+Native app run: NOT RUN.
 
 ## Personal trial interaction coverage (#758)
 
