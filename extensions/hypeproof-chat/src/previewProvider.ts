@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { buildPreviewShellCsp, PREVIEW_IFRAME_ALLOW, PREVIEW_IFRAME_SANDBOX } from "./cspBuilder";
 import { sanitizeArtifactEntry, ARTIFACT_FILES, applyPlaceholderDefaults } from "./previewArtifacts";
 import { injectBaseHref, injectInnerCsp } from "./previewHtml";
+import { noteHostWrite } from "./artifactProvenance";
 
 /**
  * HTML preview for AI-generated webapps + user-opened .html files.
@@ -253,6 +254,7 @@ export class PreviewProvider {
     const line = `- ${stamp} · ${safeEntry}\n`;
     const next = existing ? existing + line : `# ${path.basename(target)}\n\n${line}`;
     await vscode.workspace.fs.writeFile(fileUri, Buffer.from(next, "utf8"));
+    noteHostWrite([{ absPath: fileUri.fsPath, data: next }], "studio"); // REQ-STUDIO-ARTIFACT-PROVENANCE
 
     this.panel?.webview.postMessage({ type: "previewActionResult", action: "append_artifact", artifact, ok: true });
     vscode.window.showInformationMessage(`HypeProof: ${target}에 저장됐어요.`);

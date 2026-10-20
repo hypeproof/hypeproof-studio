@@ -10,9 +10,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   ArtifactProvenanceRecorder, PROVENANCE_EVENT_CAP, PROVENANCE_LABELS, PROVENANCE_VIEW_CAP, emptyLedger, loadLedger, markUnobserved,
-  observeOutsideTurn, provenanceHistoryText, provenanceLedgerFile, provenanceView, recordCoachTurn, recordRevert,
+  noteHostWrite, observeOutsideTurn, provenanceHistoryText, provenanceLedgerFile, provenanceView, recordCoachTurn, recordHostWrite, recordRevert, setHostWriteSink,
 } from "../src/artifactProvenance.ts";
 import { diffRestorePoint, scanFolder, takeRestorePoint, turnRestoreStoreDir } from "../src/turnRestore.ts";
+import { prepareImageEditAsset, saveImageEditOutput } from "../src/imageEditAssets.ts";
+import { inspectEditPng, imageBytesHash } from "../src/imageEditPng.ts";
+import { writeFiles } from "../src/learningWiki.ts";
+import { prepareWorkspaceDirectory } from "../src/workspacePreparation.ts";
+import { png } from "./fixtures/image-edit/png.mjs";
 
 let fail = 0;
 const t = async (label, fn) => {
@@ -22,7 +27,7 @@ const eq = (a, b, what) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw 
 const h = (c) => c.repeat(64);
 const files = (o) => Object.entries(o).map(([p, c]) => ({ path: p, sha256: h(c) }));
 const label = (view, p) => { const e = view.entries.find((x) => x.path === p); if (!e) throw new Error(`no entry for ${p}`); return e; };
-const turn = (turnId, at, d) => ({ turnId, at, added: d.added ?? [], changed: d.changed ?? [], deleted: d.deleted ?? [] });
+const turn = (turnId, at, d) => ({ turnId, at, startedAt: d.startedAt ?? at - 0.5, added: d.added ?? [], changed: d.changed ?? [], deleted: d.deleted ?? [] });
 
 console.log("artifact provenance — pure ledger");
 
@@ -39,7 +44,8 @@ await t("nothing observed yet: no entries, unobserved", () => {
 await t("each label from its own recorded event", () => {
   let l = observeOutsideTurn(emptyLedger(), files({ "keep.txt": "k", "edit.txt": "e" }), { at: 1 });
   // turn 1 starts with a photo the host committed from the learner's attachment
-  l = observeOutsideTurn(l, files({ "keep.txt": "k", "edit.txt": "e", "images/외관.jpg": "p" }), { at: 2, uploaded: ["images/외관.jpg"] });
+  l = recordHostWrite(l, files({ "images/외관.jpg": "p" }), { at: 1.5, actor: "learner_upload" });
+  l = observeOutsideTurn(l, files({ "keep.txt": "k", "edit.txt": "e", "images/외관.jpg": "p" }), { at: 2 });
   l = recordCoachTurn(l, turn("t1", 3, { added: ["index.html"], changed: ["edit.txt"] }), files({ "keep.txt": "k", "edit.txt": "E", "images/외관.jpg": "p", "index.html": "i" }));
   // between turns the learner changes keep.txt
   l = observeOutsideTurn(l, files({ "keep.txt": "K", "edit.txt": "E", "images/외관.jpg": "p", "index.html": "i" }), { at: 4 });
@@ -131,7 +137,8 @@ await t("revert: events after the restore point go, the restored file reads as b
   let l = observeOutsideTurn(emptyLedger(), [], { at: 1 });
   l = recordCoachTurn(l, turn("t1", 2, { added: ["a.html"] }), files({ "a.html": "1" }));
   const pointFiles = files({ "a.html": "1", "images/p.jpg": "p" });
-  l = observeOutsideTurn(l, pointFiles, { at: 10, uploaded: ["images/p.jpg"] }); // turn 2 start = point time
+  l = recordHostWrite(l, files({ "images/p.jpg": "p" }), { at: 9.5, actor: "learner_upload" });
+  l = observeOutsideTurn(l, pointFiles, { at: 10 }); // turn 2 start = point time
   l = recordCoachTurn(l, turn("t2", 11, { changed: ["a.html"], added: ["b.js"] }), files({ "a.html": "2", "images/p.jpg": "p", "b.js": "b" }));
   l = observeOutsideTurn(l, files({ "a.html": "3", "images/p.jpg": "p", "b.js": "b" }), { at: 12 }); // learner edit before deciding
   l = recordRevert(l, { pointAt: 10, pointFiles, at: 13 }, pointFiles);
@@ -143,9 +150,9 @@ await t("revert: events after the restore point go, the restored file reads as b
 });
 
 await t("labels: text and a distinct shape per meaning, no score or capability words", () => {
-  const shown = ["ai_created", "ai_changed", "learner_uploaded", "learner_changed", "none"].map((k) => PROVENANCE_LABELS[k]);
-  eq(shown.map((x) => x.label), ["AI가 만듦", "AI가 고침", "내가 올림", "내가 고침", "기록 없음"], "labels");
-  eq(new Set(shown.map((x) => x.symbol)).size, 5, "distinct symbols");
+  const shown = ["ai_created", "ai_changed", "studio_created", "studio_changed", "learner_uploaded", "learner_changed", "none"].map((k) => PROVENANCE_LABELS[k]);
+  eq(shown.map((x) => x.label), ["AI가 만듦", "AI가 고침", "Studio가 만듦", "Studio가 고침", "내가 올림", "내가 고침", "기록 없음"], "labels");
+  eq(new Set(shown.map((x) => x.symbol)).size, 7, "distinct symbols");
   eq(PROVENANCE_LABELS.unknown, PROVENANCE_LABELS.none, "unknown reads as 기록 없음");
   const text = JSON.stringify(PROVENANCE_LABELS);
   for (const bad of ["점", "%", "FRAMING", "JUDGMENT", "OWNERSHIP", "VERIFY", "ADAPT", "ORCHESTRATE"]) if (text.includes(bad)) throw new Error(`label text has ${bad}`);
@@ -192,7 +199,7 @@ await t("end to end: two coach turns, an attach, a learner edit, an out-of-turn 
 
   // turn 1: a photo attached on send, then the coach writes index.html
   write("images/외관.jpg", Buffer.from([0xff, 0xd8, 1, 2]));
-  rec.noteUploaded(["images/외관.jpg"]);
+  void rec.hostWrote(root, [{ absPath: path.join(root, "images", "외관.jpg") }], "learner_upload");
   const p1 = (await takeRestorePoint({ store, root, id: "s1", turnId: "s1", kind: "turn", now: 1000 })).point;
   await rec.turnStart(root, p1);
   write("index.html", "<h1>v1</h1>");
@@ -209,18 +216,18 @@ await t("end to end: two coach turns, an attach, a learner edit, an out-of-turn 
   await rec.turnEnd(root, p2, diffRestorePoint(p2, now), now.files);
 
   v = await rec.view(root, (await scanFolder(root)).files);
-  const got = Object.fromEntries(v.entries.map((e) => [e.path, [e.label, provenanceHistoryText(e)]]));
+  const got = Object.fromEntries(v.entries.map((e) => [e.path, [e.label, provenanceHistoryText(e)]]).sort());
   eq(got, {
-    "notes.md": ["AI가 고침", ""],
-    "index.html": ["내가 고침", "AI가 만듦 → 내가 고침"],
     "images/외관.jpg": ["내가 올림", ""],
+    "index.html": ["내가 고침", "AI가 만듦 → 내가 고침"],
+    "notes.md": ["AI가 고침", ""],
   }, "labels");
 
-  // Studio itself writes outside a turn (a preview save): never 내가 고침
+  // an unmeasured window: never 내가 고침
   await rec.unobserved(root);
-  write("index.html", "<h1>studio saved</h1>");
+  write("index.html", "<h1>changed unseen</h1>");
   v = await rec.view(root, (await scanFolder(root)).files);
-  eq([label(v, "index.html").label, provenanceHistoryText(label(v, "index.html"))], ["기록 없음", "AI가 만듦 → 내가 고침 → 기록 없음"], "host write");
+  eq([label(v, "index.html").label, provenanceHistoryText(label(v, "index.html"))], ["기록 없음", "AI가 만듦 → 내가 고침 → 기록 없음"], "unmeasured");
   if (fs.readdirSync(root).some((n) => n.includes("provenance"))) throw new Error("ledger leaked into the work folder");
 });
 
@@ -231,6 +238,157 @@ await t("view without a scan only reads; without any observation it is unobserve
   eq((await rec.view(fresh)).unobserved, true, "read only");
   eq((await rec.view(fresh, (await scanFolder(fresh)).files)).entries.map((e) => e.label), ["기록 없음"], "observed");
 });
+
+console.log("artifact provenance — verifier findings 1-6, reproduced with the recorder");
+
+let n = 0;
+/** A fresh work folder and a recorder session over it; the sink routes noteHostWrite to it. */
+async function session(seed = {}) {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(tmp, `case${++n}-`)));
+  for (const [rel, data] of Object.entries(seed)) { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), data); }
+  let clock = 1000 * n;
+  const rec = new ArtifactProvenanceRecorder(base, () => ++clock);
+  setHostWriteSink((writes, actor) => { void rec.hostWrote(dir, writes, actor); });
+  const put = (rel, data) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), data); };
+  const list = async () => rec.view(dir, await scanFolder(dir));
+  let seq = 0;
+  /** One coach turn: restore point, `during()` inside the window, rescan, diff, record. */
+  const coachTurn = async (during = async () => {}, afterScan = async () => {}) => {
+    const id = `turn${++seq}`;
+    const point = (await takeRestorePoint({ store: turnRestoreStoreDir(base, dir, `c${n}`), root: dir, id, turnId: id, kind: "turn", now: ++clock })).point;
+    await rec.turnStart(dir, point);
+    await during();
+    const now = await scanFolder(dir);
+    await afterScan();
+    await rec.turnEnd(dir, point, diffRestorePoint(point, now), now);
+  };
+  await list(); // the session's first observation (stale by design: before this, nothing was seen)
+  return { dir, rec, put, list, coachTurn };
+}
+const labelOf = async (c, p) => { const e = label(await c.list(), p); return [e.label, provenanceHistoryText(e)]; };
+
+await t("1. a prebuilt world copied in before the restore point reads Studio가 고침, never 내가 고침", async () => {
+  const c = await session({ "index.html": "<p>old world</p>" });
+  await c.coachTurn(async () => c.put("index.html", "<p>coach v1</p>")); // the coach made it once
+  // next send: Studio copies the prebuilt world, then takes the restore point
+  c.put("index.html", "<p>prebuilt world</p>");
+  noteHostWrite([{ absPath: path.join(c.dir, "index.html"), data: "<p>prebuilt world</p>" }], "studio");
+  await c.coachTurn();
+  eq(await labelOf(c, "index.html"), ["Studio가 고침", "AI가 고침 → Studio가 고침"], "world copy");
+});
+
+await t("1. negative control: the same copy with no host-write record would read 내가 고침 (the bug the hook removes)", async () => {
+  const c = await session({ "index.html": "<p>old world</p>" });
+  await c.coachTurn(async () => c.put("index.html", "<p>coach v1</p>"));
+  c.put("index.html", "<p>prebuilt world</p>");
+  await c.coachTurn();
+  eq((await labelOf(c, "index.html"))[0], "내가 고침", "without the hook");
+});
+
+await t("1. a world copy written inside the turn window keeps its Studio label (not overwritten by the turn diff)", async () => {
+  const c = await session({ "index.html": "<p>old</p>" });
+  await c.coachTurn(async () => { c.put("index.html", "<p>prebuilt</p>"); noteHostWrite([{ absPath: path.join(c.dir, "index.html"), data: "<p>prebuilt</p>" }], "studio"); });
+  eq((await labelOf(c, "index.html"))[0], "Studio가 고침", "in-turn host write");
+});
+
+await t("2. an AI image-edit result saved by saveImageEditOutput reads AI가 만듦", async () => {
+  const originalBytes = png();
+  const c = await session({ "images/keyboard.png": originalBytes });
+  const id = crypto.randomUUID(), output = png(1024, 1024), info = await inspectEditPng(output);
+  const job = { schema: "hps-image-edit-result/1", id, state: "succeeded", original_sha256: await imageBytesHash(originalBytes), operation: "remove_background", transparent: true, cancel_requested: false, error_code: null, provider: { name: "openai", model: "synthetic-model", request_id: "p" }, cost: { request_id: "c", recording_state: "recorded", pricing: "unknown", amount: null }, semantic_preservation: "not_verified", output: { sha256: await imageBytesHash(output), ...info, expires_at: Date.now() + 10000 } };
+  const saved = await saveImageEditOutput(c.dir, await prepareImageEditAsset(c.dir, "images/keyboard.png"), job, output);
+  eq(await labelOf(c, saved.relativePath), ["AI가 만듦", ""], "edit output");
+  eq((await labelOf(c, "images/keyboard.png"))[0], "기록 없음", "the original is untouched");
+});
+
+await t("2. learning wiki pages and the starter page go through the same hook", async () => {
+  const c = await session();
+  writeFiles(path.join(c.dir, "wiki"), { "index.md": "# proposal" }, "ai");
+  writeFiles(path.join(c.dir, "wiki"), { "log.md": "# 기록" });
+  prepareWorkspaceDirectory(c.dir, "html", () => "<p>starter</p>");
+  eq([(await labelOf(c, "wiki/index.md"))[0], (await labelOf(c, "wiki/log.md"))[0], (await labelOf(c, "index.html"))[0]], ["AI가 만듦", "Studio가 만듦", "Studio가 만듦"], "labels");
+});
+
+await t("3. a reveal that lands after the post-turn scan still reads AI, in either queue order", async () => {
+  for (const order of ["write-then-end", "end-then-write"]) {
+    const c = await session({ "index.html": "<p>v0</p>" });
+    await c.coachTurn(async () => {}, async () => {
+      if (order === "write-then-end") { c.put("index.html", "<p>late</p>"); noteHostWrite([{ absPath: path.join(c.dir, "index.html"), data: "<p>late</p>" }], "ai"); }
+    });
+    if (order === "end-then-write") { c.put("index.html", "<p>late</p>"); noteHostWrite([{ absPath: path.join(c.dir, "index.html"), data: "<p>late</p>" }], "ai"); }
+    eq((await labelOf(c, "index.html"))[0], "AI가 고침", order);
+  }
+});
+
+await t("3. the host waits for pending reveals before its post-turn scan (wiring lock)", () => {
+  const src = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  const wait = src.indexOf("Promise.allSettled(pendingReveals)"), end = src.indexOf("await this.endTurnRestore(turnRestorePoint, streamId)");
+  if (wait < 0 || end < 0 || wait > end) throw new Error("pending reveals are not awaited before endTurnRestore");
+  if (!src.includes("pendingReveals.push(this.revealBuilt(")) throw new Error("tryReveal's write is not tracked");
+  for (const [file, needle] of [["../src/imageEditAssets.ts", "noteHostWrite([{absPath:file,data:bytes}],'ai')"], ["../src/learningWiki.ts", "noteHostWrite("], ["../src/workspacePreparation.ts", "noteHostWrite("], ["../src/previewProvider.ts", "noteHostWrite("]]) {
+    if (!fs.readFileSync(new URL(file, import.meta.url), "utf8").includes(needle)) throw new Error(`${file} has no host-write hook`);
+  }
+  if (/hasActiveStream\(\)\) return; \/\/ inside a turn window/.test(src)) throw new Error("host writes are still gated on hasActiveStream");
+});
+
+await t("4. a file skipped by a cap is not 'removed', and when it fits again it reads 기록 없음, not 내가 고침", async () => {
+  const c = await session({ "big.bin": "x".repeat(10), "small.txt": "s" });
+  await c.coachTurn(async () => c.put("big.bin", "y".repeat(10)));
+  const caps = { limits: { fileMax: 50 } };
+  c.put("big.bin", "z".repeat(80)); // too large for this scan
+  let v = await c.rec.view(c.dir, await scanFolder(c.dir, caps));
+  if (v.entries.some((e) => e.path === "big.bin")) throw new Error("an uncovered file is listed with a stale label");
+  c.put("big.bin", "w".repeat(20)); // fits again
+  c.put("small.txt", "S");          // positive control: a normal change in the same window
+  v = await c.rec.view(c.dir, await scanFolder(c.dir, caps));
+  eq([label(v, "big.bin").label, provenanceHistoryText(label(v, "big.bin"))], ["기록 없음", "AI가 고침 → 기록 없음"], "big.bin");
+  eq(label(v, "small.txt").label, "내가 고침", "small.txt");
+});
+
+await t("4. file_cap and total_cap skips are stale too", async () => {
+  for (const limits of [{ filesMax: 1 }, { totalMax: 3 }]) {
+    const c = await session({ "a.txt": "aa", "b.txt": "bb" });
+    c.put("b.txt", "BB");
+    await c.rec.view(c.dir, await scanFolder(c.dir, { limits })); // b.txt skipped
+    c.put("b.txt", "B2");
+    eq((await labelOf(c, "b.txt"))[0], "기록 없음", JSON.stringify(limits));
+  }
+});
+
+await t("5. changes made while Studio was closed read 기록 없음; changes seen inside one session read 내가 고침", async () => {
+  const c = await session({ "a.txt": "1", "b.txt": "1" });
+  c.put("a.txt", "2");
+  eq((await labelOf(c, "a.txt"))[0], "내가 고침", "seen between two scans of this session");
+  // Studio closes; git checkout / another editor changes files; Studio starts again
+  c.put("a.txt", "3"); c.put("b.txt", "git");
+  const next = new ArtifactProvenanceRecorder(base);
+  const v = await next.view(c.dir, await scanFolder(c.dir));
+  eq([label(v, "a.txt").label, label(v, "b.txt").label], ["기록 없음", "기록 없음"], "first scan of a new session");
+  c.put("b.txt", "mine");
+  eq(label(await next.view(c.dir, await scanFolder(c.dir)), "b.txt").label, "내가 고침", "positive control: later in that session");
+});
+
+await t("6. the list scan reuses hashes of files whose size, mtime and inode did not change", async () => {
+  const c = await session({ "a.txt": "aaaa", "b.txt": "bbbb" });
+  const cache = c.rec.scanCache(c.dir);
+  const pinned = new Date(1_700_000_000_000); // whole seconds, so utimes can put it back exactly
+  fs.utimesSync(path.join(c.dir, "a.txt"), pinned, pinned);
+  const first = await scanFolder(c.dir, { cache });
+  eq(first.files, (await scanFolder(c.dir)).files, "same result as an uncached scan");
+  // same size, mtime put back: proves the cached hash is used (the file is not read again)
+  fs.writeFileSync(path.join(c.dir, "a.txt"), "AAAA");
+  fs.utimesSync(path.join(c.dir, "a.txt"), pinned, pinned);
+  const reused = await scanFolder(c.dir, { cache });
+  eq(reused.files.find((f) => f.path === "a.txt").sha256, first.files.find((f) => f.path === "a.txt").sha256, "cache hit");
+  c.put("b.txt", "bbbbb"); // size changed: hashed again
+  const fresh = await scanFolder(c.dir, { cache });
+  eq(fresh.files.find((f) => f.path === "b.txt").sha256, (await scanFolder(c.dir)).files.find((f) => f.path === "b.txt").sha256, "rehash on change");
+  fs.rmSync(path.join(c.dir, "b.txt"));
+  await scanFolder(c.dir, { cache });
+  eq([...cache.keys()], ["a.txt"], "gone files leave the cache");
+});
+
+setHostWriteSink(null);
 
 fs.rmSync(tmp, { recursive: true, force: true });
 if (fail) { console.error(`${fail} failed`); process.exit(1); }

@@ -5,7 +5,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { ArtifactProvenanceList } from "../webview-ui/src/ArtifactProvenanceList";
 import { TaskWorkspace } from "../webview-ui/src/TaskWorkspace";
-import { emptyLedger, observeOutsideTurn, provenanceView, recordCoachTurn } from "../src/artifactProvenance";
+import { emptyLedger, observeOutsideTurn, provenanceView, recordCoachTurn, recordHostWrite } from "../src/artifactProvenance";
 import type { ArtifactProvenanceView } from "../src/artifactProvenanceView";
 
 (globalThis as unknown as Record<string, unknown>).window = { acquireVsCodeApi: undefined, innerWidth: 1280 };
@@ -18,8 +18,9 @@ const h = (c: string) => c.repeat(64);
 
 // A view made by the real derivation, not typed by hand.
 let ledger = observeOutsideTurn(emptyLedger(), [{ path: "notes.md", sha256: h("n") }], { at: 1 });
-ledger = observeOutsideTurn(ledger, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }], { at: 2, uploaded: ["images/외관.jpg"] });
-ledger = recordCoachTurn(ledger, { turnId: "t1", at: 3, added: ["index.html"], changed: [], deleted: [] }, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }, { path: "index.html", sha256: h("1") }]);
+ledger = recordHostWrite(ledger, [{ path: "images/외관.jpg", sha256: h("p") }], { at: 1.5, actor: "learner_upload" });
+ledger = observeOutsideTurn(ledger, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }], { at: 2 });
+ledger = recordCoachTurn(ledger, { turnId: "t1", at: 3, startedAt: 2, added: ["index.html"], changed: [], deleted: [] }, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }, { path: "index.html", sha256: h("1") }]);
 ledger = observeOutsideTurn(ledger, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }, { path: "index.html", sha256: h("2") }], { at: 4 });
 const VIEW = provenanceView(ledger);
 
@@ -30,6 +31,10 @@ t("each file: path, symbol (decorative) and label in words", () => {
   has(html, '<span>images/외관.jpg</span><small><span aria-hidden="true" data-provenance-symbol="true">⇡</span> <strong>내가 올림</strong></small>');
   has(html, '<span>notes.md</span><small><span aria-hidden="true" data-provenance-symbol="true">○</span> <strong>기록 없음</strong></small>');
   has(html, "기록에 남은 일로만 표시해요.");
+});
+t("a Studio write reads as Studio's, with its own symbol", () => {
+  const studio = provenanceView(recordHostWrite(ledger, [{ path: "engine.js", sha256: h("e") }], { at: 5, actor: "studio" }));
+  has(list(studio), '<span>engine.js</span><small><span aria-hidden="true" data-provenance-symbol="true">▣</span> <strong>Studio가 만듦</strong></small>');
 });
 t("newest recorded event first, 기록 없음 last", () => {
   const html = list(VIEW);

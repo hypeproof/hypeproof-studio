@@ -1,7 +1,7 @@
 // REQ-STUDIO-ARTIFACT-PROVENANCE — the provenance list as the webview receives it. Pure and
 // dependency-free, so both the host (artifactProvenance.ts) and the webview import it.
 
-export type ProvenanceEventKind = "ai_created" | "ai_changed" | "learner_uploaded" | "learner_changed" | "unknown" | "removed";
+export type ProvenanceEventKind = "ai_created" | "ai_changed" | "studio_created" | "studio_changed" | "learner_uploaded" | "learner_changed" | "unknown" | "removed";
 /** The labels a learner sees. */
 export type ProvenanceLabelKind = Exclude<ProvenanceEventKind, "removed"> | "none";
 
@@ -9,6 +9,8 @@ export type ProvenanceLabelKind = Exclude<ProvenanceEventKind, "removed"> | "non
 export const PROVENANCE_LABELS: Record<ProvenanceLabelKind, { label: string; symbol: string }> = {
   ai_created: { label: "AI가 만듦", symbol: "✦" },
   ai_changed: { label: "AI가 고침", symbol: "↻" },
+  studio_created: { label: "Studio가 만듦", symbol: "▣" },
+  studio_changed: { label: "Studio가 고침", symbol: "▤" },
   learner_uploaded: { label: "내가 올림", symbol: "⇡" },
   learner_changed: { label: "내가 고침", symbol: "✎" },
   unknown: { label: "기록 없음", symbol: "○" },

@@ -174,7 +174,7 @@ import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import { changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
-import { ArtifactProvenanceRecorder } from "./artifactProvenance";
+import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
@@ -1647,7 +1647,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const folderBlocked = this.folderWriteRefusalFor(dir);
     if (folderBlocked) return { lines: [folderBlocked] };
     const state = initWiki(dir, productTitle(folder.uri.fsPath) ?? folder.name, plan);
-    this.provenanceHostWrote();
     const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
     const session = await this.ingestSession(state, plan, today, opts);
     if (session === undefined) return undefined;
@@ -1667,8 +1666,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!proposal) return { lines: [`정리하지 못했어요. ${josa(name, "은", "는")} 그대로예요. 잠시 뒤 다시 해 주세요.`] };
     const r = applyWikiProposal(state, session, sources, proposal, sid, today, plan);
     saveState(dir, r.state);
-    writeFiles(dir, renderWikiPages(r.state, plan));
-    this.provenanceHostWrote();
+    writeFiles(dir, renderWikiPages(r.state, plan), "ai");
     archiveNotes(dir, sources.notes);
     const focus = sessionFocus(plan, session);
     const deck = plan?.deck && focus.length ? await this.draftDeck(dir, r.state, plan, focus, session) : null;
@@ -1730,7 +1728,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const proposal = answer.ok ? jsonFromText<DeckProposal>(answer.text) : null;
     if (!proposal) {
       writeFiles(dir, renderDeck(state, template, plan));
-      this.provenanceHostWrote();
       return { written: [], drafted: Object.keys(state.deck).length, total: template.slides.length, refused: 0, failed: true };
     }
     let r = applyDeckProposal(state, template, slides, proposal, session);
@@ -1752,8 +1749,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       r = { ...r, state: applySlideText(r.state, fixed.items) };
     }
     saveState(dir, r.state);
-    writeFiles(dir, { ...renderWikiPages(r.state, plan), ...renderDeck(r.state, template, plan) });
-    this.provenanceHostWrote();
+    writeFiles(dir, { ...renderWikiPages(r.state, plan), ...renderDeck(r.state, template, plan) }, "ai");
     return { written: r.written, drafted: Object.keys(r.state.deck).length, total: template.slides.length, refused: r.dropped.length, failed: false };
   }
 
@@ -2059,6 +2055,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     /** #580 — the local session-log spool. Optional: tests and older callers run without recording. */
     private readonly spool?: SessionSpool,
   ) {
+    // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen.
+    this.provenanceRecorder();
     // cr-publish (CR-11 after a restart): know the signed-in person's published origin from
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
@@ -3145,6 +3143,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try {
       const target = vscode.Uri.joinPath(folders[0].uri, "agent.md");
       await vscode.workspace.fs.writeFile(target, Buffer.from(md, "utf8"));
+      noteHostWrite([{ absPath: target.fsPath, data: md }], "ai"); // the coach's own fence
       if (streamId) {
         this.postToolLog(streamId, {
           id: randomId(),
@@ -3285,6 +3284,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     void this.postLivenessEvent(ev);
   }
 
+  /** REQ-STUDIO-ARTIFACT-PROVENANCE — who the next page/engine save is recorded as (revealBuilt sets it). */
+  private revealWriter: HostWriteActor = "studio";
+
   /** False only when the folder choice kept it off disk (the reply still renders from memory). */
   private async saveGameToWorkspace(html: string, streamId?: string): Promise<boolean> {
     const folders = vscode.workspace.workspaceFolders;
@@ -3294,8 +3296,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const root = folders[0].uri;
       const target = vscode.Uri.joinPath(root, "index.html");
       await vscode.workspace.fs.writeFile(target, Buffer.from(html, "utf8"));
-      this.provenanceHostWrote();
       // Task E — "the coach ran for four minutes; did anything change?"
+      noteHostWrite([{ absPath: target.fsPath, data: html }], this.revealWriter);
       this.emitArtifactChanged(html);
     } catch {
       // Non-fatal: preview still works even if the save fails.
@@ -3736,7 +3738,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (this.folderWriteBlocked(path.join(cwd, "engine.js"), streamId)) return;
     try {
       await vscode.workspace.fs.writeFile(vscode.Uri.file(path.join(cwd, "engine.js")), Buffer.from(js, "utf8"));
-      this.provenanceHostWrote();
+      noteHostWrite([{ absPath: path.join(cwd, "engine.js"), data: js }], this.revealWriter);
     } catch { /* the fallback rescues it by inlining */ }
   }
 
@@ -3990,6 +3992,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.archiveAdultPage(checked.html, opts?.streamId);
     // Swap the engine in **after** the archive is done (the archived copy takes the
     // old engine inlined).
+    // REQ-STUDIO-ARTIFACT-PROVENANCE — the coach's own output (this turn's answer or tool) is the AI's;
+    // a prebuilt world, a re-shown or a clicked-to-run page is Studio's write (its bytes' author is not recorded).
+    const writer: HostWriteActor = opts?.artifactSource === "assistant_response" || opts?.artifactSource === "assistant_tool" ? "ai" : "studio";
+    this.revealWriter = writer;
     if (opts?.engineJs !== undefined) await this.saveEngineToWorkspace(opts.engineJs, opts?.streamId);
     // REQ-STUDIO-FOLDER-CONSENT — not saved (읽기만): the live server would show the old file, so the reply renders from memory.
     const saved = await this.saveGameToWorkspace(checked.html, opts?.streamId);
@@ -4543,19 +4549,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private provenanceRecorder(): ArtifactProvenanceRecorder | null {
     const base = this.context?.globalStorageUri?.fsPath;
     if (!base) return null;
-    return (this.provenance ??= new ArtifactProvenanceRecorder(base));
-  }
-
-  /**
-   * REQ-STUDIO-ARTIFACT-PROVENANCE — Studio itself wrote into the work folder while no coach turn ran
-   * (a preview save, the learning wiki). Those bytes are neither the coach turn's nor the learner's,
-   * so the window is marked unobserved and they read 기록 없음 instead of 내가 고침.
-   */
-  private provenanceHostWrote(): void {
-    if (this.hasActiveStream()) return; // inside a turn window the turn's own diff names it
-    const cwd = this.resolveCoachCwd();
-    const recorder = this.provenanceRecorder();
-    if (cwd && recorder) void fs.promises.realpath(cwd).then((root) => recorder.unobserved(root)).catch(() => undefined);
+    if (!this.provenance) {
+      const recorder = new ArtifactProvenanceRecorder(base);
+      this.provenance = recorder;
+      // The one host-write hook (noteHostWrite) lands in this recorder, for the folder the coach stands in.
+      setHostWriteSink((writes, actor) => { const cwd = this.resolveCoachCwd(); if (cwd) void recorder.hostWrote(cwd, writes, actor); });
+    }
+    return this.provenance;
   }
 
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — the work folder's provenance list; `observe` rescans when no turn runs. Never throws. */
@@ -4568,8 +4568,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const root = await fs.promises.realpath(cwd);
         const idle = () => !this.hasActiveStream() && this.pendingSends === 0 && !this.turnRestoreBusy && !this.taskChanging && !this.verifySession?.running;
         let scan: Awaited<ReturnType<typeof scanFolder>> | undefined;
-        if (observe && idle()) scan = await scanFolder(root);
-        view = await recorder.view(root, scan?.complete && idle() ? scan.files : undefined);
+        // Only files whose size, mtime or inode changed since the last list are read again.
+        if (observe && idle()) scan = await scanFolder(root, { cache: recorder.scanCache(root) });
+        view = await recorder.view(root, scan?.complete && idle() ? scan : undefined);
       }
     } catch { view = null; }
     await this.post({ type: "artifactProvenance", view });
@@ -4632,7 +4633,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       const changes = diffRestorePoint(handle.point, now);
-      await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now.files);
+      await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now);
       void this.postArtifactProvenance(false);
       if (changeCount(changes) === 0) { await dropRestorePoint(handle.store, handle.point.id); return; }
       this.turnReview = {
@@ -4686,7 +4687,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const out = await restoreToPoint({ store: review.store, root: review.root, point: review.point, beforeRestoreId: `${review.point.id}-before-restore-${Date.now()}` });
       if (out.touched) {
         const after = await scanFolder(review.root).catch(() => null);
-        await this.provenanceRecorder()?.reverted(review.root, review.point, after?.complete ? after.files : null);
+        await this.provenanceRecorder()?.reverted(review.root, review.point, after?.complete ? after : null);
       }
       review.view = {
         ...review.view,
@@ -5699,7 +5700,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // paths. The same lines go into the saved history, so later turns can still name them.
     const attachedNote = this.commitAttachedImages(attachments, streamId);
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
-    this.provenanceRecorder()?.noteUploaded([...savedImages.relPaths, ...imagePathsFromNotes(attachedNote)]);
+    const uploadRoot = this.resolveCoachCwd();
+    if (uploadRoot) noteHostWrite([...(savedImages.relPaths ?? []), ...imagePathsFromNotes(attachedNote)].map((rel) => ({ absPath: path.join(uploadRoot, ...rel.split("/")) })), "learner_upload");
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
     const requestSnapshot = this.turnRequests.get(userId);
     if (requestSnapshot) requestSnapshot.message.content = historyText;
@@ -5737,6 +5739,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // re-surfaces a fresh toolLog warning (new randomId each chunk → warning
     // spam, no UI dedup). Retry ONLY when the extracted html actually changed.
     let lastAttemptedHtml = "";
+    // REQ-STUDIO-ARTIFACT-PROVENANCE — reveal writes still in flight; the post-turn scan waits for them.
+    const pendingReveals: Promise<unknown>[] = [];
     const tryReveal = (text: string) => {
       if (generalBrowserRequest || revealed) return;
       const html = extractRenderableHtml(text);
@@ -5744,11 +5748,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (html === lastAttemptedHtml) return; // unchanged → don't re-warn
       lastAttemptedHtml = html;
       revealed = true; // optimistic — stop later chunks from re-revealing
-      void this.revealBuilt(html, { streamId, artifactSource: "assistant_response" }).then((ok) => {
+      pendingReveals.push(this.revealBuilt(html, { streamId, artifactSource: "assistant_response" }).then((ok) => {
         // #359 — a blocked (still-broken after repair) build didn't ship;
         // let a later, CORRECTED (different) HTML block in the same stream try.
         if (!ok) revealed = false;
-      });
+      }).catch(() => undefined));
     };
     // #173 — accumulate citations across the stream so they persist to history.
     const assistantCitations: import("./protocol").Citation[] = [];
@@ -6540,6 +6544,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       });
       if (this.effortTurn?.id === streamId) void this.refreshEffortResult().catch(() => { /* panel may have closed */ });
       // AE-15 — also after a stop or a failure: whatever the turn changed is offered for review.
+      // A reveal started during the stream may still be writing index.html: let it land (bounded) before the scan.
+      if (pendingReveals.length) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([Promise.allSettled(pendingReveals), new Promise((r) => { timer = setTimeout(r, 10_000); })]);
+        clearTimeout(timer);
+      }
       await this.endTurnRestore(turnRestorePoint, streamId);
       this.activeStreams.delete(streamId);
       // cr-verify — the run this turn carried takes no more coach calls once the turn ends.

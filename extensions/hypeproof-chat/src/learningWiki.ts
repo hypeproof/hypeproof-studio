@@ -15,6 +15,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { createHash } from "crypto";
+import { noteHostWrite, type HostWriteActor } from "./artifactProvenance.ts";
 
 /** The cohort's specialization, as /v1/profile serves it under `learning_wiki.plan`. Every field is optional. */
 // The plan shape lives in protocol.ts (the webview build imports protocol.ts and has no Node types).
@@ -461,13 +462,17 @@ export function renderWikiPages(s: WikiState, plan?: LearningWikiPlan): Record<s
 
 export function saveState(dir: string, s: WikiState): void {
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, STATE_FILE), JSON.stringify(s, null, 1), "utf8");
+  const text = JSON.stringify(s, null, 1);
+  fs.writeFileSync(path.join(dir, STATE_FILE), text, "utf8");
+  noteHostWrite([{ absPath: path.join(dir, STATE_FILE), data: text }], "studio");
 }
 
-export function writeFiles(dir: string, files: Record<string, string>): void {
+/** `writer`: "ai" when the pages carry a model's proposal, "studio" for templates (REQ-STUDIO-ARTIFACT-PROVENANCE). */
+export function writeFiles(dir: string, files: Record<string, string>, writer: HostWriteActor = "studio"): void {
   for (const [rel, content] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
     fs.writeFileSync(path.join(dir, rel), content, "utf8");
+    noteHostWrite([{ absPath: path.join(dir, rel), data: content }], writer);
   }
 }
 
@@ -510,6 +515,7 @@ export function archiveNotes(dir: string, notes: Record<string, string>): void {
     let target = path.join(dir, "raw", n);
     for (let i = 2; fs.existsSync(target) && fs.readFileSync(target, "utf8") !== text; i++) target = path.join(dir, "raw", `${path.basename(n, ext)}-${i}${ext}`);
     fs.writeFileSync(target, text, "utf8");
+    noteHostWrite([{ absPath: target, data: text }], "studio"); // the learner's note, moved by Studio
     try { fs.unlinkSync(path.join(dir, "notes", n)); } catch {}
   }
 }

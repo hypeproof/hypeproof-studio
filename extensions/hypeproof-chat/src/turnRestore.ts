@@ -108,11 +108,18 @@ function skipDir(name: string): boolean {
   return TURN_RESTORE_SKIP_DIRS.includes(name);
 }
 
+/** One cached hash: reused while the file's size, mtime and inode are unchanged. */
+export interface ScanCacheEntry { size: number; mtimeMs: number; ino: number; sha256: string }
+
 /**
  * Walk the folder. `onFile` receives each covered file's bytes as it is read (so a restore point
  * copies one file at a time instead of holding the whole folder in memory).
  */
-export async function scanFolder(root: string, opts: { limits?: Partial<TurnRestoreLimits>; onFile?: (sha256: string, data: Buffer) => Promise<void> } = {}): Promise<FolderScan> {
+export async function scanFolder(root: string, opts: { limits?: Partial<TurnRestoreLimits>; onFile?: (sha256: string, data: Buffer) => Promise<void>; cache?: Map<string, ScanCacheEntry> } = {}): Promise<FolderScan> {
+  // `cache` (REQ-STUDIO-ARTIFACT-PROVENANCE list path only): a file whose size, mtime and inode match
+  // its entry is not read again. Never used with `onFile`, which needs the bytes.
+  const cache = opts.onFile ? undefined : opts.cache;
+  const seen = new Set<string>();
   const limits = { ...TURN_RESTORE_LIMITS, ...opts.limits };
   const files: ManifestFile[] = [];
   const dirs: string[] = [];
@@ -143,16 +150,25 @@ export async function scanFolder(root: string, opts: { limits?: Partial<TurnRest
       if (st.size > limits.fileMax) { notCovered.push({ path: rel, reason: "too_large", size: st.size }); continue; }
       if (files.length >= limits.filesMax) { notCovered.push({ path: rel, reason: "file_cap", size: st.size }); continue; }
       if (total + st.size > limits.totalMax) { notCovered.push({ path: rel, reason: "total_cap", size: st.size }); continue; }
+      const hit = cache?.get(rel);
+      if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs && hit.ino === st.ino) {
+        seen.add(rel);
+        total += st.size;
+        files.push({ path: rel, size: st.size, sha256: hit.sha256 });
+        continue;
+      }
       let data: Buffer;
       try { data = await fs.readFile(abs); } catch { notCovered.push({ path: rel, reason: "unreadable", size: st.size }); continue; }
       if (data.length > limits.fileMax) { notCovered.push({ path: rel, reason: "too_large", size: data.length }); continue; }
       const hash = sha256(data);
       total += data.length;
       files.push({ path: rel, size: data.length, sha256: hash });
+      if (cache) { cache.set(rel, { size: data.length, mtimeMs: st.mtimeMs, ino: st.ino, sha256: hash }); seen.add(rel); }
       if (opts.onFile) await opts.onFile(hash, data);
     }
   };
   await walk(path.resolve(root), "");
+  if (cache) for (const k of [...cache.keys()]) if (!seen.has(k)) cache.delete(k);
   files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   dirs.sort();
   return { files, dirs, notCovered, complete, digest: manifestDigest(files) };
