@@ -537,6 +537,60 @@ and placeholder follow the theme's own colours), the Light+ separation exception
 whose background is set only by a rule without `input`/`textarea` in its selector, the HP rail cards drawn with `--hp-ink` on the
 theme background under non-HP themes, and a recorded keyboard walk in the built app.
 
+`REQ-STUDIO-FOCUS-RESTORE` (CGP-DS-R-023 / REQ-CGP-DS-25, 2026-10-20; extends
+[SX-52](requirements/studio-learning-experience.md) and DES-06), personal and classroom chat
+webview. Every dialog, popover, menu and closable inline surface follows one focus contract,
+implemented once in `webview-ui/src/dialogFocus.ts` (`useDialogFocus`, plus the primitives the task
+workspace uses for its own panels). On open, focus moves inside: to an explicit target, else the
+first actionable element, else the heading, else the surface. On close by Escape, by its close
+button or by a press outside, focus returns to the element that opened it. If that element is gone,
+disabled, hidden or inert, focus goes to the surface's own fallback and then to the composer
+(`.hps-input textarea`). Focus never ends on `<body>`. A press outside that lands on a control
+leaves focus on that control, because the learner chose it; a press anywhere else returns focus to
+the opener. A modal keeps Tab inside: it wraps at both ends, and focus that strays outside is pulled
+back. A popover lets Tab leave: the popover closes and Tab continues from its opener. Escape during
+an IME composition never closes anything (CGP-DS-R-027). Surfaces:
+
+| Surface | Kind | Closes by | Focus returns to |
+|---|---|---|---|
+| Tools menu (도구 열기) | popover menu | Escape, outside press, Tab, an item | 도구 열기 (Tab continues to the composer) |
+| Task menu (대화 메뉴) | popover menu | Escape, outside press, Tab, an item | 대화 메뉴 |
+| Settings (대화 설정, native `<dialog>`) | modal | Escape, ×, backdrop press | its opener (the 대화 메뉴 toggle), else the composer |
+| Sources panel, narrow (≤1050px) | modal | Escape, ×, backdrop | the citation or 자료 that opened it; a removed citation falls back to 자료 |
+| Task list, phone (≤700px) | modal | Escape, 작업 목록 닫기, outside press | the list toggle |
+| Edit box (수정) | inline | Escape, 취소 | that message's 수정, else the composer |
+| Rename | inline | Escape, 취소, 저장 | the task title, else the composer |
+| Capability-change card | inline (no opener) | 알겠어요 | the composer |
+| Verify panel (내 제품 테스트) | inline, opened by the host | 테스트 창 닫기 | the element focused before it opened, else the composer; it takes focus on open only when nothing holds it |
+| Quote action (인용하기) | transient button over a selection | Escape | the composer (REQ-STUDIO-QUOTE-REPLY) |
+
+Two browser facts shape the module. First, React puts focus back on an element that is still in the
+document after its commit, so a surface that stays mounted (the native dialog, the rail) is handed
+back again in a microtask. Second, an outside press blurs to `<body>` after `pointerdown`, so there
+is a check on the next frame too. The wide sources panel (above 1050px) is a side panel, not a
+popover: it stays open on an outside press, and its close keeps the REQ-STUDIO-TASK-WORKSPACE return
+to its trigger. The capability card (여기서 AI가 할 수 있는 일) is a native `<details>` disclosure, so
+focus stays on its summary. Visual change: none, except that the existing `--hp-ring`
+(REQ-STUDIO-FOCUS-AND-PLACEHOLDER) is now drawn on the opener after a close, where focus used to be
+lost. SX-52 audit (non-destructive modals that SX-52 would make inline). Settings stays a modal
+dialog, because REQ-CGP-DS-25 reserves dialogs for settings and destructive flows. The narrow
+sources dialog and the phone task list are modal only because the window has no room for a second
+column. Making them non-modal overlays is a follow-up, not a trivial change. Host-side VS Code
+modals are outside this webview contract and VS Code restores their focus. The non-destructive ones
+are the external-skill "선택하여 사용" confirmations, the start page's "현재 활동 연결 / 폴더만 열기"
+choice and the update offer; they are listed as SX-52 follow-ups. Approval, consent and delete
+confirmations stay modal (the manual-approve gate). Test: `test/dialog-focus.test.tsx`
+(`npm run test:dialog-focus`) mounts the real ChatPanel, TaskWorkspace and VerifyPanel on
+`test/fixtures/mini-dom.mjs`. The fixture now drops focus to `<body>` when the focused element is
+removed, as a browser does, and models `<dialog>` open/close. For each surface the test opens it,
+closes it by each of its routes and checks where focus is. It also covers an opener that was
+removed (composer, or 자료 for a citation), Tab wrapping in the settings, sources and harness
+modals, and Tab leaving both menus. It has negative controls: a surface without the hook leaves
+focus on `<body>`, and an IME Escape does not close. Not covered: the unmounted `VoicePanel` (a
+non-modal dialog not yet wired into the app); the curriculum-runtime inline panels (publish,
+evidence, memory, skills, review), which still drop focus on close (follow-up); Chalk; VS Code
+native dialogs; a recorded keyboard walk with a screen reader in the built app.
+
 CGP-DS-R-015 (2026-10-19), extending CP-R1's "disabled under reduced motion": an explicit
 preference wins over the OS default. With VS Code's `workbench.reduceMotion` set to "on", every
 Studio webview (chat panel, start page, local review) renders with `data-reduced-motion="true"`

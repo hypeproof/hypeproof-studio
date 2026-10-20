@@ -2,9 +2,10 @@
 // editor, and the version pager. Rules (which line, which version, what the model sees) live in
 // src/editResend.ts; this file only draws them.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { VersionPager as Pager } from "../../src/editResend";
 import { imeComposing } from "./imeGuard";
+import { useDialogFocus } from "./dialogFocus";
 
 export const EDIT_LABEL = "보낸 메시지 수정";
 export const REVERT_NOTE = "이전 답변이 바꾼 파일은 그대로예요. 되돌리려면 그 답변의 되돌리기를 쓰세요.";
@@ -41,8 +42,14 @@ export function EditPrompt({ text, images, revertNote, onCancel, onSave, onChang
   const [kept, setKept] = useState(images);
   const area = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { area.current?.focus({ preventScroll: true }); }, []);
+  // REQ-STUDIO-FOCUS-RESTORE: closing returns focus to this message's 수정 (drawn again after the
+  // editor goes), or to the composer when the message is gone.
+  const box = useRef<HTMLDivElement>(null);
+  const row = useRef<Element | null>(null);
+  useLayoutEffect(() => { row.current = box.current?.closest(".hps-msg") ?? null; }, []);
+  useDialogFocus(box, { open: true, kind: "inline", initialFocus: false, opener: () => row.current?.isConnected ? row.current.querySelector<HTMLElement>(".hps-edit-prompt") : null });
   const save = () => { if (value.trim()) onSave(value, kept); };
-  return <div className="hps-edit-box" role="group" aria-label={EDIT_LABEL}>
+  return <div ref={box} className="hps-edit-box" role="group" aria-label={EDIT_LABEL}>
     {kept.length > 0 && <div className="hps-msg-images">
       {kept.map((url, i) => <span key={i} className="hps-edit-image">
         <img src={url} alt={`첨부 이미지 ${i + 1}`} />

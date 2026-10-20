@@ -28,6 +28,7 @@ import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
+import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
 import { replyChoices } from './replyChoiceParser';
 import { activityDetail, activityLabel, trialHeaderLine } from "./activityLabel";
@@ -50,7 +51,7 @@ import { isObservationFormat, showsObservationResults } from '../../src/nativeOb
 import { CodeBlock, CodeBlockScope } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { Children, cloneElement, Fragment, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
 import type {
@@ -2015,7 +2016,11 @@ function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilitie
 
 /** CGP-SHELL-R-024: one calm line per change, in the REQ-M47 card's words; "알겠어요" closes it for good. */
 function CapabilityChangeCard({ change, onDismiss }: { change: NonNullable<ChatConfig['capabilityChange']>; onDismiss: (id: string) => void }) {
-  return <div className="hps-stop-notice hps-capability-change" role="status" aria-live="polite" data-capability-change={change.id}>
+  // REQ-STUDIO-FOCUS-RESTORE: the system shows it (no opener, no focus taken); when 알겠어요 removes
+  // it, focus goes to the composer instead of <body>.
+  const card = useRef<HTMLDivElement>(null);
+  useDialogFocus(card, { open: true, kind: 'inline', initialFocus: false });
+  return <div ref={card} className="hps-stop-notice hps-capability-change" role="status" aria-live="polite" data-capability-change={change.id}>
     <span className="hps-stop-notice-icon"><ChatIcon kind="info" size={16} /></span>
     <div>
       <p>{CAPABILITY_CHANGE_COPY.title}</p>
@@ -2981,22 +2986,20 @@ export function HeaderActions({ personal, taskId, children }: { personal: boolea
   const items = () => [...(panel.current?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? [])];
   const close = (restore = false) => { setOpen(false); if (restore) toggle.current?.focus({ preventScroll: true }); };
   useEffect(() => { setOpen(false); }, [personal, taskId]);
-  useEffect(() => {
+  // REQ-STUDIO-FOCUS-RESTORE: Escape, an outside press and Tab close the menu; focus returns to its
+  // toggle (Tab then moves on from there). The first (or, from ArrowUp, the last) item takes focus.
+  useDialogFocus(panel, { open: personal && open, kind: 'popover', scope: root, opener: () => toggle.current, initialFocus: false, onDismiss: () => setOpen(false) });
+  useLayoutEffect(() => {
     if (!personal || !open) return;
     const choices = items();
     (firstFocus.current === 'last' ? choices.at(-1) : choices[0])?.focus({ preventScroll: true });
-    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false); };
-    document.addEventListener('pointerdown', outside);
-    return () => document.removeEventListener('pointerdown', outside);
   }, [personal, open]);
   if (!personal) return <div className="hps-actions">{children}</div>;
   return <div className="hps-actions tw-chat-menu" ref={root} onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }} onKeyDown={event => {
     if (!open || event.defaultPrevented || imeComposing(event)) return;
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
-    else if (event.key === 'Tab') close(true);
-    else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
       const choices = items();
       if (!choices.length) return;
       event.preventDefault();

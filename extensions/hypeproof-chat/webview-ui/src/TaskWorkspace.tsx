@@ -10,6 +10,7 @@ export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
 import { imeComposing } from './imeGuard';
 import { ArtifactProvenanceList } from './ArtifactProvenanceList';
+import { actionable, returnFocus, returnFocusSoon, returnTarget, trapTab } from './dialogFocus';
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 
 interface Props {
@@ -82,6 +83,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const rail = useRef<HTMLElement>(null);
   const sourcePanel = useRef<HTMLElement>(null);
   const sourceToggle = useRef<HTMLButtonElement>(null);
+  const railToggle = useRef<HTMLButtonElement>(null);
   const sourceTrigger = useRef<HTMLElement | null>(null);
   const requestRef = useRef<SourceRequest | null>(null);
   const requestTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -234,7 +236,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     const focus = pendingFocus.current, origin = closingFocus.current;
     pendingFocus.current = null;
     closingFocus.current = null;
-    const target = focus === 'source-title' ? (sourcePanel.current?.querySelector<HTMLElement>('#task-source-title') ?? sourcePanel.current?.querySelector<HTMLElement>('.tw-source-close')) : focus;
+    // REQ-STUDIO-FOCUS-RESTORE: closing returns to the opener (a citation or 자료); an opener that
+    // is gone falls back to 자료, then the composer.
+    const target = focus === 'source-title' ? (sourcePanel.current?.querySelector<HTMLElement>('#task-source-title') ?? sourcePanel.current?.querySelector<HTMLElement>('.tw-source-close')) : focus ? returnTarget(focus, sourceToggle.current) : null;
     const focusOrigin = origin ?? document.activeElement;
     if (target?.isConnected) requestAnimationFrame(() => {
       // Both opening and closing yield to a newer editing target while the frame waits.
@@ -258,8 +262,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     const railWasInert = rail.current?.inert ?? false;
     if (main.current) main.current.inert = true;
     if (rail.current && sourceDialog) rail.current.inert = true;
-    const focusable = () => [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]')].filter(element => element.getClientRects().length > 0);
-    (focusable()[0] ?? dialog).focus({ preventScroll: true });
+    (actionable(dialog)[0] ?? dialog).focus({ preventScroll: true });
     const key = (event: KeyboardEvent) => {
       // CGP-DS-R-027: a native listener sees composer keys too; composition keys belong to the IME.
       if (event.isComposing || event.keyCode === 229) return;
@@ -267,21 +270,18 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         event.preventDefault();
         event.stopPropagation();
         if (sourceDialog) closeSources(); else setRailOpen(false);
-      } else if (event.key === 'Tab') {
-        const items = focusable(), first = items[0], last = items.at(-1);
-        if (!first || !last) { event.preventDefault(); dialog.focus({ preventScroll: true }); return; }
-        const position = items.indexOf(document.activeElement as HTMLElement);
-        if (position === -1 || event.shiftKey && document.activeElement === first || !event.shiftKey && document.activeElement === last) {
-          event.preventDefault(); (event.shiftKey ? last : first).focus({ preventScroll: true });
-        }
-      }
+      } else trapTab(event, dialog);
     };
+    // The phone-width task list has no backdrop: a press outside it (on the inert page) closes it.
+    const outside = (event: PointerEvent) => { if (!sourceDialog && event.target instanceof Node && !dialog.contains(event.target)) setRailOpen(false); };
     dialog.addEventListener('keydown', key);
+    document.addEventListener('pointerdown', outside);
     return () => {
       dialog.removeEventListener('keydown', key);
+      document.removeEventListener('pointerdown', outside);
       if (main.current) main.current.inert = mainWasInert;
       if (rail.current) rail.current.inert = railWasInert;
-      if (!sourceDialog && restore?.isConnected) restore.focus({ preventScroll: true });
+      if (!sourceDialog) returnFocusSoon(dialog, restore, railToggle.current);
     };
   }, [sourceDialog, railDialog, closeSources]);
   const restoreRenameFocus = (target: () => HTMLElement | null) => {
@@ -291,7 +291,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     requestAnimationFrame(() => {
       // A delayed result must not interrupt typing or a later task/panel choice.
       if (current.current.scopeKey !== owner || (document.activeElement !== origin && document.activeElement !== document.body)) return;
-      target()?.focus({ preventScroll: true });
+      // REQ-STUDIO-FOCUS-RESTORE: the title, else the composer, never <body>.
+      returnFocus(target);
     });
   };
   const finishRename = () => {
@@ -388,7 +389,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     </nav>
     <section ref={main} className="tw-main" aria-label="작업 공간">
       <header className="tw-heading">
-        <button className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}><ChatIcon kind="menu" size={20} /></button>
+        <button ref={railToggle} className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}><ChatIcon kind="menu" size={20} /></button>
         {renaming ? <form ref={renameForm} className="tw-rename" onSubmit={event => { event.preventDefault(); submitRename(); }}>
           <input ref={titleInput} aria-label="작업 이름" name="task-title" autoComplete="off" maxLength={100} readOnly={!!renamePending} aria-describedby={renameError ? 'task-rename-error' : undefined} value={title} onChange={event => setTitle(event.target.value)} onKeyDown={event => {
             // IME confirmation must not trigger the form's implicit submit.

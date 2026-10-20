@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { TurnToolMode } from '../../src/turnTools';
 import { denialCopy } from '../../src/denialSource';
 import { ChatIcon } from './ChatDetails';
+import { useDialogFocus } from './dialogFocus';
 
 /** Selection belongs to the next draft. Execution status comes from host tool events. */
 export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAttachFile, webSearchItem = true }: {
@@ -20,19 +21,13 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const close = () => { setOpen(false); trigger.current?.focus({ preventScroll: true }); };
-  useEffect(() => {
-    if (!open) return;
-    menu.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
-    const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
-    document.addEventListener('pointerdown', outside);
-    return () => document.removeEventListener('pointerdown', outside);
-  }, [open]);
+  // REQ-STUDIO-FOCUS-RESTORE: first item on open; Escape, an outside press and Tab close it and
+  // focus returns to 도구 열기 (Tab then moves on from there, to the composer).
+  useDialogFocus(menu, { open, kind: 'popover', scope: root, opener: () => trigger.current, onDismiss: () => setOpen(false) });
   const reason = locked ? '예약한 메시지를 보내거나 입력창으로 가져온 뒤 변경할 수 있습니다.' : webSearch?.reason || denialCopy({ source: 'unknown', feature: '웹 검색' }, 'neutral');
   return <div ref={root} className="hps-composer-tools">
     <button ref={trigger} type="button" className="hps-tool-trigger" aria-label="도구 열기" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}><ChatIcon kind="plus" /></button>
     {open && <div ref={menu} className="hps-tools-menu" role="menu" aria-label="메시지 도구" onKeyDown={event => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
-      if (event.key === 'Tab') { event.preventDefault(); close(); if (!event.shiftKey) root.current?.closest('.hps-input')?.querySelector('textarea')?.focus({ preventScroll: true }); return; }
       if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
       const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];

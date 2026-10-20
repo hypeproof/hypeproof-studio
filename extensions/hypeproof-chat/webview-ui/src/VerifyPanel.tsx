@@ -4,8 +4,9 @@
 // decides nothing: the 1–5 rule, the confirmation of coach proposals, the verdicts and the
 // "검증됨" state are the host's, recomputed from the record on every post. A disabled
 // button here is a picture, not a lock (the host refuses the same things by name).
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
+import { useDialogFocus } from "./dialogFocus";
 import type { VerifyView } from "../../src/verifyView";
 
 type ReportCriterion = VerifyView["held"][number];
@@ -53,6 +54,10 @@ export function VerifyPanel(props: {
   onClose(): void;
 }) {
   const { view } = props;
+  // REQ-STUDIO-FOCUS-RESTORE: the host opens this inline panel. Focus moves in only when nothing
+  // holds it; closing returns focus to whatever had it before, else the composer.
+  const panel = useRef<HTMLElement>(null);
+  useDialogFocus(panel, { open: true, kind: "inline", initialFocus: "idle" });
   const [drafts, setDrafts] = useState<Draft[]>([{ text: "", proposed_by: "student", confirmed: true }]);
   const [fixText, setFixText] = useState<Record<string, string>>({});
   const disabled = props.busy || view.running || !view.available;
@@ -115,7 +120,7 @@ export function VerifyPanel(props: {
   );
 
   return (
-    <section className="hps-verify" aria-label="내 제품 테스트" data-testid="verify-panel">
+    <section ref={panel} className="hps-verify" aria-label="내 제품 테스트" data-testid="verify-panel">
       <header className="hps-verify-head">
         <strong>내 제품 테스트</strong>
         <span className={`hps-verify-state hps-verify-state-${view.verification.state}`} data-testid="verify-status" data-state={view.verification.state}>
