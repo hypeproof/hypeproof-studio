@@ -5,8 +5,9 @@
 // how many times a device came back, are the Service's. Opening an observed claim shows the
 // participant sessions and notes it cites (CR-27); a reference that no longer resolves reads
 // "확인 필요". Counts of returns are per device, never per person (CR-72).
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
+import { useDialogFocus } from "./dialogFocus";
 import type { EvidenceItemView, EvidenceView, NoteForm } from "../../src/evidenceView";
 import { NOTE_KIND_CHOICES, REVIEW_LABEL, SECTION_LABEL, SOURCE_STATE_CHOICES, claimSources, noteFormProblems } from "../../src/evidenceView";
 
@@ -76,6 +77,9 @@ export function EvidencePanel(props: {
   onDelete(experimentId: string, sessionId?: string): void;
   onClose(): void;
 }) {
+  // REQ-STUDIO-FOCUS-RESTORE: host-opened inline panel; closing returns focus, never to <body>.
+  const panel = useRef<HTMLElement>(null);
+  useDialogFocus(panel, { open: true, kind: "inline", initialFocus: "idle" });
   const { view } = props;
   const [note, setNote] = useState<NoteForm>(EMPTY_NOTE);
   const exp = view.experiments.find((e) => e.id === view.selected) ?? null;
@@ -84,7 +88,7 @@ export function EvidencePanel(props: {
   const noteReady = noteFormProblems(note).length === 0 && (!comparison || !!note.variant);
   const disabled = props.busy || !view.available || !exp || exp.data_deleted;
   return (
-    <section className="hps-evidence" data-testid="evidence-panel" aria-label="실험 증거">
+    <section ref={panel} className="hps-evidence" data-testid="evidence-panel" aria-label="실험 증거">
       <header>
         <strong>실험 증거</strong>
         <button type="button" onClick={props.onClose} aria-label="닫기"><ChatIcon kind="close" size={16} /></button>

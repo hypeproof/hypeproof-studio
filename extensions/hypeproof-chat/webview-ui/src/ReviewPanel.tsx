@@ -5,8 +5,9 @@
 // stale, what a claim rests on and whether that source still exists are the Service's. The AI's
 // suggestion is its own section and says so; a stale section is marked; every claim opens the
 // records it names; a director's decision is written only from the pack revision on screen.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
+import { useDialogFocus } from "./dialogFocus";
 import type { DirectorDecisionForm, NextExperimentForm, ReviewAnswer, ReviewItemView, ReviewSectionView, ReviewSourceView, ReviewView } from "../../src/reviewView";
 import { MARK_LABEL, METHOD_CHOICES, STATUS_LABEL, directorFormProblems, packChoices, sectionTitle, suggestedNext, timingLine } from "../../src/reviewView";
 
@@ -226,11 +227,14 @@ export function ReviewPanel(props: {
   onDecide(projectId: string, week: number, revision: number, form: DirectorDecisionForm): void;
   onClose(): void;
 }) {
+  // REQ-STUDIO-FOCUS-RESTORE: host-opened inline panel; closing returns focus, never to <body>.
+  const panel = useRef<HTMLElement>(null);
+  useDialogFocus(panel, { open: true, kind: "inline", initialFocus: "idle" });
   const { view } = props;
   const director = view.mode === "director";
   const review = view.review;
   return (
-    <section className="hps-evidence" data-testid="review-panel" data-mode={view.mode} aria-label={director ? "주간 리뷰 (디렉터)" : "주간 리뷰"}>
+    <section ref={panel} className="hps-evidence" data-testid="review-panel" data-mode={view.mode} aria-label={director ? "주간 리뷰 (디렉터)" : "주간 리뷰"}>
       <header>
         <strong>{director ? "주간 리뷰 · 디렉터" : "주간 리뷰"}</strong>
         <button type="button" onClick={props.onRefresh} disabled={props.busy || view.running || props.deciding === true}>새로 불러오기</button>

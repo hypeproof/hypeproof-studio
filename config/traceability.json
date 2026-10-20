@@ -6855,6 +6855,20 @@
       ]
     },
     {
+      "id": "ST-TEST-FOCUS-RESTORE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-REQ-SX"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/dialog-focus.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-STROKE-ICONS",
       "stage": "test",
       "owner": "jayleekr",

@@ -46,7 +46,13 @@ class Node {
     child.parentNode?.removeChild(child);
     child.parentNode = this; this.childNodes.splice(this.childNodes.indexOf(ref), 0, child); return child;
   }
-  removeChild(child) { const i = this.childNodes.indexOf(child); if (i >= 0) this.childNodes.splice(i, 1); child.parentNode = null; return child; }
+  removeChild(child) {
+    const i = this.childNodes.indexOf(child); if (i >= 0) this.childNodes.splice(i, 1); child.parentNode = null;
+    // As in a browser: removing the focused element (or an ancestor) leaves focus on <body>.
+    const doc = this.ownerDocument ?? this;
+    if (doc.activeElement && doc.activeElement !== doc.body && child.contains(doc.activeElement)) doc.activeElement = doc.body;
+    return child;
+  }
   append(...nodes) { for (const n of nodes) this.appendChild(typeof n === "string" ? this.ownerDocument.createTextNode(n) : n); }
   remove() { this.parentNode?.removeChild(this); }
   contains(node) { for (let n = node; n; n = n.parentNode) if (n === this) return true; return false; }
@@ -129,6 +135,9 @@ class Element extends Node {
   scrollTo() {} scrollBy() {} scrollIntoView() {} select() {}
   setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
   focus() { this.ownerDocument.activeElement = this; }
+  // <dialog>: open state only (no top layer, no native focus moves). close() fires "close" as a browser task would.
+  showModal() { this.open = true; this.setAttribute("open", ""); }
+  close() { if (!this.open) return; this.open = false; this.removeAttribute("open"); setTimeout(() => this.dispatchEvent({ type: "close", bubbles: false, preventDefault() {}, stopPropagation() {} }), 0); }
   blur() { if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = this.ownerDocument.body; }
   /** Depth-first list of descendant elements matching `test`. */
   findAll(test) {

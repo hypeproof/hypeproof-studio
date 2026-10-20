@@ -4,8 +4,9 @@
 // result the Service accepted, or why it refused the AI's answer. It decides nothing: whether
 // an answer keeps the skill's rules, and what is stored, are the Service's (CR-44). The week's
 // question is the curriculum data the Service serves, never a string in this file (CR-45).
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
+import { useDialogFocus } from "./dialogFocus";
 import type { SkillForm, SkillsView } from "../../src/skillView";
 import { problemLine, skillFormProblems } from "../../src/skillView";
 
@@ -18,6 +19,9 @@ export function SkillsPanel(props: {
   onRun(skill: string, form: SkillForm): void;
   onClose(): void;
 }) {
+  // REQ-STUDIO-FOCUS-RESTORE: host-opened inline panel; closing returns focus, never to <body>.
+  const panel = useRef<HTMLElement>(null);
+  useDialogFocus(panel, { open: true, kind: "inline", initialFocus: "idle" });
   const { view } = props;
   const [skill, setSkill] = useState("");
   const [form, setForm] = useState<SkillForm>({});
@@ -30,7 +34,7 @@ export function SkillsPanel(props: {
   const toggle = (ref: string, on: boolean) => setForm((f) => ({ ...f, evidence_refs: on ? [...(f.evidence_refs ?? []), ref] : (f.evidence_refs ?? []).filter((x) => x !== ref) }));
   const r = view.result;
   return (
-    <section className="hps-evidence" data-testid="skills-panel" aria-label="커리큘럼 스킬">
+    <section ref={panel} className="hps-evidence" data-testid="skills-panel" aria-label="커리큘럼 스킬">
       <header>
         <strong>커리큘럼 스킬</strong>
         <button type="button" onClick={props.onRefresh} disabled={props.running}>새로 불러오기</button>
