@@ -66,7 +66,7 @@ import {
   summarizeToolInput,
   withCoachSeatLock,
 } from "./sdkCoachHelpers";
-import { commandSignature, describeCommandForApproval } from "./shellPolicy";
+import { describeCommandForApproval, shellApprovalFor } from "./shellPolicy";
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorld, resolveSiteBase } from "./galleryPublish";
 import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
@@ -7421,8 +7421,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     //   otherwise   → normal confirm + the option to remember.
     if (req.kind === "executeShell") {
       const command = (req.payload as { command?: string } | null | undefined)?.command ?? "";
-      const destructive = req.destructive === true;
-      const signature = destructive ? null : commandSignature(command);
+      // REQ-M4a: the flag is re-derived from the command here too and can only
+      // be added, never dropped, so a request without the SDK verdict's flag
+      // still gets the strong confirm.
+      const { destructive, signature } = shellApprovalFor(command, req.destructive === true);
 
       if (signature && this.approvedCommandSignatures.has(signature)) {
         return true;

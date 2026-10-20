@@ -133,6 +133,62 @@
       ]
     },
     {
+      "id": "ST-REQ-SHELL-NORMALISE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## M. Agent SDK coach runtime (#282)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SHELL-NORMALISE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHELL-NORMALISE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/shellWords.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/shellPolicy.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoachHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SHELL-NORMALISE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHELL-NORMALISE",
+        "ST-IMP-SHELL-NORMALISE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/shell-normalise.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/shell-normalise-table.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/shell-policy.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "REQ-STUDIO-DEV-SUBSCRIPTION",
       "stage": "requirement",
       "owner": "jayleekr",

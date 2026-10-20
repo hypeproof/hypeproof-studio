@@ -2588,9 +2588,9 @@ export interface CoachToolAction {
   input: unknown;
   /**
    * epic #431 — carried from the policy verdict so the host can pick the
-   * strong confirm. Computed once in evaluateSdkToolUse rather than re-derived
-   * at the modal, so policy and UI can never disagree about what is
-   * destructive.
+   * strong confirm. Policy and UI read the same function (isDestructiveCommand),
+   * and since REQ-M4a the action mapping and the modal OR this flag with their
+   * own reading of the command: they may add the flag, never drop it.
    */
   destructive?: boolean;
 }
@@ -2708,12 +2708,17 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
   }
 
   if (SHELL_TOOLS.has(name)) {
-    const command = firstString(action.input, ["command"]) ?? safeStringify(action.input);
+    const given = firstString(action.input, ["command"]);
+    const command = given ?? safeStringify(action.input);
+    // REQ-M4a: the verdict's flag is ORed with the policy's own reading of the
+    // command, so the request the modal sees is flagged even when the caller
+    // dropped the verdict. A flag is only ever added here.
+    const destructive = action.destructive === true || (given !== undefined && isDestructiveCommand(given));
     return {
       kind: "executeShell",
       description: `${action.toolName}: ${command}`,
       payload: { command },
-      ...(action.destructive ? { destructive: true } : {}),
+      ...(destructive ? { destructive: true } : {}),
     };
   }
   if (WRITE_TOOLS.has(name)) {
