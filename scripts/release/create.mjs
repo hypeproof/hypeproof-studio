@@ -121,9 +121,18 @@ function main() {
       run('git', 'add', record);
       run('git', 'commit', '-q', '-m', `release: record ${plan.rcTag}`);
       // A later rc of the same version moves the branch to its own candidate.
-      execFileSync('git', ['push', '-q', '--force', 'origin', `HEAD:refs/heads/${plan.branch}`],
-        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: branchPushEnv(releasePrToken, process.env)});
-      say(`Pushed ${plan.branch} with ${record}.`);
+      const push = env => execFileSync('git', ['push', '-q', '--force', 'origin', `HEAD:refs/heads/${plan.branch}`],
+        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env});
+      try {
+        push(branchPushEnv(releasePrToken, process.env));
+        say(`Pushed ${plan.branch} with ${record}.`);
+      } catch (error) {
+        if (!releasePrToken) throw error;
+        // e.g. an App without the workflows permission cannot push workflow changes. The workflow
+        // token still moves the branch; the PR's checks then wait for approval (action_required).
+        push(process.env);
+        say(`Pushed ${plan.branch} with ${record} using the workflow token: the release PR token push failed, so the PR's checks need approval to run.`);
+      }
     }
     if (step === 'pr') {
       try { pr('label', 'create', 'release', '--repo', repo, '--color', '0E8A16', '--description', 'Weekly release PR (release-cut)'); } catch { /* exists */ }
