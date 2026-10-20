@@ -14,6 +14,7 @@
 // surfacing a raw error to the student (REQ-M7).
 
 import { accessRemovedFeatures } from './accessClient.ts';
+import { folderRemovedFeatures } from './folderConsent.ts';
 import { sdkPromptWithImages } from "./visionInput.ts";
 import { requireTurnTools, toolsForTurn, turnToolMode, turnToolsAvailability, userTextForTurn, type TurnToolMode } from './turnTools';
 import { SdkWebCitations } from './sdkWebCitations';
@@ -761,6 +762,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         minor: isMinorProfile(args.profile),
         // Feature keys the selected 이용권 removed: those denies are 이용권 선택, not 수업 설정.
         accessRemoved: accessRemovedFeatures(args.profile),
+        // REQ-STUDIO-FOLDER-CONSENT — what the learner's folder choice removed: 폴더 권한.
+        folderRemoved: folderRemovedFeatures(args.profile),
       });
       if (verdict.decision === "deny") {
         if (verdict.drift) {

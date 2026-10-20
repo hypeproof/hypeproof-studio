@@ -2919,6 +2919,12 @@ export function evaluateSdkToolUse(args: {
    * Only names the source of a Gate 1 deny; never changes the verdict.
    */
   accessRemoved?: ReadonlySet<string>;
+  /**
+   * Feature keys the learner's folder choice removed (folderRemovedFeatures,
+   * REQ-STUDIO-FOLDER-CONSENT): `write`, `shell`, and `publish` for publish_site. Only names
+   * the source of a Gate 1 deny (폴더 권한); never changes the verdict.
+   */
+  folderRemoved?: ReadonlySet<string>;
 }): SdkToolVerdict {
   const { toolName, input, permittedTools, workspaceRoot, audience } = args;
   const canon = args.canonicalize ?? ((p: string) => p);
@@ -2946,6 +2952,11 @@ export function evaluateSdkToolUse(args: {
       return denyVerdict("minor_protection", `tool "${toolName}" is closed to minor seats`, toolName, audience, MINOR_CLOSED_REASON);
     }
     const feature = toolFeatureKey(toolName);
+    // The folder choice is checked first: it is the narrower, later decision for this turn.
+    const folderKey = toolName === MCP_PUBLISH_SITE ? "publish" : feature;
+    if (folderKey && args.folderRemoved?.has(folderKey)) {
+      return denyVerdict("folder_choice_narrowed", `tool "${toolName}" (${folderKey}) was removed by the learner's folder choice`, toolName, audience);
+    }
     if (feature && args.accessRemoved?.has(feature)) {
       return denyVerdict("access_choice_narrowed", `tool "${toolName}" (${feature}) was removed by the selected access choice`, toolName, audience);
     }

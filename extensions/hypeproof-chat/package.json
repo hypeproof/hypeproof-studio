@@ -193,6 +193,10 @@
         "title": "HypeProof: 배포 등록 해제"
       },
       {
+        "command": "hypeproof-chat.changeFolderAiPermission",
+        "title": "HypeProof: 이 폴더의 AI 권한 바꾸기"
+      },
+      {
         "command": "hypeproof-chat.switchProject",
         "title": "HypeProof: 프로젝트 변경",
         "enablement": "hypeproof-chat.sitePublishEnabled"

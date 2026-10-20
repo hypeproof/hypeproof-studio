@@ -43,6 +43,7 @@ const TEACHER_WORDS = ["선생님", ...CLASSROOM_ONLY_WORDS];
     binary_missing: "runtime",
     needs_newer_app: "runtime",
     access_choice_narrowed: "access",
+    folder_choice_narrowed: "folder",
   };
   assert.deepEqual({ ...DS.DENIAL_CAUSES }, expected, "the cause table is exactly the reviewed one");
   for (const [cause, source] of Object.entries(expected)) assert.equal(DS.classifyDenial(cause), source, cause);
@@ -50,7 +51,7 @@ const TEACHER_WORDS = ["선생님", ...CLASSROOM_ONLY_WORDS];
   for (const cause of [undefined, null, "", "not_found", "malformed_call", "orchestrator_off", "toString", "__proto__", "LESSON_FEATURE_OFF"]) {
     assert.equal(DS.classifyDenial(cause), "unknown", `${String(cause)} → unknown`);
   }
-  ok("classifier: 15 causes map to their source; unknown codes, prototype keys and casing variants → unknown");
+  ok("classifier: 16 causes map to their source; unknown codes, prototype keys and casing variants → unknown");
 }
 
 // ── 2. The copy: one frame per source, one next step, seat-aware ──
@@ -73,6 +74,12 @@ const TEACHER_WORDS = ["선생님", ...CLASSROOM_ONLY_WORDS];
   assert.equal(DS.denialCopy({ source: "access", feature: "웹 검색" }, "solo"), access, "access copy has no seat words");
   assert.ok(!access.includes("수업"), "an 이용권 removal never says the lesson decided");
 
+  // 폴더 권한 (REQ-STUDIO-FOLDER-CONSENT): the learner's own folder choice, the same on every seat.
+  const folder = DS.denialCopy({ source: "folder", feature: "명령 실행" });
+  assert.equal(folder, "이 폴더에서는 명령 실행을 쓰지 않기로 골랐어요. 바꾸려면 ‘이 폴더의 AI 권한 바꾸기’에서 다시 골라 주세요.");
+  assert.equal(DS.denialCopy({ source: "folder", feature: "명령 실행" }, "solo"), folder, "folder copy has no seat words");
+  assert.ok(!folder.includes("수업") && !folder.includes("이용권") && !folder.includes("안전"), "a folder choice never says the lesson, the 이용권 or a rule decided");
+
   // Neutral (a backstop that does not know the seat): seat-free wording, never a teacher.
   assert.equal(DS.lessonFeatureOff("요소 고르기", "neutral"), "지금 활동에서는 요소 고르기를 쓰지 않도록 정해져 있어요. 다른 방법으로 이어서 해 볼 수 있어요.");
 
@@ -89,12 +96,12 @@ const TEACHER_WORDS = ["선생님", ...CLASSROOM_ONLY_WORDS];
   for (const frame of ["이 수업에서는", "안전을 위해", "앱을 업데이트"]) assert.ok(!unknown.includes(frame), `unknown copy does not claim "${frame}"`);
 
   // The three sources' sentences are distinct, and each has exactly one next step.
-  const all = [lesson, safety, runtime, access, unknown];
-  assert.equal(new Set(all).size, 5);
+  const all = [lesson, safety, runtime, access, folder, unknown];
+  assert.equal(new Set(all).size, 6);
   for (const s of all) assert.equal(s.split(/(?<=[.])\s/).length, 2, `one reason sentence + one next step: ${s}`);
 
   // Solo seats never see a teacher or staff word.
-  const neutral = ["lesson", "safety", "runtime", "access", "unknown"].map((source) => DS.denialCopy({ source }, "neutral"));
+  const neutral = ["lesson", "safety", "runtime", "access", "folder", "unknown"].map((source) => DS.denialCopy({ source }, "neutral"));
   for (const s of [lessonSolo, runtimeSolo, unknownSolo, DS.denialCopy({ source: "safety" }, "solo"), ...neutral]) {
     for (const w of TEACHER_WORDS) assert.ok(!s.includes(w), `solo copy has no "${w}": ${s}`);
   }
@@ -102,7 +109,7 @@ const TEACHER_WORDS = ["선생님", ...CLASSROOM_ONLY_WORDS];
   for (const s of [lesson, safety, runtime, unknown]) assert.ok(s.includes("선생님"), s);
 
   // Defaults keep the copy whole when a site gives no feature or reason.
-  for (const source of ["lesson", "safety", "runtime", "access", "unknown"]) {
+  for (const source of ["lesson", "safety", "runtime", "access", "folder", "unknown"]) {
     for (const audience of ["classroom", "solo", "neutral"]) {
       const s = DS.denialCopy({ source }, audience);
       assert.ok(!ENGLISH_IDENTIFIER.test(s), `no English identifier: ${s}`);
@@ -112,12 +119,12 @@ const TEACHER_WORDS = ["선생님", ...CLASSROOM_ONLY_WORDS];
   // A next-step override replaces the default and stays one step.
   assert.equal(DS.denialCopy({ source: "runtime", reason: "도구가 준비되지 않았어요", next: "코치 혼자 이어서 해 주세요" }),
     "이 기능은 지금 앱에서 쓸 수 없어요 — 도구가 준비되지 않았어요. 코치 혼자 이어서 해 주세요.");
-  ok("copy: lesson / safety / runtime / access / unknown frames, classroom / solo / neutral wording, one next step, no English identifiers");
+  ok("copy: lesson / safety / runtime / access / folder / unknown frames, classroom / solo / neutral wording, one next step, no English identifiers");
 }
 
 // ── 3. The coach-facing tag ──
 {
-  for (const [source, label] of Object.entries({ lesson: "수업 설정", safety: "안전 규칙", runtime: "앱 버전/환경", access: "이용권 선택", unknown: "확인 안 됨" })) {
+  for (const [source, label] of Object.entries({ lesson: "수업 설정", safety: "안전 규칙", runtime: "앱 버전/환경", access: "이용권 선택", folder: "폴더 권한", unknown: "확인 안 됨" })) {
     assert.equal(DS.DENIAL_SOURCE_LABEL[source], label);
     const t = DS.denialToolText({ source, feature: "명령 실행" });
     assert.ok(t.startsWith(`[${label}] `), t);
@@ -129,7 +136,7 @@ const TEACHER_WORDS = ["선생님", ...CLASSROOM_ONLY_WORDS];
   assert.match(DS.SAFETY_COACH_RULE, /우회하는 방법을 찾지 말고/);
   assert.doesNotMatch(safetyTool, /다른 방법으로|궁금하면/, "no workaround invitation in the coach text");
   // Control: the other sources' coach text carries no safety rule.
-  for (const source of ["lesson", "runtime", "access", "unknown"]) assert.ok(!DS.denialToolText({ source }).includes(DS.SAFETY_COACH_RULE), source);
+  for (const source of ["lesson", "runtime", "access", "folder", "unknown"]) assert.ok(!DS.denialToolText({ source }).includes(DS.SAFETY_COACH_RULE), source);
   for (const name of ["Bash", "PowerShell", "WebFetch", "Write", "Read", "Task", "mcp__hypeproof__consult", "mcp__hypeproof__browser_open", "SendFeedback", "TotallyNewTool"]) {
     assert.ok(!ENGLISH_IDENTIFIER.test(DS.toolFeatureName(name)), `${name} → ${DS.toolFeatureName(name)}`);
   }

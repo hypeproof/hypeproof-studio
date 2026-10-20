@@ -5,11 +5,13 @@ import type { ResolvedProfile } from "../protocol";
 import {
   evaluateSdkToolUse,
   permittedToolsFor,
+  toolFeatureKey,
   type CoachToolAction,
   type SdkActivity,
 } from "../sdkCoachHelpers.ts";
 import { denialFor, denialToolText, toolFeatureName } from "../denialSource.ts";
 import { profileAudience } from "../seatVocabulary.ts";
+import { folderRemovedFeatures } from "../folderConsent.ts";
 
 const LIMIT = 200_000;
 const schema = (properties: Record<string, unknown>, required: string[]) => ({
@@ -74,8 +76,9 @@ export function workspaceTools(args: {
     const input = raw as Record<string, unknown>;
     // REQ-STUDIO-DENIAL-SOURCE — the two refusals have different sources: an ungranted
     // tool is the lesson setting; a call without a path is malformed (source unknown).
+    // REQ-STUDIO-FOLDER-CONSENT — a write the learner's folder choice removed is 폴더 권한.
     if (!definitions.some((t) => t.name === name))
-      throw Error(denialToolText(denialFor("profile_tool_not_granted", { feature: toolFeatureName(name) }), audience));
+      throw Error(denialToolText(denialFor(folderRemovedFeatures(args.profile).has(toolFeatureKey(name) ?? "") ? "folder_choice_narrowed" : "profile_tool_not_granted", { feature: toolFeatureName(name) }), audience));
     if (!input || typeof input.file_path !== "string")
       throw Error(denialToolText(denialFor("malformed_call", { feature: toolFeatureName(name), reason: "파일 경로가 비어 있었어요" }), audience));
     const file = path.resolve(args.cwd, input.file_path);

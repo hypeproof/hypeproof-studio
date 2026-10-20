@@ -18,6 +18,7 @@ const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
 import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
+import { folderConsentProfile } from './folderConsentHost';
 import { verifyActivity } from './proxyClient';
 import { fetchAccessView, sendBudgetRequest, accessProfile, type AccessState } from './accessClient';
 import { availableModelSelection, selectedModel, modelSelectionScope, type SavedModelChoice, selectedEffort, observedEffortResult, type SavedEffortChoice } from './modelSelection';
@@ -1021,6 +1022,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * deriving `<class folder>-<repo>` from it chained names (`…-sandbox-dental-homepage-3-…`).
    */
   private servedWorkspaceRoot: string | null = null;
+  /** The served class folder (REQ-STUDIO-FOLDER-CONSENT: the activity's own folder). */
+  get servedClassRoot(): string | null { return this.servedWorkspaceRoot; }
   setProjectOpener(open: (folder: string) => Promise<void>): void {
     this.projectOpener = open;
   }
@@ -5409,7 +5412,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.loadAccess();
     const fundingSource=this.accessState?.selected;
     const chosenAccess=this.accessState?.view?.choices.find(c=>c.id===fundingSource);
-    const profile=resolvedProfile?accessProfile(resolvedProfile,chosenAccess):null;
+    // REQ-STUDIO-FOLDER-CONSENT — a personal activity in a folder that is not its own asks once; the choice only narrows.
+    const profile=resolvedProfile?await folderConsentProfile(this.context,accessProfile(resolvedProfile,chosenAccess),{servedRoot:this.servedWorkspaceRoot,instructor:this._instructorMode.isInstructor===true}):null;
     // #751 U3 — captured ONCE for this turn: every request of the turn names the binding the turn started under.
     const bindingKey = profile?.lesson_binding?.enforced ? profile.lesson_binding.key : undefined;
     // #751 G2 — the step and help choice for THIS turn, from the focus at turn start against the turn's own lesson.
