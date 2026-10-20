@@ -117,14 +117,16 @@ async function present(error, profile, { products = 200 } = {}) {
 }
 
 test('an open-trial seat that ran out ends in one card built from the Service catalogue', async () => {
-  for (const [err, title] of [[EXHAUSTED, '무료 사용량을 모두 썼습니다'], [EXPIRED, '무료 사용 시간이 끝났습니다']]) {
+  for (const [err, ended] of [[EXHAUSTED, '무료로 쓸 수 있는 AI 요청은 모두 썼어요.'], [EXPIRED, '무료 사용 시간은 끝났어요.']]) {
     const r = await present(err, openTrial);
     assert.equal(r.posts.length, 1);
     const [post] = r.posts;
     assert.equal(post.type, 'streamError');
-    assert.equal(post.trialEndCard.title, title);
+    // CONV-ENDCARD-R-002: continuity first, then the recommended pass, the ending last.
+    assert.equal(post.trialEndCard.title, '만든 작업을 그대로 이어서 할 수 있어요');
+    assert.equal(post.trialEndCard.facts.at(-1), ended);
     assert.equal(post.trialEndCard.productId, 'pass-lite');
-    assert.match(post.trialEndCard.facts[1], /라이트 이용권은 30일 동안 AI 요청 200번이고 30,000원입니다/);
+    assert.equal(post.trialEndCard.facts[1], '라이트 이용권은 30일 동안 쓸 수 있고 30,000원이에요. AI 요청 200번이 들어 있어요.');
     assert.doesNotMatch(post.error, /API Error|Claude Code|429|403/, 'no raw SDK text reaches the person');
     // Only the public catalogue is read: no credential is sent, no order is created.
     assert.deepEqual(r.requests, [{ method: 'GET', url: '/v1/purchase/products', authorization: null }]);

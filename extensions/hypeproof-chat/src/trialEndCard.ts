@@ -3,9 +3,12 @@
  * Pure: no VS Code API, no DOM. The host decides and builds the view; the chat renders it.
  *
  * When a free trial's turn ends because the trial ran out (requests or time), the chat shows
- * one inline card instead of an error: facts first (files and conversation stay; the Service's
- * own pass facts), one Primary "이용권 살펴보기" and the escape "오늘은 여기까지". The card never
- * opens the purchase view by itself, never counts down and is never shown mid-work.
+ * one inline card instead of an error. CONV-ENDCARD-R-002: the title and first line speak about
+ * continuing the work just made (same folder; files and conversation kept) before any pass fact,
+ * then the pass the Service recommends (name, period, price), then the no-renewal promise, and
+ * only last why free use stopped. One Primary "이용권 살펴보기" and the escape "오늘은 여기까지".
+ * The card never opens the purchase view by itself, never counts down, never shows a remaining or
+ * used count (CONV-DEC-03, CU-13/14) and is never shown mid-work.
  *
  * Default off. The card follows the Service's own open-trial switch: it is drawn only for a seat
  * whose `/v1/profile` says `profile_id: "studio-open-trial"`, `activity_kind: "trial"` and no
@@ -21,7 +24,7 @@
  * bought pass, because the Service uses the same code for both. (Studio #1765 matches the same sentences for its notice.)
  */
 import type { ResolvedProfile, TrialEndCardView, TrialEndNotifyView } from "./protocol.ts";
-import { FREE_EXHAUSTED_SERVICE, FREE_EXPIRED_SERVICE, defaultProduct, fetchProducts, passFacts, type PassProduct } from "./passPurchase.ts";
+import { FREE_EXHAUSTED_SERVICE, FREE_EXPIRED_SERVICE, defaultProduct, fetchProducts, formatWon, type PassProduct } from "./passPurchase.ts";
 
 export type TrialEnding = TrialEndCardView["ending"];
 
@@ -30,14 +33,66 @@ export const OPEN_TRIAL_PROFILE_ID = "studio-open-trial";
 
 export const TRIAL_END_CARD_COPY = {
   // Free start (SPEC iteration 4 §2.4): the free allowance is never called a 체험.
-  titleExhausted: "무료 사용량을 모두 썼습니다",
-  titleExpired: "무료 사용 시간이 끝났습니다",
-  kept: "만든 파일은 작업 폴더에 그대로 있습니다. 대화도 계속 볼 수 있습니다.",
-  needPass: "이어서 작업하려면 이용권이 필요합니다.",
-  noRenewal: "한 번만 결제하며 자동으로 다시 결제되지 않습니다.",
+  // CONV-ENDCARD-R-002 (해요체, like the purchase view the Primary opens and the email section below):
+  // continuity first. The title is the same for both endings; the ending itself is the last line.
+  title: "만든 작업을 그대로 이어서 할 수 있어요",
+  // Only what is true on every seat: the files stay in their folder and this chat stays readable.
+  // It names no folder hand-over (a pass takes over only its own `workspace_root`, REQ-L12 ⑫, which a
+  // free seat in a numbered sibling folder does not share) and does not promise the pass continues this
+  // very conversation (that is the optional, flag-gated carry-over offer).
+  continuity: "만든 파일은 작업 폴더에, 대화는 이 채팅에 그대로 있어요. 이용권이 있으면 이 작업을 이어서 할 수 있어요.",
+  noRenewal: "한 번만 결제하고, 자동으로 다시 결제되지 않아요.",
+  endedExhausted: "무료로 쓸 수 있는 AI 요청은 모두 썼어요.",
+  endedExpired: "무료 사용 시간은 끝났어요.",
   primary: "이용권 살펴보기",
   escape: "오늘은 여기까지",
 } as const;
+
+/**
+ * The recommended pass in one line, 해요체: name, period and price first, then what it includes.
+ * Every number comes from the Service catalogue; nothing about the free seat's own allowance.
+ */
+export function passOfferLine(product: PassProduct): string {
+  const name = /이용권$/.test(product.label) ? product.label : `${product.label} 이용권`;
+  return `${name}은 ${product.durationDays}일 동안 쓸 수 있고 ${formatWon(product.amount)}이에요. AI 요청 ${product.requestLimit.toLocaleString("ko-KR")}번이 들어 있어요.`;
+}
+
+/**
+ * Pressure and countdown words the card must never carry (CU-13/14, CONV-DEC-03). Whole phrases,
+ * not single syllables: `곧` alone would also match ordinary words.
+ */
+const KO_NUMBER = "(?:한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|스무|반)";
+export const END_CARD_PRESSURE = new RegExp([
+  "지금\\s*(?:바로|만)", "오늘만", "까지만", "마감", "임박", "마지막", "놓치", "놓쳐", "서두르", "서둘러", "한정", "할인", "특가",
+  "곧\\s", "남았", "남은", "남음",
+  // Loss copy, but not its reassuring negation (`사라지지 않아요`, `잃어버리지 않아요`).
+  "사라(?:져|질|집)", "잃(?:는|을|게|어(?!버리지\\s*않))",
+  // Countdowns and counts written in digits or in Korean number words.
+  "\\d+\\s*(?:초|분|시간|일)\\s*(?:후|뒤|안에|남)",
+  `${KO_NUMBER}\\s*(?:초|분|시간|일)\\s*(?:후|뒤|안에|남)`,
+  `${KO_NUMBER}\\s*(?:번|회)\\s*(?:남|을\\s*(?:다|모두)|다\\s|모두)`,
+].join("|"));
+
+/**
+ * The CONV-ENDCARD-R-002 checker: why this card's main copy breaks the rules, or [] when it does not.
+ * The only line allowed to hold digits is the Service's pass line, exactly as `passOfferLine` builds it;
+ * any other digit (a remaining or used count, a countdown) is rejected. The email section (TUX-COND-08)
+ * is not part of the conversion copy and is not read here.
+ */
+export function endCardCopyProblems(view: Pick<TrialEndCardView, "title" | "facts" | "primary" | "escape">, product: PassProduct): string[] {
+  const problems: string[] = [];
+  const offer = passOfferLine(product);
+  const lines = [view.title, ...view.facts, view.primary, view.escape];
+  for (const line of lines) {
+    if (END_CARD_PRESSURE.test(line)) problems.push(`pressure: ${line}`);
+    if (line !== offer && /\d/.test(line)) problems.push(`count: ${line}`);
+  }
+  const offerAt = view.facts.indexOf(offer);
+  if (offerAt < 0) problems.push("order: the recommended pass is not named");
+  if (/이용권|\d/.test(view.title)) problems.push(`order: the title speaks about the pass, not the work: ${view.title}`);
+  if (offerAt !== 1 || !/이어서/.test(view.facts[0] ?? "") || !/이어서/.test(view.title)) problems.push("order: continuity must come first, then the recommended pass");
+  return problems;
+}
 
 /**
  * TUX-COND-08 — the optional email section (Jay 2026-10-19). Draft copy in 해요체, pending Jay's
@@ -107,8 +162,10 @@ export function trialEndCardView(input: { profile: ProfileFacts | null | undefin
   // The pass the Service itself suggests (`recommended`), else its first: the same one the
   // purchase list selects first, so the card never names a pass the list does not lead with.
   const product = defaultProduct(products);
-  const title = ending === "exhausted" ? TRIAL_END_CARD_COPY.titleExhausted : TRIAL_END_CARD_COPY.titleExpired;
-  const facts = [TRIAL_END_CARD_COPY.kept, `${TRIAL_END_CARD_COPY.needPass} ${passFacts(product)}`, TRIAL_END_CARD_COPY.noRenewal];
+  // Continuity first, then the recommended pass, then the promise, and only last why free use stopped.
+  const title = TRIAL_END_CARD_COPY.title;
+  const ended = ending === "exhausted" ? TRIAL_END_CARD_COPY.endedExhausted : TRIAL_END_CARD_COPY.endedExpired;
+  const facts = [TRIAL_END_CARD_COPY.continuity, passOfferLine(product), TRIAL_END_CARD_COPY.noRenewal, ended];
   const notify = notifyOptinView(profile, !!input.notifySubmitted);
   return { ending, title, facts, primary: TRIAL_END_CARD_COPY.primary, escape: TRIAL_END_CARD_COPY.escape, productId: product.id, text: [title, ...facts].join(" "), ...(notify ? { notify } : {}) };
 }
