@@ -1,22 +1,10 @@
 // Executed only by the isolated native-trial-live workflow. No production token.
-import { test, expect, type FrameLocator } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { launchApp, closeApp, chatFrame, startFrame } from '../fixtures/app';
+import { openCodeEntry } from '../fixtures/start-actions';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { hasClosingTime } from '../native-trial-checks.mjs';
-
-// The code form, whichever start page the Service draws (TUX-SP-14): with free start
-// advertised the free card leads in through "참여 코드가 있어요"; otherwise "수업에 참여하기".
-// An older public App may already show the form. The label differs by path; the input id does not.
-async function codeForm(start: FrameLocator) {
-  const code = start.getByRole('button', { name: '참여 코드가 있어요', exact: true });
-  const classroom = start.getByRole('button', { name: '수업에 참여하기', exact: true });
-  const input = start.locator('#course-code');
-  await expect(code.or(classroom).or(input).first()).toBeVisible({ timeout: 30000 });
-  if (await input.isVisible()) return;
-  await ((await code.isVisible()) ? code : classroom).click();
-  await expect(input).toBeVisible();
-}
 
 test('native trial: enter code, use real API, create and revise an actual work file', async () => {
   test.skip(process.env.HPS_NATIVE_LIVE !== '1', 'isolated live runner only');
@@ -47,7 +35,7 @@ test('native trial: enter code, use real API, create and revise an actual work f
   })();
   try {
     const start = await startFrame(ctx.win);
-    await codeForm(start);
+    await openCodeEntry(start, 'classroom');
     await start.locator('#course-code').fill('synthetic-invalid-code');
     await start.getByRole('button', { name: /^(?:코드 확인하기|수업 확인하기)$/ }).click();
     await expect(start.locator('.studio-error')).toBeVisible();
@@ -116,7 +104,7 @@ test('native trial: enter code, use real API, create and revise an actual work f
       const entry=await startFrame(ctx.win);
       // Test credentials intentionally use in-memory secret storage. Re-enter the
       // same code after a real process restart, then inspect persisted workspaceState.
-      if(await entry.getByRole('button',{name: /^(?:다른 활동 선택|다른 수업에 연결)$/}).isVisible().catch(()=>false))await entry.getByRole('button',{name: /^(?:다른 활동 선택|다른 수업에 연결)$/}).click();await codeForm(entry);
+      if(await entry.getByRole('button',{name: /^(?:다른 활동 선택|다른 수업에 연결)$/}).isVisible().catch(()=>false))await entry.getByRole('button',{name: /^(?:다른 활동 선택|다른 수업에 연결)$/}).click();await openCodeEntry(entry,'classroom');
       await entry.locator('#course-code').fill(ctx.token);
       await entry.getByRole('button',{name: /^(?:코드 확인하기|수업 확인하기)$/}).click();
       await expect(entry.locator('.studio-course')).toContainText('Studio · 내 삶에 AI 더하기');
