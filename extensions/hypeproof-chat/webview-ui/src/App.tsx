@@ -78,6 +78,8 @@ interface State {
   /** cr-review — the "주간 리뷰" panel (reviewPanelState.ts). */
   review: ReviewPanelState;
   aiNotice: string | null;          // #320 — AI disclosure at session start (host-gated)
+  /** REQ-STUDIO-STEER-NOW — the learner request the current turn answers (host streamStart), if any. */
+  streamFor: string | null;
   stopNotice: string | null;        // #497 — Stop 을 눌러 턴이 끊겼음을 알리는 인라인 안내
   /** REQ-STUDIO-TASK-RUN-STATE — how this view's last turn ended; null until one ends here. */
   lastOutcome: TaskTurnOutcome;
@@ -95,7 +97,7 @@ interface State {
 type Action =
   | { type: "config"; config: ChatConfig }
   | { type: "history"; messages: ChatMessage[] }
-  | { type: "streamStart"; streamId: string; messageId: string }
+  | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
   | { type: "streamChunk"; delta: string }
   | { type: "streamCitations"; citations: Citation[] }
   | { type: "toolLog"; entry: ToolEntry }
@@ -158,6 +160,7 @@ const initialState: State = {
   verifyError: null,
   verifySend: null,
   aiNotice: null,
+  streamFor: null,
   stopNotice: null,
   lastOutcome: null,
   openWorldId: null,
@@ -177,6 +180,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         streamId: action.streamId,
+        streamFor: action.userMessageId ?? null,
         error: null,
         stopNotice: null,   // #497 — 새 턴이 시작되면 이전 중지 안내는 사라진다
         lastOutcome: null,
@@ -449,7 +453,7 @@ export function App() {
           setVerdicts(next);
           break;
         }
-        case "streamStart": dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId }); break;
+        case "streamStart": dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId, userMessageId: msg.userMessageId }); break;
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
@@ -757,6 +761,7 @@ export function App() {
         }}
         aiNotice={state.aiNotice}
         stopNotice={state.stopNotice}
+        streamFor={state.streamFor}
         openWorldId={state.openWorldId}
         publish={state.publish}
         onPublish={() => {

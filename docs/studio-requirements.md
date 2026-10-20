@@ -762,6 +762,70 @@ next turn, which is the control; parked, the next turn gets no context and no ru
 the same turn once with no second `criterion_set` or fix-request record; a new start replaces a
 parked turn; the host parks before its busy check).
 
+`REQ-STUDIO-STEER-NOW` (CGP-CHAT-R-012, CGP-CHAT-D-012, P1; built 2026-10-20): while the AI is
+answering and the learner has parked a message (#416, "다음에 보낼 메시지"), the parked row offers
+one secondary action, **지금 방향 바꾸기**, next to the cancel ×. Neither the proxy nor the Agent SDK
+path accepts input into a running turn, so steering is: stop the current turn through the existing
+Stop path (App `cancel` → `cancelStream` → the host aborts the turn and posts `streamStopped`), keep
+the partial answer on screen, then send the parked text as the next turn. Default Enter still
+parks; the action is never the primary or default control. The press never sends by itself: the
+parked text goes out only on the stream's end edge, the same edge that already sends parked
+messages, and that edge fires once per turn, so a turn that ends naturally at the moment of the
+press still sends the text exactly once (the late `streamStopped` that answers the cancel finds
+nothing parked). On that edge, with a steer pending, the learner's own stop is not treated as a
+cut-off (the plain Stop button still hands the parked text back to the draft, unchanged), while a
+failed turn still hands it back to the draft. The partial answer keeps the existing stopped marker
+(the ⏹ stop-notice style), drawn in the transcript right after it: "여기서 답변을 멈췄어요. 새 메시지를
+보내는 중이에요." until the host starts the turn for that request itself (`streamStart` names the
+request's `userMessageId`; an app reply or another request's turn does not count), then "여기서
+답변을 멈추고 새 메시지를 보냈어요.", which stays after the next turn starts. A refusal (`inputRejected`) or an error
+before the turn starts removes the marker, so it never claims a send the host turned away. A stop
+that lands before any answer draws no marker under the learner's own line. The marker lives for the
+panel's session (the host already saves a stopped turn's partial answer to history, as for any
+Stop). The host posts `streamStopped` at once but keeps the work-folder lock until the stopped
+turn's cleanup ends (saving the partial answer, observation writes, the folder scan), so every turn
+starts only after the previous turn's outer `finally` released that lock, waiting at most 15 s
+(`src/turnSettle.ts`); the settle state is cleared when that turn ends. If the stopped turn is still
+settling after the cap, a send that needs the folder lock is refused with "중단한 응답을 정리하고
+있어요. 잠시 후 다시 시도해 주세요. 작성 중인 내용은 유지됩니다." (the text is handed back), never with
+the lock's "다른 창" sentence, which would blame another window. A send right after a stop (this
+action, or a quick Stop then Send) is therefore not refused as "다른 창에서 이 폴더를 사용 중입니다",
+and its model history already holds the stopped partial answer. The stopped
+turn ends `aborted`, so the finish notice (REQ-STUDIO-FINISH-NOTICE) never fires for it. The parked
+text is never lost: offline at the press (the same `navigator.onLine` reading as `sendWhenOnline`),
+nothing is stopped or sent and the note says "지금은 인터넷이 끊겨서 답변을 멈추지 않았어요. 다음에 보낼
+메시지는 그대로 있어요."; offline (or any send guard) at the end edge, the send goes through the
+existing gate and the text becomes a kept message with its own 보내기; if the stop does not land
+within 15 s, the steer gives up with "답변을 멈추지 못했어요. 다음에 보낼 메시지는 그대로 있고, 답변이
+끝나면 보내요." and the text stays parked; the cancel × still returns it to the draft. A second press
+while the stop is on its way is ignored (the button reads "멈추는 중…" and stays focusable with
+`aria-disabled`). Seats: wherever the panel offers Stop to the person in it, which today is
+personal and classroom learner seats alike (the classroom composer has its own Stop), so steering
+is allowed in both; it widens nothing, because it is a Stop followed by an ordinary send, and an
+instructor hold on new AI runs still refuses that send and keeps the text (`inputRejected`). Not
+offered on a paused kept item, while a product test holds the tab (`sendLocked`), or when the panel
+cannot send. 44 px target, Korean label, a real button in the tab order, no capability labels.
+Not built: true mid-turn delivery (the register's "send into the running turn" degrades to stop and
+resend until a runtime accepts mid-turn input), and the 140 ms exit animation of CGP-CHAT-D-012.
+Pure decisions in `webview-ui/src/steerNow.ts`; ChatPanel wiring is the press handler, the edge's
+`cutOff`, the marker and the button. Tests: `test/steer-settle.smoke.mjs` (the actual provider with a
+scripted runtime and a same-process folder lock: stop, then an immediate send is accepted and its
+history holds the partial answer, well under the cap; the same sequence without the settle wait is
+refused with "다른 창" as the control; the settle state is released after every turn; a cleanup longer
+than the cap, with that one timer on a fake clock, is refused with "중단한 응답을 정리하고 있어요" and the
+text handed back; each `streamStart` names its request) and `test/steer-now.test.tsx`
+(pure offer/press/edge rules with the unchanged queue rules as control; the finish-notice decision
+for `aborted` with `ok` as control; source checks that the press goes through `onCancel` and the
+host's abort; the real ChatPanel mounted on `fixtures/mini-dom.mjs` in personal and classroom
+seats: type, park with Enter, click the action, then re-render as the host would — stop edge sends
+once and marks the partial answer, a natural end racing the press sends once and a late stop sends
+nothing, offline at the press sends and stops nothing, offline at the edge keeps the text, a failed
+turn hands it back, a stop that never lands gives up and still sends once on the natural end, the
+steered turn's own end sends nothing again, a later turn can be steered again, the marker reads
+"보내는 중" until its own request's `streamStart` (an app reply's start does not flip it) and
+disappears on `inputRejected` or an error, and negative controls:
+no parked text draws no action, plain Stop sends nothing and restores the draft).
+
 Acceptance CG-01–CG-06 in [the verification contract](testing/task-workspace.md)
 is revision-bound. Matched screenshots and independent interaction review are
 required; local synthetic success is separate from live SDK/account, signed

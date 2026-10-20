@@ -15,6 +15,7 @@ import { useConnectivity, useLiveRegion, guardSend, OFFLINE_BANNER_TEXT, OFFLINE
 import { imeComposing } from './imeGuard';
 import { QuoteAction, useAnswerQuote } from './QuoteAction';
 import { mergeQuoteIntoDraft, QUOTE_ROW_ATTR, QUOTE_SCOPE_ATTR, type AnswerQuote } from './quoteReply';
+import { steerAtEnd, steerMarksAccept, steerMarksRefuse, steerMarkTarget, steerOffered, steerPress, STEER_LABEL, STEER_OFFLINE_NOTE, STEER_SENDING_MARK, STEER_STOP_FAILED_NOTE, STEER_STOP_TIMEOUT_MS, STEER_STOPPED_MARK, STEER_STOPPING_LABEL, type SteerMark } from './steerNow';
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { AccessControl } from './AccessControl';
@@ -103,6 +104,8 @@ interface Props {
   sendLocked?: boolean;
   aiNotice: string | null;             // #320 — AI disclosure at session start
   stopNotice: string | null;           // #497 — notice that the turn was cut off by Stop
+  /** REQ-STUDIO-STEER-NOW — the learner request the running turn answers (host streamStart), if any. */
+  streamFor?: string | null;
   /** #649 — id of the world currently open (the host's worldOpened). Used only to highlight the strip. */
   openWorldId: string | null;
   /** Progress of "갤러리에 올리기". null = not pressed yet. */
@@ -461,6 +464,7 @@ export function ChatPanel(props: Props) {
     const off = onHostMessage(msg => {
       if (!activityId || msg.activityId !== activityId) return;
       if (msg.type === "inputRejected") {
+        setSteerMarks(steerMarksRefuse);
         const rejectedMode = msg.toolMode ?? 'auto';
         const current = snapshot.current;
         if (current.queued !== null || current.text.trim() || current.recovered?.length || composerHasAttachments.current || preparingImagesRef.current) {
@@ -663,6 +667,32 @@ export function ChatPanel(props: Props) {
   const liveAnnouncement = useLiveRegion([responseAnnouncementText, connectivity.announcement]);
   /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
   const sendWhenOnline = (send: () => unknown, held: HeldNoteKind) => guardSend(connectivity.online, send, () => setImgNote(OFFLINE_HELD_NOTES[held]));
+  // CGP-CHAT-R-012 — "지금 방향 바꾸기": stop through the Stop path; the parked text goes on the end edge (steerNow.ts).
+  const steerRef = useRef<true | null>(null);
+  const [steerPending, setSteerPending] = useState(false);
+  const [steerMarks, setSteerMarks] = useState<SteerMark[]>([]);
+  const steerShown = steerOffered({ streaming, queued, queuedPaused, sendLocked: props.sendLocked, unavailable });
+  const steerNow = () => {
+    const press = steerPress({ offered: steerShown, online: connectivity.online, pending: steerRef.current !== null });
+    if (press === 'ignore') return;
+    if (press === 'hold') { setImgNote(STEER_OFFLINE_NOTE); return; }
+    steerRef.current = true; setSteerPending(true); setImgNote(null);
+    props.onCancel();
+  };
+  useEffect(() => {
+    if (!steerPending) return;
+    // The stop never landed: give up the steer. The text stays parked and goes when the turn ends.
+    const timer = setTimeout(() => { if (steerRef.current === null) return; steerRef.current = null; setSteerPending(false); setImgNote(STEER_STOP_FAILED_NOTE); }, STEER_STOP_TIMEOUT_MS);
+    // Named, not `return () => …`: test/hook-order.smoke.mjs reads that as an early return.
+    const cancel = () => clearTimeout(timer);
+    return cancel;
+  }, [steerPending]);
+  // "보냈어요" only once the host started the next turn; a send turned away (error before start) drops the marker.
+  useEffect(() => { if (streaming) setSteerMarks((marks) => steerMarksAccept(marks, messages, props.streamFor)); else if (error) setSteerMarks(steerMarksRefuse); }, [streaming, error, props.streamFor, messages]);
+  const steerMarkAfter = (id: string) => {
+    const mark = steerMarks.find((m) => m.id === id);
+    return mark ? <div className="hps-stop-notice hps-steer-mark" role="note"><span className="hps-stop-notice-icon" aria-hidden="true">⏹</span>{mark.sent ? STEER_STOPPED_MARK : STEER_SENDING_MARK}</div> : null;
+  };
   // Trial diagnosis D3 — solo seats (trial/pass/personal) get no classroom/operator words.
   const audience: SeatAudience = config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
   const funding = config?.access;
@@ -787,17 +817,22 @@ export function ChatPanel(props: Props) {
   useEffect(() => {
     const prev = prevStreamingRef.current;
     prevStreamingRef.current = streaming;
+    // CGP-CHAT-R-012 — with a steer pending, the learner's own stop is not a cut-off: this edge sends the parked text.
+    const steer = steerAtEnd(prev, streaming, steerRef.current !== null, !!props.stopNotice, !!error);
+    if (steer) { steerRef.current = null; setSteerPending(false); }
+    const cutOff = steer ? steer.cutOff : !!props.stopNotice || !!error;
     // #751 U4 — a turn the instructor cut off hands the parked message back, exactly like the learner's own Stop. Never sent.
     if (queuedPaused) return;
-    if (shouldRestoreQueue(prev, streaming, queued, !!props.stopNotice || !!error)) { restoreQueuedToDraft(); return; }
-    if (queuedPaused || unavailable || !shouldFlushQueue(prev, streaming, queued, !!props.stopNotice || !!error)) return;
+    if (shouldRestoreQueue(prev, streaming, queued, cutOff)) { restoreQueuedToDraft(); return; }
+    if (queuedPaused || unavailable || !shouldFlushQueue(prev, streaming, queued, cutOff)) return;
     // cr-verify — a product test holds the tab: the parked message goes back to the draft, never lost.
     if (props.sendLocked) { restoreQueuedToDraft(); return; }
     const text = queued as string;
     // A staging/pending-send guard can refuse this edge. Keep the message and
     // its mode until acceptance; a paused item gives it an explicit retry path
     // instead of silently losing it or sending later on an unrelated render.
-    if (submit(text, queuedToolMode)) setQueued(null);
+    const stoppedAt = steer?.stoppedHere ? steerMarkTarget(messages) : undefined;
+    if (submit(text, queuedToolMode)) { setQueued(null); if (stoppedAt) setSteerMarks((marks) => [...marks, { id: stoppedAt, sent: false, from: messages.length }]); }
     else {
       setQueuedPaused(true);
       setImgNote(note => note ?? '메시지를 보내지 못해 보관했습니다. 준비가 끝나면 보관한 메시지의 보내기를 눌러 주세요.');
@@ -1443,6 +1478,7 @@ export function ChatPanel(props: Props) {
               quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
             />
           )}
+          {steerMarkAfter(m.id)}
         </Fragment>)}
         </CodeBlockScope>
 
@@ -1643,6 +1679,7 @@ export function ChatPanel(props: Props) {
                 if (editor && selection) editor.setSelectionRange(...selection);
               }
             }}>보내기</button>}
+            {steerShown && <button type="button" className="hps-queued-send hps-queued-steer" aria-disabled={steerPending || undefined} onClick={steerNow}>{steerPending ? STEER_STOPPING_LABEL : STEER_LABEL}</button>}
             <button
               type="button"
               className="hps-queued-cancel"

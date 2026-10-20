@@ -20,6 +20,7 @@ import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
 import { folderConsentProfile, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { chatVisible, createFinishNotifier, watchChatSurface } from './finishNoticeHost';
+import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
 import { verifyActivity } from './proxyClient';
 import { fetchAccessView, sendBudgetRequest, accessProfile, type AccessState } from './accessClient';
 import { availableModelSelection, selectedModel, modelSelectionScope, type SavedModelChoice, selectedEffort, observedEffortResult, type SavedEffortChoice } from './modelSelection';
@@ -859,6 +860,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private finishNotice?: ReturnType<typeof createFinishNotifier>;
   private get finishNotifier() { return (this.finishNotice ??= createFinishNotifier({ view: () => this.view, editor: () => this.editorChat })); }
   private activeStreams = new Map<string, AbortController>();
+  // REQ-STUDIO-STEER-NOW — the latest turn until its outer finally released the folder lock (turnSettle.ts);
+  // undefined once it has. Fixtures build the provider with Object.create, which skips field initializers.
+  private turnSettling?: Promise<void>;
   // A send owns its activity before its first authentication await, through persistence.
   private pendingSends = 0;
   /**
@@ -1597,12 +1601,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * and the reply are recorded like the other answers the App writes itself (show intent, guest list),
    * and neither goes to the spool, so the next ingest reads only the class conversation.
    */
-  private async answerBrainCall(text: string, intent: BrainIntent, deferCompletion: (streamId: string) => void, onStart: (streamId: string) => void): Promise<void> {
+  private async answerBrainCall(text: string, intent: BrainIntent, deferCompletion: (streamId: string) => void, onStart: (streamId: string) => void, userMessageId?: string): Promise<void> {
     const name = brainName(this.learningWikiPlan());
     const uid = randomId();
     const aid = randomId();
     onStart(uid);
-    void this.post({ type: "streamStart", streamId: uid, messageId: aid });
+    void this.post({ type: "streamStart", streamId: uid, messageId: aid, ...(userMessageId ? { userMessageId } : {}) });
     let run: BrainRun | undefined;
     try {
       run = intent.kind === "show" ? this.brainShow() : intent.kind === "deck" ? await this.runDeckDraft({ ask: false }) : await this.runWikiIngest({ ask: false, session: intent.session });
@@ -5412,6 +5416,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     this.pendingSends++;
+    // REQ-STUDIO-STEER-NOW — a stopped turn posts streamStopped before it has saved its partial answer
+    // and released the folder lock. This send owns its slot at once (pendingSends) and starts after the
+    // previous turn released the lock (at most 15 s), so a send right after a stop is not refused as
+    // "another window" and its history already holds the partial answer. No previous turn still
+    // settling: no await at all, so the send stays synchronous up to its first real await.
+    const previousTurn = this.turnSettling, settle = turnSettleSignal();
+    this.turnSettling = settle.promise;
+    const previousSettled = previousTurn ? await waitAtMost(previousTurn) : true;
     let releaseActivity: (()=>void) | undefined;
     // streamEnd lets the webview flush its queued follow-up. Announce readiness
     // only after persistence, stream cleanup and the activity lease have settled.
@@ -5433,6 +5445,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const connections=activityConnections(this.context);
     // Instructor mode has no student activity connection — skip the acquire/verify gate.
     if (connections && !this._instructorMode.isInstructor) {
+      // The wait ran out: the lock is still this window's own stopped turn, not "another window".
+      if (!previousSettled) throw new ActivityConnectionError(TURN_SETTLING_REFUSAL);
       releaseActivity=connections.acquire();
       const token=await connections.token();
       await verifyActivity({token:token!,proxyUrl:connections.current!.service},connections.current!.serverId);
@@ -5463,7 +5477,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const wikiSwitch = this.cachedProfile?.learning_wiki;
     const brainCall = mode === 'auto' && wikiSwitch?.enabled === true && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
     if (brainCall) {
-      await this.answerBrainCall(text, brainCall, deferCompletion, responseStarted);
+      await this.answerBrainCall(text, brainCall, deferCompletion, responseStarted, userId);
       return;
     }
     // "Show me / open it / run it" — if the kid asks to see the game in plain
@@ -5478,7 +5492,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const uid = randomId();
         const aid = randomId();
         responseStarted(uid);
-        void this.post({ type: "streamStart", streamId: uid, messageId: aid });
+        void this.post({ type: "streamStart", streamId: uid, messageId: aid, userMessageId: userId });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
         await this.appendHistory([
           userLine(text),
@@ -5521,7 +5535,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const uid = randomId();
         const aid = randomId();
         responseStarted(uid);
-        void this.post({ type: "streamStart", streamId: uid, messageId: aid });
+        void this.post({ type: "streamStart", streamId: uid, messageId: aid, userMessageId: userId });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
         await this.appendHistory([
           userLine(text),
@@ -5700,7 +5714,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.finishNotifier.release(); // a new turn is sent from the chat: the learner has seen it
 
     responseStarted(streamId);
-    void this.post({ type: "streamStart", streamId, messageId });
+    void this.post({ type: "streamStart", streamId, messageId, userMessageId: userId });
     this.rememberAnswerTurn(messageId, streamId);
     // #503 — this turn's single timeline. It runs the same reducer as the webview, so
     // the history keeps exactly the on-screen order.
@@ -6594,7 +6608,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({type:"streamError",streamId:responseStreamId ?? "activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
       if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
     } finally {
-      try { releaseActivity?.(); } finally { this.pendingSends--; }
+      try { releaseActivity?.(); } finally {
+        this.pendingSends--; settle.settled();
+        if (this.turnSettling === settle.promise) this.turnSettling = undefined;
+      }
       if (completedStreamId && !completionSignal?.aborted) await this.post({ type: "streamEnd", streamId: completedStreamId, ...(completionFailed ? { failed: true as const } : {}) });
     }
   }
