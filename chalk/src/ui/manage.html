@@ -363,7 +363,11 @@ html:root{background:#0f1418;color:#e8ecef}
 
 /* REQ-CHALK-JOIN-LINK — 참여 링크 복사 beside 수업 정보; 44px target, confirmation in text. */
 .join-copy{min-height:44px;padding:4px 12px;font-size:.875rem;white-space:nowrap;flex:0 0 auto}.join-copied{font-size:.875rem;color:#C3CDBD}.join-copied:empty{display:none}.class-status>summary{white-space:nowrap}
-@media(max-width:600px){body.is-connected .topbar .title{flex-wrap:wrap!important;overflow:visible!important;row-gap:4px}.join-copied{flex-basis:100%}}
+@media(max-width:600px){body.is-connected .topbar .title{flex-wrap:wrap!important;row-gap:4px}.join-copied{flex-basis:100%}}
+/* An open 수업 정보 is never clipped by the one-line title nor drawn over 참여 링크 복사: up to 900px it opens
+   in the flow on its own line; wider, the popover may leave the title box. */
+@media(max-width:900px){body.is-connected .topbar .title:has(.class-status[open]){flex-wrap:wrap!important;row-gap:4px}.class-status[open]{flex-basis:100%}.class-status[open]>#ops-state{position:static!important;min-width:0!important;max-width:100%!important;margin-top:4px}}
+@media(min-width:901px){body.is-connected .topbar .title:has(.class-status[open]){overflow:visible!important}body.is-connected .class-status[open]>#ops-state{top:44px}}
 </style></head><body>
 <div class="shell">
 <aside id="side" class="side" aria-label="강사 메뉴"><div class="side-head"><div class="brand"><small>HypeProof · Chalk</small><strong>수업 운영</strong></div><button type="button" id="side-close" class="side-close">메뉴 닫기</button></div><nav class="flow" aria-label="강사 도구"><a href="/authoring">강의 작성</a><a href="/issuer">학생 초대·토큰</a><a href="/budgets">AI 예산</a><a href="/console">수업 열기·종료</a><a href="#ops-title" aria-current="page" class="here">운영 보드</a><a href="#ops-help-title" id="nav-help-link">도움 요청 응대<span id="nav-help" class="nav-badge"></span></a><details class="flow-more"><summary>더보기</summary><a href="/authoring#rehearsal">리허설·확정</a><a href="#shares-title">결과물·공유 기록</a><a href="#ops-wrap-title">마무리 단계</a><a href="#ops-finish-title">기록 회수·보고서</a></details></nav><div class="side-foot"><section class="side-class" aria-label="수업 전체 제어"><div id="ops-control" hidden><details><summary>기기 적용 현황</summary><p id="ops-control-state" class="muted" role="status" aria-live="polite"></p></details><button id="ops-pause" type="button"></button></div></section><p id="conn-where" class="muted" hidden></p></div></aside><button id="side-backdrop" type="button" aria-label="메뉴 닫기" hidden></button>
