@@ -46,6 +46,7 @@ export class PreviewProvider {
   // previews a different file.
   private watchedFile: vscode.Uri | undefined;
   private watchedBase: vscode.Uri | undefined;
+  private watchedRead: (() => Promise<string | null>) | undefined;
   private saveSubscription: vscode.Disposable | undefined;
   private labels: { title: string; placeholder: string; emoji: string } = {
     title: "🎮 내 게임",
@@ -69,16 +70,19 @@ export class PreviewProvider {
    * `hypeproof-chat.previewActiveFile` command. Calling again with a
    * different URI swaps the watch target; the previous one stops firing.
    */
-  watchForReload(fileUri: vscode.Uri): void {
+  watchForReload(fileUri: vscode.Uri, read?: () => Promise<string | null>): void {
     this.watchedFile = fileUri;
     this.watchedBase = vscode.Uri.joinPath(fileUri, "..");
+    // REQ-STUDIO-PAGE-CARD — a caller with its own checked read (handle-based, no links) supplies it; null skips the reload.
+    this.watchedRead = read;
     if (this.saveSubscription) return; // single subscription, gated on watchedFile
     this.saveSubscription = vscode.workspace.onDidSaveTextDocument(async (doc) => {
       if (!this.watchedFile) return;
       if (doc.uri.fsPath !== this.watchedFile.fsPath) return;
       try {
-        const buf = await vscode.workspace.fs.readFile(this.watchedFile);
-        await this.show(Buffer.from(buf).toString("utf8"), this.watchedBase);
+        const html = this.watchedRead ? await this.watchedRead() : Buffer.from(await vscode.workspace.fs.readFile(this.watchedFile)).toString("utf8");
+        if (html === null) return;
+        await this.show(html, this.watchedBase);
       } catch { /* file may have been deleted; ignore */ }
     });
   }
@@ -154,6 +158,7 @@ export class PreviewProvider {
         this.pendingHtml = null;
         this.watchedFile = undefined;
         this.watchedBase = undefined;
+        this.watchedRead = undefined;
         this.saveSubscription?.dispose();
         this.saveSubscription = undefined;
       });

@@ -4,6 +4,7 @@ import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
 import type { TurnToolMode } from '../../src/turnTools';
 import { ComposerTools, SelectedTool } from './ComposerTools';
 import { TurnReviewBar } from './TurnReviewBar';
+import { PageCard } from './PageCard';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
@@ -552,6 +553,13 @@ export function ChatPanel(props: Props) {
     const off = onHostMessage((msg) => { if (msg.type === "turnReviewState") setTurnReview(msg.view); });
     // Subscribe before asking: ready/config can precede this task-scoped panel's mount.
     postToHost({ type: "turnReviewRequest" });
+    return off;
+  }, []);
+  // REQ-STUDIO-PAGE-CARD — page cards of this task's coach turns, keyed by the chat row each sits under.
+  const [pageCards, setPageCards] = useState<Map<string, import("../../src/pageCard").PageCardView>>(() => new Map());
+  useEffect(() => {
+    const off = onHostMessage((msg) => { if (msg.type === "pageCardsState") setPageCards(new Map(msg.cards.map((c) => [c.anchorId, c]))); });
+    postToHost({ type: "pageCardsRequest" });
     return off;
   }, []);
   // #751 native help — the host reads the learner, class connection and Service again for every draw; nothing is kept here.
@@ -1493,6 +1501,10 @@ export function ChatPanel(props: Props) {
             />
           )}
           {steerMarkAfter(m.id)}
+          {!props.instructor && pageCards.get(m.id) && (() => {
+            const card = pageCards.get(m.id)!;
+            return <PageCard view={card} onOpen={(path) => postToHost({ type: "pageCardOpen", turnId: card.turnId, path })} onReveal={(path) => postToHost({ type: "pageCardReveal", turnId: card.turnId, path })} />;
+          })()}
         </Fragment>)}
         </CodeBlockScope>
 

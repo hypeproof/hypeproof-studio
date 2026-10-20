@@ -322,7 +322,7 @@ await t("host wiring: one restore point before every runtime, one review after i
     const at = send.indexOf(runtime);
     ok(at > begin, `${runtime} can run before the restore point is taken`);
   }
-  const end = send.indexOf("await this.endTurnRestore(turnRestorePoint, streamId);");
+  const end = send.indexOf("await this.endTurnRestore(turnRestorePoint, streamId, messageId);");
   ok(end > send.indexOf("this.spool?.recordTurnEnd({"), "review not computed in the turn's finally");
   ok(end < send.indexOf("this.turnTimelines.delete(streamId);", end), "review computed after the timeline is gone");
   ok(/case "turnRevert":\s*case "turnKeep":\s*case "turnReviewClose":\s*await this\.handleTurnReviewMessage\(msg\);/.test(src), "webview messages not routed");

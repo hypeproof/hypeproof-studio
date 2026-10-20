@@ -1188,6 +1188,39 @@ html, body, #root {
 }
 .hps-turn-review-actions button:disabled { opacity: 0.55; cursor: default; }
 
+/* REQ-STUDIO-PAGE-CARD / CGP-ART-R-010 — pages a coach turn built or changed, under that turn. Same neutral
+   surface as the review bar; every action is a 44px target. */
+.hps-page-card {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--vscode-descriptionForeground, #888);
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hps-page-card-title { margin: 0 0 4px; font-weight: 600; }
+.hps-page-card ul { margin: 0; padding: 0; list-style: none; }
+.hps-page-card-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 0; }
+.hps-page-card-name { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.hps-page-card-name code { overflow-wrap: anywhere; }
+.hps-page-card-kind, .hps-page-card-more { color: var(--vscode-descriptionForeground, #888); }
+.hps-page-card-more, .hps-page-card-notice { margin: 4px 0 0; }
+.hps-page-card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.hps-page-card-actions button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--vscode-panel-border, #697078);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.hps-page-card-actions button:hover { background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.16)); }
+.hps-page-card-actions button:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+
 /*
  * #503 — tool rows now sit one per line on the same timeline as the bubbles (the old
  * `.hps-tool-log` box is gone — that was the container that split the screen into two

@@ -177,6 +177,7 @@ import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchiv
 import { changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
+import { buildPageCard, handlePageCardAction, PageCardRegistry, type PageCardMessage } from "./pageCardHost";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
@@ -4625,6 +4626,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch { view = null; }
     await this.post({ type: "artifactProvenance", view });
   }
+  // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
+  // window starts with none, and the transcript stores nothing new for them.
+  private pageCardRegistry: PageCardRegistry | undefined;
+  private get pageCards(): PageCardRegistry { return (this.pageCardRegistry ??= new PageCardRegistry()); }
 
   private turnRestoreTaskKey(): string {
     return this.currentTaskStore()?.getView().activeTaskId ?? "default";
@@ -4634,6 +4639,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const review = this.turnReview;
     // A bar belongs to the task it was taken in; another open task sees none.
     void this.post({ type: "turnReviewState", view: review && review.taskKey === this.turnRestoreTaskKey() ? review.view : null });
+  }
+
+  private postPageCards(): void {
+    void this.post({ type: "pageCardsState", cards: this.pageCards.forTask(this.turnRestoreTaskKey()) });
+  }
+
+  /** REQ-STUDIO-PAGE-CARD — 열기 opens the page in the Studio preview; 폴더에서 보기 shows it in the OS file manager. */
+  private async handlePageCardMessage(msg: PageCardMessage): Promise<void> {
+    const out = await handlePageCardAction(this.pageCards, this.turnRestoreTaskKey(), msg, {
+      // The bytes come from the checked inode (pageCardHost readPageInFolder), never a second read by name.
+      open: async (abs, html, reload) => {
+        await this.preview.show(html, vscode.Uri.file(path.dirname(abs)));
+        this.preview.watchForReload(vscode.Uri.file(abs), async () => reload());
+      },
+      reveal: async (abs) => { await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(abs)); },
+    });
+    // A refusal is a notice on the card; clearing an earlier notice needs a redraw too.
+    if (out.ok === false && out.notice === undefined) return;
+    this.postPageCards();
   }
 
   /** Before a coach turn: record the work folder. Never throws; a failure is one visible line and the turn runs without a revert. */
@@ -4679,7 +4703,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** After a coach turn: compare the folder with the turn's restore point and offer the review bar when anything changed. Never throws. */
-  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string } | null, streamId: string): Promise<void> {
+  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string } | null, streamId: string, messageId: string): Promise<void> {
     if (!handle) return;
     try {
       const now = await scanFolder(handle.root);
@@ -4692,6 +4716,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now);
       void this.postArtifactProvenance(false);
       if (changeCount(changes) === 0) { await dropRestorePoint(handle.store, handle.point.id); return; }
+      // REQ-STUDIO-PAGE-CARD — the same diff (a stopped turn included) names the pages; the card sits under the
+      // turn's last transcript row. `pending-` lines are hidden once done, so they cannot carry it. A card that
+      // cannot be built never costs the review bar below.
+      try {
+        const timeline = this.turnTimelines?.get(streamId);
+        const items = timeline ? timelineEnd(timeline, Date.now()).items : [];
+        const anchorId = [...items].reverse().find((m) => !m.id.startsWith("pending-"))?.id ?? messageId;
+        const card = buildPageCard({ root: handle.root, turnId: handle.point.turnId, anchorId, changes });
+        if (card) { this.pageCards.add(handle.taskKey, handle.root, card); this.postPageCards(); }
+      } catch { /* no card */ }
       this.turnReview = {
         ...handle,
         view: { turnId: handle.point.turnId, state: "open", added: changes.added, changed: changes.changed, deleted: changes.deleted, notCovered: changes.notCovered.map((n) => n.path) },
@@ -5034,6 +5068,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "inboxRequest": await this.postInbox(); return;
       case "turnReviewRequest": this.postTurnReview(); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
+      case "pageCardsRequest": this.postPageCards(); return;
+      case "pageCardOpen":
+      case "pageCardReveal":
+        await this.handlePageCardMessage(msg);
+        return;
       case "turnRevert":
       case "turnKeep":
       case "turnReviewClose":
@@ -5055,6 +5094,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postInbox();
         // AE-15 — a remount must still show the open review bar (it never auto-dismisses).
         this.postTurnReview();
+        this.postPageCards();
         await this.postConfig();
         await this.postHistory();
         await this.postLearningState();
@@ -6657,7 +6697,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await Promise.race([Promise.allSettled(pendingReveals), new Promise((r) => { timer = setTimeout(r, 10_000); })]);
         clearTimeout(timer);
       }
-      await this.endTurnRestore(turnRestorePoint, streamId);
+      await this.endTurnRestore(turnRestorePoint, streamId, messageId);
       this.activeStreams.delete(streamId);
       // cr-verify — the run this turn carried takes no more coach calls once the turn ends.
       this.verifySession?.endTurn();

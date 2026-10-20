@@ -358,6 +358,7 @@ const SHARED_LEARNER = [
   ".hps-quote-action", ".hps-quote-note",
   ".hps-offline-banner",
   ".hps-delegation", ".hps-delegation-stop",
+  ".hps-page-card",
   ".hp-mission-week",
   ".hp-rail-lesson-meta, .hp-rail-lesson-note",
   ".hp-goal-heading",
