@@ -29,11 +29,32 @@ export function actions(plan, {acceptNotRun = false} = {}) {
 // approve pull requests" is off, and that switch would also let workflows approve them.
 // The PR step therefore uses a separate token (the org bot App in release-cut.yml). A PR
 // opened by an App also starts pull_request workflows; one opened by the workflow token does not.
+// The release branch push uses it too (branchPushEnv), so a later rc's checks also run.
 export function prToken(steps, env) {
   if (!steps.includes('pr')) return null;
   const token = env.RELEASE_PR_TOKEN;
   if (!token) throw new Error('RELEASE_PR_TOKEN is required to open the release PR; refusing before any tag or branch is pushed');
   return token;
+}
+
+// The release branch is pushed with the same token, through the environment so it never
+// appears in argv or the remote URL. actions/checkout persisted the workflow token as an
+// extraheader; an empty value resets that list, then the App credential is the only header.
+// A push by the workflow token attributes the PR's synchronize event to github-actions[bot],
+// whose pull_request runs this repo holds as action_required (#1973).
+export function branchPushEnv(token, env = {}, origin = 'https://github.com/') {
+  if (!token) return env;
+  const key = `http.${origin}.extraheader`;
+  const base = Number.parseInt(env.GIT_CONFIG_COUNT ?? '0', 10) || 0;
+  const auth = Buffer.from(`x-access-token:${token}`).toString('base64');
+  return {
+    ...env,
+    GIT_CONFIG_COUNT: String(base + 2),
+    [`GIT_CONFIG_KEY_${base}`]: key,
+    [`GIT_CONFIG_VALUE_${base}`]: '',
+    [`GIT_CONFIG_KEY_${base + 1}`]: key,
+    [`GIT_CONFIG_VALUE_${base + 1}`]: `AUTHORIZATION: basic ${auth}`,
+  };
 }
 
 function main() {
@@ -100,8 +121,18 @@ function main() {
       run('git', 'add', record);
       run('git', 'commit', '-q', '-m', `release: record ${plan.rcTag}`);
       // A later rc of the same version moves the branch to its own candidate.
-      run('git', 'push', '-q', '--force', 'origin', `HEAD:refs/heads/${plan.branch}`);
-      say(`Pushed ${plan.branch} with ${record}.`);
+      const push = env => execFileSync('git', ['push', '-q', '--force', 'origin', `HEAD:refs/heads/${plan.branch}`],
+        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env});
+      try {
+        push(branchPushEnv(releasePrToken, process.env));
+        say(`Pushed ${plan.branch} with ${record}.`);
+      } catch (error) {
+        if (!releasePrToken) throw error;
+        // e.g. an App without the workflows permission cannot push workflow changes. The workflow
+        // token still moves the branch; the PR's checks then wait for approval (action_required).
+        push(process.env);
+        say(`Pushed ${plan.branch} with ${record} using the workflow token: the release PR token push failed, so the PR's checks need approval to run.`);
+      }
     }
     if (step === 'pr') {
       try { pr('label', 'create', 'release', '--repo', repo, '--color', '0E8A16', '--description', 'Weekly release PR (release-cut)'); } catch { /* exists */ }
