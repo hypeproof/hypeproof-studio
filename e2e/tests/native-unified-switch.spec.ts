@@ -34,11 +34,20 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   await chooseChatModel(chat,'hypeproof-fast');
   const prompt=`합성 릴리스 검사입니다. 이 폴더에 acceptance.md 파일을 만들고 내용은 ${marker} 한 줄만 넣어 주세요. 다른 파일을 읽거나 바꾸지 말고, 셸·브라우저·네트워크 도구도 사용하지 마세요.`;
   const input=chat.getByRole('textbox',{name:/보낼 메시지/});await input.fill(prompt);await input.press('Enter');
+  // REQ-STUDIO-FOLDER-CONSENT (#2065): a trial seat whose picked folder is outside its served
+  // home asks once per activity and folder before the first model call. A classroom seat
+  // never asks. The turn writes a file, so the synthetic learner allows everything.
+  const consent=ctx.win.locator('.monaco-dialog-box').filter({hasText:'이 폴더에서 작업할까요?'});
+  if(managed){
+   await expect(consent).toBeVisible({timeout:20000});
+   await consent.locator('.monaco-button').filter({hasText:'읽기·고치기·명령 실행 모두 허용'}).click();
+   await expect(consent).toHaveCount(0);
+  }
   await expect(chat.locator('.hps-btn-stop')).toBeVisible();await expect(chat.locator('.hps-btn-stop')).toHaveCount(0,{timeout:100000});
   await expect(chat.locator('.hps-error-banner')).toHaveCount(0);
   await expect.poll(()=>existsSync(join(root,'acceptance.md'))).toBe(true);
   expect(readFileSync(join(root,'acceptance.md'),'utf8').trim()).toBe(marker);
-  turns.push({prompt,reply:await chat.locator('.hps-msg-assistant').last().innerText(),tools:await chat.locator('.hps-tool-label').allTextContents()});
+  turns.push({prompt,folder_consent:managed?'full':'not-asked',reply:await chat.locator('.hps-msg-assistant').last().innerText(),tools:await chat.locator('.hps-tool-label').allTextContents()});
  };
   writeFileSync(join(ctx.wsDir,'original-a.txt'),'synthetic activity A');
   writeFileSync(join(second,'original-b.txt'),'synthetic activity B');
