@@ -184,6 +184,7 @@ import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
+import { browserRememberLabel, browserTargetDetail } from "./browserTargetHost";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
@@ -6296,7 +6297,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             const line = tracker.lineFor(a);
             // A helper's call lands inside its row, so the main flow's notice line stays as it is.
             if (!work && line.kind !== "child") clearPending();
-            const label = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd())})`;
+            const label = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd(), { urlHostOnly: true })})`;
             toolLabels.set(a.id, label);
             // 2026-08-19 — when the SDK coach saves a .html with Write/Edit, that
             // result has to appear on screen. Before, only the chat's ```html fence
@@ -7414,11 +7415,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (origin && this.approvedBrowserOrigins.has(origin)) {
         return true;
       }
-      const REMEMBER = origin ? `이 사이트는 항상 허용 (${origin})` : null;
+      // The button names the same normalized host as the body (REQ-E3); the remembered key stays the origin.
+      // A file: URL has no site to remember (its origin is the string "null").
+      const rememberLabel = browserRememberLabel(url);
+      const REMEMBER = origin && rememberLabel ? rememberLabel : null;
       const buttons = REMEMBER ? ["열기", REMEMBER] : ["열기"];
       onPrompted?.();
     const pick = await vscode.window.showWarningMessage(
-        `${browserApprovalTitle(this.coachDisplayName())}\n\n${url || req.description}`,
+        // REQ-E3 / CGP-AGENT-R-006: the host on its own line + 내 미리보기 / 인터넷, never the full URL.
+        `${browserApprovalTitle(this.coachDisplayName())}\n\n${browserTargetDetail(url, { workspaceRoot: this.resolveCoachCwd() ?? null })}`,
         { modal: true },
         ...buttons,
       );

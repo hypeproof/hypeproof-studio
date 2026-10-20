@@ -28,6 +28,7 @@ import * as path from "node:path";
 // `node --experimental-strip-types` (smoke tests) which resolves specifiers
 // literally; esbuild + tsc (allowImportingTsExtensions) accept them.
 import { BLANK_BROWSER_URL, browserOpenUrl, isLoopbackUrl } from "./browserControlHelpers.ts";
+import { browserTargetInline, UNKNOWN_HOST_TEXT } from "./browserTargetHost.ts";
 import {
   MCP_BROWSER_OPEN,
   MCP_BROWSER_SCREENSHOT,
@@ -1890,6 +1891,8 @@ export function summarizeToolInput(
   input: unknown,
   max = 60,
   workspaceRoot?: string,
+  // REQ-E3 / CGP-AGENT-R-006 — learner-facing lines pass true: a `url` shows as `host · label`, never the full URL.
+  opts: { urlHostOnly?: boolean } = {},
 ): string {
   if (!input || typeof input !== "object") return "";
   const rec = input as Record<string, unknown>;
@@ -1902,6 +1905,7 @@ export function summarizeToolInput(
   for (const key of ["file_path", "path", "command", "url", "query", "pattern", "prompt", "description"]) {
     const v = rec[key];
     if (typeof v === "string" && v.length > 0) {
+      if (key === "url" && opts.urlHostOnly) return clip(browserTargetInline(v, { workspaceRoot: workspaceRoot ?? null }));
       if (key !== "file_path" && key !== "path") return clip(v);
       // 파일 읽기는 **어디를 읽었는지**까지 보여 준다. 큰 파일을 다룰 때 코치는
       // Grep 으로 위치를 찾고 그 구간만 읽는 것이 정상 패턴인데(Claude Code 자신도
@@ -2628,7 +2632,8 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
     const url = browserOpenUrl(raw) ?? "";
     return {
       kind: "openBrowser",
-      description: `브라우저 열기: ${url === BLANK_BROWSER_URL ? "빈 브라우저" : url || safeStringify(action.input)}`,
+      // REQ-E3 / CGP-AGENT-R-006: host · label only. The payload keeps the real URL for the browser.
+      description: `브라우저 열기: ${url ? browserTargetInline(url) : UNKNOWN_HOST_TEXT}`,
       payload: { url },
     };
   }
