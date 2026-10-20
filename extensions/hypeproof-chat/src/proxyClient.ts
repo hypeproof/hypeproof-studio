@@ -1,3 +1,4 @@
+import { responseEvidence, type FailureEvidence } from "./activityAvailability.ts";
 import { proxyUserContent } from "./visionInput.ts";
 import type { AssetScoreChunk, ChatMessage, Citation, ResolvedProfile } from "./protocol";
 
@@ -48,6 +49,7 @@ export class ProxyAuthError extends Error {
     | "session_window"
     | "not_in_roster"
     | "other";
+  evidence?: FailureEvidence;
   friendly: string;
   requestId?: string;        // S-07 / #49 — surfaced in webview ErrorBanner
   runbookUrl?: string;       // #165 — when present, banner renders as clickable link
@@ -72,9 +74,12 @@ export class ProxyAuthError extends Error {
  * can paste it into a DM and Jay greps Workers Logs.
  */
 export class ProxyTransportError extends Error {
+  evidence?: FailureEvidence;
   requestId?: string;
-  constructor(message: string, requestId?: string) {
+  constructor(message: string, requestId?: string, evidence?: FailureEvidence) {
+    // Keep cause evidence separate from friendly copy.
     super(message);
+    this.evidence = evidence;
     this.requestId = requestId;
   }
 }
@@ -256,6 +261,7 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
     const authErr = classifyError(res.status, text);
     if (authErr) {
       authErr.requestId = rid;
+      authErr.evidence = responseEvidence(res.status, text);
       throw authErr;
     }
     // REQ-M45 — 409 trial_requires_sdk: an SDK-only grant reached the proxy route. Keep the
@@ -269,6 +275,7 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
     throw new ProxyTransportError(
       friendlyTransportMessage(res.status, res.headers.get("retry-after")) ?? transportFailureText(args.audience ?? "classroom"),
       rid,
+      responseEvidence(res.status, text),
     );
   }
 
@@ -467,7 +474,10 @@ export async function verifyActivity(args: FetchProfileArgs, expectedId: string)
       signal:AbortSignal.timeout(15_000),
     });
   } catch { throw new ProxyTransportError(profileNetworkFailure().friendly); }
-  if (!response.ok) throw new ProxyTransportError(classifyProfileFailure(response.status,await response.text()).friendly);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ProxyTransportError(classifyProfileFailure(response.status,text).friendly, response.headers.get('x-request-id') ?? undefined, responseEvidence(response.status,text));
+  }
   let body: {activity_id?:string};
   try { body=await response.json() as {activity_id?:string}; } catch { throw new ProxyTransportError('서버의 활동 응답을 읽지 못했습니다. 다시 연결해 주세요.'); }
   if (!expectedId || body.activity_id !== expectedId) throw new ProxyTransportError('활동 정보가 바뀌었습니다. 참여 코드를 다시 확인해 주세요.');

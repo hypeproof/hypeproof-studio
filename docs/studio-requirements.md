@@ -3298,3 +3298,13 @@ AB (own files kept) and OWNERSHIP are design links, not measured outcomes.
 - Behavioral tests: `activity-trash.smoke.mjs`, `activity-trash-commands.smoke.mjs`,
   `activity-trash-seat.smoke.mjs` and `activity-trash-reach.smoke.mjs`. Installed-app
   visual acceptance is separate.
+
+## Activity unavailable (CGP-KNOW-R-036 / REQ-KNOW-68)
+
+The activity status uses structured transport/access evidence for authentication refusal,
+expiry, class ending, pause, exhaustion and outage. Unknown causes stay unknown. Local
+files can be opened or explicitly exported to a new filename without an AI token. No
+remote authorization is granted. Classroom status names the instructor and HypeProof
+support and has no purchase action. A remounted panel restores the current activity/task
+refusal; a new turn or explicit recovery clears it. Cancelled or stale file pickers do
+nothing, and exporting never silently overwrites a destination.

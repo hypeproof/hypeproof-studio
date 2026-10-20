@@ -40,7 +40,7 @@
         "US-19"
       ],
       "inline_prefixes": [],
-      "sha256": "8841eb414ad36d2dd0b2353bbdcf362dcfeb2207e3735b8f02e9b4da990159c6",
+      "sha256": "fdf5adc59ddc082db1dd88edf305948adb36f5bd57d9f170d45bd66fee063401",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/unified-studio-experience.md",

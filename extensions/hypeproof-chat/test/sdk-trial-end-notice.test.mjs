@@ -71,7 +71,7 @@ test.before(async () => {
 });
 
 const token = 'trial-test-code';
-const trialProfile = {};
+const trialProfile = {activity_kind:'trial'};
 const observed = (status, message) => Object.assign(new Error(message), { status });
 const SDK_EXHAUSTED = observed(429, 'Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.');
 const SDK_EXPIRED = observed(403, 'Claude Code returned an error result: Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다.');
@@ -111,7 +111,7 @@ for (const [label, error, ending] of [['exhausted', SDK_EXHAUSTED, 'exhausted'],
   test(`observed SDK ${label} text with passes on sale names kept files and '이용권으로 시작하기'`, async () => {
     const r = await present(error, catalogue);
     assert.equal(r.posts.length, 1);
-    assert.deepEqual(structuredClone(r.posts[0]), { type: 'streamError', streamId: 'stream-1', error: P.trialEndNotice(ending, true) });
+    assert.deepEqual(structuredClone(r.posts[0]), { type: 'streamError', streamId: 'stream-1', error: P.trialEndNotice(ending, true), activityUnavailable: {cause:ending,audience:'solo'} });
     assert.match(r.posts[0].error, /만든 파일과 대화는 그대로 있어요/);
     assert.match(r.posts[0].error, /'이용권으로 시작하기'/);
     assert.doesNotMatch(r.posts[0].error, /API Error|코드 발급 담당자|다시 시도/);
@@ -130,7 +130,7 @@ for (const [label, error, ending] of [['exhausted', SDK_EXHAUSTED, 'exhausted'],
 }
 
 test('classroom 429 is not a trial ending: no catalogue read, unchanged generic notice', async () => {
-  const r = await present(CLASSROOM_429, catalogue);
+  const r = await present(CLASSROOM_429, catalogue, {activity_kind:'classroom'});
   assert.deepEqual(r.requests, []);
   // REQ-M44 (merged with this notice): the banner carries the Service's sentence, not the CLI wrapper.
   assert.equal(r.posts[0].error, '실행 중인 작업이 있거나 이 수업의 요청 한도에 도달했습니다.');

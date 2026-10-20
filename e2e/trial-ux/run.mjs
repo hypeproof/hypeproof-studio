@@ -83,7 +83,9 @@ assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: '
 assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer }, err: new Error('fetch failed'), products: endCardPasses }), null, 'negative control: before the end');
 const notifySubmittedCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer }, err: endCardExhausted, products: endCardPasses, notifySubmitted: true });
 assert.equal(notifySubmittedCard.notify.submitted, true);
-const trialActivity = { activity: { id: 'activity-trial', name: '합성 체험', kind: 'trial', workspace: '/synthetic/trial', verified: true } };
+// Named apart from the in-block `trialActivity(trial)` helper, which shadowed this object so the
+// end-card cases spread a function and ran on a seat with no activity (a classroom audience).
+const endCardTrialSeat = { activity: { id: 'activity-trial', name: '합성 체험', kind: 'trial', workspace: '/synthetic/trial', verified: true } };
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://local');
@@ -612,7 +614,7 @@ try {
     const after = (await requests(p)).slice(before);
     assert.deepEqual(after.map((m) => m.type), ['trialEndCardDismiss'], 'the escape sends only trialEndCardDismiss');
     await expect(draft(p)).toBeVisible();
-  }, { cfg: trialActivity });
+  }, { cfg: endCardTrialSeat });
   await test('TUX-COND-07N', 'Card absent mid-work and for ordinary errors (negative control)', async p => {
     await host(p, { type: 'streamStart', streamId: 'work', messageId: 'a-work' });
     await host(p, { type: 'streamChunk', streamId: 'work', delta: '페이지를 만들고 있어요' });
@@ -635,7 +637,7 @@ try {
     await host(p, { type: 'streamError', streamId: 'fail2', error: '연결이 끊겼습니다. 다시 보내 주세요.' });
     await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
     assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
-  }, { cfg: trialActivity });
+  }, { cfg: endCardTrialSeat });
   // TUX-COND-08 — optional "이메일로 소식 받기" below the pass offer (Jay 2026-10-19). The webview's
   // setState throws in this harness, so a persisted address would fail the case; localStorage is
   // checked empty after every case too.
@@ -686,7 +688,7 @@ try {
     assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
     await btn(p, '이용권 살펴보기').click();
     await expect.poll(async () => emitted(await requests(p), 'trialEndCardPasses').length).toBe(1);
-  }, { cfg: trialActivity });
+  }, { cfg: endCardTrialSeat });
   await test('TUX-COND-08N', 'Email section absent when not advertised; an earlier submission shows the done line (controls)', async p => {
     await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
     await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
@@ -704,7 +706,7 @@ try {
     await expect(p.getByTestId('notify-optin').getByRole('textbox')).toHaveCount(0);
     await expect(btn(p, '그만 받기')).toBeVisible();
     assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length + emitted(await requests(p), 'notifyOptinWithdraw').length, 0);
-  }, { cfg: trialActivity });
+  }, { cfg: endCardTrialSeat });
   // ── Free start (SPEC iteration 4 §2.3/§2.4; TUX-SP-14/15/16) ─────────────────────────────
   // Selectors follow StartPage.tsx's FreeStartCard branch. Control for the 체험 checker: today's
   // start page (free start not advertised) does contain 체험, so the checker can fail.

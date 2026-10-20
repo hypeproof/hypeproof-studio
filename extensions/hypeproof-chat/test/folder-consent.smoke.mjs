@@ -522,6 +522,12 @@ try {
         if (!h) { unguarded.push(`${file}: (top level) ${line.trim()}`); continue; }
         const body = text.slice(h.at, m.index);
         if (GUARD.test(body)) continue;
+        // REQ-KNOW-68: an explicit native open/save picker is the user's own local
+        // export, not an AI write. The executable activity-status-host test proves
+        // no token requirement, scope recheck and overwrite:false for this one site.
+        if (file === 'src/chatPanelProvider.ts' && h.name === 'handleMessage' &&
+            line.trim() === 'await vscode.workspace.fs.copy(source, destination, { overwrite: false });' &&
+            body.includes('await activityLocalFile<vscode.Uri>(msg.action, {')) continue;
         // A helper with no guard of its own is fine when every call to it sits after a guard.
         const callers = [...text.matchAll(new RegExp(`this\\.${h.name}\\(`, "g"))];
         const guardedCallers = callers.length > 0 && callers.every((c) => { const ch = methodAt(c.index); return ch && GUARD.test(text.slice(ch.at, c.index)); });

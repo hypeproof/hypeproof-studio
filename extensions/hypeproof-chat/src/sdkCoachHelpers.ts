@@ -1,3 +1,4 @@
+import { responseEvidence } from "./activityAvailability.ts";
 // #282 — PURE mapping from a resolved cohort profile to Claude Agent SDK
 // options, plus the SDK-tool → host-approval mapping. No `vscode`, no SDK
 // import: safe to unit-test and typecheck standalone (extension pure/
@@ -2267,7 +2268,12 @@ export async function consumeSdkStream(
   /** The refusal as the real SDK throws it, so passSpentNotice / bindingRefusalCode / the spool read the same. */
   const cliRefusal = (text: string, status: number | undefined): Error => {
     const err = new Error(`Claude Code returned an error result: ${text}`);
-    if (status !== undefined) Object.defineProperty(err, "status", { value: status, enumerable: false });
+    if (status !== undefined) {
+      Object.defineProperty(err, "status", { value: status, enumerable: false });
+      // This is a CLI-generated error, never model text. Only parse a complete JSON body.
+      const bodyAt = text.indexOf('{');
+      Object.defineProperty(err, "evidence", {value: responseEvidence(status, bodyAt < 0 ? '' : text.slice(bodyAt))});
+    }
     return err;
   };
   /**

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
 const require = createRequire(import.meta.url);
-const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {ActivityConnections} from './src/activityConnections'; export {TaskWorkspaceStore} from './src/taskWorkspaceStore';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
+const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {ProxyAuthError, ProxyTransportError} from './src/proxyClient'; export {ActivityConnections} from './src/activityConnections'; export {TaskWorkspaceStore} from './src/taskWorkspaceStore';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 
 export async function createTaskHarness(root, onMessage = () => {}, { profile = null, turnTools, configExtras = {}, beforeReadDir } = {}) {
   const opened = [], posts = [], state = new Map(), module = { exports: {} };
@@ -41,7 +41,7 @@ export async function createTaskHarness(root, onMessage = () => {}, { profile = 
       coach: { name: 'HypeProof', personality: '', configured: true }, profile, turnTools,
     } });
   };
-  return { h, store, source, opened, posts, connections, activity, browserState, vscode,
+  return { internals: module.exports, h, store, source, opened, posts, connections, activity, browserState, vscode,
     handle: message => h.handleMessage(message, source),
     scoped: message => ({ ...message, activityId: activity.id, taskId: store.getView().activeTaskId }),
   };

@@ -1,3 +1,5 @@
+import { ActivityStatus } from "./ActivityStatus";
+import { accessFailure, type ActivityUnavailable } from "../../src/activityAvailability";
 import { CitationRack as PersonalCitationRack } from './CitationPreview';
 import type { RecoveredRequest, InlineEditDraft } from '../../src/activityDraft';
 import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
@@ -142,6 +144,7 @@ interface Props {
    */
   streamingId: string | null;
   error: string | null;
+  activityUnavailable?: ActivityUnavailable;
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
   /** TUX-COND-07 — the end-of-trial card for this turn ending; drawn instead of the error banner. */
@@ -659,7 +662,10 @@ export function ChatPanel(props: Props) {
   }, [worldPending, streaming]);
 
   /** Responding, or opening a world — the friend buttons and the runner read the same value. */
-  const unavailable = frozen || (!!config?.activity && !config.activity.verified);
+  const statusAudience = config?.activity?.kind === "classroom" || config?.profile?.activity_kind === "classroom" ? "classroom" : config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
+  const selectedAccess = config?.access?.view?.choices.find(c => c.id === config.access?.selected);
+  const activityStatus = props.activityUnavailable ?? config?.activityUnavailable ?? accessFailure(selectedAccess?.state, statusAudience);
+  const unavailable = !!activityStatus || frozen || (!!config?.activity && !config.activity.verified);
   const busy = streaming || worldPending || unavailable;
   // CGP-CHAT-R-007 — a selection inside one answer offers 인용하기; the quote joins the draft, never sends.
   const [answerQuote, dropAnswerQuote] = useAnswerQuote(!unavailable);
@@ -1710,7 +1716,13 @@ export function ChatPanel(props: Props) {
           />
         )}
 
-        {error && props.trialEndCard && props.onTrialEndCardPasses ? (
+        {activityStatus ? <ActivityStatus status={activityStatus}
+          onOpen={() => postToHost({type:'activityLocalFile',action:'open'})}
+          onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
+          onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
+          onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
+          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
+        </ActivityStatus> : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
           <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
         ) : error && (
           <ErrorBanner

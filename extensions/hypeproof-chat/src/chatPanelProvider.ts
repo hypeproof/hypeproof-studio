@@ -1,3 +1,5 @@
+import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
+import { activityLocalFile } from "./activityLocalFiles.ts";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
@@ -169,7 +171,7 @@ import {
   profileNotReadyNotice,
   shellApprovalTitle,
 } from "./coachIdentity.ts";
-import { isFreeSeat, profileAudience, type SeatAudience } from "./seatVocabulary.ts";
+import { isFreeSeat, profileAudience, seatAudience, type SeatAudience } from "./seatVocabulary.ts";
 import { classifyDenial, denialCopy, lessonFeatureOff } from "./denialSource.ts";
 // A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels,
 // the seat's session and the host arguments runSdkCoach takes.
@@ -3030,6 +3032,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   private opsLastArtifact: string | undefined;
   // #751 R3 — why new AI runs are held. Local editing, saving, Stop and export never consult this.
+  private lastActivityStatus?: { scope: string; message: Extract<HostMessage, {type:'streamError'}> };
+  private localFileBusy = false;
   private opsHold: "paused" | "stop_unconfirmed" | null = null;
   private opsGeneration = 0;
   opsSetHold(hold: "paused" | "stop_unconfirmed" | null): void { this.opsHold = hold; }
@@ -5304,7 +5308,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (this.opsHold && (msg.type === "sendMessage" || msg.type === "retryMessage")) {
       // #751 — only a NEW AI run is held; the typed text goes back into the box, nothing is lost.
       await this.post({type:"inputRejected",text:msg.type==="sendMessage"?msg.text:msg.prompt,images:msg.images,toolMode:requestedMode});
-      void this.post({ type: "streamError", streamId: "connection", error: this.opsHold === "paused" ? "강사가 새 AI 실행을 잠시 멈췄습니다. 입력은 그대로 남겨 두었고, 파일 편집·저장·내보내기는 계속 할 수 있습니다." : "이전 AI 실행이 끝났는지 확인하지 못해 새 실행을 잠시 막았습니다. 입력은 그대로 남겨 두었습니다. 강사에게 알려 주세요." });
+      void this.post({ type: "streamError", streamId: "connection", activityUnavailable: { cause: this.opsHold === "paused" ? "paused" : "forbidden", audience: "classroom" }, error: this.opsHold === "paused" ? "강사가 새 AI 실행을 잠시 멈췄습니다. 입력은 그대로 남겨 두었고, 파일 편집·저장·내보내기는 계속 할 수 있습니다." : "이전 AI 실행이 끝났는지 확인하지 못해 새 실행을 잠시 막았습니다. 입력은 그대로 남겨 두었습니다. 강사에게 알려 주세요." });
       return;
     }
     if (this.connectionChanging && (msg.type === "sendMessage" || msg.type === "retryMessage")) {
@@ -5472,11 +5476,39 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // the session (see clearHistory), so the next conversation start is
         // disclosed again.
         {
+          const savedStatus = this.lastActivityStatus;
+          if (savedStatus?.scope === this.turnRequestScope() && !this.hasActiveStream()) await this.post({...savedStatus.message, streamId:'activity'});
           const disclosure = this.aiDisclosure.noticeForReady();
           if (disclosure) void this.post({ type: "aiDisclosure", text: disclosure });
         }
         return;
+      case 'activityLocalFile': {
+        if (msg.action !== 'open' && msg.action !== 'export') return;
+        if (this.localFileBusy) return;
+        this.localFileBusy = true;
+        const scope = this.turnRequestScope();
+        try {
+          await activityLocalFile<vscode.Uri>(msg.action, {
+            current: () => scope === this.turnRequestScope(),
+            choose: async () => (await vscode.window.showOpenDialog({ canSelectFiles: true, canSelectFolders: false, canSelectMany: false, title: '내 컴퓨터의 파일 선택', openLabel: '선택' }))?.[0],
+            destination: async source => {
+              const file = path.parse(source.fsPath);
+              return vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(path.join(file.dir, file.name + '-copy' + file.ext)), title: '내 파일을 다른 위치에 내보내기', saveLabel: '내보내기' });
+            },
+            open: async source => { if (source.scheme === 'file') await vscode.commands.executeCommand('vscode.open', source); },
+            copy: async (source, destination) => {
+              if (source.scheme !== 'file' || destination.scheme !== 'file' || source.toString() === destination.toString()) return;
+              // Never overwrite silently, including a destination changed while the picker was open.
+              await vscode.workspace.fs.copy(source, destination, { overwrite: false });
+              void vscode.window.showInformationMessage('내 파일을 내보냈습니다.');
+            },
+          });
+        } catch { void vscode.window.showWarningMessage('파일을 열거나 내보내지 못했습니다. 접근 권한을 확인하고, 내보내기는 새 파일 이름을 선택해 주세요.'); }
+        finally { this.localFileBusy = false; }
+        return;
+      }
       case 'refreshAccess':
+        this.lastActivityStatus = undefined;
         await this.loadAccess(true);await this.postConfig();return;
       case 'carryoverDecision':
         await this.decideCarryover(msg.decision);
@@ -7112,10 +7144,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.activeStreams.delete(responseStreamId);
         this.turnTimelines.delete(responseStreamId);
       }
+      const activityUnavailable: import("./activityAvailability").ActivityUnavailable | undefined = error instanceof ProxyTransportError ? activityFailure(error.evidence ?? {},profileAudience(this.cachedProfile)) ?? {cause:"unknown",audience:profileAudience(this.cachedProfile)} : undefined;
       // A pre-stream storage/profile failure still owns a pending UI request.
       // Restore its captured input before propagating an unexpected host error.
       await this.post({type:"inputRejected",text,images,toolMode:mode});
-      await this.post({type:"streamError",streamId:responseStreamId ?? "activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
+      await this.post({type:"streamError",streamId:responseStreamId ?? "activity",activityUnavailable,error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
       if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
     } finally {
       try { releaseActivity?.(); } finally {
@@ -7386,6 +7419,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // transport can also throw AbortError (for example on timeout), and still
     // needs a terminal error so the user can recover instead of waiting forever.
     if (current?.signal?.aborted) return;
+    // REQ-KNOW-68: classify evidence before prose-only legacy notices. Preserve the seat
+    // before expired-code cleanup can remove its profile. All runtimes enter here.
+    const statusProfile = current?.profile ?? this.cachedProfile;
+    const audience = statusProfile?.activity_kind === "classroom" ? "classroom" : profileAudience(statusProfile);
+    const evidence = err instanceof ProxyAuthError || err instanceof ProxyTransportError
+      ? { ...err.evidence, ...(err instanceof ProxyAuthError ? { kind: err.kind } : {}) }
+      : err && typeof err === 'object' ? {status:(err as FailureEvidence).status,...(err as {evidence?:FailureEvidence}).evidence} : {};
+    const unavailable = err instanceof SdkGatewayAuthError && current?.profile?.pass ? null : activityFailure(evidence, audience);
+    if (unavailable && (err instanceof ProxyAuthError || err instanceof ProxyTransportError || evidence.code || evidence.type || (evidence.status !== 403 && evidence.status !== 429))) {
+      const requestId = err instanceof ProxyAuthError || err instanceof ProxyTransportError ? err.requestId : undefined;
+      if (requestId) this.lastRequestId = requestId;
+      await this.post({ type: 'streamError', streamId, error: err instanceof ProxyAuthError ? err.friendly : sdkErrorDisplayText(err, audience), activityUnavailable: unavailable, requestId, retry: false });
+      return;
+    }
     // TUX-COND-07 — a free trial that ran out ends in one inline card, only on an open-trial seat
     // (`profile_id: "studio-open-trial"`, served only behind the Service's default-off
     // HPS_OPEN_TRIAL). The card carries the Service's own pass facts; it never opens the
@@ -7394,7 +7441,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const card = trialEndCardView({ profile: current.profile, err, products: await catalogueWithin(current.proxyUrl), notifySubmitted: notifySubmitted(this.context?.globalState, current.token) });
       if (current.signal?.aborted) return;
       if (card) {
-        void this.post({ type: "streamError", streamId, error: card.text, trialEndCard: card });
+        void this.post({ type: "streamError", streamId, error: card.text, activityUnavailable: { cause: trialEndReason(err, false) === "expired" ? "expired" : "exhausted", audience }, trialEndCard: card });
         // CONV-FUNNEL-R-002 — count the card on the grant-scoped funnel route. Only reached when the
         // card is drawn (never for the banner fallback, a code-issued trial or a pass). The reporter
         // sends nothing unless the probe turned the route on, and keeps the first view per grant.
@@ -7410,19 +7457,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Free start (SPEC iteration 4 §2.4) — today's free budget is drained: a calm notice with
     // the 00:00 KST time, no retry button and no purchase opened. Files and conversation stay.
     if (isFreeSeat(current?.profile) && freeDailyCapReached(err)) {
-      void this.post({ type: "streamError", streamId, error: FREE_DAILY_CAP_NOTICE, retry: false });
+      void this.post({ type: "streamError", streamId, error: FREE_DAILY_CAP_NOTICE, activityUnavailable: {cause:"exhausted",audience}, retry: false });
       return;
     }
     const ending = trialEnding(err, !!current?.profile?.pass);
     if (ending) {
       const sold = current?.proxyUrl ? await passesOnSale(current.proxyUrl) : false;
       if (current?.signal?.aborted) return;
-      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile)) });
+      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile)), activityUnavailable: {cause: ending,audience} });
       return;
     }
     // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
     const spent = passSpentNotice(err);
-    if (spent) { void this.post({ type: "streamError", streamId, error: spent }); return; }
+    if (spent) { void this.post({ type: "streamError", streamId, error: spent, activityUnavailable: {cause:"exhausted",audience} }); return; }
+    if (unavailable) {
+      const requestId = err instanceof ProxyAuthError || err instanceof ProxyTransportError ? err.requestId : undefined;
+      if (requestId) this.lastRequestId = requestId;
+      await this.post({ type: 'streamError', streamId, error: err instanceof ProxyAuthError ? err.friendly : sdkErrorDisplayText(err, audience), activityUnavailable: unavailable, requestId, retry: false });
+      return;
+    }
     // REQ-L12 — the SDK's api_retry carries only 401, which is not enough to
     // call a code refunded or expired. For a profile already typed as a bought
     // pass, re-read the authenticated profile endpoint and trust only its exact
@@ -7435,7 +7488,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (current.signal?.aborted) return;
       const notice = refreshed && !refreshed.ok ? paidPassEndNotice(current.profile.pass, refreshed.failure) : null;
       if (notice) {
-        void this.post({ type: "streamError", streamId, error: notice });
+        void this.post({ type: "streamError", streamId, error: notice, activityUnavailable: {cause: refreshed && !refreshed.ok && refreshed.failure.code === "trial_revoked_or_reissued" ? "revoked" : "expired",audience} });
         return;
       }
     }
@@ -7445,6 +7498,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         type: "streamError",
         streamId,
         error: err.friendly,
+        activityUnavailable: activityFailure({ ...err.evidence, kind: err.kind }, audience) ?? undefined,
         requestId: err.requestId,
         runbookUrl: err.runbookUrl,
       });
@@ -7472,19 +7526,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             }
           });
       }
-      // #381 — "wrong_role" (instructor token) also needs a different token,
-      // so reopen the box. It is NOT deleted: only "expired" is provably dead.
-      if (err.kind === "expired" || err.kind === "missing" || err.kind === "wrong_role") {
-        // Clear the dead token so the UI shows "Token" not "Token ✓",
-        // then reopen the input box for a fresh one.
-        if (err.kind === "expired") {
-          await this.context.secrets.delete(TOKEN_KEY);
-          this.invalidateProfile();
-          await this.postConfig();
-        }
-        await new Promise((r) => setTimeout(r, 600));
-        await vscode.commands.executeCommand("hypeproof-chat.setToken");
-      }
       return;
     }
     // REQ-M45 — the install notice: shown as is, with its request ID, and without "다시 보내기".
@@ -7498,7 +7539,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const reason = sdkErrorDisplayText(err, profileAudience(this.cachedProfile));
     const requestId = err instanceof ProxyTransportError ? err.requestId : undefined;
     if (requestId) this.lastRequestId = requestId;
-    void this.post({ type: "streamError", streamId, error: reason, requestId });
+    void this.post({ type: "streamError", streamId, error: reason, requestId, activityUnavailable: {cause: err instanceof TypeError ? "outage" : "unknown", audience} });
   }
 
   /**
@@ -7928,6 +7969,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
+        activityUnavailable: this.opsHold ? {cause:this.opsHold === 'paused' ? 'paused' : 'forbidden',audience:'classroom'} : this.lastProfileFailure ? activityFailure(this.lastProfileFailure, activity ? seatAudience(activity) : profileAudience(profile)) ?? (this.lastProfileFailure.reason === 'network' ? {cause:'outage',audience:activity ? seatAudience(activity) : profileAudience(profile)} : undefined) : undefined,
         access:this.accessState,
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
@@ -8202,6 +8244,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if (msg.type === 'streamStart') this.lastActivityStatus = undefined;
+    if (msg.type === 'streamError' && msg.activityUnavailable) this.lastActivityStatus = {scope:this.turnRequestScope(),message:msg};
     msg={...msg,activityId:msg.activityId ?? activityConnections(this.context)?.scope, taskId: msg.taskId ?? this.currentTaskStore?.()?.getView().activeTaskId ?? undefined} as HostMessage;
     const targets = [this.editorChat?.webview, this.view?.webview].filter((view): view is vscode.Webview => !!view);
     if (!targets.length) return;
