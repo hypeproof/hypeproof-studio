@@ -34,3 +34,5 @@ falling back to an unreviewable write. Bind the prompt to a fresh presentation i
 current activity/task/folder/profile and lifecycle generation before credential
 reads, and recheck after them. This is a conservative implementation choice, not
 a new human agreement or a claim that every write needs approval by default.
+
+| DES-KNOW-30 (CGP-KNOW-D-017) | Reuse the native artifact history command as a local side panel on all eligible seats; compare verified text snapshots through Studio's built-in diff editor. Keep existing native attestation and machine-default-off capture. Binary comparison fails visibly rather than guessing an encoding. | Queue source line 210 points at neighboring DES-KNOW-29; the title, register design ID and R017 parent consistently identify DES-KNOW-30 at line 211. No new data destination or permission. | Off with artifactHistoryEnabled | no |

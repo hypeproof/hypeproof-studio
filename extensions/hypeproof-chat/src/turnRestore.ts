@@ -616,3 +616,18 @@ export async function restoreArtifactVersion(req: { store: string; root: string;
   finally { if (!touched && pendingHead) await fs.unlink(pointPath(req.store, pendingHead.id)).catch(() => undefined); if (temp) await fs.unlink(temp).catch(() => undefined); }
   }).catch(() => ({ ok: false, reason: "busy" }));
 }
+
+/** Read only a verified, bounded UTF-8 snapshot for the native diff editor. */
+export async function readArtifactVersion(store: string, id: string, rel: string): Promise<string | null> {
+  try {
+    const point = await loadRestorePoint(store, id);
+    const file = point?.files.find(f => f.path === rel);
+    if (!file || file.size > TURN_RESTORE_LIMITS.fileMax) return null;
+    const blob = blobPath(store, file.sha256);
+    const stat = await fs.lstat(blob);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > TURN_RESTORE_LIMITS.fileMax) return null;
+    const data = await fs.readFile(blob);
+    if (data.length > TURN_RESTORE_LIMITS.fileMax || sha256(data) !== file.sha256 || data.includes(0)) return null;
+    return new TextDecoder('utf-8', { fatal: true }).decode(data);
+  } catch { return null; }
+}

@@ -1,3 +1,4 @@
+import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
@@ -4919,6 +4920,30 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch { /* A history failure never interrupts the editor save. */ }
   }
 
+  /** DES-KNOW-30: the existing command opens a side panel for every known learner seat. */
+  async openArtifactHistoryPanel(abs: string): Promise<void> {
+    const cwd = this.resolveCoachCwd(), task = this.turnRestoreTaskKey(), generation = this.profileGeneration;
+    const idle = () => !this.hasActiveStream() && this.pendingSends === 0 && !this.taskChanging && !this.connectionChanging && !this.clearingHistory && !this.verifySession?.running;
+    const current = () => this.artifactHistoryEnabled() && idle() && this.profileGeneration === generation && this.resolveCoachCwd() === cwd && this.turnRestoreTaskKey() === task;
+    if (!cwd || !current() || this.turnRestoreBusy) {
+      void vscode.window.showInformationMessage(this.artifactHistoryEnabled() ? "진행 중인 작업이 끝난 뒤에 이전 버전을 볼 수 있어요." : "이전 버전 보관은 설정에서 켠 활동에서 사용할 수 있어요.");
+      return;
+    }
+    try {
+      const root = await fs.promises.realpath(cwd), rel = path.relative(root, abs).split(path.sep).join('/');
+      if (!current()) return;
+      const panel = new ArtifactHistoryPanel({
+        root, rel, store: artifactHistoryStore(this.context.globalStorageUri.fsPath, root, rel), current,
+        writeAllowed: () => !this.folderWriteRefusalFor(abs) && !vscode.workspace.textDocuments.some(d => d.uri.scheme === 'file' && d.uri.fsPath === abs && d.isDirty),
+        canStart: () => !this.turnRestoreBusy,
+        busy: value => { this.turnRestoreBusy = value; },
+        restored: async () => { await this.provenanceRecorder()?.unobserved(root); },
+        attest: async () => { if (current()) await this.showArtifactHistory(abs); },
+      });
+      await panel.open();
+    } catch { void vscode.window.showInformationMessage('이전 버전을 열지 못했어요.'); }
+  }
+
   /** REQ-KNOW-30: native history works for every learner seat, including class seats without TaskWorkspace. */
   async showArtifactHistory(abs: string): Promise<void> {
     const cwd = this.resolveCoachCwd();
@@ -4948,7 +4973,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void vscode.window.showInformationMessage(recorded?.turnId === "artifact-learner" ? "내가 확인한 수정으로 기록했어요." : "파일이 바뀌었어요");
         return;
       }
-      const answer = await vscode.window.showWarningMessage("선택한 버전으로 복원할까요?", { modal: true, detail: "현재 파일을 먼저 보관한 뒤 이 파일만 바꿔요." }, "복원하기");
+      const answer = await vscode.window.showWarningMessage(`${new Date(selected.point.createdAt).toLocaleString("ko-KR")} 버전으로 복원할까요?`, { modal: true, detail: "현재 파일을 먼저 보관한 뒤 이 파일만 바꿔요." }, "복원하기");
       if (answer !== "복원하기") return;
       if (!stillCurrent() || this.folderWriteRefusalFor(abs)) { void vscode.window.showInformationMessage("파일이 바뀌었어요"); return; }
       const result = await restoreArtifactVersion({ store, root, rel, id: selected.point.id, expected, stillCurrent });

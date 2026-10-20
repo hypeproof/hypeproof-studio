@@ -3190,7 +3190,7 @@ rc; the expected copy is read from source at `f9bde411`, not from a running app.
 The Explorer file menu and command palette offer `이 파일의 이전 버전` for all
 known learner seats, including minors, when machine-default-off
 `hypeproofChat.artifactHistoryEnabled` is explicitly enabled. Unknown/instructor
-profiles and activity transitions cannot enable capture. The native list shows
+profiles and activity transitions cannot enable capture. The side panel and native attribution picker show
 recorded time and AI, 나 (an explicit upload, restore or confirmed manual revision),
 or 기록 없음 when authorship is unproven.
 Editor save events are captured but never treated as proof of learner authorship;
@@ -3315,3 +3315,21 @@ denies; fresh requests reset expansion. Each presentation has a new identity and
 can answer once. Missing/hidden UI, reload, disposal, timeout, terminal events,
 account changes, and scope changes across either asynchronous credential read
 cannot approve a stale write. Two simultaneous requests do not replace each other.
+
+### Version side panel (CGP-KNOW-D-017 / DES-KNOW-30)
+
+The existing history command opens a local side panel on every eligible learner seat.
+The machine-default-off history gate remains unchanged. Rows show honest AI / 나 /
+기록 없음 chips, relative recorded time (full timestamp on hover), 지금 for the
+current saved version, and a 44px 복원 action for older versions. Native restore
+confirmation names the selected version's full time and preserves current bytes.
+A compare toggle opens Studio's existing read-only diff editor for verified UTF-8
+snapshots; binary or damaged snapshots report a persistent dismissible error.
+Refresh and restore close the panel's old comparisons; unrelated editor tabs remain.
+Errors survive refresh and successful actions until explicitly dismissed. Changed
+bytes or activity/profile, dirty buffers, unapproved writes and concurrent restores
+cannot overwrite a file. The side panel has no slide animation, including reduced
+motion. No additional retention, upload or class permission is introduced. The
+existing native attribution picker remains reachable through 내 수정 확인; it is
+an explicit attestation, never automatic proof of authorship. This supports Product
+Intent #1/#2 and learner OWNERSHIP without exposing capability labels.

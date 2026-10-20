@@ -52,7 +52,7 @@ try {
   await fs.unlink(file); await fs.writeFile(file, two);
   let enabled = true;
   const picks = [];
-  const native = { workspace: { getConfiguration: () => ({ get: (_key, dflt) => enabled === undefined ? dflt : enabled }), textDocuments: [] }, window: {
+  const native = { ViewColumn: { Beside: 2 }, workspace: { getConfiguration: () => ({ get: (_key, dflt) => enabled === undefined ? dflt : enabled }), textDocuments: [] }, window: {
     createOutputChannel: () => ({ appendLine() {} }),
     showQuickPick: async entries => entries.find(e => e.point.id === first.id),
     showWarningMessage: async () => '복원하기',
@@ -60,7 +60,7 @@ try {
   } };
   const notices = [], require = createRequire(import.meta.url);
   const extension = fileURLToPath(new URL('..', import.meta.url));
-  const bundle = await build({ stdin: { contents: "export { ChatPanelProvider } from './src/chatPanelProvider';", resolveDir: extension, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'silent' });
+  const bundle = await build({ stdin: { contents: `export { ChatPanelProvider } from ${JSON.stringify(process.env.ARTIFACT_PROVIDER_SOURCE ?? "./src/chatPanelProvider")};`, resolveDir: extension, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'silent' });
   const module = { exports: {} };
   vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? native : require(id), console, Buffer, process, setTimeout, clearTimeout, setInterval, clearInterval, AbortSignal, URL, TextEncoder, TextDecoder, crypto: webcrypto });
   const host = Object.create(module.exports.ChatPanelProvider.prototype);
@@ -220,5 +220,59 @@ try {
     await H.captureArtifactVersion(store, root, '작품.bin', 'unknown');
   }
   assert.equal((await H.listRestorePoints(store)).length, 20, 'retention is bounded per file');
+  // The public command's new side panel binds the original activity/profile/file.
+  const panelViews=[];
+  native.ViewColumn={Beside:2};
+  native.window.tabGroups={all:[],close:async()=>true};
+  native.workspace.registerTextDocumentContentProvider=()=>({dispose(){}});
+  native.window.createWebviewPanel=(_type,_title,column)=>{
+    const view={column,html:'',messages:[],webview:{set html(value){view.html=value;},onDidReceiveMessage(fn){view.receive=fn;},postMessage(m){view.messages.push(m);return Promise.resolve(true);}},onDidDispose(){}};
+    panelViews.push(view);return view;
+  };
+  host.cachedProfile={activity_kind:'classroom',minor_cohort:true};host._instructorMode.isInstructor=false;
+  host.profileGeneration=0;host.turnRestoreBusy=false;enabled=false;
+  await host.openArtifactHistoryPanel(fileB);assert.equal(panelViews.length,0);assert.match(notices.at(-1),/설정에서 켠 활동/);
+  enabled=true;host.pendingSends=1;await host.openArtifactHistoryPanel(fileB);assert.equal(panelViews.length,0);assert.match(notices.at(-1),/진행 중인 작업/);host.pendingSends=0;
+  await host.openArtifactHistoryPanel(fileB);const panelView=panelViews.at(-1);assert.equal(panelView.column,2);assert.match(panelView.html,/지금/);
+  const selectedForPanel=(await H.listRestorePoints(storeB)).at(-1);const beforePanel=await fs.readFile(fileB);
+  native.window.showWarningMessage=async()=>{host.profileGeneration++;return '복원하기';};
+  await panelView.receive({action:'restore',id:selectedForPanel.id});assert.deepEqual(await fs.readFile(fileB),beforePanel);assert.match(panelView.messages.at(-1).error,/파일이 바뀌었어요/);assert.equal(host.turnRestoreBusy,false);
+  await host.openArtifactHistoryPanel(fileB);const dirtyPanel=panelViews.at(-1);
+  native.window.showWarningMessage=async()=> '복원하기';native.workspace.textDocuments=[{uri:{scheme:'file',fsPath:fileB},isDirty:true}];
+  await dirtyPanel.receive({action:'restore',id:selectedForPanel.id});assert.deepEqual(await fs.readFile(fileB),beforePanel);assert.match(dirtyPanel.messages.at(-1).error,/파일이 바뀌었어요/);
+  native.workspace.textDocuments=[];
+  // The panel's restore honours the REAL folder consent (folderWriteRefusalFor is not stubbed here) and the host's busy flag.
+  {
+    const FC = await import('../src/folderConsent.ts');
+    const consent = new Map(), saved = { refusal: host.folderWriteRefusalFor, profile: host.cachedProfile, context: host.context };
+    delete host.folderWriteRefusalFor;
+    assert.equal(Object.hasOwn(host, 'folderWriteRefusalFor'), false, 'the prototype guard is in use');
+    host.context = { ...saved.context, globalState: { get: k => consent.get(k), update: async (k, v) => { consent.set(k, v); } }, workspaceState: { get: () => undefined, update: async () => {} } };
+    host.cachedProfile = { profile_id: 'p', activity_id: 'd'.repeat(64), activity_kind: 'personal' };
+    host.servedWorkspaceRoot = path.join(tmp, 'elsewhere');
+    native.workspace.workspaceFolders = [{ uri: { fsPath: root } }];
+    const choose = level => consent.set(FC.FOLDER_CONSENT_KEY, FC.writeFolderConsent(consent.get(FC.FOLDER_CONSENT_KEY), 'd'.repeat(64), FC.canonicalFolder(root), level));
+    const fileC = path.join(root, 'c.txt'), storeC = H.artifactHistoryStore(path.join(tmp, 'state'), root, 'c.txt');
+    try {
+      await fs.writeFile(fileC, 'c1'); const c1 = await H.captureArtifactVersion(storeC, root, 'c.txt', 'ai');
+      await fs.writeFile(fileC, 'c2');
+      native.window.showWarningMessage = async () => '복원하기';
+      for (const level of ['read', 'none', undefined]) {
+        consent.clear(); if (level) choose(level);
+        await host.openArtifactHistoryPanel(fileC); const view = panelViews.at(-1);
+        await view.receive({ action: 'restore', id: c1.id });
+        assert.equal(await fs.readFile(fileC, 'utf8'), 'c2', `${level ?? 'undecided'}: the folder choice refuses the restore`);
+        assert.match(view.messages.at(-1).error, /파일이 바뀌었어요/);
+      }
+      // Control: with full access, the same press restores, so the refusals above are the consent check and nothing else.
+      consent.clear(); choose('full');
+      await host.openArtifactHistoryPanel(fileC); const full = panelViews.at(-1);
+      let asked = 0; native.window.showWarningMessage = async () => { asked++; return '복원하기'; };
+      host.turnRestoreBusy = true; await full.receive({ action: 'restore', id: c1.id });
+      assert.equal(asked, 0, 'a busy host never opens the restore dialog'); assert.equal(await fs.readFile(fileC, 'utf8'), 'c2'); host.turnRestoreBusy = false;
+      await full.receive({ action: 'restore', id: c1.id });
+      assert.equal(asked, 1); assert.equal(await fs.readFile(fileC, 'utf8'), 'c1', 'control: full access restores');
+    } finally { Object.assign(host, { cachedProfile: saved.profile, context: saved.context, folderWriteRefusalFor: saved.refusal, turnRestoreBusy: false }); native.workspace.workspaceFolders = undefined; }
+  }
   console.log('artifact-history: PASS (binary restore, recovery head, stale bytes/context, links, traversal, shared lock)');
 } finally { await fs.rm(tmp, { recursive: true, force: true }); }
