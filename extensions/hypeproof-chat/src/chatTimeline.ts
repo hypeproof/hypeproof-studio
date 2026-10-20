@@ -23,6 +23,9 @@ export interface ToolEntry {
   state: "running" | "done" | "error";
   /** SDK 가 실어 보낸 자기 시각(ISO). 없으면 호출자가 시계를 준다. */
   at?: number;
+  /** REQ-STUDIO-LONG-STEP-HINT — the step in learner words and when it began (host clock, ms). */
+  step?: string;
+  since?: number;
 }
 
 export interface TimelineState {
@@ -62,7 +65,7 @@ function toolMessage(e: ToolEntry, now: number): ChatMessage {
     role: "tool",
     content: "",
     createdAt: e.at ?? now,
-    tool: { icon: e.icon, label: e.label, state: e.state },
+    tool: { icon: e.icon, label: e.label, state: e.state, ...(e.step !== undefined && e.since !== undefined ? { step: e.step, since: e.since } : {}) },
   };
 }
 
@@ -163,7 +166,8 @@ export function timelineTool(
   if (state.pending.some((p) => p.id === entry.id)) {
     return {
       ...state,
-      pending: state.pending.map((p) => (p.id === entry.id ? { ...p, ...entry } : p)),
+      // A step ends when an update carries none (REQ-STUDIO-LONG-STEP-HINT).
+      pending: state.pending.map((p) => (p.id === entry.id ? { ...p, ...entry, step: entry.step, since: entry.since } : p)),
     };
   }
   const open = state.openId ? state.items.find((m) => m.id === state.openId) : undefined;

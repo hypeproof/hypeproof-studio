@@ -29,7 +29,11 @@ export interface ChatMessage {
    * line (`🔧 Write(index.html) ✓`). `id` is the SDK's tool_use id, so the
    * running → done update happens in place.
    */
-  tool?: { icon: string; label: string; state: "running" | "done" | "error" };
+  tool?: {
+    icon: string; label: string; state: "running" | "done" | "error";
+    /** REQ-STUDIO-LONG-STEP-HINT — a running tool step in learner words, and when it began (ms). */
+    step?: string; since?: number;
+  };
   /**
    * #173 — Web search citations attached to an assistant message. Populated
    * by the worker's SSE translator (`hps_citations` delta), accumulated by
@@ -807,7 +811,7 @@ export type HostMessage = (
   // splices this line into the **same array** as `streamChunk` to build
   // [bubble] → [tool] → [bubble]. `at` is the SDK's own timestamp as it sent it (ms;
   // the host clock when absent) — the createdAt of the persisted line.
-  | { type: "toolLog"; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number }
+  | { type: "toolLog"; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number; step?: string; since?: number }
   // #308 — the "페이지를 코치에게" completion notice. Raising a VS Code notification
   // toast stops the integrated browser with "Paused due to Notification" (core
   // behaviour), so this is announced on the chat panel's inline status line instead

@@ -261,6 +261,7 @@ import {
 } from "./chatPanelHelpers";
 import { buildChatPanelCsp } from "./cspBuilder";
 import { toolActivityMode, workPhrase, WorkLine, THINKING_PHRASE, NEXT_STEP_PHRASE, PREVIEW_PHRASE } from "./toolActivity";
+import { StepLines } from "./longStepHint";
 import {
   SessionSpool,
   spoolIdentityFromToken,
@@ -6183,6 +6184,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // REQ-STUDIO-DELEGATION-ROW — a Task/Agent call draws one row bound to this stream; its
       // helper's calls group under it. A summary cohort (D-027) gets no row: its line stays as is.
       const tracker = new DelegationTracker(streamId, { rows: !work });
+      // REQ-STUDIO-LONG-STEP-HINT — when each detailed tool line's clock starts (at its approval).
+      const stepLines = new StepLines();
       delegations = tracker;
       // Between a tool result and the next tool call the stream is completely silent
       // (a call only arrives once complete, in one lump). On a real device that stretch
@@ -6317,15 +6320,41 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               const header = delegationHeader(a.input, this.resolveCoachCwd());
               tracker.setHeader(a.id, header);
               log(line.lineId, DELEGATION_ICON, header, "running");
+              // REQ-STUDIO-LONG-STEP-HINT — no clock yet; it starts at the approval (case "approval").
+              const started = stepLines.begin(a.id, { lineId: line.lineId, icon: DELEGATION_ICON, label: header, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
+              if (started) this.postToolLog(streamId, started);
             } else if (work) {
               pendingShown = true;
               work.show(workPhrase(a.name, a.input));
+            } else if (line.kind === "child") {
+              // A helper's own call sits inside its row; the row is the step the hint times.
+              log(line.lineId, "🔧", label, "running");
             } else {
               log(line.lineId, "🔧", label, "running");
+              // The words come from the tool name (workPhrase), never from `label`.
+              const started = stepLines.begin(a.id, { lineId: line.lineId, icon: "🔧", label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
+              if (started) this.postToolLog(streamId, started);
             }
             break;
           }
+          case "approval": {
+            // REQ-STUDIO-LONG-STEP-HINT — every call passes canUseTool, which reports here once the
+            // learner (modal) or the policy decided. The step's clock starts now, so time spent on
+            // the approve/deny modal ("승인 기다리는 중") is never counted as running time.
+            if (!a.allowed) { stepLines.end(a.id); break; }
+            const startedAt = Date.now();
+            if (work) {
+              pendingShown = true;
+              work.startStep(a.id, workPhrase(a.name, a.input), startedAt);
+              break;
+            }
+            const started = stepLines.approved(a.id, startedAt);
+            if (started) this.postToolLog(streamId, started);
+            break;
+          }
           case "tool_result": {
+            stepLines.end(a.id);
+            work?.endStep(a.id);
             const line = tracker.lineFor(a);
             // A backgrounded helper's result is the SDK's placeholder, never its answer: the row
             // stays open and the turn's end closes it as 실패 (NO_ANSWER_REASON).

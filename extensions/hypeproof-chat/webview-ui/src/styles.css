@@ -1146,6 +1146,46 @@ html, body, #root {
   font-size: 11px;
 }
 
+/* REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019) — one calm line under a tool step running 20 s+.
+   Same quiet surface as the stop notice; it fades in once and never moves under reduced motion. */
+.hps-long-step {
+  /* The transcript is a column flex box: keep the hint's own height (44px 멈추기) when it is short. */
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--vscode-descriptionForeground, #888);
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--vscode-descriptionForeground, #888);
+  word-break: keep-all;
+}
+.hps-long-step-offer { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.hps-long-step-stop {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
+  border-radius: 8px;
+  /* Required control boundary (DES-11, ≥3:1): the shared token, not the theme's secondary button
+     colour, which is about 1.1:1 on a light surface. */
+  border: 1px solid var(--hp-control-line);
+  background: transparent;
+  color: var(--vscode-foreground, inherit);
+  font: inherit;
+  cursor: pointer;
+}
+.hps-long-step-stop:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+@keyframes hps-long-step-in { from { opacity: 0; } to { opacity: 1; } }
+/* Opt-in motion: with reduced motion the hint simply appears. */
+@media (prefers-reduced-motion: no-preference) {
+  .hps-long-step { animation: hps-long-step-in var(--hp-dur-enter) var(--hp-ease); }
+}
+
 /* CGP-SHELL-R-024 — the "AI가 할 수 있는 일이 바뀌었어요" system line: same quiet surface, one dismiss. */
 .hps-capability-change > div { flex: 1; min-width: 0; }
 .hps-capability-change p { margin: 0; }

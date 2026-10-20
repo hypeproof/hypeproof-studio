@@ -458,7 +458,7 @@ export function App() {
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
-        case "toolLog": dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}) } }); break;
+        case "toolLog": dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}), ...(msg.step !== undefined && msg.since !== undefined ? { step: msg.step, since: msg.since } : {}) } }); break;
         case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
         case "elementAttached": dispatch({ type: "elementAttached", element: msg.element }); break;
         case "pageAttachment": dispatch({ type: "pageAttachment", attachment: msg.attachment }); break;

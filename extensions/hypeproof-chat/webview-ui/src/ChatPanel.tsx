@@ -63,6 +63,7 @@ import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, postToHost } from "./vscode";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { groupDelegations } from "../../src/delegationRow";
+import { activeLongStep, longStepHint, type ActiveLongStep } from "../../src/longStepHint";
 import { DelegationRow } from "./DelegationRow";
 import { CONTEXT_COMPACT_NOTE, CONTEXT_TRIM_NOTE, isCompactionLine, trimMarkerIndex } from "../../src/contextTrim";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
@@ -693,7 +694,9 @@ export function ChatPanel(props: Props) {
   // CGP-SHELL-R-011 — offline banner and reconnect line; nothing is sent on reconnect.
   const connectivity = useConnectivity();
   // One live region: the most recent line wins, so a reconnect is heard after a finished turn.
-  const liveAnnouncement = useLiveRegion([responseAnnouncementText, connectivity.announcement]);
+  // REQ-STUDIO-LONG-STEP-HINT — the hint's 20 s and 60 s lines go through this always-mounted region.
+  const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
+  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement]);
   /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
   const sendWhenOnline = (send: () => unknown, held: HeldNoteKind) => guardSend(connectivity.online, send, () => setImgNote(OFFLINE_HELD_NOTES[held]));
   // CGP-CHAT-R-012 — "지금 방향 바꾸기": stop through the Stop path; the parked text goes on the end edge (steerNow.ts).
@@ -1183,6 +1186,7 @@ export function ChatPanel(props: Props) {
     ux.suggestions.follow_up.length > 0;
   // #414 — if a real activity log showed up this turn, the spinner does not invent fake stages.
   const turnHasActivity = hasActivityThisTurn(messages);
+  const longStep = streaming ? activeLongStep(messages) : null;
   // Personal chat offers retry on the latest coach answer only.
   const latestAssistantId = [...messages].reverse().find(m => m.role === 'assistant')?.id;
   // CGP-CHAT-R-002 — one version per prompt is drawn; "수정" sits on the latest prompt only, and
@@ -1541,6 +1545,15 @@ export function ChatPanel(props: Props) {
           })()}
         </Fragment>)}
         </CodeBlockScope>
+
+        {/* REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019) — one calm hint under a tool step running 20 s+. */}
+        {longStep && <LongStepHintLine
+          key={`${longStep.id}@${longStep.since}`}
+          step={longStep}
+          turn={{ streaming, stalled: !!error }}
+          onStop={() => { restoreQueuedToDraft(); props.onCancel(); }}
+          onAnnounce={setLongStepAnnouncement}
+        />}
 
         {props.pageNotice && (
           <div className="hps-page-notice" role="status" aria-live="polite">
@@ -2106,6 +2119,40 @@ function WorldStrip({
  * seconds through a live region is noise. The accessible route to progress is the tool
  * log in the timeline ("✍️ 고치는 중…"); this bar is a visual device laid on top of it.
  */
+/**
+ * REQ-STUDIO-LONG-STEP-HINT — the hint for the one tool step that has run long. All decisions are
+ * in src/longStepHint.ts; this only re-reads the clock once a second while the step runs (the host
+ * sends nothing during a silent tool run, so without this ticker the hint never appears), and the
+ * same element updates in place. The announcement goes to the panel's response announcer, a live
+ * region mounted all along, and changes only at 20 s and 60 s; the ticking counter is not announced.
+ * 멈추기 is the Stop button's path.
+ */
+function LongStepHintLine({ step, turn, onStop, onAnnounce }: { step: ActiveLongStep; turn: { streaming: boolean; stalled: boolean }; onStop: () => void; onAnnounce: (text: string) => void }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((n) => n + 1), 1000);
+    const stop = () => clearInterval(timer);
+    return stop;
+  }, [step.id, step.since]);
+  const hint = longStepHint({ step: step.step, since: step.since, now: Date.now(), ...turn });
+  const announce = hint?.announce ?? '';
+  useEffect(() => { onAnnounce(announce); }, [announce, onAnnounce]);
+  useEffect(() => {
+    const clear = () => onAnnounce('');
+    return clear;
+  }, [onAnnounce]);
+  if (!hint) return null;
+  return (
+    <section className="hps-long-step" data-phase={hint.phase}>
+      <span className="hps-long-step-text" aria-hidden="true">{hint.text}</span>
+      {hint.offerStop && <span className="hps-long-step-offer">
+        <span className="hps-long-step-choice" aria-hidden="true">{hint.choice}</span>
+        <button type="button" className="hps-long-step-stop" style={{ minHeight: 44, minWidth: 44 }} onClick={onStop}>멈추기</button>
+      </span>}
+    </section>
+  );
+}
+
 function RunnerBar({ face, running }: { face: RunnerFace; running: boolean }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {

@@ -6632,6 +6632,40 @@
       ]
     },
     {
+      "id": "ST-IMP-LONG-STEP-HINT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/longStepHint.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LONG-STEP-HINT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-IMP-LONG-STEP-HINT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/long-step-hint.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/long-step-hint.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-IME-GUARD",
       "stage": "implementation",
       "owner": "jayleekr",

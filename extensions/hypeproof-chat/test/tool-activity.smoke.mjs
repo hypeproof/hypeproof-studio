@@ -84,7 +84,8 @@ assert.match(panel, /if \(message\.id\.startsWith\('pending-'\) && t\.state === 
 const provider = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
 assert.match(provider, /const work = toolActivityMode\(profile\) === "summary"\s*\? new WorkLine\(PENDING_ID,/, "summary cohorts get the line");
 // REQ-STUDIO-DELEGATION-ROW — the line id comes from DelegationTracker (the SDK id for a plain call).
-assert.match(provider, /\} else if \(work\) \{\s*pendingShown = true;\s*work\.show\(workPhrase\(a\.name, a\.input\)\);\s*\} else \{\s*log\(line\.lineId, "🔧", label, "running"\);/, "tool_use: a phrase instead of the raw label");
+// REQ-STUDIO-LONG-STEP-HINT — a summary call shows its phrase (its clock starts at the approval); a detailed line keeps its raw label.
+assert.match(provider, /\} else if \(work\) \{\s*pendingShown = true;\s*work\.show\(workPhrase\(a\.name, a\.input\)\);\s*\} else if \(line\.kind === "child"\) \{[^}]*log\(line\.lineId, "🔧", label, "running"\);\s*\} else \{\s*log\(line\.lineId, "🔧", label, "running"\);/, "tool_use: a phrase instead of the raw label");
 assert.match(provider, /else if \(!work\) log\(\s*line\.lineId,\s*"🔧",\s*a\.isError/, "tool_result: no per-call line (failures included)");
 assert.match(provider, /case "thinking":[\s\S]{0,200}if \(work\) \{\s*pendingShown = true;\s*work\.show\(THINKING_PHRASE\);\s*break;/, "thinking: the phrase, never the thought text");
 assert.match(provider, /toolLabels\.set\(a\.id, label\);/, "observation still records the raw label");

@@ -46,6 +46,8 @@
   border: 0; background: transparent; font-size: var(--hp-text-caption); color: var(--tw-muted); gap: 8px;
 }
 .hps-shell[data-chat-detail="personal"] .hps-tool-label { overflow-wrap: anywhere; min-width: 0; }
+/* REQ-STUDIO-LONG-STEP-HINT — the long-step hint follows the personal type scale (≥14px). */
+.hps-shell[data-chat-detail="personal"] .hps-long-step { font-size: var(--hp-text-caption); color: var(--tw-muted); border-left-color: var(--tw-line); }
 .hps-shell[data-chat-detail="personal"] .hps-tool-mark { color: inherit; }
 .hps-shell[data-chat-detail="personal"] .hps-cit-rack { margin-top: 3px; max-width: 100%; gap: 7px; }
 .hps-shell[data-chat-detail="personal"] .hps-cit-chip {
