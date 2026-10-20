@@ -6474,6 +6474,40 @@
       ]
     },
     {
+      "id": "ST-IMP-MISSING-TASK-FOLDER",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-IMP-FOLDER-CONSENT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/missingTaskFolder.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MissingFolderNotice.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MISSING-TASK-FOLDER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-IMP-MISSING-TASK-FOLDER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/missing-task-folder.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/missing-task-folder.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-FINISH-NOTICE",
       "stage": "implementation",
       "owner": "jayleekr",

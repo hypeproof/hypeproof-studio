@@ -85,6 +85,76 @@ controls), and a source scan that every write call site in the chat host and pre
 passes the guard (a planted direct write fails it; each guard was removed once and the
 smoke failed). `test/denial-source.smoke.mjs` covers the sixth source.
 
+`REQ-STUDIO-MISSING-TASK-FOLDER` (CGP-AGENT-R-028 / REQ-CGP-AGENT-57, DES-CGP-AGENT-57, P1;
+built 2026-10-20): when a personal task's folder (the open folder, or the activity's recorded
+folder when none is open) is missing — moved, renamed or deleted, before or while Studio is open,
+or gone across a restart; not a folder; not readable and writable by Studio (`stat` plus
+`access(R_OK|W_OK|X_OK)`, so `chmod 000` and a locked parent count); or no longer resolving to
+the activity's recorded canonical folder (a symlink swapped in, which the activity lock would
+refuse anyway) — the chat shows one calm notice above the composer instead of a failed send:
+"이 작업의 폴더를 찾을 수 없어요. 옮기거나 지웠다면 폴더를 다시 골라 주세요.", with one action,
+**다시 고르기** (44px target, learner text on the type-scale tokens, ≥14px; `role="status"`).
+The check is asynchronous (a hung network mount does not block the extension host) and runs
+again on every send, so a one-off read error is not remembered. Seats: the
+REQ-STUDIO-FOLDER-CONSENT seats with personal tasks (personal or trial activity, or a bought
+pass; never a classroom seat, a seat with a served lesson or lesson binding, or the instructor
+surface). Classroom and lesson seats get no notice: their folder is the class's, and they keep
+the existing, stricter refusal of the send ("활동 연결 또는 작업 폴더를 확인하지 못했습니다…" from the
+activity lock). While the folder is missing nothing is sent and no turn starts. The webview
+holds the send and keeps the draft; a press asks the host to look again, and if the folder is
+back the held draft goes out once. The host holds a new message and a retry before `handleSend`
+runs: the text goes back to the composer (`inputRejected`), the conversation is redrawn from
+history so no unsent bubble remains, and the notice is posted. No error banner, no VS Code toast.
+The webview asks for the state on mount (each task), when the panel becomes visible and when the
+window regains focus.
+
+다시 고르기 runs the folder picker ("이 폴더로 이어서 하기"). The pick is resolved to its
+canonical folder (symlinks, on-disk case, drive letter); a folder outside the activity's own asks
+the folder-consent question for that folder first (`folderConsentForFolder`), and closing it or
+answering "이 폴더에서는 AI를 쓰지 않음" moves nothing ("이 폴더에서는 AI를 쓰지 않기로 골라서 작업을
+옮기지 않았어요. 다른 폴더를 골라 주세요."). Then the draft is flushed (`setConnectionChanging`)
+and the task store is carried over: the store is scoped by activity id and canonical folder
+(`taskWorkspaceScope`), so the new folder has its own scope. `TaskWorkspaceStore.adoptFrom` copies
+every task (messages, drafts, earlier versions, verdicts; the source's active task stays active)
+into the new scope under the store's lock and atomic writes. For a task the target scope already
+holds (a move back to a folder used before, or a retry after a half-done move) the copy being
+moved wins: the target's copy of that task, with its versions and verdicts, is first written to a
+backup file next to the store (`<scope>.<task>.pre-rebind-<ts>[-n].json`, created exclusively and
+never overwritten; the same millisecond takes the next suffix) and then replaced. If that copy
+holds turns the moving copy does not, it also stays visible as its own task, "<작업 이름> · 이전".
+Tasks only the target holds are kept. One store lock covers the carry, in the order backups,
+versions sidecar, task file (the commit point), verdict sidecar, so a carry that fails leaves the
+target's verdicts unchanged. The copy is then read back from disk; the task moves only when the new scope holds the same
+active task, conversation and draft. The old scope is never changed or deleted. The move itself
+is the path 프로젝트 변경 uses (`projectOpener`: activity commit under the canonical root,
+`ensureWorkspace`, window reload); the activity commit now tolerates a window whose own folder no
+longer resolves. A pick that does not move the task keeps the notice with one extra line: not a
+folder ("고른 곳을 열 수 없어요. 다른 폴더를 골라 주세요."), consent closed, "AI 안 씀", the
+activity's own reason (for example a folder bound to another activity), or a generic failure line
+(also when the store could not be carried); a raw error never reaches the learner. 다시 고르기 does
+nothing while a turn runs.
+
+Not built: the "다시 가져오기" (REQ-P4 source re-download) option of the register row, dropped by
+the audit to one action; a read-only draft view under a notice that replaces the composer (the
+composer stays, held). Known limits: re-entry from the start page with a saved activity whose
+folder is gone still recreates that folder empty (`openWorkspaceFolder` →
+`prepareWorkspaceDirectory`), so that path opens an empty folder rather than this notice; a
+picked folder nested inside another activity's folder is accepted (the activity binding checks
+only the exact folder, as on the start page and in 프로젝트 변경). Tests:
+`test/missing-task-folder.smoke.mjs` (pure decisions including `chmod 000`, a locked parent, a
+symlink swap and a transient error; consent for a picked folder; the real host's hold of a send
+and a retry, the re-check, 다시 고르기 with consent, "AI 안 씀" and failure notes, against a fake
+VS Code; the rebind with the real `TaskWorkspaceStore` and `ActivityConnections`: a message and a
+draft in the old folder are in the reopened store of the new one, and the old scope is kept; a
+round trip back to a folder used before and a retry after a half-done move with an edited draft
+both carry the moving copy, back up the replaced one and keep the target's own tasks; at store
+level, a diverged target copy stays as "· 이전", an existing backup is never overwritten (a
+same-millisecond carry takes unique names), and a carry whose task-file write fails leaves the
+verdicts unchanged;
+wiring) and `test/missing-task-folder.test.tsx` (the real ChatPanel: notice, held send with the
+draft kept, re-check that sends the held draft once, 다시 고르기, cleared notice; classroom draws
+nothing).
+
 `REQ-STUDIO-FINISH-NOTICE` (CGP-AGENT-R-023, P1, 2026-10-20): when a coach turn ends
 while no chat surface is on screen (the sidebar view's `visible` and the editor chat
 panel's `visible` are both false, so the panel is hidden or covered), Studio shows one

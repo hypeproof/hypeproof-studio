@@ -382,6 +382,106 @@ export class TaskWorkspaceStore {
     });
   }
 
+  /**
+   * REQ-STUDIO-MISSING-TASK-FOLDER — carry another scope's tasks (messages, drafts, earlier versions
+   * and verdicts) into this scope when the activity moves to a new folder (the scope names the
+   * folder). The source — the store the learner is working in now — is only read: it is never
+   * changed or deleted. For a task both scopes hold (a move back to a folder used before, or a retry
+   * after a half-done move) the source's copy wins. This scope's copy of that task, with its versions
+   * and verdicts, is first written to a backup file next to the store
+   * (`<scope>.<task>.pre-rebind-<ts>[-n].json`, created exclusively, never overwritten); if that
+   * copy holds turns the source does not, it also stays visible as its own task, "<name> · 이전".
+   * Tasks only this scope holds are kept. The source's active task becomes the active one.
+   * One lock covers the whole carry. Order: backups, versions sidecar, task file (the commit
+   * point), then the verdict sidecar, so a failed carry never leaves the target's verdicts changed.
+   */
+  adoptFrom(source: TaskWorkspaceStore): Promise<TaskWorkspaceView> {
+    if (source.scope === this.scope) return Promise.resolve(this.getView());
+    if (source.loadError) return Promise.reject(source.loadError);
+    const from = clone(source.requireData(source.data));
+    const fromVersions = clone(source.versions.tasks);
+    const fromVerdicts = clone(source.verdicts.tasks);
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      try {
+        await this.prepareDirectory();
+        const lock = await this.acquireLock();
+        try {
+          let disk: WorkspaceData | undefined;
+          try {
+            const stat = await lstat(this.filePath);
+            if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 기록 파일의 위치를 확인해야 합니다.');
+            disk = decode(await readFile(this.filePath, 'utf8'), this.scope);
+          } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
+          const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
+          const diskVerdicts = await this.readVerdictsLocked(lock.owner.nonce);
+          const tasks = clone(disk?.tasks ?? []);
+          const versions = clone(diskVersions);
+          const verdicts = clone(diskVerdicts);
+          const stamp = Date.now();
+          for (const task of from.tasks) {
+            const at = tasks.findIndex(existing => existing.id === task.id);
+            if (at >= 0) {
+              const old = tasks[at];
+              await this.writeRebindBackup({ version: 1, scope: this.scope, replacedAt: stamp, task: old,
+                versions: diskVersions.tasks[old.id] ?? null, verdicts: diskVerdicts.tasks[old.id] ?? [] }, old.id, stamp);
+              const moving = new Set(joinVersions(task.messages, fromVersions[task.id]).map(message => message.id));
+              if (joinVersions(old.messages, diskVersions.tasks[old.id]).some(message => !moving.has(message.id))) {
+                // Turns made only here stay visible beside the moved task, never only in the backup.
+                const kept: TaskDocument = { ...old, id: randomUUID(), title: `${old.title.slice(0, 150)} · 이전`, titleOrigin: 'manual' };
+                tasks.push(kept);
+                if (diskVersions.tasks[old.id]) versions.tasks[kept.id] = clone(diskVersions.tasks[old.id]);
+                if (diskVerdicts.tasks[old.id]?.length) verdicts.tasks[kept.id] = clone(diskVerdicts.tasks[old.id]);
+              }
+              tasks[at] = task;
+            } else tasks.push(task);
+            if (fromVersions[task.id]) versions.tasks[task.id] = fromVersions[task.id]; else delete versions.tasks[task.id];
+            if (fromVerdicts[task.id]?.length) verdicts.tasks[task.id] = fromVerdicts[task.id]; else delete verdicts.tasks[task.id];
+          }
+          const next: WorkspaceData = { version: 1, scope: this.scope, revision: (disk?.revision ?? 0) + 1, activeTaskId: from.activeTaskId, tasks };
+          if (JSON.stringify(versions) !== JSON.stringify(diskVersions)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(versions)), data: versions });
+            decodeVersions(sidecar, this.scope);
+            await this.writeAtomic(this.versionsPath, sidecar, lock.owner.nonce);
+          }
+          const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+          decode(content, this.scope);
+          await this.writeAtomic(this.filePath, content, lock.owner.nonce);
+          this.data = next;
+          this.versions = versions;
+          if (JSON.stringify(verdicts) !== JSON.stringify(diskVerdicts)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(verdicts)), data: verdicts });
+            decodeVerdicts(sidecar, this.scope);
+            await this.writeAtomic(this.verdictsPath, sidecar, lock.owner.nonce);
+          }
+          this.verdicts = verdicts;
+          return this.getView();
+        } finally {
+          await this.releaseLock(lock);
+        }
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '작업을 옮기지 못했습니다. 원래 기록은 그대로 있어요.');
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
+
+  /** One backup file, created exclusively: an existing name (same millisecond) takes the next suffix. */
+  private async writeRebindBackup(backup: unknown, taskId: string, stamp: number): Promise<void> {
+    for (let n = 0; n < 1000; n++) {
+      const target = join(this.directory, `${this.scope}.${taskId}.pre-rebind-${stamp}${n ? `-${n}` : ''}.json`);
+      let file;
+      try { file = await open(target, 'wx', 0o600); }
+      catch (error) { if (codeOf(error) === 'EEXIST') continue; throw error; }
+      try { await file.writeFile(JSON.stringify(backup), 'utf8'); await file.sync(); }
+      finally { await file.close(); }
+      return;
+    }
+    fail('io', '작업을 옮기기 전 보관 파일을 만들지 못했습니다.');
+  }
+
   private newTask(title: string, now: number): TaskDocument {
     return { id: randomUUID(), title, titleOrigin: title === '새 작업' ? 'default' : 'manual', createdAt: now, updatedAt: now, messageCount: 0,
       messages: [], draft: emptyActivityDraft(), sourceSelection: null, importedLegacy: false };

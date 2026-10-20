@@ -670,6 +670,9 @@ export type WebviewMessage = (
   | { type: "inboxRequest" }
   // AE-15 / CGP-ART-R-002 — the learner's decision on the last turn's review bar; `turnId` must name the bar the host holds.
   | { type: "turnReviewRequest" }
+  /** REQ-STUDIO-MISSING-TASK-FOLDER — ask for the notice state; 다시 고르기. */
+  | { type: "missingTaskFolderRequest" }
+  | { type: "missingTaskFolderRepick" }
   | { type: "turnRevert"; turnId: string }
   | { type: "turnKeep"; turnId: string }
   | { type: "turnReviewClose"; turnId: string }
@@ -764,6 +767,8 @@ export type HostMessage = (
   | { type: "inboxState"; inbox: import("./classroomInbox").InboxView }
   /** AE-15 / CGP-ART-R-002 — the review bar for the last coach turn's file changes; null removes it. */
   | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
+  /** REQ-STUDIO-MISSING-TASK-FOLDER — the personal task's folder is gone: one notice with 다시 고르기; null hides it. */
+  | { type: "missingTaskFolder"; notice: import("./missingTaskFolder").MissingTaskFolderNotice | null }
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — one label per work-folder file, from recorded events only; null when there is no folder. */
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */

@@ -301,7 +301,9 @@ export class ActivityConnections {
     const previousPointer = this.raw.workspaceState.get<string | null>(ACTIVE);
     const bindingFile = this.bindingPath(workspace);
     const oldBinding = fs.existsSync(bindingFile) ? fs.readFileSync(bindingFile,'utf8') : undefined;
-    const sameWindowRoot = !!this.root() && canonical(this.root()!) === workspace;
+    // The window's folder may be gone (REQ-STUDIO-MISSING-TASK-FOLDER: 다시 고르기 commits a new folder
+    // from a window whose folder was moved away); a root that no longer resolves is not this folder.
+    const sameWindowRoot = (() => { const open = this.root(); if (!open) return false; try { return canonical(open) === workspace; } catch { return false; } })();
     const ref = PREFIX + crypto.randomUUID();
     const next: ActivityRecord = {version:1,ref,id,service,serverId:p.activity_id!,workspace,token,...(accountPass ? {accountPass} : {}),
       name:p.lesson?.content.title ?? p.display_name,kind:p.activity_kind,...(p.pass?{pass:true}:{}),...(isFreeSeat(p)?{free:true}:{}),savedAt:Date.now()};
