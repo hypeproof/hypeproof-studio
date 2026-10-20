@@ -230,6 +230,7 @@ export async function activate(context: vscode.ExtensionContext) {
     returned: async () => { await startPage.show(); },
     changed: () => startPage.accountChanged(),
     lock: accountLock(context.globalStorageUri.fsPath),
+    freeCredential: (): Promise<string | undefined> => startPage.freeSignInCredential(),
     invalidated: async sessionId => {
       if (connections.current?.accountPass?.sessionId === sessionId) provider.opsRequestStop();
       if (await connections.forgetAccount(sessionId)) { provider.invalidateProfile(); void provider.refreshConfig(); }
