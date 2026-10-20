@@ -151,13 +151,6 @@ export async function claimFreeStart(args: { proxyUrl: string; installId: string
 /** The Lab guardian section the under-14 block links to. */
 export const guardianUrl = (siteBase: string) => `${siteBase.replace(/\/+$/, "")}/studio#guardian`;
 
-/** The allowance line before the first message (SPEC §2.4 candidate allowance). */
-export function freeAllowanceLine(offer: { requestLimit?: number; durationHours?: number; unit?: string } | null | undefined): string | null {
-  if (!offer?.requestLimit || !offer.durationHours) return null;
-  const hours = Math.round(offer.durationHours);
-  return `무료 AI 요청 ${offer.requestLimit.toLocaleString("ko-KR")}번 · 첫 요청부터 ${hours}시간`;
-}
-
 /**
  * The saved free seat ended and the Service refused its profile: 403 `trial_expired` carrying the
  * free sentence (Service free-seat-copy, SPEC iteration 4 §1.3). A code-issued trial's sentence and
