@@ -51,7 +51,8 @@ try {
   release(); await held; await waiting;
   await fs.unlink(file); await fs.writeFile(file, two);
   let enabled = true;
-  const native = { workspace: { getConfiguration: () => ({ get: () => enabled }), textDocuments: [] }, window: {
+  const picks = [];
+  const native = { workspace: { getConfiguration: () => ({ get: (_key, dflt) => enabled === undefined ? dflt : enabled }), textDocuments: [] }, window: {
     createOutputChannel: () => ({ appendLine() {} }),
     showQuickPick: async entries => entries.find(e => e.point.id === first.id),
     showWarningMessage: async () => '복원하기',
@@ -117,6 +118,66 @@ try {
   const optedIn = new ArtifactProvenanceRecorder(recorderBase, Date.now, () => true);
   await optedIn.hostWrote(root, [{absPath:file,data:'external-change'}], 'ai');
   assert.equal((await H.listRestorePoints(recorderStore))[0].turnId,'artifact-ai');
+  // Default-off: the manifest default and the code default are both false, and an unset setting retains nothing.
+  const pkg = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.strictEqual(pkg.contributes.configuration.properties['hypeproofChat.artifactHistoryEnabled'].default, false);
+  enabled = undefined; assert.strictEqual(host.artifactHistoryEnabled(), false, 'unset setting is off'); enabled = true;
+  // Editor saves are recorded as unknown, never as the learner.
+  const fileB = path.join(root, 'b.txt'), storeB = H.artifactHistoryStore(path.join(tmp, 'state'), root, 'b.txt');
+  await fs.writeFile(fileB, 'b1'); await host.recordArtifactSave(fileB);
+  assert.deepEqual((await H.listRestorePoints(storeB)).map(p => p.turnId), ['artifact-unknown'], 'editor save actor is unknown');
+  // The list shows who and when for AI / 나 / 기록 없음.
+  for (const [data, actor] of [['b2', 'ai'], ['b3', 'learner'], ['b4', 'unknown']]) { await fs.writeFile(fileB, data); await H.captureArtifactVersion(storeB, root, 'b.txt', actor); }
+  native.window.showQuickPick = async entries => { picks.push(entries); return undefined; };
+  await host.showArtifactHistory(fileB);
+  const shown = [...picks.at(-1)], want = { 'artifact-ai': 'AI', 'artifact-learner': '나', 'artifact-unknown': '기록 없음' };
+  assert.deepEqual(shown.map(e => e.label), (await H.listRestorePoints(storeB)).map(p => `${want[p.turnId]} · ${new Date(p.createdAt).toLocaleString('ko-KR')}`));
+  assert.deepEqual(shown.map(e => e.point.turnId), ['artifact-unknown', 'artifact-learner', 'artifact-ai', 'artifact-unknown']);
+  assert.deepEqual(shown.map(e => e.description), ['현재 버전', '보관된 버전', '보관된 버전', '보관된 버전']);
+  // Restore archives bytes that were never captured before, and the new head is 나.
+  const three = Buffer.from('b5-never-captured');
+  await fs.writeFile(fileB, three);
+  const before = await H.listRestorePoints(storeB);
+  assert(!before.some(p => p.files[0].sha256 === hash(three)), 'precondition: bytes not yet captured');
+  const aiId = before.find(p => p.turnId === 'artifact-ai').id;
+  assert.deepEqual(await H.restoreArtifactVersion({ store: storeB, root, rel: 'b.txt', id: aiId, expected: hash(three) }), { ok: true });
+  assert.equal(await fs.readFile(fileB, 'utf8'), 'b2');
+  const after = await H.listRestorePoints(storeB);
+  const recovery = after.find(p => p.files[0].sha256 === hash(three));
+  assert(recovery, 'pre-restore copy exists after restore');
+  assert.equal(after[0].turnId, 'artifact-learner', 'restored head is 나'); assert.equal(after[0].files[0].sha256, hash('b2'));
+  assert.deepEqual(await H.restoreArtifactVersion({ store: storeB, root, rel: 'b.txt', id: recovery.id, expected: hash('b2') }), { ok: true });
+  assert.deepEqual(await fs.readFile(fileB), three, 'recovery copy holds the exact pre-restore bytes');
+  // Automatic hooks and host-write actors, with the opt-in on and off.
+  const hookBase = path.join(tmp, 'hooks'), hookOn = new ArtifactProvenanceRecorder(hookBase, Date.now, () => true), hookOff = new ArtifactProvenanceRecorder(hookBase);
+  const hookStore = rel => H.artifactHistoryStore(hookBase, root, rel);
+  const turns = async rel => (await H.listRestorePoints(hookStore(rel))).map(p => p.turnId);
+  await fs.writeFile(path.join(root, 'h.txt'), 'h1');
+  const hp = { turnId: 't1', createdAt: 1000, files: [{ path: 'h.txt', sha256: hash('h1') }] };
+  await hookOff.turnStart(root, hp); assert.deepEqual(await turns('h.txt'), [], 'turnStart off by default');
+  await hookOn.turnStart(root, hp); assert.deepEqual(await turns('h.txt'), ['artifact-unknown'], 'turnStart captures when opted in');
+  await fs.writeFile(path.join(root, 'h.txt'), 'h2');
+  const hafter = [{ path: 'h.txt', sha256: hash('h2') }];
+  await hookOff.turnEnd(root, hp, { added: [], changed: ['h.txt'], deleted: [] }, hafter); assert.deepEqual(await turns('h.txt'), ['artifact-unknown']);
+  await hookOn.turnEnd(root, hp, { added: [], changed: ['h.txt'], deleted: [] }, hafter); assert.deepEqual(await turns('h.txt'), ['artifact-ai', 'artifact-unknown'], 'turnEnd records AI');
+  for (const [actor, rel, turn] of [['ai', 'w-ai.txt', 'artifact-ai'], ['studio', 'w-studio.txt', 'artifact-unknown'], ['learner_upload', 'w-up.txt', 'artifact-learner']]) {
+    await fs.writeFile(path.join(root, rel), rel);
+    await hookOn.hostWrote(root, [{ absPath: path.join(root, rel), data: rel }], actor);
+    assert.deepEqual(await turns(rel), [turn], `hostWrote ${actor}`);
+  }
+  // turnStart capture is bounded by file count and total bytes.
+  const { TURN_START_HISTORY_LIMITS: LIM } = await import('../src/artifactProvenance.ts');
+  assert.deepEqual([LIM.files, LIM.bytes], [25, 4 * 1024 * 1024]);
+  const many = [];
+  for (let i = 0; i < 30; i++) { const rel = `many-${i}.txt`; await fs.writeFile(path.join(root, rel), `m${i}`); many.push({ path: rel, sha256: hash(`m${i}`) }); }
+  await hookOn.turnStart(root, { turnId: 't2', createdAt: 2000, files: many });
+  let capturedMany = 0; for (const f of many) capturedMany += (await turns(f.path)).length ? 1 : 0;
+  assert.equal(capturedMany, LIM.files, 'turnStart file cap');
+  const big = [];
+  for (let i = 0; i < 4; i++) { const data = Buffer.alloc(1.5 * 1024 * 1024, i + 1), rel = `big-${i}.bin`; await fs.writeFile(path.join(root, rel), data); big.push({ path: rel, sha256: hash(data) }); }
+  await hookOn.turnStart(root, { turnId: 't3', createdAt: 3000, files: big });
+  let capturedBig = 0; for (const f of big) capturedBig += (await turns(f.path)).length ? 1 : 0;
+  assert.equal(capturedBig, 2, 'turnStart byte cap');
   // A context switch during queued metadata/blob IO must not commit a new revision.
   await fs.writeFile(file, 'pending-context');
   const beforeRace = (await H.listRestorePoints(store)).map(p => p.id);
