@@ -305,6 +305,45 @@ the background pin (deleting that key on helper seats reproduces its previous di
 `test/sdk-gateway.smoke.mjs` names the pin as the second deliberate env change on builds that
 carry `agents`, and its A1-tip digests are unchanged. The A5 render digests did not change.
 
+`REQ-STUDIO-LONG-STEP-HINT` (CGP-ART-R-019 / REQ-ART-19, design CGP-ART-D-019, P1, 2026-10-20;
+extends REQ-M26, REQ-M27 and #403): when one tool step has been running for 20 s, the chat adds
+one calm Korean hint under it that names the step in learner words and how long it has run,
+e.g. "명령을 실행하는 중이에요 · 20초째". At 60 s the same hint adds "더 기다려도 되고, 지금 멈춰도
+돼요." and a **멈추기** button that calls the same cancel as the Stop button (`onCancel`, REQ-M8).
+Past one minute the counter shows whole minutes ("1분째", "2분째"), so it does not tick every
+second. The words come from the SDK tool name that `extractSdkActivity` reports, mapped by
+`toolActivity.workPhrase` (명령을 실행하는 중, 파일을 살펴보는 중, 홈페이지를 고치는 중, 화면을
+확인하는 중, 인터넷에서 찾아보는 중, 작업하는 중). The host puts that phrase and its own clock
+(`step`, `since`) on the running tool line, both in detailed (#414) and summary (D-027) cohorts,
+and on a delegation row (REQ-STUDIO-DELEGATION-ROW); a helper's own calls carry none. The hint
+never shows the raw `Bash(...)` text or a tool input; a step that looks like a raw call falls
+back to "작업하는 중이에요". Rules: (1) there is one hint at a time, for the newest running line
+that has a step, and it updates in place; (2) it clears when that line is updated without a step
+(done, error, or the next phrase on a summary line), when the turn ends, or when text is spoken
+after the step, so streaming text never gets a hint, and thinking lines carry no step; (3) the
+stall watchdog wins (#403, REQ-M26): while the error banner shows, there is no hint; (4) the
+live region (`role="status"`, polite) changes only at 20 s and at 60 s, and the ticking counter
+is not announced; (5) the hint fades in once (`--hp-dur-enter`, 180 ms) and has no animation under
+`prefers-reduced-motion`. It is drawn in personal and classroom chat. In personal chat it uses
+`--hp-text-caption` (≥14px, locked by `test/type-scale.smoke.mjs`); in classroom chat it uses
+14px. 멈추기 is a 44px target. It uses no capability, score or evaluation words. Not met from
+REQ-ART-19: the timers do not reset on unrelated events, because the clock belongs to the
+running step. A stretch with no running tool (thinking, between calls) is still covered only by
+the existing work and pending lines and the stall watchdog. Pure rules: `src/longStepHint.ts`;
+wiring: `chatPanelProvider.ts` (tool_use), `toolActivity.ts` (`WorkLine.show(phrase, since)`),
+`chatTimeline.ts` (the reducer keeps `step`/`since` and drops them on an update without them),
+`App.tsx` and `ChatPanel.tsx` (`LongStepHintLine`). Tests: `test/long-step-hint.smoke.mjs`
+(fake clock: 19 s none, 20 s wait, 60 s offer and the minute wording; active-step selection
+with done, no-step, spoken-text, previous-turn and parallel-call cases; stall and turn end;
+every `workPhrase` tool with no raw name or input in the hint; WorkLine and reducer carry and
+drop the fields; wiring locks) and `test/long-step-hint.test.tsx` (the real ChatPanel in
+personal and classroom chat with a fake `Date.now`: 19 s none, 20 s one hint, 60 s offer and
+44px, clear on step end and turn end, no hint for streaming text or a thinking line, the stall
+message wins, a summary cohort's screen never shows the raw name, one element updated in place
+from 20 s to 45 s with no offer yet, and a real click on 멈추기 calling `onCancel` once). The stall
+guard, the spoken-text guard, both thresholds, the raw-name guard, the panel's stall wiring
+and the reducer's step field were each removed once and a test failed.
+
 `REQ-STUDIO-CONTEXT-TRIM-MARKER` (CGP-CHAT-R-010 / CGP-CHAT-D-010, P1, 2026-10-20): when
 older turns stop going to the model, the transcript says so with one quiet line at that
 point. Two real events produce it, nothing else. (1) The history clamp: every model call

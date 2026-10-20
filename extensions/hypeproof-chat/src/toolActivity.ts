@@ -47,6 +47,9 @@ export interface WorkLineEntry {
   icon: string;
   label: string;
   state: "running" | "done";
+  /** REQ-STUDIO-LONG-STEP-HINT — set only while the line stands for one tool step. */
+  step?: string;
+  since?: number;
 }
 
 /**
@@ -70,10 +73,14 @@ export class WorkLine {
     return this.openLabel !== null;
   }
 
-  show(phrase: WorkPhrase): void {
+  /**
+   * `since` marks the phrase as a tool step that began then (REQ-STUDIO-LONG-STEP-HINT); thinking
+   * and the next-step phrase pass none, which ends the step on the same line.
+   */
+  show(phrase: WorkPhrase, since?: number): void {
     if (this.openLabel === phrase.label) return;
     this.openLabel = phrase.label;
-    this.post({ id: this.id(), icon: phrase.icon, label: phrase.label, state: "running" });
+    this.post({ id: this.id(), icon: phrase.icon, label: phrase.label, state: "running", ...(since !== undefined ? { step: phrase.label, since } : {}) });
   }
 
   close(label: string): void {

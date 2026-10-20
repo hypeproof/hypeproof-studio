@@ -6295,6 +6295,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             if (!work && line.kind !== "child") clearPending();
             const label = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd())})`;
             toolLabels.set(a.id, label);
+            // REQ-STUDIO-LONG-STEP-HINT — the webview times this step from here; its words come from
+            // the tool name (workPhrase), never from `label`.
+            const stepSince = Date.now();
             // 2026-08-19 — when the SDK coach saves a .html with Write/Edit, that
             // result has to appear on screen. Before, only the chat's ```html fence
             // opened the preview, so on a turn where the coach fixed the file with a
@@ -6316,12 +6319,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             if (line.kind === "row") {
               const header = delegationHeader(a.input, this.resolveCoachCwd());
               tracker.setHeader(a.id, header);
-              log(line.lineId, DELEGATION_ICON, header, "running");
+              this.postToolLog(streamId, { id: line.lineId, icon: DELEGATION_ICON, label: header, state: "running", ...(a.at ? { at: a.at } : {}), step: workPhrase(a.name, a.input).label, since: stepSince });
             } else if (work) {
               pendingShown = true;
-              work.show(workPhrase(a.name, a.input));
-            } else {
+              work.show(workPhrase(a.name, a.input), stepSince);
+            } else if (line.kind === "child") {
+              // A helper's own call sits inside its row; the row is the step the hint times.
               log(line.lineId, "🔧", label, "running");
+            } else {
+              this.postToolLog(streamId, { id: line.lineId, icon: "🔧", label, state: "running", ...(a.at ? { at: a.at } : {}), step: workPhrase(a.name, a.input).label, since: stepSince });
             }
             break;
           }
