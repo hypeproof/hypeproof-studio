@@ -7,6 +7,23 @@ export const sha256=file=>crypto.createHash('sha256').update(fs.readFileSync(fil
 // neither tests nor hashes it, so its presence never reads as a changed artifact set.
 export const TEST_KIT_ZIP=/^HypeProof-v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?-Test-Kit\.zip$/;
 export const isAppPackage=name=>/\.(zip|exe)$/.test(name)&&!TEST_KIT_ZIP.test(name);
+// VS Code's Inno Setup build (build/gulpfile.vscode.win32.ts buildWin32Setup) writes the
+// installed product.json itself: the portable one plus `target` ("user" or "system"),
+// re-serialized with tabs. Every other payload file must match byte for byte; this one must
+// match field for field, with `target` naming the installer that wrote it.
+export const INSTALLER_PRODUCT_JSON=/^resources[\\/]app[\\/]product\.json$/;
+export const installerTarget=name=>/UserSetup/.test(name)?'user':'system';
+export function installerProductMatches(portableText,installedText,target) {
+ const portable=JSON.parse(portableText),installed=JSON.parse(installedText);
+ if(installed.target!==target)return 'product.json target is '+JSON.stringify(installed.target)+', expected '+JSON.stringify(target);
+ if('target' in portable)return 'portable product.json already has a target';
+ delete installed.target;
+ const keys=o=>Object.keys(o).sort();
+ const canon=v=>Array.isArray(v)?v.map(canon):v&&typeof v==='object'?Object.fromEntries(keys(v).map(k=>[k,canon(v[k])])):v;
+ const a=canon(portable),b=canon(installed);
+ const differ=[...new Set([...keys(a),...keys(b)])].filter(k=>JSON.stringify(a[k])!==JSON.stringify(b[k]));
+ return differ.length?'product.json fields differ: '+differ.join(', '):null;
+}
 export function appIdentity(app,platform=process.platform) {
  const resources=path.join(app,platform==='darwin'?'Contents/Resources/app':'resources/app');
  const product=JSON.parse(fs.readFileSync(path.join(resources,'product.json'),'utf8'));

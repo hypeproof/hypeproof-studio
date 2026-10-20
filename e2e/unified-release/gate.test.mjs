@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {assertReceipt} from './artifact.mjs';
+import {assertReceipt,INSTALLER_PRODUCT_JSON,installerTarget,installerProductMatches} from './artifact.mjs';
 const sha='a'.repeat(40),digest='b'.repeat(64),version='1.2.3',platform='darwin-arm64';
 const assets={'HypeProof-Studio-darwin-arm64.zip':digest};
 const result={status:'PASS',real_folder_reload:true,draft_round_trip:true,attachment_round_trip:true,process_restart:true,encrypted_storage:true,shared_root_blocked:true,original_files_preserved:true,live_model:true,model_calls:4};
@@ -41,3 +41,25 @@ try{
  fs.unlinkSync(file);assert.notEqual(run(),0);
  console.log('PASS Windows installer and release CLI controls, current-byte and public Service mismatch');
 }finally{fs.rmSync(directory,{recursive:true,force:true});}
+
+// Installer product.json: Inno Setup adds `target` and re-serializes with tabs (VS Code
+// gulpfile.vscode.win32.ts). Positive: exactly that difference passes for each installer.
+{
+ const portable=JSON.stringify({nameLong:'HypeProof Studio',version:'1.2.3',commit:sha,win32x64AppId:'{X}',checksums:{a:'1'}},null,2);
+ const as=(target,extra={})=>JSON.stringify({...JSON.parse(portable),target,...extra},null,'\t');
+ assert.equal(installerTarget('HypeProof.StudioUserSetup-x64-1.2.3.exe'),'user');
+ assert.equal(installerTarget('HypeProof.StudioSetup-x64-1.2.3.exe'),'system');
+ assert.ok(INSTALLER_PRODUCT_JSON.test('resources\\app\\product.json')&&INSTALLER_PRODUCT_JSON.test('resources/app/product.json'));
+ assert.ok(!INSTALLER_PRODUCT_JSON.test('resources/app/extensions/x/product.json'));
+ assert.equal(installerProductMatches(portable,as('system'),'system'),null);
+ assert.equal(installerProductMatches(portable,as('user'),'user'),null);
+ // Negative: wrong or missing target, a changed field, an added or removed field.
+ assert.match(installerProductMatches(portable,as('user'),'system'),/target/);
+ assert.match(installerProductMatches(portable,portable,'system'),/target/);
+ assert.match(installerProductMatches(portable,as('system',{version:'0.0.1'}),'system'),/version/);
+ assert.match(installerProductMatches(portable,as('system',{checksums:{a:'2'}}),'system'),/checksums/);
+ assert.match(installerProductMatches(portable,as('system',{extra:true}),'system'),/extra/);
+ const less=JSON.parse(as('system'));delete less.commit;
+ assert.match(installerProductMatches(portable,JSON.stringify(less),'system'),/commit/);
+ console.log('PASS installer product.json controls: target-only difference accepted; wrong target or any other field change refused');
+}
