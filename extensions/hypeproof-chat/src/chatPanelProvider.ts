@@ -7277,7 +7277,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (current?.proxyUrl && endCardAdvertised(current.profile) && trialEndReason(err, false)) {
       const card = trialEndCardView({ profile: current.profile, err, products: await catalogueWithin(current.proxyUrl), notifySubmitted: notifySubmitted(this.context?.globalState, current.token) });
       if (current.signal?.aborted) return;
-      if (card) { void this.post({ type: "streamError", streamId, error: card.text, trialEndCard: card }); return; }
+      if (card) {
+        void this.post({ type: "streamError", streamId, error: card.text, trialEndCard: card });
+        // CONV-FUNNEL-R-002 — count the card on the grant-scoped funnel route. Only reached when the
+        // card is drawn (never for the banner fallback, a code-issued trial or a pass). The reporter
+        // sends nothing unless the probe turned the route on, and keeps the first view per grant.
+        // Optional call: telemetry must never turn a drawn card into a thrown turn ending.
+        this.funnel?.emit({ type: "offer_viewed", surface: "end_card" });
+        return;
+      }
     }
     // REQ-L12 (13) — a free trial that ran out (requests or time) is not a crash either. The notice
     // says the files stay and, only while passes are sold, names '이용권으로 시작하기'. It never

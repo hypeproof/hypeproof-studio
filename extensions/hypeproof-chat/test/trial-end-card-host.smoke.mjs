@@ -20,11 +20,13 @@ const vscode = {
 };
 
 let ChatPanelProvider;
+let FunnelReporter;
 test.before(async () => {
   const bundle = await build({
     stdin: {
       contents: [
         "export {ChatPanelProvider} from './src/chatPanelProvider';",
+        "export {FunnelReporter} from './src/funnelEvents';",
       ].join(''),
       resolveDir: new URL('..', import.meta.url).pathname,
     },
@@ -74,7 +76,7 @@ test.before(async () => {
     setTimeout,
     clearTimeout,
   });
-  ({ ChatPanelProvider } = module.exports);
+  ({ ChatPanelProvider, FunnelReporter } = module.exports);
 });
 
 const token = 'trial-test-code';
@@ -167,4 +169,98 @@ test('negative controls: no card mid-work, on a code-issued trial, on a pass, or
   assert.ok(!r.posts[0].error.includes('체험'));
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.commands, []);
+});
+
+// CONV-FUNNEL-R-002 / REQ-STUDIO-NATIVE-FUNNEL-EVENTS — the end card is counted as
+// `offer_viewed {surface: end_card}` on the Service's grant-scoped route, after the real
+// probe (refreshFunnelTarget) turned the funnel on. The synthetic Service records every
+// POST body, so the test sees exactly what would reach the Service.
+const grantToken = `${Buffer.from(JSON.stringify({ native_trial: true })).toString('base64url')}.sig`;
+const FUNNEL_PROBE_ON = { schema: 'hps-trial-funnel/1', events: ['trial_entry', 'trial_tool_result', 'offer_viewed', 'offer_clicked', 'offer_dismissed'] };
+
+async function presentWithFunnel(error, profile, { products = 200, probe = 'on', shows = 1 } = {}) {
+  const funnelPosts = [];
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const json = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+      if (req.url === '/v1/purchase/products') return products === 200 ? json(200, catalogue) : json(404, { error: 'not_found' });
+      if (req.url === '/v1/trial/events' && req.method === 'GET') return probe === 'on' ? json(200, FUNNEL_PROBE_ON) : json(404, { error: { message: 'not found', type: 'not_found' } });
+      if (req.url === '/v1/trial/events' && req.method === 'POST') {
+        funnelPosts.push({ authorization: req.headers.authorization ?? null, body: JSON.parse(raw) });
+        return json(202, { ok: true });
+      }
+      json(404, { error: 'not_found' });
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const proxyUrl = `http://127.0.0.1:${server.address().port}/v1`;
+  const posts = [];
+  const self = {
+    context: { secrets: { get: async () => grantToken, delete: async () => {} }, extension: { packageJSON: { version: '2026.1020.0' } } },
+    post: async (message) => { posts.push(message); },
+    lastRequestId: null,
+    funnelProbedToken: null,
+    funnelStartupToken: grantToken,
+    funnelClaimHint: null,
+    stopLiveness() {},
+    // The provider's own sender shape: one JSON POST with the grant's bearer token.
+    funnel: new FunnelReporter({
+      send: async (url, tok, body) => (await fetch(url, { method: 'POST', headers: { authorization: `Bearer ${tok}`, 'content-type': 'application/json' }, body: JSON.stringify(body) })).status,
+    }),
+  };
+  try {
+    await ChatPanelProvider.prototype.refreshFunnelTarget.call(self, profile, grantToken, proxyUrl);
+    for (let i = 0; i < shows; i++) await ChatPanelProvider.prototype.handleSendError.call(self, error, `stream-${i}`, { profile, proxyUrl, token: grantToken });
+    // Fire-and-forget delivery: wait until the POST count stops moving.
+    let seen = -1;
+    for (let i = 0; i < 40 && seen !== funnelPosts.length; i++) { seen = funnelPosts.length; await new Promise((r) => setTimeout(r, 25)); }
+    return { posts, funnelPosts, offerViewed: funnelPosts.filter((p) => p.body.type === 'offer_viewed') };
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+test('CONV-FUNNEL-R-002: a shown end card sends exactly one offer_viewed {surface: end_card}', async () => {
+  for (const err of [EXHAUSTED, EXPIRED]) {
+    const r = await presentWithFunnel(err, openTrial);
+    assert.equal(r.posts.length, 1);
+    assert.ok(r.posts[0].trialEndCard, 'the card is drawn');
+    // The funnel was really on: the probe's own trial_entry went out first.
+    assert.ok(r.funnelPosts.some((p) => p.body.type === 'trial_entry'), JSON.stringify(r.funnelPosts));
+    assert.equal(r.offerViewed.length, 1, JSON.stringify(r.funnelPosts));
+    // Exactly the Service body: no id, path, text or count rides along.
+    assert.deepEqual(r.offerViewed[0], { authorization: `Bearer ${grantToken}`, body: { type: 'offer_viewed', fields: { surface: 'end_card' } } });
+    // A free seat still shows no remaining count on the card.
+    assert.doesNotMatch(r.posts[0].trialEndCard.title, /\d/);
+    assert.doesNotMatch(r.posts[0].trialEndCard.text, /남은|남았/);
+  }
+  // The card drawn again on the same grant (another refused send) stays one view: first view once per grant.
+  const again = await presentWithFunnel(EXHAUSTED, openTrial, { shows: 2 });
+  assert.equal(again.posts.filter((p) => p.trialEndCard).length, 2);
+  assert.equal(again.offerViewed.length, 1);
+});
+
+test('CONV-FUNNEL-R-002 negative controls: no end_card view without a card or with the funnel off', async () => {
+  // Probe off (Service flag HPS_OPEN_TRIAL off → 404): the card still shows, nothing is sent at all.
+  let r = await presentWithFunnel(EXHAUSTED, openTrial, { probe: 'off' });
+  assert.ok(r.posts[0].trialEndCard);
+  assert.deepEqual(r.funnelPosts, []);
+  // Catalogue unreadable: the turn falls back to the banner and no offer was viewed.
+  r = await presentWithFunnel(EXHAUSTED, openTrial, { products: 404 });
+  assert.equal(r.posts[0].trialEndCard, undefined);
+  assert.deepEqual(r.offerViewed, []);
+  // Code-issued trial and bought pass: no card, no offer view (funnel on in both).
+  r = await presentWithFunnel(EXHAUSTED, { activity_kind: 'trial', profile_id: 'studio-native-trial' });
+  assert.equal(r.posts[0].trialEndCard, undefined);
+  assert.ok(r.funnelPosts.some((p) => p.body.type === 'trial_entry'), 'funnel was on');
+  assert.deepEqual(r.offerViewed, []);
+  r = await presentWithFunnel(EXHAUSTED, { ...openTrial, pass: { request_limit: 200, requests_used: 200 } });
+  assert.equal(r.posts[0].trialEndCard, undefined);
+  assert.deepEqual(r.offerViewed, []);
+  // Mid-work failure on an open-trial seat: no card, no offer view.
+  r = await presentWithFunnel(MID_WORK, openTrial);
+  assert.equal(r.posts[0].trialEndCard, undefined);
+  assert.deepEqual(r.offerViewed, []);
 });
