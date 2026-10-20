@@ -751,6 +751,56 @@ base rule, a shared class left without its override, the composer tool buttons l
 menu's 13px, an unclassified new rule, a removed step rule, a rail line back at 10px and a stale
 classification; plus a positive control.
 
+`REQ-STUDIO-UI-POLISH-1` (2026-10-20; Jay's review of the released 2026.1020.0, personal trial seat,
+dark theme, about 1420px wide). Four details of the personal chat follow rules the design system
+already has; the Korean copy is unchanged except where noted. (1) The REQ-M47 / CGP-AGENT-R-003
+"여기서 AI가 할 수 있는 일" card sits in the reading column: its inline margin is the same
+`max(20px, calc((100% - var(--chat-column)) / 2))` gutter the messages and the composer use (740px,
+CP-R1 / DES-CGP-DS-22; 18px like the messages below 700px), on a quiet panel (`--tw-panel`, 1px
+`--tw-line` border, 12px radius) instead of a full-width box. Its summary is one 44px row
+(DES-CGP-DS-11; `box-sizing: border-box` and a centred flex row, so the old `min-height: 44px` plus
+10px padding no longer makes a 64px box with empty space under the label), and the card has 6px
+inner padding and no scroller, so the one focus ring (CGP-DS-R-017, 2px offset) hugs the row and is
+never clipped. The native ▶ marker gives way to one chevron that turns when open, through
+`--hp-dur-press` (CGP-DS-R-014), declared only under `prefers-reduced-motion: no-preference`. Each of the six rows is a mark
+(✓ in a solid circle, – in a dashed one, aria-hidden), the label and one state word, `해요` or
+`안 해요`, in the same weight (no `<strong>`); off rows are muted, so the state is a shape, a word
+and a colour, never colour alone (SX-50). The footnote is the caption step (14px) under a hairline.
+**Closed by default, always**, with a one-line summary that already carries the essential fact:
+"여기서 AI가 할 수 있는 일 · 4가지 · 자세히" (new copy: the count of capabilities that are on, or
+`지금은 없음`; `자세히` hides while open). Chosen over "open until seen once" because that needs a
+per-learner seen flag the host would have to store and sync between windows, and a learner who
+dismissed it would get no summary at all; a capability change is already announced on its own by the
+CGP-SHELL-R-024 card, so nothing depends on the learner opening this one. The markup was already
+closed on main (`ai-can-do.test.tsx` asserted it); the open card in the review was most likely after
+a click, since the focus ring was drawn. (2) The personal access line "이용권 상태를 확인해 주세요.
+이용권 확인" above the composer is an inline notice: `.hps-notice-caution` shares the offline banner's
+rule (REQ-STUDIO-OFFLINE-BANNER: editor-widget surface, 4px `--hp-warn` edge, foreground text, so
+contrast does not depend on amber; the edge becomes CanvasText under forced colors,
+CGP-DS-R-016), aligned to the composer by the input area's padding, and its one action is a 44px
+target. (3) The task heading reads as three groups without dropping a word: where I am (the
+activity kind at weight 550, its name muted), what is happening (the run note, drawn only while a turn
+runs, becomes a bordered pill with a dot; the dot is CanvasText under forced colors), and what I can
+do (자료 at weight 550 after a 1px `--tw-line` divider, then the menu). All of it stays at the
+caption step (REQ-STUDIO-TYPE-SCALE); the busy line may still shrink and wrap at 390px. (4) The rail
+card shows one state: a task with no stored message reads `시작 전` only when it has no run state
+(`taskCountLine`), because the first turn is stored when it ends and "작업 중" next to "시작 전" said
+both at once; the running symbol is `•` instead of ▶, which read as a disclosure triangle or a play
+control (REQ-STUDIO-TASK-RUN-STATE keeps words plus a decorative symbol). The AI disclosure line
+above the conversation is unchanged. Tests: `test/ui-polish-1.smoke.mjs` (CSS: the card's gutter
+equals the messages' and the composer's, border-box, surface, no scroller, summary 44px border-box
+centred with no native marker and padding that fits the label at 아주 크게, the notice class on the
+offline banner's rule and its forced-colors rule, the 44px action, the heading pill, divider, weight
+and forced-colors dot, each with a mutated stylesheet that must fail; render: the real ChatPanel and
+TaskWorkspace through esbuild, closed card with the count summary, six rows of mark · label · state
+word and no `<strong>`, `지금은 없음` for a seat with nothing on, the access line carrying the notice
+class and absent in classroom chat or without an access problem, and at most one state word on the
+rail card for every run state with 0 and 3 messages, `시작 전` still shown when idle, no ▶),
+`test/ai-can-do.test.tsx` (summary and state-word markup) and `test/type-scale.smoke.mjs` (the new
+row, count and notice text probed at ≥14px; the 12px mark glyph classified as decorative). The red
+run against the unchanged sources fails all 16 checks; screenshots before and after at 1420×874 and
+800×874 are in the slice report, not in the repository.
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop

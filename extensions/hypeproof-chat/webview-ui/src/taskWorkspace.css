@@ -160,6 +160,22 @@
 .tw-task-state-symbol { font-weight: 700; }
 .tw-task-state[data-run-state="approval"], .tw-task-state[data-run-state="error"] { font-weight: 700; border-width: 2px; }
 
+/* REQ-STUDIO-UI-POLISH-1 — the heading reads as three groups: where I am (the activity kind, then
+   its name, quieter), what is happening (the run state, a bordered pill with a dot, drawn only while
+   a turn runs), and what I can do (자료 and the menu, after a hairline divider). Nothing is dropped;
+   the groups differ by weight, colour and a separator, not by size (every word stays 14px). */
+.tw-heading .hps-activity-kind { color: var(--vscode-foreground, #e1e1e1); font-weight: 550; }
+.tw-heading .hps-activity-name { color: var(--tw-muted); }
+.tw-heading .tw-run-note:not(:empty) {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px;
+  border: 1px solid var(--tw-line); border-radius: 999px; color: var(--vscode-foreground, #e1e1e1);
+}
+.tw-heading .tw-run-note:not(:empty)::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.tw-workspace .tw-heading .tw-sources-toggle { position: relative; margin-inline-start: 9px; font-weight: 550; }
+.tw-workspace .tw-heading .tw-sources-toggle::before {
+  content: ""; position: absolute; inset-block: 12px; inset-inline-start: -11px; border-inline-start: 1px solid var(--tw-line); pointer-events: none;
+}
+
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). The open sources toggle was marked by a
    background only; it takes the system selection pair like the current task. */
 @media (forced-colors: active) {
@@ -170,4 +186,6 @@
   .tw-workspace .tw-task-list { padding: 4px; }
   .tw-workspace .tw-source-list { padding-block-start: 4px; }
   .tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background-color: Highlight; color: HighlightText; border-color: Highlight !important; }
+  /* REQ-STUDIO-UI-POLISH-1: the run pill's dot is a background, which forced colors repaints as Canvas. */
+  .tw-heading .tw-run-note:not(:empty)::before { background: CanvasText; }
 }

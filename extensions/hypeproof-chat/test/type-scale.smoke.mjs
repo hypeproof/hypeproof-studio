@@ -356,7 +356,7 @@ const SHARED_LEARNER = [
   // help request, the instructor notice inbox, the trim marker #2079, the offline banner #2076).
   ".hps-context-note",
   ".hps-quote-action", ".hps-quote-note",
-  ".hps-offline-banner",
+  ".hps-offline-banner, .hps-notice-caution",
   ".hps-delegation", ".hps-delegation-stop",
   ".hps-page-card",
   ".hp-mission-week",
@@ -391,6 +391,7 @@ const SHARED_LEARNER = [
 const SHARED_OUT = {
   ".hps-msg-body": "classroom body (13px); personal chat sets its own body size (checked below)",
   ".hps-stop-notice-icon": "decorative glyph (aria-hidden ⏹) beside the stop notice text",
+  ".hp-ai-can-do-mark": "decorative glyph (aria-hidden ✓ / –) in a 20px circle; the row's state word carries the state (REQ-STUDIO-UI-POLISH-1)",
   ".hps-queued-cancel": "glyph button (×) with an aria-label; personal gives it a 44px target",
   ".hps-attachment-remove": "glyph button (×) with an aria-label; personal sets 18px",
   ".hps-worlds-label": "classroom world strip (kids-quest cohorts), not rendered in personal chat",
@@ -545,6 +546,10 @@ const EXTRA_PROBES = [
   { label: "tools menu item in the expanded composer", ctx: shellCtx, chain: ['div.hps-input[data-expanded="true"]', "div.hps-composer-tools", "div.hps-tools-menu", "button"] },
   { label: "text-size picker label in 대화 설정", ctx: shellCtx, chain: ["dialog.hps-preferences", "div.hps-preferences-body", "fieldset.hps-text-size", "label", "span"] },
   { label: "AI-can-do card note (지금 쓰는 체험·이용권에서 정해진 범위예요.)", ctx: shellCtx, chain: ["details.hp-rail-lesson.hp-ai-can-do", "p.hp-rail-lesson-note"] },
+  { label: "AI-can-do summary count (4가지 · 자세히)", ctx: shellCtx, chain: ["details.hp-rail-lesson.hp-ai-can-do", "summary", "span.hp-ai-can-do-count"] },
+  { label: "AI-can-do row label", ctx: shellCtx, chain: ["details.hp-rail-lesson.hp-ai-can-do", "ul", "li", "span.hp-ai-can-do-label"] },
+  { label: "AI-can-do row state word (해요 / 안 해요)", ctx: shellCtx, chain: ["details.hp-rail-lesson.hp-ai-can-do", "ul", "li", "span.hp-ai-can-do-state"] },
+  { label: "personal access notice (이용권 상태를 확인해 주세요.)", ctx: shellCtx, chain: ["footer.hps-input-area", "div.hps-notice-caution.hps-access-attention", "span"] },
   { label: "naming screen activity line (outside the shell)", ctx: () => [...MAIN, "div.tw-conversation"], chain: ["div.hps-activity-header"] },
   { label: "task rail title", ctx: () => RAIL, chain: ["ul.tw-task-list", "li", "button.tw-task", "span.tw-task-title"] },
   { label: "task rail count in the heading", ctx: () => RAIL, chain: ["div.tw-rail-heading", "span"] },

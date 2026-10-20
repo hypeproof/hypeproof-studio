@@ -32,7 +32,8 @@ export function deriveTaskRunState(input: TaskRunInputs): TaskRunState | null {
 /** One short Korean label and a symbol per state. The words are always drawn; the symbol is decoration. */
 export const TASK_RUN_STATE_LABELS: Record<TaskRunState, { label: string; symbol: string }> = {
   preparing: { label: '응답 준비 중', symbol: '⋯' },
-  running: { label: '작업 중', symbol: '▶' },
+  // A dot, not ▶: in the rail ▶ reads as a disclosure triangle or a play control (REQ-STUDIO-UI-POLISH-1).
+  running: { label: '작업 중', symbol: '•' },
   approval: { label: '승인 기다리는 중', symbol: '!' },
   stopped: { label: '멈춤', symbol: '■' },
   error: { label: '오류', symbol: '⚠' },
@@ -42,4 +43,14 @@ export const TASK_RUN_STATE_LABELS: Record<TaskRunState, { label: string; symbol
 /** The rail button's accessible name: the task title, then the state in words. */
 export function taskRunAccessibleName(title: string, state: TaskRunState | null): string | undefined {
   return state ? `${title}, ${TASK_RUN_STATE_LABELS[state].label}` : undefined;
+}
+
+/**
+ * REQ-STUDIO-UI-POLISH-1: the rail card's count line. A task with no stored message reads "시작 전",
+ * except while it has a run state: the first turn is not stored until it ends, and "작업 중" next to
+ * "시작 전" says two things at once. Then the line keeps only the date.
+ */
+export function taskCountLine(messageCount: number, state: TaskRunState | null): string {
+  if (messageCount) return `대화 ${messageCount}`;
+  return state ? '' : '시작 전';
 }
