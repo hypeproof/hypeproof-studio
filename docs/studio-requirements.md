@@ -41,7 +41,7 @@ folder (real path with symlinks resolved, on-disk case, upper-case drive letter)
 malformed entry reads as undecided. Fail closed: closing the question refuses and
 remembers nothing; a personal seat with an outside folder but no activity id is refused
 (확인 안 됨 copy, "활동에 다시 연결한 뒤 보내 주세요"). The command "HypeProof: 이 폴더의 AI
-권한 바꾸기" changes the choice.
+권한 바꾸기" changes the choice. Also outside the guard, by design: entry preparation creates a missing `index.html` in a folder the learner picks for the activity before the question (never overwrites, `wx`), and the learner's own 프로젝트 변경 GitHub pull (`publish/projectSwitch.ts` `pullInto`) replaces files on request. Not yet confirmed: `/observations/assess` has no folder check; it is served only with `observation.format` (lesson seats), so it should not reach a personal non-own folder.
 
 Enforcement has three parts. ① Model calls: one decision (`folderConsentProfile`) runs
 before every host model call from such a folder — the chat turn (before the team brain,
