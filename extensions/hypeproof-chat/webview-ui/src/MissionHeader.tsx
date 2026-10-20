@@ -197,7 +197,7 @@ export function MissionHeader(props: MissionHeaderProps) {
             <span className="hp-mark" aria-hidden="true">·</span>
             <span>
               {props.missing
-                ? <><ChatIcon kind="check-square" size={16} /> 표시는 내가 남긴 기록에서 확인된 것이에요.</>
+                ? <><ChatIcon kind="check-square" size={16} label="확인됨" /> 표시는 내가 남긴 기록에서 확인된 것이에요.</>
                 : "확인 표시는 직접 적고 시험한 기록이 쌓일 때 붙습니다. 지금은 아직 확인 전입니다."}
             </span>
           </li>

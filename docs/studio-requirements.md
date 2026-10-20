@@ -827,7 +827,12 @@ build and adding them would be a new runtime dependency and font, so none is add
 §6 lists codicons CC-BY-4.0 and Lucide ISC as allowed sources; no path is copied from either, and no
 OpenAI glyph is used). An icon is `aria-hidden` when words beside it carry the meaning; where it is
 the only carrier of a state it is `role="img"` with a Korean name (tool-row marks 처리 중 / 실패 /
-완료, verify marks 맞음 / 틀림 / 모름 and 성공 / 실패, mission completion marks 확인됨 / 아직).
+완료, verify marks 맞음 / 틀림 / 모름 and 성공 / 실패, mission completion marks 확인됨 / 아직, the check
+in "표시는 내가 남긴 기록에서 확인된 것이에요." named 확인됨 because the sentence refers to it, and the
+retry icon inside the classroom cut-off note named after the button it points to, 다른 방식으로 한 번
+더 만들기). The classroom done check, the row's only visual cue, mixes the theme foreground into the
+theme green so it reaches 3:1 on light themes (the bare green measured 2.97:1). CSS may size an icon
+only to 16/20/24 as well (the citation chip's icon was 14px, the empty sources panel's 28px).
 Replaced: the AI disclosure (its leading 🤖 is dropped from `AI_DISCLOSURE_TEXT`; an info icon is drawn
 in front), tool and timeline lines, error and update banners, the error boundary, the page-attached
 notice, stop notices, the verify panel, panel close buttons, verdict and reason check marks, mission
@@ -849,7 +854,7 @@ covered: VS Code native dialogs and notifications the host raises (`imageAttachP
 provenance marks (typographic symbols, not emoji), Chalk, and a capture on a real high-contrast
 display.
 Test: `test/stroke-icons.smoke.mjs` scans every webview source file outside comments for emoji and
-status marks against an allowlist with exact counts and reasons (stale entries fail), checks that
+status marks against an allowlist with exact counts and reasons (stale entries fail), checks every CSS rule that sizes an svg or `.hps-icon` (16/20/24 only) and that
 every icon the host emits maps to a named stroke icon, that the run-state labels and free-start copy
 carry no glyph, and renders the real ChatPanel (classroom and
 personal) to check that no status glyph is drawn as text and every icon is `currentColor`, 16/20/24,

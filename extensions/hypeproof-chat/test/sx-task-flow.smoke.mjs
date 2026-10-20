@@ -875,7 +875,8 @@ if (!status.available) {
     assert.deepEqual(marks(all), ["yes", "yes", "yes"], "nothing missing, and a condition stayed unchecked");
     assert.deepEqual(markSaid(all), ["check-square 확인됨", "check-square 확인됨", "check-square 확인됨"], "a screen reader is told something other than the marks show");
     assert.equal(checked(all), 4, "three checked marks and the note that explains them");
-    assert.match(all, /data-icon="check-square" class="hps-icon" aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg> 표시는 내가 남긴 기록에서 확인된 것이에요\./);
+    // The note's icon is the sentence's subject, so it is named: a screen reader hears "확인됨 표시는…" (verify F1).
+    assert.match(all, /data-icon="check-square" class="hps-icon" role="img" aria-label="확인됨">(?:(?!<\/svg>)[\s\S])*<\/svg> 표시는 내가 남긴 기록에서 확인된 것이에요\./);
     const some = await header([{ code: "missing_completion_event", item: "c2", event: "change_requested" }]);
     assert.deepEqual(marks(some), ["yes", "no", "yes"]);
     assert.deepEqual(markSaid(some), ["check-square 확인됨", "square 아직", "check-square 확인됨"], "a screen reader hears an unmet condition as confirmed, or a met one as not yet");

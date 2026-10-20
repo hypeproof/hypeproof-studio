@@ -2684,7 +2684,7 @@ function AssistantContent({
             <div key={i}>
               <CodePill code={seg.value} personal={personal} blockKey={`seg${i}`} />
               <div className="hps-stream-note" data-quote-skip="">
-                {personal ? "응답이 도중에 끊겼어요. 같은 요청을 한 번 더 보내 주세요." : <>응답이 도중에 끊겼어요. 위의 <ChatIcon kind="retry" size={16} label="다시 만들기" /> 버튼으로 다시 시도해주세요.</>}
+                {personal ? "응답이 도중에 끊겼어요. 같은 요청을 한 번 더 보내 주세요." : <>응답이 도중에 끊겼어요. 위의 <ChatIcon kind="retry" size={16} label="다른 방식으로 한 번 더 만들기" /> 버튼으로 다시 시도해주세요.</>}
               </div>
             </div>
           );

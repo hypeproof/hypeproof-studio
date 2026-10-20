@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { ChatIcon } from './ChatDetails';
+import { ChatIcon, type IconSize } from './ChatDetails';
 import type { Citation } from '../../src/protocol';
 import { postToHost } from './vscode';
 import './citationPreview.css';
@@ -23,9 +23,9 @@ export function citationAddress(url: string): URL | null {
 }
 
 /** The sources panel's icons, drawn from the one stroke set (REQ-STUDIO-STROKE-ICONS). */
-export function SourceIcon({ kind }: { kind: 'open' | 'pin' | 'close' | 'source' | 'back' }) {
+export function SourceIcon({ kind, size = 20 }: { kind: 'open' | 'pin' | 'close' | 'source' | 'back'; size?: IconSize }) {
   const map = { open: 'open-window', pin: 'pin', close: 'close', source: 'source', back: 'return' } as const;
-  return <ChatIcon kind={map[kind]} size={20} />;
+  return <ChatIcon kind={map[kind]} size={size} />;
 }
 
 /** These are message-level sources, not invented anchors for individual claims. */
@@ -52,7 +52,7 @@ export function CitationRack({ citations, messageId }: { citations: Citation[]; 
       >
         <span className="cp-citation-number" aria-hidden="true">{index + 1}</span>
         <span className="cp-citation-copy"><span className="cp-citation-title">{citation.title || address?.hostname || '출처'}</span><span className="cp-citation-domain">{address?.hostname || '주소 확인 필요'}</span></span>
-        <SourceIcon kind="source" />
+        <SourceIcon kind="source" size={16} />
       </button></span>;
     })}
   </div>;

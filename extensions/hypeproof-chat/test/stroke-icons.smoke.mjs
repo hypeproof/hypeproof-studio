@@ -106,6 +106,46 @@ ok(`learner UI source: ${files.length} files, no status glyph outside the allowl
 assert.deepEqual(stale, [], `allowlist entries that no longer match (update them):\n${stale.join("\n")}`);
 ok(`allowlist: all ${ALLOW.length} entries still match (protocol keys and learner content only)`);
 
+// ── 1b. Icon size after CSS ─────────────────────────────────────────────────────────────
+// The svg's width attribute is not its drawn size: a CSS rule on the svg wins over the attribute
+// (verify F4: `.cp-citation > svg { width: 14px }` drew a 20px icon at 14px). The render below has no
+// layout, so every CSS rule that can size an icon is checked here: whatever it sets must be 16/20/24.
+const SIZE_PROPS = /^(?:width|height|inline-size|block-size|min-width|min-height|max-width|max-height|min-inline-size|min-block-size|max-inline-size|max-block-size)$/;
+export function iconSizeFindings(css, file = "x.css") {
+  const out = [];
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const m of code.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selectors = m[1].split(",").map((x) => x.trim()).filter(Boolean);
+    if (!selectors.some((x) => /(?:^|[\s>+~])svg(?:\[[^\]]*\])?(?::[\w-]+)*$|\.hps-icon(?::[\w-]+)*$/.test(x))) continue;
+    for (const d of m[2].split(";")) {
+      const [prop, ...rest] = d.split(":");
+      const value = rest.join(":").trim();
+      if (!prop || !SIZE_PROPS.test(prop.trim())) continue;
+      if (!/^(?:16|20|24)px$/.test(value)) out.push(`${file}: ${m[1].trim()} { ${prop.trim()}: ${value} }`);
+    }
+  }
+  return out;
+}
+{
+  assert.deepEqual(iconSizeFindings(".cp-citation > svg { flex: none; width: 14px; height: 14px; }"), ["x.css: .cp-citation > svg { width: 14px }", "x.css: .cp-citation > svg { height: 14px }"], "negative control: the 14px citation icon (verify F4) is caught");
+  assert.equal(iconSizeFindings(".tw-source-empty > span > svg { width: 28px; }").length, 1, "negative control: a 28px empty-state icon is caught");
+  assert.equal(iconSizeFindings(".a .hps-icon { inline-size: 1em; }").length, 1, "negative control: a relative size on the icon class is caught");
+  assert.deepEqual(iconSizeFindings(".x > svg { width: 16px; height: 16px; color: red } .y svg { width: 24px } .hps-icon { flex: none } .svgish { width: 3px }"), [], "positive control: 16/24 sizes, non-size properties and other classes pass");
+  const files = readdirSync(src).filter((f) => f.endsWith(".css"));
+  const found = files.flatMap((f) => iconSizeFindings(readFileSync(new URL(f, src), "utf8"), f));
+  assert.deepEqual(found, [], `CSS sizes an icon outside 16/20/24:\n${found.join("\n")}`);
+  ok(`icon size after CSS: ${files.length} stylesheets, every rule that sizes an svg or .hps-icon keeps 16/20/24 (3 negative controls, 1 positive)`);
+}
+
+{
+  // Verify F3: the classroom done check (its row's only visual cue) measured 2.97:1 on the light theme
+  // in the theme green alone. The rule mixes the theme foreground in; the screenshots measure the result.
+  const css = readFileSync(new URL("styles.css", src), "utf8");
+  const rule = /\.hps-tool-done \.hps-tool-mark \{([^}]*)\}/.exec(css)?.[1] ?? "";
+  assert.match(rule, /color:\s*color-mix\(in srgb, var\(--vscode-charts-green[^)]*\) \d+%, var\(--vscode-foreground/, `done check colour is the bare theme green again: ${rule}`);
+  ok("done check: theme green mixed with the foreground (F3 contrast fix stays in place)");
+}
+
 // ── 2. Host glyph keys → stroke icons ──────────────────────────────────────────────────────
 
 const { glyphIconKind, stripLeadingGlyph, splitLeadingGlyph } = await import("../webview-ui/src/glyphIcon.ts");

@@ -1332,8 +1332,11 @@ html, body, #root {
 .hps-tool-error {
   color: var(--vscode-errorForeground, #e55);
 }
+/* REQ-STUDIO-STROKE-ICONS: the done check is the row's only visual cue, so it must reach 3:1. The theme
+   green alone measured 2.97:1 on the light theme; mixing a third of the theme foreground into it darkens
+   it on light themes and lightens it on dark ones. */
 .hps-tool-done .hps-tool-mark {
-  color: var(--vscode-charts-green, #4a4);
+  color: color-mix(in srgb, var(--vscode-charts-green, #4a4) 65%, var(--vscode-foreground, currentColor));
 }
 
 /* ── Publish to the gallery ───────────────────────────────────────────────
