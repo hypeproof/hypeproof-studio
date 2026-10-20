@@ -445,3 +445,27 @@
 @media (max-width: 700px) {
   .hps-shell[data-chat-detail="personal"] .hps-preview-recovery { margin-inline: 18px; }
 }
+
+/* CGP-SHELL-R-013 (REQ-STUDIO-PANEL-BOUNDARY) — a panel that failed to render: one calm line and one
+   44px 다시 불러오기, in place of only that panel. Unscoped: classroom chat, the personal chat and the
+   task rail and sources (outside the chat shell) all draw it. Text sits on the type scale (>= 14px). */
+.hps-panel-fallback {
+  box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  margin: 8px 0; padding: 10px 12px; max-width: 100%;
+  border: 1px solid var(--tw-line, var(--vscode-panel-border, #3c3c3c)); border-radius: 10px;
+  background: var(--tw-panel, transparent); color: inherit;
+}
+.hps-panel-fallback-icon { flex: none; color: var(--tw-muted, var(--vscode-descriptionForeground, inherit)); }
+.hps-panel-fallback-text { flex: 1 1 100px; min-width: 0; margin: 0; font-size: var(--hp-text-body); line-height: var(--hp-leading-label, 1.45); word-break: keep-all; }
+.hps-panel-fallback-retry {
+  flex: none; min-height: 44px; min-width: 44px; padding: 0 16px; border-radius: 8px;
+  border: 1px solid var(--tw-line, var(--vscode-panel-border, #3c3c3c));
+  background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, inherit);
+  font: inherit; font-size: var(--hp-text-body); font-weight: 600; cursor: pointer;
+}
+.hps-panel-fallback-retry:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-secondaryBackground, transparent)); }
+.hps-panel-fallback-retry:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+@media (forced-colors: active) {
+  .hps-panel-fallback { border-color: CanvasText; }
+  .hps-panel-fallback-icon { color: CanvasText; }
+}

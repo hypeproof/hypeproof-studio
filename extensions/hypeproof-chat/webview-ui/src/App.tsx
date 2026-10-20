@@ -21,6 +21,7 @@ import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
 import type { VerdictMap, VerdictState } from '../../src/answerVerdict';
 import { InstructorChatPanel } from "./InstructorChatPanel"; // #1298
 import { ChatErrorBoundary } from "./ChatErrorBoundary";
+import { PanelBoundary } from "./PanelBoundary";
 import { VerifyPanel } from "./VerifyPanel";
 import { PublishPanel } from "./PublishPanel";
 import { EvidencePanel } from "./EvidencePanel";
@@ -533,7 +534,7 @@ export function App() {
   }, [state.verifySend, state.streamId]);
 
   const verifyPanel = state.verify ? (
-    <VerifyPanel
+    <PanelBoundary panel="verify"><VerifyPanel
       view={state.verify}
       error={verifyNote(verifyHeld, state.verifyError)}
       busy={!!state.streamId}
@@ -541,11 +542,11 @@ export function App() {
       onRetest={() => { setVerifyHeld(false); postToHost({ type: "verifyRetest" }); }}
       onFix={(criterionId, text) => verifyWhenOnline(() => { const requestId = verifyRequest(); postToHost(pressAction(`fix:${JSON.stringify([criterionId, text])}`) === "resume" ? { type: "verifyResume", requestId } : { type: "verifyFix", requestId, criterionId, text }); })}
       onClose={() => { setVerifyHeld(false); dispatch({ type: "verifyClose" }); }}
-    />
+    /></PanelBoundary>
   ) : null;
 
   const publishPanel = state.testPublish ? (
-    <PublishPanel
+    <PanelBoundary panel="publish"><PublishPanel
       view={state.testPublish.view}
       error={state.testPublish.error}
       errorLines={state.testPublish.errorLines}
@@ -556,11 +557,11 @@ export function App() {
       onLink={(experimentId, channel, expiresInDays) => postToHost({ type: "publishLink", experimentId, channel, expiresInDays })}
       onRevoke={(linkId) => postToHost({ type: "publishRevoke", linkId })}
       onClose={() => dispatch({ type: "testPublishClose" })}
-    />
+    /></PanelBoundary>
   ) : null;
 
   const evidencePanel = state.evidence ? (
-    <EvidencePanel
+    <PanelBoundary panel="evidence-panel"><EvidencePanel
       view={state.evidence.view}
       error={state.evidence.error}
       done={state.evidence.done}
@@ -571,11 +572,11 @@ export function App() {
       onReview={(experimentId, draftId, revision, actions) => postToHost({ type: "evidenceReview", experimentId, draftId, revision, actions })}
       onDelete={(experimentId, sessionId) => postToHost({ type: "evidenceDelete", experimentId, ...(sessionId ? { sessionId } : {}) })}
       onClose={() => dispatch({ type: "evidenceClose" })}
-    />
+    /></PanelBoundary>
   ) : null;
 
   const memoryPanel = state.memory ? (
-    <MemoryPanel
+    <PanelBoundary panel="memory"><MemoryPanel
       view={state.memory.view}
       error={state.memory.error}
       done={state.memory.done}
@@ -584,11 +585,11 @@ export function App() {
       onDiff={(from, to) => postToHost({ type: "memoryDiff", from, to })}
       onDecide={(form) => postToHost({ type: "memoryDecision", form })}
       onClose={() => dispatch({ type: "memoryClose" })}
-    />
+    /></PanelBoundary>
   ) : null;
 
   const skillsPanel = state.skills ? (
-    <SkillsPanel
+    <PanelBoundary panel="skills"><SkillsPanel
       view={state.skills.view}
       error={state.skills.error}
       done={state.skills.done}
@@ -596,15 +597,15 @@ export function App() {
       onRefresh={() => postToHost({ type: "skillsOpen" })}
       onRun={(skill, form) => postToHost({ type: "skillRun", skill, form })}
       onClose={() => dispatch({ type: "skillsClose" })}
-    />
+    /></PanelBoundary>
   ) : null;
 
   // REQ-L12 ⑫ — the trial carry-over offer / read-only trial transcript (host-gated on the Service offer).
   const carryoverPanel = state.config?.carryover ? (
-    <TrialCarryover view={state.config.carryover} busy={!!state.streamId} onDecide={(decision) => postToHost({ type: "carryoverDecision", decision })} />
+    <PanelBoundary panel="carryover"><TrialCarryover view={state.config.carryover} busy={!!state.streamId} onDecide={(decision) => postToHost({ type: "carryoverDecision", decision })} /></PanelBoundary>
   ) : null;
   const reviewPanel = state.review ? (
-    <ReviewPanel
+    <PanelBoundary panel="review"><ReviewPanel
       view={state.review.view}
       error={state.review.error}
       done={state.review.done}
@@ -615,7 +616,7 @@ export function App() {
       onOpenTeam={(projectId) => postToHost({ type: "reviewDirectorOpen", projectId })}
       onDecide={(projectId, week, revision, form) => pressDecision(dispatch, postToHost, { type: "reviewDecision", projectId, week, revision, form })}
       onClose={() => dispatch({ type: "reviewClose" })}
-    />
+    /></PanelBoundary>
   ) : null;
 
   const retry = (prompt: string, source?: ChatMessage) => {

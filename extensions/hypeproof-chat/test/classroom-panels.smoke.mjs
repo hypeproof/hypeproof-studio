@@ -27,7 +27,8 @@ assert.deepEqual(classroomPanelsShown({ classroom_panels: { help_request: true }
 // The chat view draws each panel only when its own answer says so (and never in instructor mode).
 const panel = readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");
 assert.match(panel, /const classroomPanels = classroomPanelsShown\(config\?\.profile, personalWorkspace\);/);
-assert.match(panel, /\{!props\.instructor && classroomPanels\.help && <HelpRequest /, "help panel gated on its switch");
+// The panel may sit in its own error boundary (CGP-SHELL-R-013); the gate stays in front of it.
+assert.match(panel, /\{!props\.instructor && classroomPanels\.help && (?:<PanelBoundary panel="help-request">)?<HelpRequest /, "help panel gated on its switch");
 assert.match(panel, /\{!props\.instructor && help && classroomPanels\.approval && <details [^>]*data-artifact-approval=""/, "approval panel gated on its switch");
 console.log("✓ ChatPanel gates both renders on the Service's answer");
 
