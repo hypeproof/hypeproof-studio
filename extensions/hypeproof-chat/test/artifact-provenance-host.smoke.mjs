@@ -36,7 +36,8 @@ vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports
 const { ChatPanelProvider, setHostWriteSink } = module.exports;
 
 let writes = [];
-setHostWriteSink({ wrote: (w, actor) => { for (const x of w) writes.push({ rel: path.relative(root, x.absPath).split(path.sep).join("/"), actor, data: x.data === undefined ? undefined : String(x.data) }); }, replaced: () => {} });
+const captureWrites = () => setHostWriteSink({ wrote: (w, actor) => { for (const x of w) writes.push({ rel: path.relative(root, x.absPath).split(path.sep).join("/"), actor, data: x.data === undefined ? undefined : String(x.data) }); }, replaced: () => {} });
+captureWrites();
 
 const h = Object.create(ChatPanelProvider.prototype);
 Object.assign(h, {
@@ -162,14 +163,33 @@ await t("N5. an instructor turn leaves the folder unconfirmed (the instructor co
   fs.rmSync(store, { recursive: true, force: true }); fs.rmSync(store2, { recursive: true, force: true });
 });
 
-await t("wiring lock: after each turn's end the host marks a shell seat's or a stopped turn's folder as lingering", () => {
+await t("wiring lock: the list scan is guarded by the generation", () => {
   const src = fs.readFileSync(path.join(here, "src/chatPanelProvider.ts"), "utf8");
-  const end = src.indexOf("await this.endTurnRestore(turnRestorePoint, streamId);");
-  const linger = src.indexOf('await this.provenanceTurnLingers(turnRestorePoint?.root ?? null, this.cachedProfile?.sdk_tools?.shell === true ? "shell" : ctrl.signal.aborted ? "stopped" : null);');
-  if (end < 0 || linger < end || linger - end > 400) throw new Error("the lingering mark does not follow endTurnRestore");
-  if (!/if \(folder\) await recorder\.turnLingers\(folder, kind\);/.test(src)) throw new Error("provenanceTurnLingers does not reach the recorder");
   const gen = src.indexOf("const generation = recorder.generation();"), scan = src.indexOf("scan = await scanFolder(root, { cache: recorder.scanCache(root) });");
   if (gen < 0 || scan < gen || !src.includes("view = await recorder.view(root, scan && idle() ? scan : undefined, generation);")) throw new Error("the list scan is not guarded by the generation");
+});
+
+await t("a real editor save through VS Code's document events is recorded as the learner's (watchLearnerSaves)", async () => {
+  captureWrites(); // an earlier case installed a real recorder's sink
+  const listeners = {};
+  const on = (name) => (fn) => { listeners[name] = fn; return { dispose: () => {} }; };
+  Object.assign(vscode.workspace, { onDidChangeTextDocument: on("change"), onDidSaveTextDocument: on("save"), onDidCloseTextDocument: on("close") });
+  const subscriptions = [];
+  h.watchLearnerSaves({ subscriptions });
+  eq(subscriptions.length, 3, "three subscriptions, disposed with the extension");
+  const doc = (rel, text, isDirty) => ({ uri: { fsPath: path.join(root, rel), scheme: "file" }, isDirty, getText: () => text });
+  fs.writeFileSync(path.join(root, "notes.md"), "typed by the learner");
+  listeners.change({ document: doc("notes.md", "typed by the learner", true), contentChanges: [{ text: "x" }] });
+  listeners.save(doc("notes.md", "typed by the learner", false));
+  eq(writes.map((w) => [w.rel, w.actor, w.data]), [["notes.md", "learner_save", "typed by the learner"]], "save recorded");
+  writes = [];
+  // negative controls: the coach's write reloaded into a clean editor, then saved; a file outside the folder
+  listeners.change({ document: doc("index.html", "AI bytes", false), contentChanges: [{ text: "AI bytes" }] });
+  listeners.save(doc("index.html", "AI bytes", false));
+  listeners.change({ document: { uri: { fsPath: path.join(os.tmpdir(), "elsewhere.md"), scheme: "file" }, isDirty: true, getText: () => "x" }, contentChanges: [{ text: "x" }] });
+  listeners.save({ uri: { fsPath: path.join(os.tmpdir(), "elsewhere.md"), scheme: "file" }, isDirty: false, getText: () => "x" });
+  eq(writes, [], "no learner record without a learner edit in the folder");
+  for (const k of ["onDidChangeTextDocument", "onDidSaveTextDocument", "onDidCloseTextDocument"]) delete vscode.workspace[k];
 });
 
 setHostWriteSink(null);

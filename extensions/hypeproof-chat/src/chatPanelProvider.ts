@@ -174,7 +174,7 @@ import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import { changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
-import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
+import { ArtifactProvenanceRecorder, LearnerEditTracker, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
@@ -2055,8 +2055,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     /** #580 — the local session-log spool. Optional: tests and older callers run without recording. */
     private readonly spool?: SessionSpool,
   ) {
-    // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen.
+    // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen, and
+    // take 내가 고침 only from the learner's own editor saves (positive evidence).
     this.provenanceRecorder();
+    this.watchLearnerSaves(context);
     // cr-publish (CR-11 after a restart): know the signed-in person's published origin from
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
@@ -4561,14 +4563,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.provenance;
   }
 
-  /** REQ-STUDIO-ARTIFACT-PROVENANCE — mark the folder of a turn that may still be writing. Never throws. */
-  private async provenanceTurnLingers(root: string | null, kind: "shell" | "stopped" | null): Promise<void> {
-    const recorder = this.provenanceRecorder();
-    if (!kind || !recorder) return;
-    try {
-      const folder = root ?? (this.resolveCoachCwd() ? await fs.promises.realpath(this.resolveCoachCwd()!) : null);
-      if (folder) await recorder.turnLingers(folder, kind);
-    } catch { /* no folder: nothing to mark */ }
+  /** REQ-STUDIO-ARTIFACT-PROVENANCE — a document the learner typed into and saved, inside the work folder, is 내가 고침. */
+  private watchLearnerSaves(context: vscode.ExtensionContext): void {
+    const inFolder = (p: string) => {
+      const cwd = this.resolveCoachCwd();
+      if (!cwd) return false;
+      const rel = path.relative(path.resolve(cwd), path.resolve(p));
+      return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+    };
+    const tracker = new LearnerEditTracker(inFolder);
+    const ws = vscode.workspace as Partial<typeof vscode.workspace>;
+    const subs = [
+      ws.onDidChangeTextDocument?.((e) => tracker.changed({ fsPath: e.document.uri.fsPath, scheme: e.document.uri.scheme, isDirty: e.document.isDirty }, e.contentChanges.length)),
+      ws.onDidSaveTextDocument?.((doc) => tracker.saved({ fsPath: doc.uri.fsPath, scheme: doc.uri.scheme, text: doc.getText() })),
+      ws.onDidCloseTextDocument?.((doc) => tracker.closed({ fsPath: doc.uri.fsPath })),
+    ];
+    for (const sub of subs) if (sub) context?.subscriptions?.push(sub);
   }
 
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — this send's pasted (#421) and attached (D-028) photos, committed by the host, are the learner's uploads. */
@@ -6580,9 +6590,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         clearTimeout(timer);
       }
       await this.endTurnRestore(turnRestorePoint, streamId);
-      // REQ-STUDIO-ARTIFACT-PROVENANCE — a shell-capable seat's background child, or a stopped turn's
-      // in-flight write, can land after the end scan: later unexplained changes read 기록 없음.
-      await this.provenanceTurnLingers(turnRestorePoint?.root ?? null, this.cachedProfile?.sdk_tools?.shell === true ? "shell" : ctrl.signal.aborted ? "stopped" : null);
       this.activeStreams.delete(streamId);
       // cr-verify — the run this turn carried takes no more coach calls once the turn ends.
       this.verifySession?.endTurn();

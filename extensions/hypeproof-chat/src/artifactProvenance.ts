@@ -8,18 +8,20 @@
 //   Studio가 만듦 / Studio가 고침  Studio wrote bytes of its own (a prebuilt world, a starter page,
 //                                  a preview action, a wiki template, notes moved into raw/)
 //   내가 올림                      Studio committed it from a learner attachment (D-028 photo, #421 paste)
-//   내가 고침                      its bytes changed between two observations that were both outside a
-//                                  coach turn, both in this session, with nothing recorded explaining it
+//   내가 고침                      positive evidence only: the learner typed into the file in an editor
+//                                  and VS Code reported its save (`LearnerEditTracker` → noteLearnerSave)
 //   기록 없음                      nothing recorded explains its current bytes
+//
+// Scans only detect THAT bytes changed; they never attribute a change to the learner. Any change
+// no hook explains (a background process, git, another editor, a write landing after a scan, a
+// race of any kind) reads 기록 없음. That is the default every race lands in, and it is the safe one.
 //
 // The ledger is one JSON file per work folder in the extension's storage (beside the restore
 // stores, never in the work folder, never uploaded). It holds the last observed state of the
 // folder (path -> sha256), the paths whose state is not known (`stalePaths`: not covered by the
-// last scan) and an append-only, bounded list of events. Host writes are recorded at the write
-// site through one hook (`noteHostWrite`), so they never read as a learner change whatever their
-// timing. A window that was not measured (no restore point, a failed scan or save, a new session)
-// marks the ledger stale; the next observation then records differences as `unknown`
-// (기록 없음), never as a learner change.
+// last scan) and an append-only, bounded list of events. A window that was not measured (no
+// restore point, a failed scan or save, a new session, a pull) marks the ledger stale; the list
+// then confirms no label until the next complete observation.
 
 import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -52,7 +54,7 @@ export interface ProvenanceLedger {
 }
 
 /** Who wrote bytes through Studio itself. */
-export type HostWriteActor = "ai" | "studio" | "learner_upload";
+export type HostWriteActor = "ai" | "studio" | "learner_upload" | "learner_save";
 
 /** Events kept per folder; the oldest go first (a file whose only event went shows 기록 없음). */
 export const PROVENANCE_EVENT_CAP = 2000;
@@ -109,11 +111,9 @@ export function observeOutsideTurn(ledger: ProvenanceLedger, scan: ScanLike, opt
     if (latest?.sha256 === f.sha256) continue;
     // First observation ever: what was already there has no recorded origin.
     if (!base) continue;
-    if (ledger.stale || stalePaths.has(f.path)) {
-      if (before !== undefined || latest) events.push({ path: f.path, kind: "unknown", at: opts.at, sha256: f.sha256 });
-      continue;
-    }
-    events.push({ path: f.path, kind: "learner_changed", at: opts.at, sha256: f.sha256 });
+    // A scan only sees THAT the bytes changed, never who changed them (a learner's save is its own
+    // event): a known file reads 기록 없음 from here; a new file has no event at all.
+    if (before !== undefined || latest || stalePaths.has(f.path)) events.push({ path: f.path, kind: "unknown", at: opts.at, sha256: f.sha256 });
   }
   if (base) {
     const now = new Set(files.map((f) => f.path));
@@ -135,6 +135,7 @@ export function recordHostWrite(ledger: ProvenanceLedger, writes: readonly FileH
   for (const w of writes) {
     const existed = (baseline?.[w.path] !== undefined) || !!latestLive(events, w.path);
     const kind: ProvenanceEventKind = opts.actor === "learner_upload" ? "learner_uploaded"
+      : opts.actor === "learner_save" ? "learner_changed"
       : opts.actor === "ai" ? (existed ? "ai_changed" : "ai_created")
       : (existed ? "studio_changed" : "studio_created");
     events.push({ path: w.path, kind, at: opts.at, sha256: w.sha256 });
@@ -159,9 +160,13 @@ export function recordCoachTurn(ledger: ProvenanceLedger, turn: { turnId: string
   const record = (p: string, kind: ProvenanceEventKind) => {
     if (!hash[p]) return;
     const latest = latestLive(events, p);
-    // Studio recorded these exact bytes during this turn (a host write): that record names its writer.
+    // Studio or the learner's save recorded these exact bytes during this turn: that record names
+    // the writer (the later of a save and an AI write wins).
     if (latest && latest.sha256 === hash[p] && latest.at >= turn.startedAt) return;
-    events.push({ path: p, kind, at: turn.at, sha256: hash[p], turnId: turn.turnId });
+    // The learner saved this file during the turn and the bytes changed again after: who wrote last
+    // is not known, so no label is claimed.
+    const savedInTurn = events.some((e) => e.path === p && e.kind === "learner_changed" && e.at >= turn.startedAt);
+    events.push({ path: p, kind: savedInTurn ? "unknown" : kind, at: turn.at, sha256: hash[p], turnId: turn.turnId });
   };
   for (const p of turn.added) record(p, "ai_created");
   for (const p of turn.changed) record(p, "ai_changed");
@@ -296,17 +301,11 @@ export class ArtifactProvenanceRecorder {
   private readonly hashCaches = new Map<string, Map<string, unknown>>();
   /**
    * Bumped synchronously by every call that records or invalidates something (a host write, a
-   * folder replace, a turn's start and end, an unmeasured window, a revert, a lingering turn). A list
-   * scan read before a bump may hold bytes from before that event, so it is never applied.
+   * folder replace, a learner save, a turn's start and end, an unmeasured window, a revert). A list
+   * scan read before a bump may hold bytes from before that event, so it is never applied: that keeps
+   * a Studio or AI label from being lost to 기록 없음 by an older scan.
    */
   private gen = 0;
-  /**
-   * Folders where a finished turn may still be writing: `session` after a turn on a shell-capable
-   * seat (a background child can outlive the turn for the whole session), or the time after which
-   * a stopped turn's leftover write has surely landed. While set, an observation never records a
-   * learner change; the stopped-turn kind ends at the first quiet observation after that time.
-   */
-  private readonly lingering = new Map<string, "session" | number>();
   private readonly base: string;
   private readonly now: () => number;
   constructor(base: string, now: () => number = Date.now) {
@@ -337,32 +336,8 @@ export class ArtifactProvenanceRecorder {
 
   private bump(): void { this.gen++; }
 
-  /** Observe outside a turn, as stale while a finished turn may still be writing. */
   private observe(root: string, scan: ScanLike, at: number): Promise<ProvenanceLedger | null> {
-    const linger = this.lingering.get(root);
-    let quiet = false;
-    const next = this.apply(root, (l) => {
-      const base = linger === undefined ? l : markUnobserved(l);
-      const out = observeOutsideTurn(base, scan, { at });
-      quiet = out.events.length === base.events.length && (!base.baseline || Object.keys(base.baseline).length === Object.keys(out.baseline ?? {}).length);
-      return out;
-    });
-    return next.then((r) => {
-      if (typeof linger === "number" && quiet && at >= linger && this.lingering.get(root) === linger) this.lingering.delete(root);
-      return r;
-    });
-  }
-
-  /**
-   * The turn that just ended may keep writing after its end scan: `shell` (the seat can run
-   * commands, so a background child may outlive it) or `stopped` (the stop does not wait for the
-   * runtime's in-flight write). Later unexplained changes in this folder read 기록 없음.
-   */
-  turnLingers(root: string, kind: "shell" | "stopped", settleMs = 30_000): Promise<unknown> {
-    this.bump();
-    if (kind === "shell") this.lingering.set(root, "session");
-    else if (this.lingering.get(root) !== "session") this.lingering.set(root, this.now() + settleMs);
-    return this.run(() => this.apply(root, markUnobserved));
+    return this.apply(root, (l) => observeOutsideTurn(l, scan, { at }));
   }
 
   /** A per-folder hash cache for `scanFolder({ cache })` on the list path (mtime + size + inode). */
@@ -472,6 +447,39 @@ export function setHostWriteSink(sink: HostWriteSink | null): void {
  */
 export function noteHostWrite(writes: readonly HostWrite[], actor: HostWriteActor): void {
   try { hostWriteSink?.wrote(writes, actor); } catch { /* provenance never breaks a write */ }
+}
+
+/** The learner saved a document they typed into (`LearnerEditTracker`): the only source of 내가 고침. */
+export function noteLearnerSave(absPath: string, text: string): void {
+  noteHostWrite([{ absPath, data: text }], "learner_save");
+}
+
+/**
+ * Positive evidence of a learner edit. VS Code's document events feed it (`changed` from
+ * onDidChangeTextDocument, `saved` from onDidSaveTextDocument): a document counts as the learner's
+ * once a non-empty change leaves it dirty (a reload from disk after someone else's write leaves it
+ * clean, and Studio never edits documents), and its next save is recorded with the hash of the text
+ * VS Code saved. If those bytes are not what is on disk (another encoding, a later write) no event
+ * matches them and the file reads 기록 없음.
+ */
+export class LearnerEditTracker {
+  private readonly edited = new Set<string>();
+  private readonly inFolder: (absPath: string) => boolean;
+  private readonly record: (absPath: string, text: string) => void;
+  constructor(inFolder: (absPath: string) => boolean, record: (absPath: string, text: string) => void = noteLearnerSave) {
+    this.inFolder = inFolder;
+    this.record = record;
+  }
+  changed(doc: { fsPath: string; isDirty: boolean; scheme: string }, contentChanges: number): void {
+    if (doc.scheme !== "file" || contentChanges === 0 || !doc.isDirty || !this.inFolder(doc.fsPath)) return;
+    this.edited.add(doc.fsPath);
+  }
+  saved(doc: { fsPath: string; scheme: string; text: string }): void {
+    if (doc.scheme !== "file" || !this.edited.delete(doc.fsPath) || !this.inFolder(doc.fsPath)) return;
+    this.record(doc.fsPath, doc.text);
+  }
+  /** A closed document's unsaved edits are gone. */
+  closed(doc: { fsPath: string }): void { this.edited.delete(doc.fsPath); }
 }
 
 /**

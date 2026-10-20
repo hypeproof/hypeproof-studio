@@ -21,6 +21,7 @@ let ledger = observeOutsideTurn(emptyLedger(), [{ path: "notes.md", sha256: h("n
 ledger = recordHostWrite(ledger, [{ path: "images/외관.jpg", sha256: h("p") }], { at: 1.5, actor: "learner_upload" });
 ledger = observeOutsideTurn(ledger, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }], { at: 2 });
 ledger = recordCoachTurn(ledger, { turnId: "t1", at: 3, startedAt: 2, added: ["index.html"], changed: [], deleted: [] }, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }, { path: "index.html", sha256: h("1") }]);
+ledger = recordHostWrite(ledger, [{ path: "index.html", sha256: h("2") }], { at: 3.5, actor: "learner_save" }); // the learner's editor save
 ledger = observeOutsideTurn(ledger, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }, { path: "index.html", sha256: h("2") }], { at: 4 });
 const VIEW = provenanceView(ledger);
 

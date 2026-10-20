@@ -1653,61 +1653,54 @@ measured). Built:
     `raw/`.
   - `내가 올림`: Studio committed it from a learner attachment (D-028 photo into `images/`, #421 pasted
     image into `assets/`).
-  - `내가 고침`: its sha256 changed between two observations that were both outside a coach turn and
-    both in the current session, with no recorded event explaining the new bytes.
-  - `기록 없음`: no recorded event left exactly the bytes that are there now, including every file that
-    was already there at the first observation.
+  - `내가 고침`: **positive evidence only.** The learner typed into the file in a VS Code editor
+    (`onDidChangeTextDocument` with a non-empty change that leaves the document dirty, inside the work
+    folder) and VS Code reported its save (`onDidSaveTextDocument`). The event carries the hash of the
+    text VS Code saved (`LearnerEditTracker` → `noteLearnerSave`). A reload from disk after someone
+    else's write leaves the document clean, so it never counts; Studio itself never edits documents.
+    If the saved text's bytes are not what is on disk (another encoding, a later write), no event
+    matches and the file reads `기록 없음`.
+  - `기록 없음`: every other change, whoever made it: a background process the coach started, a
+    stopped turn's late write, git or another editor, a change made while Studio was closed, a GitHub
+    pull, a write that races a scan. Scans only detect **that** bytes changed; they never attribute a
+    change to the learner. Every file already there at the first observation reads `기록 없음` too.
   A file touched more than once shows the latest label and a short history, oldest first,
   consecutive repeats folded, at most four steps ("지금까지: AI가 만듦 → 내가 고침").
+- **Order within one turn.** When a learner save and an AI write hit the same file in one turn, the
+  later one wins: a save whose bytes are the turn's final bytes stays `내가 고침`; an AI write
+  recorded after the save is AI. If the file was saved during the turn and its bytes changed again
+  with no hook naming the writer, the order is unclear and it reads `기록 없음`.
 - **One host-write hook.** Every place Studio writes into the work folder file by file calls
   `noteHostWrite([{ absPath, data }], "ai" | "studio" | "learner_upload")` right after the write,
-  inside or outside a turn and not gated on whether a stream is active (chatPanelProvider's page /
-  engine / agent.md saves and the attachment commit, `imageEditAssets.ts`, `learningWiki.ts`,
-  `workspacePreparation.ts`, `previewProvider.ts`; the send path's uploads go through
-  `recordLearnerUploads`). The bytes are hashed at the call and the record
-  is queued in call order, so a world copied in before the restore point is applied before that
-  turn's start observation, and a host write made inside the turn window keeps its own label (the
-  turn diff does not overwrite bytes Studio recorded during that turn). An observation never reads
-  bytes a recorded event left behind as a change, so a reveal that lands after the post-turn scan
-  still reads AI. The host also waits (at most 10 s) for reveals started during the stream before
-  the post-turn scan. The kids' world archive (`이전 세상`) and `.hypeproof` are outside the scan.
+  inside or outside a turn (chatPanelProvider's page / engine / agent.md saves and the attachment
+  commit, `imageEditAssets.ts`, `learningWiki.ts`, `workspacePreparation.ts`, `previewProvider.ts`;
+  the send path's uploads go through `recordLearnerUploads`). The bytes are hashed at the call and
+  the record is queued in call order. A host write made inside the turn window keeps its own label
+  (the turn diff does not overwrite bytes Studio recorded during that turn), and an observation never
+  reads bytes a recorded event left behind as a change. The host waits (at most 10 s) for reveals
+  started during the stream before the post-turn scan. A hook can still lose its label to a racing
+  scan (the end scan or the restore-point scan reading the older bytes); the file then reads
+  `기록 없음`, never `내가 고침`. The kids' world archive (`이전 세상`) and `.hypeproof` are outside the scan.
 - **Observations.** The restore point taken before each coach turn; the end of the turn (restore
   diff against the rescan); opening the panel while no turn, send, revert, task switch or verify
   run is active. A file deleted and made again loses its old history.
-- **Never guess.** These mark the ledger stale: the first touch of a folder in a session (changes
-  made while Studio was closed, by git or by other tools), no restore point (folder too large, store
-  write failed), a rescan past its entry cap or a read failure after a turn, a list scan past the
-  entry cap, a GitHub clone, download, pull or sync into the folder (`publishHost.bringRepo` calls
-  `noteFolderReplaced` after each, also on failure, because "GitHub에서 이어하기" can pull into the
-  open folder without a reload), a ledger save failure and a damaged ledger. While the ledger is
-  stale the list confirms nothing: every row reads `기록 없음` (history e.g. "AI가 만듦 → 기록 없음")
-  under the note "지금 작업 폴더를 다 확인하지 못해서 모든 파일을 ‘기록 없음’으로 보여 줘요…". The next
-  complete observation records every difference as `기록 없음`, never as `내가 고침`; files whose bytes
-  still match their last event get their label back; and a coach turn that starts from a stale
+- **Generation guard on the list scan.** The recorder keeps a generation that every host write,
+  learner save, folder replace, turn start and end, unmeasured window and revert bumps
+  synchronously. The list reads it before its scan and hands it to `view`; if it moved, the scan is
+  not applied and the list is drawn read-only. This keeps a Studio write or a whole turn that lands
+  during the scan from losing its Studio or AI label to `기록 없음`.
+- **Unconfirmed windows.** These mark the ledger stale: the first touch of a folder in a session, no
+  restore point (folder too large, store write failed), a rescan past its entry cap or a read failure
+  after a turn, a list scan past the entry cap, a GitHub clone, download, pull or sync into the
+  folder (`publishHost.bringRepo` calls `noteFolderReplaced` before and after each, also on failure),
+  an instructor-surface turn (it takes no restore point and Studio cannot tell its coach's changes
+  from the instructor's own edits), a ledger save failure and a damaged ledger. While the ledger is
+  stale the list confirms nothing: every row reads `기록 없음` under the note "지금 작업 폴더를 다
+  확인하지 못해서 모든 파일을 ‘기록 없음’으로 보여 줘요…". The next complete observation restores the
+  labels of files whose bytes still match their last event; a coach turn that starts from a stale
   ledger labels nothing as AI. A folder that stays over the 20,000-entry cap therefore stays
-  `기록 없음`. A file the scan saw but could not hash (over 20 MB, past 5000 files or 200 MB, a
-  link, unreadable) is kept as a stale path: it is not listed, not recorded as removed, and when it
-  fits again it reads `기록 없음`.
-- **Writes after a turn's end scan.** A turn can keep writing after its end scan: a background
-  child on a seat with `sdk_tools.shell` (a `--watch` build, a server log), or the in-flight Write of
-  a stopped turn (the stop does not wait for the runtime). After such a turn the host calls
-  `recorder.turnLingers(folder, "shell" | "stopped")`. While a folder lingers, every observation
-  outside a turn records unexplained differences as `기록 없음`, never `내가 고침`. For a shell seat this
-  lasts for the rest of the session (a background child cannot be seen to end). For a stopped turn it
-  ends at the first quiet observation (no difference) at least 30 s after the stop. The cost is that
-  a learner's own edits in that window also read `기록 없음`, which is the safe direction.
-- **Races around the list scan.** The recorder keeps a generation that every host write, folder
-  replace, turn start and end, unmeasured window, revert and lingering mark bumps synchronously.
-  The list reads it before its scan and hands it to `view`. If it moved, the scan may hold bytes from
-  before that event and is not applied: the list is drawn read-only from the ledger. This covers a
-  Studio write landing during the scan (it keeps its Studio label), a whole turn inside one scan (its
-  bytes stay AI) and a pull that starts after the scan began. `publishHost.bringRepo` also calls
-  `noteFolderReplaced` before each clone, download, pull and sync, as well as after it, so a scan that
-  starts during the copy finds the ledger stale and records `기록 없음`.
-- **Instructor turns.** An instructor-surface turn takes no restore point. It marks the folder
-  unobserved, so if the seat leaves instructor mode in the same session, what the instructor's coach
-  changed reads `기록 없음`. This is safer than recording it as AI: without a restore diff Studio
-  cannot tell the coach's changes from the instructor's own edits.
+  `기록 없음`. A file the scan saw but could not hash (over 20 MB, past 5000 files or 200 MB, a link,
+  unreadable) is kept as a stale path: not listed, not recorded as removed, `기록 없음` when it fits.
 - **되돌리기.** After a revert to a turn's restore point, every event recorded after that point is
   dropped and the restored folder is compared with the point: a file the revert could not put back
   reads `기록 없음`.
@@ -1726,39 +1719,34 @@ measured). Built:
 
 Not built: the "내 작품" drawer (DES-KNOW-20) and grid view; labels in the classroom chat (it has no
 task workspace), on the turn review bar or in the editor's file explorer; the research doc's wording
-`확인 안 됨` (this slice uses `기록 없음` as requested in CGP-KNOW-R-012); separating a learner's manual
-edit made inside a coach turn's window from the coach's (the restore diff compares the folder, so it
-counts as the turn's, as the review bar already says); attributing changes to shell or subagent tools;
-times of edits (none is shown); links to the creating turn (REQ-KNOW-29); 만듦 vs 고침 for a host
-write into a folder never observed before (it reads 만듦); a cached hash when a file's bytes change
-with size, mtime and inode all unchanged (it keeps the old hash until one of them changes);
-labels for an instructor's own turns (the folder reads 기록 없음 instead).
+`확인 안 됨` (this slice uses `기록 없음` as requested in CGP-KNOW-R-012); 내가 고침 for edits the
+learner makes outside a VS Code editor (Finder, another app, the terminal: they read `기록 없음`);
+separating a learner's editor save inside a coach turn from a coach write that follows it without a
+hook (it reads `기록 없음`); attributing changes to shell or subagent tools; times of edits (none is
+shown); links to the creating turn (REQ-KNOW-29); 만듦 vs 고침 for a host write into a folder never
+observed before (it reads 만듦); a cached hash when a file's bytes change with size, mtime and inode
+all unchanged; labels for an instructor's own turns (the folder reads 기록 없음 instead).
 Verification: U (`extensions/hypeproof-chat/test/artifact-provenance.smoke.mjs` — synthetic
 manifests and events with a planted answer per label, history order and folding, first observation,
 revert, caps, damaged ledger, and real temp folders driven through `takeRestorePoint` /
-`diffRestorePoint` and the host recorder, including the verifier's findings: a prebuilt world copied
-before the restore point (with the no-hook negative control reproducing 내가 고침), a host write
-inside the turn window, the real `saveImageEditOutput`, `writeFiles` and `prepareWorkspaceDirectory`
-through the hook, a reveal landing after the post-turn scan in both queue orders, too_large /
-file_cap / total_cap skips, a new session after outside changes (with an in-session positive control),
-the hash cache (hit, rehash on change, eviction), a folder over the entry cap in both directions,
-a read-only list over a stale ledger, skipped Python environments (with a non-skipped control), a
-GitHub pull into the open folder (with the unhooked control reproducing 내가 고침), and a wiring lock
-that the post-turn scan waits for pending reveals; `test/artifact-provenance-host.smoke.mjs` — the
-real `ChatPanelProvider` write paths bundled with only VS Code I/O substituted: agent.md, index.html
-and engine.js saves and the `revealBuilt` writer choice per source, learner uploads, no record without
-a write, plus locks that the send path records uploads between the commit and the restore point and
-that every GitHub clone/download/pull/sync is followed by `noteFolderReplaced`; deleting any one of
-those hook lines fails a case; round 3: a shell seat's late child write and a stopped turn's leftover
-write (with the unmarked control reproducing 내가 고침, and the doubt ending after a quiet list), a
-Studio write, a GitHub pull (both orders) and a whole turn overlapping one list scan (each with the
-unguarded control reproducing 내가 고침), every recording call moving the generation, an instructor
-turn leaving the ledger stale, and locks on the lingering mark, the generation guard and the
-before-and-after pull marks; ten mutations of the derivation each
-fail at least one case; `extensions/hypeproof-chat/test/artifact-provenance.test.tsx` — row markup,
-symbol plus words, Studio row, order, empty and loading states, no score or capability words, the
-closed panel draws no list). Host wiring in `chatPanelProvider.ts` beyond the lock is covered by
-typecheck only. Native app run: NOT RUN.
+`diffRestorePoint` / `restoreToPoint` and the host recorder: every race the verifiers found (a
+prebuilt world copy, a reveal after the end scan, ▶ run during the end scan, a Studio write during the
+restore-point scan followed by 되돌리기, a background child after the turn and after a restart, a
+stopped turn's late write, a Studio write / GitHub pull / whole turn overlapping a list scan) gives no
+`내가 고침`; a real external process (`echo > file`) gives `기록 없음`; the editor-save tracker (positive
+case, and a clean reload, an empty change, a closed document, another folder and an untitled document
+recording nothing); save-vs-AI order in one turn; the real `saveImageEditOutput`, `writeFiles` and
+`prepareWorkspaceDirectory` through the hook; the hash cache; Python environments skipped;
+`test/artifact-provenance-host.smoke.mjs` — the real `ChatPanelProvider` bundled with only VS Code
+I/O substituted: agent.md, index.html and engine.js saves and the `revealBuilt` writer choice per
+source, learner uploads, folder-consent refusals and failed writes recording nothing, an instructor
+turn leaving the ledger stale, a real editor save through the fake VS Code document events recorded
+as the learner's (and a clean reload or another folder not), and locks on the upload call site, the
+list-scan generation and the before-and-after pull marks; reverting the scan default to `내가 고침`,
+dropping the dirty check or the in-turn order rule each fails cases;
+`extensions/hypeproof-chat/test/artifact-provenance.test.tsx` — row markup, symbol plus words, Studio
+row, order, empty, loading and unconfirmed states, no score or capability words, the closed panel
+draws no list). Native app run: NOT RUN.
 
 ## Personal trial interaction coverage (#758)
 
