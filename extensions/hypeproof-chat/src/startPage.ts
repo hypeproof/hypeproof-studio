@@ -95,6 +95,11 @@ export class StartPage {
   private freeNewcomer = false;
   /** This window's Service refused an order with `account_required` (login at purchase). */
   private accountRequired = false;
+  /**
+   * CONV-PURCHASE-R-002 — the pass chosen when the purchase-time sign-in began. Host memory only:
+   * a catalogue product id, never a secret, never in a URL. Given back to the list while it is open.
+   */
+  private purchasePick?: string;
   /** SPEC §2.5 — a guardian pays: the checkout link and QR shown instead of opening a browser here. */
   private guardianCheckout?: { url: string; qr: string };
   /** The first start-page paint waits briefly for the offer, so a newcomer does not see the code choices flash. */
@@ -113,6 +118,9 @@ export class StartPage {
     if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
     // Signed in after a login-at-purchase prompt: the prompt has been answered.
     if (this.accounts?.view().status === "signedIn" && this.purchaseMessage === PURCHASE_COPY.signInFirst) this.purchaseMessage = undefined;
+    // CONV-PURCHASE-R-002 — the chosen pass comes back only to the list it was chosen on. Signed in
+    // anywhere else (waiting, stopped, list closed): nothing is restored later.
+    if (this.accounts?.view().status === "signedIn" && this.purchaseStage !== "choosing") this.purchasePick = undefined;
     if (this.panel) void this.refresh();
   }
 
@@ -244,7 +252,7 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.purchaseFocus = undefined; this.stopPurchaseWait(); this.accounts?.cancel(false); } });
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.stopPurchaseWait(); this.accounts?.cancel(false); } });
     this.context.subscriptions.push(panel);
     void this.resumePurchase();
   }
@@ -287,7 +295,20 @@ export class StartPage {
       ...(this.order ? { order: { label: this.order.label, amount: this.order.amount } } : {}),
       ...(this.purchaseMessage ? { message: this.purchaseMessage } : {}),
       ...(this.purchaseFocus ? { focus: this.purchaseFocus } : {}),
+      ...(this.selectedPass() ? { selected: this.selectedPass() } : {}),
     };
+  }
+  /** CONV-PURCHASE-R-002 — remember the chosen pass when the purchase-time sign-in begins. */
+  private notePurchasePick(productId: unknown): void {
+    if (typeof productId !== "string" || this.purchaseStage !== "choosing" || this.order) return;
+    if (!this.products?.some(p => p.id === productId)) return;
+    this.purchasePick = productId;
+  }
+  /** The remembered pass, only while the pass list is open and still sells it. */
+  private selectedPass(): string | undefined {
+    const pick = this.purchasePick;
+    if (!pick || this.purchaseStage !== "choosing" || this.order) return undefined;
+    return this.products?.some(p => p.id === pick) ? pick : undefined;
   }
   /** TUX-SP-12 — one credential-free read per window; never `/v1/profile`, which would start a trial clock. */
   private async loadTrialOffer(): Promise<void> {
@@ -504,12 +525,14 @@ export class StartPage {
       this.stopPurchaseWait(); this.purchaseFocus = undefined;
       if (this.order && this.purchaseStage !== "connecting") { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.cancelled; }
       else if (!this.order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
+      this.purchasePick = undefined;
       await this.refresh(); return;
     }
     if (msg.type === "purchaseHide") {
       // Back to the other ways to start. The order stays saved and the choice list offers it again.
       this.stopPurchaseWait(); this.purchaseFocus = undefined;
       if (this.purchaseStage !== "connecting") { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
+      this.purchasePick = undefined;
       await this.refresh(); return;
     }
     if (msg.type === "purchaseReopen") {
@@ -539,9 +562,12 @@ export class StartPage {
       if (this.accounts && !this.accounts.matches(proxyUrl, siteBase)) throw new AccountError("settings_changed", "서버 설정이 바뀌었어요. Studio를 다시 열고 로그인해 주세요.");
       const accountToken = this.accounts ? await this.accounts.accessToken() : undefined;
       if (this.accounts && !accountToken) {
-        if (this.loginAtPurchase()) { this.purchaseStage = "choosing"; this.purchaseMessage = PURCHASE_COPY.signInFirst; return; }
+        if (this.loginAtPurchase()) { this.purchaseStage = "choosing"; this.purchaseMessage = PURCHASE_COPY.signInFirst; this.notePurchasePick(msg.productId); return; }
         throw new AccountError("authentication_required", "Google로 로그인한 뒤 이용권을 구매해 주세요.");
       }
+      // CONV-PURCHASE-R-002 — the pay press is the person's latest choice. A remembered pick is spent
+      // here, so a failed order and a retry never bring an older pass back over it.
+      this.purchasePick = undefined;
       // SPEC iteration 4 §2.5 — an order made from a free seat carries its credential so the Service
       // can link the purchase to the free start. Header only; never shown or sent to the checkout page.
       const freeCredential = this.freeSeatNow ? await this.currentToken() : undefined;
@@ -551,6 +577,7 @@ export class StartPage {
         // as the Primary (or the calm notice without an account runtime); nothing was ordered.
         this.accountRequired = true; this.purchaseStage = "choosing";
         this.purchaseMessage = this.accounts ? PURCHASE_COPY.signInFirst : undefined;
+        if (this.accounts) this.notePurchasePick(msg.productId);
         if (this.accounts && accountToken) await this.accounts.refreshView();
         return;
       }
@@ -651,7 +678,7 @@ export class StartPage {
       if (!this.accounts) return;
       this.error = undefined;
       try {
-        if (msg.type === "accountSignIn") await this.accounts.start();
+        if (msg.type === "accountSignIn") { if (this.loginGate() === "signIn") this.notePurchasePick(msg.productId); await this.accounts.start(); }
         else if (msg.type === "accountCancel") this.accounts.cancel();
         else if (msg.type === "accountReopen") await this.accounts.reopen();
         else if (msg.type === "accountCopyLink") await this.accounts.copyLink(text => vscode.env.clipboard.writeText(text));

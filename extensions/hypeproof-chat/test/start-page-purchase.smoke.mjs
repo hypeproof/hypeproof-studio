@@ -14,9 +14,9 @@ const ID = 'ord_' + 'a'.repeat(32), SECRET = 'b'.repeat(64), KEY = 'hypeproofCha
 const profile = { activity_kind: 'trial', profile_id: 'adult', display_name: 'Adult practice', ux: { coach: { naming_mode: 'fixed', fallback_name: 'Coach' } }, welcome: {}, series_index: 1, series_total: 5 };
 const catalogue = { products: [{ id: 'pass-30d', label: '30일 이용권', amount: 50000, currency: 'KRW', duration_hours: 720, request_limit: 600 }] };
 
-function harness({ saved, settings = {} } = {}) {
+function harness({ saved, settings = {}, accounts } = {}) {
   const world = { secrets: new Map(saved ? [[KEY, JSON.stringify(saved)]] : []), events: [], states: [], opened: [], calls: [], service: SERVICE, site: SITE,
-    products: 200, checkout: `${SITE}/studio/checkout?order=${ID}`, poll: 'pending', claims: [], profileStatus: 200, timers: 0, ...settings };
+    products: 200, catalogue, offer: null, checkout: `${SITE}/studio/checkout?order=${ID}`, poll: 'pending', claims: [], profileStatus: 200, timers: 0, ...settings };
   const ctx = { workspaceState: { keys: () => [], get: (_k, d) => d, update: async () => {} },
     secrets: { get: async k => world.secrets.get(k), store: async (k, v) => { world.events.push('store:' + k); world.secrets.set(k, v); }, delete: async k => { world.events.push('delete:' + k); world.secrets.delete(k); } },
     extension: { packageJSON: { version: 'test' } }, subscriptions: [] };
@@ -27,7 +27,8 @@ function harness({ saved, settings = {} } = {}) {
   const fetch = async (url, init = {}) => {
     const u = new URL(url), headers = new Headers(init.headers);
     world.calls.push({ path: u.pathname, origin: u.origin, method: init.method ?? 'GET', secret: headers.get('x-hps-order-secret'), body: init.body ? JSON.parse(init.body) : undefined });
-    if (u.pathname === '/v1/purchase/products') return json(world.products, world.products === 200 ? catalogue : { error: 'not_found' });
+    if (u.pathname === '/v1/purchase/products') return json(world.products, world.products === 200 ? world.catalogue : { error: 'not_found' });
+    if (u.pathname === '/v1/trial/offer') return world.offer ? json(200, world.offer) : json(404, {});
     if (u.pathname === '/v1/purchase/orders') return json(201, { order_id: ID, order_secret: SECRET, amount: 50000, currency: 'KRW', label: '30일 이용권', expires_at: Date.now() + 1800000, checkout_url: world.checkout });
     if (u.pathname === `/v1/purchase/orders/${ID}/claim`) { const a = world.claims.shift() ?? { status: 503, body: { error: 'seat_unavailable' } }; return json(a.status, a.body); }
     if (u.pathname === `/v1/purchase/orders/${ID}`) return json(200, { order_id: ID, state: world.poll, claimed: false });
@@ -37,7 +38,7 @@ function harness({ saved, settings = {} } = {}) {
   const module = { exports: {} };
   vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, Buffer, AbortSignal, URL, process, TextEncoder, fetch, Date, JSON,
     setTimeout: () => { world.timers++; return world.timers; }, clearTimeout: () => {} });
-  const page = new module.exports.StartPage(ctx, chat, async (_p, commit) => { await commit(); return false; });
+  const page = new module.exports.StartPage(ctx, chat, async (_p, commit) => { await commit(); return false; }, undefined, accounts);
   page.panel = { webview: { postMessage: async msg => world.states.push(msg) } };
   const view = () => world.states.at(-1).state.purchase;
   return { world, page, view };
@@ -236,4 +237,142 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   await page.handle({ type: 'purchaseCancel' });
   assert.equal(view().focus, undefined);
   console.log('PASS end-of-trial card: the pass list opens only on the press, without an order');
+}
+
+// ── CONV-PURCHASE-R-002: back from the purchase-time Google sign-in, the chosen pass is still chosen ──
+// Login at purchase (REQ-L12 ⑭) for a newcomer under free start. The account runtime is a stub of
+// src/accountSession.ts: `start` opens the browser and waits; `finish` stands for the approval
+// arriving later and the runtime's change event (extension.ts wires it to accountChanged).
+{
+  const OFFER = { entry: 'open', duration_hours: 24, request_limit: 10, unit: 'turn', claim: '/v1/free/claim', min_app_version: '0.0.1', available: true };
+  const two = { products: [
+    { id: 'pass-30d', label: '30일 이용권', amount: 50000, currency: 'KRW', duration_hours: 720, request_limit: 600, recommended: true },
+    { id: 'pass-90d', label: '90일 이용권', amount: 120000, currency: 'KRW', duration_hours: 2160, request_limit: 1800 },
+  ] };
+  function accountStub() {
+    const a = { status: 'signedOut', message: undefined, starts: 0, onChange: () => {},
+      view: () => ({ status: a.status, ...(a.message ? { message: a.message } : {}), ...(a.status === 'signedIn' ? { account: { id: 'acc_1', email: 'learner@example.test', display_name: '학습자' }, passes: [] } : {}) }),
+      matches: () => true, accessToken: async () => a.status === 'signedIn' ? 'account-bearer-' + 'd'.repeat(40) : undefined,
+      refreshView: async () => {}, start: async () => { a.starts++; a.status = 'waiting'; a.message = undefined; },
+      finish: () => { a.status = 'signedIn'; a.message = undefined; a.onChange(); },
+      cancel(notify = true) { if (notify) { a.status = 'signedOut'; a.message = '로그인을 취소했어요.'; a.onChange(); } },
+      reopen: async () => {}, openAccount: async () => {}, signOut: async () => { a.status = 'signedOut'; a.onChange(); } };
+    return a;
+  }
+  const newcomer = () => {
+    const accounts = accountStub();
+    const h = harness({ settings: { catalogue: two, offer: OFFER }, accounts });
+    accounts.onChange = () => h.page.accountChanged();
+    return { ...h, accounts };
+  };
+  const settle = () => new Promise(r => setImmediate(r));
+  const orders = world => world.calls.filter(c => c.path === '/v1/purchase/orders');
+  const list = v => JSON.stringify({ stage: v.stage, products: v.products });
+
+  // Positive: choose the non-default pass, sign in, and the list comes back with it and the pay Primary.
+  {
+    const { world, page, view, accounts } = newcomer();
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.handle({ type: 'purchaseOpen' });
+    assert.equal(view().stage, 'choosing');
+    assert.equal(view().login, 'signIn', 'newcomer under free start: the Google sign-in is the Primary');
+    assert.equal(view().selected, undefined, 'nothing is selected by the host before a sign-in');
+    const before = list(view());
+    await page.handle({ type: 'accountSignIn', productId: 'pass-90d' });
+    assert.equal(accounts.starts, 1);
+    assert.equal(view().selected, 'pass-90d', 'the chosen pass is kept while the browser sign-in runs');
+    accounts.finish(); await settle();
+    // No further message from the webview: the account appearing alone brings the list back.
+    const back = view();
+    assert.equal(list(back), before, 'the same pass list');
+    assert.equal(back.stage, 'choosing');
+    assert.equal(back.selected, 'pass-90d', 'the pass the person had chosen is still selected');
+    assert.equal(back.login, undefined, 'signed in: the pay Primary (`{금액} 결제하러 가기`) is drawn, not the sign-in');
+    assert.equal(back.message, undefined);
+    assert.equal(orders(world).length, 0, 'returning creates no order by itself');
+    assert.equal(world.opened.length, 0, 'and opens no browser');
+    // The id is host memory only: not in SecretStorage, not in any URL.
+    assert.equal([...world.secrets.values()].some(v => String(v).includes('pass-90d')), false);
+    assert.equal(world.calls.some(c => c.path.includes('pass-90d') || c.origin.includes('pass-90d')), false);
+    // The pay Primary orders that pass.
+    await page.handle({ type: 'purchaseStart', productId: 'pass-90d' });
+    assert.equal(orders(world).length, 1);
+    assert.equal(orders(world)[0].body.product_id, 'pass-90d', 'the order is for the chosen pass');
+    assert.equal(view().stage, 'waiting');
+    assert.equal(view().selected, undefined, 'past the list, no selection is sent');
+  }
+
+  // The pay press spends the remembered pick: a newer choice whose order fails is not overwritten
+  // by the older pass when the person comes back to the list (verifier finding, 2026-10-20).
+  {
+    const { world, page, view, accounts } = newcomer();
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.handle({ type: 'purchaseOpen' });
+    await page.handle({ type: 'accountSignIn', productId: 'pass-90d' }); accounts.finish(); await settle();
+    assert.equal(view().selected, 'pass-90d');
+    world.checkout = 'https://evil.test/pay';
+    await page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
+    assert.equal(view().stage, 'stopped');
+    await page.handle({ type: 'purchaseRetry' });
+    assert.equal(view().stage, 'choosing');
+    assert.equal(view().selected, undefined, 'the older pass does not come back over the newer choice');
+  }
+
+  // The pay press from a stale signed-out view also keeps the choice (REQ-L12 ⑭: sign in first).
+  {
+    const { page, view, accounts } = newcomer();
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.handle({ type: 'purchaseOpen' });
+    await page.handle({ type: 'purchaseStart', productId: 'pass-90d' });
+    assert.equal(view().stage, 'choosing');
+    assert.equal(view().selected, 'pass-90d');
+    await page.handle({ type: 'accountSignIn' }); accounts.finish(); await settle();
+    assert.equal(view().selected, 'pass-90d'); assert.equal(view().login, undefined);
+  }
+
+  // Negative control: the sign-in is cancelled. The list is unchanged, the choice is kept, the
+  // sign-in stays the Primary with the retry copy, and nothing is ordered.
+  {
+    const { world, page, view, accounts } = newcomer();
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.handle({ type: 'purchaseOpen' });
+    const before = list(view());
+    await page.handle({ type: 'accountSignIn', productId: 'pass-90d' });
+    await page.handle({ type: 'accountCancel' }); await settle();
+    const after = world.states.at(-1).state;
+    assert.equal(list(after.purchase), before, 'the same list');
+    assert.equal(after.purchase.login, 'signIn', 'the sign-in is still the Primary');
+    assert.equal(after.purchase.selected, 'pass-90d', 'the choice is kept');
+    assert.equal(after.account.status, 'signedOut');
+    assert.equal(after.account.message, '로그인을 취소했어요.', 'the retry copy');
+    assert.equal(orders(world).length, 0);
+    // An unknown product id is never remembered.
+    await page.handle({ type: 'accountSignIn', productId: 'pass-forged' });
+    assert.equal(view().selected, 'pass-90d');
+  }
+
+  // Negative control: the account appears while the stage is not `choosing`. No selection is restored.
+  {
+    // (a) The list was left during the sign-in: back on the list later, the host default stands.
+    const { page, view, accounts } = newcomer();
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.handle({ type: 'purchaseOpen' });
+    await page.handle({ type: 'accountSignIn', productId: 'pass-90d' });
+    await page.handle({ type: 'purchaseCancel' });
+    assert.equal(view().stage, undefined);
+    assert.equal(view().selected, undefined, 'list closed: no selection');
+    accounts.finish(); await settle();
+    assert.equal(view().selected, undefined, 'signed in off the list: nothing restored');
+    await page.handle({ type: 'purchaseOpen' });
+    assert.equal(view().stage, 'choosing');
+    assert.equal(view().selected, undefined, 'reopening the list later restores nothing');
+    // (b) A sign-in started outside the list (free card / start choices) carries no pass.
+    const other = newcomer();
+    await other.page.handle({ type: 'startReady' }); await settle();
+    await other.page.handle({ type: 'accountSignIn', productId: 'pass-90d' });
+    other.accounts.finish(); await settle();
+    await other.page.handle({ type: 'purchaseOpen' });
+    assert.equal(other.view().selected, undefined, 'a pick sent while the stage was not choosing is ignored');
+  }
+  console.log('PASS CONV-PURCHASE-R-002: sign-in at purchase returns to the same list with the chosen pass and the pay Primary; cancel keeps the list; off the list nothing is restored');
 }
