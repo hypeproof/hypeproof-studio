@@ -41,6 +41,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/artifactHistoryPanel.ts"
         }
       ]
     },
@@ -55,6 +58,12 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/artifact-history.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/artifact-history-panel.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/artifact-history-panel-client.smoke.mjs"
         }
       ]
     },

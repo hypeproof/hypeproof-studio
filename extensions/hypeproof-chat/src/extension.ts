@@ -308,7 +308,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }));
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.artifactHistory", async (uri?: vscode.Uri) => {
     const target = uri ?? vscode.window.activeTextEditor?.document.uri;
-    if (target?.scheme === "file") await provider.showArtifactHistory(target.fsPath);
+    if (target?.scheme === "file") await provider.openArtifactHistoryPanel(target.fsPath);
   }));
   registerActivityTrash(context, {
     active: () => !!provider.activityTrashBinding,
