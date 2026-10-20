@@ -1688,6 +1688,26 @@ measured). Built:
   `기록 없음`. A file the scan saw but could not hash (over 20 MB, past 5000 files or 200 MB, a
   link, unreadable) is kept as a stale path: it is not listed, not recorded as removed, and when it
   fits again it reads `기록 없음`.
+- **Writes after a turn's end scan.** A turn can keep writing after its end scan: a background
+  child on a seat with `sdk_tools.shell` (a `--watch` build, a server log), or the in-flight Write of
+  a stopped turn (the stop does not wait for the runtime). After such a turn the host calls
+  `recorder.turnLingers(folder, "shell" | "stopped")`. While a folder lingers, every observation
+  outside a turn records unexplained differences as `기록 없음`, never `내가 고침`. For a shell seat this
+  lasts for the rest of the session (a background child cannot be seen to end). For a stopped turn it
+  ends at the first quiet observation (no difference) at least 30 s after the stop. The cost is that
+  a learner's own edits in that window also read `기록 없음`, which is the safe direction.
+- **Races around the list scan.** The recorder keeps a generation that every host write, folder
+  replace, turn start and end, unmeasured window, revert and lingering mark bumps synchronously.
+  The list reads it before its scan and hands it to `view`. If it moved, the scan may hold bytes from
+  before that event and is not applied: the list is drawn read-only from the ledger. This covers a
+  Studio write landing during the scan (it keeps its Studio label), a whole turn inside one scan (its
+  bytes stay AI) and a pull that starts after the scan began. `publishHost.bringRepo` also calls
+  `noteFolderReplaced` before each clone, download, pull and sync, as well as after it, so a scan that
+  starts during the copy finds the ledger stale and records `기록 없음`.
+- **Instructor turns.** An instructor-surface turn takes no restore point. It marks the folder
+  unobserved, so if the seat leaves instructor mode in the same session, what the instructor's coach
+  changed reads `기록 없음`. This is safer than recording it as AI: without a restore diff Studio
+  cannot tell the coach's changes from the instructor's own edits.
 - **되돌리기.** After a revert to a turn's restore point, every event recorded after that point is
   dropped and the restored folder is compared with the point: a file the revert could not put back
   reads `기록 없음`.
@@ -1711,8 +1731,8 @@ edit made inside a coach turn's window from the coach's (the restore diff compar
 counts as the turn's, as the review bar already says); attributing changes to shell or subagent tools;
 times of edits (none is shown); links to the creating turn (REQ-KNOW-29); 만듦 vs 고침 for a host
 write into a folder never observed before (it reads 만듦); a cached hash when a file's bytes change
-with size, mtime and inode all unchanged (it keeps the old hash until one of them changes); the
-instructor surface records nothing.
+with size, mtime and inode all unchanged (it keeps the old hash until one of them changes);
+labels for an instructor's own turns (the folder reads 기록 없음 instead).
 Verification: U (`extensions/hypeproof-chat/test/artifact-provenance.smoke.mjs` — synthetic
 manifests and events with a planted answer per label, history order and folding, first observation,
 revert, caps, damaged ledger, and real temp folders driven through `takeRestorePoint` /
@@ -1729,7 +1749,12 @@ real `ChatPanelProvider` write paths bundled with only VS Code I/O substituted: 
 and engine.js saves and the `revealBuilt` writer choice per source, learner uploads, no record without
 a write, plus locks that the send path records uploads between the commit and the restore point and
 that every GitHub clone/download/pull/sync is followed by `noteFolderReplaced`; deleting any one of
-those hook lines fails a case; ten mutations of the derivation each
+those hook lines fails a case; round 3: a shell seat's late child write and a stopped turn's leftover
+write (with the unmarked control reproducing 내가 고침, and the doubt ending after a quiet list), a
+Studio write, a GitHub pull (both orders) and a whole turn overlapping one list scan (each with the
+unguarded control reproducing 내가 고침), every recording call moving the generation, an instructor
+turn leaving the ledger stale, and locks on the lingering mark, the generation guard and the
+before-and-after pull marks; ten mutations of the derivation each
 fail at least one case; `extensions/hypeproof-chat/test/artifact-provenance.test.tsx` — row markup,
 symbol plus words, Studio row, order, empty and loading states, no score or capability words, the
 closed panel draws no list). Host wiring in `chatPanelProvider.ts` beyond the lock is covered by

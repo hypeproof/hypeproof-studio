@@ -4561,6 +4561,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.provenance;
   }
 
+  /** REQ-STUDIO-ARTIFACT-PROVENANCE — mark the folder of a turn that may still be writing. Never throws. */
+  private async provenanceTurnLingers(root: string | null, kind: "shell" | "stopped" | null): Promise<void> {
+    const recorder = this.provenanceRecorder();
+    if (!kind || !recorder) return;
+    try {
+      const folder = root ?? (this.resolveCoachCwd() ? await fs.promises.realpath(this.resolveCoachCwd()!) : null);
+      if (folder) await recorder.turnLingers(folder, kind);
+    } catch { /* no folder: nothing to mark */ }
+  }
+
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — this send's pasted (#421) and attached (D-028) photos, committed by the host, are the learner's uploads. */
   private recordLearnerUploads(pastedRelPaths: readonly string[], attachedNote: string): void {
     const root = this.resolveCoachCwd();
@@ -4579,9 +4589,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const idle = () => !this.hasActiveStream() && this.pendingSends === 0 && !this.turnRestoreBusy && !this.taskChanging && !this.verifySession?.running;
         let scan: Awaited<ReturnType<typeof scanFolder>> | undefined;
         // Only files whose size, mtime or inode changed since the last list are read again.
+        // Anything recorded while the scan runs (a host write, a pull, a whole turn) moves the
+        // generation; the recorder then does not apply this scan's possibly older bytes.
+        const generation = recorder.generation();
         if (observe && idle()) scan = await scanFolder(root, { cache: recorder.scanCache(root) });
         // An incomplete scan (past the entry cap) is passed on: the recorder marks the window unmeasured.
-        view = await recorder.view(root, scan && idle() ? scan : undefined);
+        view = await recorder.view(root, scan && idle() ? scan : undefined, generation);
       }
     } catch { view = null; }
     await this.post({ type: "artifactProvenance", view });
@@ -4600,7 +4613,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Before a coach turn: record the work folder. Never throws; a failure is one visible line and the turn runs without a revert. */
   private async beginTurnRestore(streamId: string): Promise<{ store: string; root: string; point: RestoreManifest; taskKey: string } | null> {
     if (this.turnReview) { this.turnReview = null; this.postTurnReview(); }
-    if (this._instructorMode?.isInstructor === true) return null; // the instructor surface draws no bar
+    if (this._instructorMode?.isInstructor === true) {
+      // The instructor surface draws no bar and records no turn; what its coach changes must not
+      // read 내가 고침 if the seat leaves instructor mode in this session (REQ-STUDIO-ARTIFACT-PROVENANCE).
+      const cwd = this.resolveCoachCwd();
+      if (cwd) await fs.promises.realpath(cwd).then((root) => this.provenanceRecorder()?.unobserved(root)).catch(() => undefined);
+      return null;
+    }
     let root: string;
     try {
       const cwd = this.resolveCoachCwd();
@@ -6561,6 +6580,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         clearTimeout(timer);
       }
       await this.endTurnRestore(turnRestorePoint, streamId);
+      // REQ-STUDIO-ARTIFACT-PROVENANCE — a shell-capable seat's background child, or a stopped turn's
+      // in-flight write, can land after the end scan: later unexplained changes read 기록 없음.
+      await this.provenanceTurnLingers(turnRestorePoint?.root ?? null, this.cachedProfile?.sdk_tools?.shell === true ? "shell" : ctrl.signal.aborted ? "stopped" : null);
       this.activeStreams.delete(streamId);
       // cr-verify — the run this turn carried takes no more coach calls once the turn ends.
       this.verifySession?.endTurn();

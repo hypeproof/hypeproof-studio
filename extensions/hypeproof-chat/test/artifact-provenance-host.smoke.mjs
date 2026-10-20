@@ -138,7 +138,38 @@ await t("wiring lock: every GitHub clone, download, pull and sync into a folder 
     const end = op === "await syncClone(" ? src.indexOf("});", at) + 3 : src.indexOf(";", at) + 1;
     const next = src.slice(end, src.indexOf("\n", src.indexOf("\n", end) + 1)).trim();
     if (!next.startsWith("noteFolderReplaced(folder);")) throw new Error(`${op} is not followed by noteFolderReplaced: ${next}`);
+    const lineStart = src.lastIndexOf("\n", at);
+    const prev = src.slice(src.lastIndexOf("\n", lineStart - 1) + 1, lineStart).trim();
+    if (!prev.startsWith("noteFolderReplaced(folder);")) throw new Error(`${op} is not preceded by noteFolderReplaced: ${prev}`);
   }
+});
+
+await t("N5. an instructor turn leaves the folder unconfirmed (the instructor coach's changes never read 내가 고침)", async () => {
+  const { loadLedger, provenanceLedgerFile } = await import("../src/artifactProvenance.ts");
+  const store = fs.mkdtempSync(path.join(os.tmpdir(), "hps-provenance-store-"));
+  const p = Object.create(ChatPanelProvider.prototype);
+  Object.assign(p, { context: { globalStorageUri: { fsPath: store } }, provenance: null, turnReview: null, _instructorMode: { isInstructor: true }, resolveCoachCwd: () => root });
+  eq(await p.beginTurnRestore("s-instructor"), null, "no restore point on the instructor surface");
+  await p.provenance.view(root); // a read-only view queues behind the mark without making one
+  const ledger = await loadLedger(provenanceLedgerFile(store, root));
+  eq(ledger.stale, true, "stale after an instructor turn");
+  // negative control: a learner seat whose folder cannot be resolved records nothing
+  const q = Object.create(ChatPanelProvider.prototype);
+  const store2 = fs.mkdtempSync(path.join(os.tmpdir(), "hps-provenance-store-"));
+  Object.assign(q, { context: { globalStorageUri: { fsPath: store2 } }, provenance: null, turnReview: null, _instructorMode: { isInstructor: true }, resolveCoachCwd: () => undefined });
+  await q.beginTurnRestore("s2");
+  eq(fs.existsSync(path.join(store2, "artifact-provenance")), false, "no folder, no ledger");
+  fs.rmSync(store, { recursive: true, force: true }); fs.rmSync(store2, { recursive: true, force: true });
+});
+
+await t("wiring lock: after each turn's end the host marks a shell seat's or a stopped turn's folder as lingering", () => {
+  const src = fs.readFileSync(path.join(here, "src/chatPanelProvider.ts"), "utf8");
+  const end = src.indexOf("await this.endTurnRestore(turnRestorePoint, streamId);");
+  const linger = src.indexOf('await this.provenanceTurnLingers(turnRestorePoint?.root ?? null, this.cachedProfile?.sdk_tools?.shell === true ? "shell" : ctrl.signal.aborted ? "stopped" : null);');
+  if (end < 0 || linger < end || linger - end > 400) throw new Error("the lingering mark does not follow endTurnRestore");
+  if (!/if \(folder\) await recorder\.turnLingers\(folder, kind\);/.test(src)) throw new Error("provenanceTurnLingers does not reach the recorder");
+  const gen = src.indexOf("const generation = recorder.generation();"), scan = src.indexOf("scan = await scanFolder(root, { cache: recorder.scanCache(root) });");
+  if (gen < 0 || scan < gen || !src.includes("view = await recorder.view(root, scan && idle() ? scan : undefined, generation);")) throw new Error("the list scan is not guarded by the generation");
 });
 
 setHostWriteSink(null);

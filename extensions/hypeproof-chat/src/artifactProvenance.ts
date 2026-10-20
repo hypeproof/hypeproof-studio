@@ -294,6 +294,19 @@ export class ArtifactProvenanceRecorder {
   /** Folders touched in this session; the first touch marks the ledger stale (changes made while Studio was closed). */
   private readonly session = new Set<string>();
   private readonly hashCaches = new Map<string, Map<string, unknown>>();
+  /**
+   * Bumped synchronously by every call that records or invalidates something (a host write, a
+   * folder replace, a turn's start and end, an unmeasured window, a revert, a lingering turn). A list
+   * scan read before a bump may hold bytes from before that event, so it is never applied.
+   */
+  private gen = 0;
+  /**
+   * Folders where a finished turn may still be writing: `session` after a turn on a shell-capable
+   * seat (a background child can outlive the turn for the whole session), or the time after which
+   * a stopped turn's leftover write has surely landed. While set, an observation never records a
+   * learner change; the stopped-turn kind ends at the first quiet observation after that time.
+   */
+  private readonly lingering = new Map<string, "session" | number>();
   private readonly base: string;
   private readonly now: () => number;
   constructor(base: string, now: () => number = Date.now) {
@@ -319,6 +332,39 @@ export class ArtifactProvenanceRecorder {
     return next;
   }
 
+  /** The current generation; read it before a list scan and pass it to `view`. */
+  generation(): number { return this.gen; }
+
+  private bump(): void { this.gen++; }
+
+  /** Observe outside a turn, as stale while a finished turn may still be writing. */
+  private observe(root: string, scan: ScanLike, at: number): Promise<ProvenanceLedger | null> {
+    const linger = this.lingering.get(root);
+    let quiet = false;
+    const next = this.apply(root, (l) => {
+      const base = linger === undefined ? l : markUnobserved(l);
+      const out = observeOutsideTurn(base, scan, { at });
+      quiet = out.events.length === base.events.length && (!base.baseline || Object.keys(base.baseline).length === Object.keys(out.baseline ?? {}).length);
+      return out;
+    });
+    return next.then((r) => {
+      if (typeof linger === "number" && quiet && at >= linger && this.lingering.get(root) === linger) this.lingering.delete(root);
+      return r;
+    });
+  }
+
+  /**
+   * The turn that just ended may keep writing after its end scan: `shell` (the seat can run
+   * commands, so a background child may outlive it) or `stopped` (the stop does not wait for the
+   * runtime's in-flight write). Later unexplained changes in this folder read 기록 없음.
+   */
+  turnLingers(root: string, kind: "shell" | "stopped", settleMs = 30_000): Promise<unknown> {
+    this.bump();
+    if (kind === "shell") this.lingering.set(root, "session");
+    else if (this.lingering.get(root) !== "session") this.lingering.set(root, this.now() + settleMs);
+    return this.run(() => this.apply(root, markUnobserved));
+  }
+
   /** A per-folder hash cache for `scanFolder({ cache })` on the list path (mtime + size + inode). */
   scanCache<T>(root: string): Map<string, T> {
     let c = this.hashCaches.get(root);
@@ -331,6 +377,7 @@ export class ArtifactProvenanceRecorder {
    * write: the bytes are hashed now when given, and the record is queued in call order.
    */
   hostWrote(cwd: string, writes: readonly HostWrite[], actor: HostWriteActor): Promise<unknown> {
+    this.bump();
     const at = this.now();
     const hashed = writes.map((w) => ({ absPath: w.absPath, sha256: w.data !== undefined ? sha256Of(w.data) : undefined }));
     return this.run(async () => {
@@ -351,17 +398,20 @@ export class ArtifactProvenanceRecorder {
 
   /** Before a coach turn, with the restore point just taken. */
   turnStart(root: string, point: PointLike): Promise<unknown> {
-    return this.run(() => this.apply(root, (l) => observeOutsideTurn(l, point, { at: point.createdAt })));
+    this.bump();
+    return this.run(() => this.observe(root, point, point.createdAt));
   }
 
   /** After a coach turn whose start was observed; `after` is the scan the diff came from. */
   turnEnd(root: string, point: PointLike, diff: TurnDiff, after: ScanLike): Promise<ProvenanceLedger | null> {
+    this.bump();
     const at = Math.max(this.now(), point.createdAt + 1);
     return this.run(() => this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff }, after)));
   }
 
   /** Studio replaced files of `folder` wholesale (a GitHub pull or clone): nothing in it is confirmed until observed again. */
   folderReplaced(folder: string): Promise<unknown> {
+    this.bump();
     return this.run(async () => {
       let root: string;
       try { root = await fs.realpath(folder); } catch { return null; }
@@ -371,11 +421,13 @@ export class ArtifactProvenanceRecorder {
 
   /** A turn ran (or ended) without a usable measurement. */
   unobserved(root: string): Promise<unknown> {
+    this.bump();
     return this.run(() => this.apply(root, markUnobserved));
   }
 
   /** After "되돌리기" to `point`, with a fresh scan of the folder (or null when none could be taken). */
   reverted(root: string, point: PointLike, after: ScanLike | null): Promise<unknown> {
+    this.bump();
     const at = Math.max(this.now(), point.createdAt + 1);
     return this.run(() => this.apply(root, (l) => after
       ? recordRevert(l, { pointAt: point.createdAt, pointFiles: point.files, at }, after)
@@ -384,14 +436,17 @@ export class ArtifactProvenanceRecorder {
 
   /**
    * The list for the learner. With `scan` (taken while no turn runs) it is also an observation;
-   * without one the ledger is only read.
+   * without one the ledger is only read. `scannedAt` is `generation()` read before the scan began:
+   * if anything was recorded since, the scan may hold older bytes and is not applied (read only).
    */
-  view(root: string, scan?: ScanLike & { complete?: boolean }): Promise<ArtifactProvenanceView | null> {
+  view(root: string, scan?: ScanLike & { complete?: boolean }, scannedAt?: number): Promise<ArtifactProvenanceView | null> {
     return this.run(async () => {
+      const moved = scannedAt !== undefined && scannedAt !== this.gen;
+      const usable = moved ? undefined : scan;
       // A scan that stopped at the entry cap saw only part of the folder: the window is unmeasured.
-      const incomplete = !!scan && !Array.isArray(scan) && (scan as { complete?: boolean }).complete === false;
+      const incomplete = !!usable && !Array.isArray(usable) && (usable as { complete?: boolean }).complete === false;
       const ledger = incomplete ? await this.apply(root, markUnobserved)
-        : scan ? await this.apply(root, (l) => observeOutsideTurn(l, scan, { at: this.now() })) : await loadLedger(this.file(root));
+        : usable ? await this.observe(root, usable, this.now()) : await loadLedger(this.file(root));
       return ledger ? provenanceView(ledger) : null;
     });
   }

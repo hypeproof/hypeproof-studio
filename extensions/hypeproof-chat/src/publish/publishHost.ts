@@ -426,10 +426,12 @@ export class SitePublisher {
         return failed("clone", "empty", "no commits");
       }
       if (this.host.endpoints.apiBase) {
+        noteFolderReplaced(folder); // before as well: a list scan overlapping the copy must not read it as the learner's
         const d = await downloadRepo(api, login, repo.name, repo.defaultBranch, folder);
         noteFolderReplaced(folder);
         if (!d.ok) return failed("clone", d.code, d.detail);
       } else {
+        noteFolderReplaced(folder); // before as well: a list scan overlapping the copy must not read it as the learner's
         const c = await cloneRepo({ exec: this.exec, gh: await this.auth.bin(), login, repo: repo.name, branch: repo.defaultBranch, folder });
         noteFolderReplaced(folder);
         if (!c.ok) return failed("clone", c.code, c.detail);
@@ -441,12 +443,14 @@ export class SitePublisher {
       const keepBackup = action === "pull" && matchesLast !== true;
       if (this.host.endpoints.apiBase) {
         if (action === "pull") {
+          noteFolderReplaced(folder); // before as well: a list scan overlapping the copy must not read it as the learner's
           const p = await pullInto(api, login, repo.name, repo.defaultBranch, folder, { keepBackup, stamp });
           noteFolderReplaced(folder);
           if (!p.ok) return failed("pull", p.code, p.detail);
           backup = p.backup;
         }
       } else {
+        noteFolderReplaced(folder); // before as well: a list scan overlapping the copy must not read it as the learner's
         const s = await syncClone({
           exec: this.exec, gh: await this.auth.bin(), login, repo: repo.name, branch: repo.defaultBranch, folder,
           replace: action === "pull", ...(keepBackup ? { backup: `${folder}.before-pull-${stamp}` } : {}),

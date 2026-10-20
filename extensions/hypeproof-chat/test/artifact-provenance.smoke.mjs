@@ -250,7 +250,8 @@ async function session(seed = {}) {
   const rec = new ArtifactProvenanceRecorder(base, () => ++clock);
   setHostWriteSink({ wrote: (writes, actor) => { void rec.hostWrote(dir, writes, actor); }, replaced: (folder) => { void rec.folderReplaced(folder); } });
   const put = (rel, data) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), data); };
-  const list = async () => rec.view(dir, await scanFolder(dir));
+  // As postArtifactProvenance does: the generation is read before the scan and handed to view.
+  const list = async () => { const g = rec.generation(); return rec.view(dir, await scanFolder(dir), g); };
   let seq = 0;
   /** One coach turn: restore point, `during()` inside the window, rescan, diff, record. */
   const coachTurn = async (during = async () => {}, afterScan = async () => {}) => {
@@ -450,6 +451,121 @@ await t("F2. negative control: without the hook the same pull reads 내가 고�
   const c = await session({ "index.html": "mine" });
   c.put("index.html", "teammate on github");
   eq((await labelOf(c, "index.html"))[0], "내가 고침", "unhooked");
+});
+
+console.log("artifact provenance — verify round 3: writes after the end scan and races around the list scan");
+
+await t("N1. a shell seat's background child writing after the end scan reads 기록 없음, for the rest of the session", async () => {
+  const c = await session({ "index.html": "v0", "style.css": "a{}" });
+  await c.coachTurn(async () => c.put("index.html", "AI v1"));
+  await c.rec.turnLingers(c.dir, "shell", 1); // chatPanelProvider after endTurnRestore on sdk_tools.shell (a settle time does not apply)
+  eq((await labelOf(c, "index.html"))[0], "AI가 고침", "the turn's own change stays AI");
+  c.put("style.css", "a{color:red} /* tailwind --watch, after the turn */");
+  eq((await labelOf(c, "style.css"))[0], "기록 없음", "late child write");
+  for (let i = 0; i < 3; i++) await c.list(); // quiet lists do not end a shell session's doubt
+  c.put("server.log", "GET / 200");
+  c.put("style.css", "a{color:blue}");
+  const v = await c.list();
+  eq([label(v, "style.css").label, label(v, "server.log").label], ["기록 없음", "기록 없음"], "still not the learner's");
+});
+
+await t("N1. negative control: without the lingering mark the same late write reads 내가 고침 (the bug)", async () => {
+  const c = await session({ "index.html": "v0", "style.css": "a{}" });
+  await c.coachTurn(async () => c.put("index.html", "AI v1"));
+  c.put("style.css", "late");
+  eq((await labelOf(c, "style.css"))[0], "내가 고침", "unmarked");
+});
+
+await t("N1. a stopped turn's leftover write reads 기록 없음; after a quiet list past the settle time, edits are the learner's again", async () => {
+  const c = await session({ "index.html": "v0" });
+  await c.coachTurn(async () => c.put("index.html", "AI partial"));
+  await c.rec.turnLingers(c.dir, "stopped", 3); // the stop did not wait for the in-flight Write
+  c.put("index.html", "AI's Write landing after the stop");
+  eq((await labelOf(c, "index.html"))[0], "기록 없음", "leftover write");
+  await c.list(); await c.list(); // quiet, and the settle time has passed
+  c.put("index.html", "learner fixes it");
+  eq((await labelOf(c, "index.html"))[0], "내가 고침", "positive control: the doubt ends");
+});
+
+await t("N2. a Studio write that lands during a list scan keeps its Studio label (the old-bytes scan is not applied)", async () => {
+  const c = await session({ "index.html": "v0" });
+  const g = c.rec.generation();
+  const old = await scanFolder(c.dir); // the list scan has read the old bytes
+  c.put("index.html", "STUDIO append_artifact bytes");
+  noteHostWrite([{ absPath: path.join(c.dir, "index.html"), data: "STUDIO append_artifact bytes" }], "studio");
+  eq(label(await c.rec.view(c.dir, old, g), "index.html").label, "Studio가 고침", "this list");
+  eq((await labelOf(c, "index.html"))[0], "Studio가 고침", "next list");
+});
+
+await t("N2. negative control: the same scan applied without the generation check reads 내가 고침 (the bug)", async () => {
+  const c = await session({ "index.html": "v0" });
+  const old = await scanFolder(c.dir);
+  c.put("index.html", "STUDIO bytes");
+  noteHostWrite([{ absPath: path.join(c.dir, "index.html"), data: "STUDIO bytes" }], "studio");
+  eq(label(await c.rec.view(c.dir, old), "index.html").label, "내가 고침", "unguarded");
+});
+
+await t("N3. a GitHub pull overlapping a list scan never reads 내가 고침, whichever starts first", async () => {
+  for (const order of ["scan-first", "pull-first"]) {
+    const c = await session({ "index.html": "mine", "about.html": "mine too" });
+    let g;
+    if (order === "scan-first") g = c.rec.generation();
+    noteFolderReplaced(c.dir); // publishHost: before the copy
+    if (order === "pull-first") g = c.rec.generation();
+    c.put("index.html", "GITHUB teammate bytes"); // pullInto, first file
+    const mid = await scanFolder(c.dir);
+    const shown = c.rec.view(c.dir, mid, g);
+    c.put("about.html", "GITHUB teammate bytes 2");
+    noteFolderReplaced(c.dir); // publishHost: after the copy
+    const v = await shown;
+    if (v.entries.some((e) => e.kind === "learner_changed")) throw new Error(`${order}: pulled bytes read as the learner's`);
+    for (let i = 0; i < 2; i++) {
+      const next = await c.list();
+      eq([label(next, "index.html").label, label(next, "about.html").label], ["기록 없음", "기록 없음"], `${order}, list ${i + 1}`);
+    }
+  }
+});
+
+await t("N3. negative control: marked only after the pull, an overlapping scan reads 내가 고침 (the bug)", async () => {
+  const c = await session({ "index.html": "mine" });
+  c.put("index.html", "GITHUB teammate bytes");
+  const shown = await c.list(); // the scan ran during the copy, before any mark
+  noteFolderReplaced(c.dir);
+  await c.list();
+  eq([label(shown, "index.html").label, (await labelOf(c, "index.html"))[0]], ["내가 고침", "내가 고침"], "after-only");
+});
+
+await t("N4. a whole turn inside one list scan: the AI's bytes stay AI", async () => {
+  const c = await session({ "index.html": "v0" });
+  const g = c.rec.generation();
+  const old = await scanFolder(c.dir);
+  await c.coachTurn(async () => c.put("index.html", "AI v1"));
+  eq(label(await c.rec.view(c.dir, old, g), "index.html").label, "AI가 고침", "this list");
+  eq((await labelOf(c, "index.html"))[0], "AI가 고침", "next list");
+});
+
+await t("N4. negative control: the same scan applied unguarded reads 내가 고침 (the bug)", async () => {
+  const c = await session({ "index.html": "v0" });
+  const old = await scanFolder(c.dir);
+  await c.coachTurn(async () => c.put("index.html", "AI v1"));
+  eq(label(await c.rec.view(c.dir, old), "index.html").label, "내가 고침", "unguarded");
+});
+
+await t("generation: every recording call moves it, a read-only view does not", async () => {
+  const c = await session({ "a.txt": "a" });
+  const steps = [
+    () => c.rec.hostWrote(c.dir, [{ absPath: path.join(c.dir, "a.txt"), data: "a" }], "studio"),
+    () => c.rec.folderReplaced(c.dir), () => c.rec.unobserved(c.dir), () => c.rec.turnLingers(c.dir, "stopped", 1),
+  ];
+  for (const step of steps) { const g = c.rec.generation(); void step(); if (c.rec.generation() === g) throw new Error(`${step} did not move the generation`); }
+  const point = (await takeRestorePoint({ store: turnRestoreStoreDir(base, c.dir, "gen"), root: c.dir, id: "g1", turnId: "g1", kind: "turn" })).point;
+  let g0 = c.rec.generation(); void c.rec.turnStart(c.dir, point); if (c.rec.generation() === g0) throw new Error("turnStart did not move the generation");
+  const now = await scanFolder(c.dir);
+  g0 = c.rec.generation(); await c.rec.turnEnd(c.dir, point, diffRestorePoint(point, now), now); if (c.rec.generation() === g0) throw new Error("turnEnd did not move the generation");
+  g0 = c.rec.generation(); await c.rec.reverted(c.dir, point, now); if (c.rec.generation() === g0) throw new Error("reverted did not move the generation");
+  const g = c.rec.generation();
+  await c.rec.view(c.dir);
+  eq(c.rec.generation(), g, "read-only view");
 });
 
 setHostWriteSink(null);
