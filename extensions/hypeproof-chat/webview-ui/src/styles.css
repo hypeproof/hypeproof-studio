@@ -2109,3 +2109,20 @@ html, body, #root {
 .hps-ai-disclosure .hps-icon { margin-inline-end: 6px; }
 .hps-tool-icon, .hps-tool-mark, .hps-error-banner-icon, .hps-update-banner-icon, .hps-fatal-icon { display: inline-flex; align-items: center; }
 .hps-msg-run, .hps-msg-retry, .hps-codepill-toggle, .hps-error-banner-report, .hps-element-remove { display: inline-flex; align-items: center; gap: 4px; }
+
+/* CGP-SHELL-R-029: the remaining-requests line. On a wide heading it sits in the row; it never
+   shrinks below its longest part, and wraps only between parts (the full text is in its title). */
+.hps-access-header { flex: 0 1 auto; min-width: min-content; white-space: normal; font-size: var(--hp-text-caption, 14px); line-height: 1.5; color: var(--vscode-foreground); }
+.hps-access-part { white-space: nowrap; }
+/* Narrow heading (320-640px): the line takes a row of its own under the heading row, so the "…" menu
+   stays on the heading row and the title truncates rather than the menu moving. The current activity
+   gets a zero basis so it cannot push the menu off the first row when the heading wraps. */
+@media (max-width: 640px) {
+  .tw-heading:has(.hps-access-header) { flex-wrap: wrap; row-gap: 0; }
+  .tw-heading:has(.hps-access-header) .hps-access-header { order: 3; flex: 1 1 100%; padding-bottom: 8px; }
+  .tw-heading:has(.hps-access-header) .hps-activity-now { flex: 1 1000 0; }
+  /* Classroom header (no task heading; DEC-35 class seats): the same own row under the coach name
+     and actions, so the coach name is not squeezed to one letter. */
+  .hps-header:has(> .hps-access-header) { flex-wrap: wrap; row-gap: 2px; }
+  .hps-header > .hps-access-header { order: 3; flex: 1 1 100%; }
+}
