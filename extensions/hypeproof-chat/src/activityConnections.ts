@@ -10,6 +10,8 @@ import { isFreeSeat } from './seatVocabulary';
 export type { ActivitySummary } from './startPageProtocol';
 
 export class ActivityConnectionError extends Error {}
+/** The refusal for a folder another activity holds. The free-start path never shows it (it moves on). */
+export const FOLDER_TAKEN_MESSAGE = '이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.';
 export const ACTIVITY_TOKEN_KEY = 'hypeproofChat.workshopToken';
 const PREFIX = 'hps.activity.credential.';
 const ACTIVE = 'hps.activity.active';
@@ -33,6 +35,8 @@ export function activityService(url: string): string {
 const upperDrive = (p: string) => p.replace(/^[a-z]:/, (d) => d.toUpperCase());
 export const canonicalRoot = (root: string) => upperDrive(fs.realpathSync(root));
 const canonical = canonicalRoot;
+/** canonicalRoot for a folder that may not exist yet (deleted, or about to be created): its parent's spelling plus its name. */
+const canonicalLoose = (root: string) => { try { return canonical(root); } catch { return upperDrive(path.join(fs.realpathSync(path.dirname(root)), path.basename(root))); } };
 /**
  * REQ-L12 — a bought pass continues in its home folder, the way Claude Code continues in the folder
  * it is started in (Jay, 2026-10-14). Only the profile's own `workspace_root` can be taken over, and
@@ -41,19 +45,57 @@ const canonical = canonicalRoot;
 export function passTakesOver(p: Pick<ResolvedProfile, 'pass' | 'workspace_root'>, root: string): boolean {
   return !!p.pass && isHome(p, root);
 }
+function expandHome(p: Pick<ResolvedProfile, 'workspace_root'>): string | undefined {
+  if (!p.workspace_root) return undefined;
+  return p.workspace_root.startsWith('~/') ? path.join(os.homedir(), p.workspace_root.slice(2)) : p.workspace_root;
+}
 function isHome(p: Pick<ResolvedProfile, 'workspace_root'>, root: string): boolean {
-  if (!p.workspace_root) return false;
-  const home = p.workspace_root.startsWith('~/') ? path.join(os.homedir(), p.workspace_root.slice(2)) : p.workspace_root;
-  try { return canonical(home) === canonical(root); } catch { return false; }
+  const home = expandHome(p);
+  if (!home) return false;
+  try { return canonicalLoose(home) === canonicalLoose(root); } catch { return false; }
+}
+/** The free seat's home and its numbered siblings (`~/HypeProofTrial-2`, `-3`, …): where a free seat may work. */
+const FREE_SIBLINGS = 20;
+export function freeFolderCandidates(p: Pick<ResolvedProfile, 'workspace_root'>): string[] {
+  const home = expandHome(p);
+  if (!home) return [];
+  return [home, ...Array.from({ length: FREE_SIBLINGS - 1 }, (_, i) => `${home}-${i + 2}`)];
+}
+function isFreeFolder(p: Pick<ResolvedProfile, 'workspace_root'>, root: string): boolean {
+  let r: string;
+  try { r = canonicalLoose(root); } catch { return false; }
+  return freeFolderCandidates(p).some(c => { try { return canonicalLoose(c) === r; } catch { return false; } });
 }
 /**
- * A new free seat on this machine may take over its home folder from an earlier free seat only:
- * the free credential lives in SecretStorage, and when that is lost (a reinstall, a cleared
- * keychain) the next claim is a new seat that would otherwise be locked out of its own folder.
- * A folder held by a pass or a class stays held.
+ * Who holds a folder, as far as a new free seat is concerned. Resolved asynchronously from
+ * SecretStorage (`ActivityConnections.folderOwners`) before the synchronous `prepare()`.
+ * - `free`    — an earlier free seat.
+ * - `trial`   — an earlier non-pass trial (`kind: 'trial'`, no pass): the code-issued trials.
+ * - `unknown` — the binding's record is gone or unreadable.
+ * - `held`    — a class or lesson activity, a personal activity, or a pass.
  */
-export function freeTakesOver(p: Parameters<typeof isFreeSeat>[0] & Pick<ResolvedProfile, 'workspace_root'>, root: string, bound: { free?: unknown } | undefined): boolean {
-  return isFreeSeat(p) && bound?.free === true && isHome(p, root);
+export type FolderOwner = 'free' | 'trial' | 'unknown' | 'held';
+export type FolderOwners = ReadonlyMap<string, FolderOwner>;
+/** A binding's identity for the owner lookup. A binding rewritten after the lookup (another ref) misses it. */
+export const bindingOwnerKey = (bound: { id?: unknown; ref?: unknown }) => JSON.stringify([bound.id ?? null, bound.ref ?? null]);
+/**
+ * REQ-L12 ⑭ / REQ-STUDIO-FREE-START — a new free seat may take over its own free folder (its
+ * `workspace_root` home, or a numbered sibling it fell back to) from the machine owner's earlier
+ * solo use: an earlier free seat, an earlier code-issued trial, or an owner whose record is lost.
+ *
+ * Why an unknown owner counts as the machine owner's own: records live in this install's
+ * SecretStorage (the OS keychain of this user account). A class or pass record that is still
+ * there resolves to `held`. A record that is missing means the keychain was cleared or the app
+ * reinstalled, and the binding can no longer be entered from this machine at all (`forWorkspace`
+ * refuses it); refusing the folder would lock the newcomer out of the home the Service named,
+ * while the files stay either way.
+ *
+ * A folder held by a class, a lesson or a pass stays held. Files are never moved or deleted; the
+ * earlier activity keeps its saved record and, selected later, reports the folder as taken.
+ */
+export function freeTakesOver(p: Parameters<typeof isFreeSeat>[0] & Pick<ResolvedProfile, 'workspace_root'>, root: string, bound: { free?: unknown } | undefined, owner?: FolderOwner): boolean {
+  if (!isFreeSeat(p) || !isFreeFolder(p, root)) return false;
+  return bound?.free === true || owner === 'free' || owner === 'trial' || owner === 'unknown';
 }
 const contexts = new WeakMap<vscode.ExtensionContext, ActivityConnections>();
 export function activityConnections(context: vscode.ExtensionContext): ActivityConnections | undefined { return contexts.get(context); }
@@ -146,17 +188,17 @@ export class ActivityConnections {
     }
     return wasActive;
   }
-  private bindingPath(root: string): string { return path.join(this.dir, digest(canonical(root)) + '.json'); }
+  private bindingPath(root: string): string { return path.join(this.dir, digest(canonicalLoose(root)) + '.json'); }
   /**
    * The same folder's binding as written before canonicalRoot, when the window's root was
    * VS Code's `c:\…`. Read only, so an update keeps every folder's activity; new writes use
    * bindingPath. Undefined where there is no drive letter (macOS, Linux).
    */
   private legacyBindingPath(root: string): string | undefined {
-    const c = canonical(root), lower = c.replace(/^[A-Z]:/, (d) => d.toLowerCase());
+    const c = canonicalLoose(root), lower = c.replace(/^[A-Z]:/, (d) => d.toLowerCase());
     return lower === c ? undefined : path.join(this.dir, digest(lower) + '.json');
   }
-  private claim(root: string, id: string, takeover: boolean | ((bound: { free?: unknown }) => boolean) = false, free = false): void {
+  private claim(root: string, id: string, takeover: boolean | ((bound: { free?: unknown; ref?: unknown; id?: unknown }) => boolean) = false, free = false): void {
     fs.mkdirSync(this.dir, {recursive:true,mode:0o700});
     const file = this.bindingPath(root);
     const fresh = JSON.stringify({version:1,id,...(free?{free:true}:{})});
@@ -166,9 +208,69 @@ export class ActivityConnections {
     if (bound.id === id) return;
     // The earlier activity keeps its saved record; selecting it later reports this folder as taken.
     if (typeof takeover === 'function' ? takeover(bound) : takeover) { fs.writeFileSync(file, fresh, {mode:0o600}); return; }
-    throw new ActivityConnectionError('이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.');
+    throw new ActivityConnectionError(FOLDER_TAKEN_MESSAGE);
   }
-  prepare(root:string,p:ResolvedProfile,prepare:()=>void):void {
+  /** The binding files that may hold this folder, under the current and the pre-canonicalRoot spelling. */
+  private bindingFiles(root: string): string[] {
+    return [this.bindingPath(root), this.legacyBindingPath(root)].filter((f): f is string => !!f && fs.existsSync(f));
+  }
+  /**
+   * Resolve who holds `root` (see FolderOwner) before the synchronous `prepare()` and the claim
+   * in `commit()`. Never throws: an unreadable record is `unknown`, a missing folder has no owner.
+   */
+  async folderOwners(root: string): Promise<FolderOwners> {
+    const owners = new Map<string, FolderOwner>();
+    let files: string[];
+    try { files = this.bindingFiles(root); } catch { return owners; }
+    for (const file of files) {
+      let bound: { id?: unknown; ref?: unknown; free?: unknown };
+      try { bound = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { continue; }
+      let owner: FolderOwner = 'unknown';
+      if (bound.free === true) owner = 'free';
+      else if (typeof bound.ref === 'string') {
+        try {
+          const r = await this.read(bound.ref);
+          if (r && r.id === bound.id) owner = r.pass || r.accountPass ? 'held' : r.free ? 'free' : r.kind === 'trial' ? 'trial' : 'held';
+        } catch { /* unreadable record: unknown */ }
+      }
+      owners.set(bindingOwnerKey(bound), owner);
+    }
+    return owners;
+  }
+  /**
+   * REQ-STUDIO-FREE-START — the folder a free seat enters, without a question: its home when it is
+   * free to use or may be taken over, otherwise the first numbered sibling that is (`~/HypeProofTrial-2`,
+   * `-3`, …). A sibling already holding someone's files that no binding names is skipped, never
+   * reused. Undefined only for a profile that is not a free seat or names no home.
+   */
+  async freeWorkspace(p: ResolvedProfile, skip: ReadonlySet<string> = new Set()): Promise<string | undefined> {
+    if (!isFreeSeat(p) || !/^[a-f0-9]{64}$/.test(p.activity_id ?? '')) return undefined;
+    const id = digest(JSON.stringify([activityService(this.service()), p.activity_id]));
+    const candidates = freeFolderCandidates(p);
+    const loose = (f: string) => { try { return canonicalLoose(f); } catch { return f; } };
+    const skipped = new Set([...skip].map(loose));
+    for (const [i, folder] of candidates.entries()) {
+      if (skipped.has(loose(folder))) continue;
+      try {
+        const exists = fs.existsSync(folder);
+        if (exists && !fs.statSync(folder).isDirectory()) continue;
+        const files = this.bindingFiles(folder);
+        if (!files.length) {
+          // The home is always the seat's own; a sibling is used only while it is new or empty.
+          if (!exists || i === 0 || fs.readdirSync(folder).every(n => n.startsWith('.'))) return folder;
+          continue;
+        }
+        const owners = await this.folderOwners(folder);
+        const usable = files.every(f => {
+          const bound = JSON.parse(fs.readFileSync(f, 'utf8'));
+          return bound.id === id || freeTakesOver(p, folder, bound, owners.get(bindingOwnerKey(bound)));
+        });
+        if (usable) return folder;
+      } catch { /* an unreadable candidate is skipped, never fatal */ }
+    }
+    return undefined;
+  }
+  prepare(root:string,p:ResolvedProfile,prepare:()=>void,owners?:FolderOwners):void {
     if (!/^[a-f0-9]{64}$/.test(p.activity_id ?? '')) throw new ActivityConnectionError('활동 정보를 다시 확인해 주세요.');
     fs.mkdirSync(root,{recursive:true});
     fs.mkdirSync(this.dir,{recursive:true,mode:0o700});
@@ -179,10 +281,10 @@ export class ActivityConnections {
       const taken=[this.bindingPath(root),this.legacyBindingPath(root)].some(f=>{
         if (!f || !fs.existsSync(f)) return false;
         const bound=JSON.parse(fs.readFileSync(f,'utf8'));
-        return bound.id !== id && !freeTakesOver(p,root,bound);
+        return bound.id !== id && !freeTakesOver(p,root,bound,owners?.get(bindingOwnerKey(bound)));
       });
       if (taken && !passTakesOver(p,root)) {
-        throw new ActivityConnectionError('이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.');
+        throw new ActivityConnectionError(FOLDER_TAKEN_MESSAGE);
       }
       prepare();
     } finally { release(); }
@@ -192,6 +294,8 @@ export class ActivityConnections {
     const service = activityService(this.service()), workspace = canonical(root);
     const id = digest(JSON.stringify([service,p.activity_id]));
     fs.mkdirSync(this.dir,{recursive:true,mode:0o700});
+    // Resolved before the lock; a binding rewritten in between misses the lookup and stays held.
+    const owners = isFreeSeat(p) ? await this.folderOwners(workspace) : undefined;
     const release=this.lock(workspace);
     const previous = this.active;
     const previousPointer = this.raw.workspaceState.get<string | null>(ACTIVE);
@@ -212,7 +316,7 @@ export class ActivityConnections {
     const tmp = bindingFile + '.' + crypto.randomUUID();
     try {
       const free = isFreeSeat(p);
-      this.claim(workspace,id,(bound)=>passTakesOver(p,workspace) || freeTakesOver(p,workspace,bound),free);
+      this.claim(workspace,id,(bound)=>passTakesOver(p,workspace) || freeTakesOver(p,workspace,bound,owners?.get(bindingOwnerKey(bound))),free);
       await this.raw.secrets.store(ref,JSON.stringify(next));
       fs.writeFileSync(tmp,JSON.stringify({version:1,id,ref,...(free?{free:true}:{})}),{flag:'wx',mode:0o600});
       fs.renameSync(tmp,bindingFile);

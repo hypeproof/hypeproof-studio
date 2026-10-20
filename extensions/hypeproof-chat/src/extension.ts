@@ -1106,7 +1106,8 @@ async function openWorkspaceFolder(
   try {
     const prepare=()=>prepareWorkspaceDirectory(dir, !profile || profile.workspace_start === 'empty' ? 'empty' : 'html', () => starterIndexHtml(profile));
     const connections=context && activityConnections(context);
-    if(connections && profile)connections.prepare(dir,profile,prepare);else prepare();
+    // REQ-STUDIO-FREE-START — who holds the folder is read from SecretStorage first; prepare() is synchronous.
+    if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();
   } catch(error) {
     if(error instanceof ActivityConnectionError)throw error;
     throw new Error('Activity workspace preparation failed');
