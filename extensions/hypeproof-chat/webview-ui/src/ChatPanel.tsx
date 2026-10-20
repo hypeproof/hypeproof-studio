@@ -11,6 +11,7 @@ import { VerdictButtons, VerdictReasons } from './AnswerVerdict';
 import { verdictTargets, type VerdictMap, type VerdictState } from '../../src/answerVerdict';
 import { composerBlockedByEdit, EDIT_OPEN_NOTE, editableUserId, visibleVersions, type VersionPager as Pager } from '../../src/editResend';
 import { useResponseAnnouncement } from './responseAnnouncer';
+import { useConnectivity, useLiveRegion, guardSend, OFFLINE_BANNER_TEXT, OFFLINE_HELD_NOTES, type HeldNoteKind } from './connectivity';
 import { imeComposing } from './imeGuard';
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
@@ -634,6 +635,12 @@ export function ChatPanel(props: Props) {
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error });
+  // CGP-SHELL-R-011 — offline banner and reconnect line; nothing is sent on reconnect.
+  const connectivity = useConnectivity();
+  // One live region: the most recent line wins, so a reconnect is heard after a finished turn.
+  const liveAnnouncement = useLiveRegion([responseAnnouncementText, connectivity.announcement]);
+  /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
+  const sendWhenOnline = (send: () => unknown, held: HeldNoteKind) => guardSend(connectivity.online, send, () => setImgNote(OFFLINE_HELD_NOTES[held]));
   // Trial diagnosis D3 — solo seats (trial/pass/personal) get no classroom/operator words.
   const audience: SeatAudience = config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
   const funding = config?.access;
@@ -722,7 +729,7 @@ export function ChatPanel(props: Props) {
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
     // emptied the input). Pasted images still ride along with the next turn that goes out, as #416 defined.
     const parked = text !== undefined;
-    if (props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode) === false) return false;
+    if (!sendWhenOnline(() => props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode), parked ? 'kept' : 'draft')) return false;
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
     setPendingImages([]);
     // The host now owns these files (it moves them into images/), so no discard here.
@@ -736,7 +743,7 @@ export function ChatPanel(props: Props) {
     if (streaming || frozen || unavailable || props.sendLocked || props.sendPending) return;
     // Send only this request's images; later staged photos/imports belong to the
     // untouched composer. A refused send keeps the recovery item for another try.
-    if (props.onSend(request.text, request.images.length ? request.images : undefined, undefined, undefined, request.toolMode) === false) return;
+    if (!sendWhenOnline(() => props.onSend(request.text, request.images.length ? request.images : undefined, undefined, undefined, request.toolMode), 'kept')) return;
     setRecovered(items => items.filter(item => item !== request));
     textareaRef.current?.focus({preventScroll: true});
   };
@@ -1020,8 +1027,7 @@ export function ChatPanel(props: Props) {
     if (busy) return;
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; }
     if (!reserveRecovery(chip, [], 'auto')) return;
-    setWorldPending(true);
-    props.onSend(chip);
+    if (!sendWhenOnline(() => { setWorldPending(true); props.onSend(chip); }, 'press')) return;
     setRollExpand(null);
   };
 
@@ -1041,7 +1047,7 @@ export function ChatPanel(props: Props) {
       ? `${rollExpand.original} — 그리고 ${extra}`
       : extra;
     if (!reserveRecovery(combined, pendingImages, 'auto')) return;
-    if (props.onSend(combined, pendingImages.length > 0 ? pendingImages : undefined) === false) return;
+    if (!sendWhenOnline(() => props.onSend(combined, pendingImages.length > 0 ? pendingImages : undefined), 'draft')) return;
     setDraft("");
     setPendingImages([]);
     setImgNote(null);
@@ -1106,7 +1112,7 @@ export function ChatPanel(props: Props) {
   const judgeable = personalWorkspace && !props.instructor && props.onVerdict ? verdictTargets(shown.items, streaming) : null;
   const saveEdit = (original: ChatMessage, text: string, images: string[]) => {
     const editOf = original.editOf ?? original.id;
-    if (props.onEditResend?.(original, editOf, text, images) === false) return;
+    if (!sendWhenOnline(() => props.onEditResend?.(original, editOf, text, images), 'edit')) return;
     setEditingId(null);
     setInlineEdit(undefined);
     // The new version is drawn: forget a choice that pointed at an older one.
@@ -1344,6 +1350,7 @@ export function ChatPanel(props: Props) {
       {!personalWorkspace && showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
+      {!connectivity.online && <div className="hps-offline-banner" role="status" data-testid="offline-banner">{OFFLINE_BANNER_TEXT}</div>}
       <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
         {props.aiNotice && (
           // #320 — AI disclosure (Anthropic Usage Policy / ToS §D.3). Compact
@@ -1388,7 +1395,7 @@ export function ChatPanel(props: Props) {
               messages={messages}
               hasActivity={turnHasActivity}
               onRunCode={props.onRunCode}
-              onRetry={props.onRetry}
+              onRetry={(prompt, source) => { sendWhenOnline(() => props.onRetry(prompt, source), 'press'); }}
               personal={personalWorkspace}
               isLatest={m.id === latestAssistantId}
               freeSeat={!!config?.activity?.free}
@@ -1482,7 +1489,7 @@ export function ChatPanel(props: Props) {
             a quiet inline status line rather than an error banner. It goes away on the
             next input. */}
         {/* CGP-CHAT-R-001: one polite line per turn start (classroom) and completion (both modes). */}
-        <div className="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer">{responseAnnouncementText}</div>
+        <div className="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer">{liveAnnouncement}</div>
 
         {props.stopNotice && (
           <div className="hps-stop-notice" role="status" aria-live="polite">
@@ -1517,7 +1524,7 @@ export function ChatPanel(props: Props) {
             requestId={props.errorRequestId}
             runbookUrl={props.errorRunbookUrl}
             canRetry={props.canRetryLast && recovered.length === 0}
-            onRetry={() => { if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; } recoverToComposer(props.onRetryLast); }}
+            onRetry={() => { if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; } recoverToComposer(() => { sendWhenOnline(props.onRetryLast, 'press'); }); }}
             onDismiss={() => recoverToComposer(props.onDismissError)}
             onReport={props.onReportProblem}
             audience={audience}

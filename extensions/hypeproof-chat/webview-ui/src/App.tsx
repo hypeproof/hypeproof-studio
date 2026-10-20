@@ -34,6 +34,8 @@ import type { EvidenceView } from "../../src/evidenceView";
 import type { PublishView } from "../../src/publishView";
 import type { VerifyView } from "../../src/verifyView";
 import { deriveTaskRunState, type TaskTurnOutcome } from "../../src/taskRunState";
+import { useOnline, guardSend } from "./connectivity";
+import { verifyPressAction, verifyNote } from "./verifyOffline";
 
 interface State {
   config: ChatConfig | null;
@@ -336,6 +338,14 @@ export function App() {
   const activeStream = useRef<string | null>(null);
   const pendingSend = useRef(false);
   const [sendPending, setSendPending] = useState(false);
+  // CGP-SHELL-R-011 — the product-test start/fix also starts a chat turn: same offline gate as ChatPanel.
+  const online = useOnline();
+  const [verifyHeld, setVerifyHeld] = useState(false);
+  const verifyWhenOnline = (post: () => void) => { if (guardSend(online, post, () => setVerifyHeld(true))) setVerifyHeld(false); };
+  // N1 — which press the last handed-back turn came from, and the one parked on the host (if any).
+  const lastVerifyKey = useRef<string | null>(null);
+  const [parkedVerify, setParkedVerify] = useState<string | null>(null);
+  const pressAction = (key: string) => { const action = verifyPressAction(parkedVerify, key); setParkedVerify(null); lastVerifyKey.current = key; return action; };
   // CGP-CHAT-R-005 — the active task's verdicts as the host last confirmed them (drawn optimistically on click).
   const [verdicts, setVerdicts] = useState<VerdictMap>({});
   const pendingVerdicts = useRef(new Map<string, { requestId: string; value: VerdictState | null }>());
@@ -501,22 +511,28 @@ export function App() {
 
   // cr-verify — the host recorded the start or fix request; the student's own sentence goes
   // out through the ordinary send path (the host attaches the coach context, model-only).
+  // L1 — any answer from the host replaces the held note (declared before the hand-back effect, so a
+  // hold that effect sets in the same commit survives).
+  useEffect(() => setVerifyHeld(false), [state.verify, state.verifyError]);
   useEffect(() => {
     if (!state.verifySend || state.streamId) return;
     const text = state.verifySend;
     dispatch({ type: "verifySent" });
-    send(text);
+    // N1 — not sent (offline): park it on the host so no unrelated turn carries its context; the
+    // learner's next press of the same button resumes it. Never sent on reconnect by itself.
+    const sent = guardSend(online, () => send(text), () => setVerifyHeld(true));
+    if (!sent) { postToHost({ type: "verifyPark" }); setParkedVerify(lastVerifyKey.current); }
   }, [state.verifySend, state.streamId]);
 
   const verifyPanel = state.verify ? (
     <VerifyPanel
       view={state.verify}
-      error={state.verifyError}
+      error={verifyNote(verifyHeld, state.verifyError)}
       busy={!!state.streamId}
-      onStart={(criteria) => postToHost({ type: "verifyStart", requestId: verifyRequest(), criteria })}
-      onRetest={() => postToHost({ type: "verifyRetest" })}
-      onFix={(criterionId, text) => postToHost({ type: "verifyFix", requestId: verifyRequest(), criterionId, text })}
-      onClose={() => dispatch({ type: "verifyClose" })}
+      onStart={(criteria) => verifyWhenOnline(() => { const requestId = verifyRequest(); postToHost(pressAction(`start:${JSON.stringify(criteria)}`) === "resume" ? { type: "verifyResume", requestId } : { type: "verifyStart", requestId, criteria }); })}
+      onRetest={() => { setVerifyHeld(false); postToHost({ type: "verifyRetest" }); }}
+      onFix={(criterionId, text) => verifyWhenOnline(() => { const requestId = verifyRequest(); postToHost(pressAction(`fix:${JSON.stringify([criterionId, text])}`) === "resume" ? { type: "verifyResume", requestId } : { type: "verifyFix", requestId, criterionId, text }); })}
+      onClose={() => { setVerifyHeld(false); dispatch({ type: "verifyClose" }); }}
     />
   ) : null;
 

@@ -108,6 +108,7 @@ const REFUSAL: Record<string, string> = {
   no_plans: "다시 돌릴 테스트가 없어요. 먼저 '테스트 시작'을 해 주세요.",
   turn_running: "코치가 답하는 중이에요. 답이 끝난 뒤에 다시 눌러 주세요.",
   record_failed: "조건을 기록하지 못해 테스트를 시작하지 않았어요. 다시 시도해 주세요.",
+  nothing_parked: "보내지 못한 테스트 요청을 찾지 못했어요. 한 번 더 눌러 주세요.",
 };
 /** `switch_off` is the served switch, a lesson setting (REQ-STUDIO-DENIAL-SOURCE). */
 export const refusalText = (code: string, audience?: SeatAudience): string =>
@@ -125,6 +126,10 @@ export class VerifySession {
   /** The one browser tab: every run on it goes through this chain, one at a time. */
   private tab: Promise<unknown> = Promise.resolve();
   private coachContext: string | null = null;
+  /** CGP-SHELL-R-011 N1 — a handed-back turn the webview could not send (offline): kept off every other turn. */
+  private parked: { run: ActiveRun | null; coachContext: string; sendText: string } | null = null;
+  /** The text of the turn last handed back, so a park can keep it for the resume. */
+  private handedBack: string | null = null;
   private notice: string | null = null;
   private readonly ports: VerifyHostPorts;
   private readonly newId: () => string;
@@ -138,7 +143,33 @@ export class VerifySession {
   takeCoachContext(): string | null {
     const c = this.coachContext;
     this.coachContext = null;
+    this.handedBack = null;
     return c;
+  }
+
+  /**
+   * N1 — the webview could not send the handed-back turn. Its context and run leave the live slots,
+   * so the next unrelated turn carries no test context and opens no run. Nothing is recorded or
+   * erased: the criteria (or the fix request) stay recorded once. Returns whether anything was parked.
+   */
+  park(): boolean {
+    if (!this.coachContext || this.handedBack === null) return false;
+    this.parked = { run: this.run, coachContext: this.coachContext, sendText: this.handedBack };
+    this.run = null;
+    this.coachContext = null;
+    this.handedBack = null;
+    return true;
+  }
+
+  /** N1 — the learner pressed the same button again: the parked turn comes back once, unrecorded. */
+  resume(): { ok: true; sendText: string } | { ok: false; code: string } {
+    const p = this.parked;
+    if (!p) return { ok: false, code: "nothing_parked" };
+    this.parked = null;
+    this.run = p.run;
+    this.coachContext = p.coachContext;
+    this.handedBack = p.sendText;
+    return { ok: true, sendText: p.sendText };
   }
 
   /** The turn ended: an open run takes no more coach calls (a later turn cannot test on its own). */
@@ -204,7 +235,9 @@ export class VerifySession {
     this.proposals = this.proposals.filter((p) => !checked.criteria.some((c) => c.adopted_from === p.id));
     this.coachContext = coachRunContext(this.run, startUrl);
     this.notice = null;
-    return { ok: true, sendText: `내 제품을 이 기대 조건 ${criteria.length}개로 테스트해 주세요:\n${criteria.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}` };
+    this.parked = null;
+    this.handedBack = `내 제품을 이 기대 조건 ${criteria.length}개로 테스트해 주세요:\n${criteria.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}`;
+    return { ok: true, sendText: this.handedBack };
   }
 
   /** A proposal the student adopted keeps the id of the event that recorded it (design rule 4). */
@@ -357,6 +390,8 @@ export class VerifySession {
     }
     const [studentLine, ...rest] = built.request.coach_text.split("\n\n");
     this.coachContext = rest.join("\n\n");
+    this.parked = null;
+    this.handedBack = studentLine!;
     return { ok: true, sendText: studentLine! };
   }
 

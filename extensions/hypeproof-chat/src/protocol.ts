@@ -561,6 +561,10 @@ export type WebviewMessage = (
   | { type: "verifyStart"; requestId: string; criteria: Array<{ text: string; proposed_by: "student" | "ai"; confirmed: boolean; adopted_from?: string }> }
   | { type: "verifyRetest" }
   | { type: "verifyFix"; requestId: string; criterionId: string; text: string }
+  /** CGP-SHELL-R-011 N1 — the handed-back turn could not be sent (offline): keep it off other turns. */
+  | { type: "verifyPark" }
+  /** The learner pressed the same button again: hand the parked turn back once, unrecorded. */
+  | { type: "verifyResume"; requestId: string }
   // cr-publish — "Publish for user test" (CR-17–CR-22, CR-39, CR-73; CR switch only, re-checked by the host).
   | { type: "publishOpen"; manifest?: string[] }
   | { type: "publishSubmit"; form: import("./publishView").PublishForm }

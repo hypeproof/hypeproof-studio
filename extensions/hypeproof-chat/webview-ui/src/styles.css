@@ -1905,6 +1905,9 @@ html, body, #root {
 .hps-input:not([data-expanded]) .hps-tools-menu { background: var(--vscode-editorWidget-background, #252526); border-color: var(--vscode-panel-border, #444); }
 .hps-input:not([data-expanded]) .hps-tools-menu button { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 44px; padding: 10px; background: transparent; color: inherit; text-align: left; font-weight: 400; font-size: 13px; }
 
+/* CGP-SHELL-R-011: offline banner above the message list. Text keeps the panel foreground (the
+   stop-notice pattern); amber is only the 4px edge, so contrast does not depend on --hp-warn. */
+.hps-offline-banner { margin: 6px 0; padding: 8px 10px; border-left: 4px solid var(--hp-warn); border-radius: 4px; background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08)); color: var(--vscode-foreground, inherit); font-size: 13px; line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere; }
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Marks drawn only in colour, or only as a
    background (which forced colors repaints as Canvas), get a line or a shape. Normal mode is unchanged. */
 @media (forced-colors: active) {
@@ -1930,4 +1933,6 @@ html, body, #root {
   /* CGP-DS-R-016 — forced-color-adjust: a QR code has to stay dark on light to scan, and forced
      colors would repaint its white plate as Canvas, which is black in dark high-contrast themes. */
   .hps-publish-link img { forced-color-adjust: none; }
+  /* CGP-SHELL-R-011 offline banner: the amber edge becomes a text-coloured line. */
+  .hps-offline-banner { border-left-color: CanvasText; }
 }
