@@ -5051,6 +5051,36 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch { view = null; }
     await this.post({ type: "artifactProvenance", view });
   }
+  // CGP-KNOW-D-013 (DES-KNOW-24) — the activity trash at the bottom of 내 작품. The store, its gates
+  // and native confirms live in activityTrashCommands.ts; this only routes the panel's requests.
+  private activityTrashPanel?: import("./activityTrashCommands").ActivityTrashPanelApi;
+  setActivityTrashPanel(api: import("./activityTrashCommands").ActivityTrashPanelApi): void { this.activityTrashPanel = api; }
+  /** The 내 작품 panel exists only on a task workspace (personal, trial); activityTrashBinding admits learners only. */
+  private activityTrashSeat(): boolean { return !!this.currentTaskStore(); }
+  private async postActivityTrash(extra?: { requestId: string; result: import("./activityTrashView").ActivityTrashResult }): Promise<void> {
+    const view = this.activityTrashPanel && this.activityTrashSeat() ? await this.activityTrashPanel.view() : null;
+    await this.post({ type: "activityTrashState", view, ...extra });
+  }
+  private async runActivityTrashAction(msg: Extract<WebviewMessage, { type: "activityTrashAction" }>): Promise<void> {
+    const requestId = typeof msg.requestId === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) ? msg.requestId : null;
+    if (!requestId) return;
+    const action = msg.action === "move" || msg.action === "restore" || msg.action === "purge" ? msg.action : null;
+    const panel = this.activityTrashPanel;
+    let result: import("./activityTrashView").ActivityTrashResult;
+    if (!action || !panel || !this.activityTrashSeat() || typeof msg.target !== "string" || typeof msg.scope !== "string") {
+      result = { action: action ?? "move", error: "작업 상태가 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요." };
+    } else if (this.hasActiveStream() || this.turnRestoreBusy || this.taskChanging || this.verifySession?.running) {
+      // A turn may be writing the same files; the learner retries once it ends.
+      result = { action, error: "AI가 일하는 동안에는 파일을 옮길 수 없어요. 끝난 뒤 다시 시도해 주세요." };
+    } else {
+      // Reserves the folder like a turn restore: a send during the native confirm is refused, not raced.
+      this.turnRestoreBusy = true;
+      try { result = await panel.act(action, msg.target, msg.scope); }
+      finally { this.turnRestoreBusy = false; }
+    }
+    await this.postActivityTrash({ requestId, result });
+    if (!result.error && !result.cancelled) await this.postArtifactProvenance(true);
+  }
   // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
   // window starts with none, and the transcript stores nothing new for them.
   private pageCardRegistry: PageCardRegistry | undefined;
@@ -5535,6 +5565,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "missingTaskFolderRepick": await this.repickTaskFolder(); return;
       case "previewRecoveryRequest": await this.postPreviewRecovery(); return;
       case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;
+      case "activityTrashRequest": await this.postActivityTrash(); return;
+      case "activityTrashAction": await this.runActivityTrashAction(msg); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "pageCardsRequest": this.postPageCards(); return;
       case "pageCardOpen":

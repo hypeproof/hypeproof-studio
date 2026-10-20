@@ -218,3 +218,28 @@
   .tw-task-state { border-color: CanvasText; color: CanvasText; background: Canvas; }
   .tw-task-state[data-run-state="approval"] { border-style: double; border-width: 3px; }
 }
+
+/* CGP-KNOW-D-013 (DES-KNOW-24) — the activity trash at the bottom of 내 작품: every control is a
+   44px target, the toast's 되돌리기 included; text stays at the caption step (14px floor). */
+.tw-works { min-width: 0; overflow-wrap: anywhere; }
+.tw-works button:disabled, .tw-works button[aria-disabled="true"] { opacity: .65; cursor: default; }
+.tw-trash { padding: 0 10px 12px; border-top: 1px solid var(--tw-line); }
+.tw-trash button, .tw-trash-dialog button, .tw-trash-error button { min-height: 44px; padding: 0 12px; font-size: var(--hp-text-caption); color: inherit; background: transparent; border: 1px solid var(--tw-line); border-radius: 7px; }
+.tw-trash-entry { box-sizing: border-box; width: 100%; margin-top: 12px; text-align: left; }
+.tw-trash-list ul { list-style: none; margin: 0; padding: 0; }
+.tw-trash-list li { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; }
+.tw-trash-name { font-size: var(--hp-text-caption); overflow-wrap: anywhere; }
+.tw-trash-list time, .tw-trash-note { font-size: var(--hp-text-caption); color: var(--tw-muted); }
+.tw-trash-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tw-trash-error { font-size: var(--hp-text-caption); padding: 0 18px; }
+.tw-trash-toast { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 10px 12px; font-size: var(--hp-text-caption); }
+.tw-trash-toast[data-shown="true"] { padding: 6px 12px; border: 1px solid var(--tw-line); border-radius: 9px; background: var(--tw-panel); }
+.tw-trash-toast .tw-trash-undo { min-height: 44px; min-width: 44px; padding: 0 12px; font-size: var(--hp-text-caption); color: inherit; background: transparent; border: 1px solid var(--tw-line); border-radius: 7px; text-decoration: underline; }
+.tw-trash-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: #0009; }
+.tw-trash-dialog { box-sizing: border-box; width: 100%; max-width: 420px; max-height: 90vh; overflow: auto; padding: 20px; color: inherit; background: var(--tw-panel); border: 1px solid var(--tw-line); border-radius: 12px; font-size: var(--hp-text-caption); }
+.tw-trash-dialog h3 { margin: 0 0 8px; font-size: var(--hp-text-body); }
+.tw-trash-danger { font-weight: 600; }
+@media (forced-colors: active) {
+  .tw-trash button, .tw-trash-dialog button, .tw-trash-toast .tw-trash-undo, .tw-trash-error button { border-color: ButtonText; }
+  .tw-trash-dialog, .tw-trash-toast[data-shown="true"] { border-color: CanvasText; }
+}

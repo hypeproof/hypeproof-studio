@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { ActivityTrash, sweepActivityTrash, TRASH_LIMITS, type TrashBudget, type TrashPlan } from './activityTrash';
+import type { ActivityTrashAction, ActivityTrashResult, ActivityTrashView } from './activityTrashView';
 
 // Learner gestures: explicit commands and Explorer/applyEdit deletion events.
 // Files the coach deletes (SDK Bash `rm`, the codex shell) emit no VS Code delete event and
@@ -9,11 +10,21 @@ import { ActivityTrash, sweepActivityTrash, TRASH_LIMITS, type TrashBudget, type
 const CANCEL: vscode.MessageItem = { title: '취소', isCloseAffordance: true };
 const TOO_BIG = '파일 5,000개 또는 200MB';
 
+/**
+ * CGP-KNOW-D-013 — what the 내 작품 panel may ask. `view` is null when the trash is unavailable
+ * (setting off, no learner binding, changing activity). `act` never throws: every refusal is a
+ * result with Korean `error` copy, so the panel's pending state always ends.
+ */
+export interface ActivityTrashPanelApi {
+  view(): Promise<ActivityTrashView | null>;
+  act(action: ActivityTrashAction, target: string, scope: string): Promise<ActivityTrashResult>;
+}
+
 export function registerActivityTrash(context: vscode.ExtensionContext, deps: {
   active: () => boolean;
   refusal: (file: string) => string | null;
   binding?: () => { root: string; scope: string } | undefined;
-}): void {
+}): ActivityTrashPanelApi {
   const storage = () => context.globalStorageUri?.fsPath;
   // Each store's AES-256-GCM key lives in SecretStorage (the OS keychain), never next to the data.
   const keyring = context.secrets;
@@ -36,9 +47,9 @@ export function registerActivityTrash(context: vscode.ExtensionContext, deps: {
     const inside = (doc: string) => doc === file || doc.startsWith(file + path.sep);
     if (vscode.workspace.textDocuments.some(d => d.uri.scheme === 'file' && inside(d.uri.fsPath) && d.isDirty)) throw new Error('unsaved');
   }
-  async function confirm(text: string, action: string): Promise<boolean> {
+  async function confirm(text: string, action: string, detail?: string): Promise<boolean> {
     // One close-affordance item: the workbench then adds no second Cancel button.
-    const answer = await vscode.window.showWarningMessage(text, { modal: true }, { title: action }, CANCEL);
+    const answer = await vscode.window.showWarningMessage(text, detail ? { modal: true, detail } : { modal: true }, { title: action }, CANCEL);
     return answer?.title === action;
   }
   async function run(action: () => Promise<void>): Promise<void> {
@@ -169,4 +180,64 @@ export function registerActivityTrash(context: vscode.ExtensionContext, deps: {
         : `“${restored.path}” 파일을 복원했어요.`);
     }
   })));
+
+  // CGP-KNOW-D-013 — the 내 작품 panel. Same store, same gates (setting, learner binding, task
+  // scope, folder write consent, unsaved buffers) as the commands above; the webview only asks.
+  // One press at a time: a double press or a second request while one runs is refused, not queued.
+  let panelBusy = false;
+  const panelError = (error: unknown): string => {
+    const code = (error as Error | undefined)?.message;
+    if (code === 'unsaved') return '저장하지 않은 변경이 있어요. 저장한 뒤 다시 시도해 주세요.';
+    if (code === 'file_changed') return '파일이 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요.';
+    if (code === 'activity_changed' || code === 'unavailable' || code === 'missing') return '작업 상태가 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요.';
+    return '파일 작업을 완료하지 못했어요. 작업 폴더와 폴더 권한을 확인해 주세요.';
+  };
+  const fileOf = (trash: ActivityTrash, relative: string) => path.join(trash.root, ...relative.split('/'));
+  return {
+    async view() {
+      try {
+        const trash = current();
+        const listed = scope();
+        const { entries, damaged } = await trash.list();
+        // A task or activity switch while listing: the list belongs to neither, so none is shown.
+        if (scope() !== listed || current().root !== trash.root) return null;
+        return { scope: listed, entries: entries.map(entry => ({ id: entry.id, path: entry.originalPath, at: entry.deletedAt })), damaged };
+      } catch { return null; }
+    },
+    async act(action, target, expected) {
+      if (panelBusy) return { action, error: '앞의 파일 작업이 끝나면 다시 시도해 주세요.' };
+      panelBusy = true;
+      try {
+        if (typeof target !== 'string' || !target || target.length > 2048) throw new Error('invalid');
+        // check() below compares the listed scope with the current one before anything changes.
+        const trash = current();
+        if (action === 'move') {
+          // inspect() validates the name, refuses links, folders and hard links, and pins the bytes the learner confirms.
+          const pinned = await trash.inspect(target);
+          const file = fileOf(trash, target);
+          check(trash, file, expected);
+          if (!await confirm('이 파일을 휴지통으로 옮길까요?', '휴지통으로 이동', target)) return { action, cancelled: true };
+          check(trash, file, expected);
+          const entry = await trash.delete(target, pinned);
+          return { action, id: entry.id, path: entry.originalPath };
+        }
+        if (action !== 'restore' && action !== 'purge') throw new Error('invalid');
+        const entry = (await trash.list()).entries.find(item => item.id === target);
+        if (!entry) throw new Error('missing');
+        const file = fileOf(trash, entry.originalPath);
+        check(trash, file, expected);
+        if (action === 'restore') {
+          // Restore never overwrites (a suffixed name on collision), so it needs no native confirm.
+          const restored = await trash.restore(entry.id);
+          return { action, id: entry.id, path: restored.path, renamed: restored.renamed };
+        }
+        if (!await confirm('이 파일을 영구 삭제할까요? 다시 복원할 수 없어요.', '영구 삭제', entry.originalPath)) return { action, cancelled: true };
+        check(trash, file, expected);
+        await trash.purge(entry.id);
+        return { action, id: entry.id, path: entry.originalPath };
+      } catch (error) {
+        return { action, error: panelError(error) };
+      } finally { panelBusy = false; }
+    },
+  };
 }

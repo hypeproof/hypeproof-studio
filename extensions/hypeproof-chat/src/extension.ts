@@ -312,11 +312,11 @@ export async function activate(context: vscode.ExtensionContext) {
     const target = uri ?? vscode.window.activeTextEditor?.document.uri;
     if (target?.scheme === "file") await provider.openArtifactHistoryPanel(target.fsPath);
   }));
-  registerActivityTrash(context, {
+  provider.setActivityTrashPanel(registerActivityTrash(context, {
     active: () => !!provider.activityTrashBinding,
     binding: () => provider.activityTrashBinding,
     refusal: file => provider.folderWriteRefusalFor(file),
-  });
+  }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
 

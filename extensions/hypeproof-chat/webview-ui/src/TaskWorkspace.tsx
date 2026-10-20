@@ -9,7 +9,7 @@ import { ChatIcon } from './ChatDetails';
 export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
 import { imeComposing } from './imeGuard';
-import { ArtifactProvenanceList } from './ArtifactProvenanceList';
+import { ActivityTrashPanel } from './ActivityTrashPanel';
 import { actionable, returnFocus, returnFocusSoon, returnTarget, trapTab } from './dialogFocus';
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { PanelBoundary } from './PanelBoundary';
@@ -443,7 +443,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         <h3 className="tw-source-list-title">이 작업의 출처</h3>
         <ul className="tw-source-list">{sources.map(source => <li key={source.url}><button type="button" aria-pressed={selected.url === source.url} onClick={() => { setPreview({ url: source.url, scopeKey }); pendingFocus.current = 'source-title'; }}><span>{source.title || citationAddress(source.url)?.hostname}</span><small>{citationAddress(source.url)?.hostname}{pinnedSource?.url === source.url ? ' · 고정됨' : ''}</small></button></li>)}</ul>
       </> : <div className="tw-source-empty"><span aria-hidden="true"><SourceIcon kind="source" size={24} /></span><h3>출처를 모아 둘 자리</h3><p>대화에서 웹 자료를 찾으면 여기에서 다시 열 수 있습니다.</p></div>}
-      {sourcesOpen && <ArtifactProvenanceList view={artifacts} onAsk={onAskAboutFile && (filePath => {
+      {sourcesOpen && <ActivityTrashPanel scopeKey={scopeKey} files={artifacts} onAsk={onAskAboutFile && (filePath => {
         // The narrow layout is a modal dialog: close it without restoring focus, so the host's
         // focus request after the attach reaches the composer.
         if (sourceDialog) closeSources(null, false);

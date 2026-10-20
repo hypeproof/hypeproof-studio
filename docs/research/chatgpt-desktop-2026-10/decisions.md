@@ -64,3 +64,5 @@ copies for targeted retry. Persist only failed filenames/reasons and photo metad
 in the webview session; lost browser handles require explicit native repicking.
 Never infer encryption or add an unsupported document parser. No new recipient,
 capability grant, background upload or persistent minor-content store is added.
+
+| DEC-D013 (trash in 내 작품) | The existing task-workspace file list stands in for 내 작품 (DES-KNOW-20 has no drawer yet), so the panel is on task-workspace seats only (personal, trial); other seats keep the commands. Moving needs the host's native confirm naming the file; Undo and 복원 need none, because restore never overwrites. 영구 삭제 needs the webview dialog with 취소 focused and then the native confirm. The toast's hold restarts a full 8 s after hover or focus ends. Refused while a turn runs. The queue's source line pointed at DES-KNOW-21; the title and the R-013 trace identify DES-KNOW-24, which is what this implements | Conservative: no new seat, no new write path, the host keeps every write decision; built on the merged #2195 store only | Off, the same `activityTrashEnabled` setting | no |
