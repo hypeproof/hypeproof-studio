@@ -176,7 +176,7 @@ import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs 
 import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
-import { changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
+import { artifactHistoryStore, captureArtifactVersion, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
 import { buildPageCard, handlePageCardAction, PageCardRegistry, type PageCardMessage } from "./pageCardHost";
@@ -2237,6 +2237,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private funnelClaimHint: { token: string; outcome: "granted" | "reused" } | null = null;
   /** The token whose /v1/trial/events probe has run (or is running); null = none. */
   private funnelProbedToken: string | null = null;
+  /**
+   * CONV-FUNNEL-R-003 — the token the free end card was last drawn for. The card's buttons count
+   * as end_card offer clicks/dismissals only while it is still the probed funnel seat: a message
+   * from a card that was never drawn (code-issued trial, pass) or from an older seat sends nothing.
+   */
+  private endCardOfferToken: string | null = null;
   private readonly artifactGate = new ArtifactChangeGate();
 
   constructor(
@@ -3489,6 +3495,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       },
     });
     this.context.subscriptions.push({ dispose: () => this.stopLiveness() });
+  }
+
+  /**
+   * CONV-FUNNEL-R-003 — one press on the free end card's buttons, as `{type, surface: end_card}`.
+   * Only for a card this host drew on the seat the funnel probed (see endCardOfferToken). Every
+   * press is sent; the Service keeps the first per grant and surface. Never throws.
+   */
+  private emitEndCardOffer(type: "offer_clicked" | "offer_dismissed"): void {
+    if (!this.endCardOfferToken || this.endCardOfferToken !== this.funnelProbedToken) return;
+    this.funnel?.emit({ type, surface: "end_card" });
   }
 
   /** studio-funnel-events — one App funnel event; validated, whitelisted and fire-and-forget. */
@@ -4822,13 +4838,69 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // seat (minors too) gets them. One review bar at a time: the next turn replaces it.
   private turnReview: { view: TurnReviewView; store: string; root: string; point: RestoreManifest; taskKey: string } | null = null;
   private turnRestoreBusy = false;
+  private artifactHistoryEnabled(): boolean {
+    return !!this.cachedProfile && this._instructorMode?.isInstructor === false
+      && !this.connectionChanging && !this.taskChanging
+      && vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("artifactHistoryEnabled", false);
+  }
+  /** Capture an observed editor save without guessing whether a learner, formatter or tool authored it. */
+  async recordArtifactSave(abs: string): Promise<void> {
+    const cwd = this.resolveCoachCwd();
+    if (!cwd || !this.artifactHistoryEnabled()) return;
+    const generation = this.profileGeneration, task = this.turnRestoreTaskKey();
+    const current = () => this.artifactHistoryEnabled() && this.resolveCoachCwd() === cwd && this.profileGeneration === generation && this.turnRestoreTaskKey() === task;
+    try {
+      const root = await fs.promises.realpath(cwd), rel = path.relative(root, abs).split(path.sep).join("/");
+      await captureArtifactVersion(artifactHistoryStore(this.context.globalStorageUri.fsPath, root, rel), root, rel, "unknown", undefined, current);
+    } catch { /* A history failure never interrupts the editor save. */ }
+  }
+
+  /** REQ-KNOW-30: native history works for every learner seat, including class seats without TaskWorkspace. */
+  async showArtifactHistory(abs: string): Promise<void> {
+    const cwd = this.resolveCoachCwd();
+    if (!cwd || !this.artifactHistoryEnabled() || this.turnRestoreBusy) {
+      void vscode.window.showInformationMessage("이전 버전 보관은 설정에서 켠 활동에서 사용할 수 있어요."); return;
+    }
+    const idle = () => !this.hasActiveStream() && this.pendingSends === 0 && !this.taskChanging && !this.connectionChanging && !this.clearingHistory && !this.verifySession?.running;
+    if (!idle()) { void vscode.window.showInformationMessage("진행 중인 작업이 끝난 뒤에 이전 버전을 볼 수 있어요."); return; }
+    const task = this.turnRestoreTaskKey(), generation = this.profileGeneration;
+    this.turnRestoreBusy = true;
+    try {
+      const root = await fs.promises.realpath(cwd), rel = path.relative(root, abs).split(path.sep).join("/");
+      const store = artifactHistoryStore(this.context.globalStorageUri.fsPath, root, rel);
+      const current = await captureArtifactVersion(store, root, rel, "unknown", undefined, () => this.artifactHistoryEnabled() && idle() && this.profileGeneration === generation && this.resolveCoachCwd() === cwd && this.turnRestoreTaskKey() === task);
+      if (!current) { void vscode.window.showInformationMessage("이 파일은 이전 버전을 보관할 수 없어요."); return; }
+      const expected = current.files[0].sha256;
+      const points = await listRestorePoints(store);
+      const selected = await vscode.window.showQuickPick(points.map(p => ({ label: `${p.turnId === "artifact-ai" ? "AI" : p.turnId === "artifact-learner" ? "나" : "기록 없음"} · ${new Date(p.createdAt).toLocaleString("ko-KR")}`, description: p.id === current.id ? "현재 버전" : "보관된 버전", detail: p.turnId === "artifact-learner" ? "내가 확인한 수정·업로드·복원 기록" : p.turnId === "artifact-ai" ? "AI 작업에서 기록한 버전" : "작성자를 확인하지 않은 버전 · 현재 버전은 내 수정을 확인해 기록할 수 있어요", point: p })), { title: `${path.basename(abs).replace(/[\u0000-\u001f\u007f\u2028-\u202e\u2066-\u2069]/g, "�").slice(0, 120)} · 이전 버전`, placeHolder: "복원할 버전을 골라 주세요. 현재 내용도 보관해요." });
+      if (!selected) return;
+      const stillCurrent = () => this.artifactHistoryEnabled() && idle() && this.profileGeneration === generation && this.resolveCoachCwd() === cwd && this.turnRestoreTaskKey() === task && !vscode.workspace.textDocuments.some(d => d.uri.scheme === "file" && d.uri.fsPath === abs && d.isDirty);
+      if (selected.point.id === current.id) {
+        if (current.turnId !== "artifact-unknown") return;
+        const answer = await vscode.window.showWarningMessage("이 내용을 직접 수정했나요?", { modal: true, detail: "직접 고친 내용이 맞으면 이 버전을 ‘나’로 기록해요. 파일 내용은 바뀌지 않아요." }, "내 수정으로 기록");
+        if (answer !== "내 수정으로 기록") return;
+        if (!stillCurrent()) { void vscode.window.showInformationMessage("파일이 바뀌었어요"); return; }
+        const recorded = await captureArtifactVersion(store, root, rel, "learner", expected, stillCurrent);
+        void vscode.window.showInformationMessage(recorded?.turnId === "artifact-learner" ? "내가 확인한 수정으로 기록했어요." : "파일이 바뀌었어요");
+        return;
+      }
+      const answer = await vscode.window.showWarningMessage("선택한 버전으로 복원할까요?", { modal: true, detail: "현재 파일을 먼저 보관한 뒤 이 파일만 바꿔요." }, "복원하기");
+      if (answer !== "복원하기") return;
+      if (!stillCurrent() || this.folderWriteRefusalFor(abs)) { void vscode.window.showInformationMessage("파일이 바뀌었어요"); return; }
+      const result = await restoreArtifactVersion({ store, root, rel, id: selected.point.id, expected, stillCurrent });
+      if (result.ok) { await this.provenanceRecorder()?.unobserved(root); }
+      void vscode.window.showInformationMessage(result.ok ? "이전 버전을 복원했어요. 복원 전 내용도 보관했어요." : result.reason === "changed" ? "파일이 바뀌었어요" : "파일을 복원하지 못했어요. 이전 버전을 다시 확인해 주세요.");
+    } catch { void vscode.window.showInformationMessage("이전 버전을 읽지 못했어요."); }
+    finally { this.turnRestoreBusy = false; }
+  }
+
   // REQ-STUDIO-ARTIFACT-PROVENANCE — per-file provenance ledger beside the restore stores (artifactProvenance.ts).
   private provenance: ArtifactProvenanceRecorder | null = null;
   private provenanceRecorder(): ArtifactProvenanceRecorder | null {
     const base = this.context?.globalStorageUri?.fsPath;
     if (!base) return null;
     if (!this.provenance) {
-      const recorder = new ArtifactProvenanceRecorder(base);
+      const recorder = new ArtifactProvenanceRecorder(base, Date.now, () => this.artifactHistoryEnabled());
       this.provenance = recorder;
       // The one host-write hook (noteHostWrite) lands in this recorder, for the folder the coach stands in.
       setHostWriteSink({
@@ -5493,7 +5565,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "trialEndCardPasses":
         // TUX-COND-07 — the person pressed the card's Primary. The start page opens its own
         // purchase view (REQ-L12 ②); no order is created until they choose there.
+        // CONV-FUNNEL-R-003 — counted here as offer_clicked end_card: showPurchase() opens the pass
+        // list directly and never passes through the start page's purchaseOpen (surface start_page).
+        this.emitEndCardOffer("offer_clicked");
         void vscode.commands.executeCommand("hypeproof-chat.showPasses");
+        return;
+      case "trialEndCardDismiss":
+        // CONV-FUNNEL-R-003 — the card's escape (오늘은 여기까지). The webview closes the card itself.
+        this.emitEndCardOffer("offer_dismissed");
         return;
       case "notifyOptinSubmit":
       case "notifyOptinWithdraw":
@@ -7284,6 +7363,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // sends nothing unless the probe turned the route on, and keeps the first view per grant.
         // Optional call: telemetry must never turn a drawn card into a thrown turn ending.
         this.funnel?.emit({ type: "offer_viewed", surface: "end_card" });
+        this.endCardOfferToken = current.token ?? null;
         return;
       }
     }

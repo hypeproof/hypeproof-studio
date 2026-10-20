@@ -1700,7 +1700,7 @@ export function ChatPanel(props: Props) {
         )}
 
         {error && props.trialEndCard && props.onTrialEndCardPasses ? (
-          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={props.onDismissError} /></PanelBoundary>
+          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
         ) : error && (
           <ErrorBanner
             message={error}

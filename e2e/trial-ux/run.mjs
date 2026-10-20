@@ -604,11 +604,13 @@ try {
     assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
     await btn(p, '이용권 살펴보기').click();
     await expect.poll(async () => emitted(await requests(p), 'trialEndCardPasses').length).toBe(1);
-    // The escape closes the card and asks for nothing.
+    // The escape closes the card and asks for nothing: its only message is the funnel count
+    // (CONV-FUNNEL-R-003, offer_dismissed end_card), which opens nothing on the host.
     const before = (await requests(p)).length;
     await btn(p, '오늘은 여기까지').click();
     await expect(card).toHaveCount(0);
-    assert.equal((await requests(p)).length, before, 'the escape sends nothing to the host');
+    const after = (await requests(p)).slice(before);
+    assert.deepEqual(after.map((m) => m.type), ['trialEndCardDismiss'], 'the escape sends only trialEndCardDismiss');
     await expect(draft(p)).toBeVisible();
   }, { cfg: trialActivity });
   await test('TUX-COND-07N', 'Card absent mid-work and for ordinary errors (negative control)', async p => {

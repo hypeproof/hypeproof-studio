@@ -21,12 +21,14 @@ const vscode = {
 
 let ChatPanelProvider;
 let FunnelReporter;
+let StartPage;
 test.before(async () => {
   const bundle = await build({
     stdin: {
       contents: [
         "export {ChatPanelProvider} from './src/chatPanelProvider';",
         "export {FunnelReporter} from './src/funnelEvents';",
+        "export {StartPage} from './src/startPage';",
       ].join(''),
       resolveDir: new URL('..', import.meta.url).pathname,
     },
@@ -76,7 +78,7 @@ test.before(async () => {
     setTimeout,
     clearTimeout,
   });
-  ({ ChatPanelProvider, FunnelReporter } = module.exports);
+  ({ ChatPanelProvider, FunnelReporter, StartPage } = module.exports);
 });
 
 const token = 'trial-test-code';
@@ -180,7 +182,7 @@ test('negative controls: no card mid-work, on a code-issued trial, on a pass, or
 const grantToken = `${Buffer.from(JSON.stringify({ native_trial: true })).toString('base64url')}.sig`;
 const FUNNEL_PROBE_ON = { schema: 'hps-trial-funnel/1', events: ['trial_entry', 'trial_tool_result', 'offer_viewed', 'offer_clicked', 'offer_dismissed'] };
 
-async function presentWithFunnel(error, profile, { products = 200, probe = 'on', shows = 1 } = {}) {
+async function presentWithFunnel(error, profile, { products = 200, probe = 'on', shows = 1, presses = [], beforePress } = {}) {
   const funnelPosts = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -207,6 +209,7 @@ async function presentWithFunnel(error, profile, { products = 200, probe = 'on',
     funnelStartupToken: grantToken,
     funnelClaimHint: null,
     stopLiveness() {},
+    emitEndCardOffer: ChatPanelProvider.prototype.emitEndCardOffer,
     // The provider's own sender shape: one JSON POST with the grant's bearer token.
     funnel: new FunnelReporter({
       send: async (url, tok, body) => (await fetch(url, { method: 'POST', headers: { authorization: `Bearer ${tok}`, 'content-type': 'application/json' }, body: JSON.stringify(body) })).status,
@@ -215,10 +218,15 @@ async function presentWithFunnel(error, profile, { products = 200, probe = 'on',
   try {
     await ChatPanelProvider.prototype.refreshFunnelTarget.call(self, profile, grantToken, proxyUrl);
     for (let i = 0; i < shows; i++) await ChatPanelProvider.prototype.handleSendError.call(self, error, `stream-${i}`, { profile, proxyUrl, token: grantToken });
+    // CONV-FUNNEL-R-003 — the card's buttons arrive as webview messages through the real handler.
+    beforePress?.(self);
+    commandCalls.length = 0;
+    for (const type of presses) await ChatPanelProvider.prototype.handleMessage.call(self, { type });
     // Fire-and-forget delivery: wait until the POST count stops moving.
     let seen = -1;
     for (let i = 0; i < 40 && seen !== funnelPosts.length; i++) { seen = funnelPosts.length; await new Promise((r) => setTimeout(r, 25)); }
-    return { posts, funnelPosts, offerViewed: funnelPosts.filter((p) => p.body.type === 'offer_viewed') };
+    const offers = (type) => funnelPosts.filter((p) => p.body.type === type);
+    return { posts, funnelPosts, offerViewed: offers('offer_viewed'), offerClicked: offers('offer_clicked'), offerDismissed: offers('offer_dismissed'), commands: structuredClone(commandCalls) };
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -265,4 +273,79 @@ test('CONV-FUNNEL-R-002 negative controls: no end_card view without a card or wi
   r = await presentWithFunnel(MID_WORK, openTrial);
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.offerViewed, []);
+});
+
+// CONV-FUNNEL-R-003 / REQ-STUDIO-NATIVE-FUNNEL-EVENTS — the card's two buttons. `이용권 살펴보기`
+// arrives as `trialEndCardPasses` and `오늘은 여기까지` as `trialEndCardDismiss`; each press sends
+// one event with surface end_card on the grant-scoped route. On base the Primary only ran the
+// showPasses command (StartPage.showPurchase → handlePurchase), which never emits, and the escape
+// never reached the host.
+test('CONV-FUNNEL-R-003: each press on the end card sends one event with surface end_card', async () => {
+  const body = (type) => ({ authorization: `Bearer ${grantToken}`, body: { type, fields: { surface: 'end_card' } } });
+  let r = await presentWithFunnel(EXHAUSTED, openTrial, { presses: ['trialEndCardPasses'] });
+  assert.ok(r.posts[0].trialEndCard, 'the card is drawn');
+  assert.deepEqual(r.offerClicked, [body('offer_clicked')], JSON.stringify(r.funnelPosts));
+  assert.deepEqual(r.offerDismissed, []);
+  // The Primary still opens the pass list exactly as before.
+  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses']]);
+  // No press is ever counted as the start page's offer.
+  assert.ok(r.funnelPosts.every((p) => p.body.fields?.surface !== 'start_page'), JSON.stringify(r.funnelPosts));
+
+  r = await presentWithFunnel(EXPIRED, openTrial, { presses: ['trialEndCardDismiss'] });
+  assert.ok(r.posts[0].trialEndCard);
+  assert.deepEqual(r.offerDismissed, [body('offer_dismissed')], JSON.stringify(r.funnelPosts));
+  assert.deepEqual(r.offerClicked, []);
+  assert.deepEqual(r.commands, [], 'the escape opens nothing');
+
+  // One event per press: dismiss, then (later) the Primary, then the Primary again.
+  r = await presentWithFunnel(EXHAUSTED, openTrial, { presses: ['trialEndCardDismiss', 'trialEndCardPasses', 'trialEndCardPasses'] });
+  assert.equal(r.offerDismissed.length, 1);
+  assert.equal(r.offerClicked.length, 2);
+  assert.equal(r.offerViewed.length, 1, 'presses do not add views');
+});
+
+test('CONV-FUNNEL-R-003 negative controls: no card, another seat, or the funnel off sends nothing', async () => {
+  const presses = ['trialEndCardPasses', 'trialEndCardDismiss'];
+  // Probe off (Service flag off): the card shows and both buttons work, nothing at all is sent.
+  let r = await presentWithFunnel(EXHAUSTED, openTrial, { probe: 'off', presses });
+  assert.ok(r.posts[0].trialEndCard);
+  assert.deepEqual(r.funnelPosts, []);
+  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses']]);
+  // Code-issued trial (funnel on): no card was drawn, so a stray press is not an end-card offer.
+  r = await presentWithFunnel(EXHAUSTED, { activity_kind: 'trial', profile_id: 'studio-native-trial' }, { presses });
+  assert.equal(r.posts[0].trialEndCard, undefined);
+  assert.ok(r.funnelPosts.some((p) => p.body.type === 'trial_entry'), 'funnel was on');
+  assert.deepEqual([...r.offerClicked, ...r.offerDismissed], []);
+  // Bought pass: same.
+  r = await presentWithFunnel(EXHAUSTED, { ...openTrial, pass: { request_limit: 200, requests_used: 200 } }, { presses });
+  assert.equal(r.posts[0].trialEndCard, undefined);
+  assert.deepEqual([...r.offerClicked, ...r.offerDismissed], []);
+  // Banner fallback (catalogue unreadable): no card, no offer.
+  r = await presentWithFunnel(EXHAUSTED, openTrial, { products: 404, presses });
+  assert.equal(r.posts[0].trialEndCard, undefined);
+  assert.deepEqual([...r.offerClicked, ...r.offerDismissed], []);
+  // The card was drawn for this grant, but the seat changed since (another token probed): nothing.
+  r = await presentWithFunnel(EXHAUSTED, openTrial, { presses, beforePress: (self) => { self.funnelProbedToken = 'another-seat'; } });
+  assert.ok(r.posts[0].trialEndCard);
+  assert.deepEqual([...r.offerClicked, ...r.offerDismissed], []);
+});
+
+// The start page keeps its own surface: its purchaseOpen/purchaseHide still count as start_page,
+// while the card's route into the same pass list (showPurchase) adds no start_page click.
+test('CONV-FUNNEL-R-003: the start page path keeps surface start_page; showPurchase adds none', async () => {
+  const emitted = [];
+  const self = {
+    // The host builds these objects in the vm realm; copy them into this one to compare.
+    chat: { funnelEmit: (ev) => emitted.push(structuredClone(ev)) },
+    order: undefined,
+    handlePurchase: async () => {},
+    show: async () => {},
+    refresh: async () => {},
+  };
+  await StartPage.prototype.handle.call(self, { type: 'purchaseOpen' });
+  await StartPage.prototype.handle.call(self, { type: 'purchaseHide' });
+  assert.deepEqual(emitted, [{ type: 'offer_clicked', surface: 'start_page' }, { type: 'offer_dismissed', surface: 'start_page' }]);
+  emitted.length = 0;
+  await StartPage.prototype.showPurchase.call(self);
+  assert.deepEqual(emitted, []);
 });

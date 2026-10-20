@@ -26,6 +26,7 @@
 // restore point, a failed scan or save, a new session, a pull) marks the ledger stale; the list
 // then confirms no label until the next complete observation.
 
+import { artifactHistoryStore, captureArtifactVersion } from "./turnRestore.ts";
 import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -71,6 +72,11 @@ export function emptyLedger(): ProvenanceLedger {
 }
 
 interface FileHash { path: string; sha256: string }
+
+/** CGP-KNOW-R-017: most files and bytes of history captured before one coach turn (REQ-STUDIO-ARTIFACT-HISTORY). */
+export const TURN_START_HISTORY_LIMITS = { files: 25, bytes: 4 * 1024 * 1024 } as const;
+/** The same bound after a coach turn: files beyond it are not versioned (they keep no AI label in history). */
+export const TURN_END_HISTORY_LIMITS = { files: 25, bytes: 4 * 1024 * 1024 } as const;
 /** A folder scan (`scanFolder`) or just its files. */
 export type ScanLike = readonly FileHash[] | { files: readonly FileHash[]; notCovered?: readonly { path: string }[] };
 
@@ -307,7 +313,9 @@ export class ArtifactProvenanceRecorder {
   private gen = 0;
   private readonly base: string;
   private readonly now: () => number;
-  constructor(base: string, now: () => number = Date.now) {
+  private readonly historyEnabled: () => boolean;
+  constructor(base: string, now: () => number = Date.now, historyEnabled: () => boolean = () => false) {
+    this.historyEnabled = historyEnabled;
     this.base = base;
     this.now = now;
   }
@@ -364,6 +372,7 @@ export class ArtifactProvenanceRecorder {
         let sha = w.sha256;
         if (!sha) { try { sha = sha256Of(await fs.readFile(w.absPath)); } catch { continue; } }
         out.push({ path: rel, sha256: sha });
+        if (this.historyEnabled()) await captureArtifactVersion(artifactHistoryStore(this.base, root, rel), root, rel, actor === "ai" ? "ai" : actor === "learner_upload" ? "learner" : "unknown", sha, this.historyEnabled).catch(() => null);
       }
       if (!out.length) return null;
       return this.apply(root, (l) => recordHostWrite(l, out, { at, actor }));
@@ -373,14 +382,37 @@ export class ArtifactProvenanceRecorder {
   /** Before a coach turn, with the restore point just taken. */
   turnStart(root: string, point: PointLike): Promise<unknown> {
     this.bump();
-    return this.run(() => this.observe(root, point, point.createdAt));
+    return this.run(async () => {
+      // Bounded: a restore point can list hundreds of files; capture at most N files / M bytes per turn start.
+      let files = 0, bytes = 0;
+      for (const f of point.files) {
+        if (!this.historyEnabled() || files >= TURN_START_HISTORY_LIMITS.files) break;
+        const size = await fs.stat(path.join(root, f.path)).then((st) => st.size, () => -1);
+        if (size < 0 || bytes + size > TURN_START_HISTORY_LIMITS.bytes) continue;
+        files++; bytes += size;
+        await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "unknown", f.sha256, this.historyEnabled).catch(() => null);
+      }
+      return this.observe(root, point, point.createdAt);
+    });
   }
 
   /** After a coach turn whose start was observed; `after` is the scan the diff came from. */
   turnEnd(root: string, point: PointLike, diff: TurnDiff, after: ScanLike): Promise<ProvenanceLedger | null> {
     this.bump();
     const at = Math.max(this.now(), point.createdAt + 1);
-    return this.run(() => this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff }, after)));
+    return this.run(async () => {
+      // Bounded like turnStart: at most N files / M bytes per turn end; a file over the byte budget is skipped, later small ones still fit.
+      let files = 0, bytes = 0;
+      for (const f of filesOf(after)) {
+        if (!this.historyEnabled() || files >= TURN_END_HISTORY_LIMITS.files) break;
+        if (!(diff.added.includes(f.path) || diff.changed.includes(f.path))) continue;
+        const size = await fs.stat(path.join(root, f.path)).then((st) => st.size, () => -1);
+        if (size < 0 || bytes + size > TURN_END_HISTORY_LIMITS.bytes) continue;
+        files++; bytes += size;
+        await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "ai", f.sha256, this.historyEnabled).catch(() => null);
+      }
+      return this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff }, after));
+    });
   }
 
   /** Studio replaced files of `folder` wholesale (a GitHub pull or clone): nothing in it is confirmed until observed again. */

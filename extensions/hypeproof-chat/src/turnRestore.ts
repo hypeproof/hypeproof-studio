@@ -26,7 +26,9 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
+import * as syncFs from "node:fs";
 import * as path from "node:path";
+import { accountLock } from "./accountLock.ts";
 import { WORLD_ARCHIVE_DIR } from "./chatPanelHelpers.ts";
 
 /** Folder names never recorded: VCS data, installed packages and environments, tool caches, Studio's own archives. */
@@ -516,4 +518,101 @@ export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcom
     afterDigest: after.digest,
     touched,
   };
+}
+
+
+/** REQ-KNOW-30: per-file history reuses the manifest/blob format outside the workspace. */
+export function artifactHistoryStore(base: string, root: string, rel: string): string {
+  return turnRestoreStoreDir(base, root, `artifact-${sha256(rel).slice(0, 32)}`);
+}
+
+export async function captureArtifactVersion(store: string, root: string, rel: string, actor: "ai" | "learner" | "unknown", expected?: string, stillCurrent?: () => boolean): Promise<RestoreManifest | null> {
+  return accountLock(store)(async () => {
+    if (!await safeToChange(root, rel, "file")) return null;
+    if ((await fs.stat(path.join(root, rel))).size > TURN_RESTORE_LIMITS.fileMax) return null;
+    const data = await fs.readFile(path.join(root, rel));
+    if (data.length > TURN_RESTORE_LIMITS.fileMax) return null;
+    const hash = sha256(data);
+    if ((expected && expected !== hash) || stillCurrent?.() === false) return null;
+    const latest = (await listRestorePoints(store))[0];
+    const guard = () => stillCurrent?.() !== false && sha256(syncFs.readFileSync(path.join(root, rel))) === hash;
+    if (!await safeToChange(root, rel, "file") || !guard()) return null;
+    if (latest?.files[0]?.sha256 === hash) {
+      // Enrich only an unknown revision with exact-byte positive evidence.
+      // A repeated scan or learner confirmation never rewrites an existing AI event.
+      if (expected === hash && actor !== "unknown" && latest.turnId === "artifact-unknown") {
+        if (stillCurrent?.() === false || sha256(syncFs.readFileSync(path.join(root, rel))) !== hash) return null;
+        latest.turnId = `artifact-${actor}`;
+        writeArtifactManifestSync(store, latest, guard);
+      }
+      return latest;
+    }
+    const point = await saveArtifactVersion(store, rel, data, actor, guard);
+    await pruneRestorePoints(store, 20, [point.id]);
+    return point;
+  }).catch(() => null);
+}
+
+function writeArtifactManifestSync(store: string, point: RestoreManifest, guard: () => boolean): void {
+  const target = pointPath(store, point.id), temp = `${target}.${randomUUID()}.tmp`;
+  syncFs.mkdirSync(path.dirname(target), { recursive: true });
+  try {
+    syncFs.writeFileSync(temp, JSON.stringify(point), { flag: "wx", mode: 0o600 });
+    if (!guard()) throw new Error("artifact_changed");
+    syncFs.renameSync(temp, target);
+  } finally { try { syncFs.unlinkSync(temp); } catch { /* committed or never created */ } }
+}
+
+async function saveArtifactVersion(store: string, rel: string, data: Buffer, actor: string, guard?: () => boolean): Promise<RestoreManifest> {
+  const hash = sha256(data), id = randomUUID();
+  const at = Math.max(Date.now(), ((await listRestorePoints(store))[0]?.createdAt ?? 0) + 1);
+  await writeAtomic(blobPath(store, hash), data);
+  const files = [{ path: rel, size: data.length, sha256: hash }];
+  const point: RestoreManifest = { version: 1, id, kind: "turn", turnId: `artifact-${actor}`, createdAt: at, files, dirs: [], notCovered: [], complete: true, digest: manifestDigest(files) };
+  try {
+    if (guard) writeArtifactManifestSync(store, point, guard);
+    else await writeAtomic(pointPath(store, id), JSON.stringify(point));
+    return point;
+  } catch (error) {
+    // Failed/disabled captures must not leave a new unreferenced copy behind.
+    if (!(await listRestorePoints(store)).some(p => p.files.some(f => f.sha256 === hash))) {
+      await fs.unlink(blobPath(store, hash)).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+/** No whole-folder restore: preserve current bytes first, refuse stale or unsafe targets. */
+export async function restoreArtifactVersion(req: { store: string; root: string; rel: string; id: string; expected: string; stillCurrent?: () => boolean }): Promise<{ ok: boolean; reason?: string }> {
+  return accountLock(req.store)(async () => {
+  let temp: string | undefined;
+  let pendingHead: RestoreManifest | undefined, touched = false;
+  try {
+    const point = await loadRestorePoint(req.store, req.id);
+    const file = point?.files.find(f => f.path === req.rel);
+    if (!file || !SHA.test(req.expected) || !await safeToChange(req.root, req.rel, "file")) return { ok: false, reason: "unsafe" };
+    const target = path.join(req.root, req.rel);
+    if ((await fs.stat(target)).size > TURN_RESTORE_LIMITS.fileMax) return { ok: false, reason: "changed" };
+    const current = await fs.readFile(target).catch(() => null);
+    if (!current) return { ok: false, reason: "changed" };
+    if (sha256(current) !== req.expected) return { ok: false, reason: "changed" };
+    const data = await fs.readFile(blobPath(req.store, file.sha256));
+    if (sha256(data) !== file.sha256) return { ok: false, reason: "damaged" };
+    // No overwrite may happen unless the recovery version was committed successfully.
+    const recovery = await saveArtifactVersion(req.store, req.rel, current, "unknown");
+    pendingHead = await saveArtifactVersion(req.store, req.rel, data, "unknown");
+    temp = path.join(path.dirname(target), `.hps-restore-${randomUUID()}.tmp`);
+    await fs.writeFile(temp, data, { flag: "wx", mode: (await fs.stat(target)).mode });
+    if (!await safeToChange(req.root, req.rel, "file")) return { ok: false, reason: "unsafe" };
+    // No await between the final context/hash check and replacement.
+    if (req.stillCurrent?.() === false || sha256(syncFs.readFileSync(target)) !== req.expected) return { ok: false, reason: "changed" };
+    syncFs.renameSync(temp, target); temp = undefined; touched = true;
+    // A crash before replacement cannot leave a false learner-authorship claim.
+    pendingHead.turnId = "artifact-learner";
+    await writeAtomic(pointPath(req.store, pendingHead.id), JSON.stringify(pendingHead)).catch(() => undefined);
+    await pruneRestorePoints(req.store, 20, [recovery.id, pendingHead.id]).catch(() => undefined);
+    return { ok: true };
+  } catch (error) { return { ok: false, reason: errCode(error) === "ENOENT" ? "changed" : "failed" }; }
+  finally { if (!touched && pendingHead) await fs.unlink(pointPath(req.store, pendingHead.id)).catch(() => undefined); if (temp) await fs.unlink(temp).catch(() => undefined); }
+  }).catch(() => ({ ok: false, reason: "busy" }));
 }
