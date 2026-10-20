@@ -4,6 +4,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { VersionPager as Pager } from "../../src/editResend";
+import { ChatIcon } from "./ChatDetails";
+import { AttemptPager } from "./AttemptPager";
 import { imeComposing } from "./imeGuard";
 import { useDialogFocus } from "./dialogFocus";
 
@@ -12,18 +14,14 @@ export const REVERT_NOTE = "이전 답변이 바꾼 파일은 그대로예요. �
 export const PAGER_TITLE = "버전을 바꿔 봐도 새로 묻지 않아요. 다음 대화는 마지막 버전에서 이어져요.";
 
 export function EditAction({ onEdit }: { onEdit: () => void }) {
-  return <button type="button" className="hps-edit-prompt" onClick={onEdit} aria-label={EDIT_LABEL} title={EDIT_LABEL}>수정</button>;
+  return <button type="button" className="hps-edit-prompt" onClick={onEdit} aria-label={EDIT_LABEL} title={EDIT_LABEL}><ChatIcon kind="pencil" size={16} />수정</button>;
 }
 
 /** "‹ 1/2 ›" — switches which version of this prompt and its answer is drawn. Never sends anything. */
 export function VersionPager({ pager, onPage }: { pager: Pager; onPage: (index: number) => void }) {
-  const { index, count } = pager;
-  return <div className="hps-version-pager" role="group" aria-label="메시지 버전" title={PAGER_TITLE}>
-    <button type="button" disabled={index === 0} onClick={() => onPage(index - 1)} aria-label="이전 버전">‹</button>
-    <span aria-live="polite">{index + 1}/{count}</span>
-    <button type="button" disabled={index === count - 1} onClick={() => onPage(index + 1)} aria-label="다음 버전">›</button>
-    {index < count - 1 && <span className="hps-version-note">이 버전은 보기만 해요</span>}
-  </div>;
+  return <AttemptPager index={pager.index} count={pager.count} onPage={onPage}
+    label="메시지 버전" previousLabel="이전 버전" nextLabel="다음 버전" title={PAGER_TITLE}
+    note={pager.index < pager.count - 1 ? "이 버전은 보기만 해요" : undefined} />;
 }
 
 /**
@@ -41,6 +39,7 @@ export function EditPrompt({ text, images, revertNote, onCancel, onSave, onChang
   const [value, setValue] = useState(text);
   const [kept, setKept] = useState(images);
   const area = useRef<HTMLTextAreaElement>(null);
+  const composing = useRef(false);
   useEffect(() => { area.current?.focus({ preventScroll: true }); }, []);
   // REQ-STUDIO-FOCUS-RESTORE: closing returns focus to this message's 수정 (drawn again after the
   // editor goes), or to the composer when the message is gone.
@@ -68,8 +67,10 @@ export function EditPrompt({ text, images, revertNote, onCancel, onSave, onChang
       value={value}
       aria-label="고칠 메시지"
       onChange={(e) => { setValue(e.target.value); onChange?.(e.target.value, kept); }}
+      onCompositionStart={() => { composing.current = true; }}
+      onCompositionEnd={() => { composing.current = false; }}
       onKeyDown={(e) => {
-        if (imeComposing(e)) return;
+        if (imeComposing(e, composing.current)) { e.stopPropagation(); return; }
         if (e.key === "Escape") { e.preventDefault(); onCancel(); }
         else if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); }
       }}
@@ -77,7 +78,7 @@ export function EditPrompt({ text, images, revertNote, onCancel, onSave, onChang
     {revertNote && <p className="hps-edit-note">{REVERT_NOTE}</p>}
     <div className="hps-edit-actions">
       <button type="button" onClick={onCancel}>취소</button>
-      <button type="button" className="hps-edit-save" disabled={!value.trim()} onClick={save}>보내기</button>
+      <button type="button" className="hps-edit-save" disabled={!value.trim()} onClick={save}>다시 보내기</button>
     </div>
   </div>;
 }
