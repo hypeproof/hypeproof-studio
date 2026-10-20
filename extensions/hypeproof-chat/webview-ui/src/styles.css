@@ -1073,6 +1073,17 @@ html, body, #root {
   color: var(--vscode-descriptionForeground, inherit);
 }
 
+/* REQ-STUDIO-CONTEXT-TRIM-MARKER (CGP-CHAT-D16) — centered system line, secondary text, 13px, no
+   icon or animation. It stays in the transcript at the boundary. */
+.hps-context-note {
+  margin: 10px 0;
+  padding: 0 12px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--vscode-descriptionForeground, inherit);
+}
+
 .hps-page-notice {
   margin: 6px 0 10px;
   padding: 8px 10px;

@@ -119,6 +119,42 @@ a stale notice settling late does not release a newer one); and the wiring at th
 final status with the turn's own profile, both surfaces watched and the turn-start release. Each guard was removed once and the
 smoke failed.
 
+`REQ-STUDIO-CONTEXT-TRIM-MARKER` (CGP-CHAT-R-010 / CGP-CHAT-D-010, P1, 2026-10-20): when
+older turns stop going to the model, the transcript says so with one quiet line at that
+point. Two real events produce it, nothing else. (1) The history clamp: every model call
+sends `modelHistory(clampTimeline(modelConversation(conversation), HISTORY_MAX))`
+(`chatPanelProvider.ts`, all runtimes: proxy, browser loop, agent SDK, local and instructor
+coaches), so spoken messages older than the last `HISTORY_MAX` (200) are not sent. The
+panel derives the boundary from the transcript on every render (`trimMarkerIndex`) and draws
+"앞의 대화가 길어서 AI가 처음 부분은 자세히 기억하지 못할 수 있어요. 중요한 건 다시 말해
+주세요." right before the first message still sent. Nothing is stored. Tool lines and
+superseded versions of an edited prompt are not sent, so they never count. As the
+conversation grows the boundary moves and there is still exactly one marker. (2) An agent
+SDK `system/compact_boundary` event inside a coach turn (the CLI summarized earlier context
+at its pinned 200k window, `SDK_AUTO_COMPACT_WINDOW_TOKENS`): the host posts one tool line
+per turn (`compactionLineId(streamId)`, so a second compaction in the same turn replaces it),
+kept in the turn timeline like every tool line and drawn as "대화가 길어져서 AI가 앞 대화를
+짧게 줄여서 기억하고 있어요. 중요한 건 다시 말해 주세요." The `compacting` status tick is not
+a boundary. Both lines are a centered `role="note"` (`hps-context-note`, 13px, secondary
+text, no icon or animation), not a bubble or a toast. They are never sent to the model:
+the clamp marker is not a message, and `modelHistory` drops tool lines. They show in
+personal and classroom chat alike, with no capability labels and no token numbers. Pure
+logic: `src/contextTrim.ts`; `HISTORY_MAX` moved to `src/chatTimeline.ts` (re-exported from
+`chatPanelHelpers.ts`) so the webview reads the same number. Limits: the marker uses the
+current transcript, so while a turn is running it reflects the next request, which is at
+most two messages ahead of the one in flight. The legacy workspaceState history (no task
+store) is itself clamped to 200, so nothing visible is ever left out and no marker shows.
+Any trimming the Service does server-side is not visible to the client and is not covered.
+Tests: `test/context-trim-marker.smoke.mjs` — empty, short, exactly-full, tool-heavy and
+versioned histories give no boundary (negative controls); one message over the cap gives
+exactly one boundary at the first message still sent; the boundary moves; the host's model
+pipeline over a clamped conversation with a compaction line sends neither note; the SDK
+event extraction with `init` and `compacting` negative controls; the host and panel wiring;
+the real `ChatPanel` rendered for personal and classroom seats (no note when short or
+exactly full, one note between the last dropped and the first sent message, the compaction
+line as the same note and not a tool row). Each guard was removed once and the smoke
+failed.
+
 ### Personal chat detail (CP-R1)
 
 Proxy stream completion evidence (#1965; REQ-C1, REQ-C5):

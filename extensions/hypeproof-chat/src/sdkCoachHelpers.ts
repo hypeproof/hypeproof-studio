@@ -1776,6 +1776,8 @@ export type SdkActivity = (
   | { kind: "tool_use"; id: string; name: string; input: unknown }
   /** That tool finished. */
   | { kind: "tool_result"; id: string; isError: boolean; reason?: string }
+  /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the CLI compacted earlier context (`system/compact_boundary`). */
+  | { kind: "compaction" }
 ) & {
   /**
    * #503 — SDK 가 이벤트마다 실어 보내는 자기 시각(ms). 단일 타임라인이 영속화될
@@ -1911,6 +1913,7 @@ export function extractSdkActivity(msg: Record<string, unknown>): SdkActivity[] 
     const tokens = msg["estimated_tokens"];
     return typeof tokens === "number" ? [stamp({ kind: "thinking_tokens", tokens })] : [];
   }
+  if (type === "system" && msg["subtype"] === "compact_boundary") return [stamp({ kind: "compaction" })];
 
   // tool_use rides on assistant messages; tool_result comes back on user ones.
   if (type !== "assistant" && type !== "user") return [];

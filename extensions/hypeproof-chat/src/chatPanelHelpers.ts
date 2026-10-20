@@ -3,6 +3,7 @@
 
 import { coachDegradedNotice, DEFAULT_COACH_NAME, resolveCoachIdentity } from "./coachIdentity.ts";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers.ts";
+import { HISTORY_MAX } from "./chatTimeline.ts";
 
 /** An isolated developer app must not inherit a different app's test account. */
 export function testStateCandidates(appName: string, ownedFile: string, legacyHomeFile: string): string[] {
@@ -223,8 +224,8 @@ export function labelsForProfile(profile: ProfileToneShape | null | undefined) {
   return TONE_LABELS[appToneOf(profile)];
 }
 
-/** workspaceState ceiling — oldest turns dropped beyond this. */
-export const HISTORY_MAX = 200;
+/** workspaceState ceiling — oldest turns dropped beyond this. Defined beside clampTimeline (webview-safe). */
+export { HISTORY_MAX };
 
 /** Coach name length ceiling (REQ-F3). */
 export const COACH_NAME_MAX = 40;

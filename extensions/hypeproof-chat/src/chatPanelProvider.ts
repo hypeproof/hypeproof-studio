@@ -188,6 +188,7 @@ import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE } from "./fileAttachment";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
+import { compactionLineId, CONTEXT_COMPACT_NOTE } from "./contextTrim";
 import {
   clampTimeline,
   emptyTimeline,
@@ -5984,6 +5985,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 }, 900);
               }
             }
+            break;
+          case "compaction":
+            // REQ-STUDIO-CONTEXT-TRIM-MARKER — earlier context was summarized in this turn. One line
+            // per turn (the id is the turn's), drawn as a quiet note; summary cohorts get it too. As a
+            // tool line it is kept in the timeline and modelHistory never sends it.
+            this.postToolLog(streamId, { id: compactionLineId(streamId), icon: "", label: CONTEXT_COMPACT_NOTE, state: "done", ...(a.at ? { at: a.at } : {}) });
             break;
         }
       };
