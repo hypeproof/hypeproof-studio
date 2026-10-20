@@ -7282,6 +7282,47 @@
       ]
     },
     {
+      "id": "ST-IMP-CHALK-ROSTER-CSV",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-DES-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/lib/roster-csv.ts"
+        },
+        {
+          "path": "chalk/src/ui/console.html"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-ROSTER-CSV",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-TEST-CLASSROOM-ADMIN",
+        "ST-IMP-CHALK-ROSTER-CSV"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/roster-csv.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/roster-csv.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-ASK-ABOUT-FILE",
       "stage": "implementation",
       "owner": "jayleekr",

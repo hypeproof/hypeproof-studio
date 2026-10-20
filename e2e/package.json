@@ -40,6 +40,7 @@
     "test:classroom-ops-help": "node --experimental-strip-types --experimental-sqlite classroom/ops-help.mjs && node classroom/help-request.mjs",
     "test:classroom-ops-results": "node --experimental-strip-types --experimental-sqlite classroom/ops-results.mjs",
     "test:classroom-attention-copy": "node --experimental-strip-types --experimental-sqlite classroom/attention-copy.mjs",
+    "test:classroom-roster-csv": "node --experimental-strip-types --experimental-sqlite classroom/roster-csv.mjs",
     "test:classroom-ops-g1": "node --experimental-strip-types --experimental-sqlite classroom/ops-g1-layout.mjs",
     "test:classroom-ops-g1-wrap": "node --experimental-strip-types --experimental-sqlite classroom/ops-g1-wrap.mjs",
     "test:classroom-authoring-g2": "node --experimental-strip-types --experimental-sqlite classroom/authoring-g2.mjs",

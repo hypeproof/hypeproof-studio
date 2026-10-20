@@ -1473,3 +1473,18 @@ collection contract.
 | 기존 브라우저 시험의 고정 문구 갱신 | `ops.mjs`, `ops-g1-layout.mjs`, `ops-roster.mjs` | PASS (문구만 바꿈, 판정 그대로) |
 
 **NOT RUN**: 실제 강사·실제 학생 기기, Windows, 학교 네트워크, 운영 배포. 상세 화면 요약 줄은 좁은 폭에서 ‘와이파이’처럼 낱말 가운데서 줄이 바뀔 수 있다(잘림은 아님).
+
+<a id="adm-01-roster-csv-run"></a>
+
+## 명단 CSV 가져오기 · 2026-10-20 (ADM-01 · CGP-SHELL-R-032)
+
+요구: [명단 CSV 가져오기](../requirements/classroom-admin.md#adm-01-roster-csv). Service endpoint는 기존 `roster/append` 그대로다.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/roster-csv.test.mjs` (`chalk` `npm test`에 포함) | 순수 kit(`chalk/src/lib/roster-csv.ts`)를 페이지와 같은 코드로: BOM·CRLF·CR·따옴표·`""`·한국어 이름(NFD 포함)·빈 줄, UTF-8 BOM과 CP949 바이트, 열 계약(모르는 열·중복·머리글 없음·따옴표 오류), 200줄 경계와 201줄 거부, 수식 칸 7종 거부와 본문에 없음, 줄 검사(한국어 handle·대문자·중복·칸 수·줄바꿈·이름 길이), 본문 = `{users}`만, 응답→줄별 결과(추가됨/이미 있음, `added` 없음·남의 handle·5xx·네트워크·4xx·상한·synthetic), 다시 보내기는 실패한 줄만, 서빙된 `/console`이 시험한 kit를 그대로 inline | PASS 10/10. 대조군: 다른 `added` 목록이면 상태가 바뀜, 수식 규칙이 없으면 통과할 `82` 이름, UTF-8로만 읽으면 CP949가 깨짐, 보이지 않는 zero-width space 머리글은 거부. 페이지 연결 전 `/console` 시험은 실패(red) |
+| `e2e/classroom/roster-csv.mjs` (`npm run test:classroom-roster-csv`) | 실제 Chalk `/console`·전달 경로·Service 라우터(roster append·issuer 검증·KV 명단), Chromium 1280·800px. 통제: 페이지가 여는 Lab 배부 조회(빈 목록)와 첫 append 하나를 브라우저 route에서 끊음 | PASS (두 폭). 파일 → 표·“정상 4 · 확인 필요 3”, 이때 요청 0건 · 확인 전 버튼 꺼짐 · Space/Tab/Enter로 보냄 · 본문 `{users:[4개]}`에 이름 없음 · 끊긴 응답 → 실패 4줄과 사유 · ‘실패한 줄만 다시’ → 같은 4개만 보내 “추가됨 2 · 이미 있음 2”(Service 명단에 새 handle 한 번씩) · 다시 보내기 버튼 사라짐 · 201줄 붙여넣기 거부와 요청 0건 · 가로 넘침 없음 · 페이지 오류 없음. `origin/main`의 `console.html`로 돌리면 실패(red) |
+| 검증 후속 (M1·M2·L1–L4) | 단위: 보이지 않는/전각 접두어 수식 6종 거부와 대조군(가운데 문자·전각 글자 이름은 통과), 이름의 bidi·zero-width 제거, 본문 함수가 행 객체·이름 문자열을 예외로 거부, 서빙된 페이지의 가져오기 단계에 요청 1개·본문 1개(`rosterCsv.requestBody(handles)`), 예시 `s01`·완화한 문구. 브라우저: 결과 줄 이름이 `<bdi>` 안, 보내는 동안 파일 입력·붙여넣기 잠금(입력 무시), 보낸 뒤 같은 CSV는 ‘추가’ 꺼짐(다시 미리 보기해도), 결과 유지, 바꾼 CSV는 다시 켜짐. CI: `classroom-ops.yml` `classroom / browser`가 `test:classroom-roster-csv`를 돌리고 스크린샷을 올린다 | PASS 15/15 · 두 폭 PASS. 변이 8종(각 수정을 하나씩 되돌림) 모두 해당 시험이 실패: M1 이름 정리→단위 12, M1 `<bdi>`→브라우저, M2 본문 함수 검사→단위 13, M2 페이지 본문에 이름 추가→단위 14, L1 잠금→브라우저, L2 보낸 뒤 잠금→브라우저, L3→단위 11, L4→단위 15 |
+| 화면 확인 | 스크린샷 미리 보기·실패·결과 × 1280·800 | 눈으로 확인: handle 한 줄, 확인 필요 줄 주황 띠 + ! + 사유, 결과 줄 아이콘 + 글 |
+
+**NOT RUN**: 실제 강사·운영 Service·hosted KV(같은 키 쓰기 속도 제한 포함), Windows 브라우저, 화면 읽기 프로그램 실기, 운영 배포.

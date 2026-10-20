@@ -38,6 +38,7 @@ import boardHtml from "./ui/board.html";
 // @ts-ignore — bundled as text by wrangler rules.
 import authoringHtml from "./ui/authoring.html";
 import { INSTRUCTION_DIFF_SCRIPT } from "./lib/instruction-diff.ts";
+import { ROSTER_CSV_SCRIPT } from "./lib/roster-csv.ts";
 // @ts-ignore — bundled as text by wrangler rules.
 import manageHtml from "./ui/manage.html";
 // @ts-ignore — bundled as text by wrangler rules.
@@ -67,7 +68,9 @@ app.get("/", (c) => c.redirect("/console", 302));
 // Pages are public; every API call they make carries the instructor's Bearer
 // issuer token and is scope-checked by the Service for reads and writes.
 // Pages remain reachable when Service configuration is unavailable.
-app.get("/console", () => page(consoleHtml));
+// The roster CSV kit (parse, preview, per-row results) is shared with the tests; it is inlined in place of its marker.
+const consolePage = (consoleHtml as unknown as string).replace("/*@roster-csv*/", () => ROSTER_CSV_SCRIPT);
+app.get("/console", () => page(consolePage));
 app.get("/start", () => page(startHtml));
 app.get("/issuer", () => page(issuerHtml));
 app.get("/board", () => page(boardHtml));

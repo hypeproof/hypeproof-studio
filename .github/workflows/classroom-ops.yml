@@ -71,6 +71,8 @@ jobs:
         working-directory: e2e
       - run: npm run test:classroom-authoring-g2
         working-directory: e2e
+      - run: npm run test:classroom-roster-csv
+        working-directory: e2e
       - run: npm run test:classroom-authoring-mission
         working-directory: e2e
       - run: npm run test:classroom-feedback-loop
@@ -82,7 +84,7 @@ jobs:
         if: always()
         run: |
           python3 scripts/test-artifact-budget.py
-          python3 scripts/check-artifact-budget.py e2e/test-results/classroom-ops-roster/ e2e/test-results/classroom-ops-selection/ e2e/test-results/classroom-ops-distribution/ e2e/test-results/classroom-ops-lesson-settings/ e2e/test-results/classroom-ops-results/ e2e/test-results/classroom-ops-g1/ e2e/test-results/classroom-ops-g1-wrap/ e2e/test-results/classroom-authoring-g2/ e2e/test-results/classroom-authoring-mission/ e2e/test-results/classroom-feedback-loop/ e2e/test-results/classroom-report/
+          python3 scripts/check-artifact-budget.py e2e/test-results/classroom-ops-roster/ e2e/test-results/classroom-ops-selection/ e2e/test-results/classroom-ops-distribution/ e2e/test-results/classroom-ops-lesson-settings/ e2e/test-results/classroom-ops-results/ e2e/test-results/classroom-ops-g1/ e2e/test-results/classroom-ops-g1-wrap/ e2e/test-results/classroom-authoring-g2/ e2e/test-results/classroom-roster-csv/ e2e/test-results/classroom-authoring-mission/ e2e/test-results/classroom-feedback-loop/ e2e/test-results/classroom-report/
       - uses: actions/upload-artifact@v4
         if: always() && steps.evidence-budget.outcome == 'success'
         with:
@@ -96,6 +98,7 @@ jobs:
             e2e/test-results/classroom-ops-g1/
             e2e/test-results/classroom-ops-g1-wrap/
             e2e/test-results/classroom-authoring-g2/
+            e2e/test-results/classroom-roster-csv/
             e2e/test-results/classroom-authoring-mission/
             e2e/test-results/classroom-feedback-loop/
             e2e/test-results/classroom-report/
