@@ -18,8 +18,8 @@ const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
 import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
-import { folderConsentForFolder, folderConsentProfile, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
-import { folderConsentApplies, canonicalFolder } from './folderConsent';
+import { folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
+import { folderConsentApplies, canonicalFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
 import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED } from './missingTaskFolder';
 import { chatVisible, createFinishNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
@@ -67,6 +67,7 @@ import {
   withCoachSeatLock,
 } from "./sdkCoachHelpers";
 import { describeCommandForApproval, shellApprovalFor } from "./shellPolicy";
+import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllows, taskCommandAllowScopeKey, taskCommandExact } from "./taskCommandAllow";
 import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorld, resolveSiteBase } from "./galleryPublish";
 import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
@@ -601,6 +602,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           else if (msg.type === 'taskSelect') await store.select(msg.id, expected);
           else if (msg.type === 'taskRename') await store.rename(msg.taskId, msg.title);
           this.orchestratorState = undefined;
+          // CGP-AGENT-R-004 — "이번 작업 동안" ends with the task.
+          if (msg.type === 'taskCreate' || msg.type === 'taskSelect') this.endTaskCommandAllows();
           // CGP-ART-R-007 — queued page text belongs to the conversation it was attached in.
           if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingPageAttachment) this.clearPageAttachment();
           // CGP-CHAT-R-011 — so does an attached work-folder file.
@@ -1279,15 +1282,40 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private readonly aiDisclosure = new AiDisclosureGate();
   private activeCohortId: string | null = null;
   /**
-   * epic #431 — shell command signatures the participant chose to always
-   * allow. SESSION-SCOPED and never persisted: a fresh window restores the
-   * full judgment. Destructive commands never reach this set (shellPolicy's
-   * commandSignature returns null for them), so `rm` can never be remembered.
+   * CGP-AGENT-R-004 (REQ-E1) — exact shell commands the participant allowed "이번 작업 동안".
+   * Scoped to one task (cohort, activity, task, folder, folder consent, instructor) and in memory
+   * only: any scope change forgets them, and a reload starts empty. Destructive and chained
+   * commands are never remembered (taskCommandExact returns null), so `rm` can never be remembered.
    */
-  private readonly approvedCommandSignatures = new Set<string>();
+  private readonly taskCommandAllows = new TaskCommandAllows();
+  /** The current task scope for `taskCommandAllows`, and the folder-consent refusal for shell (null = may run). */
+  private taskCommandAllowState(): { key: string; refusal: string | null } {
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? this.cachedProfile?.workspace_root ?? null;
+    const { tag: consent, at: consentAt } = folderConsentState(this.context, this.cachedProfile, this.folderConsentOpts());
+    const key = taskCommandAllowScopeKey({
+      cohort: this.activeCohortId ?? null,
+      activity: activityConnections(this.context)?.scope ?? this.nativeHistoryScope ?? null,
+      task: this.currentTaskStore?.()?.getView().activeTaskId ?? null,
+      folder,
+      consent,
+      consentAt,
+      instructor: this._instructorMode?.isInstructor === true,
+    });
+    // "AI 안 씀" and a seat with no activity keep their own copy; read-only says 명령 실행, undecided says nothing was chosen.
+    const refusal = shellAllowedByFolderConsent(consent) ? null
+      : consent === "none" ? folderNoAiCopy()
+      : consent === "ask" ? folderShellUndecidedNotice()
+      : consent === "refuse" ? (folder ? this.folderWriteRefusalFor(folder) : null) ?? folderShellRefusalNotice()
+      : folderShellRefusalNotice();
+    return { key, refusal };
+  }
+  private lastAllowInstructor?: boolean;
+  /** Ends every task allow now (task create / select, sign-in, instructor flip, the folder-consent command). */
+  // Optional chaining: test harnesses build the host with Object.create, without field initializers.
+  endTaskCommandAllows(): void { this.taskCommandAllows?.clear(); }
   /**
    * Origins the participant pressed "이 사이트는 항상 허용" on. The same discipline as
-   * the shell signatures — session-scoped, never persisted. It is per origin, so a
+   * the shell allow (which is now per task) — session-scoped, never persisted. It is per origin, so a
    * different site is asked again.
    */
   private readonly approvedBrowserOrigins = new Set<string>();
@@ -3211,6 +3239,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.lastProfileFailure = null;
     this.activeCohortId = null;
     this.nativeHistoryScope = null;
+    // CGP-AGENT-R-004 — a sign-in, sign-out or token change ends every "이번 작업 동안" allow.
+    this.endTaskCommandAllows();
     // CR-10 — the token changed: the delete command follows the new identity.
     void this.refreshCrBytesContext();
     // The profile is gone, and with it the publish button (token gate).
@@ -7504,20 +7534,30 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   async resolveActionApproval(req: ActionRequest, onPrompted?: () => void): Promise<boolean> {
     // Tier 1 — shell (epic #431). No longer a hard deny: a cohort that set
     // `sdk_tools.shell` gets arbitrary commands, and THIS modal is the gate.
-    // Three shapes, in order of how much they interrupt:
+    // Four shapes, in order of how much they interrupt:
+    //   folder consent not full → refused before any allow is read (CGP-AGENT-R-004);
     //   destructive → strong confirm every time, never remembered;
-    //   remembered  → silent (the participant already said "항상 허용");
-    //   otherwise   → normal confirm + the option to remember.
+    //   allowed for this task → silent (the participant chose "이번 작업 동안 이 명령 허용" for this exact command);
+    //   otherwise   → normal confirm + the option to allow this exact command for this task.
     if (req.kind === "executeShell") {
       const command = (req.payload as { command?: string } | null | undefined)?.command ?? "";
       // REQ-M4a: the flag is re-derived from the command here too and can only
       // be added, never dropped, so a request without the SDK verdict's flag
       // still gets the strong confirm.
-      const { destructive, signature } = shellApprovalFor(command, req.destructive === true);
+      const { destructive } = shellApprovalFor(command, req.destructive === true);
+      const scope = this.taskCommandAllowState();
+      // Observed before refusing, so a read-only interlude (full → read → full) still ends the allow.
+      this.taskCommandAllows.observe(scope.key);
+      if (scope.refusal) {
+        void vscode.window.showInformationMessage(scope.refusal);
+        return false;
+      }
+      const exact = destructive ? null : taskCommandExact(command);
 
-      if (signature && this.approvedCommandSignatures.has(signature)) {
+      if (exact && this.taskCommandAllows.has(scope.key, exact.key)) {
         return true;
       }
+      const allowGeneration = this.taskCommandAllows.generation;
 
       const pretty = describeCommandForApproval(command);
       if (destructive) {
@@ -7534,20 +7574,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return pick === "실행";
       }
 
-      const REMEMBER = signature ? `항상 허용 (${signature})` : null;
-      const buttons = REMEMBER ? ["실행", REMEMBER] : ["실행"];
+      const buttons = exact ? ["실행", TASK_COMMAND_ALLOW_LABEL] : ["실행"];
       onPrompted?.();
     const pick = await vscode.window.showWarningMessage(
         shellApprovalTitle(this.coachDisplayName()),
         { modal: true, detail: pretty },
         ...buttons,
       );
-      if (pick === REMEMBER && signature) {
-        // Session-scoped only — never persisted. A new window starts the
-        // participant's judgment over, which is the intended lesson; what we
-        // are killing is the fifteen identical modals inside ONE 20:35 block
-        // that train them to stop reading.
-        this.approvedCommandSignatures.add(signature);
+      if (pick === TASK_COMMAND_ALLOW_LABEL && exact) {
+        // This task only, in memory only. What we are killing is the fifteen identical modals
+        // inside ONE 20:35 block that train them to stop reading; another task, folder or window
+        // starts the judgment over. Remembered only if nothing ended the allows while the modal was
+        // open (a task switch, even one that came back) and the scope is still the same.
+        if (this.taskCommandAllows.generation === allowGeneration && this.taskCommandAllowState().key === scope.key) this.taskCommandAllows.remember(scope.key, exact.key);
         return true;
       }
       return pick === "실행";
@@ -7829,6 +7868,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this._instructorMode.reset();
       isInstructor = false;
     }
+    // CGP-AGENT-R-004 — an instructor flip ends every task allow, even with no shell request in between.
+    if (this.lastAllowInstructor !== undefined && this.lastAllowInstructor !== isInstructor) this.endTaskCommandAllows();
+    this.lastAllowInstructor = isInstructor;
     // #1298 — on the auto-read path (postConfig/refresh), act on the whoami result.
     // The setInstructorToken command has its own rejection handler; this covers the background refresh path.
     if (issuerToken) {

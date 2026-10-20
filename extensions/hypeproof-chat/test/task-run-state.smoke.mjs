@@ -12,6 +12,7 @@ import vm from "node:vm";
 import { createRequire } from "node:module";
 
 const { deriveTaskRunState, TASK_RUN_STATE_LABELS, taskRunAccessibleName } = await import("../src/taskRunState.ts");
+const { TaskCommandAllows, taskCommandExact } = await import("../src/taskCommandAllow.ts");
 
 let n = 0;
 const t = (label, fn) => { fn(); n++; console.log(`  ok   ${label}`); };
@@ -69,7 +70,7 @@ const module = { exports: {} };
 vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder });
 const P = module.exports.ChatPanelProvider.prototype;
 const posts = [];
-const host = { approvalWaits: 0, post: async (m) => { posts.push(m); }, approvedCommandSignatures: new Set(), approvedBrowserOrigins: new Set(), coachDisplayName: () => "코치", resolveActionApproval: P.resolveActionApproval };
+const host = { approvalWaits: 0, post: async (m) => { posts.push(m); }, taskCommandAllows: new TaskCommandAllows(), taskCommandAllowState: () => ({ key: "task-1", refusal: null }), approvedBrowserOrigins: new Set(), coachDisplayName: () => "코치", resolveActionApproval: P.resolveActionApproval };
 const waits = () => posts.filter((m) => m.type === "approvalWait").map((m) => m.waiting);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -92,13 +93,13 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
   posts.length = 0;
   const before = modals;
   const allowed = await P.resolveActionApprovalTracked.call(host, { requestId: "r2", kind: "writeFile", description: "", payload: {} });
-  host.approvedCommandSignatures.add("npm test");
-  const remembered = await P.resolveActionApprovalTracked.call(host, { requestId: "r3", kind: "executeShell", description: "", payload: { command: "npm test" } });
+  host.taskCommandAllows.remember("task-1", taskCommandExact("git status").key);
+  const remembered = await P.resolveActionApprovalTracked.call(host, { requestId: "r3", kind: "executeShell", description: "", payload: { command: "git status" } });
   t("host: an auto-allowed or remembered request raises no modal and reports no wait (negative controls)", () => {
     assert.equal(allowed, true);
     assert.equal(modals, before, "a modal was raised");
     assert.deepEqual(waits(), [], "a wait was reported without a modal");
-    assert.equal(typeof remembered, "boolean");
+    assert.equal(remembered, true, "a kind allowed for this task runs without a modal");
   });
 }
 {

@@ -23,6 +23,7 @@ import {
   isInsideFolder,
   narrowForFolder,
   readFolderConsent,
+  readFolderConsentAt,
   servedHome,
   writeFolderConsent,
   type FolderConsentLevel,
@@ -156,6 +157,26 @@ export function folderNoAiRefusal(context: vscode.ExtensionContext, profile: Res
   if (!scope || decision.kind === "skip") return null;
   if (decision.kind === "refuse") return decision.message;
   return decision.kind === "apply" && decision.level === "none" ? folderNoAiCopy() : null;
+}
+
+/**
+ * CGP-AGENT-R-004 — the open folder's consent state in one word, for scoping a task allow:
+ * "skip" (no question applies), the remembered level, or "ask" / "refuse". Never asks.
+ */
+export function folderConsentTag(context: vscode.ExtensionContext, profile: ResolvedProfile | null | undefined, opts: FolderConsentOpts): string {
+  return folderConsentState(context, profile, opts).tag;
+}
+
+/**
+ * The tag plus when the remembered choice was written. The write time is in globalState, which every
+ * window shares, so a change made in another window shows here as a different stamp.
+ */
+export function folderConsentState(context: vscode.ExtensionContext, profile: ResolvedProfile | null | undefined, opts: FolderConsentOpts): { tag: string; at: number | null } {
+  const { scope, decision } = decide(context, profile, opts);
+  if (!scope || decision.kind === "skip") return { tag: "skip", at: null };
+  if (decision.kind !== "apply") return { tag: decision.kind, at: null };
+  const at = scope.activityId ? readFolderConsentAt(context.globalState.get(FOLDER_CONSENT_KEY), scope.activityId, scope.folder) : undefined;
+  return { tag: decision.level, at: at ?? null };
 }
 
 /** "이 폴더의 AI 권한 바꾸기": change the remembered choice for the open folder. */

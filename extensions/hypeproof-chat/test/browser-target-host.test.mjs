@@ -148,7 +148,7 @@ const mod = { exports: {} };
 vm.runInNewContext(source, { module: mod, exports: mod.exports, require: (id) => (id === 'vscode' ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder });
 const P = mod.exports.ChatPanelProvider.prototype;
 const WORK = '/Users/kid/work';
-const host = { approvedCommandSignatures: new Set(), approvedBrowserOrigins: new Set(), coachDisplayName: () => '코치', sitePublisher: () => ({ allowed: () => false }), resolveCoachCwd: () => WORK };
+const host = { approvedBrowserOrigins: new Set(), coachDisplayName: () => '코치', sitePublisher: () => ({ allowed: () => false }), resolveCoachCwd: () => WORK };
 const ask = async (url) => {
   modals.length = 0;
   const approved = await P.resolveActionApproval.call(host, { requestId: 'r', kind: 'openBrowser', description: `브라우저 열기: ${url}`, payload: { url } });

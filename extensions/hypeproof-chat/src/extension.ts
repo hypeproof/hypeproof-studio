@@ -291,6 +291,8 @@ export async function activate(context: vscode.ExtensionContext) {
   // REQ-STUDIO-FOLDER-CONSENT — the one place a remembered folder choice is changed.
   context.subscriptions.push(vscode.commands.registerCommand(FOLDER_CONSENT_COMMAND, async () => {
     await changeFolderConsent(context, await provider.ensureProfile(), { servedRoot: provider.servedClassRoot, instructor: provider.isInstructor === true });
+    // CGP-AGENT-R-004 — a consent change ends every "이번 작업 동안" shell allow.
+    provider.endTaskCommandAllows();
   }));
   // CGP-KNOW-R-015 — "이 파일에 대해 묻기" on an explorer file: show the chat, then attach through the
   // file-attach path (the host refuses anything outside the work folder) and focus the composer.

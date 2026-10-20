@@ -193,6 +193,21 @@ export const folderWriteAllowed = (level: FolderConsentLevel | undefined): boole
 export const folderReadOnlyNotice = (): string =>
   denialCopy({ source: "folder", feature: "파일 저장", next: "답은 화면에서 볼 수 있어요. 저장하려면 ‘이 폴더의 AI 권한 바꾸기’에서 다시 골라 주세요" });
 
+/** CGP-AGENT-R-004 — the one line a learner sees when a command did not run because of the folder choice. */
+export const folderShellRefusalNotice = (): string =>
+  denialCopy({ source: "folder", feature: "명령 실행", next: "명령을 실행하게 하려면 ‘이 폴더의 AI 권한 바꾸기’에서 다시 골라 주세요" });
+
+/** The same, when nothing was chosen for the folder yet: it never says the learner chose. */
+export const folderShellUndecidedNotice = (): string =>
+  "이 폴더에서 AI가 할 수 있는 일을 아직 고르지 않아서 명령을 실행하지 않았어요. ‘이 폴더의 AI 권한 바꾸기’에서 고른 뒤 다시 해 주세요.";
+
+/** When the remembered choice for this activity and folder was written, or undefined. */
+export function readFolderConsentAt(store: unknown, activityId: string, folder: string): number | undefined {
+  if (readFolderConsent(store, activityId, folder) === undefined) return undefined;
+  const at = ((store as Record<string, Record<string, { at?: unknown }>>)[activityId][folder]).at;
+  return typeof at === "number" && Number.isFinite(at) ? at : undefined;
+}
+
 /** The learner-facing refusal for a turn in a folder where the learner chose "AI 안 씀". */
 export const folderNoAiCopy = (): string => denialCopy({ source: "folder", feature: "AI" });
 
