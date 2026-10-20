@@ -124,7 +124,8 @@ export function writePathEntries(
   // One line per file: two spellings that resolve to the same place (`a`, `./a`, a link to it) are listed once.
   const out: WritePathEntry[] = [];
   for (const t of targets) {
-    const abs = root && !path.isAbsolute(t.path) ? path.resolve(root, t.path) : path.resolve(t.path);
+    // Joined as text, not path.resolve: `..` must be applied after the links before it (resolvePathThroughLinks).
+    const abs = path.isAbsolute(t.path) ? t.path : `${root ?? process.cwd()}${path.sep}${t.path}`;
     const key = canonicalWriteTarget(abs, realpath);
     if (out.some((e) => e.key === key)) continue;
     const shown = workFolderPathDisplay(key, root);
@@ -173,4 +174,16 @@ export const WRITE_SCOPE_CHANGED_MESSAGE = "승인한 파일 목록에 없는 �
 /** True when every path the call would write now is one the approval listed. */
 export function writeScopeCovered(approved: readonly string[], now: readonly string[]): boolean {
   return now.length > 0 && now.every((k) => approved.includes(k));
+}
+
+/**
+ * The input with its one path key replaced by the resolved path the approval covered. Only when the call names
+ * exactly one path (every SDK write tool today); anything else is returned unchanged.
+ */
+export function withResolvedWritePath(input: unknown, keys: readonly string[]): unknown {
+  if (!input || typeof input !== "object" || keys.length !== 1) return input;
+  const rec = input as Record<string, unknown>;
+  const named = PATH_KEYS.filter((k) => typeof rec[k] === "string" && (rec[k] as string).trim());
+  if (named.length !== 1) return input;
+  return rec[named[0]] === keys[0] ? input : { ...rec, [named[0]]: keys[0] };
 }

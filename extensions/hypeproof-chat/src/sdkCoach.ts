@@ -19,7 +19,7 @@ import { sdkPromptWithImages } from "./visionInput.ts";
 import { requireTurnTools, toolsForTurn, turnToolMode, turnToolsAvailability, userTextForTurn, type TurnToolMode } from './turnTools';
 import { SdkWebCitations } from './sdkWebCitations';
 import { canonicalizeExistingPath } from "./workspaceRouting.ts";
-import { isWriteToolName, WRITE_SCOPE_CHANGED_MESSAGE, writeScopeCovered, writeScopeKeys } from "./writeApprovalPaths.ts";
+import { isWriteToolName, withResolvedWritePath, WRITE_SCOPE_CHANGED_MESSAGE, writeScopeCovered, writeScopeKeys } from "./writeApprovalPaths.ts";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
@@ -834,6 +834,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         console.warn(`[coach] write refused after approval: ${name} no longer writes the approved path`);
         return { behavior: "deny" as const, message: WRITE_SCOPE_CHANGED_MESSAGE };
       }
+      // The CLI writes the resolved path the gate judged, not the spelling it was given: no link or `..` in the
+      // spelling can be read differently by the CLI than by the gate (CGP-AGENT-R-005 verify 2 F1).
+      if (ok && writeScope) input = withResolvedWritePath(input, writeScope) as typeof input;
       return ok
         ? { behavior: "allow" as const, updatedInput: input }
         : { behavior: "deny" as const, message: "사용자가 이 작업을 허용하지 않았어요." };

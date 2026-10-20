@@ -31,7 +31,7 @@ import { BLANK_BROWSER_URL, browserOpenUrl, isLoopbackUrl } from "./browserContr
 import { browserTargetInline, UNKNOWN_HOST_TEXT } from "./browserTargetHost.ts";
 import { writeTargetsOf } from "./writeApprovalPaths.ts";
 import { relativeEscapes } from "./workspaceRouting.ts";
-import { linkCommandVerdict } from "./shellLinkPolicy.ts";
+import { linkCommandVerdict, shellUnreadable } from "./shellLinkPolicy.ts";
 import {
   MCP_BROWSER_OPEN,
   MCP_BROWSER_SCREENSHOT,
@@ -3042,13 +3042,15 @@ export function evaluateSdkToolUse(args: {
     // 학생 작업을 날릴 수 있는 것은 강한 확인을 유지하고(「항상 허용」도 안 준다),
     // 나머지는 자동 실행한다. 파일 쓰기는 이미 워크스페이스 containment 가 지키고,
     // 셸의 위험은 그 containment 밖으로 나가는 명령이다 — 그게 정확히 이 목록이다.
-    // CGP-AGENT-R-005 verify F1-B — a link is how a write that looks inside lands outside. A link whose target
-    // is outside the work folder (or cannot be decided) is refused; a link created outside gets the strong confirm.
+    // CGP-AGENT-R-005 verify F1-B / verify 2 F2 — a link is how a write that looks inside lands outside. A plainly
+    // readable `ln` whose target is outside the work folder (or cannot be decided) is refused; any other
+    // link-making command gets the strong confirm. The write gates' resolver is the real defence.
     const link = linkCommandVerdict(command, workspaceRoot, canon);
     if (link?.decision === "deny") {
       return denyVerdict("path_outside_workspace", link.reason, toolName, audience, LINK_OUTSIDE_REASON);
     }
-    if (link?.decision === "ask" || isDestructiveCommand(command)) {
+    // A link-making tool anywhere, or a command this layer cannot read, gets the strong confirm (fail closed).
+    if (link?.decision === "ask" || shellUnreadable(command) || isDestructiveCommand(command)) {
       return { decision: "ask", destructive: true };
     }
     return { decision: "allow" };

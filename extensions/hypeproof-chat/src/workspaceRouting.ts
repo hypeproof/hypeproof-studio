@@ -52,7 +52,9 @@ export interface LinkResolverFs {
   lstat(p: string): { isSymbolicLink(): boolean };
   readlink(p: string): string;
 }
-const NODE_LINK_FS: LinkResolverFs = { realpath: (p) => fs.realpathSync(p), lstat: (p) => fs.lstatSync(p), readlink: (p) => fs.readlinkSync(p) };
+// realpath.native: the on-disk case on a case-insensitive volume, as `canonicalFolder` (#2065) spells folders, so
+// the write modal and the SDK gate agree on `~/WS` vs `~/ws` (CGP-AGENT-R-005 verify 2 F5).
+const NODE_LINK_FS: LinkResolverFs = { realpath: (p) => fs.realpathSync.native(p), lstat: (p) => fs.lstatSync(p), readlink: (p) => fs.readlinkSync(p) };
 /** Links followed before giving up (the kernel's own limit on macOS and Linux is 32/40). */
 const MAX_LINK_HOPS = 40;
 
@@ -61,44 +63,54 @@ const isMissing = (e: unknown) => {
   const code = (e as NodeJS.ErrnoException | undefined)?.code;
   return code === "ENOENT" || code === "ENOTDIR";
 };
+const components = (p: string): string[] => p.split(/[\\/]+/).filter(Boolean);
 
 /**
- * Where a write to `p` would really land (CGP-AGENT-R-005 verify F1). Segment by segment: an existing entry is
- * followed with lstat, and a symlink is followed with readlink EVEN WHEN ITS TARGET DOES NOT EXIST — a dangling
- * link at `<ws>/page.html` pointing outside makes `fs.writeFile` create the file outside, so the path must be
- * judged by the link's target, not by the link's own name. Only a segment that truly does not exist (lstat ENOENT)
- * ends the walk; the rest is re-appended. Null when it cannot be decided (a link loop, an unreadable link): callers
- * refuse rather than guess.
+ * Where a write to `p` would really land (CGP-AGENT-R-005 verify F1, verify 2 F1). Walked the way the kernel walks
+ * it, component by component from a RESOLVED prefix, never as text:
+ *   - `.` is skipped; `..` goes to the parent of the resolved prefix (after the links before it were followed, so
+ *     `here/../x` with `here -> .` is the parent of the folder, not the folder);
+ *   - an existing entry is lstat-ed; a symlink — dangling or not — has its target's components spliced in front
+ *     of the remaining ones and the walk continues from the root (absolute target) or the link's own folder;
+ *   - a component that does not exist ends the walk and the rest is appended, unless a `..` follows it (the kernel
+ *     would fail there; it is not decided here);
+ *   - more than MAX_LINK_HOPS links (a loop), or a link that cannot be read: null, and callers refuse.
+ * A relative `p` is taken against the process's working directory without collapsing `..` first.
  */
 export function resolvePathThroughLinks(p: string, io: LinkResolverFs = NODE_LINK_FS): string | null {
-  let pending = path.resolve(p);
-  for (let hops = 0; hops <= MAX_LINK_HOPS; ) {
-    const { root } = path.parse(pending);
-    const segments = pending.slice(root.length).split(/[\\/]+/).filter(Boolean);
-    let cur: string;
-    try { cur = io.realpath(root); } catch { cur = root; }
-    let followed = false;
-    for (let i = 0; i < segments.length; i++) {
-      const next = path.join(cur, segments[i]);
-      let st: { isSymbolicLink(): boolean };
-      try { st = io.lstat(next); } catch (e) {
-        if (!isMissing(e)) return null;
-        return upperDrive(path.join(next, ...segments.slice(i + 1)));
-      }
-      if (st.isSymbolicLink()) {
-        let target: string;
-        try { target = io.readlink(next); } catch { return null; }
-        pending = path.resolve(cur, target, ...segments.slice(i + 1));
-        hops += 1;
-        followed = true;
-        break;
-      }
-      // Not a link: its real spelling (on-disk case where realpath reports it).
-      try { cur = io.realpath(next); } catch { cur = next; }
+  const start = path.isAbsolute(p) ? p : `${process.cwd()}${path.sep}${p}`;
+  const realRoot = (r: string) => { try { return io.realpath(r); } catch { return r; } };
+  let cur = realRoot(path.parse(start).root);
+  const queue = components(start.slice(path.parse(start).root.length));
+  let hops = 0;
+  while (queue.length > 0) {
+    const c = queue.shift() as string;
+    if (c === ".") continue;
+    if (c === "..") { cur = path.dirname(cur); continue; }
+    const next = path.join(cur, c);
+    let st: { isSymbolicLink(): boolean };
+    try { st = io.lstat(next); } catch (e) {
+      if (!isMissing(e)) return null;
+      if (queue.includes("..")) return null;
+      return upperDrive(path.join(next, ...queue.filter((q) => q !== ".")));
     }
-    if (!followed) return upperDrive(cur);
+    if (st.isSymbolicLink()) {
+      if (++hops > MAX_LINK_HOPS) return null;
+      let target: string;
+      try { target = io.readlink(next); } catch { return null; }
+      if (path.isAbsolute(target)) {
+        const root = path.parse(target).root;
+        cur = realRoot(root);
+        queue.unshift(...components(target.slice(root.length)));
+      } else {
+        queue.unshift(...components(target)); // relative to the link's folder, which is `cur`
+      }
+      continue;
+    }
+    // Not a link: its real spelling (on-disk case where realpath reports it).
+    try { cur = io.realpath(next); } catch { cur = next; }
   }
-  return null;
+  return upperDrive(cur);
 }
 
 /** A spelling no work folder can contain, for a path the resolver could not decide: every containment check fails. */

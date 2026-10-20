@@ -1,17 +1,26 @@
-// CGP-AGENT-R-005 verify F1-B / F2 — `ln` in the coach's shell. Pure: the caller injects the canonicalizer.
+// CGP-AGENT-R-005 verify F1-B / F2, verify 2 F2 — link-making commands in the coach's shell. Pure: the caller
+// injects the canonicalizer.
 //
-// A link is how a write that looks inside lands outside: `ln -s ~/Library/LaunchAgents/x.plist page.html`, then
-// `Write page.html`. The write gates follow links (workspaceRouting.resolvePathThroughLinks), and this closes the
-// other half: the shell must not plant such a link without a decision.
+// A link is how a write that looks inside lands outside. The real defence is the write gates' resolver
+// (workspaceRouting.resolvePathThroughLinks), which follows every link the way the kernel does. This policy only
+// keeps the coach's own shell from planting or swapping links without a decision, and it FAILS CLOSED rather
+// than trying to parse every shell spelling:
 //
-//   deny — a link TARGET resolves outside the work folder, or cannot be decided (`$VAR`, `~user`, a glob, a
-//          command substitution, an `ln` after `cd`/`pushd` with a relative path, a missing operand);
-//   ask  — the target is inside but the LINK itself would be created outside (destructive: strong confirm, never
-//          remembered); also any `ln` mention the parser cannot read (e.g. inside `sh -c '…'`);
-//   null — no `ln` in the command, or every link and target stays inside: the shell tier decides as before.
+//   ask (strong confirm, never remembered) — the command mentions a link-making tool ANYWHERE, read loosely
+//          with quotes and backslashes removed (`\ln`, `l''n`, `$(which ln)`, `if …; then ln …`): ln, link,
+//          cp -s/-R/-r/-a, rsync -l/-a, tar x, unzip and other extractors, git clone/checkout/pull/…,
+//          python/node/perl/ruby/… -c/-e code that names a link call. Also any command this module cannot
+//          read (`shellUnreadable`);
+//   deny — a plainly readable `ln` whose TARGET resolves outside the work folder or cannot be decided (`$VAR`,
+//          `~user`, a glob, a substitution, a backslash or an inner quote in an operand, a relative path after
+//          `cd`, a missing operand);
+//   null — no link-making tool: the shell tier decides as before.
 //
 // A symbolic link's relative target is resolved against the LINK's directory (that is what the kernel does);
 // a hard link's against the shell's working directory (the work folder).
+//
+// The readability check is a minimal local copy. `src/shellWords.ts` on fix/sec-destructive-command-bypass is
+// the full tokeniser; once it lands, `shellUnreadable` and `words` should be consolidated onto it.
 
 import * as path from "node:path";
 import { relativeEscapes } from "./workspaceRouting.ts";
@@ -22,18 +31,59 @@ const SEGMENT_SPLIT = /&&|\|\||[;&|\n]/;
 const UNCLEAR = /[$`*?[\]{}]|^~[^/]/;
 const LN_WORD = /(^|[\s;&|()`'"])(?:\S*\/)?ln(?=\s|$|['"])/;
 
-function words(segment: string): string[] | null {
-  // Quoted operands are taken as written (a `$` or backtick inside double quotes is then judged unclear);
-  // an unbalanced quote or a backslash escape is not readable.
-  const out: string[] = [];
-  const re = /'([^']*)'|"([^"\\]*)"|([^\s'"]+)/g;
-  let m: RegExpExecArray | null;
-  let consumed = "";
-  while ((m = re.exec(segment))) {
-    out.push(m[1] ?? m[2] ?? m[3]);
-    consumed += m[0];
+// Read on the command with every quote and backslash removed, so `\ln`, `l''n` and `"l"n` all read `ln`.
+const B = "(?<![\\w.-])";
+const E = "(?![\\w.-])";
+const REST = "[^;&|\\n]*";
+const LINK_TOOLS: readonly RegExp[] = [
+  new RegExp(`${B}(?:ln|link|gln)${E}`),
+  new RegExp(`${B}g?cp${E}${REST}\\s-(?:-(?:symbolic-link|recursive|archive|no-dereference|link)|[A-Za-z]*[sRraPl])`),
+  new RegExp(`${B}rsync${E}${REST}\\s-(?:-(?:links|archive|copy-links|hard-links)|[A-Za-z]*[laH])`),
+  new RegExp(`${B}g?(?:bsd)?tar${E}${REST}(?:\\s-?[A-Za-z]*x[A-Za-z]*(?=\\s|$)|--extract|--get)`),
+  new RegExp(`${B}(?:unzip|7z|7za|ditto|cpio|pax|unar|gunzip|bunzip2)${E}`),
+  new RegExp(`${B}git${E}${REST}\\s(?:clone|checkout|pull|switch|submodule|merge|rebase|apply|am|restore|worktree|stash|reset|cherry-pick)${E}`),
+  // Inline code (-c/-e) only when the code names a link call: `curl … | python3 -c "print(…)"` is a read the
+  // shell tier auto-runs by decision (REQ-M4), and stays that way. A link call spelled to hide the name is a
+  // stated limit (REQ-E1).
+  new RegExp(`${B}(?:python[0-9.]*|node|nodejs|perl|ruby|deno|bun|php|osascript|swift|lua)${E}${REST}\\s-[A-Za-z]*[ceEp][\\s\\S]*(?:symlink|link\\s*\\(|linkSync|hardlink|os\\.link|ln\\s)`, "i"),
+];
+
+/** Does the command mention a link-making tool anywhere, however it is quoted or escaped? */
+export function mentionsLinkTool(command: string): boolean {
+  const loose = command.replace(/['"\\]/g, "");
+  return LINK_TOOLS.some((re) => re.test(loose));
+}
+
+/**
+ * A command this module cannot read: an unbalanced quote, a trailing backslash, an unterminated `$(` or
+ * backtick. The shell tier gives it the strong confirm. (Minimal; see the shellWords.ts note above.)
+ */
+export function shellUnreadable(command: string): boolean {
+  let single = false, double = false, backtick = 0, subst = 0;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (single) { if (c === "'") single = false; continue; }
+    if (c === "\\") { if (i === command.length - 1) return true; i++; continue; }
+    if (double) { if (c === '"') double = false; else if (c === "$" && command[i + 1] === "(") { subst++; i++; } else if (c === "`") backtick ^= 1; continue; }
+    if (c === "'") single = true;
+    else if (c === '"') double = true;
+    else if (c === "`") backtick ^= 1;
+    else if (c === "$" && command[i + 1] === "(") { subst++; i++; }
+    else if (c === ")" && subst > 0) subst--;
   }
-  return consumed.replace(/\s/g, "").length === segment.replace(/\s/g, "").length ? out : null;
+  return single || double || backtick !== 0 || subst !== 0;
+}
+
+function words(segment: string): string[] | null {
+  // Only whole-word quoting is read ('a b', "a b"); a backslash, or a quote that touches other characters
+  // (`.''./x`, `l''n`), is a spelling this reader does not model: null, and an `ln` there is refused.
+  const plain = segment.replace(/(^|\s)(['"])[^'"\\]*\2(?=\s|$)/g, "$1Q");
+  if (/['"\\]/.test(plain)) return null;
+  const out: string[] = [];
+  const re = /'([^']*)'|"([^"]*)"|(\S+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(segment))) out.push(m[1] ?? m[2] ?? m[3]);
+  return out;
 }
 
 const inside = (root: string, p: string) => {
@@ -51,8 +101,9 @@ export function linkCommandVerdict(
   canonicalize: (p: string) => string,
   home?: string,
 ): LinkVerdict {
-  if (!LN_WORD.test(command)) return null;
-  if (!workspaceRoot) return { decision: "deny", reason: "ln with no work folder to judge it against" };
+  const linkTool = mentionsLinkTool(command);
+  if (!linkTool && !LN_WORD.test(command)) return null;
+  if (!workspaceRoot) return { decision: "ask" };
   const root = canonicalize(workspaceRoot);
   let cwdMoved = false;
   let sawLn = false;
@@ -64,9 +115,14 @@ export function linkCommandVerdict(
   for (const raw of command.split(SEGMENT_SPLIT)) {
     const seg = raw.trim().replace(/^\(+/, "");
     const ws = words(seg);
-    if (!ws || ws.length === 0) continue;
+    if (!ws) {
+      // An `ln` in a spelling this reader does not model is refused, not guessed.
+      if (mentionsLinkTool(seg) && /(?<![\w.-])g?ln(?![\w.-])/.test(seg.replace(/['"\\]/g, ""))) return { decision: "deny", reason: `ln in a spelling Studio cannot read: ${seg}` };
+      continue;
+    }
+    if (ws.length === 0) continue;
     let i = 0;
-    while (i < ws.length && /^(sudo|command|exec|nohup|time|env|xargs|builtin)$/.test(ws[i].replace(/^.*\//, ""))) i++;
+    while (i < ws.length && /^(sudo|command|exec|nohup|time|env|xargs|builtin|then|do|else|if|while|until|!|\{|\()$/.test(ws[i].replace(/^.*\//, ""))) i++;
     const cmd = (ws[i] ?? "").replace(/^.*\//, "");
     if (cmd === "cd" || cmd === "pushd" || cmd === "popd") { cwdMoved = true; continue; }
     if (cmd !== "ln") continue;
@@ -114,6 +170,7 @@ export function linkCommandVerdict(
       }
     }
   }
-  if (!sawLn) return { decision: "ask" };
-  return ask ? { decision: "ask" } : null;
+  // Every link-making command gets at least the strong confirm, whatever the reader made of it.
+  void sawLn; void ask;
+  return { decision: "ask" };
 }

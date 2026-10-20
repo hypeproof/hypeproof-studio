@@ -366,7 +366,7 @@ test('F1-C: a dangling link swapped in while the modal is open is refused (SDK a
   fs.rmSync(target, { force: true });
 });
 
-test('ln policy: a link to outside is refused, a link created outside asks, an inside link runs as before', () => {
+test('ln policy: a link to outside is refused, a link created outside asks, an inside link asks too', () => {
   const v = (cmd) => evaluateSdkToolUse({ toolName: 'Bash', input: { command: cmd }, permittedTools: ['Bash'], workspaceRoot: WS, canonicalize: canonicalizeExistingPath });
   for (const cmd of [
     'ln -s ~/Library/LaunchAgents/x.plist page.html', 'ln -sf /etc/hosts a', 'ln -s ../out link', 'ln -s ../elsewhere/x',
@@ -380,11 +380,12 @@ test('ln policy: a link to outside is refused, a link created outside asks, an i
     const r = v(cmd);
     assert.deepEqual([r.decision, r.destructive], ['ask', true], cmd);
   }
-  // positive controls: inside links and look-alikes run without a modal, as before
-  for (const cmd of ['ln -s style.css alias.css', 'ln -s src/app.js app.js', 'ln -s ../app.js src/alias.js', 'ls -ln', 'echo kiln', 'ls']) {
-    assert.equal(v(cmd).decision, 'allow', cmd);
+  // verify 2 F2: an inside link is still a link-making command, so it asks (fail closed); look-alikes run as before
+  for (const cmd of ['ln -s style.css alias.css', 'ln -s src/app.js app.js', 'ln -s ../app.js src/alias.js']) {
+    assert.deepEqual([v(cmd).decision, v(cmd).destructive], ['ask', true], cmd);
   }
-  assert.equal(linkCommandVerdict('ln -s a b', undefined, (p) => p).decision, 'deny', 'no work folder → refuse');
+  for (const cmd of ['ls -ln', 'echo kiln', 'ls']) assert.equal(v(cmd).decision, 'allow', cmd);
+  assert.equal(linkCommandVerdict('ln -s a b', undefined, (p) => p).decision, 'ask', 'no work folder → strong confirm, never auto');
 });
 
 test('F3: a name that starts with .. is inside; a real .. segment is not', () => {
@@ -422,4 +423,120 @@ test('F4: the refusal names the place once; a solo seat is not told to ask a tea
     const norm = (s) => String(s).split(scratch).join('<SCRATCH>');
     fs.appendFileSync(out, '\n' + captured.slice(-3).map((c) => [`=== ${c.label} → approved=${c.approved}`, ...c.modals.map((m) => `--- notice\n${norm(m.message)}`)].join('\n')).join('\n\n') + '\n');
   }
+});
+
+// ── Verify round 2: `..` after a link, the fail-closed shell floor, folder-name case ──
+const writeVia = (p) => { fs.writeFileSync(p, 'kernel'); };
+/** Where the kernel actually put a write to `p`: the resolver must say the same. */
+function kernelLanding(p, candidates) {
+  for (const c of candidates) fs.rmSync(c, { force: true });
+  writeVia(p);
+  const hit = candidates.filter((c) => fs.existsSync(c) && !fs.lstatSync(c).isSymbolicLink());
+  for (const c of hit) fs.rmSync(c, { force: true });
+  return hit;
+}
+
+test('verify 2 F1: `ln -s . here` + `ln -s here/../out/x page.html` is judged where the kernel writes (outside)', async () => {
+  const base = path.dirname(WS);
+  const here = path.join(WS, 'here'), page = path.join(WS, 'page2.html');
+  for (const p of [here, page]) fs.rmSync(p, { force: true });
+  fs.symlinkSync('.', here, LINK);
+  fs.symlinkSync('here/../elsewhere/exploit.html', page, LINK);
+  const inside = path.join(WS, 'elsewhere', 'exploit.html'), outside = path.join(OUT, 'exploit.html');
+  assert.deepEqual(kernelLanding(page, [inside, outside]), [outside], 'ground truth: the kernel writes outside');
+  assert.equal(resolvePathThroughLinks(page), outside, 'the resolver agrees with the kernel');
+  assert.deepEqual(writePathEntries([{ path: page }], WS).map((e) => [e.display, e.outside]), [['작업 폴더 밖 · exploit.html', true]]);
+  assert.equal(evaluateSdkToolUse({ toolName: 'Write', input: { file_path: page, content: 'x' }, permittedTools: ['Write'], workspaceRoot: WS, canonicalize: canonicalizeExistingPath }).decision, 'deny');
+  const { workspaceTools } = await import('../src/localRuntime/tools.ts');
+  const tools = workspaceTools({ cwd: WS, profile: { profile_id: 'homepage-practice-s1', game: { template_tier: 'website' }, sdk_tools: { read: true, write: true } }, signal: new AbortController().signal, approve: async () => true });
+  await assert.rejects(tools.call('Write', { file_path: 'page2.html', content: 'x' }), /작업 폴더 밖/);
+  assert.ok(!fs.existsSync(outside));
+  // the shell pair that planted them is not auto-allowed
+  const v = evaluateSdkToolUse({ toolName: 'Bash', input: { command: 'ln -s . here && ln -s here/../elsewhere/exploit.html page2.html' }, permittedTools: ['Bash'], workspaceRoot: WS, canonicalize: canonicalizeExistingPath });
+  assert.notEqual(v.decision, 'allow', JSON.stringify(v));
+  for (const p of [here, page]) fs.rmSync(p, { force: true });
+});
+
+test('verify 2 F1: an up-link deeper in the tree, absolute and relative targets, and a direct path through it', () => {
+  const deep = path.join(WS, 'a', 'b', 'c');
+  fs.mkdirSync(deep, { recursive: true });
+  const up = path.join(deep, 'up');
+  fs.rmSync(up, { force: true });
+  fs.symlinkSync('../..', up, LINK); // <ws>/a/b/c/up -> <ws>/a
+  const cases = [
+    ['relative target through the up-link', 'a/b/c/up/../../lex.txt'],
+    ['absolute target through the up-link', path.join(WS, 'a/b/c/up/../../lex2.txt')],
+  ];
+  for (const [label, target] of cases) {
+    const link = path.join(WS, `lex-${label.length}`);
+    fs.rmSync(link, { force: true });
+    fs.symlinkSync(target, link, LINK);
+    const name = path.basename(target);
+    const where = [path.join(WS, 'a', 'b', name), path.join(WS, name), path.join(path.dirname(WS), name)];
+    const landed = kernelLanding(link, where);
+    assert.equal(landed.length, 1, label);
+    assert.equal(resolvePathThroughLinks(link), landed[0], `${label}: resolver = kernel`);
+    fs.rmSync(link, { force: true });
+  }
+  // a direct write spelled through the up-link: the kernel applies `..` after following `up`
+  const direct = path.join(WS, 'a/b/c/up/../../direct.txt');
+  const landed = kernelLanding(direct, [path.join(WS, 'a', 'b', 'direct.txt'), path.join(path.dirname(WS), 'direct.txt'), path.join(WS, 'direct.txt')]);
+  assert.equal(resolvePathThroughLinks(direct), landed[0]);
+  assert.equal(writePathEntries([{ path: direct }], WS)[0].outside, !landed[0].startsWith(WS + path.sep));
+  // positive control: a plain `..` with no link before it stays where the text says
+  assert.equal(resolvePathThroughLinks(path.join(WS, 'a/b/../x.txt')), path.join(WS, 'a', 'x.txt'));
+  fs.rmSync(up, { force: true });
+});
+
+test('verify 2 F1: the SDK hands the CLI the resolved path it judged', async () => {
+  const sub = path.join(WS, 'inner');
+  fs.mkdirSync(sub, { recursive: true });
+  const alias = path.join(WS, 'alias-dir');
+  fs.rmSync(alias, { force: true });
+  fs.symlinkSync(sub, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  const r = await sdkTurn([['Write', { file_path: path.join(alias, 'p.html'), content: 'x' }]]);
+  assert.equal(r.decisions[0].behavior, 'allow');
+  assert.equal(r.decisions[0].updatedInput.file_path, path.join(sub, 'p.html'), 'the CLI writes the resolved spelling');
+  const plain = await sdkTurn([['Write', { file_path: path.join(WS, 'plain.html'), content: 'x' }]]);
+  assert.equal(plain.decisions[0].updatedInput.file_path, path.join(WS, 'plain.html'), 'unchanged when nothing resolves differently');
+  fs.rmSync(alias, { force: true });
+});
+
+test('verify 2 F2: ln bypass spellings never auto-run; other link makers and unreadable commands get the strong confirm', () => {
+  const v = (cmd) => evaluateSdkToolUse({ toolName: 'Bash', input: { command: cmd }, permittedTools: ['Bash'], workspaceRoot: WS, canonicalize: canonicalizeExistingPath });
+  const bypasses = [
+    '\\ln -s /etc/hosts a1', "l''n -s /etc/hosts a2", 'l""n -s /etc/hosts a3', '$(which ln) -s /etc/hosts a4', 'ln -s \\/etc/hosts a5',
+    "ln -s .''./out/secret a6", 'ln -s .\\./out/secret a7', 'ln -s f.txt ok; if true; then ln -s /etc/hosts a8; fi',
+    'ln -s f.txt ok && ! ln -s /etc/hosts a9', 'ln -s f.txt ok; for i in 1; do ln -s /etc/hosts a10; done', 'ln -s f.txt ok; { ln -s /etc/hosts a11; }',
+    '`which ln` -s /etc/hosts a12', 'X=1 ln -s /etc/hosts a13', 'nice ln -s /etc/hosts a14',
+  ];
+  for (const cmd of bypasses) {
+    const r = v(cmd);
+    assert.ok(r.decision === 'deny' || (r.decision === 'ask' && r.destructive === true), `${cmd}: ${JSON.stringify(r)}`);
+  }
+  for (const cmd of ['\\ln -s /etc/hosts a1', "l''n -s /etc/hosts a2", 'ln -s \\/etc/hosts a5', "ln -s .''./out/secret a6", 'ln -s f.txt ok; if true; then ln -s /etc/hosts a8; fi']) {
+    assert.equal(v(cmd).decision, 'deny', cmd);
+  }
+  const makers = [
+    'link /etc/hosts hl', 'cp -s /etc/hosts x', 'cp -R ../tpl .', 'cp -a src dst', 'rsync -a ../tpl/ .', 'rsync --links a b', 'tar xf t.tar', 'tar -xzf t.tgz',
+    'bsdtar -xf t.tar', 'unzip t.zip', 'git clone https://example.com/r.git', 'git checkout main', 'python3 -c "import os; os.symlink(1,2)"',
+    'node -e "require(\'fs\').symlinkSync(1,2)"', 'perl -e "symlink 1,2"', "echo 'unterminated",
+  ];
+  for (const cmd of makers) {
+    const r = v(cmd);
+    assert.deepEqual([r.decision, r.destructive], ['ask', true], cmd);
+  }
+  // positive controls: everyday commands without a link maker still auto-run
+  for (const cmd of ['ls -ln', 'cp a.txt b.txt', 'cp -i a b', 'git status', 'git log --oneline', 'node app.js', 'python3 app.py', 'curl -sL "https://x.com" | python3 -c "import sys; print(sys.stdin.read())"', 'node -e "console.log(1)"', 'tar -czf out.tgz site', 'echo "it is fine"', 'cat index.html | grep -n title']) {
+    assert.equal(v(cmd).decision, 'allow', cmd);
+  }
+});
+
+test('verify 2 F5: the modal and the SDK gate agree on the work folder name case', () => {
+  const upper = path.join(path.dirname(WS), path.basename(WS).toUpperCase());
+  if (!fs.existsSync(upper)) return; // case-sensitive volume: the two spellings are different folders
+  const file = path.join(upper, 'case.txt');
+  const modal = writePathEntries([{ path: file }], WS)[0];
+  const sdk = evaluateSdkToolUse({ toolName: 'Write', input: { file_path: file, content: 'x' }, permittedTools: ['Write'], workspaceRoot: WS, canonicalize: canonicalizeExistingPath });
+  assert.deepEqual([modal.outside, sdk.decision], [false, 'ask']);
 });
