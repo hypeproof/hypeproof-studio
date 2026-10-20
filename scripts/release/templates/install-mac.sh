@@ -120,7 +120,9 @@ APP="$PARENT/$APP_NAME"
 plist() { /usr/libexec/PlistBuddy -c "Print $1" "$2/Contents/Info.plist" 2>/dev/null || true; }
 
 # ── Safety checks (nothing is written before these pass) ─────────────────────
-[ ! -L "$PARENT" ] && [ ! -L "$APP" ] || fail "설치 경로가 심볼릭 링크여서 멈췄습니다: $APP"
+if [ -L "$PARENT" ] || [ -L "$APP" ]; then
+  fail "설치 경로가 심볼릭 링크여서 멈췄습니다: $APP"
+fi
 if [ "$LAYOUT" = kit ]; then
   [ ! -L "$STATE" ] || fail "프로필 경로가 심볼릭 링크여서 멈췄습니다: $STATE"
   if [ -e "$PARENT" ] && [ ! -f "$PARENT/$MARKER" ]; then
