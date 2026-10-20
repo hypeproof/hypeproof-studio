@@ -225,8 +225,8 @@ export interface TrialEndCardView {
   primary: string;
   /** The escape: closes the card. The host only counts the press (offer_dismissed end_card, CONV-FUNNEL-R-003). */
   escape: string;
-  /** The catalogue pass whose facts are shown. */
-  productId: string;
+  /** The catalogue pass whose facts are shown. Absent on the minimal card (CONV-ENDCARD-R-005): no catalogue was read. */
+  productId?: string;
   /** Title and facts as one line, for the banner fallback and screen readers. */
   text: string;
   /**

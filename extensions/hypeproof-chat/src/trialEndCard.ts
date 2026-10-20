@@ -24,7 +24,7 @@
  * bought pass, because the Service uses the same code for both. (Studio #1765 matches the same sentences for its notice.)
  */
 import type { ResolvedProfile, TrialEndCardView, TrialEndNotifyView } from "./protocol.ts";
-import { FREE_EXHAUSTED_SERVICE, FREE_EXPIRED_SERVICE, defaultProduct, fetchProducts, formatWon, type PassProduct } from "./passPurchase.ts";
+import { FREE_EXHAUSTED_SERVICE, FREE_EXPIRED_SERVICE, defaultProduct, fetchProducts, formatWon, readCatalogue, type CatalogueRead, type PassProduct } from "./passPurchase.ts";
 
 export type TrialEnding = TrialEndCardView["ending"];
 
@@ -152,21 +152,36 @@ export function notifyOptinView(profile: ProfileFacts | null | undefined, submit
   return consentVersion ? { consentVersion, submitted, ...NOTIFY_OPTIN_COPY } : undefined;
 }
 
-/** The card for this turn ending, or `null` when the turn ends as it does today. */
-export function trialEndCardView(input: { profile: ProfileFacts | null | undefined; err: unknown; products: PassProduct[] | null | undefined; notifySubmitted?: boolean }): TrialEndCardView | null {
+/**
+ * The card for this turn ending, or `null` when the turn ends as it does today.
+ *
+ * CONV-ENDCARD-R-005 — `products: "unreadable"` (the catalogue could not be read, even after one
+ * retry) still ends in a card, the minimal one: the same continuity title and line, no pass fact
+ * (no name, period, price or renewal line, since none was read) and the same Primary, which opens
+ * the purchase screen and reads the list again there. Only a Service that does not sell passes
+ * (`"unsold"`, `null` or an empty list) falls back to the banner, so a newcomer whose free use
+ * ended is never left at an error while passes are on sale.
+ */
+export function trialEndCardView(input: { profile: ProfileFacts | null | undefined; err: unknown; products: CatalogueRead | null | undefined; notifySubmitted?: boolean }): TrialEndCardView | null {
   const { profile, err, products } = input;
   // A bought pass, a classroom or a personal seat never gets a purchase card.
   if (!profile || !endCardAdvertised(profile)) return null;
   const ending = trialEndReason(err, false);
-  if (!ending || !products?.length) return null;
+  if (!ending) return null;
+  const ended = ending === "exhausted" ? TRIAL_END_CARD_COPY.endedExhausted : TRIAL_END_CARD_COPY.endedExpired;
+  const notify = notifyOptinView(profile, !!input.notifySubmitted);
+  if (products === "unreadable") {
+    const title = TRIAL_END_CARD_COPY.title;
+    const facts = [TRIAL_END_CARD_COPY.continuity, ended];
+    return { ending, title, facts, primary: TRIAL_END_CARD_COPY.primary, escape: TRIAL_END_CARD_COPY.escape, text: [title, ...facts].join(" "), ...(notify ? { notify } : {}) };
+  }
+  if (!Array.isArray(products) || !products.length) return null;
   // The pass the Service itself suggests (`recommended`), else its first: the same one the
   // purchase list selects first, so the card never names a pass the list does not lead with.
   const product = defaultProduct(products);
   // Continuity first, then the recommended pass, then the promise, and only last why free use stopped.
   const title = TRIAL_END_CARD_COPY.title;
-  const ended = ending === "exhausted" ? TRIAL_END_CARD_COPY.endedExhausted : TRIAL_END_CARD_COPY.endedExpired;
   const facts = [TRIAL_END_CARD_COPY.continuity, passOfferLine(product), TRIAL_END_CARD_COPY.noRenewal, ended];
-  const notify = notifyOptinView(profile, !!input.notifySubmitted);
   return { ending, title, facts, primary: TRIAL_END_CARD_COPY.primary, escape: TRIAL_END_CARD_COPY.escape, productId: product.id, text: [title, ...facts].join(" "), ...(notify ? { notify } : {}) };
 }
 
@@ -179,4 +194,30 @@ export async function catalogueWithin(proxyUrl: string, timeoutMs = 3000): Promi
       new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); }),
     ]);
   } finally { if (timer) clearTimeout(timer); }
+}
+
+/**
+ * CONV-ENDCARD-R-005 — the end card's catalogue read: bounded like `catalogueWithin`, and retried
+ * once when the list could not be read (a timeout, a network failure, a 5xx or a malformed body).
+ * A Service that answers that it sells nothing (`unsold`) is believed at once and never retried.
+ */
+export async function endCardCatalogue(proxyUrl: string, opts: { timeoutMs?: number; retries?: number; signal?: AbortSignal } = {}): Promise<CatalogueRead> {
+  const { timeoutMs = 3000, retries = 1, signal } = opts;
+  let result: CatalogueRead = "unreadable";
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (signal?.aborted) return "unreadable";
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    // A stopped turn ends the read at once instead of waiting out the timeout.
+    const stop = () => ctrl.abort();
+    signal?.addEventListener("abort", stop, { once: true });
+    try {
+      result = await Promise.race([
+        readCatalogue(proxyUrl, ctrl.signal),
+        new Promise<"unreadable">((resolve) => ctrl.signal.addEventListener("abort", () => resolve("unreadable"), { once: true })),
+      ]);
+    } finally { clearTimeout(timer); signal?.removeEventListener("abort", stop); }
+    if (result !== "unreadable") return result;
+  }
+  return result;
 }

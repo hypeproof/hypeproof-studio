@@ -91,13 +91,32 @@ const EXHAUSTED = new Error('Claude Code returned an error result: API Error: Re
 const EXPIRED = new Error('Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 남아 있습니다.');
 const MID_WORK = new Error('연결이 끊겼습니다. 다시 보내 주세요.');
 
+// CONV-ENDCARD-R-005 — `products` is the catalogue's answer to every read, or a list of answers, one
+// per read in order (the last one repeats): 200, 404 (purchase not configured), 503, 'hang' (never answers)
+// or 'bad' (200 with a body that is not a catalogue).
+function catalogueAnswer(products) {
+  const queue = Array.isArray(products) ? [...products] : null;
+  return () => (queue ? (queue.length > 1 ? queue.shift() : queue[0]) : products);
+}
+function answerCatalogue(res, mode) {
+  if (mode === 'hang') return;
+  const status = mode === 'bad' ? 200 : mode;
+  res.writeHead(status, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(mode === 200 ? catalogue : mode === 'bad' ? { products: 'soon' } : { error: status === 404 ? 'not_found' : 'unavailable' }));
+}
+function closeServer(server) {
+  server.closeAllConnections?.();
+  return new Promise((resolve) => server.close(resolve));
+}
+
 async function present(error, profile, { products = 200 } = {}) {
   const requests = [];
+  const next = catalogueAnswer(products);
   const server = http.createServer((req, res) => {
     requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization ?? null });
-    const ok = req.url === '/v1/purchase/products' && products === 200;
-    res.writeHead(ok ? 200 : 404, { 'content-type': 'application/json' });
-    res.end(JSON.stringify(ok ? catalogue : { error: 'not_found' }));
+    if (req.url === '/v1/purchase/products') return answerCatalogue(res, next());
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not_found' }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const posts = [];
@@ -112,7 +131,7 @@ async function present(error, profile, { products = 200 } = {}) {
     await ChatPanelProvider.prototype.handleSendError.call(self, error, 'stream-1', { profile, proxyUrl: `http://127.0.0.1:${server.address().port}/v1`, token });
     return { posts, requests, secrets, commands: structuredClone(commandCalls) };
   } finally {
-    await new Promise((resolve) => server.close(resolve));
+    await closeServer(server);
   }
 }
 
@@ -162,8 +181,10 @@ test('negative controls: no card mid-work, on a code-issued trial, on a pass, or
   r = await present(EXHAUSTED, { ...openTrial, pass: { request_limit: 200, requests_used: 200 } });
   assert.equal(r.posts[0].trialEndCard, undefined);
   onlyNoticeCatalogueRead(r.requests);
-  // No catalogue: no facts to show, so no card and no made-up price; the turn ends as today.
+  // No catalogue because the Service sells no passes (404: purchase not configured): no facts to show, so no
+  // card and no made-up price; the turn ends as today. CONV-ENDCARD-R-005: this is the only banner fallback.
   r = await present(EXHAUSTED, openTrial, { products: 404 });
+  assert.equal(r.requests.filter((q) => q.url === '/v1/purchase/products').length, 2, 'one card read (not retried) and one notice read');
   // Baseline under the same catalogue outage: REQ-L12 ⑬'s notice drops its pass pointer when nothing is sold.
   // Free start (SPEC iteration 4 §2.4): the open-trial seat is the free allowance, so its notice says 무료,
   // while the code-issued trial keeps its 체험 sentence byte for byte (negative control).
@@ -184,12 +205,13 @@ const FUNNEL_PROBE_ON = { schema: 'hps-trial-funnel/1', events: ['trial_entry', 
 
 async function presentWithFunnel(error, profile, { products = 200, probe = 'on', shows = 1, presses = [], beforePress } = {}) {
   const funnelPosts = [];
+  const nextCatalogue = catalogueAnswer(products);
   const server = http.createServer((req, res) => {
+    if (req.url === '/v1/purchase/products') return answerCatalogue(res, nextCatalogue());
     let raw = '';
     req.on('data', (c) => { raw += c; });
     req.on('end', () => {
       const json = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-      if (req.url === '/v1/purchase/products') return products === 200 ? json(200, catalogue) : json(404, { error: 'not_found' });
       if (req.url === '/v1/trial/events' && req.method === 'GET') return probe === 'on' ? json(200, FUNNEL_PROBE_ON) : json(404, { error: { message: 'not found', type: 'not_found' } });
       if (req.url === '/v1/trial/events' && req.method === 'POST') {
         funnelPosts.push({ authorization: req.headers.authorization ?? null, body: JSON.parse(raw) });
@@ -228,7 +250,7 @@ async function presentWithFunnel(error, profile, { products = 200, probe = 'on',
     const offers = (type) => funnelPosts.filter((p) => p.body.type === type);
     return { posts, funnelPosts, offerViewed: offers('offer_viewed'), offerClicked: offers('offer_clicked'), offerDismissed: offers('offer_dismissed'), commands: structuredClone(commandCalls) };
   } finally {
-    await new Promise((resolve) => server.close(resolve));
+    await closeServer(server);
   }
 }
 
@@ -257,7 +279,7 @@ test('CONV-FUNNEL-R-002 negative controls: no end_card view without a card or wi
   let r = await presentWithFunnel(EXHAUSTED, openTrial, { probe: 'off' });
   assert.ok(r.posts[0].trialEndCard);
   assert.deepEqual(r.funnelPosts, []);
-  // Catalogue unreadable: the turn falls back to the banner and no offer was viewed.
+  // No passes sold (404): the turn falls back to the banner and no offer was viewed.
   r = await presentWithFunnel(EXHAUSTED, openTrial, { products: 404 });
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.offerViewed, []);
@@ -320,7 +342,7 @@ test('CONV-FUNNEL-R-003 negative controls: no card, another seat, or the funnel 
   r = await presentWithFunnel(EXHAUSTED, { ...openTrial, pass: { request_limit: 200, requests_used: 200 } }, { presses });
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual([...r.offerClicked, ...r.offerDismissed], []);
-  // Banner fallback (catalogue unreadable): no card, no offer.
+  // Banner fallback (no passes sold): no card, no offer.
   r = await presentWithFunnel(EXHAUSTED, openTrial, { products: 404, presses });
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual([...r.offerClicked, ...r.offerDismissed], []);
@@ -348,4 +370,107 @@ test('CONV-FUNNEL-R-003: the start page path keeps surface start_page; showPurch
   emitted.length = 0;
   await StartPage.prototype.showPurchase.call(self);
   assert.deepEqual(emitted, []);
+});
+
+// CONV-ENDCARD-R-005 — the free path never dead-ends a newcomer. When the catalogue cannot be read as
+// the seat ends (a timeout, a network failure, a 5xx, a malformed body), Studio reads it once more and,
+// if it still cannot, draws a minimal card: the continuity title and line, the ending, the same Primary
+// and escape, and no pass fact. On base the turn fell back to the error banner.
+const MINIMAL_FACTS = {
+  exhausted: ['만든 파일은 작업 폴더에, 대화는 이 채팅에 그대로 있어요. 이용권이 있으면 이 작업을 이어서 할 수 있어요.', '무료로 쓸 수 있는 AI 요청은 모두 썼어요.'],
+  expired: ['만든 파일은 작업 폴더에, 대화는 이 채팅에 그대로 있어요. 이용권이 있으면 이 작업을 이어서 할 수 있어요.', '무료 사용 시간은 끝났어요.'],
+};
+const PRESSURE = /지금\s*(?:바로|만)|오늘만|까지만|마감|임박|마지막|놓치|서두르|서둘러|한정|할인|특가|남았|남은/;
+const catalogueReads = (requests) => requests.filter((q) => q.url === '/v1/purchase/products');
+
+function assertMinimal(card, ending) {
+  assert.ok(card, 'a card is drawn, not the banner');
+  assert.equal(card.ending, ending);
+  assert.equal(card.title, '만든 작업을 그대로 이어서 할 수 있어요');
+  assert.deepEqual([...card.facts], MINIMAL_FACTS[ending]);
+  assert.equal(card.primary, '이용권 살펴보기');
+  assert.equal(card.escape, '오늘은 여기까지');
+  assert.equal(card.productId, undefined, 'no pass was read, so none is named');
+  // No numbers (no price, period, request count or remaining count) and no pressure words.
+  for (const line of [card.title, ...card.facts, card.primary, card.escape, card.text]) {
+    assert.doesNotMatch(line, /\d/, line);
+    assert.doesNotMatch(line, PRESSURE, line);
+  }
+  // 해요체, like the full card after #2182.
+  for (const line of card.facts) assert.match(line, /요\.$/, line);
+}
+
+test('CONV-ENDCARD-R-005: an unreadable catalogue is retried once, then the minimal card is drawn', async () => {
+  for (const [err, ending] of [[EXHAUSTED, 'exhausted'], [EXPIRED, 'expired']]) {
+    for (const failure of [503, 'bad']) {
+      const r = await present(err, openTrial, { products: [failure, failure] });
+      assert.equal(r.posts.length, 1);
+      assert.equal(r.posts[0].type, 'streamError');
+      assertMinimal(r.posts[0].trialEndCard, ending);
+      assert.equal(r.posts[0].error, r.posts[0].trialEndCard.text);
+      // Exactly one retry, both without a credential; nothing opens and the saved code stays.
+      assert.deepEqual(catalogueReads(r.requests), [
+        { method: 'GET', url: '/v1/purchase/products', authorization: null },
+        { method: 'GET', url: '/v1/purchase/products', authorization: null },
+      ]);
+      assert.deepEqual(r.commands, []);
+      assert.equal(r.secrets.deletes, 0);
+    }
+  }
+});
+
+test('CONV-ENDCARD-R-005: a catalogue that times out twice still ends in the minimal card', async () => {
+  const t0 = Date.now();
+  const r = await present(EXHAUSTED, openTrial, { products: ['hang', 'hang'] });
+  assertMinimal(r.posts[0].trialEndCard, 'exhausted');
+  assert.equal(catalogueReads(r.requests).length, 2);
+  // Two bounded reads (3 s each), never an open-ended wait.
+  assert.ok(Date.now() - t0 < 9000, `took ${Date.now() - t0} ms`);
+});
+
+test('CONV-ENDCARD-R-005 controls: the retry that reads the catalogue draws the full card', async () => {
+  // A first read that fails or times out, then a good one: the full card, exactly as when the first read works.
+  const full = (await present(EXHAUSTED, openTrial)).posts[0].trialEndCard;
+  for (const first of [503, 'hang']) {
+    const r = await present(EXHAUSTED, openTrial, { products: [first, 200] });
+    assert.equal(catalogueReads(r.requests).length, 2);
+    assert.equal(JSON.stringify(r.posts[0].trialEndCard), JSON.stringify(full));
+    assert.equal(r.posts[0].trialEndCard.productId, 'pass-lite');
+  }
+  // A catalogue that works the first time is read once and is the full card (no retry).
+  const once = await present(EXHAUSTED, openTrial);
+  assert.equal(catalogueReads(once.requests).length, 1);
+  assert.equal(once.posts[0].trialEndCard.facts.length, 4);
+});
+
+test('CONV-ENDCARD-R-005 controls: a code-issued trial, a pass and mid-work are unchanged by a failing catalogue', async () => {
+  const native = { activity_kind: 'trial', profile_id: 'studio-native-trial' };
+  for (const profile of [native, { ...openTrial, pass: { request_limit: 200, requests_used: 200 } }]) {
+    const failing = await present(EXHAUSTED, profile, { products: [503, 503] });
+    const unsold = await present(EXHAUSTED, profile, { products: 404 });
+    assert.equal(failing.posts[0].trialEndCard, undefined);
+    // Same banner as when nothing is sold, and only the notice's single read: no card retry on these seats.
+    assert.equal(JSON.stringify(failing.posts), JSON.stringify(unsold.posts));
+    assert.ok(catalogueReads(failing.requests).length <= 1, JSON.stringify(failing.requests));
+  }
+  const mid = await present(MID_WORK, openTrial, { products: [503, 503] });
+  assert.equal(mid.posts[0].trialEndCard, undefined);
+  assert.deepEqual(mid.requests, []);
+});
+
+test('CONV-ENDCARD-R-005: the minimal card still counts offer_viewed, offer_clicked and offer_dismissed', async () => {
+  const body = (type) => ({ authorization: `Bearer ${grantToken}`, body: { type, fields: { surface: 'end_card' } } });
+  let r = await presentWithFunnel(EXHAUSTED, openTrial, { products: [503, 503], presses: ['trialEndCardPasses'] });
+  assertMinimal(r.posts[0].trialEndCard, 'exhausted');
+  assert.deepEqual(r.offerViewed, [body('offer_viewed')], JSON.stringify(r.funnelPosts));
+  assert.deepEqual(r.offerClicked, [body('offer_clicked')]);
+  assert.deepEqual(r.offerDismissed, []);
+  // The Primary opens the pass list, which reads the catalogue again there.
+  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses']]);
+  r = await presentWithFunnel(EXPIRED, openTrial, { products: [503, 503], presses: ['trialEndCardDismiss'] });
+  assertMinimal(r.posts[0].trialEndCard, 'expired');
+  assert.deepEqual(r.offerViewed, [body('offer_viewed')]);
+  assert.deepEqual(r.offerDismissed, [body('offer_dismissed')]);
+  assert.deepEqual(r.offerClicked, []);
+  assert.deepEqual(r.commands, []);
 });

@@ -93,7 +93,7 @@ export function StartPage() {
   const restored = purchase?.selected;
   useEffect(() => { if (restored) setPicked(restored); }, [restored]);
   const chosen = chosenPass(products, picked, restored);
-  const purchaseTitle = purchase?.stage === "waiting" ? "브라우저에서 결제를 기다리고 있어요" : purchase?.stage === "connecting" ? "이용권을 넣고 있어요" : purchase?.stage === "stopped" ? "구매를 마치지 못했어요" : "어떤 이용권으로 시작할까요?";
+  const purchaseTitle = purchase?.stage === "waiting" ? "브라우저에서 결제를 기다리고 있어요" : purchase?.stage === "connecting" ? "이용권을 넣고 있어요" : purchase?.stage === "stopped" ? (purchase.message === PURCHASE_COPY.unavailable ? PURCHASE_COPY.unavailableTitle : "구매를 마치지 못했어요") : "어떤 이용권으로 시작할까요?";
   const won = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
   // Leaving keeps a saved order: the host stops waiting and the choice list offers it again.
   // Leaving the link's form by any path drops the link on the host, so it never constrains another form.

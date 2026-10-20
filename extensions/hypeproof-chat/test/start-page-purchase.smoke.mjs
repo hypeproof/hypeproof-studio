@@ -239,6 +239,26 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   console.log('PASS end-of-trial card: the pass list opens only on the press, without an order');
 }
 
+// ── CONV-ENDCARD-R-005: the minimal card's Primary, when the list still cannot be read ──
+// The purchase screen opens and says so calmly in its status line: no order, no browser, no red error
+// (state.error stays empty). Pressing the Primary again later reads the list again.
+{
+  const { world, page, view } = harness({ settings: { products: 503 } });
+  page.panel.reveal = () => {};
+  await page.showPurchase();
+  assert.equal(view().stage, 'stopped');
+  assert.equal(view().message, '지금은 이용권 목록을 불러오지 못했어요. 만든 작업은 그대로 있으니 잠시 뒤에 다시 열어 주세요.');
+  assert.doesNotMatch(view().message, /\d|오류|실패|에러/);
+  assert.equal(typeof view().focus, 'number', 'the purchase screen is shown, not the start choices');
+  assert.equal(world.states.at(-1).state.error, undefined, 'no red error box');
+  assert.equal(world.opened.length, 0);
+  world.products = 200;
+  await page.showPurchase();
+  assert.equal(view().stage, 'choosing');
+  assert.equal(view().message, undefined);
+  console.log('PASS end card without a catalogue: the purchase screen says the list is unavailable, calmly');
+}
+
 // ── CONV-PURCHASE-R-002: back from the purchase-time Google sign-in, the chosen pass is still chosen ──
 // Login at purchase (REQ-L12 ⑭) for a newcomer under free start. The account runtime is a stub of
 // src/accountSession.ts: `start` opens the browser and waits; `finish` stands for the approval

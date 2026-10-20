@@ -82,7 +82,10 @@ export const POLL_INTERVAL_MS = 3000;
  * happened to the money. The rest of the start screen keeps its own voice.
  */
 export const PURCHASE_COPY = {
-  unavailable: "지금은 이용권을 살 수 없어요. 잠시 뒤에 다시 해 주세요.",
+  // CONV-ENDCARD-R-005 — the pass list could not be read. Calm, in the purchase screen's status
+  // line (never the red error box); the work is safe and the list can be opened again later.
+  unavailableTitle: "이용권 목록을 잠시 볼 수 없어요",
+  unavailable: "지금은 이용권 목록을 불러오지 못했어요. 만든 작업은 그대로 있으니 잠시 뒤에 다시 열어 주세요.",
   orderFailed: "주문을 만들지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요.",
   badCheckout: "결제 페이지 주소가 이상해서 열지 않았어요. 앱을 업데이트하고 다시 해 주세요.",
   waiting: "결제를 마치면 이 화면이 저절로 바뀌어요.",
@@ -156,6 +159,24 @@ export async function fetchProducts(proxyUrl: string, signal?: AbortSignal): Pro
     const r = await fetch(`${base(proxyUrl)}/purchase/products`, { headers: { accept: "application/json" }, ...(signal ? { signal } : {}) });
     return r.ok ? parseProducts(await r.json()) : null;
   } catch { return null; }
+}
+
+/**
+ * CONV-ENDCARD-R-005 — the catalogue read that tells "passes are not sold" apart from "the list
+ * could not be read". `unsold`: the Service answers that it has no purchase route (404, the
+ * Service's answer while purchase is unconfigured) or an empty list. `unreadable`: a network
+ * failure, an abort, any other status or a malformed body, so the passes may well be on sale.
+ */
+export type CatalogueRead = PassProduct[] | "unsold" | "unreadable";
+export async function readCatalogue(proxyUrl: string, signal?: AbortSignal): Promise<CatalogueRead> {
+  try {
+    const r = await fetch(`${base(proxyUrl)}/purchase/products`, { headers: { accept: "application/json" }, ...(signal ? { signal } : {}) });
+    if (r.status === 404) return "unsold";
+    if (!r.ok) return "unreadable";
+    const body: unknown = await r.json();
+    if (isRecord(body) && Array.isArray(body.products) && body.products.length === 0) return "unsold";
+    return parseProducts(body) ?? "unreadable";
+  } catch { return "unreadable"; }
 }
 
 /**
