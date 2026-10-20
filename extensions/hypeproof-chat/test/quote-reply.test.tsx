@@ -167,7 +167,9 @@ t("triple-click: an end past the body in the same row, or at the start of the ne
   eq(quoteFromSelection(sel(lastPara, at(rack, "출처", "end")))?.block, "> 마지막 문단.", "end inside citation title (same row)");
   eq(quoteFromSelection(sel(lastPara, { node: allText(actions)[0], offset: 0 }))?.block, "> 마지막 문단.", "end in copy action");
   eq(quoteFromSelection(sel(lastPara, at(userBody, "더", "end"))), null, "end inside the next message (negative control)");
-  eq(quoteFromSelection(sel(lastPara, { node: row2, offset: 0 })), null, "next row start with the rack's text in between (negative control)");
+  // The rack's own text is in the start row, which the same-row rule already leaves out of the quote.
+  eq(quoteFromSelection(sel(lastPara, { node: row2, offset: 0 }))?.block, "> 마지막 문단.", "next row start after a rack");
+  eq(quoteFromSelection(sel(lastPara, { node: userBody, offset: 0 })), null, "next row's body start, past its label (negative control)");
   // A row without citations or actions (classroom): the triple-click ends at the next row's start.
   const bare = h("div", { [QUOTE_SCOPE_ATTR]: "b1" }, h("p", {}, "하나뿐인 문단."));
   const nextRole = h("div", {}, "나");
@@ -177,6 +179,89 @@ t("triple-click: an end past the body in the same row, or at the start of the ne
   eq(quoteFromSelection(sel(only, { node: next, offset: 0 }))?.block, "> 하나뿐인 문단.", "end at the start of the next row");
   eq(quoteFromSelection(sel(only, { node: allText(next)[0], offset: 0 }))?.block, "> 하나뿐인 문단.", "end at offset 0 of the next row's first text");
   eq(quoteFromSelection(sel(only, at(next, "나", "end"))), null, "end after text of the next row (negative control)");
+});
+
+t("tables: cells are joined with ` | `, rows with a line break; lists: one line per item; a soft break is a space", () => {
+  const body = h("div", { [QUOTE_SCOPE_ATTR]: "t1" },
+    h("table", {}, "\n", h("thead", {}, "\n", h("tr", {}, "\n", h("th", {}, "이름"), "\n", h("th", {}, "나이"), "\n"), "\n"),
+      h("tbody", {}, "\n", h("tr", {}, "\n", h("td", {}, "철수"), "\n", h("td", {}, "10"), "\n"), "\n")),
+    "\n",
+    h("ul", {}, "\n", h("li", {}, "하나"), "\n", h("li", {}, "둘"), "\n"),
+    "\n",
+    h("p", {}, "줄1\n줄2"),
+    h("pre", {}, h("code", {}, "a\n  b\n")));
+  pure(h("div", { "data-quote-row": "t1" }, body));
+  eq(quoteFromSelection(sel(textStart(body), at(body, "  b", "end")))?.block, "> 이름 | 나이\n> 철수 | 10\n>\n> 하나\n> 둘\n>\n> 줄1 줄2\n>\n> a\n>   b", "quote");
+});
+
+/** Counts every childNodes/getAttribute/nextSibling read on the nodes of `roots`' subtrees. */
+function instrument(roots: El[]) {
+  let reads = 0;
+  const wrap = (e: El) => {
+    const kids = e.childNodes; const getAttr = e.getAttribute.bind(e);
+    Object.defineProperty(e, "childNodes", { configurable: true, get: () => { reads++; return kids; } });
+    (e as unknown as { getAttribute(n: string): string | null }).getAttribute = (n: string) => { reads++; return getAttr(n); };
+    for (const c of kids) if (c.nodeType === 1) wrap(c); else Object.defineProperty(c, "nextSibling", { configurable: true, get: () => { reads++; return null; } });
+  };
+  for (const r of roots) wrap(r);
+  return () => reads;
+}
+
+t("long chats: a selection reads only the start answer (and the end's own ancestors), never the other answers", () => {
+  const conversation = (n: number) => {
+    const rows: El[] = [];
+    for (let i = 0; i < n; i++) {
+      rows.push(h("div", { class: "hps-msg hps-msg-user" }, h("div", {}, "나"), h("div", { class: "hps-msg-body" }, `질문 ${i}`)));
+      rows.push(h("div", { class: "hps-msg hps-msg-assistant", "data-quote-row": `a${i}` }, h("div", {}, "HypeProof"),
+        h("div", { class: "hps-msg-body", [QUOTE_SCOPE_ATTR]: `a${i}` }, h("p", {}, `답 ${i} 첫 문단.`), h("p", {}, `답 ${i} 끝.`))));
+    }
+    const composer = h("div", { class: "hps-input" }, h("span", {}, "메시지를 입력하세요"));
+    const list = h("div", { class: "hps-messages" }, ...rows);
+    pure(list, composer);
+    return { rows, list, composer, body: (i: number) => rows[2 * i + 1].findAll((e) => e.getAttribute(QUOTE_SCOPE_ATTR) === `a${i}`)[0] };
+  };
+  for (const n of [30, 300]) {
+    const c = conversation(n);
+    const mid = Math.floor(n / 2);
+    const startRow = c.rows[2 * mid + 1]; const nextRow = c.rows[2 * mid + 2]; const farRow = c.rows[2 * mid + 5];
+    const body = c.body(mid);
+    const start = at(body, `답 ${mid} 끝.`);
+    const cases: [string, ReturnType<typeof sel>, string | null][] = [
+      ["inside", sel(at(body, `답 ${mid} 첫`), at(body, `답 ${mid} 끝.`, "end")), `> 답 ${mid} 첫 문단.\n>\n> 답 ${mid} 끝.`],
+      ["next row start", sel(start, { node: nextRow, offset: 0 }), `> 답 ${mid} 끝.`],
+      ["into next message", sel(start, at(nextRow, `질문 ${mid + 1}`, "end")), null],
+      ["into a far answer", sel(start, at(farRow, "끝.", "end")), null],
+      ["into the composer", sel(start, at(c.composer, "입력", "end")), null],
+      ["starts outside", sel(at(nextRow, "질문"), at(farRow, "끝.", "end")), null],
+    ];
+    // Everything except the start row and each case's end row is a trap; they must stay unread.
+    for (const [name, s, want] of cases) {
+      const endRow = c.rows.find((r) => r === s.focusNode || r.findAll(() => true).includes(s.focusNode as never) || allText(r).includes(s.focusNode as never));
+      const traps = c.rows.filter((r) => r !== startRow && r !== endRow && !(name === "starts outside" && r === nextRow));
+      const count = instrument(traps);
+      // The message list itself: a browser's nextSibling is a pointer; one mini-dom nextSibling reads the list twice.
+      let listReads = 0; const kids = c.list.childNodes;
+      Object.defineProperty(c.list, "childNodes", { configurable: true, get: () => { listReads++; return kids; } });
+      eq(quoteFromSelection(s)?.block ?? null, want, `${n} answers, ${name}`);
+      ok(count() === 0, `${n} answers, ${name}: ${count()} reads in other answers`);
+      ok(listReads <= 2, `${n} answers, ${name}: the message list was read ${listReads} times`);
+    }
+    (c.list as unknown as { remove(): void }).remove(); (c.composer as unknown as { remove(): void }).remove();
+  }
+});
+
+t("selectionchange is read at most once per animation frame (a drag fires it on every mouse move)", async () => {
+  const v = await mount(personal);
+  const target = at(v.body("a1"), "물은");
+  let reads = 0;
+  const real = (doc as unknown as { getSelection: () => unknown }).getSelection;
+  (doc as unknown as { getSelection: () => unknown }).getSelection = () => { reads++; return real(); };
+  current = sel(target, at(v.body("a1"), "물은", "end"));
+  await act(async () => { for (let i = 0; i < 20; i++) fire(doc as unknown as El, "selectionchange", { bubbles: false }); await new Promise((r) => setTimeout(r, 5)); });
+  (doc as unknown as { getSelection: () => unknown }).getSelection = real;
+  eq(reads, 1, "selection reads for 20 events in one frame");
+  eq(v.buttons().length, 1, "button after the frame");
+  await v.unmount();
 });
 
 t("mergeQuoteIntoDraft: keeps the draft as the exact prefix, one blank line before and after the quote", () => {
@@ -205,7 +290,8 @@ const fire = (target: { dispatchEvent(e: object): boolean }, type: string, extra
   type, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(), ...extra,
   preventDefault() { (this as { defaultPrevented: boolean }).defaultPrevented = true; }, stopPropagation() { (this as { _stopped: boolean })._stopped = true; },
 });
-const selectionChange = () => act(async () => { fire(doc as unknown as El, "selectionchange", { bubbles: false }); });
+// The hook reads the selection on the next animation frame (mini-dom: a 0ms timer), so wait for it.
+const selectionChange = () => act(async () => { fire(doc as unknown as El, "selectionchange", { bubbles: false }); await new Promise((r) => setTimeout(r, 5)); });
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
 const press = (el: El) => act(async () => { click(el); });
 const cls = (e: El) => (e.getAttribute("class") ?? "").split(" ");

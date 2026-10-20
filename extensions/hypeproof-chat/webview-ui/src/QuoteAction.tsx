@@ -4,8 +4,8 @@ import { QUOTE_CUT_NOTE, QUOTE_LABEL, quoteFromSelection, type AnswerQuote, type
 import './quoteAction.css';
 
 /**
- * CGP-CHAT-R-007 — tracks the document selection and returns a quote while it lies inside one
- * answer. A collapsed selection keeps the quote only while focus is on the quote button, so Tab
+ * CGP-CHAT-R-007 — tracks the document selection (at most once per animation frame) and returns a
+ * quote while it lies inside one answer. A collapsed selection keeps the quote only while focus is on the quote button, so Tab
  * to the button (which may drop the selection) still works.
  */
 export function useAnswerQuote(enabled: boolean): [AnswerQuote | null, () => void] {
@@ -17,8 +17,11 @@ export function useAnswerQuote(enabled: boolean): [AnswerQuote | null, () => voi
       if (!next && (document.activeElement as Element | null)?.classList?.contains('hps-quote-action')) return;
       setQuote(current => current && next && current.messageId === next.messageId && current.block === next.block ? current : next);
     };
-    document.addEventListener('selectionchange', read);
-    return () => document.removeEventListener('selectionchange', read);
+    // selectionchange fires on every mouse move of a drag: read the selection once per frame.
+    let frame: number | undefined;
+    const schedule = () => { if (frame === undefined) frame = requestAnimationFrame(() => { frame = undefined; read(); }); };
+    document.addEventListener('selectionchange', schedule);
+    return () => { document.removeEventListener('selectionchange', schedule); if (frame !== undefined) cancelAnimationFrame(frame); };
   }, [enabled]);
   return [quote, () => setQuote(null)];
 }

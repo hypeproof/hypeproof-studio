@@ -24,6 +24,7 @@ export interface QuoteNode {
   nodeType: number;
   parentNode: QuoteNode | null;
   childNodes: ArrayLike<QuoteNode>;
+  nextSibling?: QuoteNode | null;
   nodeName?: string;
   data?: string;
   getAttribute?(name: string): string | null;
@@ -56,16 +57,33 @@ export function quoteScopeOf(node: QuoteNode | null): string | null {
   return body ? attr(body, QUOTE_SCOPE_ATTR) : null;
 }
 
-/** Document-order comparison of two boundary points (negative: a is before b). */
-function comparePoints(a: Point, b: Point): number {
+/**
+ * Document-order comparison of two boundary points inside `root` (negative: a is before b). Paths
+ * stop at `root`, so the cost depends on the answer's own tree, never on the conversation's length.
+ */
+function comparePoints(root: QuoteNode, a: Point, b: Point): number {
   const path = (p: Point) => {
     const out = [p.offset];
-    for (let n = p.node; n.parentNode; n = n.parentNode) out.unshift(indexIn(n));
+    for (let n = p.node; n !== root && n.parentNode; n = n.parentNode) out.unshift(indexIn(n));
     return out;
   };
   const pa = path(a); const pb = path(b);
   for (let i = 0; i < Math.min(pa.length, pb.length); i++) if (pa[i] !== pb[i]) return pa[i] - pb[i];
   return pa.length - pb.length;
+}
+
+/** True when `point` is the very first position inside `el` (offset 0 down a chain of first children). */
+function atStartOf(point: Point, el: QuoteNode): boolean {
+  if (point.offset !== 0) return false;
+  for (let n = point.node; n !== el; n = n.parentNode!) if (!n.parentNode || n.parentNode.childNodes[0] !== n) return false;
+  return true;
+}
+
+/** The next sibling element of `n` (in a browser an O(1) pointer). */
+function nextElement(n: QuoteNode): QuoteNode | null {
+  let next = n.nextSibling ?? null;
+  while (next && next.nodeType !== 1) next = next.nextSibling ?? null;
+  return next;
 }
 
 /** UI inside an answer whose text is not answer text: controls, hidden marks, status lines. */
@@ -76,12 +94,18 @@ function skipped(n: QuoteNode): boolean {
 }
 const PARAGRAPH = new Set(['P', 'PRE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'BLOCKQUOTE', 'TABLE', 'HR']);
 const LINE = new Set(['LI', 'DIV', 'TR', 'BR', 'SECTION', 'DL', 'DT', 'DD']);
+const CELL = new Set(['TD', 'TH']);
+/** Containers whose whitespace-only text is markup layout (react-markdown's "\n" between items), not text. */
+const STRUCTURE = new Set(['UL', 'OL', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR']);
+/** Separator strength: a cell gap is weaker than a line break, which is weaker than a blank line. */
+const RANK: Record<string, number> = { '': 0, ' | ': 1, '\n': 2, '\n\n': 3 };
 
 /**
  * The answer text between `start` and `end` inside `root`, walking text nodes in order. Skipped UI
  * contributes nothing (a code block counts as its code, never its tool row or a pill's toggle; a
  * collapsed pill has no code in the page and adds nothing); block elements become line breaks (a
- * paragraph-level block a blank line).
+ * paragraph-level block a blank line), table cells are joined with ` | `, and outside `<pre>` a
+ * newline inside text (a Markdown soft break, drawn as a space) becomes a space.
  */
 export function answerTextBetween(root: QuoteNode, start: Point, end: Point): string {
   let out = '';
@@ -92,29 +116,28 @@ export function answerTextBetween(root: QuoteNode, start: Point, end: Point): st
     pending = '';
     out += text;
   };
-  const brk = (sep: string) => { if (sep.length > pending.length) pending = sep; };
-  const walk = (n: QuoteNode) => {
+  const brk = (sep: string) => { if (RANK[sep] > RANK[pending]) pending = sep; };
+  const walk = (n: QuoteNode, pre: boolean) => {
     if (n.nodeType === 3) {
+      const data = n.data ?? '';
+      if (!data.trim() && n.parentNode && STRUCTURE.has(tag(n.parentNode))) return;
       const len = childCount(n);
-      const s = comparePoints({ node: n, offset: 0 }, start) >= 0 ? 0 : start.node === n ? start.offset : len;
-      const e = comparePoints({ node: n, offset: len }, end) <= 0 ? len : end.node === n ? end.offset : 0;
-      if (e > s) emit((n.data ?? '').slice(s, e));
+      const s = comparePoints(root, { node: n, offset: 0 }, start) >= 0 ? 0 : start.node === n ? start.offset : len;
+      const e = comparePoints(root, { node: n, offset: len }, end) <= 0 ? len : end.node === n ? end.offset : 0;
+      if (e > s) emit(pre ? data.slice(s, e) : data.slice(s, e).replace(/[ \t]*\n[ \t]*/g, ' '));
       return;
     }
     if (n.nodeType !== 1 || skipped(n)) return;
-    const sep = PARAGRAPH.has(tag(n)) ? '\n\n' : LINE.has(tag(n)) ? '\n' : '';
+    const name = tag(n);
+    if (CELL.has(name)) brk(' | ');
+    const sep = PARAGRAPH.has(name) ? '\n\n' : LINE.has(name) ? '\n' : '';
     if (sep) brk(sep);
-    if (tag(n) === 'BR') return;
-    for (const c of Array.from(n.childNodes)) walk(c);
+    if (name === 'BR') return;
+    for (const c of Array.from(n.childNodes)) walk(c, pre || name === 'PRE');
     if (sep) brk(sep);
   };
-  for (const c of Array.from(root.childNodes)) walk(c);
+  for (const c of Array.from(root.childNodes)) walk(c, false);
   return out;
-}
-
-/** True when no answer text (outside skipped UI) lies between two points in the document. */
-function nothingBetween(top: QuoteNode, from: Point, to: Point): boolean {
-  return answerTextBetween(top, from, to).trim() === '';
 }
 
 /** Grapheme clusters when the runtime can segment them (composed emoji, NFD Hangul), else code points. */
@@ -136,9 +159,11 @@ export function toQuoteBlock(raw: string): { block: string; truncated: boolean }
 /**
  * A quote for a selection that starts inside one quotable answer body. The end is clamped to that
  * body when it lies elsewhere in the same message row (a triple-click on the last paragraph ends
- * in the citations or the answer's actions) or when no text lies between the body and the end
- * (a triple-click ends at the start of the next block). Null for a collapsed selection, one that
- * starts outside an answer, or one that reaches text in another message, the composer or other UI.
+ * in the citations or the answer's actions) or at the very start of the element right after that
+ * row (a triple-click ends at the start of the next block). Null for a collapsed selection, one
+ * that starts outside an answer, or one that reaches text in another message, the composer or
+ * other UI. Clamping only looks up the end's ancestors, and the text walk stays inside the answer
+ * body, so a selectionchange costs the same in a 300-answer conversation as in a short one.
  */
 export function quoteFromSelection(selection: QuoteSelection | null | undefined): AnswerQuote | null {
   if (!selection || selection.isCollapsed || !selection.rangeCount || !selection.getRangeAt) return null;
@@ -149,12 +174,11 @@ export function quoteFromSelection(selection: QuoteSelection | null | undefined)
   const start: Point = { node: range.startContainer, offset: range.startOffset };
   let end: Point = { node: range.endContainer, offset: range.endOffset };
   if (closestWith(end.node, QUOTE_SCOPE_ATTR) !== body) {
-    const bodyEnd: Point = { node: body, offset: body.childNodes.length };
-    const row = closestWith(end.node, QUOTE_ROW_ATTR);
-    let top = body; while (top.parentNode) top = top.parentNode;
-    const sameRow = row !== null && attr(row, QUOTE_ROW_ATTR) === id;
-    if (!sameRow && !nothingBetween(top, bodyEnd, end)) return null;
-    end = bodyEnd;
+    const row = closestWith(body, QUOTE_ROW_ATTR) ?? body;
+    const endRow = closestWith(end.node, QUOTE_ROW_ATTR);
+    const next = endRow === row ? null : nextElement(row);
+    if (endRow !== row && !(next && atStartOf(end, next))) return null;
+    end = { node: body, offset: body.childNodes.length };
   }
   const quoted = toQuoteBlock(answerTextBetween(body, start, end));
   return quoted && { messageId: id, ...quoted };
