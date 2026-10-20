@@ -183,7 +183,7 @@ import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { aiCapabilities } from "./aiCapabilities";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
-import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY } from "./fileAttachment";
+import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE } from "./fileAttachment";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import {
@@ -1130,6 +1130,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private pendingPageAttachment: PageAttachmentPreview | null = null;
   /** CGP-CHAT-R-011 — the work-folder file queued for the next message: what the learner sees, what the model gets, and from which folder. */
   private pendingFileAttachment: { preview: import("./protocol").FileAttachmentPreview; modelText: string; root: string } | null = null;
+  /** CGP-CHAT-R-011 — user turns of this window that carried a file (a retry of one says the file was not resent). */
+  private fileTurnIds?: Set<string>;
   // #308 — inline "붙였어요" notice queued for the webview. post() silently
   // drops messages while the view is unresolved, and extension.ts calls
   // attachPageContext() BEFORE panel.focus creates the view — so the notice
@@ -4972,7 +4974,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case "sendMessage":
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, this.takeFileAttachment()); // CGP-CHAT-R-011 — this send only; the webview cleared its chip with it
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true); // CGP-CHAT-R-011 — a fresh send may carry the attached file
         return;
       case "stageImage":
         await this.stageAttachedImage(msg.stageId, msg.name, msg.mime, msg.base64);
@@ -5260,8 +5262,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     userMessageId?: string,
     retrySourceId?: string,
     editOf?: string,
-    /** CGP-CHAT-R-011 — the attached file's model text, taken by a fresh send only (never a retry). */
-    fileContext?: string | null,
+    /** CGP-CHAT-R-011 — a fresh send (never a retry) takes the attached file when its model turn starts. */
+    carryFile = false,
   ): Promise<void> {
     const mode = turnToolMode(requestedMode);
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
@@ -5438,7 +5440,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CR-09 — the picked element goes with this turn only, and only while the switch is on.
     const element = this.elementQueue.take(this.isCurriculumRuntimeEnabled());
     // CGP-CHAT-R-011 — the attached file rides in front of the learner's text, model-only, as quoted data.
+    // It is taken only here, where the model turn starts: a send turned away earlier leaves the chip
+    // (host-owned; the webview never clears it on its own) and the file pending.
+    const fileContext = carryFile ? this.takeFileAttachment() : null;
     const withFile = fileContext && fileAttachAllowed(profile, this._instructorMode.isInstructor === true) ? `${fileContext}\n\n${text}` : text;
+    if (withFile !== text) (this.fileTurnIds ??= new Set()).add(userId);
+    // A retry of a turn that carried a file does not resend it; say so instead of implying it did.
+    if (!carryFile && retrySourceId !== undefined && this.fileTurnIds?.has(retrySourceId)) {
+      void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, notice: FILE_RETRY_NOTICE });
+    }
     let userTextForModel = withElementText(pageContext ? `${pageContext}\n\n${withFile}` : withFile, element);
     // cr-verify — a test run or fix request rides with the student's own sentence, model-only, while the switch is on.
     const verifyContextText = this.verifySession.takeCoachContext();

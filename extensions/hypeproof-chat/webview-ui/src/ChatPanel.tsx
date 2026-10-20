@@ -88,6 +88,8 @@ interface Props {
   fileAttachment?: import("../../src/protocol").FileAttachmentPreview | null;
   /** CGP-CHAT-R-011 — why the last picked file was refused (Korean, one per cause). */
   fileAttachError?: string | null;
+  /** CGP-CHAT-R-011 — a one-line notice (a retry did not resend the file). */
+  fileAttachNotice?: string | null;
   onAttachFile?: () => void;
   onRemoveFileAttachment?: () => void;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
@@ -1442,6 +1444,7 @@ export function ChatPanel(props: Props) {
           </div>
         )}
         {props.fileAttachError && <p className="hps-file-attach-error" role="alert" data-testid="file-attach-error">{props.fileAttachError}</p>}
+        {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
 
         {/* CR-09 — exactly what goes to the coach with the next message, removable before sending. */}
         {props.elementPreview && (

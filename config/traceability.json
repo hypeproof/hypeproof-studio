@@ -6636,6 +6636,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/src/fileAttachment.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/dataTag.ts"
         }
       ]
     },
@@ -6653,6 +6656,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/file-attachment.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/file-attachment-kids-render.smoke.mjs"
         }
       ]
     }

@@ -787,8 +787,8 @@ export type HostMessage = (
   | { type: "elementAttached"; element: ElementPreview | null }
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
   | { type: "pageAttachment"; attachment: import("./pageContext").PageAttachmentPreview | null }
-  /** CGP-CHAT-R-011 — the work-folder file queued for the next turn (null = none), or why it was refused. */
-  | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string }
+  /** CGP-CHAT-R-011 — the work-folder file queued for the next turn (null = none), why a pick was refused, or a one-line notice. The host owns the chip's lifetime. */
+  | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string; notice?: string }
   // cr-verify — the "Test my product" panel (null = hidden). `sendText`: the student's own
   // sentence the panel sends next through the normal send path (the coach context rides
   // with it, model-only). `error`: why the last action was refused.

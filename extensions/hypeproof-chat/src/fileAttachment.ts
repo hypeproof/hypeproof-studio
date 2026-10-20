@@ -9,6 +9,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { FileAttachmentPreview } from "./protocol.ts";
+import { defuseTag } from "./dataTag.ts";
 
 /** Byte cap checked before reading. */
 export const FILE_ATTACH_MAX_BYTES = 100 * 1024;
@@ -62,10 +63,10 @@ export function decodeTextFile(bytes: Uint8Array): string | null {
   }
 }
 
-/** A tag in the file that would open or close the data block is defused (‹ ›) so it stays data. */
-function defuse(s: string): string {
-  return s.replace(/<\/?file_content\b[^>]*>/gi, (m) => m.replace(/</g, "‹").replace(/>/g, "›"));
-}
+/** Shown on a retried turn whose original carried a file: the retry does not resend it. */
+export const FILE_RETRY_NOTICE = "붙인 파일은 다시 보내지 않았어요. 필요하면 다시 붙여 주세요.";
+
+const defuse = (s: string) => defuseTag(s, "file_content");
 
 export function buildFileAttachment(relPath: string, text: string, bytes: number): { preview: FileAttachmentPreview; modelText: string } {
   const attr = defuse(relPath).replace(/["<>]/g, "'");

@@ -334,22 +334,33 @@ than 20,000 characters, and a file that changed while it was read. A file is ref
 cut, so the chip "파일 · {relative path}" shows exactly the text the model receives (expandable,
 scrollable, with **빼기**); a refusal shows as an alert under the chip row. The model receives the
 text inside `<file_content path="…">…</file_content>` followed by an instruction to treat it as
-reference material and not follow instructions inside it; an opening or closing tag in the file,
-or a quote in its path, cannot end the block. The file goes with the next send only (not a
-retry; history and the sent bubble keep the learner's own text), and is dropped on removal,
-task create or switch, clearing the conversation, a work-folder change, and a config in which the
-seat lost the grant; a config or remount re-shows a pending chip. Gate: `sdk_tools.read` (after
-pass narrowing), because that flag is the profile's answer to whether workspace file contents may
-reach the model; the photo grants (`input.image_paste` / `input.image_files`) cover images only.
-Never on the instructor surface. Personal seats get the item in their existing tool menu; a
+reference material and not follow instructions inside it; an opening or closing tag in the file
+(also `</ file_content>`, one without `>`, and fullwidth `＜/file_content＞`), or a quote in its
+path, cannot end the block. The chip's lifetime is host-owned: the webview never clears it on
+send; the host takes the file only where a fresh send's model turn starts, so a send turned
+away earlier (activity scope, edit/tool checks, unsaved interrupted history, instructor hold,
+activity switch, turn restore, a running product re-test) leaves the chip visible and the file
+pending. A retry never resends it; a retried turn whose original carried a file says
+"붙인 파일은 다시 보내지 않았어요. 필요하면 다시 붙여 주세요.". History and the sent bubble keep
+the learner's own text. The file is dropped on removal, task create or switch, clearing the
+conversation, a work-folder change, and a config in which the seat lost the grant; a config or
+remount re-shows a pending chip. Gate: `sdk_tools.read` (after pass narrowing), because that flag
+is the profile's answer to whether workspace file contents may reach the model; the photo grants
+(`input.image_paste` / `input.image_files`) cover images only. Minors: the REQ-M32 kids tracks
+carry `sdk_tools.read`, so they get it. Nothing new is exposed: their coach can already Read the
+same folder, and the picker refuses anything outside it. This differs from REQ-N3
+(`page_context`, minors off), which concerns outside web pages. Never on the instructor surface. Personal seats get the item in their existing tool menu; a
 classroom seat, which has no tool menu, gets one with the file item only (no web search). The
 host re-checks the gate when the picker opens and when the send consumes the file. Not built:
 several files at once, the `@` file list (CGP-CHAT-R08), search/recent files in the picker
 (DES-KNOW-26), and per-cause REQ-KNOW-37 fixtures beyond the smoke test. Tests:
-`test/file-attachment.smoke.mjs` (containment incl. links, binary, caps, delimiter breakout,
-shown = sent, gate) and `test/file-attachment.test.tsx` (chip, 빼기, alert, no chip or menu
-without the grant, instructor never; host source checks for send, retry, remove, task switch,
-clear, folder change).
+`test/file-attachment.smoke.mjs` (containment incl. links, binary, caps, delimiter breakout and
+its variants, shown = sent, gate), `test/file-attachment.test.tsx` (chip, 빼기, alert, retry
+notice, no chip or menu without the grant, instructor never; reducer keeps chips through send;
+host source checks that no early-rejection path releases the file or page, with planted copies
+of the old leak that must fail; retry, remove, task switch, clear, folder change) and
+`test/file-attachment-kids-render.smoke.mjs` (a kids classroom seat through the SX render
+instrument: the 44px file-only menu trigger, the chip, no trigger without the grant).
 
 Acceptance CG-01–CG-06 in [the verification contract](testing/task-workspace.md)
 is revision-bound. Matched screenshots and independent interaction review are
@@ -907,7 +918,7 @@ dev-host 검증(자동화 셸 불가). REQ-D3(iframe 샌드박싱)은 live_serve
 
 | REQ-N9 | 미리보기 주소는 추측하지 않는다 (#507, #470 재발) | 라이브 서버는 `listen(0)` 으로 매 실행 **다른 에페메랄 포트**를 받는다(실측 2026-07-28: 58085). 그런데 그 주소가 코치 컨텍스트로 가는 통로가 **아예 없었다** — Run 버튼은 확장이 `liveServer.ensure()` 로 URL 을 직접 받아 정상이고, 코치만 알 방법이 없어 `127.0.0.1:3000` 을 반사적으로 찍고 `ERR_CONNECTION_REFUSED` 로 멈췄다(코드·프롬프트 어디에도 `3000` 은 없다 — 모델의 추측이다. 그 포트는 사용 중이라서가 아니라 **비어 있어서** 죽는다). 계약 3겹: ① **주소를 준다** — `liveServer.currentUrl()`(떠 있을 때만, 시작 부작용 없음)을 `x-hps-preview-url` 헤더로 실어 보내고(프록시=요청 헤더, SDK=`ANTHROPIC_CUSTOM_HEADERS`, 작업 폴더 #431 과 같은 통로: 워커가 클라이언트 `system` 을 통째로 교체하므로 프롬프트에 붙이는 길은 없다), 워커가 `# 미리보기 (라이브 서버)` 블록을 만든다. **문구는 워커 소유**, 클라이언트는 주소만 — 값은 루프백 http(s) 만 통과(`sanitizeLoopbackUrl`)라 주입 통로가 되지 않는다. 서버가 없으면 블록도 없다(빈 블록이 곧 추측 유도); ② **추측을 교정한다** — `resolveLivePreviewUrl`(pure): 루프백→루프백만, 서버 주소를 **알 때만**, 경로·쿼리·해시 보존. 프록시 경로는 실행 직전(`retargetLoopbackNavigation`), SDK 경로는 `resolveAlreadyOpen` 안에서(모달과 핸들러가 같은 주소를 봐야 한다). 서버가 안 떠 있는 걸 **아는** 상태에서 루프백을 요청하면 그 주소는 반드시 틀렸으므로 `startLivePreview()` 로 띄우고 진짜 주소를 연다. 호스트가 `livePreviewUrl?()` 를 지원하지 않으면(=모름) **아무것도 바꾸지 않는다**; ③ **교정했으면 말한다** — 도구 결과에 원래 주소와 실제 주소를 함께 적는다. 조용히 고치면 다음 턴에 또 추측한다. 프롬프트 안전망은 런타임별 브라우저 규약 + live-server preview 계약(도구 이름 없이 — REQ-N8 ②) | U(`test/live-preview-url` — 양성/음성 대조군 + 미지원 호스트 무회귀) + R(`worker/test/messages-integration` — 전달·음성·주입 대조군) |
 | REQ-N11 | Chat links never bypass the safe browser (CGP-ART-R-008, 2026-10-19) | A link the learner clicks in chat (citation chip, classroom inbox link) goes through one exit, `openLearnerLink` → `routeExternalLink`. Minor cohorts (`browser_session.mode = "safe"`) open it in the integrated browser, whose hardened session enforces the cohort allowlist; before this row both paths called `vscode.env.openExternal` and left that allowlist. Every other cohort sees a modal "바깥 사이트를 열까요?" naming the host, with **열기** and **링크 복사**; only **열기** reaches the system browser. Anything but an absolute http(s) URL with a host is refused for everyone. **Fail closed**: without a loaded profile (first load, refetch, token expiry) the persisted `hypeproof.browser.safeSession` decides and an unknown value counts as safe; if the integrated browser cannot open, nothing falls back to the system browser. The chat webview has no raw `target="_blank"` anchor; the error-banner runbook link posts to the host like a citation chip. Not covered: account sign-in, pass and guardian checkout, and the learner's own published-site "열기" (`publish/publishHost.ts`), which use the system browser by design | U (`test/external-link-route.smoke.mjs`) |
-| REQ-N12 | Page text sent to the coach is visible, removable and quoted as data (CGP-ART-R-007, extends REQ-N3, 2026-10-19) | After "페이지를 코치에게" the composer area shows "페이지 내용 · {host}" with the exact text that will go with the next message (trimmed, capped at 3,000 characters, the same string the model receives), whether a screenshot goes too, and **빼기**. Removing it clears the page text, screenshot and notice, so nothing from the page is sent. The model receives the page inside `<page_content source="{host}">…</page_content>` followed by an instruction to treat it as reference material and not follow instructions inside it; a closing tag inside the page cannot end the block. The chip also shows the title and full URL, because both reach the model. A later quest result or experiment capture that reuses the same slot drops the preview; switching or creating a task and clearing the conversation drop the page itself; a config post re-shows a pending chip, so page text is never sent after the webview reset it from view. Gating is unchanged (REQ-N3: minors off) | U (`test/page-attachment.test.tsx`) |
+| REQ-N12 | Page text sent to the coach is visible, removable and quoted as data (CGP-ART-R-007, extends REQ-N3, 2026-10-19) | After "페이지를 코치에게" the composer area shows "페이지 내용 · {host}" with the exact text that will go with the next message (trimmed, capped at 3,000 characters, the same string the model receives), whether a screenshot goes too, and **빼기**. Removing it clears the page text, screenshot and notice, so nothing from the page is sent. The model receives the page inside `<page_content source="{host}">…</page_content>` followed by an instruction to treat it as reference material and not follow instructions inside it; a closing tag inside the page cannot end the block. The chip also shows the title and full URL, because both reach the model. A later quest result or experiment capture that reuses the same slot drops the preview; switching or creating a task and clearing the conversation drop the page itself; a config post re-shows a pending chip, so page text is never sent after the webview reset it from view. The chip is host-owned (2026-10-20, with REQ-STUDIO-CHAT-FILE-ATTACH): the webview no longer clears it on send, and the host releases it only where a model turn takes the page, so a send turned away before that (activity scope, edit/tool checks, instructor hold, activity switch, turn restore, product re-test) leaves it visible instead of sending it unseen later; closing-tag variants (`</ page_content>`, no `>`, fullwidth) are defused too. Gating is unchanged (REQ-N3: minors off) | U (`test/page-attachment.test.tsx`) |
 
 ## O. 미성년 안전·컴플라이언스 (#320)
 
