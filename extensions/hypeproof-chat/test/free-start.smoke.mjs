@@ -98,8 +98,8 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.deepEqual({ ...refused }, { ok: false, status: 403, code: 'under_14', message: fs.FREE_CLAIM_REFUSALS.under_14 });
   const offline = await fs.claimFreeStart({ proxyUrl: 'http://svc.test/v1', installId: id, appVersion: '0.1.58', ageOk: true, fetchImpl: async () => { throw new TypeError('fetch failed'); } });
   assert.deepEqual({ ...offline }, { ok: false, status: 0, code: 'network', message: '연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.' });
-  assert.equal(fs.freeAllowanceLine({ requestLimit: 10, durationHours: 24 }), '무료 AI 요청 10번 · 첫 요청부터 24시간');
-  assert.equal(fs.freeAllowanceLine({ requestLimit: 10 }), null, 'never an allowance the Service did not advertise');
+  // CONV-ENDCARD-R-008 (CONV-DEC-03): a free seat shows no allowance count before use, so no helper builds one.
+  assert.equal(fs.freeAllowanceLine, undefined, 'no free allowance line helper is exported');
   assert.equal(fs.guardianUrl('https://hypeproof-ai.xyz/'), 'https://hypeproof-ai.xyz/studio#guardian');
   for (const [k, v] of Object.entries(fs.FREE_START_COPY)) { noTrialWord(v, `copy ${k}`); assert.ok(!v.includes('수업'), `copy ${k} must not push a class: ${v}`); }
 }
