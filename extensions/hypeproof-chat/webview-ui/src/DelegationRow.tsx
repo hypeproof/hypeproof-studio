@@ -14,6 +14,8 @@ import {
   type DelegationView,
 } from "../../src/delegationRow";
 import type { ChatMessage } from "../../src/protocol";
+import { ChatIcon } from "./ChatDetails";
+import { glyphIconKind } from "./glyphIcon";
 
 export function DelegationRow({ view, renderChild, onStopAll }: {
   view: DelegationView;
@@ -25,7 +27,7 @@ export function DelegationRow({ view, renderChild, onStopAll }: {
     <div className="hps-delegation-wrap" data-delegation-status={view.status}>
       <details className="hps-delegation">
         <summary className="hps-delegation-summary" style={{ minHeight: 44 }} aria-label={`${view.helper}에게 맡긴 일: ${view.task} · ${status}`}>
-          <span className="hps-tool-icon" aria-hidden="true">{DELEGATION_ICON}</span>
+          <span className="hps-tool-icon" data-glyph={DELEGATION_ICON}><ChatIcon kind={glyphIconKind(DELEGATION_ICON)} size={16} /></span>
           <strong className="hps-delegation-helper">{view.helper}</strong>
           <span className="hps-delegation-task">{view.task}</span>
           <span className="hps-delegation-status" role="status">{status}</span>

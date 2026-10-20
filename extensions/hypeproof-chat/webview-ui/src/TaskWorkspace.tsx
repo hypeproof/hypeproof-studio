@@ -5,6 +5,7 @@ import { TASK_RUN_STATE_LABELS, taskCountLine, taskRunAccessibleName, type TaskR
 import { onHostMessage, postToHost } from './vscode';
 import { CitationPreview, CitationPreviewContext, SourceIcon, citationAddress } from './CitationPreview';
 import { HeadingSlotContext } from './headingSlot';
+import { ChatIcon } from './ChatDetails';
 export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
 import { imeComposing } from './imeGuard';
@@ -376,7 +377,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           return <li key={task.id}>
           <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={taskRunAccessibleName(task.title, state)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
             <span className="tw-task-title">{task.title}</span>
-            {state && <span className="tw-task-state" data-run-state={state}><span aria-hidden="true" className="tw-task-state-symbol">{TASK_RUN_STATE_LABELS[state].symbol}</span>{TASK_RUN_STATE_LABELS[state].label}</span>}
+            {state && <span className="tw-task-state" data-run-state={state}><span className="tw-task-state-symbol"><ChatIcon kind={TASK_RUN_STATE_LABELS[state].icon} size={16} /></span>{TASK_RUN_STATE_LABELS[state].label}</span>}
             <span id={metaId} className="tw-task-meta"><span>{taskCountLine(task.messageCount, state)}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
         </li>;
@@ -387,7 +388,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     </nav>
     <section ref={main} className="tw-main" aria-label="작업 공간">
       <header className="tw-heading">
-        <button className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}>☰</button>
+        <button className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}><ChatIcon kind="menu" size={20} /></button>
         {renaming ? <form ref={renameForm} className="tw-rename" onSubmit={event => { event.preventDefault(); submitRename(); }}>
           <input ref={titleInput} aria-label="작업 이름" name="task-title" autoComplete="off" maxLength={100} readOnly={!!renamePending} aria-describedby={renameError ? 'task-rename-error' : undefined} value={title} onChange={event => setTitle(event.target.value)} onKeyDown={event => {
             // IME confirmation must not trigger the form's implicit submit.
@@ -428,7 +429,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           onPin={() => postToHost({ type: 'taskSourceSelection', selection: { url: selected.url, pinned: !pinned } })} />
         <h3 className="tw-source-list-title">이 작업의 출처</h3>
         <ul className="tw-source-list">{sources.map(source => <li key={source.url}><button type="button" aria-pressed={selected.url === source.url} onClick={() => { setPreview({ url: source.url, scopeKey }); pendingFocus.current = 'source-title'; }}><span>{source.title || citationAddress(source.url)?.hostname}</span><small>{citationAddress(source.url)?.hostname}{pinnedSource?.url === source.url ? ' · 고정됨' : ''}</small></button></li>)}</ul>
-      </> : <div className="tw-source-empty"><span aria-hidden="true"><SourceIcon kind="source" /></span><h3>출처를 모아 둘 자리</h3><p>대화에서 웹 자료를 찾으면 여기에서 다시 열 수 있습니다.</p></div>}
+      </> : <div className="tw-source-empty"><span aria-hidden="true"><SourceIcon kind="source" size={24} /></span><h3>출처를 모아 둘 자리</h3><p>대화에서 웹 자료를 찾으면 여기에서 다시 열 수 있습니다.</p></div>}
       {sourcesOpen && <ArtifactProvenanceList view={artifacts} onAsk={onAskAboutFile && (filePath => {
         // The narrow layout is a modal dialog: close it without restoring focus, so the host's
         // focus request after the attach reaches the composer.

@@ -13,7 +13,8 @@ test("REQ-K2: ⚙ click opens Settings editor pre-filtered to hypeproofChat", as
   });
   try {
     const cf = await chatFrame(ctx.win);
-    const cog = cf.locator("button:has-text('⚙')").first();
+    // REQ-STUDIO-STROKE-ICONS: the cog is a stroke icon now; the button keeps its Korean name.
+    const cog = cf.getByRole("button", { name: "설정", exact: true }).first();
     await cog.waitFor({ state: "visible", timeout: 15_000 });
     await cog.click();
 

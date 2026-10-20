@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import { ChatIcon, type IconSize } from './ChatDetails';
 import type { Citation } from '../../src/protocol';
 import { postToHost } from './vscode';
 import './citationPreview.css';
@@ -21,14 +22,10 @@ export function citationAddress(url: string): URL | null {
   } catch { return null; }
 }
 
-export function SourceIcon({ kind }: { kind: 'open' | 'pin' | 'close' | 'source' | 'back' }) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-    {kind === 'open' && <><path d="M14 4h6v6M20 4l-9 9" /><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" /></>}
-    {kind === 'pin' && <><path d="m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v6" /></>}
-    {kind === 'close' && <path d="m6 6 12 12M18 6 6 18" />}
-    {kind === 'source' && <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>}
-    {kind === 'back' && <><path d="m9 5-7 7 7 7M2 12h13a6 6 0 0 0 6-6" /></>}
-  </svg>;
+/** The sources panel's icons, drawn from the one stroke set (REQ-STUDIO-STROKE-ICONS). */
+export function SourceIcon({ kind, size = 20 }: { kind: 'open' | 'pin' | 'close' | 'source' | 'back'; size?: IconSize }) {
+  const map = { open: 'open-window', pin: 'pin', close: 'close', source: 'source', back: 'return' } as const;
+  return <ChatIcon kind={map[kind]} size={size} />;
 }
 
 /** These are message-level sources, not invented anchors for individual claims. */
@@ -55,7 +52,7 @@ export function CitationRack({ citations, messageId }: { citations: Citation[]; 
       >
         <span className="cp-citation-number" aria-hidden="true">{index + 1}</span>
         <span className="cp-citation-copy"><span className="cp-citation-title">{citation.title || address?.hostname || '출처'}</span><span className="cp-citation-domain">{address?.hostname || '주소 확인 필요'}</span></span>
-        <SourceIcon kind="source" />
+        <SourceIcon kind="source" size={16} />
       </button></span>;
     })}
   </div>;

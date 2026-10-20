@@ -108,7 +108,8 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom]] 
 t("privacy: a plain tool line renders exactly as before", () => {
   const plain = [{ id: "u1", role: "user", content: "x", createdAt: 1 } as ChatMessage, tool("toolu_R", "Read(style.css)", "done")];
   const html = render(personal, plain);
-  ok(html.includes('<div class="hps-tool-log-line hps-tool-done" role="status" aria-live="polite"><span class="hps-tool-icon">🔧</span><span class="hps-tool-label">Read(style.css)</span><span class="hps-tool-mark">✓</span></div>'), "plain line markup changed");
+  // REQ-STUDIO-STROKE-ICONS: the 🔧 key and the ✓ mark are stroke icons (the key stays in data-glyph).
+  ok(/<div class="hps-tool-log-line hps-tool-done" role="status" aria-live="polite"><span class="hps-tool-icon" data-glyph="🔧"><svg [^>]*data-icon="tool"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg><\/span><span class="hps-tool-label">Read\(style\.css\)<\/span><span class="hps-tool-mark"><svg [^>]*data-icon="check"[^>]*role="img" aria-label="완료">(?:(?!<\/svg>)[\s\S])*<\/svg><\/span><\/div>/.test(html), "plain line markup changed");
   ok(!html.includes("hps-delegation"), "a plain line became a row");
 });
 

@@ -42,7 +42,8 @@ export const FREE_START_COPY = {
   pausedStart: "지금은 무료 사용을 잠시 멈췄습니다. 잠시 뒤 다시 시도해 주세요.",
   under14Title: "보호자와 함께 시작해 주세요",
   under14Body: "만 14세 미만은 보호자의 동의가 있어야 사용할 수 있습니다. 지금은 앱에서 보호자 동의를 받을 수 없어 여기서 시작할 수 없습니다.",
-  guardianLink: "보호자 안내 보기 ↗",
+  // REQ-STUDIO-STROKE-ICONS: the "opens elsewhere" arrow is the start page's external icon, not a ↗ in the copy.
+  guardianLink: "보호자 안내 보기",
   endedTitle: "무료 사용이 끝났습니다",
   endedExpired: "무료 사용 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.",
   endedPass: "이어서 하려면 이용권으로 시작하기",

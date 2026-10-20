@@ -354,7 +354,7 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
 | 규칙 | 적용 |
 |---|---|
 | 한 화면 Primary CTA 1개(SX-04) | `.hp-cta-primary`는 `--hp-accent` 배경 + `--hp-ink-on-accent`. A의 "다음 행동" 버튼 또는 완료 버튼 중 하나만 이 클래스를 가진다. B의 보내기, D의 저장은 `.hp-cta-secondary`(투명 배경, `--hp-control-line` 테두리) |
-| 상태는 아이콘+문구(SX-50) | 완료 조건 `☐/☑ 문구`, 게이트 차단 `⚠ 기대 조건을 먼저 적어요`, source_state `● 실제 / ◌ 가상 / ◐ 자기 보고 / ? 미확인` + 라벨. 색만 바꾸는 상태 표시는 없다 |
+| 상태는 아이콘+문구(SX-50) | 완료 조건 빈 상자/체크 상자 아이콘 + 문구, 게이트 차단 경고 아이콘 + `기대 조건을 먼저 적어요` (아이콘은 글자 글리프가 아니라 선 아이콘 세트 `ChatIcon`, REQ-STUDIO-STROKE-ICONS; 와이어프레임의 ☐/☑는 그 자리 표시), source_state `● 실제 / ◌ 가상 / ◐ 자기 보고 / ? 미확인` + 라벨. 색만 바꾸는 상태 표시는 없다 |
 | 학습 화면에 숫자 카드 없음(SX-51) | `.hp-stat`는 단계 `ui: metric_board`(4·6주차) 안에서만 렌더한다. A·B·D·E에는 카운트 배지가 없다. "남은 단계 5"는 문장이지 카드가 아니다 |
 | 모달보다 inline(SX-52) | E는 카드, D는 서랍, 게이트 안내는 CTA 옆 문구. `showInformationMessage`류 모달은 파괴적 조작(삭제)에만 남긴다 |
 | 학생 글이 AI 글보다 위(SX-53) | `.hp-student-text`: `--hp-ink`, 16px, 좌측 3px `--hp-accent` 선, 라벨 "내가 쓴 것". `.hp-ai-text`: `--hp-muted`, 14px, 라벨 "AI가 만든 것". 같은 블록에 둘이 있으면 학생 글이 먼저 온다 |

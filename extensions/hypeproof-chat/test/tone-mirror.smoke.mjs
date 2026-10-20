@@ -21,6 +21,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { appToneOf, TONE_LABELS } from "../src/chatPanelHelpers.ts";
+import { glyphIconKind } from "../webview-ui/src/glyphIcon.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webview = readFileSync(join(here, "..", "webview-ui", "src", "ChatPanel.tsx"), "utf8");
@@ -66,10 +67,13 @@ for (const [tone, labels] of Object.entries(TONE_LABELS)) {
       `ChatPanel.tsx 에 ${tone} 의 buildingLabel 이 없다 — 미러가 어긋났다`,
     );
   });
-  t(`${tone}: namingEmoji ${labels.namingEmoji}`, () => {
+  // REQ-STUDIO-STROKE-ICONS: the webview draws the host's tone emoji as its stroke icon (namingIcon).
+  t(`${tone}: namingEmoji ${labels.namingEmoji} → icon ${glyphIconKind(labels.namingEmoji)}`, () => {
+    const icon = glyphIconKind(labels.namingEmoji);
+    assert.notEqual(icon, "dot", `${tone} 의 namingEmoji 에 대응하는 아이콘이 없다`);
     assert.ok(
-      webview.includes(`"${labels.namingEmoji}"`),
-      `ChatPanel.tsx 에 ${tone} 의 namingEmoji 가 없다 — 미러가 어긋났다`,
+      new RegExp(`appTone === "${tone}" \\? "${icon}"|: "${icon}";`).test(webview),
+      `ChatPanel.tsx 에 ${tone} 의 namingIcon "${icon}" 이 없다 — 미러가 어긋났다`,
     );
   });
 }
@@ -80,6 +84,7 @@ t("quest 톤 문구 어디에도 '게임'/🎮 이 없다", () => {
   const world = JSON.stringify(TONE_LABELS.quest);
   assert.ok(!world.includes("게임"), `quest 톤에 "게임" 이 있다: ${world}`);
   assert.ok(!world.includes("🎮"), `quest 톤에 🎮 가 있다: ${world}`);
+  assert.ok(!/appTone === "quest" \? "game"/.test(webview), "웹뷰가 quest 톤에 게임 아이콘을 그린다");
 });
 
 console.log("");

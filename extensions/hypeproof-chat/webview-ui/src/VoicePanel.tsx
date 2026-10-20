@@ -9,6 +9,7 @@
 // 오디오 재생도 없다 — 실제 연결은 UI-2(#898 V0 전송 ADR · #901 V4 예산) 이후다.
 // 그때까지 `voiceStartGate` 가 시작을 막으므로 학생에게 이 패널은 열리지 않는다.
 import { useEffect, useRef, type KeyboardEvent } from "react";
+import { ChatIcon } from "./ChatDetails";
 
 import {
   COMPACT_CONTROLS,
@@ -142,7 +143,7 @@ export function VoicePanel(props: VoicePanelProps) {
         <h2>{voicePanelTitle(props.coachName)}</h2>
         <div className="hps-voice-head-buttons">
           <button type="button" onClick={props.onMinimize} aria-label="음성 대화 축소">축소</button>
-          <button type="button" onClick={() => props.onDismiss("panel_close")} aria-label="음성 대화 종료">✕</button>
+          <button type="button" onClick={() => props.onDismiss("panel_close")} aria-label="음성 대화 종료"><ChatIcon kind="close" size={16} /></button>
         </div>
       </header>
 

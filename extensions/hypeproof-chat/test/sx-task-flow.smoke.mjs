@@ -861,20 +861,25 @@ if (!status.available) {
       activity: { label: "수업", name: "GlobalBuddy", verified: true },
     });
   const marks = (html) => [...html.matchAll(/<li data-met="(yes|no)"/g)].map((m) => m[1]);
-  /** Each condition's mark as the eye and a screen reader get it: "☑ 확인됨" or "☐ 아직" (SX-50: icon and words). */
-  const markSaid = (html) => [...html.matchAll(/<li data-met="(?:yes|no)"><span class="hp-mark" role="img" aria-label="([^"]*)">([^<]*)<\/span>/g)].map((m) => `${m[2]} ${m[1]}`);
+  /**
+   * Each condition's mark as the eye and a screen reader get it (SX-50: icon and words). Since
+   * REQ-STUDIO-STROKE-ICONS the mark is a stroke icon: "check-square 확인됨" or "square 아직".
+   */
+  const markSaid = (html) => [...html.matchAll(/<li data-met="(?:yes|no)"><span class="hp-mark"><svg [^>]*data-icon="([a-z-]+)" class="hps-icon" role="img" aria-label="([^"]*)">/g)].map((m) => `${m[1]} ${m[2]}`);
+  const checked = (html) => (html.match(/data-icon="check-square"/g) ?? []).length;
   const conditionTexts = (html) => [...html.matchAll(/<span class="hp-mission-completion-text">([^<]*)<\/span>/g)].map((m) => m[1]);
   const designTexts = week3.learning.completion.map((c) => c.text);
 
   await check("SX-01·SX-50: region A checks a condition off only where the host's gate says it is met", async () => {
     const all = await header([]);
     assert.deepEqual(marks(all), ["yes", "yes", "yes"], "nothing missing, and a condition stayed unchecked");
-    assert.deepEqual(markSaid(all), ["☑ 확인됨", "☑ 확인됨", "☑ 확인됨"], "a screen reader is told something other than the marks show");
-    assert.equal((all.match(/☑/g) ?? []).length, 4, "three ☑ marks and the note that explains them");
-    assert.ok(visibleText(all).includes("☑ 표시는 내가 남긴 기록에서 확인된 것이에요."));
+    assert.deepEqual(markSaid(all), ["check-square 확인됨", "check-square 확인됨", "check-square 확인됨"], "a screen reader is told something other than the marks show");
+    assert.equal(checked(all), 4, "three checked marks and the note that explains them");
+    // The note's icon is the sentence's subject, so it is named: a screen reader hears "확인됨 표시는…" (verify F1).
+    assert.match(all, /data-icon="check-square" class="hps-icon" role="img" aria-label="확인됨">(?:(?!<\/svg>)[\s\S])*<\/svg> 표시는 내가 남긴 기록에서 확인된 것이에요\./);
     const some = await header([{ code: "missing_completion_event", item: "c2", event: "change_requested" }]);
     assert.deepEqual(marks(some), ["yes", "no", "yes"]);
-    assert.deepEqual(markSaid(some), ["☑ 확인됨", "☐ 아직", "☑ 확인됨"], "a screen reader hears an unmet condition as confirmed, or a met one as not yet");
+    assert.deepEqual(markSaid(some), ["check-square 확인됨", "square 아직", "check-square 확인됨"], "a screen reader hears an unmet condition as confirmed, or a met one as not yet");
     const late = await header([{ code: "criterion_after_artifact", event: "criterion_set" }]);
     assert.deepEqual(marks(late), ["no", "yes", "yes"], "a late criterion was checked off as '시험 전에 적었다'");
   });
@@ -882,8 +887,8 @@ if (!status.available) {
   await check("SX-50 negative: with no verdict from the host, nothing is checked off and the header says why", async () => {
     for (const html of [await header(undefined), await header(null)]) {
       assert.deepEqual(marks(html), ["no", "no", "no"], "a check mark was drawn with no verdict behind it");
-      assert.deepEqual(markSaid(html), ["☐ 아직", "☐ 아직", "☐ 아직"], "a screen reader hears a condition confirmed with no verdict behind it");
-      assert.ok(!html.includes("☑"), "a ☑ appeared with no verdict");
+      assert.deepEqual(markSaid(html), ["square 아직", "square 아직", "square 아직"], "a screen reader hears a condition confirmed with no verdict behind it");
+      assert.equal(checked(html), 0, "a checked mark appeared with no verdict");
       assert.ok(visibleText(html).includes("지금은 아직 확인 전입니다"), "the header stopped saying nothing is confirmed yet");
     }
   });
@@ -915,17 +920,18 @@ if (!status.available) {
   await check("region D negative: blocked or not started, the button is disabled and the reason sits beside it", async () => {
     const shut = await gate(blocked);
     assert.match(shut, /<button[^>]*disabled=""[^>]*>이 과제 완료하기<\/button>/);
-    assert.ok(visibleText(shut).includes("☐ 아직 안 한 것: 기대 조건을 시험 전에 적었다"), visibleText(shut));
+    assert.match(shut, /<li><svg [^>]*data-icon="square"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg> 아직 안 한 것: 기대 조건을 시험 전에 적었다/, visibleText(shut));
     const unstarted = await gate(fresh);
     assert.match(unstarted, /<button[^>]*disabled=""/);
-    assert.ok(visibleText(unstarted).includes("☐ 아직 시작 전이에요."), visibleText(unstarted));
+    assert.match(unstarted, /data-icon="square"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg> 아직 시작 전이에요\./, visibleText(unstarted));
   });
 
   await check("SX-55: a submitted task shows a state line with icon and words, and no button to press", async () => {
     const html = await gate(done);
     assert.doesNotMatch(html, /<button/, "a submitted task still offers a submit button");
     assert.match(html, /role="status"/);
-    assert.ok(visibleText(html).includes("☑이 과제를 제출했어요") || visibleText(html).includes("☑ 이 과제를 제출했어요"), visibleText(html));
+    assert.match(html, /<span class="hp-mark"><svg [^>]*data-icon="check-square"[^>]*aria-hidden="true">/, "the submitted line lost its icon");
+    assert.ok(visibleText(html).includes("이 과제를 제출했어요"), visibleText(html));
   });
 
   await check("SX-55: a submit the record could not store is said beside the button", async () => {

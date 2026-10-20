@@ -6732,6 +6732,19 @@
       ]
     },
     {
+      "id": "ST-TEST-STROKE-ICONS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/stroke-icons.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-TYPE-SCALE",
       "stage": "test",
       "owner": "jayleekr",

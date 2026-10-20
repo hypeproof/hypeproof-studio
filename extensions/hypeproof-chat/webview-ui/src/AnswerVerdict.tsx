@@ -3,6 +3,7 @@
 // this file only draws them. No score, count or colour-only state: every state is a pressed text button.
 
 import { useEffect, useState } from "react";
+import { ChatIcon } from "./ChatDetails";
 import {
   REASON_LABELS, VERDICT_LABELS, VERDICT_NOTE_MAX, VERDICT_REASONS,
   type AnswerVerdict, type VerdictReason, type VerdictState,
@@ -24,7 +25,7 @@ export function VerdictButtons({ state, onChange }: { state?: VerdictState; onCh
       title={VERDICT_PRIVACY}
       onClick={() => press(verdict)}
     >
-      <span aria-hidden="true">{state?.verdict === verdict ? "✓ " : ""}</span>{VERDICT_LABELS[verdict]}
+      {state?.verdict === verdict && <ChatIcon kind="check" size={16} />}{VERDICT_LABELS[verdict]}
     </button>)}
   </>;
 }
@@ -49,7 +50,7 @@ export function VerdictReasons({ state, onChange }: { state: VerdictState; onCha
         aria-pressed={state.reason === reason}
         onClick={() => pick(reason)}
       >
-        <span aria-hidden="true">{state.reason === reason ? "✓ " : ""}</span>{REASON_LABELS[reason]}
+        {state.reason === reason && <ChatIcon kind="check" size={16} />}{REASON_LABELS[reason]}
       </button>)}
     </div>
     {state.reason && <div className="hps-verdict-note">

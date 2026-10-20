@@ -37,11 +37,12 @@ t("each state: words and a symbol on the active task, accessible name 'title, st
   for (const state of ALL) {
     const html = render(state, state === "running" || state === "approval" || state === "preparing");
     const active = taskButton(html, "t1");
-    const { label, symbol } = TASK_RUN_STATE_LABELS[state];
+    const { label, icon } = TASK_RUN_STATE_LABELS[state];
     ok(active.includes(`aria-label="고양이 페이지, ${label}"`), `${state}: accessible name missing`);
     ok(active.includes(`aria-describedby="tw-task-meta-t1"`), `${state}: count/date not described`);
     ok(active.includes(`data-run-state="${state}"`), `${state}: state element missing`);
-    ok(active.includes(`<span aria-hidden="true" class="tw-task-state-symbol">${symbol}</span>${label}</span>`), `${state}: symbol + visible words missing`);
+    // REQ-STUDIO-STROKE-ICONS: the symbol is a hidden stroke icon, then the visible words.
+    ok(new RegExp(`<span class="tw-task-state-symbol"><svg [^>]*data-icon="${icon}"[^>]*aria-hidden="true">(?:(?!</svg>)[\\s\\S])*</svg></span>${label}</span>`).test(active), `${state}: icon + visible words missing`);
   }
 });
 t("no colour-only state: every state element carries its words as text", () => {

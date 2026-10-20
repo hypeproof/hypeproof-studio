@@ -790,7 +790,8 @@ bars are painted `CanvasText` (the idle meter `GrayText`), the four citation tru
 double, dashed and dotted left lines, verify-state chips and the instructor badge get a border, and
 the learner's bubble gets a `CanvasText` outline. Small remove buttons over an image keep a
 `ButtonFace` plate. Already carried by words, symbols or geometry and kept that way: tool-row marks
-(`…`/`⚠️`/`✓`), the verdict and reason check marks, run-state chips (approval/error 700 weight and a
+(stroke icons since REQ-STUDIO-STROKE-ICONS: dots / alert / check, each with a Korean name), the
+verdict and reason check marks, run-state chips (approval/error 700 weight and a
 2px border), the amber evidence edge (3px left border plus its state word), failed turn review
 (`role="alert"` and its title), unresolved evidence sources (`확인 필요`), the weak chip (dashed,
 struck through). `forced-color-adjust: none` is used only on the two QR code images (publish link,
@@ -815,6 +816,57 @@ borderless voice dot, a boundary that loses to `border: 0`, a non-Highlight ring
 currentColor, a run state reduced to colour, a citation fill without `!important` under its hover
 rule, the forced positive ring offset removed, the disabled rules deleted, the publish QR opt-out
 deleted, a lowercase system colour).
+
+`REQ-STUDIO-STROKE-ICONS` (CGP-DS-R-018, 2026-10-20; REQ-CGP-DS-19; DES-CGP-DS-19; SX-50). Learner-visible
+webview UI draws status and affordance icons from one stroke set, never as emoji or Unicode status
+glyphs: emoji render differently per OS, ignore the theme colour and forced colours, and the released
+app showed "🤖 AI 코치와 대화하고 있어요…" beside mixed ✓ / – marks. The set is `ChatIcon`
+(`webview-ui/src/ChatDetails.tsx`): Studio's own paths on a 24 grid, 1.7px round stroke, `currentColor`
+only, drawn at 16 (inline), 20 (toolbar, the default) or 24 (banners). Codicons are not in the webview
+build and adding them would be a new runtime dependency and font, so none is added (visual-system.md
+§6 lists codicons CC-BY-4.0 and Lucide ISC as allowed sources; no path is copied from either, and no
+OpenAI glyph is used). An icon is `aria-hidden` when words beside it carry the meaning; where it is
+the only carrier of a state it is `role="img"` with a Korean name (tool-row marks 처리 중 / 실패 /
+완료, verify marks 맞음 / 틀림 / 모름 and 성공 / 실패, mission completion marks 확인됨 / 아직, the check
+in "표시는 내가 남긴 기록에서 확인된 것이에요." named 확인됨 because the sentence refers to it, and the
+retry icon inside the classroom cut-off note named after the button it points to, 다른 방식으로 한 번
+더 만들기). The classroom done check, the row's only visual cue, mixes the theme foreground into the
+theme green so it reaches 3:1 on light themes (the bare green measured 2.97:1). CSS may size an icon
+only to 16/20/24 as well (the citation chip's icon was 14px, the empty sources panel's 28px).
+Replaced: the AI disclosure (its leading 🤖 is dropped from `AI_DISCLOSURE_TEXT`; an info icon is drawn
+in front), tool and timeline lines, error and update banners, the error boundary, the page-attached
+notice, stop notices, the verify panel, panel close buttons, verdict and reason check marks, mission
+and completion-gate check boxes, the classroom build progress, retry, Run and code-pill controls, the
+gallery notice, the world-strip pointer, the assistant role mark, the sources panel icons (folded
+into the set), the start page's external-link arrows (the free-start guardian link copy drops its
+trailing ↗ for the same icon), the classroom header's settings and gallery buttons, the personal
+header menu, the capability card's ✓ / – marks (check / minus inside the REQ-STUDIO-UI-POLISH-1
+circle), the task rail toggle, the naming card's tone mark, and the task rail run states
+(`TASK_RUN_STATE_LABELS` names an icon per state instead of a Unicode symbol: dots, dot, hand, stop,
+alert, check; the state words are unchanged and still carry the meaning). The host protocol is unchanged: a timeline
+line's `tool.icon` and an error banner's `icon` stay emoji strings (stored history and host tests
+depend on them) and are keys that `glyphIconKind` maps to a stroke icon; an unknown key draws a
+neutral dot, never the string, and the key stays readable to the e2e observers in `data-glyph`. A
+label that repeats its icon as its first character (`📏 390·1280px 확인`) drops that character. Korean
+copy is otherwise unchanged. Kept, by classification: learner content (the model's markdown task-list
+boxes, cohort world faces in the runner) and the protocol keys above, which are never drawn. Not
+covered: VS Code native dialogs and notifications the host raises (`imageAttachPrompt`), the artifact
+provenance marks (typographic symbols, not emoji), Chalk, and a capture on a real high-contrast
+display.
+Test: `test/stroke-icons.smoke.mjs` scans every webview source file outside comments for emoji and
+status marks against an allowlist with exact counts and reasons (stale entries fail), checks every CSS rule that sizes an svg or `.hps-icon` (16/20/24 only) and that
+every icon the host emits maps to a named stroke icon, that the run-state labels and free-start copy
+carry no glyph, and renders the real ChatPanel (classroom and
+personal) to check that no status glyph is drawn as text and every icon is `currentColor`, 16/20/24,
+and either hidden or named in Korean, including the header settings button and both capability card
+marks. It was red on origin/main (276ce083) with 41 findings (63 glyph uses in 16 files). Negative controls:
+a planted emoji in JSX, marks in a string literal, check boxes, CSS generated content, a URL before an
+emoji, an allowlisted file used for another glyph, a second use of an exempt glyph, a stale
+exemption, an unknown host key, the released disclosure markup, an 18px icon, an unlabelled visible
+icon and a fixed stroke colour; positive controls: comments, a stroke icon with plain punctuation,
+and labels whose words must not change. The A5 render digests were re-taken: the only markup change
+is each glyph becoming its icon (including the classroom header's ⚙), and substituting the old glyph
+markup back reproduces all four prior ChatPanel digests.
 
 `REQ-STUDIO-TYPE-SCALE` (CGP-DS-R-008, 2026-10-20; REQ-CGP-DS-09; DES-CGP-DS-09; extends DES-02 to the
 personal chat surface by DEC-29). Learner-read text on the personal task workspace (task rail, task

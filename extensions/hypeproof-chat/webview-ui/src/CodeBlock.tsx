@@ -59,7 +59,7 @@ export function CodeBlockTools({ code, wrap, onToggleWrap }: { code: string; wra
   // CGP-CHAT-R-007: the tool row is UI, never part of a quoted answer.
   return <div className="hps-codeblock-tools" data-quote-skip="">
     <button type="button" className="hps-codeblock-tool" onClick={copy} disabled={empty} aria-label={CODE_COPY_LABEL} title={CODE_COPY_LABEL}>
-      <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} size={14} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
+      <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} size={16} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
     </button>
     {/* A toggle keeps one fixed name; aria-pressed carries the state (WAI-ARIA APG). */}
     <button type="button" className="hps-codeblock-tool" onClick={onToggleWrap} aria-label={WRAP_LABEL} aria-pressed={wrap} title={WRAP_LABEL}>

@@ -5,6 +5,7 @@
 // an answer keeps the skill's rules, and what is stored, are the Service's (CR-44). The week's
 // question is the curriculum data the Service serves, never a string in this file (CR-45).
 import { useState } from "react";
+import { ChatIcon } from "./ChatDetails";
 import type { SkillForm, SkillsView } from "../../src/skillView";
 import { problemLine, skillFormProblems } from "../../src/skillView";
 
@@ -33,7 +34,7 @@ export function SkillsPanel(props: {
       <header>
         <strong>커리큘럼 스킬</strong>
         <button type="button" onClick={props.onRefresh} disabled={props.running}>새로 불러오기</button>
-        <button type="button" onClick={props.onClose} aria-label="닫기">✕</button>
+        <button type="button" onClick={props.onClose} aria-label="닫기"><ChatIcon kind="close" size={16} /></button>
       </header>
       {view.notice && <p data-testid="skills-notice">{view.notice}</p>}
       {props.error && <div className="hps-publish-error" role="alert" data-testid="skills-error">{props.error}</div>}

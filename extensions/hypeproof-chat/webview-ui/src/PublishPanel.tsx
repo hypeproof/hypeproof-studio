@@ -5,6 +5,7 @@
 // the refusal of a file, the links and their QR codes are the host's and the Service's. A
 // disabled button here is a picture, not a lock (the host and the Service refuse by name).
 import { useState } from "react";
+import { ChatIcon } from "./ChatDetails";
 import type { PublishForm, PublishView } from "../../src/publishView";
 import { EXPIRY_CHOICES, METHOD_CHOICES } from "../../src/publishView";
 
@@ -79,7 +80,7 @@ export function PublishPanel(props: {
     <section className="hps-publish" data-testid="publish-panel" aria-label="사용자 테스트용으로 공개">
       <header>
         <strong>사용자 테스트용으로 공개</strong>
-        <button type="button" onClick={props.onClose} aria-label="닫기">✕</button>
+        <button type="button" onClick={props.onClose} aria-label="닫기"><ChatIcon kind="close" size={16} /></button>
       </header>
       {!view.available && <p data-testid="publish-unavailable">{view.reason}</p>}
       {props.error && (
