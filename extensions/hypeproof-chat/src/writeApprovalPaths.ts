@@ -32,7 +32,7 @@ export { OUTSIDE_WORK_FOLDER_TEXT, WORK_FOLDER_TEXT };
 /** Shown when a write call names no path at all (malformed input). */
 export const UNNAMED_WRITE_TEXT = "이름 없는 파일";
 /** How many paths the modal lists before "외 N개". */
-export const WRITE_PATHS_SHOWN = 8;
+export const WRITE_PATHS_SHOWN = 5;
 export const WRITE_CHANGE_TEXT = { new: "새 파일", changed: "바꿈" } as const;
 export type WriteChange = keyof typeof WRITE_CHANGE_TEXT;
 

@@ -1,3 +1,5 @@
+import {WriteApprovalDialog} from "./WriteApprovalDialog";
+import type {WriteApprovalPrompt} from "../../src/writeApprovalPrompt";
 import type { TurnToolMode } from '../../src/turnTools';
 import { useEffect, useReducer, useState, useRef } from "react";
 import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage, TrialEndCardView } from "../../src/protocol";
@@ -366,6 +368,7 @@ export function App() {
   const [historySaveError, setHistorySaveError] = useState<string | null>(null);
   // REQ-STUDIO-TASK-RUN-STATE — the host raised a tool approval modal and it is still open.
   const [approvalPending, setApprovalPending] = useState(false);
+  const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
   const verifyRequest = () => {
@@ -391,7 +394,7 @@ export function App() {
           latestVerdictRequests.current.clear();
           ownVerdictRequests.current.clear();
           activeStream.current = null;
-          setApprovalPending(false);
+          setApprovalPending(false); setWriteApproval(null);
         }
         scope.current = msg.config.activity?.id;
         taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
@@ -413,10 +416,11 @@ export function App() {
       if (["streamStart", "inputRejected", "streamError", "streamEnd", "streamStopped"].includes(msg.type)) {
         pendingSend.current = false; setSendPending(false);
         // A modal never outlives its turn; a turn boundary is never "waiting for approval".
-        setApprovalPending(false);
+        setApprovalPending(false); setWriteApproval(null);
       }
       switch (msg.type) {
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
+        case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
         case 'approvalWait': setApprovalPending(msg.waiting === true); return;
         case 'taskWorkspaceError':
           if (msg.verdictMessageId && msg.verdictRequestId && ownVerdictRequests.current.has(msg.verdictRequestId) && latestVerdictRequests.current.has(msg.verdictMessageId) && latestVerdictRequests.current.get(msg.verdictMessageId) !== msg.verdictRequestId) return;
@@ -691,6 +695,7 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
+      {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);}}/>}
       <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (

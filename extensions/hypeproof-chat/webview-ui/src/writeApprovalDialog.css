@@ -1,0 +1,13 @@
+.hps-write-approval { box-sizing: border-box; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; margin: auto; padding: 20px; border: 2px solid currentColor; border-radius: 12px; background: var(--vscode-editor-background, #202226); color: var(--vscode-editor-foreground, #e1e1e1); font: inherit; font-size: var(--hp-text-caption, 14px); overflow-wrap: anywhere; }
+.hps-write-approval::backdrop { background: rgba(0,0,0,.6); }
+.hps-write-approval h2 { font: inherit; font-weight: 600; }
+.hps-write-files { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.hps-write-files li { min-width: 0; max-width: 100%; }
+.hps-write-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; max-width: 100%; padding: 8px; border: 1px solid currentColor; border-radius: 6px; background: var(--vscode-badge-background, #454545); color: var(--vscode-badge-foreground, #fff); }
+.hps-write-chip svg { flex: 0 0 16px; }
+.hps-write-chip span { min-width: 0; overflow-wrap: anywhere; }
+.hps-write-full-name { display: block; padding: 8px 0; overflow-wrap: anywhere; }
+.hps-write-approval button { min-height: 44px; min-width: 44px; padding: 8px 12px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 6px; }
+.hps-write-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.hps-write-approval :focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+@media (forced-colors: active) { .hps-write-chip { color: CanvasText; background: Canvas; } }

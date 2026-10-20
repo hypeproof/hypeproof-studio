@@ -186,7 +186,8 @@ import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { browserRememberLabel, browserTargetDetail } from "./browserTargetHost";
-import { writeApprovalCopy, writePathEntries, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
+import { WriteApprovalRequest } from "./writeApprovalPrompt";
+import { writePathLine, writePathEntries, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
@@ -888,6 +889,28 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private pendingApprovals = new Map<string, (approved: boolean) => void>();
   /** REQ-STUDIO-TASK-RUN-STATE — approval modals open right now (resolveActionApprovalTracked). */
   private approvalWaits = 0;
+  private readonly writeApprovalRequest = new WriteApprovalRequest({
+    scope:()=>this.writeApprovalScope(),
+    present:prompt=>this.presentWriteApproval(prompt),
+  });
+  private async presentWriteApproval(prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null):Promise<boolean|void> {
+    if(prompt && !(this.editorChat?.visible || this.view?.visible))return false;
+    return this.post({type:'writeApprovalPrompt',prompt});
+  }
+  private writeApprovalScope():string {
+    return JSON.stringify([activityConnections(this.context)?.scope,this.currentTaskStore?.()?.getView().activeTaskId,this.resolveCoachCwd(),this.cachedProfile?.profile_id,this._instructorMode.isInstructor]);
+  }
+  private async confirmWriteFiles(id:string,title:string,verb:string,entries:WritePathEntry[]):Promise<boolean> {
+    this.writeApprovalRequest.invalidate();
+    const scope=this.writeApprovalScope(), generation=this.writeApprovalRequest.generation;
+    const current=()=>scope===this.writeApprovalScope() && generation===this.writeApprovalRequest.generation;
+    const token=await this.context.secrets.get(TOKEN_KEY);
+    if(!current())return false;
+    const approved=await this.writeApprovalRequest.confirm({id,title,verb,files:entries.map(writePathLine)});
+    if(!approved)return false;
+    const after=await this.context.secrets.get(TOKEN_KEY);
+    return token===after && current();
+  }
   /**
    * #476 — has the participant ever been told about the agent-sdk → proxy fallback
    * (once per session)?
@@ -2909,6 +2932,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     view.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, view.webview));
     watchChatSurface(view, this.finishNotifier);
     view.onDidDispose(() => {
+      this.writeApprovalRequest.cancel();
       if (this.draftSource===sidebarWebview) this.draftSource=undefined;
       if (this.view === view) this.view = undefined;
       if (!this.editorChat) abortAllStreams(this.activeStreams);
@@ -2929,6 +2953,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       watchChatSurface(entry, this.finishNotifier);
       const editorWebview=entry.webview;
       entry.onDidDispose(() => {
+        this.writeApprovalRequest.cancel();
         if(this.draftSource===editorWebview)this.draftSource=undefined;
         if (this.editorChat === entry) {
           this.editorChat = undefined;
@@ -3036,6 +3061,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   opsRuntimeGeneration(): number { return this.opsGeneration; }
   /** Ask every running turn and pending approval to end. Entries leave the maps through their normal finally paths — that is the confirmation. */
   opsRequestStop(): void {
+    this.writeApprovalRequest?.cancel();
     for (const [streamId, ctrl] of [...this.activeStreams]) { try { ctrl.abort(); } catch { /* best-effort */ } void this.post({ type: "streamStopped", streamId, by: "instructor" }); }
     for (const resolve of [...this.pendingApprovals.values()]) resolve(false);
     this.observationAssessment?.abort();
@@ -3236,6 +3262,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Force re-fetch on next config push (e.g. after token change). */
   invalidateProfile(): void {
+    this.writeApprovalRequest?.cancel();
     this.profileGeneration++;
     this.observationAssessment?.abort();
     this.nativeObservation=null;
@@ -5444,7 +5471,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "helpDiscard": await this.helpSource?.discard(msg.key, msg.requestId); return;
       case "helpConfirm": await this.helpSource?.confirm(msg.key, msg.id, msg.revision); return;
       case "helpWithdraw": await this.helpSource?.withdraw(msg.key, msg.id); return;
+      case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
       case "ready":
+        this.writeApprovalRequest.cancel();
         await this.postInbox();
         // AE-15 — a remount must still show the open review bar (it never auto-dismisses).
         this.postTurnReview();
@@ -7754,15 +7783,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       title: approvalFallbackTitle(coachName),
       verb: "허용",
     };
-    // REQ-E1 / CGP-AGENT-R-005 — the write modal lists every path (up to 8, then 외 N개 and a full-list button
-    // naming the real total). Looking at the full list is not an answer: it asks again with every path shown.
+    // DES-CGP-AGENT-05 changes presentation only; the opt-in policy and path gates above remain.
     if (req.kind === "writeFile") {
-      const copy = writeApprovalCopy(title, writeEntries);
       onPrompted?.();
-      const pick = await vscode.window.showWarningMessage(copy.message, { modal: true }, verb, ...(copy.allLabel ? [copy.allLabel] : []));
-      if (pick === verb) return true;
-      if (!copy.allLabel || pick !== copy.allLabel || !copy.allMessage) return false;
-      return (await vscode.window.showWarningMessage(copy.allMessage, { modal: true }, verb)) === verb;
+      return this.confirmWriteFiles(randomId(),title,verb,writeEntries);
     }
     onPrompted?.();
     const pick = await vscode.window.showWarningMessage(
@@ -8202,6 +8226,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if(msg.type!=='writeApprovalPrompt') {
+      if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type))this.writeApprovalRequest?.cancel();
+      else this.writeApprovalRequest?.invalidate();
+    }
     msg={...msg,activityId:msg.activityId ?? activityConnections(this.context)?.scope, taskId: msg.taskId ?? this.currentTaskStore?.()?.getView().activeTaskId ?? undefined} as HostMessage;
     const targets = [this.editorChat?.webview, this.view?.webview].filter((view): view is vscode.Webview => !!view);
     if (!targets.length) return;
