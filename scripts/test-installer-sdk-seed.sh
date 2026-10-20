@@ -130,7 +130,7 @@ echo "=== 2. positive control: a verified seed passes ==="
 run_case member-ok ok 0
 if [ "$(rc member-ok)" = "0" ]; then pass "member-ok: doctor exits 0"
 else bad "member-ok: doctor exit $(rc member-ok) (expected 0)"; sed 's/^/      /' "$WORK/member-ok.out"; fi
-if has member-ok "SDK: seeded + verified"; then pass "member-ok: SDK reported verified"
+if has member-ok "SDK: 준비·확인됨"; then pass "member-ok: SDK reported verified"
 else bad "member-ok: SDK not reported verified"; fi
 if has member-ok "SDK: 설치되지 않았습니다"; then bad "member-ok: stop message on a good seed"
 else pass "member-ok: no stop message"; fi

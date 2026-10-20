@@ -134,6 +134,9 @@ stub python3  'echo "Python 3.12.4"'
 stub jq       'echo "jq-1.7.1"'
 stub curl     'if [ "${1:-}" = "--version" ]; then echo "curl 8.7.1"; exit 0; fi; printf "%s\n" "$*" >> "$STUB_LOG/curl.log"; exit 22'
 stub defaults 'sed -n "s/.*<string>\(.*\)<\/string>.*/\1/p" "$2" | head -n1'
+# open: the installer opens Studio at the end of an interactive install. A test run
+# is unattended and uses HPS_APPS_DIR, so it must never get here; the log proves it.
+stub open     'printf "%s\n" "$*" >> "$STUB_LOG/open.log"; exit 0'
 # macOS mktemp prefers the per-user temp folder over TMPDIR, and the member path
 # never removes its fetched seeder. Keep every temp file inside this test's folder.
 stub mktemp   'case "${1:-}" in -d) exec /usr/bin/mktemp -d "$STUB_TMP/tmp.XXXXXXXXXX" ;; -t) exec /usr/bin/mktemp "$STUB_TMP/$2.XXXXXXXXXX" ;; *) exec /usr/bin/mktemp "$@" ;; esac'
@@ -220,7 +223,7 @@ else printf '%s\n' "$out"; bad "kit install failed"; fi
 if [ -f "$APPS/HypeProof Studio.app/Contents/Info.plist" ]; then pass "app copied from the kit archive"
 else bad "app was not installed"; fi
 
-for line in 'class kit verified: Studio 9.9.9' "SDK version the installed app loads: ${SDK_VERSION}" 'Already seeded and verified' 'SDK seeded (canonical seeder)' '점검(doctor): 모든 항목 통과'; do
+for line in '설치 파일 확인' '확인 완료 (Studio 9.9.9)' "설치된 앱이 쓰는 SDK 버전: ${SDK_VERSION}" 'AI 코치 실행 파일이 이미 준비되어 있습니다' 'SDK 준비 완료' '점검(doctor): 모든 항목 통과'; do
   if printf '%s' "$out" | grep -q -F "$line"; then pass "output has: $line"
   else bad "output lacks: $line"; fi
 done
@@ -231,6 +234,16 @@ else bad "unexpected gh calls: $(gh_calls_beyond_version | tr '\n' ';')"; fi
 
 if [ -e "$LOG/curl.log" ] || [ -e "$LOG/brew.log" ]; then bad "the installer tried a download or a brew call"
 else pass "no download and no brew call"; fi
+
+if [ -e "$LOG/open.log" ]; then bad "an unattended test install tried to open Studio: $(cat "$LOG/open.log")"
+else pass "an unattended install with the HPS_APPS_DIR seam does not open Studio"; fi
+
+# A learner who is not a member reads this output: no class wording, no English
+# status lines that the Korean install used to leak (2026-10-20).
+for leak in '수업' 'HypeProof bootstrap' '(unattended mode)' 'class kit verified' 'Already seeded and verified' 'Using the verified archive'; do
+  if printf '%s' "$out" | grep -q -F -- "$leak"; then bad "output still has: $leak"
+  else pass "output no longer has: $leak"; fi
+done
 
 reset_logs
 if out="$(sandboxed "$WORK/apps-piped" STUB_GH_FORBID=1 -- bash -s -- --kit "$KIT" < "$KIT/install.sh" 2>&1)" \

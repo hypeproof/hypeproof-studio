@@ -24,6 +24,8 @@
 #   INSTALLER_NO_MODIFY_PATH=1  never touch PATH / rc files
 #   HPS_SKIP_STUDIO=1           skip Studio app + SDK seed (deps only)
 #   HPS_DEBUG=1                 xtrace
+#   HPS_NO_OPEN=1               do not open Studio at the end (the Lab one-liner
+#                               sets it because it opens the app itself)
 #   --kit <dir> | HPS_KIT_DIR=<dir>
 #                               class kit (docs/INSTALL-CLASS-KIT.ko.md): take the
 #                               Studio archive and the SDK seeder from this folder
@@ -137,6 +139,13 @@ fi
 # the English question stops a Korean install halfway (#1645). Older Homebrew
 # ignores the variable, where `--yes` would be an unknown option.
 export HOMEBREW_NO_ASK=1
+# A learner who only uses the app should not read Homebrew's English self-update
+# log ("==> Auto-updated Homebrew!", the list of new formulae) or its env hints.
+# Neither variable changes what gets installed: a missing formula index is still
+# downloaded, and a Homebrew that was just installed is already current. Like
+# HOMEBREW_NO_ASK, both are ignored by Homebrew versions that do not know them.
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_ENV_HINTS=1
 
 # --- curl | bash 안전장치: 자기 자신을 파일로 다시 실행한다 ------------------- #
 # 파이프로 오면 bash 는 이 스크립트를 stdin 에서 조금씩 읽어가며 실행한다. 그런데
@@ -252,7 +261,7 @@ kit_asset_name() {
 # Verify the whole kit before anything is installed, then pin the Studio version
 # it holds. A damaged kit should stop here, not after ten minutes of Homebrew.
 kit_preflight() {
-  step "수업 키트 확인"
+  step "설치 파일 확인"
   [ -f "${KIT_DIR}/${KIT_SUMS_NAME}" ] \
     || die "class kit: ${KIT_SUMS_NAME} not found in ${KIT_DIR} — this folder is not a class kit"
   _kit_names="$(awk '{ sub(/\r$/, "") } NF == 0 { next }
@@ -269,12 +278,14 @@ kit_preflight() {
     || die "class kit: ${KIT_INFO_NAME} has no usable studio_version"
   # The kit holds exactly one Studio version, so it decides (HPS_STUDIO_VERSION is ignored).
   STUDIO_VERSION="$_kit_version"
-  ok "class kit verified: Studio ${STUDIO_VERSION}, ${_kit_count} file(s) match ${KIT_SUMS_NAME}"
+  ok "설치 파일 ${_kit_count}개 확인 완료 (Studio ${STUDIO_VERSION})"
 }
 
 # ----------------------------------------------------------------------------- #
 # 3. Detect OS / arch / shell
 # ----------------------------------------------------------------------------- #
+printf '%s\n' "${C_BOLD}HypeProof Studio 설치${C_RESET}"
+[ "$NONINTERACTIVE" = "1" ] && info "(질문 없이 자동으로 진행합니다)"
 step "이 컴퓨터 확인"
 UNAME_S="$(uname -s)"; UNAME_M="$(uname -m)"
 case "$UNAME_S" in
@@ -290,21 +301,61 @@ esac
 PLATFORM="${OS}-${ARCH}"
 
 # Login shell + its rc file (for PATH edits).
-LOGIN_SHELL="$(basename "${SHELL:-/bin/sh}")"
-case "$LOGIN_SHELL" in
-  zsh)  RC_FILE="${ZDOTDIR:-$HOME}/.zshrc" ;;
-  bash) if [ "$OS" = "darwin" ]; then RC_FILE="$HOME/.bash_profile"; else RC_FILE="$HOME/.bashrc"; fi ;;
-  fish) RC_FILE="$HOME/.config/fish/config.fish" ;;
-  *)    RC_FILE="$HOME/.profile" ;;
-esac
+#
+# The login shell is the account's, not the one running this script. The Lab
+# one-liner runs `bash /tmp/hps-install.sh`, and a terminal or tool can export
+# SHELL=/bin/bash, so $SHELL alone sent a zsh user's PATH edits to
+# ~/.bash_profile, a file zsh never reads (2026-10-20, Studio 2026.1020.2).
+# Ask the account database first and fall back to $SHELL.
+detect_login_shell() {
+  _user="${USER:-$(id -un 2>/dev/null || true)}"
+  _sh=""
+  if [ -n "$_user" ]; then
+    if [ "$OS" = "darwin" ] && have dscl; then
+      _sh="$(dscl . -read "/Users/${_user}" UserShell 2>/dev/null | awk '$1 == "UserShell:" { print $2; exit }')"
+    elif have getent; then
+      _sh="$(getent passwd "$_user" 2>/dev/null | awk -F: '{ print $7; exit }')"
+    fi
+  fi
+  [ -n "$_sh" ] || _sh="${SHELL:-/bin/sh}"
+  basename "$_sh"
+}
+
+# rc_file_for_shell <shell> — the file PATH edits go to. zsh gets ~/.zprofile,
+# which every login zsh reads (Terminal, iTerm and Studio's terminal start login
+# shells) and where Homebrew itself puts `brew shellenv`. bash is unchanged.
+rc_file_for_shell() {
+  case "$1" in
+    zsh)  printf '%s\n' "${ZDOTDIR:-$HOME}/.zprofile" ;;
+    bash) if [ "$OS" = "darwin" ]; then printf '%s\n' "$HOME/.bash_profile"; else printf '%s\n' "$HOME/.bashrc"; fi ;;
+    fish) printf '%s\n' "$HOME/.config/fish/config.fish" ;;
+    *)    printf '%s\n' "$HOME/.profile" ;;
+  esac
+}
+
+# rc_files_already_read <shell> — older installers wrote zsh PATH lines to
+# ~/.zshrc. A line there is already in effect, so re-runs must not add a second
+# copy to ~/.zprofile.
+rc_files_already_read() {
+  case "$1" in
+    zsh) printf '%s\n' "${ZDOTDIR:-$HOME}/.zshrc" ;;
+  esac
+}
+
+LOGIN_SHELL="$(detect_login_shell)"
+RC_FILE="$(rc_file_for_shell "$LOGIN_SHELL")"
+RC_ALSO_READ="$(rc_files_already_read "$LOGIN_SHELL")"
+# Set to 1 when this run appended a PATH line, so the closing message mentions
+# a new terminal only when there is something to apply.
+PATH_RC_CHANGED=0
 
 # Studio support dir differs per OS.
 if [ "$OS" = "linux" ]; then
   STUDIO_SUPPORT="${XDG_DATA_HOME:-$HOME/.local/share}/HypeProof-Studio"
 fi
 
-ok "OS=${OS} arch=${ARCH} platform=${PLATFORM}"
-ok "shell=${LOGIN_SHELL} rc=${RC_FILE}"
+ok "운영체제 ${OS}, 칩 ${ARCH}"
+ok "로그인 셸 ${LOGIN_SHELL} (PATH 설정 파일: ${RC_FILE})"
 
 # ----------------------------------------------------------------------------- #
 # 4. Receipt (idempotency ledger)
@@ -326,16 +377,19 @@ ensure_path_entry() {  # ensure_path_entry <dir>
   [ "${INSTALLER_NO_MODIFY_PATH:-0}" = "1" ] && return 0
   [ -n "$RC_FILE" ] || return 0
   _line="export PATH=\"${_dir}:\$PATH\""
-  if [ -f "$RC_FILE" ] && grep -Fq "$_dir" "$RC_FILE" 2>/dev/null; then
-    return 0  # already present -> idempotent
-  fi
+  for _rc in "$RC_FILE" ${RC_ALSO_READ:+"$RC_ALSO_READ"}; do
+    if [ -f "$_rc" ] && grep -Fq "$_dir" "$_rc" 2>/dev/null; then
+      return 0  # already present -> idempotent
+    fi
+  done
   mkdir -p "$(dirname "$RC_FILE")" 2>/dev/null || true
   {
     printf '\n# Added by HypeProof installer (%s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '%s\n' "$_line"
   } >> "$RC_FILE"
   receipt_note "path_edit" "$_dir"
-  info "PATH: added ${_dir} to ${RC_FILE}"
+  PATH_RC_CHANGED=1
+  info "PATH: ${RC_FILE} 에 ${_dir} 추가"
 }
 
 # ----------------------------------------------------------------------------- #
@@ -375,7 +429,7 @@ brew_sudo_end() {
 
 ensure_brew() {
   step "설치 도구 준비 (Homebrew)"
-  if resolve_brew; then ok "brew present: $BREW"; return 0; fi
+  if resolve_brew; then ok "Homebrew 있음: $BREW"; return 0; fi
   if [ "$OS" = "darwin" ]; then
     if confirm "이 Mac에 Homebrew가 없습니다. 지금 설치할까요? (Xcode 명령줄 도구도 함께 설치됩니다)"; then
       NONINTERACTIVE_BREW=""
@@ -391,7 +445,7 @@ ensure_brew() {
       brew_sudo_end
       resolve_brew || die "Homebrew는 설치됐지만 'brew'를 아직 찾지 못했습니다. 새 터미널을 열고 설치를 다시 실행하세요."
       ensure_path_entry "$(dirname "$BREW")"
-      ok "Homebrew installed: $BREW"
+      ok "Homebrew 설치 완료: $BREW"
     else
       warn "Homebrew 없이 계속합니다. 가능한 도구는 직접 내려받습니다."
     fi
@@ -538,11 +592,11 @@ install_one_dep() {  # install_one_dep <id>
 
   # mac /bin/bash 3.2 & system curl satisfy the manifest even if not on PATH as such.
   if dep_preinstalled_ok "$_id" && [ "$OS" = "darwin" ] && [ -x "/bin/$_id" ]; then
-    ok "${_id}: using system /bin/${_id}"
+    ok "${_id}: 시스템 /bin/${_id} 사용"
     return 0
   fi
 
-  info "${_id}: missing — installing…"
+  info "${_id}: 없음 — 설치합니다…"
   if resolve_brew; then
     if "$BREW" install "$(dep_brew_pkg "$_id")"; then
       # keg-only formulae (node@22, python@3.11) need their opt/bin on PATH
@@ -553,7 +607,7 @@ install_one_dep() {  # install_one_dep <id>
                 [ -d "$_pp" ] && ensure_path_entry "$_pp" ;;
       esac
       receipt_note "installed" "$_id"
-      ok "${_id}: installed via brew"
+      ok "${_id}: 설치 완료 (Homebrew)"
       return 0
     fi
     warn "${_id}: brew install failed — trying direct fallback"
@@ -636,8 +690,8 @@ install_studio_mac() {
   if [ -d "$STUDIO_APP" ]; then
     # Idempotent upgrade: only replace if version differs.
     _cur="$(defaults read "${STUDIO_APP}/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo "?")"
-    if [ "$_cur" = "$STUDIO_VERSION" ]; then ok "Studio ${STUDIO_VERSION} already installed"; return 0; fi
-    info "Studio ${_cur} -> ${STUDIO_VERSION} (upgrading)"
+    if [ "$_cur" = "$STUDIO_VERSION" ]; then ok "Studio ${STUDIO_VERSION} 이 이미 설치되어 있습니다"; return 0; fi
+    info "Studio ${_cur} → ${STUDIO_VERSION} 업데이트"
   fi
   if [ -n "$KIT_DIR" ]; then
     # Class kit: the archive is already in the kit folder. Check it against the
@@ -646,7 +700,7 @@ install_studio_mac() {
     [ -n "$_asset" ] || die "No Studio archive matching '${_glob}' in the class kit (it was built without ${PLATFORM})"
     kit_verify "$_asset"
     _tmp="$(mktemp -d)"; _zip="${KIT_DIR}/${_asset}"
-    info "Using the verified archive from the class kit…"
+    info "확인된 설치 파일을 사용합니다…"
   else
     _url="$(gh_asset_url "$_glob")"
     [ -n "$_url" ] || die "No Studio asset matching '${_glob}' in ${STUDIO_RELEASES_REPO} v${STUDIO_VERSION} (fail-closed: ${PLATFORM} build may not exist yet)"
@@ -659,7 +713,7 @@ install_studio_mac() {
     _actual="$(shasum -a 256 "$_zip" | awk '{print $1}')"
     [ "$_actual" = "${_digest#sha256:}" ] || die "Release SHA-256 mismatch"
   fi
-  info "Unzipping to ${APPS_DIR}…"
+  info "${APPS_DIR} 에 압축을 푸는 중…"
   ( cd "$_tmp" && unzip -q -o "$_zip" ) || die "unzip failed"
   _app="$(cd "$_tmp" && find . -maxdepth 2 -name '*.app' -type d | head -n1)"
   [ -n "$_app" ] || die "no .app found in downloaded archive"
@@ -669,7 +723,7 @@ install_studio_mac() {
   xattr -dr com.apple.quarantine "$STUDIO_APP" 2>/dev/null || true
   rm -rf "$_tmp"
   receipt_note "studio" "$STUDIO_VERSION"
-  ok "Studio ${STUDIO_VERSION} installed to ${APPS_DIR}"
+  ok "Studio ${STUDIO_VERSION} 설치 완료 (${APPS_DIR})"
 }
 
 # Resolve the canonical seed script: prefer a local sibling (repo checkout or a
@@ -728,7 +782,7 @@ seed_sdk() {
   # binary of another version is never found). The seeder takes a non-pinned
   # version's integrity from the npm registry.
   _sdk_version="${HPS_SDK_VERSION:-$(app_sdk_version)}"
-  [ -n "$_sdk_version" ] && info "SDK version the installed app loads: ${_sdk_version}"
+  [ -n "$_sdk_version" ] && info "설치된 앱이 쓰는 SDK 버전: ${_sdk_version}"
   # Pass --platform on Linux where auto-detect may need help; darwin auto-detects.
   if bash "$_seed" ${_sdk_version:+--version "$_sdk_version"}; then
     # Record the version the seeder actually wrote (from its verified marker).
@@ -739,7 +793,7 @@ seed_sdk() {
       _rv="$(grep -o '"sdkVersion": *"[^"]*"' "$_mk" 2>/dev/null | head -n1 | sed 's/.*"sdkVersion": *"\([^"]*\)".*/\1/')"
       [ -n "$_rv" ] && receipt_note "sdk" "$_rv"
     fi
-    ok "SDK seeded (canonical seeder)"
+    ok "SDK 준비 완료"
   else
     SDK_SEED_RC=$?
     SDK_SEED_STAGE="failed"
@@ -824,12 +878,12 @@ doctor() {
   fi
 
   if [ "${HPS_SKIP_STUDIO:-0}" != "1" ] && [ "$OS" = "darwin" ]; then
-    if [ -d "$STUDIO_APP" ]; then ok "Studio: installed"; else warn "Studio: 찾지 못했습니다 — 설치를 다시 실행하세요"; _fail=1; fi
+    if [ -d "$STUDIO_APP" ]; then ok "Studio: 설치됨"; else warn "Studio: 찾지 못했습니다 — 설치를 다시 실행하세요"; _fail=1; fi
     # Canonical marker written by seed-sdk-binary.sh is <version>/claude.verified.json
     # (darwin under Application Support, linux under XDG_CONFIG_HOME).
     if ls "${STUDIO_SUPPORT}/sdk"/*/claude.verified.json >/dev/null 2>&1 \
        || ls "${XDG_CONFIG_HOME:-$HOME/.config}/HypeProof-Studio/sdk"/*/claude.verified.json >/dev/null 2>&1; then
-      ok "SDK: seeded + verified"
+      ok "SDK: 준비·확인됨"
     else
       # Fail closed, like install.ps1's doctor. Studio has no in-app fetch for the
       # native binary, so the old warning that promised a repair on first launch
@@ -849,15 +903,42 @@ doctor() {
 }
 
 # ----------------------------------------------------------------------------- #
+# 8b. Finish: open the app, mention PATH only when it changed
+# ----------------------------------------------------------------------------- #
+# should_open_studio — open the installed app for a person at a terminal, and
+# never in an unattended run, in CI, under the HPS_APPS_DIR test seam, or when the
+# caller opens it itself (HPS_NO_OPEN=1, set by the Lab one-liner).
+should_open_studio() {
+  [ "$OS" = "darwin" ] || return 1
+  [ "${HPS_SKIP_STUDIO:-0}" != "1" ] || return 1
+  [ "$NONINTERACTIVE" != "1" ] || return 1
+  [ -z "${CI:-}" ] || return 1
+  [ -z "${HPS_APPS_DIR:-}" ] || return 1
+  [ "${HPS_NO_OPEN:-0}" != "1" ] || return 1
+  [ -d "$STUDIO_APP" ] || return 1
+  have open
+}
+
+finish() {
+  step "완료"
+  ok "HypeProof Studio 설치가 끝났습니다."
+  if should_open_studio && open -a "$STUDIO_APP" >/dev/null 2>&1; then
+    ok "Studio를 열었습니다. 시작 화면에서 바로 시작하세요."
+  elif [ "$OS" = "darwin" ] && [ -d "$STUDIO_APP" ] && [ "${HPS_NO_OPEN:-0}" != "1" ]; then
+    info "Studio는 응용 프로그램 폴더의 'HypeProof Studio'로 열 수 있습니다."
+  fi
+  if [ "$PATH_RC_CHANGED" = "1" ]; then
+    info "(선택) 터미널에서 새로 설치된 명령을 쓰려면 새 터미널 창을 여세요. Studio만 쓴다면 필요 없습니다."
+  fi
+}
+
+# ----------------------------------------------------------------------------- #
 # 9. Main
 # ----------------------------------------------------------------------------- #
 # 테스트 훅 — `HPS_LIB_ONLY=1 . scripts/install.sh` 로 부르면 함수 정의만 하고
 # 아무것도 설치하지 않는다. scripts/test-installer-version-gate.sh 가 이걸로
 # 버전 게이트를 대조군과 함께 검증한다. 이 줄 위는 전부 정의부여야 한다.
 [ "${HPS_LIB_ONLY:-0}" = "1" ] && return 0 2>/dev/null
-
-printf '%s\n' "${C_BOLD}HypeProof bootstrap — platform ${PLATFORM}, manifest schema ${MANIFEST_SCHEMA}${C_RESET}"
-[ "$NONINTERACTIVE" = "1" ] && info "(unattended mode)"
 
 have curl || die "curl is required to bootstrap and was not found."
 
@@ -867,8 +948,5 @@ check_deps
 install_studio
 doctor
 
-step "완료"
-ok "HypeProof 준비가 끝났습니다. 새 터미널을 열어야(또는 'source ${RC_FILE}') 바뀐 PATH가 적용됩니다."
-[ "$OS" = "darwin" ] && [ -d "$STUDIO_APP" ] && \
-  info "실행: open '${STUDIO_APP}'"
+finish
 exit 0

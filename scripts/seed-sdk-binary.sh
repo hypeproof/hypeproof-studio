@@ -121,7 +121,7 @@ if [ "$VERSION" = "$PINNED_VERSION" ]; then
   EXPECTED_SHA="$(pinned_sha512 "$PLATFORM")"
   [ -n "$EXPECTED_SHA" ] || err "No pinned sha512 for platform $PLATFORM"
 else
-  say "Non-pinned version $VERSION — fetching dist.integrity from the npm registry"
+  say "고정 버전이 아닌 $VERSION — npm 레지스트리에서 확인값을 받는 중"
   EXPECTED_SHA="$(curl -fsSL "$REGISTRY/$PKG/$VERSION" \
     | sed -n 's|.*"integrity":"\(sha512-[^"]*\)".*|\1|p' | head -n1)"
   [ -n "$EXPECTED_SHA" ] || err "Could not read dist.integrity for $PKG@$VERSION from the registry"
@@ -140,11 +140,11 @@ MARKER="$DEST_BIN.verified.json"
 if [ -z "$DOWNLOAD_ONLY" ] && [ "$FORCE" != "yes" ] && [ -x "$DEST_BIN" ] && [ -f "$MARKER" ]; then
   CUR_SIZE="$(wc -c < "$DEST_BIN" | tr -d ' ')"
   if grep -q "\"sdkVersion\": \"$VERSION\"" "$MARKER" && grep -q "\"size\": $CUR_SIZE" "$MARKER"; then
-    say "Already seeded and verified — nothing to do"
+    say "AI 코치 실행 파일이 이미 준비되어 있습니다 (확인 완료)"
     printf '  binary : %s\n  size   : %s bytes\n  marker : %s\n' "$DEST_BIN" "$CUR_SIZE" "$MARKER"
     exit 0
   fi
-  say "Existing seed at $DEST_BIN failed the marker/size check — re-seeding"
+  say "기존 AI 코치 실행 파일($DEST_BIN)이 확인을 통과하지 못해 다시 준비합니다"
 fi
 
 TMP="$(mktemp -d)"
@@ -153,16 +153,16 @@ trap 'rm -rf "$TMP"' EXIT
 # ── Obtain the tarball ───────────────────────────────────────────────────────
 if [ -n "$TARBALL" ]; then
   [ -f "$TARBALL" ] || err "Tarball not found: $TARBALL"
-  say "Using local tarball (air-gapped mode): $TARBALL"
+  say "내려받아 둔 파일을 사용합니다: $TARBALL"
   TGZ="$TARBALL"
 else
-  say "Downloading $PKG@$VERSION (~105-120 MiB) from the npm registry"
+  say "AI 코치 실행 파일 $PKG@$VERSION 내려받는 중 (약 105-120 MiB)"
   TGZ="$TMP/sdk.tgz"
   curl -fL --retry 3 -o "$TGZ" "$TGZ_URL"
 fi
 
 # ── Verify sha512 (SRI base64 form, same value npm enforces) ─────────────────
-say "Verifying sha512"
+say "파일 확인 중 (sha512)"
 if command -v openssl >/dev/null 2>&1; then
   ACTUAL_SHA="sha512-$(openssl dgst -sha512 -binary "$TGZ" | base64 | tr -d '\n')"
 else
@@ -198,7 +198,7 @@ if [ -n "$DOWNLOAD_ONLY" ]; then
 fi
 
 # ── Extract + install atomically ─────────────────────────────────────────────
-say "Extracting package/claude"
+say "압축 푸는 중"
 tar -xzf "$TGZ" -C "$TMP" package/claude
 [ -f "$TMP/package/claude" ] || err "Tarball did not contain package/claude"
 mkdir -p "$DEST_DIR"
@@ -219,7 +219,7 @@ cat > "$MARKER" <<EOF
 EOF
 
 # ── Verification printout ────────────────────────────────────────────────────
-say "Seeded successfully"
+say "AI 코치 실행 파일 준비 완료"
 printf '  binary : %s\n' "$DEST_BIN"
 printf '  size   : %s bytes\n' "$BIN_SIZE"
 printf '  sha512 : %s (tarball, verified)\n' "$ACTUAL_SHA"
