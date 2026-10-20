@@ -288,7 +288,12 @@ export class ActivityConnections {
       prepare();
     } finally { release(); }
   }
-  async commit(token: string, p: ResolvedProfile, root: string, accountPass?: AccountPassBinding): Promise<() => Promise<void>> {
+  /**
+   * `replacesFree` (CONV-PURCHASE-R-005): the binding id of the free seat a paid pass replaces in
+   * place. Only that free seat's binding, and only for a pass, may be taken over through it; any
+   * other holder stays held exactly as before.
+   */
+  async commit(token: string, p: ResolvedProfile, root: string, accountPass?: AccountPassBinding, opts?: { replacesFree?: string }): Promise<() => Promise<void>> {
     if (!/^[a-f0-9]{64}$/.test(p.activity_id ?? '')) throw new ActivityConnectionError('서버가 활동 분리를 지원하지 않습니다. 연결 서버를 업데이트해 주세요.');
     const service = activityService(this.service()), workspace = canonical(root);
     const id = digest(JSON.stringify([service,p.activity_id]));
@@ -317,7 +322,8 @@ export class ActivityConnections {
     const tmp = bindingFile + '.' + crypto.randomUUID();
     try {
       const free = isFreeSeat(p);
-      this.claim(workspace,id,(bound)=>passTakesOver(p,workspace) || freeTakesOver(p,workspace,bound,owners?.get(bindingOwnerKey(bound))),free);
+      const replacesFree = (bound: { free?: unknown; id?: unknown }) => !!p.pass && !!opts?.replacesFree && bound.id === opts.replacesFree && bound.free === true;
+      this.claim(workspace,id,(bound)=>passTakesOver(p,workspace) || freeTakesOver(p,workspace,bound,owners?.get(bindingOwnerKey(bound))) || replacesFree(bound),free);
       await this.raw.secrets.store(ref,JSON.stringify(next));
       fs.writeFileSync(tmp,JSON.stringify({version:1,id,ref,...(free?{free:true}:{})}),{flag:'wx',mode:0o600});
       fs.renameSync(tmp,bindingFile);
