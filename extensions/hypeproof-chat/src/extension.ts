@@ -96,10 +96,10 @@ export async function activate(context: vscode.ExtensionContext) {
   const backdoors = await applyTestBackdoors(context);
 
   const preview = new PreviewProvider(context);
-  // REQ-STUDIO-PREVIEW-RECOVERY — remember the preview server's addresses so a tab restored on an old port is known.
+  // REQ-STUDIO-PREVIEW-RECOVERY — remember the preview server's addresses (max 20, 7 days) so a tab restored on an old port is known.
   const liveServer = new LiveServer({
-    get: () => context.globalState.get<string[]>("hypeproof.previewServedOrigins", []),
-    set: (origins) => { void context.globalState.update("hypeproof.previewServedOrigins", origins); },
+    get: () => context.globalState.get<unknown[]>("hypeproof.previewServedOrigins.v2", []),
+    set: (origins) => { void context.globalState.update("hypeproof.previewServedOrigins.v2", origins); },
   });
   registerPreviewViewport(context, liveServer);
   // SX-59 — the old capability status bar was built here and sat on screen for the

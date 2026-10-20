@@ -439,3 +439,9 @@
 @media (max-width: 700px) {
   .hps-shell[data-chat-detail="personal"] .hp-ai-can-do { margin-inline: 18px; }
 }
+/* REQ-STUDIO-PREVIEW-RECOVERY — the preview failure line sits in the same 740px reading column as the messages and
+   the composer (the UI-POLISH-1 measure), not across the whole pane. */
+.hps-shell[data-chat-detail="personal"] .hps-preview-recovery { margin: 12px max(20px, calc((100% - var(--chat-column)) / 2)) 0; }
+@media (max-width: 700px) {
+  .hps-shell[data-chat-detail="personal"] .hps-preview-recovery { margin-inline: 18px; }
+}

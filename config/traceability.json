@@ -6623,6 +6623,9 @@
           "path": "extensions/hypeproof-chat/test/preview-recovery-host.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/preview-recovery-provider.test.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/preview-recovery.test.tsx"
         }
       ]

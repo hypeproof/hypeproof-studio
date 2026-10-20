@@ -10,7 +10,7 @@ import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { readFileSync } from "node:fs";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
-import { PREVIEW_RECOVERY_ACTIONS, type PreviewSignals } from "../src/previewFailure";
+import { PREVIEW_RECOVERY_ACTIONS, PREVIEW_RECOVERY_NOTES, type PreviewRecoveryResult, type PreviewSignals } from "../src/previewFailure";
 import type { ChatConfig } from "../src/protocol";
 
 const act: (fn: () => unknown) => Promise<void> = (React as unknown as { act: (fn: () => unknown) => Promise<void> }).act;
@@ -69,7 +69,8 @@ async function harness(config: ChatConfig) {
     card,
     buttons: () => (card() ? card().findAll((e) => e.localName === "button") : []),
     press: async (el: El) => act(async () => { click(el); }),
-    state: async (signals: PreviewSignals | null) => act(async () => { win().dispatchEvent({ type: "message", bubbles: false, data: { type: "previewRecovery", signals } }); }),
+    state: async (signals: PreviewSignals | null, result?: PreviewRecoveryResult) => act(async () => { win().dispatchEvent({ type: "message", bubbles: false, data: { type: "previewRecovery", signals, ...(result ? { result } : {}) } }); }),
+    note: () => host.findAll((e) => e.getAttribute("data-testid") === "preview-recovery-note")[0],
     net: async (online: boolean) => act(async () => { setOnline(online); win().dispatchEvent({ type: online ? "online" : "offline", bubbles: false }); }),
   };
 }
@@ -79,6 +80,7 @@ const CASES: Array<{ name: string; s: PreviewSignals; online: boolean; text: str
   { name: "server_down", s: sig({ server: "stopped", status: null }), online: true, text: "미리보기 서버가 꺼져 있어요.", label: "다시 켜기", action: "restart_preview" },
   { name: "not_found", s: sig({ status: 404, path: "/play/game.html" }), online: true, text: "game.html 파일이 없어서 페이지를 열 수 없어요.", label: "파일 목록 보기", action: "show_files" },
   { name: "offline", s: sig({ status: null, server: "stopped", needsNetwork: true }), online: false, text: "인터넷 연결이 끊겨서 미리보기를 열 수 없어요.", label: "다시 시도", action: "retry" },
+  { name: "slow", s: sig({ server: "slow", status: null }), online: true, text: "미리보기가 응답이 늦어요.", label: "다시 시도", action: "retry" },
   { name: "unknown", s: sig({ status: 500 }), online: true, text: "미리보기를 열지 못했어요.", label: "다시 시도", action: "retry" },
 ];
 
@@ -114,6 +116,12 @@ for (const [seat, config] of [["personal", personal], ["classroom", classroom]] 
       posted.length = 0;
       await h.press(h.buttons()[0]);
       eq(posted.filter((m) => m.type === "previewRecoveryAction").length, 0, "a second press while the host works sends nothing");
+      // A state pushed by a tab event (no result) does not re-enable the button: only the press's answer does.
+      await h.state(c.s);
+      eq(h.buttons()[0].getAttribute("aria-disabled"), "true", "still busy until the press is answered");
+      await h.state(c.s, "done");
+      eq(h.buttons()[0].getAttribute("aria-disabled"), null, "answered: the button is back");
+      eq(h.note(), undefined, "a press that ran gets no extra line");
       // The host answers: the page is back (positive control), and the card goes.
       await h.state(sig());
       eq(h.card(), undefined, "card gone when the page answered");
@@ -131,6 +139,31 @@ for (const [seat, config] of [["personal", personal], ["classroom", classroom]] 
     ok(h.card().textContent.includes("인터넷 연결이 끊겨서"), "network page while offline");
     await h.net(true);
     eq(h.card(), undefined, "back online, the page answered: no card");
+  });
+
+  t(`${seat}: a refused or failed press says it did not run, and the button comes back`, async () => {
+    setOnline(true);
+    const h = await harness(config);
+    const down = sig({ server: "stopped", status: null });
+    await h.state(down);
+    await h.press(h.buttons()[0]);
+    eq(h.buttons()[0].getAttribute("aria-disabled"), "true", "busy");
+    await h.state(down, "failed");
+    eq(h.buttons()[0].getAttribute("aria-disabled"), null, "re-enabled after a failure");
+    ok(h.note()?.textContent.includes(PREVIEW_RECOVERY_NOTES.failed), "failed line");
+    await h.press(h.buttons()[0]);
+    eq(h.note(), undefined, "a new press clears the old line");
+    await h.state(sig({ status: 404, path: "/a.html" }), "refused");
+    ok(h.note()?.textContent.includes(PREVIEW_RECOVERY_NOTES.refused), "refused line under the new cause");
+    eq(h.buttons().length, 1, "still one action");
+    eq(h.buttons()[0].textContent.trim(), "파일 목록 보기", "the action follows the fresh state");
+    // Refused because the page came back meanwhile: no card, one line that says the press did not run.
+    await h.press(h.buttons()[0]);
+    await h.state(sig(), "refused");
+    eq(h.card(), undefined, "no card");
+    ok(h.note()?.textContent.includes(PREVIEW_RECOVERY_NOTES.refusedGone), "standalone line");
+    await h.state(null);
+    eq(h.note(), undefined, "the line goes once the preview tab is gone");
   });
 
   t(`${seat}: an unknown status stays generic`, async () => {

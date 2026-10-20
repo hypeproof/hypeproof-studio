@@ -185,7 +185,7 @@ import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { browserRememberLabel, browserTargetDetail } from "./browserTargetHost";
-import { measurePreview, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
+import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
@@ -2302,7 +2302,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let tab: vscode.BrowserTab | undefined;
     try { tab = this.learnerPreviewTab(); } catch { return null; }
     if (!tab) return null;
-    return measurePreview(tab.url, this.liveServer?.currentUrl(), async (url) => (await fetch(url, { signal: AbortSignal.timeout(3000), redirect: "manual" })).status);
+    return measurePreview(tab.url, () => ({ base: this.liveServer?.currentUrl(), listening: !!this.liveServer?.isListening() }), (url) => probePreviewPage(url));
   }
   private async postPreviewRecovery(): Promise<void> {
     await this.post({ type: "previewRecovery", signals: await this.previewSignals() });
@@ -2314,7 +2314,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try {
       await runPreviewRecoveryAction(action, {
         signals: () => this.previewSignals(),
-        restart: async () => { await this.startLivePreview(); },
+        restart: async () => !!(await this.startLivePreview()),
         showFiles: async () => { await vscode.commands.executeCommand("workbench.view.explorer"); },
         retry: async () => {
           const tab = this.learnerPreviewTab();
@@ -2322,7 +2322,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const pinned = new BrowserControl(); pinned.setTargetTab(tab);
           try { await pinned.loadInPinnedTab(tab.url); } finally { await pinned.dispose(); }
         },
-        post: async (signals) => { await this.post({ type: "previewRecovery", signals }); },
+        post: async (signals, result) => { await this.post({ type: "previewRecovery", signals, result }); },
       });
     } finally { this.previewRecoveryRunning = false; }
   }
@@ -4355,8 +4355,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // is unchanged, so it looks like "nothing happened". Bring it forward.
         await this.revealBrowserTab(current);
       } else {
+        // REQ-STUDIO-PREVIEW-RECOVERY — only tabs on an address this process's own server served are closed; another
+        // localhost tool's tab (or one on a port Studio used in an earlier run) is never touched.
         for (const t of tabs) {
-          if (isPreviewTab(t.url)) {
+          if (isPreviewTab(t.url) && this.liveServer.servedThisSession(t.url)) {
             try {
               await t.close();
             } catch {

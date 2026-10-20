@@ -7,7 +7,7 @@ import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
-import { previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
+import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { glyphIconKind, splitLeadingGlyph, stripLeadingGlyph } from './glyphIcon';
@@ -583,8 +583,16 @@ export function ChatPanel(props: Props) {
   // browser tab changes; the panel asks again on mount, when it comes back into view and when the window regains focus.
   const [previewSignals, setPreviewSignals] = useState<PreviewSignals | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  // The line after a press that did not run (refused or failed). Only a press's answer (`result`) re-enables the button,
+  // so a state pushed by a tab event while the host works does not invite a second press.
+  const [previewNote, setPreviewNote] = useState<string | null>(null);
   useEffect(() => {
-    const off = onHostMessage((msg) => { if (msg.type === "previewRecovery") { setPreviewSignals(msg.signals); setPreviewBusy(false); } });
+    const off = onHostMessage((msg) => {
+      if (msg.type !== "previewRecovery") return;
+      setPreviewSignals(msg.signals);
+      if (msg.result) { setPreviewBusy(false); setPreviewNote(previewRecoveryNote(msg.result, msg.signals)); }
+      else if (!msg.signals) setPreviewNote(null);
+    });
     const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "previewRecoveryRequest" }); };
     ask(); document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
     const stop = () => { off(); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
@@ -1478,7 +1486,11 @@ export function ChatPanel(props: Props) {
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
       {!connectivity.online && <div className="hps-offline-banner" role="status" data-testid="offline-banner">{OFFLINE_BANNER_TEXT}</div>}
-      {previewView && <PreviewRecoveryNotice view={previewView} busy={previewBusy} onAction={() => { setPreviewBusy(true); postToHost({ type: "previewRecoveryAction", action: previewView.action }); }} />}
+      {(previewView || previewNote) && <PreviewRecoveryNotice view={previewView} note={previewNote} busy={previewBusy} onAction={(action) => {
+        setPreviewBusy(true); setPreviewNote(null);
+        let sent = false;
+        try { postToHost({ type: "previewRecoveryAction", action }); sent = true; } finally { if (!sent) setPreviewBusy(false); }
+      }} />}
       <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
         {props.aiNotice && (
           // #320 — AI disclosure (Anthropic Usage Policy / ToS §D.3). Compact
