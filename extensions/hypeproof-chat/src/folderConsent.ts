@@ -92,17 +92,23 @@ export function folderConsentApplies(
 }
 
 /**
- * Is `folder` the activity's own work folder? Both arguments are canonical. Own means the
- * served home folder, a folder inside it, or a sibling Studio derives from it
- * (`<home>-N` from "새로 하기", `<home>-<repo>` from "프로젝트 변경"). No served home → no
- * folder is own, so the learner is asked.
+ * Is `folder` the activity's own work folder? Both arguments are canonical. Own means
+ * exactly the served home folder or a folder inside it. A look-alike sibling
+ * (`<home>-taxes`, `<home>Clinic`) is not own, and neither is a sibling Studio created
+ * (`<home>-N`, `<home>-<repo>`): those ask once. No served home → no folder is own.
  */
 export function isOwnFolder(folder: string, home: string | null | undefined): boolean {
   if (!home) return false;
   if (folder === home) return true;
   const rel = path.relative(home, folder);
-  if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) return true;
-  return path.dirname(folder) === path.dirname(home) && path.basename(folder).startsWith(`${path.basename(home)}-`);
+  return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+/** Is `target` the folder itself or inside it? Both canonical. */
+export function isInsideFolder(target: string, folder: string): boolean {
+  if (target === folder) return true;
+  const rel = path.relative(folder, target);
+  return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
 export type FolderConsentStore = Record<string, Record<string, { level: FolderConsentLevel; at: number }>>;
@@ -157,6 +163,19 @@ export function narrowForFolder(profile: ResolvedProfile, level: Exclude<FolderC
   return narrowed;
 }
 
+/** Shown when a personal seat has a folder open but no activity to remember the choice for. */
+export const FOLDER_CONSENT_NO_ACTIVITY = denialCopy(
+  { source: "unknown", feature: "AI", reason: "이 활동을 확인하지 못해 이 폴더의 AI 권한을 정할 수 없어요", next: "활동에 다시 연결한 뒤 보내 주세요" },
+  "solo",
+);
+
+/** Only "모두 허용" lets Studio write into a non-own folder; read-only, no-AI and undecided do not. */
+export const folderWriteAllowed = (level: FolderConsentLevel | undefined): boolean => level === "full";
+
+/** The one line a learner sees when Studio did not save a file because of the folder choice. */
+export const folderReadOnlyNotice = (): string =>
+  denialCopy({ source: "folder", feature: "파일 저장", next: "답은 화면에서 볼 수 있어요. 저장하려면 ‘이 폴더의 AI 권한 바꾸기’에서 다시 골라 주세요" });
+
 /** The learner-facing refusal for a turn in a folder where the learner chose "AI 안 씀". */
 export const folderNoAiCopy = (): string => denialCopy({ source: "folder", feature: "AI" });
 
@@ -166,7 +185,8 @@ export const folderToolDenial = (d: Omit<Denial, "source">): string => denialToo
 export type FolderConsentDecision =
   | { kind: "skip" } // not a personal seat, or the activity's own folder
   | { kind: "ask"; folder: string }
-  | { kind: "apply"; folder: string; level: FolderConsentLevel };
+  | { kind: "apply"; folder: string; level: FolderConsentLevel }
+  | { kind: "refuse"; message: string }; // a personal seat in a folder, but no activity to key the choice by
 
 /** What the host does before a turn. Pure: the caller passes canonical paths. */
 export function folderConsentDecision(args: {
@@ -176,8 +196,10 @@ export function folderConsentDecision(args: {
   home: string | null | undefined;
   store: unknown;
 }): FolderConsentDecision {
-  if (!args.applies || !args.folder || !args.activityId) return { kind: "skip" };
+  if (!args.applies || !args.folder) return { kind: "skip" };
   if (isOwnFolder(args.folder, args.home)) return { kind: "skip" };
+  // Fail closed: without an activity id the choice cannot be remembered, so the AI is not used.
+  if (!args.activityId) return { kind: "refuse", message: FOLDER_CONSENT_NO_ACTIVITY };
   const level = readFolderConsent(args.store, args.activityId, args.folder);
   return level ? { kind: "apply", folder: args.folder, level } : { kind: "ask", folder: args.folder };
 }

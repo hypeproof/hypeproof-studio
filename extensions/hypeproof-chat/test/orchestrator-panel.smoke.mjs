@@ -1023,11 +1023,14 @@ if (!status.available) {
         return null;
       },
       archiveAdultPage: P.ChatPanelProvider.prototype.archiveAdultPage,
+      // REQ-STUDIO-FOLDER-CONSENT — this seat's own folder: the folder guard allows every write.
+      folderWriteBlocked: () => false,
       saveEngineToWorkspace: async () => order.push("engine"),
       saveGameToWorkspace: async (html) => {
         const kept = history();
         order.push(`save(archived=${kept ? kept.length : "none"})`);
         fsm.writeFileSync(pathm.join(ws, "index.html"), html);
+        return true;
       },
       isLiveServerPreview: () => false,
       openInLiveServer: async () => false,

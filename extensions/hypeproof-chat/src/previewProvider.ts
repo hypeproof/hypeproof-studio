@@ -59,6 +59,9 @@ export class PreviewProvider {
   readonly onResult = this.resultEmitter.event;
 
   constructor(private readonly _context: vscode.ExtensionContext) {}
+  /** REQ-STUDIO-FOLDER-CONSENT — the chat host's write question; null = may write. */
+  private writeRefusal: (target: string) => string | null = () => null;
+  setWriteGuard(guard: (target: string) => string | null): void { this.writeRefusal = guard; }
 
   /**
    * Re-render the preview every time `fileUri` is saved. Called by the
@@ -218,6 +221,12 @@ export class PreviewProvider {
 
     const folderUri = vscode.Uri.joinPath(ws.uri, "workshop-output");
     const fileUri = vscode.Uri.joinPath(folderUri, target);
+    const folderRefusal = this.writeRefusal(fileUri.fsPath);
+    if (folderRefusal) {
+      vscode.window.showWarningMessage(folderRefusal);
+      this.panel?.webview.postMessage({ type: "previewActionResult", action: "append_artifact", artifact, ok: false });
+      return;
+    }
 
     const pick = await vscode.window.showWarningMessage(
       `다음 ${target} 항목을 저장할까요?\n\n${safeEntry}`,

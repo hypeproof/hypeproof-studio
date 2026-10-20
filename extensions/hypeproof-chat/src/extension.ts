@@ -266,6 +266,8 @@ export async function activate(context: vscode.ExtensionContext) {
     await ensureWorkspace(profile, context, false, commit, folder);
   });
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.switchProject", () => provider.switchProject()));
+  // REQ-STUDIO-FOLDER-CONSENT — preview saves ask the same write question as the chat host.
+  preview.setWriteGuard((target) => provider.folderWriteRefusalFor(target));
   // REQ-STUDIO-FOLDER-CONSENT — the one place a remembered folder choice is changed.
   context.subscriptions.push(vscode.commands.registerCommand(FOLDER_CONSENT_COMMAND, async () => {
     await changeFolderConsent(context, await provider.ensureProfile(), { servedRoot: provider.servedClassRoot, instructor: provider.isInstructor === true });
