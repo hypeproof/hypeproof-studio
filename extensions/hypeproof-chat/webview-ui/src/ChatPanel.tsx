@@ -41,7 +41,7 @@ import { isObservationFormat, showsObservationResults } from '../../src/nativeOb
 import { CodeBlock, CodeBlockScope } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { Children, cloneElement, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
 import type {
@@ -56,6 +56,7 @@ import type {
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, postToHost } from "./vscode";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
+import { CONTEXT_COMPACT_NOTE, CONTEXT_TRIM_NOTE, isCompactionLine, trimMarkerIndex } from "../../src/contextTrim";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
 import { classroomPanelsShown } from "../../src/classroomPanels";
@@ -139,6 +140,8 @@ interface Props {
   onEditResend?: (original: ChatMessage, editOf: string, text: string, images: string[]) => boolean | void;
   /** CGP-CHAT-R-005 — the learner's verdict per answer, and the setter. Absent: no verdict controls. */
   verdicts?: VerdictMap;
+  /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the host's clamp boundary id (null: nothing is left out). */
+  trimBoundaryId?: string | null;
   onVerdict?: (messageId: string, next: VerdictState | null) => void;
   onDismissError: () => void;
   onCancel: () => void;
@@ -1088,6 +1091,8 @@ export function ChatPanel(props: Props) {
   // CGP-CHAT-R-002 — one version per prompt is drawn; "수정" sits on the latest prompt only, and
   // never while a turn runs, a message waits in the queue or recovery list, or in instructor mode.
   const shown = visibleVersions(messages, versionChoice);
+  // REQ-STUDIO-CONTEXT-TRIM-MARKER — derived from the conversation each render; -1 when nothing is left out.
+  const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
   const editableId = props.onEditResend ? editableUserId(messages, {
     streaming, sendPending: props.sendPending, parked: queued !== null || recovered.length > 0,
     instructor: props.instructor, locked: unavailable || !!props.sendLocked,
@@ -1379,8 +1384,11 @@ export function ChatPanel(props: Props) {
 
         {/* CGP-CHAT-R-008: code-block wrap choices are scoped to this conversation. */}
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
-        {shown.items.map((m) =>
-          m.role === "tool" ? (
+        {shown.items.map((m, i) => <Fragment key={m.id}>
+          {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
+          {isCompactionLine(m) ? (
+            <ContextNote text={CONTEXT_COMPACT_NOTE} />
+          ) : m.role === "tool" ? (
             <ToolLine key={m.id} message={m} />
           ) : (
             <MessageItem
@@ -1413,8 +1421,8 @@ export function ChatPanel(props: Props) {
               verdict={judgeable?.has(m.id) ? props.verdicts?.[m.id] ?? null : undefined}
               onVerdict={judgeable?.has(m.id) && props.onVerdict ? (next) => props.onVerdict?.(m.id, next) : undefined}
             />
-          ),
-        )}
+          )}
+        </Fragment>)}
         </CodeBlockScope>
 
         {props.pageNotice && (
@@ -2148,6 +2156,11 @@ function ChipRack({
  * `hps-tool-<state>`) are **left alone on purpose** — the e2e (t1-first-turn-trace) and
  * the observer (e2e/observe/watch.mjs) read activity through these selectors.
  */
+/** REQ-STUDIO-CONTEXT-TRIM-MARKER — one quiet line in the conversation (CGP-CHAT-D16): not a bubble, not a toast. */
+function ContextNote({ text }: { text: string }) {
+  return <div className="hps-context-note" role="note">{text}</div>;
+}
+
 function ToolLine({ message }: { message: ChatMessage }) {
   const t = message.tool;
   if (!t) return null;

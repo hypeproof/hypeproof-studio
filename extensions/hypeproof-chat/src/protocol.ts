@@ -752,6 +752,8 @@ export type HostMessage = (
   | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
   | { type: "history"; messages: ChatMessage[] }
+  /** REQ-STUDIO-CONTEXT-TRIM-MARKER — first saved message the next model call still sends, when older ones are clamped. */
+  | { type: "contextTrim"; boundaryId: string | null }
   /** CGP-CHAT-R-005 — the active task's latest verdict per answer, read from the local sidecar. */
   | { type: "answerVerdicts"; requestId?: string; messageId?: string; taskId?: string; verdicts: import('./answerVerdict').VerdictMap }
   | { type: "streamStart"; streamId: string; messageId: string }

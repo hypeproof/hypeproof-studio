@@ -45,6 +45,8 @@ interface Props {
   onDismissUpdate: (version: string) => void;
   /** cr-review — the director's Weekly Review panel (null = hidden); passed to the chat panel like the student's CR panels. */
   verifyPanel?: import("react").ReactNode;
+  /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the host's clamp boundary id, passed through to ChatPanel. */
+  trimBoundaryId?: string | null;
 }
 
 export function InstructorChatPanel(props: Props) {

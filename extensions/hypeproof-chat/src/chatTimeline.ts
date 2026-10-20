@@ -237,6 +237,13 @@ export function hasActivityThisTurn(messages: ChatMessage[]): boolean {
 }
 
 /**
+ * Spoken messages (user/assistant) kept in workspaceState and sent to the model per turn.
+ * Lives here, not in chatPanelHelpers, so the webview can derive the trim marker
+ * (contextTrim.ts) from the same number without importing host code.
+ */
+export const HISTORY_MAX = 200;
+
+/**
  * #503 — 히스토리 상한. 툴 줄이 기록의 일부가 되면서 "메시지 200개"를 그대로
  * 세면 SDK 턴 한 번이 수십 줄을 먹어 **대화가 서너 턴 만에 잘려 나간다**. 상한은
  * 지금까지대로 **말한 것(user/assistant) 기준**으로 세고, 그 구간에 섞인 툴 줄은
