@@ -14,7 +14,9 @@ test('native trial: enter code, use real API, create and revise an actual work f
   let stopped = false;
   let connected = false;
   let stage = 'code-entry';
-  // Synthetic participant approves this test's requested local file operations.
+  // Synthetic participant approves this test's requested local file operations, and on a
+  // trial seat the folder consent question (REQ-STUDIO-FOLDER-CONSENT, #2065) with the
+  // choice that lets the turn write.
   // This does not count as evidence of a human's delegation ability.
   const approvals = (async () => {
     while (!stopped) {
@@ -22,7 +24,7 @@ test('native trial: enter code, use real API, create and revise an actual work f
         const box = ctx.win.locator('.monaco-dialog-box').first();
         if (await box.isVisible().catch(() => false)) {
           const copy = (await box.textContent()) || '';
-          const allowed = /restart to take effect/i.test(copy) ? /^Cancel$/i : /^(저장|읽기|Approve|승인)$/;
+          const allowed = /restart to take effect/i.test(copy) ? /^Cancel$/i : /^(저장|읽기|Approve|승인|읽기·고치기·명령 실행 모두 허용)$/;
           const button = box.locator('.monaco-button').filter({ hasText: allowed }).first();
           if (await button.isVisible().catch(() => false)) await button.click();
         }

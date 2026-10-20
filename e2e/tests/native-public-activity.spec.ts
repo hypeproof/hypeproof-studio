@@ -20,10 +20,19 @@ test('public Service activity creates and revises a synthetic file',async()=>{
   await expect(chat.getByLabel('현재 활동')).toContainText(trial?'AI 체험':'수업');
   expect(existsSync(join(ctx.wsDir,'index.html'))).toBe(false);
   await chooseChatModel(chat,'hypeproof-fast');
-  const turns=[];
+  const turns:any[]=[];
   for(const [file,content] of [['public-first.md','SYNTHETIC_FIRST'],['public-revised.md','SYNTHETIC_REVISED']]){
    const prompt=`합성 앱 인수 검사입니다. ${file} 파일에 ${content} 한 줄만 저장해 주세요. 다른 파일은 읽거나 바꾸지 마세요. 셸·네트워크·브라우저는 사용하지 마세요.`;
    const input=chat.getByRole('textbox',{name:/보낼 메시지/});await input.fill(prompt);await input.press('Enter');
+   // REQ-STUDIO-FOLDER-CONSENT (#2065): the trial seat's folder is outside its served home,
+   // so the first turn asks once; the answer is remembered for the second. A classroom
+   // seat never asks. The turn writes a file, so the synthetic learner allows everything.
+   const consent=ctx.win.locator('.monaco-dialog-box').filter({hasText:'이 폴더에서 작업할까요?'});
+   if(trial&&!turns.length){
+    await expect(consent).toBeVisible({timeout:20000});
+    await consent.locator('.monaco-button').filter({hasText:'읽기·고치기·명령 실행 모두 허용'}).click();
+    await expect(consent).toHaveCount(0);
+   }
    await expect(chat.locator('.hps-btn-stop')).toBeVisible();await expect(chat.locator('.hps-btn-stop')).toHaveCount(0,{timeout:100000});
    await expect(chat.locator('.hps-error-banner')).toHaveCount(0);
    await expect.poll(()=>existsSync(join(ctx.wsDir,file))).toBe(true);
