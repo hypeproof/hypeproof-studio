@@ -3,6 +3,7 @@
 import {test,expect} from '@playwright/test';
 import {launchApp,closeApp,startFrame,chatFrame} from '../fixtures/app';
 import {chooseChatModel} from '../fixtures/chat-actions';
+import {openCodeEntry} from '../fixtures/start-actions';
 import {readFileSync,writeFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 test('public Service activity creates and revises a synthetic file',async()=>{
@@ -12,8 +13,8 @@ test('public Service activity creates and revises a synthetic file',async()=>{
  const out=process.env.HPS_NATIVE_EVIDENCE_DIR!,trial=process.env.HPS_NATIVE_MANAGED==='1';
  try{
   const start=await startFrame(ctx.win);
-  await start.getByRole('button',{name:trial?'AI 체험하기':'수업에 참여하기',exact:true}).click();
-  await start.getByLabel(trial?'체험 참여 코드':'수업 참여 코드',{exact:true}).fill(ctx.token);
+  const entry=await openCodeEntry(start,trial?'trial':'classroom');
+  await entry.input.fill(ctx.token);
   await start.getByRole('button',{name:'코드 확인하기',exact:true}).click();
   await start.getByRole('button',{name:'이 활동 시작하기',exact:true}).click();
   const chat=await chatFrame(ctx.win);
@@ -41,6 +42,6 @@ test('public Service activity creates and revises a synthetic file',async()=>{
   }
   expect(readFileSync(join(ctx.wsDir,'public-first.md'),'utf8').trim()).toBe('SYNTHETIC_FIRST');
   await ctx.win.screenshot({path:join(out,'public-activity.png')});
-  writeFileSync(join(out,'public-activity.json'),JSON.stringify({status:'PASS',kind:trial?'trial':'classroom',synthetic:true,created:true,revised:true,originalPreserved:true,turns},null,2));
+  writeFileSync(join(out,'public-activity.json'),JSON.stringify({status:'PASS',kind:trial?'trial':'classroom',free_start_card:entry.free,synthetic:true,created:true,revised:true,originalPreserved:true,turns},null,2));
  }finally{await closeApp(ctx);}
 });
