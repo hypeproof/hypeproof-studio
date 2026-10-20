@@ -2237,6 +2237,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private funnelClaimHint: { token: string; outcome: "granted" | "reused" } | null = null;
   /** The token whose /v1/trial/events probe has run (or is running); null = none. */
   private funnelProbedToken: string | null = null;
+  /**
+   * CONV-FUNNEL-R-003 — the token the free end card was last drawn for. The card's buttons count
+   * as end_card offer clicks/dismissals only while it is still the probed funnel seat: a message
+   * from a card that was never drawn (code-issued trial, pass) or from an older seat sends nothing.
+   */
+  private endCardOfferToken: string | null = null;
   private readonly artifactGate = new ArtifactChangeGate();
 
   constructor(
@@ -3489,6 +3495,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       },
     });
     this.context.subscriptions.push({ dispose: () => this.stopLiveness() });
+  }
+
+  /**
+   * CONV-FUNNEL-R-003 — one press on the free end card's buttons, as `{type, surface: end_card}`.
+   * Only for a card this host drew on the seat the funnel probed (see endCardOfferToken). Every
+   * press is sent; the Service keeps the first per grant and surface. Never throws.
+   */
+  private emitEndCardOffer(type: "offer_clicked" | "offer_dismissed"): void {
+    if (!this.endCardOfferToken || this.endCardOfferToken !== this.funnelProbedToken) return;
+    this.funnel?.emit({ type, surface: "end_card" });
   }
 
   /** studio-funnel-events — one App funnel event; validated, whitelisted and fire-and-forget. */
@@ -5493,7 +5509,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "trialEndCardPasses":
         // TUX-COND-07 — the person pressed the card's Primary. The start page opens its own
         // purchase view (REQ-L12 ②); no order is created until they choose there.
+        // CONV-FUNNEL-R-003 — counted here as offer_clicked end_card: showPurchase() opens the pass
+        // list directly and never passes through the start page's purchaseOpen (surface start_page).
+        this.emitEndCardOffer("offer_clicked");
         void vscode.commands.executeCommand("hypeproof-chat.showPasses");
+        return;
+      case "trialEndCardDismiss":
+        // CONV-FUNNEL-R-003 — the card's escape (오늘은 여기까지). The webview closes the card itself.
+        this.emitEndCardOffer("offer_dismissed");
         return;
       case "notifyOptinSubmit":
       case "notifyOptinWithdraw":
@@ -7284,6 +7307,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // sends nothing unless the probe turned the route on, and keeps the first view per grant.
         // Optional call: telemetry must never turn a drawn card into a thrown turn ending.
         this.funnel?.emit({ type: "offer_viewed", surface: "end_card" });
+        this.endCardOfferToken = current.token ?? null;
         return;
       }
     }
