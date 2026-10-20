@@ -186,7 +186,9 @@ export function recordRevert(ledger: ProvenanceLedger, revert: { pointAt: number
 
 /** One entry per file of the last observation; newest recorded event first, then 기록 없음 by path. */
 export function provenanceView(ledger: ProvenanceLedger): ArtifactProvenanceView {
-  if (!ledger.baseline) return { entries: [], more: 0, unobserved: true };
+  if (!ledger.baseline) return { entries: [], more: 0, unobserved: true, unconfirmed: false };
+  // A window that was not measured: no current bytes can be confirmed, so no label is claimed.
+  const unconfirmed = ledger.stale;
   const byPath = new Map<string, ProvenanceEvent[]>();
   for (const e of ledger.events) {
     if (e.kind === "removed") { byPath.delete(e.path); continue; }
@@ -198,8 +200,9 @@ export function provenanceView(ledger: ProvenanceLedger): ArtifactProvenanceView
   for (const [p, sha] of Object.entries(ledger.baseline)) {
     const list = byPath.get(p) ?? [];
     const latest = list.at(-1);
-    // An event explains the file only if it left exactly the bytes that are there now.
-    if (!latest || latest.sha256 !== sha) {
+    // An event explains the file only if it left exactly the bytes that are there now, and only
+    // when the last observation was measured.
+    if (unconfirmed || !latest || latest.sha256 !== sha) {
       const history = foldHistory(list);
       entries.push({ path: p, kind: "none", ...PROVENANCE_LABELS.none, history: history.length ? [...history, PROVENANCE_LABELS.none.label].slice(-PROVENANCE_HISTORY_STEPS) : [] });
       continue;
@@ -208,7 +211,7 @@ export function provenanceView(ledger: ProvenanceLedger): ArtifactProvenanceView
     entries.push({ path: p, kind, ...PROVENANCE_LABELS[kind], history: foldHistory(list), at: latest.at });
   }
   entries.sort((a, b) => (b.at ?? -1) - (a.at ?? -1) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  return { entries: entries.slice(0, PROVENANCE_VIEW_CAP), more: Math.max(0, entries.length - PROVENANCE_VIEW_CAP), unobserved: false };
+  return { entries: entries.slice(0, PROVENANCE_VIEW_CAP), more: Math.max(0, entries.length - PROVENANCE_VIEW_CAP), unobserved: false, unconfirmed };
 }
 
 function foldHistory(list: readonly ProvenanceEvent[]): string[] {
@@ -357,6 +360,15 @@ export class ArtifactProvenanceRecorder {
     return this.run(() => this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff }, after)));
   }
 
+  /** Studio replaced files of `folder` wholesale (a GitHub pull or clone): nothing in it is confirmed until observed again. */
+  folderReplaced(folder: string): Promise<unknown> {
+    return this.run(async () => {
+      let root: string;
+      try { root = await fs.realpath(folder); } catch { return null; }
+      return this.apply(root, markUnobserved);
+    });
+  }
+
   /** A turn ran (or ended) without a usable measurement. */
   unobserved(root: string): Promise<unknown> {
     return this.run(() => this.apply(root, markUnobserved));
@@ -374,9 +386,12 @@ export class ArtifactProvenanceRecorder {
    * The list for the learner. With `scan` (taken while no turn runs) it is also an observation;
    * without one the ledger is only read.
    */
-  view(root: string, scan?: ScanLike): Promise<ArtifactProvenanceView | null> {
+  view(root: string, scan?: ScanLike & { complete?: boolean }): Promise<ArtifactProvenanceView | null> {
     return this.run(async () => {
-      const ledger = scan ? await this.apply(root, (l) => observeOutsideTurn(l, scan, { at: this.now() })) : await loadLedger(this.file(root));
+      // A scan that stopped at the entry cap saw only part of the folder: the window is unmeasured.
+      const incomplete = !!scan && !Array.isArray(scan) && (scan as { complete?: boolean }).complete === false;
+      const ledger = incomplete ? await this.apply(root, markUnobserved)
+        : scan ? await this.apply(root, (l) => observeOutsideTurn(l, scan, { at: this.now() })) : await loadLedger(this.file(root));
       return ledger ? provenanceView(ledger) : null;
     });
   }
@@ -384,7 +399,10 @@ export class ArtifactProvenanceRecorder {
 
 // --- the one host-write hook -------------------------------------------------------------------
 
-type HostWriteSink = (writes: readonly HostWrite[], actor: HostWriteActor) => void;
+export interface HostWriteSink {
+  wrote(writes: readonly HostWrite[], actor: HostWriteActor): void;
+  replaced(folder: string): void;
+}
 let hostWriteSink: HostWriteSink | null = null;
 
 /** The chat host installs where host writes go (its recorder and current work folder); null removes it. */
@@ -398,5 +416,13 @@ export function setHostWriteSink(sink: HostWriteSink | null): void {
  * `studio` when they are Studio's own, `learner_upload` for an attachment. Never throws.
  */
 export function noteHostWrite(writes: readonly HostWrite[], actor: HostWriteActor): void {
-  try { hostWriteSink?.(writes, actor); } catch { /* provenance never breaks a write */ }
+  try { hostWriteSink?.wrote(writes, actor); } catch { /* provenance never breaks a write */ }
+}
+
+/**
+ * Studio brought a whole folder up to another copy (a GitHub pull, a clone into a registered
+ * folder) without knowing file by file what changed: its files read 기록 없음 until observed again.
+ */
+export function noteFolderReplaced(folder: string): void {
+  try { hostWriteSink?.replaced(folder); } catch { /* provenance never breaks a write */ }
 }

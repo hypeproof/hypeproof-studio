@@ -6815,6 +6815,9 @@
           "path": "extensions/hypeproof-chat/test/artifact-provenance.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/artifact-provenance-host.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/artifact-provenance.test.tsx"
         }
       ]

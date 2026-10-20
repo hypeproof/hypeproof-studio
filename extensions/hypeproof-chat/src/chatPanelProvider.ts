@@ -4553,9 +4553,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const recorder = new ArtifactProvenanceRecorder(base);
       this.provenance = recorder;
       // The one host-write hook (noteHostWrite) lands in this recorder, for the folder the coach stands in.
-      setHostWriteSink((writes, actor) => { const cwd = this.resolveCoachCwd(); if (cwd) void recorder.hostWrote(cwd, writes, actor); });
+      setHostWriteSink({
+        wrote: (writes, actor) => { const cwd = this.resolveCoachCwd(); if (cwd) void recorder.hostWrote(cwd, writes, actor); },
+        replaced: (folder) => { void recorder.folderReplaced(folder); },
+      });
     }
     return this.provenance;
+  }
+
+  /** REQ-STUDIO-ARTIFACT-PROVENANCE — this send's pasted (#421) and attached (D-028) photos, committed by the host, are the learner's uploads. */
+  private recordLearnerUploads(pastedRelPaths: readonly string[], attachedNote: string): void {
+    const root = this.resolveCoachCwd();
+    const rels = [...pastedRelPaths, ...imagePathsFromNotes(attachedNote)];
+    if (root && rels.length) noteHostWrite(rels.map((rel) => ({ absPath: path.join(root, ...rel.split("/")) })), "learner_upload");
   }
 
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — the work folder's provenance list; `observe` rescans when no turn runs. Never throws. */
@@ -4570,7 +4580,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         let scan: Awaited<ReturnType<typeof scanFolder>> | undefined;
         // Only files whose size, mtime or inode changed since the last list are read again.
         if (observe && idle()) scan = await scanFolder(root, { cache: recorder.scanCache(root) });
-        view = await recorder.view(root, scan?.complete && idle() ? scan : undefined);
+        // An incomplete scan (past the entry cap) is passed on: the recorder marks the window unmeasured.
+        view = await recorder.view(root, scan && idle() ? scan : undefined);
       }
     } catch { view = null; }
     await this.post({ type: "artifactProvenance", view });
@@ -5700,8 +5711,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // paths. The same lines go into the saved history, so later turns can still name them.
     const attachedNote = this.commitAttachedImages(attachments, streamId);
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
-    const uploadRoot = this.resolveCoachCwd();
-    if (uploadRoot) noteHostWrite([...(savedImages.relPaths ?? []), ...imagePathsFromNotes(attachedNote)].map((rel) => ({ absPath: path.join(uploadRoot, ...rel.split("/")) })), "learner_upload");
+    this.recordLearnerUploads(savedImages.relPaths ?? [], attachedNote);
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
     const requestSnapshot = this.turnRequests.get(userId);
     if (requestSnapshot) requestSnapshot.message.content = historyText;

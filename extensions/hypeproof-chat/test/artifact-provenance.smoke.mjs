@@ -10,9 +10,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   ArtifactProvenanceRecorder, PROVENANCE_EVENT_CAP, PROVENANCE_LABELS, PROVENANCE_VIEW_CAP, emptyLedger, loadLedger, markUnobserved,
-  noteHostWrite, observeOutsideTurn, provenanceHistoryText, provenanceLedgerFile, provenanceView, recordCoachTurn, recordHostWrite, recordRevert, setHostWriteSink,
+  noteFolderReplaced, noteHostWrite, observeOutsideTurn, provenanceHistoryText, provenanceLedgerFile, provenanceView, recordCoachTurn, recordHostWrite, recordRevert, setHostWriteSink,
 } from "../src/artifactProvenance.ts";
-import { diffRestorePoint, scanFolder, takeRestorePoint, turnRestoreStoreDir } from "../src/turnRestore.ts";
+import { diffRestorePoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, TURN_RESTORE_SKIP_DIRS } from "../src/turnRestore.ts";
 import { prepareImageEditAsset, saveImageEditOutput } from "../src/imageEditAssets.ts";
 import { inspectEditPng, imageBytesHash } from "../src/imageEditPng.ts";
 import { writeFiles } from "../src/learningWiki.ts";
@@ -38,7 +38,7 @@ await t("first observation: what was already there reads 기록 없음, with no 
 });
 
 await t("nothing observed yet: no entries, unobserved", () => {
-  eq(provenanceView(emptyLedger()), { entries: [], more: 0, unobserved: true }, "view");
+  eq(provenanceView(emptyLedger()), { entries: [], more: 0, unobserved: true, unconfirmed: false }, "view");
 });
 
 await t("each label from its own recorded event", () => {
@@ -248,7 +248,7 @@ async function session(seed = {}) {
   for (const [rel, data] of Object.entries(seed)) { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), data); }
   let clock = 1000 * n;
   const rec = new ArtifactProvenanceRecorder(base, () => ++clock);
-  setHostWriteSink((writes, actor) => { void rec.hostWrote(dir, writes, actor); });
+  setHostWriteSink({ wrote: (writes, actor) => { void rec.hostWrote(dir, writes, actor); }, replaced: (folder) => { void rec.folderReplaced(folder); } });
   const put = (rel, data) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), data); };
   const list = async () => rec.view(dir, await scanFolder(dir));
   let seq = 0;
@@ -386,6 +386,70 @@ await t("6. the list scan reuses hashes of files whose size, mtime and inode did
   fs.rmSync(path.join(c.dir, "b.txt"));
   await scanFolder(c.dir, { cache });
   eq([...cache.keys()], ["a.txt"], "gone files leave the cache");
+});
+
+console.log("artifact provenance — verify round 2: unmeasured windows, environments, GitHub pulls");
+
+await t("F1. a folder over the entry cap: an AI rewrite after a learner edit never reads 내가 고침", async () => {
+  const c = await session({ "index.html": "v0", "z.txt": "z" });
+  c.put("index.html", "learner v1");
+  eq((await labelOf(c, "index.html"))[0], "내가 고침", "measured learner edit");
+  await c.rec.unobserved(c.dir); // the next turn's restore point was incomplete
+  c.put("index.html", "AI rewrote it");
+  const partial = await scanFolder(c.dir, { limits: { entriesMax: 1 } });
+  eq(partial.complete, false, "scan stopped at the cap");
+  const v = await c.rec.view(c.dir, partial);
+  eq([v.unconfirmed, label(v, "index.html").label, label(v, "z.txt").label], [true, "기록 없음", "기록 없음"], "nothing confirmed");
+  if (v.entries.some((e) => e.kind !== "none")) throw new Error("a confident label over unmeasured bytes");
+});
+
+await t("F1. the other direction: AI가 만듦 then a learner edit in an unmeasured window reads 기록 없음", async () => {
+  const c = await session();
+  await c.coachTurn(async () => c.put("a.html", "ai"));
+  eq((await labelOf(c, "a.html"))[0], "AI가 만듦", "measured");
+  c.put("a.html", "learner");
+  const v = await c.rec.view(c.dir, await scanFolder(c.dir, { limits: { entriesMax: 0 } }));
+  eq([v.unconfirmed, label(v, "a.html").label, provenanceHistoryText(label(v, "a.html"))], [true, "기록 없음", "AI가 만듦 → 기록 없음"], "a.html");
+});
+
+await t("F1. a read-only list over a stale ledger shows 기록 없음; a later complete scan confirms again", async () => {
+  const c = await session({ "keep.txt": "k" });
+  await c.coachTurn(async () => { c.put("a.html", "ai"); });
+  await c.rec.unobserved(c.dir);
+  const ro = await c.rec.view(c.dir); // no scan: a turn was running
+  eq([ro.unconfirmed, label(ro, "a.html").label], [true, "기록 없음"], "read-only");
+  c.put("keep.txt", "changed unseen");
+  const v = await c.list(); // the folder fits again: a complete observation
+  eq([v.unconfirmed, label(v, "a.html").label, label(v, "keep.txt").label], [false, "AI가 만듦", "기록 없음"], "confirmed again (unchanged bytes keep their label, unseen changes stay 기록 없음)");
+});
+
+await t("F1. Python environments and caches are skipped, so a .venv does not push the folder past the cap", async () => {
+  for (const d of [".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".tox"]) if (!TURN_RESTORE_SKIP_DIRS.includes(d)) throw new Error(`${d} not skipped`);
+  const c = await session({ "analysis.py": "print(1)" });
+  for (let i = 0; i < 30; i++) c.put(`.venv/lib/site-packages/pkg${i}.py`, String(i));
+  for (let i = 0; i < 5; i++) c.put(`__pycache__/m${i}.pyc`, String(i));
+  const scan = await scanFolder(c.dir, { limits: { entriesMax: 10 } });
+  eq([scan.complete, scan.files.map((f) => f.path)], [true, ["analysis.py"]], "only the work is scanned");
+  // negative control: the same tree under a name that is not skipped does pass the cap
+  c.put("vendor/a.txt", "a"); for (let i = 0; i < 12; i++) c.put(`vendor/p${i}.txt`, String(i));
+  eq((await scanFolder(c.dir, { limits: { entriesMax: 10 } })).complete, false, "vendor counts");
+});
+
+await t("F2. a GitHub pull or clone into the open folder: its files read 기록 없음, never 내가 고침", async () => {
+  const c = await session({ "index.html": "mine", "style.css": "a" });
+  await c.coachTurn(async () => c.put("style.css", "ai"));
+  // GitHub에서 이어하기 pulls a teammate's commit into the same folder; the window does not reload
+  c.put("index.html", "teammate on github"); c.put("new.js", "from github");
+  noteFolderReplaced(c.dir);
+  const v = await c.list();
+  eq([label(v, "index.html").label, label(v, "new.js").label, label(v, "style.css").label], ["기록 없음", "기록 없음", "AI가 고침"], "after the pull");
+  if (v.entries.some((e) => e.kind === "learner_changed")) throw new Error("pulled bytes read as the learner's");
+});
+
+await t("F2. negative control: without the hook the same pull reads 내가 고침 (the bug)", async () => {
+  const c = await session({ "index.html": "mine" });
+  c.put("index.html", "teammate on github");
+  eq((await labelOf(c, "index.html"))[0], "내가 고침", "unhooked");
 });
 
 setHostWriteSink(null);

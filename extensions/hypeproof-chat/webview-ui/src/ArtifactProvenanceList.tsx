@@ -14,9 +14,10 @@ export function ArtifactProvenanceList({ view }: { view: ArtifactProvenanceView 
     <h3 id="task-artifacts-title" className="tw-source-list-title">작업 폴더의 파일</h3>
     {view === undefined ? <p className="tw-source-list-title" style={NOTE} role="status">파일 기록을 불러오는 중…</p>
       : view === null ? <p className="tw-source-list-title" style={NOTE}>작업 폴더가 열려 있지 않아서 보여 줄 파일이 없어요.</p>
-      : view.unobserved ? <p className="tw-source-list-title" style={NOTE}>아직 기록이 없어요. AI에게 요청을 보내면 그때부터 기록해요.</p>
+      : view.unobserved ? <p className="tw-source-list-title" style={NOTE}>아직 기록이 없어요. 이 목록을 열거나 AI에게 요청을 보내면 그때부터 기록해요.</p>
       : <>
         <p className="tw-source-list-title" style={NOTE}>기록에 남은 일로만 표시해요. 무슨 일이 있었는지 기록이 없으면 &lsquo;기록 없음&rsquo;이라고 써요.</p>
+        {view.unconfirmed && <p className="tw-source-list-title" style={NOTE} role="status" data-testid="artifact-provenance-unconfirmed">지금 작업 폴더를 다 확인하지 못해서 모든 파일을 &lsquo;기록 없음&rsquo;으로 보여 줘요. 파일이 아주 많거나, Studio를 다시 열었거나, GitHub에서 가져온 뒤에는 이렇게 보여요.</p>}
         {view.entries.length === 0 ? <p className="tw-source-list-title" style={NOTE}>작업 폴더에 아직 파일이 없어요.</p>
           : <ul className="tw-source-list" aria-label="작업 폴더의 파일과 기록">{view.entries.map(entry => {
             const history = provenanceHistoryText(entry);

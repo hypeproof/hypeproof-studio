@@ -29,8 +29,10 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { WORLD_ARCHIVE_DIR } from "./chatPanelHelpers.ts";
 
-/** Folder names never recorded: VCS data, installed packages, Studio's own archives. */
-export const TURN_RESTORE_SKIP_DIRS: readonly string[] = [".git", "node_modules", ".hypeproof", WORLD_ARCHIVE_DIR];
+/** Folder names never recorded: VCS data, installed packages and environments, tool caches, Studio's own archives. */
+export const TURN_RESTORE_SKIP_DIRS: readonly string[] = [
+  ".git", "node_modules", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".tox", ".hypeproof", WORLD_ARCHIVE_DIR,
+];
 /** File names never recorded (OS noise). */
 export const TURN_RESTORE_SKIP_FILES: readonly string[] = [".DS_Store", "Thumbs.db"];
 /** Restore points kept per store (one work folder x one task). */

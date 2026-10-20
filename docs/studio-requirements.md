@@ -1575,7 +1575,8 @@ CGP-AGENT-R-026 of the ChatGPT desktop study, which extend AE-15; issue #673). B
 - **Restore point before each coach turn.** When a turn runs on any runtime (proxy, agent-sdk,
   local) and the coach has a work folder (`resolveCoachCwd`), `chatPanelProvider.beginTurnRestore`
   records it before the runtime starts: a manifest of every file (posix relative path, size,
-  sha256) plus a byte copy of each file (`src/turnRestore.ts`). `.git`, `node_modules`,
+  sha256) plus a byte copy of each file (`src/turnRestore.ts`). `.git`, `node_modules`, Python
+  environments and caches (`.venv`, `venv`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.tox`),
   `.hypeproof` (adult page history) and `이전 세상` (kids' world archive) are not recorded, nor
   `.DS_Store`/`Thumbs.db`. The copies live in the extension's global storage, one store per work
   folder (sha256 of its real path) and task (active task id, else `default`), never in the work
@@ -1658,11 +1659,12 @@ measured). Built:
     was already there at the first observation.
   A file touched more than once shows the latest label and a short history, oldest first,
   consecutive repeats folded, at most four steps ("지금까지: AI가 만듦 → 내가 고침").
-- **One host-write hook.** Every place Studio writes into the work folder calls
+- **One host-write hook.** Every place Studio writes into the work folder file by file calls
   `noteHostWrite([{ absPath, data }], "ai" | "studio" | "learner_upload")` right after the write,
   inside or outside a turn and not gated on whether a stream is active (chatPanelProvider's page /
   engine / agent.md saves and the attachment commit, `imageEditAssets.ts`, `learningWiki.ts`,
-  `workspacePreparation.ts`, `previewProvider.ts`). The bytes are hashed at the call and the record
+  `workspacePreparation.ts`, `previewProvider.ts`; the send path's uploads go through
+  `recordLearnerUploads`). The bytes are hashed at the call and the record
   is queued in call order, so a world copied in before the restore point is applied before that
   turn's start observation, and a host write made inside the turn window keeps its own label (the
   turn diff does not overwrite bytes Studio recorded during that turn). An observation never reads
@@ -1672,12 +1674,18 @@ measured). Built:
 - **Observations.** The restore point taken before each coach turn; the end of the turn (restore
   diff against the rescan); opening the panel while no turn, send, revert, task switch or verify
   run is active. A file deleted and made again loses its old history.
-- **Never guess.** These mark the ledger stale, so the next observation records every difference as
-  `기록 없음` (history e.g. "AI가 만듦 → 기록 없음"), never as `내가 고침`, and a coach turn that starts
-  from a stale ledger labels nothing as AI: the first touch of a folder in a session (changes made
-  while Studio was closed, by git or by other tools), no restore point (folder too large, store write
-  failed), a rescan past its entry cap or a read failure after a turn, a ledger save failure and a
-  damaged ledger. A file the scan saw but could not hash (over 20 MB, past 5000 files or 200 MB, a
+- **Never guess.** These mark the ledger stale: the first touch of a folder in a session (changes
+  made while Studio was closed, by git or by other tools), no restore point (folder too large, store
+  write failed), a rescan past its entry cap or a read failure after a turn, a list scan past the
+  entry cap, a GitHub clone, download, pull or sync into the folder (`publishHost.bringRepo` calls
+  `noteFolderReplaced` after each, also on failure, because "GitHub에서 이어하기" can pull into the
+  open folder without a reload), a ledger save failure and a damaged ledger. While the ledger is
+  stale the list confirms nothing: every row reads `기록 없음` (history e.g. "AI가 만듦 → 기록 없음")
+  under the note "지금 작업 폴더를 다 확인하지 못해서 모든 파일을 ‘기록 없음’으로 보여 줘요…". The next
+  complete observation records every difference as `기록 없음`, never as `내가 고침`; files whose bytes
+  still match their last event get their label back; and a coach turn that starts from a stale
+  ledger labels nothing as AI. A folder that stays over the 20,000-entry cap therefore stays
+  `기록 없음`. A file the scan saw but could not hash (over 20 MB, past 5000 files or 200 MB, a
   link, unreadable) is kept as a stale path: it is not listed, not recorded as removed, and when it
   fits again it reads `기록 없음`.
 - **되돌리기.** After a revert to a turn's restore point, every event recorded after that point is
@@ -1713,8 +1721,15 @@ before the restore point (with the no-hook negative control reproducing 내가 �
 inside the turn window, the real `saveImageEditOutput`, `writeFiles` and `prepareWorkspaceDirectory`
 through the hook, a reveal landing after the post-turn scan in both queue orders, too_large /
 file_cap / total_cap skips, a new session after outside changes (with an in-session positive control),
-the hash cache (hit, rehash on change, eviction), and a wiring lock that the post-turn scan waits for
-pending reveals and that each host write site calls the hook; nine mutations of the derivation each
+the hash cache (hit, rehash on change, eviction), a folder over the entry cap in both directions,
+a read-only list over a stale ledger, skipped Python environments (with a non-skipped control), a
+GitHub pull into the open folder (with the unhooked control reproducing 내가 고침), and a wiring lock
+that the post-turn scan waits for pending reveals; `test/artifact-provenance-host.smoke.mjs` — the
+real `ChatPanelProvider` write paths bundled with only VS Code I/O substituted: agent.md, index.html
+and engine.js saves and the `revealBuilt` writer choice per source, learner uploads, no record without
+a write, plus locks that the send path records uploads between the commit and the restore point and
+that every GitHub clone/download/pull/sync is followed by `noteFolderReplaced`; deleting any one of
+those hook lines fails a case; ten mutations of the derivation each
 fail at least one case; `extensions/hypeproof-chat/test/artifact-provenance.test.tsx` — row markup,
 symbol plus words, Studio row, order, empty and loading states, no score or capability words, the
 closed panel draws no list). Host wiring in `chatPanelProvider.ts` beyond the lock is covered by

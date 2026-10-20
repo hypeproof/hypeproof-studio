@@ -34,6 +34,8 @@ export interface ArtifactProvenanceView {
   more: number;
   /** Nothing has been observed in this folder yet. */
   unobserved: boolean;
+  /** The last window was not measured (folder over the scan cap, a new session, a pull): every entry reads 기록 없음. */
+  unconfirmed: boolean;
 }
 
 /** "AI가 만듦 → 내가 고침"; empty when there is only one step. */

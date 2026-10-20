@@ -54,9 +54,16 @@ t("a single step has no history line", () => {
 t("states with nothing to list say why", () => {
   has(list(undefined), "파일 기록을 불러오는 중…");
   has(list(null), "작업 폴더가 열려 있지 않아서 보여 줄 파일이 없어요.");
-  has(list({ entries: [], more: 0, unobserved: true }), "아직 기록이 없어요. AI에게 요청을 보내면 그때부터 기록해요.");
-  has(list({ entries: [], more: 0, unobserved: false }), "작업 폴더에 아직 파일이 없어요.");
+  has(list({ entries: [], more: 0, unobserved: true, unconfirmed: false }), "아직 기록이 없어요. 이 목록을 열거나 AI에게 요청을 보내면 그때부터 기록해요.");
+  has(list({ entries: [], more: 0, unobserved: false, unconfirmed: false }), "작업 폴더에 아직 파일이 없어요.");
   has(list({ ...VIEW, more: 12 }), "파일 12개는 더 있어서 여기에 다 보여 주지 못했어요.");
+});
+t("an unconfirmed folder says why every file reads 기록 없음", () => {
+  const html = list(provenanceView({ ...ledger, stale: true }));
+  has(html, "지금 작업 폴더를 다 확인하지 못해서 모든 파일을 ‘기록 없음’으로 보여 줘요.");
+  lacks(html, "<strong>내가 고침</strong>");
+  lacks(html, "<strong>AI가 만듦</strong>");
+  lacks(list(VIEW), "artifact-provenance-unconfirmed");
 });
 t("negative control: no score, percentage or capability name near the labels", () => {
   const html = list(VIEW);
