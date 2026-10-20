@@ -6795,6 +6795,36 @@
           "path": "extensions/hypeproof-chat/test/file-attachment-kids-render.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-OFFLINE-BANNER",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/connectivity.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/verifyOffline.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-OFFLINE-BANNER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE",
+        "ST-IMP-OFFLINE-BANNER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/offline-banner.test.tsx"
+        }
+      ]
     }
   ]
 }

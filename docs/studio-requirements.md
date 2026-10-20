@@ -612,6 +612,61 @@ of the old leak that must fail; retry, remove, task switch, clear, folder change
 `test/file-attachment-kids-render.smoke.mjs` (a kids classroom seat through the SX render
 instrument: the 44px file-only menu trigger, the chip, no trigger without the grant).
 
+`REQ-STUDIO-OFFLINE-BANNER` (CGP-SHELL-R-011, DES-SHELL-10, P1; built 2026-10-20): when the
+webview loses the network, the chat panel says so and says what still works. App and ChatPanel
+share one `useSyncExternalStore` reading of `navigator.onLine` that follows the window
+`offline`/`online` events and re-reads the value once the listeners are attached, so a drop or a
+reconnect between the first render and the subscribe is not missed
+(`webview-ui/src/connectivity.ts`; only an explicit `false` counts as offline, so an unknown
+state never blocks anyone). While offline, one non-modal `role="status"` banner sits above the
+message list in personal and classroom chat alike: "인터넷 연결이 끊겼어요. 만든 파일과 쓰던 글은
+그대로 있어요. 연결되면 다시 보낼 수 있어요." It has no button, no capability or score label, no
+transition, and keeps the panel foreground text on the stop-notice surface; amber (`--hp-warn`)
+is only the 4 px left edge, so text contrast does not depend on it. Sending is held, never
+dropped: every learner turn goes through one gate (`guardSend`; ChatPanel's `sendWhenOnline`,
+App's `verifyWhenOnline`): the composer send and the parked-message send, retrying a kept
+(recovered) message, picking a friend, the roll-input send, edit and resend, retry-last on the
+error banner, ask-again on an answer, and the product test's (내 제품 테스트) start and fix plus the
+turn they hand back. Offline the gate calls nothing, leaves the draft, the open edit box, the kept
+message, the error banner or the test's criteria and fix text as they are, and shows a note that
+names where the words are: "…쓴 글은 입력창에 그대로 있어요." (composer, roll), "…고친 글은 수정
+칸에 그대로 있어요." (edit), "…보관한 메시지는 그대로 있어요." (kept or parked message), "…연결되면
+다시 눌러 주세요." (friend pick, ask again, retry-last, product test, in the test panel's own
+message slot); each starts "지금은 인터넷이 끊겨서 보내지 않았어요.". Online a host refusal passes
+through unchanged. Reply and suggestion chips only fill the draft, so they keep working offline.
+A product-test turn handed back while offline is not dropped: the host has already recorded the
+criteria (or the fix request), so the webview posts `verifyPark` and `VerifySession.park()` moves
+the turn's coach context and run out of the live slots. The next unrelated message carries no test
+context and opens no run. The learner's next press of the same button (same criteria, or same
+criterion and text) posts `verifyResume`, and the host hands the same turn back once without
+recording anything again; any other press, or a new start or fix, starts fresh and drops the parked
+turn. Nothing is resumed or sent on reconnect by itself. The held note never outlives its press: it
+clears on 다시 테스트, on closing the panel, and whenever the host answers, so a newer host error is
+never hidden. Reconnecting removes the
+banner and puts "인터넷이 다시 연결됐어요. 이제 보낼 수 있어요." in the existing response-announcer
+live region for 4 s. The region has one owner: the source that most recently changed to a
+non-empty line, so the reconnect line is heard even when "답변이 끝났어요" was the last line, and when
+the owner clears the region goes quiet instead of repeating an older line. Nothing is sent on
+reconnect, because the parked-message queue still fires only on the stream's end edge. Not built:
+a host-side `net.isOnline` probe, a 5 s detection bound in a real shell, a light-theme 3:1 check
+of the amber edge, and the instructor rehearsal report and help requests, which are not chat
+turns and keep their own error states. Tests: `test/offline-banner.test.tsx` (state steps with a
+repeated-event negative control; event wiring on an `EventTarget`, including a reconnect before
+the subscribe; the held notes per path; the live region driven through a real sequence of
+`responseAnnouncement` and `connectivityStep` (finish a turn, go offline, come back: the reconnect
+line is announced; the shipped `a || b` composition must fail the same scenario; expiry goes
+quiet; the next completion is heard); personal and classroom render offline with online and
+unknown-state negative controls; `guardSend` offline/online/refusal; per-path source checks that
+each send sits inside the gate before anything is cleared and uses its own note, each with a
+planted unguarded copy that must fail; a scan of App.tsx and every webview file for
+turn-starting posts (`sendMessage`, `retryMessage`, `verifyStart`, `verifyFix`), with a planted
+copy of the unguarded product-test send that must fail and a no-space probe; park/resume press
+matching and the held-note rules; chips never send; the flush effect still keyed on the stream
+edge) and `test/cr-verify.smoke.mjs` (N1: without a park the dropped start's context reaches the
+next turn, which is the control; parked, the next turn gets no context and no run; resume returns
+the same turn once with no second `criterion_set` or fix-request record; a new start replaces a
+parked turn; the host parks before its busy check).
+
 Acceptance CG-01–CG-06 in [the verification contract](testing/task-workspace.md)
 is revision-bound. Matched screenshots and independent interaction review are
 required; local synthetic success is separate from live SDK/account, signed

@@ -1360,16 +1360,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** One verify action from the panel, each behind the served switch (a message can be posted without the panel). */
-  private async handleVerifyMessage(msg: { type: "verifyOpen" } | { type: "verifyStart"; requestId: string; criteria: unknown } | { type: "verifyRetest" } | { type: "verifyFix"; requestId: string; criterionId: string; text: string }): Promise<void> {
+  private async handleVerifyMessage(msg: { type: "verifyOpen" } | { type: "verifyStart"; requestId: string; criteria: unknown } | { type: "verifyRetest" } | { type: "verifyFix"; requestId: string; criterionId: string; text: string } | { type: "verifyPark" } | { type: "verifyResume"; requestId: string }): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
       await this.post({ type: "verifyState", view: null, error: refusalText("switch_off", this.getSeatAudience()) });
       return;
     }
     if (msg.type === "verifyOpen") return this.postVerifyState();
+    // CGP-SHELL-R-011 N1 — never refused as busy: an unsendable handed-back turn must leave the live slots.
+    if (msg.type === "verifyPark") { this.verifySession.park(); return; }
     // A run or re-test while the coach is answering would share the tab and the record with that turn.
     if (this.pendingSends > 0 || this.activeStreams.size > 0) return this.postVerifyState({ error: refusalText("turn_running") });
     if (msg.type === "verifyStart") {
       const r = await this.verifySession.start(msg.criteria);
+      return this.postVerifyState(r.ok ? { sendText: r.sendText, requestId: String(msg.requestId ?? "") } : { error: refusalText(r.code) });
+    }
+    if (msg.type === "verifyResume") {
+      const r = this.verifySession.resume();
       return this.postVerifyState(r.ok ? { sendText: r.sendText, requestId: String(msg.requestId ?? "") } : { error: refusalText(r.code) });
     }
     if (msg.type === "verifyFix") {
@@ -5123,6 +5129,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "verifyStart":
       case "verifyRetest":
       case "verifyFix":
+      case "verifyPark":
+      case "verifyResume":
         // cr-verify — CR-only messages (CR-T02 inventory); the handler re-checks the switch first.
         await this.handleVerifyMessage(msg);
         break;
