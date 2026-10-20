@@ -138,7 +138,8 @@ t("host: a fresh send carries the file; retry never, and says so; remove, task s
   ok(/this\.pendingFileAttachment\.root !== this\.resolveCoachCwd\(\) \|\| !fileAttachAllowed\(toolProfile, isInstructor\)\) this\.clearFileAttachment\(\);/.test(host), "another folder or a lost grant drops it");
   ok(/fileContext && fileAttachAllowed\(profile, this\._instructorMode\.isInstructor === true\) \? `\$\{fileContext\}\\n\\n\$\{text\}` : text/.test(host), "send re-checks the gate");
   ok(/defaultUri: vscode\.Uri\.file\(root\), canSelectFiles: true, canSelectFolders: false, canSelectMany: false/.test(host), "picker starts in the work folder, one file");
-  ok(/const read = readWorkspaceTextFile\(root, picked\[0\]\.fsPath\);/.test(host), "the pick is re-checked against the folder");
+  // CGP-KNOW-R-015 hands a path in place of the pick; both go through the same read (ask-about-file-host.smoke.mjs drives it).
+  ok(/file = picked\[0\]\.fsPath;\n\s*\}\n\s*const read = readWorkspaceTextFile\(root, file\);/.test(host), "the pick is re-checked against the folder");
 });
 
 t("retry notice renders as a status line", () => {

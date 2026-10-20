@@ -555,6 +555,8 @@ export type WebviewMessage = (
   | { type: "removePageContext" }
   /** CGP-CHAT-R-011 — open the work-folder file picker (host re-checks the gate). */
   | { type: "attachWorkspaceFile" }
+  /** CGP-KNOW-R-015 — "이 파일에 대해 묻기" from the 작업 자료 list: attach this work-folder path (relative) through the same checks, then focus the composer. */
+  | { type: "askAboutFile"; path: string }
   /** CGP-CHAT-R-011 — the learner removed the attached file; nothing from it is sent. */
   | { type: "removeFileContext" }
   // cr-verify — "Test my product" (CR-12–CR-16; CR switch only, re-checked by the host).

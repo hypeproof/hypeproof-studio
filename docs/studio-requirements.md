@@ -821,6 +821,42 @@ of the old leak that must fail; retry, remove, task switch, clear, folder change
 `test/file-attachment-kids-render.smoke.mjs` (a kids classroom seat through the SX render
 instrument: the 44px file-only menu trigger, the chip, no trigger without the grant).
 
+`REQ-STUDIO-ASK-ABOUT-FILE` (CGP-KNOW-R-015 / REQ-KNOW-28, DES-KNOW-28, P1; built 2026-10-20):
+where the learner sees work-folder files, **이 파일에 대해 묻기** attaches that file to the next
+message and moves focus to the composer. It appears under each file of the 작업 자료 list
+(REQ-STUDIO-ARTIFACT-PROVENANCE) and in the explorer context menu on a file
+(`hypeproof-chat.askAboutFile`; `when`: the gate context key, not a folder, `file` scheme, one
+workspace folder). There is no second attach path: the host calls the
+REQ-STUDIO-CHAT-FILE-ATTACH attach with the file's path in place of the picker's pick, so every
+refusal keeps its cause and copy (outside the folder, links, hidden paths, folders, missing,
+empty, binary, 100 KB / 20,000 characters, no work folder), the chip is the same "파일 ·
+{path}", one file is queued at a time, and the chip lifetime rules are unchanged. On success
+the host posts the existing `focusInput`, which focuses the composer without touching the draft
+(an empty draft stays empty, an existing draft is kept); nothing is sent. A refusal shows under
+the chip row and does not move focus. In the narrow layout, where 작업 자료 is a modal dialog,
+asking closes it so the composer can take focus. Gate: the file-attach gate, `sdk_tools.read`
+after pass narrowing, never the instructor surface; the REQ-M32 kids tracks carry
+`sdk_tools.read` and get it. The webview draws the action only with the host's `fileAttach`
+flag, the explorer item only while the context key `hypeproof-chat.askAboutFileEnabled` follows
+the same gate, and the host re-checks it on every request. Folder consent
+(REQ-STUDIO-FOLDER-CONSENT): a folder whose stored choice is "AI 안 씀", or a seat whose choice
+cannot be remembered, refuses with that feature's existing copy and asks nothing. The check is
+in the shared attach, so the composer picker refuses there too, before the dialog opens.
+Undecided, 읽기만 and 읽고 고치기 attach, and the send that carries the file asks or applies the
+choice as before. The button is a 44px text target at the caption step (14px floor, #2088), and
+its accessible name starts with the visible label and names the file; no capability name or
+score. Not built: the editable starter line of REQ-KNOW-28 (the composer gets focus with the
+learner's own draft instead, so nothing is written for them), the page card (CGP-ART-R-010 is
+not on main), the preview header placement of DES-KNOW-28 (the preview has no file header
+today), and Backspace-at-caret-start chip removal (the chip keeps its 빼기). Tests:
+`test/ask-about-file-host.smoke.mjs` (the real provider: attach through fileAttachment, focus
+only after success, every refusal cause with its copy, instructor, no `sdk_tools.read`, no
+profile, a kids track, "AI 안 씀" through both entries with 읽기만/읽고 고치기/undecided controls,
+the picker path unchanged, an outside path from the explorer, and wiring locks for the message,
+command, menu `when` and context key) and `test/ask-about-file.test.tsx` (mini-dom clicks: the
+row action names its own path, the dialog closes, no action without the grant, instructor
+never, focus lands in the composer with the draft kept).
+
 `REQ-STUDIO-OFFLINE-BANNER` (CGP-SHELL-R-011, DES-SHELL-10, P1; built 2026-10-20): when the
 webview loses the network, the chat panel says so and says what still works. App and ChatPanel
 share one `useSyncExternalStore` reading of `navigator.onLine` that follows the window

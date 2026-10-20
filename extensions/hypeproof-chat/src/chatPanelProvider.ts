@@ -18,7 +18,7 @@ const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
 import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
-import { folderConsentProfile, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
+import { folderConsentProfile, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { chatVisible, createFinishNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
 import { verifyActivity } from './proxyClient';
@@ -187,7 +187,7 @@ import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { CapabilityChangeTracker, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
-import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE } from "./fileAttachment";
+import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import { compactionLineId, CONTEXT_COMPACT_NOTE, trimBoundaryId } from "./contextTrim";
@@ -2205,27 +2205,44 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /**
    * CGP-CHAT-R-011 — "작업 폴더 파일 붙이기": a picker that starts in the work folder; the choice is
    * re-checked here (inside the folder, no links, no hidden paths, text only, size caps).
+   * CGP-KNOW-R-015 passes `chosen` (a path relative to the work folder, or absolute) instead of
+   * opening the picker; everything else is the same path. Resolves true when a file was queued.
    */
-  private async attachWorkspaceFile(): Promise<void> {
+  private async attachWorkspaceFile(chosen?: string): Promise<boolean> {
     const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
-    const refuse = (error: string) => void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, error });
+    const refuse = (error: string) => { void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, error }); return false; };
     if (!fileAttachAllowed(profile, this._instructorMode.isInstructor === true)) {
-      refuse(denialCopy({ source: "lesson", feature: "작업 폴더 파일 붙이기" }, "neutral"));
-      return;
+      return refuse(denialCopy({ source: "lesson", feature: "작업 폴더 파일 붙이기" }, "neutral"));
     }
     const root = this.resolveCoachCwd();
-    if (!root) { refuse(FILE_REFUSAL_COPY["no-workspace"]); return; }
-    const picked = await vscode.window.showOpenDialog({
-      defaultUri: vscode.Uri.file(root), canSelectFiles: true, canSelectFolders: false, canSelectMany: false,
-      openLabel: "붙이기", title: "작업 폴더에서 붙일 파일 고르기",
-    });
-    if (!picked?.[0]) return;
-    // The folder may have changed while the dialog was open.
-    if (this.resolveCoachCwd() !== root) { refuse(FILE_REFUSAL_COPY.changed); return; }
-    const read = readWorkspaceTextFile(root, picked[0].fsPath);
-    if (!read.ok) { refuse(read.reason); return; }
+    if (!root) return refuse(FILE_REFUSAL_COPY["no-workspace"]);
+    // REQ-STUDIO-FOLDER-CONSENT — "AI 안 씀" here: nothing from this folder is queued for the model.
+    const noAi = folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
+    if (noAi) return refuse(noAi);
+    let file = chosen === undefined ? undefined : path.resolve(root, chosen);
+    if (file === undefined) {
+      const picked = await vscode.window.showOpenDialog({
+        defaultUri: vscode.Uri.file(root), canSelectFiles: true, canSelectFolders: false, canSelectMany: false,
+        openLabel: "붙이기", title: "작업 폴더에서 붙일 파일 고르기",
+      });
+      if (!picked?.[0]) return false;
+      // The folder may have changed while the dialog was open.
+      if (this.resolveCoachCwd() !== root) return refuse(FILE_REFUSAL_COPY.changed);
+      file = picked[0].fsPath;
+    }
+    const read = readWorkspaceTextFile(root, file);
+    if (!read.ok) return refuse(read.reason);
     this.pendingFileAttachment = { preview: read.preview, modelText: read.modelText, root };
     void this.post({ type: "fileAttachment", attachment: read.preview });
+    return true;
+  }
+  /**
+   * CGP-KNOW-R-015 — "이 파일에 대해 묻기" (작업 자료 list, explorer context menu): attach that file
+   * through attachWorkspaceFile, then move focus to the composer. The draft is left as it is and
+   * nothing is sent; a refusal shows under the chip row like a picker refusal.
+   */
+  async askAboutFile(target: string): Promise<void> {
+    if (await this.attachWorkspaceFile(target)) void this.post({ type: "focusInput" });
   }
   /** CGP-CHAT-R-011 — remove the queued file; nothing from it is sent. */
   private clearFileAttachment(): void {
@@ -5214,6 +5231,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "attachWorkspaceFile":
         await this.attachWorkspaceFile();
         return;
+      case "askAboutFile":
+        if (typeof msg.path === "string") await this.askAboutFile(msg.path);
+        return;
       case "removeFileContext":
         // CGP-CHAT-R-011 — removed before sending: nothing from the file goes with the next turn.
         this.clearFileAttachment();
@@ -7360,6 +7380,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const seatInputs: SeatInputs = { choice: this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected), settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), fallback: !!this.fallbackNoticeShown };
     // CGP-SHELL-R-024 — the remembered and the new served profile are both evaluated under seatInputs, so only a profile change shows.
     const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, inputs: seatInputs, instructor: isInstructor, local: !!local });
+    // CGP-KNOW-R-015 — the explorer's "이 파일에 대해 묻기" follows the file-attach gate. The host re-checks
+    // the gate on every request, so a failed context update never holds up the config post.
+    void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
     await this.post({
       type: "config",
       config: {

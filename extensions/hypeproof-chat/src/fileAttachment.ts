@@ -53,6 +53,10 @@ export function fileAttachAllowed(profile: { sdk_tools?: { read?: boolean } } | 
   return !instructor && profile?.sdk_tools?.read === true;
 }
 
+/** CGP-KNOW-R-015 — "이 파일에 대해 묻기" in the explorer context menu, shown while the seat has the gate above. */
+export const ASK_ABOUT_FILE_COMMAND = "hypeproof-chat.askAboutFile";
+export const ASK_ABOUT_FILE_CONTEXT_KEY = "hypeproof-chat.askAboutFileEnabled";
+
 /** NUL bytes or invalid UTF-8 mean the file is not text we can show and send as written. */
 export function decodeTextFile(bytes: Uint8Array): string | null {
   if (bytes.includes(0)) return null;
