@@ -1,0 +1,19 @@
+/* CGP-CHAT-R-008 (REQ-STUDIO-CODE-BLOCK-TOOLS): copy and word-wrap controls on every code block.
+   This file loads before styles.css, so the wrap rules carry an extra attribute to win over
+   `.hps-codepill-body { white-space: pre }` and `.hps-prose pre { white-space: pre-wrap }`. */
+.hps-codeblock { min-width: 0; margin: 6px 0 0; }
+.hps-codeblock > pre { margin-top: 2px; }
+.hps-codeblock[data-wrap="on"] > pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.hps-codeblock[data-wrap="off"] > pre { white-space: pre; overflow-x: auto; }
+
+.hps-codeblock-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-height: 32px; }
+.hps-codeblock-tool {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; min-width: 44px; box-sizing: border-box; padding: 0 10px;
+  border: 0; border-radius: 8px; background: transparent;
+  color: var(--vscode-descriptionForeground, #b6bcc4);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.hps-codeblock-tool:hover { background: var(--vscode-list-hoverBackground, #2b3037); color: var(--vscode-foreground, #e1e1e1); }
+.hps-codeblock-tool[aria-pressed="true"] { background: var(--vscode-toolbar-activeBackground, #3a3f47); color: var(--vscode-foreground, #e1e1e1); }
+.hps-codeblock-status { margin-left: 4px; color: var(--vscode-descriptionForeground, #b6bcc4); }

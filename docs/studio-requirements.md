@@ -311,6 +311,27 @@ verdict data, with an injected `answer_verdict` spool line as the negative contr
 the controls and reasons render, Korean labels, negative controls for streaming, user lines,
 classroom, lesson and instructor).
 
+`REQ-STUDIO-CODE-BLOCK-TOOLS` (CGP-CHAT-R-008 / CGP-CHAT-R39 and design CGP-CHAT-D39, 2026-10-20,
+extending CP-R1's confirmed answer copy): every code block in an answer offers `복사` and `줄 바꿈`,
+in personal and classroom chat. That is the open code pill (a ``` fence) and a code block inside
+prose (an indented block or a `~~~` fence); inline code and the rest of the answer get no tools.
+The pill's collapsed default does not change (#159): collapsed, it shows only `코드 보기`, and the
+tools appear above the code once it is opened. `복사` (`aria-label="코드 복사"`) writes exactly that
+block's text (without Markdown's trailing newline) through the same confirmed-copy hook as the answer
+copy: `복사됨` and the status `코드를 복사했습니다` appear only after the clipboard write resolves, a
+rejected or missing clipboard says `복사하지 못했습니다. 코드를 선택해 복사해 주세요.`, and the
+feedback clears after 2.4s. `줄 바꿈` toggles soft wrap with `aria-pressed` and the label
+`줄 바꿈 켜기` / `줄 바꿈 끄기`; the default keeps each surface's existing behaviour (the pill body does
+not wrap, prose blocks wrap). The choice is remembered per block (keyed by its text, so identical
+blocks share it) for the webview session only: rerenders, streaming and remounting keep it, a reload
+forgets it, nothing is written to storage or the host. Both controls are buttons with 44px targets,
+reachable by Tab, with the shared focus ring. Not built: a fence-language label, download, and a
+per-task saved wrap choice (the research row CGP-CHAT-R39 asks for one; this slice keeps it
+session-only). Test: `test/code-block-tools.test.tsx` (tools per block in both modes, copied text
+equals the block text, confirmation only after the write, failure and missing clipboard, wrap
+attribute and `aria-pressed`, per-block memory, no tools outside code blocks, collapsed pill
+unchanged).
+
 `REQ-STUDIO-TASK-RUN-STATE` (extends [AE-03](requirements/learning-agent-experience.md);
 CGP-AGENT-R-022 / REQ-CGP-AGENT-46 recast after its "next waiting task" premise was refuted, 2026-10-20):
 tasks never run concurrently and switching stays blocked during a run, so the personal task rail

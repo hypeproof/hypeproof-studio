@@ -37,6 +37,7 @@ import { HelpRequest } from './HelpRequest';
 import { acceptHelp } from '../../src/classroomHelp';
 import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type ImportRef, type LastImport } from './draftImport';
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
+import { CodeBlock } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
 import { Children, cloneElement, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -2473,7 +2474,8 @@ function CodePill({ code, personal = false }: { code: string; personal?: boolean
       </button> : <button className="hps-codepill-toggle" onClick={() => setOpen((v) => !v)}>
         {open ? "▾" : "▸"} 📄 코드 {open ? "숨기기" : `보기 (${lines}줄)`}
       </button>}
-      {open && <pre className="hps-codepill-body">{code}</pre>}
+      {/* CGP-CHAT-R-008: the open block carries its own copy and wrap tools; collapsed stays as is (#159). */}
+      {open && <CodeBlock code={code} defaultWrap={false} preClassName="hps-codepill-body" />}
     </div>
   );
 }
