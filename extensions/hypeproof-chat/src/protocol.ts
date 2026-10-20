@@ -677,6 +677,9 @@ export type WebviewMessage = (
   /** REQ-STUDIO-MISSING-TASK-FOLDER — ask for the notice state; 다시 고르기. */
   | { type: "missingTaskFolderRequest" }
   | { type: "missingTaskFolderRepick" }
+  /** REQ-STUDIO-PREVIEW-RECOVERY — ask for the preview's measured state; run the one action its cause line names. */
+  | { type: "previewRecoveryRequest" }
+  | { type: "previewRecoveryAction"; action: string }
   | { type: "turnRevert"; turnId: string }
   | { type: "turnKeep"; turnId: string }
   | { type: "turnReviewClose"; turnId: string }
@@ -773,6 +776,8 @@ export type HostMessage = (
   | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
   /** REQ-STUDIO-MISSING-TASK-FOLDER — the personal task's folder is gone: one notice with 다시 고르기; null hides it. */
   | { type: "missingTaskFolder"; notice: import("./missingTaskFolder").MissingTaskFolderNotice | null }
+  /** REQ-STUDIO-PREVIEW-RECOVERY — the learner's preview tab as measured (server state, HTTP status); null = no preview tab. `result` answers a press. */
+  | { type: "previewRecovery"; signals: import("./previewFailure").PreviewSignals | null; result?: import("./previewFailure").PreviewRecoveryResult }
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — one label per work-folder file, from recorded events only; null when there is no folder. */
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */

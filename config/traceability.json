@@ -6588,6 +6588,49 @@
       ]
     },
     {
+      "id": "ST-IMP-PREVIEW-RECOVERY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER",
+        "ST-IMP-CLASSROOM-OPS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/previewFailure.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/liveServer.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/PreviewRecoveryNotice.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PREVIEW-RECOVERY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER",
+        "ST-IMP-PREVIEW-RECOVERY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/preview-failure.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-recovery-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-recovery-provider.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-recovery.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-FINISH-NOTICE",
       "stage": "implementation",
       "owner": "jayleekr",

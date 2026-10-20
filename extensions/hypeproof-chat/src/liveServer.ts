@@ -23,6 +23,23 @@ import { LIVERELOAD_PATH, serveStatic, staticResponseHeaders } from "./liveServe
 // Lifecycle is owned by the extension — dispose() on deactivate closes the
 // server + watcher + open SSE streams.
 
+const SERVED_ORIGINS_KEPT = 20;
+/** A remembered address older than this is forgotten: an OS ephemeral port may meanwhile belong to another tool. */
+export const SERVED_ORIGIN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** One remembered preview address and when Studio last served it (ms since epoch). */
+export interface ServedOrigin { o: string; t: number }
+type ServedMemory = { get(): readonly unknown[]; set(origins: ServedOrigin[]): void };
+const asServed = (x: unknown): x is ServedOrigin => !!x && typeof x === "object" && typeof (x as ServedOrigin).o === "string" && typeof (x as ServedOrigin).t === "number";
+/** "http://127.0.0.1:5123" for either loopback spelling; undefined for anything else. */
+function loopbackOrigin(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    if (u.hostname !== "127.0.0.1" && u.hostname !== "localhost") return undefined;
+    return `${u.protocol}//127.0.0.1:${u.port}`;
+  } catch { return undefined; }
+}
+
 export class LiveServer {
   private server: http.Server | undefined;
   private root: string | undefined;
@@ -33,13 +50,50 @@ export class LiveServer {
   private reloadTimer: ReturnType<typeof setTimeout> | undefined;
 
   /**
+   * REQ-STUDIO-PREVIEW-RECOVERY — addresses this Studio's preview server has served. `served` is kept across restarts
+   * by the caller (at most 20, each forgotten after 7 days), so a tab restored on an old port is still known as the
+   * learner's preview; `sessionOrigins` are the ones this process served, the only ones a tab may be closed for.
+   */
+  private readonly served: ServedMemory | undefined;
+  private readonly now: () => number;
+  private readonly sessionOrigins = new Set<string>();
+  constructor(served?: ServedMemory, now: () => number = Date.now) {
+    this.served = served;
+    this.now = now;
+  }
+
+  private remembered(): ServedOrigin[] {
+    const cutoff = this.now() - SERVED_ORIGIN_TTL_MS;
+    return (this.served?.get() ?? []).filter(asServed).filter((e) => e.t >= cutoff).slice(0, SERVED_ORIGINS_KEPT);
+  }
+
+  /** True when `url` is on an address a Studio preview server served (this run, or a remembered one under 7 days old). */
+  servedBefore(url: string | undefined): boolean {
+    const origin = loopbackOrigin(url);
+    if (!origin) return false;
+    return this.sessionOrigins.has(origin) || this.remembered().some((e) => e.o === origin);
+  }
+
+  /** True only for addresses this process's server served. Tabs on other loopback addresses are never closed by Studio. */
+  servedThisSession(url: string | undefined): boolean {
+    const origin = loopbackOrigin(url);
+    return !!origin && this.sessionOrigins.has(origin);
+  }
+
+  /** The server's socket is accepting connections now (false after a close or a crash, even while the object is kept). */
+  isListening(): boolean {
+    return !!this.server?.listening;
+  }
+
+  /**
    * Ensure a server is running rooted at `root`. Returns its base URL. If a
    * server is already running for a different root it is restarted. Concurrent
    * calls for the same root share one start.
    */
   async ensure(root: string): Promise<string> {
     const resolvedRoot = path.resolve(root);
-    if (this.server && this.root === resolvedRoot && this.baseUrl) return this.baseUrl;
+    // A server object whose socket no longer listens (closed or crashed) is not reused: it is dropped and started again.
+    if (this.server && this.root === resolvedRoot && this.baseUrl && this.server.listening) return this.baseUrl;
     if (this.startPromise && this.root === resolvedRoot) return this.startPromise;
     this.startPromise = this.start(resolvedRoot).finally(() => {
       this.startPromise = undefined;
@@ -123,6 +177,11 @@ export class LiveServer {
     const addr = server.address();
     const port = typeof addr === "object" && addr ? addr.port : 0;
     this.baseUrl = `http://127.0.0.1:${port}/`;
+    const origin = loopbackOrigin(this.baseUrl);
+    if (origin) {
+      this.sessionOrigins.add(origin);
+      if (this.served) this.served.set([{ o: origin, t: this.now() }, ...this.remembered().filter((e) => e.o !== origin)].slice(0, SERVED_ORIGINS_KEPT));
+    }
     this.startWatching(root);
     return this.baseUrl;
   }
