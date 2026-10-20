@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { copyableSignInLink, copySignInLink, type SignInLinkState } from './signInLink.ts';
 
 /** Host-only personal account credentials. Presentation state deliberately has no credential fields. */
 export const ACCOUNT_SECRET_KEY = 'hypeproofChat.personalAccount.v1';
@@ -11,6 +12,10 @@ export interface AccountPass {
 export interface AccountView {
   status: 'signedOut' | 'waiting' | 'signedIn'; busy?: boolean; message?: string;
   userCode?: string; expiresAt?: number; account?: AccountIdentity; passes?: AccountPass[];
+  /** REQ-L13 ⑧: present only while a sign-in waits with a copyable verification URL. */
+  link?: SignInLinkState;
+  /** The verification URL, shown only after the clipboard refused it. Never a credential. */
+  linkText?: string;
 }
 export interface AccountPassBinding { sessionId: string; passId: string }
 interface Bundle { service: string; accessToken: string; refreshToken: string; expiresAt: number; sessionId: string }
@@ -67,7 +72,7 @@ export class AccountSession {
   private readonly now: () => number;
   private serial: Promise<unknown> = Promise.resolve();
   private generation = 0;
-  private device?: { code: string; url: string; expiresAt: number; interval: number; generation: number };
+  private device?: { code: string; url: string; link?: string; expiresAt: number; interval: number; generation: number };
   private timer?: ReturnType<typeof setTimeout>;
   private browserReturn?: { state: string; uri: string; expiresAt: number; received: boolean };
   private polling?: Promise<void>;
@@ -170,9 +175,10 @@ export class AccountSession {
       if (!safeDeviceUrl(url, this.options.site) || typeof d.device_code !== 'string' || typeof d.user_code !== 'string' || !Number.isFinite(d.expires_in) || d.expires_in <= 0) throw new AccountError('invalid_response', friendly('invalid_response'));
       const expiresAt = this.now() + Math.min(d.expires_in, 600) * 1000;
       this.browserReturn = returnUri ? { state, uri: returnUri, expiresAt, received: false } : undefined;
-      this.device = { code: d.device_code, url, expiresAt, interval: Math.max(3, Number(d.interval) || 3) * 1000, generation };
-      this.state = { status: 'waiting', userCode: d.user_code, expiresAt, message: '브라우저에서 Google 로그인 후 이 Studio 연결을 승인해 주세요.' }; this.emit();
-      if (!await this.options.openBrowser(url)) { this.state.message = '브라우저를 열지 못했어요. 로그인 창 다시 열기를 눌러 주세요.'; this.emit(); }
+      const link = copyableSignInLink(url, this.options.site, d.user_code, [d.device_code]);
+      this.device = { code: d.device_code, url, link, expiresAt, interval: Math.max(3, Number(d.interval) || 3) * 1000, generation };
+      this.state = { status: 'waiting', userCode: d.user_code, expiresAt, message: '브라우저에서 Google 로그인 후 이 Studio 연결을 승인해 주세요.', ...(link ? { link: 'ready' as const } : {}) }; this.emit();
+      if (!await this.options.openBrowser(url)) { this.state.message = link ? '브라우저를 열지 못했어요. 로그인 창 다시 열기를 누르거나 링크를 복사해 다른 브라우저에서 열어 주세요.' : '브라우저를 열지 못했어요. 로그인 창 다시 열기를 눌러 주세요.'; this.emit(); }
       this.schedule();
     } catch (e) { if (generation === this.generation) { this.state = { status: 'signedOut', message: e instanceof AccountError ? e.message : friendly('unavailable') }; this.emit(); } }
   }
@@ -184,6 +190,13 @@ export class AccountSession {
       this.state.message = opened ? '브라우저에서 연결 번호를 확인하고 승인해 주세요.' : '브라우저를 열지 못했어요. 기본 브라우저 설정을 확인하고 다시 시도해 주세요.';
     } catch { this.state.message = '브라우저를 열지 못했어요. 기본 브라우저 설정을 확인하고 다시 시도해 주세요.'; }
     this.emit();
+  }
+  /** REQ-L13 ⑧: copies the verification URL this flow opens; the outcome is shown as it happened. */
+  async copyLink(write: (text: string) => PromiseLike<void>): Promise<void> {
+    const d = this.device; if (!d?.link || this.state.status !== 'waiting') return;
+    const result = await copySignInLink(d.link, write);
+    if (!result || this.device !== d) return;
+    this.state = { ...this.state, link: result, linkText: result === 'failed' ? d.link : undefined }; this.emit();
   }
   /** Callback is a wake-up signal only. The Service's explicit device approval grants credentials. */
   async browserReturned(state: string): Promise<boolean> {
