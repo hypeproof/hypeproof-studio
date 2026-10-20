@@ -176,8 +176,9 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
 
 // ── 5. End card titles, carry-over, image edit, SDK notice, profile failure ─────────────────
 {
-  assert.equal(endCard.TRIAL_END_CARD_COPY.titleExhausted, '무료 사용량을 모두 썼습니다');
-  assert.equal(endCard.TRIAL_END_CARD_COPY.titleExpired, '무료 사용 시간이 끝났습니다');
+  assert.equal(endCard.TRIAL_END_CARD_COPY.title, '만든 작업을 그대로 이어서 할 수 있어요');
+  assert.equal(endCard.TRIAL_END_CARD_COPY.endedExhausted, '무료로 쓸 수 있는 AI 요청은 모두 썼어요.');
+  assert.equal(endCard.TRIAL_END_CARD_COPY.endedExpired, '무료 사용 시간은 끝났어요.');
   for (const v of Object.values(endCard.TRIAL_END_CARD_COPY)) noTrialWord(v, 'end card');
   const card = endCard.trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, err: new Error('API Error: 429 · 무료로 쓸 수 있는 AI 요청을 모두 썼습니다.'), products: [{ id: 'p', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200 }] });
   assert.ok(card, 'positive: the free sentence ends in the card'); noTrialWord(card.text, 'end card text');

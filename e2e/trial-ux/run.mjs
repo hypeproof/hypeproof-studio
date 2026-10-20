@@ -62,7 +62,9 @@ for (const [key, value] of [['activityId', 'wrong-activity'], ['nonce', 'wrong-f
 // renders what the host sends, not a paraphrase. Fixtures: an open-trial seat (studio-open-trial) and a Service that
 // sells two passes; the turn ended with the observed exhausted sentence.
 const endCardSrc = await build({ entryPoints: [path.join(repo, 'extensions/hypeproof-chat/src/trialEndCard.ts')], bundle: true, write: false, platform: 'node', format: 'esm' });
-const { trialEndCardView } = await import(`data:text/javascript;base64,${Buffer.from(endCardSrc.outputFiles[0].text).toString('base64')}`);
+const { trialEndCardView, endCardCopyProblems, passOfferLine } = await import(`data:text/javascript;base64,${Buffer.from(endCardSrc.outputFiles[0].text).toString('base64')}`);
+const endCardTheme = JSON.parse(await fs.readFile(path.join(repo, 'extensions/hypeproof-chat/media/hypeproof-theme.json'), 'utf8'));
+const endCardDarkTheme = ':root{color-scheme:dark;' + Object.entries(endCardTheme.colors).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v};`).join('') + '--vscode-descriptionForeground:#ACB9A5;}';
 const endCardPasses = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }, { id: 'pass-basic', label: '기본', amount: 55000, durationDays: 30, requestLimit: 350 }];
 const endCardExhausted = new Error('Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.');
 const endCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, err: endCardExhausted, products: endCardPasses });
@@ -567,11 +569,19 @@ try {
     await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
     const card = p.locator('.hps-trial-end-card');
     await expect(card).toHaveCount(1);
-    await expect(card.getByRole('heading')).toHaveText('무료 사용량을 모두 썼습니다');
-    await expect(card).toContainText('만든 파일은 작업 폴더에 그대로 있습니다');
-    // The Service's numbers for the suggested pass, never a hardcoded price.
-    await expect(card).toContainText('라이트 이용권은 30일 동안 AI 요청 200번이고 30,000원입니다.');
-    await expect(card).toContainText('자동으로 다시 결제되지 않습니다');
+    // CONV-ENDCARD-R-002: the title and first line speak about continuing the work, before any pass fact.
+    await expect(card.getByRole('heading')).toHaveText('만든 작업을 그대로 이어서 할 수 있어요');
+    const facts = card.locator('.hps-trial-end-card-fact');
+    await expect(facts).toHaveText([
+      '만든 파일은 작업 폴더에, 대화는 이 채팅에 그대로 있어요. 이용권이 있으면 이 작업을 이어서 할 수 있어요.',
+      // The Service's recommended pass by name, period and price, never a hardcoded price.
+      passOfferLine(endCardPasses[0]),
+      '한 번만 결제하고, 자동으로 다시 결제되지 않아요.',
+      '무료로 쓸 수 있는 AI 요청은 모두 썼어요.',
+    ]);
+    assert.equal(passOfferLine(endCardPasses[0]), '라이트 이용권은 30일 동안 쓸 수 있고 30,000원이에요. AI 요청 200번이 들어 있어요.');
+    // The checker reads what the browser drew: no count, no countdown, no pressure words.
+    assert.deepEqual(endCardCopyProblems({ title: await card.getByRole('heading').innerText(), facts: await facts.allInnerTexts(), primary: await card.locator('.hps-trial-end-card-primary').innerText(), escape: await card.locator('.hps-trial-end-card-escape').innerText() }, endCardPasses[0]), []);
     // Exactly one Primary and one escape; the error banner (and its report button) is not drawn.
     await expect(card.getByRole('button')).toHaveCount(2);
     await expect(card.locator('.hps-trial-end-card-primary')).toHaveText('이용권 살펴보기');
@@ -579,6 +589,15 @@ try {
     await expect(p.locator('.hps-error-banner')).toHaveCount(0);
     await expect(p.getByRole('dialog')).toHaveCount(0);
     await p.screenshot({ path: path.join(out, 'TUX-COND-07-card.png'), fullPage: true });
+    // Dark theme at the two widths the conversion register asks for (1420px, 800px).
+    await p.addStyleTag({ content: endCardDarkTheme });
+    await p.evaluate(() => { document.body.classList.add('vscode-dark'); document.body.dataset.vscodeThemeKind = 'vscode-dark'; });
+    for (const width of [1420, 800]) {
+      await p.setViewportSize({ width, height: 900 });
+      await expect(card).toBeVisible();
+      await p.screenshot({ path: path.join(out, `TUX-COND-07-card-dark-${width}.png`) });
+    }
+    await p.setViewportSize({ width: 390, height: 900 });
     // No countdown or pressure copy.
     assert.doesNotMatch(await card.innerText(), /남았|남음|남은|곧|마감|지금 바로|놓치|할인|한정|\d+\s*(초|분)\b/);
     // Never opens by itself: no purchase request before the person presses the Primary.
