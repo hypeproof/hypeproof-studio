@@ -338,6 +338,34 @@ words in every state element, no state on inactive tasks or without evidence, bu
 switching still blocked; reducer outcomes for complete, stop, instructor stop, error, failed result,
 dismissed banner and new send).
 
+`REQ-STUDIO-MOTION-MEASURE-GUTTER` (CGP-DS-R-014 / -020 / -031, 2026-10-20; REQ-CGP-DS-15, -22,
+-36; DES-CGP-DS-15, -22, -36). Motion: every transition and animation time in webview CSS comes
+from a `--hp-dur-*` token in `tokens.css`, whose values are recorded first in
+`docs/design/studio-learning-experience.md` §디자인 시스템; component CSS holds no time literal. One
+curve, `--hp-ease: cubic-bezier(.19, 1, .22, 1)`, for UI transitions. `--hp-dur-press` 140ms
+(hover/press on a control, replacing 100-150ms literals), `--hp-dur-content` 160ms (copy
+confirmation, catch-up pill), `--hp-dur-enter` 180ms (live message, tools menu, runner bar; the
+tools menu was 120ms), `--hp-dur-meter` 100ms (voice level bar), `--hp-dur-stagger` 100ms (dot
+offsets). Status loops keep their former times as tokens: response dots `--hp-dur-pending` 1.2s
+for 3 cycles (3.6s, inside CP-R1's 3.8s cap), classroom dots 1s, code-progress shimmer 1.8s and
+border 2.4s, runner 2.4s / .42s / .9s (dust delays .15s / .3s as fractions of it) / 1.4s blink.
+Loops keep their own linear/ease-in-out shape. The reduced-motion rules (OS
+`prefers-reduced-motion` and `workbench.reduceMotion`, CGP-DS-R-015) still win; no token is
+`!important`. Measure: in personal chat, assistant prose (`.hps-prose`) is capped at
+`max-inline-size: 40em` of its own font, about 40 Hangul syllables per line (640px at 16px,
+scaling with the text-size choice). It is a cap only: narrower panes wrap to the pane, nothing
+gains a fixed width, and tables (`overflow-x: auto`) and code blocks (`pre-wrap`) keep their own
+overflow inside it. Gutter: the personal transcript scroller (`.hps-messages`) has
+`scrollbar-gutter: stable`, so the column does not move sideways when a reply first makes it
+scroll. Not covered: the classroom chat transcript keeps its full-width prose and no reserved
+gutter; TSX inline motion (none today); DES-CGP-DS-15's "0 animations over 300ms" rule for the
+existing status loops; the exit/move curves; a measured 0px reflow capture in the built app.
+Test: `test/motion-measure-gutter.smoke.mjs` scans every webview CSS file for a literal time in
+any `transition*`/`animation*` declaration (only the 0.01ms reduced-motion override is allowed),
+checks the token values against DES-CGP-DS-15 and the design doc, that every used token is
+defined and none is `!important`, the 40em cap with no fixed width, and the gutter on the
+scrolling element, with negative controls copied from the replaced lines.
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop

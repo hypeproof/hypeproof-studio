@@ -36,6 +36,24 @@
    * Without theme variables: 70% description colour + 30% input text (#C1CBB9). */
   --hp-placeholder-mix: color-mix(in srgb, var(--vscode-descriptionForeground, #ACB9A5) 70%, var(--vscode-input-foreground, #F2F4E8));
   --hp-placeholder: var(--vscode-input-placeholderForeground, var(--hp-placeholder-mix));
+  /* CGP-DS-R-014 — motion tokens (DES-CGP-DS-15). Every transition/animation time in webview CSS
+   * comes from here; component CSS holds no literal durations (test/motion-measure-gutter.smoke.mjs).
+   * The reduced-motion override at the end of this file still wins (!important). */
+  --hp-ease: cubic-bezier(.19, 1, .22, 1);   /* the one UI curve: fast out, soft settle */
+  --hp-dur-press: 140ms;     /* hover/press state on a control (was 100-150ms literals) */
+  --hp-dur-content: 160ms;   /* small content appearing in place: copy confirmation, catch-up pill */
+  --hp-dur-enter: 180ms;     /* a surface or message entering: live message, tools menu, runner bar */
+  --hp-dur-meter: 100ms;     /* a live level (voice meter) keeps up with the signal */
+  --hp-dur-stagger: 100ms;   /* offset between the dots of one indicator */
+  /* Status loops: each pauses when its surface is idle and stops under reduced motion. */
+  --hp-dur-pending: 1.2s;    /* response dots, 3 cycles = 3.6s (CP-R1 3.8s cap) */
+  --hp-dur-pulse: 1s;        /* classroom thinking dots */
+  --hp-dur-shimmer: 1.8s;    /* code-progress sweep */
+  --hp-dur-breathe: 2.4s;    /* code-progress border */
+  --hp-dur-runner-run: 2.4s;
+  --hp-dur-runner-hop: .42s;
+  --hp-dur-runner-puff: .9s;
+  --hp-dur-runner-blink: 1.4s;
 }
 /* VS Code's 2026 themes ship a placeholder below 4.5:1 (Dark 2026 #555555: 2.3:1, Light 2026
  * #999999: 2.8:1); the webview body carries the theme id, and there the mix is used instead. */

@@ -176,7 +176,7 @@
   font-weight:650!important;
   word-break:keep-all;
   overflow-wrap:anywhere;
-  transition:background .15s}
+  transition:background var(--hp-dur-press) var(--hp-ease)}
 .studio-primary>span {
   flex:0 0 auto}
 .studio-primary:hover:enabled {
@@ -402,7 +402,7 @@
   font-weight:650!important;
   word-break:keep-all;
   overflow-wrap:anywhere;
-  transition:background .15s}
+  transition:background var(--hp-dur-press) var(--hp-ease)}
 .studio-choice:hover:enabled { background: var(--studio-bg); }
 .studio-choice:disabled { opacity:.55; cursor:default; }
 /* TUX-SP-12 — what the trial choice needs and gives, read before choosing. Quiet text, not a second button. */

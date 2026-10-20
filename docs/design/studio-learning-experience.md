@@ -280,6 +280,23 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
      테마 변수가 없으면 설명 글자 70% + 입력 글자 30%. opacity를 쓰지 않는다 */
   --hp-placeholder-mix: color-mix(in srgb, var(--vscode-descriptionForeground, #ACB9A5) 70%, var(--vscode-input-foreground, #F2F4E8));
   --hp-placeholder: var(--vscode-input-placeholderForeground, var(--hp-placeholder-mix));
+  /* 움직임 토큰(CGP-DS-R-014, DES-CGP-DS-15). 웹뷰 CSS의 transition/animation 시간은 전부 여기서 온다.
+     컴포넌트 CSS에는 시간 리터럴이 없다. 줄인 움직임 규칙(!important 0.01ms)이 여전히 이긴다 */
+  --hp-ease: cubic-bezier(.19, 1, .22, 1);   /* UI 곡선 하나: 빨리 나가고 부드럽게 멈춘다 */
+  --hp-dur-press: 140ms;     /* 컨트롤 hover/press (기존 100~150ms 리터럴) */
+  --hp-dur-content: 160ms;   /* 제자리에 나타나는 작은 내용: 복사 확인, 아래로 가기 */
+  --hp-dur-enter: 180ms;     /* 들어오는 면·메시지: 새 메시지, 도구 메뉴, 러너 바 */
+  --hp-dur-meter: 100ms;     /* 실시간 수준 표시(음성 막대)가 신호를 따라간다 */
+  --hp-dur-stagger: 100ms;   /* 한 표시 안의 점 사이 시차 */
+  /* 상태 반복: 면이 쉬면 멈추고, 줄인 움직임에서는 꺼진다 */
+  --hp-dur-pending: 1.2s;    /* 응답 점, 3회 = 3.6s (CP-R1 상한 3.8s) */
+  --hp-dur-pulse: 1s;        /* 수업 채팅 생각 점 */
+  --hp-dur-shimmer: 1.8s;    /* 코드 진행 줄 빛 */
+  --hp-dur-breathe: 2.4s;    /* 코드 진행 테두리 */
+  --hp-dur-runner-run: 2.4s;
+  --hp-dur-runner-hop: .42s;
+  --hp-dur-runner-puff: .9s;
+  --hp-dur-runner-blink: 1.4s;
 }
 /* 자기 placeholder가 4.5:1에 못 미치는 VS Code 2026 테마는 웹뷰 body의 테마 id로 골라 mix를 쓴다 */
 body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] { --hp-placeholder: var(--hp-placeholder-mix); }
@@ -328,6 +345,9 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
 | 실제/AI 예시 라벨·색 분리(SX-12) | 외부 반응 인용은 `--hp-ink` + "실제 반응", AI 예시는 `--hp-muted` + "AI 예시". 색이 같아도 라벨이 갈린다 |
 | 포커스 링 하나(CGP-DS-R-017, DES-06/11) | 포커스를 받는 모든 컨트롤은 `outline: 2px solid var(--hp-ring); outline-offset: 2px`. 스크롤 목록 안의 촘촘한 행(`.tw-task-list`, `.tw-source-list`)만 `-2px` 안쪽 링. `outline: none`은 같은 요소의 `:focus-visible` 규칙이나 조상의 `:focus-within` 링이 있을 때만 쓴다. 예외는 프로그램으로 포커스를 옮기는 제목(`.cp-preview h3`, `tabIndex=-1`) 하나 |
 | placeholder 4.5:1(CGP-DS-R-019, DES-11) | `tokens.css`의 `::placeholder` 기본값이 모든 입력란에 `color: var(--hp-placeholder)`를 준다. 브라우저 기본 placeholder와 opacity 조절은 쓰지 않는다. placeholder는 바탕과 4.5:1, 입력한 글자와 1.5:1 이상 떨어진다. Light+만 예외: 입력 글자(#616161)가 흰 바탕에 6.2:1이라 4.5:1을 지키면 최대 1.38:1까지만 벌어진다(실측 #767676: 1.36:1). 링은 컨트롤 밖 2px 틈 너머 바탕 위에 그려지므로 링 대비는 그 바탕과 잰다 |
+| 움직임은 토큰으로(CGP-DS-R-014, DES-CGP-DS-15) | 웹뷰 CSS의 transition/animation 시간은 `--hp-dur-*`만 쓴다. 컨트롤 hover/press `--hp-dur-press` 140ms, 제자리 확인 `--hp-dur-content` 160ms, 들어오는 면 `--hp-dur-enter` 180ms, 곡선은 `--hp-ease` 하나. 상태 반복(응답 점 1.2s×3, 진행 표시, 러너)은 기존 시간을 토큰으로 옮겼다. 줄인 움직임 규칙이 늘 이긴다 |
+| 본문 한 줄 길이(CGP-DS-R-020, DES-CGP-DS-22) | 개인 대화의 AI 본문(`.hps-prose`)은 `max-inline-size: 40em`, 한 줄에 한글 약 40자. 상한일 뿐이라 좁은 창에서는 창에 맞춰 줄바꿈하고, 표와 코드는 그 안에서 자기 스크롤을 가진다 |
+| 스크롤 막대 자리(CGP-DS-R-031, DES-CGP-DS-36) | 개인 대화 대화 목록(`.hps-messages`)은 `scrollbar-gutter: stable`. 답이 길어져 스크롤 막대가 생겨도 본문이 옆으로 밀리지 않는다 |
 
 대비. 상대 휘도로 계산한 근사값이며 구현 시 검사 도구로 다시 확인한다.
 

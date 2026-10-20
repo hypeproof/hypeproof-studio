@@ -6442,6 +6442,19 @@
       ]
     },
     {
+      "id": "ST-TEST-MOTION-MEASURE-GUTTER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/motion-measure-gutter.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-CONTROL-CONTRAST",
       "stage": "test",
       "owner": "jayleekr",

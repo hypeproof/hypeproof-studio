@@ -34,7 +34,7 @@ html, body, #root {
   font-size: 13px;
   cursor: pointer;
   border-bottom: 1px dashed transparent;
-  transition: border-color 120ms;
+  transition: border-color var(--hp-dur-press) var(--hp-ease);
   /* #747 — a lesson may fix a 40-char name; keep the header one row at 390px.
      The full name stays reachable through the title attribute. */
   flex: 1 1 auto;
@@ -309,7 +309,7 @@ html, body, #root {
   font-size: 12px;
   opacity: 0.9;
 }
-.hps-dots { animation: hps-pulse 1s ease-in-out infinite; display: inline-block; }
+.hps-dots { animation: hps-pulse var(--hp-dur-pulse) ease-in-out infinite; display: inline-block; }
 @keyframes hps-pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
 
 /* 2026-08-17 — while the coach was working the screen looked "frozen" (real Windows
@@ -320,7 +320,7 @@ html, body, #root {
 .hps-code-progress {
   position: relative;
   overflow: hidden;
-  animation: hps-breathe 2.4s ease-in-out infinite;
+  animation: hps-breathe var(--hp-dur-breathe) ease-in-out infinite;
 }
 .hps-code-progress::after {
   content: "";
@@ -335,7 +335,7 @@ html, body, #root {
     transparent 80%
   );
   transform: translateX(-100%);
-  animation: hps-shimmer 1.8s linear infinite;
+  animation: hps-shimmer var(--hp-dur-shimmer) linear infinite;
   pointer-events: none;
 }
 @keyframes hps-shimmer { to { transform: translateX(100%); } }
@@ -420,7 +420,7 @@ html, body, #root {
   cursor: pointer;
   color: inherit;
   font: inherit;
-  transition: background 120ms, border-color 120ms;
+  transition: background var(--hp-dur-press) var(--hp-ease), border-color var(--hp-dur-press) var(--hp-ease);
 }
 .hps-chip:hover:not(:disabled) {
   background: var(--vscode-input-background, #2a2d2e);
@@ -499,7 +499,7 @@ html, body, #root {
   font: inherit;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 120ms, border-color 120ms, transform 120ms;
+  transition: background var(--hp-dur-press) var(--hp-ease), border-color var(--hp-dur-press) var(--hp-ease), transform var(--hp-dur-press) var(--hp-ease);
 }
 .hps-world:hover:not(:disabled) {
   border-color: var(--vscode-focusBorder, #5b9bff);
@@ -567,7 +567,7 @@ html, body, #root {
   border: 1px solid transparent;
   border-radius: 10px;
   color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, #ddd));
-  transition: height 180ms ease, opacity 180ms ease, margin-bottom 180ms ease;
+  transition: height var(--hp-dur-enter) var(--hp-ease), opacity var(--hp-dur-enter) var(--hp-ease), margin-bottom var(--hp-dur-enter) var(--hp-ease);
 }
 .hps-runner-on {
   height: 40px;
@@ -605,22 +605,22 @@ html, body, #root {
   justify-content: flex-end;     /* in row-reverse, flex-end = the starting line on the left */
   align-items: center;
   gap: 4px;
-  animation: hps-runner-run 2.4s linear infinite;
+  animation: hps-runner-run var(--hp-dur-runner-run) linear infinite;
 }
 .hps-runner-face {
   font-size: 17px;
   line-height: 1;
-  animation: hps-runner-hop 0.42s ease-in-out infinite;
+  animation: hps-runner-hop var(--hp-dur-runner-hop) ease-in-out infinite;
 }
 .hps-runner-dust {
   width: 4px;
   height: 4px;
   border-radius: 50%;
   background: var(--vscode-descriptionForeground, #9aa0a6);
-  animation: hps-runner-puff 0.9s ease-out infinite;
+  animation: hps-runner-puff var(--hp-dur-runner-puff) ease-out infinite;
 }
-.hps-runner-dust:nth-child(3) { animation-delay: 0.15s; }
-.hps-runner-dust:nth-child(4) { animation-delay: 0.3s; }
+.hps-runner-dust:nth-child(3) { animation-delay: calc(var(--hp-dur-runner-puff) / 6); }
+.hps-runner-dust:nth-child(4) { animation-delay: calc(var(--hp-dur-runner-puff) / 3); }
 
 .hps-runner-say {
   flex: 0 1 auto;
@@ -658,7 +658,7 @@ html, body, #root {
     justify-content: flex-start;
   }
   .hps-runner-face { animation: none; }
-  .hps-runner-dust { animation: hps-runner-blink 1.4s ease-in-out infinite; }
+  .hps-runner-dust { animation: hps-runner-blink var(--hp-dur-runner-blink) ease-in-out infinite; }
 }
 
 /* ---------- Input area ---------- */
@@ -1525,7 +1525,7 @@ html, body, #root {
    more makes a perfectly good runner check read this block and fail (that is exactly how
    it was broken once). */
 @media (prefers-reduced-motion: no-preference) {
-  .hps-voice-bar { transition: height .1s linear; }
+  .hps-voice-bar { transition: height var(--hp-dur-meter) linear; }
 }
 .hps-voice-meter:not(.hps-voice-meter-live) .hps-voice-bar { background: var(--vscode-descriptionForeground, #9aa0a6); }
 .hps-voice-status-text { margin: 0; font-size: 15px; font-weight: 600; text-align: center; overflow-wrap: anywhere; }
