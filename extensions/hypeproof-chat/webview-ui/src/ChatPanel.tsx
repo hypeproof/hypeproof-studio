@@ -14,7 +14,7 @@ import { useResponseAnnouncement } from './responseAnnouncer';
 import { useConnectivity, useLiveRegion, guardSend, OFFLINE_BANNER_TEXT, OFFLINE_HELD_NOTES, type HeldNoteKind } from './connectivity';
 import { imeComposing } from './imeGuard';
 import { QuoteAction, useAnswerQuote } from './QuoteAction';
-import { mergeQuoteIntoDraft, QUOTE_SCOPE_ATTR, type AnswerQuote } from './quoteReply';
+import { mergeQuoteIntoDraft, QUOTE_ROW_ATTR, QUOTE_SCOPE_ATTR, type AnswerQuote } from './quoteReply';
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { AccessControl } from './AccessControl';
@@ -615,7 +615,8 @@ export function ChatPanel(props: Props) {
       editor.setSelectionRange(editor.value.length, editor.value.length);
     });
   };
-  const dismissQuote = () => { dropAnswerQuote(); document.getSelection?.()?.removeAllRanges?.(); };
+  // Escape: the button goes away, so focus returns to the composer (draft and caret untouched), not <body>.
+  const dismissQuote = () => { dropAnswerQuote(); document.getSelection?.()?.removeAllRanges?.(); recoverToComposer(undefined); };
 
   const ux: UxConfig = config?.profile?.ux ?? DEFAULT_UX;
   // Image paste is a per-profile opt-in (website-copyclone). Default-off so
@@ -2298,7 +2299,7 @@ function MessageItem({
   const retryPrompt = canRetry ? userPromptBefore(messages, message.id) : null;
 
   return (
-    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`}>
+    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`} {...(quotable ? { [QUOTE_ROW_ATTR]: message.id } : {})}>
       <div className={personal ? "hps-msg-role hps-sr-only" : "hps-msg-role"}>
         {/*
           * #747 (AE-08) — if a stored name exists, use **that**. If not (rows from
@@ -2497,7 +2498,7 @@ function AssistantContent({
           return (
             <div key={i}>
               <CodePill code={seg.value} personal={personal} blockKey={`seg${i}`} />
-              <div className="hps-stream-note">
+              <div className="hps-stream-note" data-quote-skip="">
                 {personal ? "응답이 도중에 끊겼어요. 같은 요청을 한 번 더 보내 주세요." : "응답이 도중에 끊겼어요. 위의 🔄 버튼으로 다시 시도해주세요."}
               </div>
             </div>

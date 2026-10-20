@@ -1,15 +1,17 @@
 // CGP-CHAT-R-007 (REQ-STUDIO-QUOTE-REPLY) — quote part of one answer into the next message.
 // Bundled with esbuild and run with plain Node, like code-block-tools.test.tsx. The pure part
 // (quoteReply.ts) is checked directly; the interactive part mounts ChatPanel with react-dom/client
-// on the minimal DOM (fixtures/mini-dom.mjs, loaded first), stubs document.getSelection with real
-// text nodes from the rendered answers, fires selectionchange and presses the real button.
+// on the minimal DOM (fixtures/mini-dom.mjs, loaded first), stubs document.getSelection with a
+// range over the real rendered nodes, fires selectionchange and presses the real button. The stub's
+// toString() serialises every text node in the range, buttons included, the way Chromium does, so
+// a quote built from toString() would carry UI labels.
 
 import { click, document as doc, mountPoint } from "./fixtures/mini-dom.mjs";
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { readFileSync } from "node:fs";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
-import { mergeQuoteIntoDraft, quoteFromSelection, toQuoteBlock, QUOTE_CUT_NOTE, QUOTE_LABEL, QUOTE_MAX, QUOTE_SCOPE_ATTR, type QuoteNode } from "../webview-ui/src/quoteReply";
+import { mergeQuoteIntoDraft, quoteFromSelection, toQuoteBlock, QUOTE_CUT_NOTE, QUOTE_LABEL, QUOTE_MAX, QUOTE_SCOPE_ATTR } from "../webview-ui/src/quoteReply";
 import type { ChatConfig, ChatMessage } from "../src/protocol";
 
 const act: (fn: () => unknown) => Promise<void> = (React as unknown as { act: (fn: () => unknown) => Promise<void> }).act;
@@ -50,11 +52,41 @@ const u = (id: string, content: string): ChatMessage => ({ id, role: "user", con
 const a = (id: string, content: string): ChatMessage => ({ id, role: "assistant", content, createdAt: 1 });
 const CONVO = [u("u1", "물이 왜 끓어요?"), a("a1", "물은 100도에서 끓어요."), u("u2", "더 알려줘"), a("a2", "높은 산에서는 더 낮은 온도에서 끓어요.")];
 
-// ---------- Pure: selection → quote text, merge with the draft ----------
+// ---------- Selection fixture: a range over real mini-dom nodes ----------
 
-const el = (id: string | null, parent: QuoteNode | null = null): QuoteNode => ({ nodeType: 1, parentNode: parent, getAttribute: (n) => (n === QUOTE_SCOPE_ATTR ? id : null) });
-const text = (parent: QuoteNode): QuoteNode => ({ nodeType: 3, parentNode: parent });
-const sel = (anchor: QuoteNode | null, focus: QuoteNode | null, s: string, collapsed = false) => ({ isCollapsed: collapsed, rangeCount: 1, anchorNode: anchor, focusNode: focus, toString: () => s });
+type El = { localName: string; nodeName: string; data?: string; getAttribute(n: string): string | null; hasAttribute(n: string): boolean; textContent: string; value: string; selectionStart: number; childNodes: El[]; nodeType: number; parentNode: El | null; findAll(test: (e: El) => boolean): El[]; dispatchEvent(e: object): boolean; appendChild(c: El): El; setAttribute(n: string, v: string): void };
+type Pt = { node: El; offset: number };
+const pathOf = (p: Pt) => { const out = [p.offset]; for (let n = p.node; n.parentNode; n = n.parentNode) out.unshift(n.parentNode.childNodes.indexOf(n)); return out; };
+const cmp = (a: Pt, b: Pt) => { const x = pathOf(a), y = pathOf(b); for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] - y[i]; return x.length - y.length; };
+const allText = (n: El, out: El[] = []) => { for (const c of n.childNodes) { if (c.nodeType === 3) out.push(c); else if (c.nodeType === 1) allText(c, out); } return out; };
+/** What Chromium's Selection.toString() gives, near enough: every text node in the range, controls included. */
+const naiveText = (s: Pt, e: Pt) => allText(doc as unknown as El).map((t) => {
+  const len = (t.data ?? "").length;
+  const a = cmp({ node: t, offset: 0 }, s) >= 0 ? 0 : t === s.node ? s.offset : len;
+  const b = cmp({ node: t, offset: len }, e) <= 0 ? len : t === e.node ? e.offset : 0;
+  return b > a ? (t.data ?? "").slice(a, b) : "";
+}).join("");
+const sel = (s: Pt, e: Pt, collapsed = false) => {
+  const range = { startContainer: s.node, startOffset: s.offset, endContainer: e.node, endOffset: e.offset };
+  return { isCollapsed: collapsed, rangeCount: 1, anchorNode: s.node, anchorOffset: s.offset, focusNode: e.node, focusOffset: e.offset, getRangeAt: () => range, toString: () => naiveText(s, e) };
+};
+/** The point at the start of `needle` (or just after it) in the first text node under `root` holding it. */
+const at = (root: El, needle: string, side: "start" | "end" = "start"): Pt => {
+  const node = allText(root).find((t) => (t.data ?? "").includes(needle));
+  ok(node, `no text node with ${JSON.stringify(needle)}`);
+  const i = node!.data!.indexOf(needle);
+  return { node: node!, offset: side === "start" ? i : i + needle.length };
+};
+const textStart = (root: El): Pt => ({ node: allText(root).find((t) => (t.data ?? "").trim())!, offset: 0 });
+const h = (tagName: string, attrs: Record<string, string> = {}, ...kids: (El | string)[]) => {
+  const e = doc.createElement(tagName) as unknown as El;
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  for (const k of kids) e.appendChild(typeof k === "string" ? doc.createTextNode(k) as unknown as El : k);
+  return e;
+};
+const pure = (...rows: El[]) => { const root = h("div", {}, ...rows); doc.body.appendChild(root as never); return root; };
+
+// ---------- Pure: selection → quote text, merge with the draft ----------
 
 t("toQuoteBlock: every line gets `> `, a blank line stays inside the quote as `>`, CRLF normalised", () => {
   eq(toQuoteBlock("첫 줄\r\n\r\n\r\n둘째 줄  \n셋째")?.block, "> 첫 줄\n>\n> 둘째 줄\n> 셋째", "block");
@@ -67,26 +99,84 @@ t("toQuoteBlock: whitespace-only selection gives no quote (negative control)", (
   eq(toQuoteBlock(" \n\t \n"), null, "whitespace");
 });
 
-t(`toQuoteBlock: longer than ${QUOTE_MAX} characters is cut and ends with …; a surrogate pair is never split`, () => {
+t(`toQuoteBlock: longer than ${QUOTE_MAX} characters is cut on a character boundary and ends with …`, () => {
   const long = toQuoteBlock("가".repeat(QUOTE_MAX + 500))!;
   ok(long.truncated, "not marked truncated");
   eq(long.block, `> ${"가".repeat(QUOTE_MAX)}…`, "cut block");
   const emoji = toQuoteBlock("😀".repeat(QUOTE_MAX + 1))!;
-  eq(Array.from(emoji.block.slice(2)).length, QUOTE_MAX + 1, "code points kept (incl. …)");
+  eq(Array.from(emoji.block.slice(2)).length, QUOTE_MAX + 1, "characters kept (incl. …)");
   ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(emoji.block), "lone high surrogate");
   const exact = toQuoteBlock("나".repeat(QUOTE_MAX))!;
   ok(!exact.truncated && !exact.block.endsWith("…"), "exactly the cap is not cut");
 });
 
+t("toQuoteBlock: the cut never splits a composed emoji or an NFD Hangul syllable (grapheme clusters)", () => {
+  const family = "👨‍👩‍👧";
+  const f = toQuoteBlock("가".repeat(QUOTE_MAX - 1) + family + "끝")!;
+  eq(f.block, `> ${"가".repeat(QUOTE_MAX - 1)}${family}…`, "ZWJ family emoji split");
+  const nfd = "한".normalize("NFD");
+  ok(nfd.length === 3, "fixture is not NFD");
+  const k = toQuoteBlock("가".repeat(QUOTE_MAX - 1) + nfd + "끝")!;
+  eq(k.block, `> ${"가".repeat(QUOTE_MAX - 1)}${nfd}…`, "NFD syllable split");
+  ok(!toQuoteBlock(family.repeat(QUOTE_MAX))!.truncated, "1,000 composed emoji counted as more than 1,000");
+});
+
 t("quoteFromSelection: inside one answer → quote; spans messages, outside, collapsed → none", () => {
-  const body1 = el("a1"); const inner = el(null, body1); const body2 = el("a2"); const composer = el(null);
-  const one = quoteFromSelection(sel(text(inner), text(body1), "물은 100도"));
+  const body1 = h("div", { [QUOTE_SCOPE_ATTR]: "a1" }, h("p", {}, "물은 ", h("strong", {}, "100도"), "에서 끓어요."));
+  const row1 = h("div", { "data-quote-row": "a1" }, body1);
+  const body2 = h("div", { [QUOTE_SCOPE_ATTR]: "a2" }, h("p", {}, "높은 산"));
+  const row2 = h("div", { "data-quote-row": "a2" }, h("span", {}, "HypeProof"), body2);
+  const composer = h("div", {}, h("span", {}, "입력"));
+  pure(row1, row2, composer);
+  const one = quoteFromSelection(sel(textStart(body1), at(body1, "100도", "end")));
   eq(one?.messageId, "a1", "message id"); eq(one?.block, "> 물은 100도", "block");
-  eq(quoteFromSelection(sel(text(body1), text(body2), "x")), null, "across two answers");
-  eq(quoteFromSelection(sel(text(body1), text(composer), "x")), null, "answer into composer");
-  eq(quoteFromSelection(sel(text(composer), text(composer), "x")), null, "composer only");
-  eq(quoteFromSelection(sel(text(body1), text(body1), "x", true)), null, "collapsed");
+  eq(quoteFromSelection(sel(textStart(body1), at(body2, "높은", "end"))), null, "across two answers");
+  eq(quoteFromSelection(sel(textStart(body1), at(composer, "입력", "end"))), null, "answer into composer");
+  eq(quoteFromSelection(sel(textStart(composer), at(composer, "입력", "end"))), null, "composer only");
+  eq(quoteFromSelection(sel(at(body2, "높은", "end"), at(body2, "산", "end")) && sel(textStart(row2), at(body2, "산", "end"))), null, "starts in another row's label");
+  eq(quoteFromSelection(sel(textStart(body1), textStart(body1), true)), null, "collapsed");
   eq(quoteFromSelection(null), null, "no selection");
+});
+
+t("answer text only: buttons, [aria-hidden], role=status and data-quote-skip inside the range add nothing; code counts as its code", () => {
+  const body = h("div", { [QUOTE_SCOPE_ATTR]: "a1" },
+    h("p", {}, "첫 문단입니다."),
+    h("div", { class: "hps-codepill" }, h("button", {}, h("span", {}, "코드 숨기기")),
+      h("div", { class: "hps-codeblock" }, h("div", { "data-quote-skip": "" }, h("button", {}, h("span", {}, "복사")), h("button", {}, h("span", {}, "줄 바꿈")), h("span", { role: "status" }, "코드를 복사했습니다")),
+        h("pre", {}, h("code", {}, "const x = 1;\nconsole.log(x);\n")))),
+    h("p", {}, "번호 ", h("span", { "aria-hidden": "true" }, "1"), "있는 글", h("span", { role: "status" }, "복사했습니다")),
+    h("p", {}, "마지막 문단입니다."));
+  pure(h("div", { "data-quote-row": "a1" }, body));
+  const s = sel(textStart(body), at(body, "마지막 문단입니다.", "end"));
+  ok(/복사|줄 바꿈|코드 숨기기/.test(s.toString()), "fixture: toString() should carry the labels, as in Chromium");
+  eq(quoteFromSelection(s)?.block, "> 첫 문단입니다.\n>\n> const x = 1;\n> console.log(x);\n>\n> 번호 있는 글\n>\n> 마지막 문단입니다.", "quote");
+  // Starting inside the code keeps only code text.
+  eq(quoteFromSelection(sel(at(body, "console"), at(body, "console.log(x);", "end")))?.block, "> console.log(x);", "code only");
+});
+
+t("triple-click: an end past the body in the same row, or at the start of the next block, is clamped to the body", () => {
+  const body = h("div", { [QUOTE_SCOPE_ATTR]: "a1" }, h("p", {}, "앞 문단."), h("p", {}, "마지막 문단."));
+  const rack = h("div", { class: "cp-citations" }, h("span", { class: "cp-citation-number", "aria-hidden": "true" }, "1"), h("span", {}, "출처 제목"));
+  const actions = h("div", {}, h("button", {}, h("span", { class: "hps-copy-answer" }, "복사")));
+  const row1 = h("div", { "data-quote-row": "a1" }, h("div", {}, "HypeProof"), body, rack, actions);
+  const userBody = h("div", { class: "hps-msg-body" }, "더 알려줘");
+  const row2 = h("div", { class: "hps-msg hps-msg-user" }, h("div", {}, "나"), userBody);
+  pure(row1, row2);
+  const lastPara = at(body, "마지막 문단.");
+  eq(quoteFromSelection(sel(lastPara, { node: allText(rack)[0], offset: 0 }))?.block, "> 마지막 문단.", "end in citation number");
+  eq(quoteFromSelection(sel(lastPara, at(rack, "출처", "end")))?.block, "> 마지막 문단.", "end inside citation title (same row)");
+  eq(quoteFromSelection(sel(lastPara, { node: allText(actions)[0], offset: 0 }))?.block, "> 마지막 문단.", "end in copy action");
+  eq(quoteFromSelection(sel(lastPara, at(userBody, "더", "end"))), null, "end inside the next message (negative control)");
+  eq(quoteFromSelection(sel(lastPara, { node: row2, offset: 0 })), null, "next row start with the rack's text in between (negative control)");
+  // A row without citations or actions (classroom): the triple-click ends at the next row's start.
+  const bare = h("div", { [QUOTE_SCOPE_ATTR]: "b1" }, h("p", {}, "하나뿐인 문단."));
+  const nextRole = h("div", {}, "나");
+  const next = h("div", { class: "hps-msg hps-msg-user" }, nextRole, h("div", {}, "다음 질문"));
+  pure(h("div", { "data-quote-row": "b1" }, h("div", {}, "HypeProof"), bare), next);
+  const only = textStart(bare);
+  eq(quoteFromSelection(sel(only, { node: next, offset: 0 }))?.block, "> 하나뿐인 문단.", "end at the start of the next row");
+  eq(quoteFromSelection(sel(only, { node: allText(next)[0], offset: 0 }))?.block, "> 하나뿐인 문단.", "end at offset 0 of the next row's first text");
+  eq(quoteFromSelection(sel(only, at(next, "나", "end"))), null, "end after text of the next row (negative control)");
 });
 
 t("mergeQuoteIntoDraft: keeps the draft as the exact prefix, one blank line before and after the quote", () => {
@@ -109,7 +199,6 @@ t("CSS: 44px target, tokens only for motion, no score or capability wording in t
 
 // ---------- Interactive: ChatPanel, a stubbed selection, real button presses ----------
 
-type El = { localName: string; getAttribute(n: string): string | null; hasAttribute(n: string): boolean; textContent: string; value: string; selectionStart: number; childNodes: El[]; nodeType: number; parentNode: El | null; findAll(test: (e: El) => boolean): El[]; dispatchEvent(e: object): boolean };
 let current: ReturnType<typeof sel> | null = null;
 (doc as unknown as { getSelection: () => unknown }).getSelection = () => current && { ...current, removeAllRanges: () => { current = null; } };
 const fire = (target: { dispatchEvent(e: object): boolean }, type: string, extra: object = {}) => target.dispatchEvent({
@@ -118,7 +207,8 @@ const fire = (target: { dispatchEvent(e: object): boolean }, type: string, extra
 });
 const selectionChange = () => act(async () => { fire(doc as unknown as El, "selectionchange", { bubbles: false }); });
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
-const firstText = (root: El): El => { for (const c of root.childNodes) { if (c.nodeType === 3 && c.textContent.trim()) return c; if (c.nodeType === 1) { const f = firstText(c); if (f) return f; } } return null as unknown as El; };
+const press = (el: El) => act(async () => { click(el); });
+const cls = (e: El) => (e.getAttribute("class") ?? "").split(" ");
 
 const mounted: Root[] = [];
 async function mount(config: ChatConfig, messages: ChatMessage[] = CONVO, extra: object = {}) {
@@ -130,16 +220,19 @@ async function mount(config: ChatConfig, messages: ChatMessage[] = CONVO, extra:
   const body = (id: string) => host.findAll((e) => e.getAttribute(QUOTE_SCOPE_ATTR) === id)[0];
   const buttons = () => host.findAll((e) => e.localName === "button" && e.textContent === QUOTE_LABEL);
   const textarea = () => host.findAll((e) => e.localName === "textarea")[0];
-  const select = async (anchor: El, focus: El, s: string) => { current = sel(anchor as unknown as QuoteNode, focus as unknown as QuoteNode, s); await selectionChange(); };
-  return { host, body, buttons, textarea, select, unmount: () => act(async () => root.unmount()) };
+  const select = async (s: Pt, e: Pt) => { current = sel(s, e); await selectionChange(); };
+  const quote = async () => { eq(buttons().length, 1, "quote buttons"); await press(buttons()[0]); await settle(); return textarea().value; };
+  return { host, body, buttons, textarea, select, quote, unmount: () => act(async () => root.unmount()) };
 }
 /** The answer text (not the speaker label) of the last or first assistant row, whatever its marking. */
 const answerBody = (host: El, which: "first" | "last") => {
-  const rows = host.findAll((e) => (e.getAttribute("class") ?? "").split(" ").includes("hps-msg-assistant"));
+  const rows = host.findAll((e) => cls(e).includes("hps-msg-assistant"));
   const row = which === "first" ? rows[0] : rows[rows.length - 1];
   return row.findAll((e) => (e.getAttribute("class") ?? "") === "hps-msg-body")[0];
 };
-const rowOf = (e: El) => { let n: El | null = e; while (n && !(n.getAttribute?.("class") ?? "").split(" ").includes("hps-msg")) n = n.parentNode; return n; };
+const rowOf = (e: El) => { let n: El | null = e.nodeType === 1 ? e : e.parentNode; while (n && !cls(n).includes("hps-msg")) n = n.parentNode; return n!; };
+
+const RICH = "첫 문단입니다.\n\n```js\nconst x = 1;\nconsole.log(x);\n```\n\n중간 문단.\n\n~~~\nnpm test\n~~~\n\n마지막 문단입니다.";
 
 for (const [mode, config] of [["personal", personal], ["classroom", classroom]] as const) {
   t(`${mode}: select inside an answer → 인용하기 under that answer → press → draft is the > block, focus at its end, nothing sent`, async () => {
@@ -148,13 +241,11 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom]] 
     ok(v.body("a1") && v.body("a2"), "answers not marked quotable");
     ok(!v.host.findAll((e) => e.getAttribute(QUOTE_SCOPE_ATTR) === "u1").length, "a user line is quotable");
     eq(v.buttons().length, 0, "button before any selection");
-    const node = firstText(v.body("a1"));
-    await v.select(node, node, "100도에서 끓어요");
+    await v.select(at(v.body("a1"), "100도"), at(v.body("a1"), "끓어요", "end"));
     eq(v.buttons().length, 1, "button count after selecting");
     ok(rowOf(v.buttons()[0]) === rowOf(v.body("a1")), "button is not under the selected answer");
-    await act(async () => { click(v.buttons()[0]); });
-    await settle();
-    eq(v.textarea().value, "> 100도에서 끓어요\n\n", "draft");
+    eq(rowOf(v.body("a1")).getAttribute("data-quote-row"), "a1", "row not marked for the same-message clamp");
+    eq(await v.quote(), "> 100도에서 끓어요\n\n", "draft");
     ok(doc.activeElement === (v.textarea() as unknown), "composer not focused");
     eq(v.textarea().selectionStart, v.textarea().value.length, "caret not at the end");
     eq(v.buttons().length, 0, "button still shown after quoting");
@@ -163,86 +254,132 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom]] 
     await v.unmount();
   });
 
+  t(`${mode}: button and pill labels never enter the quote (closed pill, open pill with 복사 / 줄 바꿈, prose code block)`, async () => {
+    const v = await mount(config, [u("u1", "코드 보여줘"), a("a1", RICH)]);
+    const b = () => v.body("a1");
+    const label = mode === "personal" ? "코드 보기 · 2줄" : "코드 보기 (2줄)";
+    ok(b().textContent.includes(label) && b().textContent.includes("줄 바꿈"), `fixture: labels not rendered inside the body: ${b().textContent}`);
+    await v.select(textStart(b()), at(b(), "마지막 문단입니다.", "end"));
+    ok(current!.toString().includes("복사"), "fixture: toString() should carry the labels");
+    eq(await v.quote(), "> 첫 문단입니다.\n>\n> 중간 문단.\n>\n> npm test\n>\n> 마지막 문단입니다.\n\n", "closed pill");
+    const toggle = v.host.findAll((e) => cls(e).includes("hps-codepill-toggle"))[0];
+    await press(toggle);
+    await v.select(textStart(b()), at(b(), "마지막 문단입니다.", "end"));
+    const tools = v.host.findAll((e) => cls(e).includes("hps-codeblock-tools"));
+    ok(tools.length === 2 && tools.every((e) => e.getAttribute("data-quote-skip") === ""), "code-block tool rows not marked data-quote-skip");
+    const draft = await v.quote();
+    eq(draft.slice(draft.indexOf("> 첫 문단입니다.", 2)), "> 첫 문단입니다.\n>\n> const x = 1;\n> console.log(x);\n>\n> 중간 문단.\n>\n> npm test\n>\n> 마지막 문단입니다.\n\n", "open pill");
+    ok(!/복사|줄 바꿈|코드 숨기기|코드 보기/.test(draft), `labels leaked: ${JSON.stringify(draft)}`);
+    await v.unmount();
+  });
+
   t(`${mode}: a selection across two messages, or from an answer into a user line, gives no button (negative control)`, async () => {
     const v = await mount(config);
-    await v.select(firstText(v.body("a1")), firstText(v.body("a2")), "끓어요. 더 알려줘 높은 산");
+    await v.select(textStart(v.body("a1")), at(v.body("a2"), "높은 산", "end"));
     eq(v.buttons().length, 0, "across answers");
-    const userLine = v.host.findAll((e) => (e.getAttribute("class") ?? "").includes("hps-msg-user"))[0];
-    await v.select(firstText(v.body("a1")), firstText(userLine), "끓어요. 더 알려줘");
+    const userLine = v.host.findAll((e) => cls(e).includes("hps-msg-user"))[1];
+    await v.select(textStart(v.body("a1")), at(userLine, "더 알려줘", "end"));
     eq(v.buttons().length, 0, "answer into user line");
-    await v.select(firstText(userLine), firstText(userLine), "더 알려줘");
+    await v.select(at(userLine, "더"), at(userLine, "더 알려줘", "end"));
     eq(v.buttons().length, 0, "user line alone");
+    await v.unmount();
+  });
+
+  t(`${mode}: triple-click on a one-paragraph answer (end at the next row's start) shows the button and quotes the paragraph`, async () => {
+    const v = await mount(config);
+    const next = rowOf(at(v.host, "더 알려줘").node);
+    await v.select(textStart(v.body("a1")), { node: next, offset: 0 });
+    eq(await v.quote(), "> 물은 100도에서 끓어요.\n\n", "quote");
     await v.unmount();
   });
 
   t(`${mode}: an existing draft is kept and the quote follows it`, async () => {
     const v = await mount(withDraft(config, "내 생각은"));
     eq(v.textarea().value, "내 생각은", "draft restored");
-    const node = firstText(v.body("a2"));
-    await v.select(node, node, "높은 산에서는\n더 낮은 온도");
-    await act(async () => { click(v.buttons()[0]); });
-    await settle();
-    eq(v.textarea().value, "내 생각은\n\n> 높은 산에서는\n> 더 낮은 온도\n\n", "merged draft");
+    await v.select(at(v.body("a2"), "높은 산에서는"), at(v.body("a2"), "낮은 온도", "end"));
+    eq(await v.quote(), "내 생각은\n\n> 높은 산에서는 더 낮은 온도\n\n", "merged draft");
     // A second quote also keeps everything that is there.
-    const again = firstText(v.body("a1"));
-    await v.select(again, again, "100도");
-    await act(async () => { click(v.buttons()[0]); });
-    await settle();
-    eq(v.textarea().value, "내 생각은\n\n> 높은 산에서는\n> 더 낮은 온도\n\n> 100도\n\n", "second quote");
+    await v.select(at(v.body("a1"), "100도"), at(v.body("a1"), "100도", "end"));
+    eq(await v.quote(), "내 생각은\n\n> 높은 산에서는 더 낮은 온도\n\n> 100도\n\n", "second quote");
     await v.unmount();
   });
 }
 
+t("personal: triple-click on the last paragraph ends in the citation rack or the copy action; still quotes the paragraph", async () => {
+  const cited = { ...a("a1", "앞 문단.\n\n마지막 문단."), citations: [{ url: "https://example.org/a", title: "출처 제목", domain: "example.org", tier: 1 as const }] };
+  const v = await mount(personal, [u("u1", "알려줘"), cited]);
+  const row = rowOf(v.body("a1"));
+  const rack = row.findAll((e) => cls(e).includes("cp-citation-number"))[0];
+  ok(rack, "citation rack not rendered");
+  await v.select(at(v.body("a1"), "마지막 문단."), { node: allText(rack)[0], offset: 0 });
+  eq(v.buttons().length, 1, "no button when the end is in the citation number");
+  const copy = row.findAll((e) => e.getAttribute("aria-label") === "답변 복사")[0];
+  ok(copy, "copy action not rendered");
+  await v.select(at(v.body("a1"), "마지막 문단."), { node: allText(copy)[0], offset: 0 });
+  eq(await v.quote(), "> 마지막 문단.\n\n", "quote");
+  await v.unmount();
+});
+
+t("reply-choice answers: the choice buttons and help line never enter the quote", async () => {
+  const q = "설명 글이에요.\n\n어느 쪽이 가까웠나요?\n1. 설치가 먼저\n2. 실행이 먼저\n\n뒤의 설명.";
+  const v = await mount(personal, [u("u1", "골라줘"), a("a1", q)]);
+  const b = v.body("a1");
+  ok(v.host.findAll((e) => e.getAttribute("class") === "hps-reply-question").length === 1, "not drawn as a choice question");
+  ok(b.textContent.includes("직접 입력"), "fixture: help not inside the body");
+  ok(["hps-reply-choices", "hps-choice-help"].every((c) => v.host.findAll((e) => cls(e).includes(c))[0]?.getAttribute("data-quote-skip") === ""), "choice controls not marked data-quote-skip");
+  await v.select(textStart(b), at(b, "뒤의 설명.", "end"));
+  const draft = await v.quote();
+  ok(!/설치가 먼저|실행이 먼저|직접 입력|선택하면/.test(draft), `controls leaked: ${JSON.stringify(draft)}`);
+  ok(draft.startsWith("> 설명 글이에요.") && draft.endsWith("> 뒤의 설명.\n\n"), `draft ${JSON.stringify(draft)}`);
+  await v.unmount();
+});
+
 t("a selection in the composer or other UI gives no button (negative control)", async () => {
   const v = await mount(withDraft(personal, "입력 중인 글"));
-  await v.select(v.textarea(), v.textarea(), "입력 중인 글");
+  await v.select({ node: v.textarea(), offset: 0 }, { node: v.textarea(), offset: 0 });
   eq(v.buttons().length, 0, "composer");
   const parent = v.textarea().parentNode!;
-  await v.select(parent, parent, "메시지를 입력하세요");
+  await v.select({ node: parent, offset: 0 }, { node: parent, offset: parent.childNodes.length });
   eq(v.buttons().length, 0, "composer chrome");
   await v.unmount();
 });
 
-t("collapsing the selection hides the button; Escape on the button dismisses it without touching the draft", async () => {
+t("collapsing the selection hides the button; Escape dismisses it, keeps the draft and returns focus to the composer", async () => {
   const v = await mount(withDraft(personal, "초안"));
-  const node = firstText(v.body("a1"));
-  await v.select(node, node, "물은");
+  const pick = () => v.select(at(v.body("a1"), "물은"), at(v.body("a1"), "물은", "end"));
+  await pick();
   eq(v.buttons().length, 1, "shown");
   current = null; await selectionChange();
   eq(v.buttons().length, 0, "still shown after the selection went away");
-  await v.select(node, node, "물은");
+  await pick();
+  const btn = v.buttons()[0] as unknown as { focus(): void };
+  btn.focus();
   await act(async () => { fire(v.buttons()[0], "keydown", { key: "Escape", keyCode: 27 }); });
   eq(v.buttons().length, 0, "Escape did not dismiss");
   eq(v.textarea().value, "초안", "Escape changed the draft");
+  ok(doc.activeElement === (v.textarea() as unknown), `focus after Escape: ${(doc.activeElement as unknown as El)?.localName}`);
   await v.unmount();
 });
 
 t("keyboard: the button stays while it has focus even if the selection collapses (Tab to it)", async () => {
   const v = await mount(personal);
-  const node = firstText(v.body("a1"));
-  await v.select(node, node, "물은");
+  await v.select(at(v.body("a1"), "물은"), at(v.body("a1"), "물은", "end"));
   const btn = v.buttons()[0] as unknown as { focus(): void };
   btn.focus();
   current = null; await selectionChange();
   eq(v.buttons().length, 1, "button vanished when focus moved to it");
-  await act(async () => { click(v.buttons()[0]); });
-  await settle();
-  eq(v.textarea().value, "> 물은\n\n", "draft from the stored quote");
+  eq(await v.quote(), "> 물은\n\n", "draft from the stored quote");
   await v.unmount();
 });
 
 t(`longer than ${QUOTE_MAX} characters: the button says so and the draft ends with …`, async () => {
-  const v = await mount(personal);
-  const node = firstText(v.body("a1"));
-  await v.select(node, node, "가".repeat(QUOTE_MAX + 10));
+  const v = await mount(personal, [u("u1", "길게"), a("a1", "가".repeat(QUOTE_MAX + 10))]);
+  await v.select(textStart(v.body("a1")), at(v.body("a1"), "가".repeat(QUOTE_MAX + 10), "end"));
   ok(v.host.findAll((e) => e.textContent === QUOTE_CUT_NOTE).length === 1, "cut note missing");
-  await act(async () => { click(v.buttons()[0]); });
-  await settle();
-  eq(v.textarea().value, `> ${"가".repeat(QUOTE_MAX)}…\n\n`, "cut draft");
+  eq(await v.quote(), `> ${"가".repeat(QUOTE_MAX)}…\n\n`, "cut draft");
   await v.unmount();
   const short = await mount(personal);
-  const n2 = firstText(short.body("a1"));
-  await short.select(n2, n2, "가");
+  await short.select(at(short.body("a1"), "물은"), at(short.body("a1"), "물은", "end"));
   eq(short.host.findAll((e) => e.textContent === QUOTE_CUT_NOTE).length, 0, "cut note on a short quote");
   await short.unmount();
 });
@@ -251,20 +388,18 @@ t("the answer that is still streaming is not quotable; finished ones are", async
   const v = await mount(personal, CONVO, { streaming: true, streamingId: "a2" });
   ok(!v.body("a2"), "streaming answer is marked quotable");
   const live = answerBody(v.host, "last");
-  ok(firstText(live).textContent.includes("높은 산"), `not the streaming answer's text: ${firstText(live).textContent}`);
-  await v.select(firstText(live), firstText(live), "높은 산");
+  await v.select(at(live, "높은 산"), at(live, "높은 산", "end"));
   eq(v.buttons().length, 0, "button on the streaming answer");
-  const node = firstText(v.body("a1"));
-  await v.select(node, node, "물은");
+  await v.select(at(v.body("a1"), "물은"), at(v.body("a1"), "물은", "end"));
   eq(v.buttons().length, 1, "finished answer during a stream");
   await v.unmount();
 });
 
 t("an unverified activity (composer read-only) offers no quote (negative control)", async () => {
   const v = await mount(unverified(personal));
-  const node = firstText(answerBody(v.host, "first"));
-  ok(node.textContent.includes("100도"), `not the answer's text: ${node.textContent}`);
-  current = sel(node as unknown as QuoteNode, node as unknown as QuoteNode, "물은"); await selectionChange();
+  const b = answerBody(v.host, "first");
+  ok(b.getAttribute(QUOTE_SCOPE_ATTR) === "a1", "fixture: the body is still marked, so only the gate can hide the button");
+  await v.select(at(b, "물은"), at(b, "물은", "end"));
   eq(v.buttons().length, 0, "button while unavailable");
   await v.unmount();
 });
@@ -272,10 +407,9 @@ t("an unverified activity (composer read-only) offers no quote (negative control
 t("IME guard: while a composition is open the button is disabled and pressing it changes nothing", async () => {
   const v = await mount(withDraft(personal, "한"));
   await act(async () => { fire(v.textarea(), "compositionstart", { data: "" }); });
-  const node = firstText(v.body("a1"));
-  await v.select(node, node, "물은");
+  await v.select(at(v.body("a1"), "물은"), at(v.body("a1"), "물은", "end"));
   ok(v.buttons()[0].hasAttribute("disabled"), "not disabled while composing");
-  await act(async () => { click(v.buttons()[0]); });
+  await press(v.buttons()[0]);
   await settle();
   eq(v.textarea().value, "한", "draft changed during composition");
   await act(async () => { fire(v.textarea(), "compositionend", { data: "한" }); });
