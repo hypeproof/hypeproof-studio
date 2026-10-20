@@ -315,18 +315,27 @@ second. The words come from the SDK tool name that `extractSdkActivity` reports,
 `toolActivity.workPhrase` (명령을 실행하는 중, 파일을 살펴보는 중, 홈페이지를 고치는 중, 화면을
 확인하는 중, 인터넷에서 찾아보는 중, 작업하는 중). The host puts that phrase and its own clock
 (`step`, `since`) on the running tool line, both in detailed (#414) and summary (D-027) cohorts,
-and on a delegation row (REQ-STUDIO-DELEGATION-ROW); a helper's own calls carry none. The hint
+and on a delegation row (REQ-STUDIO-DELEGATION-ROW); a helper's own calls carry none. The clock
+starts when the tool actually starts: every SDK call passes `canUseTool`, which reports an
+`approval` activity once the learner (approve/deny modal) or the policy decided, and only an
+allowed approval stamps `since` (`StepLines` for detailed lines, `WorkLine.startStep` for the
+summary line). Time on the modal ("승인 기다리는 중") is never running time and shows no hint;
+a denied call never starts. The hint
 never shows the raw `Bash(...)` text or a tool input; a step that looks like a raw call falls
-back to "작업하는 중이에요". Rules: (1) there is one hint at a time, for the newest running line
-that has a step, and it updates in place; (2) it clears when that line is updated without a step
+back to "작업하는 중이에요". Rules: (1) there is one hint at a time, for the step that has run longest
+among the running lines after the last spoken text, and it updates in place; a newer parallel call
+never takes it away, and on a summary line a parallel call that ends first hands the line back to
+the step still running (with its own start), not to "다음 단계를 준비하는 중…"; (2) it clears when that line is updated without a step
 (done, error, or the next phrase on a summary line), when the turn ends, or when text is spoken
 after the step, so streaming text never gets a hint, and thinking lines carry no step; (3) the
-stall watchdog wins (#403, REQ-M26): while the error banner shows, there is no hint; (4) the
-live region (`role="status"`, polite) changes only at 20 s and at 60 s, and the ticking counter
-is not announced; (5) the hint fades in once (`--hp-dur-enter`, 180 ms) and has no animation under
+stall watchdog wins (#403, REQ-M26): its `streamError` ends `streaming`, which clears the hint,
+and the hint also stays off whenever the panel shows an error; (4) the hint is announced through
+the panel's always-mounted response announcer (`useLiveRegion`), once at 20 s and once at 60 s;
+the ticking counter is not announced. A 1 s ticker in the hint re-reads the clock, because the host
+sends nothing during a silent tool run; (5) the hint fades in once (`--hp-dur-enter`, 180 ms) and has no animation under
 `prefers-reduced-motion`. It is drawn in personal and classroom chat. In personal chat it uses
 `--hp-text-caption` (≥14px, locked by `test/type-scale.smoke.mjs`); in classroom chat it uses
-14px. 멈추기 is a 44px target. It uses no capability, score or evaluation words. Not met from
+14px. 멈추기 is a 44px target with a `--hp-control-line` border (≥3:1 on dark and light surfaces). It uses no capability, score or evaluation words. Not met from
 REQ-ART-19: the timers do not reset on unrelated events, because the clock belongs to the
 running step. A stretch with no running tool (thinking, between calls) is still covered only by
 the existing work and pending lines and the stall watchdog. Pure rules: `src/longStepHint.ts`;
@@ -340,9 +349,14 @@ drop the fields; wiring locks) and `test/long-step-hint.test.tsx` (the real Chat
 personal and classroom chat with a fake `Date.now`: 19 s none, 20 s one hint, 60 s offer and
 44px, clear on step end and turn end, no hint for streaming text or a thinking line, the stall
 message wins, a summary cohort's screen never shows the raw name, one element updated in place
-from 20 s to 45 s with no offer yet, and a real click on 멈추기 calling `onCancel` once). The stall
-guard, the spoken-text guard, both thresholds, the raw-name guard, the panel's stall wiring
-and the reducer's step field were each removed once and a test failed.
+from 20 s to 45 s with no offer yet, and a real click on 멈추기 calling `onCancel` once). Verifier follow-up (same date): approval wait excluded (StepLines and WorkLine cases: no hint at
+approval + 0 s or + 19 s after a 30 s modal), parallel calls (summary build kept after a parallel
+Read ends; detailed longest step leads), the reducer's pending path, and a fake-timer render case
+with no outside re-render (19 s → 20.5 s shows the hint by itself; the response announcer carries
+the 20 s line once and the 60 s offer). The stall guard, the spoken-text guard, both thresholds,
+the raw-name guard, the panel's stall wiring, the reducer's step field and pending path, the
+ticker, the announcer wiring, the longest-step choice, the summary step lock and a tool_use clock
+were each removed once and a test failed.
 
 `REQ-STUDIO-CONTEXT-TRIM-MARKER` (CGP-CHAT-R-010 / CGP-CHAT-D-010, P1, 2026-10-20): when
 older turns stop going to the model, the transcript says so with one quiet line at that

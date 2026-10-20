@@ -694,7 +694,9 @@ export function ChatPanel(props: Props) {
   // CGP-SHELL-R-011 — offline banner and reconnect line; nothing is sent on reconnect.
   const connectivity = useConnectivity();
   // One live region: the most recent line wins, so a reconnect is heard after a finished turn.
-  const liveAnnouncement = useLiveRegion([responseAnnouncementText, connectivity.announcement]);
+  // REQ-STUDIO-LONG-STEP-HINT — the hint's 20 s and 60 s lines go through this always-mounted region.
+  const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
+  const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement]);
   /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
   const sendWhenOnline = (send: () => unknown, held: HeldNoteKind) => guardSend(connectivity.online, send, () => setImgNote(OFFLINE_HELD_NOTES[held]));
   // CGP-CHAT-R-012 — "지금 방향 바꾸기": stop through the Stop path; the parked text goes on the end edge (steerNow.ts).
@@ -1550,6 +1552,7 @@ export function ChatPanel(props: Props) {
           step={longStep}
           turn={{ streaming, stalled: !!error }}
           onStop={() => { restoreQueuedToDraft(); props.onCancel(); }}
+          onAnnounce={setLongStepAnnouncement}
         />}
 
         {props.pageNotice && (
@@ -2118,11 +2121,13 @@ function WorldStrip({
  */
 /**
  * REQ-STUDIO-LONG-STEP-HINT — the hint for the one tool step that has run long. All decisions are
- * in src/longStepHint.ts; this only re-reads the clock once a second while the step runs, so the
- * same element updates in place. The live region carries the announcement, which changes only at
- * 20 s and 60 s; the ticking counter itself is not announced. 멈추기 is the Stop button's path.
+ * in src/longStepHint.ts; this only re-reads the clock once a second while the step runs (the host
+ * sends nothing during a silent tool run, so without this ticker the hint never appears), and the
+ * same element updates in place. The announcement goes to the panel's response announcer, a live
+ * region mounted all along, and changes only at 20 s and 60 s; the ticking counter is not announced.
+ * 멈추기 is the Stop button's path.
  */
-function LongStepHintLine({ step, turn, onStop }: { step: ActiveLongStep; turn: { streaming: boolean; stalled: boolean }; onStop: () => void }) {
+function LongStepHintLine({ step, turn, onStop, onAnnounce }: { step: ActiveLongStep; turn: { streaming: boolean; stalled: boolean }; onStop: () => void; onAnnounce: (text: string) => void }) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setTick((n) => n + 1), 1000);
@@ -2130,10 +2135,15 @@ function LongStepHintLine({ step, turn, onStop }: { step: ActiveLongStep; turn: 
     return stop;
   }, [step.id, step.since]);
   const hint = longStepHint({ step: step.step, since: step.since, now: Date.now(), ...turn });
+  const announce = hint?.announce ?? '';
+  useEffect(() => { onAnnounce(announce); }, [announce, onAnnounce]);
+  useEffect(() => {
+    const clear = () => onAnnounce('');
+    return clear;
+  }, [onAnnounce]);
   if (!hint) return null;
   return (
     <section className="hps-long-step" data-phase={hint.phase}>
-      <span className="hps-sr-only" role="status" aria-live="polite">{hint.announce}</span>
       <span className="hps-long-step-text" aria-hidden="true">{hint.text}</span>
       {hint.offerStop && <span className="hps-long-step-offer">
         <span className="hps-long-step-choice" aria-hidden="true">{hint.choice}</span>

@@ -1171,7 +1171,9 @@ html, body, #root {
   min-width: 44px;
   padding: 0 14px;
   border-radius: 8px;
-  border: 1px solid var(--vscode-button-secondaryBackground, #3a3d41);
+  /* Required control boundary (DES-11, ≥3:1): the shared token, not the theme's secondary button
+     colour, which is about 1.1:1 on a light surface. */
+  border: 1px solid var(--hp-control-line);
   background: transparent;
   color: var(--vscode-foreground, inherit);
   font: inherit;

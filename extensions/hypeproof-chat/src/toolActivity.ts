@@ -61,6 +61,9 @@ export interface WorkLineEntry {
 export class WorkLine {
   private seq = 0;
   private openLabel: string | null = null;
+  private openSince: number | undefined = undefined;
+  /** REQ-STUDIO-LONG-STEP-HINT — tool steps that have started (approved) and not ended. */
+  private readonly steps = new Map<string, { phrase: WorkPhrase; since: number }>();
   private readonly baseId: string;
   private readonly post: (entry: WorkLineEntry) => void;
 
@@ -74,20 +77,47 @@ export class WorkLine {
   }
 
   /**
-   * `since` marks the phrase as a tool step that began then (REQ-STUDIO-LONG-STEP-HINT); thinking
-   * and the next-step phrase pass none, which ends the step on the same line.
+   * A phrase with no clock (thinking, the next step, a tool waiting for its approval). While a
+   * started step still runs, the line keeps showing that step instead: a parallel call that ended
+   * must not take the hint away from a build that is still going.
    */
-  show(phrase: WorkPhrase, since?: number): void {
-    if (this.openLabel === phrase.label) return;
-    this.openLabel = phrase.label;
-    this.post({ id: this.id(), icon: phrase.icon, label: phrase.label, state: "running", ...(since !== undefined ? { step: phrase.label, since } : {}) });
+  show(phrase: WorkPhrase): void {
+    if (this.steps.size > 0) return;
+    this.render(phrase);
+  }
+
+  /** The tool actually started (its approval resolved): the line shows the longest-running step. */
+  startStep(id: string, phrase: WorkPhrase, since: number): void {
+    this.steps.set(id, { phrase, since });
+    this.renderOldest();
+  }
+
+  /** The tool ended. Returns true while another started step still runs (the line stays on it). */
+  endStep(id: string): boolean {
+    if (this.steps.delete(id) && this.steps.size > 0) this.renderOldest();
+    return this.steps.size > 0;
   }
 
   close(label: string): void {
+    this.steps.clear();
     if (this.openLabel === null) return;
     this.openLabel = null;
+    this.openSince = undefined;
     this.post({ id: this.id(), icon: "✍️", label, state: "done" });
     this.seq += 1;
+  }
+
+  private renderOldest(): void {
+    let oldest: { phrase: WorkPhrase; since: number } | undefined;
+    for (const step of this.steps.values()) if (!oldest || step.since < oldest.since) oldest = step;
+    if (oldest) this.render(oldest.phrase, oldest.since);
+  }
+
+  private render(phrase: WorkPhrase, since?: number): void {
+    if (this.openLabel === phrase.label && this.openSince === since) return;
+    this.openLabel = phrase.label;
+    this.openSince = since;
+    this.post({ id: this.id(), icon: phrase.icon, label: phrase.label, state: "running", ...(since !== undefined ? { step: phrase.label, since } : {}) });
   }
 
   private id(): string {

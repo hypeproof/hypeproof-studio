@@ -155,6 +155,55 @@ t("멈추기 calls the same onCancel as Stop, once", async () => {
   ok(cancels === 1, `onCancel called ${cancels} times`);
 });
 
+// ---------- The 1 s ticker: no outside re-render, only fake timers ----------
+// The real app sends nothing while a tool runs silently; the hint must appear by itself.
+type Interval = { fn: () => void; every: number; next: number };
+const intervals = new Map<number, Interval>();
+let intervalSeq = 0;
+const realSetInterval = globalThis.setInterval;
+const realClearInterval = globalThis.clearInterval;
+const useFakeIntervals = () => {
+  intervals.clear();
+  (globalThis as { setInterval: unknown }).setInterval = (fn: () => void, every: number) => { const id = ++intervalSeq + 100000; intervals.set(id, { fn, every, next: clock + every }); return id; };
+  (globalThis as { clearInterval: unknown }).clearInterval = (id: number) => { if (!intervals.delete(id)) realClearInterval(id as unknown as ReturnType<typeof setInterval>); };
+};
+const useRealIntervals = () => { (globalThis as { setInterval: unknown }).setInterval = realSetInterval; (globalThis as { clearInterval: unknown }).clearInterval = realClearInterval; };
+/** Advance the fake clock, firing due intervals; no root.render from outside. */
+const advance = async (ms: number) => {
+  const end = clock + ms;
+  while (true) {
+    const due = [...intervals.values()].filter((i) => i.next <= end).sort((x, y) => x.next - y.next)[0];
+    if (!due) break;
+    clock = due.next; due.next += due.every;
+    await act(async () => { due.fn(); });
+  }
+  clock = end;
+};
+const announcer = (host: El) => host.findAll((e) => e.getAttribute("data-testid") === "response-announcer")[0]?.textContent ?? "";
+t("the hint appears by itself at 20 s (ticker) and is announced once through the response announcer", async () => {
+  useFakeIntervals();
+  try {
+    const host = mountPoint() as unknown as El;
+    const root = createRoot(host as unknown as HTMLElement);
+    mounted.push(root);
+    at(19 * S);
+    await act(async () => { root.render(panel(personal, turn(detailedLine("running")))); });
+    ok(hints(host).length === 0, "a hint at 19 s");
+    ok(!announcer(host).includes("오래"), "announced before 20 s");
+    await advance(1500);
+    ok(hints(host).length === 1, "no hint 1.5 s later without an outside re-render (ticker missing?)");
+    const first = announcer(host);
+    ok(first.includes("명령을 실행하는 중이에요") && first.includes("조금 오래 걸리고 있어요"), `20 s not announced: "${first}"`);
+    ok(host.findAll((e) => e.getAttribute("role") === "status" && (e.textContent ?? "").includes("조금 오래")).length === 1, "the 20 s line is in more than one live region");
+    await advance(10 * S);
+    ok(announcer(host) === first, "the announcement changed while the counter ticked");
+    ok(hints(host)[0].textContent.includes("30초째"), `counter did not tick by itself: ${hints(host)[0].textContent}`);
+    await advance(30 * S);
+    ok(announcer(host).includes("멈춰도"), `60 s offer not announced: "${announcer(host)}"`);
+    ok(host.findAll((e) => e.getAttribute("class") === "hps-long-step-stop").length === 1, "멈추기 did not appear by itself at 60 s");
+  } finally { useRealIntervals(); }
+});
+
 (async () => {
   for (const [label, fn] of tests) {
     try { await fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${(e as Error).message}`); if (process.env.HPS_TEST_STACK) console.error((e as Error).stack); fail++; }

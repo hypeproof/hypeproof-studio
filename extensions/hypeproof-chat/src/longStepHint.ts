@@ -35,20 +35,79 @@ export interface ActiveLongStep {
 }
 
 /**
- * The step the hint may speak about: walking back from the newest item, the first running tool
- * line that carries a step. Spoken text or a user message on the way means there is none.
+ * The step the hint may speak about: of the running tool lines with a step after the last spoken
+ * text (and after the last user message), the one that has run longest. A newer parallel call
+ * that is still short never takes the hint (and 멈추기) away from a long one.
  */
 export function activeLongStep(messages: readonly LongStepLine[]): ActiveLongStep | null {
+  let found: ActiveLongStep | null = null;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m.role === "user") return null;
-    if (m.role === "assistant" && m.content.trim()) return null;
+    if (m.role === "user") break;
+    if (m.role === "assistant" && m.content.trim()) break;
     const t = m.role === "tool" ? m.tool : undefined;
     if (t?.state === "running" && typeof t.step === "string" && t.step && typeof t.since === "number") {
-      return { id: m.id, step: t.step, since: t.since };
+      if (!found || t.since < found.since) found = { id: m.id, step: t.step, since: t.since };
     }
   }
-  return null;
+  return found;
+}
+
+export interface StepLineEntry {
+  id: string;
+  icon: string;
+  label: string;
+  state: "running";
+  step: string;
+  since: number;
+  at?: number;
+}
+
+/**
+ * Host side, detailed cohorts: when a tool's clock starts. Every SDK call passes `canUseTool`,
+ * which reports an `approval` activity (allowed or denied) once the learner or the policy has
+ * decided. The tool_use line is drawn at once with no clock; the clock starts at the approval,
+ * so the seconds a learner spends reading the approve/deny modal never count as running time.
+ * The order of tool_use and approval is not assumed.
+ */
+export class StepLines {
+  private readonly waiting = new Map<string, { lineId: string; icon: string; label: string; step: string; at?: number }>();
+  private readonly approvedEarly = new Map<string, number>();
+  private readonly closed = new Set<string>();
+
+  /** tool_use. Returns the line with its clock only when the approval already came. */
+  begin(toolId: string, line: { lineId: string; icon: string; label: string; at?: number }, step: string): StepLineEntry | null {
+    if (this.closed.has(toolId)) return null;
+    const early = this.approvedEarly.get(toolId);
+    if (early !== undefined) {
+      this.approvedEarly.delete(toolId);
+      this.closed.add(toolId);
+      return entry(line, step, early);
+    }
+    this.waiting.set(toolId, { ...line, step });
+    return null;
+  }
+
+  /** approval allowed: the tool starts now. Returns the line to re-post with step + since. */
+  approved(toolId: string, at: number): StepLineEntry | null {
+    if (this.closed.has(toolId)) return null;
+    const line = this.waiting.get(toolId);
+    if (!line) { this.approvedEarly.set(toolId, at); return null; }
+    this.waiting.delete(toolId);
+    this.closed.add(toolId);
+    return entry(line, line.step, at);
+  }
+
+  /** Denied, or its result arrived: it never (re)starts. */
+  end(toolId: string): void {
+    this.waiting.delete(toolId);
+    this.approvedEarly.delete(toolId);
+    this.closed.add(toolId);
+  }
+}
+
+function entry(line: { lineId: string; icon: string; label: string; at?: number }, step: string, since: number): StepLineEntry {
+  return { id: line.lineId, icon: line.icon, label: line.label, state: "running", step, since, ...(line.at ? { at: line.at } : {}) };
 }
 
 /**
@@ -86,6 +145,10 @@ export function longStepHint(args: {
   streaming: boolean;
   stalled: boolean;
 }): LongStepHint | null {
+  // In App a stall (#403) reaches the panel as streamError, which also ends `streaming`, so the
+  // first test is what clears the hint there. `stalled` is kept on purpose: ChatPanel is also
+  // mounted by other surfaces and tests with their own state, and an error banner beside a
+  // "keep waiting" hint would contradict it. The stall message always wins.
   if (!args.streaming || args.stalled) return null;
   const elapsed = args.now - args.since;
   if (!Number.isFinite(elapsed) || elapsed < LONG_STEP_HINT_MS) return null;

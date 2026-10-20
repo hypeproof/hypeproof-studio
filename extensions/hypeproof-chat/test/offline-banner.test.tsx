@@ -371,7 +371,7 @@ t("reconnect never sends: the queue flush still keys on the stream edge, not on 
 });
 t("the announcer region renders the live-region result over both sources", () => {
   ok(panel.includes('data-testid="response-announcer">{liveAnnouncement}</div>'), "announcer region");
-  ok(panel.includes("useLiveRegion([responseAnnouncementText, connectivity.announcement])"), "both sources, reconnect last");
+  ok(panel.includes("useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement])"), "every source, reconnect last (REQ-STUDIO-LONG-STEP-HINT adds the long-step line)");
 });
 
 if (fail) { console.error(`offline-banner: ${fail} failed`); process.exit(1); }

@@ -103,13 +103,16 @@ const line = (id, state, extra = {}) => ({ id, role: "tool", content: "", create
   const posted = [];
   const work = new WorkLine("pending-s1", (e) => posted.push(e));
   work.show(THINKING_PHRASE);
-  work.show(workPhrase("Bash", { command: "npm run build" }), T0);
+  work.show(workPhrase("Bash", { command: "npm run build" }));
+  work.startStep("toolu_B", workPhrase("Bash", { command: "npm run build" }), T0);
+  work.endStep("toolu_B");
   work.show(NEXT_STEP_PHRASE);
   assert.equal(posted[0].step, undefined, "thinking is not a tool step");
-  assert.deepEqual([posted[1].label, posted[1].step, posted[1].since], [BASH, BASH, T0], "a tool phrase carries its step and start");
-  assert.ok(!posted[1].label.includes("Bash"), "summary line never carries the raw name");
-  assert.equal(posted[2].step, undefined, "the next-step phrase ends the step");
-  assert.equal(posted[1].id, posted[2].id, "same line, changed in place");
+  assert.equal(posted[1].step, undefined, "a tool phrase before its approval has no clock");
+  assert.deepEqual([posted[2].label, posted[2].step, posted[2].since], [BASH, BASH, T0], "the approved step carries its step and start");
+  assert.ok(!posted[2].label.includes("Bash"), "summary line never carries the raw name");
+  assert.equal(posted.at(-1).step, undefined, "the next-step phrase ends the step");
+  assert.equal(posted[1].id, posted.at(-1).id, "same line, changed in place");
 
   let s = timelineStart({ ...emptyTimeline(), items: [user] }, "a1", 1);
   s = timelineDelta(s, "빌드해 볼게요.", 2);
@@ -128,15 +131,101 @@ const line = (id, state, extra = {}) => ({ id, role: "tool", content: "", create
   ok("WorkLine and timelineTool carry step + since, and drop them when the step ends");
 }
 
+// ── 5b. The reducer's pending path (a code fence is open) also drops the step ─
+{
+  let s = timelineStart({ ...emptyTimeline(), items: [user] }, "a1", 1);
+  s = timelineDelta(s, "```html\n<p>", 2);
+  s = timelineTool(s, { id: "pending-s1-w0", icon: "⌨️", label: BASH, state: "running", step: BASH, since: T0 }, 3);
+  assert.equal(s.pending.length, 1, "control: the line is held while the fence is open");
+  s = timelineTool(s, { id: "pending-s1-w0", icon: NEXT_STEP_PHRASE.icon, label: NEXT_STEP_PHRASE.label, state: "running" }, 4);
+  assert.equal(s.pending[0].step, undefined, "a held line keeps the old step after an update without one");
+  assert.equal(s.pending[0].since, undefined, "a held line keeps the old start after an update without one");
+  s = timelineDelta(s, "</p>\n```", 5);
+  const flushed = s.items.find((m) => m.id === "pending-s1-w0");
+  assert.equal(flushed.tool.label, NEXT_STEP_PHRASE.label, "the flushed line is the newest phrase");
+  assert.equal(flushed.tool.step, undefined, "the flushed line still carries the ended step");
+  ok("pending (open fence) updates drop the step too");
+}
+
+// ── 7. Waiting for the learner's approval is not running time ────────────────
+{
+  // Detailed cohorts: StepLines holds the line until the approval says the tool starts.
+  const lines = new H.StepLines();
+  const at = (ms) => T0 + ms;
+  assert.equal(lines.begin("toolu_W", { lineId: "toolu_W", icon: "🔧", label: "Write(index.html)" }, "홈페이지를 고치는 중…"), null, "tool_use alone starts no clock");
+  // The learner reads the approval modal for 30 s; nothing carries a clock, so no hint can show.
+  const started = lines.approved("toolu_W", at(30_000));
+  assert.deepEqual(started, { id: "toolu_W", icon: "🔧", label: "Write(index.html)", state: "running", step: "홈페이지를 고치는 중…", since: at(30_000) }, "the clock starts at the approval");
+  const hint = (now) => H.longStepHint({ step: started.step, since: started.since, now, streaming: true, stalled: false });
+  assert.equal(hint(at(30_000)), null, "no hint at approval + 0 s");
+  assert.equal(hint(at(49_000)), null, "no hint at approval + 19 s");
+  assert.ok(hint(at(50_000)), "positive control: approval + 20 s shows it");
+  assert.equal(hint(at(89_000)).offerStop, false, "no stop offer at approval + 59 s, although 89 s passed since tool_use");
+  assert.equal(hint(at(90_000)).offerStop, true, "positive control: approval + 60 s offers stop");
+  assert.equal(lines.approved("toolu_W", at(31_000)), null, "a second approval re-stamps nothing");
+  // Approval may arrive before tool_use; the clock still starts at the approval.
+  assert.equal(lines.approved("toolu_X", at(1_000)), null);
+  assert.equal(lines.begin("toolu_X", { lineId: "toolu_X", icon: "🔧", label: "Read(a)" }, "파일을 살펴보는 중…").since, at(1_000));
+  // A denied or finished call never starts.
+  lines.begin("toolu_D", { lineId: "toolu_D", icon: "🔧", label: "Bash(rm)" }, BASH);
+  lines.end("toolu_D");
+  assert.equal(lines.approved("toolu_D", at(2_000)), null, "an ended call is not restarted");
+
+  // Summary cohorts: the work line carries no clock until startStep (the approval).
+  const posted = [];
+  const work = new WorkLine("pending-s1", (e) => posted.push(e));
+  work.show(workPhrase("Edit", { file_path: "/w/index.html" }));
+  assert.equal(posted.at(-1).since, undefined, "summary: no clock while the approval is open");
+  work.startStep("toolu_W", workPhrase("Edit", { file_path: "/w/index.html" }), at(30_000));
+  assert.equal(posted.at(-1).since, at(30_000), "summary: the clock starts at the approval");
+  ok("approval wait is excluded in detailed and summary cohorts");
+}
+
+// ── 8. Parallel calls: the longest still-running step keeps the hint ─────────
+{
+  // Summary (D-027): Bash and a parallel Read; the Read ends first.
+  const posted = [];
+  const work = new WorkLine("pending-s1", (e) => posted.push(e));
+  work.startStep("toolu_B", workPhrase("Bash", {}), T0);
+  work.startStep("toolu_R", workPhrase("Read", { file_path: "/w/a" }), T0 + 200);
+  assert.deepEqual([posted.at(-1).step, posted.at(-1).since], [BASH, T0], "the oldest step leads while both run");
+  assert.equal(work.endStep("toolu_R"), true, "a step still runs");
+  work.show(NEXT_STEP_PHRASE);
+  assert.deepEqual([posted.at(-1).step, posted.at(-1).since], [BASH, T0], "the build keeps its step after the Read ends");
+  let items = [user];
+  for (const e of posted) items = timelineTool({ ...emptyTimeline(), items }, e, 1).items;
+  assert.deepEqual(H.activeLongStep(items), { id: "pending-s1-w0", step: BASH, since: T0 }, "the hint stays on the build at T0+90 s");
+  assert.equal(work.endStep("toolu_B"), false, "nothing runs any more");
+  work.show(NEXT_STEP_PHRASE);
+  assert.equal(posted.at(-1).step, undefined, "the next-step phrase follows once every step ended");
+  // Ending the oldest of two hands the line to the other with its own start.
+  const p2 = [];
+  const w2 = new WorkLine("pending-s2", (e) => p2.push(e));
+  w2.startStep("a", workPhrase("Bash", {}), T0);
+  w2.startStep("b", workPhrase("WebSearch", {}), T0 + 5_000);
+  w2.endStep("a");
+  assert.deepEqual([p2.at(-1).label, p2.at(-1).since], ["인터넷에서 찾아보는 중…", T0 + 5_000], "the remaining step takes over with its own start");
+
+  // Detailed: a newer parallel Read does not take the hint from a step that has run 70 s.
+  const a = { id: "toolu_A", role: "tool", content: "", createdAt: 3, tool: { icon: "🔧", label: "Bash(npm run build)", state: "running", step: BASH, since: T0 } };
+  const r = { id: "toolu_R2", role: "tool", content: "", createdAt: 4, tool: { icon: "🔧", label: "Read(a)", state: "running", step: "파일을 살펴보는 중…", since: T0 + 70_000 } };
+  assert.equal(H.activeLongStep([user, said, a, r])?.id, "toolu_A", "the longest-running step leads");
+  assert.equal(H.activeLongStep([user, said, a, { ...r, tool: { ...r.tool, state: "done", step: undefined, since: undefined } }])?.id, "toolu_A");
+  ok("the longest still-running step keeps the hint");
+}
+
 // ── 6. Wiring locks ──────────────────────────────────────────────────────────
 {
   const provider = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
-  assert.match(provider, /work\.show\(workPhrase\(a\.name, a\.input\), stepSince\)/, "summary tool call passes its start");
-  assert.match(provider, /step: workPhrase\(a\.name, a\.input\)\.label, since: stepSince/, "detailed tool line carries its learner step");
+  assert.match(provider, /case "approval": \{[\s\S]{0,900}?work\.startStep\(a\.id, workPhrase\(a\.name, a\.input\), startedAt\)[\s\S]{0,400}?stepLines\.approved\(a\.id, startedAt\)/, "the approval starts the clock in both modes");
+  assert.match(provider, /if \(!a\.allowed\) \{[^}]*stepLines\.end\(a\.id\)/, "a denied call never starts");
+  assert.match(provider, /stepLines\.end\(a\.id\);\s*work\?\.endStep\(a\.id\);/, "a tool result ends its step in both modes");
+  assert.doesNotMatch(provider, /stepSince/, "no clock is stamped at tool_use");
   const app = fs.readFileSync(new URL("../webview-ui/src/App.tsx", import.meta.url), "utf8");
   assert.match(app, /case "toolLog": dispatch\(\{ type: "toolLog", [^\n]*step: msg\.step, since: msg\.since/, "App passes step + since to the reducer");
   const panel = fs.readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");
   assert.match(panel, /stalled: !!error/, "the panel hands the stall/error state to the hint");
+  assert.match(panel, /useLiveRegion\(\[responseAnnouncementText, longStepAnnouncement, connectivity\.announcement\]\)/, "the hint speaks through the response announcer");
   ok("provider, App and ChatPanel wiring");
 }
 
