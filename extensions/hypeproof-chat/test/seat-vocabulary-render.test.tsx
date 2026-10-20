@@ -94,17 +94,19 @@ const renderError = (error: string, canRetryLast = true) =>
   renderToStaticMarkup(<ChatPanel {...PROPS} error={error} canRetryLast={canRetryLast} config={config("trial")} instructor={false} />);
 t("daily cap: calm notice without the problem-report action", () => {
   const html = renderError(DAILY_CAP);
-  if (!html.includes("오늘 무료 사용량이 모두 소진됐어요") || !html.includes("🌙")) throw new Error("cap notice missing — the absence checks would be vacuous");
+  if (!html.includes("오늘 무료 사용량이 모두 소진됐어요") || !html.includes('data-icon="moon"')) throw new Error("cap notice missing — the absence checks would be vacuous");
   if (!html.includes("hps-error-banner--notice")) throw new Error("cap notice is not in the notice style");
   if (!/class="hps-error-banner hps-error-banner--notice" role="status"/.test(html)) throw new Error("cap notice is announced as an alert");
-  for (const bad of ["신고하기", "🚨", "다시 보내기", "rid-123"]) if (html.includes(bad)) throw new Error(`cap notice shows ${bad}`);
+  for (const bad of ["신고하기", 'data-icon="flag"', "다시 보내기", "rid-123"]) if (html.includes(bad)) throw new Error(`cap notice shows ${bad}`);
   if (!html.includes(">닫기</button>")) throw new Error("cap notice lost its dismiss button");
 });
 t("generic failure: alert banner keeps 신고하기, retry and the id (positive control)", () => {
   const html = renderError("문제가 발생했습니다.");
   if (html.includes("hps-error-banner--notice")) throw new Error("a real failure took the notice style");
   if (!html.includes('role="alert"')) throw new Error("a real failure is not an alert");
-  for (const want of ["🚨 신고하기", "다시 보내기", "rid-123"]) if (!html.includes(want)) throw new Error(`a real failure lost ${want}`);
+  // REQ-STUDIO-STROKE-ICONS: the report button's 🚨 is the flag stroke icon now.
+  if (!/data-icon="flag"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg> 신고하기/.test(html)) throw new Error("a real failure lost the flagged 신고하기 button");
+  for (const want of ["다시 보내기", "rid-123"]) if (!html.includes(want)) throw new Error(`a real failure lost ${want}`);
 });
 
 t("start page: Korean eyebrow and motto, no English chrome", () => {

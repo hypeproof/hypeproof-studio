@@ -390,7 +390,6 @@ const SHARED_LEARNER = [
 ];
 const SHARED_OUT = {
   ".hps-msg-body": "classroom body (13px); personal chat sets its own body size (checked below)",
-  ".hps-stop-notice-icon": "decorative glyph (aria-hidden ⏹) beside the stop notice text",
   ".hp-ai-can-do-mark": "decorative glyph (aria-hidden ✓ / –) in a 20px circle; the row's state word carries the state (REQ-STUDIO-UI-POLISH-1)",
   ".hps-queued-cancel": "glyph button (×) with an aria-label; personal gives it a 44px target",
   ".hps-attachment-remove": "glyph button (×) with an aria-label; personal sets 18px",

@@ -6,6 +6,7 @@
 // participant sessions and notes it cites (CR-27); a reference that no longer resolves reads
 // "확인 필요". Counts of returns are per device, never per person (CR-72).
 import { useState } from "react";
+import { ChatIcon } from "./ChatDetails";
 import type { EvidenceItemView, EvidenceView, NoteForm } from "../../src/evidenceView";
 import { NOTE_KIND_CHOICES, REVIEW_LABEL, SECTION_LABEL, SOURCE_STATE_CHOICES, claimSources, noteFormProblems } from "../../src/evidenceView";
 
@@ -86,7 +87,7 @@ export function EvidencePanel(props: {
     <section className="hps-evidence" data-testid="evidence-panel" aria-label="실험 증거">
       <header>
         <strong>실험 증거</strong>
-        <button type="button" onClick={props.onClose} aria-label="닫기">✕</button>
+        <button type="button" onClick={props.onClose} aria-label="닫기"><ChatIcon kind="close" size={16} /></button>
       </header>
       {view.notice && <p data-testid="evidence-notice">{view.notice}</p>}
       {props.error && <div className="hps-publish-error" role="alert" data-testid="evidence-error">{props.error}</div>}

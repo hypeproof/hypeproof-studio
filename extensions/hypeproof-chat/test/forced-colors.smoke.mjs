@@ -76,8 +76,9 @@ const INVENTORY = [
 const TIERS = [1, 2, 3, 4].map((n) => `.hps-cit-chip.hps-cit-tier-${n}`);
 // Already carried by words, symbols or geometry in normal mode; these must stay that way.
 const TEXT_CUES = [
-  { file: "ChatPanel.tsx", what: "tool row marks", re: /t\.state === "running" \? "…" : t\.state === "error" \? "⚠️" : "✓"/ },
-  { file: "AnswerVerdict.tsx", what: "pressed verdict and reason check mark", re: /=== (?:verdict|reason) \? "✓ " : ""/g, count: 2 },
+  // REQ-STUDIO-STROKE-ICONS: the marks are stroke icons now (currentColor); the shape still differs per state.
+  { file: "ChatPanel.tsx", what: "tool row marks", re: /t\.state === "running" \? <ChatIcon kind="dots"[^>]*\/> : t\.state === "error" \? <ChatIcon kind="alert"[^>]*\/> : <ChatIcon kind="check"/ },
+  { file: "AnswerVerdict.tsx", what: "pressed verdict and reason check mark", re: /=== (?:verdict|reason) && <ChatIcon kind="check"/g, count: 2 },
   { file: "TurnReviewBar.tsx", what: "failed review is an alert with a title", re: /data-state="failed" role="alert"/ },
   { file: "VerifyPanel.tsx", what: "verify state chip has its words", re: /\{STATE_LINE\[view\.verification\.state\]\}/ },
   { file: "../../src/evidenceView.ts", what: "unresolved evidence source reads 확인 필요", re: /label: "확인 필요"/ },

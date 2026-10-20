@@ -6,6 +6,7 @@
 // suggestion is drawn apart from the team's decisions (SX-45); a decision with no evidence says
 // so; a belief change with nothing linked reads "기록되지 않았어요", never a made-up reason.
 import { useEffect, useState } from "react";
+import { ChatIcon } from "./ChatDetails";
 import type { Confidence, DecisionForm, MemoryItemView, MemoryView } from "../../src/memoryView";
 import { CHANGE_LABEL, CONFIDENCE_LABEL, ENTRY_LABEL, ROLE_CONFIDENCE_SUFFIX, ROLE_LABEL, STATUS_LABEL, beliefSentence, decisionFormProblems, timelineRecord } from "../../src/memoryView";
 
@@ -68,7 +69,7 @@ export function MemoryPanel(props: {
       <header>
         <strong>프로젝트 기억</strong>
         <button type="button" onClick={props.onRefresh} disabled={props.busy}>새로 불러오기</button>
-        <button type="button" onClick={props.onClose} aria-label="닫기">✕</button>
+        <button type="button" onClick={props.onClose} aria-label="닫기"><ChatIcon kind="close" size={16} /></button>
       </header>
       {view.notice && <p data-testid="memory-notice">{view.notice}</p>}
       {props.error && <div className="hps-publish-error" role="alert" data-testid="memory-error">{props.error}</div>}

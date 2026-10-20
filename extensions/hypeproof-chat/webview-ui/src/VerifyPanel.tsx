@@ -5,6 +5,7 @@
 // "검증됨" state are the host's, recomputed from the record on every post. A disabled
 // button here is a picture, not a lock (the host refuses the same things by name).
 import { useState } from "react";
+import { ChatIcon } from "./ChatDetails";
 import type { VerifyView } from "../../src/verifyView";
 
 type ReportCriterion = VerifyView["held"][number];
@@ -69,7 +70,8 @@ export function VerifyPanel(props: {
         <ul className="hps-verify-expect" data-testid="verify-expectations">
           {c.expectations.map((e, i) => (
             <li key={i}>
-              {e.ok === true ? "✓" : e.ok === false ? "✗" : "?"} 확인한 것: {e.detail}
+              {/* REQ-STUDIO-STROKE-ICONS: the mark is the only place that says pass or fail, so it has a Korean name. */}
+              {e.ok === true ? <ChatIcon kind="check" size={16} label="맞음" /> : e.ok === false ? <ChatIcon kind="close" size={16} label="틀림" /> : <ChatIcon kind="help" size={16} label="모름" />} 확인한 것: {e.detail}
             </li>
           ))}
         </ul>
@@ -80,7 +82,7 @@ export function VerifyPanel(props: {
           <ol>
             {c.steps.map((s) => (
               <li key={s.index}>
-                {s.ok ? "✓" : "✗"} {ACTION_LABEL[s.action] ?? "단계"}
+                {s.ok ? <ChatIcon kind="check" size={16} label="성공" /> : <ChatIcon kind="close" size={16} label="실패" />} {ACTION_LABEL[s.action] ?? "단계"}
                 {s.target ? ` · ${s.target}` : ""} — {s.message}
               </li>
             ))}
@@ -120,13 +122,13 @@ export function VerifyPanel(props: {
           {STATE_LINE[view.verification.state]}
         </span>
         <button type="button" className="hps-verify-close" aria-label="테스트 창 닫기" onClick={props.onClose}>
-          ✕
+          <ChatIcon kind="close" size={16} />
         </button>
       </header>
 
       {view.running && (
         <div className="hps-verify-running" role="status" aria-live="polite" data-testid="verify-running">
-          🧪 테스트 중 — 실험 브라우저가 화면을 움직이고 있어요
+          <ChatIcon kind="flask" size={16} /> 테스트 중 — 실험 브라우저가 화면을 움직이고 있어요
         </div>
       )}
       {(props.error || view.reason) && (

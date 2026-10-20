@@ -83,10 +83,19 @@ html, body, #root {
 }
 .hps-msg-role > span { font-weight: 700; }
 
-/* Assistant role gets a friendly avatar dot */
+/* Assistant role gets a friendly mark: the stroke set's sparkle (REQ-STUDIO-STROKE-ICONS), drawn as a
+   mask over currentColor so it follows the theme. Forced colors would repaint that background as
+   Canvas and hide the mark, so the forced-colors block below gives it CanvasText. */
 .hps-msg-assistant .hps-msg-role > span::before {
-  content: "🪄";
+  content: "";
+  display: inline-block;
+  inline-size: 16px;
+  block-size: 16px;
+  vertical-align: -3px;
   margin-right: 5px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5c.6 4.3 2.2 5.9 6.5 6.5-4.3.6-5.9 2.2-6.5 6.5-.6-4.3-2.2-5.9-6.5-6.5 4.3-.6 5.9-2.2 6.5-6.5ZM18.5 16v4M16.5 18h4'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5c.6 4.3 2.2 5.9 6.5 6.5-4.3.6-5.9 2.2-6.5 6.5-.6-4.3-2.2-5.9-6.5-6.5 4.3-.6 5.9-2.2 6.5-6.5ZM18.5 16v4M16.5 18h4'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .hps-msg-body {
@@ -1143,7 +1152,8 @@ html, body, #root {
 
 .hps-stop-notice-icon {
   flex: none;
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019) — one calm line under a tool step running 20 s+.
@@ -2067,4 +2077,14 @@ html, body, #root {
   .hps-publish-link img { forced-color-adjust: none; }
   /* CGP-SHELL-R-011 offline banner: the amber edge becomes a text-coloured line. */
   .hps-offline-banner, .hps-notice-caution { border-left-color: CanvasText; }
+  /* REQ-STUDIO-STROKE-ICONS: the assistant mark is a masked background; a system colour survives. */
+  .hps-msg-assistant .hps-msg-role > span::before { background-color: CanvasText; }
 }
+
+/* CGP-DS-R-018 / REQ-STUDIO-STROKE-ICONS — the stroke icon set (ChatIcon). Icons sit on the text
+   baseline and never shrink in a flex row. Stroke and fill are currentColor, so forced colors and
+   every theme recolour them with the words around them. */
+.hps-icon { flex: none; display: inline-block; vertical-align: -0.2em; }
+.hps-ai-disclosure .hps-icon { margin-inline-end: 6px; }
+.hps-tool-icon, .hps-tool-mark, .hps-error-banner-icon, .hps-update-banner-icon, .hps-fatal-icon { display: inline-flex; align-items: center; }
+.hps-msg-run, .hps-msg-retry, .hps-codepill-toggle, .hps-error-banner-report, .hps-element-remove { display: inline-flex; align-items: center; gap: 4px; }

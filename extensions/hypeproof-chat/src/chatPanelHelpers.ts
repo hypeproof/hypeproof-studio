@@ -337,9 +337,12 @@ export function isShowIntent(text: string): boolean {
  * outputs without checking) also satisfies ToS §D.3 and embodies the
  * verification_reflex asset (docs/seven-assets.md). Kid-friendly Korean —
  * keep both sentences if you edit.
+ *
+ * REQ-STUDIO-STROKE-ICONS: no leading emoji. The webview draws the stroke info icon in front.
+ * e2e/tests/27-ai-disclosure.spec.ts reads this literal right after the `=`.
  */
 export const AI_DISCLOSURE_TEXT =
-  "🤖 AI 코치와 대화하고 있어요. AI의 답은 틀릴 수 있으니 중요한 내용은 꼭 확인해요!";
+  "AI 코치와 대화하고 있어요. AI의 답은 틀릴 수 있으니 중요한 내용은 꼭 확인해요!";
 
 /**
  * Session gate for the AI disclosure notice (#320). The webview has no memory

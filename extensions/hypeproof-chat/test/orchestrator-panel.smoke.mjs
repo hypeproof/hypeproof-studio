@@ -218,11 +218,15 @@ const OLD_SCREENS = {
  */
 // Attachment guidance: only the persistent empty attachment-announcer is added;
 // stripping that exact element reproduces all nine prior digests.
+// REQ-STUDIO-STROKE-ICONS re-took the four ChatPanel digests: the only change is each status glyph
+// becoming its stroke icon (☐ mission marks → <svg data-icon="square" role="img" aria-label="아직">,
+// tool-row 🔧/🖼️ → <span data-glyph> + <svg aria-hidden>, ✓/⚠️/… marks → named <svg>). Substituting
+// the old glyph markup back into the HPS_A5_DUMP_DIR dumps reproduces all four prior digests.
 const BASE = {
-  "ChatPanel/adult-plain": "1b432cef21b78698d76e284167581834f3d37b06e59c76e49a5821c9798010ff",
-  "ChatPanel/adult-effort-observed": "d726134dde6fe8342e4b2258b5762a414429bcc01f01535913c95e4fa5db7747",
-  "ChatPanel/adult-timeline": "6912f0204fb1a88483522bb496bb658bd255bd3370f52162ede3e3799ba132e4",
-  "ChatPanel/kids": "fa914b1785cbb3a4fe84468ddfb93da76940cadf5a1c6cd61b81ebb31264aafc",
+  "ChatPanel/adult-plain": "7317f206fdeffb935c78b840296802bce6f52188619e9c2d164565b7c7e980c4",
+  "ChatPanel/adult-effort-observed": "5870015ee91a0c25cdb623b6f65ace8a620a73b824437c34850b04a9e0c94b06",
+  "ChatPanel/adult-timeline": "4d405eb47b4d4d0d9fd73140e86f03083d84b1574ed4c22c882797a5d822f332",
+  "ChatPanel/kids": "03f80a24ee8bd411dd0076227f231b0bce34f227952833f4c8960158deddc074",
   "EffortControl/policy-observed": "caea5b1eab6f88d737a96c6dde5f67369dec99657c24d5b25dca26117cd7b9ba",
   "EffortControl/policy-loading": "5d88d9a6ac8f18b171024b26f107bee0c59db5d31f7c7201b5c079aa37b05598",
   "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",
@@ -1151,15 +1155,17 @@ if (status.available) {
     P.orchestratorToolEntry({ kind: "check", id: "check:a1", name: "archive", verdict: "archived", summary: "", path: "index.html", state: "done", icon: "🗂", label: "🗂 이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html", at: 5 }, "t"),
   ];
   const panel = await render("ChatPanel", chatPanelProps({ config: adultConfig(), messages: entries.map(toMessage) }));
-  const shown = [...panel.matchAll(/<div class="hps-tool-log-line hps-tool-(\w+)"[^>]*>([\s\S]*?)<\/div>/g)].map((m) => `${visibleText(m[2])} [${m[1]}]`);
+  // REQ-STUDIO-STROKE-ICONS: icons are stroke svgs now; each is read back as (its data-icon name).
+  const iconsAsText = (html) => html.replace(/<svg [^>]*data-icon="([a-z-]+)"[^>]*>[\s\S]*?<\/svg>/g, "($1)");
+  const shown = [...panel.matchAll(/<div class="hps-tool-log-line hps-tool-(\w+)"[^>]*>([\s\S]*?)<\/div>/g)].map((m) => `${visibleText(iconsAsText(m[2]))} [${m[1]}]`);
   assert.deepEqual(shown, [
-    "🔎검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개✓ [done]",
-    "📏390·1280px 확인 — 통과✓ [done]",
-    "📏390px에서 2곳 넘침✓ [done]",
-    "📏미확인(미리보기 꺼짐)✓ [done]",
-    "🗂이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html✓ [done]",
+    "(search)검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개(check) [done]",
+    "(ruler)390·1280px 확인 — 통과(check) [done]",
+    "(ruler)390px에서 2곳 넘침(check) [done]",
+    "(ruler)미확인(미리보기 꺼짐)(check) [done]",
+    "(folder)이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html(check) [done]",
   ]);
-  assert.doesNotMatch(panel, /🔎\s*🔎|📏\s*📏|🗂\s*🗂/, "no icon twice");
+  assert.doesNotMatch(visibleText(panel), /🔎|📏|🗂/, "no icon drawn as an emoji, and none twice (data-glyph keeps the key, unseen)");
   ok("details: each request row names its agent before the model (코치 · / 검토 도우미 · / 보조 작업 ·), from the Service's title, the roster's, or the wire name; rows without agents read exactly as today (control); a served roster alone changes none of the 9 old screens; the timeline renders consult, check and archive lines with one icon each, the verdict in the label");
 } else {
   console.log(`NOT RUN orchestrator panel details/timeline renders — ${status.detail}`);

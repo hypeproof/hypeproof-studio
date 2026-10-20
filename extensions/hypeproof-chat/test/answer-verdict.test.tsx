@@ -75,13 +75,13 @@ t("reasons appear only for 고쳐야 해요, as a labelled group with the four K
   const fix = render(personal, { verdicts: { "a2#2": { verdict: "fix" } } });
   ok(count(fix, `aria-label="${REASONS_LABEL}"`) === 1, "reasons group missing");
   for (const label of ["틀렸어요", "내가 원한 게 아니에요", "너무 어려워요", "기타"]) ok(fix.includes(`>${label}</button>`), label);
-  ok(/aria-pressed="true"[^>]*><span aria-hidden="true">✓ <\/span>고쳐야 해요<\/button>/.test(fix), "고쳐야 해요 is not drawn pressed with a check mark");
+  ok(/aria-pressed="true"[^>]*><svg[^>]*data-icon="check"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg>고쳐야 해요<\/button>/.test(fix), "고쳐야 해요 is not drawn pressed with a check mark");
   ok(fix.includes(VERDICT_PRIVACY), "privacy line missing");
   ok(!fix.includes(NOTE_LABEL), "note box before a reason was chosen");
   const right = render(personal, { verdicts: { "a2#2": { verdict: "right" } } });
   ok(!right.includes(`aria-label="${REASONS_LABEL}"`), "reasons under 맞아요");
-  ok(/aria-pressed="true"[^>]*><span aria-hidden="true">✓ <\/span>맞아요<\/button>/.test(right), "맞아요 not pressed");
-  ok(!/aria-pressed="true"[^>]*><span aria-hidden="true">✓ <\/span>맞아요<\/button>/.test(fix), "control: 맞아요 pressed under 고쳐야 해요");
+  ok(/aria-pressed="true"[^>]*><svg[^>]*data-icon="check"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg>맞아요<\/button>/.test(right), "맞아요 not pressed");
+  ok(!/aria-pressed="true"[^>]*><svg[^>]*data-icon="check"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg>맞아요<\/button>/.test(fix), "control: 맞아요 pressed under 고쳐야 해요");
 });
 t("a chosen reason opens the optional note (≤300) with the saved text", () => {
   const html = renderToStaticMarkup(<VerdictReasons state={{ verdict: "fix", reason: "other", note: "색이 어두워요" }} onChange={noop} />);

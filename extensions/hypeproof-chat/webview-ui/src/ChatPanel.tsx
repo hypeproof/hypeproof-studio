@@ -8,6 +8,7 @@ import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
+import { glyphIconKind, splitLeadingGlyph, stripLeadingGlyph } from './glyphIcon';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
 import { VerdictButtons, VerdictReasons } from './AnswerVerdict';
 import { verdictTargets, type VerdictMap, type VerdictState } from '../../src/answerVerdict';
@@ -723,7 +724,7 @@ export function ChatPanel(props: Props) {
   useEffect(() => { if (streaming) setSteerMarks((marks) => steerMarksAccept(marks, messages, props.streamFor)); else if (error) setSteerMarks(steerMarksRefuse); }, [streaming, error, props.streamFor, messages]);
   const steerMarkAfter = (id: string) => {
     const mark = steerMarks.find((m) => m.id === id);
-    return mark ? <div className="hps-stop-notice hps-steer-mark" role="note"><span className="hps-stop-notice-icon" aria-hidden="true">⏹</span>{mark.sent ? STEER_STOPPED_MARK : STEER_SENDING_MARK}</div> : null;
+    return mark ? <div className="hps-stop-notice hps-steer-mark" role="note"><span className="hps-stop-notice-icon"><ChatIcon kind="stop" size={16} /></span>{mark.sent ? STEER_STOPPED_MARK : STEER_SENDING_MARK}</div> : null;
   };
   // Trial diagnosis D3 — solo seats (trial/pass/personal) get no classroom/operator words.
   const audience: SeatAudience = config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
@@ -1251,7 +1252,7 @@ export function ChatPanel(props: Props) {
       onDrop={handleDrop}
     >
       {dragActive && (
-        <div className="hps-shell-drop-overlay">여기에 놓으면 이미지가 첨부돼요 🖼</div>
+        <div className="hps-shell-drop-overlay">여기에 놓으면 이미지가 첨부돼요 <ChatIcon kind="image" size={20} /></div>
       )}
       {(() => { const header = <header className="hps-header">
         {ux.coach.naming_mode === "fixed"
@@ -1468,7 +1469,8 @@ export function ChatPanel(props: Props) {
           // and unobtrusive; sits at the top of the conversation so it reads
           // as a session-start notice, not an interruption.
           <div className="hps-ai-disclosure" role="note" aria-live="polite">
-            {props.aiNotice}
+            {/* REQ-STUDIO-STROKE-ICONS: a stroke icon, not a colour emoji; the sentence carries the meaning. */}
+            <ChatIcon kind="info" size={16} />{stripLeadingGlyph(props.aiNotice)}
           </div>
         )}
 
@@ -1557,7 +1559,8 @@ export function ChatPanel(props: Props) {
 
         {props.pageNotice && (
           <div className="hps-page-notice" role="status" aria-live="polite">
-            {props.pageNotice}
+            {/* REQ-STUDIO-STROKE-ICONS: the host's leading glyph becomes a stroke icon. */}
+            {(() => { const notice = splitLeadingGlyph(props.pageNotice); return <>{notice.glyph && <><ChatIcon kind={glyphIconKind(notice.glyph)} size={16} /> </>}{notice.text}</>; })()}
           </div>
         )}
 
@@ -1616,7 +1619,7 @@ export function ChatPanel(props: Props) {
               </details>
             </div>
             <button type="button" className="hps-element-remove" aria-label="이 요소 빼기" onClick={props.onRemoveElement}>
-              ✕
+              <ChatIcon kind="close" size={16} />
             </button>
           </div>
         )}
@@ -1631,7 +1634,7 @@ export function ChatPanel(props: Props) {
 
         {props.stopNotice && (
           <div className="hps-stop-notice" role="status" aria-live="polite">
-            <span className="hps-stop-notice-icon" aria-hidden="true">⏹</span>
+            <span className="hps-stop-notice-icon"><ChatIcon kind="stop" size={16} /></span>
             {props.stopNotice}
           </div>
         )}
@@ -1985,7 +1988,7 @@ function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilitie
 /** CGP-SHELL-R-024: one calm line per change, in the REQ-M47 card's words; "알겠어요" closes it for good. */
 function CapabilityChangeCard({ change, onDismiss }: { change: NonNullable<ChatConfig['capabilityChange']>; onDismiss: (id: string) => void }) {
   return <div className="hps-stop-notice hps-capability-change" role="status" aria-live="polite" data-capability-change={change.id}>
-    <span className="hps-stop-notice-icon" aria-hidden="true">ℹ</span>
+    <span className="hps-stop-notice-icon"><ChatIcon kind="info" size={16} /></span>
     <div>
       <p>{CAPABILITY_CHANGE_COPY.title}</p>
       {change.added.length > 0 && <p data-change="added">{CAPABILITY_CHANGE_COPY.added} — {change.added.join(', ')}</p>}
@@ -2020,7 +2023,7 @@ function GalleryNotice({
   if (publish.state === "done") {
     return (
       <div className="hps-gallery-notice hps-gallery-done" role="status" aria-live="polite">
-        <span aria-hidden>🖼️</span> 갤러리에 올렸어요!{" "}
+        <ChatIcon kind="image" size={16} /> 갤러리에 올렸어요!{" "}
         <button type="button" className="hps-gallery-link" onClick={() => onOpenUrl(publish.url)}>
           보러 가기
         </button>
@@ -2069,7 +2072,7 @@ function WorldStrip({
           Clear** the first screen was empty — no chips and no label. The arrow points
           down — the buttons are directly below this line (matching the wording and
           direction of the guest-list answer). */}
-      {showLabel && <div className="hps-worlds-label">👇 친구를 누르면 그 세상으로 가요</div>}
+      {showLabel && <div className="hps-worlds-label"><ChatIcon kind="down" size={16} /> 친구를 누르면 그 세상으로 가요</div>}
       <div className="hps-worlds" role="group" aria-label="친구 고르기">
         {worlds.map((w) => {
           const open = w.id === openId;
@@ -2366,9 +2369,9 @@ function ToolLine({ message }: { message: ChatMessage }) {
     return (
       <details className="hps-thinking-details">
         <summary className="hps-tool-log-line hps-tool-done" aria-label="AI 처리 내용 보기">
-          <span className="hps-tool-icon">{t.icon}</span>
+          <span className="hps-tool-icon" data-glyph={t.icon}><ChatIcon kind={glyphIconKind(t.icon)} size={16} /></span>
           <span className="hps-tool-label">응답 준비</span>
-          <span className="hps-tool-mark">▾</span>
+          <span className="hps-tool-mark"><ChatIcon kind="chevron-down" size={16} /></span>
         </summary>
         <pre>{t.label}</pre>
       </details>
@@ -2376,10 +2379,13 @@ function ToolLine({ message }: { message: ChatMessage }) {
   }
   return (
     <div className={`hps-tool-log-line hps-tool-${t.state}`} role="status" aria-live="polite">
-      <span className="hps-tool-icon">{t.icon}</span>
-      <span className="hps-tool-label">{thinking ? '응답을 준비하는 중…' : t.label}</span>
+      {/* REQ-STUDIO-STROKE-ICONS: the host's glyph is a key; the row draws the stroke icon it names
+          and drops a label's leading copy of it. The state mark has a Korean name: it is the only
+          place that says whether the step failed. */}
+      <span className="hps-tool-icon" data-glyph={t.icon}><ChatIcon kind={glyphIconKind(t.icon)} size={16} /></span>
+      <span className="hps-tool-label">{thinking ? '응답을 준비하는 중…' : stripLeadingGlyph(t.label)}</span>
       <span className="hps-tool-mark">
-        {t.state === "running" ? "…" : t.state === "error" ? "⚠️" : "✓"}
+        {t.state === "running" ? <ChatIcon kind="dots" size={16} label="처리 중" /> : t.state === "error" ? <ChatIcon kind="alert" size={16} label="실패" /> : <ChatIcon kind="check" size={16} label="완료" />}
       </span>
     </div>
   );
@@ -2491,7 +2497,7 @@ function MessageItem({
             onClick={() => onRunCode(renderable)}
             title="미리보기 패널에서 실행"
           >
-            ▶ Run
+            <ChatIcon kind="play" size={16} /> Run
           </button>
         )}
         {!personal && retryPrompt && (
@@ -2499,8 +2505,9 @@ function MessageItem({
             className="hps-msg-retry"
             onClick={() => onRetry(retryPrompt.content, retryPrompt)}
             title="다른 방식으로 한 번 더 만들기"
+            aria-label="다른 방식으로 한 번 더 만들기"
           >
-            🔄
+            <ChatIcon kind="retry" size={16} />
           </button>
         )}
       </div>
@@ -2652,7 +2659,7 @@ function AssistantContent({
   const hasOpenFence = segments.some((s) => s.type === "code-open");
 
   if (content.length === 0) {
-    return personal && streaming ? <ResponsePending /> : <span>{streaming ? "생각하는 중… ✨" : ""}</span>;
+    return personal && streaming ? <ResponsePending /> : <span>{streaming ? <>생각하는 중… <span className="hps-dots"><ChatIcon kind="sparkle" size={16} /></span></> : ""}</span>;
   }
 
   return (
@@ -2667,7 +2674,7 @@ function AssistantContent({
             const stage = buildStageText(buildingLabel, content, hasOpenFence, tone, hasActivity);
             return (
               <div key={i} className="hps-code-progress">
-                🛠️ {stage}… <span className="hps-dots">✨</span>
+                <ChatIcon kind="tool" size={16} /> {stage}… <span className="hps-dots"><ChatIcon kind="sparkle" size={16} /></span>
               </div>
             );
           }
@@ -2676,7 +2683,7 @@ function AssistantContent({
             <div key={i}>
               <CodePill code={seg.value} personal={personal} blockKey={`seg${i}`} />
               <div className="hps-stream-note" data-quote-skip="">
-                {personal ? "응답이 도중에 끊겼어요. 같은 요청을 한 번 더 보내 주세요." : "응답이 도중에 끊겼어요. 위의 🔄 버튼으로 다시 시도해주세요."}
+                {personal ? "응답이 도중에 끊겼어요. 같은 요청을 한 번 더 보내 주세요." : <>응답이 도중에 끊겼어요. 위의 <ChatIcon kind="retry" size={16} label="다시 만들기" /> 버튼으로 다시 시도해주세요.</>}
               </div>
             </div>
           );
@@ -2686,7 +2693,7 @@ function AssistantContent({
       {personal && streaming && !hasOpenFence && <ResponsePending hasContent />}
       {!personal && streaming && !hasOpenFence && content.length > 0 && (
         <div className="hps-code-progress hps-code-progress-prelude">
-          🛠️ {buildStageText(buildingLabel, content, false, tone, hasActivity)}… <span className="hps-dots">✨</span>
+          <ChatIcon kind="tool" size={16} /> {buildStageText(buildingLabel, content, false, tone, hasActivity)}… <span className="hps-dots"><ChatIcon kind="sparkle" size={16} /></span>
         </div>
       )}
     </CodeBlockScope>
@@ -2701,9 +2708,9 @@ function CodePill({ code, personal = false, blockKey }: { code: string; personal
       {/* Personal chat: a quiet disclosure in the answer's own type size, with a line icon from the
           chat's icon set instead of a colour emoji (UI audit P0-2). */}
       {personal ? <button className="hps-codepill-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <ChatIcon kind="code" size={14} /><span>{open ? "코드 숨기기" : `코드 보기 · ${lines}줄`}</span>
+        <ChatIcon kind="code" size={16} /><span>{open ? "코드 숨기기" : `코드 보기 · ${lines}줄`}</span>
       </button> : <button className="hps-codepill-toggle" onClick={() => setOpen((v) => !v)}>
-        {open ? "▾" : "▸"} 📄 코드 {open ? "숨기기" : `보기 (${lines}줄)`}
+        <ChatIcon kind={open ? "chevron-down" : "chevron"} size={16} /><ChatIcon kind="file" size={16} /> 코드 {open ? "숨기기" : `보기 (${lines}줄)`}
       </button>}
       {/* CGP-CHAT-R-008: the open block carries its own copy and wrap tools; collapsed stays as is (#159). */}
       {open && <CodeBlock code={code} defaultWrap={false} blockKey={blockKey} preClassName="hps-codepill-body" />}
@@ -2779,7 +2786,7 @@ function ErrorBanner({
       role={notice ? "status" : "alert"}
       aria-live={notice ? "polite" : undefined}
     >
-      <div className="hps-error-banner-icon">{icon}</div>
+      <div className="hps-error-banner-icon"><ChatIcon kind={glyphIconKind(icon)} size={24} /></div>
       <div className="hps-error-banner-body">
         <div className="hps-error-banner-title">{title}</div>
         <div className="hps-error-banner-msg">{message}</div>
@@ -2787,7 +2794,7 @@ function ErrorBanner({
           <div className="hps-error-banner-runbook">
             {/* CGP-ART-R-008: the host decides where a link opens; a raw target=_blank anchor would reach the system browser. */}
             <a href={runbookUrl} onClick={(e) => { e.preventDefault(); postToHost({ type: "openExternal", url: runbookUrl }); }}>
-              📖 강사 안내 — 세션 여는 법
+              <ChatIcon kind="book" size={16} /> 강사 안내 — 세션 여는 법
             </a>
           </div>
         )}
@@ -2809,7 +2816,7 @@ function ErrorBanner({
             onClick={onReport}
             title={reportButtonTitle(audience)}
           >
-            🚨 신고하기
+            <ChatIcon kind="flag" size={16} /> 신고하기
           </button>
         )}
         <button
@@ -2892,7 +2899,7 @@ function UpdateBanner({
 
   return (
     <div className="hps-update-banner" role="status">
-      <div className="hps-update-banner-icon">⬆️</div>
+      <div className="hps-update-banner-icon"><ChatIcon kind="upload" size={24} /></div>
       <div className="hps-update-banner-body">
         <div className="hps-update-banner-title">
           새 버전 v{offer.version} 나왔어요{sizeMb ? ` · ${sizeMb}` : ""}

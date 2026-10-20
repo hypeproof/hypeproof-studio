@@ -35,15 +35,16 @@ const ok = (n) => { passed++; console.log(`✓ ${n}`); };
   assert.equal((html.match(/data-status="pass"/g) ?? []).length, 3);
   assert.doesNotMatch(html, /verify-fix"/, "nothing to fix");
   // The evidence is in Korean: no raw step action or citation kind reaches the student.
-  assert.match(text, /✓ 이동/);
+  // REQ-STUDIO-STROKE-ICONS: the step mark is a stroke icon named in Korean, then the Korean action.
+  assert.match(html, /role="img" aria-label="성공">(?:(?!<\/svg>)[\s\S])*<\/svg> 이동/);
   assert.match(text, /근거\(화면 내용\)/);
-  assert.doesNotMatch(text, /✓ navigate|근거\((?:snapshot|record|screenshot|route)\)/);
+  assert.doesNotMatch(text, /navigate|근거\((?:snapshot|record|screenshot|route)\)/);
   assert.doesNotMatch(html, /verify-expectations/, "control: no expectations, no list");
   // The coach wrote the expectations, so each result shows what it was judged on.
   const judged = report(V0, [crit("c1", "주문하면 완료 화면이 보인다", "pass", { expectations: [{ kind: "text", ok: true, detail: "보이지 않아야 함: 주문 오류" }] })]);
   const shown = await render(view({ verification: { state: "verified", run_id: "run-1", open: [] }, report: judged }));
   assert.match(shown.html, /data-testid="verify-expectations"/);
-  assert.match(shown.text, /✓ 확인한 것: 보이지 않아야 함: 주문 오류/);
+  assert.match(shown.html, /role="img" aria-label="맞음">(?:(?!<\/svg>)[\s\S])*<\/svg> 확인한 것: 보이지 않아야 함: 주문 오류/);
   ok("CR-T76 UI positive: a version with a three-pass report bound to it shows 검증됨 with each result");
 }
 {
