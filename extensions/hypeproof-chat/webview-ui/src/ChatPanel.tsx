@@ -2290,7 +2290,7 @@ function MessageItem({
         revertNote={revertNote}
         onCancel={onCancelEdit}
         onSave={onSaveEdit} /> : <div className="hps-msg-body">
-        {question && onPickReply && onWriteReply ? <ReplyChoices question={question} onPick={onPickReply} onWrite={onWriteReply} /> : message.role === "assistant" ? (
+        {question && onPickReply && onWriteReply ? <CodeBlockScope id={message.id}><ReplyChoices question={question} onPick={onPickReply} onWrite={onWriteReply} /></CodeBlockScope> : message.role === "assistant" ? (
           <AssistantContent
             content={message.content}
             streaming={isStreamingThis}

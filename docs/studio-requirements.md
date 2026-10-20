@@ -325,18 +325,20 @@ claims a copy or clears the clipboard. `줄 바꿈` is a toggle with one fixed n
 and `aria-pressed` for its state; the default keeps each surface's existing behaviour (the pill body
 does not wrap, prose blocks wrap). The choice is remembered per block for the webview session only.
 A block is identified by its position, not its text: conversation (activity and task) › message id ›
-answer segment › block start offset. So identical blocks, the same snippet in another task, and a
-new conversation never share a choice, and a block that is still streaming keeps its choice as it
-grows. Rerenders and remounts (task switch and back) keep it, a reload forgets it, and nothing is
-written to storage or the host. A block outside a full scope (a reply-choice question) keeps its
-choice only while mounted. Both controls are buttons with 44px targets, reachable by Tab, with the
+answer segment, or the before/after text of a reply-choice question › block start offset. So
+identical blocks, the same snippet in another message or task, the two texts of one choice question,
+and a new conversation never share a choice, and a block that is still streaming keeps its choice as
+it grows. Rerenders and remounts (task switch and back) keep it, a reload forgets it, and nothing is
+written to storage or the host. A key needs at least the conversation and the message level; a block
+rendered with less keeps its choice only while mounted. Both controls are buttons with 44px targets, reachable by Tab, with the
 shared focus ring. Not built: a fence-language label, download, and a per-task saved wrap choice (the
 research row CGP-CHAT-R39 asks for one; this slice keeps it session-only). Test:
 `test/code-block-tools.test.tsx`. Static markup covers where tools render (both modes, no tools
 outside code blocks, collapsed pill unchanged). Mounted on a minimal DOM (`test/fixtures/mini-dom.mjs`),
 it clicks the real buttons with a stubbed clipboard that resolves, rejects or is missing, for the
 block copy and the answer copy (`CopyAnswer`), the empty block, the wrap toggle, per-block, per-task
-and streaming memory through `ChatPanel`, and opening a pill in personal and classroom chat.
+and streaming memory and reply-choice questions (two messages, before/after) through `ChatPanel`, and
+opening a pill in personal and classroom chat.
 Reverting any of 13 behaviours (copy or wrap wired to a no-op, confirming before the write, success
 shown on failure, text-keyed memory, and others) fails it.
 

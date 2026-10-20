@@ -237,6 +237,15 @@ t("wrap memory is per block: survives a remount and a growing (streaming) block,
   v = await mount(<CodeBlock code="npm install" defaultWrap={false} blockKey="seg1" />);
   ok(v.wrapAttr()[0] === "off", "an unscoped block read remembered state");
   await v.unmount();
+  // A conversation scope without a message level is not enough for a key: mount-local only.
+  const convOnly = <CodeBlockScope root id="p1/t1"><CodeBlock code="npm install" defaultWrap={false} blockKey="pre@4" /></CodeBlockScope>;
+  v = await mount(convOnly);
+  await press(v.one(WRAP_LABEL));
+  ok(v.wrapAttr()[0] === "on", "toggle under a conversation-only scope");
+  await v.unmount();
+  v = await mount(convOnly);
+  ok(v.wrapAttr()[0] === "off", "a conversation-only scope remembered a choice across mounts");
+  await v.unmount();
 });
 
 t("in ChatPanel: the same snippet in another task starts at its default; the task's own choice comes back", async () => {
@@ -261,6 +270,27 @@ t("in ChatPanel: the same snippet in another task starts at its default; the tas
   await v.unmount();
   v = await mount(panel("t1", "m9", "설명이에요.\n\n~~~\nnpm install\nnpm test\n~~~\n\n끝."));
   ok(JSON.stringify(v.wrapAttr()) === '["off"]', `choice lost once the streaming block grew ${JSON.stringify(v.wrapAttr())}`);
+  await v.unmount();
+});
+
+t("in ChatPanel: reply-choice questions keep their own wrap choice per message and per before/after text", async () => {
+  resetWrapMemory();
+  // Each question has an indented block at the same offset (after "설명\n\n") in its own text.
+  const q1 = "설명\n\n    npm install\n\n어느 쪽이 가까웠나요?\n1. 설치가 먼저\n2. 실행이 먼저\n\n설명\n\n    npm ci";
+  const q2 = "설명\n\n    npm test\n\n어떤 쪽을 골라 볼까요?\n1. 테스트\n2. 빌드";
+  const panel = (msg: ChatMessage) => <ChatPanel {...PROPS} config={personal} instructor={false} messages={[msg]} />;
+  let v = await mount(panel(a("m1", q1)));
+  ok(v.host.findAll((e) => e.getAttribute("class") === "hps-reply-question").length === 1, "m1 is not drawn as a choice question");
+  ok(JSON.stringify(v.wrapAttr()) === '["on","on"]', `m1 default ${JSON.stringify(v.wrapAttr())}`);
+  await press(v.byLabel(WRAP_LABEL)[0]);
+  ok(JSON.stringify(v.wrapAttr()) === '["off","on"]', `toggle m1 before-block ${JSON.stringify(v.wrapAttr())}`);
+  await v.unmount();
+  v = await mount(panel(a("m1", q1)));
+  ok(JSON.stringify(v.wrapAttr()) === '["off","on"]', `m1 after remount (before/after share a key?) ${JSON.stringify(v.wrapAttr())}`);
+  await v.unmount();
+  v = await mount(panel(a("m2", q2)));
+  ok(v.host.findAll((e) => e.getAttribute("class") === "hps-reply-question").length === 1, "m2 is not drawn as a choice question");
+  ok(JSON.stringify(v.wrapAttr()) === '["on"]', `m2's block inherited m1's choice ${JSON.stringify(v.wrapAttr())}`);
   await v.unmount();
 });
 

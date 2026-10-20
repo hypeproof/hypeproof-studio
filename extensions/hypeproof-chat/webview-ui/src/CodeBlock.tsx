@@ -8,10 +8,12 @@ import './codeBlock.css';
  *
  * The wrap choice is remembered per block for this webview session only (never persisted).
  * A block's key is its position, not its text: conversation (activity + task) › message id ›
- * answer segment › block offset. So two identical blocks, or the same snippet in another task,
- * never share a choice, and a block that is still streaming keeps its key as it grows. Rerenders
- * and remounts (task switch and back) keep the choice, a reload forgets it. A block rendered
- * outside a full scope (no conversation or message) keeps its choice only while it is mounted.
+ * answer segment (or a reply-choice question's before/after text) › block offset. So two identical
+ * blocks, the same snippet in another message or task, never share a choice, and a block that is
+ * still streaming keeps its key as it grows. Rerenders and remounts (task switch and back) keep the
+ * choice, a reload forgets it. A key needs at least the conversation and the message level; a
+ * block rendered with less (no scope, or a conversation scope only) keeps its choice only while it
+ * is mounted, so a surface that forgets its message scope cannot share choices across messages.
  */
 const wrapMemory = new Map<string, boolean>();
 const WRAP_MEMORY_LIMIT = 200;
@@ -30,7 +32,10 @@ export function rememberWrap(key: string, wrap: boolean): void {
 /** Test hook: forget every remembered choice. */
 export function resetWrapMemory(): void { wrapMemory.clear(); }
 
-const ScopeContext = createContext<string | null>(null);
+type Scope = { key: string; depth: number } | null;
+const ScopeContext = createContext<Scope>(null);
+/** Conversation + message: the least a key needs. */
+const MIN_KEY_DEPTH = 2;
 
 /**
  * One level of a block's key. `root` starts a conversation scope; nested scopes append their id.
@@ -38,7 +43,7 @@ const ScopeContext = createContext<string | null>(null);
  */
 export function CodeBlockScope({ id, root = false, children }: { id: string | null | undefined; root?: boolean; children: ReactNode }) {
   const parent = useContext(ScopeContext);
-  const value = id == null || id === '' ? null : root ? id : parent == null ? null : `${parent}|${id}`;
+  const value: Scope = id == null || id === '' ? null : root ? { key: id, depth: 1 } : parent == null ? null : { key: `${parent.key}|${id}`, depth: parent.depth + 1 };
   return <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>;
 }
 
@@ -71,7 +76,7 @@ export function CodeBlockTools({ code, wrap, onToggleWrap }: { code: string; wra
  */
 export function CodeBlock({ code, defaultWrap, blockKey, preClassName, children }: { code: string; defaultWrap: boolean; blockKey?: string; preClassName?: string; children?: ReactNode }) {
   const scope = useContext(ScopeContext);
-  const key = scope != null && blockKey ? `${scope}|${blockKey}` : null;
+  const key = scope != null && scope.depth >= MIN_KEY_DEPTH && blockKey ? `${scope.key}|${blockKey}` : null;
   const [wrap, setWrap] = useState(() => (key ? rememberedWrap(key, defaultWrap) : defaultWrap));
   const toggle = () => setWrap((current) => { const next = !current; if (key) rememberWrap(key, next); return next; });
   return <div className="hps-codeblock" data-wrap={wrap ? 'on' : 'off'}>
