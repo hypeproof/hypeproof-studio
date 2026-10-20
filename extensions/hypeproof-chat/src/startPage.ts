@@ -18,6 +18,7 @@ import { qrDataUrl } from "./testQr";
 import { randomUUID } from "node:crypto";
 import type { ClassRepo } from "./publish/githubContinue";
 import { JOIN_LINK_COPY, classOfCode, isClassId } from "./joinLink";
+import { passSurface, type PassSurface, type PurchasePathEvent } from "./funnelEvents";
 
 /**
  * "GitHub에서 이어하기" for a code being confirmed (user requirement 2026-10-13): look at the
@@ -106,6 +107,12 @@ export class StartPage {
   private offerWaited = false;
   /** REQ-STUDIO-JOIN-LINK — the class a join link named, until a code is confirmed or the learner drops it. */
   private joinLink?: { classId: string; seq: number };
+  /** CONV-FUNNEL-R-006 — where the pass list on screen was opened from (end card, header link, start page). */
+  private passListSurface: PassSurface = "start_page";
+  /** CONV-FUNNEL-R-006 — the pass list was on screen at the last paint; a new appearance counts once. */
+  private passListShown = false;
+  /** CONV-FUNNEL-R-006 — a purchase-time sign-in begun from the list on this surface and not finished yet. */
+  private purchaseSignIn?: PassSurface;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
@@ -115,6 +122,10 @@ export class StartPage {
   ) {}
 
   accountChanged(): void {
+    // CONV-FUNNEL-R-006 — the purchase-time sign-in finished (or ended without an account).
+    const account = this.accounts?.view();
+    if (this.purchaseSignIn && account?.status === "signedIn") { this.purchasePathEvent("sign_in_completed", this.purchaseSignIn); this.purchaseSignIn = undefined; }
+    else if (this.purchaseSignIn && (!account || (account.status === "signedOut" && !account.busy))) this.purchaseSignIn = undefined;
     if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
     // Signed in after a login-at-purchase prompt: the prompt has been answered.
     if (this.accounts?.view().status === "signedIn" && this.purchaseMessage === PURCHASE_COPY.signInFirst) this.purchaseMessage = undefined;
@@ -252,7 +263,10 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.stopPurchaseWait(); this.accounts?.cancel(false); } });
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.purchaseSignIn = undefined; this.stopPurchaseWait();
+      // CONV-FUNNEL-R-006 — a reopened tab starts on the start choices, not on the list (the webview
+      // draws the list only after an open), so a list left in `choosing` is not a new view until opened again.
+      this.passListShown = true; this.accounts?.cancel(false); } });
     this.context.subscriptions.push(panel);
     void this.resumePurchase();
   }
@@ -276,6 +290,15 @@ export class StartPage {
    * screen has no login.
    */
   private loginAtPurchase(): boolean { return this.freeSeatNow || this.freeNewcomer || this.accountRequired; }
+  /**
+   * CONV-FUNNEL-R-006 — one purchase-path funnel event for a free seat (Service #168). The chat host's
+   * reporter sends it with the seat's grant token, only when the Service's probe lists the type, and
+   * never throws. Any other seat (pass, code-issued trial, class, none) sends nothing.
+   */
+  private purchasePathEvent(type: PurchasePathEvent, surface: PassSurface = this.passListSurface): void {
+    if (!this.freeSeatNow) return;
+    try { this.chat.funnelEmit?.({ type, surface }); } catch { /* telemetry never interrupts a purchase */ }
+  }
   /** What blocks checkout for want of an account; undefined when checkout may go ahead. */
   private loginGate(): PurchaseView["login"] {
     if (!this.loginAtPurchase()) return undefined;
@@ -426,7 +449,9 @@ export class StartPage {
    * TUX-COND-07 — "이용권 살펴보기" on the chat's end-of-trial card. The person pressed it, so
    * the start page opens on the pass list (REQ-L12 ②). No order is created until they choose.
    */
-  async showPurchase(): Promise<void> {
+  async showPurchase(surface?: unknown): Promise<void> {
+    // CONV-FUNNEL-R-006 — the command argument names the surface; anything else is the end card's.
+    this.passListSurface = passSurface(surface, "end_card");
     await this.show();
     await this.handlePurchase({ type: "purchaseOpen" });
     this.purchaseFocus = Date.now();
@@ -516,6 +541,8 @@ export class StartPage {
   }
   private async handlePurchase(msg: StartRequest): Promise<void> {
     if (msg.type === "purchaseOpen") {
+      // Every open is a new view of the list, even when it was already on screen.
+      this.passListShown = false;
       await this.loadProducts(true);
       if (!this.order) { this.purchaseStage = this.products?.length ? "choosing" : "stopped"; this.purchaseMessage = this.products?.length ? undefined : PURCHASE_COPY.unavailable; }
       await this.refresh(); return;
@@ -536,7 +563,7 @@ export class StartPage {
       await this.refresh(); return;
     }
     if (msg.type === "purchaseReopen") {
-      if (this.order) await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl));
+      if (this.order && await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl))) this.purchasePathEvent("checkout_opened");
       return;
     }
     if (msg.type === "purchaseRetry") {
@@ -588,7 +615,7 @@ export class StartPage {
       this.order = order; this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
       // Under 19 on a free seat: the guardian pays on their own phone, so the page is shown here as a link and QR.
       if (msg.guardian && this.freeSeatNow) this.guardianCheckout = { url: order.checkoutUrl, qr: qrDataUrl(order.checkoutUrl) };
-      else { this.guardianCheckout = undefined; await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl)); }
+      else { this.guardianCheckout = undefined; if (await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl))) this.purchasePathEvent("checkout_opened"); }
       this.schedulePurchasePoll();
     } catch (e) { this.purchaseStage = "stopped"; this.purchaseMessage = e instanceof AccountError ? e.message : PURCHASE_COPY.orderFailed; }
     finally { this.busy = false; await this.refresh(); }
@@ -661,6 +688,10 @@ export class StartPage {
     };
     // studio-funnel-events — the pass offer is on screen: the choice list shows it while no activity card is.
     if (this.panel && state.purchase?.available && !state.profile) this.chat.funnelEmit?.({ type: "offer_viewed", surface: "start_page" });
+    // CONV-FUNNEL-R-006 — the pass list appears on screen (each open, and each return to it from another stage).
+    const listShown = !!this.panel && this.purchaseStage === "choosing" && !!this.products?.length && !this.order;
+    if (listShown && !this.passListShown) this.purchasePathEvent("pass_list_viewed");
+    this.passListShown = listShown;
     await this.panel?.webview.postMessage({ type: "startState", state });
   }
 
@@ -678,7 +709,14 @@ export class StartPage {
       if (!this.accounts) return;
       this.error = undefined;
       try {
-        if (msg.type === "accountSignIn") { if (this.loginGate() === "signIn") this.notePurchasePick(msg.productId); await this.accounts.start(); }
+        if (msg.type === "accountSignIn") {
+          if (this.loginGate() === "signIn") {
+            this.notePurchasePick(msg.productId);
+            // CONV-FUNNEL-R-006 — the purchase-time sign-in begins from the pass list.
+            if (this.purchaseStage === "choosing" && !this.order && this.freeSeatNow) { this.purchaseSignIn = this.passListSurface; this.purchasePathEvent("sign_in_started"); }
+          }
+          await this.accounts.start();
+        }
         else if (msg.type === "accountCancel") this.accounts.cancel();
         else if (msg.type === "accountReopen") await this.accounts.reopen();
         else if (msg.type === "accountCopyLink") await this.accounts.copyLink(text => vscode.env.clipboard.writeText(text));
@@ -708,7 +746,7 @@ export class StartPage {
     if (msg.type === "freeStartGuardian") { await vscode.env.openExternal(vscode.Uri.parse(guardianUrl(this.settings().siteBase))); return; }
     if (msg.type === "freeStartUpdate") { await vscode.commands.executeCommand("hypeproof-chat.checkForUpdates"); return; }
     // studio-funnel-events — the start-page pass offer (Service type offer_*, surface start_page).
-    if (msg.type === "purchaseOpen") this.chat.funnelEmit?.({ type: "offer_clicked", surface: "start_page" });
+    if (msg.type === "purchaseOpen") { this.chat.funnelEmit?.({ type: "offer_clicked", surface: "start_page" }); this.passListSurface = "start_page"; }
     if ((msg.type === "purchaseHide" || msg.type === "purchaseCancel") && !this.order) this.chat.funnelEmit?.({ type: "offer_dismissed", surface: "start_page" });
     if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchasePayer" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }

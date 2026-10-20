@@ -23,6 +23,8 @@ import {
   FUNNEL_OS,
   FunnelReporter,
   OFFER_SURFACES,
+  PASS_SURFACES,
+  PURCHASE_PATH_EVENTS,
   TOOL_RESULT_KINDS,
   TRACE_EVENT_ROUTE,
   TRIAL_EVENTS_ROUTE,
@@ -34,6 +36,7 @@ import {
   funnelToolKind,
   isTrialGrantToken,
   parseTrialEventsProbe,
+  passSurface,
   trialEventsUrl,
   usesTraceRoute,
 } from "../src/funnelEvents.ts";
@@ -74,6 +77,7 @@ function studioInputs() {
   }
   for (const kind of TOOL_RESULT_KINDS) for (const ok of [true, false]) out.push({ type: "trial_tool_result", kind, ok });
   for (const t of ["offer_viewed", "offer_clicked", "offer_dismissed"]) for (const surface of OFFER_SURFACES) out.push({ type: t, surface });
+  for (const t of PURCHASE_PATH_EVENTS) for (const surface of PASS_SURFACES) out.push({ type: t, surface });
   return out;
 }
 
@@ -112,6 +116,12 @@ function recorder(status = 200) {
   assert.deepEqual([...FUNNEL_OS], CONTRACT.app_events.trial_entry.os.values);
   assert.deepEqual([...TOOL_RESULT_KINDS], CONTRACT.app_events.trial_tool_result.kind.values);
   assert.deepEqual([...OFFER_SURFACES], CONTRACT.app_events.offer_viewed.surface.values);
+  // CONV-FUNNEL-R-006 — the purchase-path events (Service #168): one required `surface` each.
+  for (const t of PURCHASE_PATH_EVENTS) {
+    assert.ok(ALL_EVENTS.includes(t), `the Service probe lists ${t}`);
+    assert.deepEqual([...PASS_SURFACES], CONTRACT.app_events[t].surface.values, `${t} surfaces`);
+    assert.equal(CONTRACT.app_events[t].surface.required, true);
+  }
   assert.equal(APP_VERSION_RE.source, CONTRACT.version_re);
 }
 
@@ -180,8 +190,29 @@ if (process.env.HPS_SERVICE_WORKER_DIR) {
     { type: "trial_tool_result", kind: "bash", ok: true },
     { type: "trial_tool_result", kind: "write", ok: "yes" },
     { type: "offer_viewed", surface: "chat" },
+    // CONV-FUNNEL-R-006 negatives: the offer events keep their own two surfaces; the purchase-path
+    // events need a listed surface; near-miss names are not Service types.
+    { type: "offer_viewed", surface: "header_menu" },
+    { type: "pass_list_viewed" },
+    { type: "pass_list_viewed", surface: "menu" },
+    { type: "checkout_opened", surface: "chat" },
+    { type: "sign_in_completed", surface: "" },
+    { type: "pass_list_opened", surface: "end_card" },
+    { type: "sign_in", surface: "end_card" },
+    { type: "checkout_started", surface: "end_card" },
     null,
   ]) assert.equal(buildFunnelEvent(bad), null, JSON.stringify(bad));
+}
+
+// ─── CONV-FUNNEL-R-006: purchase-path bodies carry the surface and nothing else ─────────────
+{
+  const leaky = buildFunnelEvent({ type: "checkout_opened", surface: "end_card", product_id: "pass-30d", order_id: "ord_1", account_id: "acc_1", email: "a@b.c", url: "https://pay.test/?order=1" });
+  assert.deepEqual(leaky, { type: "checkout_opened", fields: { surface: "end_card" } }, "product, order, account and url never leave");
+  assert.ok(serviceAccepts(leaky));
+  assert.equal(passSurface("header_menu"), "header_menu");
+  assert.equal(passSurface("end_card"), "end_card");
+  for (const bad of [undefined, null, "menu", "chat", 1, { surface: "end_card" }]) assert.equal(passSurface(bad), "start_page", String(bad));
+  assert.equal(passSurface("chat", "end_card"), "end_card", "the caller's fallback");
 }
 
 // ─── Small mappers ───────────────────────────────────────────────────────────────────────
@@ -328,6 +359,52 @@ if (process.env.HPS_SERVICE_WORKER_DIR) {
 }
 
 {
+  // CONV-FUNNEL-R-006 — purchase-path events go to the grant-scoped route with the grant token the
+  // reporter was given (never another credential), are sent on every emit once the route is on (the
+  // Service keeps the first per grant and surface), and only when the probe lists the type.
+  const { reporter, calls } = recorder();
+  for (let i = 0; i < 5; i += 1) reporter.emit({ type: "pass_list_viewed", surface: "end_card" });
+  reporter.emit({ type: "pass_list_viewed", surface: "header_menu" });
+  assert.equal(reporter.queued, 2, "before the probe answers, one view per surface waits");
+  reporter.setTarget({ url: URL_ON, token: "grant-token-F", events: ALL_EVENTS });
+  reporter.emit({ type: "sign_in_started", surface: "end_card" });
+  reporter.emit({ type: "sign_in_completed", surface: "end_card" });
+  reporter.emit({ type: "checkout_opened", surface: "end_card" });
+  reporter.emit({ type: "pass_list_viewed", surface: "end_card" });
+  reporter.emit({ type: "pass_list_viewed", surface: "start_page", account_token: "account-bearer-x" });
+  await flush();
+  assert.deepEqual(calls.map((c) => c.body), [
+    { type: "pass_list_viewed", fields: { surface: "end_card" } },
+    { type: "pass_list_viewed", fields: { surface: "header_menu" } },
+    { type: "sign_in_started", fields: { surface: "end_card" } },
+    { type: "sign_in_completed", fields: { surface: "end_card" } },
+    { type: "checkout_opened", fields: { surface: "end_card" } },
+    { type: "pass_list_viewed", fields: { surface: "end_card" } },
+    { type: "pass_list_viewed", fields: { surface: "start_page" } },
+  ]);
+  for (const c of calls) {
+    assert.equal(c.token, "grant-token-F", "always the grant token the target names");
+    assert.equal(c.url, URL_ON);
+    assert.ok(serviceAccepts(c.body), JSON.stringify(c.body));
+    assert.ok(!JSON.stringify(c.body).includes("account-bearer"), "no credential in the body");
+  }
+  // An older Service (before #168) lists only the first five types: the new ones are not sent.
+  const old = recorder();
+  old.reporter.setTarget({ url: URL_ON, token: "g", events: ["trial_entry", "trial_tool_result", "offer_viewed", "offer_clicked", "offer_dismissed"] });
+  for (const t of PURCHASE_PATH_EVENTS) old.reporter.emit({ type: t, surface: "start_page" });
+  old.reporter.emit({ type: "offer_clicked", surface: "start_page" });
+  await flush();
+  assert.deepEqual(old.calls.map((c) => c.body.type), ["offer_clicked"], "unlisted types are dropped");
+  // A failing or rejecting send never throws into the caller.
+  for (const send of [async () => { throw new Error("offline"); }, async () => 400, () => { throw new Error("sync"); }]) {
+    const r = new FunnelReporter({ send });
+    r.setTarget({ url: URL_ON, token: "g", events: ALL_EVENTS });
+    for (const t of PURCHASE_PATH_EVENTS) assert.doesNotThrow(() => r.emit({ type: t, surface: "end_card" }));
+    await flush(); await flush();
+  }
+}
+
+{
   // Profile-read sequence: active → failed read → recovered read must keep the route on.
   // Before the fix a failed read cleared the target but kept the probe marker, so the recovered
   // read skipped the probe and the funnel stayed off (events stuck in the queue, liveness back on
@@ -382,6 +459,10 @@ if (process.env.HPS_SERVICE_WORKER_DIR) {
   assert.ok(!/from ["']vscode["']/.test(funnelSrc), "funnelEvents.ts stays pure (no vscode)");
   const start = readFileSync(new URL("../src/startPage.ts", import.meta.url), "utf8");
   for (const e of ["offer_viewed", "offer_clicked", "offer_dismissed"]) assert.ok(start.includes(`type: "${e}"`), `start page emits ${e}`);
+  for (const e of PURCHASE_PATH_EVENTS) assert.ok(start.includes(`"${e}"`), `start page emits ${e}`);
+  const ext = readFileSync(new URL("../src/extension.ts", import.meta.url), "utf8");
+  assert.match(ext, /registerCommand\("hypeproof-chat\.showPasses", \(surface\?: unknown\) => startPage\.showPurchase\(surface\)\)/, "the command forwards the surface to the start page");
+  assert.match(host, /executeCommand\("hypeproof-chat\.showPasses", msg\.surface === "header_menu" \? "header_menu" : "end_card"\)/, "the chat names the surface the pass list was opened from");
   assert.ok(!/event: "/.test(start.match(/funnelEmit\?\.\([^)]*\)/g)?.join("\n") ?? ""), "no revision-1 {event} calls");
 }
 
