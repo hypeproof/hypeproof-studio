@@ -19,6 +19,7 @@ import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from '.
 import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
 import { folderConsentProfile, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
+import { chatVisible, createFinishNotifier } from './finishNoticeHost';
 import { verifyActivity } from './proxyClient';
 import { fetchAccessView, sendBudgetRequest, accessProfile, type AccessState } from './accessClient';
 import { availableModelSelection, selectedModel, modelSelectionScope, type SavedModelChoice, selectedEffort, observedEffortResult, type SavedEffortChoice } from './modelSelection';
@@ -851,6 +852,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private editorChat?: vscode.WebviewPanel;
+  // REQ-STUDIO-FINISH-NOTICE — one calm notice when a turn ends while no chat surface is on screen.
+  // Lazy: fixtures build the provider with Object.create, which skips field initializers.
+  private finishNotice?: ReturnType<typeof createFinishNotifier>;
+  private get finishNotifier() { return (this.finishNotice ??= createFinishNotifier({ view: () => this.view, editor: () => this.editorChat })); }
   private activeStreams = new Map<string, AbortController>();
   // A send owns its activity before its first authentication await, through persistence.
   private pendingSends = 0;
@@ -6420,6 +6425,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.opsObserver?.turnResult({ ok: spoolStatus === "ok", aborted: ctrl.signal.aborted, runtime: spoolRuntime === "agent-sdk" ? "agent-sdk" : "proxy", sdkFallback: opsSdkFallback, ...(spoolErrorKind ? { errorKind: spoolErrorKind } : {}), ...opsFailure });
       const total = sdkTurnTotal.current;
       const finalSpoolStatus = ctrl.signal.aborted ? "aborted" : spoolStatus;
+      this.finishNotifier.turnEnded({ status: finalSpoolStatus, chatVisible: chatVisible({ view: () => this.view, editor: () => this.editorChat }), seat: profile, instructor: this._instructorMode?.isInstructor === true });
       // #1298 — clear pending model revert when the turn succeeded.
       if (finalSpoolStatus === "ok") this._instructorMode.onTurnSuccess();
       await Promise.all(observationCaptures);
