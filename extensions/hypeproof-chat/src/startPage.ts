@@ -59,7 +59,8 @@ const DEFAULT_SITE_BASE = "https://hypeproof-ai.xyz";
 const isLegacyHistoryKey = (key: string): boolean =>
   key === 'hypeproofChat.history' || (key.startsWith('hypeproofChat.history:') && !/:[a-f0-9]{64}$/.test(key));
 
-type Candidate = { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string; accountPass?: AccountPassBinding };
+/** `replacesFree` (CONV-PURCHASE-R-005): the free seat's binding id this paid pass replaces in place. */
+type Candidate = { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string; accountPass?: AccountPassBinding; replacesFree?: string };
 /** What a candidate's GitHub holds. Bound to one candidate: another code or a cancel retires it. */
 type GithubLook = { candidate: Candidate; classRoot: string; state: NonNullable<StartState["github"]>; login?: string; repos?: ClassRepo[] };
 
@@ -514,15 +515,20 @@ export class StartPage {
   }
   private async claimPurchase(order: PendingOrder): Promise<void> {
     this.stopPurchaseWait();
+    // CONV-PURCHASE-R-005 — read before the claim: the free seat this window runs, if any.
+    const freeSeat = this.freeSeatInWindow();
     this.purchaseStage = "connecting"; this.purchaseMessage = PURCHASE_COPY.connecting;
     await this.refresh();
     if (order.accountOwned) {
+      let activated = false;
       try {
         await this.accounts?.refreshView();
         await this.activateAccountPass(order.id);
         await this.context.secrets.delete(PENDING_PURCHASE_KEY);
         this.order = undefined; this.purchaseStage = undefined; this.purchaseMessage = undefined;
+        activated = true;
       } catch (e) { this.purchaseStage = "stopped"; this.purchaseMessage = e instanceof AccountError ? e.message : PURCHASE_COPY.claimFailed; }
+      if (activated) await this.switchSeatInPlace(freeSeat);
       await this.refresh(); return;
     }
     const claim = await claimWithRecovery(order);
@@ -542,8 +548,35 @@ export class StartPage {
     await this.handle({ type: "connectCourse", token: claim.code });
     if (this.candidate?.token === claim.code) {
       this.purchaseToken = claim.code; this.order = undefined; this.purchaseStage = undefined; this.purchaseMessage = undefined; this.error = undefined;
+      await this.switchSeatInPlace(freeSeat);
     } else { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.claimFailed; }
     await this.refresh();
+  }
+  /**
+   * CONV-PURCHASE-R-005 — the free seat this window runs (its folder binding pins the record to the
+   * window). Read from the saved record, not the profile: an ended free seat no longer serves one.
+   */
+  private freeSeatInWindow(): { id: string; workspace: string } | undefined {
+    const seat = activityConnections(this.context)?.current;
+    return seat?.free === true && seat.workspace ? { id: seat.id, workspace: seat.workspace } : undefined;
+  }
+  /**
+   * CONV-PURCHASE-R-005 / REQ-L12 ⑮ — the Service answered paid while this window runs a free seat:
+   * the pass takes the free seat's place without the preview press, in the same folder, through
+   * the ordinary entry (`beginCourse`: profile and activity check, binding, rollback). Free start
+   * never blocks: if anything in that entry fails, the free seat is restored by the entry's own
+   * rollback, the error is not shown, and today's preview stays with the pass's ordinary folder,
+   * so `이 활동 시작하기` (or `다시 연결`, the order record being kept) can try again.
+   */
+  private async switchSeatInPlace(seat: { id: string; workspace: string } | undefined): Promise<void> {
+    const c = this.candidate;
+    if (!seat || !c?.profile.pass) return;
+    const ordinary = c.workspace;
+    c.workspace = seat.workspace; c.replacesFree = seat.id;
+    await this.handle({ type: "beginCourse" });
+    if (this.candidate !== c) return; // entered (or the entry could not even restore: keep that message)
+    c.workspace = ordinary; c.replacesFree = undefined;
+    this.error = undefined;
   }
   private async handlePurchase(msg: StartRequest): Promise<void> {
     if (msg.type === "purchaseOpen") {
@@ -632,9 +665,11 @@ export class StartPage {
    * trial conversation. Only an offer is written here (once per pass); nothing is copied or mixed
    * until the learner confirms it in the chat. Off unless the Service advertises it.
    */
-  private async recordCarryoverOffer(profile: ResolvedProfile, root: string, previous: { id: string; name: string; workspace?: string; kind?: string; pass?: boolean } | undefined): Promise<void> {
+  private async recordCarryoverOffer(profile: ResolvedProfile, root: string, previous: { id: string; name: string; workspace?: string; kind?: string; pass?: boolean; free?: boolean } | undefined, replacedFree = false): Promise<void> {
     const pass = activityConnections(this.context)?.current;
-    if (!pass || !carryoverAdvertised(profile) || !passTakesOver(profile, root)) return;
+    // CONV-PURCHASE-R-005 — a pass that replaced the free seat in place took over that seat's folder,
+    // which may be a numbered free folder rather than the pass's own home.
+    if (!pass || !carryoverAdvertised(profile) || !(passTakesOver(profile, root) || replacedFree)) return;
     const from = carryoverSourceOf(previous, pass.id);
     if (!from) return;
     const key = carryoverOfferKey(pass.id);
@@ -883,16 +918,17 @@ export class StartPage {
             if (!root) throw new Error('작업 폴더를 선택해 주세요.');
             // REQ-L12 ⑫ — read who held this folder before the pass takes it over (carry-over offer).
             const previousHolder = carryoverAdvertised(profile) ? await connections.forWorkspace(root).catch(() => undefined) : undefined;
-            rollback = await connections.commit(candidate.token,profile!,root,candidate.accountPass);
-            await this.recordCarryoverOffer(profile!, root, previousHolder);
+            rollback = await connections.commit(candidate.token,profile!,root,candidate.accountPass,candidate.replacesFree ? { replacesFree: candidate.replacesFree } : undefined);
+            await this.recordCarryoverOffer(profile!, root, previousHolder, !!candidate.replacesFree && previousHolder?.id === candidate.replacesFree);
           } else await this.context.secrets.store(TOKEN_KEY, candidate.token);
           committed = true;
-          // REQ-L12 — the purchased activity is entered; the order record has done its job.
-          if (this.purchaseToken === candidate.token) { this.purchaseToken = undefined; await this.context.secrets.delete(PENDING_PURCHASE_KEY); }
           this.chat.invalidateProfile();
           if (vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1") !== candidate.proxyUrl) throw new Error("Activity Service changed during confirmation");
           if (!await this.chat.ensureProfile(true)) throw new Error('connection validation failed');
           if (!this.panel || this.candidate !== candidate) throw new Error("Activity entry was cancelled");
+          // REQ-L12 ⑦ — the purchased activity is entered and verified; the order record has done its job.
+          // Retired only now: a check above that fails rolls the entry back and must leave 다시 연결 possible.
+          if (this.purchaseToken === candidate.token) { this.purchaseToken = undefined; await this.context.secrets.delete(PENDING_PURCHASE_KEY); }
           this.candidate = undefined;
         };
         const selectedWorkspace = candidate?.workspace ?? (connections?.matchesService && connections.current?.serverId === profile.activity_id ? connections.current?.workspace : undefined);
