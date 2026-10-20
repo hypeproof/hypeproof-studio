@@ -339,6 +339,7 @@ const CLASSROOM_SHARED = {
 // personal chat shell can render are LEARNER here and get a personal-scoped token override in
 // chatDetails.css; classroom rendering is out of DEC-29's scope and unchanged.
 const SHARED_LEARNER = [
+  ".hp-ai-can-do-label",
   ".hps-coach-name", ".hps-header button", ".hps-msg-role", ".hps-user-actions button", ".hps-version-pager", ".hps-version-note",
   ".hps-edit-note", ".hps-cit-chip", ".hps-cit-domain", ".hps-msg-run, .hps-msg-retry", ".hps-naming-btn-ghost", ".hps-thinking-details pre",
   ".hps-code-progress", ".hps-codepill-toggle", ".hps-codepill-body", ".hps-empty-sub", ".hps-chips-label", ".hps-chip-text", ".hps-chip-caption",
@@ -594,6 +595,20 @@ const real = { ...Object.fromEntries(ORDER.map((f) => [f, read(f)])), "TaskWorks
   // Classroom (no personal shell) keeps its own sizes: the change is personal-scoped.
   assert.equal(compute(rules, [...PAGE, "div.hps-shell", "div.hps-msg", "div.hps-msg-role"], env).px, 11, "classroom role line is unchanged (11px)");
 }
+
+// CGP-AGENT-D-002: the capability label is body-sized in both seats, even at 320px.
+const capabilityRules = []; for (const f of ORDER) capabilityRules.push(...parseCss(real[f], f, capabilityRules.length));
+for (const personal of [true, false]) for (const w of [320, 800, 1420]) {
+  const ctx = personal ? shellCtx("base") : ["body", "div.hps-shell"];
+  const label = compute(capabilityRules, [...ctx, "details.hp-rail-lesson.hp-ai-can-do", "ul", "li", "span.hp-ai-can-do-label"], { w, h: 900, forced: false, reduce: false });
+  assert.equal(label.px, 16, `capability label at ${w}px personal=${personal}`);
+}
+// Structural CSS checks supplement the rendered-row test. Actual geometry is a browser check.
+const cardRule = selector => capabilityRules.find(r => r.text === selector);
+const cardProperty = (selector, prop) => cardRule(selector)?.decls.find(d => d.prop === prop)?.value;
+assert.equal(cardProperty(".hp-ai-can-do li", "min-height"), "44px", "capability row height floor");
+assert.equal(cardProperty(".hp-ai-can-do ul", "grid-template-columns"), "minmax(0, 1fr)", "one shrinkable column");
+assert.equal(cardProperty(".hp-ai-can-do li", "overflow-wrap"), "anywhere", "long labels wrap inside the column");
 
 const result = check(real);
 if (result.findings.length) {

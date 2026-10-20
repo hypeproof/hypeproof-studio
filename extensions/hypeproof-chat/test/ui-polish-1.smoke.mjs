@@ -231,12 +231,22 @@ try {
   assert.ok(!/<details[^>]*\bopen\b/.test(card.slice(0, 80)), "card is drawn open");
   assert.ok(card.includes('<span class="hp-ai-can-do-title">여기서 AI가 할 수 있는 일</span><span class="hp-ai-can-do-count">6가지 중 4가지<span class="hp-ai-can-do-more"> · 자세히</span></span>'), "one-line summary with the count");
   assert.ok(!card.includes("<strong"), "raw bold state words");
-  const rows = [...card.matchAll(/<li data-capability="(\w+)" data-on="(true|false)">([\s\S]*?)<\/li>/g)];
+  const rows = [...card.matchAll(/<li data-capability="(\w+)" data-on="(true|false)" aria-label="[^"]+">([\s\S]*?)<\/li>/g)];
   assert.equal(rows.length, 6, "six rows");
   for (const [, key, on, body] of rows) {
-    assert.match(body, /^<span class="hp-ai-can-do-mark"><svg [^>]*data-icon="(?:check|minus)"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg><\/span><span class="hp-ai-can-do-label">[^<]+<\/span><span class="hp-ai-can-do-state">(해요|안 해요)<\/span>$/, `${key}: row shape`);
-    assert.equal(/state">해요</.test(body), on === "true", `${key}: state word disagrees with data-on`);
+    assert.match(body, /^<span class="hp-ai-can-do-mark"><svg [^>]*data-icon="(?:check|minus|info)"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg><\/span><span class="hp-ai-can-do-label">[^<]+<\/span><span class="hp-ai-can-do-state">(해요|안 해요|물어봐요)<\/span>$/, `${key}: row shape`);
+    assert.equal(/state">안 해요</.test(body), on === "false", `${key}: state word disagrees with data-on`);
+    assert.equal(/state">물어봐요</.test(body), key === "browser", `${key}: conditional browser confirmation`);
   }
+  });
+  await check("render 1: the browser row says 해요 on the proxy runtime, where the browser loop has no approval modal (control: agent-sdk asks)", () => {
+  const stateOf = (rows, key) => {
+    const card = /<details class="hp-rail-lesson hp-ai-can-do">[\s\S]*?<\/details>/.exec(panel({ taskWorkspace: view, aiCapabilities: rows }))?.[0] ?? "";
+    return new RegExp(`data-capability="${key}"[\\s\\S]*?hp-ai-can-do-state">([^<]+)<`).exec(card)?.[1];
+  };
+  const grants = { sdk_tools: { read: true, write: true, shell: true, browser: true }, tools: { web_search: true }, browser_control: { enabled: true } };
+  assert.equal(stateOf(aiCapabilities(grants, "agent-sdk"), "browser"), "물어봐요", "control: agent-sdk browser asks");
+  assert.equal(stateOf(aiCapabilities(grants, "proxy"), "browser"), "해요", "proxy browser auto-runs");
   });
   await check("render 1: a seat with no capability reads 지금은 없음 (never 0가지)", () => {
   const none = panel({ taskWorkspace: view, aiCapabilities: aiCapabilities(null, "proxy") });

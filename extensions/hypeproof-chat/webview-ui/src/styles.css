@@ -2022,11 +2022,11 @@ html, body, #root {
 .hp-ai-can-do-title { font-weight: 550; }
 .hp-ai-can-do-count { color: var(--hp-ai-can-do-muted); }
 .hp-ai-can-do[open] .hp-ai-can-do-more { display: none; }
-.hp-ai-can-do ul { margin: 4px 0 8px; padding: 0; list-style: none; display: grid; gap: 2px; }
-.hp-ai-can-do li { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 8px; overflow-wrap: anywhere; word-break: keep-all; }
+.hp-ai-can-do ul { margin: 4px 0 8px; padding: 0; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.hp-ai-can-do li { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; overflow-wrap: anywhere; word-break: keep-all; }
 .hp-ai-can-do-mark { flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; box-sizing: border-box; border: 1px solid currentColor; border-radius: 50%; font-size: 12px; line-height: 1; }
 .hp-ai-can-do li[data-on="false"] .hp-ai-can-do-mark { border-style: dashed; }
-.hp-ai-can-do-label { flex: 1 1 auto; min-width: 0; }
+.hp-ai-can-do-label { flex: 1 1 auto; min-width: 0; font-size: var(--hp-text-body); }
 .hp-ai-can-do-state { flex: none; font-weight: 400; }
 .hp-ai-can-do li[data-on="false"] { color: var(--hp-ai-can-do-muted); }
 .hp-ai-can-do > .hp-rail-lesson-note { margin: 0; padding: 8px 8px 4px; border-top: 1px solid var(--hp-line); color: var(--hp-ai-can-do-muted); }

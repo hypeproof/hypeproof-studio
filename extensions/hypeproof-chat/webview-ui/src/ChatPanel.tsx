@@ -1,3 +1,4 @@
+import { aiCapabilityState } from "../../src/aiCapabilities";
 import { CitationRack as PersonalCitationRack } from './CitationPreview';
 import type { RecoveredRequest, InlineEditDraft } from '../../src/activityDraft';
 import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
@@ -2026,12 +2027,13 @@ function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilitie
       <span className="hp-ai-can-do-count">{onCount ? `${items.length}가지 중 ${onCount}가지` : '지금은 없음'}<span className="hp-ai-can-do-more"> · 자세히</span></span>
     </summary>
     <ul>
-      {items.map(item => <li key={item.key} data-capability={item.key} data-on={item.on ? 'true' : 'false'}>
-        <span className="hp-ai-can-do-mark"><ChatIcon kind={item.on ? 'check' : 'minus'} size={16} /></span>
+      {items.map(item => <li key={item.key} data-capability={item.key} data-on={item.on ? 'true' : 'false'} aria-label={`${item.label}: ${aiCapabilityState(item)}`}>
+        <span className="hp-ai-can-do-mark"><ChatIcon kind={!item.on ? 'minus' : item.asks === true ? 'info' : 'check'} size={16} /></span>
         <span className="hp-ai-can-do-label">{item.label}</span>
-        <span className="hp-ai-can-do-state">{item.on ? '해요' : '안 해요'}</span>
+        <span className="hp-ai-can-do-state">{aiCapabilityState(item)}</span>
       </li>)}
     </ul>
+    {items.some(item => item.on && item.asks === true) && <p className="hp-rail-lesson-note">물어봐요: 확인이 필요한 동작을 하기 전에 허락을 받아요. 이미 허락했거나 확인이 필요 없는 동작은 바로 할 수 있어요.</p>}
     <p className="hp-rail-lesson-note">{solo ? '지금 쓰는 체험·이용권에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
   </details>;
 }
