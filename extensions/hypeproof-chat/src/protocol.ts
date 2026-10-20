@@ -760,7 +760,8 @@ export type HostMessage = (
   | { type: "contextTrim"; boundaryId: string | null }
   /** CGP-CHAT-R-005 — the active task's latest verdict per answer, read from the local sidecar. */
   | { type: "answerVerdicts"; requestId?: string; messageId?: string; taskId?: string; verdicts: import('./answerVerdict').VerdictMap }
-  | { type: "streamStart"; streamId: string; messageId: string }
+  /** `userMessageId` (REQ-STUDIO-STEER-NOW): the learner request this turn answers; absent for app-initiated replies. */
+  | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
   | { type: "streamChunk"; streamId: string; delta: string }
   | { type: "streamCitations"; streamId: string; citations: Citation[] }  // #173
   // SX-59 — the host message that used to leak capability scores to the webview

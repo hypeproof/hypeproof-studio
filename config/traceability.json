@@ -6948,6 +6948,39 @@
           "path": "extensions/hypeproof-chat/test/offline-banner.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-STEER-NOW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/steerNow.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/turnSettle.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-STEER-NOW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE",
+        "ST-IMP-STEER-NOW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/steer-now.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/steer-settle.smoke.mjs"
+        }
+      ]
     }
   ]
 }

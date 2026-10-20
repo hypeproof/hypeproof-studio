@@ -149,6 +149,10 @@ class Document extends Node {
     this.documentElement.appendChild(this.body);
     this.activeElement = this.body;
     this.visibilityState = "visible"; this.hidden = false;
+    // react-dom probes `"oninput" in document` once at load; without it, it falls back to an IE
+    // polyfill (attachEvent) that cannot run here. Typing then works by setting `value` and
+    // dispatching a bubbling "input" event.
+    this.oninput = null;
   }
   hasFocus() { return true; }
   querySelectorAll(selector) { return this.documentElement.findAll((e) => e.matches(selector)); }

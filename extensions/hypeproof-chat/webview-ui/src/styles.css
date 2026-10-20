@@ -1885,6 +1885,10 @@ html, body, #root {
 .hps-queued-send:disabled { opacity: .5; cursor: default; }
 .hps-queued-send:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
 .hps-recovered { font-size: 12px; }
+/* CGP-CHAT-R-012 — "지금 방향 바꾸기": a secondary action on the parked message, 44px target. */
+.hps-queued-steer { min-width: 44px; min-height: 44px; }
+.hps-queued-steer[aria-disabled="true"] { opacity: .6; cursor: default; }
+.hps-steer-mark { margin-top: 2px; }
 
 /* CGP-DS-R-028: Korean prose wraps at word (eojeol) boundaries; long URLs and tokens still wrap. */
 .hps-msg-body, .hps-prose, .hp-mission-sentence, .hp-mission-acceptance, .hps-error-banner-msg, .hps-stop-notice {
