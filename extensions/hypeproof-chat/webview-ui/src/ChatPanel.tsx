@@ -69,7 +69,7 @@ import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { groupDelegations } from "../../src/delegationRow";
 import { activeLongStep, longStepHint, type ActiveLongStep } from "../../src/longStepHint";
 import { DelegationRow } from "./DelegationRow";
-import { PanelBoundary } from "./PanelBoundary";
+import { guardHostPayload, PanelBoundary } from "./PanelBoundary";
 import { CONTEXT_COMPACT_NOTE, CONTEXT_TRIM_NOTE, isCompactionLine, trimMarkerIndex } from "../../src/contextTrim";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
@@ -412,8 +412,9 @@ export function ChatPanel(props: Props) {
   useEffect(() => { setGoalNote(null); }, [config?.profile?.lesson?.sha256]);
   useEffect(() => onHostMessage((msg) => {
     if (msg.type !== "goalState") return;
-    setGoalAnswer((prev) => acceptGoalView(prev, msg.view));
-    const note = goalNoteFor(msg, goalRequest.current);
+    // A malformed answer keeps the goal already shown.
+    setGoalAnswer((prev) => guardHostPayload("goal-state", () => acceptGoalView(prev, msg.view), prev));
+    const note = guardHostPayload("goal-state", () => goalNoteFor(msg, goalRequest.current), undefined);
     if (note === undefined) return;
     goalRequest.current = null;
     setGoalPending(false);
@@ -537,6 +538,9 @@ export function ChatPanel(props: Props) {
     const off = onHostMessage((msg) => {
       if (msg.type === "config") recordKeyNow.current = recordViewKey(msg.config);
       if (msg.type !== "learningState") return;
+      // A malformed state clears the evidence region and is reported once (a listener throw would fail
+      // silently). The checks are pure, so running them first changes nothing for a good state.
+      if (!guardHostPayload("learning-state", () => { void msg.state.task; stepViewOnState(stepView.current, msg.state); recordShownBy(msg.state); return true; }, false)) { setLearning(null); return; }
       setLearning(msg.state);
       learningTask.current = msg.state.task;
       const next = stepViewOnState(stepView.current, msg.state);
@@ -567,7 +571,8 @@ export function ChatPanel(props: Props) {
   // REQ-STUDIO-PAGE-CARD — page cards of this task's coach turns, keyed by the chat row each sits under.
   const [pageCards, setPageCards] = useState<Map<string, import("../../src/pageCard").PageCardView>>(() => new Map());
   useEffect(() => {
-    const off = onHostMessage((msg) => { if (msg.type === "pageCardsState") setPageCards(new Map(msg.cards.map((c) => [c.anchorId, c]))); });
+    // A malformed payload becomes no cards and one report (a listener throw would fail silently).
+    const off = onHostMessage((msg) => { if (msg.type === "pageCardsState") setPageCards(guardHostPayload("page-cards", () => new Map(msg.cards.map((c) => [c.anchorId, c])), new Map())); });
     postToHost({ type: "pageCardsRequest" });
     return off;
   }, []);
@@ -592,7 +597,7 @@ export function ChatPanel(props: Props) {
     const off = onHostMessage((msg) => {
       if (msg.type !== "previewRecovery") return;
       setPreviewSignals(msg.signals);
-      if (msg.result) { setPreviewBusy(false); setPreviewNote(previewRecoveryNote(msg.result, msg.signals)); }
+      if (msg.result) { setPreviewBusy(false); setPreviewNote(guardHostPayload("preview-recovery", () => previewRecoveryNote(msg.result!, msg.signals), null)); }
       else if (!msg.signals) setPreviewNote(null);
     });
     const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "previewRecoveryRequest" }); };
@@ -604,7 +609,7 @@ export function ChatPanel(props: Props) {
   const [help, setHelp] = useState<import("../../src/classroomHelp").HelpView | null>(null);
   useEffect(() => {
     // The host numbers its draws; one that arrives after a newer draw (an older learner's, or an older read) is not shown.
-    const off = onHostMessage((msg) => { if (msg.type === "helpState") setHelp((prev) => acceptHelp(prev, msg.help)); });
+    const off = onHostMessage((msg) => { if (msg.type === "helpState") setHelp((prev) => guardHostPayload("help", () => acceptHelp(prev, msg.help), null)); });
     const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "helpRequest" }); };
     ask(); document.addEventListener("visibilitychange", ask);
     const stop = () => { off(); document.removeEventListener("visibilitychange", ask); };
@@ -717,7 +722,8 @@ export function ChatPanel(props: Props) {
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error });
   // CGP-SHELL-R-011 — offline banner and reconnect line; nothing is sent on reconnect.
   const connectivity = useConnectivity();
-  const previewView = previewRecoveryView(previewSignals, connectivity.online);
+  // Malformed signals from the host draw no recovery line (and one report) instead of failing the chat's render.
+  const previewView = guardHostPayload("preview-recovery", () => previewRecoveryView(previewSignals, connectivity.online), null);
   // One live region: the most recent line wins, so a reconnect is heard after a finished turn.
   // REQ-STUDIO-LONG-STEP-HINT — the hint's 20 s and 60 s lines go through this always-mounted region.
   const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
@@ -1490,11 +1496,11 @@ export function ChatPanel(props: Props) {
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
       {!connectivity.online && <div className="hps-offline-banner" role="status" data-testid="offline-banner">{OFFLINE_BANNER_TEXT}</div>}
-      {(previewView || previewNote) && <PreviewRecoveryNotice view={previewView} note={previewNote} busy={previewBusy} onAction={(action) => {
+      {(previewView || previewNote) && <PanelBoundary panel="preview-recovery"><PreviewRecoveryNotice view={previewView} note={previewNote} busy={previewBusy} onAction={(action) => {
         setPreviewBusy(true); setPreviewNote(null);
         let sent = false;
         try { postToHost({ type: "previewRecoveryAction", action }); sent = true; } finally { if (!sent) setPreviewBusy(false); }
-      }} />}
+      }} /></PanelBoundary>}
       <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
         {props.aiNotice && (
           // #320 — AI disclosure (Anthropic Usage Policy / ToS §D.3). Compact
@@ -1581,13 +1587,12 @@ export function ChatPanel(props: Props) {
         </CodeBlockScope>
 
         {/* REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019) — one calm hint under a tool step running 20 s+. */}
-        {longStep && <LongStepHintLine
-          key={`${longStep.id}@${longStep.since}`}
+        {longStep && <PanelBoundary key={`${longStep.id}@${longStep.since}`} panel="long-step"><LongStepHintLine
           step={longStep}
           turn={{ streaming, stalled: !!error }}
           onStop={() => { restoreQueuedToDraft(); props.onCancel(); }}
           onAnnounce={setLongStepAnnouncement}
-        />}
+        /></PanelBoundary>}
 
         {props.pageNotice && (
           <div className="hps-page-notice" role="status" aria-live="polite">
@@ -1656,7 +1661,7 @@ export function ChatPanel(props: Props) {
           </div>
         )}
 
-        {props.verifyPanel && <PanelBoundary panel="verify-panel">{props.verifyPanel}</PanelBoundary>}
+        {props.verifyPanel}
 
         {/* #497 — the notice right after Stop. It is not an error, so it is announced as
             a quiet inline status line rather than an error banner. It goes away on the
@@ -1695,7 +1700,7 @@ export function ChatPanel(props: Props) {
         )}
 
         {error && props.trialEndCard && props.onTrialEndCardPasses ? (
-          <PanelBoundary panel="trial-end"><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={props.onDismissError} /></PanelBoundary>
+          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={props.onDismissError} /></PanelBoundary>
         ) : error && (
           <ErrorBanner
             message={error}
@@ -1731,7 +1736,7 @@ export function ChatPanel(props: Props) {
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
-        {folderMissing && missingFolder && <PanelBoundary panel="missing-folder"><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} /></PanelBoundary>}
+        {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} /></PanelBoundary>}
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read
@@ -1968,6 +1973,8 @@ export function ChatPanel(props: Props) {
         </div>
       </footer>
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
+        {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}
+        <PanelBoundary panel="settings">{() => <>
         <details className="hps-advanced-response"><summary>응답 고급 설정</summary>
           <p>선택한 설정은 다음 요청부터 적용됩니다.</p>
           <ModelControl config={config} streaming={streaming} />
@@ -1984,6 +1991,7 @@ export function ChatPanel(props: Props) {
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
+        </>}</PanelBoundary>
       </ChatPreferences>}
     </div>
   );

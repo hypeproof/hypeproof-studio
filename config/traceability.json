@@ -7548,6 +7548,9 @@
           "path": "extensions/hypeproof-chat/test/panel-boundary.test.tsx"
         },
         {
+          "path": "extensions/hypeproof-chat/test/panel-boundary.build.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/fixtures/mini-dom.mjs"
         }
       ]

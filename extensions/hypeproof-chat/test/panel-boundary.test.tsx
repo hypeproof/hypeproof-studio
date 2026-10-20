@@ -5,17 +5,23 @@
 // while the composer keeps its draft and the transcript still renders. 다시 불러오기 remounts only
 // that panel; a second throw shows the same fallback without looping; the report goes out once and
 // carries no learner text; the top-level boundary still catches a throw in the composer itself.
-// Bundled with esbuild and run with plain Node; the banner captures what the webview posts.
+// Every wrapped panel is also thrown on purpose from inside its own component (the build script
+// test/panel-boundary.build.mjs instruments each one) in the real App, data-driven over PANELS:
+// only that panel's fallback appears. A panel moved out of its boundary fails that row.
+// Bundled by test/panel-boundary.build.mjs and run with plain Node; the banner captures what the
+// webview posts.
 
 import { click, mountPoint } from "./fixtures/mini-dom.mjs";
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { readFileSync } from "node:fs";
 import { App } from "../webview-ui/src/App";
-import { ChatPanel } from "../webview-ui/src/ChatPanel";
 import { ChatErrorBoundary } from "../webview-ui/src/ChatErrorBoundary";
 import { TaskWorkspaceFrame } from "../webview-ui/src/TaskWorkspace";
-import { PanelBoundary, PANEL_FALLBACK_TEXT, PANEL_RETRY_LABEL, panelErrorReport, resetPanelReports } from "../webview-ui/src/PanelBoundary";
+import { PanelBoundary, PANEL_BLOCKED_TEXT, PANEL_FALLBACK_TEXT, PANEL_RETRY_LABEL, panelErrorReport, resetPanelReports } from "../webview-ui/src/PanelBoundary";
+import { delegationRowId } from "../src/delegationRow";
+import { missingTaskFolderNotice } from "../src/missingTaskFolder";
+import { learningState } from "../src/learningStateHelpers";
 import type { ChatConfig } from "../src/protocol";
 
 const act: (fn: () => unknown) => Promise<void> = (React as unknown as { act: (fn: () => unknown) => Promise<void> }).act;
@@ -109,7 +115,7 @@ let throwRenders = 0;
 function Thrower({ always = false, text = "" }: { always?: boolean; text?: string }) {
   throwRenders++;
   if (always || throwing > 0) { if (!always) throwing--; throw new Error(`render failed for ${text}`); }
-  return <p data-testid="thrower-ok">패널 내용</p>;
+  return <p data-testid="thrower-ok">패널 내용 <button type="button" data-testid="panel-first">자세히</button></p>;
 }
 
 t("personal: a throwing task rail shows only its fallback; the draft and the transcript stay", async () => {
@@ -123,7 +129,7 @@ t("personal: a throwing task rail shows only its fallback; the draft and the tra
   ok(userRow, "transcript renders");
   await hostMsg({ type: "taskWorkspaceState", view: view(Number.NaN), activityId: "p1", taskId: "t1" });
   ok(h.fallback("task-rail"), "the task rail shows its fallback");
-  eq(h.fatal(), undefined, "the whole-panel fatal screen did not take over");
+  ok(!h.fatal(), "the whole-panel fatal screen did not take over");
   eq(h.fallbacks().length, 1, "only the failed panel");
   ok(h.fallback("task-rail").textContent.includes(PANEL_FALLBACK_TEXT), "calm sentence");
   eq(h.retry("task-rail").textContent.trim(), PANEL_RETRY_LABEL, "one 다시 불러오기 action");
@@ -157,7 +163,7 @@ t("personal: 다시 불러오기 remounts only the task rail; the draft and the 
   eq(h.textarea(), textarea, "the composer node is the same one");
   eq(h.textarea().value, "고양이 그려 줘", "the draft is kept");
   eq(h.message("고양이 사진을 모아 줘"), userRow, "the transcript row node is the same one");
-  eq(h.fatal(), undefined, "no fatal screen");
+  ok(!h.fatal(), "no fatal screen");
 });
 
 t("personal: a second throw after 다시 불러오기 shows the same fallback, once, with no loop", async () => {
@@ -168,11 +174,11 @@ t("personal: a second throw after 다시 불러오기 shows the same fallback, o
   await h.press(h.retry("task-rail"));
   ok(h.fallback("task-rail"), "still broken: the same fallback");
   eq(h.fallbacks().length, 1, "one fallback");
-  eq(h.fatal(), undefined, "the second throw did not escalate to the fatal screen");
+  ok(!h.fatal(), "the second throw did not escalate to the fatal screen");
   eq(h.textarea().value, "고양이 그려 줘", "the draft is kept");
   eq(reports().length, 1, "still reported only once");
   const doc = (globalThis as unknown as { document: { activeElement: unknown } }).document;
-  eq(doc.activeElement, h.retry("task-rail"), "focus stays on 다시 불러오기");
+  ok(doc.activeElement === h.retry("task-rail"), "focus stays on 다시 불러오기");
 });
 
 t("no loop: a panel that always throws renders a bounded number of times and stays put", async () => {
@@ -221,7 +227,7 @@ t("retry recovers a panel that threw once (positive control), and only that pane
   let siblingMounts = 0;
   function Sibling() { React.useEffect(() => { siblingMounts++; }, []); return <span>옆 패널</span>; }
   throwing = 100; // every render (React's replays included) throws until the panel is fixed
-  const m = mount(<div><PanelBoundary panel="evidence"><Thrower /></PanelBoundary><PanelBoundary panel="help-request"><Sibling /></PanelBoundary></div>);
+  const m = mount(<div><button type="button">앞 버튼</button><PanelBoundary panel="evidence"><Thrower /></PanelBoundary><button type="button" data-testid="after">뒤 버튼</button><PanelBoundary panel="help-request"><Sibling /></PanelBoundary></div>);
   await m.render();
   const h = probe(m.host);
   ok(h.fallback("evidence"), "failed first");
@@ -230,33 +236,144 @@ t("retry recovers a panel that threw once (positive control), and only that pane
   eq(h.fallback("evidence"), undefined, "recovered");
   ok(m.host.findAll((e) => e.getAttribute("data-testid") === "thrower-ok").length === 1, "panel content back");
   eq(siblingMounts, 1, "the sibling panel was not remounted");
+  const doc = (globalThis as unknown as { document: { activeElement: El } }).document;
+  eq(doc.activeElement?.getAttribute("data-testid"), "panel-first", "focus moved to the panel's first focusable element (not <body>, not the next button)");
 });
 
-t("classroom: a throwing verify panel shows its fallback; the composer keeps its draft", async () => {
-  resetPanelReports(); posted.length = 0;
-  const props: Record<string, unknown> = {
-    messages: HISTORY, streaming: false, streamingId: null, error: null, errorRequestId: null, errorRunbookUrl: null, canRetryLast: false,
-    pageNotice: null, aiNotice: null, stopNotice: null, openWorldId: null, publish: null, incomingImage: null,
-    onSend: noop, onRetry: noop, onRetryLast: noop, onDismissError: noop, onCancel: noop, onClear: noop,
-    onSetToken: noop, onSettings: noop, onRunCode: noop, onNamingRitual: noop, onSaveCoach: noop,
-    onReportProblem: noop, onInstallUpdate: noop, onDismissUpdate: noop, onPublish: noop,
-    config: classroom, instructor: false,
-  };
-  const panel = (verifyPanel: React.ReactNode) => <ChatErrorBoundary><ChatPanel {...(props as React.ComponentProps<typeof ChatPanel>)} verifyPanel={verifyPanel} /></ChatErrorBoundary>;
-  const host = mountPoint() as unknown as El;
-  const root = createRoot(host as unknown as HTMLElement);
-  mounted.push(root);
-  await act(async () => { root.render(panel(<p>검증 패널</p>)); });
-  const h = probe(host);
-  eq(h.fallbacks().length, 0, "healthy verify panel: no fallback (negative control)");
-  await h.type("발표 준비");
-  const textarea = h.textarea();
-  await act(async () => { root.render(panel(<Thrower always />)); });
-  ok(h.fallback("verify-panel"), "the verify panel shows its fallback");
-  eq(h.fatal(), undefined, "no fatal screen");
-  eq(h.textarea(), textarea, "the composer was not remounted");
-  eq(h.textarea().value, "발표 준비", "the draft is kept");
-  ok(h.text().includes("갤러리를 만들었어요"), "the transcript still renders");
+// ─── Every wrapped panel, thrown from inside its own component, in the real App ───────────────
+const WEEK = JSON.parse(readFileSync("test/fixtures/session-design/week-3.json", "utf8"));
+const classroomApp = {
+  proxyUrl: "http://localhost:8787/v1", model: "claude-sonnet-5", hasToken: true,
+  coach: { name: "코치", personality: "", configured: true },
+  activity: { id: "c1", name: "GlobalBuddy", kind: "classroom", workspace: "/w", verified: true },
+  profile: { profile_id: "sx-fixture", display_name: WEEK.title, language: "ko", series_index: 3, series_total: 6,
+    welcome: { greeting_md: "오늘 수업", example_prompts: [] }, ux: UX,
+    lesson: { course_id: "globalbuddy", version: "m2026.09.20-1", sha256: "f".repeat(64), content: WEEK } },
+} as unknown as ChatConfig;
+const CITED = [
+  { id: "u1", role: "user", content: "자료 찾아 줘", createdAt: 1 },
+  { id: "a1", role: "assistant", content: "찾았어요", createdAt: 2, citations: [{ url: "https://example.com/cats", title: "고양이" }] },
+];
+const DELEGATED = [
+  { id: "u1", role: "user", content: "리뷰 부탁해", createdAt: 1 },
+  { id: "a1", role: "assistant", content: "맡겨 볼게요", createdAt: 2 },
+  { id: delegationRowId("toolu_T", "s0"), role: "tool", content: "", createdAt: 3, tool: { icon: "🤝", label: "코드리뷰어: 살펴봐 줘", state: "done" } },
+];
+type Row = { panel: string; key: string | null; mode: "personal" | "classroom"; config?: Record<string, unknown>; history?: unknown[]; msgs?: () => Record<string, unknown>[]; blocking?: boolean };
+const PANELS: Row[] = [
+  { panel: "task-sources", key: "CitationPreview.tsx:CitationPreview", mode: "personal", history: CITED },
+  { panel: "citations", key: "CitationPreview.tsx:CitationRack", mode: "personal", history: CITED },
+  { panel: "citations", key: "ChatPanel.tsx:CitationRack", mode: "classroom", history: CITED },
+  { panel: "page-card", key: "PageCard.tsx:PageCard", mode: "personal", msgs: () => [{ type: "pageCardsState", cards: [{ turnId: "s1", anchorId: "a1", pages: [] }] }] },
+  { panel: "delegation", key: "DelegationRow.tsx:DelegationRow", mode: "personal", history: DELEGATED },
+  { panel: "turn-review", key: "TurnReviewBar.tsx:TurnReviewBar", mode: "personal", msgs: () => [{ type: "turnReviewState", view: { turnId: "s1" } }] },
+  { panel: "missing-folder", key: "MissingFolderNotice.tsx:MissingFolderNotice", mode: "personal", blocking: true, msgs: () => [{ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") }] },
+  { panel: "preview-recovery", key: "PreviewRecoveryNotice.tsx:PreviewRecoveryNotice", mode: "personal", msgs: () => [{ type: "previewRecovery", signals: { server: "stopped", status: null, path: "/", needsNetwork: false } }] },
+  { panel: "long-step", key: "ChatPanel.tsx:LongStepHintLine", mode: "personal", msgs: () => [
+    { type: "userSent", text: "빌드해 줘", id: "u9" }, { type: "streamStart", streamId: "s1", messageId: "a9" },
+    { type: "toolLog", streamId: "s1", id: "toolu_B", icon: "🔧", label: "Bash(npm run build)", state: "running", step: "명령을 실행하는 중…", since: Date.now() - 25_000 }] },
+  { panel: "trial-end", key: "TrialEndCard.tsx:TrialEndCard", mode: "personal", blocking: true, msgs: () => [
+    { type: "userSent", text: "더 해 줘", id: "u9" }, { type: "streamStart", streamId: "s1", messageId: "a9" },
+    { type: "streamError", streamId: "s1", error: "체험이 끝났어요", trialEndCard: { kind: "ended" } }] },
+  { panel: "settings", key: "AccessControl.tsx:AccessControl", mode: "personal" },
+  { panel: "ai-can-do", key: "ChatPanel.tsx:AiCanDo", mode: "personal", config: { aiCapabilities: [] } },
+  { panel: "capability-change", key: "ChatPanel.tsx:CapabilityChangeCard", mode: "personal", config: { capabilityChange: { id: "c1" } } },
+  { panel: "carryover", key: "TrialCarryover.tsx:TrialCarryover", mode: "personal", config: { carryover: {} } },
+  { panel: "verify", key: "VerifyPanel.tsx:VerifyPanel", mode: "personal", msgs: () => [{ type: "verifyState", view: {} }] },
+  { panel: "publish", key: "PublishPanel.tsx:PublishPanel", mode: "personal", msgs: () => [{ type: "publishState", view: {} }] },
+  { panel: "evidence-panel", key: "EvidencePanel.tsx:EvidencePanel", mode: "personal", msgs: () => [{ type: "evidenceState", view: {} }] },
+  { panel: "memory", key: "MemoryPanel.tsx:MemoryPanel", mode: "personal", msgs: () => [{ type: "memoryState", view: {} }] },
+  { panel: "skills", key: "SkillsPanel.tsx:SkillsPanel", mode: "personal", msgs: () => [{ type: "skillsState", view: {} }] },
+  { panel: "review", key: "ReviewPanel.tsx:ReviewPanel", mode: "personal", msgs: () => [{ type: "reviewState", view: { mode: "learner" } }] },
+  { panel: "verify", key: "VerifyPanel.tsx:VerifyPanel", mode: "classroom", msgs: () => [{ type: "verifyState", view: {} }] },
+  { panel: "mission-header", key: "MissionHeader.tsx:MissionHeader", mode: "classroom" },
+  { panel: "student-goal", key: "StudentGoal.tsx:StudentGoal", mode: "classroom" },
+  { panel: "lesson", key: "LessonStepPanel.tsx:LessonStepPanel", mode: "classroom" },
+  { panel: "instructor-inbox", key: "InstructorInbox.tsx:InstructorInbox", mode: "classroom" },
+  { panel: "help-request", key: "HelpRequest.tsx:HelpRequest", mode: "classroom" },
+  { panel: "evidence", key: "CompletionGate.tsx:CompletionGate", mode: "classroom", msgs: () => [{ type: "learningState", state: learningState({ task: "t", events: [] }) }] },
+  { panel: "observation", key: "NativeObservationPanel.tsx:NativeObservationPanel", mode: "classroom", config: { profile: { ...(classroomApp as unknown as { profile: object }).profile, observation: { format: "hps-observation/1", scope: "s", assess: true, record: true } } } },
+];
+// EvidenceDrawer sits inside the evidence region beside CompletionGate; it uses a <select>, which
+// mini-dom does not model, so it is always stubbed.
+const ALL_KEYS = [...new Set(PANELS.map((r) => r.key).filter((k): k is string => !!k)), "EvidenceDrawer.tsx:EvidenceDrawer"];
+type G = { __hpsPanelThrow?: string; __hpsStub?: Set<string>; __hpsRendered?: Set<string> };
+const g = globalThis as unknown as G;
+
+async function scenario(row: Row) {
+  const base = row.mode === "personal" ? personal : classroomApp;
+  const config = { ...base, ...(row.config ?? {}) } as ChatConfig;
+  const m = mount(<App />);
+  await m.render();
+  const ctx = row.mode === "personal" ? { activityId: "p1", taskId: "t1" } : {};
+  await hostMsg({ type: "config", config });
+  await hostMsg({ type: "history", messages: row.history ?? HISTORY, ...ctx });
+  if (row.mode === "personal") await hostMsg({ type: "taskWorkspaceState", view: view(5), ...ctx });
+  for (const msg of row.msgs?.() ?? []) await hostMsg({ ...ctx, ...msg });
+  return { ...probe(m.host), host: m.host };
+}
+
+t("table: every instrumented component is in the table, and the table covers every PanelBoundary in the sources", () => {
+  const ids = new Set<string>();
+  for (const f of ["App.tsx", "ChatPanel.tsx", "TaskWorkspace.tsx"]) for (const [, id] of readFileSync(`webview-ui/src/${f}`, "utf8").matchAll(/<PanelBoundary (?:key=\{.*?\} )?panel="([a-z-]+)"/g)) ids.add(id);
+  const tested = new Set([...PANELS.map((r) => r.panel), "task-rail"]);
+  for (const id of ids) ok(tested.has(id), `PanelBoundary "${id}" has no rendered row in PANELS`);
+  for (const id of tested) ok(ids.has(id), `PANELS row "${id}" has no PanelBoundary in the sources`);
+  ok(ids.size >= 25, `found ${ids.size} boundaries`);
+});
+
+for (const row of PANELS) {
+  t(`rendered: ${row.mode} ${row.panel} (${row.key}) throws inside its own boundary only`, async () => {
+    const others = new Set(ALL_KEYS.filter((k) => k !== row.key));
+    // Control: the scenario reaches the component, with no fallback and no fatal screen.
+    resetPanelReports(); posted.length = 0;
+    g.__hpsStub = new Set(ALL_KEYS); g.__hpsRendered = new Set(); g.__hpsPanelThrow = undefined;
+    const c = await scenario(row);
+    ok(g.__hpsRendered.has(row.key!), `control: the scenario never rendered ${row.key}`);
+    eq(c.fallbacks().length, 0, `control: no fallback (got ${c.fallbacks().map((f) => f.getAttribute("data-panel-fallback"))})`);
+    ok(!c.fatal(), "control: no fatal screen");
+    // The component throws: only its panel falls back; the composer keeps working.
+    resetPanelReports(); posted.length = 0;
+    g.__hpsStub = others; g.__hpsRendered = new Set(); g.__hpsPanelThrow = row.key!;
+    const h = await scenario(row);
+    ok(!h.fatal(), `${row.key} escaped to the fatal screen: it is not inside a PanelBoundary`);
+    const fb = h.fallbacks();
+    ok(fb.length >= 1, "a fallback is shown");
+    for (const f of fb) eq(f.getAttribute("data-panel-fallback"), row.panel, "only this panel falls back");
+    ok(fb[0].textContent.includes(row.blocking ? PANEL_BLOCKED_TEXT : PANEL_FALLBACK_TEXT), row.blocking ? "a send-holding notice says sending is held" : "calm sentence");
+    ok(h.textarea(), "the composer is still there");
+    await h.type("계속 쓸 수 있어요");
+    eq(h.textarea().value, "계속 쓸 수 있어요", "the composer still takes input");
+    eq(reports().filter((r) => /panel render error/.test(r.message ?? "")).length, 1, "one report");
+    g.__hpsPanelThrow = undefined; g.__hpsStub = undefined;
+  });
+}
+
+// ─── Host listeners that parse payloads (boundaries do not see listener errors) ───────────────
+t("listener: a malformed pageCardsState becomes no cards and one report; a valid one draws the card", async () => {
+  resetPanelReports(); posted.length = 0; g.__hpsStub = undefined; g.__hpsPanelThrow = undefined; g.__hpsRendered = new Set();
+  const h = await personalApp();
+  await hostMsg({ type: "pageCardsState", cards: "not-a-list", activityId: "p1", taskId: "t1" });
+  await hostMsg({ type: "pageCardsState", cards: { length: 1 }, activityId: "p1", taskId: "t1" });
+  ok(!g.__hpsRendered.has("PageCard.tsx:PageCard"), "no card drawn from a malformed payload");
+  ok(!h.fatal(), "no fatal screen");
+  const r = reports().filter((x) => /host payload error: page-cards/.test(x.message ?? ""));
+  eq(r.length, 1, "reported once across two malformed payloads");
+  ok(!JSON.stringify(r[0]).includes("not-a-list"), "the payload is not reported");
+  await hostMsg({ type: "pageCardsState", cards: [{ turnId: "s1", anchorId: "a1", pages: [{ path: "index.html", kind: "added" }] }], activityId: "p1", taskId: "t1" });
+  ok(g.__hpsRendered.has("PageCard.tsx:PageCard"), "a valid payload still draws the card (positive control)");
+});
+
+t("listener: a malformed learningState clears the evidence region with one report; preview signals too", async () => {
+  resetPanelReports(); posted.length = 0; g.__hpsStub = new Set(ALL_KEYS); g.__hpsPanelThrow = undefined; g.__hpsRendered = new Set();
+  const hostile = new Proxy({}, { get() { throw new TypeError("bad signals"); } });
+  const h = await scenario({ panel: "evidence", key: null, mode: "classroom", msgs: () => [{ type: "learningState", state: null }, { type: "previewRecovery", signals: hostile }] });
+  ok(!g.__hpsRendered.has("CompletionGate.tsx:CompletionGate"), "no evidence region from a malformed state");
+  eq(reports().filter((x) => /host payload error: learning-state/.test(x.message ?? "")).length, 1, "learning-state reported once");
+  eq(reports().filter((x) => /host payload error: preview-recovery/.test(x.message ?? "")).length, 1, "unreadable preview signals reported once (they are read on every render)");
+  ok(!h.fatal(), "no fatal screen");
+  ok(h.textarea(), "the composer is still there");
+  g.__hpsStub = undefined;
 });
 
 t("top-level: a throw in the composer itself still reaches ChatErrorBoundary", async () => {
@@ -280,26 +397,6 @@ t("top-level: App's REQ-C7 crash injection still lands on the fatal screen", asy
   await hostMsg({ type: "webviewTestCrash" });
   ok(h.fatal(), "fatal screen");
   eq(h.fallbacks().length, 0, "not a panel fallback");
-});
-
-t("inventory: every independent panel sits in its own PanelBoundary", () => {
-  const src = (f: string) => readFileSync(`webview-ui/src/${f}`, "utf8");
-  const want: Record<string, string[]> = {
-    "TaskWorkspace.tsx": ["task-rail", "task-sources"],
-    "ChatPanel.tsx": ["mission-header", "student-goal", "lesson", "ai-can-do", "instructor-inbox", "help-request", "evidence", "observation", "delegation", "page-card", "verify-panel", "capability-change", "turn-review", "trial-end", "missing-folder", "citations"],
-    "App.tsx": ["carryover", "verify", "publish", "evidence-panel", "memory", "skills", "review"],
-  };
-  for (const [file, ids] of Object.entries(want)) {
-    const text = src(file);
-    for (const id of ids) ok(text.includes(`<PanelBoundary panel="${id}"`), `${file}: no PanelBoundary for ${id}`);
-  }
-  // The composer is deliberately outside every panel boundary: the top-level boundary owns it.
-  const chat = src("ChatPanel.tsx");
-  const footer = chat.indexOf('<footer className="hps-input-area">');
-  const textarea = chat.indexOf("<textarea", footer);
-  const between = chat.slice(footer, textarea);
-  ok(footer > 0 && textarea > footer, "composer found");
-  ok((between.match(/<PanelBoundary /g) ?? []).length === (between.match(/<\/PanelBoundary>/g) ?? []).length, "the composer textarea is not inside a PanelBoundary");
 });
 
 t("styles: 44px retry target, type-scale tokens, forced-colors boundary", () => {
