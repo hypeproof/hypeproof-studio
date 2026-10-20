@@ -50,6 +50,7 @@ class Node {
   append(...nodes) { for (const n of nodes) this.appendChild(typeof n === "string" ? this.ownerDocument.createTextNode(n) : n); }
   remove() { this.parentNode?.removeChild(this); }
   contains(node) { for (let n = node; n; n = n.parentNode) if (n === this) return true; return false; }
+  get isConnected() { let n = this; while (n.parentNode) n = n.parentNode; return n.nodeType === 9; }
   get textContent() { return this.childNodes.map((c) => c.textContent).join(""); }
   set textContent(value) {
     for (const c of this.childNodes) c.parentNode = null;
@@ -125,7 +126,8 @@ class Element extends Node {
   querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
   getBoundingClientRect() { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }; }
   getClientRects() { return []; }
-  scrollTo() {} scrollBy() {} scrollIntoView() {} setSelectionRange() {} select() {}
+  scrollTo() {} scrollBy() {} scrollIntoView() {} select() {}
+  setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
   focus() { this.ownerDocument.activeElement = this; }
   blur() { if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = this.ownerDocument.body; }
   /** Depth-first list of descendant elements matching `test`. */
@@ -160,11 +162,13 @@ class Document extends Node {
 
 const document = new Document();
 class HTMLIFrameElement {}
+// Its presence makes react-dom use native composition events (onCompositionStart/End), as in a browser.
+class CompositionEvent {}
 class Observer { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } }
 const winTarget = new Node(0, "#window", document);
 const win = globalThis.window ?? {};
 Object.assign(win, {
-  document, HTMLIFrameElement, Node, Element, Text,
+  document, HTMLIFrameElement, CompositionEvent, Node, Element, Text,
   addEventListener: winTarget.addEventListener.bind(winTarget), removeEventListener: winTarget.removeEventListener.bind(winTarget),
   dispatchEvent: winTarget.dispatchEvent.bind(winTarget),
   matchMedia: (query) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }),

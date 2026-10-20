@@ -6344,6 +6344,42 @@
       ]
     },
     {
+      "id": "ST-IMP-QUOTE-REPLY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/quoteReply.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/QuoteAction.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/quoteAction.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-QUOTE-REPLY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-QUOTE-REPLY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/quote-reply.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/mini-dom.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-TASK-RUN-STATE",
       "stage": "implementation",
       "owner": "jayleekr",

@@ -1,0 +1,15 @@
+/* CGP-CHAT-R-007 (REQ-STUDIO-QUOTE-REPLY): the 인용하기 button under the answer that holds the selection. */
+.hps-quote-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; animation: hps-quote-in var(--hp-dur-content) var(--hp-ease); }
+.hps-quote-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; min-width: 44px; box-sizing: border-box; padding: 0 12px;
+  border: 0; border-radius: 8px;
+  background: var(--vscode-button-secondaryBackground, #3a3f47);
+  color: var(--vscode-button-secondaryForeground, #e1e1e1);
+  font: inherit; font-size: 13px; cursor: pointer;
+  transition: background-color var(--hp-dur-press) var(--hp-ease);
+}
+.hps-quote-action:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, #4a505a); }
+.hps-quote-action:disabled { cursor: default; opacity: .6; }
+.hps-quote-note { color: var(--vscode-descriptionForeground, #b6bcc4); font-size: 12px; }
+@keyframes hps-quote-in { from { opacity: 0; } to { opacity: 1; } }

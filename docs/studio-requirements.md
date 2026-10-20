@@ -423,6 +423,54 @@ opening a pill in personal and classroom chat.
 Reverting any of 13 behaviours (copy or wrap wired to a no-op, confirming before the write, success
 shown on failure, text-keyed memory, and others) fails it.
 
+`REQ-STUDIO-QUOTE-REPLY` (CGP-CHAT-R-007 / CGP-CHAT-R72 and design CGP-CHAT-D72, 2026-10-20, adapted
+by the audit note: the quote is draft text, not a chip): the learner can quote part of one answer into
+the next message, in personal and classroom chat. When the selection starts inside the body of one
+finished answer, a `인용하기` button appears under that answer. If the selection ends past the body
+but still in the same message row (a triple-click on the last paragraph ends in the citations or the
+answer's actions), or at the very start of the element right after that row (a triple-click ends at
+the start of the next block), the end is clamped to the body. A selection that starts outside an answer, reaches
+text in another message, lies in the composer or other UI, or sits in the answer that is still
+streaming offers nothing, and neither does a read-only composer (unverified activity or frozen
+seat). The quote is built from the selected range by walking its text nodes, not from
+`Selection.toString()`: buttons, `[aria-hidden]`, `role="status"` and anything marked
+`data-quote-skip` (code-block tool rows, reply-choice controls, the cut-off stream note) add
+nothing, so labels such as `코드 보기 · 2줄`, `코드 숨기기`, `복사` and `줄 바꿈` never reach the draft. A
+code block counts as its code text; a collapsed pill has no code in the page and adds nothing.
+Paragraph-level blocks become a blank line, list items and line-level blocks a line break, table
+cells are joined with ` | `, and a Markdown soft break (drawn as a space) is a space. The selection is
+read at most once per animation frame, the clamp only looks up the end's ancestors and the text walk
+stays inside the start answer's body, so the cost of a selectionchange does not grow with the
+conversation (a 300-answer test reads no node of any other answer). Pressing
+the button appends the quote to the composer draft as a `> ` quoted block (blank lines inside become
+`>`) followed by a blank line; an existing draft is kept byte for byte as the prefix, with one blank
+line before the quote. Focus then goes to the composer with the caret at the end, the selection is
+cleared and the button goes away. Nothing is sent: the quote is ordinary draft text the learner can
+edit or delete, saved with the draft like any other text. A selection longer than 1,000 characters
+(grapheme clusters, so a composed emoji or an NFD Hangul syllable is never split) is cut and ends
+with `…`, and the button shows `앞 1,000자만 들어가요` before it is pressed. The button is a 44px target
+reachable by Tab (it stays while it has focus even if the selection collapses); Escape dismisses it
+and returns focus to the composer without touching the draft; while an IME composition is open
+(#1880, `imeGuard.ts`) it is disabled. It carries no capability or score label. The logic is in
+`webview-ui/src/quoteReply.ts` (range to answer text, quote block, merge with the draft), the button
+and selection tracking in `QuoteAction.tsx`. Not built: a context-menu entry, a keyboard-only way to
+make the selection (answers are not caret-browsable), a removable quote chip, positioning the button
+over the selection (it sits under the answer), list numbers in the quote (rendered `1. 사과` quotes as
+`사과`), and excluding code blocks (the research row offers only copy there; this slice quotes the
+code text). The offline send gate (`sendWhenOnline`, #2076) does not apply: quoting never sends,
+so it works offline and the gate still holds the later send. Test: `test/quote-reply.test.tsx`. Its selection stub is a range over real
+mini-dom nodes whose `toString()` serialises every text node in it, buttons included, as Chromium
+does. Pure checks cover the block format, the grapheme-safe cap, the scope and clamp rules (same-row
+citation and action ends, next-row start, negative controls for text in the next message) and the
+skipped UI, tables, lists and soft breaks, and instrument a 30- and a 300-answer conversation so any
+read of another answer's nodes fails. Through `ChatPanel` in both modes it presses the real button (draft, focus, caret,
+nothing sent) over answers with closed and open code pills, a prose code block, reply choices,
+citations and a one-paragraph answer, with negative controls for cross-message, user-line, composer,
+streaming, read-only and IME cases, plus an existing draft kept, Escape focus, Tab focus and the cut
+note, and the once-per-frame read. The same test fails 10 cases against the first version
+(`toString()`, no clamp) and 4 against the second (whole-document walk, no frame debounce, tables and
+lists). Each of 40 reverted behaviours fails it.
+
 `REQ-STUDIO-TASK-RUN-STATE` (extends [AE-03](requirements/learning-agent-experience.md);
 CGP-AGENT-R-022 / REQ-CGP-AGENT-46 recast after its "next waiting task" premise was refuted, 2026-10-20):
 tasks never run concurrently and switching stays blocked during a run, so the personal task rail
