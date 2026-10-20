@@ -308,7 +308,9 @@ in the 대화 설정 dialog. Message bodies and the composer read 16/18/20px, an
 inside answers grows by the same 2px steps; control heights and 44px targets do not change. The
 choice is a device preference (`globalState`, not part of any lesson or activity) and applies when
 the host confirms it. The default size adds no markup. Not built: classroom seats have no settings
-dialog, so they keep the base size; code pills keep their size. Test: `test/text-size.test.tsx`.
+dialog, so they keep the base size. Since `REQ-STUDIO-TYPE-SCALE` the choice is one step
+variable on the shell, so every caption in the personal chat (code pills included) follows it too.
+Test: `test/text-size.test.tsx`.
 
 `REQ-STUDIO-CHAT-EDIT-RESEND` (CGP-CHAT-R-002, 2026-10-20, DEC-08): the learner can edit their
 latest sent prompt and resend it, in personal task chat and classroom chat. A ghost `수정` button
@@ -574,6 +576,64 @@ borderless voice dot, a boundary that loses to `border: 0`, a non-Highlight ring
 currentColor, a run state reduced to colour, a citation fill without `!important` under its hover
 rule, the forced positive ring offset removed, the disabled rules deleted, the publish QR opt-out
 deleted, a lowercase system colour).
+
+`REQ-STUDIO-TYPE-SCALE` (CGP-DS-R-008, 2026-10-20; REQ-CGP-DS-09; DES-CGP-DS-09; extends DES-02 to the
+personal chat surface by DEC-29). Learner-read text on the personal task workspace (task rail, task
+heading and the chat header drawn into it, the chat shell with its answers, composer, notices and
+대화 설정 dialog, and the sources panel) takes one of three semantic sizes from `tokens.css`:
+`--hp-text-caption` 14px (labels, metadata, captions, controls), `--hp-text-body` 16px (message
+bodies, the composer) and `--hp-text-lead` 18px (the empty-chat greeting), with
+`--hp-leading-label` 1.5 and `--hp-leading-prose` 1.65 (Hangul prose; the personal body moves from
+1.625). The smallest step is 14px, and metadata is not exempt: the CC-R1 role line, tool log, citation
+chips and domains, chip captions, AI disclosure, rail time and message count, run state chip, source
+host names and source policy line rise from 10-13px to 14px. Values are recorded first in
+`docs/design/studio-learning-experience.md` §디자인 시스템. The text-size choice (CGP-DS-R-009) is
+one variable: `--hp-text-step` is 0px on `:root`, and the personal shell sets 2px (크게) or 4px
+(아주 크게). The size tokens are declared on `:root, .hps-shell`, because a custom property is
+substituted where it is declared: re-declared on the shell they pick up its step, so every token
+size inside the chat grows by the same 2px/4px, and the shell's own size is the caption step so text
+that only inherits follows as well. Control heights and 44px targets do not change; they are
+min-heights, and only text grows inside them. Outside the shell (rail, heading, sources) the step is
+0. Shared chat classes whose base size in `styles.css` (or in a component file the classroom also
+loads: trial line, code-block copy status and tools, composer tool captions, citation chips) is below
+14px keep that size in the classroom and are raised under the personal shell by selectors that always
+outrank their base rule. That covers every prefix, not only `.hps-*`: the learner panels the shell can
+mount (the AI-can-do card and lesson step notes `.hp-rail-lesson-*`, goal, evidence and completion,
+help request, the instructor notice inbox), the trim marker (`.hps-context-note`, #2079), the
+offline banner (`.hps-offline-banner`, #2076) and the quote button and note (`quoteAction.css`, #2081); the naming screen's activity line is raised under
+`.tw-workspace`. In the narrow task heading (390px) the busy line (승인 기다리는 중 / 작업 중) may
+shrink and wrap between words instead of staying rigid, the trial count keeps `flex-shrink: 0` at
+640px and below so it stays whole (TUX-SP-13B), and text that still truncates with an ellipsis carries
+its full text in a title (the task title button's title now names the task). Allowed below 14px: visually hidden text (the keyboard hint), decorative
+glyphs, glyph-only buttons with an accessible name (×), and instructor-only text. **Scope: DEC-29 narrows this
+slice to the personal chat, so REQ-CGP-DS-09 ("no visible text <14px on learner surfaces") and
+CGP-DS-R-008 stay open for the classroom chat and must not be marked done by this requirement.** Not
+covered: the classroom chat, whose base body is still 13px and whose labels run 10-13px (DES-02
+already applies there; a separate slice); DES-CGP-DS-09's "weights 400/600 only" (550/650/700/750
+remain) and "tracking 0 for Hangul" (`.tw-brand` keeps -.4px on its Latin word); the error-boundary screen that replaces the panel; `start.css` and the
+local review page; the 22/28px title steps of DES-CGP-DS-09 (no personal chat text uses them);
+learner testing of 35 vs 40 syllables per line (DEC-29 keeps 40em from
+REQ-STUDIO-MOTION-MEASURE-GUTTER); a capture in the built app.
+Test: `test/type-scale.smoke.mjs` parses every webview CSS file in bundle order and runs the cascade
+itself (media queries at 12 viewports from 320x480 to 1280x900, `!important`, specificity, source
+order, inheritance, custom properties substituted on the declaring element, `calc`) over element
+chains that mirror the personal markup (`tw-workspace` → `tw-conversation` → personal shell, the
+header portalled into `tw-heading`, rail, sources). It checks the token values, that every
+`font-size` in the four personal files is classified (learner text must be a `--hp-text-*` token),
+that every rule in `styles.css` and `start.css` with a size below 14px (px under 14 or em/% under 1),
+whatever its prefix, is classified (learner / out of scope with a reason, stale entries fail; only
+pure `.studio-*` start-page rules skip the list), that every learner probe computes to ≥14px
+everywhere and to base+2 / base+4 under 크게 / 아주 크게, that classroom sizes are unchanged, and that
+in the 390px heading no learner text is nowrap and rigid (except the short 자료 N and ☰ labels), no
+ellipsis lacks a full-text title in its component, and the trial count cannot shrink. Red on
+origin/main with 338 findings; the widened inventory was red on the first version of this change
+with 40 findings (the 12px AI-can-do note among them), and the heading check with 3. Negative
+controls: the AI-can-do note left at 12px, the run note rigid again, the trial count shrinkable, the
+task title's full-text title removed, a 13px caption token, tokens declared on `:root` only, a later literal
+12px rule, a narrow-only media rule (caught at 690px, not 1280px), an undefined token, an `!important`
+base rule, a shared class left without its override, the composer tool buttons left at the compact
+menu's 13px, an unclassified new rule, a removed step rule, a rail line back at 10px and a stale
+classification; plus a positive control.
 
 ### Chat reference interaction (CG-IMPL-R1)
 
