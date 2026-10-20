@@ -382,6 +382,59 @@ export class TaskWorkspaceStore {
     });
   }
 
+  /**
+   * REQ-STUDIO-MISSING-TASK-FOLDER — carry another scope's tasks (messages, drafts, earlier versions
+   * and verdicts) into this scope when the activity moves to a new folder (the scope names the
+   * folder). The source is only read: it is never changed or deleted. Tasks already in this scope are
+   * kept; a source task whose id is already here is not copied again. The source's active task
+   * becomes the active one. The verdict sidecar is written first, so a crash in between leaves only
+   * verdicts for tasks that are not here yet, which nothing draws.
+   */
+  async adoptFrom(source: TaskWorkspaceStore): Promise<TaskWorkspaceView> {
+    if (source.scope === this.scope) return this.getView();
+    if (source.loadError) throw source.loadError;
+    const from = clone(source.requireData(source.data));
+    const fromVersions = clone(source.versions.tasks);
+    const fromVerdicts = clone(source.verdicts.tasks);
+    await this.mergeVerdicts(fromVerdicts);
+    return this.mutate((data, versions) => {
+      const have = new Set((data?.tasks ?? []).map(task => task.id));
+      const added = from.tasks.filter(task => !have.has(task.id));
+      for (const task of added) if (fromVersions[task.id]) versions.tasks[task.id] = fromVersions[task.id];
+      return { version: 1, scope: this.scope, revision: data?.revision ?? 0, activeTaskId: from.activeTaskId, tasks: [...(data?.tasks ?? []), ...added] };
+    });
+  }
+
+  /** Adds verdict histories for tasks that have none here yet; existing entries are never replaced. */
+  private mergeVerdicts(tasks: Record<string, VerdictEvent[]>): Promise<void> {
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      if (!Object.keys(tasks).length) return;
+      try {
+        await this.prepareDirectory();
+        const lock = await this.acquireLock();
+        try {
+          const disk = await this.readVerdictsLocked(lock.owner.nonce);
+          const next = clone(disk);
+          for (const [id, events] of Object.entries(tasks)) if (!next.tasks[id] && events.length) next.tasks[id] = clone(events);
+          if (JSON.stringify(next) !== JSON.stringify(disk)) {
+            const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+            decodeVerdicts(content, this.scope);
+            await this.writeAtomic(this.verdictsPath, content, lock.owner.nonce);
+          }
+          this.verdicts = next;
+        } finally {
+          await this.releaseLock(lock);
+        }
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '작업을 옮기지 못했습니다. 원래 기록은 그대로 있어요.');
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
+
   private newTask(title: string, now: number): TaskDocument {
     return { id: randomUUID(), title, titleOrigin: title === '새 작업' ? 'default' : 'manual', createdAt: now, updatedAt: now, messageCount: 0,
       messages: [], draft: emptyActivityDraft(), sourceSelection: null, importedLegacy: false };

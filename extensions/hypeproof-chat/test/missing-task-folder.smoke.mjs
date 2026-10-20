@@ -43,30 +43,46 @@ try {
 
   // ── 1. Pure decisions and copy ──
   {
-    assert.equal(M.folderReachable(home), true);
-    assert.equal(M.folderReachable(gone), false, "a deleted folder is not reachable");
-    assert.equal(M.folderReachable(aFile), false, "a file is not a folder");
-    assert.equal(M.folderReachable(home, () => { throw Object.assign(new Error("EACCES"), { code: "EACCES" }); }), false, "an unreadable folder is not reachable");
-    assert.equal(M.missingTaskFolder({ applies: true, folder: gone }), path.resolve(gone));
+    assert.equal(await M.folderReachable(home), true);
+    assert.equal(await M.folderReachable(gone), false, "a deleted folder is not reachable");
+    assert.equal(await M.folderReachable(aFile), false, "a file is not a folder");
+    const eacces = async () => { throw Object.assign(new Error("EACCES"), { code: "EACCES" }); };
+    assert.equal(await M.folderReachable(home, { stat: eacces, access: async () => {} }), false, "a locked parent (stat EACCES) is not reachable");
+    assert.equal(await M.folderReachable(home, { stat: async () => ({ isDirectory: () => true }), access: eacces }), false, "a folder Studio may not read and write is not reachable");
+    const locked = path.join(tmp, "locked");
+    fs.mkdirSync(locked);
+    fs.chmodSync(locked, 0o000);
+    if (process.getuid?.() !== 0) assert.equal(await M.folderReachable(locked), false, "chmod 000 on disk: not reachable");
+    fs.chmodSync(locked, 0o700);
+    assert.equal(await M.folderReachable(locked), true, "control: the same folder readable again is reachable");
+    assert.equal(await M.missingTaskFolder({ applies: true, folder: gone }), path.resolve(gone));
     // Negative controls: an existing folder, a class seat, no folder known.
-    assert.equal(M.missingTaskFolder({ applies: true, folder: home }), null, "an existing folder gives no notice");
-    assert.equal(M.missingTaskFolder({ applies: false, folder: gone }), null, "a class or lesson seat gets no notice");
-    assert.equal(M.missingTaskFolder({ applies: true, folder: undefined }), null, "no folder known is not 'missing'");
+    assert.equal(await M.missingTaskFolder({ applies: true, folder: home }), null, "an existing folder gives no notice");
+    assert.equal(await M.missingTaskFolder({ applies: false, folder: gone }), null, "a class or lesson seat gets no notice");
+    assert.equal(await M.missingTaskFolder({ applies: true, folder: undefined }), null, "no folder known is not 'missing'");
+    // A path that now resolves to another folder (a symlink swapped in) is missing; the bound folder is not.
+    assert.equal(await M.missingTaskFolder({ applies: true, folder: outsideLink, recorded: home, canonical: FC.canonicalFolder }), path.resolve(outsideLink), "symlink swap → notice");
+    assert.equal(await M.missingTaskFolder({ applies: true, folder: outsideLink, recorded: outside, canonical: FC.canonicalFolder }), null, "control: the link to the bound folder is that folder");
+    // A one-off error is not remembered: the next check sees the folder again.
+    let flaky = true;
+    const once = async () => { if (flaky) { flaky = false; return false; } return true; };
+    assert.ok(await M.missingTaskFolder({ applies: true, folder: home, reachable: once }), "first check: transient error");
+    assert.equal(await M.missingTaskFolder({ applies: true, folder: home, reachable: once }), null, "next check: back");
     const notice = M.missingTaskFolderNotice(gone);
     assert.deepEqual(notice, { message: "이 작업의 폴더를 찾을 수 없어요. 옮기거나 지웠다면 폴더를 다시 골라 주세요.", action: "다시 고르기" });
     assert.equal(M.missingTaskFolderNotice(null), null);
     assert.equal(M.missingTaskFolderNotice(gone, "x").note, "x");
-    for (const s of [M.MISSING_TASK_FOLDER_COPY, M.MISSING_TASK_FOLDER_ACTION, M.MISSING_TASK_FOLDER_NOT_A_FOLDER, M.MISSING_TASK_FOLDER_UNDECIDED, M.MISSING_TASK_FOLDER_FAILED]) {
+    for (const s of [M.MISSING_TASK_FOLDER_COPY, M.MISSING_TASK_FOLDER_ACTION, M.MISSING_TASK_FOLDER_NOT_A_FOLDER, M.MISSING_TASK_FOLDER_UNDECIDED, M.MISSING_TASK_FOLDER_FAILED, M.MISSING_TASK_FOLDER_NO_AI]) {
       assert.match(s, /[가-힣]/, `Korean copy: ${s}`);
       assert.doesNotMatch(s, /FRAMING|JUDGMENT|ORCHESTRATE|VERIFY|ADAPT|OWNERSHIP|역량|점수|선생님/, `no capability label or teacher word: ${s}`);
     }
     // The pick: cancel, not a folder, a folder in its canonical spelling.
-    assert.deepEqual(M.repickedFolder(undefined, FC.canonicalFolder), { kind: "cancel" });
-    assert.deepEqual(M.repickedFolder(aFile, FC.canonicalFolder), { kind: "invalid" });
-    assert.deepEqual(M.repickedFolder(gone, FC.canonicalFolder), { kind: "invalid" });
-    assert.deepEqual(M.repickedFolder(outsideLink, FC.canonicalFolder), { kind: "ok", folder: outside }, "a symlink is followed to the folder it names");
-    assert.deepEqual(M.repickedFolder(outside, () => { throw new Error("gone between checks"); }), { kind: "invalid" });
-    ok("pure: missing / file / unreadable → notice; existing folder, class seat, no folder → none; pick → cancel / invalid / canonical folder");
+    assert.deepEqual(await M.repickedFolder(undefined, FC.canonicalFolder), { kind: "cancel" });
+    assert.deepEqual(await M.repickedFolder(aFile, FC.canonicalFolder), { kind: "invalid" });
+    assert.deepEqual(await M.repickedFolder(gone, FC.canonicalFolder), { kind: "invalid" });
+    assert.deepEqual(await M.repickedFolder(outsideLink, FC.canonicalFolder), { kind: "ok", folder: outside }, "a symlink is followed to the folder it names");
+    assert.deepEqual(await M.repickedFolder(outside, () => { throw new Error("gone between checks"); }), { kind: "invalid" });
+    ok("pure: missing / file / unreadable (chmod 000, locked parent) / symlink swap → notice; a transient error is not remembered; existing folder, class seat, no folder → none; pick → cancel / invalid / canonical folder");
   }
 
   // ── 2. Folder consent for a picked folder (the real host module) ──
@@ -144,6 +160,8 @@ try {
         handleSend: async () => { reached.turn++; },
         setConnectionChanging: async (v) => { order.push(`changing:${v}`); },
         ensureProfile: async () => profile,
+        // The store carry is exercised with the real store in section 3b; here it succeeds.
+        carryTaskStoreTo: async (folder) => { order.push(`carry:${folder}`); return true; },
       });
       h.setProjectOpener(async (folder) => { order.push(`open:${folder}`); ws.folder = folder; });
       const notices = () => posts.filter((m) => m.type === "missingTaskFolder");
@@ -189,10 +207,10 @@ try {
     {
       const { h } = make();
       h._instructorMode = { isInstructor: true };
-      assert.equal(h.missingTaskFolderPath(), null, "instructor: no notice");
+      assert.equal(await h.missingTaskFolderPath(), null, "instructor: no notice");
       const { h: h2 } = make();
       h2.currentTaskStore = () => undefined;
-      assert.equal(h2.missingTaskFolderPath(), null, "no personal task store: no notice");
+      assert.equal(await h2.missingTaskFolderPath(), null, "no personal task store: no notice");
     }
 
     // 다시 고르기 → a folder inside the activity's own folder: rebinds, no consent question, notice gone.
@@ -204,7 +222,7 @@ try {
       assert.equal(ui.dialogs.at(-1).canSelectFolders, true, "the folder picker");
       assert.equal(ui.dialogs.at(-1).canSelectFiles, false);
       assert.equal(ui.dialogs.at(-1).openLabel, M.MISSING_TASK_FOLDER_PICK_LABEL);
-      assert.deepEqual(order, ["changing:true", `open:${inside}`, "changing:false"], "the draft is flushed before the move, through the project opener");
+      assert.deepEqual(order, ["changing:true", `carry:${inside}`, `open:${inside}`, "changing:false"], "the draft is flushed and the store carried before the move, through the project opener");
       assert.equal(ui.modal.length, 0, "own folder: no consent question");
       assert.equal(last(), null, "the notice goes away");
       assert.deepEqual(ui.toasts, []);
@@ -218,7 +236,7 @@ try {
       assert.equal(ui.modal.length, 1, "folder consent asks");
       assert.equal(ui.modal[0].message, FC.FOLDER_CONSENT_TITLE);
       assert.ok(ui.modal[0].opts.detail.startsWith(outside), "for the canonical picked folder");
-      assert.deepEqual(order, ["changing:true", `open:${outside}`, "changing:false"]);
+      assert.deepEqual(order, ["changing:true", `carry:${outside}`, `open:${outside}`, "changing:false"]);
       assert.equal(FC.readFolderConsent(state.get(FC.FOLDER_CONSENT_KEY), personal.activity_id, outside), "read");
       assert.equal(last(), null);
     }
@@ -276,7 +294,144 @@ try {
       assert.equal(ui.dialogs.length, before);
       assert.deepEqual(order, []);
     }
-    ok("chat host: missing → notice + held send (draft back, no toast, no turn); existing folder / class / lesson / instructor → no notice; 다시 고르기 → own folder rebinds, outside asks consent first, closing / file / cancel / failure keep the notice");
+    // N2: answering "AI 안 씀" for the picked folder does not move the task there.
+    ws.folder = gone;
+    {
+      const other = { ...personal, activity_id: "f".repeat(64) };
+      const { h, order, last } = make(other);
+      ui.picked = outside; ui.answer = FC.FOLDER_CONSENT_LABEL.none; ui.modal.length = 0;
+      await h.repickTaskFolder();
+      assert.equal(ui.modal.length, 1, "asked");
+      assert.deepEqual(order, [], "'AI 안 씀' moves nothing");
+      assert.deepEqual(last(), M.missingTaskFolderNotice(gone, M.MISSING_TASK_FOLDER_NO_AI));
+      ui.answer = undefined;
+      await h.repickTaskFolder();
+      assert.deepEqual(order, [], "a remembered 'AI 안 씀' moves nothing either");
+    }
+    // A store that could not be carried: the task does not move.
+    ws.folder = gone;
+    {
+      const { h, order, last } = make();
+      h.carryTaskStoreTo = async () => false;
+      ui.picked = inside;
+      await h.repickTaskFolder();
+      assert.ok(!order.some((x) => x.startsWith("open:")), "no move without the conversation");
+      assert.deepEqual(last(), M.missingTaskFolderNotice(gone, M.MISSING_TASK_FOLDER_FAILED));
+    }
+    // T1: a retry is held the same way (behaviour, not only the source wiring).
+    ws.folder = gone;
+    {
+      const { h, posts, reached, last } = make();
+      await h.handleMessage({ type: "retryMessage", prompt: "다시 해 줘", history: [], taskId: "t1", userMessageId: "local-r" });
+      assert.equal(reached.turn, 0, "the retry starts no turn");
+      assert.equal(posts.find((m) => m.type === "inputRejected")?.text, "다시 해 줘", "the retry text goes back");
+      assert.deepEqual(last(), M.missingTaskFolderNotice(gone));
+      ws.folder = outside;
+      await h.handleMessage({ type: "retryMessage", prompt: "다시 해 줘", history: [], taskId: "t1", userMessageId: "local-r2" });
+      assert.equal(reached.turn, 1, "control: with the folder there, the retry runs");
+    }
+    // M3: the next send checks again; a folder that is back sends without 다시 고르기.
+    const back = path.join(tmp, "Documents", "comes-back");
+    ws.folder = back;
+    {
+      const { h, reached } = make();
+      await send(h, "안녕", "local-m3a");
+      assert.equal(reached.turn, 0, "held while gone");
+      fs.mkdirSync(back, { recursive: true });
+      await send(h, "안녕", "local-m3b");
+      assert.equal(reached.turn, 1, "the next send runs once the folder is back");
+    }
+    ok("chat host: missing → notice + held send and retry (draft back, no toast, no turn); existing folder / class / lesson / instructor → no notice; the next send re-checks; 다시 고르기 → own folder rebinds, outside asks consent first; closing, 'AI 안 씀', file, cancel, failed carry or move keep the notice");
+  }
+
+  // ── 3b. B1: the rebind keeps the conversation and the draft (real TaskWorkspaceStore, real ActivityConnections) ──
+  {
+    const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {ActivityConnections} from './src/activityConnections'; export {TaskWorkspaceStore} from './src/taskWorkspaceStore'; export {taskWorkspaceRoot, taskWorkspaceScope} from './src/trialCarryoverSource';", resolveDir: extRoot, loader: "ts" }, bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "error" });
+    const ws = { folder: undefined };
+    const ui = { picked: undefined, modal: 0 };
+    const toUri = (p) => ({ fsPath: p, path: p, scheme: "file" });
+    const vscode = {
+      ViewColumn: { One: 1, Two: 2, Beside: 2 }, ProgressLocation: { Window: 10, Notification: 15 },
+      Uri: { file: toUri, joinPath: (u, ...parts) => toUri(path.join(u.fsPath, ...parts)), parse: (x) => toUri(x) },
+      commands: { executeCommand: async () => undefined },
+      window: {
+        showWarningMessage: async () => { ui.modal++; return undefined; }, showInformationMessage: async () => undefined,
+        showOpenDialog: async () => (ui.picked ? [toUri(ui.picked)] : undefined), withProgress: async (_o, f) => f(),
+      },
+      workspace: { get workspaceFolders() { return ws.folder ? [{ uri: toUri(ws.folder), name: path.basename(ws.folder) }] : undefined; }, getConfiguration: () => ({ get: (_k, fallback) => fallback }) },
+    };
+    const mod = { exports: {} };
+    vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console: { ...console, log() {}, warn() {}, error() {} }, process, Buffer, URL, TextEncoder, TextDecoder, setTimeout, clearTimeout, AbortSignal, crypto: webcrypto });
+    const { ChatPanelProvider, ActivityConnections, TaskWorkspaceStore, taskWorkspaceRoot, taskWorkspaceScope } = mod.exports;
+    const { emptyActivityDraft } = await import("../src/activityDraft.ts");
+
+    const storage = path.join(tmp, "global-storage");
+    fs.mkdirSync(storage, { recursive: true });
+    const mem = () => { const m = new Map(); return { get: (k, d) => (m.has(k) ? m.get(k) : d), update: async (k, v) => { m.set(k, v); }, keys: () => [...m.keys()] }; };
+    const secretMap = new Map();
+    const raw = {
+      globalStorageUri: { fsPath: storage }, globalState: mem(), workspaceState: mem(),
+      secrets: { get: async (k) => secretMap.get(k), store: async (k, v) => { secretMap.set(k, v); }, delete: async (k) => { secretMap.delete(k); }, keys: async () => [...secretMap.keys()], onDidChange: () => ({ dispose() {} }) },
+    };
+    const conn = new ActivityConnections(raw, () => "http://127.0.0.1:8787/v1", () => ws.folder, async () => profile);
+    const context = conn.wrap();
+    const profile = { profile_id: "personal-a", activity_id: "c".repeat(64), activity_kind: "personal", display_name: "내 작업", sdk_tools: { read: true, write: true } };
+    const oldFolder = path.join(home, "cat-game");
+    const newFolder = path.join(home, "cat-game-moved");
+    fs.mkdirSync(oldFolder, { recursive: true });
+    fs.mkdirSync(newFolder, { recursive: true });
+    ws.folder = oldFolder;
+    await conn.commit("tok", profile, oldFolder);
+
+    const host = () => {
+      const h = Object.create(ChatPanelProvider.prototype);
+      Object.assign(h, {
+        context, cachedProfile: profile, servedWorkspaceRoot: home, _instructorMode: { isInstructor: false },
+        pendingSends: 0, activeStreams: new Map(), turnRequests: new Map(),
+        post: async () => true, postHistory: async () => {}, ensureProfile: async () => profile,
+        setConnectionChanging: async () => {},
+      });
+      // The extension's opener commits the activity to the picked folder, then reloads into it.
+      h.setProjectOpener(async (folder) => { await conn.commit("tok", profile, folder); ws.folder = folder; });
+      return h;
+    };
+    const before = host();
+    await before.prepareTaskWorkspace(false);
+    const store = before.currentTaskStore();
+    assert.ok(store, "a personal activity has a task store");
+    const taskId = store.getView().activeTaskId;
+    await store.append(taskId, [{ id: "u1", role: "user", content: "고양이 게임 만들어 줘", createdAt: 1 }]);
+    const draft = { ...emptyActivityDraft(), text: "점수판도 달아 줘" };
+    await store.saveDraft(taskId, draft);
+
+    // The learner renames the folder away; 다시 고르기 → the moved folder.
+    fs.rmSync(oldFolder, { recursive: true, force: true });
+    assert.ok(await before.missingTaskFolderPath(), "the old folder is missing");
+    ui.picked = newFolder;
+    await before.repickTaskFolder();
+    assert.equal(conn.current.workspace, fs.realpathSync(newFolder), "the activity now names the new folder");
+
+    // The window reloads: a new host opens the store for the new record.
+    const after = host();
+    await after.prepareTaskWorkspace(false);
+    const reopened = after.currentTaskStore();
+    assert.notEqual(reopened.scope, store.scope, "the new folder has its own scope");
+    assert.equal(reopened.getView().activeTaskId, taskId, "the same task is open");
+    assert.deepEqual(J(reopened.getHistory()).map((m) => m.content), ["고양이 게임 만들어 줘"], "the conversation is there");
+    assert.equal(reopened.getDraft().text, "점수판도 달아 줘", "the draft is there");
+    assert.equal(await after.missingTaskFolderPath(), null, "no notice in the new folder");
+    // The old scope is never deleted.
+    const old = new TaskWorkspaceStore(taskWorkspaceRoot(storage), taskWorkspaceScope({ id: conn.current.id, workspace: oldFolder }));
+    assert.equal(old.scope, store.scope, "that is the store the old window used");
+    assert.equal(J(old.getHistory()).length, 1, "the old scope keeps its copy");
+
+    // M1 with the real record: the bound path swapped for a symlink to another tree → the notice.
+    const elsewhere = path.join(tmp, "elsewhere");
+    fs.mkdirSync(elsewhere);
+    fs.rmSync(newFolder, { recursive: true, force: true });
+    fs.symlinkSync(elsewhere, newFolder, "dir");
+    assert.equal(await after.missingTaskFolderPath(), path.resolve(newFolder), "a symlink swap is missing too");
+    ok("B1: 다시 고르기 carries the task store to the new folder's scope: after the reload the same task, conversation and draft are there; the old scope is kept; a symlink swap shows the notice");
   }
 
   // ── 4. Wiring ──
@@ -286,7 +441,7 @@ try {
     // Both entry points (a new message and a retry) hold before handleSend runs, so the send takes no slot.
     for (const [kind, arg] of [["sendMessage", "msg.text"], ["retryMessage", "msg.prompt"]]) {
       const at = provider.indexOf(`case "${kind}":`);
-      const holdAt = provider.indexOf(`if (this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(${arg}, msg.images, requestedMode); return; }`, at);
+      const holdAt = provider.indexOf(`if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(${arg}, msg.images, requestedMode); return; }`, at);
       const sendAt = provider.indexOf("await this.handleSend(", at);
       assert.ok(at > 0 && holdAt > at && holdAt < sendAt, `${kind}: the hold runs before handleSend`);
     }

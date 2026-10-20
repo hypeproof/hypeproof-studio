@@ -99,9 +99,14 @@ t("personal: a missing folder shows one notice with one action; the send is held
   ok((h.action()[0].getAttribute("class") ?? "").includes("hps-missing-folder-action"), "44px class");
   eq(h.notice().getAttribute("role"), "status", "announced politely");
   await h.type("고양이 그려 줘");
+  posted.length = 0;
   await h.enter();
   eq(h.sent.length, 0, "the send is held");
   eq(h.draft(), "고양이 그려 줘", "the draft stays");
+  ok(posted.some((m) => m.type === "missingTaskFolderRequest"), "the press asks the host to look again (a one-off error does not stick)");
+  // Still missing: the notice stays and nothing goes out.
+  await h.hostMsg({ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") });
+  eq(h.sent.length, 0, "still held");
   posted.length = 0;
   await h.press(h.action()[0]);
   ok(posted.some((m) => m.type === "missingTaskFolderRepick"), "다시 고르기 asks the host to run the picker");
@@ -110,13 +115,27 @@ t("personal: a missing folder shows one notice with one action; the send is held
   await h.hostMsg({ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone", MISSING_TASK_FOLDER_NOT_A_FOLDER) });
   ok(h.text().includes(MISSING_TASK_FOLDER_NOT_A_FOLDER), "the note");
   eq(h.action().length, 1);
-  // The rebind landed: the host clears the notice and the same draft goes out (positive control).
+  // The rebind landed: the host clears the notice, the draft is intact, and sending works again (positive control).
   await h.hostMsg({ type: "missingTaskFolder", notice: null });
   eq(h.notice(), undefined, "notice gone");
   eq(h.draft(), "고양이 그려 줘", "the draft survived the whole recovery");
+  eq(h.sent.length, 0, "clearing the notice alone sends nothing");
   await h.enter();
   eq(h.sent.length, 1, "sending works again");
   eq(h.sent[0], "고양이 그려 줘");
+});
+
+t("personal: a held press whose re-check finds the folder back sends that draft once", async () => {
+  const h = await harness(personal);
+  await h.hostMsg({ type: "missingTaskFolder", notice: missingTaskFolderNotice("/flaky") });
+  await h.type("다시 보내 줘");
+  await h.enter();
+  eq(h.sent.length, 0, "held");
+  await h.hostMsg({ type: "missingTaskFolder", notice: null });
+  eq(h.sent.length, 1, "the re-check cleared the notice: the held draft goes out");
+  eq(h.sent[0], "다시 보내 줘");
+  await h.hostMsg({ type: "missingTaskFolder", notice: null });
+  eq(h.sent.length, 1, "exactly once");
 });
 
 t("classroom: no notice and no webview hold (the host keeps the existing refusal)", async () => {

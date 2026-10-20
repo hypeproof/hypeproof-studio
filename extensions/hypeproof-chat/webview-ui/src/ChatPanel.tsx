@@ -686,6 +686,7 @@ export function ChatPanel(props: Props) {
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
   // Sending is held (the draft stays) while the task's folder is missing.
   const folderMissing = personalWorkspace && !props.instructor && !!missingFolder;
+  const recheckSend = useRef(false);
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error });
@@ -799,8 +800,12 @@ export function ChatPanel(props: Props) {
     // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
     if (imagePreparationBlocksSend()) return false;
-    // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays.
-    if (folderMissing) return false;
+    // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays. A press
+    // asks the host to look again: a folder that is back clears the notice and this draft goes out then.
+    if (folderMissing) {
+      if (text === undefined) { recheckSend.current = true; postToHost({ type: "missingTaskFolderRequest" }); }
+      return false;
+    }
     const value = (text ?? draft).trim();
     if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked || props.sendPending) return false;
     if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return false; }
@@ -820,6 +825,14 @@ export function ChatPanel(props: Props) {
     setRollExpand(null);
     return true;
   };
+
+  // The host answered the re-check of a held send: folder back → the held draft goes out once;
+  // still missing → the press is answered and nothing is sent later on its behalf.
+  useEffect(() => {
+    if (!recheckSend.current) return;
+    recheckSend.current = false;
+    if (!missingFolder) submit();
+  }, [missingFolder]);
 
   const retryRecovered = (request: RecoveredRequest) => {
     if (streaming || frozen || unavailable || props.sendLocked || props.sendPending) return;
@@ -1895,7 +1908,7 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
-                disabled={preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || folderMissing || stagedPhotos.some((p) => !p.ready)}
+                disabled={preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
                 title={personalWorkspace ? '메시지 보내기' : undefined}
