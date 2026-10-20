@@ -7121,6 +7121,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/PageCard.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/previewProvider.ts"
         }
       ]
     },

@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { isPagePath, pageCardRows, PAGE_CARD_COPY, PAGE_CARD_MAX_ROWS } from "../src/pageCard.ts";
-import { buildPageCard, handlePageCardAction, PageCardRegistry, resolvePageInFolder } from "../src/pageCardHost.ts";
+import { buildPageCard, handlePageCardAction, pageCardSeam, PageCardRegistry, readPageInFolder, recheckPageInFolder, resolvePageInFolder } from "../src/pageCardHost.ts";
 
 let fail = 0;
 const t = async (label, fn) => { try { await fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${e.message}`); fail++; } };
@@ -87,7 +87,7 @@ await t("resolvePageInFolder: positive control and each refusal", () => {
 const registry = new PageCardRegistry();
 registry.add("task-a", root, card({ added: ["index.html", "game/level.HTM"], changed: [], deleted: [] }));
 const calls = [];
-const deps = { open: (abs) => calls.push(["open", abs]), reveal: (abs) => calls.push(["reveal", abs]) };
+const deps = { open: (abs, text) => calls.push(["open", abs, text]), reveal: (abs) => calls.push(["reveal", abs]) };
 const act = async (msg, taskKey = "task-a") => handlePageCardAction(registry, taskKey, msg, deps);
 
 await t("열기 and 폴더에서 보기 reach the right host action with the real path", async () => {
@@ -95,7 +95,7 @@ await t("열기 and 폴더에서 보기 reach the right host action with the rea
   assert.equal((await act({ type: "pageCardOpen", turnId: "turn-1", path: "index.html" })).ok, true);
   assert.equal((await act({ type: "pageCardReveal", turnId: "turn-1", path: "game/level.HTM" })).ok, true);
   const real = fs.realpathSync(root);
-  assert.deepEqual(calls, [["open", path.join(real, "index.html")], ["reveal", path.join(real, "game", "level.HTM")]]);
+  assert.deepEqual(calls, [["open", path.join(real, "index.html"), "<!doctype html><title>a</title>"], ["reveal", path.join(real, "game", "level.HTM")]]);
 });
 
 await t("the host handler refuses a path outside the folder (and a path not on the card)", async () => {
@@ -129,6 +129,67 @@ await t("the registry keeps a bounded number of cards", () => {
   const r = new PageCardRegistry(2);
   for (const id of ["t1", "t2", "t3"]) r.add("k", root, { turnId: id, anchorId: id, pages: [{ path: "index.html", kind: "added" }] });
   assert.deepEqual(r.forTask("k").map((c) => c.turnId), ["t2", "t3"]);
+});
+
+// F1 — check-then-use: the seam swaps the checked file (or a directory on its path) for a link to an
+// outside page between the check and the use. A by-name read would return OUTSIDE-SECRET.
+const race = path.join(tmp, "race");
+const raceOut = path.join(tmp, "race-outside");
+const resetRace = () => {
+  fs.rmSync(race, { recursive: true, force: true });
+  fs.mkdirSync(path.join(race, "sub"), { recursive: true });
+  fs.mkdirSync(path.join(raceOut, "sub"), { recursive: true });
+  fs.writeFileSync(path.join(race, "page.html"), "INSIDE");
+  fs.writeFileSync(path.join(race, "sub", "deep.html"), "INSIDE-DEEP");
+  fs.writeFileSync(path.join(raceOut, "secret.html"), "OUTSIDE-SECRET");
+  fs.writeFileSync(path.join(raceOut, "sub", "deep.html"), "OUTSIDE-SECRET");
+};
+const swapFile = (abs) => { fs.rmSync(abs); fs.symlinkSync(path.join(raceOut, "secret.html"), abs); };
+const swapDir = () => { fs.rmSync(path.join(race, "sub"), { recursive: true }); fs.symlinkSync(path.join(raceOut, "sub"), path.join(race, "sub")); };
+const withSeam = (fn, body) => { pageCardSeam.afterCheck = fn; try { return body(); } finally { pageCardSeam.afterCheck = null; } };
+
+await t("positive control: the handle-based read returns the checked bytes", () => {
+  resetRace();
+  const r = readPageInFolder(race, "page.html");
+  assert.equal(r.ok, true);
+  assert.equal(r.text, "INSIDE");
+});
+await t("F1: the file swapped for a link between check and read is refused, never read", () => {
+  resetRace();
+  const r = withSeam((abs) => swapFile(abs), () => readPageInFolder(race, "page.html"));
+  assert.equal(r.ok, false);
+  assert.equal(r.text, undefined);
+});
+await t("F1: a directory on the path swapped for a link between check and read is refused (dev+ino)", () => {
+  resetRace();
+  const r = withSeam(() => swapDir(), () => readPageInFolder(race, "sub/deep.html"));
+  assert.equal(r.ok, false);
+  assert.equal(r.cause, "changed");
+});
+await t("F1: 폴더에서 보기 walks again right before the OS call and refuses a swapped file or directory", () => {
+  resetRace();
+  assert.equal(recheckPageInFolder(race, "page.html").ok, true);
+  assert.equal(withSeam((abs) => swapFile(abs), () => recheckPageInFolder(race, "page.html")).ok, false);
+  resetRace();
+  assert.equal(withSeam(() => swapDir(), () => recheckPageInFolder(race, "sub/deep.html")).ok, false);
+});
+await t("F1: through the gate, a swap at the seam reaches neither open nor reveal, and reload re-checks", async () => {
+  resetRace();
+  const reg = new PageCardRegistry();
+  reg.add("k", race, { turnId: "r1", anchorId: "a", pages: [{ path: "page.html", kind: "changed" }] });
+  const got = [];
+  let reload;
+  const d = { open: (abs, text, again) => { got.push(["open", text]); reload = again; }, reveal: (abs) => got.push(["reveal", abs]) };
+  assert.equal((await withSeam((abs) => swapFile(abs), () => handlePageCardAction(reg, "k", { type: "pageCardOpen", turnId: "r1", path: "page.html" }, d))).ok, false);
+  resetRace();
+  assert.equal((await withSeam((abs) => swapFile(abs), () => handlePageCardAction(reg, "k", { type: "pageCardReveal", turnId: "r1", path: "page.html" }, d))).ok, false);
+  assert.deepEqual(got, []);
+  resetRace();
+  assert.equal((await handlePageCardAction(reg, "k", { type: "pageCardOpen", turnId: "r1", path: "page.html" }, d)).ok, true);
+  assert.deepEqual(got, [["open", "INSIDE"]]);
+  assert.equal(reload(), "INSIDE");
+  swapFile(path.join(race, "page.html"));
+  assert.equal(reload(), null, "a reload after a swap must not read the link target");
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });

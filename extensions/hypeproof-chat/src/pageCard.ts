@@ -24,9 +24,11 @@ export interface PageCardView {
 export const PAGE_CARD_MAX_ROWS = 3;
 
 export const PAGE_CARD_COPY = {
-  title: "AI가 만들거나 고친 페이지",
+  // Neutral on purpose: the turn diff also counts Studio's own writes (실행) and the learner's edits during the turn,
+  // and provenance (artifactProvenance.ts) labels learner edits inside a turn as the AI's, so it cannot clear a row as AI.
+  title: "이번 답에서 바뀐 페이지",
   added: "새로 만듦",
-  changed: "고침",
+  changed: "바뀜",
   open: "열기",
   reveal: "폴더에서 보기",
   more: (n: number) => `외 ${n}개`,

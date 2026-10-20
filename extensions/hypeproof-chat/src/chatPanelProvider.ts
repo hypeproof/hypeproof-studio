@@ -4648,11 +4648,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** REQ-STUDIO-PAGE-CARD — 열기 opens the page in the Studio preview; 폴더에서 보기 shows it in the OS file manager. */
   private async handlePageCardMessage(msg: PageCardMessage): Promise<void> {
     const out = await handlePageCardAction(this.pageCards, this.turnRestoreTaskKey(), msg, {
-      open: async (abs) => {
-        const file = vscode.Uri.file(abs);
-        const html = Buffer.from(await vscode.workspace.fs.readFile(file)).toString("utf8");
+      // The bytes come from the checked inode (pageCardHost readPageInFolder), never a second read by name.
+      open: async (abs, html, reload) => {
         await this.preview.show(html, vscode.Uri.file(path.dirname(abs)));
-        this.preview.watchForReload(file);
+        this.preview.watchForReload(vscode.Uri.file(abs), async () => reload());
       },
       reveal: async (abs) => { await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(abs)); },
     });

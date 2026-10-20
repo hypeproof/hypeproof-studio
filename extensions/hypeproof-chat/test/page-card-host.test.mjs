@@ -18,7 +18,8 @@ test('a page change posts a card; buttons reach preview and revealFileInOS; outs
     const f = await createTaskHarness(root);
     f.h.resolveCoachCwd = () => work;
     const shown = [];
-    f.h.preview = { show: async (html, base) => { shown.push({ html, base: base.fsPath }); }, watchForReload: () => {} };
+    const reloads = [];
+    f.h.preview = { show: async (html, base) => { shown.push({ html, base: base.fsPath }); }, watchForReload: (uri, read) => { reloads.push(read); } };
     const cards = () => f.posts.filter((m) => m.type === 'pageCardsState').at(-1)?.cards;
 
     // Negative control first: a turn that changes only a non-page file posts no card.
@@ -37,6 +38,8 @@ test('a page change posts a card; buttons reach preview and revealFileInOS; outs
     await f.handle(f.scoped({ type: 'pageCardOpen', turnId: 'turn-page', path: 'index.html' }));
     const real = await realpath(work);
     assert.deepEqual(shown, [{ html: '<!doctype html><title>내 게임</title>', base: real }]);
+    assert.equal(typeof reloads[0], 'function', 'the reload uses the checked reader');
+    assert.equal(await reloads[0](), '<!doctype html><title>내 게임</title>');
     await f.handle(f.scoped({ type: 'pageCardReveal', turnId: 'turn-page', path: 'index.html' }));
     assert.deepEqual(f.browserState.commandArgs.at(-1), ['revealFileInOS', { fsPath: join(real, 'index.html'), scheme: 'file' }]);
 
@@ -48,6 +51,18 @@ test('a page change posts a card; buttons reach preview and revealFileInOS; outs
     assert.equal(f.browserState.commands.length, before, 'no reveal for a refused path');
     assert.equal(shown.length, 1, 'no preview for a refused path');
     assert.equal(cards()[0].notice, '이 페이지를 열 수 없어요. 작업 폴더 안에 그대로 있는지 확인해 주세요.');
+
+    // F4: the click-time re-check, through the real provider. The row the card lists is swapped for a link to
+    // an outside page after the turn; both buttons must refuse it (a gate that only checks "is it on the card"
+    // or reads by name would pass it).
+    await rm(join(work, 'index.html'));
+    await symlink(join(outside, 'secret.html'), join(work, 'index.html'));
+    const revealsBefore = f.browserState.commands.length;
+    await f.handle(f.scoped({ type: 'pageCardOpen', turnId: 'turn-page', path: 'index.html' }));
+    await f.handle(f.scoped({ type: 'pageCardReveal', turnId: 'turn-page', path: 'index.html' }));
+    assert.equal(shown.length, 1, 'a listed row swapped for a link was opened');
+    assert.ok(!shown.some((s) => s.html.includes('secret')), 'outside bytes reached the preview');
+    assert.equal(f.browserState.commands.length, revealsBefore, 'a listed row swapped for a link was revealed');
 
     // A remount asks again and gets the same card back.
     await f.handle(f.scoped({ type: 'pageCardsRequest' }));

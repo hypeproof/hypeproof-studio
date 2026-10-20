@@ -57,9 +57,9 @@ const MANY: PageCardView = { turnId: "turn-2", anchorId: "m2", pages: ["a", "b",
 t("rows: path, kind, two 44px actions each, Korean labels with the path for screen readers", () => {
   const html = renderToStaticMarkup(<PageCard view={CARD} onOpen={noop} onReveal={noop} />);
   ok(html.includes('data-testid="page-card"'), "card");
-  ok(html.includes("AI가 만들거나 고친 페이지"), "title");
+  ok(html.includes("이번 답에서 바뀐 페이지"), "title");
   ok(html.includes("<code>index.html</code>") && html.includes("<code>game/level.html</code>"), "paths");
-  ok(html.includes("새로 만듦") && html.includes("고침"), "kinds");
+  ok(html.includes("새로 만듦") && html.includes("바뀜"), "kinds");
   eq((html.match(/>열기<\/button>/g) ?? []).length, 2, "열기 buttons");
   eq((html.match(/>폴더에서 보기<\/button>/g) ?? []).length, 2, "폴더에서 보기 buttons");
   ok(html.includes('aria-label="index.html 열기"') && html.includes('aria-label="index.html 폴더에서 보기"'), "aria labels");
@@ -74,6 +74,8 @@ t("more than 3 pages: 3 rows plus 외 N개", () => {
 t("negative control: no capability label or score words on the card", () => {
   const html = renderToStaticMarkup(<PageCard view={{ ...CARD, notice: "이 페이지를 열 수 없어요. 작업 폴더 안에 그대로 있는지 확인해 주세요." }} onOpen={noop} onReveal={noop} />);
   for (const w of ["FRAMING", "JUDGMENT", "ORCHESTRATE", "VERIFY", "ADAPT", "OWNERSHIP", "점수"]) ok(!html.includes(w), w);
+  // F2: the diff also holds Studio's and the learner's writes, so the card never says the AI made them.
+  ok(!html.includes("AI"), "the card claims AI authorship");
   ok(html.includes('role="status"') && html.includes("이 페이지를 열 수 없어요"), "notice");
 });
 t("default chat render draws no card (A5 digests unchanged)", () => {
@@ -124,7 +126,7 @@ t("the card sits after its anchor row and before the next user message", async (
   const v = await mount(personal);
   await fromHost({ type: "pageCardsState", cards: [CARD] });
   const text = v.host.textContent;
-  const card = text.indexOf("AI가 만들거나 고친 페이지");
+  const card = text.indexOf("이번 답에서 바뀐 페이지");
   ok(card > text.indexOf("만들었어요."), "after the turn's answer");
   ok(card < text.indexOf("고마워"), "before the next user message");
   await v.unmount();
