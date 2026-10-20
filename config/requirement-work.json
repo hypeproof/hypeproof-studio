@@ -279,6 +279,7 @@
         "SAVE-01",
         "VER-01",
         "VER-02",
+        "VER-03",
         "WEB-01",
         "WEB-02",
         "WEB-03",
@@ -290,7 +291,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "768aeca0ea452e8d00a275bf5630cc915f8f54b5a865f37d3c9d26113256420c",
+      "sha256": "7689ce2a793937f3aa7e597df16b8f743f576b8600dab05d9e4db22adc1ddffd",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -4023,6 +4024,37 @@
         "chalk/test/instructor-auth-drift.test.mjs",
         "test/service-integration/measurement-core.test.mjs"
       ]
+    },
+    {
+      "id": "chalk-confirm-instruction-diff",
+      "title": "확정 전 안내 문구 줄 비교 (CGP-AGENT-R-016)",
+      "issue": 2118,
+      "kind": "implementation",
+      "feature_ids": [
+        "design-session"
+      ],
+      "requirements": [
+        {
+          "path": "docs/requirements/chalk-authoring.md",
+          "ids": [
+            "VER-03"
+          ]
+        }
+      ],
+      "depends_on": [
+        "rehearsal"
+      ],
+      "next_action": "Review and merge feat/cgp-chalk-diff. Then add the Service half: the confirmation route rejects a compared_with that is not the newest confirmed version, and /versions exposes the newest confirmed version so a long course is not locked. Then build the grouped per-field change list of R-016.",
+      "design_delta": "The confirm step diffs the candidate's step titles and instructions against the newest confirmed version, client-side from existing reads (Myers line diff, CRLF/NFC/trailing-newline normalised, folds over 3 unchanged lines, whitespace-only pairs labelled, >2000 edits reported as skipped). Confirm stays locked while the diff loads, fails, has an unexpected shape, or the base cannot be proven; the base is re-read right before confirm and sent as compared_with.",
+      "positive_control": "Identical text draws no rows; a normal edit draws +/− rows with 추가/삭제 spoken words, underline/strike and a fold; a complete version list with no confirmed version is a first confirmation and does not lock (chalk/test/instruction-diff.test.mjs, e2e/chalk-authoring/confirm-diff.mjs).",
+      "negative_control": "A failed or malformed base read, or a truncated list without a confirmed version, keeps confirm locked; a base confirmed elsewhere after the review refuses the confirm and re-diffs; markup in lesson text never renders; a 3000-line lesson with two edits is not drawn as a full replace.",
+      "evidence_required": "Studio commit, unit and browser test output with the mutation list, screenshots at 1280/800px. The Service-side compared_with check and a real instructor confirm are separate evidence.",
+      "implementation_paths": [
+        "chalk/src/lib/instruction-diff.ts",
+        "chalk/src/ui/authoring.html",
+        "chalk/src/index.ts"
+      ],
+      "verification_inputs": []
     }
   ]
 }

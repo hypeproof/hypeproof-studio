@@ -7035,6 +7035,48 @@
       ]
     },
     {
+      "id": "ST-IMP-CHALK-INSTRUCTION-DIFF",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-DES-CHALK-AUTHORING",
+        "ST-IMP-CHALK-REHEARSAL"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/lib/instruction-diff.ts"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-INSTRUCTION-DIFF",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-TEST-CHALK-AUTHORING",
+        "ST-IMP-CHALK-INSTRUCTION-DIFF"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/instruction-diff.test.mjs"
+        },
+        {
+          "path": "e2e/chalk-authoring/confirm-diff.mjs"
+        },
+        {
+          "path": "docs/testing/chalk-authoring.md"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-ASK-ABOUT-FILE",
       "stage": "implementation",
       "owner": "jayleekr",

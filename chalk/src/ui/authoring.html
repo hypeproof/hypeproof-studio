@@ -118,6 +118,7 @@ label small{color:var(--hp-mute)}
 </fieldset>
 <fieldset id="confirm"><legend>05 · 수업 버전 확정</legend>
 <p>리허설을 통과한 바로 그 후보만 확정할 수 있습니다. 확정해도 진행 중인 수업은 바뀌지 않습니다.</p>
+<section id="confirm-diff" aria-labelledby="confirm-diff-title"><h3 id="confirm-diff-title">안내 문구 바뀐 줄 — 지금 확정된 버전과 비교</h3><p id="confirm-diff-summary" role="status" aria-live="polite">리허설을 통과하면 이 후보의 단계 안내를 지금 확정된 버전과 줄 단위로 비교해 보여 줍니다.</p><ol id="confirm-diff-lines" aria-labelledby="confirm-diff-title" tabindex="0" hidden></ol></section>
 <button id="confirm-go" type="button" disabled>통과한 후보를 수업 버전으로 확정</button><p id="confirm-status" role="status"></p>
 </fieldset>
 <fieldset id="send"><legend>06 · 학생에게 보내기</legend>
@@ -164,12 +165,13 @@ const stepFormKeys=['id','title','instructions','hint','acceptance','help','ui']
 let carriedTop={},carriedStep=new Map(),carriedLearning={};
 let revision=null,bound=null,dirty=false,busy=false,pending=null,batch=[];
 // #751 G2 — declared with the page state: controls() reads them from the first render on.
+let confirmDiff=null;
 let candidateVersion='',versionList=[],readiness=null,readinessTimer=null,rehearsalPending=null,confirmPending=null;
 let lessonModel, modelCatalogue, modelCatalogueScope;
 let lessonFeatures, featureCatalogue, featureCatalogueScope;
 const identity=()=>JSON.stringify(['cohort','profile','course'].map(k=>$(k).value.trim()));
 const status=text=>{$('status').textContent=text;};
-function controls(){$('models-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue;$('effort-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue?.effort||!lessonModel;$('features-fields').disabled=busy||featureCatalogueScope!==identity()||!featureCatalogue;const valid=bound===identity()&&revision!==null&&!busy;$('save').disabled=!valid;$('freeze').disabled=!valid||dirty||revision<1;for(const id of ['load','new','import','courses','version-load','token','cohort','profile','course','version','forget','deliver','student','hours','features-load','connect','setting','versions-load','base-version','impact','reuse-all','reuse-step','reuse-step-add','rehearsal-learner','readiness-load'])$(id).disabled=busy;$('rehearsal-issue').disabled=busy||!candidateOK();$('confirm-go').disabled=busy||readiness?.state!=='passed'||!!readiness?.confirmed||readiness?.version!==candidateVersion;document.querySelector('#editor fieldset').disabled=busy;retroControls();}
+function controls(){$('models-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue;$('effort-fields').disabled=busy||modelCatalogueScope!==identity()||!modelCatalogue?.effort||!lessonModel;$('features-fields').disabled=busy||featureCatalogueScope!==identity()||!featureCatalogue;const valid=bound===identity()&&revision!==null&&!busy;$('save').disabled=!valid;$('freeze').disabled=!valid||dirty||revision<1;for(const id of ['load','new','import','courses','version-load','token','cohort','profile','course','version','forget','deliver','student','hours','features-load','connect','setting','versions-load','base-version','impact','reuse-all','reuse-step','reuse-step-add','rehearsal-learner','readiness-load'])$(id).disabled=busy;$('rehearsal-issue').disabled=busy||!candidateOK();$('confirm-go').disabled=busy||readiness?.state!=='passed'||!!readiness?.confirmed||readiness?.version!==candidateVersion||confirmDiff?.candidate!==readiness?.version||confirmDiff?.state!=='ready';document.querySelector('#editor fieldset').disabled=busy;retroControls();}
 function changed(){dirty=true;$('completion').textContent='';controls();}
 function discard(){return !dirty||confirm('저장하지 않은 편집을 바꿀까요? 필요한 내용은 먼저 내보내세요.');}
 function scope(){for(const k of ['cohort','profile','course'])if(!/^[a-zA-Z0-9_-]{1,128}$/.test($(k).value.trim()))throw Error('코호트·프로필·수업 ID를 확인하세요.');if(!$('token').value.trim())throw Error('강사 토큰을 입력하세요.');return '/admin/cohorts/'+encodeURIComponent($('cohort').value.trim())+'/authoring/'+encodeURIComponent($('course').value.trim());}
@@ -333,18 +335,60 @@ function renderReadiness(){const box=$('readiness');box.replaceChildren();if(!re
  else if(r.confirmation_required)line('이 서버는 확정한 버전만 학생에게 보냅니다.');
  const c=r.rehearsal?.checks;$('readiness-detail').textContent=JSON.stringify({version:r.version,lesson_sha256:r.lesson_sha256,source_revision:r.source_revision,draft_revision:r.draft_revision,rehearsal:r.rehearsal?{id:r.rehearsal.id,learner:r.rehearsal.learner_id,verdict:r.rehearsal.verdict,reasons:r.rehearsal.reasons,app:r.rehearsal.app,steps:c?.steps,mission:c?.mission,requests:c?.turns,tools:c?.tools}:null,confirmed:r.confirmed,history:r.history},null,2);
  controls();}
-function clearReadiness(){clearTimeout(readinessTimer);candidateVersion='';readiness=null;$('rehearsal-token').value='';$('confirm-status').textContent='';$('readiness-detail').textContent='';renderReadiness();}
+function clearReadiness(){clearTimeout(readinessTimer);candidateVersion='';readiness=null;confirmDiff=null;renderConfirmDiff();$('rehearsal-token').value='';$('confirm-status').textContent='';$('readiness-detail').textContent='';renderReadiness();}
 async function loadReadiness(){const v=candidateVersion;clearTimeout(readinessTimer);if(!v){readiness=null;renderReadiness();return;}
- const d=await call(scope()+'/versions/'+encodeURIComponent(v)+'/readiness');readiness={...d,version:v};renderReadiness();
+ const d=await call(scope()+'/versions/'+encodeURIComponent(v)+'/readiness');readiness={...d,version:v};renderReadiness();await loadConfirmDiff();
  // The background refresh never takes the page lock: a teacher's click is never swallowed by a poll.
  if(d.state==='running'&&document.visibilityState==='visible')readinessTimer=setTimeout(()=>loadReadiness().catch(()=>{}),5000);}
+// CGP-AGENT-R-016 / CGP-DS-R-029 — before confirming, the candidate's step instructions are diffed line by line against the
+// newest confirmed version. Both sides come from existing reads (readiness content, GET /versions and GET /versions/:v);
+// the diff itself is computed here by instructionDiffKit (chalk/src/lib/instruction-diff.ts, inlined below).
+/*@instruction-diff*/
+// The base is the newest confirmed version the API can PROVE: a truncated list with no confirmed entry is not "first
+// confirmation" — it is unknown, and unknown keeps confirm locked. Any unexpected response shape is an error too.
+async function newestConfirmed(candidate){const list=await call(scope()+'/versions');if(!Array.isArray(list?.versions))throw Error('버전 목록 응답 형식이 예상과 다릅니다');
+ const b=list.versions.find(x=>x?.confirmed===true&&x.version!==candidate);if(b)return b.version;
+ if(list.truncated!==false)throw Error('최근 버전 '+list.versions.length+'개 안에 확정 버전이 없어 비교 기준을 확인할 수 없습니다. 더 오래된 확정 버전이 있을 수 있어 확정을 막습니다');return null;}
+let confirmDiffSeq=0;
+async function loadConfirmDiff(){const r=readiness,seq=++confirmDiffSeq;if(!r||r.state!=='passed'){confirmDiff=null;renderConfirmDiff();return;}
+ if(r.confirmed){confirmDiff={candidate:r.version,state:'done'};renderConfirmDiff();return;}
+ confirmDiff={candidate:r.version,state:'loading'};renderConfirmDiff();
+ let next;try{if(!Array.isArray(r.content?.steps))throw Error('후보 내용의 응답 형식이 예상과 다릅니다');const base=await newestConfirmed(r.version);
+  if(base===null)next={state:'ready',base:null};
+  else{const d=await call(scope()+'/versions/'+encodeURIComponent(base));if(!Array.isArray(d?.module?.content?.steps))throw Error('비교 기준 버전('+base+')의 응답 형식이 예상과 다릅니다');
+   next={state:'ready',base,diff:instructionDiffKit.instructionDiff(d.module.content,r.content)};}
+ }catch(e){next={state:'failed',error:e.message};}
+ if(seq!==confirmDiffSeq||readiness?.version!==r.version)return;confirmDiff={candidate:r.version,...next};renderConfirmDiff();}
+const DIFF_WORDS={add:['+','추가'],del:['−','삭제'],same:['','변경 없음']};
+// Whitespace on a whitespace-only change is drawn: · space, → tab, ⍽ no-break space.
+const showSpace=t=>t.replace(/ /g,'·').replace(/\t/g,'→').replace(/\u00a0/g,'⍽');
+function diffLine(kind,text,ws){const li=document.createElement('li');li.className='diff-'+kind;const [glyph,word]=DIFF_WORDS[kind];
+ const sr=Object.assign(document.createElement('span'),{className:'sr-only',textContent:word+(ws?'(공백만 바뀜)':'')+': '});const g=Object.assign(document.createElement('span'),{className:'diff-glyph',textContent:glyph});g.setAttribute('aria-hidden','true');
+ const t=document.createElement(kind==='add'?'ins':kind==='del'?'del':'span');t.className='diff-text';t.textContent=ws?showSpace(text):text.trim()===''?'(빈 줄)':text;li.append(sr,g,t);
+ if(ws){const tag=Object.assign(document.createElement('span'),{className:'diff-ws',textContent:'공백만 바뀜'});tag.setAttribute('aria-hidden','true');li.append(tag);}return li;}
+function diffFold(row){const li=document.createElement('li');li.className='diff-fold';const b=document.createElement('button');b.type='button';b.className='ghost';b.textContent='변경 없음 '+row.count+'줄 · 펼치기';
+ b.onclick=()=>{const rows=row.lines.map(x=>diffLine('same',x));li.replaceWith(...rows);rows[0]?.querySelector('.diff-text')?.setAttribute('tabindex','-1');rows[0]?.querySelector('.diff-text')?.focus();};li.append(b);return li;}
+function renderConfirmDiff(){const box=$('confirm-diff-lines'),say=t=>{$('confirm-diff-summary').textContent=t;};box.replaceChildren();box.hidden=true;const c=confirmDiff;
+ if(!c){say('리허설을 통과하면 이 후보의 단계 안내를 지금 확정된 버전과 줄 단위로 비교해 보여 줍니다.');controls();return;}
+ if(c.state==='done')say('이 후보는 확정됐습니다. 안내 문구 비교는 확정하기 전에만 보여 줍니다.');
+ else if(c.state==='loading')say('지금 확정된 버전과 안내 문구를 비교하는 중입니다… 비교가 끝나야 확정할 수 있습니다.');
+ else if(c.state==='failed'){say('안내 문구 비교를 불러오지 못했습니다 — 비교를 볼 때까지 확정할 수 없습니다. ('+c.error+')');const b=Object.assign(document.createElement('button'),{type:'button',className:'ghost',id:'confirm-diff-retry',textContent:'비교 다시 불러오기'});b.onclick=()=>run(loadConfirmDiff);$('confirm-diff-summary').append(' ',b);}
+ else if(!c.base)say('아직 확정된 버전이 없습니다 — 이 후보가 첫 확정 버전이라 비교할 안내 문구가 없습니다.');
+ else if(c.diff.skipped)say('확정 버전 '+c.base+' → 이 후보 '+c.candidate+': 변경이 많아 줄 단위 비교를 생략했어요(바뀐 줄 '+c.diff.limit+'줄 초과). 03 · 바뀌는 내용 확인에서 단계별 변경을 확인하세요.');
+ else if(!c.diff.rows.length)say('확정 버전 '+c.base+'과(와) 비교: 단계 안내 문구가 같습니다. 바뀐 줄이 없습니다.');
+ else{say('확정 버전 '+c.base+' → 이 후보 '+c.candidate+': 추가 '+c.diff.added+'줄 · 삭제 '+c.diff.removed+'줄. 줄 앞의 + 는 추가, − 는 삭제입니다.');box.append(...c.diff.rows.map(r=>r.kind==='fold'?diffFold(r):diffLine(r.kind,r.text,r.ws)));box.hidden=false;}
+ controls();}
 $('readiness-load').onclick=()=>run(loadReadiness);
 $('rehearsal-issue').onclick=()=>run(async()=>{const learner=$('rehearsal-learner').value.trim();if(!/^[a-zA-Z0-9_-]{1,64}$/.test(learner))throw Error('리허설 학생 ID를 확인하세요.');const v=candidateVersion,sig=JSON.stringify([scope(),v,learner]);if(rehearsalPending?.sig!==sig)rehearsalPending={sig,id:crypto.randomUUID()};
  const d=await call(scope()+'/versions/'+encodeURIComponent(v)+'/rehearsals','POST',{learner,request_id:rehearsalPending.id});rehearsalPending=null;$('rehearsal-token').value=d.token;status('리허설 코드를 발급했습니다 — 아직 준비 완료가 아닙니다. Studio에서 이 코드로 실행한 결과를 기다립니다.');await loadReadiness();});
 $('rehearsal-copy').onclick=async()=>{if(!$('rehearsal-token').value)return;try{await navigator.clipboard.writeText($('rehearsal-token').value);status('리허설 코드를 복사했습니다.');}catch{status('클립보드 접근이 거부됐습니다.');}};
 $('confirm-go').onclick=()=>run(async()=>{const r=readiness;if(!r||r.state!=='passed'||!r.rehearsal)throw Error('리허설을 통과한 후보만 확정할 수 있습니다.');if(!confirm('후보 '+r.version+'을(를) 수업 버전으로 확정할까요? 학생 미션: '+missionLine(r.content?.learning)+'. 진행 중인 수업은 바뀌지 않습니다.'))return;
+ const reviewed=confirmDiff;if(reviewed?.candidate!==r.version||reviewed.state!=='ready')throw Error('안내 문구 비교를 본 뒤에 확정할 수 있습니다.');
+ // The base can change while the page is open (another tab confirmed a version): re-read it, refuse and re-diff if it moved.
+ const now=await newestConfirmed(r.version);if(now!==reviewed.base){await loadConfirmDiff();const msg='확정하지 않았습니다 — 비교한 뒤 다른 버전('+(now??'없음')+')이 확정됐습니다. 새 기준으로 다시 비교했으니 바뀐 줄을 확인한 뒤 확정하세요.';$('confirm-status').textContent=msg;throw Error(msg);}
  const sig=JSON.stringify([scope(),r.version,r.rehearsal.id]);if(confirmPending?.sig!==sig)confirmPending={sig,id:crypto.randomUUID()};
- const d=await call(scope()+'/versions/'+encodeURIComponent(r.version)+'/confirmation','POST',{rehearsal_id:r.rehearsal.id,request_id:confirmPending.id});confirmPending=null;$('confirm-status').textContent='확정했습니다 — '+r.version+' · '+new Date(d.confirmed.at).toLocaleString()+'. 운영 보드에서 고른 학생에게 보낼 수 있습니다.';await loadReadiness();});
+ // compared_with names the reviewed base. The Service does not check it yet (server-side expected-base: not built).
+ const d=await call(scope()+'/versions/'+encodeURIComponent(r.version)+'/confirmation','POST',{rehearsal_id:r.rehearsal.id,request_id:confirmPending.id,compared_with:reviewed.base});confirmPending=null;$('confirm-status').textContent='확정했습니다 — '+r.version+' · '+new Date(d.confirmed.at).toLocaleString()+'. 운영 보드에서 고른 학생에게 보낼 수 있습니다.';await loadReadiness();});
 $('versions-load').onclick=()=>run(async()=>{const d=await call(scope()+'/versions');versionList=d.versions;$('base-version').replaceChildren(new Option(d.versions.length?'버전을 고르세요':'확정된 버전이 없습니다',''),...d.versions.map(v=>new Option(v.version+(v.title?' · '+v.title:'')+(v.mission?' · 미션 ‘'+v.mission.mission+'’':'')+' · '+(v.confirmed?'확정됨':(REHEARSAL_WORDS[v.rehearsal]||v.rehearsal).split(' — ')[0]),v.version)));status('버전 '+d.versions.length+'개를 불러왔습니다.');});
 async function versionContent(){const v=$('base-version').value;if(!v)throw Error('버전을 고르세요.');const d=await call(scope()+'/versions/'+encodeURIComponent(v)+'/readiness');return {v,content:d.content};}
 $('base-version').onchange=()=>run(async()=>{$('impact-view').replaceChildren();const {content}=await versionContent();$('reuse-step').replaceChildren(new Option('단계를 고르세요',''),...content.steps.map((x,i)=>new Option((i+1)+'. '+x.title,x.id)));});
@@ -488,4 +532,5 @@ label{font-size:15px}input,textarea,select{font-size:16px}small,.help,.muted{col
 body{max-width:1100px;margin:0 auto!important;padding:20px!important}.hp-flowbar{padding:10px 14px;margin-bottom:14px!important}body>header{padding:12px 0!important}body>header h1{font-size:24px}body>header p{margin:4px 0 12px}fieldset{margin:14px 0!important;padding:18px!important}.page-help{margin:8px 0}fieldset>small{display:block;margin:8px 0}#disconnect{background:transparent!important;color:#b7c1ca!important;border:1px solid #3a4855!important}
 </style><style>.hp-flowbar details{margin:0!important}.hp-flowbar summary{padding:8px 0;color:#b7c1ca}.page-help summary{color:#b7c1ca}body>header{margin:0;padding:4px 0 10px!important}fieldset>details{margin:10px 0}fieldset>details summary{color:#b7c1ca}#status,.step{background:#151c22;color:#e8ecef;border-color:#3a4855}#completion{color:#7dc896}
 /* #1013 retrospective: checkbox rows read as rows, not full-width inputs. */#retro .retro-cite,#retro .retro-refs{margin:8px 0}#retro .retro-cite label,#retro .retro-refs label{display:flex;align-items:center;gap:8px;margin:4px 0}#retro .retro-cite input,#retro .retro-refs input{display:inline-block;width:auto;margin:0}#retro ol>li{margin:0 0 18px}#retro h3{font-size:16px;margin:18px 0 4px}#retro-view{margin:14px 0}#retro-view p{margin:4px 0}#retro-view p.muted{padding-left:14px}#retro-source-view pre{background:#151c22;padding:8px}
+/* CGP-AGENT-R-016 / CGP-DS-R-029 instruction diff: marker glyph + hidden word + underline/strike, tint is never the only signal. */.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}#confirm-diff h3{font-size:16px;margin:12px 0 4px}#confirm-diff-lines{list-style:none;margin:8px 0 14px;padding:0;border:1px solid #3a4855;border-radius:8px;max-height:420px;overflow:auto;font-size:15px;line-height:1.6}#confirm-diff-lines:focus-visible{outline:2px solid #2ac4d9;outline-offset:2px}#confirm-diff-lines li{display:flex;gap:10px;padding:2px 12px;color:#e8ecef;word-break:keep-all;overflow-wrap:anywhere}#confirm-diff-lines .diff-glyph{flex:0 0 1ch;font-weight:700}#confirm-diff-lines .diff-add{background:rgba(125,200,150,.14)}#confirm-diff-lines .diff-add .diff-glyph{color:#7dc896}#confirm-diff-lines ins{text-decoration:underline 2px #7dc896;text-underline-offset:3px;color:#e8ecef}#confirm-diff-lines .diff-del{background:rgba(255,134,134,.14)}#confirm-diff-lines .diff-del .diff-glyph{color:#ff8686}#confirm-diff-lines del{text-decoration:line-through 2px #ff8686;color:#e8ecef}#confirm-diff-lines .diff-same{color:#b7c1ca}#confirm-diff-lines .diff-ws{flex:0 0 auto;margin-inline-start:auto;font-size:13px;color:#e8ecef;border:1px solid #5a6a78;border-radius:4px;padding:0 6px}#confirm-go:disabled{background:transparent!important;color:#a7b4bf!important;border:1px dashed #5a6a78!important;font-weight:400!important;opacity:1;cursor:not-allowed}#confirm-diff-lines .diff-fold{padding:4px 12px}#confirm-diff-lines .diff-fold button{min-height:44px;margin:0;font:14px/1.4 system-ui,sans-serif}
 /* REQ-CHALK-ROW-ACTIONS: list row actions stay visible labelled buttons with a 44px target (DES-06). */#steps>.step>button,#learning-completion button,#retro-sources button,#retro-findings button,#retro-decisions button{min-height:44px}</style></html>
