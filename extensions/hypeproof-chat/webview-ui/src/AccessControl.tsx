@@ -1,6 +1,7 @@
 import {useState,useEffect,useRef} from 'react';
 import type {ChatConfig,WebviewMessage} from '../../src/protocol';
-const stateLabels:Record<string,string>={ready:'사용 가능',ended:'이용 기간 종료',paused:'일시정지',review_required:'사용량 확인 필요',exhausted:'남은 자원 부족',not_configured:'이용 한도 설정 대기',external_unknown:'외부 공급자 사용량 미확인'};
+/** The usage panel's state words; the chat header (AccessHeader) reads the same ones. */
+export const stateLabels:Record<string,string>={ready:'사용 가능',ended:'이용 기간 종료',paused:'일시정지',review_required:'사용량 확인 필요',exhausted:'남은 자원 부족',not_configured:'이용 한도 설정 대기',external_unknown:'외부 공급자 사용량 미확인'};
 const meterLabels:Record<string,string>={'tokens:input':'입력 토큰','tokens:output':'출력 토큰','tokens:cache_read':'캐시 읽기 토큰','tokens:cache_write':'캐시 쓰기 토큰','tokens:cache_write:5m':'5분 캐시 토큰','tokens:cache_write:1h':'1시간 캐시 토큰','requests:count':'요청 수','browser:seconds':'브라우저 초','computer:seconds':'컴퓨터 초','execution:seconds':'실행 초','storage:byte-seconds':'저장 byte·초'};
 const unit=(m:string)=>m.startsWith('currency:')?m.split(':')[1]+' 정산 기준':meterLabels[m]??m;
 const amount=(n:number,m:string)=>m.startsWith('currency:')?(n/1000000).toLocaleString('en-US',{maximumFractionDigits:6}):n.toLocaleString('en-US');

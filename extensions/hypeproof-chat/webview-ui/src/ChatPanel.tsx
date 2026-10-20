@@ -25,6 +25,7 @@ import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
 import { AccessControl } from './AccessControl';
+import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
@@ -1303,6 +1304,7 @@ export function ChatPanel(props: Props) {
         })()}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" title={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
+        <AccessHeader config={config} />
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its

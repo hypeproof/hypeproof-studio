@@ -19,6 +19,9 @@ import { build } from "esbuild";
 import { chatPanelProps, resolvedProfile } from "./sx-screen-fixtures.mjs";
 
 const RECORD = process.env.HPS_A5_RECORD_BASE === "1";
+// The DEC-35 classroom screens show Service's confirmation time (local clock); pin the zone so their
+// digests are the same on every machine and in CI.
+process.env.TZ = "UTC";
 let passed = 0;
 const ok = (name) => {
   passed++;
@@ -194,6 +197,10 @@ const TOOL_LINES = [
   { id: "rev_1", role: "tool", content: "", createdAt: 3, tool: { icon: "🖼️", label: "미리보기 여는 중", state: "running" } },
 ];
 
+/** A classroom's selected class funding as Service's /v1/access returns it (DEC-35 class seats). */
+const CLASS_FUNDED = { status: "ready", selected: "class-1", view: { schema: "hps-access-view/1", configured: true, as_of: "2026-10-20T06:42:00Z", choices: [{
+  id: "class-1", label: "수업 지원", source_kind: "cohort", mode: "included", active: true, available: true, state: "ready", ends_at: 1_800_000_000_000, can_request: false,
+  allowed: { models: [], efforts: [], features: [], runtimes: [] }, resources: [{ meter: "requests:count", remaining: 37, held: 3, unresolved: 2, spent: 10, limit: 50, overrun: 0, shared: false }] }] } };
 /** name → props: every screen whose markup must not move for an old profile. */
 const OLD_SCREENS = {
   "ChatPanel/adult-plain": () => ["ChatPanel", chatPanelProps({ config: adultConfig() })],
@@ -205,6 +212,11 @@ const OLD_SCREENS = {
   "EffortControl/unknown": () => ["EffortControl", { config: adultConfig({ effortResult: { state: "unknown", requests: [] } }), post() {} }],
   "EffortControl/observed-truncated": () => ["EffortControl", { config: adultConfig({ effortResult: { state: "observed", requests: ROWS, truncated: true } }), post() {} }],
   "EffortControl/nothing": () => ["EffortControl", { config: adultConfig(), post() {} }],
+  // DEC-35 class seats (Jay 2026-10-19: the remaining count applies to pass and class seats): a
+  // classroom with Service class funding shows the class line in its header, and an unreachable
+  // Service shows 남은 요청 미확인. Recorded on this branch (CGP-SHELL-R-029); not main before A5.
+  "ChatPanel/classroom-class-funded": () => ["ChatPanel", chatPanelProps({ config: adultConfig({ access: CLASS_FUNDED }) })],
+  "ChatPanel/classroom-access-unknown": () => ["ChatPanel", chatPanelProps({ config: adultConfig({ access: { status: "unknown", selected: "class-1", notice: "사용량 미확인 · 새로고침해 주세요." } }) })],
 };
 
 /**
@@ -235,6 +247,14 @@ const BASE = {
   "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",
   "EffortControl/observed-truncated": "38784f908976a596bc7605c7cf68bf3238c8650b8c4272a495f91f42267d28c6",
   "EffortControl/nothing": "4a3c092bd66e1aa89b05f7e4c0444694fbaefce76613185e7cfdc18ea30feeef",
+  // DEC-35 class seats (CGP-SHELL-R-029): recorded on this branch with HPS_A5_RECORD_BASE=1 (TZ=UTC).
+  // The class-funded header reads "수업·기관 지원 · 남은 요청 37회 · 06:42 확인"; the unreachable one
+  // "남은 요청 미확인". The nine digests above are unchanged: none of those screens carries access data.
+  // Re-recorded after the rebase onto CGP-CHAT-D-001 (#2187): the only change from the earlier pair is
+  // that invisible response-announcer node moving, the same move main's nine digests took
+  // (identical markup after removing that one node, diffed with HPS_A5_DUMP_DIR).
+  "ChatPanel/classroom-class-funded": "9b07c13c930a022633e3266d047c2c20b49bb1ef2200599a9110a90289ce16b0",
+  "ChatPanel/classroom-access-unknown": "ee2d2a4efd55532594a6e8eba69c16eed324d9c2be9aee0c3aebe4cbeeb1e6aa",
 };
 
 const status = rendererStatus();
@@ -262,7 +282,7 @@ if (!status.available) {
   for (const [name, digest] of Object.entries(digests)) {
     assert.equal(digest, BASE[name], `${name}: an old profile renders differently from main before A5`);
   }
-  ok(`old-profile render identity: ${Object.keys(digests).length} screens equal main before A5`);
+  ok(`old-profile render identity: ${Object.keys(digests).length} screens equal their recorded base (main before A5; the two DEC-35 classroom screens on this branch)`);
 }
 
 // ── 2. The capability header on GET /v1/profile (spec §2.2 condition 4, §4.1) ─
@@ -1169,7 +1189,7 @@ if (status.available) {
     "(folder)이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html(check) [done]",
   ]);
   assert.doesNotMatch(visibleText(panel), /🔎|📏|🗂/, "no icon drawn as an emoji, and none twice (data-glyph keeps the key, unseen)");
-  ok("details: each request row names its agent before the model (코치 · / 검토 도우미 · / 보조 작업 ·), from the Service's title, the roster's, or the wire name; rows without agents read exactly as today (control); a served roster alone changes none of the 9 old screens; the timeline renders consult, check and archive lines with one icon each, the verdict in the label");
+  ok("details: each request row names its agent before the model (코치 · / 검토 도우미 · / 보조 작업 ·), from the Service's title, the roster's, or the wire name; rows without agents read exactly as today (control); a served roster alone changes none of the 11 old screens; the timeline renders consult, check and archive lines with one icon each, the verdict in the label");
 } else {
   console.log(`NOT RUN orchestrator panel details/timeline renders — ${status.detail}`);
 }
