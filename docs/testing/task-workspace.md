@@ -216,3 +216,19 @@ Personal conversation starters use the same draft ownership as editable reply ch
 Personal conversation deletion keeps its original task identity across confirmation. An in-progress task transition must not open deletion confirmation. A rejected store write must preserve history, show safe retry guidance, release the deletion guard, and permit a later explicit successful retry. Cancellation and active-stream guards remain required; synthetic modal tests do not establish native event timing.
 
 Complete targetless browser requests include polite Korean ability questions (for example “브라우저 열어줄 수 있어?”). They must retain the same no-authoring protection as imperative browser-open requests, including against synthetic unexpected HTML output. Explicit destinations, search, authoring, negation and mixed requests must not be classified as targetless browsing.
+
+## Question card (CGP-CHAT-D-003 / CGP-CHAT-D53)
+
+`test/question-card.test.tsx` mounts the shipped card and ChatPanel, drives keyboard
+and pointer events, and checks selection, explicit send, preserved draft, duplicate
+confirmation, IME guards, typing focus/notice, retry, new-turn ownership and the
+classroom gate. It also rejects hostile control/bidi option text and distinguishes
+explicit recommendation suffixes from prose. Existing parser/quote/text-size tests
+remain regression coverage.
+
+Browser verification must measure the card against the reading column, 44px
+options with 8px gaps, badge contrast in dark/light, and no narrow-pane overflow.
+Capture personal/classroom at 1420px and 800px (320px is an additional stress case).
+Check arrow focus, Space selection, Enter confirmation, draft-preserving arrival
+and idle arrival. Physical IME, native screen-reader speech and forced-colors
+acceptance must be reported separately from synthetic DOM/browser tests.
