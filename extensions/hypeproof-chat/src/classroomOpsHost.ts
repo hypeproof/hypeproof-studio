@@ -1,3 +1,4 @@
+import { confirmOutbound } from "./outboundConsentHost.ts";
 // Host adapter for remote classroom operations (#751). VS Code, SecretStorage,
 // disk and fetch live here; every decision lives in classroomOps.ts.
 //
@@ -137,11 +138,14 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     return { grant_id: m.grant_id, class_run_id: m.class_run_id, seat_id: m.seat_id, student: m.student, activity: m.lesson ? { course_id: m.lesson.course_id, version: m.lesson.version } : null, run: m.run };
   }
   private snapshotDeps(consent: { purpose: string; notice_version: string } | null = null, kinds: CollectKind[] | null = null): SnapshotDeps {
+    const generation = this.generation, credential = this.credential, base = this.base();
+    const current = () => generation === this.generation && credential === this.credential && base === this.base();
     const dir = path.join(this.context.globalStorageUri.fsPath, "classroom-snapshots"), safe = (s: string) => s.replace(/[^A-Za-z0-9-]/g, "");
     const stateFile = (b: string) => path.join(dir, `${safe(b)}.state.json`), copyDir = (b: string, r: number) => path.join(dir, safe(b), `r${r}`);
-    const call = async (url: string, init: RequestInit) => { try { const res = await fetch(`${this.base()}/classroom/ops/collect/${url}`, { ...init, signal: AbortSignal.timeout(30000), headers: { authorization: `Bearer ${this.credential}`, ...(init.headers ?? {}) } }); const j = (await res.json().catch(() => ({}))) as Record<string, string>; return { status: res.status, reason: j.reason, receipt_id: j.receipt_id, coverage: j.coverage, coverage_reason: j.coverage_reason }; } catch { return { status: 0 }; } };
+    const call = async (url: string, init: RequestInit) => { try { if (!current()) return { status: 403, reason: "not_connected" }; const res = await fetch(`${base}/classroom/ops/collect/${url}`, { ...init, signal: AbortSignal.timeout(30000), headers: { authorization: `Bearer ${credential}`, ...(init.headers ?? {}) } }); const j = (await res.json().catch(() => ({}))) as Record<string, string>; return { status: res.status, reason: j.reason, receipt_id: j.receipt_id, coverage: j.coverage, coverage_reason: j.coverage_reason }; } catch { return { status: 0 }; } };
     return {
-      scope: () => this.scope(),
+      confirm: async (items) => current() && await confirmOutbound({ recipient: `수업 기록 운영자 · ${new URL(base).host}`, items }) && current(),
+      scope: () => current() ? this.scope() : null,
       // The immutable copy: written once per (batch, revision) and only ever read back afterwards — with the binding it was frozen under.
       copy: async (b, r) => {
         const target = copyDir(b, r), bindingFile = path.join(target, "binding.json");

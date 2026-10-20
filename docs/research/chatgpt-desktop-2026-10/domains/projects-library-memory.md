@@ -263,3 +263,14 @@ Chalk: DES-01–11 (`requirements/classroom-design.md`).
 10. Search used for "no coverage" claims was bounded to the `studio@origin/main:` snapshot docs and
     `extensions/hypeproof-chat/src` file headers; Service (`hypeproof-service`) source was not
     available here, so Service-side memory or storage features may exist unseen.
+
+### REQ-KNOW-09 implementation contract (CGP-KNOW-R-006)
+
+Every outgoing content action requires a fresh disclosure bound to its immutable bytes and destination. Native gallery (with its session-record block), log collection, classroom snapshots, GitHub site publication, curriculum test publication, share-link issuance, the problem report (`문제 신고하기`, with or without recent turns), the budget-request note and the observation assessment use the same recipient/item-byte-size/exclusion presentation. Help and Chalk retain explicit unselected consent and add byte sizes and the fixed exclusion line. Local inbox submission shows its exact bundle fields and a local-only destination, with Cancel.
+
+- Cancel or an absent confirmation adapter authorizes no content request. Read-only destination discovery may precede the dialog; no content POST/PUT may precede it.
+- The gallery dialog also says that the learner's name (the class-roster name the gallery attaches) appears on the public page. Several pending session logs are listed in one dialog, one block per session with its recipient, files and sizes; exactly those bytes are sent and Cancel sends none.
+- Changing identity, activity, preview root or destination while confirming refuses the action. A failed upload, a resumed snapshot and a help-request retry ask again (the retry re-opens the same request as an unconfirmed preview); cancelling a snapshot is terminal for that batch. Nothing remembers broad consent.
+- The exclusion line refers to app-owned memory and personal-note stores, including the configured learning wiki directory. Export paths reject those stores. Gallery publication keeps the 2026-08-21 post-publish session-record upload, but never silently: it is its own block (recipient, files, sizes) in the publish confirmation, and exactly the listed bytes are sent (DEC-KNOW-09). Learner-selected prose already contained in a page or explicit help/feedback text remains part of the disclosed content.
+- Existing Service authorization, profile gates, expiries and audience rules remain mandatory. No new publication capability, recipient, or cohort opt-in is enabled. A published legacy version that includes a private-store path cannot receive a new share link through this action.
+- Evidence is local/synthetic: request-boundary tests and browser fixtures do not establish live publication or installed-device acceptance.

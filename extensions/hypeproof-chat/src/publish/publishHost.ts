@@ -1,3 +1,4 @@
+import { confirmOutbound } from "../outboundConsentHost.ts";
 // VS Code glue for the one-click publish: the toolbar command, the coach tool's host side,
 // the "this becomes public" confirmation, progress, and the device-code modal.
 //
@@ -233,6 +234,9 @@ export class SitePublisher {
       const profileOk = this.allowed();
       const profile = this.host.profile();
       return await runPublishSite(input, {
+        current: () => this.host.workspaceRoot() === workspace && this.host.profile() === profile,
+        confirmContent: async (manifest) => this.host.workspaceRoot() === workspace && this.host.profile() === profile && await confirmOutbound(manifest) && this.host.workspaceRoot() === workspace && this.host.profile() === profile,
+        privateDirectories: profile?.learning_wiki?.plan?.dir ? [profile.learning_wiki.plan.dir] : [],
         fetch,
         sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
         now: () => Date.now(),

@@ -52,7 +52,7 @@ try {
   assert.equal((await api(`/admin/cohorts/${local.cohort}/classroom/shares/share-flip`, 'PUT', { expected_revision: 1, status: 'answered', feedback: FLIP, next_action: '기다려 주세요' }, teacher)).status, 200);
 
   browser = await chromium.launch(); const origin = 'http://127.0.0.1:' + chalkServer.address().port, errors = [];
-  const open = async (url, viewport) => { const p = await browser.newPage({ viewport }); p.on('pageerror', (e) => errors.push(e.message)); p.on('dialog', (d) => d.accept()); await p.goto(origin + url); return p; };
+  const open = async (url, viewport) => { const p = await browser.newPage({ viewport }); await p.addInitScript(() => { new MutationObserver(() => { const d = document.getElementById('outbound'); if (d && d.open && !d.dataset.e2eShown) { d.dataset.e2eShown = '1'; window.__outboundConfirmed = (window.__outboundConfirmed || 0) + 1; setTimeout(() => { delete d.dataset.e2eShown; document.getElementById('outbound-send').click(); }, 0); } }).observe(document, { subtree: true, attributes: true, attributeFilter: ['open'] }); }); /* CGP-KNOW-R-006: confirm each outbound send in the page's own dialog */ p.on('pageerror', (e) => errors.push(e.message)); p.on('dialog', (d) => d.accept()); await p.goto(origin + url); return p; };
   const noOverflow = (p) => p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
   // ── 1. the learner answers the person's feedback on /sharing, at phone width ──

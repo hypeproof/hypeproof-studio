@@ -1,3 +1,4 @@
+import { contentBytes, OUTBOUND_EXCLUDED } from "../../src/outboundConsent";
 import { useEffect, useRef, useState } from "react";
 import { HELP_DURATIONS, REASON_TEXT, type HelpCard, type HelpDraft, type HelpView } from "../../src/classroomHelp";
 
@@ -92,7 +93,8 @@ export function HelpRequest(props: { view: HelpView | null; post: Post }) {
       {key && e && e.state === "prepared" && <section className="hp-help-preview" data-help-envelope={e.request_id} aria-label="보내기 전 확인">
         <p className="hp-inbox-meta">받는 강사: <strong data-help-preview-recipient="">{e.recipient_id}</strong> · 이번 수업 · 내 자리 {e.seat_id}</p>
         <p className="hp-inbox-meta">아래 내용이 이 글자 그대로 저장됩니다. 비밀번호·키처럼 보이는 글자는 저장할 때 가려집니다.</p>
-        {Object.entries(e.content).map(([field, text]) => <div key={field}><p className="hp-inbox-meta">{({ question: "내가 쓴 질문", prompt: "내가 AI에게 보낸 말", response: "AI의 답" } as Record<string, string>)[field] ?? field}</p><p className="hp-inbox-body" data-help-preview-field={field}>{text}</p></div>)}
+        {Object.entries(e.content).map(([field, text]) => <div key={field}><p className="hp-inbox-meta" data-help-preview-size={field}>{({ question: "내가 쓴 질문", prompt: "내가 AI에게 보낸 말", response: "AI의 답" } as Record<string, string>)[field] ?? field} · {contentBytes(String(text)).toLocaleString("ko-KR")} 바이트</p><p className="hp-inbox-body" data-help-preview-field={field}>{text}</p></div>)}
+        <p className="hp-outbound-excluded" data-help-preview-excluded="">{OUTBOUND_EXCLUDED}</p>
         {e.truncated.length > 0 && <p className="hp-inbox-meta">길어서 앞부분 8,000자만 보냅니다.</p>}
         <p className="hp-inbox-meta" data-help-preview-expiry="" data-help-preview-end={e.consent_expires_at}>강사는 {time(e.consent_expires_at * 1000)}까지 볼 수 있습니다(수업 참여 기간이 먼저 끝나면 그때까지). 기간이 지나면 강사도 나도 더 열 수 없습니다.</p>
         <p className="hp-inbox-meta">보낸 뒤에도 여기의 ‘공유 철회’로 언제든 거둘 수 있고, 철회하면 강사는 더 열 수 없습니다. 강사가 이미 읽은 것은 되돌릴 수 없습니다.</p>

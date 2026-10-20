@@ -24,7 +24,7 @@ async function hostFixture(t, opts = {}) {
     plugins: [{ name: 'vscode-review-stub', setup(b) {
       b.onResolve({ filter: /^vscode$/ }, () => ({ path: 'vscode', namespace: 'stub' }));
       b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-        contents: 'export const window={showInformationMessage:async()=>undefined}; export const workspace={getConfiguration:()=>({get:()=>"https://example.invalid/v1"})};', loader: 'js',
+        contents: 'export const window={showInformationMessage:async()=>undefined,showWarningMessage:async(message,options,...actions)=>{const d=globalThis.__opsDialogs??=[];d.push({message,options,actions});return globalThis.__opsDialogAnswer===undefined?"확인하고 보내기":globalThis.__opsDialogAnswer;}}; export const workspace={getConfiguration:()=>({get:()=>"https://example.invalid/v1"})};', loader: 'js',
       }));
     } }],
   });
@@ -45,7 +45,7 @@ async function hostFixture(t, opts = {}) {
   await writeFile(join(copy, 'binding.json'), JSON.stringify(frozen.binding));
   const stateFile = join(snapshots, batch + '.state.json');
   const pending = await uploadSnapshot(batch, {
-    scope: () => scope, copy: async () => ({ files: frozen.files, binding: frozen.binding }), loadState: async () => null,
+    confirm: async () => true, scope: () => scope, copy: async () => ({ files: frozen.files, binding: frozen.binding }), loadState: async () => null,
     saveState: async (s) => writeFile(stateFile, JSON.stringify(s)),
     put: async () => ({ status: 0 }), seal: async () => { throw Error('offline cannot seal'); },
   });
@@ -87,6 +87,24 @@ test('F5 normal expiry resumes the previously authorized frozen upload, without 
   assert.equal(state.receipt_id, 'synthetic-receipt', 'normal connection expiry must not strand an approved pending snapshot');
   assert.ok(f.requests.length > 0);
   assert.ok(f.requests.every((p) => p.startsWith('/v1/classroom/ops/collect/snapshots/')), 'expired observation/command access must not resume');
+});
+
+test('REQ-KNOW-09 the resumed upload asks again through the real host dialog; closing it sends nothing and ends that batch', async (t) => {
+  globalThis.__opsDialogs = []; globalThis.__opsDialogAnswer = null; // null = the learner closed the dialog
+  t.after(() => { delete globalThis.__opsDialogs; delete globalThis.__opsDialogAnswer; });
+  const f = await hostFixture(t);
+  await f.host.resume();
+  const until = Date.now() + 1000; let state;
+  do { state = JSON.parse(await readFile(f.stateFile, 'utf8')); if (state.result) break; await new Promise((r) => setTimeout(r, 10)); } while (Date.now() < until);
+  assert.equal(globalThis.__opsDialogs.length, 1, 'the host showed its confirmation');
+  const d = globalThis.__opsDialogs[0];
+  assert.equal(d.options?.modal, true);
+  const lines = d.options.detail.split('\n');
+  assert.equal(lines[0], '받는 곳: 수업 기록 운영자 · example.invalid');
+  assert.ok(lines.some((l) => /^• events\.jsonl \([1-9][\d,]* 바이트\)$/.test(l)), 'each frozen file is a sized line: ' + lines.join(' | '));
+  assert.equal(lines.at(-1), '포함하지 않는 것: AI 기억, 개인 메모');
+  assert.deepEqual(f.requests.filter((p) => p.startsWith('/v1/classroom/ops/collect/snapshots/')), [], 'closing the dialog sends no snapshot bytes');
+  assert.equal(state.result, 'consent_declined', 'and ends that batch');
 });
 
 test('F5 negative control: explicit disconnect does not resume a pending upload', async (t) => {

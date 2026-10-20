@@ -2175,3 +2175,13 @@ html, body, #root {
 @media (forced-colors: active) {
   .hps-turn-diff-line[data-kind="added"], .hps-turn-diff-line[data-kind="removed"] { border-inline-start: 1px solid CanvasText; }
 }
+
+/* REQ-KNOW-09: disclosure remains readable in host light/dark themes. */
+.hp-help-preview { color: var(--vscode-foreground, var(--hp-ink)); overflow-wrap: anywhere; }
+.hp-help-preview .hp-muted, .hp-help-preview .hp-help-label { color: inherit; font-size: var(--hp-text-caption); }
+.hp-help-preview button, .hp-help-preview .hp-help-consent { min-height: 44px; font-size: var(--hp-text-caption); }
+.hp-help-preview .hp-help-consent { align-items: center; }
+@media (forced-colors: active) { .hp-help-preview { color: CanvasText; } .hp-help-preview button:focus-visible { --hp-ring: Highlight; outline: 2px solid var(--hp-ring); } }
+.hp-help-preview .hp-inbox-meta, .hp-help-preview .hp-cta-quiet { color: inherit; }
+/* The exclusion line is the disclosure itself: body size (15px in the panel), never the 12px caption. */
+.hp-help-preview .hp-outbound-excluded { margin: 0; font-size: inherit; line-height: 1.5; color: inherit; font-weight: 600; overflow-wrap: anywhere; }

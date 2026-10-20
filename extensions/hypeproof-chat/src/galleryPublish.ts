@@ -1,3 +1,4 @@
+import { contentBytes, type OutboundConfirmation, type OutboundItem } from "./outboundConsent.ts";
 // 갤러리 발행 — "갤러리에 올리기" 의 네트워크 절반.
 //
 // 아이가 만든 세상 HTML 한 장을 lab 사이트(`hypeproof-ai.xyz`)의
@@ -113,6 +114,31 @@ export function galleryPublishAllowed(
   // 감추는 조건과 같은 값을 같은 방향으로 본다.
   if (publishing.strategy !== "hypeproof_gallery") return { ok: false, message: GALLERY_NOT_ALLOWED };
   return { ok: true };
+}
+
+/**
+ * The session record that goes with a publish (2026-08-21 operations decision: the "this far" log snapshot survives on the
+ * server even when the learner misses "기록 보내기"). REQ-KNOW-09: it is its own block in the same confirmation — recipient,
+ * items and sizes — and `send` uploads exactly the bytes that were listed. It runs only after the page itself is published.
+ */
+/**
+ * The client never sends a name (identity comes from the token), but the gallery route looks the learner up on the
+ * distribution board and shows that name on the public page (see the header). The dialog says so (REQ-KNOW-09, F7).
+ */
+export const GALLERY_NAME_NOTE = "공개 페이지에 내 이름이 함께 보여요 (수업 명단에 적힌 이름을 갤러리가 붙여요)";
+export interface GalleryRecord { recipient: string; items: readonly OutboundItem[]; send(): Promise<unknown> }
+
+/** User-facing gate over a frozen page; the transport remains usable by Service contract tests. */
+export async function publishWorldConfirmed(input: PublishInput, confirm: OutboundConfirmation, current: () => Promise<boolean>, record: GalleryRecord | null = null): Promise<PublishResult> {
+  const frozen = { ...input };
+  if (!await current()) return { ok: false, status: 0, message: "활동이 바뀌어서 보내지 않았어요." };
+  const metadata = { worldId: frozen.worldId, title: frozen.title, ...(frozen.sessionId ? { sessionId: frozen.sessionId } : {}) };
+  const also = record ? [{ recipient: record.recipient, items: record.items }] : undefined;
+  if (!await confirm({ recipient: `갤러리 · ${new URL(frozen.siteBase).host}`, public: true, notes: [GALLERY_NAME_NOTE], items: [{ name: "index.html (화면과 실행 코드)", bytes: contentBytes(frozen.html) }, { name: "작품 제목·종류·세션 연결 정보", bytes: contentBytes(JSON.stringify(metadata)) }], ...(also ? { also } : {}) }) || !await current()) return { ok: false, status: 0, message: "보내지 않았어요." };
+  const result = await publishWorld(frozen);
+  // Fire-and-forget, as before: the page is already up; a record failure is not put on the learner's screen.
+  if (result.ok && record) void record.send().catch(() => undefined);
+  return result;
 }
 
 export async function publishWorld(input: PublishInput): Promise<PublishResult> {
