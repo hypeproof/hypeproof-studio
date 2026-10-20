@@ -76,6 +76,8 @@
 .tw-source-list button[aria-pressed="true"] { border-color: var(--tw-line); }
 .tw-source-list span { overflow-wrap: anywhere; font-size: var(--hp-text-caption); line-height: 1.6; }
 .tw-source-list small { font-size: var(--hp-text-caption); color: var(--tw-muted); overflow-wrap: anywhere; }
+/* CGP-KNOW-R-015 — 이 파일에 대해 묻기 under each work-folder file: a 44px target, text only. */
+.tw-source-list .tw-artifact-ask { flex-direction: row; align-items: center; align-self: flex-start; width: auto; min-height: 44px; padding: 0 12px; border-color: var(--tw-line); font-size: var(--hp-text-caption); }
 .tw-source-empty { padding: 64px 22px; }
 .tw-source-empty > span { display: block; font-size: 28px; color: var(--tw-muted); margin-bottom: 20px; }
 .tw-rail-toggle { display: none; }

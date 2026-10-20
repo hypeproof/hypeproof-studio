@@ -126,6 +126,20 @@ export function folderWriteRefusal(context: vscode.ExtensionContext, profile: Re
   return folderWriteAllowed(decision.kind === "apply" ? decision.level : undefined) ? null : folderReadOnlyNotice();
 }
 
+/**
+ * Does the stored choice already say the AI is not used in the open folder? For an action
+ * that queues folder contents for a later turn without calling the model (CGP-KNOW-R-015
+ * "이 파일에 대해 묻기", the work-folder file picker): it never asks. "AI 안 씀", or a seat
+ * whose choice cannot be remembered, returns the same copy the turn would refuse with;
+ * undecided and the other choices return null, and the send that carries the file asks.
+ */
+export function folderNoAiRefusal(context: vscode.ExtensionContext, profile: ResolvedProfile | null | undefined, opts: FolderConsentOpts): string | null {
+  const { scope, decision } = decide(context, profile, opts);
+  if (!scope || decision.kind === "skip") return null;
+  if (decision.kind === "refuse") return decision.message;
+  return decision.kind === "apply" && decision.level === "none" ? folderNoAiCopy() : null;
+}
+
 /** "이 폴더의 AI 권한 바꾸기": change the remembered choice for the open folder. */
 export async function changeFolderConsent(
   context: vscode.ExtensionContext,

@@ -54,6 +54,7 @@ import { uploadAllPending, scanUploadableSessions } from "./spoolUploader";
 import type { ResolvedProfile } from "./protocol";
 import { changeFolderConsent } from "./folderConsentHost";
 import { FOLDER_CONSENT_COMMAND } from "./folderConsent.ts";
+import { ASK_ABOUT_FILE_COMMAND } from "./fileAttachment";
 import { resolvePublishEndpoints, type PublishOverrideSource } from "./publish/publishConfig";
 
 const TOKEN_KEY = "hypeproofChat.workshopToken";
@@ -271,6 +272,14 @@ export async function activate(context: vscode.ExtensionContext) {
   // REQ-STUDIO-FOLDER-CONSENT — the one place a remembered folder choice is changed.
   context.subscriptions.push(vscode.commands.registerCommand(FOLDER_CONSENT_COMMAND, async () => {
     await changeFolderConsent(context, await provider.ensureProfile(), { servedRoot: provider.servedClassRoot, instructor: provider.isInstructor === true });
+  }));
+  // CGP-KNOW-R-015 — "이 파일에 대해 묻기" on an explorer file: show the chat, then attach through the
+  // file-attach path (the host refuses anything outside the work folder) and focus the composer.
+  context.subscriptions.push(vscode.commands.registerCommand(ASK_ABOUT_FILE_COMMAND, async (uri?: vscode.Uri) => {
+    const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+    if (!target || target.scheme !== "file") return;
+    await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+    await provider.askAboutFile(target.fsPath);
   }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));

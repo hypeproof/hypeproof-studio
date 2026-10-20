@@ -16,6 +16,7 @@ import { onHostMessage, postToHost } from "./vscode";
 import { runVoiceCapabilityProbe } from "./voiceProbe";
 import { ChatPanel } from "./ChatPanel";
 import { TaskWorkspaceFrame } from './TaskWorkspace';
+import { askAboutFileAllowed } from './askAboutFile';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
 import type { VerdictMap, VerdictState } from '../../src/answerVerdict';
 import { InstructorChatPanel } from "./InstructorChatPanel"; // #1298
@@ -689,7 +690,7 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
-      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)}>
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel

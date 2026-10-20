@@ -4,12 +4,16 @@
 
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { provenanceHistoryText } from '../../src/artifactProvenanceView';
+import { ASK_ABOUT_FILE_LABEL } from './askAboutFile';
 
 const ROW = { display: 'flex', flexDirection: 'column', gap: 5, padding: '10px 8px', minHeight: 44, boxSizing: 'border-box' } as const;
 const NOTE = { fontSize: 11, padding: '0 18px', margin: '6px 0 8px', lineHeight: 1.6 } as const;
 
-/** `view` undefined: not answered yet; null: no work folder to describe. */
-export function ArtifactProvenanceList({ view }: { view: ArtifactProvenanceView | null | undefined }) {
+/**
+ * `view` undefined: not answered yet; null: no work folder to describe. `onAsk` (CGP-KNOW-R-015)
+ * is passed only where the seat may attach work-folder files; each row then offers 이 파일에 대해 묻기.
+ */
+export function ArtifactProvenanceList({ view, onAsk }: { view: ArtifactProvenanceView | null | undefined; onAsk?: (path: string) => void }) {
   return <section className="tw-artifacts" aria-labelledby="task-artifacts-title" data-testid="artifact-provenance">
     <h3 id="task-artifacts-title" className="tw-source-list-title">작업 폴더의 파일</h3>
     {view === undefined ? <p className="tw-source-list-title" style={NOTE} role="status">파일 기록을 불러오는 중…</p>
@@ -24,6 +28,7 @@ export function ArtifactProvenanceList({ view }: { view: ArtifactProvenanceView 
             return <li key={entry.path}><div style={ROW} data-provenance={entry.kind}>
               <span>{entry.path}</span>
               <small><span aria-hidden="true" data-provenance-symbol>{entry.symbol}</span> <strong>{entry.label}</strong>{history && <> · 지금까지: {history}</>}</small>
+              {onAsk && <button type="button" className="tw-artifact-ask" aria-label={`${ASK_ABOUT_FILE_LABEL}: ${entry.path}`} onClick={() => onAsk(entry.path)}>{ASK_ABOUT_FILE_LABEL}</button>}
             </div></li>;
           })}</ul>}
         {view.more > 0 && <p className="tw-source-list-title" style={NOTE}>파일 {view.more}개는 더 있어서 여기에 다 보여 주지 못했어요.</p>}

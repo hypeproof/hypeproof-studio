@@ -6954,6 +6954,47 @@
       ]
     },
     {
+      "id": "ST-IMP-ASK-ABOUT-FILE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE",
+        "ST-IMP-CHAT-FILE-ATTACH",
+        "ST-IMP-ARTIFACT-PROVENANCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/askAboutFile.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ArtifactProvenanceList.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/fileAttachment.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/folderConsentHost.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ASK-ABOUT-FILE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE",
+        "ST-IMP-ASK-ABOUT-FILE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/ask-about-file-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/ask-about-file.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-OFFLINE-BANNER",
       "stage": "implementation",
       "owner": "jayleekr",
