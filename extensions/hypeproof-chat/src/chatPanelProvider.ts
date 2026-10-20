@@ -186,6 +186,7 @@ import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSa
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { aiCapabilities } from "./aiCapabilities";
+import { CapabilityChangeTracker } from "./capabilityChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE } from "./fileAttachment";
 import { classUpdateHold } from "./updateCheckerHelpers";
@@ -859,6 +860,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // Lazy: fixtures build the provider with Object.create, which skips field initializers.
   private finishNotice?: ReturnType<typeof createFinishNotifier>;
   private get finishNotifier() { return (this.finishNotice ??= createFinishNotifier({ view: () => this.view, editor: () => this.editorChat })); }
+  // CGP-SHELL-R-024 — what the learner was last told the AI can do, per token and activity (memory only).
+  // Inline `??=` at each use, not a getter: some fixtures call postConfig on a plain object that has no prototype getters.
+  private capChanges?: CapabilityChangeTracker;
   private activeStreams = new Map<string, AbortController>();
   // REQ-STUDIO-STEER-NOW — the latest turn until its outer finally released the folder lock (turnSettle.ts);
   // undefined once it has. Fixtures build the provider with Object.create, which skips field initializers.
@@ -5187,6 +5191,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #72. User clicked "Later" — silence this version for 7 days.
         void vscode.commands.executeCommand("hypeproof-chat.dismissUpdate", msg.version);
         return;
+      case "dismissCapabilityChange":
+        (this.capChanges ??= new CapabilityChangeTracker()).dismiss(msg.id);
+        void this.postConfig();
+        return;
       case "namingRitual":
         void this.runCoachNamingRitual({ force: true });
         return;
@@ -7338,6 +7346,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const toolRuntime = selection?.source === 'lesson' ? selection.runtime : resolveCoachRuntime({
       settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: toolProfile?.coach_runtime, minorCohort: toolProfile?.minor_cohort,
     });
+    // CGP-SHELL-R-024 — compare the served profile (before the access choice and the folder choice, which the learner made).
+    const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, runtime: toolRuntime, instructor: isInstructor, local: !!local });
     await this.post({
       type: "config",
       config: {
@@ -7345,6 +7355,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
         ...(toolProfile && !local && !isInstructor ? { aiCapabilities: aiCapabilities(toolProfile, this.fallbackNoticeShown ? 'proxy' : toolRuntime) } : {}),
+        ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
