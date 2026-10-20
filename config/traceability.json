@@ -5811,6 +5811,86 @@
       ]
     },
     {
+      "id": "ST-REQ-RELEASE-CASEBOOK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-UNIFIED",
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Release casebook (REQ-STUDIO-RELEASE-CASEBOOK)"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-RELEASE-CASEBOOK",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-RELEASE-CASEBOOK"
+      ],
+      "sources": [
+        {
+          "path": "docs/operations/release-casebook/README.md"
+        },
+        {
+          "path": "docs/operations/release-casebook/journeys.yaml"
+        },
+        {
+          "path": "docs/operations/release-casebook/cases.yaml"
+        },
+        {
+          "path": "docs/operations/release-casebook/results-schema.md"
+        },
+        {
+          "path": "docs/operations/release-casebook/pre-tester-prompt.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-RELEASE-CASEBOOK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-RELEASE-CASEBOOK",
+        "ST-DES-RELEASE-CASEBOOK",
+        "ST-TEST-RELEASE-CASEBOOK"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/casebook.mjs"
+        },
+        {
+          "path": "scripts/release/select-cases.mjs"
+        },
+        {
+          "path": "scripts/release/daily-gate.mjs"
+        },
+        {
+          "path": "scripts/release/validate-blackbox-run.mjs"
+        },
+        {
+          "path": "scripts/release/templates/release-pr.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-RELEASE-CASEBOOK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-RELEASE-CASEBOOK"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/test/select-cases.test.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-TASK-WORKSPACE",
       "stage": "requirement",
       "owner": "ico1036",

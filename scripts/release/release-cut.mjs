@@ -18,6 +18,8 @@ import {fileURLToPath} from 'node:url';
 import {classify, fetchPrs, render} from './checklist.mjs';
 import {exitCode, printSmoke, runSmoke} from './smoke/smoke.mjs';
 import {nextRcTag, versionFor} from './version.mjs';
+import {oneLiner} from './install-kit.mjs';
+import {run as selectCases} from './select-cases.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
@@ -81,6 +83,22 @@ console.log(`[5] reading ${prNumbers.length} PRs`);
 const {groups, authors} = classify(fetchPrs(REPO, prNumbers));
 const rendered = render({groups});
 
+// 7. Black-box cases for the release manager (docs/operations/release-casebook/README.md).
+// A broken casebook does not stop the cut; the PR body says so and the manager runs every P0 case.
+let cases = {markdown: '', json: null};
+let changedRequirements = '';
+try {
+  cases = selectCases({root, baseline, candidate, today: day, out});
+  changedRequirements = cases.json.touched_requirements.length
+    ? cases.json.touched_requirements.map(id => `\`${id}\``).join(' ')
+    : 'None found in commit messages or requirement-doc diffs.';
+  console.log(`[6] black-box cases: ${cases.json.cases.length} selected, ${cases.json.touched_requirements.length} requirement ids touched`);
+} catch (error) {
+  console.log(`[6] black-box case selection failed: ${error.message}`);
+  cases.markdown = `> **케이스 선택 실패** — \`${String(error.message).split('\n')[0]}\`. 릴리스 관리자는 \`docs/operations/release-casebook/cases.yaml\` 의 P0 케이스를 모두 실행합니다.`;
+  changedRequirements = '_not computed: case selection failed_';
+}
+
 const fill = (name, values) => fs.readFileSync(path.join(here, 'templates', name), 'utf8')
   .replace(/\{\{(\w+)\}\}/g, (_, k) => values[k] ?? `{{${k}}}`);
 const common = {
@@ -96,7 +114,7 @@ const plan = {
 };
 const writePlan = () => fs.writeFileSync(path.join(out, 'plan.json'), JSON.stringify(plan, null, 2));
 
-// 7. Branch on the smoke verdict.
+// 8. Branch on the smoke verdict.
 if (smoke.result === 'FAIL') {
   fs.writeFileSync(path.join(out, 'smoke-failure-issue.md'), fill('smoke-failure-issue.md', {
     ...common, AUTHORS: authors.map(a => `- @${a}`).join('\n') || 'None.',
@@ -113,6 +131,8 @@ if (smoke.result === 'FAIL') {
 fs.writeFileSync(path.join(out, 'release-pr.md'), fill('release-pr.md', {
   ...common,
   RC_TAG: rcTag, FINAL_TAG: version,
+  INSTALL_ONELINER: oneLiner(rcTag),
+  BLACKBOX_CASES: cases.markdown, CHANGED_REQUIREMENTS: changedRequirements,
   RC_BUILD_LINK: `https://github.com/${REPO}/releases/tag/${rcTag}`,
   SERVICE_VERSION: smoke.service_version ?? 'unknown', CHALK_VERSION: smoke.chalk_version ?? 'unknown',
   SMOKE_RESULT: smoke.result,
