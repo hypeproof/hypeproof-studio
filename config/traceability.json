@@ -6610,6 +6610,21 @@
           "path": "extensions/hypeproof-chat/test/page-attachment.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-TEST-CHALK-ROW-ACTIONS",
+      "stage": "test",
+      "label": "Chalk row actions visible without hover, 44px targets, focus ring (REQ-CHALK-ROW-ACTIONS)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-DESIGN",
+        "ST-DES-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/row-actions.test.mjs"
+        }
+      ]
     }
   ]
 }

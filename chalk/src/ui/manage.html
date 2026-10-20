@@ -137,7 +137,8 @@ main{padding:6px 20px 28px}
 .ops-seat>td.c-step .caution{color:var(--ink-warn);font-weight:500}
 .ops-seat>td.c-step .unknown{color:var(--ink-mute)}
 .ops-seat>td.c-act{text-align:right}
-.ops-seat>td.c-act button{min-height:32px;padding:4px 12px;font-size:.875rem;background:transparent;border:1px solid var(--ink-line-hi);color:var(--ink-text-2);border-radius:6px;font-weight:500}
+/* REQ-CHALK-ROW-ACTIONS: the row action is a persistent labelled button, never hover-revealed; 44px target (DES-06) and a 3:1 boundary (DES-11). */
+.ops-seat>td.c-act button{min-height:44px;padding:4px 12px;font-size:.875rem;background:transparent;border:1px solid var(--ink-mute);color:var(--ink-text-2);border-radius:6px;font-weight:500}
 .ops-seat:hover>td.c-act button,.ops-seat[aria-current="true"]>td.c-act button{background:var(--ink-accent);color:#08131A;border-color:var(--ink-accent)}
 .ops-seat>td.c-pick .pick input{accent-color:var(--ink-accent)}
 /* Narrow list (>=760 → default; <760 → block layout using the new 4-col grid). */
@@ -226,7 +227,8 @@ body:not(.has-selection) #ops-help.group{margin-top:8px}
 .brand small{font-size:.6875rem;color:var(--ink-mute);letter-spacing:.08em}
 .brand strong{font-size:1.0625rem;letter-spacing:.02em;color:var(--ink-text)}
 .flow{gap:2px;font-size:.875rem;display:flex;flex-direction:column}
-.flow>a{min-height:34px;padding:6px 10px;font-size:.875rem;display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:6px;color:var(--ink-text);text-decoration:none}
+/* REQ-CHALK-ROW-ACTIONS: sidebar rows are 44px targets (DES-06). */
+.flow>a{min-height:44px;padding:6px 10px;font-size:.875rem;display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:6px;color:var(--ink-text);text-decoration:none}
 .flow>a:hover{background:var(--ink-panel-hi)}
 .flow>a[aria-current="page"]{background:var(--ink-panel-hi);box-shadow:inset 2px 0 0 var(--ink-accent);font-weight:600;color:var(--ink-text)}
 .flow a#nav-help-link:has(#nav-help:empty){display:none}
@@ -235,7 +237,7 @@ body:not(.has-selection) #ops-help.group{margin-top:8px}
 .flow-more>summary::-webkit-details-marker{display:none}
 .flow-more>summary::after{content:' ▾';color:var(--ink-mute)}
 .flow-more[open]>summary::after{content:' ▴'}
-.flow-more>a{display:flex;align-items:center;min-height:32px;padding:4px 10px;font-size:.8125rem;color:var(--ink-text-2);text-decoration:none;border-radius:6px}
+.flow-more>a{display:flex;align-items:center;min-height:44px;padding:4px 10px;font-size:.8125rem;color:var(--ink-text-2);text-decoration:none;border-radius:6px}
 .flow-more>a:hover{background:var(--ink-panel-hi);color:var(--ink-text)}
 /* Selection tools chip: 선택 도구 opens the pickby helpers. Zero visible clutter when closed. */
 details#ops-tools>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 12px;font-size:.875rem;color:var(--ink-text-2);background:transparent;border:1px solid var(--ink-line-hi);border-radius:8px;letter-spacing:.02em}
