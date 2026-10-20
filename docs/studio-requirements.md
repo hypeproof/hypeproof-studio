@@ -85,6 +85,40 @@ controls), and a source scan that every write call site in the chat host and pre
 passes the guard (a planted direct write fails it; each guard was removed once and the
 smoke failed). `test/denial-source.smoke.mjs` covers the sixth source.
 
+`REQ-STUDIO-FINISH-NOTICE` (CGP-AGENT-R-023, P1, 2026-10-20): when a coach turn ends
+while no chat surface is on screen (the sidebar view's `visible` and the editor chat
+panel's `visible` are both false, so the panel is hidden or covered), Studio shows one
+non-modal information message: "AI 답이 준비됐어요." for a finished turn, "AI가 이번 답을
+끝내지 못했어요. 채팅에서 확인해 주세요." for a failed one, each with the action "채팅 열기",
+which reveals the editor chat panel when one exists, otherwise focuses the sidebar view
+(`hypeproof-chat.panel.focus`). Approval already asks with a modal, so it is not covered
+here. Never: while a chat surface is visible; for a turn that was stopped (the learner's
+or the instructor's stop, the turn's own abort signal); with any answer text (fixed copy
+only, for shared and projected screens). At most one notice is held at a time: turns that
+end while it is held are coalesced into it, not stacked. The hold ends when the notice is
+clicked or closed, when any chat surface becomes visible however the learner got there
+(`onDidChangeVisibility` / `onDidChangeViewState`), at the next turn start, and after 2
+minutes at the latest (`FINISH_NOTICE_HOLD_MS`), because VS Code never settles an
+information message whose toast timed out into the notification center. Seats: personal work only
+(activity kind personal or trial, or a bought pass); never a classroom seat, a seat with a
+served lesson or an enforced lesson binding, the instructor surface, or an unknown seat.
+This follows the stricter existing quiet rule (the REQ-STUDIO-FOLDER-CONSENT seats, and
+CGP-SHELL-R-001 `classUpdateHold`, where a missing kind counts as a class), so a notice
+never interrupts a class. Pure decisions and coalescing: `src/finishNotice.ts`; VS Code
+binding: `src/finishNoticeHost.ts`; one call at turn end in `chatPanelProvider.ts`.
+Limits: a VS Code information message is in-window; whether it reaches macOS Notification
+Center or Windows when Studio is in the background is not verified (master register open
+question), and the OS notification of CGP-SHELL-R-008 (unfocused window, turns over 60 s)
+is not built. Tests: `test/finish-notice.smoke.mjs` — seats with classroom, lesson,
+unknown and instructor negative controls; visible and stopped give no notice; copy; the
+real host module against a fake VS Code (non-modal, one action, two turns give one notice,
+the action reveals the view or the editor panel, dismissing reveals nothing, no answer
+text); the hold with a notice that never settles (released by the view or the editor panel
+becoming visible but not by a hidden-state event, by the next turn start, and at 2 minutes;
+a stale notice settling late does not release a newer one); and the wiring at the turn's
+final status with the turn's own profile, both surfaces watched and the turn-start release. Each guard was removed once and the
+smoke failed.
+
 ### Personal chat detail (CP-R1)
 
 Proxy stream completion evidence (#1965; REQ-C1, REQ-C5):
