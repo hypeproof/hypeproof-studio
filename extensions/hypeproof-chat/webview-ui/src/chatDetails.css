@@ -284,3 +284,14 @@
 .hps-text-size { border: 0; border-bottom: 1px solid var(--tw-line); margin: 0; padding: 8px 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .hps-text-size legend { padding: 0; font-weight: 500; min-height: 32px; }
 .hps-text-size label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }
+
+/* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Normal mode is unchanged. */
+@media (forced-colors: active) {
+  /* The composer wrapper is the field: it keeps the boundary and the ring, and the textarea inside it
+     draws neither, as in normal mode. */
+  .hps-shell[data-chat-detail="personal"] .hps-input { border: 1px solid ButtonText; }
+  .hps-shell[data-chat-detail="personal"] .hps-input:focus-within { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+  .hps-shell[data-chat-detail="personal"] .hps-input textarea { border-style: none !important; }
+  /* Response dots are painted with currentColor as a background, which forced colors repaints as Canvas. */
+  .hps-response-dots i { background: CanvasText; }
+}

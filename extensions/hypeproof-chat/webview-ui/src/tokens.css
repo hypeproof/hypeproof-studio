@@ -108,3 +108,33 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
   transition-delay: 0s !important;
   scroll-behavior: auto !important;
 }
+
+/* CGP-DS-R-016 — forced colors (Windows high contrast, REQ-STUDIO-FORCED-COLORS, DES-CGP-DS-17).
+ * The system palette replaces author colours and drops box-shadow and gradient backgrounds, so what
+ * has to survive is geometry (borders, outlines, shapes) and system colour keywords. Nothing in this
+ * block applies outside forced colors. `!important` appears only inside it: component rules set
+ * `border: 0` and tinted states at higher specificity, and those would otherwise erase the boundary
+ * or the state (test/forced-colors.smoke.mjs). */
+@media (forced-colors: active) {
+  /* Focus: the one ring token becomes Highlight in every scope that sets it, so every existing
+   * `outline: 2px solid var(--hp-ring)` rule draws in Highlight. The ring is always an outline. */
+  :root, .studio-start, .studio-disconnected, .hp-mission, [data-surface="growth"], .hp-reflection { --hp-ring: Highlight; }
+  :focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+  /* Every control keeps a visible boundary, including the borderless ghost buttons. */
+  button, select, textarea, summary,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),
+  [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="radio"] {
+    border: 1px solid ButtonText !important;
+  }
+  /* Disabled reads as disabled in the system palette, not through opacity alone. */
+  :disabled, [aria-disabled="true"] { color: GrayText !important; border-color: GrayText !important; }
+  :disabled *, [aria-disabled="true"] * { color: GrayText !important; }
+  /* Pressed, checked, selected and current take the system selection pair. After the disabled rule,
+   * so a pressed control that is also disabled (the open world, a submitted step) still reads as on. */
+  [aria-pressed="true"], [aria-checked="true"], [aria-selected="true"], [aria-current="page"] {
+    background-color: Highlight !important; color: HighlightText !important; border-color: Highlight !important;
+  }
+  [aria-pressed="true"] *, [aria-checked="true"] *, [aria-selected="true"] *, [aria-current="page"] * {
+    color: HighlightText !important; border-color: HighlightText !important;
+  }
+}

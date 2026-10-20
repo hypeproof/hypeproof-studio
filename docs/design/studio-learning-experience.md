@@ -318,6 +318,11 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
    layer 밖 규칙은 구체성과 상관없이 layer 안 규칙을 이긴다. 그래서 이 규칙들은 layer 밖에 둔다 */
 :focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
 ::placeholder { color: var(--hp-placeholder); opacity: 1; }
+/* 강제 색상(Windows 고대비, CGP-DS-R-016): 링 토큰은 시스템 Highlight가 된다. 링을 정하는 모든 범위에서 다시 정한다 */
+@media (forced-colors: active) {
+  :root, .studio-start, .studio-disconnected, .hp-mission, [data-surface="growth"], .hp-reflection { --hp-ring: Highlight; }
+  :focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+}
 ```
 
 ### 팔레트 계열 (DEC-27)
@@ -348,6 +353,7 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
 | 움직임은 토큰으로(CGP-DS-R-014, DES-CGP-DS-15) | 웹뷰 CSS의 transition/animation 시간은 `--hp-dur-*`만 쓴다. 컨트롤 hover/press `--hp-dur-press` 140ms, 제자리 확인 `--hp-dur-content` 160ms, 들어오는 면 `--hp-dur-enter` 180ms, 곡선은 `--hp-ease` 하나. 상태 반복(응답 점 1.2s×3, 진행 표시, 러너)은 기존 시간을 토큰으로 옮겼다. 줄인 움직임 규칙이 늘 이긴다 |
 | 본문 한 줄 길이(CGP-DS-R-020, DES-CGP-DS-22) | 개인 대화의 AI 본문(`.hps-prose`)은 `max-inline-size: 40em`, 한 줄에 한글 약 40자. 상한일 뿐이라 좁은 창에서는 창에 맞춰 줄바꿈하고, 표와 코드는 그 안에서 자기 스크롤을 가진다 |
 | 스크롤 막대 자리(CGP-DS-R-031, DES-CGP-DS-36) | 개인 대화 대화 목록(`.hps-messages`)은 `scrollbar-gutter: stable`. 답이 길어져 스크롤 막대가 생겨도 본문이 옆으로 밀리지 않는다 |
+| 강제 색상(CGP-DS-R-016, DES-CGP-DS-17) | Windows 고대비에서는 시스템 색만 남고 그림자와 그라데이션은 사라진다. 모든 컨트롤은 `1px solid ButtonText` 테두리, 포커스는 `--hp-ring`이 `Highlight`가 된 같은 outline, 눌림·선택·현재 상태는 `Highlight`/`HighlightText`. 색이나 배경만으로 그리던 표시(음성 캡처 점, 응답 점, 음성 막대, 인용 신뢰 단계, 검증 상태 칩, 강사 배지, 학생 말풍선)는 테두리나 모양을 얻는다. `forced-color-adjust: none`은 QR 코드 두 곳뿐이다. 보통 화면은 바뀌지 않는다 |
 
 대비. 상대 휘도로 계산한 근사값이며 구현 시 검사 도구로 다시 확인한다.
 

@@ -431,6 +431,55 @@ checks the token values against DES-CGP-DS-15 and the design doc, that every use
 defined and none is `!important`, the 40em cap with no fixed width, and the gutter on the
 scrolling element, with negative controls copied from the replaced lines.
 
+`REQ-STUDIO-FORCED-COLORS` (CGP-DS-R-016, 2026-10-20; REQ-CGP-DS-17; DES-CGP-DS-17). Under forced
+colors (Windows high contrast) the webview keeps every control, its focus and its states visible
+with system colours only, and normal mode renders exactly as before: every new rule sits inside an
+`@media (forced-colors: active)` block and no system colour keyword appears outside one. Focus: every
+scope that sets `--hp-ring` (`:root`, the lime start/mission scopes, Paper) resets it to `Highlight`,
+so each existing `outline: 2px solid var(--hp-ring)` rule draws in `Highlight`; the baseline
+`:focus-visible` and the personal composer's `:focus-within` restate the outline. No focus rule uses
+`box-shadow`, which forced colors removes, and the only outline removals stay the programmatic
+`.cp-preview h3` heading and the composer textarea whose wrapper draws the ring. Controls: buttons,
+selects, text fields, `summary` and the button/menuitem/radio roles get `1px solid ButtonText`
+(`!important`, because ghost buttons set `border: 0` at higher specificity); disabled controls read
+`GrayText`. States: `aria-pressed`, `aria-checked`, `aria-selected` and `aria-current="page"` take
+`Highlight`/`HighlightText` with their children (the current task, verdict and reason buttons, source
+pins, pass choices, the open world chip even while disabled, the web-search menu item); the open
+sources toggle and the open citation (`aria-expanded`) do too (the citation's fill is `!important`
+so its more specific hover rule cannot leave HighlightText on Canvas), and the chosen repository row
+gets a 2px `Highlight` edge. The inset (-2px) rings of the task and source lists move outside
+(2px, with 4px of list padding) because the ring and a current or pressed row are both `Highlight`. Marks that were colour or a background only gain a shape or a line: the voice
+capture dot is hollow when closed and filled when open, response dots, runner dust and voice meter
+bars are painted `CanvasText` (the idle meter `GrayText`), the four citation trust tiers get solid,
+double, dashed and dotted left lines, verify-state chips and the instructor badge get a border, and
+the learner's bubble gets a `CanvasText` outline. Small remove buttons over an image keep a
+`ButtonFace` plate. Already carried by words, symbols or geometry and kept that way: tool-row marks
+(`…`/`⚠️`/`✓`), the verdict and reason check marks, run-state chips (approval/error 700 weight and a
+2px border), the amber evidence edge (3px left border plus its state word), failed turn review
+(`role="alert"` and its title), unresolved evidence sources (`확인 필요`), the weak chip (dashed,
+struck through). `forced-color-adjust: none` is used only on the two QR code images (publish link,
+guardian payment), each with its reason, so their white plate still scans. Not covered: a capture on
+a real Windows high-contrast or macOS Increase Contrast display (not possible here; this is CSS
+evidence only); VS Code high-contrast themes without OS forced colors, which do not trigger the
+media query (DES-CGP-DS-13's `--vscode-contrastBorder`, a separate row); text links keep the system
+`LinkText` and underline with no box; the Primary CTA is not otherwise distinguished from other
+buttons in forced colors; the citation trust tier still has no words in normal mode.
+Test: `test/forced-colors.smoke.mjs` parses every webview CSS file, separates the forced-colors
+blocks from the rest, and checks the four required files have one, no system colour leaks into
+normal mode, every ring scope resets to `Highlight`, focus is an outline (never box-shadow) with only
+the two listed removals, the control boundary and its coverage, every state selector in normal CSS
+has a forced `Highlight` rule that no more specific normal rule on the same element outranks, no
+inset focus ring is left on a `Highlight` fill, disabled reads `GrayText`, each inventoried colour-only mark has its cue, the existing word,
+symbol and geometry cues are still in the source, and every `forced-color-adjust: none` is listed and
+justified, and both listed opt-outs still exist. System colours are matched in any letter case.
+Negative controls: the CSS with its forced blocks removed (origin/main), a forced
+`outline: none`, a box-shadow ring, an unreset ring scope, an unmapped expanded state, a leaked
+system colour, an unexplained opt-out, and mutations of the shipped rules (two tiers with one line, a
+borderless voice dot, a boundary that loses to `border: 0`, a non-Highlight ring, pending dots in
+currentColor, a run state reduced to colour, a citation fill without `!important` under its hover
+rule, the forced positive ring offset removed, the disabled rules deleted, the publish QR opt-out
+deleted, a lowercase system colour).
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop
