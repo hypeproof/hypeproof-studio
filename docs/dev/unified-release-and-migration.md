@@ -39,6 +39,9 @@ flowchart TD
   Windows 빌드는 `scripts/patches/windows-policy-locales.patch`를 fork의 patch
   디렉터리에 복사한 뒤 준비한다. 정책 파일의 언어별 하위 폴더도 설치본에 포함한다.
   patch 적용 검사는 설치본 검증을 대신하지 않는다.
+  `resources/app/product.json` is the one file compared by field, not by bytes: VS Code's
+  Inno Setup build adds `target` (`user`/`system`) and re-serializes it, so the installed
+  copy must equal the portable one plus the target of the installer that wrote it.
 - `public.mjs`: checks the same candidate App against the current public Service with
   synthetic trial and classroom codes minted for this run, and creates two files in each
   activity. Existing policy and request limits apply and a failed activity is not retried
