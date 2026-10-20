@@ -7938,6 +7938,59 @@
           "path": "e2e/start-page/join-link.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TASK-COMMAND-ALLOW",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## E. Manual-approve modal"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-COMMAND-ALLOW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-COMMAND-ALLOW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskCommandAllow.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/folderConsentHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/folderConsent.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-COMMAND-ALLOW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-COMMAND-ALLOW",
+        "ST-IMP-TASK-COMMAND-ALLOW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-command-allow.smoke.mjs"
+        }
+      ]
     }
   ]
 }

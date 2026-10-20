@@ -177,7 +177,7 @@ Each line: canonical row <- rows merged into it. Verdict in brackets when the me
 | CGP-DS-R-027 (P0) | IME composition never triggers Enter-send, Escape-close or any single-key shortcut | CGP-VOICE-R-013 |
 | CGP-CHAT-R-009 (P1) | Each completed answer can be read aloud. | CGP-VOICE-R-020 |
 | CGP-CHAT-R-030 (P2) | A shortcuts help sheet lists the chat keys that exist. | CGP-VOICE-R-022 |
-| CGP-AGENT-R-004 (P1) | A command approval offers "이번 작업 동안 같은 종류 명령 허용" for a non-destructive command prefix. | CGP-VOICE-R-025 |
+| CGP-AGENT-R-004 (P1) | A command approval offers "이번 작업 동안 같은 종류 명령 허용" for a non-destructive command prefix. DEVIATION (2026-10-20, REQ-E1): ships as "이번 작업 동안 이 명령 허용" for the EXACT command only (whitespace collapsed); three adversarial verifications showed a prefix/"same kind" scope widens to code execution. | CGP-VOICE-R-025 |
 | CGP-AGENT-R-023 (P1) | Studio notifies when the coach finishes a turn or waits for approval while the chat panel  | CGP-SHELL-R-008 |
 | CGP-DS-R-009 (P1) | Learner can choose a chat text size (기본 / 크게 / 아주 크게) | CGP-SHELL-R-017 |
 | CGP-DS-R-015 (P0) | Reduced motion honors an explicit app/VS Code preference, falling back to the OS | CGP-SHELL-R-018 |
