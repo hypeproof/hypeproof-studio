@@ -13,7 +13,8 @@ const server=createServer(async(req,res)=>{try{const parts=[];for await(const p 
 let browser;
 try{
  server.listen(0,'127.0.0.1');await once(server,'listening');const origin='http://127.0.0.1:'+server.address().port;
- browser=await chromium.launch();const student=await browser.newPage();const teacher=await browser.newPage();const errors=[];for(const p of [student,teacher])p.on('pageerror',e=>errors.push(e.message));
+ browser=await chromium.launch();const student=await browser.newPage();await student.addInitScript(() => { new MutationObserver(() => { const d = document.getElementById('outbound'); if (d && d.open && !d.dataset.e2eShown) { d.dataset.e2eShown = '1'; window.__outboundConfirmed = (window.__outboundConfirmed || 0) + 1; setTimeout(() => { delete d.dataset.e2eShown; document.getElementById('outbound-send').click(); }, 0); } }).observe(document, { subtree: true, attributes: true, attributeFilter: ['open'] }); }); // CGP-KNOW-R-006: the learner confirms each outbound send in the page's own dialog
+const teacher=await browser.newPage();const errors=[];for(const p of [student,teacher])p.on('pageerror',e=>errors.push(e.message));
  await student.goto(origin+'/sharing');assert.equal(await student.locator('#consent').isChecked(),false);
  await student.locator('#token').fill(local.studentToken);await student.locator('#login button').first().click();await student.getByText('공유 중인 기록이 없습니다.').waitFor();await student.locator('#status').filter({hasText:'연결됨'}).waitFor();
  assert.equal(await student.locator('#token').inputValue(),'');

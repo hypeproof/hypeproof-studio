@@ -82,6 +82,7 @@ function deps(gh, root, extra = {}) {
   const c = clock();
   let n = 0;
   const d = {
+    confirmContent: async () => true,
     fetch: gh.fetch,
     sleep: c.sleep,
     now: c.now,
@@ -510,7 +511,7 @@ const tree = (gh, name) => {
   const gh = createMockGitHub({ faults: { pagesNeverWorkflow: true } });
   const r = await runPublishSite({}, deps(gh, site(GOOD_SITE)));
   assert.equal(r.error?.code, "pages_not_ready", JSON.stringify(r));
-  assert.equal(gh.state.log.filter((l) => l === "GET /repos/octo-clinic/neo-dental/pages").length, 1 + 12, "the skill's bounded 12 reads");
+  assert.equal(gh.state.log.filter((l) => l === "GET /repos/octo-clinic/neo-dental/pages").length, 2 + 12, "consent lookup plus initial read and bounded 12 retries");
   assert.ok(!gh.state.log.some((l) => l.startsWith("PATCH ")), "the workflow file is NOT pushed when Pages never read back as workflow");
   ok("failure: Pages build_type never becomes workflow → bounded, nothing pushed");
 }
@@ -677,3 +678,16 @@ assert.equal(gitBlobSha(new TextEncoder().encode("hello\n")), "ce013625030ba8dba
 ok("git blob sha matches `git hash-object`");
 
 console.log("\n✓ publish-site smoke 통과");
+
+// REQ-KNOW-09: every publish, including a registered repository, asks about this frozen set.
+{
+ const gh=createMockGitHub(),root=site({...GOOD_SITE,'notes/private.txt':'PRIVATE','wiki/memory.md':'MEMORY'});let shown;
+ const no=await runPublishSite({},deps(gh,root,{confirmContent:async m=>(shown=m,false)}));
+ assert.equal(no.error?.code,'declined');assert.ok(!gh.state.log.some(l=>/^(POST|PUT|PATCH)/.test(l)));
+ assert.ok(shown.recipient.includes('octo-clinic/neo-dental'));assert.ok(shown.items.every(i=>!i.name.startsWith('notes/')&&!i.name.startsWith('wiki/')));
+ assert.equal(shown.items.find(i=>i.name==='index.html').bytes,Buffer.byteLength(GOOD_SITE['index.html']));
+ const absent=await runPublishSite({},deps(gh,root,{confirmContent:undefined}));assert.equal(absent.error?.code,'declined');
+ const yes=await runPublishSite({stage:'save'},deps(gh,root,{confirmContent:async()=>{fs.writeFileSync(path.join(root,'index.html'),'UNAPPROVED');return true;}}));
+ assert.equal(yes.ok,true);assert.ok(!JSON.stringify([...gh.repo('neo-dental').blobs.values()]).includes('UNAPPROVED'));
+ ok('per-send content consent: Cancel/default refuse before writes; private stores excluded; frozen bytes');
+}

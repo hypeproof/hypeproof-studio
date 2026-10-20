@@ -1,3 +1,4 @@
+import { privateOutboundPath, contentBytes, type OutboundConfirmation } from "./outboundConsent.ts";
 // "사용자 테스트용으로 공개" — the App side of Publish for User Test (cr-publish #1393;
 // CR-11, CR-17–CR-22, CR-39, CR-64, CR-73, CR-81). Pure over its ports, vscode-free, so a
 // smoke drives exactly what the provider runs.
@@ -20,6 +21,9 @@ import { curriculumRequest, publishTestVersion, type CurriculumResult } from "./
 import type { PublishExperimentView, PublishForm, PublishLinkView, PublishView } from "./publishView.ts";
 
 export interface PublishPorts {
+  confirmOutbound?: OutboundConfirmation;
+  scopeKey?(): string;
+  privateDirectories?(): string[];
   switchOn(): boolean;
   /** Seat wording for the switch-off copy (REQ-STUDIO-DENIAL-SOURCE). Default classroom. */
   audience?(): SeatAudience;
@@ -79,6 +83,7 @@ const hitLine = (h: { file: string; line: number; rule: string }) => (h.line > 0
 const SIGN_IN = "참여 코드를 먼저 입력해 주세요.";
 
 export class PublishSession {
+  private outboundBusy = false;
   private origin: string | null = null;
   private cached: ProjectState | null = null;
   private timing: PublishView["timing"] = null;
@@ -111,7 +116,7 @@ export class PublishSession {
     const root = this.ports.root();
     const entry = this.ports.entry();
     if (!root || !entry) return null;
-    const built = await buildPublishSet(root, entry, manifest, this.scanContext(projectId));
+    const built = await buildPublishSet(root, entry, manifest, this.scanContext(projectId), this.ports.privateDirectories?.());
     if (built.ok) return built;
     return {
       ok: false,
@@ -273,12 +278,27 @@ export class PublishSession {
    * The one publish action: version → test → link. Every refusal is the student's to read,
    * and nothing is uploaded when the set is refused (the scan runs before any request).
    */
-  async submit(form: PublishForm): Promise<{ ok: true; share_url: string } | { ok: false; message: string; lines?: string[] }> {
+  async submit(form: PublishForm) {
+    if (this.outboundBusy) return { ok: false as const, message: "이미 보내기를 확인하고 있어요." };
+    this.outboundBusy = true;
+    try { return await this.submitOnce(form); } finally { this.outboundBusy = false; }
+  }
+
+  private async submitOnce(form: PublishForm): Promise<{ ok: true; share_url: string } | { ok: false; message: string; lines?: string[] }> {
+    form = structuredClone(form);
     if (!this.ports.switchOn()) return { ok: false, message: lessonFeatureOff("사용자 테스트 공개", this.ports.audience?.()) };
     const days = form.expires_in_days;
     if (typeof days !== "number" || !Number.isFinite(days) || days <= 0 || days > 90) return { ok: false, message: "링크를 언제까지 열어 둘지 골라 주세요." };
+    const scope = this.ports.scopeKey?.(), root = this.ports.root(), entry = this.ports.entry();
     const client = await this.client();
     if (!client) return { ok: false, message: SIGN_IN };
+    const expiresAt = this.now() + days * DAY;
+    const current = async () => { const token = await this.ports.token(); return token === client.token && this.ports.switchOn() && this.ports.scopeKey?.() === scope && this.ports.root() === root && this.ports.entry() === entry && this.ports.base() === client.base; };
+    const originalFetch = client.fetchImpl ?? fetch;
+    client.fetchImpl = async (url, init) => {
+      if (init?.method && init.method !== "GET" && !await current()) return new Response(JSON.stringify({ error: { message: "연결이 변경되어 보내지 않았어요." } }), { status: 403 });
+      return originalFetch(url, init);
+    };
     const started = this.now();
     const phases: Record<string, number> = {};
     const phase = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
@@ -289,14 +309,30 @@ export class PublishSession {
         phases[name] = this.now() - t;
       }
     };
+    form.title = form.title?.trim() || this.ports.defaultTitle();
+    form.week = form.week ?? this.ports.week() ?? 1;
     if (form.manifest) this.setManifest(form.manifest);
+    const selection = [...this.manifest];
     // The set is built and scanned before any request, so a refused set sends nothing and
     // leaves nothing behind on the Service.
-    const pre = await phase("scan", () => this.currentSet(this.ports.projectId(), this.manifest));
+    const pre = await phase("scan", () => this.currentSet(this.ports.projectId(), selection));
     if (!pre) return { ok: false, message: "미리보기를 먼저 켜 주세요. 미리보기에 보이는 페이지를 공개해요." };
     if (!pre.ok) return { ok: false, message: pre.message, lines: pre.lines };
     const resolved = await phase("resolve", () => this.resolveProject(client));
     if (!resolved.ok) return { ok: false, message: resolved.message };
+    const devices = form.devices?.filter((d) => d === "camera" || d === "microphone");
+    const labels = [...new Set((form.labels ?? []).map((l) => l.trim()).filter(Boolean))].slice(0, 30);
+    const declarations = { ...(form.repeated_use ? { repeated_use: true } : {}), ...(devices?.length ? { devices } : {}), ...(labels.length ? { labels } : {}) };
+    const experimentMetadata = {
+      week: form.week,
+      question: form.question, method: form.method, success_criteria: form.success_criteria,
+      ...(form.hypothesis_id ? { hypothesis_id: form.hypothesis_id } : { hypothesis: form.hypothesis }),
+      ...(Object.keys(declarations).length ? { declarations } : {}),
+    };
+    const linkSettings = { expires_at: expiresAt, ...(form.channel?.trim() ? { channel: form.channel.trim() } : {}) };
+    const verification = productVerification(await this.ports.events(), pre.set.id);
+    if (!await current()) return { ok: false, message: "활동이 바뀌어서 보내지 않았어요." };
+    if (!await this.ports.confirmOutbound?.({ recipient: `사용자 테스트 · ${new URL(client.base).host} · 프로젝트 구성원 ${(resolved.state?.project.members ?? []).join(", ") || "나"} · 링크를 받은 사람`, public: true, items: [...pre.set.files.map(f => ({ name: f.path, bytes: f.bytes })), { name: "프로젝트 제목", bytes: contentBytes(form.title!) }, { name: "테스트 설명", bytes: contentBytes(JSON.stringify(experimentMetadata)) }, { name: "링크 설정", bytes: contentBytes(JSON.stringify(linkSettings)) }, ...(verification.state === "verified" ? [{ name: "검증 기록 참조", bytes: contentBytes(verification.run_id!) }] : [])] }) || !await current()) return { ok: false, message: "보내지 않았어요." };
     let projectId = resolved.state?.project.id;
     if (!projectId) {
       const made = await phase("project", () => curriculumRequest<{ project: { id: string } }>(client, "POST", "/projects", { title: form.title?.trim() || this.ports.defaultTitle() }));
@@ -306,36 +342,28 @@ export class PublishSession {
       await this.state(client, projectId);
     }
     // Rebuilt against the project and its origin (the token rule names both), and read again.
-    const built = await phase("files", () => this.currentSet(projectId, this.manifest));
+    const built = await phase("files", () => this.currentSet(projectId, selection));
     if (!built || !built.ok) return { ok: false, message: built ? built.message : "미리보기를 먼저 켜 주세요.", ...(built && !built.ok ? { lines: built.lines } : {}) };
-    const verification = productVerification(await this.ports.events(), built.set.id);
+    if (built.set.id !== pre.set.id || built.set.entry !== pre.set.entry) return { ok: false, message: "파일이 바뀌었어요. 내용을 다시 확인해 주세요." };
     const up = await phase("upload", () => publishTestVersion(client, projectId!, built.set, verification.state === "verified" ? verification.run_id : undefined));
     if (!up.ok) return this.refusal(up);
-    const devices = form.devices?.filter((d) => d === "camera" || d === "microphone");
-    const labels = [...new Set((form.labels ?? []).map((l) => l.trim()).filter(Boolean))].slice(0, 30);
-    const declarations = { ...(form.repeated_use ? { repeated_use: true } : {}), ...(devices?.length ? { devices } : {}), ...(labels.length ? { labels } : {}) };
     const exp = await phase("experiment", () =>
       curriculumRequest<{ experiment: { id: string } }>(client, "POST", "/experiments", {
         project_id: projectId,
         product_version_id: built.set.id,
-        week: form.week ?? this.ports.week() ?? 1,
-        question: form.question,
-        method: form.method,
-        success_criteria: form.success_criteria,
-        ...(form.hypothesis_id ? { hypothesis_id: form.hypothesis_id } : { hypothesis: form.hypothesis }),
-        ...(Object.keys(declarations).length ? { declarations } : {}),
+        ...experimentMetadata,
       }),
     );
     if (!exp.ok) return this.refusal(exp);
-    const link = await phase("link", () => this.issue(client, exp.body.experiment.id, form.channel, days));
+    const link = await phase("link", () => this.issue(client, exp.body.experiment.id, form.channel, days, expiresAt));
     this.timing = publishTiming(started, this.now(), phases);
     if (!link.ok) return this.refusal(link);
     return { ok: true, share_url: link.body.share_url };
   }
 
-  private issue(client: Client, experimentId: string, channel: string | undefined, days: number) {
+  private issue(client: Client, experimentId: string, channel: string | undefined, days: number, expiresAt = this.now() + days * DAY) {
     return curriculumRequest<{ share_url: string; test_origin: string }>(client, "POST", `/experiments/${encodeURIComponent(experimentId)}/links`, {
-      expires_at: this.now() + days * DAY,
+      expires_at: expiresAt,
       ...(channel?.trim() ? { channel: channel.trim() } : {}),
     });
   }
@@ -346,13 +374,35 @@ export class PublishSession {
   }
 
   /** Another channel's link for a running experiment (CR-73). */
-  async link(experimentId: string, form: { channel?: string; expires_in_days?: number }): Promise<{ ok: true; share_url: string } | { ok: false; message: string }> {
+  async link(experimentId: string, form: { channel?: string; expires_in_days?: number }) {
+    if (this.outboundBusy) return { ok: false as const, message: "이미 보내기를 확인하고 있어요." };
+    this.outboundBusy = true;
+    try { return await this.linkOnce(experimentId, form); } finally { this.outboundBusy = false; }
+  }
+
+  private async linkOnce(experimentId: string, form: { channel?: string; expires_in_days?: number }): Promise<{ ok: true; share_url: string } | { ok: false; message: string }> {
+    form = structuredClone(form);
     if (!this.ports.switchOn()) return { ok: false, message: lessonFeatureOff("사용자 테스트 공개", this.ports.audience?.()) };
     const days = form.expires_in_days;
     if (typeof days !== "number" || !Number.isFinite(days) || days <= 0 || days > 90) return { ok: false, message: "링크를 언제까지 열어 둘지 골라 주세요." };
+    const scope = this.ports.scopeKey?.(), root = this.ports.root(), entry = this.ports.entry();
     const client = await this.client();
     if (!client) return { ok: false, message: SIGN_IN };
-    const r = await this.issue(client, experimentId, form.channel, days);
+    const expiresAt = this.now() + days * DAY;
+    const current = async () => { const token = await this.ports.token(); return token === client.token && this.ports.switchOn() && this.ports.scopeKey?.() === scope && this.ports.root() === root && this.ports.entry() === entry && this.ports.base() === client.base; };
+    const originalFetch = client.fetchImpl ?? fetch;
+    client.fetchImpl = async (url, init) => {
+      if (init?.method && init.method !== "GET" && !await current()) return new Response(JSON.stringify({ error: { message: "연결이 변경되어 보내지 않았어요." } }), { status: 403 });
+      return originalFetch(url, init);
+    };
+    const resolved = await this.resolveProject(client);
+    if (!resolved.ok) return { ok: false, message: resolved.message };
+    const experiment = resolved.state?.experiments.find(e => e.id === experimentId);
+    const version = resolved.state?.versions.find(v => v.id === experiment?.product_version_id);
+    if (!version?.files?.length || version.files.some(f => privateOutboundPath(f.path) || this.ports.privateDirectories?.().some(dir => privateOutboundPath(f.path, dir)))) return { ok: false, message: "공유할 파일 목록을 확인하지 못했어요." };
+    if (!await current()) return { ok: false, message: "활동이 바뀌어서 보내지 않았어요." };
+    if (!await this.ports.confirmOutbound?.({ recipient: `사용자 테스트 · ${new URL(client.base).host} · 프로젝트 구성원 ${(resolved.state?.project.members ?? []).join(", ") || "나"} · 링크를 받은 사람`, public: true, items: [...version.files.map(f => ({ name: f.path, bytes: f.bytes })), { name: "링크 설정", bytes: contentBytes(JSON.stringify({ expires_at: expiresAt, ...(form.channel?.trim() ? { channel: form.channel.trim() } : {}) })) }] }) || !await current()) return { ok: false, message: "보내지 않았어요." };
+    const r = await this.issue(client, experimentId, form.channel, days, expiresAt);
     return r.ok ? { ok: true, share_url: r.body.share_url } : this.refusal(r);
   }
 
