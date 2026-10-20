@@ -5659,7 +5659,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CONV-FUNNEL-R-003 — counted here as offer_clicked end_card: showPurchase() opens the pass
         // list directly and never passes through the start page's purchaseOpen (surface start_page).
         this.emitEndCardOffer("offer_clicked");
-        void vscode.commands.executeCommand("hypeproof-chat.showPasses");
+        // CONV-FUNNEL-R-006 — the pass list it opens is counted as pass_list_viewed on this surface.
+        void vscode.commands.executeCommand("hypeproof-chat.showPasses", msg.surface === "header_menu" ? "header_menu" : "end_card");
         return;
       case "trialEndCardDismiss":
         // CONV-FUNNEL-R-003 — the card's escape (오늘은 여기까지). The webview closes the card itself.

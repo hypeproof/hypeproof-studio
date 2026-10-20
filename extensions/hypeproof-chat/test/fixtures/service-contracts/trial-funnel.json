@@ -2,13 +2,13 @@
   "schema": "studio-consumer-fixture/trial-funnel/1",
   "provenance": {
     "repository": "hypeproof/hypeproof-service",
-    "branch": "free-start/integration-20261019",
-    "commit": "78ae769",
+    "branch": "feat/conv-funnel-events-first10",
+    "commit": "03e225b",
     "note": "Captured from the Service branch commit by running its parseAppEvent (samples[].accepted is the real parser verdict). Regenerate when the Service contract changes.",
     "sources": {
-      "worker/src/lib/trial-funnel.ts": "baf19d0d56133e30b6b9ce6abcf7401f39e9787672d25b93edb4744c9b7266bd",
-      "worker/src/routes/trial-events.ts": "fb638167a562e488e84d968c86701f278a7e74c861eebd75ae8f1434603825aa",
-      "worker/src/index.ts": "f496ca1f4683484e4feb4fbc165e3798ca9d972a72ee83de26b51cd7eaecba9a"
+      "worker/src/lib/trial-funnel.ts": "e5e326b27c8a208e45dc3c2b4e60a6ab9d13d3a18005d452500024e129d9875b",
+      "worker/src/routes/trial-events.ts": "958c3d873e02d977265c94f97205237c1796a3b42ad04a599fab1ad6b5fe2a0c",
+      "worker/src/index.ts": "ccac852f330bc1ad6b5d7e46421ec02e1accfe2f06b1ea372e983981d73913a6"
     }
   },
   "route": {
@@ -31,7 +31,11 @@
         "trial_tool_result",
         "offer_viewed",
         "offer_clicked",
-        "offer_dismissed"
+        "offer_dismissed",
+        "pass_list_viewed",
+        "checkout_opened",
+        "sign_in_started",
+        "sign_in_completed"
       ]
     }
   },
@@ -112,6 +116,50 @@
         "values": [
           "end_card",
           "start_page"
+        ],
+        "required": true
+      }
+    },
+    "pass_list_viewed": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page",
+          "header_menu"
+        ],
+        "required": true
+      }
+    },
+    "checkout_opened": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page",
+          "header_menu"
+        ],
+        "required": true
+      }
+    },
+    "sign_in_started": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page",
+          "header_menu"
+        ],
+        "required": true
+      }
+    },
+    "sign_in_completed": {
+      "surface": {
+        "kind": "enum",
+        "values": [
+          "end_card",
+          "start_page",
+          "header_menu"
         ],
         "required": true
       }
@@ -818,6 +866,247 @@
         "type": "offer_viewed",
         "fields": {
           "surface": "chat"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: surface"
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "header_menu"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "header_menu"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "header_menu"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "header_menu"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "header_menu"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_started",
+        "fields": {
+          "surface": "header_menu"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "end_card"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "end_card"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "start_page"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "start_page"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "header_menu"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "header_menu"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "menu"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: surface"
+    },
+    {
+      "body": {
+        "type": "checkout_opened",
+        "fields": {
+          "surface": "end_card",
+          "product_id": "lite"
+        }
+      },
+      "accepted": false,
+      "message": "unknown field: product_id"
+    },
+    {
+      "body": {
+        "type": "sign_in_completed",
+        "fields": {
+          "surface": "end_card",
+          "account_id": "acct-1"
+        }
+      },
+      "accepted": false,
+      "message": "unknown field: account_id"
+    },
+    {
+      "body": {
+        "type": "sign_in_started",
+        "fields": {}
+      },
+      "accepted": false,
+      "message": "missing field: surface"
+    },
+    {
+      "body": {
+        "type": "pass_list_viewed",
+        "fields": {
+          "surface": "end_card"
+        },
+        "order_id": "ord-1"
+      },
+      "accepted": false,
+      "message": "unknown key: order_id"
+    },
+    {
+      "body": {
+        "type": "offer_viewed",
+        "fields": {
+          "surface": "header_menu"
         }
       },
       "accepted": false,

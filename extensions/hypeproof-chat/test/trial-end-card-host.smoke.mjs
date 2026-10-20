@@ -243,7 +243,7 @@ async function presentWithFunnel(error, profile, { products = 200, probe = 'on',
     // CONV-FUNNEL-R-003 — the card's buttons arrive as webview messages through the real handler.
     beforePress?.(self);
     commandCalls.length = 0;
-    for (const type of presses) await ChatPanelProvider.prototype.handleMessage.call(self, { type });
+    for (const press of presses) await ChatPanelProvider.prototype.handleMessage.call(self, typeof press === 'string' ? { type: press } : press);
     // Fire-and-forget delivery: wait until the POST count stops moving.
     let seen = -1;
     for (let i = 0; i < 40 && seen !== funnelPosts.length; i++) { seen = funnelPosts.length; await new Promise((r) => setTimeout(r, 25)); }
@@ -309,7 +309,7 @@ test('CONV-FUNNEL-R-003: each press on the end card sends one event with surface
   assert.deepEqual(r.offerClicked, [body('offer_clicked')], JSON.stringify(r.funnelPosts));
   assert.deepEqual(r.offerDismissed, []);
   // The Primary still opens the pass list exactly as before.
-  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses']]);
+  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses', 'end_card']]);
   // No press is ever counted as the start page's offer.
   assert.ok(r.funnelPosts.every((p) => p.body.fields?.surface !== 'start_page'), JSON.stringify(r.funnelPosts));
 
@@ -326,13 +326,25 @@ test('CONV-FUNNEL-R-003: each press on the end card sends one event with surface
   assert.equal(r.offerViewed.length, 1, 'presses do not add views');
 });
 
+// CONV-FUNNEL-R-006 — the pass list the Primary opens is counted on the StartPage as pass_list_viewed;
+// the chat names the surface in the showPasses argument. The header link (CONV-ENDCARD-R-003) posts the
+// same message with `surface: "header_menu"`; any other value is the end card's.
+test('CONV-FUNNEL-R-006: the chat names the pass-list surface for showPasses', async () => {
+  let r = await presentWithFunnel(EXHAUSTED, openTrial, { presses: [{ type: 'trialEndCardPasses', surface: 'header_menu' }] });
+  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses', 'header_menu']]);
+  r = await presentWithFunnel(EXHAUSTED, openTrial, { presses: [{ type: 'trialEndCardPasses', surface: 'start_page' }, { type: 'trialEndCardPasses', surface: { x: 1 } }] });
+  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses', 'end_card'], ['hypeproof-chat.showPasses', 'end_card']], 'only header_menu is taken from the message');
+  // The chat itself sends no purchase-path event: the start page owns them.
+  assert.ok(r.funnelPosts.every((p) => !['pass_list_viewed', 'checkout_opened', 'sign_in_started', 'sign_in_completed'].includes(p.body.type)), JSON.stringify(r.funnelPosts));
+});
+
 test('CONV-FUNNEL-R-003 negative controls: no card, another seat, or the funnel off sends nothing', async () => {
   const presses = ['trialEndCardPasses', 'trialEndCardDismiss'];
   // Probe off (Service flag off): the card shows and both buttons work, nothing at all is sent.
   let r = await presentWithFunnel(EXHAUSTED, openTrial, { probe: 'off', presses });
   assert.ok(r.posts[0].trialEndCard);
   assert.deepEqual(r.funnelPosts, []);
-  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses']]);
+  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses', 'end_card']]);
   // Code-issued trial (funnel on): no card was drawn, so a stray press is not an end-card offer.
   r = await presentWithFunnel(EXHAUSTED, { activity_kind: 'trial', profile_id: 'studio-native-trial' }, { presses });
   assert.equal(r.posts[0].trialEndCard, undefined);
@@ -466,7 +478,7 @@ test('CONV-ENDCARD-R-005: the minimal card still counts offer_viewed, offer_clic
   assert.deepEqual(r.offerClicked, [body('offer_clicked')]);
   assert.deepEqual(r.offerDismissed, []);
   // The Primary opens the pass list, which reads the catalogue again there.
-  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses']]);
+  assert.deepEqual(r.commands, [['hypeproof-chat.showPasses', 'end_card']]);
   r = await presentWithFunnel(EXPIRED, openTrial, { products: [503, 503], presses: ['trialEndCardDismiss'] });
   assertMinimal(r.posts[0].trialEndCard, 'expired');
   assert.deepEqual(r.offerViewed, [body('offer_viewed')]);

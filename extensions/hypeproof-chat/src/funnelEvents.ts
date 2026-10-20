@@ -27,6 +27,12 @@ export const TRIAL_FUNNEL_SCHEMA = "hps-trial-funnel/1";
 export const ENTRY_OUTCOMES = ["granted", "reused", "signed_in"] as const;
 export const TOOL_RESULT_KINDS = ["write", "edit", "preview", "publish"] as const;
 export const OFFER_SURFACES = ["end_card", "start_page"] as const;
+/**
+ * CONV-FUNNEL-R-006 — where the pass list was opened from (Service hypeproof-service #168). The
+ * purchase-path events (pass list, purchase-time sign-in, checkout) all carry this one field.
+ */
+export const PASS_SURFACES = ["end_card", "start_page", "header_menu"] as const;
+export const PURCHASE_PATH_EVENTS = ["pass_list_viewed", "checkout_opened", "sign_in_started", "sign_in_completed"] as const;
 export const FUNNEL_OS = ["darwin", "win32", "linux"] as const;
 /** Same bound as the Service (`VERSION_RE` in lib/trial-funnel.ts). Releases are calendar versions (`2026.1017.0`). */
 export const APP_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,5}(?:-[0-9A-Za-z.]{1,16})?$/;
@@ -34,12 +40,15 @@ export const APP_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,5}(?:-[0-9A-Za-z.]{1,16})
 export type EntryOutcome = (typeof ENTRY_OUTCOMES)[number];
 export type ToolResultKind = (typeof TOOL_RESULT_KINDS)[number];
 export type OfferSurface = (typeof OFFER_SURFACES)[number];
+export type PassSurface = (typeof PASS_SURFACES)[number];
+export type PurchasePathEvent = (typeof PURCHASE_PATH_EVENTS)[number];
 export type FunnelOs = (typeof FUNNEL_OS)[number];
 
 export type FunnelEvent =
   | { type: "trial_entry"; fields: { outcome: EntryOutcome; app_version?: string; os?: FunnelOs } }
   | { type: "trial_tool_result"; fields: { kind: ToolResultKind; ok: boolean } }
-  | { type: "offer_viewed" | "offer_clicked" | "offer_dismissed"; fields: { surface: OfferSurface } };
+  | { type: "offer_viewed" | "offer_clicked" | "offer_dismissed"; fields: { surface: OfferSurface } }
+  | { type: PurchasePathEvent; fields: { surface: PassSurface } };
 
 export type FunnelEventType = FunnelEvent["type"];
 
@@ -50,6 +59,10 @@ export const FUNNEL_EVENT_FIELDS: Record<FunnelEventType, readonly string[]> = {
   offer_viewed: ["surface"],
   offer_clicked: ["surface"],
   offer_dismissed: ["surface"],
+  pass_list_viewed: ["surface"],
+  checkout_opened: ["surface"],
+  sign_in_started: ["surface"],
+  sign_in_completed: ["surface"],
 };
 
 const oneOf = <T extends string>(list: readonly T[], v: unknown): v is T => typeof v === "string" && (list as readonly string[]).includes(v);
@@ -76,6 +89,11 @@ export function buildFunnelEvent(input: unknown): FunnelEvent | null {
     case "offer_clicked":
     case "offer_dismissed":
       return oneOf(OFFER_SURFACES, o.surface) ? { type: o.type, fields: { surface: o.surface } } : null;
+    case "pass_list_viewed":
+    case "checkout_opened":
+    case "sign_in_started":
+    case "sign_in_completed":
+      return oneOf(PASS_SURFACES, o.surface) ? { type: o.type, fields: { surface: o.surface } } : null;
     default:
       return null;
   }
@@ -150,12 +168,22 @@ export function funnelProfileStep(o: { profileOk: boolean; trialGrant: boolean; 
   return o.probedToken === o.token ? "keep" : "probe";
 }
 
+/** A pass-list surface from an untrusted caller (a command argument, a webview message), else the fallback. */
+export function passSurface(v: unknown, fallback: PassSurface = "start_page"): PassSurface {
+  return oneOf(PASS_SURFACES, v) ? v : fallback;
+}
+
 /** Events reported once per grant (entry, first view, first result per kind/outcome). */
 function dedupeKey(ev: FunnelEvent): string | null {
   if (ev.type === "trial_entry") return ev.type;
   if (ev.type === "trial_tool_result") return `${ev.type}:${ev.fields.kind}:${ev.fields.ok}`;
   if (ev.type === "offer_viewed") return `${ev.type}:${ev.fields.surface}`;
   return null;
+}
+
+/** Queue-only dedupe: the once-per-grant events, plus one pass-list view per surface. */
+function queueKey(ev: FunnelEvent): string | null {
+  return dedupeKey(ev) ?? (ev.type === "pass_list_viewed" ? `${ev.type}:${ev.fields.surface}` : null);
 }
 
 export interface FunnelTarget { url: string; token: string; events: readonly FunnelEventType[] }
@@ -211,8 +239,10 @@ export class FunnelReporter {
     // Once-per-grant events are deduplicated here too: the start page re-emits offer_viewed on
     // every refresh, and undeduplicated copies would fill the bounded queue and push out the
     // offer_clicked this queue exists to keep.
-    const d = dedupeKey(ev);
-    if (d && this.queue.some((q) => dedupeKey(q) === d)) return;
+    // A pass list opened again while the probe is pending adds nothing the Service would keep
+    // (it keeps the first per surface), so the queue holds one per surface.
+    const d = queueKey(ev);
+    if (d && this.queue.some((q) => queueKey(q) === d)) return;
     if (this.queue.length < this.maxQueue) this.queue.push(ev);
   }
 

@@ -14,15 +14,22 @@ const ID = 'ord_' + 'a'.repeat(32), SECRET = 'b'.repeat(64), KEY = 'hypeproofCha
 const profile = { activity_kind: 'trial', profile_id: 'adult', display_name: 'Adult practice', ux: { coach: { naming_mode: 'fixed', fallback_name: 'Coach' } }, welcome: {}, series_index: 1, series_total: 5 };
 const catalogue = { products: [{ id: 'pass-30d', label: '30일 이용권', amount: 50000, currency: 'KRW', duration_hours: 720, request_limit: 600 }] };
 
-function harness({ saved, settings = {}, accounts } = {}) {
-  const world = { secrets: new Map(saved ? [[KEY, JSON.stringify(saved)]] : []), events: [], states: [], opened: [], calls: [], service: SERVICE, site: SITE,
+function harness({ saved, settings = {}, accounts, seat = profile, funnelEmit } = {}) {
+  const world = { secrets: new Map(saved ? [[KEY, JSON.stringify(saved)]] : []), events: [], states: [], opened: [], calls: [], funnel: [], service: SERVICE, site: SITE,
     products: 200, catalogue, offer: null, checkout: `${SITE}/studio/checkout?order=${ID}`, poll: 'pending', claims: [], profileStatus: 200, timers: 0, ...settings };
   const ctx = { workspaceState: { keys: () => [], get: (_k, d) => d, update: async () => {} },
     secrets: { get: async k => world.secrets.get(k), store: async (k, v) => { world.events.push('store:' + k); world.secrets.set(k, v); }, delete: async k => { world.events.push('delete:' + k); world.secrets.delete(k); } },
-    extension: { packageJSON: { version: 'test' } }, subscriptions: [] };
-  const chat = { openInEditor: async () => {}, ensureProfile: async () => world.secrets.has('hypeproofChat.workshopToken') ? profile : null, profileFailure: () => null, invalidateProfile() {}, refreshConfig() {}, hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => 'Coach', coachNameIsChosen: () => true };
+    extension: { packageJSON: { version: 'test' } }, extensionUri: 'ext:', subscriptions: [] };
+  const chat = { renderHtml: () => '<html></html>', funnelEmit: funnelEmit ?? (e => world.funnel.push(e)), openInEditor: async () => {}, ensureProfile: async () => world.secrets.has('hypeproofChat.workshopToken') ? seat : null, profileFailure: () => null, invalidateProfile() {}, refreshConfig() {}, hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => 'Coach', coachNameIsChosen: () => true };
   const vscode = { workspace: { workspaceFolders: [], getConfiguration: () => ({ get: (key, fallback) => key === 'proxyUrl' ? world.service : key === 'siteBase' ? world.site : fallback }) },
-    window: {}, commands: { executeCommand: async () => {} }, Uri: { parse: s => s }, env: { openExternal: async url => { world.events.push('open'); world.opened.push(url); return true; } } };
+    window: { createWebviewPanel: () => {
+      // A real tab for show(): the test closes it through the handler show() registers.
+      const panel = { webview: { html: '', postMessage: async msg => world.states.push(msg), onDidReceiveMessage: () => ({}) }, reveal: () => {},
+        onDidChangeViewState: () => ({}), onDidDispose: f => { world.closeTab = f; return {}; } };
+      return panel;
+    } }, ViewColumn: { One: 1 },
+    commands: { executeCommand: async () => {} }, Uri: { parse: s => s, joinPath: (...a) => a.join('/') },
+    env: { openExternal: async url => { if (world.openFails) return false; world.events.push('open'); world.opened.push(url); return true; } } };
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const fetch = async (url, init = {}) => {
     const u = new URL(url), headers = new Headers(init.headers);
@@ -395,4 +402,193 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
     assert.equal(other.view().selected, undefined, 'a pick sent while the stage was not choosing is ignored');
   }
   console.log('PASS CONV-PURCHASE-R-002: sign-in at purchase returns to the same list with the chosen pass and the pay Primary; cancel keeps the list; off the list nothing is restored');
+}
+
+// ── CONV-FUNNEL-R-006: the purchase path on a free seat reaches the funnel (Service #168) ──────
+// pass_list_viewed each time the list appears (surface = where it was opened from), sign_in_started /
+// sign_in_completed around the purchase-time Google sign-in, checkout_opened when the checkout URL
+// opens. `chat.funnelEmit` is the chat host's FunnelReporter (grant token, probe-listed types only,
+// fire-and-forget; locked in funnel-events.smoke.mjs). Here: which events the start page asks for.
+{
+  const FREE = { ...profile, profile_id: 'studio-open-trial', display_name: '무료 시작' };
+  const PASS = { ...profile, pass: { id: 'pass_1', label: '30일 이용권' } };
+  const GRANT = 'free-grant-' + 'e'.repeat(40);
+  const PATH = ['pass_list_viewed', 'sign_in_started', 'sign_in_completed', 'checkout_opened'];
+  function accountStub() {
+    const a = { status: 'signedOut', starts: 0, onChange: () => {},
+      view: () => ({ status: a.status, ...(a.status === 'signedIn' ? { account: { id: 'acc_1', email: 'learner@example.test', display_name: '학습자' }, passes: [] } : {}) }),
+      matches: () => true, accessToken: async () => a.status === 'signedIn' ? 'account-bearer-' + 'd'.repeat(40) : undefined,
+      refreshView: async () => {}, start: async () => { a.starts++; a.status = 'waiting'; },
+      finish: () => { a.status = 'signedIn'; a.onChange(); },
+      cancel(notify = true) { if (notify) { a.status = 'signedOut'; a.onChange(); } },
+      reopen: async () => {}, openAccount: async () => {}, signOut: async () => { a.status = 'signedOut'; a.onChange(); } };
+    return a;
+  }
+  const seated = (seat, opts = {}) => {
+    const accounts = accountStub();
+    const h = harness({ seat, accounts, ...opts });
+    h.world.secrets.set('hypeproofChat.workshopToken', GRANT);
+    h.page.panel.reveal = () => {};
+    accounts.onChange = () => h.page.accountChanged();
+    return { ...h, accounts };
+  };
+  const settle = () => new Promise(r => setImmediate(r));
+  // JSON round trip: the events are built in the vm realm, where deepEqual sees another prototype.
+  const path = world => JSON.parse(JSON.stringify(world.funnel.filter(e => PATH.includes(e.type))));
+
+  // Positive: end card → list → sign in → pay → reopen checkout. Every event carries the surface only.
+  {
+    const { world, page, view, accounts } = seated(FREE);
+    await page.handle({ type: 'startReady' }); await settle();
+    assert.deepEqual(path(world), [], 'the start page alone shows no pass list');
+    await page.showPurchase('end_card');
+    assert.equal(view().stage, 'choosing');
+    assert.equal(view().login, 'signIn', 'a free seat signs in at purchase');
+    await page.handle({ type: 'accountRefresh' });
+    await page.handle({ type: 'purchasePayer', adult: true });
+    assert.deepEqual(path(world), [{ type: 'pass_list_viewed', surface: 'end_card' }], 'one view per appearance, not per repaint');
+    await page.handle({ type: 'accountSignIn', productId: 'pass-30d' });
+    assert.deepEqual(path(world).at(-1), { type: 'sign_in_started', surface: 'end_card' });
+    assert.equal(path(world).length, 2, 'started is not yet completed');
+    accounts.finish(); await settle();
+    assert.deepEqual(path(world).at(-1), { type: 'sign_in_completed', surface: 'end_card' });
+    await page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
+    assert.equal(world.opened.length, 1, 'the checkout opened');
+    assert.deepEqual(path(world).at(-1), { type: 'checkout_opened', surface: 'end_card' });
+    await page.handle({ type: 'purchaseReopen' });
+    assert.equal(world.opened.length, 2);
+    assert.deepEqual(path(world).map(e => e.type), ['pass_list_viewed', 'sign_in_started', 'sign_in_completed', 'checkout_opened', 'checkout_opened']);
+    for (const e of world.funnel) assert.deepEqual(Object.keys(e).sort(), ['surface', 'type'], `only {type, surface}: ${JSON.stringify(e)}`);
+    const sent = JSON.stringify(world.funnel);
+    for (const secret of ['account-bearer', GRANT, SECRET, ID, 'pass-30d', 'learner@example.test']) assert.ok(!sent.includes(secret), `no ${secret} in a funnel event`);
+  }
+
+  // Each open is a new view; the surface follows where it was opened from.
+  {
+    const { world, page, view, accounts } = seated(FREE);
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.handle({ type: 'purchaseOpen' });
+    await page.handle({ type: 'purchaseCancel' });
+    await page.handle({ type: 'purchaseOpen' });
+    await page.handle({ type: 'purchaseOpen' });
+    await page.showPurchase('header_menu');
+    await page.showPurchase('end_card');
+    await page.showPurchase('not-a-surface');
+    await page.showPurchase();
+    assert.deepEqual(path(world).map(e => e.surface), ['start_page', 'start_page', 'start_page', 'header_menu', 'end_card', 'end_card', 'end_card'],
+      'start page opens are start_page; the command names header_menu or end_card; anything else falls back to end_card');
+    assert.ok(path(world).every(e => e.type === 'pass_list_viewed'));
+    // A pay press that sends the person to sign in first keeps the list on screen: not a new view.
+    const before = path(world).length;
+    await page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
+    assert.equal(view().stage, 'choosing');
+    assert.equal(path(world).length, before, 'a sign-in-first press is not a view');
+    // Back on the list after a failed order is the list appearing again (surface of the last open).
+    await page.handle({ type: 'accountSignIn', productId: 'pass-30d' }); accounts.finish(); await settle();
+    world.checkout = 'https://evil.test/pay';
+    await page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
+    assert.equal(view().stage, 'stopped');
+    assert.ok(!path(world).some(e => e.type === 'checkout_opened'), 'a refused checkout address is not opened, so not counted');
+    await page.handle({ type: 'purchaseRetry' });
+    assert.equal(view().stage, 'choosing');
+    assert.deepEqual(path(world).at(-1), { type: 'pass_list_viewed', surface: 'end_card' });
+  }
+
+  // Surface bookkeeping: a start-page open after an end-card open is start_page again; a sign-in
+  // completes with the surface it started on, even if the list was reopened elsewhere meanwhile.
+  {
+    const { world, page, accounts } = seated(FREE);
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.showPurchase('header_menu');
+    await page.handle({ type: 'accountSignIn', productId: 'pass-30d' });
+    await page.handle({ type: 'purchaseOpen' });
+    accounts.finish(); await settle();
+    assert.deepEqual(path(world), [
+      { type: 'pass_list_viewed', surface: 'header_menu' },
+      { type: 'sign_in_started', surface: 'header_menu' },
+      { type: 'pass_list_viewed', surface: 'start_page' },
+      { type: 'sign_in_completed', surface: 'header_menu' },
+    ]);
+  }
+  // Closing the tab and opening it again shows the start choices, not the list: no view until it is opened.
+  {
+    const { world, page } = seated(FREE);
+    page.panel = undefined;
+    await page.show();
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.showPurchase('end_card');
+    assert.equal(path(world).length, 1);
+    world.closeTab();
+    assert.equal(page.panel, undefined, 'the tab is closed');
+    await page.show();
+    await page.handle({ type: 'startReady' }); await settle();
+    assert.equal(path(world).length, 1, 'a reopened tab with a list stage left over adds no view');
+    await page.handle({ type: 'purchaseOpen' });
+    assert.deepEqual(path(world).at(-1), { type: 'pass_list_viewed', surface: 'start_page' }, 'opening the list again does');
+    assert.equal(path(world).length, 2);
+  }
+  // A checkout the system refused to open is not counted.
+  {
+    const { world, page, accounts } = seated(FREE);
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.showPurchase('end_card');
+    await page.handle({ type: 'accountSignIn', productId: 'pass-30d' }); accounts.finish(); await settle();
+    world.openFails = true;
+    await page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
+    await page.handle({ type: 'purchaseReopen' });
+    assert.ok(!path(world).some(e => e.type === 'checkout_opened'), 'openExternal false → no checkout_opened');
+  }
+
+  // Negative controls ----------------------------------------------------------------------
+  // (a) Paid and code-issued seats send no purchase-path event on the same journey.
+  for (const seat of [PASS, profile]) {
+    const { world, page, accounts } = seated(seat, { settings: { offer: null } });
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.showPurchase('end_card');
+    await page.handle({ type: 'purchaseOpen' });
+    await page.handle({ type: 'accountSignIn', productId: 'pass-30d' }); accounts.finish(); await settle();
+    await page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
+    await page.handle({ type: 'purchaseReopen' });
+    assert.ok(world.opened.length >= 1, 'the purchase itself still works');
+    assert.deepEqual(path(world), [], `no purchase-path event for ${seat.pass ? 'a pass' : 'a code-issued'} seat`);
+  }
+  // (b) A cancelled sign-in is never completed; a later sign-in elsewhere does not complete it.
+  {
+    const { world, page, accounts } = seated(FREE);
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.showPurchase('end_card');
+    await page.handle({ type: 'accountSignIn', productId: 'pass-30d' });
+    await page.handle({ type: 'accountCancel' }); await settle();
+    accounts.finish(); await settle();
+    assert.deepEqual(path(world).map(e => e.type), ['pass_list_viewed', 'sign_in_started'], 'cancelled: no sign_in_completed');
+  }
+  // (c) A sign-in started off the list (start choices, account box) is not the purchase-time sign-in.
+  {
+    const { world, page, accounts } = seated(FREE);
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.handle({ type: 'accountSignIn' }); accounts.finish(); await settle();
+    assert.deepEqual(path(world), [], 'no sign-in event off the pass list');
+  }
+  // (d) A guardian checkout is shown as a link and QR, not opened here: no checkout_opened.
+  {
+    const { world, page, accounts } = seated(FREE);
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.showPurchase('end_card');
+    await page.handle({ type: 'accountSignIn', productId: 'pass-30d' }); accounts.finish(); await settle();
+    await page.handle({ type: 'purchaseStart', productId: 'pass-30d', guardian: true });
+    assert.equal(world.opened.length, 0);
+    assert.ok(!path(world).some(e => e.type === 'checkout_opened'));
+  }
+  // (e) A funnel that throws never stops the purchase.
+  {
+    const { world, page, view, accounts } = seated(FREE, { funnelEmit: () => { throw new Error('funnel down'); } });
+    await page.handle({ type: 'startReady' }); await settle();
+    await page.showPurchase('end_card');
+    assert.equal(view().stage, 'choosing');
+    await page.handle({ type: 'accountSignIn', productId: 'pass-30d' }); accounts.finish(); await settle();
+    await page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
+    assert.equal(world.opened.length, 1, 'checkout still opens');
+    assert.equal(view().stage, 'waiting');
+  }
+  console.log('PASS CONV-FUNNEL-R-006: a free seat\'s pass list, purchase-time sign-in and checkout reach the funnel with the surface only; paid seats, cancelled or off-list sign-ins, guardian checkout and a failing funnel add nothing');
 }
