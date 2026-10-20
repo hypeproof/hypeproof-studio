@@ -39,9 +39,11 @@ const OVERRIDES = {
   "ask-about-file": { banner: BANNER_POSTED_ARROW },
 };
 
-// Tests in test/ that this runner must skip, with the reason. Empty: every
-// test/*.test.tsx is part of `npm test`.
-const EXCLUDED = new Set([]);
+// Tests in test/ that this runner must skip, because they have their own build step
+// and their own entry in the `npm test` chain.
+const EXCLUDED = new Set([
+  "panel-boundary", // built by test/panel-boundary.build.mjs (test:panel-boundary)
+]);
 
 function discover() {
   return fs
