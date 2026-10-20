@@ -13,6 +13,8 @@ import { composerBlockedByEdit, EDIT_OPEN_NOTE, editableUserId, visibleVersions,
 import { useResponseAnnouncement } from './responseAnnouncer';
 import { useConnectivity, useLiveRegion, guardSend, OFFLINE_BANNER_TEXT, OFFLINE_HELD_NOTES, type HeldNoteKind } from './connectivity';
 import { imeComposing } from './imeGuard';
+import { QuoteAction, useAnswerQuote } from './QuoteAction';
+import { mergeQuoteIntoDraft, QUOTE_SCOPE_ATTR, type AnswerQuote } from './quoteReply';
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { AccessControl } from './AccessControl';
@@ -41,7 +43,7 @@ import { isObservationFormat, showsObservationResults } from '../../src/nativeOb
 import { CodeBlock, CodeBlockScope } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { Children, cloneElement, Fragment, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
 import type {
@@ -598,6 +600,22 @@ export function ChatPanel(props: Props) {
   /** Responding, or opening a world — the friend buttons and the runner read the same value. */
   const unavailable = frozen || (!!config?.activity && !config.activity.verified);
   const busy = streaming || worldPending || unavailable;
+  // CGP-CHAT-R-007 — a selection inside one answer offers 인용하기; the quote joins the draft, never sends.
+  const [answerQuote, dropAnswerQuote] = useAnswerQuote(!unavailable);
+  const quoteAnswer = (quote: AnswerQuote) => {
+    if (unavailable || composing) return;
+    lastReplyChoice.current = null;
+    setDraft(current => mergeQuoteIntoDraft(current, quote.block));
+    dropAnswerQuote();
+    document.getSelection?.()?.removeAllRanges?.();
+    requestAnimationFrame(() => {
+      const editor = textareaRef.current;
+      if (!editor?.isConnected) return;
+      editor.focus({ preventScroll: true });
+      editor.setSelectionRange(editor.value.length, editor.value.length);
+    });
+  };
+  const dismissQuote = () => { dropAnswerQuote(); document.getSelection?.()?.removeAllRanges?.(); };
 
   const ux: UxConfig = config?.profile?.ux ?? DEFAULT_UX;
   // Image paste is a per-profile opt-in (website-copyclone). Default-off so
@@ -1420,6 +1438,8 @@ export function ChatPanel(props: Props) {
               onSaveEdit={(text, images) => saveEdit(m, text, images)}
               verdict={judgeable?.has(m.id) ? props.verdicts?.[m.id] ?? null : undefined}
               onVerdict={judgeable?.has(m.id) && props.onVerdict ? (next) => props.onVerdict?.(m.id, next) : undefined}
+              quotable={m.role === 'assistant' && !(streaming && m.id === streamingId)}
+              quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
             />
           )}
         </Fragment>)}
@@ -2219,6 +2239,8 @@ function MessageItem({
   onEditChange,
   verdict,
   onVerdict,
+  quotable = false,
+  quoteAction,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -2258,6 +2280,9 @@ function MessageItem({
   /** CGP-CHAT-R-005 — present (null = no verdict yet) on an answer that offers a verdict. */
   verdict?: VerdictState | null;
   onVerdict?: (next: VerdictState | null) => void;
+  /** CGP-CHAT-R-007 — a finished answer whose text may be quoted, and its 인용하기 button. */
+  quotable?: boolean;
+  quoteAction?: ReactNode;
 }) {
   const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
@@ -2309,7 +2334,7 @@ function MessageItem({
         onChange={onEditChange}
         revertNote={revertNote}
         onCancel={onCancelEdit}
-        onSave={onSaveEdit} /> : <div className="hps-msg-body">
+        onSave={onSaveEdit} /> : <div className="hps-msg-body" {...(quotable ? { [QUOTE_SCOPE_ATTR]: message.id } : {})}>
         {question && onPickReply && onWriteReply ? <CodeBlockScope id={message.id}><ReplyChoices question={question} onPick={onPickReply} onWrite={onWriteReply} /></CodeBlockScope> : message.role === "assistant" ? (
           <AssistantContent
             content={message.content}
@@ -2333,6 +2358,7 @@ function MessageItem({
           </>
         )}
       </div>}
+      {quoteAction}
       {message.role === 'user' && !editing && (pager || onEdit) && <div className="hps-user-actions">
         {pager && onPage && <VersionPager pager={pager} onPage={(index) => onPage(pager.key, index)} />}
         {onEdit && <EditAction onEdit={onEdit} />}

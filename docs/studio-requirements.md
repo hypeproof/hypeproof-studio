@@ -423,6 +423,34 @@ opening a pill in personal and classroom chat.
 Reverting any of 13 behaviours (copy or wrap wired to a no-op, confirming before the write, success
 shown on failure, text-keyed memory, and others) fails it.
 
+`REQ-STUDIO-QUOTE-REPLY` (CGP-CHAT-R-007 / CGP-CHAT-R72 and design CGP-CHAT-D72, 2026-10-20, adapted
+by the audit note: the quote is draft text, not a chip): the learner can quote part of one answer into
+the next message, in personal and classroom chat. When the selection starts and ends inside the body
+of one finished answer, a `인용하기` button appears under that answer. A selection that spans
+messages, touches a user line, lies in the composer or other UI, or sits in the answer that is still
+streaming offers nothing, and neither does a read-only composer (unverified activity or frozen
+seat). Pressing it appends the selection to the composer draft as a `> ` quoted block (blank lines
+inside become `>`) followed by a blank line; an existing draft is kept byte for byte as the prefix,
+with one blank line before the quote. Focus then goes to the composer with the caret at the end, the
+selection is cleared and the button goes away. Nothing is sent: the quote is ordinary draft text the
+learner can edit or delete, saved with the draft like any other text. A selection longer than 1,000
+characters is cut at 1,000 code points and ends with `…`, and the button shows `앞 1,000자만 들어가요`
+before it is pressed. The button is a 44px target reachable by Tab (it stays while it has focus even
+if the selection collapses), Escape dismisses it, and while an IME composition is open (#1880,
+`imeGuard.ts`) it is disabled. It carries no capability or score label. The logic is in
+`webview-ui/src/quoteReply.ts` (selection to quote, merge with the draft), the button and selection
+tracking in `QuoteAction.tsx`. Not built: a context-menu entry, a keyboard-only way to make the
+selection (answers are not caret-browsable), a removable quote chip and positioning the button over
+the selection (it sits under the answer), and excluding code blocks (the research row offers only copy
+there; this slice quotes any text in the answer). The offline send gate (`sendWhenOnline`) is not on
+main yet; quoting never sends, so it has nothing to gate. Test: `test/quote-reply.test.tsx`. Pure
+checks cover the block format, the cap with a surrogate-safe cut, the scope rule and the merge. Mounted
+on the minimal DOM (`test/fixtures/mini-dom.mjs`) with a stubbed selection over the real rendered text
+nodes, it presses the real button through `ChatPanel` in both modes (draft, focus, caret, nothing
+sent), with negative controls for cross-message, user-line, composer, streaming, read-only and IME
+cases, plus an existing draft kept, Escape, Tab focus and the cut note. Each of 20 reverted behaviours
+fails it.
+
 `REQ-STUDIO-TASK-RUN-STATE` (extends [AE-03](requirements/learning-agent-experience.md);
 CGP-AGENT-R-022 / REQ-CGP-AGENT-46 recast after its "next waiting task" premise was refuted, 2026-10-20):
 tasks never run concurrently and switching stays blocked during a run, so the personal task rail
