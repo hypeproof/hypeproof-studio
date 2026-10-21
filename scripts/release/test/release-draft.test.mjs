@@ -51,6 +51,22 @@ test('two drafts for same tag → throws naming both ids', () => {
   }
 });
 
+// Race guard scenario: both builders listed (both saw 0), both called create,
+// then the re-list after create finds 2 drafts. pickRelease on that re-list
+// must throw so upload is never dispatched against an ambiguous tag.
+test('race guard — re-list after create finds 2 drafts → throws Multiple', () => {
+  assert.throws(
+    () => pickRelease([rel('v1.0.0', true, 10), rel('v1.0.0', true, 11)], 'v1.0.0'),
+    /Multiple/
+  );
+  // Both ids appear in the message
+  try { pickRelease([rel('v1.0.0', true, 10), rel('v1.0.0', true, 11)], 'v1.0.0'); }
+  catch (e) {
+    assert.ok(e.message.includes('10'), 'id 10 should appear in error');
+    assert.ok(e.message.includes('11'), 'id 11 should appear in error');
+  }
+});
+
 test('three releases for same tag → throws naming all ids', () => {
   try {
     pickRelease([rel('v1.0.0', true, 1), rel('v1.0.0', true, 2), rel('v1.0.0', true, 3)], 'v1.0.0');

@@ -77,6 +77,14 @@ function main() {
     if (prerelease) createArgs.push('--prerelease');
     gh(...createArgs);
     console.log(`release-draft: created draft release for ${tag}`);
+
+    // Race guard: re-list after create. If both builders listed before either
+    // created, both will have seen 0 and both will have called create, leaving
+    // two drafts. Fail fast here so upload is never ambiguous.
+    const fresh = JSON.parse(
+      gh('api', `repos/${repo}/releases`, '--paginate', '--slurp')
+    ).flat();
+    pickRelease(fresh, tag); // throws with ids if 2+ drafts exist
   } else {
     console.log(`release-draft: reusing existing draft release ${decision.id} for ${tag}`);
   }
