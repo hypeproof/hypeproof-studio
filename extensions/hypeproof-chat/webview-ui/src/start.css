@@ -154,6 +154,7 @@
   cursor:pointer}
 .studio-primary {
   width:100%;
+  min-height:var(--hp-control-cta);
   border:var(--ds-c-studio-start-size-3) solid transparent;
   border-radius:var(--ds-c-studio-start-radius-1);
   background:var(--ds-c-studio-start-surface-12);
@@ -466,7 +467,7 @@
 .studio-account-pass .studio-choice { margin-top: var(--ds-c-studio-start-space-13); }
 
 /* Google's light button treatment keeps the multicolor mark on white. */
-.studio-account .studio-google { background: var(--ds-c-studio-start-surface-19); color: var(--ds-c-studio-start-ink-15); border: var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-9); border-radius: var(--ds-c-studio-start-radius-13); min-height: var(--ds-c-studio-start-size-42); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); justify-content: center; gap: var(--ds-c-studio-start-space-1); font-family: var(--ds-c-studio-start-font-2); font-size: var(--ds-c-studio-start-type-17)!important; font-weight: var(--ds-c-studio-start-typography-8)!important; }
+.studio-account .studio-google { background: var(--ds-c-studio-start-surface-19); color: var(--ds-c-studio-start-ink-15); border: var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-9); border-radius: var(--ds-c-studio-start-radius-13); min-height: var(--hp-control-cta); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); justify-content: center; gap: var(--ds-c-studio-start-space-1); font-family: var(--ds-c-studio-start-font-2); font-size: var(--ds-c-studio-start-type-17)!important; font-weight: var(--ds-c-studio-start-typography-8)!important; }
 .studio-account .studio-google:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .studio-account .studio-google:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 .studio-account .studio-google:focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }

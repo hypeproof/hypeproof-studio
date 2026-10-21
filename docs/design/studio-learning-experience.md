@@ -329,6 +329,16 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-control-md: 44px;   /* 학생 화면의 모든 컨트롤 */
   --hp-control-lg: 48px;   /* 큰 선택지, 주 행동 */
   --hp-control-min: var(--hp-control-md);   /* 학생 화면의 하한(DES-06) */
+  /* 간격 사다리(CGP-DS-D-007, DES-CGP-DS-11). 이름은 --hp-space의 몇 배인지다. 새로 쓰거나 바꾸는 간격은 이
+     단계 중 하나를 쓰고 28px 단계는 없다. 화면마다 하나인 주 행동(SX-04)은 --hp-control-cta 이상 높이다 */
+  --hp-space-1: var(--hp-space);   /* 4px */
+  --hp-space-2: calc(var(--hp-space) * 2);   /* 8px */
+  --hp-space-3: calc(var(--hp-space) * 3);   /* 12px */
+  --hp-space-4: calc(var(--hp-space) * 4);   /* 16px */
+  --hp-space-5: calc(var(--hp-space) * 5);   /* 20px */
+  --hp-space-6: calc(var(--hp-space) * 6);   /* 24px */
+  --hp-space-8: calc(var(--hp-space) * 8);   /* 32px */
+  --hp-control-cta: var(--hp-control-lg);   /* 48px · 주 행동 */
 }
 /* 의미 글자 크기(CGP-DS-R-008, DES-CGP-DS-09, DEC-29로 DES-02를 개인 대화에 확장). 학생이 읽는 글은 이 단계만 쓰고
    가장 작은 단계가 14px이다. custom property는 선언한 요소에서 값이 정해져 그 값으로 상속되므로 .hps-shell에서도

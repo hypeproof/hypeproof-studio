@@ -21,6 +21,7 @@ const SRC = new URL("../webview-ui/src/", import.meta.url);
 const FILES = ["tokens.css", "styles.css", "chatDetails.css", "taskWorkspace.css", "start.css", "localReview.css", "citationPreview.css", "quoteAction.css", "codeBlock.css", "refusalBanner.css", "writeApprovalDialog.css", "outboundDialog.css"];
 const real = Object.fromEntries(FILES.map((f) => [f, readDesignFile(new URL(f, SRC), "utf8")]));
 const MIN = 44;
+const CTA = 48; // CGP-DS-D-007: the ladder's lg step, the primary call to action
 let passed = 0;
 const failures = [];
 const check = (label, fn) => { try { fn(); passed++; console.log(`  ok   ${label}`); } catch (e) { failures.push(label); console.error(`  FAIL ${label}: ${e.message.split("\n")[0]}`); } };
@@ -103,6 +104,7 @@ const CONTROLS = [
   { base: true, name: "나의 변화 기록 ›", ctx: null, last: /\.hp-mission-growth(?![\w-])/, dims: H },
   { base: true, name: "lesson step fields", ctx: /\.hp-surface\b/, last: /^(input|textarea)(?:$|[.:[])/, dims: H },
   { base: true, name: "help mode radio labels", ctx: /\.hp-help-modes\b/, last: /^label(?:$|[.:[])/, dims: H },
+  { base: true, name: "test panel buttons and fields (내 제품 테스트), height", ctx: /\.hps-verify\b/, last: /^(button|input)(?:$|[.:[])/, dims: H },
   { base: true, name: "composer buttons (보내기, Stop)", ctx: /\.hps-input\b/, last: /^button(?:$|[.:[])|\.hps-btn-(send|stop)(?![\w-])/, dims: HW },
   { name: "skip link (대화로 바로 가기)", ctx: null, last: /\.tw-skip(?![\w-])/, dims: H },
   { name: "task search field", ctx: /\.tw-search\b/, last: /^input(?:$|[.:[])/, dims: H },
@@ -111,7 +113,6 @@ const CONTROLS = [
   { name: "start page bottom (작업 폴더 열기)", ctx: /\.studio-bottom\b/, last: /^button(?:$|[.:[])/, dims: H },
   { base: true, name: "image remove ×", ctx: null, last: /\.hps-attachment-remove(?![\w-])(?!(?::[\w-]+)*::)/, dims: HW },
   { base: true, name: "citation chips", ctx: null, last: /\.hps-cit-chip(?![\w-])/, dims: H },
-  { name: "trial end card primary (이용권 살펴보기)", ctx: null, last: /\.hps-trial-end-card-primary(?![\w-])/, dims: H },
   { name: "trial end card escape (나중에)", ctx: null, last: /\.hps-trial-end-card-escape(?![\w-])/, dims: H },
   { base: true, name: "voice panel buttons", ctx: /\.hps-voice-(actions|compact|head-buttons|resume)\b|\.hps-voice-retry/, last: /^button(?:$|[.:[])|\.hps-voice-retry(?![\w-])/, dims: HW },
   { base: true, name: "picked element remove ×", ctx: null, last: /\.hps-element-remove(?![\w-])/, dims: HW },
@@ -125,9 +126,10 @@ const lastCompound = (sel) => sel.split(/\s*[\s>+~]\s*/).filter(Boolean).pop() ?
 const PROPS = { height: ["min-height", "height", "max-height", "block-size", "min-block-size", "max-block-size"], width: ["min-width", "width", "max-width", "inline-size", "min-inline-size", "max-inline-size"] };
 const FLOOR = { height: ["min-height", "height", "block-size", "min-block-size"], width: ["min-width", "width", "inline-size", "min-inline-size"] };
 
-/** Findings for one control: a rule that sets a needed dimension below 44px, or no floor at all. */
+/** Findings for one control: a rule that sets a needed dimension below its floor (44px, or c.min), or no floor at all. */
 function controlFindings(css, c) {
   const props = customProps(css);
+  const MIN = c.min ?? 44;
   const bad = []; const floor = Object.fromEntries(c.dims.map((d) => [d, false]));
   for (const r of Object.entries(css).flatMap(([f, t]) => rules(t, f))) {
     const sels = r.selectors.filter((s) => c.last.test(lastCompound(s)) && (!c.ctx || c.ctx.test(s)));
@@ -152,15 +154,67 @@ check("tokens: the control ladder is 32 / 44 / 48 and the learner floor is its 4
   assert.equal(props.get("--hp-control-min"), "var(--hp-control-md)");
   assert.equal(px("var(--hp-control-min)", props), MIN);
 });
+// CGP-DS-D-007 (DES-CGP-DS-11) — the spacing ladder 4 / 8 / 12 / 16 / 20 / 24 / 32px, each a multiple of the unit.
+const LADDER = [[1, 4], [2, 8], [3, 12], [4, 16], [5, 20], [6, 24], [8, 32]];
+const LADDER_PX = new Set(LADDER.map(([, v]) => v));
+/** The ladder findings for a stylesheet set: a step at the wrong size or not derived from --hp-space. */
+function ladderFindings(css) {
+  const p = customProps(css); const bad = [];
+  for (const [step, want] of LADDER) {
+    const name = `--hp-space-${step}`; const raw = p.get(name);
+    if (!raw) { bad.push(`${name} missing`); continue; }
+    const got = px(raw, p);
+    if (got !== want) bad.push(`${name} = ${got}px, not ${want}px`);
+    if (!/var\(--hp-space\)/.test(raw)) bad.push(`${name} is not derived from --hp-space: ${raw}`);
+  }
+  if (px("var(--hp-control-cta)", p) !== CTA) bad.push(`--hp-control-cta is not ${CTA}px`);
+  if (p.get("--hp-control-cta") !== "var(--hp-control-lg)") bad.push("--hp-control-cta is not the lg step");
+  return bad;
+}
+const SPACING = /^(padding|margin|gap|row-gap|column-gap|inset|top|right|bottom|left|scroll-padding|scroll-margin)(-[\w-]+)?$/;
+/** Every spacing declaration that uses the unit or a ladder step must land on the ladder (DEC-DS-R-010: new and changed spacing). */
+function spacingFindings(css) {
+  const p = customProps(css); const bad = [];
+  for (const r of Object.entries(css).flatMap(([f, t]) => rules(t, f))) for (const [prop, v] of r.decls) {
+    if (!SPACING.test(prop) || !/var\(--hp-space/.test(v)) continue;
+    // Split only between complete CSS values. Unknown nested arithmetic fails closed in px().
+    const parts = []; let depth = 0, part = "";
+    for (const ch of v) {
+      if (ch === "(") depth++;
+      if (ch === ")") depth--;
+      if (/\s/.test(ch) && depth === 0) { if (part) parts.push(part); part = ""; } else part += ch;
+    }
+    if (part) parts.push(part);
+    for (const part of parts) {
+      if (!/--hp-space/.test(part)) continue;
+      const n = Math.abs(px(part, p));
+      if (!LADDER_PX.has(n)) bad.push(`${r.file} ${r.selectors[0]} { ${prop}: ${v} } uses ${n}px, off the ladder`);
+    }
+  }
+  return bad;
+}
+check("tokens: the spacing ladder is 4 / 8 / 12 / 16 / 20 / 24 / 32px from --hp-space, and the primary CTA step is 48px", () => { const bad = ladderFindings(real); assert.deepEqual(bad, [], bad.join("; ")); });
+check("spacing: every padding/margin/gap/inset that uses --hp-space lands on the ladder", () => { const bad = spacingFindings(real); assert.deepEqual(bad, [], bad.join("; ")); });
 check("tokens: declared in tokens.css on :root", () => {
   const root = rules(real["tokens.css"], "tokens.css").filter((r) => r.selectors.includes(":root"));
   const names = new Set(root.flatMap((r) => r.decls.map(([p]) => p)));
-  for (const n of ["--hp-space", "--hp-control-sm", "--hp-control-md", "--hp-control-lg", "--hp-control-min"]) assert.ok(names.has(n), `${n} missing on :root`);
+  for (const n of ["--hp-space", "--hp-control-sm", "--hp-control-md", "--hp-control-lg", "--hp-control-min", ...LADDER.map(([s]) => `--hp-space-${s}`), "--hp-control-cta"]) assert.ok(names.has(n), `${n} missing on :root`);
 });
 check("tokens: no learner rule uses the instructor-only sm step", () => {
   const uses = Object.entries(real).flatMap(([f, t]) => rules(t, f)).filter((r) => r.decls.some(([p, v]) => !p.startsWith("--") && /var\(--hp-control-sm\)/.test(v)));
   assert.deepEqual(uses.map((r) => `${r.file} ${r.selectors[0]}`), []);
 });
+// CGP-DS-D-007 (DES-CGP-DS-11) — the primary call to action takes the ladder's 48px step. One per screen
+// (SX-04): the start page's main button, the lesson header's Primary (also the trial carry-over's 이어가기)
+// and the trial end card's 이용권 살펴보기. `base`: drawn in the classroom too, so the floor is unscoped.
+const CTAS = [
+  { base: true, min: CTA, name: "primary CTA: Google account", ctx: null, last: /\.studio-google(?![\w-])/, dims: H },
+  { base: true, min: CTA, name: "primary CTA: start page (.studio-primary)", ctx: null, last: /\.studio-primary(?![\w-])/, dims: H },
+  { base: true, min: CTA, name: "primary CTA: lesson header and trial carry-over (.hp-cta-primary)", ctx: null, last: /\.hp-cta-primary(?![\w-])/, dims: H },
+  { base: true, min: CTA, name: "primary CTA: trial end card 이용권 살펴보기", ctx: null, last: /\.hps-trial-end-card-primary(?![\w-])/, dims: H },
+  { base: true, min: CTA, name: "primary CTA: test panel 테스트 시작 (.hps-verify-primary)", ctx: null, last: /\.hps-verify-primary(?![\w-])/, dims: H },
+];
+CONTROLS.push(...CTAS);
 for (const c of CONTROLS) check(`floor: ${c.name}`, () => { const bad = controlFindings(real, c); assert.deepEqual(bad, [], bad.join("; ")); });
 
 // ─── negative controls: each fix reverted must fail its check ────────────────────────────────────
@@ -170,8 +224,18 @@ const NEGATIVE = [
   ["tokens", "--hp-space at 5px", () => assert.notEqual(px("var(--hp-space)", customProps(tokensMut("--hp-space: 4px;", "--hp-space: 5px;"))), 4)],
   ["tokens", "learner floor on the sm step", () => assert.notEqual(px("var(--hp-control-min)", customProps(tokensMut("--hp-control-min: var(--hp-control-md);", "--hp-control-min: var(--hp-control-sm);"))), MIN)],
 ];
+NEGATIVE.push(
+  ["spacing", "nested off-ladder arithmetic fails closed", () => assert.ok(spacingFindings(mutate("styles.css", "padding: var(--hp-space) ", "padding: calc(var(--hp-space) * (3 + 4)) ")).length)],
+  ["tokens", "a ladder step at 28px (--hp-space-6 = unit × 7)", () => assert.ok(ladderFindings(tokensMut("--hp-space-6: calc(var(--hp-space) * 6);", "--hp-space-6: calc(var(--hp-space) * 7);")).length)],
+  ["tokens", "a ladder step as a literal off the unit", () => assert.ok(ladderFindings(tokensMut("--hp-space-8: calc(var(--hp-space) * 8);", "--hp-space-8: 32px;")).length)],
+  ["tokens", "a ladder step removed", () => assert.ok(ladderFindings(tokensMut("  --hp-space-5: calc(var(--hp-space) * 5);", "")).length)],
+  ["tokens", "the CTA step on md (44px)", () => assert.ok(ladderFindings(tokensMut("--hp-control-cta: var(--hp-control-lg);", "--hp-control-cta: var(--hp-control-md);")).length)],
+  ["spacing", "a gap of unit × 7 (28px)", () => assert.ok(spacingFindings(mutate("styles.css", "padding: var(--hp-space) ", "padding: calc(var(--hp-space) * 7) ")).length)],
+  ["spacing", "a margin of unit × 1.5 (6px)", () => assert.ok(spacingFindings(mutate("styles.css", "padding: var(--hp-space) ", "padding: calc(var(--hp-space) * 1.5) ")).length)],
+);
 for (const [, label, fn] of NEGATIVE) check(`negative control: ${label}`, () => fn());
 const FLOOR_MUTATIONS = [
+  ["primary CTA: Google account", "start.css", "min-height: var(--hp-control-cta);", "min-height: var(--hp-control-min);"],
   ["classroom chat header actions", "styles.css", "  min-width: var(--hp-control-min); min-height: var(--hp-control-min); /* CGP-DS-R-010 */\n}\n.hps-header button:hover", "}\n.hps-header button:hover"],
   ["answer Run / retry", "styles.css", "  min-width: var(--hp-control-min); min-height: var(--hp-control-min); /* CGP-DS-R-010 */\n}\n.hps-msg-run:hover", "}\n.hps-msg-run:hover"],
   ["code disclosure", "chatDetails.css", "gap: 6px; min-height: var(--hp-control-min); margin-left:", "gap: 6px; min-height: 32px; margin-left:"],
@@ -189,13 +253,22 @@ const FLOOR_MUTATIONS = [
   ["composer buttons", "chatDetails.css", "  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: 50%;", "  width: 36px; height: 36px; padding: 0; border-radius: 50%;"],
   ["image remove ×", "styles.css", "  width: var(--hp-control-min);\n  height: var(--hp-control-min);\n  padding: 0;\n  line-height:", "  width: 18px;\n  height: 18px;\n  padding: 0;\n  line-height:"],
   ["citation chips", "styles.css", "  min-height: var(--hp-control-min); /* CGP-DS-R-010 */\n  text-align: left;", "  text-align: left;"],
-  ["trial end card primary", "styles.css", "border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: 6px 14px;", "border: 0; cursor: pointer; padding: 6px 14px;"],
   ["trial end card escape", "styles.css", "border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: 6px 8px; background: transparent;", "border: 0; cursor: pointer; padding: 6px 8px; background: transparent;"],
   ["voice panel buttons", "styles.css", "  font: inherit; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 6px 12px;", "  font: inherit; padding: 6px 12px;"],
   ["picked element remove ×", "styles.css", "  min-width: var(--hp-control-min); min-height: var(--hp-control-min); justify-content: center; /* CGP-DS-R-010 */\n", ""],
   ["picked element 코치에게", "styles.css", ".hps-element-meta summary { display: flex; align-items: center; min-height: var(--hp-control-min); cursor: pointer; }", ".hps-element-meta summary { cursor: pointer; }"],
   ["task rename field", "taskWorkspace.css", ".tw-rename input { width: 100%; box-sizing: border-box; min-height: var(--hp-control-min);", ".tw-rename input { width: 100%; box-sizing: border-box;"],
   ["sources panel", "taskWorkspace.css", ".tw-open-source { width: 100%; min-height: var(--hp-control-min);", ".tw-open-source { width: 100%;"],
+  // CGP-DS-D-007: each primary CTA back on the 44px step, or with no floor, must fail its 48px check.
+  ["primary CTA: start page", "start.css", "  width:100%;\n  min-height:var(--hp-control-cta);\n", "  width:100%;\n  min-height:var(--hp-control-min);\n"],
+  ["primary CTA: start page", "start.css", "  width:100%;\n  min-height:var(--hp-control-cta);\n", "  width:100%;\n"],
+  ["primary CTA: lesson header", "styles.css", ".hp-cta-primary {\n  min-height: var(--hp-control-cta);", ".hp-cta-primary {\n  min-height: var(--hp-control-min);"],
+  ["primary CTA: lesson header", "styles.css", ".hp-cta-primary {\n  min-height: var(--hp-control-cta);", ".hp-cta-primary {\n  min-height: var(--hp-control-cta); height: var(--hp-control-md);"],
+  ["primary CTA: trial end card", "styles.css", "border: 0; cursor: pointer; min-height: var(--hp-control-cta); padding: 6px 14px;", "border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: 6px 14px;"],
+  ["primary CTA: trial end card", "styles.css", "border: 0; cursor: pointer; min-height: var(--hp-control-cta); padding: 6px 14px;", "border: 0; cursor: pointer; padding: 6px 14px;"],
+  ["primary CTA: test panel", "styles.css", ".hps-verify .hps-verify-primary { min-height: var(--hp-control-cta); }", ".hps-verify .hps-verify-primary { min-height: var(--hp-control-min); }"],
+  ["primary CTA: test panel", "styles.css", ".hps-verify .hps-verify-primary { min-height: var(--hp-control-cta); }", ""],
+  ["test panel buttons", "styles.css", ".hps-verify button, .hps-verify input { min-height: var(--hp-control-min); }", ""],
   // A size in another unit is not measured, so it is a finding.
   ["citation chips", "styles.css", "  min-height: var(--hp-control-min); /* CGP-DS-R-010 */\n  text-align: left;", "  min-height: var(--hp-control-min); max-height: 2em;\n  text-align: left;"],
   // A later rule that shrinks a control again must fail even when the floor rule is intact.
