@@ -1,3 +1,4 @@
+import { readDesignFile } from "./lib/design-token-values.mjs";
 // CGP-DS-R-015 — an explicit reduce-motion preference stops motion even when the OS allows it.
 //   node --experimental-strip-types test/reduced-motion.smoke.mjs
 import assert from "node:assert/strict";
@@ -12,7 +13,7 @@ const html = '<!doctype html><html lang="ko"><head></head><body></body></html>';
 assert.equal(withReducedMotionAttr(html, true), '<!doctype html><html data-reduced-motion="true" lang="ko"><head></head><body></body></html>');
 assert.equal(withReducedMotionAttr(html, false), html, "no attribute unless forced");
 
-const tokens = readFileSync(new URL("../webview-ui/src/tokens.css", import.meta.url), "utf8");
+const tokens = readDesignFile(new URL("../webview-ui/src/tokens.css", import.meta.url), "utf8");
 for (const sel of ['*', '*::before', '*::after']) assert.ok(tokens.includes(`:root[data-reduced-motion="true"] ${sel}`), `rule covers ${sel}`);
 for (const decl of ["animation-duration: 0.01ms !important", "animation-iteration-count: 1 !important", "animation-delay: 0s !important", "transition-duration: 0.01ms !important", "transition-delay: 0s !important", "scroll-behavior: auto !important"]) assert.ok(tokens.includes(decl), decl);
 

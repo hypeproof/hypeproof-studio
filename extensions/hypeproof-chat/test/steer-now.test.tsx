@@ -1,3 +1,4 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // CGP-CHAT-R-012 (REQ-STUDIO-STEER-NOW) — "지금 방향 바꾸기": while a turn streams and a message is
 // parked, one action stops the turn through the existing Stop path and sends the parked text as the
 // next turn, exactly once. Bundled with esbuild and run with plain Node. The pure decisions run
@@ -351,7 +352,7 @@ t("stop that never lands: after the timeout the steer gives up, the text stays p
 });
 
 t("44px target in styles", () => {
-  const css = readFileSync("webview-ui/src/styles.css", "utf8");
+  const css = designValues(readFileSync("webview-ui/src/styles.css", "utf8"));
   const rule = /\.hps-queued-steer\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
   ok(/min-height:\s*44px/.test(rule) && /min-width:\s*44px/.test(rule), "44px min target");
 });
@@ -366,3 +367,5 @@ t("44px target in styles", () => {
   // Timers that belong to unmounted panels (other features' polls) must not hold the process.
   process.exit(0);
 })();
+
+function designValues(css: string): string { return staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(css); }

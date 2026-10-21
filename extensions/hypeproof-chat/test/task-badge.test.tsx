@@ -1,3 +1,4 @@
+import { staticTokens } from './lib/expand-design-tokens.mjs';
 import { click, document as doc, mountPoint } from './fixtures/mini-dom.mjs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -58,12 +59,12 @@ async function run() {
   }
   await act(() => root.unmount());
   // Structural CSS contracts complement mounted behavior; real geometry is e2e/task-workspace/task-rail-badge.mjs.
-  const css = fs.readFileSync(path.join(process.cwd(), 'webview-ui/src/taskWorkspace.css'), 'utf8');
+  const css = designValues(fs.readFileSync(path.join(process.cwd(), 'webview-ui/src/taskWorkspace.css'), 'utf8'));
   assert.match(css, /\.tw-task \{ display: grid; grid-template-columns: minmax\(0, 1fr\);/);
   assert.match(css, /\.tw-task-state \{ justify-self: end; max-width: 100%;/);
   assert.doesNotMatch(css, /\.tw-task-state \{[^}]*white-space: nowrap/, 'the badge must not force a one-line width that starves the title');
   assert.match(css, /\.tw-task-state \{[^}]*font-size: var\(--hp-text-caption\)/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), 'webview-ui/src/tokens.css'), 'utf8'), /--hp-text-caption: calc\(14px \+ var\(--hp-text-step\)\)/, 'caption token floor is 14px');
+  assert.match(designValues(fs.readFileSync(path.join(process.cwd(), 'webview-ui/src/tokens.css'), 'utf8')), /--hp-text-caption: calc\(14px \+ var\(--hp-text-step\)\)/, 'caption token floor is 14px');
   assert.match(css, /\.tw-task-meta \{ grid-column: 1 \/ -1;/);
   assert.match(css, /\.tw-task-state\[data-run-state="approval"\][^{]*\{[^}]*font-weight: 700;[^}]*border-width: 2px;/);
   assert.match(css, /\.tw-conversation:focus \{ outline: 2px solid var\(--hp-ring\); outline-offset: 2px;/);
@@ -72,3 +73,4 @@ async function run() {
   console.log('task-badge: mounted states, skip focus and CSS contracts PASS');
 }
 run().then(() => process.exit(0), e => { console.error(e); process.exit(1); });
+function designValues(css: string): string { return staticTokens(fs.readFileSync(path.join(process.cwd(), 'webview-ui/src/designTokens.css'), 'utf8'))(css); }

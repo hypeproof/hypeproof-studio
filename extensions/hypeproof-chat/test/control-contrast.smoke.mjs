@@ -1,7 +1,8 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // CGP-DS-R-034 / DES-11 — required control boundaries meet 3:1 against every surface they sit on.
 //   node --experimental-strip-types test/control-contrast.smoke.mjs
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 
 const read = (f) => readFileSync(new URL(`../webview-ui/src/${f}`, import.meta.url), "utf8");
 const lum = (hex) => {

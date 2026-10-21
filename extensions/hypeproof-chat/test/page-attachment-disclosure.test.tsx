@@ -3,6 +3,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { staticTokens } from './lib/expand-design-tokens.mjs';
 import postcss from '../webview-ui/node_modules/postcss';
 import { ChatPanel } from '../webview-ui/src/ChatPanel';
 import { buildPageAttachment, pageOrigin, PAGE_TITLE_LIMIT, PAGE_URL_LIMIT, PAGE_TEXT_LIMIT } from '../src/pageContext';
@@ -30,7 +31,7 @@ const config = {
 } as unknown as ChatConfig;
 
 // Parsed CSS applied to mounted elements; this models declarations, not browser layout.
-const css = postcss.parse(readFileSync('webview-ui/src/styles.css', 'utf8'));
+const css = postcss.parse(staticTokens(readFileSync('webview-ui/src/designTokens.css', 'utf8'))(readFileSync('webview-ui/src/styles.css', 'utf8')));
 function style(el: any, forced = false, focus = false) {
   const values: Record<string, string> = {};
   css.walkRules(rule => {

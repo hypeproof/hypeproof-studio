@@ -4,7 +4,10 @@
 // copy that must fail (negative controls).
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {safetySignalCss} from '../src/lib/safety-signal.ts';
+import {safetySignalCss as tokenized} from '../src/lib/safety-signal.ts';
+import {staticTokens} from '../../extensions/hypeproof-chat/test/lib/expand-design-tokens.mjs';
+// CGP-DS-R-001: the shipped rules reference shared tokens; expand only the static --ds-* aliases.
+const safetySignalCss = staticTokens(readFileSync(new URL('../../extensions/hypeproof-chat/webview-ui/src/designTokens.css', import.meta.url), 'utf8'))(tokenized);
 
 function parse(css) {
   const rules = new Map();

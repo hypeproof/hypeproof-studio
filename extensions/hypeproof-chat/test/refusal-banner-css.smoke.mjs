@@ -9,7 +9,7 @@
 //   4. the dismiss control is a 44px target; 14px type from the type-scale token.
 //   node --experimental-strip-types test/refusal-banner-css.smoke.mjs
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 
 const FILE = "refusalBanner.css";
 const real = readFileSync(new URL(`../webview-ui/src/${FILE}`, import.meta.url), "utf8");

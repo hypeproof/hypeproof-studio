@@ -1,3 +1,4 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // SX-01 ~ SX-05 — the student home is "today's work". Judging the mission header.
 // Run: node --experimental-strip-types test/sx-mission-header.smoke.mjs
 //
@@ -15,7 +16,7 @@
 // screen reads.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { auditRegionText } from "./sx-audit.mjs";
 import { rendererStatus, renderComponent, visibleText } from "./sx-render.mjs";
 // The pure judgments live in `.ts` — --experimental-strip-types cannot read `.tsx`

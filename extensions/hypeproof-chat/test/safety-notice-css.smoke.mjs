@@ -3,11 +3,12 @@
 // forced colours. The checks are functions over the shipped stylesheet text; each also runs against
 // mutated copies that must fail (negative controls). Stylesheet-rule pattern of ui-polish-1.smoke.mjs.
 //   node --experimental-strip-types test/safety-notice-css.smoke.mjs
-import { readFileSync } from "node:fs";
+import { readDesignFile } from "./lib/design-token-values.mjs";
 
 const SRC = new URL("../webview-ui/src/", import.meta.url);
 const FILES = ["styles.css", "chatDetails.css", "taskWorkspace.css", "tokens.css"];
-const real = Object.fromEntries(FILES.map((f) => [f, readFileSync(new URL(f, SRC), "utf8")]));
+// CGP-DS-R-001: rules reference shared tokens; readDesignFile expands only the static --ds-* aliases.
+const real = Object.fromEntries(FILES.map((f) => [f, readDesignFile(new URL(f, SRC))]));
 
 // ─── CSS: rules with their media context ────────────────────────────────────────────────────────
 /** Split a selector list on commas outside parentheses (":has(a, b)" stays one selector). */

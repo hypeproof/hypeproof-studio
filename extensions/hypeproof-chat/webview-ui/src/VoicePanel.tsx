@@ -62,7 +62,7 @@ function Meter({ meter }: { meter: MeterView }) {
           key={i}
           className="hps-voice-bar"
           // 정지 상태의 높이는 **고정**이다. 관측 없이 흔들리면 그게 가짜 움직임이다.
-          style={{ height: `${12 + (level * weight * 44)}px` }}
+          style={{ height: `calc(var(--ds-c-inline-meter-base) + ${level * weight} * var(--ds-c-inline-meter-span))` }}
         />
       ))}
     </div>

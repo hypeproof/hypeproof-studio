@@ -1,3 +1,4 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // CGP-CHAT-R-008 (REQ-STUDIO-CODE-BLOCK-TOOLS) — copy and word-wrap controls on every code block.
 // Bundled with esbuild and run with plain Node, like edit-resend.test.tsx. Static markup covers
 // where the tools render; the interactive part mounts with react-dom/client on a minimal DOM
@@ -117,7 +118,7 @@ t("writeClipboard: a failed or missing clipboard is failed, never copied (negati
 });
 
 t("44px targets and wrap rules that beat the existing white-space rules", () => {
-  const css = readFileSync("webview-ui/src/codeBlock.css", "utf8");
+  const css = designValues(readFileSync("webview-ui/src/codeBlock.css", "utf8"));
   const tool = /\.hps-codeblock-tool \{([^}]*)\}/.exec(css)?.[1] ?? "";
   ok(/min-height: 44px/.test(tool) && /min-width: 44px/.test(tool), "44px");
   ok(/\.hps-codeblock\[data-wrap="on"\] > pre \{[^}]*white-space: pre-wrap/.test(css), "wrap on");
@@ -340,3 +341,5 @@ t("answer copy (CopyAnswer): 답변 복사 confirms only after success, states a
   // Pending 2.4s feedback-reset timers belong to unmounted components; do not wait for them.
   process.exit(0);
 })();
+
+function designValues(css: string): string { return staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(css); }

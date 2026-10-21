@@ -77,15 +77,15 @@ export const safetySignalScript = `const safetySignal = (function safetySignalUI
 })();`;
 
 export const safetySignalCss = `
-.safety-pin {margin:8px 0;padding:10px 12px;border:2px solid #f5c36b;border-radius:8px;background:#151c22;color:#e2e8f0}
+.safety-pin {margin:var(--ds-c-chalk-safety-signal-space-2) 0;padding:var(--ds-c-chalk-safety-signal-space-7) var(--ds-c-chalk-safety-signal-space-1);border:var(--ds-c-chalk-safety-signal-size-7) solid var(--ds-c-chalk-safety-signal-boundary-98);border-radius:var(--ds-c-chalk-safety-signal-radius-10);background:var(--ds-c-chalk-safety-signal-surface-88);color:var(--ds-c-chalk-safety-signal-ink-105)}
 .safety-pin[hidden] {display:none}
-.safety-pin h3 {margin:0 0 4px;font-size:15px}
-.safety-note {margin:0 0 6px;font-size:14px;color:#cbd5e1}
+.safety-pin h3 {margin:0 0 var(--ds-c-chalk-safety-signal-space-13);font-size:var(--ds-c-chalk-safety-signal-type-2)}
+.safety-note {margin:0 0 var(--ds-c-chalk-safety-signal-space-15);font-size:var(--ds-c-chalk-safety-signal-type-17);color:var(--ds-c-chalk-safety-signal-ink-111)}
 .safety-list {list-style:none;margin:0;padding:0}
-.safety-item {display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 0;font-size:14px;line-height:1.5}
-.safety-flag {display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border:1px solid #f5c36b;border-radius:6px;background:#17212b;color:#fde68a;font-size:14px;font-weight:600;white-space:nowrap}
-.safety-item button {min-height:44px;min-width:44px;margin:0;padding:6px 12px;border:1px solid #94a3b8;border-radius:8px;background:#17212b;color:#e2e8f0;font:inherit;font-size:14px;cursor:pointer}
-.safety-item button:focus-visible {outline:2px solid #93c5fd;outline-offset:2px}
+.safety-item {display:flex;flex-wrap:wrap;align-items:center;gap:var(--ds-c-chalk-safety-signal-space-2);padding:var(--ds-c-chalk-safety-signal-space-15) 0;font-size:var(--ds-c-chalk-safety-signal-type-17);line-height:var(--ds-c-chalk-safety-signal-typography-5)}
+.safety-flag {display:inline-flex;align-items:center;gap:var(--ds-c-chalk-safety-signal-space-13);padding:var(--ds-c-chalk-safety-signal-space-11) var(--ds-c-chalk-safety-signal-space-12);border:var(--ds-c-chalk-safety-signal-size-3) solid var(--ds-c-chalk-safety-signal-boundary-98);border-radius:var(--ds-c-chalk-safety-signal-radius-3);background:var(--ds-c-chalk-safety-signal-surface-127);color:var(--ds-c-chalk-safety-signal-ink-108);font-size:var(--ds-c-chalk-safety-signal-type-17);font-weight:var(--ds-c-chalk-safety-signal-typography-7);white-space:nowrap}
+.safety-item button {min-height:var(--ds-c-chalk-safety-signal-size-8);min-width:var(--ds-c-chalk-safety-signal-size-8);margin:0;padding:var(--ds-c-chalk-safety-signal-space-15) var(--ds-c-chalk-safety-signal-space-1);border:var(--ds-c-chalk-safety-signal-size-3) solid var(--ds-c-chalk-safety-signal-boundary-90);border-radius:var(--ds-c-chalk-safety-signal-radius-10);background:var(--ds-c-chalk-safety-signal-surface-127);color:var(--ds-c-chalk-safety-signal-ink-105);font:inherit;font-size:var(--ds-c-chalk-safety-signal-type-17);cursor:pointer}
+.safety-item button:focus-visible {outline:var(--ds-c-chalk-safety-signal-size-7) solid var(--ds-c-chalk-safety-signal-boundary-91);outline-offset:var(--ds-c-chalk-safety-signal-size-7)}
 @media(forced-colors:active){.safety-pin,.safety-flag,.safety-item button {border-color:CanvasText;color:CanvasText;background:Canvas}.safety-item button:focus-visible{outline-color:Highlight}}
 `;
 

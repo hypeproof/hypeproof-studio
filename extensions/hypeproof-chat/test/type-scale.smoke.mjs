@@ -1,3 +1,4 @@
+import { readDesignFile } from "./lib/design-token-values.mjs";
 // REQ-STUDIO-TYPE-SCALE — CGP-DS-R-008 (REQ-CGP-DS-09, DES-CGP-DS-09; DES-02 extended to the
 // personal chat surface by DEC-29): learner-read text uses a semantic type scale whose smallest
 // step is 14px, and the scale follows the learner's text-size choice (CGP-DS-R-009, #1902).
@@ -13,7 +14,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
 const SRC = new URL("../webview-ui/src/", import.meta.url);
-const read = (f) => readFileSync(new URL(f, SRC), "utf8");
+const read = (f) => readDesignFile(new URL(f, SRC), "utf8");
 // Stylesheet order in the built bundle (vite build, checked in dist/assets/index.css): main.tsx
 // imports tokens.css first, then modules pull in localReview/start/citationPreview/quoteAction/codeBlock/
 // quoteAction/taskWorkspace before the explicit styles.css and chatDetails.css imports.
@@ -587,8 +588,8 @@ const HEADER_TEXT = [
 ];
 
 // ─── Run on the real files ─────────────────────────────────────────────────────────────────────
-const cssFiles = readdirSync(SRC).filter((n) => n.endsWith(".css")).sort();
-assert.deepEqual(cssFiles, [...ORDER].sort(), "every webview CSS file is in the bundle order list");
+const cssFiles = readdirSync(SRC).filter((n) => n.endsWith(".css") && n !== "designTokens.css").sort();
+assert.deepEqual(cssFiles, [...ORDER].sort(), "every rule-bearing webview CSS file is in the bundle order list (canonical static aliases are expanded by readDesignFile)");
 const real = { ...Object.fromEntries(ORDER.map((f) => [f, read(f)])), "TaskWorkspace.tsx": read("TaskWorkspace.tsx"), "ChatPanel.tsx": read("ChatPanel.tsx") };
 
 // Emulator self-checks on known cascade facts (fail loudly if the model drifts from the CSS).

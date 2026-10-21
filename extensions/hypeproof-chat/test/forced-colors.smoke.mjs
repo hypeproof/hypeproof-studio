@@ -1,3 +1,4 @@
+import { readDesignFile } from "./lib/design-token-values.mjs";
 // REQ-STUDIO-FORCED-COLORS — CGP-DS-R-016 (REQ-CGP-DS-17, DES-CGP-DS-17): under forced colors
 // (Windows high contrast) every control keeps a boundary, focus keeps an outline in Highlight,
 // selected/pressed states stay apart, and no status mark is carried by colour alone.
@@ -11,7 +12,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
 const SRC = new URL("../webview-ui/src/", import.meta.url);
-const read = (f) => readFileSync(new URL(f, SRC), "utf8");
+const read = (f) => readDesignFile(new URL(f, SRC), "utf8");
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 const norm = (s) => s.replace(/\s+/g, " ").trim();
 const quotes = (s) => s.replace(/\[([\w-]+)=("?)([^"\]]+)\2\]/g, '[$1="$3"]');

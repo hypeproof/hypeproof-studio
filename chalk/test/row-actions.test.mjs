@@ -1,3 +1,4 @@
+import { staticTokens } from "../../extensions/hypeproof-chat/test/lib/expand-design-tokens.mjs";
 // REQ-CHALK-ROW-ACTIONS (CGP-DS-R-021 / REQ-CGP-DS-23): row actions in Chalk lists and the
 // sidebar are visible and operable without hover — touch, keyboard and screen readers.
 // Static lock on the shipped HTML/CSS in src/ui:
@@ -13,9 +14,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
+const expandTokens = staticTokens(readFileSync(new URL('../../extensions/hypeproof-chat/webview-ui/src/designTokens.css', import.meta.url), 'utf8'));
 const UI = new URL('../src/ui/', import.meta.url);
 const pages = Object.fromEntries(
-  readdirSync(UI).filter((f) => f.endsWith('.html')).sort().map((f) => [f, readFileSync(new URL(f, UI), 'utf8')]),
+  readdirSync(UI).filter((f) => f.endsWith('.html')).sort().map((f) => [f, expandTokens(readFileSync(new URL(f, UI), 'utf8'))]),
 );
 assert.ok(Object.keys(pages).length >= 9, 'all Chalk pages are read');
 

@@ -1,3 +1,4 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // CGP-KNOW-R-015 (REQ-STUDIO-ASK-ABOUT-FILE) — "이 파일에 대해 묻기" in the 작업 자료 file list.
 // Mounted with react-dom/client on the minimal DOM (fixtures/mini-dom.mjs, loaded first) and driven
 // by real clicks: the row button asks the host to attach that path (the host owns every check and
@@ -93,7 +94,7 @@ t("gate: offered only where the host granted file attach, never on the instructo
 
 t("label: Korean, no capability name, 44px target at the caption step or larger", () => {
   eq(ASK_ABOUT_FILE_LABEL, "이 파일에 대해 묻기", "label");
-  const css = readFileSync("webview-ui/src/taskWorkspace.css", "utf8");
+  const css = designValues(readFileSync("webview-ui/src/taskWorkspace.css", "utf8"));
   const rule = /\.tw-source-list \.tw-artifact-ask \{([^}]*)\}/.exec(css)?.[1] ?? "";
   ok(/min-height: 44px/.test(rule), "44px target");
   ok(/font-size: var\(--hp-text-(caption|body)\)/.test(rule), "type-scale token (≥14px)");
@@ -147,3 +148,5 @@ t("the host's focus request after an attach lands in the composer and keeps the 
   console.log("ask-about-file OK");
   process.exit(0);
 })();
+
+function designValues(css: string): string { return staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(css); }

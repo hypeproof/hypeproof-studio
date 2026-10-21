@@ -1,3 +1,5 @@
+@import "./designTokens.css";
+
 /* HypeProof Studio design tokens — learning experience first (SX-49 ~ SX-54)
  *
  * Canonical values: docs/design/studio-learning-experience.md §디자인 시스템.
@@ -17,46 +19,46 @@
  */
 
 :root {
-  --hp-bg: #151D19;       /* Deep forest · app background, focus mode, outside of the coach rail */
-  --hp-panel: #202C24;    /* Panel · mission card, evidence drawer, secondary panels */
-  --hp-accent: #D5F279;   /* Lime · the one Primary CTA, current-step marker */
-  --hp-warn: #E6A373;     /* Amber · caution, hold, needs confirmation, real/simulated confusion */
-  --hp-ink: #F2F4E8;      /* Ink light · headings and body on a dark surface */
-  --hp-paper: #F4F6F0;    /* Paper · retrospective, growth record, reports */
-  --hp-ink-on-paper: #151D19;
-  --hp-ink-on-accent: #18231C;   /* the value start.css .studio-primary already uses */
-  --hp-line: #35483A;            /* start.css --studio-line · decorative dividers only (1.75:1) */
-  --hp-control-line: #748F79;    /* required control boundary (buttons, fields) · DES-11 3:1: 4.9:1 on bg, 4.1:1 on panel */
-  --hp-muted: #ACB9A5;           /* start.css --studio-muted · AI explanation, secondary copy */
+  --hp-bg: var(--ds-c-studio-tokens-surface-68);       /* Deep forest · app background, focus mode, outside of the coach rail */
+  --hp-panel: var(--ds-c-studio-tokens-surface-69);    /* Panel · mission card, evidence drawer, secondary panels */
+  --hp-accent: var(--ds-c-studio-tokens-ink-12);   /* Lime · the one Primary CTA, current-step marker */
+  --hp-warn: var(--ds-c-studio-tokens-ink-39);     /* Amber · caution, hold, needs confirmation, real/simulated confusion */
+  --hp-ink: var(--ds-c-studio-tokens-ink-40);      /* Ink light · headings and body on a dark surface */
+  --hp-paper: var(--ds-c-studio-tokens-surface-70);    /* Paper · retrospective, growth record, reports */
+  --hp-ink-on-paper: var(--ds-c-studio-tokens-surface-68);
+  --hp-ink-on-accent: var(--ds-c-studio-tokens-ink-13);   /* the value start.css .studio-primary already uses */
+  --hp-line: var(--ds-c-studio-tokens-boundary-50);            /* start.css --studio-line · decorative dividers only (1.75:1) */
+  --hp-control-line: var(--ds-c-studio-tokens-boundary-1);    /* required control boundary (buttons, fields) · DES-11 3:1: 4.9:1 on bg, 4.1:1 on panel */
+  --hp-muted: var(--ds-c-studio-tokens-ink-41);           /* start.css --studio-muted · AI explanation, secondary copy */
   /* CGP-DS-R-017 — the one focus-ring colour. The webview body follows the VS Code theme, so the
    * ring is the theme's own focusBorder; the fallback is the HypeProof Studio theme's value. */
-  --hp-ring: var(--vscode-focusBorder, #D5F279);
+  --hp-ring: var(--vscode-focusBorder, var(--ds-c-studio-tokens-ink-12));
   /* CGP-DS-R-019 — field placeholder: the theme's own input placeholder colour, so it stays apart
    * from typed text (Light Modern #767676: 4.5:1 on white, 2.5:1 from #3B3B3B text). Never opacity.
    * Without theme variables: 70% description colour + 30% input text (#C1CBB9). */
-  --hp-placeholder-mix: color-mix(in srgb, var(--vscode-descriptionForeground, #ACB9A5) 70%, var(--vscode-input-foreground, #F2F4E8));
+  --hp-placeholder-mix: color-mix(in srgb, var(--vscode-descriptionForeground, var(--ds-c-studio-tokens-ink-41)) 70%, var(--vscode-input-foreground, var(--ds-c-studio-tokens-ink-40)));
   --hp-placeholder: var(--vscode-input-placeholderForeground, var(--hp-placeholder-mix));
   /* CGP-DS-R-014 — motion tokens (DES-CGP-DS-15). Every transition/animation time in webview CSS
    * comes from here; component CSS holds no literal durations (test/motion-measure-gutter.smoke.mjs).
    * The reduced-motion override at the end of this file still wins (!important). */
-  --hp-ease: cubic-bezier(.19, 1, .22, 1);   /* the one UI curve: fast out, soft settle */
-  --hp-dur-press: 140ms;     /* hover/press state on a control (was 100-150ms literals) */
-  --hp-dur-content: 160ms;   /* small content appearing in place: copy confirmation, catch-up pill */
-  --hp-dur-enter: 180ms;     /* a surface or message entering: live message, tools menu, runner bar */
-  --hp-dur-meter: 100ms;     /* a live level (voice meter) keeps up with the signal */
-  --hp-dur-stagger: 100ms;   /* offset between the dots of one indicator */
+  --hp-ease: var(--ds-c-studio-tokens-easing-1);   /* the one UI curve: fast out, soft settle */
+  --hp-dur-press: var(--ds-c-studio-tokens-size-80);     /* hover/press state on a control (was 100-150ms literals) */
+  --hp-dur-content: var(--ds-c-studio-tokens-size-81);   /* small content appearing in place: copy confirmation, catch-up pill */
+  --hp-dur-enter: var(--ds-c-studio-tokens-size-82);     /* a surface or message entering: live message, tools menu, runner bar */
+  --hp-dur-meter: var(--ds-c-studio-tokens-size-83);     /* a live level (voice meter) keeps up with the signal */
+  --hp-dur-stagger: var(--ds-c-studio-tokens-size-83);   /* offset between the dots of one indicator */
   /* Status loops: each pauses when its surface is idle and stops under reduced motion. */
-  --hp-dur-pending: 1.2s;    /* response dots, 3 cycles = 3.6s (CP-R1 3.8s cap) */
-  --hp-dur-pulse: 1s;        /* classroom thinking dots */
-  --hp-dur-shimmer: 1.8s;    /* code-progress sweep */
-  --hp-dur-breathe: 2.4s;    /* code-progress border */
-  --hp-dur-runner-run: 2.4s;
-  --hp-dur-runner-hop: .42s;
-  --hp-dur-runner-puff: .9s;
-  --hp-dur-runner-blink: 1.4s;
+  --hp-dur-pending: var(--ds-c-studio-tokens-size-84);    /* response dots, 3 cycles = 3.6s (CP-R1 3.8s cap) */
+  --hp-dur-pulse: var(--ds-c-studio-tokens-size-85);        /* classroom thinking dots */
+  --hp-dur-shimmer: var(--ds-c-studio-tokens-size-86);    /* code-progress sweep */
+  --hp-dur-breathe: var(--ds-c-studio-tokens-size-87);    /* code-progress border */
+  --hp-dur-runner-run: var(--ds-c-studio-tokens-size-87);
+  --hp-dur-runner-hop: var(--ds-c-studio-tokens-size-88);
+  --hp-dur-runner-puff: var(--ds-c-studio-tokens-size-89);
+  --hp-dur-runner-blink: var(--ds-c-studio-tokens-size-90);
   /* CGP-DS-R-008 — the text-size step (CGP-DS-R-009): 0px here; the personal chat shell sets 2px
    * for 크게 and 4px for 아주 크게 (chatDetails.css). */
-  --hp-text-step: 0px;
+  --hp-text-step: var(--ds-c-studio-tokens-size-91);
 }
 /* CGP-DS-R-008 — semantic type scale (REQ-STUDIO-TYPE-SCALE, DES-CGP-DS-09, DES-02 via DEC-29).
  * Learner-read text takes one of these sizes; the smallest step is 14px. A custom property is
@@ -65,11 +67,11 @@
  * the chat grows with the learner's text-size choice instead of fighting it
  * (test/type-scale.smoke.mjs). Line heights: 1.5 for labels, 1.65 for Hangul prose. */
 :root, .hps-shell {
-  --hp-text-caption: calc(14px + var(--hp-text-step));   /* labels, metadata, captions, controls */
-  --hp-text-body: calc(16px + var(--hp-text-step));      /* message bodies, the composer */
-  --hp-text-lead: calc(18px + var(--hp-text-step));      /* the empty-chat greeting */
-  --hp-leading-label: 1.5;
-  --hp-leading-prose: 1.65;
+  --hp-text-caption: calc(var(--ds-c-studio-tokens-size-18) + var(--hp-text-step));   /* labels, metadata, captions, controls */
+  --hp-text-body: calc(var(--ds-c-studio-tokens-size-30) + var(--hp-text-step));      /* message bodies, the composer */
+  --hp-text-lead: calc(var(--ds-c-studio-tokens-size-52) + var(--hp-text-step));      /* the empty-chat greeting */
+  --hp-leading-label: var(--ds-c-studio-tokens-leading-label);
+  --hp-leading-prose: var(--ds-c-studio-tokens-leading-prose);
 }
 /* VS Code's 2026 themes ship a placeholder below 4.5:1 (Dark 2026 #555555: 2.3:1, Light 2026
  * #999999: 2.8:1); the webview body carries the theme id, and there the mix is used instead. */
@@ -85,13 +87,13 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
  * --hp-ink-on-paper wording. */
 [data-surface="growth"], .hp-reflection {
   --hp-bg: var(--hp-paper);
-  --hp-panel: #FFFFFF;
+  --hp-panel: var(--ds-c-studio-tokens-surface-71);
   --hp-ink: var(--hp-ink-on-paper);
-  --hp-muted: #4B5A4F;
-  --hp-line: #D7DDD2;
-  --hp-control-line: #76837A;    /* 3.6:1 on Paper, 4.0:1 on white */
-  --hp-ring: #4D6B12;            /* 5.6:1 on Paper, 6.1:1 on white */
-  --hp-placeholder: #4B5A4F;     /* 6.7:1 on Paper, 7.3:1 on white */
+  --hp-muted: var(--ds-c-studio-tokens-ink-42);
+  --hp-line: var(--ds-c-studio-tokens-boundary-51);
+  --hp-control-line: var(--ds-c-studio-tokens-boundary-52);    /* 3.6:1 on Paper, 4.0:1 on white */
+  --hp-ring: var(--ds-c-studio-tokens-ink-43);            /* 5.6:1 on Paper, 6.1:1 on white */
+  --hp-placeholder: var(--ds-c-studio-tokens-ink-42);     /* 6.7:1 on Paper, 7.3:1 on white */
 }
 
 /* CGP-DS-R-017 / CGP-DS-R-019 — baselines for every focusable control and every field. VS Code
@@ -103,8 +105,8 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
  * default (#757575 is 2.4:1 on Dark+ input) and never a lowered opacity
  * (test/focus-placeholder.smoke.mjs). */
 :focus-visible {
-  outline: 2px solid var(--hp-ring);
-  outline-offset: 2px;
+  outline: var(--ds-c-studio-tokens-size-7) solid var(--hp-ring);
+  outline-offset: var(--ds-c-studio-tokens-size-7);
 }
 ::placeholder {
   color: var(--hp-placeholder);
@@ -117,11 +119,11 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
 :root[data-reduced-motion="true"] *,
 :root[data-reduced-motion="true"] *::before,
 :root[data-reduced-motion="true"] *::after {
-  animation-duration: 0.01ms !important;
+  animation-duration: var(--ds-c-studio-tokens-motion-1) !important;
   animation-iteration-count: 1 !important;
-  animation-delay: 0s !important;
-  transition-duration: 0.01ms !important;
-  transition-delay: 0s !important;
+  animation-delay: var(--ds-c-studio-tokens-motion-2) !important;
+  transition-duration: var(--ds-c-studio-tokens-motion-1) !important;
+  transition-delay: var(--ds-c-studio-tokens-motion-2) !important;
   scroll-behavior: auto !important;
 }
 
@@ -135,12 +137,12 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
   /* Focus: the one ring token becomes Highlight in every scope that sets it, so every existing
    * `outline: 2px solid var(--hp-ring)` rule draws in Highlight. The ring is always an outline. */
   :root, .studio-start, .studio-disconnected, .hp-mission, [data-surface="growth"], .hp-reflection { --hp-ring: Highlight; }
-  :focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+  :focus-visible { outline: var(--ds-c-studio-tokens-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-tokens-size-7); }
   /* Every control keeps a visible boundary, including the borderless ghost buttons. */
   button, select, textarea, summary,
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),
   [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="radio"] {
-    border: 1px solid ButtonText !important;
+    border: var(--ds-c-studio-tokens-size-3) solid ButtonText !important;
   }
   /* Disabled reads as disabled in the system palette, not through opacity alone. */
   :disabled, [aria-disabled="true"] { color: GrayText !important; border-color: GrayText !important; }

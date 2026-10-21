@@ -1,3 +1,4 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // REQ-STUDIO-PREVIEW-RECOVERY (CGP-ART-R-009 / REQ-ART-09, DES-ART-09; extends #751 U4) — the webview
 // side: the real ChatPanel on the minimal DOM (fixtures/mini-dom.mjs) asks the host for the preview's
 // state, draws one cause line and exactly one action for each cause in personal and classroom chat,
@@ -178,7 +179,7 @@ for (const [seat, config] of [["personal", personal], ["classroom", classroom]] 
 }
 
 t("styles: shared rule, 14px+ type-scale tokens, a 44px action, forced-colors safe", () => {
-  const css = readFileSync("webview-ui/src/styles.css", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const css = designValues(readFileSync("webview-ui/src/styles.css", "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
   const rule = (sel: string) => new RegExp(`(?:^|\\})\\s*\\.${sel}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
   ok(/font-size:\s*var\(--hp-text-body\)/.test(rule("hps-preview-recovery-text")), "cause line at body size");
   ok(/font-size:\s*var\(--hp-text-caption\)/.test(rule("hps-preview-recovery-action")), "action label at caption size (14px floor)");
@@ -201,3 +202,5 @@ t("styles: shared rule, 14px+ type-scale tokens, a 44px action, forced-colors sa
   console.log(`\n${tests.length} preview-recovery checks passed`);
   process.exit(0);
 })();
+
+function designValues(css: string): string { return staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(css); }

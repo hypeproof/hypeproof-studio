@@ -1,3 +1,4 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // REQ-STUDIO-UI-POLISH-1 — four details of the personal trial chat that Jay saw in 2026.1020.0
 // (dark theme, about 1420px wide), each locked here from the CSS and from a real render:
 //   1. the "여기서 AI가 할 수 있는 일" card: in the chat column, a quiet surface, a 44px summary whose
@@ -12,7 +13,7 @@
 // copy that must fail (negative controls). The render half bundles the real ChatPanel and
 // TaskWorkspace with esbuild and renders them with react-dom/server.
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";

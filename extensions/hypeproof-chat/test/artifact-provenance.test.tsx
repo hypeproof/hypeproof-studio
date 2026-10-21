@@ -1,14 +1,18 @@
+import { readFileSync } from "node:fs";
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // REQ-STUDIO-ARTIFACT-PROVENANCE (CGP-KNOW-R-012) — the 작업 자료 panel draws the host's labels as text
 // plus a symbol, with the history, and says so when it has nothing to show. Bundled with esbuild and
 // run with plain Node, like turn-review.
 
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderRawMarkup } from "react-dom/server";
 import { ArtifactProvenanceList } from "../webview-ui/src/ArtifactProvenanceList";
 import { TaskWorkspace } from "../webview-ui/src/TaskWorkspace";
 import { emptyLedger, observeOutsideTurn, provenanceView, recordCoachTurn, recordHostWrite } from "../src/artifactProvenance";
 import type { ArtifactProvenanceView } from "../src/artifactProvenanceView";
 
 (globalThis as unknown as Record<string, unknown>).window = { acquireVsCodeApi: undefined, innerWidth: 1280 };
+const expandTokens = staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"));
+const renderToStaticMarkup: typeof renderRawMarkup = (node) => expandTokens(renderRawMarkup(node));
 let fail = 0;
 const t = (label: string, fn: () => void) => { try { fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${(e as Error).message}`); fail++; } };
 const has = (html: string, s: string) => { if (!html.includes(s)) throw new Error(`missing ${JSON.stringify(s)}`); };

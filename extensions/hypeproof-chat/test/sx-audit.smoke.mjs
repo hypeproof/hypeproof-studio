@@ -1,3 +1,4 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // Checking the design tokens against the doc, and the **self-verification** of the render DOM
 // audit instrument — the instrument measuring the instrument.
 //
@@ -34,7 +35,7 @@
 
 import assert from "node:assert/strict";
 
-import { readFileSync } from "node:fs";
+
 
 const {
   BANNED_LABELS,

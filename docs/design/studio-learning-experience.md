@@ -481,3 +481,19 @@ F는 `LocalReview.tsx`를 개편한 별도 웹뷰 패널이다. 표면은 Paper.
 | `worker/src/lib/measurement-core/interpretation.ts` `versions` 표시 | F의 방법/세부 데이터에 관찰 기준·범위·신뢰도 | SX-37 | P5 |
 
 각 단계의 수용은 [검증 문서](../testing/studio-learning-experience.md)의 SX-T가 소유한다. 이 표의 행이 머지돼도 해당 SX가 충족됐다는 뜻은 아니다.
+
+
+### Shared source implementation — CGP-DS-R-001
+
+Canonical implementation values now live in
+`extensions/hypeproof-chat/webview-ui/src/designTokens.css`: primitive values, semantic
+roles with explicit light/dark bindings, then component aliases. `tokens.css` imports
+that source and retains contextual HP roles, accessibility and motion policies. Existing
+palette and dimensions are preserved; equal branded light/dark bindings are intentional
+under DEC-27. Host theme variables remain composed at the consumer, never inside root
+primitives. The self-contained assistant SVG mask is an image primitive.
+
+After editing canonical values, run `node scripts/sync-design-tokens.mjs` to refresh the
+Chalk TS transport. Run extension `test/design-tokens.smoke.mjs` and Chalk
+`test/design-tokens.test.mjs`; Chalk builds reject stale transport. Existing accessibility
+probes resolve only static `--ds-*` aliases before evaluating their original assertions.

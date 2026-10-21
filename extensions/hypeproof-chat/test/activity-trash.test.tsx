@@ -10,6 +10,7 @@ import { createRoot } from "react-dom/client";
 import { ActivityTrashPanel } from "../webview-ui/src/ActivityTrashPanel";
 import { TRASH_TOAST_MS } from "../src/activityTrashView";
 import { readFileSync } from "node:fs";
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 
 type Node = { tagName?: string; textContent: string; getAttribute(n: string): string | null; hasAttribute(n: string): boolean; focus(): void; dispatchEvent(e: unknown): boolean; findAll(f: (e: Node) => boolean): Node[] };
 const act: (fn: () => unknown) => Promise<void> = (React as unknown as { act: (fn: () => unknown) => Promise<void> }).act;
@@ -363,7 +364,7 @@ t("focus: a pending 영구 삭제 opener stays focusable (aria-disabled)", async
 
 // ── 44px: the rendered controls, matched against the real stylesheet (the ui-polish-1 pattern) ──
 t("every rendered trash control gets min-height 44px from the real stylesheet; 되돌리기 also min-width 44px", async () => {
-  const css = readFileSync(new URL("../webview-ui/src/taskWorkspace.css", `file://${process.cwd()}/test/x`), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const css = staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(readFileSync(new URL("../webview-ui/src/taskWorkspace.css", `file://${process.cwd()}/test/x`), "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
   const declared: { sel: string; decls: Record<string, string> }[] = [];
   const top = css.replace(/@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, "");   // forced-colours only restyles borders
   for (const m of top.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {

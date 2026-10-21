@@ -2276,7 +2276,7 @@ function LongStepHintLine({ step, turn, onStop, onAnnounce }: { step: ActiveLong
       <span className="hps-long-step-text" aria-hidden="true">{hint.text}</span>
       {hint.offerStop && <span className="hps-long-step-offer">
         <span className="hps-long-step-choice" aria-hidden="true">{hint.choice}</span>
-        <button type="button" className="hps-long-step-stop" style={{ minHeight: 44, minWidth: 44 }} onClick={onStop}>멈추기</button>
+        <button type="button" className="hps-long-step-stop" style={{ minHeight: 'var(--ds-c-inline-hit-target)', minWidth: 'var(--ds-c-inline-hit-target)' }} onClick={onStop}>멈추기</button>
       </span>}
     </section>
   );
