@@ -16,7 +16,7 @@ import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
-import { bindComposerFocus } from './composerFocus';
+import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { glyphIconKind, splitLeadingGlyph, stripLeadingGlyph } from './glyphIcon';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
@@ -1935,6 +1935,7 @@ export function ChatPanel(props: Props) {
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded : undefined}
+          onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
         >
           {personalWorkspace && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}

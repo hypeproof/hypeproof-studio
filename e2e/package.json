@@ -54,7 +54,8 @@
     "test:feedback-report": "node feedback-report/run.mjs",
     "test:feedback-native:guards": "node --test feedback-native/*.test.mjs",
     "test:photo-only-send": "node --experimental-strip-types photo-only-send.mjs",
-    "test:attachment-error-geometry": "node --experimental-strip-types attachment-error-geometry.mjs"
+    "test:attachment-error-geometry": "node --experimental-strip-types attachment-error-geometry.mjs",
+    "test:hit-target-audit": "node hit-target-audit.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

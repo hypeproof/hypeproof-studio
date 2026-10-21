@@ -321,6 +321,14 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-dur-runner-blink: 1.4s;
   /* 글자 크기 단계(CGP-DS-R-008/-009). 여기서는 0px, 개인 대화 셸이 크게 2px · 아주 크게 4px로 바꾼다 */
   --hp-font-step: 0px;
+  /* 간격 단위와 컨트롤 높이 사다리(CGP-DS-R-010, REQ-CGP-DS-11, DES-06). 새로 쓰거나 바꾸는 간격은 --hp-space의
+     배수(calc(var(--hp-space) * n))다. 컨트롤 높이는 사다리에서 고르고, 학생 화면의 누르는 영역은 가로·세로 모두
+     --hp-control-min 이상이다. sm은 강사 전용 촘촘한 줄에만 쓰고 학생이 누르는 곳에는 쓰지 않는다 */
+  --hp-space: 4px;
+  --hp-control-sm: 32px;   /* 강사 전용 촘촘한 줄 */
+  --hp-control-md: 44px;   /* 학생 화면의 모든 컨트롤 */
+  --hp-control-lg: 48px;   /* 큰 선택지, 주 행동 */
+  --hp-control-min: var(--hp-control-md);   /* 학생 화면의 하한(DES-06) */
 }
 /* 의미 글자 크기(CGP-DS-R-008, DES-CGP-DS-09, DEC-29로 DES-02를 개인 대화에 확장). 학생이 읽는 글은 이 단계만 쓰고
    가장 작은 단계가 14px이다. custom property는 선언한 요소에서 값이 정해져 그 값으로 상속되므로 .hps-shell에서도

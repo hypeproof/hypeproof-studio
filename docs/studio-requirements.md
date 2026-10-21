@@ -1014,6 +1014,48 @@ base rule, a shared class left without its override, the composer tool buttons l
 menu's 13px, an unclassified new rule, a removed step rule, a rail line back at 10px and a stale
 classification; plus a positive control.
 
+`REQ-STUDIO-CONTROL-LADDER` (CGP-DS-R-010, 2026-10-22; REQ-CGP-DS-11; extends DES-06 and the CC-R1
+44px targets to every learner surface). `tokens.css` defines the spacing unit `--hp-space` = 4px and
+the control-height ladder `--hp-control-sm` 32px (instructor-only dense rows, never a learner target),
+`--hp-control-md` 44px and `--hp-control-lg` 48px, with `--hp-control-min` = the md step as the learner
+floor; the values come from `designTokens.css` like every other token and are recorded first in
+`docs/design/studio-learning-experience.md` §디자인 시스템. New and changed spacing is a multiple of
+`--hp-space`; existing spacing keeps its values (DEC-DS-R-010). On the learner surfaces — the personal
+task workspace and its chat, the classroom chat with its lesson rail, and the start page — every
+interactive element's hit target is at least 44×44 px. The audit on origin/main found 29 controls
+under that size, and each now takes `var(--hp-control-min)` at its own rule: the classroom header
+actions (활동 변경, 대화 지우기, 설정; the header keeps one `--hp-space` above and below them), the
+classroom answer Run and retry, the code disclosure (the personal rule's later 32px had overridden
+its own 44px floor), 나의 변화 기록 ›, the lesson step fields and help-mode labels, the classroom
+composer's 보내기 and Stop, the skip link, the task search field, the task title button's width,
+the start page's top navigation, 작업 폴더 열기 and its text buttons (시작 방법 다시 선택, 다른
+활동 선택, 연결 해제), the classroom photo's remove × (a 44px round target in the thumbnail corner
+whose visible dot stays small, as the edit-box image button already is), the citation chips, the
+trial end card's 이용권 살펴보기 and 나중에, the picked element's remove × and 코치에게 보낼 내용 보기,
+the task rename field, the sources panel's 브라우저에서 열기, and the voice panel's buttons. The personal one-line composer keeps its 24px textarea inside a 44px+ card; a
+primary press anywhere on the card's own surface (not on a control inside it) puts the caret in
+the textarea, so the card is its hit target. Exempt, as WCAG 2.5.8 allows: a link inside a sentence
+of an answer. Not covered: instructor-only surfaces (the inbox, instructor chat panel, Chalk), the
+local review page, dialogs the host raises, the preview panel, and states the audit does not drive
+(the voice popup, whose buttons are guarded in CSS only, approval and outbound dialogs, the
+purchase screen); a capture in the built app.
+Test: `e2e/hit-target-audit.mjs` renders the real ChatPanel (personal inside TaskWorkspaceFrame, as
+App does; classroom with a lesson) and StartPage in headless Chromium, dark and light, at 1420 and
+800 px, drives them through rest, editing, a failed, a streaming and an allowance-ended turn, a picked page
+element, a staged photo, a cited answer, the code disclosure, the tools and chat menus, the sources
+panel and task rename, and the start page's entry, code form and connected card, and measures every
+shown interactive element, disabled ones included (1772 targets): red on origin/main with 684
+findings, green on this change. The composer card counts only after a real press on its padding
+has focused the textarea. `test/control-ladder.smoke.mjs` (in `npm test`) locks the tokens and,
+for each of those controls, every rule in any webview stylesheet whose selector ends on it: none
+may set a needed dimension below 44px, and one rule must give the floor (for controls the classroom
+also draws, a rule not scoped to the personal workspace). It also checks the composer press on
+fake events (a read-only or disabled textarea, a right press and a press on an inner control do
+nothing). Any size on a listed control that is not a px length (`2em`, `min()`) is a finding. It was
+red on origin/main (60 of 62 checks). Negative controls: `--hp-space` at 5px, the floor on the sm
+step, each of the 23 fixes reverted, the personal send button's dead 36px rule restored, a later
+rule capping the task title at 40px, and a `max-height: 2em` on the citation chip.
+
 `REQ-STUDIO-UI-POLISH-1` (2026-10-20; Jay's review of the released 2026.1020.0, personal trial seat,
 dark theme, about 1420px wide). Four details of the personal chat follow rules the design system
 already has; the Korean copy is unchanged except where noted. (1) The REQ-M47 / CGP-AGENT-R-003
