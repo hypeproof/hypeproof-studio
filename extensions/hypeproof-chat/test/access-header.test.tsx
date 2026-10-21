@@ -96,7 +96,12 @@ test('invalid counts, held or unresolved are unconfirmed; confirmed zero stays z
 });
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('ko-KR',{hour:'numeric',minute:'2-digit',hour12:false});
 /** Every number the line shows (text and title), after removing the confirmation time. */
-const numbers = (html: string, iso: string) => (html.split(hhmm(iso)).join(' ').match(/\d[\d,]*/g) ?? []);
+const numbers = (html: string, iso: string) => {
+ const title = html.match(/title="([^"]*)"/)?.[1] ?? '';
+ // The model alias may contain digits; inspect the actual visible ledger as well as its tooltip.
+ const visible = html.replace(/<span class="hps-access-model"[^>]*>[\s\S]*?<\/span>/, '').replace(/<[^>]+>/g, '');
+ return ((title + ' ' + visible).split(hhmm(iso)).join(' ').match(/\d[\d,]*/g) ?? []);
+};
 test('class funding shows its own remaining count and no other number (limit, use, reservation, overrun)', () => {
  for(const source of ['cohort','organization']) for (const seat of ['personal','classroom']) {
   const c=base(); const r=c.access!.view!.choices[0].resources[0]; c.access!.view!.choices[0].source_kind=source;
@@ -120,7 +125,7 @@ test('a class source without a valid ledger reads 미확인 and shows no number'
   if(change==='time') v.as_of='bad';
   if(change==='missing') v.choices[0].resources=[];
   const html=render(c);
-  assert.ok(html.includes('수업·기관 지원 · 남은 요청 미확인'),change); assert.equal((html.match(/\d/g)??[]).length,0,change+': '+html);
+  assert.ok(html.includes('수업·기관 지원 · 남은 요청 미확인'),change); assert.deepEqual(numbers(html,v.as_of),[],change+': '+html);
  }
 });
 // DEC-35 (Jay 2026-10-19): the count applies to pass and class seats. Classroom screens show it
