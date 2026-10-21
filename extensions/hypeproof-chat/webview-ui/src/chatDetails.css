@@ -82,7 +82,7 @@
 .hps-composer-hint { margin-right: auto; font-size: var(--ds-c-studio-chatdetails-type-3); line-height: var(--ds-c-studio-chatdetails-typography-5); color: var(--tw-muted); }
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send,
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-stop {
-  width: var(--ds-c-studio-chatdetails-size-10); height: var(--ds-c-studio-chatdetails-size-10); padding: 0; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
   transition: transform var(--hp-dur-press) var(--hp-ease), opacity var(--hp-dur-press) var(--hp-ease);
   background: var(--vscode-button-background, var(--ds-c-studio-chatdetails-surface-4)); color: var(--vscode-button-foreground, var(--ds-c-studio-chatdetails-ink-2));
 }
@@ -231,7 +231,7 @@
 
 /* Code disclosure: the answer's quiet secondary, not a 16px emoji pill (UI audit P0-2). */
 .hps-shell[data-chat-detail="personal"] .hps-codepill-toggle {
-  display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--ds-c-studio-chatdetails-size-23); margin-left: var(--ds-c-studio-chatdetails-space-23);
+  display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--hp-control-min); margin-left: var(--ds-c-studio-chatdetails-space-23);
   padding: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-2); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-3); background: transparent; color: var(--tw-muted);
   font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-chatdetails-typography-6);
 }

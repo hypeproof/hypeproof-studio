@@ -563,6 +563,10 @@
   --ds-p-543: #a7f3d0;
   --ds-p-544: #cbd5e1;
   --ds-p-545: #f5c36b;
+  --ds-p-space-unit: 4px;
+  --ds-p-control-sm: 32px;
+  --ds-p-control-md: 44px;
+  --ds-p-control-lg: 48px;
 }
 :root, [data-theme="dark"], .vscode-dark {
   --ds-s-assistant-mark: var(--ds-p-assistant-mask);
@@ -1245,6 +1249,10 @@
   --ds-s-boundary-97: var(--ds-p-533);
   --ds-s-boundary-98: var(--ds-p-545);
   --ds-s-ink-111: var(--ds-p-544);
+  --ds-s-space-unit: var(--ds-p-space-unit);
+  --ds-s-control-sm: var(--ds-p-control-sm);
+  --ds-s-control-md: var(--ds-p-control-md);
+  --ds-s-control-lg: var(--ds-p-control-lg);
 }
 [data-theme="light"], .vscode-light {
   --ds-s-assistant-mark: var(--ds-p-assistant-mask);
@@ -1927,6 +1935,10 @@
   --ds-s-boundary-97: var(--ds-p-533);
   --ds-s-boundary-98: var(--ds-p-545);
   --ds-s-ink-111: var(--ds-p-544);
+  --ds-s-space-unit: var(--ds-p-space-unit);
+  --ds-s-control-sm: var(--ds-p-control-sm);
+  --ds-s-control-md: var(--ds-p-control-md);
+  --ds-s-control-lg: var(--ds-p-control-lg);
 }
 :root, body {
   --ds-c-studio-tokens-leading-label: var(--ds-s-typography-5);
@@ -3462,4 +3474,8 @@
   --ds-c-status-chip-edge-double: var(--ds-s-size-15);
   --ds-c-status-chip-success: var(--ds-s-ink-29);
   --ds-c-status-chip-danger: var(--ds-s-ink-30);
+  --ds-c-studio-tokens-space-unit: var(--ds-s-space-unit);
+  --ds-c-studio-tokens-control-sm: var(--ds-s-control-sm);
+  --ds-c-studio-tokens-control-md: var(--ds-s-control-md);
+  --ds-c-studio-tokens-control-lg: var(--ds-s-control-lg);
 }

@@ -26,7 +26,8 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1);
+  /* CGP-DS-R-010 — the actions are 44px tall now; one spacing unit above and below keeps the row compact. */
+  padding: var(--hp-space) var(--ds-c-studio-styles-space-1);
   border-bottom: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, var(--ds-c-studio-styles-boundary-10));
 }
 
@@ -55,6 +56,7 @@ html, body, #root {
   margin-left: var(--ds-c-studio-styles-space-13);
   cursor: pointer;
   font-size: var(--ds-c-studio-styles-type-3);
+  min-width: var(--hp-control-min); min-height: var(--hp-control-min); /* CGP-DS-R-010 */
 }
 .hps-header button:hover {
   background-color: var(--hp-bg-control-hover);
@@ -177,6 +179,7 @@ html, body, #root {
   line-height: var(--ds-c-studio-styles-typography-18);
   cursor: pointer;
   max-width: 100%;
+  min-height: var(--hp-control-min); /* CGP-DS-R-010 */
   text-align: left;
 }
 .hps-cit-chip:hover {
@@ -231,6 +234,7 @@ html, body, #root {
   cursor: pointer;
   text-transform: none;
   letter-spacing: 0;
+  min-width: var(--hp-control-min); min-height: var(--hp-control-min); /* CGP-DS-R-010 */
 }
 .hps-msg-run:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .hps-msg-run:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
@@ -385,6 +389,7 @@ html, body, #root {
   padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-7);
   font-size: var(--ds-c-studio-styles-type-1);
   cursor: pointer;
+  min-height: var(--hp-control-min); /* CGP-DS-R-010 */
 }
 .hps-codepill-toggle:hover { border-color: var(--vscode-textLink-foreground, var(--ds-c-studio-styles-boundary-24)); }
 .hps-codepill-body {
@@ -782,6 +787,7 @@ html, body, #root {
   cursor: pointer;
   font-weight: var(--ds-c-studio-styles-typography-7);
   font-size: var(--ds-c-studio-styles-type-1);
+  min-width: var(--hp-control-min); min-height: var(--hp-control-min); /* CGP-DS-R-010 */
 }
 .hps-btn-roll {
   background: transparent;
@@ -874,24 +880,40 @@ html, body, #root {
   object-fit: cover;
   display: block;
 }
+/* CGP-DS-R-010 — a 44px hit target in the thumbnail's corner; the visible dot stays small (the
+   .hps-edit-image button pattern). */
 .hps-attachment-remove {
   position: absolute;
-  top: var(--ds-c-studio-styles-size-7);
-  right: var(--ds-c-studio-styles-size-7);
-  width: var(--ds-c-studio-styles-size-52);
-  height: var(--ds-c-studio-styles-size-52);
+  top: 0;
+  right: 0;
+  width: var(--hp-control-min);
+  height: var(--hp-control-min);
   padding: 0;
   line-height: var(--ds-c-studio-styles-size-30);
   border: none;
   border-radius: 50%;
-  background: var(--ds-c-studio-styles-surface-42);
+  background: transparent;
+  isolation: isolate;
   color: var(--ds-c-studio-styles-ink-2);
   font-size: var(--ds-c-studio-styles-type-9);
   font-weight: var(--ds-c-studio-styles-typography-17);
   cursor: pointer;
 }
-.hps-attachment-remove:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
-.hps-attachment-remove:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+/* The visible dot is a pseudo-element under the glyph; the 44px button stays transparent. The hover and pressed
+   layer (CGP-DS-R-005) is painted on the dot only, so it never becomes a faint 44px circle in place of the dot. */
+.hps-attachment-remove::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  margin: auto;
+  width: calc(2 * var(--ds-c-studio-styles-surface-25));
+  height: calc(2 * var(--ds-c-studio-styles-surface-25));
+  border-radius: 50%;
+  background-color: var(--ds-c-studio-styles-surface-42);
+}
+.hps-attachment-remove:hover::before { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-attachment-remove:active::before { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 /* D-028 — a staged photo whose format the webview cannot draw (HEIC) shows its file name. */
 .hps-attachment-name {
   display: flex;
@@ -1195,8 +1217,10 @@ html, body, #root {
 }
 .hps-element-meta { flex: 1; min-width: 0; }
 .hps-element-source { color: var(--vscode-descriptionForeground, inherit); }
+.hps-element-meta summary { display: flex; align-items: center; min-height: var(--hp-control-min); cursor: pointer; } /* CGP-DS-R-010 */
 .hps-element-meta pre { max-height: var(--ds-c-studio-styles-size-54); overflow: auto; white-space: pre-wrap; word-break: break-all; }
 .hps-element-remove {
+  min-width: var(--hp-control-min); min-height: var(--hp-control-min); justify-content: center; /* CGP-DS-R-010 */
   background: none;
   border: none;
   color: inherit;
@@ -1613,7 +1637,7 @@ html, body, #root {
 .hp-mission-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-1); margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
 /* SX-03 — one link. It does not use the Primary style and sits below the mission, smaller. */
 .hp-mission-growth {
-  font: inherit; font-size: var(--ds-c-studio-styles-type-1); padding: var(--ds-c-studio-styles-space-15) 0; cursor: pointer;
+  font: inherit; font-size: var(--ds-c-studio-styles-type-1); padding: var(--ds-c-studio-styles-space-15) 0; cursor: pointer; min-height: var(--hp-control-min); /* CGP-DS-R-010 */
   color: var(--hp-text-muted-default); background: none; border: 0; text-decoration: underline;
 }
 .hp-mission :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
@@ -1758,7 +1782,7 @@ html, body, #root {
   padding-top: var(--ds-c-studio-styles-space-2); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-7));
 }
 .hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry {
-  font: inherit; padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-8); cursor: pointer;
+  font: inherit; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-8); cursor: pointer;
   color: var(--vscode-button-secondaryForeground, var(--ds-c-studio-styles-ink-1));
   background: var(--vscode-button-secondaryBackground, var(--ds-c-studio-styles-surface-21));
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
@@ -1925,12 +1949,12 @@ html, body, #root {
 .hp-step-work { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-2); max-height: none; }
 .hp-help-modes { border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-10); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); margin: 0; }
 .hp-help-modes legend { font-size: var(--ds-c-studio-styles-type-9); padding: 0 var(--ds-c-studio-styles-space-13); }
-.hp-help-modes label { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); min-height: var(--ds-c-studio-styles-size-23); }
+.hp-help-modes label { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); min-height: var(--hp-control-min); }
 .hp-surface { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); }
 .hp-surface label { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-17); }
 /* The criterion/decision fields sat on the dark rail as the platform's default white boxes: same tokens as the evidence form. */
 .hp-surface textarea, .hp-surface input {
-  font: inherit; width: 100%; box-sizing: border-box; min-height: var(--ds-c-studio-styles-size-10); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2);
+  font: inherit; width: 100%; box-sizing: border-box; min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2);
   background: var(--hp-bg-app-default); color: var(--hp-text-primary-default); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3);
 }
 .hp-surface textarea { resize: vertical; }
@@ -2039,13 +2063,13 @@ html, body, #root {
 .hps-trial-end-card-fact { margin: 0 0 var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-9); line-height: var(--ds-c-studio-styles-typography-5); overflow-wrap: anywhere; }
 .hps-trial-end-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-2); margin-top: var(--ds-c-studio-styles-space-7); }
 .hps-trial-end-card-primary {
-  border: 0; cursor: pointer; padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-19); border-radius: var(--ds-c-studio-styles-radius-13); font-size: var(--ds-c-studio-styles-type-9); font-weight: var(--ds-c-studio-styles-typography-7);
+  border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-19); border-radius: var(--ds-c-studio-styles-radius-13); font-size: var(--ds-c-studio-styles-type-9); font-weight: var(--ds-c-studio-styles-typography-7);
   background: var(--vscode-button-background, var(--ds-c-studio-styles-surface-31)); color: var(--vscode-button-foreground, var(--ds-c-studio-styles-ink-2));
 }
 .hps-trial-end-card-primary:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .hps-trial-end-card-primary:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 .hps-trial-end-card-escape {
-  border: 0; cursor: pointer; padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2); background: transparent; font-size: var(--ds-c-studio-styles-type-9);
+  border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2); background: transparent; font-size: var(--ds-c-studio-styles-type-9);
   color: var(--vscode-textLink-foreground, var(--ds-c-studio-styles-ink-36));
 }
 .hps-trial-end-card-escape:hover { text-decoration: underline; }
@@ -2222,6 +2246,7 @@ html, body, #root {
   .hps-instructor-badge { border: var(--ds-c-studio-styles-size-3) solid CanvasText; }
   /* Small controls drawn over an image keep an opaque plate under their glyph. */
   .hps-attachment-remove, .hps-edit-image button { background: ButtonFace; color: ButtonText; }
+  .hps-attachment-remove::before { display: none; }
   /* CGP-DS-R-016 — forced-color-adjust: a QR code has to stay dark on light to scan, and forced
      colors would repaint its white plate as Canvas, which is black in dark high-contrast themes. */
   .hps-publish-link img { forced-color-adjust: none; }

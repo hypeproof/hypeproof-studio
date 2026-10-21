@@ -96,6 +96,17 @@
   /* CGP-DS-R-008 — the text-size step (CGP-DS-R-009): 0px here; the personal chat shell sets 2px
    * for 크게 and 4px for 아주 크게 (chatDetails.css). */
   --hp-font-step: var(--ds-c-studio-tokens-size-91);
+  /* CGP-DS-R-010 (REQ-CGP-DS-11, DES-06) — the 4px spacing unit and the control-height ladder.
+   * New and changed spacing is a multiple of --hp-space (calc(var(--hp-space) * n)). A control's
+   * height comes from the ladder; on a learner surface its hit target is at least --hp-control-min
+   * in both dimensions (e2e/hit-target-audit.mjs measures the render,
+   * test/control-ladder.smoke.mjs locks the rules). The sm step is for instructor-only dense rows,
+   * never a learner target. */
+  --hp-space: var(--ds-c-studio-tokens-space-unit);        /* 4px */
+  --hp-control-sm: var(--ds-c-studio-tokens-control-sm);   /* 32px · instructor-only dense rows */
+  --hp-control-md: var(--ds-c-studio-tokens-control-md);   /* 44px · every learner control */
+  --hp-control-lg: var(--ds-c-studio-tokens-control-lg);   /* 48px · large choices and primary actions */
+  --hp-control-min: var(--hp-control-md);                  /* the learner floor (DES-06) */
 }
 /* CGP-DS-R-008 — semantic type scale (REQ-STUDIO-TYPE-SCALE, DES-CGP-DS-09, DES-02 via DEC-29).
  * Learner-read text takes one of these sizes; the smallest step is 14px. A custom property is

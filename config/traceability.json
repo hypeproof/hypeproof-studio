@@ -9714,6 +9714,22 @@
           "path": "chalk/test/board-status-css.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-TEST-CONTROL-LADDER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/control-ladder.smoke.mjs"
+        },
+        {
+          "path": "e2e/hit-target-audit.mjs"
+        }
+      ]
     }
   ]
 }
