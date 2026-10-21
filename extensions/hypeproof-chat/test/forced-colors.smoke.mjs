@@ -69,7 +69,9 @@ const INVENTORY = [
   { file: "styles.css", sel: ".hps-runner-dust", why: "runner dust: background only", ok: isSystemBg },
   { file: "styles.css", sel: ".hps-voice-bar", why: "voice meter bars: background only", ok: isSystemBg },
   { file: "styles.css", sel: ".hps-voice-meter:not(.hps-voice-meter-live) .hps-voice-bar", why: "idle meter: a different grey", ok: (d) => /GrayText/.test(value(d, "background", "background-color") ?? "") },
-  { file: "styles.css", sel: ".hps-verify-state", why: "verify state chip: tinted background only", ok: isBorder },
+  // CGP-DS-R-006: every status chip (verify state, task run, delegation, help, source state) is one
+  // `.hp-status-chip`; forced colors keeps its per-intent edge style and paints it CanvasText.
+  { file: "styles.css", sel: ".hp-status-chip[data-intent]", why: "status chip: tinted background per intent", ok: (d) => value(d, "border-color") === "CanvasText" },
   { file: "styles.css", sel: ".hps-instructor-badge", why: "instructor badge: tinted background only", ok: isBorder },
   { file: "styles.css", sel: ".hps-msg-user .hps-msg-body", why: "user bubble: background only (DES-CGP-DS-17)", ok: (d) => /CanvasText/.test(value(d, "border") ?? "") },
 ];
@@ -81,11 +83,13 @@ const TEXT_CUES = [
   { file: "ChatPanel.tsx", what: "tool row marks", re: /t\.state === "running" \? <ChatIcon kind="dots"[^>]*\/> : t\.state === "error" \? <ChatIcon kind="alert"[^>]*\/> : <ChatIcon kind="check"/ },
   { file: "AnswerVerdict.tsx", what: "pressed verdict and reason check mark", re: /=== (?:verdict|reason) && <ChatIcon kind="check"/g, count: 2 },
   { file: "TurnReviewBar.tsx", what: "failed review is an alert with a title", re: /data-state="failed" role="alert"/ },
-  { file: "VerifyPanel.tsx", what: "verify state chip has its words", re: /\{STATE_LINE\[view\.verification\.state\]\}/ },
+  { file: "VerifyPanel.tsx", what: "verify state chip has its words", re: /<IntentChip chip=\{verifyChip\(view\.verification\.state\)\}/ },
   { file: "../../src/evidenceView.ts", what: "unresolved evidence source reads 확인 필요", re: /label: "확인 필요"/ },
 ];
 const GEOMETRY_CUES = [
-  { file: "taskWorkspace.css", sel: '.tw-task-state[data-run-state="approval"]', ok: (d) => value(d, "border-width") === "2px" && value(d, "font-weight") === "700" },
+  // The task rail's approval and error badges are caution and danger status chips (CGP-DS-R-006).
+  { file: "styles.css", sel: '.hp-status-chip[data-intent="caution"]', ok: (d) => value(d, "border-width") === "2px" && value(d, "border-style") === "solid" },
+  { file: "styles.css", sel: '.hp-status-chip[data-intent="danger"]', ok: (d) => value(d, "border-width") === "3px" && value(d, "border-style") === "double" },
   { file: "styles.css", sel: ".hp-evidence-row.hp-amber", ok: (d) => /^3px solid\b/.test(value(d, "border-left") ?? "") },
   { file: "styles.css", sel: ".hps-chip-weak", ok: (d) => value(d, "border-style") === "dashed" },
 ];
@@ -257,7 +261,9 @@ expectBad(audit({ ...files, "x.css": ".x { color: canvastext; }" }), /system col
 assert.ok(!audit({ ...files, "x.css": ".hp-mark { background: var(--tw-canvas); }" }).some((p) => p.startsWith("x.css")), "positive control: identifiers containing a system colour word are not leaks");
 assert.ok(specificity(".cp-citation:hover:not(:disabled)") > specificity('.cp-citation[aria-expanded="true"]'), "specificity: the hover rule really outranks the forced rule");
 assert.equal(specificity('.hps-shell[data-chat-detail="personal"] .hps-input textarea'), 301, "specificity of a mixed selector");
-expectBad(mutate("taskWorkspace.css", "font-weight: 700; border-width: 2px;", "border-width: 2px;"), /lost its geometric cue/, "run state that is colour only");
+expectBad(mutate("styles.css", "border-style: solid; border-width: 2px; border-color: var(--hp-text-warn-default);", "border-style: solid; border-color: var(--hp-text-warn-default);"), /data-intent="caution"\]" lost its geometric cue/, "a caution chip (approval) that is colour only");
+expectBad(mutate("styles.css", "border-style: double; border-width: 3px;", "border-style: solid; border-width: 3px;"), /data-intent="danger"\]" lost its geometric cue/, "a danger chip (error) without its double edge");
+expectBad(mutate("styles.css", "  .hp-status-chip[data-intent] { border-color: CanvasText;", "  .hp-status-chip[data-intent] {"), /hp-status-chip\[data-intent\]" .*no non-colour cue/, "a status chip whose edge vanishes in forced colors");
 // Positive controls: the shapes the checker must accept.
 assert.deepEqual(split("@media (forced-colors: active) { .a { color: CanvasText; } } .b { color: red; }").forced.map(norm), [".a { color: CanvasText; }"], "split reads a forced block");
 assert.equal(norm(split("@media (forced-colors: active) { .a { color: CanvasText; } } .b { color: red; }").rest), ".b { color: red; }", "split keeps the rest");

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ChatMessage, Citation } from '../../src/protocol';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
-import { TASK_RUN_STATE_LABELS, taskCountLine, taskRunAccessibleName, type TaskRunState } from '../../src/taskRunState';
+import { taskCountLine, taskRunAccessibleName, type TaskRunState } from '../../src/taskRunState';
 import { onHostMessage, postToHost } from './vscode';
 import { CitationPreview, CitationPreviewContext, SourceIcon, citationAddress } from './CitationPreview';
 import { HeadingSlotContext } from './headingSlot';
 import { ChatIcon } from './ChatDetails';
+import { IntentChip } from './StatusChip';
+import { TASK_RUN_CHIPS } from './statusChipLogic';
 export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
 import { imeComposing } from './imeGuard';
@@ -388,7 +390,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           return <li key={task.id}>
           <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={taskRunAccessibleName(task.title, state)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
             <span className="tw-task-title">{task.title}</span>
-            {state && <span className="tw-task-state" data-run-state={state}><span className="tw-task-state-symbol"><ChatIcon kind={TASK_RUN_STATE_LABELS[state].icon} size={16} /></span>{TASK_RUN_STATE_LABELS[state].label}</span>}
+            {state && <IntentChip chip={TASK_RUN_CHIPS[state]} status={state} className="tw-task-state" attrs={{ 'data-run-state': state }} />}
             <span id={metaId} className="tw-task-meta"><span>{taskCountLine(task.messageCount, state)}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
         </li>;
@@ -414,9 +416,10 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         </form> : <h1><button ref={renameButton} className="tw-title-button" title={`작업 이름 바꾸기: ${active?.title ?? '작업 기록'}`} disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
         <div ref={setHeadingSlot} className="tw-heading-slot" />
         <span className="tw-run-note" role="status" aria-live="polite" title={busy ? (runState === 'approval' ? '화면에 뜬 확인 창에서 골라 주세요.' : '멈춘 뒤 다른 작업으로 이동할 수 있습니다.') : undefined}>
+          {/* CGP-DS-R-006: the heading's run state is the same intent chip as the rail's; the help sentence stays for screen readers. */}
           {busy && (runState === 'approval'
-            ? <>승인 기다리는 중<span className="tw-run-help">입니다. 화면에 뜬 확인 창에서 골라 주세요.</span></>
-            : <>작업 중<span className="tw-run-help">입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</span></>)}
+            ? <><IntentChip chip={TASK_RUN_CHIPS.approval} status="approval" className="tw-run-chip" /><span className="tw-run-help">입니다. 화면에 뜬 확인 창에서 골라 주세요.</span></>
+            : <><IntentChip chip={TASK_RUN_CHIPS.running} status="running" className="tw-run-chip" /><span className="tw-run-help">입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</span></>)}
         </span>
         <button ref={sourceToggle} className="tw-quiet tw-sources-toggle" aria-expanded={sourcesOpen} aria-controls="task-sources" onClick={toggleSources}>자료{sources.length ? ` ${sources.length}` : ''}</button>
       </header>

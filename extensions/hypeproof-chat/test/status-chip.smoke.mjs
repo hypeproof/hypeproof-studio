@@ -6,7 +6,10 @@ import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 //   3. contrast with every host variable absent (the HP palette): label ≥4.5:1 and icon ≥3:1 on the
 //      fill over the app and panel surfaces;
 //   4. a chip in a narrow rail wraps a Korean word between eojeol and is never cut;
-//   5. forced colours: a CanvasText boundary, text and icon on Canvas.
+//   5. forced colours: a CanvasText boundary, text and icon on Canvas;
+//   6. CGP-DS-R-006 (REQ-CGP-DS-05): each named intent has its own edge (style + width), so a grayscale
+//      capture separates the intents; the edge survives forced colours, the block padding gives back what a
+//      heavier edge takes (one outer height), and every status family's mark is this chip, not its own look.
 //   node --experimental-strip-types test/status-chip.smoke.mjs
 //
 // Each check is a function over the stylesheet text, so it also runs against mutated copies that must
@@ -60,6 +63,15 @@ function rules(raw) {
 /** Every declaration on an exact selector in one media context, later wins (styles.css only). */
 const decls = (css, selector, media = "") => rules(css["styles.css"]).filter((r) => r.media === media && r.selectors.includes(selector)).reduce((a, r) => ({ ...a, ...r.decls }), {});
 const tokenBlock = (css, scope) => rules(css["tokens.css"]).filter((r) => r.media === "" && r.selectors.includes(scope)).reduce((a, r) => ({ ...a, ...r.decls }), {});
+/** A px length or a calc() of px terms joined by + and -. */
+const lengthPx = (v) => {
+  const m = /^calc\((.+)\)$/.exec(v ?? "");
+  if (!m) return px(v);
+  const terms = m[1].split(/\s+([+-])\s+/);
+  let total = px(terms[0]);
+  for (let k = 1; k < terms.length; k += 2) total += (terms[k] === "+" ? 1 : -1) * px(terms[k + 1]);
+  return total;
+};
 const px = (v) => { assert.match(v ?? "", /^\d+px$/, `a px length: ${v}`); return parseInt(v, 10); };
 
 // ─── contrast ───────────────────────────────────────────────────────────────────────────────────
@@ -83,6 +95,9 @@ const CHIP = ".hp-status-chip";
 const ICON = ".hp-status-chip .hps-icon";
 const INTENTS = ["success", "caution", "info", "neutral", "danger"];
 const intent = (i) => `.hp-status-chip[data-intent="${i}"]`;
+// The documented intent edges (docs/studio-requirements.md "Status intents (CGP-DS-R-006)"): severity reads
+// as weight — danger double 3px, caution solid 2px — and the calm intents differ by line pattern.
+const EDGE = { info: "dotted/1", success: "solid/1", caution: "solid/2", neutral: "dashed/1", danger: "double/3" };
 const MIX = /^color-mix\(in srgb, (.+) (\d+(?:\.\d+)?)%, transparent\)$/;
 
 const checks = {
@@ -116,7 +131,7 @@ const checks = {
     const neutral = decls(css, intent("neutral"));
     assert.equal(neutral["border-style"], "dashed", "unverified is dashed");
     assert.match(neutral["border-color"] ?? "", /^var\(--hp-border-muted-default\)$/);
-    assert.match(decls(css, CHIP).border ?? "", /solid transparent$/, "the other chips keep a transparent edge, so a dashed one does not shift");
+    assert.match(decls(css, CHIP).border ?? "", /solid transparent$/, "the base edge is transparent: each intent paints its own (check 6)");
   },
   "3 contrast: label ≥4.5:1 and icon ≥3:1 on each fill over app and panel": (css) => {
     const root = tokenBlock(css, ":root");
@@ -155,6 +170,34 @@ const checks = {
     assert.equal(chip["background-color"], "Canvas");
     assert.equal(icon.color, "CanvasText");
   },
+  "6 intents: one edge pattern each, visible in grayscale and forced colours, one outer height": (css) => {
+    const base = decls(css, CHIP);
+    const baseEdge = px(/^(\d+px)\b/.exec(base.border ?? "")?.[1]);
+    const basePad = px(base["padding-block"]);
+    const edges = INTENTS.map((i) => {
+      const d = decls(css, intent(i));
+      const style = d["border-style"];
+      assert.ok(["solid", "dashed", "dotted", "double"].includes(style), `${i}: edge style ${style}`);
+      assert.ok(d["border-color"] && !/transparent/.test(d["border-color"]), `${i}: the edge is painted (${d["border-color"]})`);
+      const width = d["border-width"] ? px(d["border-width"]) : baseEdge;
+      if (style === "double") assert.ok(width >= 3, `${i}: a double edge needs 3px to show two lines`);
+      // One outer height: block padding + edge is the same for every intent.
+      const pad = d["padding-block"] ? lengthPx(d["padding-block"]) : basePad;
+      assert.ok(pad >= 0, `${i}: block padding ${pad}`);
+      assert.equal(pad + width, basePad + baseEdge, `${i}: outer height moves (${pad}px padding + ${width}px edge)`);
+      assert.equal(`${style}/${width}`, EDGE[i], `${i}: edge is ${style}/${width}px, the documented pattern is ${EDGE[i]}`);
+      return `${style}/${width}`;
+    });
+    assert.equal(new Set(edges).size, INTENTS.length, `two intents share an edge pattern in grayscale: ${edges.join(" | ")}`);
+    // Forced colours repaint the edge but must not flatten its style or width.
+    const forced = decls(css, `${CHIP}[data-intent]`, "(forced-colors: active)");
+    for (const k of ["border", "border-style", "border-width"]) assert.equal(forced[k], undefined, `forced colours reset ${k}`);
+    // No family keeps a look of its own that would override the intent (task rail, product test, delegation, help).
+    for (const sel of [".hps-verify-state", ".hps-verify-badge", ".hps-delegation-status", ".hp-help-status"]) {
+      for (const k of ["background", "background-color", "border", "border-color", "border-style", "border-width", "color", "padding", "font-weight"]) assert.equal(decls(css, sel)[k], undefined, `${sel} sets ${k} over its intent`);
+    }
+    for (const r of rules(css["styles.css"])) for (const sel of r.selectors) assert.ok(!/^\.hps-verify-state-/.test(sel), `per-state look ${sel} outside the intent`);
+  },
 };
 for (const [label, fn] of Object.entries(checks)) check(label, () => fn(real));
 
@@ -171,15 +214,24 @@ const negatives = [
   ["1 geometry", "pill radius", mutate("styles.css", "border: 1px solid transparent; border-radius: 4px;", "border: 1px solid transparent; border-radius: 999px;")],
   ["1 geometry", "6px inline padding", mutate("styles.css", "padding-inline: 8px;\n  border: 1px solid transparent", "padding-inline: 6px;\n  border: 1px solid transparent")],
   ["2 soft fill", "danger fill solid", mutate("styles.css", "var(--vscode-errorForeground, #f48771) 14%, transparent", "var(--vscode-errorForeground, #f48771) 100%, transparent")],
-  ["2 soft fill", "caution fill removed", mutate("styles.css", '.hp-status-chip[data-intent="caution"] { background-color: color-mix(in srgb, var(--hp-text-warn-default) 14%, transparent); }\n', "")],
+  ["2 soft fill", "caution fill removed", mutate("styles.css", '.hp-status-chip[data-intent="caution"] { background-color: color-mix(in srgb, var(--hp-text-warn-default) 14%, transparent); border-style', '.hp-status-chip[data-intent="caution"] { border-style')],
   ["2 soft fill", "success icon in the body colour", mutate("styles.css", '.hp-status-chip[data-intent="success"] .hps-icon { color: var(--vscode-charts-green, #4ec9b0); }', '.hp-status-chip[data-intent="success"] .hps-icon { color: var(--hp-text-primary-default); }')],
-  ["2 soft fill", "info tinted like success", mutate("styles.css", '.hp-status-chip[data-intent="info"] { background-color: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent); }\n.hp-status-chip[data-intent="info"] .hps-icon { color: var(--hp-text-primary-default); }', '.hp-status-chip[data-intent="info"] { background-color: color-mix(in srgb, var(--vscode-charts-green, #4ec9b0) 14%, transparent); }\n.hp-status-chip[data-intent="info"] .hps-icon { color: var(--vscode-charts-green, #4ec9b0); }')],
+  ["2 soft fill", "info tinted like success", mutate("styles.css", '.hp-status-chip[data-intent="info"] { background-color: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent); border-style: dotted; border-color: var(--hp-text-primary-default); }\n.hp-status-chip[data-intent="info"] .hps-icon { color: var(--hp-text-primary-default); }', '.hp-status-chip[data-intent="info"] { background-color: color-mix(in srgb, var(--vscode-charts-green, #4ec9b0) 14%, transparent); border-style: dotted; border-color: var(--hp-text-primary-default); }\n.hp-status-chip[data-intent="info"] .hps-icon { color: var(--vscode-charts-green, #4ec9b0); }')],
   ["2 soft fill", "unverified not dashed", mutate("styles.css", " border-style: dashed; border-color: var(--hp-border-muted-default); }", " }")],
   ["3 contrast", "label in the divider colour", mutate("styles.css", "color: var(--hp-text-primary-default); font-size: var(--hp-font-caption)", "color: var(--hp-border-divider-default); font-size: var(--hp-font-caption)")],
   ["3 contrast", "dark danger ink", mutate("styles.css", "var(--vscode-errorForeground, #f48771)", "var(--vscode-errorForeground, #c62828)")],
   ["4 no truncation", "ellipsis", mutate("styles.css", "white-space: normal; word-break: keep-all; overflow-wrap: anywhere;\n}", "white-space: nowrap; word-break: keep-all; overflow-wrap: anywhere; overflow: hidden; text-overflow: ellipsis;\n}")],
   ["4 no truncation", "Hangul split mid-word", mutate("styles.css", "white-space: normal; word-break: keep-all; overflow-wrap: anywhere;\n}", "white-space: normal; overflow-wrap: anywhere;\n}")],
   ["5 forced colours", "forced block removed", mutate("styles.css", "  .hp-status-chip[data-intent] { border-color: CanvasText; color: CanvasText; background-color: Canvas; }\n", "")],
+  ["6 intents", "info edge like success (solid)", mutate("styles.css", "border-style: dotted; border-color: var(--hp-text-primary-default);", "border-style: solid; border-color: var(--hp-text-primary-default);")],
+  ["6 intents", "danger edge single", mutate("styles.css", "border-style: double; border-width: 3px;", "border-style: solid; border-width: 3px;")],
+  ["6 intents", "caution edge 1px (like success)", mutate("styles.css", "border-style: solid; border-width: 2px; border-color: var(--hp-text-warn-default);", "border-style: solid; border-color: var(--hp-text-warn-default);")],
+  ["6 intents", "success edge left transparent", mutate("styles.css", "14%, transparent); border-style: solid; border-color: var(--vscode-charts-green, #4ec9b0); }", "14%, transparent); }")],
+  ["6 intents", "danger chip taller (no padding give-back)", mutate("styles.css", "padding-block: calc(2px + 1px - 3px); }", "}")],
+  ["6 intents", "forced colours flatten the edge", mutate("styles.css", "  .hp-status-chip[data-intent] { border-color: CanvasText;", "  .hp-status-chip[data-intent] { border: 1px solid CanvasText;")],
+  ["6 intents", "verify state keeps its own fill", mutate("styles.css", ".hps-verify-head {", ".hps-verify-state-failed { background: #400; }\n.hps-verify-head {")],
+  ["6 intents", "verdict badge keeps its own weight", mutate("styles.css", ".hps-verify-head {", ".hps-verify-badge { font-weight: 700; }\n.hps-verify-head {")],
+  ["6 intents", "delegation status keeps its own weight", mutate("styles.css", ".hps-delegation-status { flex: 0 0 auto; }", ".hps-delegation-status { flex: 0 0 auto; font-weight: 600; }")],
   ["5 forced colours", "forced icon colour removed", mutate("styles.css", "  .hp-status-chip[data-intent] .hps-icon { color: CanvasText; }\n", "")],
 ];
 for (const [prefix, label, css] of negatives) {

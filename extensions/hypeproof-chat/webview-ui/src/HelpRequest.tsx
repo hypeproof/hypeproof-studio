@@ -1,6 +1,8 @@
 import { contentBytes, OUTBOUND_EXCLUDED } from "../../src/outboundConsent";
 import { useEffect, useRef, useState } from "react";
 import { HELP_DURATIONS, REASON_TEXT, type HelpCard, type HelpDraft, type HelpView } from "../../src/classroomHelp";
+import { IntentChip } from "./StatusChip";
+import { helpChip } from "./statusChipLogic";
 
 /**
  * #751 native help — the learner asks the instructor of THIS class for help, from the coach rail (SX-05/06), closed by
@@ -21,7 +23,7 @@ function Card(props: { card: HelpCard; k: string; post: Post; history?: boolean 
   const c = props.card;
   return (
     <li className="hp-inbox-card hp-help-card" data-help-share={c.id} data-help-status={c.status} data-help-revision={c.revision}>
-      <p className="hp-inbox-meta"><span className="hp-help-status">{c.label}</span> · 보낸 시각 {time(c.created_at * 1000)} · {time(c.expires_at * 1000)}까지 공유</p>
+      <p className="hp-inbox-meta"><IntentChip chip={helpChip(c.status, c.label)} status={c.status} className="hp-help-status" /> · 보낸 시각 {time(c.created_at * 1000)} · {time(c.expires_at * 1000)}까지 공유</p>
       <details><summary>보낸 내용</summary>
         {c.content.map((f) => <div key={f.field}><p className="hp-inbox-meta">{f.label}</p><p className="hp-inbox-body" data-help-sent={f.field}>{f.text}</p></div>)}
       </details>

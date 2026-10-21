@@ -174,10 +174,10 @@
 .tw-workspace .tw-heading .tw-rail-toggle { border-color: transparent; }
 .tw-workspace .tw-heading .tw-rail-toggle:hover { background-color: var(--hp-bg-control-hover); }
 .tw-workspace .tw-heading .tw-rail-toggle:active { background-color: var(--hp-bg-control-pressed); }
-/* REQ-STUDIO-TASK-RUN-STATE — words plus a symbol; colour is never the only carrier. */
-.tw-task-state { justify-self: end; max-width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-13); margin-top: var(--ds-c-studio-taskworkspace-space-15); padding: var(--ds-c-studio-taskworkspace-space-21) var(--ds-c-studio-taskworkspace-space-15); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-15); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-taskworkspace-typography-5); }
-.tw-task-state-symbol { font-weight: var(--ds-c-studio-taskworkspace-typography-17); }
-.tw-task-state[data-run-state="approval"], .tw-task-state[data-run-state="error"] { font-weight: var(--ds-c-studio-taskworkspace-typography-17); border-width: var(--ds-c-studio-taskworkspace-size-7); }
+/* REQ-STUDIO-TASK-RUN-STATE — words plus a symbol; colour is never the only carrier. The badge is a
+   status chip (styles.css `.hp-status-chip`, CGP-DS-R-006): its look, intent edge and forced colours
+   come from there; the rail only places it under the title. */
+.tw-task-state { justify-self: end; max-width: 100%; box-sizing: border-box; margin-top: var(--ds-c-studio-taskworkspace-space-15); }
 
 /* REQ-STUDIO-UI-POLISH-1 — the heading reads as three groups: where I am (the activity kind, then
    its name, quieter), what is happening (the run state, a bordered pill with a dot, drawn only while
@@ -185,11 +185,9 @@
    the groups differ by weight, colour and a separator, not by size (every word stays 14px). */
 .tw-heading .hps-activity-kind { color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1)); font-weight: var(--ds-c-studio-taskworkspace-typography-2); }
 .tw-heading .hps-activity-name { color: var(--tw-muted); }
-.tw-heading .tw-run-note:not(:empty) {
-  display: inline-flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-15); padding: var(--ds-c-studio-taskworkspace-space-14) var(--ds-c-studio-taskworkspace-space-7);
-  border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-15); color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1));
-}
-.tw-heading .tw-run-note:not(:empty)::before { content: ""; width: var(--ds-c-studio-taskworkspace-size-37); height: var(--ds-c-studio-taskworkspace-size-37); border-radius: 50%; background: currentColor; flex: none; }
+/* CGP-DS-R-006: the run state is a status chip (.tw-run-chip, styles.css .hp-status-chip) with its
+   intent's icon, colour and edge; the live-region wrapper only places it. */
+.tw-heading .tw-run-note:not(:empty) { display: inline-flex; align-items: center; min-width: 0; }
 .tw-workspace .tw-heading .tw-sources-toggle { position: relative; font-weight: var(--ds-c-studio-taskworkspace-typography-2); }
 /* The divider separates the actions from something: only when the activity, the remaining line or the
    run pill precedes 자료. The classroom heading has none of them while idle, so it draws no stray line. */
@@ -215,15 +213,10 @@
   .tw-workspace .tw-source-list { padding-block-start: var(--ds-c-studio-taskworkspace-space-13); }
   .tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background-color: Highlight; color: HighlightText; border-color: Highlight !important; }
   /* REQ-STUDIO-UI-POLISH-1: the run pill's dot is a background, which forced colors repaints as Canvas. */
-  .tw-heading .tw-run-note:not(:empty)::before { background: CanvasText; }
 }
 
 /* D019: the existing skip link moves actual focus, with the shared theme-aware focus ring. */
 .tw-conversation:focus { outline: var(--ds-c-studio-taskworkspace-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-taskworkspace-size-7); }
-@media (forced-colors: active) {
-  .tw-task-state { border-color: CanvasText; color: CanvasText; background: Canvas; }
-  .tw-task-state[data-run-state="approval"] { border-style: double; border-width: var(--ds-c-studio-taskworkspace-size-15); }
-}
 
 /* CGP-KNOW-D-013 (DES-KNOW-24) — the activity trash at the bottom of 내 작품: every control is a
    44px target, the toast's 되돌리기 included; text stays at the caption step (14px floor). */

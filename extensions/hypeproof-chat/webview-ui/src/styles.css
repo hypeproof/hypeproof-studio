@@ -1369,7 +1369,7 @@ html, body, #root {
 .hps-delegation { border-left: var(--ds-c-studio-styles-size-7) solid var(--vscode-focusBorder, var(--ds-c-studio-styles-boundary-27)); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); border-radius: var(--ds-c-studio-styles-radius-13); font-size: var(--ds-c-studio-styles-type-1); min-width: 0; }
 .hps-delegation-summary { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); padding: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-7); cursor: pointer; min-width: 0; }
 .hps-delegation-task { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hps-delegation-status { flex: 0 0 auto; font-weight: var(--ds-c-studio-styles-typography-7); }
+.hps-delegation-status { flex: 0 0 auto; }
 .hps-delegation-body { padding: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-34); }
 .hps-delegation-heading { margin: var(--ds-c-studio-styles-space-15) 0 var(--ds-c-studio-styles-space-14); font-weight: var(--ds-c-studio-styles-typography-7); }
 .hps-delegation-result { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1868,7 +1868,12 @@ html, body, #root {
    unverified chip 10%, with a dashed edge). The label stays in the body text colour, so it reads
    at 4.5:1 whatever the intent; the icon takes the intent colour. In a grayscale capture the five
    states still split by icon shape and wording (SX-50). The label wraps between eojeol and is
-   never cut, so a chip in a narrow rail keeps its whole Korean word. */
+   never cut, so a chip in a narrow rail keeps its whole Korean word.
+   CGP-DS-R-006 (REQ-CGP-DS-05) — every status family (source state, task run, delegation, product
+   test, help request; statusChipLogic.ts) draws this chip with one named intent. Each intent also has
+   its own edge, so a grayscale capture separates the intents themselves: info dotted, success solid,
+   caution solid 2px, danger double 3px, neutral dashed. The block padding gives back what a heavier
+   edge takes, so every chip keeps the same outer height. */
 .hp-status-chip {
   display: inline-flex; align-items: center; gap: var(--ds-c-status-chip-gap); min-width: 0; max-width: 100%;
   padding-block: var(--ds-c-status-chip-pad-block); padding-inline: var(--ds-c-status-chip-pad-inline);
@@ -1878,15 +1883,15 @@ html, body, #root {
 }
 .hp-status-chip .hps-icon { flex: none; inline-size: var(--ds-c-status-chip-icon); block-size: var(--ds-c-status-chip-icon); }
 .hp-status-chip-label { min-width: 0; }
-.hp-status-chip[data-intent="success"] { background-color: color-mix(in srgb, var(--vscode-charts-green, var(--ds-c-status-chip-success)) 14%, transparent); }
+.hp-status-chip[data-intent="success"] { background-color: color-mix(in srgb, var(--vscode-charts-green, var(--ds-c-status-chip-success)) 14%, transparent); border-style: solid; border-color: var(--vscode-charts-green, var(--ds-c-status-chip-success)); }
 .hp-status-chip[data-intent="success"] .hps-icon { color: var(--vscode-charts-green, var(--ds-c-status-chip-success)); }
-.hp-status-chip[data-intent="caution"] { background-color: color-mix(in srgb, var(--hp-text-warn-default) 14%, transparent); }
+.hp-status-chip[data-intent="caution"] { background-color: color-mix(in srgb, var(--hp-text-warn-default) 14%, transparent); border-style: solid; border-width: var(--ds-c-status-chip-edge-strong); border-color: var(--hp-text-warn-default); padding-block: calc(var(--ds-c-status-chip-pad-block) + var(--ds-c-status-chip-edge) - var(--ds-c-status-chip-edge-strong)); }
 .hp-status-chip[data-intent="caution"] .hps-icon { color: var(--hp-text-warn-default); }
-.hp-status-chip[data-intent="info"] { background-color: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent); }
+.hp-status-chip[data-intent="info"] { background-color: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent); border-style: dotted; border-color: var(--hp-text-primary-default); }
 .hp-status-chip[data-intent="info"] .hps-icon { color: var(--hp-text-primary-default); }
 .hp-status-chip[data-intent="neutral"] { background-color: color-mix(in srgb, var(--hp-text-muted-default) 10%, transparent); border-style: dashed; border-color: var(--hp-border-muted-default); }
 .hp-status-chip[data-intent="neutral"] .hps-icon { color: var(--hp-text-muted-default); }
-.hp-status-chip[data-intent="danger"] { background-color: color-mix(in srgb, var(--vscode-errorForeground, var(--ds-c-status-chip-danger)) 14%, transparent); }
+.hp-status-chip[data-intent="danger"] { background-color: color-mix(in srgb, var(--vscode-errorForeground, var(--ds-c-status-chip-danger)) 14%, transparent); border-style: double; border-width: var(--ds-c-status-chip-edge-double); border-color: var(--vscode-errorForeground, var(--ds-c-status-chip-danger)); padding-block: calc(var(--ds-c-status-chip-pad-block) + var(--ds-c-status-chip-edge) - var(--ds-c-status-chip-edge-double)); }
 .hp-status-chip[data-intent="danger"] .hps-icon { color: var(--vscode-errorForeground, var(--ds-c-status-chip-danger)); }
 @media (forced-colors: active) {
   .hp-status-chip[data-intent] { border-color: CanvasText; color: CanvasText; background-color: Canvas; }
@@ -1915,7 +1920,6 @@ html, body, #root {
 .hp-help-consent input { width: var(--ds-c-studio-styles-size-52); height: var(--ds-c-studio-styles-size-52); margin-top: var(--ds-c-studio-styles-space-14); }
 .hp-help-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-15) 0; }
 .hp-help-feedback { border-left: var(--ds-c-studio-styles-size-15) solid var(--hp-border-divider-default); padding-left: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-15) 0; }
-.hp-help-status { font-weight: var(--ds-c-studio-styles-typography-7); }
 
 /* #751 G2 — the current step's help choice, work surface and rehearsal notice (quiet controls; region A keeps the Primary). */
 .hp-step-work { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-2); max-height: none; }
@@ -1938,10 +1942,6 @@ html, body, #root {
 .hps-verify { border: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, var(--ds-c-studio-styles-boundary-42)); border-radius: var(--ds-c-studio-styles-radius-3); padding: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-2) 0; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); font-size: var(--ds-c-studio-styles-type-1); }
 .hps-verify-head { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); flex-wrap: wrap; }
 .hps-verify-close { margin-left: auto; background: none; border: none; cursor: pointer; color: inherit; }
-.hps-verify-state { padding: var(--ds-c-studio-styles-space-21) var(--ds-c-studio-styles-space-15); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-badge-background, var(--ds-c-studio-styles-surface-55)); }
-.hps-verify-state-verified { background: var(--ds-c-studio-styles-surface-56); }
-.hps-verify-state-failed { background: var(--ds-c-studio-styles-surface-57); }
-.hps-verify-state-needs_recheck, .hps-verify-state-incomplete { background: var(--ds-c-studio-styles-surface-58); }
 .hps-verify-running { padding: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-15); border-left: var(--ds-c-studio-styles-size-15) solid var(--ds-c-studio-styles-boundary-43); background: var(--ds-c-studio-styles-surface-59); }
 .hps-verify-error { color: var(--vscode-errorForeground, var(--ds-c-studio-styles-ink-32)); }
 .hps-verify-label { opacity: 0.8; }
@@ -1951,9 +1951,6 @@ html, body, #root {
 .hps-verify-proposals { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); align-items: flex-start; }
 .hps-verify-result { padding: var(--ds-c-studio-styles-space-13) 0; border-top: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, var(--ds-c-studio-styles-boundary-44)); }
 .hps-verify-held { margin-top: var(--ds-c-studio-styles-space-15); padding-top: var(--ds-c-studio-styles-space-13); border-top: var(--ds-c-studio-styles-size-3) dashed var(--vscode-panel-border, var(--ds-c-studio-styles-boundary-42)); }
-.hps-verify-badge { font-weight: var(--ds-c-studio-styles-typography-7); }
-.hps-verify-fail .hps-verify-badge, .hps-verify-non_reproducible .hps-verify-badge { color: var(--vscode-errorForeground, var(--ds-c-studio-styles-ink-32)); }
-.hps-verify-pass .hps-verify-badge { color: var(--ds-c-studio-styles-ink-33); }
 .hps-verify-reason { opacity: 0.85; }
 
 /* #1298 — instructor band shown in InstructorChatPanel when isInstructor === true */
@@ -2220,8 +2217,9 @@ html, body, #root {
   /* Level and progress marks painted as backgrounds. The idle meter stays grey. */
   .hps-voice-bar, .hps-runner-dust { background: CanvasText; }
   .hps-voice-meter:not(.hps-voice-meter-live) .hps-voice-bar { background: GrayText; }
-  /* Chips whose shape was a tinted background; their words remain the state. */
-  .hps-verify-state, .hps-instructor-badge { border: var(--ds-c-studio-styles-size-3) solid CanvasText; }
+  /* Chips whose shape was a tinted background; their words remain the state. (The product test's
+     state is a status chip now: its forced rule is the chip's own, by intent.) */
+  .hps-instructor-badge { border: var(--ds-c-studio-styles-size-3) solid CanvasText; }
   /* Small controls drawn over an image keep an opaque plate under their glyph. */
   .hps-attachment-remove, .hps-edit-image button { background: ButtonFace; color: ButtonText; }
   /* CGP-DS-R-016 — forced-color-adjust: a QR code has to stay dark on light to scan, and forced

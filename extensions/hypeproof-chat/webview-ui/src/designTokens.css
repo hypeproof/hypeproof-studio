@@ -3458,6 +3458,8 @@
   --ds-c-status-chip-pad-block: var(--ds-s-size-7);
   --ds-c-status-chip-gap: var(--ds-s-space-13);
   --ds-c-status-chip-edge: var(--ds-s-size-3);
+  --ds-c-status-chip-edge-strong: var(--ds-s-size-7);
+  --ds-c-status-chip-edge-double: var(--ds-s-size-15);
   --ds-c-status-chip-success: var(--ds-s-ink-29);
   --ds-c-status-chip-danger: var(--ds-s-ink-30);
 }
