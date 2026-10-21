@@ -81,7 +81,7 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
     readFileSync(new URL("../webview-ui/src/tokens.css", import.meta.url), "utf8"),
   );
 
-  for (const selector of [':root', '[data-surface="growth"], .hp-reflection']) {
+  for (const selector of [':root', '[data-surface="growth"], .hp-reflection', ".studio-start, .studio-disconnected", "body.vscode-light, body.vscode-high-contrast-light"]) {
     assert.ok(fromDoc[selector], `설계 문서에 ${selector} 블록이 없다`);
     assert.deepEqual(
       fromFile[selector],
@@ -89,43 +89,38 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
       `tokens.css 의 ${selector} 가 설계 문서 §디자인 시스템 과 다르다`,
     );
   }
-  for (const name of ["--hp-bg", "--hp-panel", "--hp-accent", "--hp-warn", "--hp-ink", "--hp-paper"]) {
+  for (const name of ["--hp-bg-app-default", "--hp-bg-panel-default", "--hp-bg-accent-default", "--hp-text-warn-default", "--hp-text-primary-default", "--hp-bg-paper-default"]) {
     assert.ok(fromFile[":root"][name], `SX-49 토큰 누락: ${name}`);
   }
   console.log(`ok 토큰: tokens.css 의 ${Object.keys(fromFile[":root"]).length}개 값이 설계 문서와 일치한다`);
 }
 
-// start.css must be aliases, and each alias target's value must be **the same as the literal
-// before this change**. That is what turns "the rendered colors are unchanged" from a claim
-// into a check.
+// start.css reads the semantic roles directly (CGP-DS-D-001 removed the --studio-* aliases), and
+// each role's value must be **the same as the literal start.css used before the 2026-09-20
+// change** (git show HEAD:extensions/hypeproof-chat/webview-ui/src/start.css at that time). That
+// is what turns "the rendered colors are unchanged" from a claim into a check. Since CGP-DS-D-002
+// the :root roles follow the host theme, and the start screen reads its own fixed forest binding
+// (`.studio-start, .studio-disconnected` in tokens.css), so that binding is what is compared.
 {
   const startCss = readFileSync(new URL("../webview-ui/src/start.css", import.meta.url), "utf8");
-  const block = parseCssCustomProperties(startCss)[".studio-start,.studio-disconnected"];
-  assert.ok(block, ".studio-start,.studio-disconnected 블록을 찾지 못했다");
-
-  // Left is the alias target, right is the literal in start.css immediately before this
-  // 2026-09-20 change (confirmed with
-  // git show HEAD:extensions/hypeproof-chat/webview-ui/src/start.css).
-  const ALIASES = {
-    "--studio-bg": ["--hp-bg", "#151D19"],
-    "--studio-panel": ["--hp-panel", "#202C24"],
-    "--studio-line": ["--hp-line", "#35483A"],
-    "--studio-text": ["--hp-ink", "#F2F4E8"],
-    "--studio-muted": ["--hp-muted", "#ACB9A5"],
-    "--studio-accent": ["--hp-accent", "#D5F279"],
+  assert.doesNotMatch(startCss, /--studio-[a-z]/, "start.css 에 --studio-* 별칭이 남아 있다");
+  const ROLES = {
+    "--hp-bg-app-default": "#151D19",
+    "--hp-bg-panel-default": "#202C24",
+    "--hp-border-divider-default": "#35483A",
+    "--hp-text-primary-default": "#F2F4E8",
+    "--hp-text-muted-default": "#ACB9A5",
+    "--hp-text-accent-default": "#D5F279",
   };
   const tokens = parseCssCustomProperties(
     readFileSync(new URL("../webview-ui/src/tokens.css", import.meta.url), "utf8"),
-  )[":root"];
-  for (const [alias, [target, before]] of Object.entries(ALIASES)) {
-    assert.equal(block[alias], `var(${target})`, `${alias} 가 토큰 별칭이 아니다`);
-    assert.equal(tokens[target], before, `${target} 값이 변경 전 ${alias} 리터럴과 다르다 — 렌더 색이 바뀐다`);
+  )[".studio-start, .studio-disconnected"];
+  assert.ok(tokens, "tokens.css 에 시작 화면의 forest 고정 블록이 없다");
+  for (const [role, before] of Object.entries(ROLES)) {
+    assert.ok(startCss.includes(`var(${role})`), `start.css 가 ${role} 를 읽지 않는다`);
+    assert.equal(tokens[role], before, `${role} 값이 변경 전 start.css 리터럴과 다르다 — 렌더 색이 바뀐다`);
   }
-  assert.ok(
-    !/#[0-9a-fA-F]{3,8}/.test(Object.values(block).join(";")),
-    `.studio-start 토큰 블록에 hex 리터럴이 남아 있다: ${JSON.stringify(block)}`,
-  );
-  console.log("ok 토큰: start.css 의 --studio-* 6개가 --hp-* 별칭이고 값이 변경 전과 같다");
+  console.log("ok 토큰: start.css 가 의미 역할을 바로 읽고 값이 변경 전과 같다");
 }
 
 // ─── Check that the rule lists match the docs ─────────────────────────

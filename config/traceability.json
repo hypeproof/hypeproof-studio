@@ -9208,6 +9208,284 @@
           "path": "chalk/test/design-tokens.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-SEMANTIC-COLOUR-ROLES",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Semantic colour roles and token order (CGP-DS-D-001)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SEMANTIC-COLOUR-ROLES",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SEMANTIC-COLOUR-ROLES",
+        "ST-IMP-SHARED-DESIGN-TOKENS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/main.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/citationPreview.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/localReview.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/refusalBanner.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/writeApprovalDialog.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/WriteApprovalDialog.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SEMANTIC-COLOUR-ROLES",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SEMANTIC-COLOUR-ROLES",
+        "ST-IMP-SEMANTIC-COLOUR-ROLES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/semantic-tokens.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-HOST-THEME-MAPPING",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SEMANTIC-COLOUR-ROLES"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Host theme mapping (CGP-DS-D-002)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-HOST-THEME-MAPPING",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-MAPPING",
+        "ST-IMP-SEMANTIC-COLOUR-ROLES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/media/hypeproof-theme.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-HOST-THEME-MAPPING",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-MAPPING",
+        "ST-IMP-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/host-theme-mapping.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-STATE-LAYERS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-MAPPING",
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## State layers and control boundary (CGP-DS-D-003)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-STATE-LAYERS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STATE-LAYERS",
+        "ST-IMP-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/refusalBanner.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/budgets.html"
+        },
+        {
+          "path": "chalk/src/ui/console.html"
+        },
+        {
+          "path": "chalk/src/ui/issuer.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/ui/board.html"
+        },
+        {
+          "path": "chalk/src/ui/sharing.html"
+        },
+        {
+          "path": "chalk/src/ui/learn.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-STATE-LAYERS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STATE-LAYERS",
+        "ST-IMP-STATE-LAYERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/control-state-layers.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/control-boundary.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-STATUS-CHIP",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STATE-LAYERS",
+        "ST-REQ-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Status chip (CGP-DS-D-004)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-STATUS-CHIP",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STATUS-CHIP",
+        "ST-IMP-STATE-LAYERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StatusChip.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/statusChipLogic.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/EvidenceDrawer.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "chalk/src/lib/board-status.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-STATUS-CHIP",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STATUS-CHIP",
+        "ST-IMP-STATUS-CHIP"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/status-chip.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/status-chip.test.tsx"
+        },
+        {
+          "path": "chalk/test/board-status-css.test.mjs"
+        },
+        {
+          "path": "chalk/test/board-status.test.mjs"
+        }
+      ]
     }
   ]
 }

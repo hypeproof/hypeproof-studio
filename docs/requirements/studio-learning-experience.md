@@ -169,6 +169,11 @@ Google's fixed logo artwork and learner-authored preview documents are content a
 their SVG geometry/brand paint and generated document styles are not application chrome.
 The assistant mask remains a self-contained image token: variables cannot resolve inside SVG URLs.
 
+The Studio role layer on top of that source (CGP-DS-D-001, DES-CGP-DS-01) names every colour
+role `--hp-{text|bg|border|ring}-{role}-{state}` and binds each one in both the dark (forest)
+and the light (Paper) theme; `tokens.css` is the first import of the webview. The contract is
+in `docs/studio-requirements.md` "Semantic colour roles and token order (CGP-DS-D-001)".
+
 Chalk's generated TypeScript transport must exactly equal the canonical CSS, be checked
 before its build, and be injected before page styles through every actual HTML route.
 No network request, account state or live Service dependency is added. Missing document

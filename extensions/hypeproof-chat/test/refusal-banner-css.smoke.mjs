@@ -2,7 +2,7 @@
 // ui-polish-1.smoke.mjs): each check is a function over the stylesheet, and each also runs against a
 // mutated copy that must fail (negative controls).
 //   1. readable surface: when the theme defines no --vscode-editorWidget-background the fallback is a
-//      tint of the TEXT colour (never the dark-only --hp-panel under a theme text colour), so light
+//      tint of the TEXT colour (never the dark-only --hp-bg-panel-default under a theme text colour), so light
 //      themes stay readable;
 //   2. does not cover the draft: in normal flow (no fixed/absolute/sticky, no transform);
 //   3. no slide-in motion: animation and transition are none;
@@ -83,7 +83,7 @@ const checks = {
     const bad = [];
     if (value(css, BUTTON, "min-height") !== "44px") bad.push(`min-height ${value(css, BUTTON, "min-height")}`);
     if (value(css, BUTTON, "min-width") !== "44px") bad.push(`min-width ${value(css, BUTTON, "min-width")}`);
-    if (value(css, BANNER, "font-size") !== "var(--hp-text-caption)") bad.push(`font-size ${value(css, BANNER, "font-size")}`);
+    if (value(css, BANNER, "font-size") !== "var(--hp-font-caption)") bad.push(`font-size ${value(css, BANNER, "font-size")}`);
     return bad;
   },
   "5 forced colours keep an edge": (css) => {
@@ -95,9 +95,9 @@ const checks = {
 };
 
 const NEGATIVE = [
-  ["1", "fallback back to the dark-only --hp-panel", (s) => s.replace(/color-mix\([^;]*?transparent\)/, "var(--hp-panel)")],
+  ["1", "fallback back to the dark-only --hp-bg-panel-default", (s) => s.replace(/color-mix\([^;]*?transparent\)/, "var(--hp-bg-panel-default)")],
   ["1", "fallback is an unrelated literal", (s) => s.replace(/color-mix\([^;]*?transparent\)/, "#202C24")],
-  ["1", "text colour on a dark-surface token", (s) => s.replace("color: var(--vscode-foreground, var(--hp-ink));", "color: var(--hp-panel);")],
+  ["1", "text colour on a dark-surface token", (s) => s.replace("color: var(--vscode-foreground, var(--hp-text-primary-default));", "color: var(--hp-bg-panel-default);")],
   ["2", "position fixed over the draft", (s) => s.replace("  animation: none;", "  position: fixed; bottom: 0;\n  animation: none;")],
   ["2", "position sticky", (s) => s.replace("  animation: none;", "  position: sticky;\n  animation: none;")],
   ["2", "transform set", (s) => s.replace("transform: none;", "transform: translateY(8px);")],
@@ -105,7 +105,7 @@ const NEGATIVE = [
   ["3", "transition on", (s) => s.replace("transition: none;", "transition: opacity .2s;")],
   ["4", "dismiss button 30px", (s) => s.replace("min-height: 44px;", "min-height: 30px;")],
   ["4", "dismiss button 30px wide", (s) => s.replace("min-width: 44px;", "min-width: 30px;")],
-  ["4", "10px type", (s) => s.replace("font-size: var(--hp-text-caption);", "font-size: 10px;")],
+  ["4", "10px type", (s) => s.replace("font-size: var(--hp-font-caption);", "font-size: 10px;")],
   ["5", "forced colours edge dropped", (s) => s.replace("border-color: CanvasText;", "")],
 ];
 

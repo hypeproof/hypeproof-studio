@@ -17,7 +17,7 @@ export function WriteApprovalDialog({prompt,onAnswer,textSize}:{prompt:WriteAppr
   const finish=(approved:boolean)=>{if(answered.current)return;answered.current=true;onAnswer(prompt.id,approved);};
   useDialogFocus(dialog,{open:true,kind:'modal',initialFocus:'[data-write-deny]'});
   useEffect(()=>{const node=dialog.current;node?.showModal();node?.querySelector<HTMLButtonElement>('[data-write-deny]')?.focus();return()=>node?.close();},[]);
-  return <dialog ref={dialog} className="hps-write-approval" aria-labelledby="write-approval-title" style={{'--hp-text-caption':`calc(14px + ${{base:0,large:2,xlarge:4}[normalizeTextSize(textSize)]}px)`} as CSSProperties}
+  return <dialog ref={dialog} className="hps-write-approval" aria-labelledby="write-approval-title" style={{'--hp-font-caption':`calc(14px + ${{base:0,large:2,xlarge:4}[normalizeTextSize(textSize)]}px)`} as CSSProperties}
     onCancel={e=>{e.preventDefault();if(!composing.current)finish(false);}}
     onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
     onKeyDownCapture={e=>{if(imeComposing(e,composing.current)){e.stopPropagation();return;}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();finish(false);}}}>

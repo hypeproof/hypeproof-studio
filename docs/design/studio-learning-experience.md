@@ -260,26 +260,45 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
 
 토큰은 새 파일 `extensions/hypeproof-chat/webview-ui/src/tokens.css`에 CSS custom property로 두고 `main.tsx`가 가장 먼저 import한다. 값의 정본은 이 파일이고, 원문 §14는 출처다.
 
+의미 색 역할의 이름은 `--hp-{text|bg|border|ring}-{role}-{state}`다(CGP-DS-D-001). 범주는 그 색을 칠하는 속성(글자·바탕·테두리·포커스 링), 역할은 쓰임, 상태는 `default`·`hover`·`pressed`·`selected` 중 하나다. hover·pressed 바탕은 글자색을 면 위에 8%, 14%(밝은 면은 12%) 섞은 상태층이다(CGP-DS-D-003, DES-CGP-DS-04). 컨트롤을 알아보게 하는 테두리는 이렇게 섞지 않고 3:1 이상인 고정색 `--hp-border-control-default`를 쓴다. 컴포넌트 CSS는 이 이름만 읽는다. 두 테마가 모든 역할을 따로 묶는다: 어두운 forest(`:root`)와 밝은 Paper(회고·변화 기록 면). 글자 크기 단계는 `--hp-font-*`라서 `--hp-text-*`는 언제나 글자색이다. 이전 이름과의 대응은 아래 블록 다음의 표에 있다.
+
 ```css
 :root {
-  --hp-bg: #151D19;       /* Deep forest · 앱 배경, 집중 모드, 코치 rail 외곽 */
-  --hp-panel: #202C24;    /* Panel · 미션 카드, 근거 서랍, 보조 패널 */
-  --hp-accent: #D5F279;   /* Lime · Primary CTA 1개, 현재 단계 표시 */
-  --hp-warn: #E6A373;     /* Amber · 주의, 보류, 확인 필요, 실제/가상 혼동 */
-  --hp-ink: #F2F4E8;      /* Ink light · 어두운 면 위 제목·본문 */
-  --hp-paper: #F4F6F0;    /* Paper · 회고, 변화 기록, 보고서 */
-  --hp-ink-on-paper: #151D19;
-  --hp-ink-on-accent: #18231C;   /* start.css .studio-primary가 이미 쓰는 값 */
-  --hp-line: #35483A;            /* start.css --studio-line · 장식 구분선 전용 */
-  --hp-control-line: #748F79;    /* 필수 컨트롤 경계(버튼·입력) · DES-11 3:1 */
-  --hp-muted: #ACB9A5;           /* start.css --studio-muted · AI 설명, 보조 문구 */
-  /* 포커스 링 하나(CGP-DS-R-017). 웹뷰 바탕은 VS Code 테마를 따르므로 테마의 focusBorder를 쓴다.
-     fallback은 HypeProof Studio 테마의 focusBorder와 같은 lime */
-  --hp-ring: var(--vscode-focusBorder, #D5F279);
+  /* 호스트 대응(CGP-DS-D-002, DES-CGP-DS-02). 역할마다 같은 일을 하는 VS Code 테마 색을 읽고, fallback은 forest 값이다.
+     HypeProof Studio 테마(media/hypeproof-theme.json)가 그 키를 모두 forest 값으로 정하므로 기본 테마에서는 fallback 없이도
+     HP 팔레트이고, 다른 테마에서는 수업 화면이 그 테마를 따른다. 고정 3개: 컨트롤 경계(VS Code 기본 테마의 어떤 키도 3:1에
+     못 미친다, DES-11)와 Paper 칩 한 쌍 */
+  /* 어두운 테마(forest). 글자 */
+  --hp-text-primary-default: var(--vscode-foreground, #F2F4E8); /* Ink light · 어두운 면 위 제목·본문 */
+  --hp-text-muted-default: var(--vscode-descriptionForeground, #ACB9A5); /* AI 설명, 보조 문구 */
+  --hp-text-accent-default: var(--vscode-textLink-foreground, #D5F279); /* Lime · 현재 단계 표시, eyebrow */
+  --hp-text-warn-default: var(--vscode-list-warningForeground, var(--vscode-editorWarning-foreground, #E6A373)); /* Amber · 주의, 보류, 확인 필요 */
+  --hp-text-inverse-default: var(--vscode-button-foreground, #18231C); /* lime Primary CTA 위의 글자 */
+  --hp-text-paper-default: #151D19;       /* 고정 · 어두운 면 안 Paper 칩의 글자 */
   /* 입력란 placeholder(CGP-DS-R-019). 테마 자신의 placeholder 색을 먼저 쓴다(입력한 글자와 구분된다).
      테마 변수가 없으면 설명 글자 70% + 입력 글자 30%. opacity를 쓰지 않는다 */
   --hp-placeholder-mix: color-mix(in srgb, var(--vscode-descriptionForeground, #ACB9A5) 70%, var(--vscode-input-foreground, #F2F4E8));
-  --hp-placeholder: var(--vscode-input-placeholderForeground, var(--hp-placeholder-mix));
+  --hp-text-placeholder-default: var(--vscode-input-placeholderForeground, var(--hp-placeholder-mix));
+  /* 바탕 */
+  --hp-bg-app-default: var(--vscode-editor-background, #151D19); /* Deep forest · 앱 배경, 집중 모드, 코치 rail 외곽 */
+  --hp-bg-panel-default: var(--vscode-quickInput-background, #202C24); /* Panel · 미션 카드, 근거 서랍, 보조 패널 */
+  --hp-bg-paper-default: #F4F6F0;         /* 고정 · Paper · 어두운 면 안의 Paper 칩 */
+  --hp-bg-accent-default: var(--vscode-button-background, #D5F279); /* Lime · Primary CTA 1개 */
+  /* CGP-DS-D-003 상태층: 포인터가 올라가면 글자색 8%, 누르면 14%(밝은 면 12%)를 놓인 면 위에 겹친다. */
+  --hp-bg-control-hover: color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent);
+  --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent);
+  --hp-bg-control-selected: var(--vscode-editor-background, #151D19); /* 라디오 카드 묶음에서 고른 항목 */
+  /* 테두리 */
+  --hp-border-divider-default: var(--vscode-panel-border, #35483A); /* 장식 구분선 전용 (1.75:1) */
+  --hp-border-control-default: #748F79;   /* 고정 · 필수 컨트롤 경계(버튼·입력) · DES-11 3:1 (Light+ 패널 위 3.2:1) */
+  --hp-border-control-hover: var(--vscode-descriptionForeground, #ACB9A5);
+  --hp-border-control-selected: var(--vscode-focusBorder, #D5F279);
+  --hp-border-muted-default: var(--vscode-descriptionForeground, #ACB9A5); /* 인용 줄 */
+  --hp-border-warn-default: var(--vscode-list-warningForeground, var(--vscode-editorWarning-foreground, #E6A373)); /* 4px 주의 테두리 */
+  --hp-border-accent-default: var(--vscode-focusBorder, #D5F279);
+  /* 포커스 링 하나(CGP-DS-R-017). 웹뷰 바탕은 VS Code 테마를 따르므로 테마의 focusBorder를 쓴다.
+     fallback은 HypeProof Studio 테마의 focusBorder와 같은 lime */
+  --hp-ring-focus-default: var(--vscode-focusBorder, #D5F279);
   /* 움직임 토큰(CGP-DS-R-014, DES-CGP-DS-15). 웹뷰 CSS의 transition/animation 시간은 전부 여기서 온다.
      컴포넌트 CSS에는 시간 리터럴이 없다. 줄인 움직임 규칙(!important 0.01ms)이 여전히 이긴다 */
   --hp-ease: cubic-bezier(.19, 1, .22, 1);   /* UI 곡선 하나: 빨리 나가고 부드럽게 멈춘다 */
@@ -298,44 +317,105 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-dur-runner-puff: .9s;
   --hp-dur-runner-blink: 1.4s;
   /* 글자 크기 단계(CGP-DS-R-008/-009). 여기서는 0px, 개인 대화 셸이 크게 2px · 아주 크게 4px로 바꾼다 */
-  --hp-text-step: 0px;
+  --hp-font-step: 0px;
 }
 /* 의미 글자 크기(CGP-DS-R-008, DES-CGP-DS-09, DEC-29로 DES-02를 개인 대화에 확장). 학생이 읽는 글은 이 단계만 쓰고
    가장 작은 단계가 14px이다. custom property는 선언한 요소에서 값이 정해져 그 값으로 상속되므로 .hps-shell에서도
-   다시 선언한다. 그래야 셸의 --hp-text-step을 받아 글자 크기 선택을 따라간다 */
+   다시 선언한다. 그래야 셸의 --hp-font-step을 받아 글자 크기 선택을 따라간다 */
 :root, .hps-shell {
-  --hp-text-caption: calc(14px + var(--hp-text-step));   /* 라벨, 메타 정보, 캡션, 컨트롤 */
-  --hp-text-body: calc(16px + var(--hp-text-step));      /* 메시지 본문, 입력창 */
-  --hp-text-lead: calc(18px + var(--hp-text-step));      /* 빈 대화 인사말 */
+  --hp-font-caption: calc(14px + var(--hp-font-step));   /* 라벨, 메타 정보, 캡션, 컨트롤 */
+  --hp-font-body: calc(16px + var(--hp-font-step));      /* 메시지 본문, 입력창 */
+  --hp-font-lead: calc(18px + var(--hp-font-step));      /* 빈 대화 인사말 */
   --hp-leading-label: 1.5;
   --hp-leading-prose: 1.65;
 }
 /* 자기 placeholder가 4.5:1에 못 미치는 VS Code 2026 테마는 웹뷰 body의 테마 id로 골라 mix를 쓴다 */
-body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] { --hp-placeholder: var(--hp-placeholder-mix); }
-/* 자기 바탕을 HP 토큰으로 칠하는 어두운 면: 테마와 상관없이 lime 링, 자기 바탕을 칠한 입력란은 --hp-muted */
-.studio-start, .studio-disconnected, .hp-mission { --hp-ring: var(--hp-accent); }
-.studio-start, .studio-disconnected, .hp-surface, .hp-evidence-form, .hps-instructor-model-input { --hp-placeholder: var(--hp-muted); }
+body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] { --hp-text-placeholder-default: var(--hp-placeholder-mix); }
+/* 밝은 호스트 테마(CGP-DS-D-002). VS Code 자신의 설명 글자색은 Light+ 사이드바·패널 위 4.4:1(#717171 on #F3F3F3)이라
+   밝은 테마에서는 보조 글자를 테마 글자색 쪽으로 20% 당긴다: 4.6:1, 본문보다는 여전히 옅다. 어두운 테마는 테마 값 그대로 */
+body.vscode-light, body.vscode-high-contrast-light {
+  --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 12%, transparent);
+  --hp-text-muted-default: color-mix(in srgb, var(--vscode-descriptionForeground, #4B5A4F) 80%, var(--vscode-foreground, #151D19));
+}
+/* 브랜드 화면(CGP-DS-D-002). 시작·연결 끊김 화면은 그림과 카드가 forest 전용이라 어느 테마에서나 forest로 그린다.
+   Paper처럼 모든 역할을 고정 forest 값으로 다시 묶는다. 링은 lime(배경 위 13.8:1, 패널 위 11.6:1) */
+.studio-start, .studio-disconnected {
+  --hp-text-primary-default: #F2F4E8;
+  --hp-text-muted-default: #ACB9A5;
+  --hp-text-accent-default: #D5F279;
+  --hp-text-warn-default: #E6A373;
+  --hp-text-inverse-default: #18231C;
+  --hp-text-paper-default: #151D19;
+  --hp-text-placeholder-default: #ACB9A5;
+  --hp-bg-app-default: #151D19;
+  --hp-bg-panel-default: #202C24;
+  --hp-bg-paper-default: #F4F6F0;
+  --hp-bg-accent-default: #D5F279;
+  --hp-bg-control-hover: color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent);
+  --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent);
+  --hp-bg-control-selected: #151D19;
+  --hp-border-divider-default: #35483A;
+  --hp-border-control-default: #748F79;
+  --hp-border-control-hover: #ACB9A5;
+  --hp-border-control-selected: #D5F279;
+  --hp-border-muted-default: #ACB9A5;
+  --hp-border-warn-default: #E6A373;
+  --hp-border-accent-default: #D5F279;
+  --hp-ring-focus-default: #D5F279;
+}
+/* 자기 바탕을 칠한 입력란은 보조 글자색 */
+.hp-surface, .hp-evidence-form, .hps-instructor-model-input { --hp-text-placeholder-default: var(--hp-text-muted-default); }
+/* 밝은 테마(Paper): 회고·변화 기록·보고서 면. :root의 모든 역할을 여기서 다시 묶는다 */
 [data-surface="growth"], .hp-reflection {
-  --hp-bg: var(--hp-paper);
-  --hp-panel: #FFFFFF;
-  --hp-ink: var(--hp-ink-on-paper);
-  --hp-muted: #4B5A4F;
-  --hp-line: #D7DDD2;
-  --hp-control-line: #76837A;
-  --hp-ring: #4D6B12;
-  --hp-placeholder: #4B5A4F;
+  --hp-text-primary-default: #151D19;
+  --hp-text-muted-default: #4B5A4F;
+  --hp-text-accent-default: #D5F279;
+  --hp-text-warn-default: #E6A373;
+  --hp-text-inverse-default: #18231C;
+  --hp-text-paper-default: #151D19;
+  --hp-text-placeholder-default: #4B5A4F;
+  --hp-bg-app-default: #F4F6F0;
+  --hp-bg-panel-default: #FFFFFF;
+  --hp-bg-paper-default: #F4F6F0;
+  --hp-bg-accent-default: #D5F279;
+  --hp-bg-control-hover: color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent);
+  --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 12%, transparent);
+  --hp-bg-control-selected: #F4F6F0;
+  --hp-border-divider-default: #D7DDD2;
+  --hp-border-control-default: #76837A;
+  --hp-border-control-hover: #4B5A4F;
+  --hp-border-control-selected: #D5F279;
+  --hp-border-muted-default: #4B5A4F;
+  --hp-border-warn-default: #E6A373;
+  --hp-border-accent-default: #D5F279;
+  --hp-ring-focus-default: #4D6B12;
 }
 /* 모든 포커스 가능한 컨트롤과 모든 입력란의 기본값. VS Code 웹뷰 기본 스타일
    (`a/input/select/textarea:focus { outline: 1px … ; outline-offset: -1px }`)은 `@layer vscode-default` 안에 있고,
    layer 밖 규칙은 구체성과 상관없이 layer 안 규칙을 이긴다. 그래서 이 규칙들은 layer 밖에 둔다 */
-:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
-::placeholder { color: var(--hp-placeholder); opacity: 1; }
+:focus-visible { outline: 2px solid var(--hp-ring-focus-default); outline-offset: 2px; }
+::placeholder { color: var(--hp-text-placeholder-default); opacity: 1; }
 /* 강제 색상(Windows 고대비, CGP-DS-R-016): 링 토큰은 시스템 Highlight가 된다. 링을 정하는 모든 범위에서 다시 정한다 */
 @media (forced-colors: active) {
-  :root, .studio-start, .studio-disconnected, .hp-mission, [data-surface="growth"], .hp-reflection { --hp-ring: Highlight; }
-  :focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+  :root, .studio-start, .studio-disconnected, .hp-mission, [data-surface="growth"], .hp-reflection { --hp-ring-focus-default: Highlight; }
+  :focus-visible { outline: 2px solid var(--hp-ring-focus-default); outline-offset: 2px; }
 }
 ```
+
+이전 이름 대응(CGP-DS-D-001). 이 문서와 다른 문서의 산문에 남은 이전 이름은 이 표로 읽는다. 한 이전 이름이 여러 범주로 나뉜 것은 컴포넌트가 그 색을 칠한 속성에 따라 갈랐기 때문이다.
+
+| 이전 이름 | 의미 역할 |
+|---|---|
+| `--hp-ink` | `--hp-text-primary-default` |
+| `--hp-muted` | `--hp-text-muted-default`, 테두리면 `--hp-border-muted-default`, hover 테두리면 `--hp-border-control-hover` |
+| `--hp-accent` | `--hp-bg-accent-default`, `--hp-border-accent-default`, `--hp-text-accent-default`, 고른 항목 테두리면 `--hp-border-control-selected` |
+| `--hp-warn` | `--hp-text-warn-default`, `--hp-border-warn-default` |
+| `--hp-ink-on-accent` · `--hp-ink-on-paper` | `--hp-text-inverse-default` · `--hp-text-paper-default` |
+| `--hp-bg` · `--hp-panel` · `--hp-paper` | `--hp-bg-app-default` · `--hp-bg-panel-default` · `--hp-bg-paper-default`, hover·고른 항목 바탕이면 `--hp-bg-control-hover` · `--hp-bg-control-selected` |
+| `--hp-line` · `--hp-control-line` | `--hp-border-divider-default` · `--hp-border-control-default` |
+| `--hp-ring` · `--hp-placeholder` | `--hp-ring-focus-default` · `--hp-text-placeholder-default` |
+| `--hp-text-caption` · `--hp-text-body` · `--hp-text-lead` · `--hp-text-step` | `--hp-font-caption` · `--hp-font-body` · `--hp-font-lead` · `--hp-font-step` |
+| `start.css`의 `--studio-*` | 없앴다. 시작 화면도 위 의미 역할을 바로 읽는다 |
 
 ### 팔레트 계열 (DEC-27)
 
@@ -343,9 +423,9 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
 
 | 계열 | 쓰는 곳 | 정본 | 값의 성격 |
 |---|---|---|---|
-| `--hp-*` (SX 학습 화면) | 수업 화면, 시작 화면, 회고·변화 기록 | `tokens.css` | 고정 브랜드 값. 배경 `#151D19`, 패널 `#202C24`, accent `#D5F279` |
+| `--hp-*` (SX 학습 화면) | 수업 화면, 시작 화면, 회고·변화 기록 | `tokens.css` | HypeProof Studio 테마에서 브랜드 값. 배경 `#151D19`, 패널 `#202C24`, accent `#D5F279`. 수업 화면은 다른 VS Code 테마를 따르고, 시작 화면과 회고·변화 기록(Paper)은 어느 테마에서나 고정이다(CGP-DS-D-002) |
 | `--tw-*` (개인 작업 공간, CP-R1·CC-R1) | 개인 작업 대화 화면 | `taskWorkspace.css` | VS Code 테마를 따른다. 캔버스 `--vscode-editor-background`(fallback `#202226`), 패널 `--vscode-sideBar-background`(fallback `#17191d`), 구분선 `#34383e`, 보조 글 `#a4aab3`, 포커스 `#799ed7`은 어두운 테마 fallback일 뿐이다 |
-| 역할이 다른 값 | `#18231C` | `--hp-ink-on-accent` | 패널이 아니라 lime CTA 위의 글자색이다 |
+| 역할이 다른 값 | `#18231C` | `--hp-text-inverse-default` | 패널이 아니라 lime CTA 위의 글자색이다 |
 
 개인 작업 공간이 학습 화면과 다른 것은 의도다(호스트 테마 추종). 이 슬라이스는 시각 변화를 만들지 않으며 CSS를 바꾸지 않는다. 결정 기록은 `docs/research/chatgpt-desktop-2026-10/decisions.md`의 DEC-27.
 
@@ -353,20 +433,20 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
 
 | 규칙 | 적용 |
 |---|---|
-| 한 화면 Primary CTA 1개(SX-04) | `.hp-cta-primary`는 `--hp-accent` 배경 + `--hp-ink-on-accent`. A의 "다음 행동" 버튼 또는 완료 버튼 중 하나만 이 클래스를 가진다. B의 보내기, D의 저장은 `.hp-cta-secondary`(투명 배경, `--hp-control-line` 테두리) |
+| 한 화면 Primary CTA 1개(SX-04) | `.hp-cta-primary`는 `--hp-bg-accent-default` 배경 + `--hp-text-inverse-default`. A의 "다음 행동" 버튼 또는 완료 버튼 중 하나만 이 클래스를 가진다. B의 보내기, D의 저장은 `.hp-cta-secondary`(투명 배경, `--hp-border-control-default` 테두리) |
 | 상태는 아이콘+문구(SX-50) | 완료 조건 빈 상자/체크 상자 아이콘 + 문구, 게이트 차단 경고 아이콘 + `기대 조건을 먼저 적어요` (아이콘은 글자 글리프가 아니라 선 아이콘 세트 `ChatIcon`, REQ-STUDIO-STROKE-ICONS; 와이어프레임의 ☐/☑는 그 자리 표시), source_state `● 실제 / ◌ 가상 / ◐ 자기 보고 / ? 미확인` + 라벨. 색만 바꾸는 상태 표시는 없다 |
 | 학습 화면에 숫자 카드 없음(SX-51) | `.hp-stat`는 단계 `ui: metric_board`(4·6주차) 안에서만 렌더한다. A·B·D·E에는 카운트 배지가 없다. "남은 단계 5"는 문장이지 카드가 아니다 |
 | 모달보다 inline(SX-52) | E는 카드, D는 서랍, 게이트 안내는 CTA 옆 문구. `showInformationMessage`류 모달은 파괴적 조작(삭제)에만 남긴다 |
-| 학생 글이 AI 글보다 위(SX-53) | `.hp-student-text`: `--hp-ink`, 16px, 좌측 3px `--hp-accent` 선, 라벨 "내가 쓴 것". `.hp-ai-text`: `--hp-muted`, 14px, 라벨 "AI가 만든 것". 같은 블록에 둘이 있으면 학생 글이 먼저 온다 |
-| 작업 화면은 저대비, 회고는 Paper(SX-54) | 작업 중 표면은 `--hp-bg`/`--hp-panel`에 `--hp-ink` 본문, 강조는 accent 한 곳. E와 F는 `data-surface="growth"` 토큰으로 Paper 전환 |
-| 실제/AI 예시 라벨·색 분리(SX-12) | 외부 반응 인용은 `--hp-ink` + "실제 반응", AI 예시는 `--hp-muted` + "AI 예시". 색이 같아도 라벨이 갈린다 |
-| 포커스 링 하나(CGP-DS-R-017, DES-06/11) | 포커스를 받는 모든 컨트롤은 `outline: 2px solid var(--hp-ring); outline-offset: 2px`. 스크롤 목록 안의 촘촘한 행(`.tw-task-list`, `.tw-source-list`)만 `-2px` 안쪽 링. `outline: none`은 같은 요소의 `:focus-visible` 규칙이나 조상의 `:focus-within` 링이 있을 때만 쓴다. 예외는 프로그램으로 포커스를 옮기는 제목(`.cp-preview h3`, `tabIndex=-1`) 하나 |
-| placeholder 4.5:1(CGP-DS-R-019, DES-11) | `tokens.css`의 `::placeholder` 기본값이 모든 입력란에 `color: var(--hp-placeholder)`를 준다. 브라우저 기본 placeholder와 opacity 조절은 쓰지 않는다. placeholder는 바탕과 4.5:1, 입력한 글자와 1.5:1 이상 떨어진다. Light+만 예외: 입력 글자(#616161)가 흰 바탕에 6.2:1이라 4.5:1을 지키면 최대 1.38:1까지만 벌어진다(실측 #767676: 1.36:1). 링은 컨트롤 밖 2px 틈 너머 바탕 위에 그려지므로 링 대비는 그 바탕과 잰다 |
+| 학생 글이 AI 글보다 위(SX-53) | `.hp-student-text`: `--hp-text-primary-default`, 16px, 좌측 3px `--hp-border-accent-default` 선, 라벨 "내가 쓴 것". `.hp-ai-text`: `--hp-text-muted-default`, 14px, 라벨 "AI가 만든 것". 같은 블록에 둘이 있으면 학생 글이 먼저 온다 |
+| 작업 화면은 저대비, 회고는 Paper(SX-54) | 작업 중 표면은 `--hp-bg-app-default`/`--hp-bg-panel-default`에 `--hp-text-primary-default` 본문, 강조는 accent 한 곳. E와 F는 `data-surface="growth"` 토큰으로 Paper 전환 |
+| 실제/AI 예시 라벨·색 분리(SX-12) | 외부 반응 인용은 `--hp-text-primary-default` + "실제 반응", AI 예시는 `--hp-text-muted-default` + "AI 예시". 색이 같아도 라벨이 갈린다 |
+| 포커스 링 하나(CGP-DS-R-017, DES-06/11) | 포커스를 받는 모든 컨트롤은 `outline: 2px solid var(--hp-ring-focus-default); outline-offset: 2px`. 스크롤 목록 안의 촘촘한 행(`.tw-task-list`, `.tw-source-list`)만 `-2px` 안쪽 링. `outline: none`은 같은 요소의 `:focus-visible` 규칙이나 조상의 `:focus-within` 링이 있을 때만 쓴다. 예외는 프로그램으로 포커스를 옮기는 제목(`.cp-preview h3`, `tabIndex=-1`) 하나 |
+| placeholder 4.5:1(CGP-DS-R-019, DES-11) | `tokens.css`의 `::placeholder` 기본값이 모든 입력란에 `color: var(--hp-text-placeholder-default)`를 준다. 브라우저 기본 placeholder와 opacity 조절은 쓰지 않는다. placeholder는 바탕과 4.5:1, 입력한 글자와 1.5:1 이상 떨어진다. Light+만 예외: 입력 글자(#616161)가 흰 바탕에 6.2:1이라 4.5:1을 지키면 최대 1.38:1까지만 벌어진다(실측 #767676: 1.36:1). 링은 컨트롤 밖 2px 틈 너머 바탕 위에 그려지므로 링 대비는 그 바탕과 잰다 |
 | 움직임은 토큰으로(CGP-DS-R-014, DES-CGP-DS-15) | 웹뷰 CSS의 transition/animation 시간은 `--hp-dur-*`만 쓴다. 컨트롤 hover/press `--hp-dur-press` 140ms, 제자리 확인 `--hp-dur-content` 160ms, 들어오는 면 `--hp-dur-enter` 180ms, 곡선은 `--hp-ease` 하나. 상태 반복(응답 점 1.2s×3, 진행 표시, 러너)은 기존 시간을 토큰으로 옮겼다. 줄인 움직임 규칙이 늘 이긴다 |
 | 본문 한 줄 길이(CGP-DS-R-020, DES-CGP-DS-22) | 개인 대화의 AI 본문(`.hps-prose`)은 `max-inline-size: 40em`, 한 줄에 한글 약 40자. 상한일 뿐이라 좁은 창에서는 창에 맞춰 줄바꿈하고, 표와 코드는 그 안에서 자기 스크롤을 가진다 |
 | 스크롤 막대 자리(CGP-DS-R-031, DES-CGP-DS-36) | 개인 대화 대화 목록(`.hps-messages`)은 `scrollbar-gutter: stable`. 답이 길어져 스크롤 막대가 생겨도 본문이 옆으로 밀리지 않는다 |
-| 의미 글자 크기와 14px 바닥(CGP-DS-R-008, DES-CGP-DS-09, DEC-29) | 개인 작업 화면(작업 목록, 작업 제목 줄, 대화 셸, 자료 패널, 대화 설정)에서 학생이 읽는 글은 `--hp-text-caption` 14px, `--hp-text-body` 16px, `--hp-text-lead` 18px 셋 중 하나다. 메타 정보도 예외가 아니다: 역할 줄, 도구 줄, 인용 칩, 시간·대화 수, 출처 주소가 10~13px에서 14px이 된다. 줄 높이는 라벨 1.5, 한글 본문 1.65. 글자 크기 선택(기본 · 크게 · 아주 크게)은 셸의 `--hp-text-step` 하나(0 · 2 · 4px)라서 셸 안의 모든 단계가 같이 커지고, 44px 대상과 컨트롤 높이는 그대로다(min-height만 있다). 14px 아래로 남는 것: 화면에 보이지 않는 키보드 안내, 장식 글리프, 접근 이름이 있는 글리프 버튼(×). 수업 채팅은 이번에 바꾸지 않는다(같은 클래스는 개인 셸 아래에서만 올린다) |
-| 강제 색상(CGP-DS-R-016, DES-CGP-DS-17) | Windows 고대비에서는 시스템 색만 남고 그림자와 그라데이션은 사라진다. 모든 컨트롤은 `1px solid ButtonText` 테두리, 포커스는 `--hp-ring`이 `Highlight`가 된 같은 outline, 눌림·선택·현재 상태는 `Highlight`/`HighlightText`. 색이나 배경만으로 그리던 표시(음성 캡처 점, 응답 점, 음성 막대, 인용 신뢰 단계, 검증 상태 칩, 강사 배지, 학생 말풍선)는 테두리나 모양을 얻는다. `forced-color-adjust: none`은 QR 코드 두 곳뿐이다. 보통 화면은 바뀌지 않는다 |
+| 의미 글자 크기와 14px 바닥(CGP-DS-R-008, DES-CGP-DS-09, DEC-29) | 개인 작업 화면(작업 목록, 작업 제목 줄, 대화 셸, 자료 패널, 대화 설정)에서 학생이 읽는 글은 `--hp-font-caption` 14px, `--hp-font-body` 16px, `--hp-font-lead` 18px 셋 중 하나다. 메타 정보도 예외가 아니다: 역할 줄, 도구 줄, 인용 칩, 시간·대화 수, 출처 주소가 10~13px에서 14px이 된다. 줄 높이는 라벨 1.5, 한글 본문 1.65. 글자 크기 선택(기본 · 크게 · 아주 크게)은 셸의 `--hp-font-step` 하나(0 · 2 · 4px)라서 셸 안의 모든 단계가 같이 커지고, 44px 대상과 컨트롤 높이는 그대로다(min-height만 있다). 14px 아래로 남는 것: 화면에 보이지 않는 키보드 안내, 장식 글리프, 접근 이름이 있는 글리프 버튼(×). 수업 채팅은 이번에 바꾸지 않는다(같은 클래스는 개인 셸 아래에서만 올린다) |
+| 강제 색상(CGP-DS-R-016, DES-CGP-DS-17) | Windows 고대비에서는 시스템 색만 남고 그림자와 그라데이션은 사라진다. 모든 컨트롤은 `1px solid ButtonText` 테두리, 포커스는 `--hp-ring-focus-default`이 `Highlight`가 된 같은 outline, 눌림·선택·현재 상태는 `Highlight`/`HighlightText`. 색이나 배경만으로 그리던 표시(음성 캡처 점, 응답 점, 음성 막대, 인용 신뢰 단계, 검증 상태 칩, 강사 배지, 학생 말풍선)는 테두리나 모양을 얻는다. `forced-color-adjust: none`은 QR 코드 두 곳뿐이다. 보통 화면은 바뀌지 않는다 |
 
 대비. 상대 휘도로 계산한 근사값이며 구현 시 검사 도구로 다시 확인한다.
 
@@ -378,23 +458,23 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
 | Ink-on-accent on Lime | 13:1 | CTA 글자 |
 | Amber on Deep forest | 7.7:1 | 경고 문구 가능 |
 | Amber on Panel | 6.6:1 | 경고 문구 가능 |
-| Amber on Paper | 2.0:1 | 글자로 쓰지 않는다. Paper에서는 아이콘·테두리 + `--hp-ink-on-paper` 문구 |
+| Amber on Paper | 2.0:1 | 글자로 쓰지 않는다. Paper에서는 아이콘·테두리 + `--hp-text-paper-default` 문구 |
 | Ink-on-paper on Paper | 17:1 | 본문 가능 |
 | Line(#35483A) on Deep forest / Panel | 1.75:1 / 1.48:1 | 장식 구분선만. 버튼·입력 경계로 쓰지 않는다(DES-11) |
 | Control line(#748F79) on Deep forest / Panel | 4.9:1 / 4.1:1 | 필수 컨트롤 경계 |
 | Control line on Paper(#76837A) on Paper / White | 3.6:1 / 4.0:1 | 필수 컨트롤 경계 |
-| Ring(#D5F279, `--hp-accent`) on Deep forest / Panel / 시작 화면 그라데이션(#1B271B) | 13.8:1 / 11.6:1 / 12.4:1 | HP 어두운 면의 포커스 링 |
+| Ring(#D5F279, `--hp-border-accent-default`) on Deep forest / Panel / 시작 화면 그라데이션(#1B271B) | 13.8:1 / 11.6:1 / 12.4:1 | HP 어두운 면의 포커스 링 |
 | Ring fallback(#D5F279) on HypeProof Studio 테마 sideBar·input(#18231C) / editor(#151D19) | 13.0:1 / 13.8:1 | 테마 변수가 없을 때도 같은 값 |
 | Ring on Paper(#4D6B12) on Paper / White | 5.6:1 / 6.1:1 | 회고·보고서 면의 포커스 링 |
 | 테마 focusBorder on sideBar / editor — Dark Modern #0078D4 · Light Modern #005FB8 · Dark+ #007FD4 · Light+ #0090F1 · HC Dark #F38518 · HC Light #006BBD · 2026 Dark #3994BC(70%) · 2026 Light #0069CC | 3.9/3.6 · 5.9/6.3 · 3.6/4.0 · 3.0/3.4 · 8.2/8.2 · 5.5/5.5 · 3.2/3.3 · 5.2/5.4 | VS Code 기본 테마의 값. 다른 테마는 그 테마가 책임진다 |
-| Placeholder on HP 입력란 — `--hp-muted` on Deep forest / 연결 입력(#1B1E1A) | 8.4:1 / 8.2:1 | `.hp-surface`, 시작 화면 |
+| Placeholder on HP 입력란 — `--hp-text-muted-default` on Deep forest / 연결 입력(#1B1E1A) | 8.4:1 / 8.2:1 | `.hp-surface`, 시작 화면 |
 | Placeholder on Paper(#4B5A4F) on Paper / White | 6.7:1 / 7.3:1 | Paper 면 입력란 |
-| `--hp-placeholder` on 테마 input 바탕 / 입력 글자와의 차이 — HypeProof Studio #ACB9A5 · Dark Modern #989898 · Light Modern #767676 · Dark+ #A6A6A6 · Light+ #767676 · HC Dark #B3B3B3 · HC Light #696969 · 2026 Dark mix #9B9B9B · 2026 Light mix #4D4D4D | 7.9/1.8 · 4.5/1.8 · 4.5/2.5 · 4.5/1.5 · 4.5/1.4 · 10.0/2.1 · 5.5/2.6 · 6.3/1.5 · 8.5/1.9 | 테마 자신의 placeholder 색. 2026 두 테마만 mix(자기 값 2.3:1 / 2.8:1). Light+의 1.4는 위 규칙의 예외 |
-| `--hp-placeholder` fallback(#C1CBB9) on fallback 입력 바탕(#292D33 / #2A2D2E / #1E1E1E) | 8.2 / 8.3 / 9.9 :1 | 테마 변수가 없는 브라우저 렌더 |
+| `--hp-text-placeholder-default` on 테마 input 바탕 / 입력 글자와의 차이 — HypeProof Studio #ACB9A5 · Dark Modern #989898 · Light Modern #767676 · Dark+ #A6A6A6 · Light+ #767676 · HC Dark #B3B3B3 · HC Light #696969 · 2026 Dark mix #9B9B9B · 2026 Light mix #4D4D4D | 7.9/1.8 · 4.5/1.8 · 4.5/2.5 · 4.5/1.5 · 4.5/1.4 · 10.0/2.1 · 5.5/2.6 · 6.3/1.5 · 8.5/1.9 | 테마 자신의 placeholder 색. 2026 두 테마만 mix(자기 값 2.3:1 / 2.8:1). Light+의 1.4는 위 규칙의 예외 |
+| `--hp-text-placeholder-default` fallback(#C1CBB9) on fallback 입력 바탕(#292D33 / #2A2D2E / #1E1E1E) | 8.2 / 8.3 / 9.9 :1 | 테마 변수가 없는 브라우저 렌더 |
 
 기존 스타일 이행:
 
-- `start.css`: `--studio-*` 변수를 `--hp-*`의 별칭으로 바꾼다(`--studio-bg: var(--hp-bg)`). 선택자는 유지. 시작 화면 nav의 "내 작업 검토"는 "변화 기록"으로 이름을 바꾸고 `openGrowth`를 보낸다.
+- `start.css`: 처음에는 `--studio-*` 변수를 `--hp-*`의 별칭으로 바꿨고, CGP-DS-D-001에서 별칭을 없애고 의미 역할을 바로 읽게 했다. 선택자는 유지. 시작 화면 nav의 "내 작업 검토"는 "변화 기록"으로 이름을 바꾸고 `openGrowth`를 보낸다.
 - `styles.css`: 한 번에 갈아엎지 않는다. 각 영역을 다시 만들 때 그 블록만 `--hp-*`로 옮긴다. P0에서 `hps-header`, `hps-activity-header`, `hps-lesson` 블록이 `hp-mission` 블록으로 대체된다. P1에서 `hps-native-observation`, `hps-observation-compare`가 `hp-drawer`로 대체된다. 코호트 전용 블록(`hps-worlds`, `hps-runner`, `hps-naming`)은 손대지 않는다. `--vscode-*` fallback은 학습 화면 밖(설정, 오류 배너)에 남는다.
 - `localReview.css`: `growth.css`로 이름을 바꾸고 Paper 토큰을 쓴다. `capability-grid`는 `<details>` 안으로 들어간다.
 - `assetStatusBar.ts`와 `assetStatus.ts`는 삭제한다(SX-59). `extension.ts:71`의 생성, `ChatPanelProvider` 생성자의 `assetScores` 인자, `onAssetScore`의 `recordAssetScore` 호출, `streamAssetScore` 호스트 메시지, `App.tsx`의 `assetScore` 상태와 액션, `hypeproof-chat.showAssetHistogram` 명령이 함께 나간다. `AssetScoreChunk` 타입은 프록시 SSE 파서가 `asset_score` 청크를 읽고 버릴 수 있도록 `protocol.ts`에 남긴다. 워커가 청크를 그만 보내는 것은 별도 Service 변경이다.

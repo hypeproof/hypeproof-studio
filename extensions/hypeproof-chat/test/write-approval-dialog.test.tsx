@@ -28,7 +28,7 @@ async function main(){
  await act(async()=>fire(dialog,'compositionend'));await act(async()=>fire(dialog,'keydown',{key:'Escape',keyCode:27}));assert.deepEqual(answers,[['request-one',false]]);
  await act(async()=>click(host.querySelector('.hps-write-actions').querySelectorAll('button')[1]));assert.equal(answers.length,1);
  await act(async()=>root.render(<WriteApprovalDialog key="new" textSize="xlarge" prompt={{...prompt,id:'new'}} onAnswer={(...a)=>answers.push(a)}/>));
- assert.equal(chips().length,5);assert.equal(host.querySelector('dialog').style['--hp-text-caption'],'calc(14px + 4px)');
+ assert.equal(chips().length,5);assert.equal(host.querySelector('dialog').style['--hp-font-caption'],'calc(14px + 4px)');
  await act(async()=>click(host.querySelector('.hps-write-actions').querySelectorAll('button')[1]));assert.deepEqual(answers.at(-1),['new',true]);
  await act(async()=>root.render(<WriteApprovalDialog key="one" prompt={{...prompt,id:'one',files:['only.txt']}} onAnswer={()=>{}}/>));
  assert.equal(chips().length,1);assert.ok(!host.querySelector('.hps-write-expand'));

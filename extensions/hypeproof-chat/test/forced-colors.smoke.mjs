@@ -120,14 +120,14 @@ function audit(files) {
     }
   }
 
-  // Focus. Every scope that sets --hp-ring resets it to Highlight; the baseline and the composer
+  // Focus. Every scope that sets --hp-ring-focus-default resets it to Highlight; the baseline and the composer
   // wrapper restate an outline (box-shadow is dropped in forced colors, so it can never be the ring).
-  const ringScopes = restRules.filter((r) => r.decls.some(([k]) => k === "--hp-ring")).flatMap((r) => r.parts);
-  if (!ringScopes.includes(":root")) bad.push("no :root --hp-ring found: the scan is not reading tokens.css");
-  for (const s of ringScopes) if (value(forcedDecls(s), "--hp-ring") !== "Highlight") bad.push(`"${s}" sets --hp-ring but forced colors does not reset it to Highlight`);
+  const ringScopes = restRules.filter((r) => r.decls.some(([k]) => k === "--hp-ring-focus-default")).flatMap((r) => r.parts);
+  if (!ringScopes.includes(":root")) bad.push("no :root --hp-ring-focus-default found: the scan is not reading tokens.css");
+  for (const s of ringScopes) if (value(forcedDecls(s), "--hp-ring-focus-default") !== "Highlight") bad.push(`"${s}" sets --hp-ring-focus-default but forced colors does not reset it to Highlight`);
   for (const [sel, f] of [[":focus-visible", "tokens.css"], [COMPOSER_RING, "chatDetails.css"]]) {
     const o = value(forcedDecls(sel, f), "outline") ?? "";
-    if (!/^2px solid var\(--hp-ring\)/.test(o)) bad.push(`${f}: forced "${sel}" outline is "${o}", not 2px solid var(--hp-ring)`);
+    if (!/^2px solid var\(--hp-ring-focus-default\)/.test(o)) bad.push(`${f}: forced "${sel}" outline is "${o}", not 2px solid var(--hp-ring-focus-default)`);
   }
   for (const { f, parts, decls } of [...restRules, ...forcedRules]) {
     const focus = parts.some((p) => /:focus(-visible|-within)?\b/.test(p));
@@ -237,8 +237,8 @@ const expectBad = (problems, re, label) => assert.ok(problems.some((p) => re.tes
 const noBlocks = Object.fromEntries(Object.entries(files).map(([f, css]) => [f, split(css).rest]));
 expectBad(audit(noBlocks), /tokens\.css: no @media \(forced-colors: active\) block/, "CSS without forced-colors blocks (origin/main)");
 expectBad(audit({ ...files, "x.css": "@media (forced-colors: active) { .x:focus-visible { outline: none; } }" }), /removes the outline/, "forced focus outline: none");
-expectBad(audit({ ...files, "x.css": ".x:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--hp-ring); }" }), /box-shadow/, "focus drawn with box-shadow");
-expectBad(audit({ ...files, "x.css": ".x { --hp-ring: #D5F279; }" }), /"\.x" sets --hp-ring/, "a new ring scope without a forced reset");
+expectBad(audit({ ...files, "x.css": ".x:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--hp-ring-focus-default); }" }), /box-shadow/, "focus drawn with box-shadow");
+expectBad(audit({ ...files, "x.css": ".x { --hp-ring-focus-default: #D5F279; }" }), /"\.x" sets --hp-ring-focus-default/, "a new ring scope without a forced reset");
 expectBad(audit({ ...files, "x.css": '.x[aria-expanded="true"] { background: #333; }' }), /state "\.x\[aria-expanded="true"\]"/, "a new expanded state without a forced rule");
 assert.ok(!audit({ ...files, "x.css": '.x[aria-selected="true"] { background: #333; }' }).some((p) => p.includes(".x[")), "positive control: the generic [aria-selected] rule covers a new selected state");
 expectBad(audit({ ...files, "x.css": ".x { color: Highlight; }" }), /system colour Highlight outside/, "a system colour leaking into normal mode");
@@ -246,7 +246,7 @@ expectBad(audit({ ...files, "x.css": "@media (forced-colors: active) { .x { forc
 expectBad(mutate("styles.css", "border-left: 3px double CanvasText", "border-left: 3px solid CanvasText"), /four distinct forced border-left styles/, "two citation tiers with the same line");
 expectBad(mutate("styles.css", ".hps-voice-dot { border: 1px solid CanvasText;", ".hps-voice-dot {"), /hps-voice-dot.*no non-colour cue/, "voice dot without a border");
 expectBad(mutate("tokens.css", "border: 1px solid ButtonText !important;", "border: 1px solid ButtonText;"), /control boundary/, "a control boundary that loses to border: 0");
-expectBad(mutate("tokens.css", "--hp-ring: Highlight;", "--hp-ring: CanvasText;"), /does not reset it to Highlight/, "a ring that is not Highlight");
+expectBad(mutate("tokens.css", "--hp-ring-focus-default: Highlight;", "--hp-ring-focus-default: CanvasText;"), /does not reset it to Highlight/, "a ring that is not Highlight");
 expectBad(mutate("chatDetails.css", "background: CanvasText;", "background: currentColor;"), /hps-response-dots i/, "pending dots without a system colour");
 expectBad(mutate("start.css", "still scans in dark high-contrast themes. */\n", "still scans in dark high-contrast themes. */\n  .studio-x { color: CanvasText; }\n"), /without a CGP-DS-R-016 comment/, "a QR opt-out whose justification is not right before it");
 expectBad(mutate("citationPreview.css", "background-color: Highlight !important; color: HighlightText !important;", "background-color: Highlight; color: HighlightText;"), /beaten by the more specific "\.cp-citation:hover:not\(:disabled\)"/, "a forced fill that a hover rule outranks (defect D1)");
@@ -261,6 +261,6 @@ expectBad(mutate("taskWorkspace.css", "font-weight: 700; border-width: 2px;", "b
 // Positive controls: the shapes the checker must accept.
 assert.deepEqual(split("@media (forced-colors: active) { .a { color: CanvasText; } } .b { color: red; }").forced.map(norm), [".a { color: CanvasText; }"], "split reads a forced block");
 assert.equal(norm(split("@media (forced-colors: active) { .a { color: CanvasText; } } .b { color: red; }").rest), ".b { color: red; }", "split keeps the rest");
-assert.deepEqual(rulesOf('.a[aria-current=page] , .b { outline: 2px solid var(--hp-ring) }')[0].parts, ['.a[aria-current="page"]', ".b"], "state attribute quotes are normalised");
+assert.deepEqual(rulesOf('.a[aria-current=page] , .b { outline: 2px solid var(--hp-ring-focus-default) }')[0].parts, ['.a[aria-current="page"]', ".b"], "state attribute quotes are normalised");
 
 console.log(`forced-colors smoke OK (${Object.keys(files).length} CSS files, ${INVENTORY.length + TIERS.length} colour-only marks, ${TEXT_CUES.length + GEOMETRY_CUES.length} existing cues)`);

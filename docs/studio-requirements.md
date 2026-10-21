@@ -341,8 +341,8 @@ the panel's always-mounted response announcer (`useLiveRegion`), once at 20 s an
 the ticking counter is not announced. A 1 s ticker in the hint re-reads the clock, because the host
 sends nothing during a silent tool run; (5) the hint fades in once (`--hp-dur-enter`, 180 ms) and has no animation under
 `prefers-reduced-motion`. It is drawn in personal and classroom chat. In personal chat it uses
-`--hp-text-caption` (≥14px, locked by `test/type-scale.smoke.mjs`); in classroom chat it uses
-14px. 멈추기 is a 44px target with a `--hp-control-line` border (≥3:1 on dark and light surfaces). It uses no capability, score or evaluation words. Not met from
+`--hp-font-caption` (≥14px, locked by `test/type-scale.smoke.mjs`); in classroom chat it uses
+14px. 멈추기 is a 44px target with a `--hp-border-control-default` border (≥3:1 on dark and light surfaces). It uses no capability, score or evaluation words. Not met from
 REQ-ART-19: the timers do not reset on unrelated events, because the clock belongs to the
 running step. A stretch with no running tool (thinking, between calls) is still covered only by
 the existing work and pending lines and the stall watchdog. Pure rules: `src/longStepHint.ts`;
@@ -482,11 +482,11 @@ them back; physical macOS 2-set and Windows MS IME runs are not yet recorded. Te
 
 CGP-DS-R-034 (2026-10-19), extending DES-11: a required control boundary (button, text field,
 select, choice card, plan and repository options, lesson-mode Send) is drawn with
-`--hp-control-line` (#748F79: 4.9:1 on `--hp-bg`, 4.1:1 on `--hp-panel`; #76837A on the Paper
-surface: 3.6:1, 4.0:1 on white). `--hp-line` (#35483A, 1.75:1) stays for decorative dividers
+`--hp-border-control-default` (#748F79: 4.9:1 on `--hp-bg-app-default`, 4.1:1 on `--hp-bg-panel-default`; #76837A on the Paper
+surface: 3.6:1, 4.0:1 on white). `--hp-border-divider-default` (#35483A, 1.75:1) stays for decorative dividers
 only. Values are recorded in `docs/design/studio-learning-experience.md` §디자인 시스템. Test:
 `test/control-contrast.smoke.mjs` computes the ratios from `tokens.css` and rejects any control
-rule that borders with the decorative line (including `var(--hp-line, …)` with a fallback) and any
+rule that borders with the decorative line (including `var(--hp-border-divider-default, …)` with a fallback) and any
 start-page control whose literal border fails 3:1 on its own background. Not yet covered: the
 personal-chat `--tw-line` family (fallback #34383e) and legacy `--vscode-*` fallbacks in
 `styles.css`; tracked as the next DES-11 slice.
@@ -494,23 +494,23 @@ personal-chat `--tw-line` family (fallback #34383e) and legacy `--vscode-*` fall
 `REQ-STUDIO-FOCUS-AND-PLACEHOLDER` (CGP-DS-R-017 / REQ-CGP-DS-18 and CGP-DS-R-019 /
 REQ-CGP-DS-21 + REQ-CGP-DS-42, 2026-10-20), extending DES-06 and DES-11 for every chat-webview
 stylesheet (`webview-ui/src/*.css`: chat panel, personal chat detail, task workspace, citation
-preview, start page, local review). Focus: one token, `--hp-ring`, drawn as `outline: 2px solid
-var(--hp-ring); outline-offset: 2px` on `:focus-visible` (inputs may use `:focus`, which matches
+preview, start page, local review). Focus: one token, `--hp-ring-focus-default`, drawn as `outline: 2px solid
+var(--hp-ring-focus-default); outline-offset: 2px` on `:focus-visible` (inputs may use `:focus`, which matches
 the same moments); only tight rows inside the scrolling task and source lists use a -2px inset.
 Unlayered baselines in `tokens.css` (`:focus-visible` and `::placeholder`) cover every focusable
 element and every field. They replace VS Code's injected webview defaults
 (`a/input/select/textarea:focus`, 1px, -1px offset), which sit in `@layer vscode-default`, and
-the browser's default placeholder, which ignores the theme. `--hp-ring` is
-`var(--vscode-focusBorder, #D5F279)` on theme-following surfaces, `--hp-accent` #D5F279 on
+the browser's default placeholder, which ignores the theme. `--hp-ring-focus-default` is
+`var(--vscode-focusBorder, #D5F279)` on theme-following surfaces, `--hp-border-accent-default` #D5F279 on
 surfaces that paint their own HP dark background (start page, mission header: 13.8:1 on
-`--hp-bg`, 11.6:1 on `--hp-panel`, 12.4:1 on the start gradient) and #4D6B12 on Paper (5.6:1,
+`--hp-bg-app-default`, 11.6:1 on `--hp-bg-panel-default`, 12.4:1 on the start gradient) and #4D6B12 on Paper (5.6:1,
 6.1:1 on white). Measured against the surface around the control (the 2px offset leaves a gap of
 that surface): HypeProof Studio theme 13.0:1, and VS Code's default themes from 3.0:1 (Light+ on
 its side bar) to 8.2:1; the fallback #D5F279 is at least 12.4:1 on every literal surface fallback.
-`outline: none` is allowed only with a `--hp-ring` replacement on the same element or an
+`outline: none` is allowed only with a `--hp-ring-focus-default` replacement on the same element or an
 ancestor `:focus-within` (the personal composer), plus one programmatic focus target that is not
 a control (`.cp-preview h3`, `tabIndex=-1`). Placeholder: every `::placeholder` rule uses
-`--hp-placeholder` at opacity 1, never a lowered opacity. It must reach 4.5:1 on the field and
+`--hp-text-placeholder-default` at opacity 1, never a lowered opacity. It must reach 4.5:1 on the field and
 stay at least 1.5:1 apart from the field's typed text. On theme-following fields it is the theme's
 own `--vscode-input-placeholderForeground`: HypeProof Studio #ACB9A5 7.9:1 (1.8:1 from text), Dark
 Modern 4.5:1 (1.8), Light Modern #767676 4.5:1 (2.5), Dark+ 4.5:1 (1.5), HC Dark 10.0:1 (2.1),
@@ -523,7 +523,7 @@ cannot meet both limits: its typed text (#616161) is 6.2:1 on white, so a 4.5:1 
 be at most 1.38:1 apart; its own #767676 is 4.5:1 and 1.36:1 apart. Placeholders have no
 non-colour cue to compensate, so Light+ is a recorded exception, not a pass. Fields that
 paint their own HP background (lesson criterion/decision fields, evidence drawer, instructor model
-ID, start page token field) use `--hp-muted` (8.4:1 on `--hp-bg`, 8.2:1 on the start page field)
+ID, start page token field) use `--hp-text-muted-default` (8.4:1 on `--hp-bg-app-default`, 8.2:1 on the start page field)
 and Paper uses #4B5A4F (6.7:1, 7.3:1 on white). Through the baseline this covers every field in
 the webview, including the ~25 that used the browser default until now (task search, evidence
 drawer, panels, naming inputs, trial end card, local review). Values are recorded in
@@ -533,12 +533,12 @@ drawer, panels, naming inputs, trial end card, local review). Values are recorde
 `vscodium-base` theme-defaults when it is checked out), rejects any focus rule that is not the
 token ring, any outline removal without a replacement, any placeholder rule with opacity or a
 colour other than the token, a missing or layered baseline, and any field painting an HP
-background outside the `--hp-muted` scope. Its token-free geometry check also rejects rules
+background outside the `--hp-text-muted-default` scope. Its token-free geometry check also rejects rules
 copied verbatim from origin/main (1px composer ring, 4px/3px/1px offsets, no placeholder
 baseline), and it has negative controls.
 Not covered: Chalk pages, VS Code's own chrome and native widgets, third-party themes (the ring
 and placeholder follow the theme's own colours), the Light+ separation exception above, fields
-whose background is set only by a rule without `input`/`textarea` in its selector, the HP rail cards drawn with `--hp-ink` on the
+whose background is set only by a rule without `input`/`textarea` in its selector, the HP rail cards drawn with `--hp-text-primary-default` on the
 theme background under non-HP themes, and a recorded keyboard walk in the built app.
 
 `REQ-STUDIO-FOCUS-RESTORE` (CGP-DS-R-023 / REQ-CGP-DS-25, 2026-10-20; extends
@@ -581,7 +581,7 @@ back again in a microtask. Second, an outside press blurs to `<body>` after `poi
 is a check on the next frame too. The wide sources panel (above 1050px) is a side panel, not a
 popover: it stays open on an outside press, and its close keeps the REQ-STUDIO-TASK-WORKSPACE return
 to its trigger. The capability card (여기서 AI가 할 수 있는 일) is a native `<details>` disclosure, so
-focus stays on its summary. Visual change: none, except that the existing `--hp-ring`
+focus stays on its summary. Visual change: none, except that the existing `--hp-ring-focus-default`
 (REQ-STUDIO-FOCUS-AND-PLACEHOLDER) is now drawn on the opener after a close, where focus used to be
 lost. SX-52 audit (non-destructive modals that SX-52 would make inline). Settings stays a modal
 dialog, because REQ-CGP-DS-25 reserves dialogs for settings and destructive flows. The narrow
@@ -859,8 +859,8 @@ scrolling element, with negative controls copied from the replaced lines.
 colors (Windows high contrast) the webview keeps every control, its focus and its states visible
 with system colours only, and normal mode renders exactly as before: every new rule sits inside an
 `@media (forced-colors: active)` block and no system colour keyword appears outside one. Focus: every
-scope that sets `--hp-ring` (`:root`, the lime start/mission scopes, Paper) resets it to `Highlight`,
-so each existing `outline: 2px solid var(--hp-ring)` rule draws in `Highlight`; the baseline
+scope that sets `--hp-ring-focus-default` (`:root`, the lime start/mission scopes, Paper) resets it to `Highlight`,
+so each existing `outline: 2px solid var(--hp-ring-focus-default)` rule draws in `Highlight`; the baseline
 `:focus-visible` and the personal composer's `:focus-within` restate the outline. No focus rule uses
 `box-shadow`, which forced colors removes, and the only outline removals stay the programmatic
 `.cp-preview h3` heading and the composer textarea whose wrapper draws the ring. Controls: buttons,
@@ -960,14 +960,14 @@ markup back reproduces all four prior ChatPanel digests.
 personal chat surface by DEC-29). Learner-read text on the personal task workspace (task rail, task
 heading and the chat header drawn into it, the chat shell with its answers, composer, notices and
 대화 설정 dialog, and the sources panel) takes one of three semantic sizes from `tokens.css`:
-`--hp-text-caption` 14px (labels, metadata, captions, controls), `--hp-text-body` 16px (message
-bodies, the composer) and `--hp-text-lead` 18px (the empty-chat greeting), with
+`--hp-font-caption` 14px (labels, metadata, captions, controls), `--hp-font-body` 16px (message
+bodies, the composer) and `--hp-font-lead` 18px (the empty-chat greeting), with
 `--hp-leading-label` 1.5 and `--hp-leading-prose` 1.65 (Hangul prose; the personal body moves from
 1.625). The smallest step is 14px, and metadata is not exempt: the CC-R1 role line, tool log, citation
 chips and domains, chip captions, AI disclosure, rail time and message count, run state chip, source
 host names and source policy line rise from 10-13px to 14px. Values are recorded first in
 `docs/design/studio-learning-experience.md` §디자인 시스템. The text-size choice (CGP-DS-R-009) is
-one variable: `--hp-text-step` is 0px on `:root`, and the personal shell sets 2px (크게) or 4px
+one variable: `--hp-font-step` is 0px on `:root`, and the personal shell sets 2px (크게) or 4px
 (아주 크게). The size tokens are declared on `:root, .hps-shell`, because a custom property is
 substituted where it is declared: re-declared on the shell they pick up its step, so every token
 size inside the chat grows by the same 2px/4px, and the shell's own size is the caption step so text
@@ -1030,8 +1030,8 @@ as part of the summary's name) that turns when open, through
 (✓ in a solid circle, – in a dashed one, aria-hidden), the label and one state word, `해요` or
 `안 해요`, in the same weight (no `<strong>`); off rows are muted, so the state is a shape, a word
 and a colour, never colour alone (SX-50). The card's quiet text (count, chevron, off rows, footnote)
-uses `--hp-ai-can-do-muted` = `var(--vscode-descriptionForeground, var(--hp-muted))`, so it follows a
-light theme too: `--hp-muted` alone is a dark-only constant, 2.05:1 on white (≥4.5:1 now: 5.6:1 on
+uses `--hp-ai-can-do-muted` = `var(--vscode-descriptionForeground, var(--hp-text-muted-default))`, so it follows a
+light theme too: `--hp-text-muted-default` alone is a dark-only constant, 2.05:1 on white (≥4.5:1 now: 5.6:1 on
 the harness light theme, 4.9:1 on Light+). The footnote is the caption step (14px) under a hairline.
 **Closed by default, always**, with a one-line summary that already carries the essential fact:
 "여기서 AI가 할 수 있는 일 · 6가지 중 4가지 · 자세히" (new copy: of the listed capabilities, how many
@@ -1042,7 +1042,7 @@ CGP-SHELL-R-024 card, so nothing depends on the learner opening this one. The ma
 closed on main (`ai-can-do.test.tsx` asserted it); the open card in the review was most likely after
 a click, since the focus ring was drawn. (2) The personal access line "이용권 상태를 확인해 주세요.
 이용권 확인" above the composer is an inline notice: `.hps-notice-caution` shares the offline banner's
-rule (REQ-STUDIO-OFFLINE-BANNER: editor-widget surface, 4px `--hp-warn` edge, foreground text, so
+rule (REQ-STUDIO-OFFLINE-BANNER: editor-widget surface, 4px `--hp-border-warn-default` edge, foreground text, so
 contrast does not depend on amber; the edge becomes CanvasText under forced colors,
 CGP-DS-R-016), aligned to the composer by the input area's padding, and its one action is a 44px
 target. (3) The task heading reads as three groups without dropping a word: where I am (the
@@ -1250,7 +1250,7 @@ reconnect between the first render and the subscribe is not missed
 state never blocks anyone). While offline, one non-modal `role="status"` banner sits above the
 message list in personal and classroom chat alike: "인터넷 연결이 끊겼어요. 만든 파일과 쓰던 글은
 그대로 있어요. 연결되면 다시 보낼 수 있어요." It has no button, no capability or score label, no
-transition, and keeps the panel foreground text on the stop-notice surface; amber (`--hp-warn`)
+transition, and keeps the panel foreground text on the stop-notice surface; amber (`--hp-border-warn-default`)
 is only the 4 px left edge, so text contrast does not depend on it. Sending is held, never
 dropped: every learner turn goes through one gate (`guardSend`; ChatPanel's `sendWhenOnline`,
 App's `verifyWhenOnline`): the composer send and the parked-message send, retrying a kept
@@ -2692,7 +2692,7 @@ study, P1, 2026-10-20; extends REQ-C7 / S-04 #48). A broken panel does not take 
     in its fallback instead: "지금은 보낼 수 없어요. 다시 불러오기를 눌러 이유를 확인해 주세요."
     A held send therefore never looks like a silent dead composer.
   - No error text, stack or capability label is shown.
-  - Learner text uses the type-scale tokens (`--hp-text-body`, ≥14px in personal chat,
+  - Learner text uses the type-scale tokens (`--hp-font-body`, ≥14px in personal chat,
     REQ-STUDIO-TYPE-SCALE).
   - The panel keeps a real 1px border that turns CanvasText under forced colors, and the button
     keeps the global forced-colors control boundary (REQ-STUDIO-FORCED-COLORS).
@@ -3632,3 +3632,180 @@ successful sibling attachments and the existing per-item retry/remove semantics
 remain intact. Batch attachment-count limits remain picker policy notices.
 Behavioral check: `test/attachment-error-design.test.tsx` mounts personal and classroom
 ChatPanel, diagnoses causes and checks actual host/retry/preparation events.
+
+## Semantic colour roles and token order (CGP-DS-D-001)
+
+DES-CGP-DS-01, traces to CGP-DS-R-001 (SX-49). Product Intent: one readable vocabulary for
+colour, so a learner surface cannot quietly pair a dark-only colour with a light surface.
+
+- `webview-ui/src/main.tsx` imports `tokens.css` as its first statement, and `tokens.css`
+  starts with `@import "./designTokens.css"`. The stylesheet bundled from `main.tsx` opens
+  with the primitive tokens, then the role tokens, before any component rule.
+- Colour roles are named `--hp-{text|bg|border|ring}-{role}-{state}`. The category is the
+  property that paints the colour, the role is its use, and the state is `default`, `hover`
+  or `selected`. Type-scale sizes are `--hp-font-{caption|body|lead|step}`, so a
+  `--hp-text-*` name is always a text colour. In `tokens.css` no other `--hp-*` name carries a
+  colour except `--hp-placeholder-mix`, an input of the placeholder role. A component may keep
+  a private helper outside the four categories (`--hp-ai-can-do-muted` in `styles.css`) that
+  is built from a role.
+- Two themes bind every colour role explicitly: dark (forest) on `:root` and light (Paper)
+  on `[data-surface="growth"], .hp-reflection`. Since CGP-DS-D-002 the `:root` binding reads the
+  host theme with the forest value as its fallback (section below). Each is readable on its own: primary,
+  muted and placeholder text 4.5:1 on the app and panel backgrounds, inverse text 4.5:1 on
+  the accent fill, the control boundary and the focus ring 3:1. The accent and warn text
+  roles keep their forest values on Paper (lime 1.2:1, amber 2.0:1 there), so on Paper they
+  mark icons and edges only and wording takes the primary text role.
+- The computed `:root` and Paper custom properties resolve every `--hp-*` name that a
+  component reads in its CSS or inline TSX style. Every role defined there is read by a
+  component. Component CSS reads roles and never declares one, except inside
+  `@media (forced-colors: active)`.
+- The `start.css` `--studio-*` aliases are gone. The personal task workspace keeps its
+  host-theme `--tw-*` family (DEC-27), and Chalk pages keep their page-local palettes
+  (DEC-DS-D-001 in the research decisions).
+
+Test: `extensions/hypeproof-chat/test/semantic-tokens.smoke.mjs` (computed snapshot,
+bundled order and 12 negative controls).
+
+## Host theme mapping (CGP-DS-D-002)
+
+DES-CGP-DS-02, traces to CGP-DS-R-003 (REQ-CGP-DS-02). Product Intent: the lesson surfaces read
+in whatever VS Code theme the learner runs, and the HypeProof Studio theme still draws the HP
+palette exactly.
+
+- Each `:root` colour role in `tokens.css` reads the VS Code theme colour that plays the same
+  part, with the forest value as its fallback:
+
+  | Role | Host source |
+  |---|---|
+  | `--hp-text-primary-default` | `--vscode-foreground` |
+  | `--hp-text-muted-default`, `--hp-border-muted-default`, `--hp-border-control-hover` | `--vscode-descriptionForeground` |
+  | `--hp-text-accent-default` | `--vscode-textLink-foreground` |
+  | `--hp-text-warn-default`, `--hp-border-warn-default` | `--vscode-list-warningForeground`, then `--vscode-editorWarning-foreground` |
+  | `--hp-text-inverse-default` · `--hp-bg-accent-default` | `--vscode-button-foreground` · `--vscode-button-background` |
+  | `--hp-bg-app-default`, `--hp-bg-control-selected` | `--vscode-editor-background` |
+  | `--hp-bg-control-hover`, `--hp-bg-control-pressed` | derived from `--hp-text-primary-default` (CGP-DS-D-003, below) |
+  | `--hp-bg-panel-default` | `--vscode-quickInput-background` |
+  | `--hp-border-divider-default` | `--vscode-panel-border` |
+  | `--hp-border-accent-default`, `--hp-border-control-selected`, `--hp-ring-focus-default` | `--vscode-focusBorder` |
+  | `--hp-text-placeholder-default` | `--vscode-input-placeholderForeground` (CGP-DS-R-019) |
+
+- Fixed, with no host source: `--hp-border-control-default` (`#748F79`; no VS Code default
+  theme draws a control boundary at 3:1, DES-11, while this value is ≥3:1 on every default
+  theme's app and panel surface) and the Paper chip pair `--hp-text-paper-default` /
+  `--hp-bg-paper-default`.
+- Under the HypeProof Studio theme (`media/hypeproof-theme.json`) the fallback-free values
+  equal the HP palette: the theme sets every source key above to the forest value. It gains
+  `descriptionForeground: #ACB9A5` and `list.warningForeground: #E6A373` for this.
+- Under Light+ every text pair is ≥4.5:1: each text role on the app surface, the panel surface
+  and the webview body (`sideBar.background`), the CTA ink on the CTA, the Paper chip pair, the
+  placeholder in a field, and every colour/background pair a component rule declares together.
+  On light theme kinds (`body.vscode-light`, `body.vscode-high-contrast-light`) the muted text
+  is the description colour pulled 20% toward the foreground, because Light+'s own
+  `#717171` is 4.4:1 on its `#F3F3F3` sidebar.
+- The same text pairs, and the control boundary and focus ring at 3:1, hold in Light Modern,
+  Dark+, Dark Modern, HC Dark, HC Light and both 2026 themes.
+- The start and disconnected screens (`.studio-start`, `.studio-disconnected`) are branded:
+  their artwork and cards are forest-only, so they bind every role back to the forest value
+  and draw no colour from the host theme. The Paper reading surfaces stay Paper (SX-54). The
+  mission header (`.hp-mission`) no longer forces the lime ring: it follows the host like the
+  rest of the lesson chat, and under the HypeProof Studio theme its ring is still lime.
+- The instructor band's connection and model labels take the primary text role: muted text on
+  the band's tint is 4.0:1 under Light+.
+
+Test: `extensions/hypeproof-chat/test/host-theme-mapping.smoke.mjs` (recorded theme table,
+re-derived from `theme-defaults` when `vscodium-base` is checked out, and 14 negative controls).
+Decision: DEC-DS-D-002 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+## State layers and control boundary (CGP-DS-D-003)
+
+DES-CGP-DS-04, traces to CGP-DS-R-005 (REQ-CGP-DS-04) and classroom-design DES-11. Product
+Intent: a learner or instructor sees that a control answers the pointer and the press, and
+can find every control's edge, without the edge depending on a hover. Both Studio and Chalk.
+
+- Studio state layers (`tokens.css`): `--hp-bg-control-hover` is
+  `color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent)`, so the text colour at 8%
+  over whatever surface the control sits on. `--hp-bg-control-pressed` is the same at 14% on dark
+  surfaces (`:root`, the branded start and disconnected screens) and 12% on light ones (Paper,
+  and `body.vscode-light` / `body.vscode-high-contrast-light`). Each scope that rebinds the
+  text role declares both again, because a custom property resolves where it is declared.
+- Every quiet Studio control drawn with `--hp-border-control-default` on a transparent fill paints
+  the hover layer on `:hover` and the pressed layer on `:active` (both `:not(:disabled)`):
+  `.hp-cta-quiet`; the lesson-mode quiet Send, Run, Retry, Install, trial-end, native-observation
+  and edit-save buttons; `.hps-access button`; `.hp-evidence-form button`; `.hps-long-step-stop`;
+  `.studio-nav button`, `.studio-secondary`, `.studio-choice`, `.studio-plan`;
+  `.hps-verdict-reason` (not while chosen) and `.hps-verdict-note-actions button`;
+  `.hps-refusal-banner button`. Before this, the lesson-mode quiet buttons had no hover state at
+  all and the start-screen choices sank to the app background.
+- The boundary that identifies a control is never derived from the text colour. The secondary CTA
+  (`.hp-cta-quiet`) and the lesson-mode quiet buttons draw `--hp-border-control-default`
+  (`#748F79`): 4.9:1 on `#151D19`, 4.1:1 on the panel, and still 3.9:1 / 3.3:1 against the hover
+  and pressed fills over `#151D19`. The old `#35483A` divider (1.75:1) is a decorative line only.
+- Chalk: every boundary that identifies a control (button, field, summary toggle, `a.btn`) is
+  ≥3:1 on every dark surface the page paints. The control line is the field line Chalk already
+  used on `/manage` (`#7D8994`, `--ds-*-boundary-81`): 5.2:1 on `#0F1418`, 4.3:1 on `#1D2630`.
+  It replaces `#3A4855`, `#3A4A3E` and `#2A2E36` on the control rules of `/authoring`,
+  `/budgets`, `/console`, `/issuer`, `/manage` and `/board`; dividers, panels, tags and fieldsets
+  keep their lines. A filled control (the primary button) is identified by its fill instead.
+- Chalk state layers: each page with controls (`/authoring`, `/budgets`, `/console`, `/issuer`,
+  `/manage`, `/board`, `/sharing`, `/learn`) declares hover = its text colour at 8% and pressed =
+  14% over the surface. Quiet buttons (`.ghost`, `.reset`, `.secondary`, a form's unclassed
+  second buttons, the board's ghost button) and every `/sharing` and `/learn` button paint them on
+  `:hover` / `:active`. On `/manage` one `!important` layer covers every non-primary button,
+  `a.btn` and `summary`, so no control's own fill shorthand (`#ops-summary`, `#ops-actions`,
+  `.pickby`) erases it; a chosen state filter and the seat row's accent action keep their own
+  state. No other hover or pressed fill remains on a non-primary control: the bulk-action
+  buttons no longer turn accent on hover, and the seat card no longer turns forest. Primary
+  buttons keep their accent hover. The generic accent hover no longer reaches `.secondary`
+  buttons, which it used to repaint.
+- In Studio the pressed rule follows every hover rule it ties with, so a press shows while the
+  pointer is still over the control.
+
+Tests: `extensions/hypeproof-chat/test/control-state-layers.smoke.mjs` (tokens per scope,
+hover/pressed coverage of every quiet control, pressed outranking hover in the cascade, the
+secondary CTA boundary; 20 negative controls) and `chalk/test/control-boundary.test.mjs` (served
+CSS of all nine Chalk pages with tokens resolved, the state layers on eight pages, the cascade
+that could erase them, and no other hover fill on a non-primary control; 19 negative controls). Decision: DEC-DS-D-003 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+## Status chip (CGP-DS-D-004)
+
+DES-CGP-DS-05, traces to CGP-DS-R-006 (REQ-CGP-DS-05) and extends SX-21 / SX-50. Product Intent:
+a learner reading the evidence drawer, or an instructor scanning the board, tells a real reaction
+from a simulated, self-reported or unverified one, and a blocked seat from the rest, by shape and
+wording first and by colour last, so the distinction survives black-and-white print and colour
+blindness. Both Studio and Chalk.
+
+- One chip: a 16px stroke icon in `currentColor` (never shrinks), a 14px label, 4px radius, 8px
+  inline padding and a soft background. Icon, radius and padding come from `--ds-c-status-chip-*` in
+  `designTokens.css`, shared by Studio and Chalk; Chalk's label also uses `--ds-c-status-chip-label`,
+  while Studio's label is `--hp-font-caption` (14px at the default text size) so it follows the
+  learner's text-size choice. The label wraps between eojeol
+  (`word-break: keep-all; overflow-wrap: anywhere`) and is never cut, so a chip in a narrow rail or
+  seat column keeps its whole Korean word.
+- Studio (`StatusChip.tsx`, `statusChipLogic.ts`, `styles.css .hp-status-chip`): five states,
+  each with a named intent, icon and label. real = success, check, 실제로 있었던 일;
+  simulated = caution, flask, 가상으로 해 본 것; self_reported = info, pencil, 내가 그렇다고 적은 것;
+  unverified = neutral, help, 아직 확인 전 (dashed edge); blocked = danger, ban, 막힘. The four
+  source-state labels are the SX-21 table itself. Unknown values fall to unverified, never real
+  (SX-46); blocked is accepted by exact match only. The soft fill is the intent colour at 14%
+  (neutral 10%) over the surface; the label stays in the body text colour (≥4.5:1 on every fill
+  over the HP palette's app and panel surfaces; other host themes are not measured) and the icon takes the intent colour (≥3:1). Under forced
+  colours the chip has a CanvasText boundary, text and icon on Canvas.
+- The evidence drawer draws each row's source state as this chip in the row's meta line
+  (`.hp-status-chip.hp-evidence-state`), with the same normalized state as `data-source-state`.
+  The simulated row keeps its amber edge; the old amber label text is replaced by the chip.
+  No Studio surface shows blocked yet; it is in the vocabulary so the chip set is one set.
+- Chalk (`chalk/src/lib/board-status.ts`): the board and manage seat chips take the same
+  geometry, draw a 16px stroke SVG (play, ban, alert, pause, check, help) instead of a Unicode
+  glyph, and fill with the state's own colour at 14% (unknown 10%, dashed) over the chip surface.
+  Labels, state mapping, borders and filters are unchanged.
+- Grayscale: no two states share an icon shape or a label (Studio's five, Chalk's six).
+- Not covered: the manage page's `.tag` attention labels and `wrapBadge` text (separate
+  components); Studio's other status marks (`tw-task-state`, `hps-verify-state`); a capture on a
+  real Windows high-contrast display.
+
+Tests: `extensions/hypeproof-chat/test/status-chip.smoke.mjs` (stylesheet rules: geometry, soft
+fill, contrast, no truncation, forced colours; 16 negative controls),
+`extensions/hypeproof-chat/test/status-chip.test.tsx` (rendered chips, grayscale signatures,
+evidence drawer rows), `chalk/test/board-status-css.test.mjs` (geometry, soft fill, contrast; 11
+negative controls) and `chalk/test/board-status.test.mjs` (16px SVG icons, distinct shapes).
+Decision: DEC-DS-D-004 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.

@@ -1,17 +1,9 @@
-/* SX-49: --studio-* are aliases of --hp-*. The selectors stay as they are and only the
- * values point at the tokens (design doc §디자인 시스템 "기존 스타일 이행"). The six
- * values are character-for-character the same colors as in tokens.css, so the render
- * result does not change. tokens.css is the single canonical source for the values. */
+/* SX-49 / CGP-DS-D-001: the start screen reads the semantic roles of tokens.css
+ * (--hp-{text|bg|border|ring}-{role}-{state}) directly; the former --studio-* aliases were a
+ * one-to-one indirection and are gone. tokens.css is the single canonical source. */
 .studio-start,.studio-disconnected {
-  --studio-bg:var(--hp-bg);
-  --studio-panel:var(--hp-panel);
-  --studio-line:var(--hp-line);
-  --studio-control-line:var(--hp-control-line);
-  --studio-text:var(--hp-ink);
-  --studio-muted:var(--hp-muted);
-  --studio-accent:var(--hp-accent);
-  color:var(--studio-text);
-  background:var(--studio-bg);
+  color:var(--hp-text-primary-default);
+  background:var(--hp-bg-app-default);
   font-family:var(--ds-c-studio-start-font-1);
   box-sizing:border-box;
   line-height:var(--ds-c-studio-start-typography-4)}
@@ -47,11 +39,11 @@
   display:block}
 .studio-brand-sub {
   font-weight:var(--ds-c-studio-start-typography-12);
-  color:var(--studio-muted)}
+  color:var(--hp-text-muted-default)}
 .studio-edition {
   font-size:var(--ds-c-studio-start-type-4);
   letter-spacing:var(--ds-c-studio-start-size-7);
-  color:var(--studio-muted)}
+  color:var(--hp-text-muted-default)}
 .studio-main {
   flex:1;
   display:grid;
@@ -66,13 +58,13 @@
   align-items:center;
   gap:var(--ds-c-studio-start-space-7);
   font-size:var(--ds-c-studio-start-type-1);
-  color:var(--studio-accent);
+  color:var(--hp-text-accent-default);
   letter-spacing:var(--ds-c-studio-start-size-3);
   margin:0 0 var(--ds-c-studio-start-space-3)}
 .studio-eyebrow>span {
   width:var(--ds-c-studio-start-size-37);
   height:var(--ds-c-studio-start-size-37);
-  background:var(--studio-accent);
+  background:var(--hp-bg-accent-default);
   border-radius:50%}
 .studio-intro h1 {
   font-size:clamp(var(--ds-c-studio-start-type-11),4.3vw,var(--ds-c-studio-start-type-12));
@@ -86,14 +78,14 @@
 .studio-lead {
   font-size:var(--ds-c-studio-start-type-13);
   line-height:var(--ds-c-studio-start-typography-15);
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   margin:0}
 .studio-process {
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
   gap:var(--ds-c-studio-start-space-20);
   margin-top:var(--ds-c-studio-start-space-33);
-  border-top:var(--ds-c-studio-start-size-3) solid var(--studio-line);
+  border-top:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default);
   padding-top:var(--ds-c-studio-start-space-34)}
 .studio-process>div>span {
   display:block;
@@ -105,12 +97,12 @@
   font-weight:var(--ds-c-studio-start-typography-2)}
 .studio-process p {
   font-size:var(--ds-c-studio-start-type-3);
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   margin:var(--ds-c-studio-start-space-12) 0 0;
   word-break:keep-all;
   overflow-wrap:anywhere}
 .studio-connect {
-  background:var(--studio-panel);
+  background:var(--hp-bg-panel-default);
   border:var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-4);
   border-radius:var(--ds-c-studio-start-radius-8);
   padding:var(--ds-c-studio-start-space-3);
@@ -125,7 +117,7 @@
 .studio-step {
   font-size:var(--ds-c-studio-start-type-3);
   letter-spacing:0;
-  color:var(--studio-muted)}
+  color:var(--hp-text-muted-default)}
 .studio-dot {
   display:none}
 .studio-connect h2 {
@@ -138,7 +130,7 @@
   overflow-wrap:anywhere}
 .studio-card-description {
   font-size:var(--ds-c-studio-start-type-9);
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   margin:0 0 var(--ds-c-studio-start-space-3);
   word-break:keep-all;
   overflow-wrap:anywhere}
@@ -149,14 +141,14 @@
 .studio-connect input {
   width:100%;
   background:var(--ds-c-studio-start-surface-11);
-  color:var(--studio-text);
-  border:var(--ds-c-studio-start-size-3) solid var(--studio-control-line);
+  color:var(--hp-text-primary-default);
+  border:var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default);
   border-radius:var(--ds-c-studio-start-radius-1);
   padding:var(--ds-c-studio-start-space-35) var(--ds-c-studio-start-space-1);
   font:inherit;
   font-size:var(--ds-c-studio-start-type-9)}
 .studio-connect input::placeholder {
-  color:var(--hp-placeholder)}
+  color:var(--hp-text-placeholder-default)}
 .studio-start button,.studio-disconnected button {
   font:inherit;
   cursor:pointer}
@@ -188,21 +180,21 @@
   cursor:default}
 .studio-help {
   font-size:var(--ds-c-studio-start-type-3);
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   margin:var(--ds-c-studio-start-space-24) 0 var(--ds-c-studio-start-space-37)}
 .studio-text-button {
   background:transparent;
   border:0;
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   display:block;
   margin:var(--ds-c-studio-start-space-36) auto 0;
   padding:var(--ds-c-studio-start-space-13);
   font-size:var(--ds-c-studio-start-type-1)!important}
 .studio-card-footer {
-  border-top:var(--ds-c-studio-start-size-3) solid var(--studio-line);
+  border-top:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default);
   padding-top:var(--ds-c-studio-start-space-18);
   margin-top:var(--ds-c-studio-start-space-37);
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   font-size:var(--ds-c-studio-start-type-3);
   display:flex;
   align-items:center;
@@ -211,7 +203,7 @@
   font-size:var(--ds-c-studio-start-type-13)}
 .studio-course {
   background:var(--ds-c-studio-start-surface-14);
-  border:var(--ds-c-studio-start-size-3) solid var(--studio-line);
+  border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default);
   border-radius:var(--ds-c-studio-start-radius-10);
   padding:var(--ds-c-studio-start-space-18);
   margin:0 0 var(--ds-c-studio-start-space-34)}
@@ -233,7 +225,7 @@
   gap:var(--ds-c-studio-start-space-1);
   margin-top:var(--ds-c-studio-start-space-24)}
 .studio-course dt {
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   flex-shrink:0}
 .studio-course dd {
   margin:0;
@@ -241,7 +233,7 @@
   overflow-wrap:anywhere}
 .studio-status {
   font-size:var(--ds-c-studio-start-type-1);
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   margin-top:var(--ds-c-studio-start-space-1)}
 .studio-status:empty {
   display:none}
@@ -262,14 +254,14 @@
   display:flex;
   align-items:center;
   gap:var(--ds-c-studio-start-space-5);
-  border-top:var(--ds-c-studio-start-size-3) solid var(--studio-line);
+  border-top:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default);
   padding-top:var(--ds-c-studio-start-space-38);
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   font-size:var(--ds-c-studio-start-type-3)}
 .studio-bottom button {
   border:0;
   background:none;
-  color:var(--studio-text);
+  color:var(--hp-text-primary-default);
   padding:0;
   font-size:var(--ds-c-studio-start-type-1);
   white-space:nowrap}
@@ -277,7 +269,7 @@
   margin-left:auto;
   white-space:nowrap}
 .studio-start :focus-visible,.studio-disconnected :focus-visible {
-  outline:var(--ds-c-studio-start-size-7) solid var(--hp-ring);
+  outline:var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default);
   outline-offset:var(--ds-c-studio-start-size-7)}
 .studio-disconnected {
   padding:var(--ds-c-studio-start-space-26) var(--ds-c-studio-start-space-5);
@@ -290,7 +282,7 @@
   margin-top:var(--ds-c-studio-start-space-39)}
 .studio-disconnected p {
   font-size:var(--ds-c-studio-start-type-9);
-  color:var(--studio-muted);
+  color:var(--hp-text-muted-default);
   margin-bottom:var(--ds-c-studio-start-space-40);
   word-break:keep-all;
   overflow-wrap:anywhere}
@@ -371,27 +363,27 @@
   margin:var(--ds-c-studio-start-space-36) 0 0}
 
 
-.studio-start { background: radial-gradient(ellipse at 10% 8%, var(--ds-c-studio-start-surface-16), transparent 48%), var(--studio-bg); }
+.studio-start { background: radial-gradient(ellipse at 10% 8%, var(--ds-c-studio-start-surface-16), transparent 48%), var(--hp-bg-app-default); }
 .studio-intro h1 > span { color: var(--ds-c-studio-start-ink-12); }
 .studio-primary { background: var(--ds-c-studio-start-surface-17); color: var(--ds-c-studio-start-ink-13); }
 .studio-primary:hover:not(:disabled) { background: var(--ds-c-studio-start-surface-18); }
 .studio-nav { display: flex; gap: var(--ds-c-studio-start-space-7); }
-.studio-nav button { font: inherit; font-size: var(--ds-c-studio-start-type-1); color: var(--studio-text); background: transparent; border: var(--ds-c-studio-start-size-3) solid var(--studio-control-line); border-radius: var(--ds-c-studio-start-radius-10); padding: var(--ds-c-studio-start-space-12) var(--ds-c-studio-start-space-19); cursor: pointer; }
-.studio-nav button:hover { border-color: var(--ds-c-studio-start-boundary-6); color: var(--ds-c-studio-start-ink-12); }
-.studio-nav button:focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-start-size-7); }
+.studio-nav button { font: inherit; font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-start-radius-10); padding: var(--ds-c-studio-start-space-12) var(--ds-c-studio-start-space-19); cursor: pointer; }
+.studio-nav button:hover { background-color: var(--hp-bg-control-hover); border-color: var(--ds-c-studio-start-boundary-6); color: var(--ds-c-studio-start-ink-12); }
+.studio-nav button:focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }
 
 .studio-entry-options { display: grid; gap: var(--ds-c-studio-start-space-1); }
-.studio-secondary { background: transparent; color: var(--studio-text); border-color: var(--studio-control-line); }
-.studio-secondary:hover:enabled { background: var(--studio-bg); }
+.studio-secondary { background: transparent; color: var(--hp-text-primary-default); border-color: var(--hp-border-control-default); }
+.studio-secondary:hover:enabled { background: var(--hp-bg-control-hover); }
 /* SX-04 — peer options. Neither of the two is emphasized. The emphasized button
  * (Primary) is the single "코드 확인하기" that follows the choice. Inherits only
  * `.studio-primary`'s layout, with the emphasis taken out. */
 .studio-choice {
   width:100%;
-  border:var(--ds-c-studio-start-size-3) solid var(--studio-control-line);
+  border:var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default);
   border-radius:var(--ds-c-studio-start-radius-1);
   background:transparent;
-  color:var(--studio-text);
+  color:var(--hp-text-primary-default);
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -403,23 +395,26 @@
   word-break:keep-all;
   overflow-wrap:anywhere;
   transition:background var(--hp-dur-press) var(--hp-ease)}
-.studio-choice:hover:enabled { background: var(--studio-bg); }
+.studio-choice:hover:enabled { background: var(--hp-bg-control-hover); }
 .studio-choice:disabled { opacity:.55; cursor:default; }
 /* TUX-SP-12 — what the trial choice needs and gives, read before choosing. Quiet text, not a second button. */
 .studio-choice-group { display:grid; gap:var(--ds-c-studio-start-space-15); }
-.studio-choice-note { margin:0 var(--ds-c-studio-start-space-14); font-size:var(--ds-c-studio-start-type-3); line-height:var(--ds-c-studio-start-typography-5); color:var(--studio-muted); word-break:keep-all; overflow-wrap:anywhere; }
+.studio-choice-note { margin:0 var(--ds-c-studio-start-space-14); font-size:var(--ds-c-studio-start-type-3); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-muted-default); word-break:keep-all; overflow-wrap:anywhere; }
 .studio-choice-note span { display:block; }
 
 /* REQ-L12 — passes are a list of peer choices (SX-04): the selected one gets a border, never a second Primary. */
 .studio-plans { display:grid; gap:var(--ds-c-studio-start-space-2); margin-bottom:var(--ds-c-studio-start-space-19); }
-.studio-plan { width:100%; display:grid; grid-template-columns:1fr auto; gap:var(--ds-c-studio-start-space-14) var(--ds-c-studio-start-space-1); text-align:left; padding:var(--ds-c-studio-start-space-35) var(--ds-c-studio-start-space-36); border:var(--ds-c-studio-start-size-3) solid var(--studio-control-line); border-radius:var(--ds-c-studio-start-radius-1); background:transparent; color:var(--studio-text); cursor:pointer; font:inherit; word-break:keep-all; }
-.studio-plan[aria-checked="true"] { border-color:var(--studio-accent); background:var(--studio-bg); }
-.studio-plan:hover:enabled { background:var(--studio-bg); }
+.studio-plan { width:100%; display:grid; grid-template-columns:1fr auto; gap:var(--ds-c-studio-start-space-14) var(--ds-c-studio-start-space-1); text-align:left; padding:var(--ds-c-studio-start-space-35) var(--ds-c-studio-start-space-36); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); border-radius:var(--ds-c-studio-start-radius-1); background:transparent; color:var(--hp-text-primary-default); cursor:pointer; font:inherit; word-break:keep-all; }
+.studio-plan[aria-checked="true"] { border-color:var(--hp-border-control-selected); background:var(--hp-bg-control-selected); }
+.studio-plan:hover:enabled { background:var(--hp-bg-control-hover); }
 .studio-plan:disabled { opacity:.55; cursor:default; }
+/* CGP-DS-D-003 — pressed: the text colour at 14% over the surface (hover is 8%, tokens.css). After every :hover rule
+ * it ties with, so a press shows while the pointer is still over the control. */
+.studio-nav button:active, .studio-secondary:active:enabled, .studio-choice:active:enabled, .studio-plan:active:enabled { background: var(--hp-bg-control-pressed); }
 .studio-plan-name { font-size:var(--ds-c-studio-start-type-17); font-weight:var(--ds-c-studio-start-typography-3); }
-.studio-plan-name em { margin-left:var(--ds-c-studio-start-space-2); font-style:normal; font-size:var(--ds-c-studio-start-type-3); font-weight:var(--ds-c-studio-start-typography-8); color:var(--studio-accent); }
+.studio-plan-name em { margin-left:var(--ds-c-studio-start-space-2); font-style:normal; font-size:var(--ds-c-studio-start-type-3); font-weight:var(--ds-c-studio-start-typography-8); color:var(--hp-text-accent-default); }
 .studio-plan-price { font-size:var(--ds-c-studio-start-type-17); font-weight:var(--ds-c-studio-start-typography-3); text-align:right; }
-.studio-plan-for, .studio-plan-what { grid-column:1 / -1; font-size:var(--ds-c-studio-start-type-1); color:var(--studio-muted); }
+.studio-plan-for, .studio-plan-what { grid-column:1 / -1; font-size:var(--ds-c-studio-start-type-1); color:var(--hp-text-muted-default); }
 .studio-purchase-actions { display:flex; flex-wrap:wrap; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-20); }
 
 /* "GitHub에서 이어하기" — the choice that replaces the one Primary while a code is confirmed and
@@ -427,14 +422,14 @@
 .studio-github { display: grid; gap: var(--ds-c-studio-start-space-7); }
 .studio-github h3 { font-size: var(--ds-c-studio-start-type-9); font-weight: var(--ds-c-studio-start-typography-3); margin: 0; }
 .studio-repo-list { border: 0; margin: 0; padding: 0; display: grid; gap: var(--ds-c-studio-start-space-15); min-width: 0; }
-.studio-repo-list legend { font-size: var(--ds-c-studio-start-type-3); color: var(--studio-muted); padding: 0; margin-bottom: var(--ds-c-studio-start-space-15); }
-.studio-repo-list label, .studio-repo-one { display: flex; align-items: center; gap: var(--ds-c-studio-start-space-7); border: var(--ds-c-studio-start-size-3) solid var(--studio-control-line); border-radius: var(--ds-c-studio-start-radius-1); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); margin: 0; font-size: var(--ds-c-studio-start-type-9); cursor: pointer; }
+.studio-repo-list legend { font-size: var(--ds-c-studio-start-type-3); color: var(--hp-text-muted-default); padding: 0; margin-bottom: var(--ds-c-studio-start-space-15); }
+.studio-repo-list label, .studio-repo-one { display: flex; align-items: center; gap: var(--ds-c-studio-start-space-7); border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-start-radius-1); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); margin: 0; font-size: var(--ds-c-studio-start-type-9); cursor: pointer; }
 .studio-repo-list label:has(input:checked) { border-color: var(--ds-c-studio-start-boundary-6); }
 /* `.studio-connect input` styles the code field (width:100%, padding, border); undo it for radios,
  * or the radio takes the row and the name wraps one letter per line (seen in c-01-pick.png). */
 .studio-repo-list input[type="radio"] { width: auto; flex: none; margin: 0; padding: 0; border: 0; border-radius: 50%; background: none; accent-color: var(--ds-c-studio-start-ink-12); }
 .studio-repo-list span, .studio-repo-one span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.studio-repo-list small, .studio-repo-one small { flex-shrink: 0; font-size: var(--ds-c-studio-start-type-3); color: var(--studio-muted); }
+.studio-repo-list small, .studio-repo-one small { flex-shrink: 0; font-size: var(--ds-c-studio-start-type-3); color: var(--hp-text-muted-default); }
 .studio-repo-one { cursor: default; }
 .studio-github .studio-help { margin: 0; }
 
@@ -455,40 +450,40 @@
 .hp-inbox-quiet .hp-inbox-links li { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-start-space-2); align-items: center; min-width: 0; }
 .hp-inbox-quiet .hp-inbox-link-url { font-size: var(--ds-c-studio-start-type-1); opacity: .8; overflow-wrap: anywhere; min-width: 0; }
 .hp-inbox-quiet button { font: inherit; color: inherit; background: none; border: var(--ds-c-studio-start-size-3) solid currentColor; border-radius: var(--ds-c-studio-start-radius-3); min-height: var(--ds-c-studio-start-size-10); padding: var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-7); cursor: pointer; }
-.hp-inbox-quiet :focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-start-size-7); }
+.hp-inbox-quiet :focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }
 
 /* Personal account preview: a single primary sign-in action and plain pass choices. */
 .studio-account { border-bottom: var(--ds-c-studio-start-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-start-boundary-8)); padding-bottom: var(--ds-c-studio-start-space-5); margin-bottom: var(--ds-c-studio-start-space-2); }
 .studio-account h3 { font-size: var(--ds-c-studio-start-type-13); margin: var(--ds-c-studio-start-space-19) 0 var(--ds-c-studio-start-space-2); }
 .studio-account-identity { display: flex; flex-direction: column; gap: var(--ds-c-studio-start-space-13); }
-.studio-account-identity span, .studio-account-pass > span { font-size: var(--ds-c-studio-start-type-1); color: var(--vscode-descriptionForeground, var(--ds-c-studio-start-ink-14)); overflow-wrap: anywhere; }
+.studio-account-identity span, .studio-account-pass > span { font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .studio-account-pass { display: flex; flex-direction: column; gap: var(--ds-c-studio-start-space-12); padding: var(--ds-c-studio-start-space-19) 0; }
 .studio-account-pass .studio-choice { margin-top: var(--ds-c-studio-start-space-13); }
 
 /* Google's light button treatment keeps the multicolor mark on white. */
 .studio-account .studio-google { background: var(--ds-c-studio-start-surface-19); color: var(--ds-c-studio-start-ink-15); border: var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-9); border-radius: var(--ds-c-studio-start-radius-13); min-height: var(--ds-c-studio-start-size-42); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); justify-content: center; gap: var(--ds-c-studio-start-space-1); font-family: var(--ds-c-studio-start-font-2); font-size: var(--ds-c-studio-start-type-17)!important; font-weight: var(--ds-c-studio-start-typography-8)!important; }
 .studio-account .studio-google:hover:not(:disabled) { background: var(--ds-c-studio-start-surface-20); }
-.studio-account .studio-google:focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-start-size-7); }
+.studio-account .studio-google:focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }
 .studio-account .studio-google svg { flex: 0 0 var(--ds-c-studio-start-size-43); margin: 0!important; }
 /* REQ-L13 ⑧ (CGP-SHELL-R-022, DES-SHELL-21) — 링크 복사 under the waiting sign-in: 44px target, 14px text.
    The 1px border is a real boundary, so forced colors draw it in ButtonText. */
 .studio-signin-copy-row { margin-top: var(--ds-c-studio-start-space-2); }
-.studio-account .studio-signin-copy { min-height: var(--ds-c-studio-start-size-8); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-36); border: var(--ds-c-studio-start-size-3) solid var(--studio-control-line); font-size: var(--ds-c-studio-start-type-17)!important; }
-.studio-signin-copy-hint { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: var(--ds-c-studio-start-type-17); line-height: var(--ds-c-studio-start-typography-5); color: var(--studio-muted); word-break: keep-all; overflow-wrap: anywhere; }
-.studio-signin-copy-status { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: var(--ds-c-studio-start-type-17); line-height: var(--ds-c-studio-start-typography-5); color: var(--studio-text); word-break: keep-all; overflow-wrap: anywhere; }
+.studio-account .studio-signin-copy { min-height: var(--ds-c-studio-start-size-8); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-36); border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); font-size: var(--ds-c-studio-start-type-17)!important; }
+.studio-signin-copy-hint { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: var(--ds-c-studio-start-type-17); line-height: var(--ds-c-studio-start-typography-5); color: var(--hp-text-muted-default); word-break: keep-all; overflow-wrap: anywhere; }
+.studio-signin-copy-status { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: var(--ds-c-studio-start-type-17); line-height: var(--ds-c-studio-start-typography-5); color: var(--hp-text-primary-default); word-break: keep-all; overflow-wrap: anywhere; }
 .studio-signin-copy-status:empty { margin: 0; }
 .studio-signin-copy-link { margin: var(--ds-c-studio-start-space-15) var(--ds-c-studio-start-space-14) 0; font-size: var(--ds-c-studio-start-type-17); line-height: var(--ds-c-studio-start-typography-5); overflow-wrap: anywhere; word-break: break-all; }
 .studio-signin-copy-link code { user-select: all; }
 /* TUX-SP-14/15/16 — free start card. Same tokens as the rest of the card; one Primary, quiet links. */
 .studio-free { display:grid; gap:var(--ds-c-studio-start-space-1); }
-.studio-question { margin:0 0 var(--ds-c-studio-start-space-14); font-size:var(--ds-c-studio-start-type-2); line-height:var(--ds-c-studio-start-typography-5); font-weight:var(--ds-c-studio-start-typography-2); color:var(--studio-text); word-break:keep-all; }
+.studio-question { margin:0 0 var(--ds-c-studio-start-space-14); font-size:var(--ds-c-studio-start-type-2); line-height:var(--ds-c-studio-start-typography-5); font-weight:var(--ds-c-studio-start-typography-2); color:var(--hp-text-primary-default); word-break:keep-all; }
 .studio-free-links { display:flex; flex-wrap:wrap; justify-content:flex-start; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-18); margin:var(--ds-c-studio-start-space-13) 0 0 var(--ds-c-studio-start-space-42); }
 /* The free allowance is the offer itself: read before the question, in body text, not as a footnote. */
-.studio-free-allowance { margin:var(--ds-c-studio-start-space-42) 0 var(--ds-c-studio-start-space-15); font-size:var(--ds-c-studio-start-type-9); line-height:var(--ds-c-studio-start-typography-5); color:var(--studio-text); word-break:keep-all; }
+.studio-free-allowance { margin:var(--ds-c-studio-start-space-42) 0 var(--ds-c-studio-start-space-15); font-size:var(--ds-c-studio-start-type-9); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-primary-default); word-break:keep-all; }
 .studio-free-links .studio-text-button { margin:0; }
-.studio-free-guardian { color:var(--studio-text); text-decoration:underline; text-underline-offset:var(--ds-c-studio-start-size-15); margin:0 0 0 var(--ds-c-studio-start-space-42); }
+.studio-free-guardian { color:var(--hp-text-primary-default); text-decoration:underline; text-underline-offset:var(--ds-c-studio-start-size-15); margin:0 0 0 var(--ds-c-studio-start-space-42); }
 /* A calm notice, not an error: today's free budget is gone or paused. No red, no countdown. */
-.studio-notice { margin:0; font-size:var(--ds-c-studio-start-type-1); line-height:var(--ds-c-studio-start-typography-4); color:var(--studio-text); background:var(--studio-panel); border:var(--ds-c-studio-start-size-3) solid var(--studio-line); border-radius:var(--ds-c-studio-start-radius-1); padding:var(--ds-c-studio-start-space-1); word-break:keep-all; }
+.studio-notice { margin:0; font-size:var(--ds-c-studio-start-type-1); line-height:var(--ds-c-studio-start-typography-4); color:var(--hp-text-primary-default); background:var(--hp-bg-panel-default); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default); border-radius:var(--ds-c-studio-start-radius-1); padding:var(--ds-c-studio-start-space-1); word-break:keep-all; }
 .studio-guardian-pay { display:grid; justify-items:center; gap:var(--ds-c-studio-start-space-2); margin:0 0 var(--ds-c-studio-start-space-1); }
 .studio-guardian-pay img { background:var(--ds-c-studio-start-surface-19); border-radius:var(--ds-c-studio-start-radius-3); padding:var(--ds-c-studio-start-space-15); }
 .studio-guardian-pay .studio-help { margin:0; text-align:center; }
@@ -504,7 +499,7 @@
 }
 
 /* REQ-STUDIO-JOIN-LINK (DES-SHELL-04) — the class a join link named, above the empty code field. */
-.studio-join-link { margin:0 0 var(--ds-c-studio-start-space-18); padding:var(--ds-c-studio-start-space-1) var(--ds-c-studio-start-space-19); border:var(--ds-c-studio-start-size-3) solid var(--studio-line); border-left:var(--ds-c-studio-start-size-15) solid var(--studio-accent); border-radius:var(--ds-c-studio-start-radius-1); background:var(--ds-c-studio-start-surface-14); }
-.studio-join-class { margin:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-7); font-size:var(--ds-c-studio-start-type-17); color:var(--studio-muted); }
-.studio-join-class strong { color:var(--studio-text); font-size:var(--ds-c-studio-start-type-13); font-weight:var(--ds-c-studio-start-typography-7); overflow-wrap:anywhere; }
-.studio-join-help { margin:var(--ds-c-studio-start-space-15) 0 0; font-size:var(--ds-c-studio-start-type-17); line-height:var(--ds-c-studio-start-typography-5); color:var(--studio-muted); word-break:keep-all; overflow-wrap:anywhere; }
+.studio-join-link { margin:0 0 var(--ds-c-studio-start-space-18); padding:var(--ds-c-studio-start-space-1) var(--ds-c-studio-start-space-19); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default); border-left:var(--ds-c-studio-start-size-15) solid var(--hp-border-accent-default); border-radius:var(--ds-c-studio-start-radius-1); background:var(--ds-c-studio-start-surface-14); }
+.studio-join-class { margin:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-7); font-size:var(--ds-c-studio-start-type-17); color:var(--hp-text-muted-default); }
+.studio-join-class strong { color:var(--hp-text-primary-default); font-size:var(--ds-c-studio-start-type-13); font-weight:var(--ds-c-studio-start-typography-7); overflow-wrap:anywhere; }
+.studio-join-help { margin:var(--ds-c-studio-start-space-15) 0 0; font-size:var(--ds-c-studio-start-type-17); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-muted-default); word-break:keep-all; overflow-wrap:anywhere; }

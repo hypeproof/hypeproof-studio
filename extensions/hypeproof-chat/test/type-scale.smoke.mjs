@@ -461,17 +461,17 @@ function check(files) {
   const fontRules = (f) => rules.filter((r) => r.file === f && !r.media.some((m) => /forced-colors/.test(m)) && r.decls.some((d) => d.prop === "font-size"));
 
   // 1. Tokens exist with DES-CGP-DS-09 values and are declared where the text-size step is set.
-  const tokenRule = rules.find((r) => r.file === "tokens.css" && r.media.length === 0 && r.decls.some((d) => d.prop === "--hp-text-caption"));
+  const tokenRule = rules.find((r) => r.file === "tokens.css" && r.media.length === 0 && r.decls.some((d) => d.prop === "--hp-font-caption"));
   const tokens = Object.fromEntries((tokenRule?.decls ?? []).map((d) => [d.prop, d.value]));
   for (const [name, want] of Object.entries(TOKENS)) if (tokens[name] !== want) findings.push(`tokens.css: ${name} is ${tokens[name] ?? "missing"}, want ${want}`);
   if (tokenRule && !/(^|, )\.hps-shell(,|$)/.test(tokenRule.text)) findings.push(`tokens.css: size tokens are declared on "${tokenRule?.text}", not also on .hps-shell, so the text-size step set on the shell cannot reach them`);
-  const stepRoot = rules.find((r) => r.file === "tokens.css" && r.text === ":root" && r.decls.some((d) => d.prop === "--hp-text-step"));
-  if (stepRoot?.decls.find((d) => d.prop === "--hp-text-step")?.value !== "0px") findings.push("tokens.css: :root { --hp-text-step: 0px } missing");
+  const stepRoot = rules.find((r) => r.file === "tokens.css" && r.text === ":root" && r.decls.some((d) => d.prop === "--hp-font-step"));
+  if (stepRoot?.decls.find((d) => d.prop === "--hp-font-step")?.value !== "0px") findings.push("tokens.css: :root { --hp-font-step: 0px } missing");
   for (const [size, step] of Object.entries(STEPS)) {
     if (!step) continue;
     const sel = `.hps-shell[data-chat-detail="personal"][data-text-size="${size}"]`;
-    const r = rules.find((x) => x.file === "chatDetails.css" && x.text === sel && x.decls.some((d) => d.prop === "--hp-text-step"));
-    if (r?.decls.find((d) => d.prop === "--hp-text-step").value !== `${step}px`) findings.push(`chatDetails.css: ${sel} { --hp-text-step: ${step}px } missing`);
+    const r = rules.find((x) => x.file === "chatDetails.css" && x.text === sel && x.decls.some((d) => d.prop === "--hp-font-step"));
+    if (r?.decls.find((d) => d.prop === "--hp-font-step").value !== `${step}px`) findings.push(`chatDetails.css: ${sel} { --hp-font-step: ${step}px } missing`);
   }
 
   // 2. Every font-size in the scope files is classified, and learner text is a token.
@@ -480,7 +480,7 @@ function check(files) {
     const sel = s.text;
     const d = r.decls.find((x) => x.prop === "font-size");
     if (NOT_LEARNER[sel]) continue;
-    if (!CLASSROOM_SHARED[sel] && !/^var\(--hp-text-[a-z]+\)$/.test(d.value) && !(sel.includes("[data-text-size=") && /var\(--hp-text/.test(d.value))) findings.push(`${f}: ${sel} { font-size: ${d.value} } is learner text without a --hp-text-* token`);
+    if (!CLASSROOM_SHARED[sel] && !/^var\(--hp-font-[a-z]+\)$/.test(d.value) && !(sel.includes("[data-text-size=") && /var\(--hp-font/.test(d.value))) findings.push(`${f}: ${sel} { font-size: ${d.value} } is learner text without a --hp-font-* token`);
     if (/:(hover|focus|active|disabled)/.test(sel)) continue;
     probes.push({ label: `${f}: ${sel}`, ctx: contextOf(sel), chain: chainOf(sel) });
   }
@@ -534,9 +534,9 @@ function check(files) {
 }
 
 const TOKENS = {
-  "--hp-text-caption": "calc(14px + var(--hp-text-step))",
-  "--hp-text-body": "calc(16px + var(--hp-text-step))",
-  "--hp-text-lead": "calc(18px + var(--hp-text-step))",
+  "--hp-font-caption": "calc(14px + var(--hp-font-step))",
+  "--hp-font-body": "calc(16px + var(--hp-font-step))",
+  "--hp-font-lead": "calc(18px + var(--hp-font-step))",
   "--hp-leading-label": "1.5",
   "--hp-leading-prose": "1.65",
 };
@@ -639,19 +639,19 @@ assert.ok(result.probes >= 120, `only ${result.probes} probes ran; the inventory
 // ─── Negative controls: each mutation must be caught ───────────────────────────────────────────
 const mutate = (file, fn) => ({ ...real, [file]: fn(real[file]) });
 const NEGATIVE = [
-  ["caption token below the floor", mutate("tokens.css", (s) => s.replace("--hp-text-caption: calc(14px + var(--hp-text-step))", "--hp-text-caption: calc(13px + var(--hp-text-step))")), /hp-text-caption is calc\(13px/],
+  ["caption token below the floor", mutate("tokens.css", (s) => s.replace("--hp-font-caption: calc(14px + var(--hp-font-step))", "--hp-font-caption: calc(13px + var(--hp-font-step))")), /hp-font-caption is calc\(13px/],
   ["size tokens declared on :root only (the shell's step cannot reach them)", mutate("tokens.css", (s) => s.replace(/:root, \.hps-shell \{/, ":root {")), /does not follow the text-size step|not also on \.hps-shell/],
-  ["a later personal rule with a literal 12px", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-tool-log-line { font-size: 12px; }\n`), /hps-tool-log-line.*(without a --hp-text|computes to 12px)/],
+  ["a later personal rule with a literal 12px", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-tool-log-line { font-size: 12px; }\n`), /hps-tool-log-line.*(without a --hp-font|computes to 12px)/],
   ["a narrow-only rule below the floor (caught at 690px, not at 1280px)", mutate("styles.css", (s) => `${s}\n@media (max-width: 700px) { .tw-workspace .hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: 12px; } }\n`), /hps-cit-chip computes to 12px at 690x900/],
-  ["a size token that is not defined", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-text-small); }\n`), /undefined custom property --hp-text-small/],
+  ["a size token that is not defined", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-font-small); }\n`), /undefined custom property --hp-font-small/],
   ["an !important base rule outranks the personal override", mutate("styles.css", (s) => s.replace(".hps-edit-note { margin: 0; font-size: 12px;", ".hps-edit-note { margin: 0; font-size: 12px !important;")), /hps-edit-note computes to 12px/],
   ["a shared class left without its personal override", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-effort,/, "\n")), /hps-effort computes to 12px/],
   ["the composer's tool buttons left at the compact-menu 13px", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input button,/, "\n").replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input:not\(\[data-expanded\]\) \.hps-tools-menu button,/, "\n")), /tools-menu button computes to 13px/],
   ["an unclassified new shared rule below 14px", mutate("styles.css", (s) => `${s}\n.hps-new-meta { font-size: 12px; }\n`), /hps-new-meta sets 12px and is not classified/],
-  ["the text-size step rule removed", mutate("chatDetails.css", (s) => s.replace('.hps-shell[data-chat-detail="personal"][data-text-size="large"] { --hp-text-step: 2px; }', "")), /data-text-size="large"\] \{ --hp-text-step: 2px \} missing/],
-  ["a rail metadata line back at 10px", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-task-meta \{([^}]*)font-size: var\(--hp-text-caption\)/, ".tw-task-meta {$1font-size: 10px")), /tw-task-meta.*(without a --hp-text|computes to 10px)/],
+  ["the text-size step rule removed", mutate("chatDetails.css", (s) => s.replace('.hps-shell[data-chat-detail="personal"][data-text-size="large"] { --hp-font-step: 2px; }', "")), /data-text-size="large"\] \{ --hp-font-step: 2px \} missing/],
+  ["a rail metadata line back at 10px", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-task-meta \{([^}]*)font-size: var\(--hp-font-caption\)/, ".tw-task-meta {$1font-size: 10px")), /tw-task-meta.*(without a --hp-font|computes to 10px)/],
   ["the AI-can-do note left at 12px in personal chat", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hp-rail-lesson-note,/, "\n")), /AI-can-do card note .* computes to 12px|hp-rail-lesson-note computes to 12px/],
-  ["the run note back to nowrap and rigid", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-run-note \{[^}]*\}/, ".tw-run-note { flex: 0 0 auto; color: var(--tw-muted); font-size: var(--hp-text-caption); white-space: nowrap; }")), /run note .* cannot give way at 390px/],
+  ["the run note back to nowrap and rigid", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-run-note \{[^}]*\}/, ".tw-run-note { flex: 0 0 auto; color: var(--tw-muted); font-size: var(--hp-font-caption); white-space: nowrap; }")), /run note .* cannot give way at 390px/],
   ["the trial count allowed to shrink again", mutate("taskWorkspace.css", (s) => s.replace(/\n\s*\.tw-heading \.hps-trial-left \{ flex-shrink: 0; \}/, "")), /trial remaining count can shrink at 390px/],
   ["the task title's full-text title removed", { ...real, "TaskWorkspace.tsx": real["TaskWorkspace.tsx"].replace(/className="tw-title-button" title=\{`[^`]*`\}/, 'className="tw-title-button" title="작업 이름 바꾸기"') }, /task title button is nowrap with an ellipsis but its markup has no title/],
   ["a stale classification (rule deleted from styles.css)", mutate("styles.css", (s) => s.replace(/\.hps-roll-cancel \{[^}]*\}/, "")), /hps-roll-cancel" no longer sets a font-size/],
@@ -663,5 +663,5 @@ for (const [what, files, expect] of NEGATIVE) {
   assert.ok(found.some((f) => expect.test(f)), `negative control "${what}" caught for the wrong reason:\n  ${found.slice(0, 4).join("\n  ")}`);
 }
 // Positive control: a learner rule that moves up the scale must not be flagged.
-assert.deepEqual(check(mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-text-body); }\n`)).findings, [], "positive control flagged");
+assert.deepEqual(check(mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-font-body); }\n`)).findings, [], "positive control flagged");
 console.log(`type-scale OK: ${result.probes} probes ≥${FLOOR}px across ${ENVS.length} viewports, text-size steps followed, ${NEGATIVE.length} negative controls caught`);

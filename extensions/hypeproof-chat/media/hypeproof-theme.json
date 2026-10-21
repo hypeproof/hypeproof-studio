@@ -4,6 +4,7 @@
   "type": "dark",
   "colors": {
     "foreground": "#F2F4E8",
+    "descriptionForeground": "#ACB9A5",
     "focusBorder": "#D5F279",
     "selection.background": "#52603F",
     "widget.border": "#35483A",
@@ -50,6 +51,7 @@
     "list.activeSelectionBackground": "#354B2E",
     "list.activeSelectionForeground": "#F2F4E8",
     "list.hoverBackground": "#253526",
+    "list.warningForeground": "#E6A373",
     "textLink.foreground": "#D5F279",
     "textLink.activeForeground": "#E2FF92",
     "notifications.background": "#202C24",

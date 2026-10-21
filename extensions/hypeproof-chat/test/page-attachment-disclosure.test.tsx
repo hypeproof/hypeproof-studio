@@ -209,7 +209,7 @@ async function run() {
     assert.equal(style(text)['max-height'], 'none');
     assert.equal(style(text).overflow, 'visible');
     for (const target of [toggle(), text]) {
-      assert.equal(style(target, false, true).outline, '2px solid var(--hp-ring)');
+      assert.equal(style(target, false, true).outline, '2px solid var(--hp-ring-focus-default)');
       assert.equal(style(target, false, true)['outline-offset'], '2px');
     }
     const meta = get('[data-testid="page-attachment-meta"]');

@@ -181,9 +181,9 @@ for (const [seat, config] of [["personal", personal], ["classroom", classroom]] 
 t("styles: shared rule, 14px+ type-scale tokens, a 44px action, forced-colors safe", () => {
   const css = designValues(readFileSync("webview-ui/src/styles.css", "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
   const rule = (sel: string) => new RegExp(`(?:^|\\})\\s*\\.${sel}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
-  ok(/font-size:\s*var\(--hp-text-body\)/.test(rule("hps-preview-recovery-text")), "cause line at body size");
-  ok(/font-size:\s*var\(--hp-text-caption\)/.test(rule("hps-preview-recovery-action")), "action label at caption size (14px floor)");
-  ok(/font-size:\s*var\(--hp-text-caption\)/.test(rule("hps-preview-recovery-detail")), "detail at caption size");
+  ok(/font-size:\s*var\(--hp-font-body\)/.test(rule("hps-preview-recovery-text")), "cause line at body size");
+  ok(/font-size:\s*var\(--hp-font-caption\)/.test(rule("hps-preview-recovery-action")), "action label at caption size (14px floor)");
+  ok(/font-size:\s*var\(--hp-font-caption\)/.test(rule("hps-preview-recovery-detail")), "detail at caption size");
   const action = rule("hps-preview-recovery-action");
   ok(/min-height:\s*44px/.test(action) && /min-width:\s*44px/.test(action), "44px target");
   ok(/flex-wrap:\s*wrap/.test(rule("hps-preview-recovery")), "wraps on a narrow panel");

@@ -52,7 +52,7 @@ async function main() {
   const onceHost: any = mountPoint(), onceRoot = createRoot(onceHost), once: any[] = [];
   await act(async () => onceRoot.render(<OutboundDialog textSize="xlarge" prompt={prompt} onAnswer={(...a) => once.push(a)} />));
   const onceDialog = onceHost.querySelector('dialog');
-  assert.equal(onceDialog.style['--hp-text-caption'], 'calc(14px + 4px)');
+  assert.equal(onceDialog.style['--hp-font-caption'], 'calc(14px + 4px)');
   await act(async () => fire(onceDialog, 'compositionstart')); await act(async () => fire(onceDialog, 'cancel')); assert.equal(once.length, 0, 'native cancel ignored during IME');
   await act(async () => fire(onceDialog, 'compositionend')); await act(async () => fire(onceDialog, 'cancel')); assert.deepEqual(once, [['r1', null]]);
   await press(onceHost.querySelector('[data-outbound-cancel]')); assert.equal(once.length, 1, 'answers once');

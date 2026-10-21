@@ -67,14 +67,14 @@ const checks = {
     const bad = [], s = ".hps-turn-review summary";
     if (value(css, s, "min-height") !== "44px") bad.push(`min-height ${value(css, s, "min-height")}`);
     if (value(css, s, "box-sizing") !== "border-box") bad.push("summary is not border-box");
-    if (value(css, `${s}:focus-visible`, "outline") !== "2px solid var(--hp-ring)") bad.push(`focus ring ${value(css, `${s}:focus-visible`, "outline")}`);
+    if (value(css, `${s}:focus-visible`, "outline") !== "2px solid var(--hp-ring-focus-default)") bad.push(`focus ring ${value(css, `${s}:focus-visible`, "outline")}`);
     if (value(css, `${s}:focus-visible`, "outline-offset") !== "2px") bad.push("focus ring offset");
     return bad;
   },
   "text follows the 14px caption token in every seat": (css) => {
     const bad = [];
-    if (value(css, ".hps-turn-review", "font-size") !== "var(--hp-text-caption)") bad.push(`base size ${value(css, ".hps-turn-review", "font-size")}`);
-    if (!/--hp-text-caption:\s*calc\(14px \+ var\(--hp-text-step\)\)/.test(css["tokens.css"])) bad.push("caption token floor is not 14px");
+    if (value(css, ".hps-turn-review", "font-size") !== "var(--hp-font-caption)") bad.push(`base size ${value(css, ".hps-turn-review", "font-size")}`);
+    if (!/--hp-font-caption:\s*calc\(14px \+ var\(--hp-font-step\)\)/.test(css["tokens.css"])) bad.push("caption token floor is not 14px");
     const personal = value(css, `${PERSONAL} .hps-turn-review`, "font-size");
     if (personal === undefined || (/px$/.test(personal) && parseFloat(personal) < 14)) bad.push(`personal override ${personal}`);
     return bad;
@@ -112,8 +112,8 @@ const NEGATIVE = [
   ["unified below 1024px, split from 1024px", "breakpoint 1024px -> 768px", mutate("styles.css", "@media (min-width: 1024px)", "@media (min-width: 768px)")],
   ["unified below 1024px, split from 1024px", "split view always shown", mutate("styles.css", ".hps-turn-split { display: none; }", ".hps-turn-split { display: grid; }")],
   ["summary is a 44px target with a visible focus ring", "summary 44px -> 30px", mutate("styles.css", ".hps-turn-review summary { min-height: 44px;", ".hps-turn-review summary { min-height: 30px;")],
-  ["summary is a 44px target with a visible focus ring", "focus ring removed", mutate("styles.css", ".hps-turn-review summary:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }", ".hps-turn-review summary:focus-visible { outline: none; }")],
-  ["text follows the 14px caption token in every seat", "base font 10px", mutate("styles.css", ".hps-turn-review { min-width: 0; font-size: var(--hp-text-caption); }", ".hps-turn-review { min-width: 0; font-size: 10px; }")],
+  ["summary is a 44px target with a visible focus ring", "focus ring removed", mutate("styles.css", ".hps-turn-review summary:focus-visible { outline: 2px solid var(--hp-ring-focus-default); outline-offset: 2px; }", ".hps-turn-review summary:focus-visible { outline: none; }")],
+  ["text follows the 14px caption token in every seat", "base font 10px", mutate("styles.css", ".hps-turn-review { min-width: 0; font-size: var(--hp-font-caption); }", ".hps-turn-review { min-width: 0; font-size: 10px; }")],
   ["added and removed lines are tinted, and still bordered in forced colours", "added background transparent", mutate("styles.css", '[data-kind="added"] { background: var(--vscode-diffEditor-insertedTextBackground, rgba(0,128,0,.12)); }', '[data-kind="added"] { background: transparent; }')],
   ["added and removed lines are tinted, and still bordered in forced colours", "forced-colours border removed", mutate("styles.css", "{ border-inline-start: 1px solid CanvasText; }", "{ }")],
   ["long diff lines wrap inside the column", "wrapping removed", mutate("styles.css", "white-space: pre-wrap; overflow-wrap: anywhere; }\n.hps-turn-diff-line[data-kind=\"added\"]", "white-space: pre; }\n.hps-turn-diff-line[data-kind=\"added\"]")],

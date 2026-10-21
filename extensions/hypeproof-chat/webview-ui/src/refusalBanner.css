@@ -7,12 +7,12 @@
   min-inline-size: 0;
   /* The surface and the text come from the same theme: when the theme defines no widget background,
      the surface is a tint of the text colour itself (as on every other card here), so the pair stays
-     readable in light and dark. The dark-only --hp-panel is never paired with a theme text colour. */
-  color: var(--vscode-foreground, var(--hp-ink));
-  background: var(--vscode-editorWidget-background, color-mix(in srgb, var(--vscode-foreground, var(--hp-ink)) 8%, transparent));
-  border: var(--ds-c-studio-refusalbanner-size-3) solid var(--hp-control-line);
+     readable in light and dark. The dark-only --hp-bg-panel-default is never paired with a theme text colour. */
+  color: var(--vscode-foreground, var(--hp-text-primary-default));
+  background: var(--vscode-editorWidget-background, color-mix(in srgb, var(--vscode-foreground, var(--hp-text-primary-default)) 8%, transparent));
+  border: var(--ds-c-studio-refusalbanner-size-3) solid var(--hp-border-control-default);
   border-radius: var(--ds-c-studio-refusalbanner-radius-10);
-  font-size: var(--hp-text-caption);
+  font-size: var(--hp-font-caption);
   line-height: var(--ds-c-studio-refusalbanner-typography-5);
   overflow-wrap: anywhere;
   animation: none;
@@ -28,11 +28,14 @@
   font: inherit;
   color: inherit;
   background: transparent;
-  border: var(--ds-c-studio-refusalbanner-size-3) solid var(--hp-control-line);
+  border: var(--ds-c-studio-refusalbanner-size-3) solid var(--hp-border-control-default);
   border-radius: var(--ds-c-studio-refusalbanner-radius-3);
   cursor: pointer;
 }
-.hps-refusal-banner button:focus-visible { outline: var(--ds-c-studio-refusalbanner-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-refusalbanner-size-7); }
+/* CGP-DS-D-003 — state layers: text colour at 8% (hover) and 14% / 12% light (pressed) over the banner. */
+.hps-refusal-banner button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-refusal-banner button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-refusal-banner button:focus-visible { outline: var(--ds-c-studio-refusalbanner-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-refusalbanner-size-7); }
 @media (forced-colors: active) {
   .hps-refusal-banner { border-color: CanvasText; }
   .hps-refusal-banner button { border-color: ButtonText; }

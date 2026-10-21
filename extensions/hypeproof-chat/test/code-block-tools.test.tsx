@@ -123,7 +123,7 @@ t("44px targets and wrap rules that beat the existing white-space rules", () => 
   ok(/min-height: 44px/.test(tool) && /min-width: 44px/.test(tool), "44px");
   ok(/\.hps-codeblock\[data-wrap="on"\] > pre \{[^}]*white-space: pre-wrap/.test(css), "wrap on");
   ok(/\.hps-codeblock\[data-wrap="off"\] > pre \{[^}]*white-space: pre;/.test(css), "wrap off");
-  ok(!/outline: none|border: 1px solid var\(--hp-line/.test(css), "focus ring removed or decorative border on a control");
+  ok(!/outline: none|border: 1px solid var\(--hp-border-divider-default/.test(css), "focus ring removed or decorative border on a control");
 });
 
 // ---------- Interactive: real clicks, stubbed clipboard ----------

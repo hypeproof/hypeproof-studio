@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { StatusChip } from "./StatusChip";
 import {
   EVIDENCE_TYPE_LABELS,
   PROVENANCE_FIELDS,
@@ -14,7 +15,6 @@ import {
   partitionBySourceState,
   provenanceLine,
   shortRevision,
-  sourceStateLabel,
   type EvidenceRowView,
 } from "./evidenceDrawerLogic";
 import type { SourceKind } from "@hypeproof/measurement-core/learning-events";
@@ -288,7 +288,7 @@ function renderRow(row: EvidenceRowView) {
       <p className="hp-evidence-meta">
         <span>{SOURCE_KIND_LABELS[row.source_kind] ?? SOURCE_KIND_LABELS.none}</span>
         <span>{provenanceLine(row)}</span>
-        <span className="hp-evidence-state">{sourceStateLabel(state)}</span>
+        <StatusChip state={state} className="hp-evidence-state" />
       </p>
       {row.adopted_from && <p className="hp-evidence-adopted">코치가 제안한 문장을 받아서 적었어요</p>}
     </li>

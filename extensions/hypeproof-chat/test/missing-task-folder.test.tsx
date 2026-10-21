@@ -151,8 +151,8 @@ t("classroom: no notice and no webview hold (the host keeps the existing refusal
 t("styles: learner text uses the type-scale tokens; the action is a 44px target", () => {
   const css = designValues(readFileSync("webview-ui/src/chatDetails.css", "utf8"));
   const rule = (sel: string) => new RegExp(`\\.hps-shell\\[data-chat-detail="personal"\\] \\.${sel}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
-  ok(/font-size:\s*var\(--hp-text-body\)/.test(rule("hps-missing-folder-text")), "sentence at body size");
-  ok(/font-size:\s*var\(--hp-text-caption\)/.test(rule("hps-missing-folder-note")), "note at caption size (14px floor)");
+  ok(/font-size:\s*var\(--hp-font-body\)/.test(rule("hps-missing-folder-text")), "sentence at body size");
+  ok(/font-size:\s*var\(--hp-font-caption\)/.test(rule("hps-missing-folder-note")), "note at caption size (14px floor)");
   const action = rule("hps-missing-folder-action");
   ok(/min-height:\s*44px/.test(action) && /min-width:\s*44px/.test(action), "44px target");
   ok(/flex-wrap:\s*wrap/.test(rule("hps-missing-folder")), "wraps to one column on a narrow panel");
