@@ -9,7 +9,8 @@
   font: inherit; font-size: var(--ds-c-studio-quoteaction-type-9); cursor: pointer;
   transition: background-color var(--hp-dur-press) var(--hp-ease);
 }
-.hps-quote-action:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, var(--ds-c-studio-quoteaction-surface-10)); }
+.hps-quote-action:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-quote-action:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 .hps-quote-action:disabled { cursor: default; opacity: .6; }
 .hps-quote-note { color: var(--vscode-descriptionForeground, var(--ds-c-studio-quoteaction-ink-6)); font-size: var(--ds-c-studio-quoteaction-type-1); }
 @keyframes hps-quote-in { from { opacity: 0; } to { opacity: 1; } }

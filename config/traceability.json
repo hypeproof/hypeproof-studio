@@ -9539,6 +9539,91 @@
           "path": "chalk/test/board-status.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-HOVER-PRESSED-FILLS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STATE-LAYERS",
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Hover and pressed fills and control boundaries everywhere (CGP-DS-R-005)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-HOVER-PRESSED-FILLS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOVER-PRESSED-FILLS",
+        "ST-IMP-STATE-LAYERS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/citationPreview.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/codeBlock.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/quoteAction.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/localReview.css"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/budgets.html"
+        },
+        {
+          "path": "chalk/src/ui/console.html"
+        },
+        {
+          "path": "chalk/src/ui/issuer.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-HOVER-PRESSED-FILLS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOVER-PRESSED-FILLS",
+        "ST-IMP-HOVER-PRESSED-FILLS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/hover-pressed-fills.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/hover-pressed-fills.test.mjs"
+        }
+      ]
     }
   ]
 }

@@ -195,7 +195,7 @@ const negatives = [
   ["2a every quiet control paints the hover layer", "refusal banner hover removed", mutate("refusalBanner.css", ".hps-refusal-banner button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }\n", "")],
   ["2a every quiet control paints the hover layer", "studio nav hover fill removed", mutate("start.css", ".studio-nav button:hover { background-color: var(--hp-bg-control-hover); ", ".studio-nav button:hover { ")],
   ["2b every quiet control paints the pressed layer", "studio pressed rule removed", mutate("start.css", ".studio-nav button:active, .studio-secondary:active:enabled, .studio-choice:active:enabled, .studio-plan:active:enabled { background: var(--hp-bg-control-pressed); }\n", "")],
-  ["2b every quiet control paints the pressed layer", "quiet pressed paints hover", mutate("styles.css", "{ background-color: var(--hp-bg-control-pressed); }", "{ background-color: var(--hp-bg-control-hover); }")],
+  ["2b every quiet control paints the pressed layer", "quiet pressed paints hover", mutate("styles.css", "{ background: var(--hp-bg-control-pressed); }", "{ background: var(--hp-bg-control-hover); }")],
   ["2b every quiet control paints the pressed layer", "verdict pressed removed", mutate("chatDetails.css", ".hps-verdict-reason:active:not(:disabled):not([aria-pressed=\"true\"]), ", "")],
   ["2d while pressed", "studio pressed rule back before the choice/plan hover rules", (() => {
     const t = real["start.css"];

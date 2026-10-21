@@ -3809,3 +3809,54 @@ fill, contrast, no truncation, forced colours; 16 negative controls),
 evidence drawer rows), `chalk/test/board-status-css.test.mjs` (geometry, soft fill, contrast; 11
 negative controls) and `chalk/test/board-status.test.mjs` (16px SVG icons, distinct shapes).
 Decision: DEC-DS-D-004 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+## Hover and pressed fills and control boundaries everywhere (CGP-DS-R-005)
+
+REQ-CGP-DS-04, P0, Both; traces to CGP-DS-004 and classroom-design DES-11; builds on CGP-DS-D-003
+above. Product Intent: every control answers the pointer and the press the same way in any theme,
+and a learner or instructor can find every field and secondary button by its edge.
+
+- Hover and pressed fills derive from the foreground via `color-mix`. Every `:hover` / `:active` fill
+  in the Studio webview CSS is one of four layers:
+  - quiet (transparent) controls: `--hp-bg-control-hover` / `--hp-bg-control-pressed`, the text role
+    at 8% / 12–20% (CGP-DS-D-003);
+  - filled controls (the Primary, the start screen's Google button, secondary-filled buttons,
+    citation chips, the task list's New button): `--hp-bg-layer-hover` / `--hp-bg-layer-pressed`,
+    the control's own foreground (`currentColor`) at 8% / 14%, drawn as a `background-image` over its
+    resting fill.
+  No hover reads a host hover colour (`list.hoverBackground`, `toolbar.hoverBackground`,
+  `button.hoverBackground`, `button.secondaryHoverBackground`), a literal, an opacity drop or a
+  brightness filter. Under the HypeProof Studio theme and Dark+/Light+ the personal chat's ghost
+  buttons look the same as before (`#29342C` for `#253526`, `#323233` for `#2A2D2E`, `#E7E7E7` for
+  `#E8E8E8`); the webview no longer depends on a host key for it.
+- Every painted hover has a pressed rule of the same selector shape later in the same file, so a
+  press shows while the pointer is still over the control. No resting rule that sets a control's
+  fill may out-rank its hover: the personal chat's chips and reply choices and the classroom
+  composer's tools button and tools menu restate both states, because their resting rule outranked
+  the shared hover and no hover showed there at all. A quiet layer on a control that also has a
+  filled layer clears the image, so the two never stack.
+- Boundaries that identify a control never derive from the foreground. Every field (the classroom
+  and personal composers, edit box, naming, model, effort, access, notification and task-title
+  inputs, local review, the observation, publish and evidence-note forms) and every bordered
+  secondary button (the kids' world chips, quiet task buttons, retry, dismiss on
+  the error, update, fatal and safety notices, turn-review and page-card actions, queued send,
+  delegation stop, chips, citation chips, catch-up, voice buttons, edit actions) draws
+  `--hp-border-control-default`. A secondary fill with no boundary is not allowed; a ghost control
+  with no border and a Primary named by its fill are. No `--hp-border-*` role and no control border
+  is a `color-mix`.
+- The control token is ≥3:1 against every surface a control sits on: `#748F79` is 4.9:1 on
+  `#151D19`, 4.6:1 on `#18231C`, 3.1:1 on the Dark+ field `#3C3C3C`, and 3.8:1 on the Dark+ error
+  notice tint. On light host themes it is the Paper control line `#76837A`: 4.0:1 on white, 3.1:1
+  on the Light+ error notice tint, where the forest value would be 2.8:1.
+- Chalk: the primary buttons' hover (`--hp-accent-hi`, `--ink-accent-hi`, two literals on `/manage`)
+  is the button's own ink at 8% over its accent fill, with a 14% pressed layer; the flow-bar and
+  `/manage` flow links and the seat rows take the page's text layers with a pressed rule. One
+  documented exception: a seat row promotes its action button to the Primary style while the row
+  is current or under the pointer. Chalk boundaries are measured ≥3:1 by CGP-DS-D-003's test; none
+  is a `color-mix`.
+
+Tests: `extensions/hypeproof-chat/test/hover-pressed-fills.smoke.mjs` (state tokens, every pointer
+fill in every webview stylesheet, pressed coverage, field and secondary boundaries, the control
+token against the HP palette, Paper, eight default themes, notice tints and field fills, and the
+cascade: a resting fill never out-ranks the hover, two layers never stack; 29 negative controls) and `chalk/test/hover-pressed-fills.test.mjs` (served CSS of all nine pages; 12 negative
+controls). Decision: DEC-DS-R-005 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.

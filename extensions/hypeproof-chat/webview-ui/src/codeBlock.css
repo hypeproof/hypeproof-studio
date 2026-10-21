@@ -14,6 +14,7 @@
   color: var(--vscode-descriptionForeground, var(--ds-c-studio-codeblock-ink-6));
   font: inherit; font-size: var(--ds-c-studio-codeblock-type-1); cursor: pointer;
 }
-.hps-codeblock-tool:hover { background: var(--vscode-list-hoverBackground, var(--ds-c-studio-codeblock-surface-2)); color: var(--vscode-foreground, var(--ds-c-studio-codeblock-ink-1)); }
+.hps-codeblock-tool:hover { background-color: var(--hp-bg-control-hover); color: var(--vscode-foreground, var(--ds-c-studio-codeblock-ink-1)); }
+.hps-codeblock-tool:active { background-color: var(--hp-bg-control-pressed); }
 .hps-codeblock-tool[aria-pressed="true"] { background: var(--vscode-toolbar-activeBackground, var(--ds-c-studio-codeblock-surface-9)); color: var(--vscode-foreground, var(--ds-c-studio-codeblock-ink-1)); }
 .hps-codeblock-status { margin-left: var(--ds-c-studio-codeblock-space-13); color: var(--vscode-descriptionForeground, var(--ds-c-studio-codeblock-ink-6)); }

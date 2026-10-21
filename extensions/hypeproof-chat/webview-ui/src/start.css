@@ -172,7 +172,9 @@
 .studio-primary>span {
   flex:0 0 auto}
 .studio-primary:hover:enabled {
-  background:var(--ds-c-studio-start-surface-13)}
+  background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover))}
+.studio-primary:active:enabled {
+  background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed))}
 .studio-primary:disabled {
   opacity:.5;
   cursor:wait}
@@ -366,7 +368,8 @@
 .studio-start { background: radial-gradient(ellipse at 10% 8%, var(--ds-c-studio-start-surface-16), transparent 48%), var(--hp-bg-app-default); }
 .studio-intro h1 > span { color: var(--ds-c-studio-start-ink-12); }
 .studio-primary { background: var(--ds-c-studio-start-surface-17); color: var(--ds-c-studio-start-ink-13); }
-.studio-primary:hover:not(:disabled) { background: var(--ds-c-studio-start-surface-18); }
+.studio-primary:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.studio-primary:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 .studio-nav { display: flex; gap: var(--ds-c-studio-start-space-7); }
 .studio-nav button { font: inherit; font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-start-radius-10); padding: var(--ds-c-studio-start-space-12) var(--ds-c-studio-start-space-19); cursor: pointer; }
 .studio-nav button:hover { background-color: var(--hp-bg-control-hover); border-color: var(--ds-c-studio-start-boundary-6); color: var(--ds-c-studio-start-ink-12); }
@@ -462,7 +465,8 @@
 
 /* Google's light button treatment keeps the multicolor mark on white. */
 .studio-account .studio-google { background: var(--ds-c-studio-start-surface-19); color: var(--ds-c-studio-start-ink-15); border: var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-9); border-radius: var(--ds-c-studio-start-radius-13); min-height: var(--ds-c-studio-start-size-42); padding: var(--ds-c-studio-start-space-7) var(--ds-c-studio-start-space-1); justify-content: center; gap: var(--ds-c-studio-start-space-1); font-family: var(--ds-c-studio-start-font-2); font-size: var(--ds-c-studio-start-type-17)!important; font-weight: var(--ds-c-studio-start-typography-8)!important; }
-.studio-account .studio-google:hover:not(:disabled) { background: var(--ds-c-studio-start-surface-20); }
+.studio-account .studio-google:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.studio-account .studio-google:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 .studio-account .studio-google:focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }
 .studio-account .studio-google svg { flex: 0 0 var(--ds-c-studio-start-size-43); margin: 0!important; }
 /* REQ-L13 ⑧ (CGP-SHELL-R-022, DES-SHELL-21) — 링크 복사 under the waiting sign-in: 44px target, 14px text.
