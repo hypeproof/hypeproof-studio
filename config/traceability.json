@@ -7160,6 +7160,37 @@
       ]
     },
     {
+      "id": "ST-IMP-CLASS-UPDATE-LINE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-AUTO-UPDATE",
+        "ST-IMP-CLASS-UPDATE-HOLD"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CLASS-UPDATE-LINE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-AUTO-UPDATE",
+        "ST-IMP-CLASS-UPDATE-LINE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/update-line.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-MOTION-PREFERENCE",
       "stage": "implementation",
       "owner": "jayleekr",

@@ -1094,6 +1094,21 @@ html, body, #root {
 }
 .hps-update-banner-dismiss:hover { background: rgba(255,255,255,0.06); }
 
+/* CGP-SHELL-D-001 (DES-SHELL-01): during class the update state is one line. 32px tall at most
+   (4 + 22 + 4 + 2 border), 14px text, nothing moves, theme foreground on the panel's own
+   background (no tint, no opacity), so its contrast is the theme's body-text contrast in dark
+   and light. At 320px the version ellipsizes first; the verb never shrinks or wraps. */
+.hps-update-line {
+  box-sizing: border-box; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px;
+  max-height: 32px; margin: 6px 12px 0; padding: 4px 10px;
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35)); border-radius: 6px;
+  background: transparent; color: var(--vscode-foreground, #F2F4E8);
+  font-size: 14px; line-height: 22px; white-space: nowrap; overflow: hidden;
+  animation: none; transition: none;
+}
+.hps-update-line-version { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hps-update-line-verb { flex: 0 0 auto; white-space: nowrap; }
+
 /* #278 Phase 3 — browser tool action log (auto-run + log, no modal). */
 /* #308 — inline notice for "페이지를 코치에게" (replaces the VS Code toast — a toast freezes the integrated browser) */
 /* #320 — AI disclosure at session start (Anthropic Usage Policy). Compact,
