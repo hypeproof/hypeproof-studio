@@ -3302,6 +3302,41 @@ AB (own files kept) and OWNERSHIP are design links, not measured outcomes.
   `activity-trash-seat.smoke.mjs` and `activity-trash-reach.smoke.mjs`. Installed-app
   visual acceptance is separate.
 
+#### Trash in 내 작품 (CGP-KNOW-D-013 / DES-KNOW-24)
+
+Product Intent #1 (recoverable deliberate removal); may expose OWNERSHIP. Same store,
+same default-off setting and same gates as the commands above; the webview only asks.
+
+- **Where.** The task workspace's file list (`작업 폴더의 파일`, the provenance inventory)
+  stands in for `내 작품`, which has no drawer yet (DES-KNOW-20); the panel is named
+  `내 작품` for assistive technology. So the panel exists only on a learner seat with a
+  task workspace (personal, trial); classroom and lesson seats keep the commands only.
+  While the trash is available each file row offers `휴지통으로 옮기기` and the last item
+  is the trash entry `휴지통 · N개`, which opens the list (path, deletion time, `복원`,
+  `영구 삭제…`). Unavailable (setting off, instructor, unknown profile, changing
+  activity) shows neither.
+- **Move.** The host shows its native modal naming the file (one Cancel). The press is
+  refused, before any confirm, while a turn runs, a send is pending, a restore holds the
+  folder, the buffer is unsaved, folder write consent refuses, or the task scope the list
+  was issued for has changed. The confirm holds the send reservation. The scope, consent
+  and unsaved checks run again after the confirm.
+- **Toast.** A move shows `휴지통으로 옮겼어요 · 되돌리기` in a `role=status`,
+  `aria-live=polite` region for 8 seconds. `되돌리기` is a real button of at least 44 × 44px.
+  Hover, focus inside the toast, or a pending press holds it; when that ends, a fresh 8
+  seconds start. A new answer starts a new toast and drops what held the old one. A task
+  or scope change drops it. A cancelled confirm shows no toast.
+- **Undo / 복원.** Restores the exact id the move returned, without a confirm: restore
+  never overwrites (a suffixed name on collision) and the toast names the actual path.
+- **영구 삭제.** A webview dialog names the file with `취소` focused; Escape closes it and
+  returns focus to its opener; an open IME composition blocks the press. Confirming
+  reaches the host's native destructive confirm (one Cancel) as well.
+- One press at a time: a double press sends one request, a second request while one runs
+  is refused, and every answer carries the request id; answers for another id or task are
+  ignored. A refusal stays on screen with `다시 확인`.
+- Tests: `activity-trash-panel.smoke.mjs` (real provider and store),
+  `activity-trash.test.tsx` (real component), `activity-trash-css.smoke.mjs` (44px,
+  type step, focus ring, forced colours, with negative controls).
+
 ### REQ-STUDIO-WRITE-APPROVAL-CHIPS (CGP-AGENT-D-004 / DES-CGP-AGENT-05)
 
 Extend REQ-E1's optional write approval presentation, preserving its default-off

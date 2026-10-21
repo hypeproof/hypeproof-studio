@@ -1,6 +1,7 @@
 // REQ-STUDIO-ARTIFACT-PROVENANCE (CGP-KNOW-R-012) — the work folder's files in the 작업 자료 panel,
 // each with the provenance label the host derived from recorded events. Text plus a shape symbol,
-// never colour alone; no score or capability name.
+// never colour alone; no score or capability name. With the activity trash on, each row can move
+// its file to the trash (CGP-KNOW-D-013, ActivityTrashPanel).
 
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { provenanceHistoryText } from '../../src/artifactProvenanceView';
@@ -13,7 +14,13 @@ const NOTE = { fontSize: 11, padding: '0 18px', margin: '6px 0 8px', lineHeight:
  * `view` undefined: not answered yet; null: no work folder to describe. `onAsk` (CGP-KNOW-R-015)
  * is passed only where the seat may attach work-folder files; each row then offers 이 파일에 대해 묻기.
  */
-export function ArtifactProvenanceList({ view, onAsk }: { view: ArtifactProvenanceView | null | undefined; onAsk?: (path: string) => void }) {
+export function ArtifactProvenanceList({ view, onAsk, onTrash, trashPending = false }: {
+  view: ArtifactProvenanceView | null | undefined;
+  onAsk?: (path: string) => void;
+  /** CGP-KNOW-D-013 — present only while the activity trash is available; the host confirms natively. */
+  onTrash?: (path: string, button: HTMLButtonElement) => void;
+  trashPending?: boolean;
+}) {
   return <section className="tw-artifacts" aria-labelledby="task-artifacts-title" data-testid="artifact-provenance">
     <h3 id="task-artifacts-title" className="tw-source-list-title">작업 폴더의 파일</h3>
     {view === undefined ? <p className="tw-source-list-title" style={NOTE} role="status">파일 기록을 불러오는 중…</p>
@@ -28,6 +35,7 @@ export function ArtifactProvenanceList({ view, onAsk }: { view: ArtifactProvenan
             return <li key={entry.path}><div style={ROW} data-provenance={entry.kind}>
               <span>{entry.path}</span>
               <small><span aria-hidden="true" data-provenance-symbol>{entry.symbol}</span> <strong>{entry.label}</strong>{history && <> · 지금까지: {history}</>}</small>
+              {onTrash && <button type="button" className="tw-artifact-ask" data-trash-move="" aria-disabled={trashPending || undefined} aria-label={`휴지통으로 옮기기: ${entry.path}`} onClick={event => { if (!trashPending) onTrash(entry.path, event.currentTarget); }}>휴지통으로 옮기기</button>}
               {onAsk && <button type="button" className="tw-artifact-ask" aria-label={`${ASK_ABOUT_FILE_LABEL}: ${entry.path}`} onClick={() => onAsk(entry.path)}>{ASK_ABOUT_FILE_LABEL}</button>}
             </div></li>;
           })}</ul>}

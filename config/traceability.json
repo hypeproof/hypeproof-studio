@@ -8051,6 +8051,24 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityTrashView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityTrashPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ArtifactProvenanceList.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
         }
       ]
     },
@@ -8074,6 +8092,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/activity-trash-reach.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-trash-panel.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-trash.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-trash-css.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/task-workspace.md"
         }
       ]
     },

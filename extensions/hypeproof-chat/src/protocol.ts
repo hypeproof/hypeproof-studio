@@ -694,6 +694,9 @@ export type WebviewMessage = (
   | { type: "turnKeep"; turnId: string }
   | { type: "turnReviewClose"; turnId: string }
   // REQ-STUDIO-ARTIFACT-PROVENANCE — the 작업 자료 panel asks for the work folder's provenance list.
+  // CGP-KNOW-D-013 — the 내 작품 panel's trash: list, and one press (move a file, restore or purge an item) bound to the listed scope.
+  | { type: "activityTrashRequest" }
+  | { type: "activityTrashAction"; requestId: string; scope: string; action: import("./activityTrashView").ActivityTrashAction; target: string }
   | { type: "artifactProvenanceRequest" }
   // REQ-STUDIO-PAGE-CARD — a press on a page card row; the host acts only on a row of a card it issued, inside the work folder.
   | { type: "pageCardsRequest" }
@@ -791,6 +794,8 @@ export type HostMessage = (
   /** REQ-STUDIO-PREVIEW-RECOVERY — the learner's preview tab as measured (server state, HTTP status); null = no preview tab. `result` answers a press. */
   | { type: "previewRecovery"; signals: import("./previewFailure").PreviewSignals | null; result?: import("./previewFailure").PreviewRecoveryResult }
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — one label per work-folder file, from recorded events only; null when there is no folder. */
+  /** CGP-KNOW-D-013 — the current activity's trash; null when unavailable. `requestId`/`result` answer one press. */
+  | { type: "activityTrashState"; view: import("./activityTrashView").ActivityTrashView | null; requestId?: string; result?: import("./activityTrashView").ActivityTrashResult }
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }

@@ -232,3 +232,26 @@ Capture personal/classroom at 1420px and 800px (320px is an additional stress ca
 Check arrow focus, Space selection, Enter confirmation, draft-preserving arrival
 and idle arrival. Physical IME, native screen-reader speech and forced-colors
 acceptance must be reported separately from synthetic DOM/browser tests.
+
+## Activity trash in 내 작품 (CGP-KNOW-D-013)
+
+- `test/activity-trash-panel.smoke.mjs`: the real provider routes the panel's requests into the
+  real encrypted store with real temporary files. Default off, instructor and no task workspace
+  give no view. Native confirm names the file with one Cancel; Cancel, a running turn, a pending
+  send, an unsaved buffer, folder refusal, a stale scope, traversal, folders and malformed request
+  ids never mutate. Move, Undo with identical SHA-256, suffixed restore, purge Cancel/confirm,
+  the send reservation during the confirm, a refused second press and a profile change during the
+  confirm.
+- `test/activity-trash.test.tsx`: the real component on the minimal DOM. Exact 7999/8000ms
+  expiry, hold on focus and hover with a fresh 8s after, a pending Undo holds, polite live copy
+  `휴지통으로 옮겼어요 · 되돌리기`, restore of the moved id, foreign answers ignored, refusal and
+  retry, double press, dialog naming the file with 취소 focused, Escape focus return, IME block,
+  task and scope changes. Focus: a pending press is `aria-disabled` (never `disabled`, which blurs
+  the focused button), and after a file move, 복원, 영구 삭제 or Undo the focus lands on the next
+  row's control, the restored file's row, or the 휴지통 entry, never `<body>`; the mini DOM sends
+  focus to `<body>` when the focused element is removed, as a browser does. Every rendered trash
+  control is matched against the real stylesheet for 44px (되돌리기 also 44px wide).
+- `test/activity-trash-css.smoke.mjs`: stylesheet rules with one negative control each: 44px
+  targets (되돌리기 44 × 44), caption type step, wrapping names, the 2px focus ring, forced colours.
+- Native dialog focus, physical IME, installed-app rendering and screen-reader output are
+  separate observations; the synthetic tests do not establish them.
