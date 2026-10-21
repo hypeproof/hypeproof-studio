@@ -1,0 +1,17 @@
+/* CGP-KNOW-D-006 — outbound confirmation dialog. */
+.hps-outbound { box-sizing: border-box; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; margin: auto; padding: 20px; border: 2px solid currentColor; border-radius: 12px; color: var(--vscode-editor-foreground, #e1e1e1); background: var(--vscode-editor-background, #202226); font: inherit; font-size: var(--hp-text-caption); line-height: 1.6; overflow-wrap: anywhere; }
+.hps-outbound::backdrop { background: rgba(0, 0, 0, .6); }
+.hps-outbound h2, .hps-outbound h3 { font: inherit; font-weight: 600; margin: 0 0 12px; }
+.hps-outbound p { margin: 0 0 8px; }
+.hps-outbound fieldset { min-width: 0; margin: 16px 0; padding: 0; border: 0; }
+.hps-outbound legend { padding: 0; margin-bottom: 8px; }
+.hps-outbound-item { display: flex; align-items: flex-start; gap: 8px; min-height: 44px; padding: 8px 0; }
+.hps-outbound-item input { flex: 0 0 auto; min-width: 20px; min-height: 20px; }
+.hps-outbound-excluded { border: 2px solid currentColor; padding: 12px; }
+.hps-outbound-excluded ul { margin: 0; padding-inline-start: 20px; }
+.hps-outbound-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.hps-outbound-actions button { min-width: 44px; min-height: 44px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 6px; padding: 8px 14px; }
+.hps-outbound :focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+.hps-outbound-actions .hps-outbound-send { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); border-color: transparent; }
+.hps-outbound-actions button:disabled { opacity: .5; }
+@media (forced-colors: active) { .hps-outbound, .hps-outbound-excluded { border-color: CanvasText; } }
