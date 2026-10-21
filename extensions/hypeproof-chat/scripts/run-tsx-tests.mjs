@@ -37,6 +37,7 @@ const OVERRIDES = {
   "write-approval-dialog": { banner: BANNER_POSTED },
   "outbound-dialog-app": { banner: BANNER_POSTED },
   "refusal-banner": { banner: BANNER_POSTED },
+  "attachment-error-design": { banner: BANNER_POSTED },
   "instructor-render": { logLevel: null },
   "missing-task-folder": { banner: BANNER_POSTED },
   "preview-recovery": { banner: BANNER_POSTED },

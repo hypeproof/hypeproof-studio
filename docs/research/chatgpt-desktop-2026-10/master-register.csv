@@ -823,7 +823,7 @@ CGP-KNOW-D-016,DES-KNOW-29,KNOW,design,"Info popover with rows 종류, 크기, �
 CGP-KNOW-D-017,DES-KNOW-30,KNOW,design,"Version list as a side panel: entries with actor chip (AI/나), relative time, 복원 button; compare toggle reuses existing diff view.",ADAPT,Studio,P0,CGP-KNOW-R-017,,,projects-library-memory.md:210
 CGP-KNOW-D-018,DES-KNOW-33,KNOW,design,"Memory-at-receiver line inside every outbound dialog, with icon + text.",ADAPT,Both,P1,CGP-KNOW-R-018,,,projects-library-memory.md:211
 CGP-KNOW-D-019,DES-KNOW-35,KNOW,design,Disk warning as a persistent bar above the composer.,ADAPT,Studio,P2,CGP-KNOW-R-019,,,projects-library-memory.md:212
-CGP-KNOW-D-020,DES-KNOW-37,KNOW,design,Attachment error renders inside the chip (red-outline plus text) and as a one-line message under the composer.,ADAPT,Studio,P0,CGP-KNOW-R-020,,,projects-library-memory.md:213
+CGP-KNOW-D-020,DES-KNOW-37,KNOW,design,Attachment error renders inside the chip (red-outline plus text) and as a one-line message under the composer.,ADAPT,Studio,P0,CGP-KNOW-R-020,,,projects-library-memory.md:214
 CGP-KNOW-D-021,DES-KNOW-38,KNOW,design,"Download status lines in the chat timeline, subordinate to answers (secondary text, 13px).",ADAPT,Studio,P2,CGP-KNOW-R-021,,,projects-library-memory.md:214
 CGP-KNOW-D-022,DES-KNOW-40,KNOW,design,"Memory state line ""AI 기억: 켜짐/꺼짐"" in the settings dialog and activity header disclosure.",ADAPT,Both,P0,CGP-KNOW-R-022,,,projects-library-memory.md:215
 CGP-KNOW-D-023,DES-KNOW-41,KNOW,design,"""AI가 기억하는 것"" list in the settings dialog: item text, date, source link, delete.",ADAPT,Studio,P0,CGP-KNOW-R-023,,,projects-library-memory.md:216

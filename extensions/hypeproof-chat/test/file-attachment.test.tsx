@@ -57,7 +57,7 @@ t("chip shows the path, the full text exactly, and 빼기", () => {
 t("negative control: no chip without an attachment", () => ok(!render({}).includes('data-testid="file-attachment"'), "chip"));
 t("a refusal is shown as an alert with its cause", () => {
   const html = render({ fileAttachError: FILE_REFUSAL_COPY.binary });
-  ok(/role="alert" data-testid="file-attach-error">글자로 된 파일/.test(html), "alert");
+  ok(/data-testid="file-attach-error">글자로 된 파일/.test(html), "polite inline error");
   ok(!render({}).includes("file-attach-error"), "no alert without an error");
 });
 t("classroom seat gets a tool menu only when the host grants file attach; never an instructor", () => {

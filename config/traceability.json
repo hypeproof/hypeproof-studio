@@ -8869,6 +8869,12 @@
       ],
       "sources": [
         {
+          "path": "extensions/hypeproof-chat/test/attachment-error-design.test.tsx"
+        },
+        {
+          "path": "e2e/attachment-error-geometry.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/attachment-preparation.smoke.mjs"
         },
         {

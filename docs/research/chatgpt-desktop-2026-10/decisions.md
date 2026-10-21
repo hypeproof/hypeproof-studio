@@ -80,3 +80,13 @@ capability grant, background upload or persistent minor-content store is added.
 Build on the merged CGP-KNOW-R-006 disclosure (`outboundConsent.ts`): every producer keeps its own immutable manifest and the single `confirmOutbound` chokepoint. Only the presentation changes. While a Studio chat webview is visible, the manifest opens as a native HTML `<dialog>` there: exact recipient (and each `also` recipient as its own block), one checkbox per item with its byte count, the fixed `포함하지 않는 것: AI 기억, 개인 메모` box, primary 보내기 and secondary 취소 with initial focus on 취소. Every checkbox starts unchecked, including the action's own item: REQ-KNOW-09's stricter no-preselection rule takes precedence over the design row's optional exception. All items of one manifest are one atomic payload, so 보내기 stays disabled until every item is checked; a partial selection never sends a subset. Cancel, Escape, closing the panel, a reload, a changed activity/task/folder/profile, a concurrent prompt or a 3-minute timeout send nothing. When no chat webview is visible (for example the report-problem command with the panel closed), the existing R-006 VS Code modal is used unchanged. Consent is never remembered.
 
 Register correction: DES-KNOW-09 is line 200 of projects-library-memory.md; line 199 belongs to the scope header. No adjacent backlog row is changed.
+
+## Attachment error presentation (CGP-KNOW-D-020)
+
+Agent implementation choice, not human policy approval: “one-line message” means
+one concise status entry below the composer, allowed to wrap rather than clip
+Korean recovery instructions at narrow widths or larger text sizes. Show the last
+failure in the existing producer order; all failures retain full chip text. Map only
+existing diagnoses to decorative glyphs and short labels; unknown diagnoses say
+`첨부 실패`, without claiming encryption detection. One persistent polite status
+replaces assertive chip alerts. Reuse the R-020 recovery implementation and gates.

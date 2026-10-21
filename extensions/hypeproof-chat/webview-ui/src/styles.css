@@ -2227,11 +2227,17 @@ html, body, #root {
 .hp-help-preview .hp-outbound-excluded { margin: 0; font-size: inherit; line-height: 1.5; color: inherit; font-weight: 600; overflow-wrap: anywhere; }
 /* CGP-KNOW-R-020: failure chips remain next to the unchanged draft. */
 .hps-attachment-failures { min-width: 0; }
-.hps-attachment-failure, .hps-photo-failure { border: 1px solid var(--vscode-inputValidation-errorBorder, #be6672); padding: 12px; margin-block: 8px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.hps-attachment-failure, .hps-photo-failure { border: 1px solid var(--vscode-inputValidation-errorBorder, #be6672); padding: 12px; margin-block: 8px; font-size: var(--hp-text-caption); line-height: 1.6; overflow-wrap: anywhere; }
 .hps-attachment-failure p, .hps-photo-failure p { margin-block: 8px; }
 .hps-attachment-failure button, .hps-photo-failure button { min-height: 44px; min-width: 44px; font: inherit; margin-inline-end: 8px; }
 .hps-attachment-failure button:focus-visible, .hps-photo-failure button:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
-.hps-attachment:has(.hps-photo-failure) { width: min(100%, 360px); height: auto; min-height: 72px; display: block; padding: 8px; }
+/* CGP-KNOW-D-020: a refused photo's chip grows to hold its whole failure block (badge, reason, retry). Nothing in it
+   is clipped, so no control that can take focus is ever hidden. Name and remove share the first row; the block wraps below. */
+.hps-attachment:has(.hps-photo-failure) { box-sizing: border-box; width: min(100%, 360px); height: auto; min-height: 72px; display: flex; flex-wrap: wrap; align-items: center; align-self: flex-start; gap: 4px 8px; padding: 8px; overflow: visible; }
+.hps-attachment:has(.hps-photo-failure) > img { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 4px; }
+.hps-attachment:has(.hps-photo-failure) > .hps-attachment-name { flex: 1 1 0; min-width: 0; height: auto; padding: 0; justify-content: flex-start; text-align: start; }
+.hps-attachment:has(.hps-photo-failure) > .hps-attachment-remove { position: static; flex: 0 0 44px; width: 44px; height: 44px; margin-inline-start: auto; }
+.hps-attachment:has(.hps-photo-failure) > .hps-photo-failure { box-sizing: border-box; order: 1; flex: 1 0 100%; min-width: 0; margin: 0; }
 /* The rows live in the footer, so the reason is on screen with the composer. Compact: the name and reason on the left, the actions on the right. */
 .hps-attachment-failures { max-height: 45vh; overflow-y: auto; }
 .hps-attachment-failure { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 8px; align-items: center; padding: 6px 12px; margin-block: 4px; }
@@ -2243,3 +2249,8 @@ html, body, #root {
 /* A classroom lesson makes the shell the scroller: keep the footer (composer and failure rows) at the bottom edge. */
 .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hps-input-area { position: sticky; bottom: 0; z-index: 2; background: var(--vscode-editor-background, #1f1f1f); }
 @media (forced-colors: active) { .hps-attachment-failure, .hps-photo-failure { border-color: CanvasText; } }
+
+/* DES-KNOW-37: shape/text identify the failure; colour is supplementary. */
+.hps-attachment-failure-cause { display: inline-flex; align-items: center; gap: 6px; margin-inline-start: 8px; }
+.hps-attachment-error-summary { margin: 6px 0 0; font-size: var(--hp-text-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; white-space: normal; }
+.hps-attachment-error-summary:empty { margin: 0; }

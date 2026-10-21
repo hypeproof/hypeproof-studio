@@ -341,6 +341,7 @@ const CLASSROOM_SHARED = {
 const SHARED_LEARNER = [
   ".hp-ai-can-do-label",
   ".hps-denial-notice",
+  ".hps-attachment-failure, .hps-photo-failure", ".hps-attachment-error-summary",
   ".hps-coach-name", ".hps-header button", ".hps-msg-role", ".hps-user-actions button", ".hps-version-pager", ".hps-version-note",
   ".hps-edit-note", ".hps-cit-chip", ".hps-cit-domain", ".hps-msg-run, .hps-msg-retry", ".hps-naming-btn-ghost", ".hps-thinking-details pre",
   ".hps-code-progress", ".hps-codepill-toggle", ".hps-codepill-body", ".hps-empty-sub", ".hps-chips-label", ".hps-chip-text", ".hps-chip-caption",
