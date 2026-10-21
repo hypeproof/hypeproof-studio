@@ -81,6 +81,10 @@ Build on the merged CGP-KNOW-R-006 disclosure (`outboundConsent.ts`): every prod
 
 Register correction: DES-KNOW-09 is line 200 of projects-library-memory.md; line 199 belongs to the scope header. No adjacent backlog row is changed.
 
+### CGP-KNOW-D-033 implementation choices (2026-10-21, agent decision)
+
+DEC-KNOW-D033: build on main's merged dialog (#2365) and R-033 host rule (#2361). Only the presentation changes. A memory item reaches the dialog only when the learner typed it into "파일 추가", so the group never offers a file the host did not already list. The group stays collapsed and unchecked; because the payload is atomic, a listed memory file must be opened and checked before 보내기 works, and the hint says so. A partial send that drops the memory file is not offered: the learner removes it from "파일 추가" instead, which keeps DES-KNOW-09's one-decision rule. The empty group appears once, on the first recipient, so the learner sees that no memory goes with this transfer. An earlier draft of this row (built on the pre-merge D-006 branch) changed host selection and site publish; those parts are superseded by R-033 and are not carried over.
+
 ## Attachment error presentation (CGP-KNOW-D-020)
 
 Agent implementation choice, not human policy approval: “one-line message” means

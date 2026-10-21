@@ -290,3 +290,14 @@ Help, collect, gallery and publish payloads leave memory files out unless the le
 - Stated limit: a hard link to a memory file under an ordinary name (for example `copy.md` hard-linked to `wiki/index.md`) cannot be told apart by path or real path and is published as an ordinary file. Closing it needs content or inode tracking of the memory stores; it is not part of this row.
 - A new share link for a stored version that contains a memory path stays refused (REQ-KNOW-09 contract) and says so: "AI 기억 파일이 들어 있는 버전이라 새 링크를 만들지 않아요. 다시 공개하면 보낼 파일을 확인한 뒤 링크를 받을 수 있어요."
 - Evidence is synthetic (`test/outbound-memory.smoke.mjs`, `test/publish-site.smoke.mjs`, `test/outbound-consent.smoke.mjs`); no live publish or installed-device run.
+
+### DES-KNOW-51 dialog grouping (CGP-KNOW-D-033)
+
+The in-panel outbound dialog (CGP-KNOW-D-006) shows memory items in their own group (DEC-KNOW-D033).
+
+- A learner-selected memory item (`memory: true`) is drawn only inside a native `<details>` group under its own recipient. The summary reads `기억 파일 (기본 제외)` plus the item count. The group starts collapsed and its checkboxes start unchecked. Opening it checks nothing.
+- Ordinary items stay outside the group. The payload stays atomic (DES-KNOW-09): 보내기 needs every box, memory items included, and the hint adds `기억 파일도 펼쳐서 확인해 주세요.` while one is unchecked.
+- With no memory item, the first recipient shows one collapsed group that says `이 전송에는 기억 파일이 없어요.` and holds no checkbox.
+- The summary is a 44px keyboard target inside the dialog's focus trap (Enter and Space toggle natively). Reopening a prompt starts collapsed again.
+- Presentation only: which files are memory, and when one may be listed, stays CGP-KNOW-R-033's host rule. The VS Code modal fallback is unchanged.
+- Evidence: `test/outbound-dialog.test.tsx`, `test/outbound-dialog-styles.smoke.mjs` and a headless Chromium render of both seats, both themes, at 1420 and 800 px. No installed-app run.
