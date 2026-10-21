@@ -14,6 +14,7 @@
 // `gh release upload TAG` resolves it deterministically.
 
 import {execFileSync} from 'node:child_process';
+import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import process from 'node:process';
 
@@ -95,6 +96,7 @@ function main() {
   console.log(`release-draft: uploaded ${assets.length} asset(s) to ${tag}`);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main();
-}
+const __file = fileURLToPath(import.meta.url);
+let _isMain = false;
+try { _isMain = realpathSync(process.argv[1]) === __file; } catch { _isMain = process.argv[1] === __file; }
+if (_isMain) main();
