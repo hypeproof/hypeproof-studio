@@ -160,8 +160,8 @@ try {
 
   // ── 6. wrap-up: from what the Service said; off is unavailable, not done ──
   const steps = await page.locator('#ops-wrap-steps > li').evaluateAll((l) => l.map((x) => ({ cls: x.className, text: x.innerText })));
-  assert.equal(steps.length, 4); assert.match(steps[0].text, /^1 기록 회수 ○ 시작 전\n[\s\S]*아직 시작 전/); assert.equal(steps[0].cls, 'wrap-idle');
-  for (const i of [1, 2, 3]) { assert.equal(steps[i].cls, 'wrap-off', 'reports and delivery are off in this class: ' + steps[i].text); assert.match(steps[i].text, /^\d [^\n]+ 사용할 수 없음\n/, 'off is said in words'); }
+  assert.equal(steps.length, 4); assert.match(steps[0].text, /^1 기록 회수 \n시작 전\n[\s\S]*아직 시작 전/); assert.equal(steps[0].cls, 'wrap-idle');
+  for (const i of [1, 2, 3]) { assert.equal(steps[i].cls, 'wrap-off', 'reports and delivery are off in this class: ' + steps[i].text); assert.match(steps[i].text, /^\d [^\n]+ \n사용할 수 없음\n/, 'off is said in words'); }
   assert.match(steps[1].text, /보고서 기능이 꺼져 있어 초안을 만들지 않습니다/); assert.match(steps[3].text, /발송 절차가 꺼져 있습니다/); const pendingPaths = await page.locator('#ops-wrap-note').innerText(); assert.match(pendingPaths, /여러 회차의 반복 패턴 본문/); assert.match(pendingPaths, /카카오·문자·QR 발송/); assert.doesNotMatch(pendingPaths, /종류별 회수 기록/);
   // #1363: the 마무리 링크는 사이드바의 "더보기" 아래로 이동했다. 스크린샷 전에 먼저 펼친다.
   const more = page.locator('details.flow-more'); if (await more.count() && !(await more.evaluate((d) => d.open))) await more.locator('> summary').click();

@@ -6,26 +6,13 @@
 // button here is a picture, not a lock (the host refuses the same things by name).
 import { useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
+import { IntentChip } from "./StatusChip";
+import { verdictChip, verifyChip } from "./statusChipLogic";
 import { useDialogFocus } from "./dialogFocus";
 import type { VerifyView } from "../../src/verifyView";
 
 type ReportCriterion = VerifyView["held"][number];
 type Draft = { text: string; proposed_by: "student" | "ai"; confirmed: boolean; adopted_from?: string };
-
-const STATE_LINE: Record<VerifyView["verification"]["state"], string> = {
-  verified: "검증됨 · 이 버전에서 기대 조건을 모두 통과했어요",
-  failed: "통과하지 못한 조건이 있어요",
-  incomplete: "확인되지 않은 조건이 있어요",
-  needs_recheck: "파일이 바뀌었어요 · 다시 테스트해 주세요 (이전 결과는 남아 있어요)",
-  not_verified: "이 버전은 아직 테스트하지 않았어요",
-};
-const STATUS_LABEL: Record<string, string> = {
-  pass: "통과",
-  fail: "실패",
-  warning: "주의",
-  not_verified: "확인 안 됨",
-  non_reproducible: "결과가 매번 달라요",
-};
 
 /** Student-facing names for the runner's step actions and evidence kinds (never the raw tokens). */
 const ACTION_LABEL: Record<string, string> = {
@@ -66,7 +53,7 @@ export function VerifyPanel(props: {
   const resultRow = (c: ReportCriterion, onVersion: boolean, testId: string) => (
     <div className={`hps-verify-result hps-verify-${c.status}`} key={c.id} data-testid={testId} data-status={c.status} data-criterion={c.id} data-test-kind={c.test_kind ?? ""}>
       <div>
-        <span className="hps-verify-badge">{STATUS_LABEL[c.status] ?? c.status}</span> {c.text}
+        <IntentChip chip={verdictChip(c.status)} status={String(c.status)} className="hps-verify-badge" /> {c.text}
         {c.method === "vision" && <span className="hps-verify-vision"> · 화면 판단</span>}
       </div>
       {c.reason && <div className="hps-verify-reason">{c.reason}</div>}
@@ -123,9 +110,7 @@ export function VerifyPanel(props: {
     <section ref={panel} className="hps-verify" aria-label="내 제품 테스트" data-testid="verify-panel">
       <header className="hps-verify-head">
         <strong>내 제품 테스트</strong>
-        <span className={`hps-verify-state hps-verify-state-${view.verification.state}`} data-testid="verify-status" data-state={view.verification.state}>
-          {STATE_LINE[view.verification.state]}
-        </span>
+        <IntentChip chip={verifyChip(view.verification.state)} status={view.verification.state} className={`hps-verify-state hps-verify-state-${view.verification.state}`} attrs={{ "data-testid": "verify-status", "data-state": view.verification.state }} />
         <button type="button" className="hps-verify-close" aria-label="테스트 창 닫기" onClick={props.onClose}>
           <ChatIcon kind="close" size={16} />
         </button>

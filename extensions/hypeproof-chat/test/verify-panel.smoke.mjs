@@ -32,7 +32,9 @@ const ok = (n) => { passed++; console.log(`✓ ${n}`); };
   assert.match(html, /data-testid="verify-status" data-state="verified"/);
   assert.match(text, /검증됨 · 이 버전에서 기대 조건을 모두 통과했어요/);
   assert.match(text, /이 버전의 테스트 결과/);
-  assert.equal((html.match(/data-status="pass"/g) ?? []).length, 3);
+  assert.equal((html.match(/data-testid="[^"]+" data-status="pass"/g) ?? []).length, 3);
+  // CGP-DS-R-006: each verdict is a success status chip (icon + 통과), one per row.
+  assert.equal((html.match(/class="hp-status-chip hps-verify-badge" data-status="pass" data-intent="success"><svg [^>]*data-icon="check"/g) ?? []).length, 3);
   assert.doesNotMatch(html, /verify-fix"/, "nothing to fix");
   // The evidence is in Korean: no raw step action or citation kind reaches the student.
   // REQ-STUDIO-STROKE-ICONS: the step mark is a stroke icon named in Korean, then the Korean action.

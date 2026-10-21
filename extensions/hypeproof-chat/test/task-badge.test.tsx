@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TaskWorkspace } from '../webview-ui/src/TaskWorkspace';
 import type { TaskWorkspaceView } from '../src/taskWorkspaceContract';
+import { TASK_RUN_CHIPS } from '../webview-ui/src/statusChipLogic';
 for (const name of ['Node', 'Element']) (globalThis as any)[name] ??= (window as any)[name];
 (globalThis as any).HTMLElement ??= (window as any).Element;
 const view: TaskWorkspaceView = { scope: 's', revision: 1, activeTaskId: 'a', sourceSelection: null, tasks: [
@@ -22,6 +23,10 @@ async function run() {
     assert.equal(badge.parentElement, tasks[0]);
     assert.equal(badge.textContent, label); assert.ok(label.split(' ').length <= 3);
     assert.equal(badge.getAttribute('data-run-state'), state);
+    // CGP-DS-R-006: the badge is the status chip of its named intent (approval caution, error danger, ...).
+    assert.equal(badge.getAttribute('class'), 'hp-status-chip tw-task-state');
+    assert.equal(badge.getAttribute('data-intent'), TASK_RUN_CHIPS[state as keyof typeof labels].intent);
+    assert.equal(badge.querySelector('svg').getAttribute('data-icon'), TASK_RUN_CHIPS[state as keyof typeof labels].icon);
     assert.equal(tasks[1].querySelector('.tw-task-state'), null);
     assert.equal(host.querySelector('script'), null);
   }
@@ -63,13 +68,12 @@ async function run() {
   assert.match(css, /\.tw-task \{ display: grid; grid-template-columns: minmax\(0, 1fr\);/);
   assert.match(css, /\.tw-task-state \{ justify-self: end; max-width: 100%;/);
   assert.doesNotMatch(css, /\.tw-task-state \{[^}]*white-space: nowrap/, 'the badge must not force a one-line width that starves the title');
-  assert.match(css, /\.tw-task-state \{[^}]*font-size: var\(--hp-font-caption\)/);
+  // Size, edge, weight and forced colours are the status chip's own (test/status-chip.smoke.mjs); the rail
+  // places the chip and never restyles it.
+  assert.doesNotMatch(css, /\.tw-task-state[^{]*\{(?:[^}]*;)?\s*(?:border(?:-[a-z]+)*|padding(?:-[a-z]+)*|font-size|font-weight|background(?:-color)?|color)\s*:/, 'the rail restyles the status chip');
   assert.match(designValues(fs.readFileSync(path.join(process.cwd(), 'webview-ui/src/tokens.css'), 'utf8')), /--hp-font-caption: calc\(14px \+ var\(--hp-font-step\)\)/, 'caption token floor is 14px');
   assert.match(css, /\.tw-task-meta \{ grid-column: 1 \/ -1;/);
-  assert.match(css, /\.tw-task-state\[data-run-state="approval"\][^{]*\{[^}]*font-weight: 700;[^}]*border-width: 2px;/);
   assert.match(css, /\.tw-conversation:focus \{ outline: 2px solid var\(--hp-ring-focus-default\); outline-offset: 2px;/);
-  assert.match(css, /@media \(forced-colors: active\) \{\s*\.tw-task-state \{ border-color: CanvasText; color: CanvasText; background: Canvas; \}/);
-  assert.match(css, /\.tw-task-state\[data-run-state="approval"\] \{ border-style: double; border-width: 3px; \}/);
   console.log('task-badge: mounted states, skip focus and CSS contracts PASS');
 }
 run().then(() => process.exit(0), e => { console.error(e); process.exit(1); });

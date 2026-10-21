@@ -138,14 +138,15 @@ const checks = {
   "3 heading has three groups": (css) => {
     const bad = [];
     const pill = ".tw-heading .tw-run-note:not(:empty)";
-    if (!/^1px solid/.test(value(css, pill, "border") ?? "")) bad.push("run state is not a bordered pill");
+    // CGP-DS-R-006: the run state is drawn as the status chip (rendered in test/status-intents.test.tsx);
+    // the wrapper must not paint a second border or dot around it.
+    for (const k of ["border", "background", "padding"]) if (value(css, pill, k)) bad.push(`run note wrapper paints its own ${k} around the chip`);
+    if (all(css).some((r) => r.selectors.includes(`${pill}::before`))) bad.push("run note wrapper still draws its own dot");
     const dividers = all(css).filter((r) => r.selectors.some((x) => x.endsWith(".tw-sources-toggle::before")) && /1px solid/.test(r.decls["border-inline-start"] ?? ""));
     if (!dividers.length) bad.push("no divider before the actions");
     // Classroom: nothing precedes 자료 while idle, so an unconditional divider floats alone (verify N1).
     for (const r of dividers) for (const x of r.selectors) if (!/:has\([^)]*\.hps-activity-now/.test(x)) bad.push(`divider drawn without anything before 자료: ${x}`);
     if (!value(css, ".tw-heading .hps-activity-kind", "font-weight")) bad.push("activity kind has no weight of its own");
-    const forced = all(css).find((r) => r.media.includes("forced-colors") && r.selectors.includes(`${pill}::before`));
-    if (forced?.decls.background !== "CanvasText") bad.push("forced colors: the pill dot (a background) would vanish");
     return bad;
   },
   "3b narrow running heading keeps the kind and moves the name to the title": (css) => {
@@ -182,6 +183,7 @@ const NEGATIVE = [
   ["1d", "count back on the dark-only --hp-text-muted-default", mutate("styles.css", (s) => s.replace(".hp-ai-can-do-count { color: var(--hp-ai-can-do-muted); }", ".hp-ai-can-do-count { color: var(--hp-text-muted-default); }"))],
   ["1d", "classroom off rows back on --hp-text-muted-default", mutate("styles.css", (s) => s.replace('.hp-ai-can-do li[data-on="false"] { color: var(--hp-ai-can-do-muted); }', '.hp-ai-can-do li[data-on="false"] { color: var(--hp-text-muted-default); }'))],
   ["1e", "chevron read aloud", mutate("styles.css", (s) => s.replace('content: "›" / "";', 'content: "›";'))],
+  ["3", "run note paints its own pill around the chip", mutate("taskWorkspace.css", (s) => s.replace(".tw-heading .tw-run-note:not(:empty) { display: inline-flex; align-items: center; min-width: 0; }", ".tw-heading .tw-run-note:not(:empty) { display: inline-flex; align-items: center; min-width: 0; border: 1px solid var(--tw-line); }"))],
   ["3", "no divider", mutate("taskWorkspace.css", (s) => s.replace("border-inline-start: 1px solid var(--tw-line); pointer-events: none;", "pointer-events: none;"))],
 ];
 for (const [name, fn] of Object.entries(checks)) await check(`css ${name}`, () => assert.deepEqual(fn(real), [], fn(real).join("; ")));

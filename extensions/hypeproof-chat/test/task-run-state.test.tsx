@@ -8,6 +8,7 @@ import { TaskWorkspace } from "../webview-ui/src/TaskWorkspace";
 import { chatPanelReducer, chatPanelInitialState } from "../webview-ui/src/App";
 import { TASK_RUN_STATE_LABELS, deriveTaskRunState, type TaskRunState } from "../src/taskRunState";
 import type { TaskWorkspaceView } from "../src/taskWorkspaceContract";
+import { TASK_RUN_CHIPS } from "../webview-ui/src/statusChipLogic";
 
 (globalThis as unknown as Record<string, unknown>).window = { acquireVsCodeApi: undefined, innerWidth: 1280, addEventListener() {}, removeEventListener() {} };
 // SSR cannot run layout effects; that React warning is not what this test measures.
@@ -41,8 +42,9 @@ t("each state: words and a symbol on the active task, accessible name 'title, st
     ok(active.includes(`aria-label="고양이 페이지, ${label}"`), `${state}: accessible name missing`);
     ok(active.includes(`aria-describedby="tw-task-meta-t1"`), `${state}: count/date not described`);
     ok(active.includes(`data-run-state="${state}"`), `${state}: state element missing`);
-    // REQ-STUDIO-STROKE-ICONS: the symbol is a hidden stroke icon, then the visible words.
-    ok(new RegExp(`<span class="tw-task-state-symbol"><svg [^>]*data-icon="${icon}"[^>]*aria-hidden="true">(?:(?!</svg>)[\\s\\S])*</svg></span>${label}</span>`).test(active), `${state}: icon + visible words missing`);
+    // REQ-STUDIO-STROKE-ICONS: the symbol is a hidden stroke icon, then the visible words, drawn as the
+    // status chip of the state's named intent (CGP-DS-R-006).
+    ok(new RegExp(`<span data-run-state="${state}" class="hp-status-chip tw-task-state" data-status="${state}" data-intent="${TASK_RUN_CHIPS[state].intent}"><svg [^>]*data-icon="${icon}"[^>]*aria-hidden="true">(?:(?!</svg>)[\\s\\S])*</svg><span class="hp-status-chip-label">${label}</span></span>`).test(active), `${state}: icon + visible words missing`);
   }
 });
 t("no colour-only state: every state element carries its words as text", () => {
@@ -63,11 +65,11 @@ t("no evidence → no state anywhere (negative control)", () => {
   const html = render(null);
   ok(!html.includes("data-run-state") && !html.includes("aria-describedby=\"tw-task-meta"), "a state drawn without evidence");
 });
-t("busy line: approval says 승인 기다리는 중, otherwise the existing 작업 중 copy", () => {
+t("busy line: approval says 승인 기다리는 중, otherwise the existing 작업 중 copy (the words close the heading's status chip, CGP-DS-R-006)", () => {
   const waiting = render("approval", true);
-  ok(waiting.includes("승인 기다리는 중<span class=\"tw-run-help\">입니다. 화면에 뜬 확인 창에서 골라 주세요.</span>"), "approval busy line missing");
+  ok(waiting.includes("승인 기다리는 중</span></span><span class=\"tw-run-help\">입니다. 화면에 뜬 확인 창에서 골라 주세요.</span>"), "approval busy line missing");
   const running = render("running", true);
-  ok(running.includes("작업 중<span class=\"tw-run-help\">입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</span>"), "existing busy line changed");
+  ok(running.includes("작업 중</span></span><span class=\"tw-run-help\">입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</span>"), "existing busy line changed");
   ok(!render("done", false).includes("tw-run-help"), "busy line shown while idle");
 });
 t("task switching stays blocked during a run, exactly as before", () => {

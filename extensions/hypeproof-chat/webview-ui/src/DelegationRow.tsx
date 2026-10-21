@@ -16,6 +16,8 @@ import {
 import type { ChatMessage } from "../../src/protocol";
 import { ChatIcon } from "./ChatDetails";
 import { glyphIconKind } from "./glyphIcon";
+import { IntentChip } from "./StatusChip";
+import { DELEGATION_CHIPS } from "./statusChipLogic";
 
 export function DelegationRow({ view, renderChild, onStopAll }: {
   view: DelegationView;
@@ -30,7 +32,7 @@ export function DelegationRow({ view, renderChild, onStopAll }: {
           <span className="hps-tool-icon" data-glyph={DELEGATION_ICON}><ChatIcon kind={glyphIconKind(DELEGATION_ICON)} size={16} /></span>
           <strong className="hps-delegation-helper">{view.helper}</strong>
           <span className="hps-delegation-task">{view.task}</span>
-          <span className="hps-delegation-status" role="status">{status}</span>
+          <IntentChip chip={DELEGATION_CHIPS[view.status]} status={view.status} className="hps-delegation-status" attrs={{ role: "status" }} />
         </summary>
         <div className="hps-delegation-body">
           <p className="hps-delegation-heading">{RESULT_HEADING}</p>

@@ -3799,9 +3799,9 @@ blindness. Both Studio and Chalk.
   glyph, and fill with the state's own colour at 14% (unknown 10%, dashed) over the chip surface.
   Labels, state mapping, borders and filters are unchanged.
 - Grayscale: no two states share an icon shape or a label (Studio's five, Chalk's six).
-- Not covered: the manage page's `.tag` attention labels and `wrapBadge` text (separate
-  components); Studio's other status marks (`tw-task-state`, `hps-verify-state`); a capture on a
-  real Windows high-contrast display.
+- Not covered here: a capture on a real Windows high-contrast display. The manage page's `.tag`
+  and `wrapBadge`, and Studio's other status marks, became chips in CGP-DS-R-006 (next section),
+  which also moved colour and edge from the state to its named intent.
 
 Tests: `extensions/hypeproof-chat/test/status-chip.smoke.mjs` (stylesheet rules: geometry, soft
 fill, contrast, no truncation, forced colours; 16 negative controls),
@@ -3860,3 +3860,64 @@ fill in every webview stylesheet, pressed coverage, field and secondary boundari
 token against the HP palette, Paper, eight default themes, notice tints and field fills, and the
 cascade: a resting fill never out-ranks the hover, two layers never stack; 29 negative controls) and `chalk/test/hover-pressed-fills.test.mjs` (served CSS of all nine pages; 12 negative
 controls). Decision: DEC-DS-R-005 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+## Status intents (CGP-DS-R-006)
+
+REQ-CGP-DS-05, extends SX-21 / SX-50 and builds on the status chip (CGP-DS-D-004). Product Intent
+principle 5 (evidence over claims): a state is read from its words and shape, so a learner or an
+instructor can tell "this failed" from "this is waiting for me" from "nobody has checked this yet"
+in a black-and-white print, under colour blindness and in forced colours. Both Studio and Chalk.
+
+- **Named intents.** Every status chip speaks one of five intents: `info`, `caution`, `danger`,
+  `success`, plus `neutral`, the "no evidence yet" intent that the `source_state` family uses for
+  unverified and the other families use for an idle or stopped state. The intent picks the chip's
+  colour (D-004 colours: info = body text role, caution = warn role, danger = errorForeground,
+  success = charts green, neutral = muted role) **and its edge**: info dotted 1px, success solid
+  1px, caution solid 2px, danger double 3px, neutral dashed 1px. The block padding gives back what
+  a heavier edge takes, so every chip keeps one outer height. Forced colours repaint the edge
+  CanvasText and keep its style and width, so the intents also separate there.
+- **Every status chip has an icon and Korean words.** Studio families (`statusChipLogic.ts`), each
+  state with words, a 16px stroke icon and an intent; within a family no two states share an icon
+  shape or words:
+  - source state (D-004): real success · simulated caution · self_reported info · unverified neutral.
+  - task run (`.tw-task-state`, words from `taskRunState.ts`): preparing info · running info ·
+    approval caution · stopped neutral · error danger · done success.
+  - delegation (`.hps-delegation-status`, words from `delegationRow.ts`, stays `role="status"`):
+    running info · done success · stopped neutral · failed danger.
+  - product test state (`.hps-verify-state`, keeps `data-testid="verify-status"` and `data-state`):
+    verified success · failed danger · incomplete caution · needs_recheck caution ·
+    not_verified neutral. An unknown state reads not_verified.
+  - criterion verdict (`.hps-verify-badge`): pass success · fail danger · warning caution ·
+    not_verified neutral · non_reproducible danger. An unknown verdict reads 확인 안 됨, never its
+    raw token.
+  - help request (`.hp-help-status`, words from the card): received info · reviewing info ·
+    answered caution (the learner still has to confirm) · resolved success · any other status
+    neutral with the card's own words (상태 확인 불가).
+  The families' own looks (tinted backgrounds, bold text, thicker borders) are removed; the chip is
+  the only look. The task rail places the chip under the title and never restyles it, and the
+  chip never takes width from a short title (the rail's long titles keep their existing one-line
+  ellipsis). The task heading's live run note (`.tw-run-note`) draws the same chip
+  (`.tw-run-chip`: approval caution, otherwise running info) and keeps its screen-reader sentence.
+- **Chalk** (`board-status.ts` `intentChip`): the board seat chip takes its intent's colour and
+  edge (working info · idle info · review caution · blocked danger · done success · unknown
+  neutral). On `/manage`, the seat attention tag (blocked 차단됨 danger · caution 주의 caution ·
+  unknown 확인 불가 neutral · help 도움 요청 caution · approval 승인 대기 caution · ok 정상 success), the
+  wrap-up step badge (idle neutral · pending info · partial caution · blocked danger · unknown
+  neutral · done success · none neutral · off neutral) and the evidence source state (Chalk's
+  words with Studio's source-state intents and icons) are intent chips. The Unicode glyphs that
+  rode in the words or in `::before` (✕ ! ? ✓ ⏸ ✋ ○ … ◐ –) are now the chip's SVG icon. An
+  unknown intent reads neutral and an unknown icon draws the help mark; words go in as text.
+- Not chips, so not covered: status lines and sentences (`.studio-status`, MissionHeader marks,
+  the publish panel's `data-state` text, review pack status, Chalk's stage line, ledger stages,
+  evidence review line, instructor help list, pick/delivery/job lines), the citation tier chip
+  (a source link, not a state), the fixed 강사 모드 badge and the tool-log marks.
+
+Tests: `extensions/hypeproof-chat/test/status-intents.test.tsx` (every family: Korean words, a
+drawn icon, a named intent, grayscale-distinct within the family, hostile values; each render site
+draws the chip), `extensions/hypeproof-chat/test/status-chip.smoke.mjs` check 6 (the edge table,
+one outer height, forced colours keep the edge, no family restyles the chip; 9 negative controls),
+`task-run-state.test.tsx`, `task-badge.test.tsx`, `verify-panel.smoke.mjs`,
+`forced-colors.smoke.mjs`, `chalk/test/status-intents.test.mjs` (board chip intents,
+`intentChip` fallbacks, and the shipped `/manage` script run in a VM drawing seat tags, wrap-up
+badges and evidence source states) and `chalk/test/board-status-css.test.mjs` (colour, fill and
+edge per intent). Decision: DEC-DS-R-006.

@@ -3,6 +3,8 @@
 // CGP-DS-D-004 (DES-CGP-DS-05): 16px icon, 14px label, 4px radius, 8px inline padding and a soft
 // fill of each state's colour; every check is a function over the CSS so the mutated copies at the
 // end must fail it.
+// CGP-DS-R-006 (REQ-CGP-DS-05): the colour, fill and edge belong to the chip's named intent
+// (info / caution / danger / success / neutral), the same five and the same edge table as Studio.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {boardStatusCss} from '../src/lib/board-status.ts';
@@ -40,14 +42,25 @@ const px = (v) => { assert.match(v ?? '', /^\d+px$/, 'a px length: ' + v); retur
 
 // Page backgrounds the chips sit on (board.html --bg, manage.html --ink-bg / --ink-panel).
 const pages = ['#0f1115', '#0f1418', '#151c22'];
-const STATES = ['working', 'blocked', 'review', 'idle', 'done', 'unknown'];
+const INTENTS = ['info', 'caution', 'danger', 'success', 'neutral'];
+const sel = (i) => `.cgp-state[data-intent="${i}"]`;
+const EDGE = { info: 'dotted/1', success: 'solid/1', caution: 'solid/2', neutral: 'dashed/1', danger: 'double/3' };
+/** A px length or calc() of px terms joined by + and -. */
+const lengthPx = (v) => {
+  const m = /^calc\((.+)\)$/.exec(v ?? '');
+  if (!m) return px(v);
+  const t = m[1].split(/\s+([+-])\s+/);
+  let total = px(t[0]);
+  for (let k = 1; k < t.length; k += 2) total += (t[k] === '+' ? 1 : -1) * px(t[k + 1]);
+  return total;
+};
 
 const checks = {
   // Text 4.5:1 on the chip fill and 3:1 for the chip boundary against its fill and every page.
   'contrast': (css) => {
     const rule = parse(css), base = rule('.cgp-state');
-    for (const key of STATES) {
-      const r = {...base, ...rule('.cgp-' + key)};
+    for (const key of INTENTS) {
+      const r = {...base, ...rule(sel(key))};
       const bg = colour(r.background);
       assert.ok(ratio(hex(r.color), bg) >= 4.5, key + ' text contrast ' + ratio(r.color, bg));
       const border = hex(r['border-color']);
@@ -59,8 +72,8 @@ const checks = {
   // surface, so the fill is tinted, never solid and never the same plain surface for every state.
   'soft fill': (css) => {
     const rule = parse(css), surface = hex(rule('.cgp-state').background);
-    const fills = STATES.map((key) => {
-      const r = rule('.cgp-' + key);
+    const fills = INTENTS.map((key) => {
+      const r = rule(sel(key));
       const m = /^color-mix\(in srgb, (#[0-9a-f]{6}) (\d+(?:\.\d+)?)%, (#[0-9a-f]{6})\)$/i.exec(r.background ?? '');
       assert.ok(m, key + ' fill is a colour-mix: ' + r.background);
       assert.equal(m[1].toLowerCase(), hex(r['border-color']), key + ' fill is tinted by its own colour');
@@ -68,7 +81,7 @@ const checks = {
       assert.equal(m[3].toLowerCase(), surface, key + ' tint sits on the chip surface');
       return colour(r.background);
     });
-    assert.equal(new Set(fills).size, STATES.length, 'every state has its own fill');
+    assert.equal(new Set(fills).size, INTENTS.length, 'every intent has its own fill');
   },
   // CGP-DS-D-004 geometry.
   'geometry': (css) => {
@@ -108,20 +121,38 @@ const checks = {
     assert.ok(ratio(hex(focus.outline.split(' ')[2]), chipBg) >= 3, 'focus ring contrast');
     assert.ok(parseInt(focus['outline-offset'], 10) >= 1);
   },
-  // Done is the only green; unknown is dashed, neutral and never green.
+  // Success is the only green; neutral (unknown) is dashed and never green.
   'hues': (css) => {
     const rule = parse(css);
     const green = (h) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); return g > r + 40 && g > b; };
-    assert.ok(green(rule('.cgp-done')['border-color']), 'done border is green');
-    for (const key of ['working', 'blocked', 'review', 'idle', 'unknown']) assert.ok(!green(rule('.cgp-' + key)['border-color']), key + ' is not green');
-    assert.equal(rule('.cgp-unknown')['border-style'], 'dashed');
-    assert.ok(!green(rule('.cgp-unknown').color), 'unknown text is not green');
+    assert.ok(green(rule(sel('success'))['border-color']), 'success border is green');
+    for (const key of ['info', 'caution', 'danger', 'neutral']) assert.ok(!green(rule(sel(key))['border-color']), key + ' is not green');
+    assert.equal(rule(sel('neutral'))['border-style'], 'dashed');
+    assert.ok(!green(rule(sel('neutral')).color), 'neutral text is not green');
     assert.equal(rule('.cgp-state-filter:has(.cgp-unknown)')['border-style'], 'dashed');
     assert.ok(!green(rule('.cgp-state-filter:has(.cgp-unknown)')['border-color']));
   },
+  // CGP-DS-R-006: each intent has its own edge, so grayscale separates the intents; one outer height.
+  'intent edges': (css) => {
+    const rule = parse(css), base = rule('.cgp-state');
+    const [baseWidth] = (base.border ?? '').split(/\s+/);
+    const [baseBlock] = (base.padding ?? '').split(/\s+/);
+    const seen = INTENTS.map((key) => {
+      const r = rule(sel(key));
+      const width = r['border-width'] ? px(r['border-width']) : px(baseWidth);
+      assert.equal(`${r['border-style']}/${width}`, EDGE[key], key + ' edge');
+      const block = r['padding-block'] ? lengthPx(r['padding-block']) : px(baseBlock);
+      assert.ok(block >= 0, key + ' block padding');
+      assert.equal(block + width, px(baseBlock) + px(baseWidth), key + ' outer height moves');
+      return EDGE[key];
+    });
+    assert.equal(new Set(seen).size, INTENTS.length);
+  },
   'forced colours': (css) => {
     const forced = css.match(/@media\(forced-colors:active\)\{([\s\S]*)\}\s*$/)?.[1] || '';
-    assert.match(forced, /\.cgp-state,\.cgp-state-filter \{[^}]*border-color:CanvasText[^}]*color:CanvasText[^}]*background:Canvas/);
+    // [data-intent] in the selector so the forced rule outranks every intent rule; it keeps the edge style.
+    assert.match(forced, /\.cgp-state,\.cgp-state\[data-intent\],\.cgp-state-filter \{[^}]*border-color:CanvasText[^}]*color:CanvasText[^}]*background:Canvas/);
+    assert.doesNotMatch(forced, /border(?:-style|-width)?:[^;}]*(?:solid|dashed|dotted|double|\dpx)/, 'forced colours flatten the intent edge');
     assert.match(forced, /\.cgp-state-icon\{color:CanvasText\}/);
     assert.match(forced, /outline-color:Highlight/);
   },
@@ -140,12 +171,19 @@ const negatives = [
   ['geometry', '13px label', mutate('font-size:var(--ds-c-status-chip-label)', 'font-size:var(--ds-c-studio-styles-type-9)')],
   ['geometry', '14px icon', mutate('width:var(--ds-c-status-chip-icon);height:var(--ds-c-status-chip-icon)', 'width:var(--ds-c-status-chip-label);height:var(--ds-c-status-chip-label)')],
   ['geometry', 'icon can shrink', mutate('.cgp-state-icon {flex:none;', '.cgp-state-icon {')],
-  ['soft fill', 'blocked fill back to the plain surface', mutate('background:color-mix(in srgb, var(--ds-c-chalk-board-status-boundary-92) 14%, var(--ds-c-chalk-board-status-surface-127))', 'background:var(--ds-c-chalk-board-status-surface-127)')],
-  ['soft fill', 'working tint solid (100%)', mutate('var(--ds-c-chalk-board-status-boundary-91) 14%', 'var(--ds-c-chalk-board-status-boundary-91) 100%')],
-  ['soft fill', 'review tinted by another state', mutate('background:color-mix(in srgb, var(--ds-c-chalk-board-status-boundary-93) 14%', 'background:color-mix(in srgb, var(--ds-c-chalk-board-status-boundary-92) 14%')],
+  ['soft fill', 'danger fill back to the plain surface', mutate('background:color-mix(in srgb, var(--ds-c-chalk-board-status-boundary-92) 14%, var(--ds-c-chalk-board-status-surface-127))', 'background:var(--ds-c-chalk-board-status-surface-127)')],
+  ['soft fill', 'info tint solid (100%)', mutate('var(--ds-c-chalk-board-status-boundary-91) 14%', 'var(--ds-c-chalk-board-status-boundary-91) 100%')],
+  ['soft fill', 'caution tinted by another intent', mutate('background:color-mix(in srgb, var(--ds-c-chalk-board-status-boundary-93) 14%', 'background:color-mix(in srgb, var(--ds-c-chalk-board-status-boundary-92) 14%')],
   ['no truncation', 'ellipsis', mutate('white-space:normal;word-break:keep-all;', 'white-space:nowrap;text-overflow:ellipsis;overflow:hidden;word-break:keep-all;')],
   ['no truncation', 'Hangul split mid-word', mutate('word-break:keep-all;overflow-wrap:anywhere}', 'overflow-wrap:anywhere}')],
   ['forced colours', 'forced icon colour removed', mutate('.cgp-state-icon{color:CanvasText}', '')],
+  ['forced colours', 'forced rule loses to the intent rules', mutate('.cgp-state,.cgp-state[data-intent],.cgp-state-filter {', '.cgp-state,.cgp-state-filter {')],
+  ['intent edges', 'info solid like success', mutate('[data-intent="info"] {border-style:dotted;', '[data-intent="info"] {border-style:solid;')],
+  ['intent edges', 'danger single line', mutate('[data-intent="danger"] {border-style:double;', '[data-intent="danger"] {border-style:solid;')],
+  ['intent edges', 'caution 1px', mutate('[data-intent="caution"] {border-style:solid;border-width:var(--ds-c-status-chip-edge-strong);', '[data-intent="caution"] {border-style:solid;')],
+  ['intent edges', 'neutral solid', mutate('[data-intent="neutral"] {border-style:dashed;', '[data-intent="neutral"] {border-style:solid;')],
+  ['intent edges', 'danger chip taller', mutate('padding-block:calc(var(--ds-c-chalk-board-status-space-11) + var(--ds-c-chalk-board-status-size-3) - var(--ds-c-status-chip-edge-double));', '')],
+  ['hues', 'neutral not dashed', mutate('[data-intent="neutral"] {border-style:dashed;', '[data-intent="neutral"] {border-style:dotted;')],
 ];
 for (const [name, label, css] of negatives) assert.throws(() => checks[name](css), undefined, `negative control passed ${name}: ${label}`);
 
