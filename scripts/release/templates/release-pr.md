@@ -18,7 +18,6 @@ The release manager works through the sections in order. Black-box process: [rel
 | rc tag | `{{RC_TAG}}` |
 | rc build · automatic E2E | {{RC_BUILD_LINK}} |
 | Service at smoke time | `{{SERVICE_VERSION}}` |
-| Chalk at smoke time | `{{CHALK_VERSION}}` |
 
 ## 2. Automatic checks
 

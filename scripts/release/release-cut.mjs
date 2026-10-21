@@ -73,7 +73,6 @@ console.log(`[4] smoke on ${short}`);
 const smoke = await runSmoke({
   sha: candidate, out,
   serviceUrl: arg('--service-url', 'https://api.hypeproof-ai.xyz'),
-  chalkUrl: arg('--chalk-url', 'https://chalk.hypeproof-ai.xyz'),
 });
 printSmoke(smoke);
 const smokeRows = smoke.checks.map(c => `| ${c.id} ${c.name} | ${c.result} | ${String(c.detail).replace(/\|/g, '\\|')} |`).join('\n');
@@ -134,7 +133,7 @@ fs.writeFileSync(path.join(out, 'release-pr.md'), fill('release-pr.md', {
   INSTALL_ONELINER: oneLiner(rcTag),
   BLACKBOX_CASES: cases.markdown, CHANGED_REQUIREMENTS: changedRequirements,
   RC_BUILD_LINK: `https://github.com/${REPO}/releases/tag/${rcTag}`,
-  SERVICE_VERSION: smoke.service_version ?? 'unknown', CHALK_VERSION: smoke.chalk_version ?? 'unknown',
+  SERVICE_VERSION: smoke.service_version ?? 'unknown',
   SMOKE_RESULT: smoke.result,
   DEPENDENCY_ITEMS: rendered.dependency, FEATURE_ITEMS: rendered.features, AUTOMATIC_ITEMS: rendered.automatic,
   SMOKE_MISSING: 'No baseline commit for smoke declarations yet. Listed from the baseline onward.',
