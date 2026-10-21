@@ -265,25 +265,50 @@ test('both workflow upload scripts stop at the draft and use validated outputs t
     for (const asset of names(platform)) fs.writeFileSync(path.join(dist, asset), `offline fixture ${asset}`);
     assert.equal(run(f.repo, f.env, 'preflight', f.contractPath).status, 0);
     assert.equal(run(f.repo, f.env, 'record', f.contractPath, platform, dist, app).status, 0);
-    const log = path.join(f.dir, 'calls.jsonl'), stub = path.join(f.dir, 'github-fixture.cjs');
-    fs.writeFileSync(stub, `const fs = require('fs'); const args = process.argv.slice(2); fs.appendFileSync(process.env.FIXTURE_LOG, JSON.stringify(args)+'\\n'); if(args[0]!=='release'||!['create','view','upload'].includes(args[1]))process.exit(9); if(args[1]==='view')console.log(process.env.FIXTURE_IS_DRAFT);`);
+    const log = path.join(f.dir, 'calls.jsonl');
+    // Fake gh executable on PATH: logs argv, answers api+release calls, exits 9 otherwise.
+    // Node's execFileSync(gh) bypasses shell functions, so a real executable is required.
+    const stub = path.join(f.dir, 'gh-stub.cjs');
+    const bin = path.join(f.dir, 'bin'); fs.mkdirSync(bin);
+    const fakeGh = path.join(bin, 'gh');
+    fs.writeFileSync(stub, [
+      'const fs=require("fs"),args=process.argv.slice(2);',
+      'fs.appendFileSync(process.env.FIXTURE_LOG,JSON.stringify(args)+"\\n");',
+      'if(args[0]==="api"&&args.some(a=>a.includes("/releases"))&&args.includes("--slurp")){',
+      '  const c=process.env.FIXTURE_LOG+".apicnt";',
+      '  let n=0;try{n=parseInt(fs.readFileSync(c,"utf8")||"0");}catch{}',
+      '  fs.writeFileSync(c,String(n+1));',
+      '  const tag=process.env.GITHUB_REF.replace("refs/tags/","");',
+      '  if(process.env.FIXTURE_IS_DRAFT==="true"){',
+      '    console.log(n===0?"[[]]":JSON.stringify([[{id:1,tag_name:tag,draft:true}]]));',
+      '  }else{console.log(JSON.stringify([[{id:2,tag_name:tag,draft:false}]]));} process.exit(0);',
+      '}',
+      'if(args[0]==="release"&&args[1]==="create")process.exit(0);',
+      'if(args[0]==="release"&&args[1]==="upload")process.exit(0);',
+      'process.exit(9);',
+    ].join('\n'));
+    fs.writeFileSync(fakeGh, `#!/bin/sh\nexec node ${JSON.stringify(stub)} "$@"\n`);
+    fs.chmodSync(fakeGh, 0o755);
     const upload = steps.find(s => s.name === 'Upload draft candidate (tag builds only)');
-    // A shell function intercepts every gh invocation. No GitHub CLI/API runs.
-    const script = 'gh() { node "$FIXTURE_GH" "$@"; }\n' + upload.run;
-    const result = spawnSync('bash', ['-e', '-c', script], {cwd: f.repo, encoding: 'utf8', env: {...process.env, ...f.env,
-      HPS_MANAGED_DRAFT: 'true', FIXTURE_GH: stub, FIXTURE_LOG: log, FIXTURE_IS_DRAFT: 'true'}});
+    const fakeEnv = {...process.env, ...f.env, HPS_MANAGED_DRAFT: 'true',
+      FIXTURE_LOG: log, FIXTURE_IS_DRAFT: 'true', GITHUB_REPOSITORY: 'hypeproof/hypeproof-studio',
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`};
+    const result = spawnSync('bash', ['-e', '-c', upload.run], {cwd: f.repo, encoding: 'utf8', env: fakeEnv});
     assert.equal(result.status, 0, result.stderr);
     const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
-    assert.deepEqual(calls.map(args => args.slice(0, 2)), [['release', 'create'], ['release', 'view'], ['release', 'upload']]);
-    assert.ok(calls[0].includes('--draft')); assert.ok(calls[0].includes('--prerelease'));
-    assert.ok(calls[2].includes(`dist/draft-build-${platform}.json`));
-    assert.ok(!calls[2].includes('--clobber'));
-    fs.writeFileSync(log, '');
-    const published = spawnSync('bash', ['-e', '-c', script], {cwd: f.repo, encoding: 'utf8', env: {...process.env, ...f.env,
-      HPS_MANAGED_DRAFT: 'true', FIXTURE_GH: stub, FIXTURE_LOG: log, FIXTURE_IS_DRAFT: 'false'}});
+    // list → create → list (race guard re-check) → upload
+    assert.deepEqual(calls.map(args => args.slice(0, 2)),
+      [['api', 'repos/hypeproof/hypeproof-studio/releases'], ['release', 'create'],
+       ['api', 'repos/hypeproof/hypeproof-studio/releases'], ['release', 'upload']]);
+    assert.ok(calls[1].includes('--draft')); assert.ok(calls[1].includes('--prerelease'));
+    assert.ok(calls[3].includes(`dist/draft-build-${platform}.json`));
+    assert.ok(!calls[3].includes('--clobber'));
+    fs.writeFileSync(log, ''); try { fs.unlinkSync(log + '.apicnt'); } catch {}
+    const published = spawnSync('bash', ['-e', '-c', upload.run], {cwd: f.repo, encoding: 'utf8',
+      env: {...fakeEnv, FIXTURE_IS_DRAFT: 'false'}});
     assert.notEqual(published.status, 0);
     assert.deepEqual(fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse).map(args => args.slice(0, 2)),
-      [['release', 'create'], ['release', 'view']], 'a public release must be refused before upload');
+      [['api', 'repos/hypeproof/hypeproof-studio/releases']], 'a public release must be refused before create or upload');
     const gate = steps.find(s => s.name === 'Trigger both-activity release acceptance');
     assert.equal(gate.if, "steps.contract.outputs.auto_acceptance == 'true'");
     const output = Object.fromEntries(fs.readFileSync(f.env.GITHUB_OUTPUT, 'utf8').trim().split('\n').map(line => line.split('=')));

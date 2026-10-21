@@ -537,15 +537,11 @@ jobs:
           fi
           TAG="${GITHUB_REF#refs/tags/}"
           PRERELEASE_FLAG="$(bash scripts/tag-is-prerelease.sh "$TAG")"
-          gh release create "$TAG" --draft --title "HypeProof Studio $TAG" \
-            --generate-notes --verify-tag $PRERELEASE_FLAG 2>/dev/null || true
-          # Both builds may create the draft. Never replace bytes of a public release.
-          [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == true ]] || { echo 'Refusing to overwrite a published release'; exit 1; }
           shopt -s nullglob
           assets=(dist/*.zip dist/*.exe)
           (( ${#assets[@]} > 0 )) || exit 1
           if [[ "$HPS_MANAGED_DRAFT" == true ]]; then assets+=(dist/draft-build-darwin-arm64.json); fi
-          gh release upload "$TAG" "${assets[@]}"
+          node scripts/release/release-draft.mjs --tag "$TAG" $PRERELEASE_FLAG "${assets[@]}"
 
       # workflow_dispatch is explicit because GITHUB_TOKEN release events do
       # not trigger another workflow. Both builders dispatch; concurrency serializes.

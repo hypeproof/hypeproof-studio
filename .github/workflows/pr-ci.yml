@@ -82,7 +82,7 @@ jobs:
         run: |
           npm ci --prefix scripts/release/engine --ignore-scripts --no-audit --no-fund
           node e2e/unified-release/gate.test.mjs
-          node --test scripts/release/test/build-contract.test.mjs scripts/release/test/platforms.test.mjs
+          node --test scripts/release/test/build-contract.test.mjs scripts/release/test/platforms.test.mjs scripts/release/test/release-draft.test.mjs
           node --test scripts/release/test/sdk-seed-assets.test.mjs
           node --test scripts/release/test/install-kit.test.mjs
           node e2e/unified-release/sdk-seed.test.mjs
