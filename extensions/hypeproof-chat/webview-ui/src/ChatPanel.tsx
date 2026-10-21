@@ -39,6 +39,7 @@ import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
 import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
+import { SafetyNotice } from './SafetyNotice';
 import { replyChoices } from './replyChoiceParser';
 import { activityDetail, activityLabel, freeSeatEnded, freeSeatEndedNote, trialHeaderLine } from "./activityLabel";
 import { RefusalBanner } from "./RefusalBanner";
@@ -158,6 +159,8 @@ interface Props {
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
   /** TUX-COND-07 — the end-of-trial card for this turn ending; drawn instead of the error banner. */
   trialEndCard?: import("../../src/protocol").TrialEndCardView | null;
+  /** REQ-CGP-LEARN-13 — a moderation block for this turn ending; drawn instead of every other ending card. */
+  safetyNotice?: import("../../src/safetyNotice").SafetyNoticeView | null;
   /** TUX-COND-07 — the card's Primary. The host opens the start page's pass list; nothing else does. */
   onTrialEndCardPasses?: () => void;
   canRetryLast: boolean;
@@ -1746,7 +1749,9 @@ export function ChatPanel(props: Props) {
           />
         )}
 
-        {activityStatus ? <ActivityStatus status={activityStatus}
+        {error && props.safetyNotice ? (
+          <SafetyNotice view={props.safetyNotice} onDismiss={() => recoverToComposer(props.onDismissError)} />
+        ) : activityStatus ? <ActivityStatus status={activityStatus}
           onOpen={() => postToHost({type:'activityLocalFile',action:'open'})}
           onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
           onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
