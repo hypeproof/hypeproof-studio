@@ -13,12 +13,13 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { readDesignFile } from "./lib/design-token-values.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SRC = new URL("../webview-ui/src/", import.meta.url);
 // Every stylesheet the webview imports, so a later rule in any of them is seen.
 const FILES = readdirSync(SRC).filter((f) => f.endsWith(".css")).sort();
-const real = Object.fromEntries(FILES.map((f) => [f, readFileSync(new URL(f, SRC), "utf8")]));
+const real = Object.fromEntries(FILES.map((f) => [f, f === "designTokens.css" ? readFileSync(new URL(f, SRC), "utf8") : readDesignFile(new URL(f, SRC))]));
 let passed = 0;
 const failures = [];
 const check = async (label, fn) => {

@@ -1,3 +1,4 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // CGP-CHAT-R-007 (REQ-STUDIO-QUOTE-REPLY) — quote part of one answer into the next message.
 // Bundled with esbuild and run with plain Node, like code-block-tools.test.tsx. The pure part
 // (quoteReply.ts) is checked directly; the interactive part mounts ChatPanel with react-dom/client
@@ -273,7 +274,7 @@ t("mergeQuoteIntoDraft: keeps the draft as the exact prefix, one blank line befo
 });
 
 t("CSS: 44px target, tokens only for motion, no score or capability wording in the slice", () => {
-  const css = readFileSync("webview-ui/src/quoteAction.css", "utf8");
+  const css = designValues(readFileSync("webview-ui/src/quoteAction.css", "utf8"));
   const btn = /\.hps-quote-action \{([^}]*)\}/.exec(css)?.[1] ?? "";
   ok(/min-height: 44px/.test(btn) && /min-width: 44px/.test(btn), "44px");
   ok(/var\(--hp-dur-/.test(css) && !/\d+m?s\b/.test(css.replace(/var\([^)]*\)/g, "")), "literal duration");
@@ -512,3 +513,5 @@ t("IME guard: while a composition is open the button is disabled and pressing it
   console.log("quote-reply OK");
   process.exit(0);
 })();
+
+function designValues(css: string): string { return staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(css); }

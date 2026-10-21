@@ -5,6 +5,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 import { AccountEntry } from "../webview-ui/src/AccountEntry";
 import { SIGN_IN_LINK_COPY } from "../src/signInLink";
 import type { AccountView } from "../src/accountSession";
@@ -64,7 +65,7 @@ t("the press posts accountCopyLink and nothing else", () => {
 });
 
 // --- CSS: 44px target, ≥14px text, forced colors --------------------------------------------
-const css = readFileSync("webview-ui/src/start.css", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const css = staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(readFileSync("webview-ui/src/start.css", "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
 const rule = (sel: string) => { const m = new RegExp(`(^|\\})\\s*${sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(css); return m ? m[2] : ""; };
 const px = (body: string, prop: string) => { const m = new RegExp(`(^|;|\\s)${prop}\\s*:\\s*(\\d+(?:\\.\\d+)?)px`).exec(body); return m ? Number(m[2]) : NaN; };
 t("button: min-height ≥ 44px and font-size ≥ 14px", () => {

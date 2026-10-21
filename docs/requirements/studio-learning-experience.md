@@ -143,3 +143,35 @@ Intent 열의 표기: `상위 X`는 X가 이 행의 상위 계약이고 이 행�
 이 표의 P0는 Jay dogfood 경로의 첫 수용 목표다. 학생 화면·강사 화면·Lab 웹의 실제 변경은 각각 위의 선행 결정과 별도 배포 절차를 거친다. 기존 Studio 학습자 수집·권한·삭제 정책은 유지한다. 여섯 역량 모델의 기본 채택은 MC-17의 결정을 따르고 이 문서가 다시 결정하지 않는다.
 
 구현 PR은 다루는 SX ID, 실제 경로, 실행 증거(live-host / captured-replay / synthetic 구분), 남은 NOT RUN을 명시한다. 화면 이름·라벨·문구를 이 표와 다르게 쓰려면 표를 먼저 고친다. 원문 철학 문서는 수정하지 않고 파생 문서를 고친다. 요구사항 번호는 재사용하지 않는다.
+
+
+### Shared design tokens — CGP-DS-R-001 (SX-49)
+
+Studio chat CSS and all nine Chalk pages resolve authored color, typography, fixed length,
+radius, shadow and duration values through one canonical `designTokens.css` source with
+primitive → semantic → component tiers. Every semantic role has explicit light and dark
+bindings. DEC-27 is preserved: branded lesson/Chalk surfaces retain their shipped palette
+in both themes; personal surfaces continue to compose host VS Code variables at the consumer.
+This is consolidation, not a new light palette or layout redesign.
+
+The CSS declaration lint must report zero literal colors outside the canonical token file,
+including Chalk style attributes: hex, `rgb()`/`hsl()`/`hwb()`/`lab()`/`lch()`/`oklab()`/
+`oklch()`/`color()` and every CSS named color. It also rejects literal fixed lengths
+(px, rem, em, pt, pc, cm, mm, in, Q), times and font values. Rules added after the first
+migration (refusal banner, write approval dialog, turn review, attachment failures) follow
+the same rule; no consumer file is exempt. That includes CSS a Chalk route injects from a
+TypeScript module (`chalk/src/lib/*.ts` `*Css` exports: board status chips, the safety pin):
+the lint reads every such export, and every served Chalk page carries no colour literal
+outside its token block. CSS inheritance/system colors, unitless zero, relative layout percentages, media
+query breakpoints, SVG path geometry and live measurements are structural inputs rather
+than theme values. Inline chrome spacing and voice meter base/range use the same tokens.
+Google's fixed logo artwork and learner-authored preview documents are content assets;
+their SVG geometry/brand paint and generated document styles are not application chrome.
+The assistant mask remains a self-contained image token: variables cannot resolve inside SVG URLs.
+
+Chalk's generated TypeScript transport must exactly equal the canonical CSS, be checked
+before its build, and be injected before page styles through every actual HTML route.
+No network request, account state or live Service dependency is added. Missing document
+roots and a closing style tag in the canonical source fail explicitly. Static accessibility
+probes expand only the new static aliases; browser comparison must also cover inherited
+host fonts and embedded mask images, which textual expansion cannot validate.

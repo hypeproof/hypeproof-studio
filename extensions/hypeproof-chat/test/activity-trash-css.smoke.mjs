@@ -5,7 +5,7 @@
 // copy of the stylesheet that must fail (negative controls).
 //   node --experimental-strip-types test/activity-trash-css.smoke.mjs
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 
 const css = readFileSync(new URL("../webview-ui/src/taskWorkspace.css", import.meta.url), "utf8");
 const tokens = readFileSync(new URL("../webview-ui/src/tokens.css", import.meta.url), "utf8");

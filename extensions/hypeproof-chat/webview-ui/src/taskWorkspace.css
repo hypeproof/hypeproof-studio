@@ -2,149 +2,149 @@
    --hp-text-* token from tokens.css, so the rail, heading and sources panel never drop below 14px;
    metadata (time, message count, run state, host names, the source policy line) included. */
 .tw-workspace {
-  --tw-panel: var(--vscode-sideBar-background, #17191d);
-  --tw-canvas: var(--vscode-editor-background, #202226);
-  --tw-line: var(--vscode-panel-border, #34383e);
-  --tw-muted: var(--vscode-descriptionForeground, #a4aab3);
-  display: grid; grid-template-columns: 204px minmax(0, 1fr); height: 100%; min-height: 0;
+  --tw-panel: var(--vscode-sideBar-background, var(--ds-c-studio-taskworkspace-surface-63));
+  --tw-canvas: var(--vscode-editor-background, var(--ds-c-studio-taskworkspace-ink-38));
+  --tw-line: var(--vscode-panel-border, var(--ds-c-studio-taskworkspace-boundary-3));
+  --tw-muted: var(--vscode-descriptionForeground, var(--ds-c-studio-taskworkspace-ink-5));
+  display: grid; grid-template-columns: var(--ds-c-studio-taskworkspace-size-68) minmax(0, 1fr); height: 100%; min-height: 0;
   container-type: inline-size; position: relative; background: var(--tw-canvas); font-size: var(--hp-text-caption);
 }
-.tw-workspace[data-sources-open="true"] { grid-template-columns: 204px minmax(0, 1fr) 280px; }
+.tw-workspace[data-sources-open="true"] { grid-template-columns: var(--ds-c-studio-taskworkspace-size-68) minmax(0, 1fr) var(--ds-c-studio-taskworkspace-size-29); }
 .tw-workspace button, .tw-workspace input { font: inherit; }
 .tw-workspace button { touch-action: manipulation; cursor: pointer; }
 .tw-workspace button:disabled { cursor: default; opacity: .5; }
-.tw-workspace button:focus-visible, .tw-workspace input:focus-visible, .tw-skip:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+.tw-workspace button:focus-visible, .tw-workspace input:focus-visible, .tw-skip:focus-visible { outline: var(--ds-c-studio-taskworkspace-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-taskworkspace-size-7); }
 /* Tight rows inside the scrolling task and source lists: inset ring so the list never clips it. */
-.tw-workspace .tw-task-list button:focus-visible, .tw-workspace .tw-source-list button:focus-visible { outline-offset: -2px; }
-.tw-workspace input { min-width: 0; background: var(--vscode-input-background, #25282e); color: inherit; border: 1px solid var(--tw-line); border-radius: 7px; }
-.tw-skip { position: absolute; z-index: 10; top: 6px; left: 220px; padding: 10px; background: var(--tw-canvas); color: inherit; transform: translateY(-150%); }
+.tw-workspace .tw-task-list button:focus-visible, .tw-workspace .tw-source-list button:focus-visible { outline-offset: var(--ds-c-studio-taskworkspace-size-16); }
+.tw-workspace input { min-width: 0; background: var(--vscode-input-background, var(--ds-c-studio-taskworkspace-surface-64)); color: inherit; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-skip { position: absolute; z-index: 10; top: var(--ds-c-studio-taskworkspace-size-37); left: var(--ds-c-studio-taskworkspace-size-27); padding: var(--ds-c-studio-taskworkspace-space-7); background: var(--tw-canvas); color: inherit; transform: translateY(-150%); }
 .tw-skip:focus { transform: none; }
-.tw-rail { background: var(--tw-panel); display: flex; flex-direction: column; min-height: 0; padding: 22px 12px 12px; border-right: 1px solid var(--tw-line); }
-.tw-brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -.4px; margin: 0 8px 27px; }
-.tw-mark { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 7px; font-size: 18px; font-weight: 750; }
-.tw-new { padding: 10px 12px; text-align: left; border: 1px solid var(--tw-line); border-radius: 9px; color: inherit; background: var(--tw-canvas); }
-.tw-new span { margin-right: 7px; }
-.tw-new:hover:not(:disabled), .tw-quiet:hover:not(:disabled), .tw-task:hover:not(:disabled), .tw-title-button:hover:not(:disabled), .tw-source-list button:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
-.tw-search { display: flex; flex-direction: column; gap: 7px; margin: 22px 4px 18px; color: var(--tw-muted); font-size: var(--hp-text-caption); }
-.tw-search input { width: 100%; box-sizing: border-box; padding: 8px; font-size: var(--hp-text-caption); }
-.tw-rail-heading { color: var(--tw-muted); display: flex; justify-content: space-between; margin: 0 8px 7px; font-size: var(--hp-text-caption); }
+.tw-rail { background: var(--tw-panel); display: flex; flex-direction: column; min-height: 0; padding: var(--ds-c-studio-taskworkspace-space-34) var(--ds-c-studio-taskworkspace-space-1) var(--ds-c-studio-taskworkspace-space-1); border-right: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
+.tw-brand { display: flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-7); font-weight: var(--ds-c-studio-taskworkspace-typography-3); letter-spacing: var(--ds-c-studio-taskworkspace-size-69); margin: 0 var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-52); }
+.tw-mark { width: var(--ds-c-studio-taskworkspace-size-70); height: var(--ds-c-studio-taskworkspace-size-70); display: grid; place-items: center; border: var(--ds-c-studio-taskworkspace-size-3) solid currentColor; border-radius: var(--ds-c-studio-taskworkspace-radius-1); font-size: var(--ds-c-studio-taskworkspace-type-5); font-weight: var(--ds-c-studio-taskworkspace-typography-21); }
+.tw-new { padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); text-align: left; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-4); color: inherit; background: var(--tw-canvas); }
+.tw-new span { margin-right: var(--ds-c-studio-taskworkspace-space-12); }
+.tw-new:hover:not(:disabled), .tw-quiet:hover:not(:disabled), .tw-task:hover:not(:disabled), .tw-title-button:hover:not(:disabled), .tw-source-list button:hover { background: var(--vscode-list-hoverBackground, var(--ds-c-studio-taskworkspace-surface-2)); }
+.tw-search { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-12); margin: var(--ds-c-studio-taskworkspace-space-34) var(--ds-c-studio-taskworkspace-space-13) var(--ds-c-studio-taskworkspace-space-18); color: var(--tw-muted); font-size: var(--hp-text-caption); }
+.tw-search input { width: 100%; box-sizing: border-box; padding: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-text-caption); }
+.tw-rail-heading { color: var(--tw-muted); display: flex; justify-content: space-between; margin: 0 var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-12); font-size: var(--hp-text-caption); }
 .tw-task-list, .tw-source-list { list-style: none; padding: 0; margin: 0; overflow: auto; min-height: 0; overscroll-behavior: contain; }
 .tw-task-list { flex: 1; }
-.tw-task-list li, .tw-source-list li { content-visibility: auto; contain-intrinsic-size: auto 65px; }
+.tw-task-list li, .tw-source-list li { content-visibility: auto; contain-intrinsic-size: auto var(--ds-c-studio-taskworkspace-size-71); }
 /* D019: one column. The badge sits on its own right-aligned line so the title keeps the whole row width. */
-.tw-task { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; width: 100%; border: 1px solid transparent; border-radius: 8px; padding: 11px 9px; color: inherit; text-align: left; background: transparent; margin: 2px 0; }
-.tw-task[aria-current="page"] { background: var(--vscode-list-inactiveSelectionBackground, #30353d); border-color: var(--tw-line); }
+.tw-task { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; width: 100%; border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: var(--ds-c-studio-taskworkspace-radius-10); padding: var(--ds-c-studio-taskworkspace-space-53) var(--ds-c-studio-taskworkspace-space-24); color: inherit; text-align: left; background: transparent; margin: var(--ds-c-studio-taskworkspace-space-14) 0; }
+.tw-task[aria-current="page"] { background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-taskworkspace-surface-1)); border-color: var(--tw-line); }
 .tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-text-caption); }
-.tw-task-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; font-size: var(--hp-text-caption); margin-top: 7px; color: var(--tw-muted); font-variant-numeric: tabular-nums; }
-.tw-local-note { color: var(--tw-muted); margin: 18px 8px 4px; font-size: var(--hp-text-caption); }
-.tw-empty-search { font-size: var(--hp-text-caption); line-height: 1.6; padding: 0 8px; color: var(--tw-muted); }
+.tw-task-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-text-caption); margin-top: var(--ds-c-studio-taskworkspace-space-12); color: var(--tw-muted); font-variant-numeric: tabular-nums; }
+.tw-local-note { color: var(--tw-muted); margin: var(--ds-c-studio-taskworkspace-space-18) var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-13); font-size: var(--hp-text-caption); }
+.tw-empty-search { font-size: var(--hp-text-caption); line-height: var(--ds-c-studio-taskworkspace-typography-4); padding: 0 var(--ds-c-studio-taskworkspace-space-2); color: var(--tw-muted); }
 .tw-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.tw-heading { display: flex; align-items: center; gap: 12px; min-height: 57px; padding: 0 20px; border-bottom: 1px solid var(--tw-line); }
-.tw-heading h1 { font-size: var(--hp-text-caption); font-weight: 550; margin: 0; min-width: 0; flex: 1; }
-.tw-title-button { background: transparent; border: 0; border-radius: 6px; padding: 7px 0; max-width: 100%; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; text-align: left; color: inherit; }
-.tw-title-button span { margin-left: 10px; color: var(--tw-muted); }
-.tw-quiet { background: transparent; color: inherit; border: 1px solid var(--tw-line); border-radius: 7px; padding: 7px 10px; white-space: nowrap; }
-.tw-rename { display: flex; gap: 6px; min-width: 0; flex: 1; }
-.tw-rename input { width: 100%; padding: 6px 8px; }
+.tw-heading { display: flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-1); min-height: var(--ds-c-studio-taskworkspace-size-72); padding: 0 var(--ds-c-studio-taskworkspace-space-5); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
+.tw-heading h1 { font-size: var(--hp-text-caption); font-weight: var(--ds-c-studio-taskworkspace-typography-2); margin: 0; min-width: 0; flex: 1; }
+.tw-title-button { background: transparent; border: 0; border-radius: var(--ds-c-studio-taskworkspace-radius-3); padding: var(--ds-c-studio-taskworkspace-space-12) 0; max-width: 100%; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; text-align: left; color: inherit; }
+.tw-title-button span { margin-left: var(--ds-c-studio-taskworkspace-space-7); color: var(--tw-muted); }
+.tw-quiet { background: transparent; color: inherit; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-1); padding: var(--ds-c-studio-taskworkspace-space-12) var(--ds-c-studio-taskworkspace-space-7); white-space: nowrap; }
+.tw-rename { display: flex; gap: var(--ds-c-studio-taskworkspace-space-15); min-width: 0; flex: 1; }
+.tw-rename input { width: 100%; padding: var(--ds-c-studio-taskworkspace-space-15) var(--ds-c-studio-taskworkspace-space-2); }
 .tw-conversation { flex: 1; min-height: 0; min-width: 0; }
 .tw-conversation .hps-shell { background: var(--tw-canvas); }
-.tw-conversation .hps-header { border-bottom: 0; padding: 10px 20px; }
-.tw-conversation .hps-messages { padding: 20px max(20px, calc((100% - 740px) / 2)); gap: 25px; }
-.tw-conversation .hps-msg-body { font-size: var(--hp-text-body); line-height: 1.75; }
+.tw-conversation .hps-header { border-bottom: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-5); }
+.tw-conversation .hps-messages { padding: var(--ds-c-studio-taskworkspace-space-5) max(var(--ds-c-studio-taskworkspace-space-5), calc((100% - var(--ds-c-studio-taskworkspace-space-54)) / 2)); gap: var(--ds-c-studio-taskworkspace-space-32); }
+.tw-conversation .hps-msg-body { font-size: var(--hp-text-body); line-height: var(--ds-c-studio-taskworkspace-typography-22); }
 .tw-conversation .hps-msg-assistant .hps-msg-body { background: transparent; border: 0; padding: 0; max-width: 100%; }
 .tw-conversation .hps-msg-assistant .hps-msg-role > span::before { content: none; }
-.tw-conversation .hps-msg-user .hps-msg-body { background: var(--vscode-list-inactiveSelectionBackground, #343a44); color: inherit; border-radius: 14px; }
-.tw-error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 10px 20px; padding: 10px 12px; border: 1px solid var(--vscode-inputValidation-errorBorder, #d07575); border-radius: 6px; line-height: 1.6; }
+.tw-conversation .hps-msg-user .hps-msg-body { background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-taskworkspace-surface-65)); color: inherit; border-radius: var(--ds-c-studio-taskworkspace-radius-14); }
+.tw-error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--ds-c-studio-taskworkspace-space-1); margin: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-5); padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--vscode-inputValidation-errorBorder, var(--ds-c-studio-taskworkspace-boundary-49)); border-radius: var(--ds-c-studio-taskworkspace-radius-3); line-height: var(--ds-c-studio-taskworkspace-typography-4); }
 /* CGP-DS-R-008: at 14px the busy line must not crowd the trial count out of a 390px heading, so it
    may shrink and wrap between words (its title keeps the full sentence). */
-.tw-run-note { flex: 0 1 auto; min-width: 0; color: var(--tw-muted); font-size: var(--hp-text-caption); line-height: 1.3; word-break: keep-all; }
-.tw-run-help { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.tw-sources { border-left: 1px solid var(--tw-line); background: var(--tw-panel); overflow-y: auto; min-width: 0; overscroll-behavior: contain; }
+.tw-run-note { flex: 0 1 auto; min-width: 0; color: var(--tw-muted); font-size: var(--hp-text-caption); line-height: var(--ds-c-studio-taskworkspace-typography-23); word-break: keep-all; }
+.tw-run-help { position: absolute; width: var(--ds-c-studio-taskworkspace-size-3); height: var(--ds-c-studio-taskworkspace-size-3); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tw-sources { border-left: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); background: var(--tw-panel); overflow-y: auto; min-width: 0; overscroll-behavior: contain; }
 .tw-sources[hidden] { display: none; }
-.tw-sources > header { display: flex; align-items: center; justify-content: space-between; padding: 13px 17px; border-bottom: 1px solid var(--tw-line); }
-.tw-sources h2 { font-size: var(--hp-text-caption); font-weight: 550; margin: 0; }
-.tw-source-detail { padding: 25px 18px 20px; }
+.tw-sources > header { display: flex; align-items: center; justify-content: space-between; padding: var(--ds-c-studio-taskworkspace-space-35) var(--ds-c-studio-taskworkspace-space-8); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
+.tw-sources h2 { font-size: var(--hp-text-caption); font-weight: var(--ds-c-studio-taskworkspace-typography-2); margin: 0; }
+.tw-source-detail { padding: var(--ds-c-studio-taskworkspace-space-32) var(--ds-c-studio-taskworkspace-space-18) var(--ds-c-studio-taskworkspace-space-5); }
 .tw-source-domain { color: var(--tw-muted); font-size: var(--hp-text-caption); overflow-wrap: anywhere; }
-.tw-sources h3 { font-size: var(--hp-text-body); line-height: 1.6; font-weight: 550; overflow-wrap: anywhere; margin: 9px 0; text-wrap: pretty; }
-.tw-source-detail p, .tw-source-empty p { font-size: var(--hp-text-caption); color: var(--tw-muted); line-height: 1.8; }
-.tw-open-source { width: 100%; margin-top: 10px; color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #365d95); border: 0; padding: 10px; border-radius: 8px; }
-.tw-open-source:hover { background: var(--vscode-button-hoverBackground, #426faa); }
-.tw-pin { width: 100%; margin-top: 9px; }
+.tw-sources h3 { font-size: var(--hp-text-body); line-height: var(--ds-c-studio-taskworkspace-typography-4); font-weight: var(--ds-c-studio-taskworkspace-typography-2); overflow-wrap: anywhere; margin: var(--ds-c-studio-taskworkspace-space-24) 0; text-wrap: pretty; }
+.tw-source-detail p, .tw-source-empty p { font-size: var(--hp-text-caption); color: var(--tw-muted); line-height: var(--ds-c-studio-taskworkspace-typography-1); }
+.tw-open-source { width: 100%; margin-top: var(--ds-c-studio-taskworkspace-space-7); color: var(--vscode-button-foreground, var(--ds-c-studio-taskworkspace-ink-2)); background: var(--vscode-button-background, var(--ds-c-studio-taskworkspace-surface-4)); border: 0; padding: var(--ds-c-studio-taskworkspace-space-7); border-radius: var(--ds-c-studio-taskworkspace-radius-10); }
+.tw-open-source:hover { background: var(--vscode-button-hoverBackground, var(--ds-c-studio-taskworkspace-surface-66)); }
+.tw-pin { width: 100%; margin-top: var(--ds-c-studio-taskworkspace-space-24); }
 .tw-source-detail .tw-source-policy { font-size: var(--hp-text-caption); margin-bottom: 0; }
-.tw-sources .tw-source-list-title { font-size: var(--hp-text-caption); color: var(--tw-muted); padding: 0 18px; margin-top: 14px; }
-.tw-source-list { padding: 0 10px 20px; }
-.tw-source-list button { display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left; border: 1px solid transparent; background: transparent; color: inherit; padding: 10px 8px; border-radius: 7px; }
+.tw-sources .tw-source-list-title { font-size: var(--hp-text-caption); color: var(--tw-muted); padding: 0 var(--ds-c-studio-taskworkspace-space-18); margin-top: var(--ds-c-studio-taskworkspace-space-19); }
+.tw-source-list { padding: 0 var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-5); }
+.tw-source-list button { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-16); width: 100%; text-align: left; border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; background: transparent; color: inherit; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-2); border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
 .tw-source-list button[aria-pressed="true"] { border-color: var(--tw-line); }
-.tw-source-list span { overflow-wrap: anywhere; font-size: var(--hp-text-caption); line-height: 1.6; }
+.tw-source-list span { overflow-wrap: anywhere; font-size: var(--hp-text-caption); line-height: var(--ds-c-studio-taskworkspace-typography-4); }
 .tw-source-list small { font-size: var(--hp-text-caption); color: var(--tw-muted); overflow-wrap: anywhere; }
 /* CGP-KNOW-R-015 — 이 파일에 대해 묻기 under each work-folder file: a 44px target, text only. */
-.tw-source-list .tw-artifact-ask { flex-direction: row; align-items: center; align-self: flex-start; width: auto; min-height: 44px; padding: 0 12px; border-color: var(--tw-line); font-size: var(--hp-text-caption); }
-.tw-source-empty { padding: 64px 22px; }
-.tw-source-empty > span { display: block; font-size: 28px; color: var(--tw-muted); margin-bottom: 20px; }
+.tw-source-list .tw-artifact-ask { flex-direction: row; align-items: center; align-self: flex-start; width: auto; min-height: var(--ds-c-studio-taskworkspace-size-8); padding: 0 var(--ds-c-studio-taskworkspace-space-1); border-color: var(--tw-line); font-size: var(--hp-text-caption); }
+.tw-source-empty { padding: var(--ds-c-studio-taskworkspace-space-33) var(--ds-c-studio-taskworkspace-space-34); }
+.tw-source-empty > span { display: block; font-size: var(--ds-c-studio-taskworkspace-type-24); color: var(--tw-muted); margin-bottom: var(--ds-c-studio-taskworkspace-space-5); }
 .tw-rail-toggle { display: none; }
-.tw-rail-close { margin-bottom: 18px; align-self: flex-end; }
+.tw-rail-close { margin-bottom: var(--ds-c-studio-taskworkspace-space-18); align-self: flex-end; }
 @media (max-width: 1050px) {
-  .tw-workspace[data-sources-open="true"] { grid-template-columns: 204px minmax(0, 1fr); }
-  .tw-sources { position: absolute; z-index: 3; right: 0; top: 58px; bottom: 0; width: min(300px, 100%); box-sizing: border-box; box-shadow: -8px 0 20px #0002; }
+  .tw-workspace[data-sources-open="true"] { grid-template-columns: var(--ds-c-studio-taskworkspace-size-68) minmax(0, 1fr); }
+  .tw-sources { position: absolute; z-index: 3; right: 0; top: var(--ds-c-studio-taskworkspace-size-73); bottom: 0; width: min(var(--ds-c-studio-taskworkspace-size-33), 100%); box-sizing: border-box; box-shadow: var(--ds-c-studio-taskworkspace-shadow-15) 0 var(--ds-c-studio-taskworkspace-shadow-10) var(--ds-c-studio-taskworkspace-shadow-5); }
 }
 @media (max-width: 700px) {
   .tw-workspace, .tw-workspace[data-sources-open="true"] { grid-template-columns: minmax(0, 1fr); }
   .tw-rail { display: none; }
-  .tw-workspace[data-rail-open="true"] .tw-rail { display: flex; position: absolute; top: 58px; bottom: 0; left: 0; z-index: 4; width: min(260px, calc(100% - 25px)); box-sizing: border-box; }
+  .tw-workspace[data-rail-open="true"] .tw-rail { display: flex; position: absolute; top: var(--ds-c-studio-taskworkspace-size-73); bottom: 0; left: 0; z-index: 4; width: min(var(--ds-c-studio-taskworkspace-size-58), calc(100% - var(--ds-c-studio-taskworkspace-size-74))); box-sizing: border-box; }
   .tw-rail-toggle { display: inline-block; }
-  .tw-heading { padding: 0 12px; gap: 8px; }
+  .tw-heading { padding: 0 var(--ds-c-studio-taskworkspace-space-1); gap: var(--ds-c-studio-taskworkspace-space-2); }
   .tw-heading h1 { font-size: var(--hp-text-caption); }
-  .tw-rename { flex-wrap: wrap; padding: 8px 0; }
+  .tw-rename { flex-wrap: wrap; padding: var(--ds-c-studio-taskworkspace-space-2) 0; }
   .tw-rename input { flex-basis: 100%; }
-  .tw-conversation .hps-messages { padding: 15px; }
-  .tw-skip { left: 10px; }
+  .tw-conversation .hps-messages { padding: var(--ds-c-studio-taskworkspace-space-36); }
+  .tw-skip { left: var(--ds-c-studio-taskworkspace-size-75); }
 }
 
 /* Source inspection keeps one panel and leaves the conversation tree mounted. */
-.tw-source-backdrop { position: absolute; inset: 0; z-index: 2; background: rgb(0 0 0 / 38%); }
-.tw-source-close { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
-.tw-sources > header { padding-block: 7px; }
-.tw-source-list button { min-height: 44px; }
-.tw-source-empty > span > svg { width: 24px; height: 24px; }
-.tw-sources .tw-source-policy { line-height: 1.7; }
-.tw-workspace .tw-sources-toggle, .tw-workspace .tw-rail-toggle, .tw-workspace .tw-title-button, .tw-workspace .tw-new, .tw-workspace .tw-quiet { min-height: 44px; }
-.tw-sources .tw-source-detail { padding-top: 20px; }
+.tw-source-backdrop { position: absolute; inset: 0; z-index: 2; background: var(--ds-c-studio-taskworkspace-surface-67); }
+.tw-source-close { min-width: var(--ds-c-studio-taskworkspace-size-8); min-height: var(--ds-c-studio-taskworkspace-size-8); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.tw-sources > header { padding-block: var(--ds-c-studio-taskworkspace-space-12); }
+.tw-source-list button { min-height: var(--ds-c-studio-taskworkspace-size-8); }
+.tw-source-empty > span > svg { width: var(--ds-c-studio-taskworkspace-size-17); height: var(--ds-c-studio-taskworkspace-size-17); }
+.tw-sources .tw-source-policy { line-height: var(--ds-c-studio-taskworkspace-typography-24); }
+.tw-workspace .tw-sources-toggle, .tw-workspace .tw-rail-toggle, .tw-workspace .tw-title-button, .tw-workspace .tw-new, .tw-workspace .tw-quiet { min-height: var(--ds-c-studio-taskworkspace-size-8); }
+.tw-sources .tw-source-detail { padding-top: var(--ds-c-studio-taskworkspace-space-5); }
 @media (prefers-reduced-motion: reduce) {
   .tw-workspace *, .tw-workspace *::before, .tw-workspace *::after { scroll-behavior: auto !important; }
 }
 
 
 /* Keep primary navigation reachable at 320px without shrinking its hit area. */
-.tw-workspace .tw-rail-toggle { min-width: 44px; width: 44px; flex: 0 0 44px; }
-.tw-workspace .hps-shell[data-chat-detail="personal"] .hps-header { padding-block: 4px; gap: 8px; }
-.tw-workspace .hps-shell[data-chat-detail="personal"] .hps-header > button.hps-coach-name { min-height: 44px; min-width: 44px; margin-left: 0; }
+.tw-workspace .tw-rail-toggle { min-width: var(--ds-c-studio-taskworkspace-size-8); width: var(--ds-c-studio-taskworkspace-size-8); flex: 0 0 var(--ds-c-studio-taskworkspace-size-8); }
+.tw-workspace .hps-shell[data-chat-detail="personal"] .hps-header { padding-block: var(--ds-c-studio-taskworkspace-space-13); gap: var(--ds-c-studio-taskworkspace-space-2); }
+.tw-workspace .hps-shell[data-chat-detail="personal"] .hps-header > button.hps-coach-name { min-height: var(--ds-c-studio-taskworkspace-size-8); min-width: var(--ds-c-studio-taskworkspace-size-8); margin-left: 0; }
 .tw-chat-menu { position: relative; }
-.tw-workspace .hps-header .tw-chat-menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; padding: 0; margin: 0; border-radius: 7px; }
-.tw-chat-menu-panel { position: absolute; z-index: 5; top: calc(100% + 6px); right: 0; width: min(224px, calc(100vw - 32px)); padding: 6px; box-sizing: border-box; border: 1px solid var(--tw-line); border-radius: 9px; background: var(--tw-panel); color: var(--vscode-foreground, #e1e1e1); box-shadow: 0 6px 22px rgb(0 0 0 / 20%); }
-.tw-workspace .hps-header .tw-chat-menu-panel > button { display: block; width: 100%; min-width: 44px; min-height: 44px; box-sizing: border-box; margin: 0; padding: 10px 12px; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: var(--hp-text-caption); line-height: 1.5; border-radius: 5px; }
+.tw-workspace .hps-header .tw-chat-menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: var(--ds-c-studio-taskworkspace-size-8); min-width: var(--ds-c-studio-taskworkspace-size-8); min-height: var(--ds-c-studio-taskworkspace-size-8); padding: 0; margin: 0; border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-chat-menu-panel { position: absolute; z-index: 5; top: calc(100% + var(--ds-c-studio-taskworkspace-size-37)); right: 0; width: min(var(--ds-c-studio-taskworkspace-size-76), calc(100vw - var(--ds-c-studio-taskworkspace-size-23))); padding: var(--ds-c-studio-taskworkspace-space-15); box-sizing: border-box; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-4); background: var(--tw-panel); color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1)); box-shadow: 0 var(--ds-c-studio-taskworkspace-shadow-16) var(--ds-c-studio-taskworkspace-shadow-17) var(--ds-c-studio-taskworkspace-shadow-18); }
+.tw-workspace .hps-header .tw-chat-menu-panel > button { display: block; width: 100%; min-width: var(--ds-c-studio-taskworkspace-size-8); min-height: var(--ds-c-studio-taskworkspace-size-8); box-sizing: border-box; margin: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: var(--hp-text-caption); line-height: var(--ds-c-studio-taskworkspace-typography-5); border-radius: var(--ds-c-studio-taskworkspace-radius-12); }
 
 /* Personal menu contrast follows the active theme, including hover and focus. */
 .tw-workspace .hps-header .tw-chat-menu-toggle,
-.tw-workspace .hps-header .tw-chat-menu-panel > button { color: var(--vscode-foreground, #e1e1e1); }
+.tw-workspace .hps-header .tw-chat-menu-panel > button { color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1)); }
 .tw-workspace .hps-header .tw-chat-menu-toggle:hover,
-.tw-workspace .hps-header .tw-chat-menu-panel > button:hover:not(:disabled) { background: var(--vscode-list-hoverBackground, #2b3037); color: var(--vscode-foreground, #e1e1e1); }
+.tw-workspace .hps-header .tw-chat-menu-panel > button:hover:not(:disabled) { background: var(--vscode-list-hoverBackground, var(--ds-c-studio-taskworkspace-surface-2)); color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1)); }
 
 /* One calm header row: the personal chat's header controls (remaining line, menu) are drawn into
    the task heading next to 자료, which is a plain header button rather than a bordered square. */
 .tw-heading-slot { display: contents; }
 .tw-heading .hps-header { display: contents; }
-.tw-heading .hps-trial-left { color: var(--tw-muted); margin-inline: 0 4px; }
+.tw-heading .hps-trial-left { color: var(--tw-muted); margin-inline: 0 var(--ds-c-studio-taskworkspace-space-13); }
 .tw-heading .tw-chat-menu { order: 1; }
-.tw-workspace .tw-heading .tw-sources-toggle { border-color: transparent; background: transparent; padding: 0 12px; font-size: var(--hp-text-caption); color: var(--vscode-foreground, #e1e1e1); }
-.tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background: var(--vscode-list-inactiveSelectionBackground, #30353d); }
+.tw-workspace .tw-heading .tw-sources-toggle { border-color: transparent; background: transparent; padding: 0 var(--ds-c-studio-taskworkspace-space-1); font-size: var(--hp-text-caption); color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1)); }
+.tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-taskworkspace-surface-1)); }
 /* The task title keeps its place; the remaining line gives way (ellipsis, full text in its title). */
-.tw-heading h1 { flex: 1 1 0; min-width: min(120px, 30%); }
+.tw-heading h1 { flex: 1 1 0; min-width: min(var(--ds-c-studio-taskworkspace-size-77), 30%); }
 .tw-heading .hps-trial-left { flex: 0 1 auto; min-width: 0; }
 /* US-05 current activity: muted, and it yields before the remaining count does. */
 .tw-heading .hps-activity-now { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-text-caption); color: var(--tw-muted); }
 /* Narrow header (sidebar, 390-560px): the remaining count stays whole; only "· …까지" gives way. */
 @media (max-width: 640px) {
-  .tw-heading h1 { min-width: min(72px, 22%); }
+  .tw-heading h1 { min-width: min(var(--ds-c-studio-taskworkspace-size-46), 22%); }
   .tw-heading .hps-trial-until { display: none; }
   /* TUX-SP-13B: the remaining count stays whole; the title and the run note give way first. */
   .tw-heading .hps-trial-left { flex-shrink: 0; }
@@ -152,13 +152,13 @@
      trial's remaining line needs the room: that line already says the seat is a trial, and its count
      must stay whole (TUX-SP-13B). */
   .tw-heading .hps-activity-name,
-  .tw-heading:has(.hps-trial-left) .hps-activity-now { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .tw-heading:has(.hps-trial-left) .hps-activity-now { position: absolute; width: var(--ds-c-studio-taskworkspace-size-3); height: var(--ds-c-studio-taskworkspace-size-3); margin: var(--ds-c-studio-taskworkspace-space-22); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 /* CONV-ENDCARD-R-003 — on an ended free seat the ended line already says 무료, and with the pass
    link beside it a mid-width header would squeeze the activity line to a stray dot and cut the ended
    line. The activity line gives its room there (screen readers keep it, as at 640px above). */
 @media (max-width: 1100px) {
-  .tw-heading:has(.hps-header-passes) .hps-activity-now { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .tw-heading:has(.hps-header-passes) .hps-activity-now { position: absolute; width: var(--ds-c-studio-taskworkspace-size-3); height: var(--ds-c-studio-taskworkspace-size-3); margin: var(--ds-c-studio-taskworkspace-space-22); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 /* At sidebar width the ended line carries no count (a free seat never shows one), so unlike a
    trial's count (TUX-SP-13B) it may shrink, down to nothing at 390px, rather than push 자료 and the
@@ -167,35 +167,35 @@
   .tw-heading:has(.hps-header-passes) .hps-trial-left { flex-shrink: 1; }
 }
 .tw-workspace .tw-heading .tw-rail-toggle { border-color: transparent; }
-.tw-workspace .tw-heading .tw-rail-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
+.tw-workspace .tw-heading .tw-rail-toggle:hover { background: var(--vscode-list-hoverBackground, var(--ds-c-studio-taskworkspace-surface-2)); }
 /* REQ-STUDIO-TASK-RUN-STATE — words plus a symbol; colour is never the only carrier. */
-.tw-task-state { justify-self: end; max-width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 1px 6px; border: 1px solid var(--tw-line); border-radius: 999px; font-size: var(--hp-text-caption); line-height: 1.5; }
-.tw-task-state-symbol { font-weight: 700; }
-.tw-task-state[data-run-state="approval"], .tw-task-state[data-run-state="error"] { font-weight: 700; border-width: 2px; }
+.tw-task-state { justify-self: end; max-width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-13); margin-top: var(--ds-c-studio-taskworkspace-space-15); padding: var(--ds-c-studio-taskworkspace-space-21) var(--ds-c-studio-taskworkspace-space-15); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-15); font-size: var(--hp-text-caption); line-height: var(--ds-c-studio-taskworkspace-typography-5); }
+.tw-task-state-symbol { font-weight: var(--ds-c-studio-taskworkspace-typography-17); }
+.tw-task-state[data-run-state="approval"], .tw-task-state[data-run-state="error"] { font-weight: var(--ds-c-studio-taskworkspace-typography-17); border-width: var(--ds-c-studio-taskworkspace-size-7); }
 
 /* REQ-STUDIO-UI-POLISH-1 — the heading reads as three groups: where I am (the activity kind, then
    its name, quieter), what is happening (the run state, a bordered pill with a dot, drawn only while
    a turn runs), and what I can do (자료 and the menu, after a hairline divider). Nothing is dropped;
    the groups differ by weight, colour and a separator, not by size (every word stays 14px). */
-.tw-heading .hps-activity-kind { color: var(--vscode-foreground, #e1e1e1); font-weight: 550; }
+.tw-heading .hps-activity-kind { color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1)); font-weight: var(--ds-c-studio-taskworkspace-typography-2); }
 .tw-heading .hps-activity-name { color: var(--tw-muted); }
 .tw-heading .tw-run-note:not(:empty) {
-  display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px;
-  border: 1px solid var(--tw-line); border-radius: 999px; color: var(--vscode-foreground, #e1e1e1);
+  display: inline-flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-15); padding: var(--ds-c-studio-taskworkspace-space-14) var(--ds-c-studio-taskworkspace-space-7);
+  border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-15); color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1));
 }
-.tw-heading .tw-run-note:not(:empty)::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
-.tw-workspace .tw-heading .tw-sources-toggle { position: relative; font-weight: 550; }
+.tw-heading .tw-run-note:not(:empty)::before { content: ""; width: var(--ds-c-studio-taskworkspace-size-37); height: var(--ds-c-studio-taskworkspace-size-37); border-radius: 50%; background: currentColor; flex: none; }
+.tw-workspace .tw-heading .tw-sources-toggle { position: relative; font-weight: var(--ds-c-studio-taskworkspace-typography-2); }
 /* The divider separates the actions from something: only when the activity, the remaining line or the
    run pill precedes 자료. The classroom heading has none of them while idle, so it draws no stray line. */
-.tw-workspace .tw-heading:has(.hps-activity-now, .hps-trial-left, .tw-run-note:not(:empty)) .tw-sources-toggle { margin-inline-start: 9px; }
+.tw-workspace .tw-heading:has(.hps-activity-now, .hps-trial-left, .tw-run-note:not(:empty)) .tw-sources-toggle { margin-inline-start: var(--ds-c-studio-taskworkspace-space-24); }
 .tw-workspace .tw-heading:has(.hps-activity-now, .hps-trial-left, .tw-run-note:not(:empty)) .tw-sources-toggle::before {
-  content: ""; position: absolute; inset-block: 12px; inset-inline-start: -11px; border-inline-start: 1px solid var(--tw-line); pointer-events: none;
+  content: ""; position: absolute; inset-block: var(--ds-c-studio-taskworkspace-size-78); inset-inline-start: var(--ds-c-studio-taskworkspace-size-79); border-inline-start: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); pointer-events: none;
 }
 
 /* Split-pane widths while a turn runs: the pill takes the room the track name had, so the name moves
    into the activity's title (kind · name) instead of ending in an ellipsis. The kind stays. */
 @media (max-width: 900px) {
-  .tw-heading:has(.tw-run-note:not(:empty)) .hps-activity-name { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .tw-heading:has(.tw-run-note:not(:empty)) .hps-activity-name { position: absolute; width: var(--ds-c-studio-taskworkspace-size-3); height: var(--ds-c-studio-taskworkspace-size-3); margin: var(--ds-c-studio-taskworkspace-space-22); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). The open sources toggle was marked by a
@@ -204,41 +204,41 @@
   /* The current task and the selected source are filled with Highlight, and the ring is Highlight too:
      the inset ring of these tight rows would sit on its own colour. Outside the row it sits on Canvas,
      and the scrolling lists get 4px of room so they do not clip it. */
-  .tw-workspace .tw-task-list button:focus-visible, .tw-workspace .tw-source-list button:focus-visible { outline-offset: 2px; }
-  .tw-workspace .tw-task-list { padding: 4px; }
-  .tw-workspace .tw-source-list { padding-block-start: 4px; }
+  .tw-workspace .tw-task-list button:focus-visible, .tw-workspace .tw-source-list button:focus-visible { outline-offset: var(--ds-c-studio-taskworkspace-size-7); }
+  .tw-workspace .tw-task-list { padding: var(--ds-c-studio-taskworkspace-space-13); }
+  .tw-workspace .tw-source-list { padding-block-start: var(--ds-c-studio-taskworkspace-space-13); }
   .tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background-color: Highlight; color: HighlightText; border-color: Highlight !important; }
   /* REQ-STUDIO-UI-POLISH-1: the run pill's dot is a background, which forced colors repaints as Canvas. */
   .tw-heading .tw-run-note:not(:empty)::before { background: CanvasText; }
 }
 
 /* D019: the existing skip link moves actual focus, with the shared theme-aware focus ring. */
-.tw-conversation:focus { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+.tw-conversation:focus { outline: var(--ds-c-studio-taskworkspace-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-taskworkspace-size-7); }
 @media (forced-colors: active) {
   .tw-task-state { border-color: CanvasText; color: CanvasText; background: Canvas; }
-  .tw-task-state[data-run-state="approval"] { border-style: double; border-width: 3px; }
+  .tw-task-state[data-run-state="approval"] { border-style: double; border-width: var(--ds-c-studio-taskworkspace-size-15); }
 }
 
 /* CGP-KNOW-D-013 (DES-KNOW-24) — the activity trash at the bottom of 내 작품: every control is a
    44px target, the toast's 되돌리기 included; text stays at the caption step (14px floor). */
 .tw-works { min-width: 0; overflow-wrap: anywhere; }
 .tw-works button:disabled, .tw-works button[aria-disabled="true"] { opacity: .65; cursor: default; }
-.tw-trash { padding: 0 10px 12px; border-top: 1px solid var(--tw-line); }
-.tw-trash button, .tw-trash-dialog button, .tw-trash-error button { min-height: 44px; padding: 0 12px; font-size: var(--hp-text-caption); color: inherit; background: transparent; border: 1px solid var(--tw-line); border-radius: 7px; }
-.tw-trash-entry { box-sizing: border-box; width: 100%; margin-top: 12px; text-align: left; }
+.tw-trash { padding: 0 var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); border-top: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
+.tw-trash button, .tw-trash-dialog button, .tw-trash-error button { min-height: var(--ds-c-studio-taskworkspace-size-8); padding: 0 var(--ds-c-studio-taskworkspace-space-1); font-size: var(--hp-text-caption); color: inherit; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-trash-entry { box-sizing: border-box; width: 100%; margin-top: var(--ds-c-studio-taskworkspace-space-1); text-align: left; }
 .tw-trash-list ul { list-style: none; margin: 0; padding: 0; }
-.tw-trash-list li { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; }
+.tw-trash-list li { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-15); padding: var(--ds-c-studio-taskworkspace-space-7) 0; }
 .tw-trash-name { font-size: var(--hp-text-caption); overflow-wrap: anywhere; }
 .tw-trash-list time, .tw-trash-note { font-size: var(--hp-text-caption); color: var(--tw-muted); }
-.tw-trash-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.tw-trash-error { font-size: var(--hp-text-caption); padding: 0 18px; }
-.tw-trash-toast { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 10px 12px; font-size: var(--hp-text-caption); }
-.tw-trash-toast[data-shown="true"] { padding: 6px 12px; border: 1px solid var(--tw-line); border-radius: 9px; background: var(--tw-panel); }
-.tw-trash-toast .tw-trash-undo { min-height: 44px; min-width: 44px; padding: 0 12px; font-size: var(--hp-text-caption); color: inherit; background: transparent; border: 1px solid var(--tw-line); border-radius: 7px; text-decoration: underline; }
-.tw-trash-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: #0009; }
-.tw-trash-dialog { box-sizing: border-box; width: 100%; max-width: 420px; max-height: 90vh; overflow: auto; padding: 20px; color: inherit; background: var(--tw-panel); border: 1px solid var(--tw-line); border-radius: 12px; font-size: var(--hp-text-caption); }
-.tw-trash-dialog h3 { margin: 0 0 8px; font-size: var(--hp-text-body); }
-.tw-trash-danger { font-weight: 600; }
+.tw-trash-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-taskworkspace-space-2); }
+.tw-trash-error { font-size: var(--hp-text-caption); padding: 0 var(--ds-c-studio-taskworkspace-space-18); }
+.tw-trash-toast { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-13) var(--ds-c-studio-taskworkspace-space-2); margin: 0 var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); font-size: var(--hp-text-caption); }
+.tw-trash-toast[data-shown="true"] { padding: var(--ds-c-studio-taskworkspace-space-15) var(--ds-c-studio-taskworkspace-space-1); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-4); background: var(--tw-panel); }
+.tw-trash-toast .tw-trash-undo { min-height: var(--ds-c-studio-taskworkspace-size-8); min-width: var(--ds-c-studio-taskworkspace-size-8); padding: 0 var(--ds-c-studio-taskworkspace-space-1); font-size: var(--hp-text-caption); color: inherit; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-1); text-decoration: underline; }
+.tw-trash-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: var(--ds-c-studio-taskworkspace-space-20); background: var(--ds-c-studio-taskworkspace-surface-126); }
+.tw-trash-dialog { box-sizing: border-box; width: 100%; max-width: var(--ds-c-studio-taskworkspace-size-101); max-height: 90vh; overflow: auto; padding: var(--ds-c-studio-taskworkspace-space-5); color: inherit; background: var(--tw-panel); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-6); font-size: var(--hp-text-caption); }
+.tw-trash-dialog h3 { margin: 0 0 var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-text-body); }
+.tw-trash-danger { font-weight: var(--ds-c-studio-taskworkspace-typography-7); }
 @media (forced-colors: active) {
   .tw-trash button, .tw-trash-dialog button, .tw-trash-toast .tw-trash-undo, .tw-trash-error button { border-color: ButtonText; }
   .tw-trash-dialog, .tw-trash-toast[data-shown="true"] { border-color: CanvasText; }

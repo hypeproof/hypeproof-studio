@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019) — the real ChatPanel draws one calm hint under a tool
 // step that has been running 20 s, offers 멈추기 at 60 s through the same cancel as Stop, updates it
 // in place, and clears it when the step ends, when text streams, or when the stall (#403) message
@@ -6,13 +8,15 @@
 
 import { click, mountPoint } from "./fixtures/mini-dom.mjs";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderRawMarkup } from "react-dom/server";
 import { createRoot, type Root } from "react-dom/client";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
 import { workPhrase } from "../src/toolActivity";
 import type { ChatConfig, ChatMessage } from "../src/protocol";
 
 const act: (fn: () => unknown) => Promise<void> = (React as unknown as { act: (fn: () => unknown) => Promise<void> }).act;
+const expandTokens = staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"));
+const renderToStaticMarkup: typeof renderRawMarkup = (node) => expandTokens(renderRawMarkup(node));
 let fail = 0;
 const tests: [string, () => void | Promise<void>][] = [];
 const t = (label: string, fn: () => void | Promise<void>) => tests.push([label, fn]);

@@ -1,3 +1,4 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // CGP-DS-R-018 / REQ-STUDIO-STROKE-ICONS — learner UI draws status and affordance icons from the
 // stroke set (ChatIcon), never as emoji or Unicode status glyphs. Emoji render differently per OS,
 // ignore the theme colour and forced colours, and looked unpolished in the released app
@@ -13,7 +14,7 @@
 // Run: node --experimental-strip-types test/stroke-icons.smoke.mjs
 
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 
 const ok = (msg) => console.log(`  ✓ ${msg}`);
 const src = new URL("../webview-ui/src/", import.meta.url);

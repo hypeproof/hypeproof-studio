@@ -1,3 +1,4 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // CGP-CHAT-R-011 — a kids classroom seat (REQ-M32: sdk_tools.read on, lesson on) with file attach
 // granted renders the real ChatPanel through the SX render instrument: the file-only tool menu
 // trigger appears in the classroom composer (no data-expanded, so the 44px classroom rule applies),
@@ -5,7 +6,7 @@
 // Run: node --experimental-strip-types test/file-attachment-kids-render.smoke.mjs
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { rendererStatus, renderComponent, visibleText } from "./sx-render.mjs";
 import { chatConfig, chatPanelProps, resolvedProfile, noop } from "./sx-screen-fixtures.mjs";
 

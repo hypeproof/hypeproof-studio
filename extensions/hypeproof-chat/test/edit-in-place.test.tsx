@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { EditAction, EditPrompt, VersionPager } from '../webview-ui/src/EditResend';
 import { AttemptPager } from '../webview-ui/src/AttemptPager';
+import { staticTokens } from './lib/expand-design-tokens.mjs';
 const act=(React as any).act;
 const fireEv=(target:any,type:string,extra:any={})=>{const ev:any={type,bubbles:true,cancelable:true,defaultPrevented:false,timeStamp:Date.now(),isComposing:false,keyCode:0,shiftKey:false,...extra,preventDefault(){ev.defaultPrevented=true;},stopPropagation(){ev._stopped=true;}};target.dispatchEvent(ev);return ev;};
 const fire=(target:any,type:string,extra:any={})=>target.dispatchEvent({type,bubbles:true,cancelable:true,timeStamp:Date.now(),isComposing:false,keyCode:0,shiftKey:false,...extra,preventDefault(){},stopPropagation(){(this as any)._stopped=true;}});
@@ -74,7 +75,7 @@ const fire=(target:any,type:string,extra:any={})=>target.dispatchEvent({type,bub
  await act(async()=>click(host.querySelectorAll('button')[1])); assert.deepEqual(pages,[1,0,1]);
  await act(async()=>root.unmount()); host.remove();
  // CSS contracts supplement the mounted interaction tests; browser geometry remains an owner check.
- const css=fs.readFileSync(path.join(process.cwd(),'webview-ui/src/styles.css'),'utf8');
+ const css=staticTokens(fs.readFileSync(path.join(process.cwd(),'webview-ui/src/designTokens.css'),'utf8'))(fs.readFileSync(path.join(process.cwd(),'webview-ui/src/styles.css'),'utf8'));
  const rule=(selector:string)=>{const body=css.slice(css.indexOf(selector+' {')+selector.length+2); return body.slice(0,body.indexOf('}'));};
  for(const selector of ['.hps-user-actions','.hps-version-pager','.hps-edit-actions']) assert.match(rule(selector),/flex-wrap: wrap/,selector);
  for(const selector of ['.hps-edit-box','.hps-edit-box textarea','.hps-edit-actions','.hps-user-actions','.hps-version-pager']) {assert.match(rule(selector),/min-width: 0/,selector);assert.match(rule(selector),/max-width: 100%/,selector);}

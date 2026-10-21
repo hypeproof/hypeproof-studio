@@ -9169,6 +9169,45 @@
           "path": "extensions/hypeproof-chat/test/outbound-dialog-app.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-SHARED-DESIGN-TOKENS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SX"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        },
+        {
+          "path": "scripts/sync-design-tokens.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SHARED-DESIGN-TOKENS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SX",
+        "ST-IMP-SHARED-DESIGN-TOKENS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/design-tokens.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/design-tokens.test.mjs"
+        }
+      ]
     }
   ]
 }

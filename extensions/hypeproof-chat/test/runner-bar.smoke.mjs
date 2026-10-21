@@ -1,3 +1,4 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // #642 — "코치가 일하는 동안 살아있는 화면" (달리는 게스트, 2026-08-20 실기기).
 //
 // 증상: 코치가 "Read ✓" 를 찍고 나면 1~3분 동안 화면이 통째로 정적이다. 초3·4 는
@@ -13,7 +14,7 @@
 // Run: node --experimental-strip-types test/runner-bar.smoke.mjs
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 

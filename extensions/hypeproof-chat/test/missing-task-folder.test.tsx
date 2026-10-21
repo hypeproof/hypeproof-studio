@@ -1,3 +1,4 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // REQ-STUDIO-MISSING-TASK-FOLDER (CGP-AGENT-R-028, DES-CGP-AGENT-57) — the webview side: the real
 // ChatPanel on the minimal DOM (fixtures/mini-dom.mjs) receives the host's notice, shows one sentence
 // and one 다시 고르기 action, holds the send with the draft kept, and drops the notice when the host
@@ -148,7 +149,7 @@ t("classroom: no notice and no webview hold (the host keeps the existing refusal
 });
 
 t("styles: learner text uses the type-scale tokens; the action is a 44px target", () => {
-  const css = readFileSync("webview-ui/src/chatDetails.css", "utf8");
+  const css = designValues(readFileSync("webview-ui/src/chatDetails.css", "utf8"));
   const rule = (sel: string) => new RegExp(`\\.hps-shell\\[data-chat-detail="personal"\\] \\.${sel}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
   ok(/font-size:\s*var\(--hp-text-body\)/.test(rule("hps-missing-folder-text")), "sentence at body size");
   ok(/font-size:\s*var\(--hp-text-caption\)/.test(rule("hps-missing-folder-note")), "note at caption size (14px floor)");
@@ -166,3 +167,5 @@ t("styles: learner text uses the type-scale tokens; the action is a 44px target"
   console.log(`\n${tests.length} missing-task-folder checks passed`);
   process.exit(0);
 })();
+
+function designValues(css: string): string { return staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(css); }

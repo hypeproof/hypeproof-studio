@@ -113,7 +113,7 @@ const NEGATIVE = [
   ["1", "c04 .hps-access-part nowrap dropped", (s) => s.replace(".hps-access-part { white-space: nowrap; }", "")],
   ["2", "personal heading no longer wraps", (s) => s.replace(".tw-heading:has(.hps-access-header) { flex-wrap: wrap; row-gap: 0; }", ".tw-heading:has(.hps-access-header) { row-gap: 0; }")],
   ["2", "line shares the first row (no full basis)", (s) => s.replace(".tw-heading:has(.hps-access-header) .hps-access-header { order: 3; flex: 1 1 100%;", ".tw-heading:has(.hps-access-header) .hps-access-header { order: 3; flex: 0 1 auto;")],
-  ["3", "classroom header rules dropped", (s) => s.replace("  .hps-header:has(> .hps-access-header) { flex-wrap: wrap; row-gap: 2px; }\n", "")],
+  ["3", "classroom header rules dropped", (s) => s.replace("  .hps-header:has(> .hps-access-header) { flex-wrap: wrap; row-gap: var(--ds-c-studio-styles-space-14); }\n", "")],
   ["3", "classroom line not a full row", (s) => s.replace(".hps-header > .hps-access-header { order: 3; flex: 1 1 100%; }", ".hps-header > .hps-access-header { order: 3; }")],
   ["2", "narrow rules moved to a narrower breakpoint (max-width: 400px)", (s) => s.replace("@media (max-width: 640px) {\n  .tw-heading:has(.hps-access-header)", "@media (max-width: 400px) {\n  .tw-heading:has(.hps-access-header)")],
 ];

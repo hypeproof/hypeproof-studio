@@ -1,3 +1,4 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // Region A, the work screen's home (SX-01 ~ SX-04): SX-02's "지난번 이어서" — the step the task
 // record still holds from an earlier session of the App — and the two style rules the in-app run
 // found missing. Run: node --experimental-strip-types test/sx-home.smoke.mjs
@@ -36,7 +37,7 @@
 // and a reopen) is e2e/sx/home-app.spec.ts.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

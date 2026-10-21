@@ -1,3 +1,4 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // CGP-KNOW-R-004 (REQ-STUDIO-ANSWER-TO-WIKI) — "팀 브레인에 정리하기" on one finished answer, webview
 // side: where the action renders and what a click hands to App. The real ChatPanel mounts on the
 // minimal DOM (fixtures/mini-dom.mjs, loaded first) and the test clicks the real button. The host side
@@ -93,7 +94,7 @@ t("placed in the existing answer action row, with the copy and verdict actions, 
   const row = (button as unknown as { parentNode: El }).parentNode;
   ok((row.getAttribute("class") ?? "").split(/\s+/).includes("hps-answer-actions"), "not in the answer action row");
   ok(row.textContent.includes("복사") && row.textContent.includes("맞아요"), "copy and verdict are not in the same row");
-  const css = readFileSync("webview-ui/src/chatDetails.css", "utf8");
+  const css = designValues(readFileSync("webview-ui/src/chatDetails.css", "utf8"));
   const rule = /\.hps-shell\[data-chat-detail="personal"\] \.hps-answer-actions \.hps-answer-action \{([^}]*)\}/.exec(css)?.[1] ?? "";
   ok(/min-height:\s*44px/.test(rule) && /min-width:\s*44px/.test(rule), "the shared action rule lost its 44px target");
 });
@@ -139,3 +140,5 @@ t("App posts the click to the host as answerToWiki with the message id only", ()
   console.log(`\n${tests.length} answer-to-wiki checks passed`);
   process.exit(0);
 })();
+
+function designValues(css: string): string { return staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(css); }

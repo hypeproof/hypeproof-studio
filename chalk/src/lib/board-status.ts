@@ -56,19 +56,19 @@ export const boardStatusScript = `const boardStatus = (function boardStatusUI() 
 })();`;
 
 export const boardStatusCss = `
-.cgp-state {display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border:1px solid #94a3b8;border-radius:6px;background:#17212b;color:#e2e8f0;font-size:14px;line-height:1.5;white-space:normal}
-.cgp-working {border-color:#93c5fd;color:#bfdbfe}
-.cgp-blocked {border-color:#fca5a5;color:#fecaca}
-.cgp-review {border-color:#fcd34d;color:#fde68a}
-.cgp-idle {border-color:#c4b5fd;color:#ddd6fe}
-.cgp-done {border-color:#6ee7b7;color:#a7f3d0}
-.cgp-unknown {border-style:dashed;border-color:#cbd5e1;color:#e2e8f0;background:#17212b}
-.cgp-filters {display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.cgp-state {display:inline-flex;align-items:center;gap:var(--ds-c-chalk-board-status-space-13);padding:var(--ds-c-chalk-board-status-space-11) var(--ds-c-chalk-board-status-space-12);border:var(--ds-c-chalk-board-status-size-3) solid var(--ds-c-chalk-board-status-boundary-90);border-radius:var(--ds-c-chalk-board-status-radius-3);background:var(--ds-c-chalk-board-status-surface-127);color:var(--ds-c-chalk-board-status-ink-105);font-size:var(--ds-c-chalk-board-status-type-17);line-height:var(--ds-c-chalk-board-status-typography-5);white-space:normal}
+.cgp-working {border-color:var(--ds-c-chalk-board-status-boundary-91);color:var(--ds-c-chalk-board-status-ink-106)}
+.cgp-blocked {border-color:var(--ds-c-chalk-board-status-boundary-92);color:var(--ds-c-chalk-board-status-ink-107)}
+.cgp-review {border-color:var(--ds-c-chalk-board-status-boundary-93);color:var(--ds-c-chalk-board-status-ink-108)}
+.cgp-idle {border-color:var(--ds-c-chalk-board-status-boundary-94);color:var(--ds-c-chalk-board-status-ink-109)}
+.cgp-done {border-color:var(--ds-c-chalk-board-status-boundary-95);color:var(--ds-c-chalk-board-status-ink-110)}
+.cgp-unknown {border-style:dashed;border-color:var(--ds-c-chalk-board-status-boundary-96);color:var(--ds-c-chalk-board-status-ink-105);background:var(--ds-c-chalk-board-status-surface-127)}
+.cgp-filters {display:flex;flex-wrap:wrap;gap:var(--ds-c-chalk-board-status-space-15);margin:var(--ds-c-chalk-board-status-space-2) 0}
 .ops-top > .cgp-filters {grid-column:1 / -1}
-.cgp-state-filter {display:inline-flex;align-items:center;gap:4px;width:auto;min-height:44px;margin:0;padding:5px 8px;border:1px solid #94a3b8;border-radius:8px;background:#17212b;color:#e2e8f0;font:inherit;font-size:14px;cursor:pointer}
-.cgp-state-filter[aria-pressed="true"] {border-width:3px;padding:3px 6px;border-color:#e2e8f0}
-.cgp-state-filter:focus-visible {outline:2px solid #93c5fd;outline-offset:2px}
-.cgp-state-filter:has(.cgp-unknown) {border-style:dashed;border-color:#cbd5e1;color:#e2e8f0}
+.cgp-state-filter {display:inline-flex;align-items:center;gap:var(--ds-c-chalk-board-status-space-13);width:auto;min-height:var(--ds-c-chalk-board-status-size-8);margin:0;padding:var(--ds-c-chalk-board-status-space-16) var(--ds-c-chalk-board-status-space-2);border:var(--ds-c-chalk-board-status-size-3) solid var(--ds-c-chalk-board-status-boundary-90);border-radius:var(--ds-c-chalk-board-status-radius-10);background:var(--ds-c-chalk-board-status-surface-127);color:var(--ds-c-chalk-board-status-ink-105);font:inherit;font-size:var(--ds-c-chalk-board-status-type-17);cursor:pointer}
+.cgp-state-filter[aria-pressed="true"] {border-width:var(--ds-c-chalk-board-status-size-15);padding:var(--ds-c-chalk-board-status-space-11) var(--ds-c-chalk-board-status-space-15);border-color:var(--ds-c-chalk-board-status-boundary-97)}
+.cgp-state-filter:focus-visible {outline:var(--ds-c-chalk-board-status-size-7) solid var(--ds-c-chalk-board-status-boundary-91);outline-offset:var(--ds-c-chalk-board-status-size-7)}
+.cgp-state-filter:has(.cgp-unknown) {border-style:dashed;border-color:var(--ds-c-chalk-board-status-boundary-96);color:var(--ds-c-chalk-board-status-ink-105)}
 @media(forced-colors:active){.cgp-state,.cgp-state-filter {border-color:CanvasText;color:CanvasText;background:Canvas}.cgp-state-filter:focus-visible{outline-color:Highlight}}
 `;
 

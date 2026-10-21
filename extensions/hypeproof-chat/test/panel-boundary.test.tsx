@@ -1,3 +1,4 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // CGP-SHELL-R-013 (REQ-C7 / S-04 extension, REQ-STUDIO-PANEL-BOUNDARY) — a broken panel does not
 // take down the chat. The real App, TaskWorkspace and ChatPanel on the minimal DOM
 // (fixtures/mini-dom.mjs): a task rail that throws while rendering (a task with an invalid
@@ -400,7 +401,7 @@ t("top-level: App's REQ-C7 crash injection still lands on the fatal screen", asy
 });
 
 t("styles: 44px retry target, type-scale tokens, forced-colors boundary", () => {
-  const css = readFileSync("webview-ui/src/chatDetails.css", "utf8");
+  const css = designValues(readFileSync("webview-ui/src/chatDetails.css", "utf8"));
   const rule = (sel: string) => new RegExp(`(?:^|\\n)${sel.replace(/\./g, "\\.")}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
   const retry = rule(".hps-panel-fallback-retry");
   ok(/min-height:\s*44px/.test(retry) && /min-width:\s*44px/.test(retry), "44px target");
@@ -422,3 +423,5 @@ t("styles: 44px retry target, type-scale tokens, forced-colors boundary", () => 
   console.log(`\n${tests.length} panel-boundary checks passed`);
   process.exit(0);
 })();
+
+function designValues(css: string): string { return staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(css); }

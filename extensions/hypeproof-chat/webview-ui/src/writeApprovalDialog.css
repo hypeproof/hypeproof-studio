@@ -1,13 +1,13 @@
-.hps-write-approval { box-sizing: border-box; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; margin: auto; padding: 20px; border: 2px solid currentColor; border-radius: 12px; background: var(--vscode-editor-background, #202226); color: var(--vscode-editor-foreground, #e1e1e1); font: inherit; font-size: var(--hp-text-caption, 14px); overflow-wrap: anywhere; }
-.hps-write-approval::backdrop { background: rgba(0,0,0,.6); }
-.hps-write-approval h2 { font: inherit; font-weight: 600; }
-.hps-write-files { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.hps-write-approval { box-sizing: border-box; width: min(var(--ds-c-studio-writeapprovaldialog-size-108), calc(100vw - var(--ds-c-studio-writeapprovaldialog-size-17))); max-height: calc(100vh - var(--ds-c-studio-writeapprovaldialog-size-17)); overflow: auto; margin: auto; padding: var(--ds-c-studio-writeapprovaldialog-space-5); border: var(--ds-c-studio-writeapprovaldialog-size-7) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-6); background: var(--vscode-editor-background, var(--ds-c-studio-writeapprovaldialog-surface-24)); color: var(--vscode-editor-foreground, var(--ds-c-studio-writeapprovaldialog-ink-1)); font: inherit; font-size: var(--hp-text-caption, var(--ds-c-studio-writeapprovaldialog-type-17)); overflow-wrap: anywhere; }
+.hps-write-approval::backdrop { background: var(--ds-c-studio-writeapprovaldialog-surface-124); }
+.hps-write-approval h2 { font: inherit; font-weight: var(--ds-c-studio-writeapprovaldialog-typography-7); }
+.hps-write-files { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-writeapprovaldialog-space-2); }
 .hps-write-files li { min-width: 0; max-width: 100%; }
-.hps-write-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; max-width: 100%; padding: 8px; border: 1px solid currentColor; border-radius: 6px; background: var(--vscode-badge-background, #454545); color: var(--vscode-badge-foreground, #fff); }
-.hps-write-chip svg { flex: 0 0 16px; }
+.hps-write-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--ds-c-studio-writeapprovaldialog-space-2); min-height: var(--ds-c-studio-writeapprovaldialog-size-8); max-width: 100%; padding: var(--ds-c-studio-writeapprovaldialog-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-3); background: var(--vscode-badge-background, var(--ds-c-studio-writeapprovaldialog-surface-125)); color: var(--vscode-badge-foreground, var(--ds-c-studio-writeapprovaldialog-ink-2)); }
+.hps-write-chip svg { flex: 0 0 var(--ds-c-studio-writeapprovaldialog-size-30); }
 .hps-write-chip span { min-width: 0; overflow-wrap: anywhere; }
-.hps-write-full-name { display: block; padding: 8px 0; overflow-wrap: anywhere; }
-.hps-write-approval button { min-height: 44px; min-width: 44px; padding: 8px 12px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 6px; }
-.hps-write-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-.hps-write-approval :focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+.hps-write-full-name { display: block; padding: var(--ds-c-studio-writeapprovaldialog-space-2) 0; overflow-wrap: anywhere; }
+.hps-write-approval button { min-height: var(--ds-c-studio-writeapprovaldialog-size-8); min-width: var(--ds-c-studio-writeapprovaldialog-size-8); padding: var(--ds-c-studio-writeapprovaldialog-space-2) var(--ds-c-studio-writeapprovaldialog-space-1); font: inherit; color: inherit; background: transparent; border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-3); }
+.hps-write-actions { display: flex; gap: var(--ds-c-studio-writeapprovaldialog-space-2); justify-content: flex-end; margin-top: var(--ds-c-studio-writeapprovaldialog-space-20); }
+.hps-write-approval :focus-visible { outline: var(--ds-c-studio-writeapprovaldialog-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-writeapprovaldialog-size-7); }
 @media (forced-colors: active) { .hps-write-chip { color: CanvasText; background: Canvas; } }

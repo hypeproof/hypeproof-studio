@@ -1,7 +1,8 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // CGP-DS-R-027 / CGP-DS-R-028 — Korean input and reading comfort in the chat webview.
 //   node --experimental-strip-types test/korean-input.smoke.mjs
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 
 const { imeComposing } = await import("../webview-ui/src/imeGuard.ts");
 const ev = (nativeEvent) => ({ nativeEvent });

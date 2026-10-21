@@ -1,9 +1,9 @@
 // CGP-KNOW-D-006 — CSS declarations of the outbound dialog (rendered geometry needs Chromium; see the classroom browser runs).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readDesignFile } from './lib/design-token-values.mjs';
 import { createRequire } from 'node:module';
 const require = createRequire(new URL('../webview-ui/package.json', import.meta.url));
-const css = require('postcss').parse(readFileSync(new URL('../webview-ui/src/outboundDialog.css', import.meta.url), 'utf8'));
+const css = require('postcss').parse(readDesignFile(new URL('../webview-ui/src/outboundDialog.css', import.meta.url)));
 function declarations(selector) { const out = {}; css.walkRules(rule => { if (rule.parent.type === 'root' && rule.selectors.includes(selector)) rule.walkDecls(d => out[d.prop] = d.value); }); return out; }
 const dialog = declarations('.hps-outbound'), box = declarations('.hps-outbound-excluded'), actions = declarations('.hps-outbound-actions'), button = declarations('.hps-outbound-actions button');
 assert.match(box.border, /^2px solid currentColor$/, 'exclusion box border follows the text colour');

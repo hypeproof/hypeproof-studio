@@ -1,3 +1,4 @@
+import { readDesignFile } from "./lib/design-token-values.mjs";
 // REQ-STUDIO-MOTION-MEASURE-GUTTER — CGP-DS-R-014 motion tokens, CGP-DS-R-020 prose measure,
 // CGP-DS-R-031 stable transcript scrollbar gutter.
 //   node --experimental-strip-types test/motion-measure-gutter.smoke.mjs
@@ -5,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
 const dir = new URL("../webview-ui/src/", import.meta.url);
-const read = (f) => readFileSync(new URL(f, dir), "utf8");
+const read = (f) => readDesignFile(new URL(f, dir), "utf8");
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 const cssFiles = readdirSync(dir).filter((n) => n.endsWith(".css"));
 assert.ok(cssFiles.length >= 7 && cssFiles.includes("tokens.css"), `webview CSS files found: ${cssFiles.join(", ")}`);
@@ -47,7 +48,7 @@ for (const good of [
 ]) assert.deepEqual(literalTimes(good), [], `positive control flagged: ${good}`);
 
 let checked = 0;
-for (const f of cssFiles.filter((n) => n !== "tokens.css")) {
+for (const f of cssFiles.filter((n) => n !== "tokens.css" && n !== "designTokens.css")) {
   const css = read(f);
   assert.deepEqual(literalTimes(css), [], `${f} has a literal transition/animation time; use a --hp-dur-* token from tokens.css`);
   checked += [...strip(css).matchAll(/(?:transition|animation)(?:-[a-z-]+)?\s*:/g)].length;

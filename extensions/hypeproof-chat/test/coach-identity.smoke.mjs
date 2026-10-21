@@ -1,3 +1,4 @@
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 // #747 (E1, AE-07 표시 일관성) — one identity resolver shared by host and webview,
 // and every sentence that names the AI built from it.
 //
@@ -12,7 +13,7 @@
 // Run: node --experimental-strip-types test/coach-identity.smoke.mjs
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 
 const id = await import("../src/coachIdentity.ts");
 const { resolveCoach, COACH_DEGRADED_NOTICE } = await import("../src/chatPanelHelpers.ts");

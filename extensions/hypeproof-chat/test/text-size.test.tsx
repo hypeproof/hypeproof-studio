@@ -1,3 +1,4 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // CGP-DS-R-009 — the learner chooses a chat text size (기본 / 크게 / 아주 크게).
 // Bundled with esbuild and run with plain Node, like seat-vocabulary-render.
 
@@ -42,8 +43,8 @@ const shellAttr = (html: string) => /<div class="hps-shell"[^>]*?(?: data-text-s
 t("base size adds no attribute (existing renders unchanged)", () => ok(!/data-text-size=/.test(renderToStaticMarkup(<ChatPanel {...PROPS} config={config()} instructor={false} />)), "attribute on base"));
 for (const size of ["large", "xlarge"]) t(`${size} marks the shell`, () => ok(renderToStaticMarkup(<ChatPanel {...PROPS} config={config(size)} instructor={false} />).includes(`data-text-size="${size}"`), "missing"));
 
-const css = readFileSync("webview-ui/src/chatDetails.css", "utf8");
-const tokens = readFileSync("webview-ui/src/tokens.css", "utf8");
+const css = designValues(readFileSync("webview-ui/src/chatDetails.css", "utf8"));
+const tokens = designValues(readFileSync("webview-ui/src/tokens.css", "utf8"));
 // Effective value = the last rule in the file for that selector that sets font-size (same
 // specificity, so the later one wins; media-query overrides are earlier in the file).
 const lastSize = (sel: string) => { let v = ""; for (let i = css.indexOf(sel); i >= 0; i = css.indexOf(sel, i + 1)) { const m = /font-size: ([^;]+);/.exec(css.slice(i, css.indexOf("}", i))); if (m) v = m[1]; } return v; };
@@ -78,3 +79,5 @@ t("host stores the normalized choice and re-posts config", () => ok(/case "setTe
 
 if (fail) { console.error(`text-size: ${fail} failed`); process.exit(1); }
 console.log("text-size OK");
+
+function designValues(css: string): string { return staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(css); }

@@ -4,7 +4,7 @@
 // runs against a mutated copy that must fail (negative controls).
 //   node --experimental-strip-types test/turn-review-css.smoke.mjs
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 
 const SRC = new URL("../webview-ui/src/", import.meta.url);
 const read = (f) => readFileSync(new URL(f, SRC), "utf8");

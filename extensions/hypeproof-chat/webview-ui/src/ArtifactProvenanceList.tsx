@@ -7,8 +7,8 @@ import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { provenanceHistoryText } from '../../src/artifactProvenanceView';
 import { ASK_ABOUT_FILE_LABEL } from './askAboutFile';
 
-const ROW = { display: 'flex', flexDirection: 'column', gap: 5, padding: '10px 8px', minHeight: 44, boxSizing: 'border-box' } as const;
-const NOTE = { fontSize: 11, padding: '0 18px', margin: '6px 0 8px', lineHeight: 1.6 } as const;
+const ROW = { display: 'flex', flexDirection: 'column', gap: 'var(--ds-c-inline-row-gap)', padding: 'var(--ds-c-inline-row-padding)', minHeight: 'var(--ds-c-inline-hit-target)', boxSizing: 'border-box' } as const;
+const NOTE = { fontSize: 'var(--ds-c-inline-note-font)', padding: 'var(--ds-c-inline-note-padding)', margin: 'var(--ds-c-inline-note-margin)', lineHeight: 'var(--ds-c-inline-note-leading)' } as const;
 
 /**
  * `view` undefined: not answered yet; null: no work folder to describe. `onAsk` (CGP-KNOW-R-015)

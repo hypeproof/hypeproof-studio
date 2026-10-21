@@ -3,8 +3,10 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {boardStatusCss} from '../src/lib/board-status.ts';
+import {staticTokens} from '../../extensions/hypeproof-chat/test/lib/expand-design-tokens.mjs';
 
-const css = boardStatusCss;
+// CGP-DS-R-001: the shipped rules reference shared tokens; expand only the static --ds-* aliases.
+const css = staticTokens(readFileSync(new URL('../../extensions/hypeproof-chat/webview-ui/src/designTokens.css', import.meta.url), 'utf8'))(boardStatusCss);
 const rules = new Map();
 for (const m of css.matchAll(/(^|\n)([^@{}\n][^{}]*)\{([^{}]*)\}/g)) {
   for (const sel of m[2].split(',').map((s) => s.trim())) {

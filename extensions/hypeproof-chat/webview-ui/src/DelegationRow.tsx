@@ -26,7 +26,7 @@ export function DelegationRow({ view, renderChild, onStopAll }: {
   return (
     <div className="hps-delegation-wrap" data-delegation-status={view.status}>
       <details className="hps-delegation">
-        <summary className="hps-delegation-summary" style={{ minHeight: 44 }} aria-label={`${view.helper}에게 맡긴 일: ${view.task} · ${status}`}>
+        <summary className="hps-delegation-summary" style={{ minHeight: 'var(--ds-c-inline-hit-target)' }} aria-label={`${view.helper}에게 맡긴 일: ${view.task} · ${status}`}>
           <span className="hps-tool-icon" data-glyph={DELEGATION_ICON}><ChatIcon kind={glyphIconKind(DELEGATION_ICON)} size={16} /></span>
           <strong className="hps-delegation-helper">{view.helper}</strong>
           <span className="hps-delegation-task">{view.task}</span>
@@ -44,7 +44,7 @@ export function DelegationRow({ view, renderChild, onStopAll }: {
         </div>
       </details>
       {view.status === "running" && onStopAll && (
-        <button type="button" className="hps-delegation-stop" style={{ minHeight: 44, minWidth: 44 }} onClick={onStopAll}>
+        <button type="button" className="hps-delegation-stop" style={{ minHeight: 'var(--ds-c-inline-hit-target)', minWidth: 'var(--ds-c-inline-hit-target)' }} onClick={onStopAll}>
           {STOP_ALL_LABEL}
         </button>
       )}

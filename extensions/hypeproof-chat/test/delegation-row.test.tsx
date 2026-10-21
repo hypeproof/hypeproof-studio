@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // REQ-STUDIO-DELEGATION-ROW (CGP-AGENT-R-009) — the real ChatPanel draws a coach delegation as one
 // collapsed row with its helper's tool calls inside, and "모두 멈추기" stops the turn through the same
 // cancel path as the Stop button. Bundled with esbuild and run with plain Node; clicks go through
@@ -5,13 +7,15 @@
 
 import { click, mountPoint } from "./fixtures/mini-dom.mjs";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderRawMarkup } from "react-dom/server";
 import { createRoot, type Root } from "react-dom/client";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
 import { delegationChildId, delegationHeader, delegationResultLabel, delegationRowId, DELEGATION_ICON, STOP_ALL_LABEL } from "../src/delegationRow";
 import type { ChatConfig, ChatMessage } from "../src/protocol";
 
 const act: (fn: () => unknown) => Promise<void> = (React as unknown as { act: (fn: () => unknown) => Promise<void> }).act;
+const expandTokens = staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"));
+const renderToStaticMarkup: typeof renderRawMarkup = (node) => expandTokens(renderRawMarkup(node));
 let fail = 0;
 const tests: [string, () => void | Promise<void>][] = [];
 const t = (label: string, fn: () => void | Promise<void>) => tests.push([label, fn]);

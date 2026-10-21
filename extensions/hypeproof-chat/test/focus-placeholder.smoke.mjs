@@ -1,3 +1,4 @@
+import { readDesignFile } from "./lib/design-token-values.mjs";
 // CGP-DS-R-017 / CGP-DS-R-019 (REQ-STUDIO-FOCUS-AND-PLACEHOLDER) — one focus ring and readable
 // placeholders across the chat webview CSS, measured from tokens.css.
 //   node --experimental-strip-types test/focus-placeholder.smoke.mjs
@@ -12,7 +13,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 
 const SRC = new URL("../webview-ui/src/", import.meta.url);
-const read = (f) => readFileSync(new URL(f, SRC), "utf8");
+const read = (f) => readDesignFile(new URL(f, SRC), "utf8");
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 
 // ---------- colour maths (WCAG relative luminance; color-mix in srgb) ----------
