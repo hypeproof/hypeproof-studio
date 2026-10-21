@@ -69,20 +69,20 @@ Answer yes for Smoke when this adds a dependency on another repository or a serv
 
 const FILLED = `## Release check
 
-How to verify: Chalk → create a track plan → the plan lists three sessions
-Smoke: yes — calls the Chalk server for the plan
-Smoke check: scripts/release/smoke/checks/s2-chalk-health.mjs
+How to verify: Service → POST /v1/chat/completions → returns a streaming response
+Smoke: yes — calls the Service API for the plan
+Smoke check: scripts/release/smoke/checks/s1-service-health.mjs
 
 ## Checklist`;
 
 test('howToCheck: the Release check first line drops its label; the unfilled template is not a check', () => {
-  assert.equal(howToCheck(FILLED), 'Chalk → create a track plan → the plan lists three sessions');
+  assert.equal(howToCheck(FILLED), 'Service → POST /v1/chat/completions → returns a streaming response');
   assert.equal(howToCheck(TEMPLATE), null);
 });
 
 test('smokeOf: reads the answer, reason and check; null for the unfilled template', () => {
-  assert.deepEqual(smokeOf(FILLED), {answer: 'yes', reason: 'calls the Chalk server for the plan',
-    check: 'scripts/release/smoke/checks/s2-chalk-health.mjs'});
+  assert.deepEqual(smokeOf(FILLED), {answer: 'yes', reason: 'calls the Service API for the plan',
+    check: 'scripts/release/smoke/checks/s1-service-health.mjs'});
   assert.deepEqual(smokeOf('## Release check\nHow to verify: a → b → c\nSmoke: no — UI copy only, nothing external\n'),
     {answer: 'no', reason: 'UI copy only, nothing external', check: null});
   assert.equal(smokeOf(TEMPLATE), null);
@@ -92,17 +92,17 @@ test('smokeOf: reads the answer, reason and check; null for the unfilled templat
 test('render shows the linked issue and the smoke decision for features and dependency PRs', () => {
   const closes = {closingIssuesReferences: {nodes: [{number: 77}]}};
   const {groups} = classify([
-    pr(1, 'feat(chalk): plan', [], {body: FILLED, ...closes}),
+    pr(1, 'feat(service): health', [], {body: FILLED, ...closes}),
     pr(2, 'feat(start): copy'),
     pr(3, 'chore(deploy): pin', ['.github/workflows/deploy-worker.yml'], {body: FILLED, ...closes}),
   ]);
   const {features, dependency} = render({groups});
-  assert.match(features, /#1 feat\(chalk\): plan — @dev · closes #77/);
-  assert.match(features, /smoke: yes — calls the Chalk server for the plan \(check: scripts\/release\/smoke\/checks\/s2-chalk-health\.mjs\)/);
+  assert.match(features, /#1 feat\(service\): health — @dev · closes #77/);
+  assert.match(features, /smoke: yes — calls the Service API for the plan \(check: scripts\/release\/smoke\/checks\/s1-service-health\.mjs\)/);
   assert.match(features, /#2 feat\(start\): copy — @dev · _no linked issue_/);
   assert.match(features, /smoke: _not given by the author_/);
   assert.match(dependency, /#3 chore\(deploy\): pin — @dev · closes #77/);
-  assert.match(dependency, /how to check: Chalk → create a track plan/);
+  assert.match(dependency, /how to check: Service → POST \/v1\/chat\/completions/);
   assert.match(dependency, /smoke: yes —/);
 });
 
@@ -221,16 +221,16 @@ test('S3 binds a fresh synthetic token and requires successful cleanup, without 
 const stub = (id, result, detail = '') => ({id, name: id, run: async () => ({result, detail})});
 const ctx = {};
 
-test('smoke runs read-only checks (S1, S2, S5) before session-opening checks (S3, S4)', async () => {
+test('smoke runs read-only checks (S1, S5) before session-opening checks (S3, S4)', async () => {
   const order = [];
   const tracked = id => ({id, name: id, run: async () => { order.push(id); return {result: 'PASS', detail: ''}; }});
-  await runSmokeChecks([tracked('S4'), tracked('S3'), tracked('S5'), tracked('S2'), tracked('S1')], ctx);
-  assert.deepEqual(order.slice(0, 3).sort(), ['S1', 'S2', 'S5']);
-  assert.deepEqual(order.slice(3).sort(), ['S3', 'S4']);
+  await runSmokeChecks([tracked('S4'), tracked('S3'), tracked('S5'), tracked('S1')], ctx);
+  assert.deepEqual(order.slice(0, 2).sort(), ['S1', 'S5']);
+  assert.deepEqual(order.slice(2).sort(), ['S3', 'S4']);
 });
 
 test('smoke skips S3 and S4 with NOT_RUN when S1 fails', async () => {
-  const checks = await runSmokeChecks([stub('S1', 'FAIL'), stub('S2', 'PASS'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'PASS')], ctx);
+  const checks = await runSmokeChecks([stub('S1', 'FAIL'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'PASS')], ctx);
   const byId = Object.fromEntries(checks.map(c => [c.id, c]));
   assert.equal(byId.S3.result, 'NOT_RUN');
   assert.equal(byId.S4.result, 'NOT_RUN');
@@ -239,19 +239,12 @@ test('smoke skips S3 and S4 with NOT_RUN when S1 fails', async () => {
 });
 
 test('smoke skips S3 and S4 with NOT_RUN when S5 fails', async () => {
-  const checks = await runSmokeChecks([stub('S1', 'PASS'), stub('S2', 'PASS'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'FAIL')], ctx);
+  const checks = await runSmokeChecks([stub('S1', 'PASS'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'FAIL')], ctx);
   const byId = Object.fromEntries(checks.map(c => [c.id, c]));
   assert.equal(byId.S3.result, 'NOT_RUN');
   assert.equal(byId.S4.result, 'NOT_RUN');
   assert.match(byId.S3.detail, /skipped: S5 failed/);
   assert.match(byId.S4.detail, /skipped: S5 failed/);
-});
-
-test('smoke does not skip S3 and S4 when only S2 fails', async () => {
-  const checks = await runSmokeChecks([stub('S1', 'PASS'), stub('S2', 'FAIL'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'PASS')], ctx);
-  const byId = Object.fromEntries(checks.map(c => [c.id, c]));
-  assert.equal(byId.S3.result, 'PASS');
-  assert.equal(byId.S4.result, 'PASS');
 });
 
 const MANAGER_NO = `## Release check

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Release smoke runner (#1608).
-// Runs read-only checks first (S1, S2, S5), then session-opening checks (S3, S4), then the rest.
+// Runs read-only checks first (S1, S5), then session-opening checks (S3, S4), then the rest.
 // A new check is one new file that default-exports {id, name, run(ctx)} and returns {result, detail}.
 //
 //   node scripts/release/smoke/smoke.mjs --sha <candidate> [--out DIR]
@@ -19,7 +19,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
 
 // S1 and S5 are read-only and must pass before session-opening checks run.
-const READ_ONLY_FIRST = new Set(['S1', 'S2', 'S5']);
+const READ_ONLY_FIRST = new Set(['S1', 'S5']);
 const SESSION_CHECKS = new Set(['S3', 'S4']);
 const SKIP_TRIGGERS = new Set(['S1', 'S5']);
 
@@ -50,8 +50,8 @@ export async function runSmokeChecks(checkModules, ctx) {
   return results;
 }
 
-export async function runSmoke({sha, out, serviceUrl, chalkUrl, repo = 'hypeproof/hypeproof-studio', env = process.env}) {
-  const ctx = {sha, repo, studioDir: root, serviceUrl, chalkUrl, env};
+export async function runSmoke({sha, out, serviceUrl, repo = 'hypeproof/hypeproof-studio', env = process.env}) {
+  const ctx = {sha, repo, studioDir: root, serviceUrl, env};
   const checkDir = path.join(here, 'checks');
   const files = fs.readdirSync(checkDir).filter(f => f.endsWith('.mjs')).sort();
   const checkModules = [];
@@ -65,7 +65,6 @@ export async function runSmoke({sha, out, serviceUrl, chalkUrl, repo = 'hypeproo
     schema: 'hps-smoke/0',
     candidate: {repo, sha},
     service_version: checks.find(c => c.id === 'S1')?.version ?? null,
-    chalk_version: checks.find(c => c.id === 'S2')?.version ?? null,
     result: overall,
     checks,
     finished_at: new Date().toISOString(),
@@ -96,7 +95,6 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     sha,
     out: arg('--out', path.join(os.tmpdir(), 'hps-release-cut')),
     serviceUrl: arg('--service-url', 'https://api.hypeproof-ai.xyz'),
-    chalkUrl: arg('--chalk-url', 'https://chalk.hypeproof-ai.xyz'),
   });
   printSmoke(report);
   process.exit(exitCode(report.result));
