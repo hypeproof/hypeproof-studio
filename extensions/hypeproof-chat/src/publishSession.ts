@@ -1,4 +1,6 @@
-import { privateOutboundPath, contentBytes, type OutboundConfirmation } from "./outboundConsent.ts";
+import { memoryOutboundPath, privateOutboundPath, contentBytes, type OutboundConfirmation } from "./outboundConsent.ts";
+/** REQ-KNOW-51 / DEC-KNOW-51: a stored version with a memory file gets no new link; the learner publishes again and confirms. */
+export const MEMORY_VERSION_LINK = "AI 기억 파일이 들어 있는 버전이라 새 링크를 만들지 않아요. 다시 공개하면 보낼 파일을 확인한 뒤 링크를 받을 수 있어요.";
 // "사용자 테스트용으로 공개" — the App side of Publish for User Test (cr-publish #1393;
 // CR-11, CR-17–CR-22, CR-39, CR-64, CR-73, CR-81). Pure over its ports, vscode-free, so a
 // smoke drives exactly what the provider runs.
@@ -88,6 +90,8 @@ export class PublishSession {
   private cached: ProjectState | null = null;
   private timing: PublishView["timing"] = null;
   private manifest: string[] = [];
+  /** REQ-KNOW-51: the activity (scope + root) the manifest was typed in. A selection never carries over to another one. */
+  private manifestFor: string | null = null;
   private readonly ports: PublishPorts;
   constructor(ports: PublishPorts) {
     this.ports = ports;
@@ -227,12 +231,13 @@ export class PublishSession {
     const state = resolved.ok ? resolved.state : null;
     if (!resolved.ok) notice ??= resolved.message;
     else if (resolved.notice) notice ??= resolved.notice;
-    const built = await this.currentSet(state?.project.id, this.manifest);
+    const selection = this.selection();
+    const built = await this.currentSet(state?.project.id, selection);
     const version: PublishView["version"] = !built
       ? { id: null, files: [], manifest_added: [], refusal: "미리보기를 먼저 켜 주세요. 미리보기에 보이는 페이지를 공개해요.", refusal_lines: [] }
       : built.ok
-        ? { id: built.set.id, files: built.set.files.map((f) => ({ path: f.path, bytes: f.bytes })), manifest_added: built.set.manifest_added, refusal: null, refusal_lines: [] }
-        : { id: null, files: [], manifest_added: [...this.manifest], refusal: built.message, refusal_lines: built.lines };
+        ? { id: built.set.id, files: built.set.files.map((f) => ({ path: f.path, bytes: f.bytes })), manifest_added: [...built.set.manifest_added, ...built.set.memory.filter((m) => !built.set.manifest_added.includes(m))], refusal: null, refusal_lines: [] }
+        : { id: null, files: [], manifest_added: selection, refusal: built.message, refusal_lines: built.lines };
     const verification = productVerification(await this.ports.events(), version.id);
     const experiments: PublishExperimentView[] = [];
     // The per-channel counts come with the Project read (one grouped query), not one call per experiment.
@@ -272,6 +277,17 @@ export class PublishSession {
   /** Add or remove files beyond static reach (the R4 manifest); the panel lists the set again. */
   setManifest(paths: unknown): void {
     this.manifest = Array.isArray(paths) ? paths.filter((p): p is string => typeof p === "string" && p.length > 0 && p.length <= 300).slice(0, 50) : [];
+    this.manifestFor = this.activityKey();
+  }
+
+  private activityKey(): string {
+    return JSON.stringify([this.ports.scopeKey?.() ?? null, this.ports.root() ?? null]);
+  }
+
+  /** The manifest, or nothing when the activity changed since it was typed (a memory file chosen elsewhere is not chosen here). */
+  private selection(): string[] {
+    if (this.manifestFor !== this.activityKey()) { this.manifest = []; this.manifestFor = null; }
+    return [...this.manifest];
   }
 
   /**
@@ -312,7 +328,7 @@ export class PublishSession {
     form.title = form.title?.trim() || this.ports.defaultTitle();
     form.week = form.week ?? this.ports.week() ?? 1;
     if (form.manifest) this.setManifest(form.manifest);
-    const selection = [...this.manifest];
+    const selection = this.selection();
     // The set is built and scanned before any request, so a refused set sends nothing and
     // leaves nothing behind on the Service.
     const pre = await phase("scan", () => this.currentSet(this.ports.projectId(), selection));
@@ -332,7 +348,7 @@ export class PublishSession {
     const linkSettings = { expires_at: expiresAt, ...(form.channel?.trim() ? { channel: form.channel.trim() } : {}) };
     const verification = productVerification(await this.ports.events(), pre.set.id);
     if (!await current()) return { ok: false, message: "활동이 바뀌어서 보내지 않았어요." };
-    if (!await this.ports.confirmOutbound?.({ recipient: `사용자 테스트 · ${new URL(client.base).host} · 프로젝트 구성원 ${(resolved.state?.project.members ?? []).join(", ") || "나"} · 링크를 받은 사람`, public: true, items: [...pre.set.files.map(f => ({ name: f.path, bytes: f.bytes })), { name: "프로젝트 제목", bytes: contentBytes(form.title!) }, { name: "테스트 설명", bytes: contentBytes(JSON.stringify(experimentMetadata)) }, { name: "링크 설정", bytes: contentBytes(JSON.stringify(linkSettings)) }, ...(verification.state === "verified" ? [{ name: "검증 기록 참조", bytes: contentBytes(verification.run_id!) }] : [])] }) || !await current()) return { ok: false, message: "보내지 않았어요." };
+    if (!await this.ports.confirmOutbound?.({ recipient: `사용자 테스트 · ${new URL(client.base).host} · 프로젝트 구성원 ${(resolved.state?.project.members ?? []).join(", ") || "나"} · 링크를 받은 사람`, public: true, items: [...pre.set.files.map(f => ({ name: f.path, bytes: f.bytes, ...(pre.set.memory.includes(f.path) ? { memory: true as const } : {}) })), { name: "프로젝트 제목", bytes: contentBytes(form.title!) }, { name: "테스트 설명", bytes: contentBytes(JSON.stringify(experimentMetadata)) }, { name: "링크 설정", bytes: contentBytes(JSON.stringify(linkSettings)) }, ...(verification.state === "verified" ? [{ name: "검증 기록 참조", bytes: contentBytes(verification.run_id!) }] : [])] }) || !await current()) return { ok: false, message: "보내지 않았어요." };
     let projectId = resolved.state?.project.id;
     if (!projectId) {
       const made = await phase("project", () => curriculumRequest<{ project: { id: string } }>(client, "POST", "/projects", { title: form.title?.trim() || this.ports.defaultTitle() }));
@@ -399,6 +415,7 @@ export class PublishSession {
     if (!resolved.ok) return { ok: false, message: resolved.message };
     const experiment = resolved.state?.experiments.find(e => e.id === experimentId);
     const version = resolved.state?.versions.find(v => v.id === experiment?.product_version_id);
+    if (version?.files?.some(f => memoryOutboundPath(f.path, this.ports.privateDirectories?.() ?? []))) return { ok: false, message: MEMORY_VERSION_LINK };
     if (!version?.files?.length || version.files.some(f => privateOutboundPath(f.path) || this.ports.privateDirectories?.().some(dir => privateOutboundPath(f.path, dir)))) return { ok: false, message: "공유할 파일 목록을 확인하지 못했어요." };
     if (!await current()) return { ok: false, message: "활동이 바뀌어서 보내지 않았어요." };
     if (!await this.ports.confirmOutbound?.({ recipient: `사용자 테스트 · ${new URL(client.base).host} · 프로젝트 구성원 ${(resolved.state?.project.members ?? []).join(", ") || "나"} · 링크를 받은 사람`, public: true, items: [...version.files.map(f => ({ name: f.path, bytes: f.bytes })), { name: "링크 설정", bytes: contentBytes(JSON.stringify({ expires_at: expiresAt, ...(form.channel?.trim() ? { channel: form.channel.trim() } : {}) })) }] }) || !await current()) return { ok: false, message: "보내지 않았어요." };

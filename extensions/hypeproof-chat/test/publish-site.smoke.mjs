@@ -691,3 +691,17 @@ console.log("\n✓ publish-site smoke 통과");
  assert.equal(yes.ok,true);assert.ok(!JSON.stringify([...gh.repo('neo-dental').blobs.values()]).includes('UNAPPROVED'));
  ok('per-send content consent: Cancel/default refuse before writes; private stores excluded; frozen bytes');
 }
+
+// REQ-KNOW-51 (CGP-KNOW-R-033): site publish has no learner file choice, so memory files never go; the dialog names them.
+{
+ const gh=createMockGitHub(),root=site({...GOOD_SITE,'notes/private.txt':'PRIVATE','wiki/memory.md':'MEMORY','journal/today.md':'JOURNAL'});let shown;
+ assert.equal((await runPublishSite({},deps(gh,root,{privateDirectories:['journal'],confirmContent:async m=>(shown=m,false)}))).error?.code,'declined');
+ assert.equal(shown.notes.length,1);assert.match(shown.notes[0],/^AI 기억 파일은 올리지 않아요: /);
+ assert.deepEqual(shown.notes[0].replace('AI 기억 파일은 올리지 않아요: ','').split(', ').sort(),['journal','notes','wiki'],'every memory store left out is named, the configured one included');
+ assert.ok(shown.items.every(i=>!/^(notes|wiki|journal)\//.test(i.name)),'no memory path among the items');
+ const yes=await runPublishSite({stage:'save'},deps(gh,root,{privateDirectories:['journal'],confirmContent:async()=>true}));assert.equal(yes.ok,true);
+ assert.deepEqual([...tree(gh,'neo-dental').keys()].filter(p=>/^(notes|wiki|journal)\//.test(p)),[],'pushed tree: no memory path');
+ const plain=createMockGitHub();let plainShown;await runPublishSite({},deps(plain,site({...GOOD_SITE}),{confirmContent:async m=>(plainShown=m,false)}));
+ assert.equal(plainShown.notes,undefined,'no memory store: no note');
+ ok('site publish: memory stores left out and named in the confirmation');
+}
