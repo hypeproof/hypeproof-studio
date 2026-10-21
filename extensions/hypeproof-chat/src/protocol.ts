@@ -269,6 +269,8 @@ export interface ResolvedProfile {
   trial?: TrialStatus;
   /** TUX-COND-08 — a free seat may leave an email on its end card (Service HPS_FREE_NOTIFY_OPTIN, default off). Absent → no section. */
   notify_optin?: { available: boolean; consent_version: string };
+  /** REQ-CGP-LEARN-13 (DEC-LEARN-13a) — the Service turns the 109/1388 help lines on for this seat. Only `true` counts; absent → off. */
+  safety_help_lines?: boolean;
   /**
    * REQ-L12 ⑫ exception (ot-conversation-carryover) — the Service offers "체험에서 하던 대화 이어가기"
    * on this pass (Service flag, default off). Absent → the pass starts a new conversation, as before.
@@ -894,7 +896,7 @@ export type HostMessage = (
     }
   /** `retry: false` — resending cannot help (REQ-M45 missing SDK binary); the panel hides "다시 보내기". `retryable: false` (#1819) — the answer could not be saved; same effect. */
   | { type: "streamRefusal"; streamId: string }
-  | { type: "streamError"; streamId: string; error: string; activityUnavailable?: import("./activityAvailability").ActivityUnavailable; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView }
+  | { type: "streamError"; streamId: string; error: string; activityUnavailable?: import("./activityAvailability").ActivityUnavailable; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView; safetyNotice?: import("./safetyNotice").SafetyNoticeView }
   | { type: "actionResult"; requestId: string; approved: boolean }
   /** TUX-COND-08 — the answer to notifyOptinSubmit / notifyOptinWithdraw. Never carries the address. */
   | { type: "notifyOptinResult"; state: "subscribed" | "withdrawn" | "error"; message?: string }

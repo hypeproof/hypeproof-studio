@@ -8850,6 +8850,86 @@
           "path": "extensions/hypeproof-chat/test/attachment-failure-render.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-SAFETY-BLOCK-NOTICE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Safety block notice and instructor safety item (CGP-LEARN-D-013)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SAFETY-BLOCK-NOTICE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SAFETY-BLOCK-NOTICE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/safetyNotice.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/proxyClient.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/SafetyNotice.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "chalk/src/lib/safety-signal.ts"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SAFETY-BLOCK-NOTICE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SAFETY-BLOCK-NOTICE",
+        "ST-IMP-SAFETY-BLOCK-NOTICE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/safety-notice.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/safety-notice.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/safety-notice-css.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/safety-signal.test.mjs"
+        },
+        {
+          "path": "chalk/test/safety-signal-css.test.mjs"
+        }
+      ]
     }
   ]
 }

@@ -57,6 +57,7 @@ import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
+import { helpLinesEnabled, moderationBlockOf, ModerationBlockError, safetyNoticeView } from "./safetyNotice.ts";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
 import { resolveSdkBinaryForHost, runSdkCoach, SdkGatewayAuthError, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
 import { fetchSdkSeed } from "./sdkSeedFetch";
@@ -7628,6 +7629,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // transport can also throw AbortError (for example on timeout), and still
     // needs a terminal error so the user can recover instead of waiting forever.
     if (current?.signal?.aborted) return;
+    // REQ-CGP-LEARN-13 — a moderation block (either runtime) is drawn as a calm inline notice, not the
+    // red card: the Service's own sentence, no retry, no OS notification or sound. The 109/1388 help
+    // lines join it only for a self_harm block on a seat whose profile turned them on (DEC-LEARN-13a).
+    const block = moderationBlockOf(err);
+    if (block) {
+      const profile = current?.profile ?? this.cachedProfile;
+      const requestId = err instanceof ModerationBlockError ? err.requestId : undefined;
+      if (requestId) this.lastRequestId = requestId;
+      const safetyNotice = safetyNoticeView(block, { helpLines: helpLinesEnabled(profile), audience: profileAudience(profile) });
+      await this.post({ type: "streamError", streamId, error: block.message, safetyNotice, retry: false, ...(requestId ? { requestId } : {}) });
+      return;
+    }
     // REQ-KNOW-68: classify evidence before prose-only legacy notices. Preserve the seat
     // before expired-code cleanup can remove its profile. All runtimes enter here.
     const statusProfile = current?.profile ?? this.cachedProfile;

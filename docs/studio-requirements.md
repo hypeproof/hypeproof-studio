@@ -2125,6 +2125,54 @@ Anthropic 미성년자 가이드(#282 의 2026-07-13 라이선싱 코멘트) 구
 | REQ-O6 | Age-verification 설계 노트 | [docs/age-verification.md](./age-verification.md) 유지 — 수강등록+roster+토큰 게이트가 minors-guide 의 "only intended users" 요건을 충족한다는 논거 + 잔여 갭 추적 | M (문서 리뷰) |
 | REQ-O7 | False-positive 회귀 목록 | 검색/색상/이야기한(야한)/유니섹스(섹스)/게임 속 몬스터 처치/사이트 주소/전화번호 입력 화면 등 benign 한국어가 절대 차단되지 않음 — 룰 추가 PR 은 이 목록을 통과해야 머지 | R (`worker/test/moderation.test.mjs`) |
 
+## Safety block notice and instructor safety item (CGP-LEARN-D-013)
+
+REQ-CGP-LEARN-13 / DES-CGP-LEARN-13. Extends REQ-O2 (the learner side of a block) and REQ-O5
+(the instructor never sees matched text). Product Intent: the responsible adult in the room
+stays the human; the app does not alarm, judge or counsel. No capability or score label.
+
+Learner (Studio, `extensions/hypeproof-chat/src/safetyNotice.ts`, `webview-ui/src/SafetyNotice.tsx`):
+
+- A `400` whose body has `error.type === "moderation_block"` is drawn as one calm inline notice in
+  the chat column instead of the red error card, on the proxy runtime and on the agent-sdk runtime
+  when the CLI's API-error line carries the Service body. Before this, the proxy runtime dropped the
+  body and showed the generic error, so the Service's sentence never reached the child.
+- The notice is a polite status (`role="status"`, never `alert`), uses the stop-notice surface
+  (widget background, neutral rail, foreground text), has no icon, motion, sound, retry or request
+  id, and only a 44px `닫기`. Text is 14px; the focus ring hugs the button; forced colours keep the
+  boundary and the focus.
+- The Service sentence is shown when it is a short Korean sentence (NFC, control/bidi/zero-width and
+  line separators removed, ≤ 400 chars, no markup); anything else becomes a calm Korean fallback.
+- The help lines (자살예방상담전화 109, 청소년상담 1388) and "선생님께 바로 이야기해도 괜찮아요."
+  (solo seats: "가까운 어른께 …") are added only when the Service named `category: "self_harm"`
+  and the served profile has `safety_help_lines: true` (DEC-LEARN-13a, default off). Numbers are plain,
+  selectable text, never links: a desktop cannot dial, and a link would leave the safe session.
+- No VS Code notification is raised for a block, so there is no OS sound.
+
+Instructor (Chalk `/manage`, `chalk/src/lib/safety-signal.ts`):
+
+- A seat in the ops status answer that carries `safety: {category: "self_harm", at}` is pinned in a
+  region above the help-request region and the seat list: an amber (`#f5c36b`) boundary, an icon (⚠)
+  and the words "안전 확인 필요" (SX-50: never colour alone), then seat, student, category in words and
+  time. Matched text is never shown, even if a payload carried it.
+- The item never enters the status chips, filters, summary counts, seat rows or any ranking or score
+  column. It stays pinned across polls and across a failed poll until the instructor presses
+  `확인했어요`; a newer block on the same seat pins it again; a different class run or a disconnect
+  clears it. Memory only, so a page reload shows again what the Service still sends. At most the
+  newest 50 items; a time that is not a real date is ignored. A failed poll keeps the pins on purpose:
+  a safety item must not vanish because one read failed.
+- The Service field is DEC-LEARN-13b's contract. The Service does not send it yet (it records the
+  category only in Analytics); until it does, the region stays hidden.
+
+Not covered here: the 10 s delivery, the operator-protocol link and guardian notification (REQ row
+CGP-LEARN-R-013), and help lines on the agent-sdk runtime (its `/v1/messages` block has no category).
+
+Evidence: `extensions/hypeproof-chat/test/safety-notice.smoke.mjs` (parsing, hostile text, help-line
+gate, proxy runtime, host turn ending), `test/safety-notice.test.tsx` (render, classroom and personal),
+`test/safety-notice-css.smoke.mjs` (no red, no motion, 14px, 44px, focus ring, forced colours, with
+negative controls), `chalk/test/safety-signal.test.mjs` (shipped `/manage` script) and
+`chalk/test/safety-signal-css.test.mjs`.
+
 ## P. 배포 자동화 (코치 스킬 · #431 결과물 2번)
 
 배포 절차는 코드가 아니라 **스킬 마크다운**(`worker/src/skills/publish-homepage.md`)에

@@ -975,6 +975,31 @@ html, body, #root {
   background: transparent; color: var(--vscode-foreground, #aaa); border: 1px solid rgba(255,255,255,0.15);
 }
 .hps-error-banner-dismiss:hover { background: rgba(255,255,255,0.06); }
+/* REQ-CGP-LEARN-13 / DES-CGP-LEARN-13 — a moderation block. The same calm surface as a stop notice:
+   widget background, neutral rail, foreground text; no red, no icon, no motion. 14px text, a 44px close
+   button whose --hp-ring focus ring hugs it (Highlight in forced colours, tokens.css), and help-line numbers as plain selectable text. */
+.hps-safety-notice {
+  margin: 8px 0; padding: 12px 14px; border-radius: 6px;
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+  border-left: 2px solid var(--vscode-descriptionForeground, #888);
+  color: var(--vscode-foreground, #ddd);
+  font-size: 14px; line-height: 1.5;
+}
+.hps-safety-title { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.hps-safety-msg, .hps-safety-intro, .hps-safety-adult { margin: 0 0 6px; font-size: 14px; overflow-wrap: anywhere; }
+.hps-safety-lines { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; }
+.hps-safety-number { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; user-select: text; white-space: nowrap; }
+.hps-safety-dismiss {
+  min-width: 44px; min-height: 44px; padding: 6px 14px; border-radius: 4px; cursor: pointer;
+  background: transparent; color: var(--vscode-foreground, #ddd); border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.45));
+  font-size: 14px; font-weight: 600;
+}
+.hps-safety-dismiss:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+@media (forced-colors: active) {
+  .hps-safety-notice { border-color: CanvasText; }
+  .hps-safety-dismiss { border-color: ButtonText; }
+}
 /* Free start D4 (TUX-SP-16) — a scheduled state, not a fault: the calm stop-notice palette
    (neutral rail, widget background, foreground text) instead of the red alert chrome. */
 .hps-error-banner--notice {

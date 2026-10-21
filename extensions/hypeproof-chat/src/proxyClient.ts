@@ -18,6 +18,7 @@ import {
 } from "./proxyClientHelpers.ts";
 import { ORCHESTRATOR_FORMAT } from "./sdkCoachHelpers.ts";
 import { SdkRequiredError, trialRequiresSdkMessage } from "./sdkRequiredHelpers.ts";
+import { parseModerationBlock, ModerationBlockError } from "./safetyNotice.ts";
 import { transportFailureText, type SeatAudience } from "./seatVocabulary.ts";
 
 /**
@@ -266,6 +267,10 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
       authErr.evidence = responseEvidence(res.status, text);
       throw authErr;
     }
+    // REQ-CGP-LEARN-13 — a minor-cohort moderation block is not a crash: the turn handler draws
+    // the Service's calm sentence (and, when allowed, the help lines) instead of the red card.
+    const block = parseModerationBlock(res.status, text);
+    if (block) throw new ModerationBlockError(block, rid);
     // REQ-M45 — 409 trial_requires_sdk: an SDK-only grant reached the proxy route. Keep the
     // Service sentence, add the cause and the install remedy, and offer no retry.
     const sdkRequired = trialRequiresSdkMessage(res.status, text);
