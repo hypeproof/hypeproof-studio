@@ -13,5 +13,8 @@ assert.equal(dialog.width, 'min(560px, calc(100vw - 24px))'); assert.equal(dialo
 assert.equal(dialog['overflow-wrap'], 'anywhere'); assert.equal(dialog['font-size'], 'var(--hp-text-caption)'); assert.equal(actions['flex-wrap'], 'wrap');
 assert.ok(parseFloat(declarations('.hps-outbound-item')['min-height']) >= 44, 'checkbox row target'); assert.ok(parseFloat(button['min-height']) >= 44); assert.ok(parseFloat(button['min-width']) >= 44);
 assert.ok(declarations('.hps-outbound-actions .hps-outbound-send').background.includes('--vscode-button-background'), '보내기 is the primary action');
+const memory = declarations('.hps-outbound-memory'), summary = declarations('.hps-outbound-memory summary');
+assert.ok(parseFloat(summary['min-height']) >= 44, 'memory group summary is a 44px target (DES-KNOW-51)'); assert.equal(summary['box-sizing'], 'border-box'); assert.equal(summary.cursor, 'pointer');
+assert.match(memory['border-top'], /^1px solid currentColor$/, 'memory group separated by the text colour');
 let forced = false; css.walkAtRules('media', m => { if (m.params === '(forced-colors: active)') m.walkDecls('border-color', d => { if (d.value === 'CanvasText') forced = true; }); }); assert.ok(forced);
-console.log('PASS outbound dialog CSS: exclusion contrast, containment, wrapping, targets, primary action, forced colours');
+console.log('PASS outbound dialog CSS: memory group target, exclusion contrast, containment, wrapping, targets, primary action, forced colours');
