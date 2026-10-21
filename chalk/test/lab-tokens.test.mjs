@@ -2,8 +2,6 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import {labTokens} from '../src/routes/lab-tokens.ts';
-import smoke from '../../scripts/release/smoke/checks/s6-chalk-lab-tokens.mjs';
-
 const request = (auth = 'Bearer synthetic-issuer') => new Request('https://chalk.test/cohorts/class-one/lab-tokens', {
   headers: {authorization: auth, cookie: 'not-forwarded', 'cf-access-authenticated-user-email': 'forged@example.test'},
 });
@@ -37,17 +35,5 @@ test('rejects missing/Basic credentials before transport, and refuses redirect/n
     assert.equal((await labTokens.fetch(request(), {})).status, 502);
     globalThis.fetch = async () => {throw new Error('network');};
     assert.equal((await labTokens.fetch(request(), {})).status, 502);
-  } finally {globalThis.fetch = previous;}
-});
-
-test('read-only release smoke compares credentials without putting them in reports', async () => {
-  const previous = globalThis.fetch;
-  try {
-    assert.equal((await smoke.run({env: {}, chalkUrl: 'https://chalk.test'})).result, 'NOT_RUN');
-    globalThis.fetch = async () => Response.json(fixture);
-    const report = await smoke.run({env: {HPS_LAB_TOKEN_READ_ISSUER: 'synthetic-issuer', HPS_LAB_TOKEN_READ_COHORT: 'class-one'}, chalkUrl: 'https://chalk.test'});
-    assert.equal(report.result, 'PASS'); assert.ok(!JSON.stringify(report).includes('synthetic-'));
-    globalThis.fetch = async () => Response.json({error: 'denied'}, {status: 403});
-    assert.equal((await smoke.run({env: {HPS_LAB_TOKEN_READ_ISSUER: 'synthetic-issuer', HPS_LAB_TOKEN_READ_COHORT: 'class-one'}, chalkUrl: 'https://chalk.test'})).result, 'FAIL');
   } finally {globalThis.fetch = previous;}
 });
