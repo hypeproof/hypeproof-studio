@@ -25,6 +25,8 @@ The **base key** (`scripts/mac-base-key.sh`) hashes the git objects of:
 - the `vscodium-base` submodule pin (fork patches, `prepare_vscode.sh`, icons, upstream)
 - `hypeproof-studio.env.example`
 - `scripts/apply-product-overrides.sh`, `scripts/install-brand-assets.sh`, `scripts/run-build.sh`
+- `scripts/stage-core-patches.sh` and `scripts/patches/core/` (Studio-owned VS Code core
+  patches, such as the quit guard, staged into `vscodium-base/patches/user/`)
 - `assets/brand/`
 - `MAC_BASE_EPOCH` in the script: bump it by hand when a `build-mac.yml` change affects
   the base (runner image, Node pin, the env block, brew dependencies). The workflow file

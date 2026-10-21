@@ -521,6 +521,8 @@ export type WebviewMessage = (
   | { type: 'taskOpenSource'; url: string; requestId?: string }
   | { type: 'taskReturnFromSource'; requestId: string; url: string }
   | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string;imagePreparationFailed?:boolean}
+  /** REQ-STUDIO-QUIT-GUARD — whether this chat surface holds a queued, unsent message. */
+  | { type: 'queueState'; queued: boolean }
   /**
    * #897 (VO-01) — the **raw observation** from the voice capability probe. It
    * carries no verdict: the webview measures, the host's voiceCapabilityHelpers

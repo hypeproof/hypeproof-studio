@@ -291,6 +291,7 @@ jobs:
         run: |
           bash get_repo.sh
           bash prepare_src.sh
+          bash ../scripts/stage-core-patches.sh
           bash prepare_vscode.sh
 
       - name: Apply product.json overrides

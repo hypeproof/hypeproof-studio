@@ -89,6 +89,13 @@ echo "  BUILD_SOURCEVERSION=${BUILD_SOURCEVERSION:-<unset — version.sh will de
   echo "==================================================="
 } | tee /dev/stderr
 
+# Studio-owned core patches (scripts/patches/core/) join the fork's patches/user/ set.
+# build.sh re-runs prepare_vscode.sh, so they must be staged before it, every time.
+if ! bash "$REPO_ROOT/scripts/stage-core-patches.sh"; then
+  echo "[run-build] ERROR: could not stage core patches" >&2
+  exit 1
+fi
+
 cd vscodium-base
 
 # --- Pre-build reset ---------------------------------------------------------

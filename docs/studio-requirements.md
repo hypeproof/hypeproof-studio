@@ -1824,6 +1824,7 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 | REQ-I9 | win32 설치 pipeline (#447, #463) | macOS 처럼 우리가 .app 을 스왑하지 않고 Inno Setup 설치 관리자에 위임: download → `renderWindowsUpdateWrapper` 로 detached PowerShell wrapper write → spawn → `workbench.action.quit`. wrapper 가 앱 종료를 **먼저** 기다린 뒤 설치 관리자를 `/silent /mergetasks=runcode /LOG=…` 로 실행 — 종료 중인 구 인스턴스의 single-instance lock 과 경합하면 재실행된 프로세스가 죽어가는 구 인스턴스에 핸드오프하고 종료해 "업데이트는 됐는데 안 켜짐" 이 된다 | U (`test/update-checker`) |
 | REQ-I10 | win32 wrapper 는 UTF-8 BOM 으로 기록 — 한글 계정명 머신에서 업데이트 성립 | `renderWindowsUpdateWrapper` 반환값이 **U+FEFF 로 시작**하고 호출부가 그대로(`fs.writeFileSync(p, s, "utf8")`) 기록해 디스크에 `EF BB BF` 가 남아야 한다. 이유: 벤치 머신의 `powershell.exe` 는 Windows PowerShell **5.1** 이고, BOM 없는 `-File` 스크립트를 UTF-8 이 아니라 **ANSI 코드페이지(한국은 CP949)** 로 디코드한다. wrapper 에 박히는 설치 관리자 경로는 `%TEMP%` = `C:\Users\<계정명>\AppData\Local\Temp\…` 아래라, 계정명이 한글이면(코호트 대다수) 경로가 모지바케가 되어 `Start-Process` 가 아무것도 못 찾는다. 그런데 호출부는 wrapper 를 띄운 직후 앱을 종료하므로 **Studio 는 꺼지고 업데이트는 안 된 채 끝난다** — 실패가 조용하다. 실측(Windows 11 / PS 5.1.26100 / `C:\Users\신제형`): BOM 없음 → 설치 관리자 미기동, UTF-8 BOM → 기동. PS 5.1·PS 7 모두 UTF-8 BOM 을 존중한다. **주의(닭-달걀): 이 결함이 있는 빌드는 인앱 업데이트로 자신을 고칠 수 없다 — 해당 머신은 재설치가 유일한 경로다** | U (`test/update-checker`) + M (한글 경로 실기기 확인) |
 | REQ-I16 | No update install during a class (CGP-SHELL-R-001, 2026-10-19) | While the active seat is a classroom activity, the update banner shows the new version with "수업이 끝나면 설치할 수 있어요." and no install button, the install command refuses with "수업 중에는 업데이트를 설치하지 않아요. 수업이 끝나면 설치할 수 있어요." before any download, and a manual check reports the same. Outside a class seat REQ-I2/I4 behave as before; every restart is still approved by the user (REQ-I4). The client does not yet receive the class window's end time (DEC-25), so the whole class seat counts as the window. It fails closed with the seat-vocabulary rule: a profile without a kind (older Service) holds, and without a loaded profile the saved activity decides; a bought pass, trial and personal seat never hold. Security-critical overrides and an instructor-set freeze range are REQ-SHELL-03 (not built) | U (`test/class-update-hold.test.tsx`) |
+| REQ-I17 | During class the update state is one line, not a card or a modal (CGP-SHELL-D-001, DES-SHELL-01, 2026-10-21) | While the REQ-I16 hold applies, the chat panel shows the update as a single status line (`role="status"`): a 16px icon, "새 버전 v<version>" and "수업이 끝나면 설치할 수 있어요." with no install, dismiss or release-notes control. The line is at most 32px tall, its text is 14px, nothing animates or transitions, and it uses the theme foreground on the panel's own background (no tint, fade or muted token), which is ≥4.5:1 in the HP dark theme and VS Code dark and light themes. At 320px the version ellipsizes first and the verb is never shrunk, wrapped or cut. The held install command and a manual check answer with a non-modal notification (REQ-I16). Outside a class seat the REQ-I2 card is unchanged. Studio draws no update state on the start page or in the native About dialog, so the chat panel line is the only in-class surface (DEC-SHELL-D001) | U (`test/update-line.smoke.mjs`, `test/class-update-hold.test.tsx`) |
 
 ## J. Build / branding integrity (Phase 2-3 게이트)
 
@@ -3574,3 +3575,46 @@ Implemented attachment preparation and recovery:
 Behavioral tests cover filesystem failure/retry, actual host preparation, native
 repick and the real preparation hook's request lifecycle. Native/browser visual
 acceptance remains separate; the owner captures the sandbox-blocked matrix.
+
+## Quit guard (CGP-SHELL-R-004 / CGP-SHELL-D-003)
+
+`REQ-STUDIO-QUIT-GUARD` (CGP-SHELL-R-004 / REQ-SHELL-04 and CGP-SHELL-D-003 / DES-SHELL-03, P0;
+built 2026-10-21): quitting Studio (Cmd+Q, Alt+F4, the menu, the update installer's quit) or
+closing a window asks first when something would stop, and names it. An extension cannot veto a
+quit, so a Studio-owned VS Code core patch (`scripts/patches/core/hps-quit-guard.patch`, staged into
+the fork's `patches/user/` by `scripts/stage-core-patches.sh`) adds a workbench shutdown veto. On
+window close and app quit (never on reload or a workspace switch) it calls the hypeproof-chat
+command `_hypeproof.quitGuard.prompt`, which answers from the host's own state:
+
+| Active | Dialog body (2 lines) |
+|---|---|
+| a coach turn (streaming, settling or waiting on an approval; every runtime) | "지금 하고 있는 대답이 멈춰요." / "만든 파일은 그대로 남아요." |
+| a queued message not yet sent, reported by the sidebar or editor chat | "보내지 않은 메시지가 있어요." / "끝내면 이 메시지는 보내지 않아요." |
+| both | "지금 하고 있는 대답이 멈춰요." / "보내려던 메시지도 보내지 않아요." |
+| nothing | no dialog; the quit goes ahead |
+
+- **Native dialog, safe default.** An OS message box (warning), title "Studio를 끝낼까요?", the body
+  above. Buttons "계속하기" then "끝내기". "계속하기" is both the default (Enter) and the cancel (Esc);
+  "끝내기" is secondary and is the only answer that lets the quit go ahead. VS Code's button
+  reordering would put Enter on the destructive button, so the patch adds a narrow path: a box whose
+  `defaultId` equals its `cancelId` keeps the given order. No upstream dialog sets `defaultId`.
+- **Screen readers.** The title and body are the native box's message and detail, which VoiceOver
+  and Narrator read on open.
+- **Untrusted answer.** The core accepts only a well-formed answer: control and bidi characters are
+  removed, the title is capped at 60 characters and the body at two lines of 80. The core fixes the
+  button order, default and cancel; the extension supplies only the words.
+- **Never traps the learner.** If the extension does not answer within 2 s, fails, or the dialog
+  cannot be shown, the quit goes ahead. 계속하기 keeps everything running; 끝내기 stops the turn
+  (files already written stay).
+- **Updates.** 업데이트 설치 is refused while a turn runs ("AI가 대답하고 있어서 지금은 업데이트하지
+  않았어요. 대답이 끝난 뒤 다시 눌러 주세요."): the install ends in a quit, and answering 계속하기 to
+  the guard would leave the already-started installer to give up without telling the learner. A turn
+  that starts in the moment between the update confirmation and the quit still gets the dialog.
+- **Each window asks for its own work.** Closing one window with an active turn asks; a quit with
+  two windows can ask once per window that has work.
+
+Verification: `test/quit-guard.smoke.mjs` (copy, box shape, Enter/Esc through the safe-default path,
+guard decisions, hostile answers), `test/quit-guard-host.smoke.mjs` (host state per surface),
+`test/quit-guard-queue.test.tsx` (ChatPanel reports its queue), `test/quit-guard-patch.smoke.mjs`
+(the patch is current, applies to the pinned upstream files and ships the tested sources). The
+native dialog itself (macOS and Windows) needs a built app; see the row's report.

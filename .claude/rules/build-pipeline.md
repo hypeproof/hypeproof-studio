@@ -160,6 +160,15 @@ proxy-only.
 - **Phase 2+**: `hypeproof-studio.env` must be sourced before any `prepare_*` or `build.sh` call.
 - **Phase 5**: bundling `hypeproof-chat` as built-in needs the extension folder injected into VS Code source during `prepare_vscode.sh`. Do not add a `product.json.builtInExtensions` entry.
 
+## Studio-owned core patches (`scripts/patches/core/`)
+
+A VS Code core change that ships with a Studio change (for example the quit guard,
+REQ-STUDIO-QUIT-GUARD) lives here instead of in the fork, so it is reviewed in the same PR.
+`scripts/stage-core-patches.sh` copies each `*.patch` to `vscodium-base/patches/user/99-*`;
+`run-build.sh` and both build workflows call it before `prepare_vscode.sh`. The patch is
+generated: edit `scripts/patches/core/src/` or the hooks in `build_quit_guard_patch.py`, then
+`python3 scripts/patches/core/build_quit_guard_patch.py vscodium-base/vscode`.
+
 ## Adding a new patch
 
 1. Make the change against the unpacked `vscode/` tree.
@@ -175,7 +184,8 @@ rebuilds `extensions/hypeproof-chat`. Details and operator commands:
 
 - **Base key** = `scripts/mac-base-key.sh`: git objects of the `vscodium-base` pin,
   `hypeproof-studio.env.example`, `apply-product-overrides.sh`, `install-brand-assets.sh`,
-  `run-build.sh`, `assets/brand/`, plus `MAC_BASE_EPOCH`. **Bump `MAC_BASE_EPOCH`** when a
+  `run-build.sh`, `stage-core-patches.sh`, `scripts/patches/core/`, `assets/brand/`, plus
+  `MAC_BASE_EPOCH`. **Bump `MAC_BASE_EPOCH`** when a
   `build-mac.yml` change alters the base (runner, Node pin, env block, brew deps). Add a
   path to `INPUTS` when a new file starts shaping the base app.
 - **Base source**: Actions cache (unsigned full-build output, saved by the full path) →

@@ -511,6 +511,9 @@ export function ChatPanel(props: Props) {
     if (initialDraft.current) { initialDraft.current=false; return; }
     if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
   }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused,recovered,inlineEdit]);
+  // REQ-STUDIO-QUIT-GUARD: the host names an unsent queued message in the quit dialog.
+  const hasQueued = queued !== null;
+  useEffect(() => { postToHost({ type: "queueState", queued: hasQueued }); }, [hasQueued]);
   useEffect(() => {
     const off = onHostMessage(msg => {
       if (msg.activityId !== activityId || (msg.taskId && msg.taskId !== taskId)) return;
@@ -3029,6 +3032,18 @@ function UpdateBanner({
   const [expanded, setExpanded] = useState(false);
   const sizeMb = offer.sizeBytes > 0 ? (offer.sizeBytes / 1024 / 1024).toFixed(0) + " MB" : "";
 
+  // CGP-SHELL-D-001: during class the update state is one quiet status line, not a card.
+  // Nothing to press; the version may ellipsize at 320px, the verb never does.
+  if (offer.heldForClass) {
+    return (
+      <div className="hps-update-line" role="status">
+        <ChatIcon kind="upload" size={16} />
+        <span className="hps-update-line-version">새 버전 v{offer.version}</span>
+        <span className="hps-update-line-verb">수업이 끝나면 설치할 수 있어요.</span>
+      </div>
+    );
+  }
+
   return (
     <div className="hps-update-banner" role="status">
       <div className="hps-update-banner-icon"><ChatIcon kind="upload" size={24} /></div>
@@ -3037,9 +3052,7 @@ function UpdateBanner({
           새 버전 v{offer.version} 나왔어요{sizeMb ? ` · ${sizeMb}` : ""}
         </div>
         <div className="hps-update-banner-sub">
-          {offer.heldForClass
-            ? "수업이 끝나면 설치할 수 있어요."
-            : "업데이트하면 자동으로 재시작됩니다. 작업 중인 내용은 미리 저장해주세요."}
+          업데이트하면 자동으로 재시작됩니다. 작업 중인 내용은 미리 저장해주세요.
         </div>
         {expanded && offer.notes && (
           <pre className="hps-update-banner-notes">{offer.notes}</pre>
@@ -3054,13 +3067,13 @@ function UpdateBanner({
         )}
       </div>
       <div className="hps-update-banner-actions">
-        {!offer.heldForClass && <button
+        <button
           className="hps-update-banner-install"
           onClick={onInstall}
           title={`v${offer.version} 다운로드 + 자동 적용`}
         >
           업데이트
-        </button>}
+        </button>
         <button
           className="hps-update-banner-dismiss"
           onClick={() => onDismiss(offer.version)}
