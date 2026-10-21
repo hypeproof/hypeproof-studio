@@ -39,7 +39,11 @@ export const FREE_START_COPY = {
   network: "연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.",
   update: "업데이트 확인",
   dailyCapStart: "오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 시작할 수 있습니다.",
-  pausedStart: "지금은 무료 사용을 잠시 멈췄습니다. 잠시 뒤 다시 시도해 주세요.",
+  dailyCapTitle: "밤 12시 이후에 시작할 수 있습니다",
+  // CONV-FIRST10-R-004 — an operator pause has no known end, so the title names no time and the
+  // body says the install stays and when to come back (reopening Studio reads the offer again).
+  pausedTitle: "나중에 시작할 수 있습니다",
+  pausedStart: "지금은 무료 사용을 잠시 멈췄습니다. Studio는 그대로 두고, 나중에 다시 열면 바로 시작할 수 있습니다.",
   under14Title: "보호자와 함께 시작해 주세요",
   under14Body: "만 14세 미만은 보호자의 동의가 있어야 사용할 수 있습니다. 지금은 앱에서 보호자 동의를 받을 수 없어 여기서 시작할 수 없습니다.",
   // REQ-STUDIO-STROKE-ICONS: the "opens elsewhere" arrow is the start page's external icon, not a ↗ in the copy.
@@ -68,6 +72,25 @@ export const FREE_CLAIM_REFUSALS: Record<string, string> = {
   free_start_unavailable: "지금은 바로 시작하기를 쓸 수 없습니다. 잠시 뒤 다시 시도해 주세요.",
 };
 const UNKNOWN_REFUSAL = FREE_CLAIM_REFUSALS.free_start_unavailable!;
+
+/**
+ * TUX-SP-16 — the calm notice the first-run card draws instead of the age question or the Primary,
+ * or null when the card is not in a calm state. A drained day comes from the offer
+ * (`unavailable: "daily_cap"`) or a claim refusal (`daily_cap_reached`, the Service sentence as given).
+ * An operator pause (`unavailable: "paused"` or refusal `paused`) always uses the local sentence: the
+ * Service's claim sentence asks for a retry, and the paused card's promise (the install stays, come
+ * back later) is Studio's to make. A calm refusal outranks the offer.
+ */
+export interface FreeCalmNotice { kind: "daily_cap" | "paused"; title: string; body: string }
+export function freeCalmNotice(free: { unavailable?: "daily_cap" | "paused"; refusal?: { code: string; message: string } } | undefined): FreeCalmNotice | null {
+  if (!free) return null;
+  const code = free.refusal?.code;
+  if (code === "paused") return { kind: "paused", title: FREE_START_COPY.pausedTitle, body: FREE_START_COPY.pausedStart };
+  if (code === "daily_cap_reached") return { kind: "daily_cap", title: FREE_START_COPY.dailyCapTitle, body: free.refusal!.message };
+  if (free.unavailable === "daily_cap") return { kind: "daily_cap", title: FREE_START_COPY.dailyCapTitle, body: FREE_START_COPY.dailyCapStart };
+  if (free.unavailable === "paused") return { kind: "paused", title: FREE_START_COPY.pausedTitle, body: FREE_START_COPY.pausedStart };
+  return null;
+}
 
 /** What the start page shows for a refusal. `code` steers layout only; `message` is shown as given. */
 export interface FreeClaimRefusal { code: string; message: string; resumesAt?: string }

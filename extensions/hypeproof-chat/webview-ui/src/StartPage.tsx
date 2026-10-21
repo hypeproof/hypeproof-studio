@@ -11,7 +11,7 @@ import { chosenPass } from "./purchaseChoice";
 import { InstructorInbox } from "./InstructorInbox";
 import { activityLabel, passSummary, trialAllowance, trialEndedFacts, trialSummary } from "./activityLabel";
 import { trialEntryNote } from "../../src/trialOffer";
-import { FREE_START_COPY } from "../../src/freeStart";
+import { FREE_START_COPY, freeCalmNotice } from "../../src/freeStart";
 import { PURCHASE_COPY } from "../../src/passPurchase";
 
 export function StartPage() {
@@ -77,13 +77,13 @@ export function StartPage() {
   const freeBlocked = free?.age === "under14";
   // e2e D2 — a saved free seat whose window is over: the card names the end, never a fresh start.
   const freeEnded = !freeBlocked && free?.ended === "expired";
-  const freeCalm = free?.refusal?.code === "daily_cap_reached" || free?.refusal?.code === "paused" ? free.refusal.message
-    : free?.unavailable === "daily_cap" ? FREE_START_COPY.dailyCapStart : free?.unavailable === "paused" ? FREE_START_COPY.pausedStart : null;
+  const calmNotice = freeCalmNotice(free);
+  const freeCalm = calmNotice?.body ?? null;
   const freeError = free?.refusal && !freeCalm ? free.refusal.message : null;
   // A drained or paused day says when, in the title; the card then holds only the calm notice and the two links.
   const freeTitle = freeBlocked ? FREE_START_COPY.under14Title
     : freeEnded ? FREE_START_COPY.endedTitle
-    : freeCalm ? (free?.unavailable === "paused" || free?.refusal?.code === "paused" ? "잠시 뒤 시작할 수 있습니다" : "밤 12시 이후에 시작할 수 있습니다")
+    : calmNotice ? calmNotice.title
     : FREE_START_COPY.readyTitle;
   // The class a join link named, shown only on the class code form.
   const joinClass = entry === "classroom" ? state.joinLink?.classId : undefined;
