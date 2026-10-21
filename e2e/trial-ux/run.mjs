@@ -798,6 +798,42 @@ try {
     await expect(p.getByText('만 14세 이상인가요?')).toHaveCount(0);
     await expect(p.locator('.studio-notice')).toBeVisible();
   }, { surface: 'start' });
+  await test('TUX-SP-16P', 'Operator pause: calm card says the install stays and to come back later; no Primary, no error (800/1420 dark)', async p => {
+    const paused = '지금은 무료 사용을 잠시 멈췄습니다. Studio는 그대로 두고, 나중에 다시 열면 바로 시작할 수 있습니다.';
+    const calmCard = async () => {
+      await expect(p.locator('#connect-title')).toHaveText('나중에 시작할 수 있습니다');
+      const notice = p.locator('.studio-notice');
+      await expect(notice).toHaveText(paused);
+      await expect(notice).toHaveAttribute('role', 'status');
+      await expect(p.getByRole('alert')).toHaveCount(0);
+      await expect(p.locator('.studio-error')).toHaveCount(0);
+      await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
+      await expect(p.getByText('만 14세 이상인가요?')).toHaveCount(0);
+      await expect(btn(p, '참여 코드가 있어요')).toBeVisible();
+      await expect(btn(p, '이용권으로 시작하기')).toBeVisible();
+      assert.doesNotMatch(await cardText(p), /\d+\s*(번|회|초|분|시간)|오류|실패|다시 시도|체험|수업/);
+    };
+    // The Service advertises the pause (offer path)...
+    await startState(p, { trialOffer: { ...FREE_OFFER, available: false, reason: 'paused' }, freeStart: { age: '14+', unavailable: 'paused' }, purchase: { available: true } });
+    await calmCard();
+    // ...or refuses the claim with `paused`: the same card, never the Service's retry sentence.
+    await startState(p, { trialOffer: FREE_OFFER, freeStart: { age: '14+', refusal: { code: 'paused', message: '지금은 무료 사용을 잠시 멈췄습니다. 잠시 뒤 다시 시도해 주세요.' } }, purchase: { available: true } });
+    await calmCard();
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0);
+    assert.equal(emitted(await requests(p), 'freeStartClaim').length, 0);
+    // Dark theme at the two widths the conversion register asks for: the card fits and nothing spills.
+    await p.addStyleTag({ content: endCardDarkTheme });
+    await p.evaluate(() => { document.body.classList.add('vscode-dark'); document.body.dataset.vscodeThemeKind = 'vscode-dark'; });
+    for (const width of [800, 1420]) {
+      await p.setViewportSize({ width, height: 900 });
+      await expect(p.locator('.studio-notice')).toBeVisible();
+      assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `no horizontal scroll at ${width}px`);
+      const box = await p.locator('.studio-notice').boundingBox();
+      assert.ok(box && box.x >= 0 && box.x + box.width <= width, `notice inside the viewport at ${width}px`);
+      await p.screenshot({ path: path.join(out, `TUX-SP-16P-paused-dark-${width}.png`) });
+    }
+    await p.setViewportSize({ width: 390, height: 900 });
+  }, { surface: 'start' });
   await test('TUX-SP-13F', 'Free seat labels: 무료 사용 on the start card and in the chat header, never 체험', async p => {
     await startState(p, { profile: trialSeat(nearLimit, { id: 'studio-open-trial', free: true }) });
     await expect(p.locator('.studio-verified')).toHaveText('무료 사용');

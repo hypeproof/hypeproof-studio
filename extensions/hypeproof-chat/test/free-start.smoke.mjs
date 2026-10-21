@@ -102,6 +102,28 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.equal(fs.freeAllowanceLine, undefined, 'no free allowance line helper is exported');
   assert.equal(fs.guardianUrl('https://hypeproof-ai.xyz/'), 'https://hypeproof-ai.xyz/studio#guardian');
   for (const [k, v] of Object.entries(fs.FREE_START_COPY)) { noTrialWord(v, `copy ${k}`); assert.ok(!v.includes('수업'), `copy ${k} must not push a class: ${v}`); }
+
+  // CONV-FIRST10-R-004 / TUX-SP-16 — the calm first-run notice. An operator pause (offer or claim)
+  // says the install stays and when to come back; it names no count, no time it cannot know, no retry.
+  const svcPaused = fs.FREE_CLAIM_REFUSALS.paused;
+  const offerPaused = fs.freeCalmNotice({ unavailable: 'paused' });
+  const claimPaused = fs.freeCalmNotice({ refusal: { code: 'paused', message: svcPaused } });
+  assert.deepEqual(offerPaused, { kind: 'paused', title: '나중에 시작할 수 있습니다', body: '지금은 무료 사용을 잠시 멈췄습니다. Studio는 그대로 두고, 나중에 다시 열면 바로 시작할 수 있습니다.' });
+  assert.deepEqual(claimPaused, offerPaused, 'a paused claim refusal draws the same calm card as the paused offer');
+  assert.notEqual(claimPaused.body, svcPaused, 'the Service retry sentence is not shown on the paused card');
+  assert.match(offerPaused.body, /Studio는 그대로/, 'the install stays');
+  assert.match(offerPaused.body, /나중에 다시 열면/, 'says when to come back');
+  assert.doesNotMatch(offerPaused.title + offerPaused.body, /\d|오류|실패|다시 시도|체험|수업|죄송/, 'no count, no error words, no retry push');
+  // Daily cap: unchanged (TUX-SP-16) — the offer uses the local sentence, a refusal the Service sentence as given.
+  assert.deepEqual(fs.freeCalmNotice({ unavailable: 'daily_cap' }), { kind: 'daily_cap', title: '밤 12시 이후에 시작할 수 있습니다', body: fs.FREE_START_COPY.dailyCapStart });
+  assert.equal(fs.freeCalmNotice({ refusal: { code: 'daily_cap_reached', message: '서비스 문장입니다.' } }).body, '서비스 문장입니다.');
+  assert.equal(fs.freeCalmNotice({ unavailable: 'daily_cap', refusal: { code: 'paused', message: svcPaused } }).kind, 'paused', 'a calm refusal outranks the offer');
+  // Negative controls: an ordinary card, another refusal, or no free start is not calm (it may be an error, or the age question).
+  assert.equal(fs.freeCalmNotice(undefined), null);
+  assert.equal(fs.freeCalmNotice({}), null);
+  assert.equal(fs.freeCalmNotice({ refusal: { code: 'network_limit', message: '네트워크 한도' } }), null);
+  assert.equal(fs.freeCalmNotice({ refusal: { code: 'free_start_unavailable', message: '쓸 수 없습니다' } }), null);
+  assert.equal(fs.freeCalmNotice({ unavailable: 'paused', refusal: { code: 'network', message: '연결하지 못했습니다.' } }).kind, 'paused', 'a non-calm refusal does not hide a paused offer');
 }
 
 // ── 3. Seat copy: free vs code-issued trial vs pass ─────────────────────────────────────────
