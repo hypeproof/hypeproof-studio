@@ -61,7 +61,9 @@ try {
  saved=null;assert.equal((await uploadSnapshot('batch',{...deps,confirm:async()=>{live={...scope,grant_id:'new'};return true;}})).code,'not_connected');assert.equal(calls.length,0);
  live=scope;saved=null;assert.equal((await uploadSnapshot('batch',{...deps,confirm:async()=>true})).ok,true);assert.equal(calls.length,3);
  writeFileSync(join(root,'index.html'),'<p>page</p>');mkdirSync(join(root,'notes'));writeFileSync(join(root,'notes/private.md'),'private');
- assert.equal((await buildPublishSet(root,'/index.html',['notes/private.md'],{projectId:'prj-synthetic',testOrigin:null})).ok,false);
+ { // REQ-KNOW-51 (CGP-KNOW-R-033) replaced the blanket refusal: a memory file the learner typed in is part of the set and labelled.
+  const chosen=await buildPublishSet(root,'/index.html',['notes/private.md'],{projectId:'prj-synthetic',testOrigin:null});assert.equal(chosen.ok,true);assert.deepEqual(chosen.set.memory,['notes/private.md']);
+  assert.equal((await buildPublishSet(root,'/index.html',[],{projectId:'prj-synthetic',testOrigin:null})).set.files.some(f=>f.path.startsWith('notes/')),false,'not selected: not in the set'); }
  const form={question:'q',method:'task_test',success_criteria:['c'],hypothesis:'h',expires_in_days:1};
  const project={id:'prj-synthetic',title:'project',members:['synthetic']};
  const state={project,test_origin:null,versions:[{id:'v',files:[{path:'approved.html',bytes:7,sha256:'a'}]}],hypotheses:[],experiments:[{id:'exp-synthetic',product_version_id:'v'}],links:[]};

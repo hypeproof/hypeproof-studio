@@ -11,7 +11,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { OutboundConfirmation } from "../outboundConsent.ts";
+import { memoryOutboundPath, type OutboundConfirmation } from "../outboundConsent.ts";
 import { createGitHubApi, ghMessage, GitHubTransportError, missingScopes, parseOAuthScopes, type GitHubApi, type GitHubTransport } from "./githubApi.ts";
 import { AuthToolMissingError, type AuthProvider } from "./githubAuth.ts";
 import {
@@ -235,6 +235,9 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
 
   // ── preflight (nothing leaves the machine before this passes) ─────────────
   let siteFiles: Array<{ path: string; abs: string }> = [];
+  // REQ-KNOW-51: memory-store files the walk left out. Site publish has no student file choice, so they never go; the
+  // confirmation names them so the student sees what stayed behind.
+  let memoryLeftOut: string[] = [];
   let site: TreeFile[] = [];
   if (!checkOnly) {
     if (!deps.workspaceRoot) return fail("no_workspace");
@@ -250,6 +253,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       report.issues.length ? `파일 ${report.files.length}개 · 확인할 점: ${lines.join(" / ")}` : `파일 ${report.files.length}개를 검사했어요. 문제 없어요.`,
     );
     siteFiles = report.files;
+    memoryLeftOut = report.excluded.filter((rel) => memoryOutboundPath(rel, deps.privateDirectories ?? []));
     try { site = readTreeFiles(siteFiles); } catch { return fail("preflight_blocked"); }
     if (report.markers.length) extra.markers = report.markers;
   } else {
@@ -367,7 +371,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     if (knownPages && !knownPages.ok) return fail(knownPages.code, knownPages.detail);
     const approvedCname = domain ?? (knownPages?.ok ? knownPages.pages?.cname?.toLowerCase() : null) ?? null;
     const generated: TreeFile[] = [{ path: ".nojekyll", bytes: new Uint8Array() }, ...(stage === "save" ? [] : [{ path: WORKFLOW_PATH, bytes: enc(PAGES_WORKFLOW_YAML) }, { path: NONCE_PATH, bytes: enc(`${nonce}\n`) }, ...(approvedCname ? [{ path: "CNAME", bytes: enc(`${approvedCname}\n`) }] : [])])];
-    if (!await deps.confirmContent?.({ recipient: `GitHub · ${login}/${repoName}`, public: true, items: [...site, ...generated].map(f => ({ name: f.path, bytes: f.bytes.byteLength })) })) return fail("declined");
+    if (!await deps.confirmContent?.({ recipient: `GitHub · ${login}/${repoName}`, public: true, ...(memoryLeftOut.length ? { notes: [memoryLeftOutNote(memoryLeftOut)] } : {}), items: [...site, ...generated].map(f => ({ name: f.path, bytes: f.bytes.byteLength })) })) return fail("declined");
     const expectedHead = deps.lastPushedSha?.(login, repoName);
 
     // ── repository ──────────────────────────────────────────────────────────
@@ -610,4 +614,10 @@ export function resultChatText(r: PublishSiteResult): string {
   }
   // Markdown hard breaks: one fact per line in one bubble (same as the team-brain replies).
   return lines.join("  \n");
+}
+
+/** REQ-KNOW-51: one confirmation line naming the memory-store paths a site publish leaves out (at most five, then a count). */
+export function memoryLeftOutNote(paths: readonly string[]): string {
+  const shown = paths.slice(0, 5).join(", ");
+  return `AI 기억 파일은 올리지 않아요: ${shown}${paths.length > 5 ? ` 외 ${paths.length - 5}개` : ""}`;
 }
