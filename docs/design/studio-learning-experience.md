@@ -336,9 +336,14 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
 :root, .hps-shell {
   --hp-font-caption: calc(14px + var(--hp-font-step));   /* 라벨, 메타 정보, 캡션, 컨트롤 */
   --hp-font-body: calc(16px + var(--hp-font-step));      /* 메시지 본문, 입력창 */
-  --hp-font-lead: calc(18px + var(--hp-font-step));      /* 빈 대화 인사말 */
+  --hp-font-lead: calc(18px + var(--hp-font-step));      /* 빈 대화 인사말, 답의 h2·h3 */
+  --hp-font-title: calc(22px + var(--hp-font-step));     /* 답의 h1 (CGP-DS-D-005) */
+  --hp-font-display: calc(28px + var(--hp-font-step));   /* 예약: 아직 개인 화면에서 쓰는 곳이 없다 */
   --hp-leading-label: 1.5;
   --hp-leading-prose: 1.65;
+  --hp-weight-regular: 400;   /* 굵기는 둘뿐이다(CGP-DS-D-005) */
+  --hp-weight-strong: 600;    /* 제목, 강조, 굵은 라벨 */
+  --hp-tracking-hangul: 0;    /* 한글 자간은 0, 음수 자간 없음 */
 }
 /* 자기 placeholder가 4.5:1에 못 미치는 VS Code 2026 테마는 웹뷰 body의 테마 id로 골라 mix를 쓴다 */
 body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] { --hp-text-placeholder-default: var(--hp-placeholder-mix); }
@@ -462,6 +467,7 @@ body.vscode-light, body.vscode-high-contrast-light {
 | 본문 한 줄 길이(CGP-DS-R-020, DES-CGP-DS-22) | 개인 대화의 AI 본문(`.hps-prose`)은 `max-inline-size: 40em`, 한 줄에 한글 약 40자. 상한일 뿐이라 좁은 창에서는 창에 맞춰 줄바꿈하고, 표와 코드는 그 안에서 자기 스크롤을 가진다 |
 | 스크롤 막대 자리(CGP-DS-R-031, DES-CGP-DS-36) | 개인 대화 대화 목록(`.hps-messages`)은 `scrollbar-gutter: stable`. 답이 길어져 스크롤 막대가 생겨도 본문이 옆으로 밀리지 않는다 |
 | 의미 글자 크기와 14px 바닥(CGP-DS-R-008, DES-CGP-DS-09, DEC-29) | 개인 작업 화면(작업 목록, 작업 제목 줄, 대화 셸, 자료 패널, 대화 설정)에서 학생이 읽는 글은 `--hp-font-caption` 14px, `--hp-font-body` 16px, `--hp-font-lead` 18px 셋 중 하나다. 메타 정보도 예외가 아니다: 역할 줄, 도구 줄, 인용 칩, 시간·대화 수, 출처 주소가 10~13px에서 14px이 된다. 줄 높이는 라벨 1.5, 한글 본문 1.65. 글자 크기 선택(기본 · 크게 · 아주 크게)은 셸의 `--hp-font-step` 하나(0 · 2 · 4px)라서 셸 안의 모든 단계가 같이 커지고, 44px 대상과 컨트롤 높이는 그대로다(min-height만 있다). 14px 아래로 남는 것: 화면에 보이지 않는 키보드 안내, 장식 글리프, 접근 이름이 있는 글리프 버튼(×). 수업 채팅은 이번에 바꾸지 않는다(같은 클래스는 개인 셸 아래에서만 올린다) |
+| 학습자 글자 단계 전체(CGP-DS-D-005, DES-CGP-DS-09) | 크기는 14 · 16 · 18 · 22 · 28px 다섯 단계다(`--hp-font-caption` · `body` · `lead` · `title` · `display`). 개인 대화의 답 마크다운은 h1 22px, h2·h3 18px, h4~h6 16px이고, 이전의 1.15em(18.4px)은 쓰지 않는다. 굵기는 400과 600 둘뿐이다: 550 · 650 · 700과 브라우저 기본 굵게(제목, `strong`, `b`, `th`)는 모두 600이 된다. 작업 화면 전체가 라벨 줄 높이 1.5를 기본으로 가져서 `normal`(약 1.2)로 남는 글이 없다. 파일 바꾸기·보내기 확인 창은 작업 화면 밖에 그려져서 스스로 1.5와 600을 가진다(수업 좌석도 같이 바뀐다). 한글 자간은 0이다: 답 제목의 -0.2px, 대화 칩 제목의 0.2px, 주차 표시의 1px가 개인 화면에서 0이 된다. 줄 높이는 라벨 1.5(1.2~1.45였던 인용 칩, 첨부 이름, 업데이트 노트, 답 버튼, 진행 줄이 1.5로), 한글 본문 1.65(답 문단·목록·인용·표, 학생 말풍선, 빈 대화 인사말, 자료 설명)로 기본 · 크게 · 아주 크게 모두 1.65~1.75 안이다. 입력창은 48px 입력창 모양(DES-CGP-DS-21)을 지키려고 라벨 줄 높이 1.5를 유지한다. 브랜드 글자 "HypeProof"(라틴 로고)와 장식 글리프는 제외. 수업 채팅은 이번에 바꾸지 않는다(DEC-DS-D-005) |
 | 강제 색상(CGP-DS-R-016, DES-CGP-DS-17) | Windows 고대비에서는 시스템 색만 남고 그림자와 그라데이션은 사라진다. 모든 컨트롤은 `1px solid ButtonText` 테두리, 포커스는 `--hp-ring-focus-default`이 `Highlight`가 된 같은 outline, 눌림·선택·현재 상태는 `Highlight`/`HighlightText`. 색이나 배경만으로 그리던 표시(음성 캡처 점, 응답 점, 음성 막대, 인용 신뢰 단계, 검증 상태 칩, 강사 배지, 학생 말풍선)는 테두리나 모양을 얻는다. `forced-color-adjust: none`은 QR 코드 두 곳뿐이다. 보통 화면은 바뀌지 않는다 |
 
 대비. 상대 휘도로 계산한 근사값이며 구현 시 검사 도구로 다시 확인한다.

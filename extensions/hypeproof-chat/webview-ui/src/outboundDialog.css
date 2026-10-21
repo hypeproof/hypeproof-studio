@@ -1,6 +1,8 @@
 /* CGP-KNOW-D-006 — outbound confirmation dialog. */
 .hps-outbound { box-sizing: border-box; width: min(var(--ds-c-studio-outbounddialog-size-108), calc(100vw - var(--ds-c-studio-outbounddialog-size-17))); max-height: calc(100vh - var(--ds-c-studio-outbounddialog-size-17)); overflow: auto; margin: auto; padding: var(--ds-c-studio-outbounddialog-space-5); border: var(--ds-c-studio-outbounddialog-size-7) solid currentColor; border-radius: var(--ds-c-studio-outbounddialog-radius-6); color: var(--vscode-editor-foreground, var(--ds-c-studio-outbounddialog-ink-1)); background: var(--vscode-editor-background, var(--ds-c-studio-outbounddialog-surface-24)); font: inherit; font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-outbounddialog-typography-4); overflow-wrap: anywhere; }
 .hps-outbound::backdrop { background: var(--ds-c-studio-outbounddialog-surface-124); }
+/* CGP-DS-D-005: the recipient name is 600, not the user agent's bold. */
+.hps-outbound strong { font-weight: var(--hp-weight-strong); }
 .hps-outbound h2, .hps-outbound h3 { font: inherit; font-weight: var(--ds-c-studio-outbounddialog-typography-7); margin: 0 0 var(--ds-c-studio-outbounddialog-space-1); }
 .hps-outbound p { margin: 0 0 var(--ds-c-studio-outbounddialog-space-2); }
 .hps-outbound fieldset { min-width: 0; margin: var(--ds-c-studio-outbounddialog-space-20) 0; padding: 0; border: 0; }

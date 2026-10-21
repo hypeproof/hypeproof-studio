@@ -1,4 +1,6 @@
 .hps-write-approval { box-sizing: border-box; width: min(var(--ds-c-studio-writeapprovaldialog-size-108), calc(100vw - var(--ds-c-studio-writeapprovaldialog-size-17))); max-height: calc(100vh - var(--ds-c-studio-writeapprovaldialog-size-17)); overflow: auto; margin: auto; padding: var(--ds-c-studio-writeapprovaldialog-space-5); border: var(--ds-c-studio-writeapprovaldialog-size-7) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-6); background: var(--vscode-editor-background, var(--ds-c-studio-writeapprovaldialog-surface-24)); color: var(--vscode-editor-foreground, var(--ds-c-studio-writeapprovaldialog-ink-1)); font: inherit; font-size: var(--hp-font-caption, var(--ds-c-studio-writeapprovaldialog-type-17)); overflow-wrap: anywhere; }
+/* CGP-DS-D-005: the dialog is drawn outside the task workspace, so it carries the label leading itself. */
+.hps-write-approval { line-height: var(--hp-leading-label); }
 .hps-write-approval::backdrop { background: var(--ds-c-studio-writeapprovaldialog-surface-124); }
 .hps-write-approval h2 { font: inherit; font-weight: var(--ds-c-studio-writeapprovaldialog-typography-7); }
 .hps-write-files { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-writeapprovaldialog-space-2); }

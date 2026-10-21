@@ -1943,6 +1943,10 @@
 :root, body {
   --ds-c-studio-tokens-leading-label: var(--ds-s-typography-5);
   --ds-c-studio-tokens-leading-prose: var(--ds-s-typography-10);
+  --ds-c-studio-tokens-type-title: var(--ds-s-type-15);
+  --ds-c-studio-tokens-type-display: var(--ds-s-type-24);
+  --ds-c-studio-tokens-weight-regular: var(--ds-s-typography-12);
+  --ds-c-studio-tokens-weight-strong: var(--ds-s-typography-7);
   --ds-c-assistant-mark: var(--ds-s-assistant-mark);
   --ds-c-inline-hit-target: var(--ds-s-inline-hit-target);
   --ds-c-inline-row-gap: var(--ds-s-inline-row-gap);
