@@ -40,7 +40,9 @@ const FIXED = ["--hp-text-paper-default", "--hp-bg-paper-default", "--hp-border-
 // CGP-DS-D-003 — state layers: the text role mixed over the surface. They follow the host through the
 // text role, so they carry no --vscode-* key of their own, and every scope binds the same expression
 // (test/control-state-layers.smoke.mjs owns the shares).
-const DERIVED = new Map([["--hp-bg-control-hover", /^color-mix\(in srgb, var\(--hp-text-primary-default\) \d+%, transparent\)$/], ["--hp-bg-control-pressed", /^color-mix\(in srgb, var\(--hp-text-primary-default\) \d+%, transparent\)$/]]);
+const DERIVED = new Map([["--hp-bg-control-hover", /^color-mix\(in srgb, var\(--hp-text-primary-default\) \d+%, transparent\)$/], ["--hp-bg-control-pressed", /^color-mix\(in srgb, var\(--hp-text-primary-default\) \d+%, transparent\)$/],
+  // CGP-DS-R-005 — the filled-control layers: the control's own foreground (test/hover-pressed-fills.smoke.mjs).
+  ["--hp-bg-layer-hover", /^color-mix\(in srgb, currentColor \d+%, transparent\)$/], ["--hp-bg-layer-pressed", /^color-mix\(in srgb, currentColor \d+%, transparent\)$/]]);
 const BRANDED = ".studio-start, .studio-disconnected";
 const PAPER = '[data-surface="growth"], .hp-reflection';
 const LIGHT_BODY = "body.vscode-light, body.vscode-high-contrast-light";

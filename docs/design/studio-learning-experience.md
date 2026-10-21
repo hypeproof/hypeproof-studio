@@ -287,6 +287,9 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   /* CGP-DS-D-003 상태층: 포인터가 올라가면 글자색 8%, 누르면 14%(밝은 면 12%)를 놓인 면 위에 겹친다. */
   --hp-bg-control-hover: color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent);
   --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent);
+  /* CGP-DS-R-005 채운 컨트롤의 상태층: 컨트롤 자신의 글자색(currentColor) 8% / 14%를 자기 채움 위에 background-image로 겹친다. */
+  --hp-bg-layer-hover: color-mix(in srgb, currentColor 8%, transparent);
+  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);
   --hp-bg-control-selected: var(--vscode-editor-background, #151D19); /* 라디오 카드 묶음에서 고른 항목 */
   /* 테두리 */
   --hp-border-divider-default: var(--vscode-panel-border, #35483A); /* 장식 구분선 전용 (1.75:1) */
@@ -335,6 +338,7 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
    밝은 테마에서는 보조 글자를 테마 글자색 쪽으로 20% 당긴다: 4.6:1, 본문보다는 여전히 옅다. 어두운 테마는 테마 값 그대로 */
 body.vscode-light, body.vscode-high-contrast-light {
   --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 12%, transparent);
+  --hp-border-control-default: #76837A; /* CGP-DS-R-005: 밝은 호스트 테마의 컨트롤 경계는 Paper 값 — 흰 바탕 4.0:1, Light+ 오류 알림 틴트 위 3.1:1 */
   --hp-text-muted-default: color-mix(in srgb, var(--vscode-descriptionForeground, #4B5A4F) 80%, var(--vscode-foreground, #151D19));
 }
 /* 브랜드 화면(CGP-DS-D-002). 시작·연결 끊김 화면은 그림과 카드가 forest 전용이라 어느 테마에서나 forest로 그린다.
@@ -353,6 +357,8 @@ body.vscode-light, body.vscode-high-contrast-light {
   --hp-bg-accent-default: #D5F279;
   --hp-bg-control-hover: color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent);
   --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent);
+  --hp-bg-layer-hover: color-mix(in srgb, currentColor 8%, transparent);
+  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);
   --hp-bg-control-selected: #151D19;
   --hp-border-divider-default: #35483A;
   --hp-border-control-default: #748F79;
@@ -380,6 +386,8 @@ body.vscode-light, body.vscode-high-contrast-light {
   --hp-bg-accent-default: #D5F279;
   --hp-bg-control-hover: color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent);
   --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 12%, transparent);
+  --hp-bg-layer-hover: color-mix(in srgb, currentColor 8%, transparent);
+  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);
   --hp-bg-control-selected: #F4F6F0;
   --hp-border-divider-default: #D7DDD2;
   --hp-border-control-default: #76837A;

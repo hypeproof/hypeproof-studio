@@ -58,6 +58,11 @@
    * rebinds the text role declares both again, because a custom property resolves where it is declared. */
   --hp-bg-control-hover: color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent);
   --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent);
+  /* CGP-DS-R-005 (DES-CGP-DS-04) — the same layers for a filled control, drawn as a background-image
+   * over its own fill: the control's own foreground (currentColor, resolved on the control) at 8% and
+   * 14%. Every :hover/:active fill in the webview is one of these four (test/hover-pressed-fills.smoke.mjs). */
+  --hp-bg-layer-hover: color-mix(in srgb, currentColor 8%, transparent);
+  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);
   --hp-bg-control-selected: var(--vscode-editor-background, var(--ds-c-studio-tokens-surface-68)); /* the chosen option of a radio card group */
   /* Borders */
   --hp-border-divider-default: var(--vscode-panel-border, var(--ds-c-studio-tokens-boundary-50)); /* decorative dividers only (1.75:1) */
@@ -115,6 +120,9 @@ body[data-vscode-theme-id="Dark 2026"], body[data-vscode-theme-id="Light 2026"] 
  * Studio theme included, keep the theme value as is. */
 body.vscode-light, body.vscode-high-contrast-light {
   --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 12%, transparent); /* CGP-DS-D-003: light surface */
+  /* CGP-DS-R-005: on light host themes the control boundary is the Paper one (4.0:1 on white). The forest
+   * value is 2.8:1 on a tinted notice there (the error banner over #F3F3F3). */
+  --hp-border-control-default: var(--ds-c-studio-tokens-boundary-52);
   --hp-text-muted-default: color-mix(in srgb, var(--vscode-descriptionForeground, var(--ds-c-studio-tokens-ink-42)) 80%, var(--vscode-foreground, var(--ds-c-studio-tokens-surface-68)));
 }
 
@@ -136,6 +144,8 @@ body.vscode-light, body.vscode-high-contrast-light {
   --hp-bg-accent-default: var(--ds-c-studio-tokens-ink-12);
   --hp-bg-control-hover: color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent);
   --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent);
+  --hp-bg-layer-hover: color-mix(in srgb, currentColor 8%, transparent);
+  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);
   --hp-bg-control-selected: var(--ds-c-studio-tokens-surface-68);
   --hp-border-divider-default: var(--ds-c-studio-tokens-boundary-50);
   --hp-border-control-default: var(--ds-c-studio-tokens-boundary-1);
@@ -167,6 +177,8 @@ body.vscode-light, body.vscode-high-contrast-light {
   --hp-bg-accent-default: var(--ds-c-studio-tokens-ink-12);
   --hp-bg-control-hover: color-mix(in srgb, var(--hp-text-primary-default) 8%, transparent);
   --hp-bg-control-pressed: color-mix(in srgb, var(--hp-text-primary-default) 12%, transparent);
+  --hp-bg-layer-hover: color-mix(in srgb, currentColor 8%, transparent);
+  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);
   --hp-bg-control-selected: var(--ds-c-studio-tokens-surface-70);
   --hp-border-divider-default: var(--ds-c-studio-tokens-boundary-51);
   --hp-border-control-default: var(--ds-c-studio-tokens-boundary-52); /* 3.6:1 on Paper, 4.0:1 on white */
