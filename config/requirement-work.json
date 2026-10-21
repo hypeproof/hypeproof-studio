@@ -484,7 +484,7 @@
         "DES-12"
       ],
       "inline_prefixes": [],
-      "sha256": "a3562f962fc2122b500352d755038885b0d854e03b53d30bedb4785d1d794870",
+      "sha256": "f7306e50dc1bdf735c4c495371251250236f30f3a2c112d932c30b7979bc23be",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-design.md",

@@ -1,6 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
 import { attachmentDisplayName, attachmentReadFailure, type AttachmentFailure } from '../../src/attachmentFailure';
+import { ChatIcon, type IconKind } from './ChatDetails';
 import { onHostMessage, postToHost } from './vscode';
+
+
+/** Classify only an existing diagnosis; never infer encryption or a new failure from a filename. */
+export function attachmentFailureLabel(reason: string): {label:string; icon:IconKind} {
+  if (/빈 파일/.test(reason)) return {label:'빈 파일',icon:'file'};
+  if (/읽을 글자/.test(reason)) return {label:'글자 없음',icon:'file'};
+  if (/너무 커|크기|MB까지|KB까지/.test(reason)) return {label:'크기 초과',icon:'ruler'};
+  if (/글자가 너무 많/.test(reason)) return {label:'글자 수 초과',icon:'ruler'};
+  if (/시간이 너무|응답이 늦/.test(reason)) return {label:'시간 초과',icon:'clock'};
+  if (/권한/.test(reason)) return {label:'권한 없음',icon:'lock'};
+  if (/지원하지 않는|글자로 된 파일/.test(reason)) return {label:'지원하지 않는 형식',icon:'file'};
+  if (/다시 골라|다시 선택/.test(reason)) return {label:'다시 선택 필요',icon:'folder'};
+  return {label:'첨부 실패',icon:'alert'};
+}
+export function AttachmentFailureBadge({reason}:{reason:string}) {
+  const cause=attachmentFailureLabel(reason);
+  return <span className="hps-attachment-failure-cause" data-testid="attachment-failure-cause"><ChatIcon kind={cause.icon} size={16}/><span>{cause.label}</span></span>;
+}
+/** One persistent polite region below the composer; chips retain the full reason for every item. */
+export function AttachmentFailureNotice({items,fallback}:{items:AttachmentFailure[];fallback?:string|null}) {
+  const item=items.at(-1);
+  const message=item ? `${attachmentDisplayName(item.name)}: ${item.reason}` : fallback ?? '';
+  return <p className="hps-attachment-error-summary" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-error-summary">{message && <span data-testid={!item?'file-attach-error':undefined}>{message}</span>}</p>;
+}
 
 export function AttachmentFailures({ items, retry, remove }: {
   items: (AttachmentFailure & { busy?: boolean; repick?:boolean })[]; retry: (id: string) => void; remove: (id: string) => void;
@@ -9,7 +34,7 @@ export function AttachmentFailures({ items, retry, remove }: {
   if (items.length === 0) return null;
   return <div className="hps-attachment-failures" aria-label="다시 확인할 첨부 파일">
     {items.map(item => <div className="hps-attachment-failure" key={item.id} data-testid="attachment-failure">
-      <strong>{attachmentDisplayName(item.name)}</strong><p role="alert">{item.reason}</p>
+      <strong>{attachmentDisplayName(item.name)}</strong><AttachmentFailureBadge reason={item.reason}/><p>{item.reason}</p>
       {!item.final && <button type="button" disabled={item.busy} onClick={() => retry(item.id)}>{item.busy ? '다시 읽는 중…' : item.repick ? '이 파일 다시 선택' : '이 파일만 다시 시도'}</button>}
       <button type="button" onClick={() => remove(item.id)} aria-label={`${attachmentDisplayName(item.name)} 빼기`}>빼기</button>
     </div>)}

@@ -3618,3 +3618,17 @@ guard decisions, hostile answers), `test/quit-guard-host.smoke.mjs` (host state 
 `test/quit-guard-queue.test.tsx` (ChatPanel reports its queue), `test/quit-guard-patch.smoke.mjs`
 (the patch is current, applies to the pinned upstream files and ships the tested sources). The
 native dialog itself (macOS and Windows) needs a built app; see the row's report.
+
+CGP-KNOW-D-020 / DES-KNOW-37 presentation: each retained attachment failure
+has an outlined chip containing its filename, decorative cause glyph, short Korean
+label and full Korean diagnosis with a next action. Colour is not the only cue.
+One persistent `role=status`, `aria-live=polite`, atomic summary below the composer
+shows one failed filename and its diagnosis; every other failure stays readable in
+its chip. The summary wraps on narrow screens and clears when its failure resolves.
+Browser staging, host read and send-preparation errors share this presentation.
+Unrelated operational notices remain available; no duplicate assertive error alert
+is added. Personal text size settings apply to the chips and summary. Typed text,
+successful sibling attachments and the existing per-item retry/remove semantics
+remain intact. Batch attachment-count limits remain picker policy notices.
+Behavioral check: `test/attachment-error-design.test.tsx` mounts personal and classroom
+ChatPanel, diagnoses causes and checks actual host/retry/preparation events.

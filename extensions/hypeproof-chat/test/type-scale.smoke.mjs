@@ -17,12 +17,12 @@ const read = (f) => readFileSync(new URL(f, SRC), "utf8");
 // Stylesheet order in the built bundle (vite build, checked in dist/assets/index.css): main.tsx
 // imports tokens.css first, then modules pull in localReview/start/citationPreview/quoteAction/codeBlock/
 // quoteAction/taskWorkspace before the explicit styles.css and chatDetails.css imports.
-const ORDER = ["tokens.css", "localReview.css", "start.css", "writeApprovalDialog.css", "citationPreview.css", "quoteAction.css", "codeBlock.css", "refusalBanner.css", "taskWorkspace.css", "styles.css", "chatDetails.css"];
+const ORDER = ["tokens.css", "localReview.css", "start.css", "writeApprovalDialog.css", "outboundDialog.css", "citationPreview.css", "quoteAction.css", "codeBlock.css", "refusalBanner.css", "taskWorkspace.css", "styles.css", "chatDetails.css"];
 // The DEC-29 scope: files that style only the personal task workspace and its chat.
 const PERSONAL_FILES = ["chatDetails.css", "taskWorkspace.css", "citationPreview.css", "codeBlock.css"];
 const FLOOR = 14;
 // Files whose rules also style other surfaces (classroom chat, start page).
-const SHARED_FILES = ["refusalBanner.css", "styles.css", "start.css", "quoteAction.css", "writeApprovalDialog.css"];
+const SHARED_FILES = ["refusalBanner.css", "styles.css", "start.css", "quoteAction.css", "writeApprovalDialog.css", "outboundDialog.css"];
 const STEPS = { base: 0, large: 2, xlarge: 4 };
 
 // ─── CSS parsing ───────────────────────────────────────────────────────────────────────────────
@@ -341,6 +341,7 @@ const CLASSROOM_SHARED = {
 const SHARED_LEARNER = [
   ".hp-ai-can-do-label",
   ".hps-denial-notice",
+  ".hps-attachment-failure, .hps-photo-failure", ".hps-attachment-error-summary",
   ".hps-coach-name", ".hps-header button", ".hps-msg-role", ".hps-user-actions button", ".hps-version-pager", ".hps-version-note",
   ".hps-edit-note", ".hps-cit-chip", ".hps-cit-domain", ".hps-msg-run, .hps-msg-retry", ".hps-naming-btn-ghost", ".hps-thinking-details pre",
   ".hps-code-progress", ".hps-codepill-toggle", ".hps-codepill-body", ".hps-empty-sub", ".hps-chips-label", ".hps-chip-text", ".hps-chip-caption",

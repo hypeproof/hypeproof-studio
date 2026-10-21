@@ -21,5 +21,6 @@ assert.equal((html.match(/data-testid="attachment-failure"/g) ?? []).length, 2);
 assert.ok(html.includes('이 파일만 다시 시도'));
 assert.ok(html.includes('다시 읽는 중…'));
 assert.ok(html.includes('disabled=""'));
-assert.ok(html.includes('role="alert"'));
+assert.ok(html.includes('data-testid="attachment-failure-cause"'));
+assert.ok(!html.includes('role="alert"'));
 console.log('attachment failure render: safe names, separate chips, retry and busy state PASS');

@@ -513,6 +513,7 @@ export interface SuggestionChip {
 // Webview → Host
 export type WebviewMessage = (
   | {type:'writeApprovalAnswer';id:string;approved:boolean}
+  | {type:'outboundAnswer';id:string;selected:string[]|null}
   | { type: 'taskCreate' }
   | { type: 'taskRecoverDraft' }
   | { type: 'taskSelect'; id: string }
@@ -749,6 +750,7 @@ export type WebviewMessage = (
 // Host → Webview
 export type HostMessage = (
   | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
+  | {type:'outboundPrompt';prompt:import('./outboundApproval').OutboundPrompt|null}
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
   | { type: 'taskRenameResult'; requestId: string; saved: boolean }

@@ -171,6 +171,8 @@
 /* Attachments stay one reachable row instead of pushing the composer off screen. */
 .hps-shell[data-chat-detail="personal"] .hps-attachments { flex-wrap: nowrap; overflow-x: auto; flex-shrink: 0; }
 .hps-shell[data-chat-detail="personal"] .hps-attachment { display: flex; align-items: center; flex: 0 0 auto; width: auto; height: 44px; border-radius: 8px; background: var(--tw-panel); }
+/* CGP-KNOW-D-020: a refused photo's chip is not the 44px row chip; it grows to hold its failure block (styles.css). */
+.hps-shell[data-chat-detail="personal"] .hps-attachment:has(.hps-photo-failure) { flex-wrap: wrap; align-items: center; width: min(100%, 360px); height: auto; }
 .hps-shell[data-chat-detail="personal"] .hps-attachment img { width: 44px; height: 44px; flex: 0 0 44px; }
 .hps-shell[data-chat-detail="personal"] .hps-attachment-remove { position: static; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 0; background: transparent; color: var(--vscode-foreground, #e1e1e1); font-size: 18px; }
 .hps-shell[data-chat-detail="personal"] .hps-attachment-remove:hover { background: var(--vscode-list-hoverBackground, #2b3037); }

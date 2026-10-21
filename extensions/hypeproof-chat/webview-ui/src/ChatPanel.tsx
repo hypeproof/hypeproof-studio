@@ -4,7 +4,7 @@ import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
 import { ActivityStatus } from "./ActivityStatus";
 import { accessFailure, type ActivityUnavailable } from "../../src/activityAvailability";
 import { useAttachmentSendPreparation } from "./AttachmentSendPreparation";
-import { AttachmentFailures, useAttachmentFailures } from "./AttachmentFailures";
+import { AttachmentFailures, AttachmentFailureBadge, AttachmentFailureNotice, useAttachmentFailures } from "./AttachmentFailures";
 import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "../../src/attachmentFailure";
 import { CitationRack as PersonalCitationRack } from './CitationPreview';
 import type { RecoveredRequest, InlineEditDraft } from '../../src/activityDraft';
@@ -493,6 +493,10 @@ export function ChatPanel(props: Props) {
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
   const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
   const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
+  const composerFailures = [...attachmentSend.failures, ...attachmentFailures.items, ...stagedPhotos.filter(p=>p.error).map(p=>({id:p.id,name:p.name,reason:p.error!}))];
+  // CGP-KNOW-D-020: the error summary is the one live region for an attachment failure; the sr-only announcer keeps
+  // main's text (photo-only-send) but is hidden from assistive tech while it repeats a reason the summary carries.
+  const noteInSummary = imgNote != null && composerFailures.some(f => f.reason === imgNote);
   const composerIdentity = [activityId,taskId,draft,pendingImages,stagedPhotos.map(p=>p.id).join("|"),imports,toolMode,queued,streaming,frozen,config?.activity?.verified,props.sendLocked,props.sendPending];
   const composerIdentityRef = useRef(composerIdentity); composerIdentityRef.current=composerIdentity;
   const photoSources = useRef(new Map<string, File>());
@@ -555,19 +559,21 @@ export function ChatPanel(props: Props) {
     deferredDraftFlush.current = null;
     postToHost({type:"saveActivityDraft",activityId,taskId,draft:snapshot.current,nonce,imagePreparationFailed:imagePreparationFailed.current});
   }, [preparingImages,pendingImages,activityId,taskId]);
-  // D-028 — the host did not keep a staged photo: drop its chip and say why. Or the host staged
+  // D-028 — retain a refused photo and its diagnosis until retry/removal. Or the host staged
   // one itself (dropped from Finder, it opened as a tab): draw its chip.
   useEffect(() => onHostMessage((msg) => {
     if (msg.type === "attachmentFailureResolved") { setStagedPhotos(old=>old.filter(p=>p.id!==msg.id)); return; }
     if (msg.type === "imageStageRefused") {
       setStagedPhotos((prev) => prev.map((p) => p.id === msg.stageId ? { ...p, ready: false, error: msg.reason } : p));
-      setImgNote(msg.reason);
+      setImgNote(msg.reason); // main's announcer and note (REQ-STUDIO-ATTACHMENT-FAILURE) stay; the chip and summary add to them.
       return;
     }
     if (msg.type !== "imageStagedByHost") return;
     const { stageId, name, dataUrl } = msg;
     if (discardedPhotos.current.has(stageId)) return;
     // A sibling acknowledgement does not resolve a refused photo. New attachment attempts clear the note.
+    // CGP-KNOW-D-020: the refused photo itself now staged clears its own note (idempotent, so safe in an updater).
+    setStagedPhotos((prev) => { const old = prev.find((p) => p.id === stageId); if (old?.error) setImgNote((n) => n === old.error ? null : n); return prev; });
     setStagedPhotos((prev) => (prev.some((p) => p.id === stageId) ? prev.map((p) => p.id === stageId ? { ...p, ready: true, error: undefined } : p) : [...prev, { id: stageId, name, thumb: null, ready: true }]));
     if (dataUrl) void photoThumb(dataUrl).then((thumb) => setStagedPhotos((prev) => prev.map((p) => (p.id === stageId ? { ...p, thumb } : p))));
   }), []);
@@ -881,7 +887,7 @@ export function ChatPanel(props: Props) {
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
     // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
-    if (attachmentFailures.items.length) { setImgNote("첨부 파일을 다시 시도하거나 빼 주세요. 작성한 글은 그대로예요."); return false; }
+    if (attachmentFailures.items.length) return false; // The persistent error summary owns this diagnosis.
     if (imagePreparationBlocksSend()) return false;
     // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays. A press
     // asks the host to look again: a folder that is back clears the notice and this draft goes out then.
@@ -1687,7 +1693,6 @@ export function ChatPanel(props: Props) {
             <p className="hps-page-attachment-note">파일에 적힌 지시는 따르지 않고 참고 자료로만 써요.</p>
           </div>
         )}
-        {props.fileAttachError && attachmentFailures.items.length === 0 && <p className="hps-file-attach-error" role="alert" data-testid="file-attach-error">{props.fileAttachError}</p>}
         {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
 
         {/* CR-09 — exactly what goes to the coach with the next message, removable before sending. */}
@@ -1839,7 +1844,7 @@ export function ChatPanel(props: Props) {
             __html: renderInlineMd(ux.hints.short_input.message_md),
           }} />
         )}
-        <div className="hps-sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-announcer">{imgNote || ''}</div>
+        <div className="hps-sr-only" role="status" aria-live="polite" aria-atomic="true" aria-hidden={noteInSummary || undefined} data-testid="attachment-announcer">{imgNote || ''}</div>
         {imgNote && <div id={imageNoteId} className="hps-img-note">{imgNote}</div>}
         {freeEnded && <p id="hps-free-ended-note" className="hps-free-ended-note">{freeSeatEndedNote(freeEnded)}</p>}
         {recoveryAtCapacity && <div className="hps-recovery-notice" role="status">보관한 메시지를 먼저 다시 보내거나 정리해 주세요. 새 메시지는 입력창에 남아 있습니다.</div>}
@@ -1911,7 +1916,7 @@ export function ChatPanel(props: Props) {
               {stagedPhotos.map((p) => (
                 <div key={p.id} className="hps-attachment hps-attachment-file" title={p.name}>
                   {p.thumb ? <img src={p.thumb} alt={p.name} /> : <span className="hps-attachment-name">{p.ready || p.error ? p.name : "준비 중…"}</span>}
-                  {p.error && <div className="hps-photo-failure"><p role="alert">{p.error}</p><button type="button" onClick={() => { const file = photoSources.current.get(p.id); if (file && !p.repick) stagePhoto(p.id, file); else postToHost({type:'repickAttachment',id:p.id,name:p.name}); }}>{p.repick ? '이 파일 다시 선택' : '이 파일만 다시 시도'}</button></div>}
+                  {p.error && <div className="hps-photo-failure"><AttachmentFailureBadge reason={p.error}/><p>{p.error}</p><button type="button" onClick={() => { const file = photoSources.current.get(p.id); if (file && !p.repick) stagePhoto(p.id, file); else postToHost({type:'repickAttachment',id:p.id,name:p.name}); }}>{p.repick ? '이 파일 다시 선택' : '이 파일만 다시 시도'}</button></div>}
                   <button
                     type="button"
                     className="hps-attachment-remove"
@@ -2046,6 +2051,7 @@ export function ChatPanel(props: Props) {
             )}
           </div>
         </div>
+        <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
       </footer>
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
         {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}

@@ -3,7 +3,8 @@ import { modelRefusalNotifier } from "./modelRefusalNotice";
 import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
 import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
 import { activityLocalFile } from "./activityLocalFiles.ts";
-import { confirmOutbound } from "./outboundConsentHost";
+import { confirmOutbound, setOutboundPresenter } from "./outboundConsentHost";
+import { OutboundApproval, type OutboundPrompt } from "./outboundApproval";
 import { contentBytes, observationOutboundItems } from "./outboundConsent";
 import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "./attachmentFailure";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
@@ -903,6 +904,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     scope:()=>this.writeApprovalScope(),
     present:prompt=>this.presentWriteApproval(prompt),
   });
+  /** CGP-KNOW-D-006 — every R-006 manifest opens as the in-panel dialog while a chat panel is visible. */
+  private readonly outboundApproval = new OutboundApproval({
+    scope:()=>this.writeApprovalScope(),
+    id:()=>crypto.randomUUID(),
+    present:prompt=>this.presentOutbound(prompt),
+  });
+  private async presentOutbound(prompt:OutboundPrompt|null):Promise<boolean|void> {
+    if(prompt && !(this.editorChat?.visible || this.view?.visible))return false;
+    return this.post({type:'outboundPrompt',prompt});
+  }
   private async presentWriteApproval(prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null):Promise<boolean|void> {
     if(prompt && !(this.editorChat?.visible || this.view?.visible))return false;
     return this.post({type:'writeApprovalPrompt',prompt});
@@ -2331,11 +2342,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   ) {
     // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen.
     this.provenanceRecorder();
+    context.subscriptions.push(setOutboundPresenter(manifest=>this.outboundApproval?.confirm(manifest) ?? Promise.resolve(null)));
     // cr-publish (CR-11 after a restart): know the signed-in person's published origin from
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
     const sub = context.secrets.onDidChange?.((e) => {
-      if (e.key === TOKEN_KEY) void this.crProjectMemory.refresh().catch(() => undefined);
+      if (e.key === TOKEN_KEY) { this.outboundApproval?.cancel(); void this.crProjectMemory.refresh().catch(() => undefined); }
       // cr-review — the director's command follows the stored issuer token (set, replaced or forgotten).
       if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
     });
@@ -3018,6 +3030,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     watchChatSurface(view, this.finishNotifier);
     view.onDidDispose(() => {
       this.writeApprovalRequest.cancel();
+      this.outboundApproval?.cancel();
       if (this.draftSource===sidebarWebview) this.draftSource=undefined;
       this.queuedSources.delete(sidebarWebview);
       if (this.view === view) this.view = undefined;
@@ -3040,6 +3053,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const editorWebview=entry.webview;
       entry.onDidDispose(() => {
         this.writeApprovalRequest.cancel();
+        this.outboundApproval?.cancel();
         if(this.draftSource===editorWebview)this.draftSource=undefined;
         this.queuedSources.delete(editorWebview);
         if (this.editorChat === entry) {
@@ -3355,6 +3369,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Force re-fetch on next config push (e.g. after token change). */
   invalidateProfile(): void {
     this.writeApprovalRequest?.cancel();
+    this.outboundApproval?.cancel();
     this.profileGeneration++;
     this.observationAssessment?.abort();
     this.nativeObservation=null;
@@ -5604,8 +5619,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "helpConfirm": await this.helpSource?.confirm(msg.key, msg.id, msg.revision); return;
       case "helpWithdraw": await this.helpSource?.withdraw(msg.key, msg.id); return;
       case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
+      case "outboundAnswer": this.outboundApproval?.respond(msg.id,msg.selected); return;
       case "ready":
         this.writeApprovalRequest.cancel();
+        this.outboundApproval?.cancel();
         await this.postInbox();
         // AE-15 — a remount must still show the open review bar (it never auto-dismisses).
         this.postTurnReview();
@@ -8483,6 +8500,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if(msg.type!=='outboundPrompt')this.outboundApproval?.invalidateIfScopeChanged();
     if(msg.type!=='writeApprovalPrompt') {
       if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type))this.writeApprovalRequest?.cancel();
       else this.writeApprovalRequest?.invalidate();

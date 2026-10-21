@@ -27,6 +27,10 @@ const ok = (name) => {
   passed++;
   console.log(`✓ ${name}`);
 };
+// D020's empty recovery containers are covered by attachment-error-design, not A5.
+const withoutEmptyRecovery = html => html
+  .replaceAll('<div class="hps-attachment-failures" aria-label="다시 확인할 첨부 파일"></div>', '')
+  .replace('<p class="hps-attachment-error-summary" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-error-summary"></p>', '');
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 
 // ── The render instrument: the real components, bundled once ────────────────
@@ -268,7 +272,7 @@ if (!status.available) {
   for (const [name, make] of Object.entries(OLD_SCREENS)) {
     const [component, props] = make();
     const html = await render(component, props);
-    digests[name] = sha(html);
+    digests[name] = sha(withoutEmptyRecovery(html));
     if (dumpDir) {
       const fs = await import("node:fs");
       fs.mkdirSync(dumpDir, { recursive: true });
@@ -1164,7 +1168,7 @@ if (status.available) {
     for (const [name, make] of Object.entries(OLD_SCREENS)) {
       const [component, props] = make();
       const withServed = { ...props, config: { ...props.config, profile: { ...props.config.profile, orchestrator: served } } };
-      assert.equal(sha(await render(component, withServed)), BASE[name], `${name} with orchestrator=${served.enabled === false ? "disabled" : "roster"}`);
+      assert.equal(sha(withoutEmptyRecovery(await render(component, withServed))), BASE[name], `${name} with orchestrator=${served.enabled === false ? "disabled" : "roster"}`);
     }
   }
   // The timeline draws the host's lines as designed (spec §5.2 examples), through ChatPanel.
