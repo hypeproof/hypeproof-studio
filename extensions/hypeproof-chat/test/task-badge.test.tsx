@@ -63,11 +63,11 @@ async function run() {
   assert.match(css, /\.tw-task \{ display: grid; grid-template-columns: minmax\(0, 1fr\);/);
   assert.match(css, /\.tw-task-state \{ justify-self: end; max-width: 100%;/);
   assert.doesNotMatch(css, /\.tw-task-state \{[^}]*white-space: nowrap/, 'the badge must not force a one-line width that starves the title');
-  assert.match(css, /\.tw-task-state \{[^}]*font-size: var\(--hp-text-caption\)/);
-  assert.match(designValues(fs.readFileSync(path.join(process.cwd(), 'webview-ui/src/tokens.css'), 'utf8')), /--hp-text-caption: calc\(14px \+ var\(--hp-text-step\)\)/, 'caption token floor is 14px');
+  assert.match(css, /\.tw-task-state \{[^}]*font-size: var\(--hp-font-caption\)/);
+  assert.match(designValues(fs.readFileSync(path.join(process.cwd(), 'webview-ui/src/tokens.css'), 'utf8')), /--hp-font-caption: calc\(14px \+ var\(--hp-font-step\)\)/, 'caption token floor is 14px');
   assert.match(css, /\.tw-task-meta \{ grid-column: 1 \/ -1;/);
   assert.match(css, /\.tw-task-state\[data-run-state="approval"\][^{]*\{[^}]*font-weight: 700;[^}]*border-width: 2px;/);
-  assert.match(css, /\.tw-conversation:focus \{ outline: 2px solid var\(--hp-ring\); outline-offset: 2px;/);
+  assert.match(css, /\.tw-conversation:focus \{ outline: 2px solid var\(--hp-ring-focus-default\); outline-offset: 2px;/);
   assert.match(css, /@media \(forced-colors: active\) \{\s*\.tw-task-state \{ border-color: CanvasText; color: CanvasText; background: Canvas; \}/);
   assert.match(css, /\.tw-task-state\[data-run-state="approval"\] \{ border-style: double; border-width: 3px; \}/);
   console.log('task-badge: mounted states, skip focus and CSS contracts PASS');

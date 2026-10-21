@@ -97,7 +97,7 @@ t("label: Korean, no capability name, 44px target at the caption step or larger"
   const css = designValues(readFileSync("webview-ui/src/taskWorkspace.css", "utf8"));
   const rule = /\.tw-source-list \.tw-artifact-ask \{([^}]*)\}/.exec(css)?.[1] ?? "";
   ok(/min-height: 44px/.test(rule), "44px target");
-  ok(/font-size: var\(--hp-text-(caption|body)\)/.test(rule), "type-scale token (≥14px)");
+  ok(/font-size: var\(--hp-font-(caption|body)\)/.test(rule), "type-scale token (≥14px)");
 });
 
 t("the host's focus request after an attach lands in the composer and keeps the draft", async () => {

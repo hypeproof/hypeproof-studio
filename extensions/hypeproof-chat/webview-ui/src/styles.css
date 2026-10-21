@@ -134,7 +134,7 @@ html, body, #root {
 .hps-user-actions button:hover:not(:disabled) { background: var(--vscode-list-hoverBackground, var(--ds-c-studio-styles-surface-2)); color: var(--vscode-foreground, var(--ds-c-studio-styles-ink-1)); }
 .hps-edit-prompt { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-c-studio-styles-space-13); }
 .hps-user-actions button:disabled { opacity: .4; cursor: default; }
-.hps-user-actions button:focus-visible, .hps-edit-box button:focus-visible, .hps-edit-box textarea:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-user-actions button:focus-visible, .hps-edit-box button:focus-visible, .hps-edit-box textarea:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-version-pager { display: inline-flex; flex-wrap: wrap; min-width: 0; max-width: 100%; align-items: center; gap: var(--ds-c-studio-styles-space-14); font-size: var(--ds-c-studio-styles-type-1); }
 .hps-version-pager button { min-width: var(--ds-c-studio-styles-size-8); min-height: var(--ds-c-studio-styles-size-8); font: inherit; }
 .hps-version-note { overflow-wrap: anywhere; margin-left: var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-1); }
@@ -264,7 +264,7 @@ html, body, #root {
   text-align: center;
 }
 .hps-naming-input:focus {
-  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7);
+  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7);
 }
 .hps-naming-row { display: flex; gap: var(--ds-c-studio-styles-space-2); }
 .hps-naming-btn {
@@ -304,7 +304,7 @@ html, body, #root {
 .hps-prose pre { white-space: pre-wrap; }
 .hps-prose blockquote { margin: var(--ds-c-studio-styles-space-43) 0; padding-left: var(--ds-c-studio-styles-space-43); border-left: var(--ds-c-studio-styles-size-7) solid var(--vscode-textBlockQuote-border, var(--ds-c-studio-styles-boundary-21)); }
 .hps-markdown-table { max-width: 100%; overflow-x: auto; margin: var(--ds-c-studio-styles-space-43) 0; }
-.hps-markdown-table:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-markdown-table:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-markdown-table table { border-collapse: collapse; width: max-content; min-width: 100%; }
 .hps-markdown-table th, .hps-markdown-table td { min-width: var(--ds-c-studio-styles-size-47); max-width: var(--ds-c-studio-styles-size-48); text-align: left; padding: var(--ds-c-studio-styles-space-48) var(--ds-c-studio-styles-space-49); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, var(--ds-c-studio-styles-boundary-20)); }
 .hps-thinking-details { margin: var(--ds-c-studio-styles-space-13) 0; min-width: 0; }
@@ -517,7 +517,7 @@ html, body, #root {
   transform: translateY(var(--ds-c-studio-styles-size-11));
 }
 .hps-world:focus-visible {
-  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring);
+  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default);
   outline-offset: var(--ds-c-studio-styles-size-7);
 }
 /* Keep the signal that it cannot be pressed during a response, but the name still has to
@@ -748,11 +748,11 @@ html, body, #root {
   font-size: inherit;
 }
 .hps-input textarea:focus {
-  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring);
+  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default);
   outline-offset: var(--ds-c-studio-styles-size-7);
 }
 /* CGP-DS-R-019 — the classroom composer names its placeholder colour instead of taking the UA default. */
-.hps-input textarea::placeholder { color: var(--hp-placeholder); opacity: 1; }
+.hps-input textarea::placeholder { color: var(--hp-text-placeholder-default); opacity: 1; }
 .hps-input-buttons {
   display: flex;
   gap: var(--ds-c-studio-styles-space-15);
@@ -977,7 +977,7 @@ html, body, #root {
 .hps-error-banner-dismiss:hover { background: var(--ds-c-studio-styles-surface-48); }
 /* REQ-CGP-LEARN-13 / DES-CGP-LEARN-13 — a moderation block. The same calm surface as a stop notice:
    widget background, neutral rail, foreground text; no red, no icon, no motion. 14px text, a 44px close
-   button whose --hp-ring focus ring hugs it (Highlight in forced colours, tokens.css), and help-line numbers as plain selectable text. */
+   button whose --hp-ring-focus-default focus ring hugs it (Highlight in forced colours, tokens.css), and help-line numbers as plain selectable text. */
 .hps-safety-notice {
   margin: var(--ds-c-studio-styles-space-2) 0; padding: var(--ds-c-studio-styles-space-1) var(--ds-c-studio-styles-space-19); border-radius: var(--ds-c-studio-styles-radius-3);
   background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41));
@@ -995,7 +995,7 @@ html, body, #root {
   background: transparent; color: var(--vscode-foreground, var(--ds-c-studio-styles-ink-22)); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-styles-boundary-89));
   font-size: var(--ds-c-studio-styles-type-17); font-weight: var(--ds-c-studio-styles-typography-7);
 }
-.hps-safety-dismiss:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-safety-dismiss:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 @media (forced-colors: active) {
   .hps-safety-notice { border-color: CanvasText; }
   .hps-safety-dismiss { border-color: ButtonText; }
@@ -1225,13 +1225,13 @@ html, body, #root {
   border-radius: var(--ds-c-studio-styles-radius-10);
   /* Required control boundary (DES-11, ≥3:1): the shared token, not the theme's secondary button
      colour, which is about 1.1:1 on a light surface. */
-  border: var(--ds-c-studio-styles-size-3) solid var(--hp-control-line);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
   background: transparent;
   color: var(--vscode-foreground, inherit);
   font: inherit;
   cursor: pointer;
 }
-.hps-long-step-stop:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-long-step-stop:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 @keyframes hps-long-step-in { from { opacity: 0; } to { opacity: 1; } }
 /* Opt-in motion: with reduced motion the hint simply appears. */
 @media (prefers-reduced-motion: no-preference) {
@@ -1275,7 +1275,7 @@ html, body, #root {
   background: var(--vscode-toolbar-hoverBackground, var(--ds-c-studio-styles-surface-52));
 }
 .hps-turn-review-actions button:focus-visible {
-  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring);
+  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default);
   outline-offset: var(--ds-c-studio-styles-size-7);
 }
 .hps-turn-review-actions button:disabled { opacity: 0.55; cursor: default; }
@@ -1311,7 +1311,7 @@ html, body, #root {
   cursor: pointer;
 }
 .hps-page-card-actions button:hover { background: var(--vscode-toolbar-hoverBackground, var(--ds-c-studio-styles-surface-52)); }
-.hps-page-card-actions button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-page-card-actions button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
 /*
  * #503 — tool rows now sit one per line on the same timeline as the bubbles (the old
@@ -1431,7 +1431,7 @@ html, body, #root {
   cursor: pointer;
 }
 .hps-gallery-link:focus-visible {
-  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring);
+  outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default);
   outline-offset: var(--ds-c-studio-styles-size-7);
 }
 /* ── Region A · Mission header (SX-01~05, SX-49~54) ───────────────────────────
@@ -1442,8 +1442,8 @@ html, body, #root {
 .hp-mission {
   position: sticky; top: 0; z-index: 2;
   margin: 0; padding: var(--ds-c-studio-styles-space-19) var(--ds-c-studio-styles-space-1) var(--ds-c-studio-styles-space-7);
-  background: var(--hp-panel); color: var(--hp-ink);
-  border-bottom: var(--ds-c-studio-styles-size-3) solid var(--hp-line);
+  background: var(--hp-bg-panel-default); color: var(--hp-text-primary-default);
+  border-bottom: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default);
   flex-shrink: 0;
 }
 /* SX-01 — the header stays on screen while everything under it scrolls. A sticky element sticks
@@ -1502,16 +1502,16 @@ html, body, #root {
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-activity { order:10; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-growth { order:11; flex:0 0 auto; }
 }
-.hp-mission-week { margin: 0 0 var(--ds-c-studio-styles-space-14); font-size: var(--ds-c-studio-styles-type-1); letter-spacing: var(--ds-c-studio-styles-size-3); color: var(--hp-muted); }
+.hp-mission-week { margin: 0 0 var(--ds-c-studio-styles-space-14); font-size: var(--ds-c-studio-styles-type-1); letter-spacing: var(--ds-c-studio-styles-size-3); color: var(--hp-text-muted-default); }
 .hp-mission-sentence { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-15); line-height: var(--ds-c-studio-styles-typography-16); font-weight: var(--ds-c-studio-styles-typography-17); overflow-wrap: anywhere; }
-.hp-mission-activity { margin: 0 0 var(--ds-c-studio-styles-space-7); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); overflow-wrap: anywhere; }
+.hp-mission-activity { margin: 0 0 var(--ds-c-studio-styles-space-7); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .hp-mission-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); margin: 0 0 var(--ds-c-studio-styles-space-7); padding: 0; list-style: none; }
 .hp-mission-action { display: flex; }
 /* One Primary CTA per screen (SX-04). The accent background exists on this class only. */
 .hp-cta-primary {
   min-height: var(--ds-c-studio-styles-size-8); padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-20); font: inherit; font-weight: var(--ds-c-studio-styles-typography-17); cursor: pointer;
-  color: var(--hp-ink-on-accent); background: var(--hp-accent);
-  border: var(--ds-c-studio-styles-size-3) solid var(--hp-accent); border-radius: var(--ds-c-studio-styles-radius-3);
+  color: var(--hp-text-inverse-default); background: var(--hp-bg-accent-default);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-accent-default); border-radius: var(--ds-c-studio-styles-radius-3);
 }
 .hp-cta-primary:disabled { opacity: .55; cursor: default; }
 /* SX-04 — one Lime button on the screen. The App's theme paints `--vscode-button-background`
@@ -1519,7 +1519,7 @@ html, body, #root {
    region A's Primary: found on the real work screen, not in a server render (Send and the
    observation panel's button, e2e/sx/home-app.spec.ts, 2026-10-05). While region A draws its
    Primary they step down to the quiet style (design §디자인 시스템: "B의 보내기 … 투명 배경,
-   --hp-line 테두리"). A seat without a lesson has no Primary and keeps the theme's button. */
+   --hp-line 테두리", now --hp-border-control-default). A seat without a lesson has no Primary and keeps the theme's button. */
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-input .hps-btn-send,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-run,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-error-banner-retry,
@@ -1527,54 +1527,79 @@ html, body, #root {
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-trial-end-card-primary,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-edit-actions .hps-edit-save {
-  color: var(--hp-ink); background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-control-line);
+  color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
 }
+/* CGP-DS-D-003 (DES-CGP-DS-04) — state layers for every quiet control drawn with the control boundary:
+   hover is the text colour at 8% over the surface it sits on, pressed 14% (12% on light surfaces;
+   tokens.css). Only the fill changes; the 3:1 boundary stays (test/control-state-layers.smoke.mjs). */
+.hps-long-step-stop:hover:not(:disabled),
+.hp-cta-quiet:hover:not(:disabled),
+.hps-access button:hover:not(:disabled),
+.hp-evidence-form button:hover:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-input .hps-btn-send:hover:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-run:hover:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-error-banner-retry:hover:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-update-banner-install:hover:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-trial-end-card-primary:hover:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button:hover:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-edit-actions .hps-edit-save:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-long-step-stop:active:not(:disabled),
+.hp-cta-quiet:active:not(:disabled),
+.hps-access button:active:not(:disabled),
+.hp-evidence-form button:active:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-input .hps-btn-send:active:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-run:active:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-error-banner-retry:active:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-update-banner-install:active:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-trial-end-card-primary:active:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button:active:not(:disabled),
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-edit-actions .hps-edit-save:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 /* ...and the student's own chat bubble, which takes the same theme colour as its background: Lime
    on a second element of the viewport is SX-04's failure (SX-49 negative), and a bubble is none of
    Lime's roles (Primary CTA, current step). Found in the App beside region A's Primary, mid-turn and
    on every later screen (e2e/sx/home-app.spec.ts, review of 2026-10-05). It keeps its side and its
    shape on the Panel token, which SX-49 gives to secondary surfaces. */
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-user .hps-msg-body {
-  color: var(--hp-ink); background: var(--hp-panel); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line);
+  color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default);
 }
 .hp-cta-quiet {
   min-height: var(--ds-c-studio-styles-size-8); padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-19); font: inherit; cursor: pointer;
-  color: var(--hp-ink); background: transparent;
-  border: var(--ds-c-studio-styles-size-3) solid var(--hp-control-line); border-radius: var(--ds-c-studio-styles-radius-3);
+  color: var(--hp-text-primary-default); background: transparent;
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3);
 }
-.hp-mission-acceptance { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-ink); overflow-wrap: anywhere; }
+.hp-mission-acceptance { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-primary-default); overflow-wrap: anywhere; }
 .hp-mission-completion { margin: 0 0 var(--ds-c-studio-styles-space-2); padding: 0; list-style: none; font-size: var(--ds-c-studio-styles-type-9); }
 .hp-mission-completion li { display: flex; gap: var(--ds-c-studio-styles-space-15); align-items: baseline; margin: var(--ds-c-studio-styles-space-11) 0; overflow-wrap: anywhere; }
-.hp-mission-completion-note { color: var(--hp-muted); }
+.hp-mission-completion-note { color: var(--hp-text-muted-default); }
 /* SX-50 — state is icon + wording. It reads in a render with the color removed. */
 .hp-mark { flex: 0 0 auto; font-variant-emoji: text; }
 /* SX-02 — "지난번 이어서": below the actions, above the growth link; a quiet button (SX-04). */
 .hp-mission-resume { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-9); }
 .hp-mission-resume .hp-cta-quiet { overflow-wrap: anywhere; text-align: left; }
-.hp-mission-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-1); margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); }
+.hp-mission-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-1); margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
 /* SX-03 — one link. It does not use the Primary style and sits below the mission, smaller. */
 .hp-mission-growth {
   font: inherit; font-size: var(--ds-c-studio-styles-type-1); padding: var(--ds-c-studio-styles-space-15) 0; cursor: pointer;
-  color: var(--hp-muted); background: none; border: 0; text-decoration: underline;
+  color: var(--hp-text-muted-default); background: none; border: 0; text-decoration: underline;
 }
-.hp-mission :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hp-mission :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
 /* ── Region B's learning information — inside the coach rail, outside the message stream (SX-05) ──
    AE-01's goal block (`.hp-rail-goal`) is a rail card with the same look under its own name, so `.hp-rail-lesson`
    keeps meaning the lesson's own cards. */
-.hp-rail-lesson, .hp-rail-goal { margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-1); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-10); font-size: var(--ds-c-studio-styles-type-2); max-height: 45vh; overflow: auto; flex-shrink: 0; }
+.hp-rail-lesson, .hp-rail-goal { margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-1); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-10); font-size: var(--ds-c-studio-styles-type-2); max-height: 45vh; overflow: auto; flex-shrink: 0; }
 .hp-rail-lesson p, .hp-rail-goal p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .hp-rail-lesson summary, .hp-rail-goal summary { min-height: var(--ds-c-studio-styles-size-8); cursor: pointer; padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-13); }
-.hp-rail-lesson-meta, .hp-rail-lesson-note { color: var(--hp-muted); font-size: var(--ds-c-studio-styles-type-1); }
-.hp-rail-lesson :focus-visible, .hp-rail-goal :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hp-rail-lesson-meta, .hp-rail-lesson-note { color: var(--hp-text-muted-default); font-size: var(--ds-c-studio-styles-type-1); }
+.hp-rail-lesson :focus-visible, .hp-rail-goal :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 /* AE-01 (#554) — "내 목표". Region A draws the saved goal quietly under the lesson's conditions, at most two lines
    (read whole in the rail); the rail block holds the personal criteria and the editor. Quiet controls only (SX-04);
    tokens only (SX-49). */
-.hp-mission-goal { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-ink); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.hp-mission-goal { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-primary-default); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .hp-mission-goal-label, .hp-goal-label { font-weight: var(--ds-c-studio-styles-typography-17); }
 .hp-goal summary { overflow-wrap: anywhere; }
 .hp-goal-current { margin: var(--ds-c-studio-styles-space-13) 0 var(--ds-c-studio-styles-space-2); }
-.hp-goal-heading { margin: var(--ds-c-studio-styles-space-13) 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-muted); }
+.hp-goal-heading { margin: var(--ds-c-studio-styles-space-13) 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-muted-default); }
 .hp-goal-criteria ul { margin: 0 0 var(--ds-c-studio-styles-space-2); padding-left: var(--ds-c-studio-styles-space-5); font-size: var(--ds-c-studio-styles-type-17); }
 .hp-goal-criteria li { overflow-wrap: anywhere; }
 .hp-goal-form { margin: var(--ds-c-studio-styles-space-2) 0; }
@@ -1587,7 +1612,7 @@ html, body, #root {
 .hps-native-observation button:disabled { opacity: .55; cursor: default; }
 .hps-native-observation label, .hps-native-observation small { display: block; margin: var(--ds-c-studio-styles-space-2) 0; overflow-wrap: anywhere; }
 .hps-native-observation textarea { display:block; width:100%; box-sizing:border-box; }
-.hps-native-observation :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-native-observation :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-observation-compare { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(var(--ds-c-studio-styles-size-58),100%),1fr)); gap:var(--ds-c-studio-styles-space-1); }
 .hps-observation-compare section { min-width:0; border:var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border,var(--ds-c-studio-styles-boundary-21)); padding:var(--ds-c-studio-styles-space-2); }
 
@@ -1595,7 +1620,7 @@ html, body, #root {
 .hps-model-selection { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); align-items: center; margin-bottom: var(--ds-c-studio-styles-space-2); min-width: 0; }
 .hps-model-selection label { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); min-width: 0; max-width: 100%; }
 .hps-model-selection select { min-width: 0; max-width: 100%; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-input-border, var(--ds-c-studio-styles-boundary-39)); border-radius: var(--ds-c-studio-styles-radius-13); padding: var(--ds-c-studio-styles-space-13); font: inherit; }
-.hps-model-selection select:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-model-selection select:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-model-selection small { color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
 
 .hps-effort { display:flex; flex-wrap:wrap; gap:var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); align-items:center; font-size:var(--ds-c-studio-styles-type-1); }
@@ -1631,14 +1656,14 @@ html, body, #root {
 .hps-access button {
   margin:var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-2) 0 0; white-space:normal;
   min-height: var(--ds-c-studio-styles-size-8); padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-19); font: inherit; cursor: pointer;
-  color: var(--hp-ink); background: transparent;
-  border: var(--ds-c-studio-styles-size-3) solid var(--hp-control-line); border-radius: var(--ds-c-studio-styles-radius-3);
+  color: var(--hp-text-primary-default); background: transparent;
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3);
 }
-.hps-access button:hover:not(:disabled) { border-color: var(--hp-muted); }
+.hps-access button:hover:not(:disabled) { border-color: var(--hp-border-control-hover); }
 .hps-access button:disabled { opacity: .55; cursor: default; }
 .hps-access p,.hps-access span,.hps-access small { overflow-wrap:anywhere; }
 .hps-access-muted { color:var(--vscode-descriptionForeground,var(--ds-c-studio-styles-ink-31)); }
-.hps-access :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-access :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-access[open] { max-height: 30vh; overflow-y: auto; overscroll-behavior: contain; }
 .hps-access summary { position: sticky; top: 0; background: var(--vscode-editor-background,var(--ds-c-studio-styles-surface-53)); }
 
@@ -1658,7 +1683,7 @@ html, body, #root {
 .hps-voice-compact:focus-visible,
 .hps-voice-compact :focus-visible,
 .hps-voice-panel:focus-visible,
-.hps-voice-panel :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-voice-panel :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-voice-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-7); }
 .hps-voice-body > * { flex-shrink: 0; }
 .hps-voice-head, .hps-voice-status, .hps-voice-actions { flex-shrink: 0; }
@@ -1727,21 +1752,21 @@ html, body, #root {
 .hp-evidence-region { margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); flex-shrink: 0; }
 .hp-complete { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-7); margin: 0 0 var(--ds-c-studio-styles-space-2); }
 /* The reason it is disabled goes **beside** the button. Moved below it, all you see is a button that will not press. */
-.hp-complete-why { margin: 0; padding: 0; list-style: none; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-warn); }
+.hp-complete-why { margin: 0; padding: 0; list-style: none; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-warn-default); }
 .hp-complete-why li { display: flex; gap: var(--ds-c-studio-styles-space-15); align-items: baseline; margin: var(--ds-c-studio-styles-space-14) 0; overflow-wrap: anywhere; }
-.hp-complete-note { margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); }
+.hp-complete-note { margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
 /* SX-55 — submitted is a state line, not a badge or a celebration (SX-29); icon and words (SX-50). */
-.hp-complete-done { display: flex; gap: var(--ds-c-studio-styles-space-15); align-items: baseline; margin: 0; font-size: var(--ds-c-studio-styles-type-17); color: var(--hp-ink); }
+.hp-complete-done { display: flex; gap: var(--ds-c-studio-styles-space-15); align-items: baseline; margin: 0; font-size: var(--ds-c-studio-styles-type-17); color: var(--hp-text-primary-default); }
 /* SX-55 — a submit the record could not store. The words carry it; amber only marks "check this" (SX-49). */
-.hp-complete-notice { flex-basis: 100%; margin: 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-warn); overflow-wrap: anywhere; }
-.hp-evidence { border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-10); padding: var(--ds-c-studio-styles-space-1); font-size: var(--ds-c-studio-styles-type-2); max-height: 55vh; overflow: auto; }
+.hp-complete-notice { flex-basis: 100%; margin: 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-warn-default); overflow-wrap: anywhere; }
+.hp-evidence { border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-10); padding: var(--ds-c-studio-styles-space-1); font-size: var(--ds-c-studio-styles-type-2); max-height: 55vh; overflow: auto; }
 .hp-evidence summary { min-height: var(--ds-c-studio-styles-size-8); cursor: pointer; padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-13); }
-.hp-evidence-verify { margin: 0 0 var(--ds-c-studio-styles-space-7); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-muted); overflow-wrap: anywhere; }
+.hp-evidence-verify { margin: 0 0 var(--ds-c-studio-styles-space-7); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .hp-evidence-form { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); margin: 0 0 var(--ds-c-studio-styles-space-1); }
-.hp-evidence-form label { font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-ink); }
+.hp-evidence-form label { font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-primary-default); }
 .hp-evidence-form textarea { min-height: var(--ds-c-studio-styles-size-53); resize: vertical; }
 .hp-evidence-form textarea, .hp-evidence-form input, .hp-evidence-form select {
-  background: var(--hp-bg); color: var(--hp-ink); border: var(--ds-c-studio-styles-size-3) solid var(--hp-control-line);
+  background: var(--hp-bg-app-default); color: var(--hp-text-primary-default); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
   border-radius: var(--ds-c-studio-styles-radius-3); padding: var(--ds-c-studio-styles-space-2); font: inherit;
 }
 /* These two buttons ("기대 조건 남기기", "들은 말 남기기") had NO colour rule and no
@@ -1758,81 +1783,109 @@ html, body, #root {
 .hp-evidence-form button {
   align-self: flex-start; min-height: var(--ds-c-studio-styles-size-8);
   padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-19); font: inherit; cursor: pointer;
-  color: var(--hp-ink); background: transparent;
-  border: var(--ds-c-studio-styles-size-3) solid var(--hp-control-line); border-radius: var(--ds-c-studio-styles-radius-3);
+  color: var(--hp-text-primary-default); background: transparent;
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3);
 }
-.hp-evidence-form button:hover:not(:disabled) { border-color: var(--hp-muted); }
+.hp-evidence-form button:hover:not(:disabled) { border-color: var(--hp-border-control-hover); }
 /* Disabled still has to be READ — it is how the student learns what is missing.
    Colour alone never carries the state (SX-50); the reason is spelled out beside
    the button. */
 .hp-evidence-form button:disabled { opacity: .55; cursor: default; }
 /* A row with no words of the student's own shows its kind name instead. Muted and
    italic so it does not read as something they wrote. */
-.hp-evidence-kindonly { color: var(--hp-muted); font-style: italic; }
-.hp-evidence-filter { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); margin: 0 0 var(--ds-c-studio-styles-space-7); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-muted); }
-.hp-evidence-empty { margin: 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-muted); }
+.hp-evidence-kindonly { color: var(--hp-text-muted-default); font-style: italic; }
+.hp-evidence-filter { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); margin: 0 0 var(--ds-c-studio-styles-space-7); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-muted-default); }
+.hp-evidence-empty { margin: 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-muted-default); }
 .hp-evidence-group { margin: 0 0 var(--ds-c-studio-styles-space-1); }
-.hp-evidence-group h4 { margin: 0 0 var(--ds-c-studio-styles-space-15); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-muted); font-weight: var(--ds-c-studio-styles-typography-7); }
+.hp-evidence-group h4 { margin: 0 0 var(--ds-c-studio-styles-space-15); font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-muted-default); font-weight: var(--ds-c-studio-styles-typography-7); }
 .hp-evidence-group ol { margin: 0; padding: 0 0 0 var(--ds-c-studio-styles-space-18); }
 .hp-evidence-row { margin: 0 0 var(--ds-c-studio-styles-space-2); }
 .hp-evidence-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.hp-evidence-meta { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-14) 0 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); }
-.hp-evidence-adopted { margin: var(--ds-c-studio-styles-space-14) 0 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); }
-.hp-evidence :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hp-evidence-meta { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-14) 0 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
+.hp-evidence-adopted { margin: var(--ds-c-studio-styles-space-14) 0 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
+.hp-evidence :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
 /* SX-15·16 (P1-C) — the previous check and the before/after view of a change. */
-.hp-evidence-previous { margin: 0 0 var(--ds-c-studio-styles-space-7); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); }
-.hp-evidence-diff { margin: 0 0 var(--ds-c-studio-styles-space-1); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-3); padding: var(--ds-c-studio-styles-space-2); }
+.hp-evidence-previous { margin: 0 0 var(--ds-c-studio-styles-space-7); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
+.hp-evidence-diff { margin: 0 0 var(--ds-c-studio-styles-space-1); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-3); padding: var(--ds-c-studio-styles-space-2); }
 .hp-evidence-diff summary { min-height: var(--ds-c-studio-styles-size-8); cursor: pointer; padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-9); }
 .hp-evidence-diff-criterion { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-9); overflow-wrap: anywhere; }
-.hp-evidence-diff-note { margin: 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-muted); }
+.hp-evidence-diff-note { margin: 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-muted-default); }
 /* At narrow widths they stack vertically — at sidebar width neither of the two columns is readable. */
 .hp-evidence-compare { display: grid; grid-template-columns: 1fr; gap: var(--ds-c-studio-styles-space-7); }
 @media (min-width: 720px) { .hp-evidence-compare { grid-template-columns: 1fr 1fr; } }
-.hp-evidence-compare h5 { margin: 0 0 var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); font-weight: var(--ds-c-studio-styles-typography-7); }
+.hp-evidence-compare h5 { margin: 0 0 var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); font-weight: var(--ds-c-studio-styles-typography-7); }
 .hp-evidence-compare pre {
   margin: 0; padding: var(--ds-c-studio-styles-space-2); max-height: var(--ds-c-studio-styles-size-25); overflow: auto;
-  background: var(--hp-bg); border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-3);
+  background: var(--hp-bg-app-default); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-3);
   white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--ds-c-studio-styles-type-1);
 }
-.hp-evidence-compare small { color: var(--hp-muted); font-size: var(--ds-c-studio-styles-type-3); }
+.hp-evidence-compare small { color: var(--hp-text-muted-default); font-size: var(--ds-c-studio-styles-type-3); }
 
 /* SX-21 (P1-D) — real / simulated label.
    Amber is for **states that can be confused, only**. The color is secondary; the wording
-   (`sourceStateLabel`) and `data-source-state` are the substance — it has to separate for
+   (the status chip's icon and label, CGP-DS-D-004) and `data-source-state` are the substance — it has to separate for
    a color-blind student and in black-and-white print too. */
-.hp-evidence-aside { margin: var(--ds-c-studio-styles-space-2) 0 0; padding: var(--ds-c-studio-styles-space-2) 0 0; border-top: var(--ds-c-studio-styles-size-3) dashed var(--hp-line); }
-.hp-evidence-aside h5 { margin: 0 0 var(--ds-c-studio-styles-space-15); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); font-weight: var(--ds-c-studio-styles-typography-7); }
-.hp-evidence-row.hp-amber { border-left: var(--ds-c-studio-styles-size-15) solid var(--hp-warn); padding-left: var(--ds-c-studio-styles-space-2); }
-.hp-evidence-row.hp-amber .hp-evidence-state { color: var(--hp-warn); }
-.hp-evidence-hint { margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); }
+.hp-evidence-aside { margin: var(--ds-c-studio-styles-space-2) 0 0; padding: var(--ds-c-studio-styles-space-2) 0 0; border-top: var(--ds-c-studio-styles-size-3) dashed var(--hp-border-divider-default); }
+.hp-evidence-aside h5 { margin: 0 0 var(--ds-c-studio-styles-space-15); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); font-weight: var(--ds-c-studio-styles-typography-7); }
+.hp-evidence-row.hp-amber { border-left: var(--ds-c-studio-styles-size-15) solid var(--hp-border-warn-default); padding-left: var(--ds-c-studio-styles-space-2); }
+/* CGP-DS-D-004 (DES-CGP-DS-05) — the status chip (StatusChip.tsx): a 16px icon and a 14px label,
+   4px radius, 8px inline padding, and a soft fill of the state's intent colour at 14% (the neutral
+   unverified chip 10%, with a dashed edge). The label stays in the body text colour, so it reads
+   at 4.5:1 whatever the intent; the icon takes the intent colour. In a grayscale capture the five
+   states still split by icon shape and wording (SX-50). The label wraps between eojeol and is
+   never cut, so a chip in a narrow rail keeps its whole Korean word. */
+.hp-status-chip {
+  display: inline-flex; align-items: center; gap: var(--ds-c-status-chip-gap); min-width: 0; max-width: 100%;
+  padding-block: var(--ds-c-status-chip-pad-block); padding-inline: var(--ds-c-status-chip-pad-inline);
+  border: var(--ds-c-status-chip-edge) solid transparent; border-radius: var(--ds-c-status-chip-radius);
+  color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
+  white-space: normal; word-break: keep-all; overflow-wrap: anywhere;
+}
+.hp-status-chip .hps-icon { flex: none; inline-size: var(--ds-c-status-chip-icon); block-size: var(--ds-c-status-chip-icon); }
+.hp-status-chip-label { min-width: 0; }
+.hp-status-chip[data-intent="success"] { background-color: color-mix(in srgb, var(--vscode-charts-green, var(--ds-c-status-chip-success)) 14%, transparent); }
+.hp-status-chip[data-intent="success"] .hps-icon { color: var(--vscode-charts-green, var(--ds-c-status-chip-success)); }
+.hp-status-chip[data-intent="caution"] { background-color: color-mix(in srgb, var(--hp-text-warn-default) 14%, transparent); }
+.hp-status-chip[data-intent="caution"] .hps-icon { color: var(--hp-text-warn-default); }
+.hp-status-chip[data-intent="info"] { background-color: color-mix(in srgb, var(--hp-text-primary-default) 14%, transparent); }
+.hp-status-chip[data-intent="info"] .hps-icon { color: var(--hp-text-primary-default); }
+.hp-status-chip[data-intent="neutral"] { background-color: color-mix(in srgb, var(--hp-text-muted-default) 10%, transparent); border-style: dashed; border-color: var(--hp-border-muted-default); }
+.hp-status-chip[data-intent="neutral"] .hps-icon { color: var(--hp-text-muted-default); }
+.hp-status-chip[data-intent="danger"] { background-color: color-mix(in srgb, var(--vscode-errorForeground, var(--ds-c-status-chip-danger)) 14%, transparent); }
+.hp-status-chip[data-intent="danger"] .hps-icon { color: var(--vscode-errorForeground, var(--ds-c-status-chip-danger)); }
+@media (forced-colors: active) {
+  .hp-status-chip[data-intent] { border-color: CanvasText; color: CanvasText; background-color: Canvas; }
+  .hp-status-chip[data-intent] .hps-icon { color: CanvasText; }
+}
+.hp-evidence-hint { margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
 
 /* #751 U2 — instructor notices/materials. Text is text: pre-wrap, never markup. State is said in words, not colour.
    No fixed heights and `overflow-wrap:anywhere`, so 200% zoom and a 390px rail never scroll sideways. */
 .hp-inbox-list { list-style: none; margin: var(--ds-c-studio-styles-space-2) 0 0; padding: 0; display: grid; gap: var(--ds-c-studio-styles-space-2); }
-.hp-inbox-card { border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-line); padding-top: var(--ds-c-studio-styles-space-2); min-width: 0; }
+.hp-inbox-card { border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); padding-top: var(--ds-c-studio-styles-space-2); min-width: 0; }
 .hp-inbox-card summary { min-height: var(--ds-c-studio-styles-size-8); cursor: pointer; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-13); overflow-wrap: anywhere; }
 .hp-inbox-title { font-weight: var(--ds-c-studio-styles-typography-7); }
-.hp-inbox-meta { color: var(--hp-muted); font-size: var(--ds-c-studio-styles-type-1); overflow-wrap: anywhere; }
+.hp-inbox-meta { color: var(--hp-text-muted-default); font-size: var(--ds-c-studio-styles-type-1); overflow-wrap: anywhere; }
 .hp-inbox-body { white-space: pre-wrap; overflow-wrap: anywhere; margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-13); }
 .hp-inbox-links { list-style: none; margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-13); padding: 0; display: grid; gap: var(--ds-c-studio-styles-space-2); }
 .hp-inbox-links li { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); align-items: center; min-width: 0; }
-.hp-inbox-link-url { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-8)); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-muted); overflow-wrap: anywhere; min-width: 0; }
-.hp-inbox :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hp-inbox-link-url { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-8)); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; min-width: 0; }
+.hp-inbox :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
 /* #751 native help — the learner's help request in the coach rail (same quiet card language as the inbox). */
 .hp-help-form, .hp-help-preview { display: grid; gap: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-13); min-width: 0; }
 .hp-help-label { display: grid; gap: var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-9); min-width: 0; }
-.hp-help-label textarea, .hp-help-label select { font: inherit; min-height: var(--ds-c-studio-styles-size-10); color: var(--hp-ink); background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-control-line); border-radius: var(--ds-c-studio-styles-radius-3); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2); min-width: 0; max-width: 100%; }
+.hp-help-label textarea, .hp-help-label select { font: inherit; min-height: var(--ds-c-studio-styles-size-10); color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2); min-width: 0; max-width: 100%; }
 .hp-help-consent { display: flex; gap: var(--ds-c-studio-styles-space-2); align-items: flex-start; font-size: var(--ds-c-studio-styles-type-9); }
 .hp-help-consent input { width: var(--ds-c-studio-styles-size-52); height: var(--ds-c-studio-styles-size-52); margin-top: var(--ds-c-studio-styles-space-14); }
 .hp-help-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-15) 0; }
-.hp-help-feedback { border-left: var(--ds-c-studio-styles-size-15) solid var(--hp-line); padding-left: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-15) 0; }
+.hp-help-feedback { border-left: var(--ds-c-studio-styles-size-15) solid var(--hp-border-divider-default); padding-left: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-15) 0; }
 .hp-help-status { font-weight: var(--ds-c-studio-styles-typography-7); }
 
 /* #751 G2 — the current step's help choice, work surface and rehearsal notice (quiet controls; region A keeps the Primary). */
 .hp-step-work { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-2); max-height: none; }
-.hp-help-modes { border: var(--ds-c-studio-styles-size-3) solid var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-10); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); margin: 0; }
+.hp-help-modes { border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-10); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); margin: 0; }
 .hp-help-modes legend { font-size: var(--ds-c-studio-styles-type-9); padding: 0 var(--ds-c-studio-styles-space-13); }
 .hp-help-modes label { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); min-height: var(--ds-c-studio-styles-size-23); }
 .hp-surface { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); }
@@ -1840,12 +1893,12 @@ html, body, #root {
 /* The criterion/decision fields sat on the dark rail as the platform's default white boxes: same tokens as the evidence form. */
 .hp-surface textarea, .hp-surface input {
   font: inherit; width: 100%; box-sizing: border-box; min-height: var(--ds-c-studio-styles-size-10); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2);
-  background: var(--hp-bg); color: var(--hp-ink); border: var(--ds-c-studio-styles-size-3) solid var(--hp-control-line); border-radius: var(--ds-c-studio-styles-radius-3);
+  background: var(--hp-bg-app-default); color: var(--hp-text-primary-default); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3);
 }
 .hp-surface textarea { resize: vertical; }
-.hp-surface textarea::placeholder, .hp-surface input::placeholder { color: var(--hp-placeholder); opacity: 1; }
-.hp-surface :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
-.hp-rehearsal { border: var(--ds-c-studio-styles-size-3) dashed var(--hp-line); border-radius: var(--ds-c-studio-styles-radius-10); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); }
+.hp-surface textarea::placeholder, .hp-surface input::placeholder { color: var(--hp-text-placeholder-default); opacity: 1; }
+.hp-surface :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hp-rehearsal { border: var(--ds-c-studio-styles-size-3) dashed var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-10); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); }
 
 /* cr-verify — "내 제품 테스트" panel (CR-12–CR-16, CR-68, CR-81). */
 .hps-verify { border: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, var(--ds-c-studio-styles-boundary-42)); border-radius: var(--ds-c-studio-styles-radius-3); padding: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-2) 0; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); font-size: var(--ds-c-studio-styles-type-1); }
@@ -1887,19 +1940,21 @@ html, body, #root {
   border-radius: var(--ds-c-studio-styles-radius-13);
   background: var(--vscode-editorInfo-background, var(--ds-c-studio-styles-surface-61));
 }
-.hps-instructor-connection { color: var(--hp-muted, var(--ds-c-studio-styles-ink-35)); }
-.hps-instructor-model-label { color: var(--hp-muted, var(--ds-c-studio-styles-ink-35)); }
+/* CGP-DS-D-002 — the band's tint sits on the host body, so its labels take the primary text role:
+ * muted text there is 4.0:1 under Light+ (test/host-theme-mapping.smoke.mjs). */
+.hps-instructor-connection { color: var(--hp-text-primary-default); }
+.hps-instructor-model-label { color: var(--hp-text-primary-default); }
 .hps-instructor-model { font-weight: var(--ds-c-studio-styles-typography-8); }
 .hps-instructor-model-input {
   font: inherit; font-size: var(--ds-c-studio-styles-type-1);
-  background: var(--hp-bg, var(--vscode-input-background));
-  color: var(--hp-ink, var(--vscode-input-foreground));
-  border: var(--ds-c-studio-styles-size-3) solid var(--hp-control-line, var(--vscode-input-border, var(--ds-c-studio-styles-boundary-45)));
+  background: var(--hp-bg-app-default, var(--vscode-input-background));
+  color: var(--hp-text-primary-default, var(--vscode-input-foreground));
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default, var(--vscode-input-border, var(--ds-c-studio-styles-boundary-45)));
   border-radius: var(--ds-c-studio-styles-radius-13);
   padding: var(--ds-c-studio-styles-space-14) var(--ds-c-studio-styles-space-15);
   min-width: 0; flex: 1;
 }
-.hps-instructor-model-input:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-instructor-model-input:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-instructor-model-error { color: var(--vscode-errorForeground, var(--ds-c-studio-styles-ink-30)); font-size: var(--ds-c-studio-styles-type-3); flex-basis: 100%; }
 
 /* cr-publish (#1393) — "사용자 테스트용으로 공개" panel. Same frame as the verify panel. */
@@ -2009,7 +2064,7 @@ html, body, #root {
 .hps-recovery-list { max-height: min(var(--ds-c-studio-styles-size-54), 25vh); min-height: 0; flex-shrink: 1; overflow-y: auto; overscroll-behavior: contain; }
 .hps-recovered { flex-wrap: wrap; }
 .hps-recovered .hps-queued-text { min-width: var(--ds-c-studio-styles-size-65); }
-.hps-recovered button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-recovered button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-recovery-notice { font-size: var(--ds-c-studio-styles-type-1); line-height: var(--ds-c-studio-styles-typography-5); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-13); color: var(--vscode-descriptionForeground, var(--ds-c-studio-styles-ink-37)); }
 .hps-recovery-confirm { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-15); flex-basis: 100%; }
 
@@ -2026,7 +2081,7 @@ html, body, #root {
 }
 .hps-queued-send:hover { background: var(--vscode-list-hoverBackground, var(--ds-c-studio-styles-surface-62)); }
 .hps-queued-send:disabled { opacity: .5; cursor: default; }
-.hps-queued-send:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-queued-send:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-recovered { font-size: var(--ds-c-studio-styles-type-1); }
 /* CGP-CHAT-R-012 — "지금 방향 바꾸기": a secondary action on the parked message, 44px target. */
 .hps-queued-steer { min-width: var(--ds-c-studio-styles-size-8); min-height: var(--ds-c-studio-styles-size-8); }
@@ -2049,9 +2104,9 @@ html, body, #root {
   padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2); border-radius: var(--ds-c-studio-styles-radius-10); list-style: none;
 }
 .hp-ai-can-do > summary::-webkit-details-marker { display: none; }
-/* Quiet text in the card follows the host theme (light themes included); --hp-muted is a dark-only
+/* Quiet text in the card follows the host theme (light themes included); --hp-text-muted-default is a dark-only
    constant, 2.05:1 on white. The fallback keeps the HP value where no theme value exists. */
-.hp-ai-can-do { --hp-ai-can-do-muted: var(--vscode-descriptionForeground, var(--hp-muted)); }
+.hp-ai-can-do { --hp-ai-can-do-muted: var(--vscode-descriptionForeground, var(--hp-text-muted-default)); }
 /* The chevron is decoration: empty alternative text keeps it out of the summary's name. */
 .hp-ai-can-do > summary::before {
   content: "›" / ""; display: inline-block; width: var(--ds-c-studio-styles-size-66); text-align: center; color: var(--hp-ai-can-do-muted);
@@ -2066,10 +2121,10 @@ html, body, #root {
 .hp-ai-can-do li { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-7); min-height: var(--ds-c-studio-styles-size-8); padding: 0 var(--ds-c-studio-styles-space-2); overflow-wrap: anywhere; word-break: keep-all; }
 .hp-ai-can-do-mark { flex: none; display: inline-grid; place-items: center; width: var(--ds-c-studio-styles-size-43); height: var(--ds-c-studio-styles-size-43); box-sizing: border-box; border: var(--ds-c-studio-styles-size-3) solid currentColor; border-radius: 50%; font-size: var(--ds-c-studio-styles-type-1); line-height: var(--ds-c-studio-styles-typography-19); }
 .hp-ai-can-do li[data-on="false"] .hp-ai-can-do-mark { border-style: dashed; }
-.hp-ai-can-do-label { flex: 1 1 auto; min-width: 0; font-size: var(--hp-text-body); }
+.hp-ai-can-do-label { flex: 1 1 auto; min-width: 0; font-size: var(--hp-font-body); }
 .hp-ai-can-do-state { flex: none; font-weight: var(--ds-c-studio-styles-typography-12); }
 .hp-ai-can-do li[data-on="false"] { color: var(--hp-ai-can-do-muted); }
-.hp-ai-can-do > .hp-rail-lesson-note { margin: 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-13); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-line); color: var(--hp-ai-can-do-muted); }
+.hp-ai-can-do > .hp-rail-lesson-note { margin: 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-13); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); color: var(--hp-ai-can-do-muted); }
 
 /* CGP-ART-R-007: page text going with the next message. */
 .hps-page-attachment { margin: var(--ds-c-studio-styles-space-15) 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, var(--ds-c-studio-styles-boundary-45)); border-radius: var(--ds-c-studio-styles-radius-10); font-size: var(--ds-c-studio-styles-type-9); }
@@ -2091,23 +2146,23 @@ html, body, #root {
 .hps-input:not([data-expanded]) .hps-tools-menu button { display: flex; align-items: flex-start; gap: var(--ds-c-studio-styles-space-7); width: 100%; min-height: var(--ds-c-studio-styles-size-8); padding: var(--ds-c-studio-styles-space-7); background: transparent; color: inherit; text-align: left; font-weight: var(--ds-c-studio-styles-typography-12); font-size: var(--ds-c-studio-styles-type-9); }
 
 /* CGP-SHELL-R-011: offline banner above the message list. Text keeps the panel foreground (the
-   stop-notice pattern); amber is only the 4px edge, so contrast does not depend on --hp-warn.
+   stop-notice pattern); amber is only the 4px edge, so contrast does not depend on --hp-border-warn-default.
    REQ-STUDIO-UI-POLISH-1: `.hps-notice-caution` is the same surface under a name that is not about
    the network, for any other "please check this" line (the personal access line). */
-.hps-offline-banner, .hps-notice-caution { margin: var(--ds-c-studio-styles-space-15) 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); border-left: var(--ds-c-studio-styles-size-13) solid var(--hp-warn); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); font-size: var(--ds-c-studio-styles-type-9); line-height: var(--ds-c-studio-styles-typography-5); word-break: keep-all; overflow-wrap: anywhere; }
+.hps-offline-banner, .hps-notice-caution { margin: var(--ds-c-studio-styles-space-15) 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); border-left: var(--ds-c-studio-styles-size-13) solid var(--hp-border-warn-default); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); font-size: var(--ds-c-studio-styles-type-9); line-height: var(--ds-c-studio-styles-typography-5); word-break: keep-all; overflow-wrap: anywhere; }
 /* REQ-STUDIO-PREVIEW-RECOVERY (CGP-ART-R-009, DES-ART-09): the preview cannot show a page. One cause line at
    body size, one 44px action, the technical code folded under 자세히. Personal and classroom chat share it, so
    every size is a type-scale token (14px floor). The edge is the offline banner's amber; text keeps the foreground. */
-.hps-preview-recovery { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); margin: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-1); border-left: var(--ds-c-studio-styles-size-13) solid var(--hp-warn); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); word-break: keep-all; overflow-wrap: anywhere; }
-.hps-preview-recovery-text { margin: 0; flex: 1 1 var(--ds-c-studio-styles-size-27); min-width: 0; font-size: var(--hp-text-body); line-height: var(--hp-leading-label); }
-.hps-preview-recovery-action { min-height: var(--ds-c-studio-styles-size-8); min-width: var(--ds-c-studio-styles-size-8); padding: 0 var(--ds-c-studio-styles-space-20); border-radius: var(--ds-c-studio-styles-radius-10); border: var(--ds-c-studio-styles-size-3) solid transparent; background: var(--vscode-button-background, var(--ds-c-studio-styles-surface-31)); color: var(--vscode-button-foreground, var(--ds-c-studio-styles-ink-21)); font-size: var(--hp-text-caption); font-weight: var(--ds-c-studio-styles-typography-7); cursor: pointer; }
+.hps-preview-recovery { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); margin: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-1); border-left: var(--ds-c-studio-styles-size-13) solid var(--hp-border-warn-default); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); word-break: keep-all; overflow-wrap: anywhere; }
+.hps-preview-recovery-text { margin: 0; flex: 1 1 var(--ds-c-studio-styles-size-27); min-width: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label); }
+.hps-preview-recovery-action { min-height: var(--ds-c-studio-styles-size-8); min-width: var(--ds-c-studio-styles-size-8); padding: 0 var(--ds-c-studio-styles-space-20); border-radius: var(--ds-c-studio-styles-radius-10); border: var(--ds-c-studio-styles-size-3) solid transparent; background: var(--vscode-button-background, var(--ds-c-studio-styles-surface-31)); color: var(--vscode-button-foreground, var(--ds-c-studio-styles-ink-21)); font-size: var(--hp-font-caption); font-weight: var(--ds-c-studio-styles-typography-7); cursor: pointer; }
 .hps-preview-recovery-action[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
-.hps-preview-recovery-action:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
-.hps-preview-recovery-detail { flex: 1 1 100%; color: var(--vscode-descriptionForeground, inherit); font-size: var(--hp-text-caption); line-height: var(--hp-leading-label); }
+.hps-preview-recovery-action:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-preview-recovery-detail { flex: 1 1 100%; color: var(--vscode-descriptionForeground, inherit); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
 .hps-preview-recovery-detail summary { cursor: pointer; }
-.hps-preview-recovery-detail code { font-size: var(--hp-text-caption); }
-.hps-preview-recovery-note { margin: 0; flex: 1 1 100%; font-size: var(--hp-text-caption); line-height: var(--hp-leading-label); }
-.hps-preview-recovery-solo { display: block; font-size: var(--hp-text-caption); line-height: var(--hp-leading-label); }
+.hps-preview-recovery-detail code { font-size: var(--hp-font-caption); }
+.hps-preview-recovery-note { margin: 0; flex: 1 1 100%; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-preview-recovery-solo { display: block; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Marks drawn only in colour, or only as a
    background (which forced colors repaints as Canvas), get a line or a shape. Normal mode is unchanged. */
 @media (forced-colors: active) {
@@ -2152,7 +2207,7 @@ html, body, #root {
 
 /* CGP-SHELL-R-029: the remaining-requests line. On a wide heading it sits in the row; it never
    shrinks below its longest part, and wraps only between parts (the full text is in its title). */
-.hps-access-header { flex: 0 1 auto; min-width: min-content; white-space: normal; font-size: var(--hp-text-caption, var(--ds-c-studio-styles-type-17)); line-height: var(--ds-c-studio-styles-typography-5); color: var(--vscode-foreground); }
+.hps-access-header { flex: 0 1 auto; min-width: min-content; white-space: normal; font-size: var(--hp-font-caption, var(--ds-c-studio-styles-type-17)); line-height: var(--ds-c-studio-styles-typography-5); color: var(--vscode-foreground); }
 .hps-access-part { white-space: nowrap; }
 /* Narrow heading (320-640px): the line takes a row of its own under the heading row, so the "…" menu
    stays on the heading row and the title truncates rather than the menu moving. The current activity
@@ -2173,32 +2228,32 @@ html, body, #root {
 .hps-page-context-panel[hidden] { display: none; }
 .hps-page-context-panel h3 { margin: var(--ds-c-studio-styles-space-2) 0; font-size: var(--ds-c-studio-styles-type-22); }
 .hps-page-context-origin { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-5)); overflow-wrap: anywhere; }
-.hps-page-context-quote { margin: var(--ds-c-studio-styles-space-2) 0; padding: 0 0 0 var(--ds-c-studio-styles-space-1); border-left: var(--ds-c-studio-styles-size-15) solid var(--hp-muted); }
+.hps-page-context-quote { margin: var(--ds-c-studio-styles-space-2) 0; padding: 0 0 0 var(--ds-c-studio-styles-space-1); border-left: var(--ds-c-studio-styles-size-15) solid var(--hp-border-muted-default); }
 .hps-page-context-quote pre { max-height: none; overflow: visible; }
-.hps-page-context-toggle:focus-visible, .hps-page-context-quote pre:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-page-context-toggle:focus-visible, .hps-page-context-quote pre:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 @media (forced-colors: active) {
   .hps-page-context-quote { border-left-color: CanvasText; }
 }
 
 .hps-page-context .hps-page-attachment-remove { font: inherit; color: inherit; }
 /* CGP-AGENT-D-006: one persistent, readable row and one allowed action. */
-.hps-denial-notice { display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-2) 0; padding: var(--ds-c-studio-styles-space-7); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, currentColor); border-radius: var(--ds-c-studio-styles-radius-10); font-size: var(--hp-text-caption); overflow-wrap: anywhere; }
+.hps-denial-notice { display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-2) 0; padding: var(--ds-c-studio-styles-space-7); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, currentColor); border-radius: var(--ds-c-studio-styles-radius-10); font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
 .hps-denial-notice > div { flex: 1 1 var(--ds-c-studio-styles-size-54); min-width: 0; }
 .hps-denial-notice p { margin: var(--ds-c-studio-styles-space-13) 0 0; }
 .hps-denial-source { font-weight: var(--ds-c-studio-styles-typography-7); }
 .hps-denial-notice button { min-height: var(--ds-c-studio-styles-size-8); font: inherit; color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid currentColor; border-radius: var(--ds-c-studio-styles-radius-3); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-7); }
-.hps-denial-notice button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-denial-notice button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
 /* REQ-KNOW-68: the status stays within the chat column in every theme. */
-.hps-activity-status { margin: var(--ds-c-studio-styles-space-1) 0; padding: var(--ds-c-studio-styles-space-20); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-contrastBorder, currentColor); border-radius: var(--ds-c-studio-styles-radius-10); font-size: var(--hp-text-caption); overflow-wrap: anywhere; }
-.hps-activity-status h3 { margin: 0 0 var(--ds-c-studio-styles-space-1); font-size: var(--hp-text-body); }
+.hps-activity-status { margin: var(--ds-c-studio-styles-space-1) 0; padding: var(--ds-c-studio-styles-space-20); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-contrastBorder, currentColor); border-radius: var(--ds-c-studio-styles-radius-10); font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
+.hps-activity-status h3 { margin: 0 0 var(--ds-c-studio-styles-space-1); font-size: var(--hp-font-body); }
 .hps-activity-status-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); }
-.hps-activity-status button { min-height: var(--ds-c-studio-styles-size-8); font-size: var(--hp-text-caption); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); }
-.hps-activity-status button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-activity-status button { min-height: var(--ds-c-studio-styles-size-8); font-size: var(--hp-font-caption); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); }
+.hps-activity-status button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 @media (forced-colors: active) { .hps-activity-status { border-color: CanvasText; } }
 
 /* DES-CGP-AGENT-52: bounded local diff, glyphs alongside theme colors. */
-.hps-turn-review { min-width: 0; font-size: var(--hp-text-caption); }
+.hps-turn-review { min-width: 0; font-size: var(--hp-font-caption); }
 .hps-turn-file { min-width: 0; margin-block: var(--ds-c-studio-styles-space-1); overflow-wrap: anywhere; }
 .hps-turn-file > p { margin-block: var(--ds-c-studio-styles-space-13); }
 .hps-turn-diff { margin-block: var(--ds-c-studio-styles-space-2); min-width: 0; }
@@ -2207,7 +2262,7 @@ html, body, #root {
 .hps-turn-diff-line[data-kind="removed"] { background: var(--vscode-diffEditor-removedTextBackground, var(--ds-c-studio-styles-surface-122)); }
 .hps-turn-split { display: none; }
 .hps-turn-review summary { min-height: var(--ds-c-studio-styles-size-8); padding-block: var(--ds-c-studio-styles-space-7); box-sizing: border-box; cursor: pointer; }
-.hps-turn-review summary:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-turn-review summary:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 @media (min-width: 1024px) {
   .hps-turn-split { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--ds-c-studio-styles-space-2); }
   .hps-turn-unified { display: none; }
@@ -2217,20 +2272,20 @@ html, body, #root {
 }
 
 /* REQ-KNOW-09: disclosure remains readable in host light/dark themes. */
-.hp-help-preview { color: var(--vscode-foreground, var(--hp-ink)); overflow-wrap: anywhere; }
-.hp-help-preview .hp-muted, .hp-help-preview .hp-help-label { color: inherit; font-size: var(--hp-text-caption); }
-.hp-help-preview button, .hp-help-preview .hp-help-consent { min-height: var(--ds-c-studio-styles-size-8); font-size: var(--hp-text-caption); }
+.hp-help-preview { color: var(--vscode-foreground, var(--hp-text-primary-default)); overflow-wrap: anywhere; }
+.hp-help-preview .hp-muted, .hp-help-preview .hp-help-label { color: inherit; font-size: var(--hp-font-caption); }
+.hp-help-preview button, .hp-help-preview .hp-help-consent { min-height: var(--ds-c-studio-styles-size-8); font-size: var(--hp-font-caption); }
 .hp-help-preview .hp-help-consent { align-items: center; }
-@media (forced-colors: active) { .hp-help-preview { color: CanvasText; } .hp-help-preview button:focus-visible { --hp-ring: Highlight; outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); } }
+@media (forced-colors: active) { .hp-help-preview { color: CanvasText; } .hp-help-preview button:focus-visible { --hp-ring-focus-default: Highlight; outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); } }
 .hp-help-preview .hp-inbox-meta, .hp-help-preview .hp-cta-quiet { color: inherit; }
 /* The exclusion line is the disclosure itself: body size (15px in the panel), never the 12px caption. */
 .hp-help-preview .hp-outbound-excluded { margin: 0; font-size: inherit; line-height: var(--ds-c-studio-styles-typography-5); color: inherit; font-weight: var(--ds-c-studio-styles-typography-7); overflow-wrap: anywhere; }
 /* CGP-KNOW-R-020: failure chips remain next to the unchanged draft. */
 .hps-attachment-failures { min-width: 0; }
-.hps-attachment-failure, .hps-photo-failure { border: var(--ds-c-studio-styles-size-3) solid var(--vscode-inputValidation-errorBorder, var(--ds-c-studio-styles-boundary-88)); padding: var(--ds-c-studio-styles-space-1); margin-block: var(--ds-c-studio-styles-space-2); font-size: var(--hp-text-caption); line-height: var(--ds-c-studio-styles-typography-4); overflow-wrap: anywhere; }
+.hps-attachment-failure, .hps-photo-failure { border: var(--ds-c-studio-styles-size-3) solid var(--vscode-inputValidation-errorBorder, var(--ds-c-studio-styles-boundary-88)); padding: var(--ds-c-studio-styles-space-1); margin-block: var(--ds-c-studio-styles-space-2); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-styles-typography-4); overflow-wrap: anywhere; }
 .hps-attachment-failure p, .hps-photo-failure p { margin-block: var(--ds-c-studio-styles-space-2); }
 .hps-attachment-failure button, .hps-photo-failure button { min-height: var(--ds-c-studio-styles-size-8); min-width: var(--ds-c-studio-styles-size-8); font: inherit; margin-inline-end: var(--ds-c-studio-styles-space-2); }
-.hps-attachment-failure button:focus-visible, .hps-photo-failure button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-attachment-failure button:focus-visible, .hps-photo-failure button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 /* CGP-KNOW-D-020: a refused photo's chip grows to hold its whole failure block (badge, reason, retry). Nothing in it
    is clipped, so no control that can take focus is ever hidden. Name and remove share the first row; the block wraps below. */
 .hps-attachment:has(.hps-photo-failure) { box-sizing: border-box; width: min(100%, var(--ds-c-studio-styles-size-106)); height: auto; min-height: var(--ds-c-studio-styles-size-46); display: flex; flex-wrap: wrap; align-items: center; align-self: flex-start; gap: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-2); padding: var(--ds-c-studio-styles-space-2); overflow: visible; }
@@ -2252,5 +2307,5 @@ html, body, #root {
 
 /* DES-KNOW-37: shape/text identify the failure; colour is supplementary. */
 .hps-attachment-failure-cause { display: inline-flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); margin-inline-start: var(--ds-c-studio-styles-space-2); }
-.hps-attachment-error-summary { margin: var(--ds-c-studio-styles-space-15) 0 0; font-size: var(--hp-text-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; white-space: normal; }
+.hps-attachment-error-summary { margin: var(--ds-c-studio-styles-space-15) 0 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; white-space: normal; }
 .hps-attachment-error-summary:empty { margin: 0; }

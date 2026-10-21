@@ -104,7 +104,7 @@ const checks = {
     if (!(px(value(css, b, "min-height")) >= 44)) bad.push(`min-height ${value(css, b, "min-height")}`);
     if (!(px(value(css, b, "min-width")) >= 44)) bad.push(`min-width ${value(css, b, "min-width")}`);
     const outline = value(css, `${b}:focus-visible`, "outline") ?? "";
-    if (outline !== "2px solid var(--hp-ring)") bad.push(`outline ${outline}`);
+    if (outline !== "2px solid var(--hp-ring-focus-default)") bad.push(`outline ${outline}`);
     const off = px(value(css, `${b}:focus-visible`, "outline-offset"));
     if (!(off >= 1 && off <= 3)) bad.push(`outline-offset ${off}`);
     return bad;
@@ -114,9 +114,9 @@ const checks = {
     const m = "(forced-colors: active)";
     if (value(css, ".hps-safety-notice", "border-color", m) !== "CanvasText") bad.push("notice border");
     if (value(css, ".hps-safety-dismiss", "border-color", m) !== "ButtonText") bad.push("button border");
-    // The ring itself turns Highlight through --hp-ring (tokens.css); this rule must not override it.
+    // The ring itself turns Highlight through --hp-ring-focus-default (tokens.css); this rule must not override it.
     if (value(css, ".hps-safety-dismiss:focus-visible", "outline-color", m) !== undefined) bad.push("focus colour overridden");
-    if (!/--hp-ring: Highlight/.test(css["tokens.css"] ?? "")) bad.push("tokens.css no longer maps --hp-ring to Highlight");
+    if (!/--hp-ring-focus-default: Highlight/.test(css["tokens.css"] ?? "")) bad.push("tokens.css no longer maps --hp-ring-focus-default to Highlight");
     return bad;
   },
 };
@@ -138,8 +138,8 @@ const mutations = {
   ],
   "close button: 44px target and a hugging focus ring": [
     [S, "min-width: 44px; min-height: 44px; padding: 6px 14px;", "min-width: 44px; min-height: 32px; padding: 6px 14px;"],
-    [S, ".hps-safety-dismiss:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }", ".hps-safety-dismiss:focus-visible { outline: none; }"],
-    [S, ".hps-safety-dismiss:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }", ".hps-safety-dismiss:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 6px; }"],
+    [S, ".hps-safety-dismiss:focus-visible { outline: 2px solid var(--hp-ring-focus-default); outline-offset: 2px; }", ".hps-safety-dismiss:focus-visible { outline: none; }"],
+    [S, ".hps-safety-dismiss:focus-visible { outline: 2px solid var(--hp-ring-focus-default); outline-offset: 2px; }", ".hps-safety-dismiss:focus-visible { outline: 2px solid var(--hp-ring-focus-default); outline-offset: 6px; }"],
   ],
   "forced colours keep the boundary and the focus": [
     [S, "  .hps-safety-notice { border-color: CanvasText; }", "  .hps-safety-notice { border-color: transparent; }"],

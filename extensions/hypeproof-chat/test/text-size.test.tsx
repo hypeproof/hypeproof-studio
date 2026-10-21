@@ -53,15 +53,15 @@ const P = '.hps-shell[data-chat-detail="personal"]';
 // variable on the shell. The computed sizes (16/18/20 body, every caption +2/+4) are checked by
 // test/type-scale.smoke.mjs, which runs the cascade.
 t("personal base is 16px for body and composer (the steps build on the real base)", () => {
-  ok(lastSize(`${P} .hps-msg-body {`) === "var(--hp-text-body)", `body base ${lastSize(`${P} .hps-msg-body {`)}`);
-  ok(lastSize(`${P} .hps-input textarea {`) === "var(--hp-text-body)", `composer base ${lastSize(`${P} .hps-input textarea {`)}`);
-  ok(/--hp-text-body: calc\(16px \+ var\(--hp-text-step\)\);/.test(tokens) && /--hp-text-step: 0px;/.test(tokens), "body token is 16px at step 0");
+  ok(lastSize(`${P} .hps-msg-body {`) === "var(--hp-font-body)", `body base ${lastSize(`${P} .hps-msg-body {`)}`);
+  ok(lastSize(`${P} .hps-input textarea {`) === "var(--hp-font-body)", `composer base ${lastSize(`${P} .hps-input textarea {`)}`);
+  ok(/--hp-font-body: calc\(16px \+ var\(--hp-font-step\)\);/.test(tokens) && /--hp-font-step: 0px;/.test(tokens), "body token is 16px at step 0");
 });
 t("크게 / 아주 크게 are +2 / +4px over base for body, composer and reply choices", () => {
-  ok(css.includes(`${P}[data-text-size="large"] { --hp-text-step: 2px; }`), "large step");
-  ok(css.includes(`${P}[data-text-size="xlarge"] { --hp-text-step: 4px; }`), "xlarge step");
-  ok(/:root, \.hps-shell \{[^}]*--hp-text-caption: calc\(14px \+ var\(--hp-text-step\)\)/.test(tokens), "size tokens are re-declared on the shell, where the step is set");
-  for (const part of [".hps-reply-choices button", ".hps-choice-help button"]) ok(/^var\(--hp-text-[a-z]+\)$/.test(lastSize(`${P} ${part}`) || lastSize(`${part} {`)), `${part} uses a size token`);
+  ok(css.includes(`${P}[data-text-size="large"] { --hp-font-step: 2px; }`), "large step");
+  ok(css.includes(`${P}[data-text-size="xlarge"] { --hp-font-step: 4px; }`), "xlarge step");
+  ok(/:root, \.hps-shell \{[^}]*--hp-font-caption: calc\(14px \+ var\(--hp-font-step\)\)/.test(tokens), "size tokens are re-declared on the shell, where the step is set");
+  for (const part of [".hps-reply-choices button", ".hps-choice-help button"]) ok(/^var\(--hp-font-[a-z]+\)$/.test(lastSize(`${P} ${part}`) || lastSize(`${part} {`)), `${part} uses a size token`);
 });
 t("no dead classroom rules: every size rule is scoped to personal chat", () => ok(!/\.hps-shell\[data-text-size=/.test(css), "classroom-only size rule present"));
 

@@ -720,7 +720,7 @@ const NOT_BESIDE_THE_PRIMARY = {
 };
 const STEP_DOWN = ".hps-shell:has(.hp-mission .hp-cta-primary) ";
 /** A background that is not Lime: transparent, or one of the design tokens other than the accent. */
-const NOT_LIME = /^(?:transparent|var\(--hp-(?:bg|panel|paper)\))$/;
+const NOT_LIME = /^(?:transparent|var\(--hp-bg-(?:app|panel|paper)-default\))$/;
 function limeProblem(css) {
   const rules = cssRules(css);
   // The background each selector ends with, in source order (same selector, later rule wins).
@@ -739,9 +739,9 @@ await staticCheck("SX-04 styles: nothing the theme paints Lime stays Lime beside
   // Send keeps the theme's Lime again (the in-app finding of 2026-10-05).
   [".hps-shell:has(.hp-mission .hp-cta-primary) .hps-input .hps-btn-send,\n", ""],
   // The student's own bubble keeps the theme's Lime again (the third review's finding).
-  [".hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-user .hps-msg-body {\n  color: var(--hp-ink); background: var(--hp-panel);", ".hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-user .hps-msg-body {\n  color: var(--hp-ink);"],
+  [".hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-user .hps-msg-body {\n  color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default);", ".hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-user .hps-msg-body {\n  color: var(--hp-text-primary-default);"],
   // ...or steps "down" to the accent itself.
-  ["background: var(--hp-panel); border: 1px solid var(--hp-line);\n}", "background: var(--hp-accent); border: 1px solid var(--hp-line);\n}"],
+  ["background: var(--hp-bg-panel-default); border: 1px solid var(--hp-border-divider-default);\n}", "background: var(--hp-bg-accent-default); border: 1px solid var(--hp-border-divider-default);\n}"],
   // A new element takes the theme's colour without stepping down.
   [".hps-btn-send {\n", ".hps-new-cta { background: var(--vscode-button-background); }\n.hps-btn-send {\n"],
 ]);

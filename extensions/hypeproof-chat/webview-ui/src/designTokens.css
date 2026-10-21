@@ -3266,6 +3266,11 @@
   --ds-c-chalk-manage-size-139: var(--ds-s-size-139);
   --ds-c-chalk-manage-type-39: var(--ds-s-type-39);
   --ds-c-chalk-manage-boundary-81: var(--ds-s-boundary-81);
+  --ds-c-chalk-authoring-boundary-81: var(--ds-s-boundary-81); /* CGP-DS-D-003: control boundary, 3:1 on every Chalk surface */
+  --ds-c-chalk-budgets-boundary-81: var(--ds-s-boundary-81); /* CGP-DS-D-003: control boundary, 3:1 on every Chalk surface */
+  --ds-c-chalk-console-boundary-81: var(--ds-s-boundary-81); /* CGP-DS-D-003: control boundary, 3:1 on every Chalk surface */
+  --ds-c-chalk-issuer-boundary-81: var(--ds-s-boundary-81); /* CGP-DS-D-003: control boundary, 3:1 on every Chalk surface */
+  --ds-c-chalk-board-boundary-81: var(--ds-s-boundary-81); /* CGP-DS-D-003: control boundary, 3:1 on every Chalk surface */
   --ds-c-chalk-manage-surface-87: var(--ds-s-surface-87);
   --ds-c-chalk-manage-ink-66: var(--ds-s-ink-66);
   --ds-c-chalk-manage-size-25: var(--ds-s-size-25);
@@ -3444,4 +3449,15 @@
   --ds-c-studio-outbounddialog-surface-31: var(--ds-s-surface-31);
   --ds-c-studio-outbounddialog-ink-2: var(--ds-s-ink-2);
   --ds-c-studio-outbounddialog-surface-124: var(--ds-s-surface-124);
+  /* CGP-DS-D-004 (DES-CGP-DS-05) — the status chip, Studio and Chalk: 16px icon, 14px label, 4px radius,
+     8px inline padding. The soft fill is the intent colour mixed in by the consumer. */
+  --ds-c-status-chip-icon: var(--ds-s-size-30);
+  --ds-c-status-chip-label: var(--ds-s-type-17);
+  --ds-c-status-chip-radius: var(--ds-s-radius-13);
+  --ds-c-status-chip-pad-inline: var(--ds-s-space-2);
+  --ds-c-status-chip-pad-block: var(--ds-s-size-7);
+  --ds-c-status-chip-gap: var(--ds-s-space-13);
+  --ds-c-status-chip-edge: var(--ds-s-size-3);
+  --ds-c-status-chip-success: var(--ds-s-ink-29);
+  --ds-c-status-chip-danger: var(--ds-s-ink-30);
 }

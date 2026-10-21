@@ -19,6 +19,8 @@
 -->
 <style>
   :root {
+    /* CGP-DS-D-003: control boundary (3:1 on every board surface) and the state layers, text at 8% / 14% over the surface. */
+    --control-line: var(--ds-c-chalk-board-boundary-81); --state-hover: color-mix(in srgb, var(--fg) 8%, transparent); --state-pressed: color-mix(in srgb, var(--fg) 14%, transparent);
     --bg: var(--ds-c-chalk-board-surface-72); --fg: var(--ds-c-chalk-board-ink-44); --muted: var(--ds-c-chalk-board-ink-71); --line: var(--ds-c-chalk-board-boundary-64);
     --accent: var(--ds-c-chalk-board-ink-25); --card: var(--ds-c-chalk-board-ink-72);
     --ok: var(--ds-c-chalk-board-ink-73); --watch: var(--ds-c-chalk-board-ink-74); --alert: var(--ds-c-chalk-board-ink-75); --unknown: var(--ds-c-chalk-board-ink-76);
@@ -36,7 +38,7 @@
   textarea, input {
     width: 100%; padding: var(--ds-c-chalk-board-space-24) var(--ds-c-chalk-board-space-53); font: inherit; font-size: var(--ds-c-chalk-board-type-9);
     background: var(--card); color: var(--fg);
-    border: var(--ds-c-chalk-board-size-3) solid var(--line); border-radius: var(--ds-c-chalk-board-radius-3);
+    border: var(--ds-c-chalk-board-size-3) solid var(--control-line); border-radius: var(--ds-c-chalk-board-radius-3);
   }
   textarea { font-family: var(--ds-c-chalk-board-font-7); font-size: var(--ds-c-chalk-board-type-3); resize: vertical; }
   label { display: block; font-size: var(--ds-c-chalk-board-type-3); color: var(--muted); margin: var(--ds-c-chalk-board-space-2) 0 var(--ds-c-chalk-board-space-11); }
@@ -45,7 +47,9 @@
     border: 0; border-radius: var(--ds-c-chalk-board-radius-3); cursor: pointer; font: inherit; font-weight: var(--ds-c-chalk-board-typography-7);
     background: var(--accent); color: var(--ds-c-chalk-board-ink-2);
   }
-  button.ghost { background: transparent; color: var(--muted); border: var(--ds-c-chalk-board-size-3) solid var(--line); font-weight: var(--ds-c-chalk-board-typography-12); }
+  button.ghost { background: transparent; color: var(--muted); border: var(--ds-c-chalk-board-size-3) solid var(--control-line); font-weight: var(--ds-c-chalk-board-typography-12); }
+  button.ghost:hover:not(:disabled) { background: var(--state-hover); }
+  button.ghost:active:not(:disabled) { background: var(--state-pressed); }
   fieldset { border: var(--ds-c-chalk-board-size-3) solid var(--line); border-radius: var(--ds-c-chalk-board-radius-10); padding: var(--ds-c-chalk-board-space-19); margin: 0 0 var(--ds-c-chalk-board-space-19); }
   legend { padding: 0 var(--ds-c-chalk-board-space-15); color: var(--muted); font-size: var(--ds-c-chalk-board-type-3); }
   .banner { padding: var(--ds-c-chalk-board-space-7) var(--ds-c-chalk-board-space-1); border-radius: var(--ds-c-chalk-board-radius-10); font-size: var(--ds-c-chalk-board-type-1); margin-bottom: var(--ds-c-chalk-board-space-7); }

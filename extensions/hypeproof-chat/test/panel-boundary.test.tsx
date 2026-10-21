@@ -405,8 +405,8 @@ t("styles: 44px retry target, type-scale tokens, forced-colors boundary", () => 
   const rule = (sel: string) => new RegExp(`(?:^|\\n)${sel.replace(/\./g, "\\.")}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
   const retry = rule(".hps-panel-fallback-retry");
   ok(/min-height:\s*44px/.test(retry) && /min-width:\s*44px/.test(retry), "44px target");
-  ok(/font-size:\s*var\(--hp-text-body\)/.test(retry), "retry label at body size");
-  ok(/font-size:\s*var\(--hp-text-body\)/.test(rule(".hps-panel-fallback-text")), "sentence at body size (>=14px)");
+  ok(/font-size:\s*var\(--hp-font-body\)/.test(retry), "retry label at body size");
+  ok(/font-size:\s*var\(--hp-font-body\)/.test(rule(".hps-panel-fallback-text")), "sentence at body size (>=14px)");
   ok(/flex-wrap:\s*wrap/.test(rule(".hps-panel-fallback")), "wraps on a narrow panel");
   ok(/border:\s*1px solid/.test(rule(".hps-panel-fallback")), "a real border that survives forced colors");
   const forced = /@media \(forced-colors: active\) \{([\s\S]*?)\n\}/.exec(css.slice(css.indexOf(".hps-panel-fallback")))?.[1] ?? "";

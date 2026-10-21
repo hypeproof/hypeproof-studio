@@ -16,7 +16,7 @@ export type IconKind =
   | 'back' | 'forward' | 'message' | 'chevron-down' | 'scroll' | 'flask' | 'bulb' | 'clock' | 'lock' | 'book' | 'package'
   | 'folder' | 'ruler' | 'dots' | 'sparkle' | 'square' | 'check-square' | 'help' | 'upload' | 'plug' | 'ticket' | 'moon'
   | 'flag' | 'people' | 'camera' | 'keyboard' | 'thought' | 'dot' | 'open-window' | 'pin' | 'source' | 'return'
-  | 'minus' | 'menu' | 'settings' | 'hand' | 'game';
+  | 'minus' | 'menu' | 'settings' | 'hand' | 'game' | 'ban';
 export type IconSize = 16 | 20 | 24;
 
 export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: IconSize; label?: string }) {
@@ -79,6 +79,7 @@ export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: Ic
     {kind === 'source' && <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>}
     {kind === 'return' && <path d="m9 5-7 7 7 7M2 12h13a6 6 0 0 0 6-6" />}
     {kind === 'minus' && <path d="M7 12h10" />}
+    {kind === 'ban' && <><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></>}
     {kind === 'game' && <><rect x="2.5" y="7" width="19" height="11" rx="4" /><path d="M7 10.5v4M5 12.5h4M15.5 12h.01M18 14h.01" /></>}
     {kind === 'menu' && <path d="M4 7h16M4 12h16M4 17h16" />}
     {kind === 'settings' && <><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" /><circle cx="12" cy="12" r="6.5" /></>}

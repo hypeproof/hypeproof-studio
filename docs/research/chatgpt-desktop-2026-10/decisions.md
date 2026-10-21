@@ -105,3 +105,51 @@ Host variables and CSS-wide inheritance stay at their consuming element. Chalk u
 checked generated TS transport because its runtime/test HTML loader does not load CSS.
 Structural CSS/SVG geometry and learner-authored preview content are outside theme tokens.
 No new palette, authorization, Service change or publication is implied.
+
+## DEC-DS-D-001: semantic colour role names (CGP-DS-D-001, 2026-10-21; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| Which names follow `--hp-{text\|bg\|border\|ring}-{role}-{state}` | The Studio colour roles in `tokens.css`, the names components read. The numbered `--ds-s-*` tier of CGP-DS-R-001 stays a value transport, not a role API | Renaming the generated tier gives no reader a clearer name and churns every alias | On | no |
+| Legacy names | Removed, not kept as aliases. Each use was renamed by the property that paints it, so one old name can map to several roles (`--hp-accent` → bg/border/text accent). `start.css` `--studio-*` aliases removed | Two names for one role would let new CSS keep the old vocabulary. Rendered values are unchanged | On | no |
+| States | `default`, `hover`, `selected`, only where a component already had that state | No invented states | On | no |
+| Type scale | `--hp-text-{caption,body,lead,step}` renamed to `--hp-font-*` | Otherwise `--hp-text-body` (a size) collides with `--hp-text-{role}-{state}` (a colour) | On | no |
+| Light and dark | Dark = forest on `:root`; light = Paper on the reading surfaces (SX-54). Paper binds every role explicitly, including roles whose value is unchanged | The row names exactly these two. Host light themes keep DEC-27 (branded values are equal in both host themes) | On | no |
+| Chalk | Pages keep their page-local palettes and alias names. The token file is injected first on every route (CGP-DS-R-001) | Chalk ships three distinct palettes; one role vocabulary would merge them, which is a palette change nobody approved | Unchanged | needed for a Chalk palette merge |
+| `--tw-*` | Kept (DEC-27): personal workspace follows the host theme | Already decided | Unchanged | no |
+
+## DEC-DS-D-002: host theme mapping (CGP-DS-D-002, 2026-10-21; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| Which surfaces follow the host theme | The `:root` roles, so the lesson chat (mission header, CTAs, evidence and completion lines, fields) follows any VS Code theme. DEC-27 still holds: the SX palette is what those surfaces draw under the HypeProof Studio theme, which is the configured default | REQ-CGP-DS-02 and verification.md scope the bridge to the `--hp-*` tokens. Under Light+ the forest-only roles left 10 text pairs below 4.5:1 in the classroom chat (white quiet-CTA text on a white body, 1.0:1) | On | no |
+| Branded screens | The start and disconnected screens stay forest in every theme: `.studio-start, .studio-disconnected` re-bind every role to the forest value | Their cards, gradient and artwork are forest-only literals; following the host there would mean redrawing the start screen, which is a visual design nobody approved | Unchanged | needed to theme the start screen |
+| Source key per role | A built-in key whose HypeProof Studio theme value already equals the palette (`foreground`, `textLink.foreground`, `button.*`, `editor.background`, `quickInput.background`, `panel.border`, `focusBorder`). The theme gains two keys where none existed: `descriptionForeground #ACB9A5` and `list.warningForeground #E6A373` | Keeps shell changes to two keys that the theme already uses for the same purpose (`#ACB9A5` is its secondary text everywhere). `quickInput.background` over `editorWidget.background`, which would change editor widgets. `list.warningForeground` over `editorWarning.foreground`, whose Light+ value is 3.1:1 on white | On | no |
+| The row's example `--hp-bg: var(--vscode-sideBar-background, #151D19)` | Not used: the HP theme's sidebar is `#18231C`, so the fallback-free value would not equal the palette. The app role reads `editor.background` (`#151D19` in the HP theme) | The acceptance clause wins over the example | On | no |
+| Light-theme muted text | `body.vscode-light` and `body.vscode-high-contrast-light` pull the description colour 20% toward the foreground (Light+ `#6E6E6E`, 4.6:1 on `#F3F3F3`) | VS Code's own `#717171` is 4.4:1 on its Light+ sidebar. Dark kinds, the HP theme included, are untouched | On | no |
+| Fixed roles | Control boundary `#748F79` and the Paper chip pair keep no host source | No default theme's control border reaches 3:1 (Light Modern `#CECECE` is 1.6:1); the sage value is ≥3:1 on every default theme's surfaces | On | no |
+| HC themes | Not themed beyond the mapping (CGP-DS-R-004 owns HC). Text pairs pass in HC Dark and HC Light; the HC Dark CTA is a black button with white ink and no extra border | Out of this row | Unchanged | no |
+| `--hp-code-bg` | Not added: code blocks already read `--vscode-textCodeBlock-background`, and a role nobody reads fails the CGP-DS-D-001 guard | No consumer | n/a | no |
+
+## DEC-DS-D-003: state layers and the control boundary (CGP-DS-D-003, 2026-10-21; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| Pressed share | 14% on dark surfaces, 12% on light ones | Inside both ranges the row allows (12–20% dark, 12–16% light) and clearly apart from hover. It keeps the control boundary ≥3:1 against the pressed fill over `#151D19` (3.3:1; 16% would give 3.1:1, 20% 2.7:1). Over the panel `#202C24` the pressed fill sits at 2.7:1 from the boundary; WCAG compares a boundary with what surrounds the control, and that stays ≥3:1 | On | no |
+| Which controls take the layers | Quiet (transparent) controls drawn with the control boundary in Studio; in Chalk every non-primary control (on `/manage` one `!important` layer over each control's own fill; `/sharing` and `/learn` buttons too). Chalk hover fills that were not a layer (bulk actions turning accent, the seat card turning forest) are removed | Those are the controls the row's boundary clause names. Primary CTAs keep their accent hover; ghost icon buttons in the personal chat keep `--vscode-list-hoverBackground` because DEC-DS-D-002 makes the host theme their source, and changing the IDE theme's list hover would restyle the whole workbench | On | needed to restyle the personal chat's host-hover controls |
+| Layer as a mix with `transparent` | `color-mix(in srgb, <text> N%, transparent)` | It is the text colour at N% over whatever surface the control sits on, with no per-surface value. In Chalk, where a quiet rule forces `background-color: transparent !important`, the same layer is painted as a `background-image` gradient so it is not erased | On | no |
+| Control boundary value | Studio keeps `#748F79` (already the control token on main). Chalk uses `#7D8994`, the field line `/manage` already drew | The row's example `#6E8270` is 4.2:1 on `#151D19` but 2.8:1 against a 14% pressed fill over it and 3.7:1 on Chalk's `#1D2630`, so it needed the verification the row asked for and did not pass it everywhere. No new palette value is introduced | On | no |
+| Chalk scope | Control rules only; dividers, panels, fieldsets, tags and the flow bar keep their lines | A decorative line is not a control boundary (DES-11); raising every line would be a palette change | On | no |
+| Disabled controls | Not measured | WCAG 1.4.11 exempts inactive components | n/a | no |
+
+## DEC-DS-D-004: the status chip (CGP-DS-D-004, 2026-10-21; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| Where the chip lands in Studio | The evidence drawer's source-state label, the one learner surface that shows real / simulated / self_reported / unverified | It was 12px muted text with no chip; other status marks (`tw-task-state`, verify states) are separate rows | On | no |
+| `blocked` in Studio | In the vocabulary (danger, ban icon, 막힘 from Chalk's board) but drawn on no Studio surface | The row names five states; no learner surface shows a blocked state today, and inventing one is out of scope | n/a | no |
+| Intent colours | success = `--vscode-charts-green` (fallback `#4ec9b0`), caution = the warn role, info = the body text role, neutral = the muted role, danger = `--vscode-errorForeground` (fallback `#f48771`). Lime is not used | SX-04 keeps lime for the one Primary CTA and the current step. All are colours Studio already draws | On | no |
+| Soft fill share | 14% of the intent colour over the surface (neutral 10% plus a dashed edge) | Tinted but clearly not solid; label and icon contrast hold on the app and panel surfaces | On | no |
+| Label colour | The body text role, not the intent colour | Keeps ≥4.5:1 on every fill over the app and panel surfaces of the HP palette (measured in `test/status-chip.smoke.mjs`; other host themes are not measured); the icon carries the intent | On | no |
+| Label size | `--hp-font-caption` (14px at the default text size) | The learner's text-size choice (CGP-DS-R-009) still grows it; the icon stays 16px | On | no |
+| Chalk | Same geometry and soft fill on the board/manage seat chip; Unicode glyphs replaced by 16px stroke SVGs | The row is Both; the seat chip is Chalk's status chip and already carries blocked | On | no |

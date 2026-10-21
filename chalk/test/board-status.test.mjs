@@ -32,12 +32,23 @@ assert.equal(ui.ops(fresh,true),'review');
 assert.equal(ui.ops({...fresh,signal:'stale'},true),'unknown');
 assert.equal(ui.ops({...fresh,attention:'blocked'},true),'blocked');
 for(const key of Object.keys(ui.states)) {
- const chip=ui.chip(key);assert.ok(chip.textContent.includes(ui.states[key].label));
- assert.equal(chip.children[0].getAttribute('aria-hidden'),'true');
- assert.equal(chip.children[0].textContent,ui.states[key].icon);
+ const chip=ui.chip(key);assert.equal(chip.textContent,ui.states[key].label,'the label is the only text: no glyph is drawn as text');
+ // CGP-DS-D-004: a 16px stroke icon in currentColor, hidden from assistive tech (the label carries the state).
+ const svg=chip.children[0];
+ assert.equal(svg.tagName.toLowerCase(),'svg');assert.equal(svg.getAttribute('aria-hidden'),'true');
+ assert.equal(svg.getAttribute('data-icon'),ui.states[key].icon);
+ for(const [k,v] of [['width','16'],['height','16'],['stroke','currentColor'],['fill','none'],['class','cgp-state-icon']]) assert.equal(svg.getAttribute(k),v,key+' icon '+k);
+ assert.ok(svg.children.length>=1&&svg.children.every(p=>p.tagName.toLowerCase()==='path'&&p.getAttribute('d')),key+' icon has paths');
+ assert.equal(chip.children[1].className,'cgp-state-label');
  assert.ok(chip.className.includes('cgp-'+key));assert.equal(chip.title,ui.states[key].detail);
 }
 assert.ok(ui.chip('constructor').textContent.includes('확인 불가'));
+// Grayscale: no two states share an icon shape or a label (colour is the third cue only).
+{
+ const shapes=Object.keys(ui.states).map(k=>ui.chip(k).children[0].children.map(p=>p.getAttribute('d')).join('|'));
+ assert.equal(new Set(shapes).size,shapes.length,'every state has its own icon shape');
+ assert.equal(new Set(Object.values(ui.states).map(x=>x.label)).size,shapes.length,'every state has its own label');
+}
 const host=mountPoint();const keys=Object.keys(ui.states);let selected='all';
 const draw=()=>ui.filters(host,keys,selected,key=>{selected=key;draw();});
 draw();assert.equal(host.children.length,7);
@@ -71,7 +82,7 @@ console.log('board status mapping, icons, filters and shipped injection PASS');
 const nodes=new Map();
 const element=id=>{if(!nodes.has(id))nodes.set(id,doc.createElement('div'));return nodes.get(id);};
 const requests=[];
-const pageDoc={getElementById:element,createElement:doc.createElement.bind(doc),createTextNode:doc.createTextNode.bind(doc),activeElement:doc.activeElement};
+const pageDoc={getElementById:element,createElement:doc.createElement.bind(doc),createElementNS:doc.createElementNS.bind(doc),createTextNode:doc.createTextNode.bind(doc),activeElement:doc.activeElement};
 const ctx=vm.createContext({document:pageDoc,location:{hash:'',search:'',pathname:'/board'},history:{replaceState(){}},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},URLSearchParams,setInterval(){return 1;},clearInterval(){},console,fetch:()=>new Promise((resolve,reject)=>requests.push({resolve,reject}))});
 const shipped=renderBoardStatusPage(readFileSync(new URL('../src/ui/board.html',import.meta.url),'utf8')).match(/<script>([\s\S]*?)<\/script>/)[1];
 vm.runInContext(shipped,ctx);

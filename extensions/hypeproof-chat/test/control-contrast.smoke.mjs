@@ -15,15 +15,15 @@ const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
 const tokens = read("tokens.css");
 const [root, paper] = tokens.split('[data-surface="growth"]');
 const val = (block, name) => new RegExp(`--hp-${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(block)?.[1];
-const dark = { bg: val(root, "bg"), panel: val(root, "panel"), control: val(root, "control-line"), line: val(root, "line") };
-const light = { bg: val(root, "paper"), panel: "#FFFFFF", control: val(paper, "control-line") };
-assert.ok(dark.control && light.control, "--hp-control-line defined for both surfaces");
+const dark = { bg: val(root, "bg-app-default"), panel: val(root, "bg-panel-default"), control: val(root, "border-control-default"), line: val(root, "border-divider-default") };
+const light = { bg: val(root, "bg-paper-default"), panel: "#FFFFFF", control: val(paper, "border-control-default") };
+assert.ok(dark.control && light.control, "--hp-border-control-default defined for both surfaces");
 
 for (const [label, fg, bg] of [["dark bg", dark.control, dark.bg], ["dark panel", dark.control, dark.panel], ["paper", light.control, light.bg], ["white", light.control, light.panel]]) {
   assert.ok(ratio(fg, bg) >= 3, `control line on ${label}: ${ratio(fg, bg).toFixed(2)}:1 < 3:1`);
 }
 // The decorative line stays below 3:1, which is exactly why controls must not use it.
-assert.ok(ratio(dark.line, dark.bg) < 3, "control: --hp-line really is too faint for a control");
+assert.ok(ratio(dark.line, dark.bg) < 3, "control: --hp-border-divider-default really is too faint for a control");
 
 // No rule that styles a control draws its boundary with the decorative line.
 const CONTROL = /\b(button|input|textarea|select)\b|\.hp-cta-quiet|\.hps-btn-send|\.studio-(choice|secondary|plan|nav)|\.studio-repo-(list|one)/;
@@ -32,8 +32,8 @@ for (const f of ["styles.css", "start.css"]) {
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const [selector, body] = [m[1].trim(), m[2]];
     if (!CONTROL.test(selector)) continue;
-    // `var(--hp-line, …)` with a fallback is the same decorative line.
-    assert.doesNotMatch(body, /border(-color)?:[^;]*var\(--(hp|studio)-line\b/, `${f}: "${selector.slice(0, 80)}" draws a control boundary with the decorative line`);
+    // `var(--hp-border-divider-default, …)` with a fallback is the same decorative line.
+    assert.doesNotMatch(body, /border(-color)?:[^;]*var\(--hp-border-divider-default\b/, `${f}: "${selector.slice(0, 80)}" draws a control boundary with the decorative line`);
     // A literal border colour on an hp/studio surface must pass 3:1 against that rule's own
     // literal background (or the app background when the rule sets none).
     if (f === "start.css") {

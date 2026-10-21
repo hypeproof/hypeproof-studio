@@ -40,7 +40,7 @@ const value = (sheet, selector, prop, media = "") => {
   for (const r of rules(sheet)) if (r.media === media && r.selectors.includes(selector) && r.decls[prop] !== undefined) v = r.decls[prop];
   return v;
 };
-const CAPTION = "var(--hp-text-caption)";
+const CAPTION = "var(--hp-font-caption)";
 const TARGETS = [".tw-trash button", ".tw-trash-dialog button", ".tw-trash-error button", ".tw-trash-toast .tw-trash-undo"];
 const TEXT = [".tw-trash button", ".tw-trash-dialog button", ".tw-trash-name", ".tw-trash-list time", ".tw-trash-note", ".tw-trash-toast", ".tw-trash-toast .tw-trash-undo", ".tw-trash-error", ".tw-trash-dialog"];
 
@@ -55,7 +55,7 @@ const checks = {
     TARGETS.filter(sel => value(s, sel, "min-height") !== "44px").map(sel => `${sel} min-height ${value(s, sel, "min-height")}`),
   "trash text stays on the caption step (14px floor), the dialog title on the body step": s => {
     const bad = TEXT.filter(sel => value(s, sel, "font-size") !== CAPTION).map(sel => `${sel} font-size ${value(s, sel, "font-size")}`);
-    if (value(s, ".tw-trash-dialog h3", "font-size") !== "var(--hp-text-body)") bad.push("dialog title");
+    if (value(s, ".tw-trash-dialog h3", "font-size") !== "var(--hp-font-body)") bad.push("dialog title");
     return bad;
   },
   "the trash entry spans the panel and sits under a divider": s => {
@@ -76,7 +76,7 @@ const checks = {
   },
   "focus ring: the workspace's 2px ring reaches every trash button": s => {
     const ring = value(s, ".tw-workspace button:focus-visible", "outline");
-    return ring === "2px solid var(--hp-ring)" ? [] : [`ring ${ring}`];
+    return ring === "2px solid var(--hp-ring-focus-default)" ? [] : [`ring ${ring}`];
   },
   "forced colours keep every control's border and the toast's frame": s => {
     const M = "(forced-colors: active)";
@@ -90,9 +90,9 @@ const checks = {
 const mutants = {
   "되돌리기 is at least 44 × 44px": s => s.replace(".tw-trash-toast .tw-trash-undo { min-height: 44px; min-width: 44px;", ".tw-trash-toast .tw-trash-undo { min-height: 32px; min-width: 44px;"),
   "every trash control (entry, 복원, 영구 삭제, dialog, 다시 확인) is a 44px target": s => s.replace(".tw-trash button, .tw-trash-dialog button, .tw-trash-error button { min-height: 44px;", ".tw-trash button, .tw-trash-dialog button, .tw-trash-error button { min-height: 36px;"),
-  "trash text stays on the caption step (14px floor), the dialog title on the body step": s => s.replace(".tw-trash-list time, .tw-trash-note { font-size: var(--hp-text-caption);", ".tw-trash-list time, .tw-trash-note { font-size: 11px;"),
+  "trash text stays on the caption step (14px floor), the dialog title on the body step": s => s.replace(".tw-trash-list time, .tw-trash-note { font-size: var(--hp-font-caption);", ".tw-trash-list time, .tw-trash-note { font-size: 11px;"),
   "the trash entry spans the panel and sits under a divider": s => s.replace(".tw-trash-entry { box-sizing: border-box; width: 100%;", ".tw-trash-entry { width: 100%;"),
-  "a long Korean or path-like name wraps instead of widening the panel": s => s.replace(".tw-trash-name { font-size: var(--hp-text-caption); overflow-wrap: anywhere; }", ".tw-trash-name { font-size: var(--hp-text-caption); white-space: nowrap; }"),
+  "a long Korean or path-like name wraps instead of widening the panel": s => s.replace(".tw-trash-name { font-size: var(--hp-font-caption); overflow-wrap: anywhere; }", ".tw-trash-name { font-size: var(--hp-font-caption); white-space: nowrap; }"),
   "focus ring: the workspace's 2px ring reaches every trash button": s => s.replace(".tw-workspace button:focus-visible, ", ""),
   "forced colours keep every control's border and the toast's frame": s => s.replace(".tw-trash button, .tw-trash-dialog button, .tw-trash-toast .tw-trash-undo, .tw-trash-error button { border-color: ButtonText; }", ".tw-trash button { border-color: ButtonText; }"),
 };
@@ -107,5 +107,5 @@ for (const [label, check] of Object.entries(checks)) {
   console.log(`  ok   ${label}`);
 }
 // The caption step is never below 14px (DEC-29), so the rules above hold the floor.
-assert.match(tokens, /--hp-text-caption: calc\(14px \+ var\(--hp-text-step\)\)/);
+assert.match(tokens, /--hp-font-caption: calc\(14px \+ var\(--hp-font-step\)\)/);
 console.log(`activity-trash CSS: ${passed} rule checks with negative controls PASS`);

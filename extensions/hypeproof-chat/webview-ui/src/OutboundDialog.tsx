@@ -34,7 +34,7 @@ export function OutboundDialog({ prompt, onAnswer, textSize }: { prompt: Outboun
   useEffect(() => { const node = dialog.current; node?.showModal(); node?.querySelector<HTMLButtonElement>('[data-outbound-cancel]')?.focus(); return () => node?.close(); }, []);
   const excluded = prompt.excluded.replace(/^포함하지 않는 것:\s*/, '').split(/,\s*/).filter(Boolean);
   return <dialog ref={dialog} className="hps-outbound" aria-labelledby="outbound-title" data-testid="outbound-dialog"
-    style={{ '--hp-text-caption': `calc(14px + ${{ base: 0, large: 2, xlarge: 4 }[normalizeTextSize(textSize)]}px)` } as CSSProperties}
+    style={{ '--hp-font-caption': `calc(14px + ${{ base: 0, large: 2, xlarge: 4 }[normalizeTextSize(textSize)]}px)` } as CSSProperties}
     onCancel={e => { e.preventDefault(); if (!composing.current) finish(null); }}
     onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
     onKeyDownCapture={e => {
