@@ -59,6 +59,7 @@ import type { ResolvedProfile } from "./protocol";
 import { changeFolderConsent } from "./folderConsentHost";
 import { FOLDER_CONSENT_COMMAND } from "./folderConsent.ts";
 import { ASK_ABOUT_FILE_COMMAND } from "./fileAttachment";
+import { QUIT_GUARD_COMMAND, UPDATE_DURING_TURN_COPY, quitGuardPrompt } from "./quitGuardHelpers";
 import { resolvePublishEndpoints, type PublishOverrideSource } from "./publish/publishConfig";
 
 const TOKEN_KEY = "hypeproofChat.workshopToken";
@@ -722,6 +723,11 @@ export async function activate(context: vscode.ExtensionContext) {
         void vscode.window.showInformationMessage(CLASS_UPDATE_HOLD_COPY);
         return;
       }
+      // REQ-STUDIO-QUIT-GUARD: the install ends in a quit, which the quit guard would question.
+      if (provider.hasActiveStream()) {
+        void vscode.window.showInformationMessage(UPDATE_DURING_TURN_COPY);
+        return;
+      }
       try {
         // Re-fetch to be safe (the stored banner state might be stale).
         const current = currentBundleVersion();
@@ -740,6 +746,10 @@ export async function activate(context: vscode.ExtensionContext) {
         void reportInstallUpdateFailure(error);
       }
     }),
+
+    // REQ-STUDIO-QUIT-GUARD: asked by the core quit guard on window close and app quit.
+    // null = nothing would stop, so the shutdown goes ahead without a dialog.
+    vscode.commands.registerCommand(QUIT_GUARD_COMMAND, () => quitGuardPrompt(provider.quitGuardActivity())),
 
     vscode.commands.registerCommand("hypeproof-chat.dismissUpdate", async (version: string) => {
       if (typeof version !== "string" || !version) return;

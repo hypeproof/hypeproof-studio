@@ -43,6 +43,7 @@ const OVERRIDES = {
   "attachment-failure-ui": { banner: BANNER_POSTED_ARROW },
   "trial-end-card-dismiss": { banner: BANNER_POSTED },
   "activity-status-chatpanel": { banner: BANNER_POSTED },
+  "quit-guard-queue": { banner: BANNER_POSTED },
 };
 
 // Tests in test/ that this runner must skip, because they have their own build step

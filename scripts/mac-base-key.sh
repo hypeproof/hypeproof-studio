@@ -20,6 +20,8 @@
 #   scripts/install-brand-assets.sh   icon SVG install before build_icons.sh
 #   assets/brand                      brand SVGs
 #   scripts/run-build.sh              the build entry point
+#   scripts/stage-core-patches.sh     stages Studio-owned core patches
+#   scripts/patches/core              Studio-owned VS Code core patches
 #   MAC_BASE_EPOCH (below)            bump by hand when a build-mac.yml change
 #                                     alters the base (runner image, Node pin,
 #                                     env block, brew deps) — the workflow file is
@@ -42,6 +44,8 @@ INPUTS=(
   scripts/install-brand-assets.sh
   assets/brand
   scripts/run-build.sh
+  scripts/stage-core-patches.sh
+  scripts/patches/core
 )
 
 lines="epoch $MAC_BASE_EPOCH"$'\n'

@@ -205,6 +205,7 @@ jobs:
           set -euo pipefail
           # Stage the Studio-owned fix through the fork's patch pipeline.
           cp ../scripts/patches/windows-policy-locales.patch patches/windows/99-hps-policy-locales.patch
+          bash ../scripts/stage-core-patches.sh
           bash prepare_vscode.sh
 
       - name: Apply product.json overrides

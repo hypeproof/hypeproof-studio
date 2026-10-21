@@ -511,6 +511,9 @@ export function ChatPanel(props: Props) {
     if (initialDraft.current) { initialDraft.current=false; return; }
     if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
   }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused,recovered,inlineEdit]);
+  // REQ-STUDIO-QUIT-GUARD: the host names an unsent queued message in the quit dialog.
+  const hasQueued = queued !== null;
+  useEffect(() => { postToHost({ type: "queueState", queued: hasQueued }); }, [hasQueued]);
   useEffect(() => {
     const off = onHostMessage(msg => {
       if (msg.activityId !== activityId || (msg.taskId && msg.taskId !== taskId)) return;

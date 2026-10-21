@@ -289,6 +289,7 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
+import type { QuitGuardActivity } from "./quitGuardHelpers";
 import { FunnelReporter, entryOutcome, funnelOs, funnelProfileStep, funnelToolKind, isTrialGrantToken, parseTrialEventsProbe, trialEventsUrl, usesTraceRoute, type ToolResultKind } from "./funnelEvents";
 import {
   ArtifactChangeGate,
@@ -3018,6 +3019,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     view.onDidDispose(() => {
       this.writeApprovalRequest.cancel();
       if (this.draftSource===sidebarWebview) this.draftSource=undefined;
+      this.queuedSources.delete(sidebarWebview);
       if (this.view === view) this.view = undefined;
       if (!this.editorChat) abortAllStreams(this.activeStreams);
     });
@@ -3039,6 +3041,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       entry.onDidDispose(() => {
         this.writeApprovalRequest.cancel();
         if(this.draftSource===editorWebview)this.draftSource=undefined;
+        this.queuedSources.delete(editorWebview);
         if (this.editorChat === entry) {
           this.editorChat = undefined;
           abortAllStreams(this.activeStreams);
@@ -3227,6 +3230,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return { idleMs: Date.now() - this.lastActivityAt, status };
   }
   hasActiveStream(): boolean { return this.pendingSends > 0 || this.activeStreams.size > 0 || !!this.worldOpening || !!this.observationAssessment || (this.pendingApprovals?.size ?? 0) > 0; }
+  /** REQ-STUDIO-QUIT-GUARD — chat surfaces that last reported a queued, unsent message. */
+  private queuedSources = new Set<vscode.Webview>();
+  quitGuardActivity(): QuitGuardActivity { return { turnRunning: this.hasActiveStream(), queuedUnsent: this.queuedSources.size > 0 }; }
 
   refreshConfig(): Promise<void> {
     return (async () => {
@@ -5370,6 +5376,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
+    // REQ-STUDIO-QUIT-GUARD: handled before the activity/task checks, which would answer a
+    // task-less report with a task error. It only records the flag for this surface.
+    if (msg.type === 'queueState') {
+      if (source) { if (msg.queued === true) this.queuedSources.add(source); else this.queuedSources.delete(source); }
+      return;
+    }
     const connections=activityConnections(this.context);
     if (connections && msg.activityId && msg.activityId!==connections.scope) return;
     const taskStore = this.currentTaskStore?.();

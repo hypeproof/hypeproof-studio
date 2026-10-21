@@ -9017,6 +9017,80 @@
           "path": "extensions/hypeproof-chat/test/outbound-consent.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-QUIT-GUARD",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Quit guard (CGP-SHELL-R-004 / CGP-SHELL-D-003)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-QUIT-GUARD",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-QUIT-GUARD"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/quitGuardHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "scripts/patches/core/hps-quit-guard.patch"
+        },
+        {
+          "path": "scripts/patches/core/build_quit_guard_patch.py"
+        },
+        {
+          "path": "scripts/stage-core-patches.sh"
+        },
+        {
+          "path": "scripts/run-build.sh"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-QUIT-GUARD",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-QUIT-GUARD",
+        "ST-IMP-QUIT-GUARD"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/quit-guard.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/quit-guard-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/quit-guard-queue.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/quit-guard-patch.smoke.mjs"
+        }
+      ]
     }
   ]
 }

@@ -3575,3 +3575,46 @@ Implemented attachment preparation and recovery:
 Behavioral tests cover filesystem failure/retry, actual host preparation, native
 repick and the real preparation hook's request lifecycle. Native/browser visual
 acceptance remains separate; the owner captures the sandbox-blocked matrix.
+
+## Quit guard (CGP-SHELL-R-004 / CGP-SHELL-D-003)
+
+`REQ-STUDIO-QUIT-GUARD` (CGP-SHELL-R-004 / REQ-SHELL-04 and CGP-SHELL-D-003 / DES-SHELL-03, P0;
+built 2026-10-21): quitting Studio (Cmd+Q, Alt+F4, the menu, the update installer's quit) or
+closing a window asks first when something would stop, and names it. An extension cannot veto a
+quit, so a Studio-owned VS Code core patch (`scripts/patches/core/hps-quit-guard.patch`, staged into
+the fork's `patches/user/` by `scripts/stage-core-patches.sh`) adds a workbench shutdown veto. On
+window close and app quit (never on reload or a workspace switch) it calls the hypeproof-chat
+command `_hypeproof.quitGuard.prompt`, which answers from the host's own state:
+
+| Active | Dialog body (2 lines) |
+|---|---|
+| a coach turn (streaming, settling or waiting on an approval; every runtime) | "지금 하고 있는 대답이 멈춰요." / "만든 파일은 그대로 남아요." |
+| a queued message not yet sent, reported by the sidebar or editor chat | "보내지 않은 메시지가 있어요." / "끝내면 이 메시지는 보내지 않아요." |
+| both | "지금 하고 있는 대답이 멈춰요." / "보내려던 메시지도 보내지 않아요." |
+| nothing | no dialog; the quit goes ahead |
+
+- **Native dialog, safe default.** An OS message box (warning), title "Studio를 끝낼까요?", the body
+  above. Buttons "계속하기" then "끝내기". "계속하기" is both the default (Enter) and the cancel (Esc);
+  "끝내기" is secondary and is the only answer that lets the quit go ahead. VS Code's button
+  reordering would put Enter on the destructive button, so the patch adds a narrow path: a box whose
+  `defaultId` equals its `cancelId` keeps the given order. No upstream dialog sets `defaultId`.
+- **Screen readers.** The title and body are the native box's message and detail, which VoiceOver
+  and Narrator read on open.
+- **Untrusted answer.** The core accepts only a well-formed answer: control and bidi characters are
+  removed, the title is capped at 60 characters and the body at two lines of 80. The core fixes the
+  button order, default and cancel; the extension supplies only the words.
+- **Never traps the learner.** If the extension does not answer within 2 s, fails, or the dialog
+  cannot be shown, the quit goes ahead. 계속하기 keeps everything running; 끝내기 stops the turn
+  (files already written stay).
+- **Updates.** 업데이트 설치 is refused while a turn runs ("AI가 대답하고 있어서 지금은 업데이트하지
+  않았어요. 대답이 끝난 뒤 다시 눌러 주세요."): the install ends in a quit, and answering 계속하기 to
+  the guard would leave the already-started installer to give up without telling the learner. A turn
+  that starts in the moment between the update confirmation and the quit still gets the dialog.
+- **Each window asks for its own work.** Closing one window with an active turn asks; a quit with
+  two windows can ask once per window that has work.
+
+Verification: `test/quit-guard.smoke.mjs` (copy, box shape, Enter/Esc through the safe-default path,
+guard decisions, hostile answers), `test/quit-guard-host.smoke.mjs` (host state per surface),
+`test/quit-guard-queue.test.tsx` (ChatPanel reports its queue), `test/quit-guard-patch.smoke.mjs`
+(the patch is current, applies to the pinned upstream files and ships the tested sources). The
+native dialog itself (macOS and Windows) needs a built app; see the row's report.
