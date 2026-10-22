@@ -116,13 +116,13 @@ const noteTexts = () => [CT.CONTEXT_TRIM_NOTE, CT.CONTEXT_COMPACT_NOTE];
 // ── 5. Host wiring ──
 {
   const src = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
-  assert.match(src, /const history = modelHistory\(clampTimeline\(modelConversation\(conversation, versionOf\), HISTORY_MAX\)\);/, "the clamp the marker mirrors is still the one model path");
+  assert.match(src, /const history = modelHistory\(clampTimeline\(modelConversation\(attemptHistory\(conversation, retrySourceId\), versionOf\), HISTORY_MAX\)\);/, "the clamp the marker mirrors is still the one model path");
   const at = src.indexOf('case "compaction"');
   assert.ok(at > 0, "the turn's activity switch handles compaction");
   const branch = src.slice(at, at + 700);
   assert.match(branch, /this\.postToolLog\(streamId, \{ id: compactionLineId\(streamId\)/, "posted through postToolLog, so it is kept in the turn timeline");
   assert.match(branch, /CONTEXT_COMPACT_NOTE/);
-  assert.match(src, /const conversation = activityConnections\(this\.context\) \? this\.getHistory\(\) : rawHistory;/, "the model clamps the saved history");
+  assert.match(src, /const conversation = activityConnections\(this\.context\) \|\| savedHistory\.length \? savedHistory : rawHistory;/, "the model clamps the saved history");
   assert.match(src, /type: "contextTrim", boundaryId: trimBoundaryId\(this\.getHistory\(\)\)/, "the host posts the boundary of that same saved history");
   assert.ok((src.match(/await this\.postContextTrim\(\);/g) ?? []).length >= 3, "posted with the history and after every save (task store and legacy)");
   const panel = fs.readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");

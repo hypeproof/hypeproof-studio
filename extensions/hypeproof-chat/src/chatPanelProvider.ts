@@ -1,3 +1,4 @@
+import { attemptGroups, attemptHistory, selectAttempt, visibleAttempts } from './answerAttempts';
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
 import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
@@ -461,6 +462,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.postConfig();
   }
 
+  private attemptWrite?: Promise<void>;
   private nativeObservation: NativeObservationRecorder | null = null;
   private nativeHistoryScope: string | null = null;
   private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore };
@@ -498,7 +500,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /** Refuses an edit of anything but the latest prompt group, and any edit from instructor mode. */
   private requireEditTarget(editOf: unknown): void {
-    if (this._instructorMode.isInstructor || !validEditTarget(this.editableHistory(), editOf)) {
+    if (this._instructorMode.isInstructor || !validEditTarget(visibleAttempts(this.editableHistory()).items, editOf)) {
       throw new TurnToolModeError('마지막으로 보낸 메시지만 고칠 수 있어요. 고친 내용은 입력창에 남겨 두었어요.');
     }
   }
@@ -3243,7 +3245,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const status = (this.pendingApprovals?.size ?? 0) > 0 ? "waiting_approval" : this.hasActiveStream() ? "running" : "idle";
     return { idleMs: Date.now() - this.lastActivityAt, status };
   }
-  hasActiveStream(): boolean { return this.pendingSends > 0 || this.activeStreams.size > 0 || !!this.worldOpening || !!this.observationAssessment || (this.pendingApprovals?.size ?? 0) > 0; }
+  hasActiveStream(): boolean { return !!this.attemptWrite || this.pendingSends > 0 || this.activeStreams.size > 0 || !!this.worldOpening || !!this.observationAssessment || (this.pendingApprovals?.size ?? 0) > 0; }
   /** REQ-STUDIO-QUIT-GUARD — chat surfaces that last reported a queued, unsent message. */
   private queuedSources = new Set<vscode.Webview>();
   quitGuardActivity(): QuitGuardActivity { return { turnRunning: this.hasActiveStream(), queuedUnsent: this.queuedSources.size > 0 }; }
@@ -5391,6 +5393,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
+    if ((msg.type === 'sendMessage' || msg.type === 'retryMessage') && this.attemptWrite) await this.attemptWrite;
     // REQ-STUDIO-QUIT-GUARD: handled before the activity/task checks, which would answer a
     // task-less report with a task error. It only records the flag for this surface.
     if (msg.type === 'queueState') {
@@ -5766,6 +5769,27 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "discardStagedImage":
         this.imageStaging?.discard(msg.stageId);
         return;
+      case "selectAnswerAttempt": {
+        if (this.hasActiveStream() || this.pendingSends || this._instructorMode.isInstructor ||
+            msg.activityId !== activityConnections(this.context)?.current?.id ||
+            msg.taskId !== (this.currentTaskStore?.()?.getView().activeTaskId ?? undefined)) return;
+        const scope = this.turnRequestScope();
+        const selected = selectAttempt(this.getHistory(), msg.rootId, msg.attemptId, msg.choose === true);
+        if (!selected) return;
+        const write = (async () => {
+          await this.appendHistory([selected]);
+          if (msg.choose === true) {
+            const key = `answer-attempt-events:${scope}`;
+            const events = this.context.globalState.get<unknown[]>(key, []);
+            await this.context.globalState.update(key, [...events, { event: 'answer_attempt_chosen',
+              rootId: msg.rootId, attemptId: msg.attemptId, actor: 'learner', at: Date.now() }]);
+          }
+          if (scope === this.turnRequestScope()) await this.post({type:'answerAttemptSelected',root:selected,scope});
+        })();
+        this.attemptWrite = write;
+        try { await write; } finally { if (this.attemptWrite === write) this.attemptWrite = undefined; }
+        return;
+      }
       case "retryMessage":
         // #358 — carry the failed turn's image(s) through the retry so the
         // coach actually re-receives the screenshot (was text-only → "스크린샷을
@@ -6108,11 +6132,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let preflightComplete=false;
     try {
     // CGP-CHAT-R-002 — an error retry of an edited prompt (same id) stays a version of its group.
-    const versionOf = editOf ?? (retrySourceId !== undefined && retrySourceId === userMessageId ? this.retryMessages().find(message => message.id === retrySourceId)?.editOf : undefined);
-    const editedFrom = editOf ? latestUserTurn(this.editableHistory()) : null;
-    const versions = editOf ? versionCount(this.editableHistory(), editOf) : 0;
+    const retryRoot = retrySourceId ? attemptGroups(this.editableHistory()).find(group => group.attempts.some(attempt => attempt.user.id === retrySourceId))?.root : undefined;
+    const versionOf = editOf ?? retryRoot?.editOf ?? (retrySourceId !== undefined && retrySourceId === userMessageId ? this.retryMessages().find(message => message.id === retrySourceId)?.editOf : undefined);
+    const editedFrom = editOf ? latestUserTurn(visibleAttempts(this.editableHistory()).items) : null;
+    const versions = editOf ? versionCount(visibleAttempts(this.editableHistory()).items, editOf) : 0;
     const userId = this.rememberTurnRequest(text, mode, userMessageId, retrySourceId, versionOf);
-    const userLine = (content: string): ChatMessage => ({ id: userId, role: "user", content, createdAt: Date.now(), toolMode: mode, ...(versionOf ? { editOf: versionOf } : {}) });
+    const userLine = (content: string): ChatMessage => ({ id: userId, role: "user", content, createdAt: Date.now(), toolMode: mode, ...(versionOf ? { editOf: versionOf } : {}), ...(retryRoot && userId !== retryRoot.id ? { retryOf: retryRoot.id } : {}) });
+    if (retryRoot) Object.assign(this.turnRequests.get(userId)!.message, { retryOf: retryRoot.id });
     const connections=activityConnections(this.context);
     // Instructor mode has no student activity connection — skip the acquire/verify gate.
     if (connections && !this._instructorMode.isInstructor) {
@@ -6144,8 +6170,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // The proxy/SDK gateway calls below are a contract that knows only user/assistant.
     // CGP-CHAT-R-002 — only the latest version of each prompt goes to the model. A turn that belongs to a
     // version group (an edit, or the error retry of one, which arrives without editOf) drops its whole group.
-    const conversation = activityConnections(this.context) ? this.getHistory() : rawHistory;
-    const history = modelHistory(clampTimeline(modelConversation(conversation, versionOf), HISTORY_MAX));
+    const savedHistory = this.getHistory();
+    const conversation = activityConnections(this.context) || savedHistory.length ? savedHistory : rawHistory;
+    const history = modelHistory(clampTimeline(modelConversation(attemptHistory(conversation, retrySourceId), versionOf), HISTORY_MAX));
+    if (retryRoot && userId !== retryRoot.id) await this.appendHistory([{ ...retryRoot, visibleAttemptId: userId }, userLine(text)]);
     // Learning wiki called by name ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘", "팀 브레인에
     // 뭐 있어?"): the App answers with the skill instead of a coach turn. Checked before the show
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is

@@ -1,3 +1,4 @@
+import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
 import {OutboundDialog} from "./OutboundDialog";
@@ -136,7 +137,8 @@ type Action =
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
   | { type: "streamError"; error: string; activityUnavailable?: import("../../src/activityAvailability").ActivityUnavailable; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView; safetyNotice?: import("../../src/safetyNotice").SafetyNoticeView }
-  | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string; editOf?: string }
+  | { type: "answerAttemptSelected"; root: ChatMessage }
+  | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string; editOf?: string; retryOf?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
 
@@ -183,6 +185,8 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "config":
       return { ...(state.config?.activity?.id === action.config.activity?.id && state.config?.taskWorkspace?.activeTaskId === action.config.taskWorkspace?.activeTaskId ? state : initialState), config: action.config };
+    case "answerAttemptSelected":
+      return { ...state, timeline: { ...state.timeline, items: applyAttemptSelection(state.timeline.items, action.root) } };
     case "history":
       // 대화·툴·에러가 한 번에 갈린다. Clear 를 눌러도 직전 턴의 툴 호출 목록이
       // 화면에 남아 있었다(2026-07-27 실사용) — 이제 툴이 타임라인의 일부라
@@ -329,13 +333,14 @@ function reducer(state: State, action: Action): State {
         timeline: {
           ...state.timeline,
           items: [
-            ...state.timeline.items,
+            ...state.timeline.items.map(message => action.retryOf === message.id ? { ...message, visibleAttemptId: action.id } : message),
             {
               id: action.id ?? `local-${Date.now()}`,
               role: "user",
               content: action.text,
               ...(action.toolMode ? { toolMode: action.toolMode } : {}),
               ...(action.editOf ? { editOf: action.editOf } : {}),
+              ...(action.retryOf ? { retryOf: action.retryOf } : {}),
               createdAt: Date.now(),
               ...(action.images && action.images.length > 0 ? { images: action.images } : {}),
             },
@@ -461,6 +466,7 @@ export function App() {
           break;
         }
         case "config":      dispatch({ type: "config", config: msg.config }); break;
+        case "answerAttemptSelected": dispatch({type: "answerAttemptSelected", root: msg.root}); break;
         case "history":     dispatch({ type: "history", messages: msg.messages }); setTrimBoundaryId(null); break;
         case "contextTrim": setTrimBoundaryId(msg.boundaryId); break;
         case "answerVerdicts": {
@@ -646,7 +652,8 @@ export function App() {
     if (!beginRequest()) return;
     const toolMode = source?.toolMode ?? 'auto';
     const userMessageId = `local-${crypto.randomUUID()}`;
-    dispatch({ type: "userSent", text: prompt, toolMode, id: userMessageId, images: source?.images });
+    const root = attemptGroups(messages).find(group => group.attempts.some(attempt => attempt.user.id === source?.id))?.root;
+    dispatch({ type: "userSent", text: prompt, toolMode, id: userMessageId, images: source?.images, retryOf: root?.id, editOf: root?.editOf });
     postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt, history: messages, toolMode, sourceMessageId: source?.id, userMessageId, images: source?.images });
   };
 
@@ -687,9 +694,13 @@ export function App() {
         // 받았어요" even though the student did paste one. Images live only on
         // the in-memory message (single-shot, REQ-C11), which is exactly what a
         // same-session retry needs.
-        const images = m.images && m.images.length > 0 ? m.images : undefined;
+        // Same body as retry(): this runs only behind ChatPanel's guarded onRetryLast press.
+        const toolMode = m.toolMode ?? 'auto';
+        const userMessageId = `local-${crypto.randomUUID()}`;
+        const root = attemptGroups(messages).find(group => group.attempts.some(attempt => attempt.user.id === m.id))?.root;
         if (!beginRequest()) return;
-        postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt: m.content, history: messages, images, toolMode: m.toolMode ?? 'auto', sourceMessageId: m.id, userMessageId: m.id });
+        dispatch({ type: "userSent", text: m.content, toolMode, id: userMessageId, images: m.images, retryOf: root?.id, editOf: root?.editOf });
+        postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt: m.content, history: messages, toolMode, sourceMessageId: m.id, userMessageId, images: m.images });
         return;
       }
     }
@@ -820,6 +831,11 @@ export function App() {
         sendPending={sendPending}
         onRetry={retry}
         onRetryLast={retryLast}
+        onSelectAttempt={(rootId, attemptId, choose) => {
+          if (state.streamId || pendingSend.current) return;
+          postToHost({ type: 'selectAnswerAttempt', activityId: state.config?.activity?.id,
+            taskId: state.config?.taskWorkspace?.activeTaskId ?? undefined, rootId, attemptId, choose });
+        }}
         onEditResend={editResend}
         verdicts={verdicts}
         trimBoundaryId={trimBoundaryId}

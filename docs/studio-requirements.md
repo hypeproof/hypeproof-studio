@@ -4281,3 +4281,23 @@ overflow. Code whitespace is preserved; the new rules directly target only Korea
 capability assessment. Shared declarations are transported to Chalk by the existing
 canonical design stylesheet pipeline. Guards: `test/korean-prose.smoke.mjs`;
 computed guard: `test/korean-prose-computed.smoke.mjs` (headless Chromium, real Studio CSS order and all Chalk pages, light/dark, 320/800; fails on a later higher-specificity or `@media !important` override; NOT RUN without a browser, a failure under `FOCUS_REQUIRE_BROWSER=1`).
+
+## Answer attempts (CGP-CHAT-R-006)
+
+**REQ-STUDIO-ANSWER-ATTEMPTS** — Retrying adds a distinct request attempt under the
+same prompt. The pager shows one answer (including its tool-separated segments) and
+switches without a model request. “이걸 쓸래요” marks one attempt and records a local,
+learner-attributed event containing IDs and time only. Only the visible answer is
+sent as history for the next turn; the pager tooltip states this. A retry that fails
+without any answer is shown with its error but never becomes the history: the newest
+answered attempt stays the one the next turn carries. Same-session
+REQ-C5 image reattachment remains available after selection. Selection is disabled
+while a request or selection write is running and is bound to the activity/task.
+Reload retains all attempts and the visible/chosen selection. The existing history
+retention bound still applies. This is PI#2 learner agency and PI#5 honest visibility,
+tracing CGP-CHAT-064 and AE-35; it exposes learner iteration and judgment, not a score.
+
+Evidence: `answer-attempts.smoke.mjs`, `answer-attempts.test.tsx`,
+`answer-attempts-style.smoke.mjs`, and `answer-attempts-computed.smoke.mjs` (headless
+Chromium: 44px targets, 14px text, focus ring, both seats, dark and light, 1420/800/320,
+measured against clientWidth) in `extensions/hypeproof-chat/test/`.

@@ -1,3 +1,6 @@
+import './answerAttempts.css';
+import { visibleAttempts, ATTEMPT_HISTORY_NOTE } from '../../src/answerAttempts';
+import { AttemptPager } from './AttemptPager';
 import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
 import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
@@ -166,6 +169,7 @@ interface Props {
   canRetryLast: boolean;
   sendPending?: boolean;
   onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
+  onSelectAttempt?: (rootId: string, attemptId: string, choose: boolean) => void;
   onRetry: (prompt: string, source?: ChatMessage) => void;
   onRetryLast: () => void;
   /** CGP-CHAT-R-002 — resend an edited copy of the latest prompt. Absent (instructor mode): no "수정". */
@@ -1284,15 +1288,16 @@ export function ChatPanel(props: Props) {
   const turnHasActivity = hasActivityThisTurn(messages);
   const longStep = streaming ? activeLongStep(messages) : null;
   // Personal chat offers retry on the latest coach answer only.
-  const latestAssistantId = [...messages].reverse().find(m => m.role === 'assistant')?.id;
+  const latestAssistantId = [...visibleAttempts(messages).items].reverse().find(m => m.role === 'assistant')?.id;
   // CGP-CHAT-R-002 — one version per prompt is drawn; "수정" sits on the latest prompt only, and
   // never while a turn runs, a message waits in the queue or recovery list, or in instructor mode.
-  const shown = visibleVersions(messages, versionChoice);
+  const attempts = visibleAttempts(messages);
+  const shown = visibleVersions(attempts.items, versionChoice);
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — derived from the conversation each render; -1 when nothing is left out.
   const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
   // REQ-STUDIO-DELEGATION-ROW — a delegation is one row; its helper's tool lines are drawn inside it.
   const delegations = groupDelegations(shown.items, streaming ? props.runningStreamId ?? null : null);
-  const editableId = props.onEditResend ? editableUserId(messages, {
+  const editableId = props.onEditResend ? editableUserId(attempts.items, {
     streaming, sendPending: props.sendPending, parked: queued !== null || recovered.length > 0,
     instructor: props.instructor, locked: unavailable || !!props.sendLocked,
   }) : null;
@@ -1664,7 +1669,20 @@ export function ChatPanel(props: Props) {
             const card = pageCards.get(m.id)!;
             return <PageCard view={card} onOpen={(path) => postToHost({ type: "pageCardOpen", turnId: card.turnId, path })} onReveal={(path) => postToHost({ type: "pageCardReveal", turnId: card.turnId, path })} />;
           }}</PanelBoundary>}
-        </Fragment>)}
+        {(() => {
+            const group = attempts.groups.find(group => group.attempts.length > 1 && (group.attempts[group.index].lines.at(-1)?.id ?? group.root.id) === m.id);
+            if (!group || !props.onSelectAttempt || props.instructor) return null;
+            const locked = streaming || !!props.sendPending || !!props.sendLocked || unavailable;
+            const selected = group.attempts[group.index].user.id;
+            return <div className="hps-answer-attempts">
+              <AttemptPager index={group.index} count={group.attempts.length} title={ATTEMPT_HISTORY_NOTE}
+                disabled={locked} onPage={index => props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false)} />
+              <button type="button" className="hps-attempt-choose" disabled={locked || !group.attempts[group.index].lines.some(line => line.role === "assistant" && line.content.trim())}
+                aria-pressed={group.root.chosenAttemptId === selected}
+                onClick={() => props.onSelectAttempt?.(group.root.id, selected, true)}>이걸 쓸래요</button>
+            </div>;
+          })()}
+          </Fragment>)}
         </CodeBlockScope>
 
         {/* REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019) — one calm hint under a tool step running 20 s+. */}
