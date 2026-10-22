@@ -29,17 +29,23 @@ export function findChromium() {
   return null;
 }
 
-export async function launch(bin) {
+// A cold Chrome start on a busy CI runner can take longer than a warm local one: wait up to
+// 30 s, then retry once with a fresh profile before failing.
+export async function launch(bin, attempt = 1) {
   const profile = mkdtempSync(join(tmpdir(), 'hp-headless-'));
   // A full Chrome/Chromium needs --headless=new; chrome-headless-shell is headless already.
   const headless = /chrome-headless-shell$/.test(bin) ? [] : ['--headless=new'];
   const child = spawn(bin, [...headless, '--remote-debugging-port=0', '--no-sandbox', '--disable-gpu', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
   let port = 0;
-  for (let i = 0; i < 100 && !port; i++) {
+  for (let i = 0; i < 300 && !port; i++) {
     await new Promise((r) => setTimeout(r, 100));
     try { port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]); } catch { /* not yet */ }
   }
-  if (!port) { child.kill(); throw new Error('headless Chromium did not start'); }
+  if (!port) {
+    child.kill();
+    if (attempt < 2) return launch(bin, attempt + 1);
+    throw new Error('headless Chromium did not start');
+  }
   const tabs = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
   const ws = new WebSocket(tabs.find((t) => t.type === 'page').webSocketDebuggerUrl);
   await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });

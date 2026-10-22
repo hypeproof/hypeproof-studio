@@ -591,6 +591,25 @@ and placeholder follow the theme's own colours), the Light+ separation exception
 whose background is set only by a rule without `input`/`textarea` in its selector, the HP rail cards drawn with `--hp-text-primary-default` on the
 theme background under non-HP themes, and a recorded keyboard walk in the built app.
 
+### Modal card geometry and lifecycle
+
+`REQ-STUDIO-MODAL-SURFACE` (CGP-DS-D-020 / DES-CGP-DS-25, traces to
+CGP-DS-R-023; extends SX-52 and Product Intent's deliberate consequential actions).
+Studio settings, file-write approval, outbound consent and permanent-delete cards,
+and Chalk outbound consent use 320–480px cards (viewport-clamped below 320px),
+12px corners and 20px padding. Backdrops dim dark by 40% and light by 30%.
+Entry takes 180ms; dismissal retains the card and its focus trap for the 120ms exit,
+then returns focus. At widths <=390px the card is a full-width bottom sheet with
+rounded top corners. Reduced motion completes without animation. A repeated close
+answers once; unmounting a Studio request cancels its deferred answer. Routine
+learning completion stays inline and does not add a confirmation dialog.
+Native host/browser confirmations, navigation drawers and the nonmodal voice panel
+retain their existing platform contracts. No permission or recipient is widened.
+Evidence: `modal-surface.smoke.mjs`, `modal-surface.test.tsx`, the headless-Chromium
+`modal-geometry.smoke.mjs` (computed width, radii, padding, backdrop dim, sheet at 390px and
+card at 391px, personal and classroom, dark and light, Chalk, reduced motion, forced colours),
+`dialog-focus.test.tsx`, `activity-trash.test.tsx` and Chalk outbound consent tests.
+
 `REQ-STUDIO-FOCUS-RESTORE` (CGP-DS-R-023 / REQ-CGP-DS-25, 2026-10-20; extends
 [SX-52](requirements/studio-learning-experience.md) and DES-06), personal and classroom chat
 webview. The surfaces listed in the table below follow one focus contract (surfaces not listed,

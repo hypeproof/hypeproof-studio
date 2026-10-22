@@ -1,3 +1,5 @@
+import { finishModal } from './modalMotion';
+import './modalSurface.css';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { imeComposing } from './imeGuard';
 import { useDialogFocus } from './dialogFocus';
@@ -18,7 +20,7 @@ export function ChatPreferences({ open, onClose, initialFocus, opener, children 
     const node = dialog.current;
     if (!open || !node) return;
     if (!node.open) node.showModal();
-    return () => { if (node.open) node.close(); };
+    return () => { node.removeAttribute('data-closing'); if (node.open) node.close(); };
   }, [open]);
   // The cancel guard reads the last key pressed anywhere while open (focus may sit on <body> inside
   // the modal), so a stale composing key never blocks a later plain Escape.
@@ -29,8 +31,9 @@ export function ChatPreferences({ open, onClose, initialFocus, opener, children 
     document.addEventListener('keydown', track, true);
     return () => document.removeEventListener('keydown', track, true);
   }, [open]);
-  useDialogFocus(dialog, { open, kind: 'modal', initialFocus: initialFocus ?? 'header button', onDismiss: onClose, ...(opener ? { opener } : {}) });
-  return <dialog ref={dialog} className="hps-preferences" aria-labelledby="chat-preferences-title"
+  const dismiss = () => finishModal(dialog.current, onClose);
+  useDialogFocus(dialog, { open, kind: 'modal', keepFocusOnDismiss: true, initialFocus: initialFocus ?? 'header button', onDismiss: dismiss, ...(opener ? { opener } : {}) });
+  return <dialog ref={dialog} className="hps-preferences hp-modal" aria-labelledby="chat-preferences-title"
     onKeyDown={event => {
       // CGP-DS-R-027 (#1880): an Escape that cancels an IME syllable must not close the dialog.
       // preventDefault stops the dialog's own close request; the cancel guard below covers a
@@ -40,8 +43,8 @@ export function ChatPreferences({ open, onClose, initialFocus, opener, children 
       // sources panel (the focus hook has already closed the dialog).
       if (event.key === 'Escape') event.stopPropagation();
     }}
-    onCancel={event => { if (composing.current) { event.preventDefault(); return; } onClose(); }} onClose={onClose}>
-    <header><h2 id="chat-preferences-title">대화 설정</h2><button type="button" autoFocus aria-label="대화 설정 닫기" onClick={onClose}>×</button></header>
+    onCancel={event => { event.preventDefault(); if (!composing.current) dismiss(); }}>
+    <header><h2 id="chat-preferences-title">대화 설정</h2><button type="button" autoFocus aria-label="대화 설정 닫기" onClick={dismiss}>×</button></header>
     <div className="hps-preferences-body">{children}</div>
   </dialog>;
 }

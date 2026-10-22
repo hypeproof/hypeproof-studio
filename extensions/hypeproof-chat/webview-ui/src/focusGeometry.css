@@ -38,6 +38,10 @@ html body :is(
 ) {
   --hp-focus-offset: var(--ds-c-focus-inset);
 }
+/* CGP-DS-D-020: the shared modal card scrolls (overflow:auto), so its controls ring inside. It stays a
+ * separate rule: inside the :is() list above its 2-class selector would raise that whole rule's
+ * specificity over the accent-control exemption. A control's own --hp-focus-offset still wins. */
+.hp-modal.hp-modal { --hp-focus-offset: var(--ds-c-focus-inset); }
 /* Chalk's responsive scrollers scroll only below their own breakpoints. */
 @media (max-width: 520px) {
   html body :is(.ops-top) { --hp-focus-offset: var(--ds-c-focus-inset); }

@@ -10028,6 +10028,61 @@
           "path": "chalk/test/list-rows.browser.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-MODAL-SURFACE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Modal card geometry and lifecycle"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MODAL-SURFACE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MODAL-SURFACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/modalSurface.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/modalMotion.ts"
+        },
+        {
+          "path": "chalk/src/ui/sharing.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MODAL-SURFACE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MODAL-SURFACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/modal-surface.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/modal-geometry.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/modal-surface.test.tsx"
+        },
+        {
+          "path": "chalk/test/outbound-consent.test.mjs"
+        }
+      ]
     }
   ]
 }
