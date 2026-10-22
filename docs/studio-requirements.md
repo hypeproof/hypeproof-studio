@@ -4563,3 +4563,43 @@ webview entry), existing
 `cr-host.smoke.mjs`, `cr-switch.smoke.mjs` and `element-pick.smoke.mjs`. Browser
 layout tests require `FOCUS_REQUIRE_BROWSER=1` on the owner/CI host; sandbox
 unavailability must be reported as NOT RUN, never visual PASS.
+
+## Local work takeaway (CGP-KNOW-R-035)
+
+`REQ-STUDIO-WORK-TAKEAWAY` extends REQ-KNOW-67 / CGP-KNOW-067, PI#1,
+AB, BASE-05 and US-13. The learner can review local copies at class end and
+before a trial-to-class transition. The default-off machine setting
+`workTakeawayEnabled` admits known learner seats only; minors are covered only
+by that default-off setting, there is no minor-specific rule. The offered
+triggers are exactly two: the unavailable-status action shown only when the
+cause is `ended` (the class itself has ended; never for outage, limited, auth,
+forbidden, paused, not-started, exhausted, revoked, expired or unknown), and the
+trial-to-class connection switch (class-to-class and pass-to-class are not
+offered). The `hypeproof-chat.takeMyWork` command is the learner's own explicit
+request through the same host flow. All offers run before activity credentials
+change. No Service permission, AI funding or runtime session moves.
+
+The preview names selected files, task transcripts and selected team-brain files,
+and names excluded class materials, instructor notes, class memory and credentials.
+Every item receives 옮김/실패/제외 with a reason. Copies never delete or overwrite
+source files. File and team-brain relative paths are preserved so selected project
+files keep their links; readable transcripts are under `작업-기록/`. A destination failure reports failures, and repeat requests use new
+exclusive directories. Task transcripts are readable text copies (including earlier
+prompt versions), not resumed SDK sessions. Cancel, activity/task changes and an
+active turn prevent copying. Unknown/instructor seats cannot use the flow.
+
+Files require recorded learner-upload or AI-created origin and an exact current
+byte hash. A file the AI created and the learner later edited is
+excluded on purpose (its origin is no longer known). Unknown origins, class/Studio-created resources, configuration files,
+dot paths, symlinks, private memory outside the selected team-brain folder,
+credential-bearing content and oversized files are excluded. The native dialog
+accepts explicit file selection or tasks-only export. Nothing is sent over a
+network. This deliberately does not restore a destination's task execution state.
+The learner exercises ownership by choosing and inspecting exactly what leaves the
+activity; no capability labels or scores appear in the UI.
+
+Evidence: `test/work-takeaway.smoke.mjs`, `test/work-takeaway-host.smoke.mjs`,
+`test/work-takeaway.test.tsx`, `test/work-takeaway-transition.smoke.mjs`,
+`test/work-takeaway-layout.smoke.mjs` (computed button size, text, focus ring,
+forced colours at 1420/800/360) under the extension. Native-dialog visual acceptance
+is owner-run; automated tests use isolated disk fixtures and stub native dialogs.

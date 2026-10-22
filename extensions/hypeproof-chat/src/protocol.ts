@@ -173,6 +173,7 @@ export interface ChatConfig {
   proxyUrl: string;
   model: string;
   hasToken: boolean;
+  workTakeawayEnabled?: boolean;
   coach: CoachInfo;
   profile: ResolvedProfile | null;
   update?: UpdateOffer | null;             // #72 — auto-update banner state
@@ -539,6 +540,7 @@ export type WebviewMessage = (
    */
   | { type: 'voiceCapabilityProbeResult'; probeId: string;
       observations: import('./voiceCapabilityHelpers').VoiceProbeObservations }
+  | {type:'workTakeaway'}
   | {type:'activityLocalFile'; action:'open'|'export'}
   | {type:'refreshAccess'}
   | {type:'selectFunding';id:string}

@@ -165,6 +165,27 @@ t("classroom seat: no trial card and no purchase, even if the status says solo o
   ok(solo.cardTitle(), "positive control: a solo seat gets the card without a status");
 });
 
+t("takeaway is opt-in and its class-ended button reaches the host", async () => {
+  for (const config of [personal, classroom]) {
+    const off = await harness(config, { activityUnavailable: status("ended"), error: "x" });
+    eq(off.button("내 작업 가져가기"), undefined, "hidden by default");
+    const on = await harness({ ...config, workTakeawayEnabled: true }, { activityUnavailable: status("ended"), error: "x" });
+    posted.length = 0;
+    await on.press(on.button("내 작업 가져가기"));
+    ok(posted.some(m => m.type === "workTakeaway"), "takeaway request posted");
+  }
+});
+
+t("takeaway is not offered for outage, limited, auth or other non-end causes", async () => {
+  for (const config of [personal, classroom]) {
+    for (const cause of ["outage", "limited", "auth", "forbidden", "paused", "exhausted", "expired", "not_started", "unknown", "revoked"]) {
+      const on = await harness({ ...config, workTakeawayEnabled: true }, { activityUnavailable: status(cause as never), error: "x" });
+      eq(on.button("내 작업 가져가기"), undefined, cause + " must not offer the takeaway");
+      ok(on.button("상태 다시 확인"), "positive control: status card renders for " + cause);
+    }
+  }
+});
+
 (async () => {
   for (const [label, fn] of tests) {
     try { await fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${(e as Error).message}`); if (process.env.HPS_TEST_STACK) console.error((e as Error).stack); fail++; }
