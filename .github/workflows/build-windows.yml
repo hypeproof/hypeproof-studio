@@ -529,7 +529,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OVERRIDE_LIVE_SESSION: ${{ inputs.override_live_session || false }}
         run: |
           set -euo pipefail
           gh workflow run verify-unified-release.yml --repo "$GITHUB_REPOSITORY" \
-            -f tag="${GITHUB_REF#refs/tags/}"
+            -f tag="${GITHUB_REF#refs/tags/}" \
+            -f override_live_session="${OVERRIDE_LIVE_SESSION}"
