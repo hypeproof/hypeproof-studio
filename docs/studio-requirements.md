@@ -613,10 +613,18 @@ on its root and `tokens.css` stops nonessential animation, transitions and smoot
 when the OS allows motion, and JS scrolling asks `motion.ts` instead of requesting a smooth
 scroll. A settings change reaches the open chat panel without a reload; the start page and local
 review apply it the next time they open. The preview panel shows the learner's own page and is
-not restyled. "auto"
-follows the OS through `prefers-reduced-motion`. "off" also follows the OS instead of forcing
-motion back on, because re-enabling animation against an OS accessibility setting is the riskier
-direction. State stays readable without motion. Test: `test/reduced-motion.smoke.mjs`.
+not restyled. CGP-DS-D-012 (DES-CGP-DS-16, 2026-10-22) makes this a three-way
+contract: "on" writes `true`, "off" writes `false`, and "auto" (system or an unknown
+setting) omits the attribute. Explicit false allows normal motion even if the OS
+requests reduction; only the user's explicit host setting can do this. OS media
+rules are gated by `:not([data-reduced-motion])`. Explicit true gets the same static
+layout as OS reduce, including shimmer visibility and hover transforms. The global
+reduction covers elements and both pseudo-elements, transitions, delays, iteration
+count and scrolling. State stays readable without motion.
+Tests: `test/reduced-motion.smoke.mjs` checks all six host/OS combinations and parsed
+CSS declarations; `test/reduced-motion-live.test.tsx` mounts App and delivers config
+updates, including returning to system and preserving initial state before config.
+Six built-webview captures remain a separate visual acceptance check.
 
 CGP-DS-R-009 (2026-10-19): in personal chat the learner chooses a text size, 기본 / 크게 / 아주 크게,
 in the 대화 설정 dialog. Message bodies and the composer read 16/18/20px, and the reply-choice text

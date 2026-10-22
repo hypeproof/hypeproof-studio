@@ -144,7 +144,7 @@ export interface ChatConfig {
   capabilityChange?: import('./aiCapabilities').CapabilityChange;
   /** CGP-DS-R-009: chat text size chosen on this device. */
   textSize?: import('./textSize').TextSize;
-  /** CGP-DS-R-015: `workbench.reduceMotion` is "on"; the webview stops nonessential motion. */
+  /** CGP-DS-R-015: `workbench.reduceMotion`: true = on, false = off, absent = system. */
   reduceMotion?: boolean;
   turnTools?: import('./turnTools').TurnToolsAvailability;
   /** CGP-CHAT-R-011 — this seat may attach a work-folder text file (sdk_tools.read, never instructors). */

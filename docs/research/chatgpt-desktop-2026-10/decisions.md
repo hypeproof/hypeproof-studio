@@ -214,3 +214,12 @@ No new palette, authorization, Service change or publication is implied.
 | How a CTA reaches 48px | `min-height: var(--hp-control-cta)`; padding and font unchanged | The start page's button already drew 49px; the other two grow 4px, and the Google account override grows from 40px to 48px | On | no |
 | 32px step | Defined, not applied; no Studio instructor row moves onto it in this row | The row is about learner surfaces; restyling instructor rows is a separate visual change | n/a | no |
 | Audit report location | `HPS_AUDIT_REPORT`, default `<tmpdir>/hps-hit-target-audit/report.md` (+ `.json`), never inside the repo | Generated output in a working tree has leaked into main before | On | no |
+
+## DEC-DS-D-012: explicit reduced-motion off (2026-10-22; agent implementation choice)
+
+The supplied DES-CGP-DS-16 three-way contract supersedes R-015's earlier agent choice
+that off follows the OS. Host on sets `data-reduced-motion="true"`, off sets `false`,
+and auto/unknown removes the attribute. Only an explicit boolean false permits motion
+over the OS preference. System remains the default; no preference is persisted by
+this change. CSS OS rules run only without the attribute. This is not a new human
+agreement and does not change permissions or safety policy.

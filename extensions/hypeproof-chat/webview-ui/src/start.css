@@ -353,9 +353,11 @@
   padding-left:var(--ds-c-studio-start-space-1);
   padding-right:var(--ds-c-studio-start-space-1)}
 }
+:where(:root[data-reduced-motion="true"]) .studio-primary {
+  transition:none}
 
 @media(prefers-reduced-motion:reduce) {
-  .studio-primary {
+  :where(:root:not([data-reduced-motion])) .studio-primary {
   transition:none}
 }
 

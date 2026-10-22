@@ -372,10 +372,13 @@ html, body, #root {
   0%, 100% { border-color: var(--ds-c-studio-styles-boundary-22); box-shadow: 0 0 0 0 var(--ds-c-studio-styles-shadow-12); }
   50%      { border-color: var(--ds-c-studio-styles-boundary-23); box-shadow: 0 0 var(--ds-c-studio-styles-shadow-13) 0 var(--ds-c-studio-styles-shadow-14); }
 }
+:where(:root[data-reduced-motion="true"]) .hps-code-progress { animation: none; }
+:where(:root[data-reduced-motion="true"]) .hps-code-progress::after { animation: none; opacity: 0; }
+:where(:root[data-reduced-motion="true"]) .hps-dots { animation: none; }
 @media (prefers-reduced-motion: reduce) {
-  .hps-code-progress { animation: none; }
-  .hps-code-progress::after { animation: none; opacity: 0; }
-  .hps-dots { animation: none; }
+  :where(:root:not([data-reduced-motion])) .hps-code-progress { animation: none; }
+  :where(:root:not([data-reduced-motion])) .hps-code-progress::after { animation: none; opacity: 0; }
+  :where(:root:not([data-reduced-motion])) .hps-dots { animation: none; }
 }
 
 .hps-codepill {
@@ -567,10 +570,12 @@ html, body, #root {
 }
 .hps-world-emoji { font-size: var(--ds-c-studio-styles-type-2); line-height: var(--ds-c-studio-styles-typography-19); }
 .hps-world-name { font-size: var(--ds-c-studio-styles-type-1); line-height: var(--ds-c-studio-styles-typography-18); }
+:where(:root[data-reduced-motion="true"]) .hps-world { transition: none; }
+:where(:root[data-reduced-motion="true"]) .hps-world:hover:not(:disabled) { transform: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .hps-world { transition: none; }
-  .hps-world:hover:not(:disabled) { transform: none; }
+  :where(:root:not([data-reduced-motion])) .hps-world { transition: none; }
+  :where(:root:not([data-reduced-motion])) .hps-world:hover:not(:disabled) { transform: none; }
 }
 
 /* ---------- Running guest — #642 ----------
@@ -681,17 +686,28 @@ html, body, #root {
 }
 @keyframes hps-runner-blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
 
-/* Movement off, the face stays put, only the three dots blink — the waiting is still visible. */
-@media (prefers-reduced-motion: reduce) {
-  .hps-runner { transition: none; }
-  .hps-runner-go {
+/* Movement off and the face stays put. The global reduced-motion rule in tokens.css (!important)
+   also stops the dot blink below, for explicit "on" and for OS reduce alike (CGP-DS-D-012): the
+   waiting reads from the static face and dots. */
+:where(:root[data-reduced-motion="true"]) .hps-runner { transition: none; }
+:where(:root[data-reduced-motion="true"]) .hps-runner-go {
     animation: none;
     opacity: 1;
     flex-direction: row;           /* dots after the face — the familiar 'loading' shape */
     justify-content: flex-start;
   }
-  .hps-runner-face { animation: none; }
-  .hps-runner-dust { animation: hps-runner-blink var(--hp-dur-runner-blink) ease-in-out infinite; }
+:where(:root[data-reduced-motion="true"]) .hps-runner-face { animation: none; }
+:where(:root[data-reduced-motion="true"]) .hps-runner-dust { animation: hps-runner-blink var(--hp-dur-runner-blink) ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  :where(:root:not([data-reduced-motion])) .hps-runner { transition: none; }
+  :where(:root:not([data-reduced-motion])) .hps-runner-go {
+    animation: none;
+    opacity: 1;
+    flex-direction: row;           /* dots after the face — the familiar 'loading' shape */
+    justify-content: flex-start;
+  }
+  :where(:root:not([data-reduced-motion])) .hps-runner-face { animation: none; }
+  :where(:root:not([data-reduced-motion])) .hps-runner-dust { animation: hps-runner-blink var(--hp-dur-runner-blink) ease-in-out infinite; }
 }
 
 /* ---------- Input area ---------- */
@@ -1287,8 +1303,9 @@ html, body, #root {
 .hps-long-step-stop:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 @keyframes hps-long-step-in { from { opacity: 0; } to { opacity: 1; } }
 /* Opt-in motion: with reduced motion the hint simply appears. */
+:where(:root[data-reduced-motion="false"]) .hps-long-step { animation: hps-long-step-in var(--hp-dur-enter) var(--hp-ease); }
 @media (prefers-reduced-motion: no-preference) {
-  .hps-long-step { animation: hps-long-step-in var(--hp-dur-enter) var(--hp-ease); }
+  :where(:root:not([data-reduced-motion])) .hps-long-step { animation: hps-long-step-in var(--hp-dur-enter) var(--hp-ease); }
 }
 
 /* CGP-SHELL-R-024 — the "AI가 할 수 있는 일이 바뀌었어요" system line: same quiet surface, one dismiss. */
@@ -1761,8 +1778,9 @@ html, body, #root {
    the last reduce block with `lastIndexOf` to check the runner rules, so appending one
    more makes a perfectly good runner check read this block and fail (that is exactly how
    it was broken once). */
+:where(:root[data-reduced-motion="false"]) .hps-voice-bar { transition: height var(--hp-dur-meter) linear; }
 @media (prefers-reduced-motion: no-preference) {
-  .hps-voice-bar { transition: height var(--hp-dur-meter) linear; }
+  :where(:root:not([data-reduced-motion])) .hps-voice-bar { transition: height var(--hp-dur-meter) linear; }
 }
 .hps-voice-meter:not(.hps-voice-meter-live) .hps-voice-bar { background: var(--vscode-descriptionForeground, var(--ds-c-studio-styles-surface-38)); }
 .hps-voice-status-text { margin: 0; font-size: var(--ds-c-studio-styles-type-2); font-weight: var(--ds-c-studio-styles-typography-7); text-align: center; overflow-wrap: anywhere; }
@@ -2173,7 +2191,8 @@ html, body, #root {
   content: "›" / ""; display: inline-block; width: var(--ds-c-studio-styles-size-66); text-align: center; color: var(--hp-ai-can-do-muted);
 }
 /* The turn moves only when motion is welcome (the voice meter's pattern), so no reduce block is needed. */
-@media (prefers-reduced-motion: no-preference) { .hp-ai-can-do > summary::before { transition: transform var(--hp-dur-press) var(--hp-ease); } }
+:where(:root[data-reduced-motion="false"]) .hp-ai-can-do > summary::before { transition: transform var(--hp-dur-press) var(--hp-ease); }
+@media (prefers-reduced-motion: no-preference) { :where(:root:not([data-reduced-motion])) .hp-ai-can-do > summary::before { transition: transform var(--hp-dur-press) var(--hp-ease); } }
 .hp-ai-can-do[open] > summary::before { transform: rotate(90deg); }
 .hp-ai-can-do-title { font-weight: var(--ds-c-studio-styles-typography-2); }
 .hp-ai-can-do-count { color: var(--hp-ai-can-do-muted); }

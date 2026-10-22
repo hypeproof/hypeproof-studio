@@ -237,8 +237,7 @@ body.vscode-light, body.vscode-high-contrast-light {
 }
 
 /* CGP-DS-R-015: `workbench.reduceMotion: "on"` stops nonessential motion even when the OS allows
- * it (the host sets data-reduced-motion). The OS `prefers-reduced-motion` rules in each file still
- * apply on their own. State stays readable without motion (DES-11). */
+ * it (the host sets data-reduced-motion). OS rules apply only without an explicit preference. State stays readable without motion (DES-11). */
 :root[data-reduced-motion="true"] *,
 :root[data-reduced-motion="true"] *::before,
 :root[data-reduced-motion="true"] *::after {
@@ -249,6 +248,19 @@ body.vscode-light, body.vscode-high-contrast-light {
   transition-delay: var(--ds-c-studio-tokens-motion-2) !important;
   scroll-behavior: auto !important;
 }
+@media (prefers-reduced-motion: reduce) {
+:root:not([data-reduced-motion]) *,
+:root:not([data-reduced-motion]) *::before,
+:root:not([data-reduced-motion]) *::after {
+  animation-duration: var(--ds-c-studio-tokens-motion-1) !important;
+  animation-iteration-count: 1 !important;
+  animation-delay: var(--ds-c-studio-tokens-motion-2) !important;
+  transition-duration: var(--ds-c-studio-tokens-motion-1) !important;
+  transition-delay: var(--ds-c-studio-tokens-motion-2) !important;
+  scroll-behavior: auto !important;
+}
+}
+
 
 /* CGP-DS-R-016 — forced colors (Windows high contrast, REQ-STUDIO-FORCED-COLORS, DES-CGP-DS-17).
  * The system palette replaces author colours and drops box-shadow and gradient backgrounds, so what

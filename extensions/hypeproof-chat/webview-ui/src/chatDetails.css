@@ -128,11 +128,13 @@
   .hps-shell[data-chat-detail="personal"] .hps-cit-title { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
   .hps-composer-hint { font-size: var(--ds-c-studio-chatdetails-type-4); }
 }
+:where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] *, :where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] *::before, :where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+:where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] .hps-input button:hover,
+:where(:root[data-reduced-motion="true"]) .hps-shell[data-chat-detail="personal"] .hps-input button:active { transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  .hps-shell[data-chat-detail="personal"] *, .hps-shell[data-chat-detail="personal"] *::before,
-  .hps-shell[data-chat-detail="personal"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  .hps-shell[data-chat-detail="personal"] .hps-input button:hover,
-  .hps-shell[data-chat-detail="personal"] .hps-input button:active { transform: none; }
+  :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] *, :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] *::before, :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] .hps-input button:hover,
+  :where(:root:not([data-reduced-motion])) .hps-shell[data-chat-detail="personal"] .hps-input button:active { transform: none; }
 }
 
 /* CG-R1: a compact editing row expands without remounting the textarea. */

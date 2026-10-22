@@ -1,3 +1,4 @@
+import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
 import {OutboundDialog} from "./OutboundDialog";
 import type {OutboundPrompt} from "../../src/outboundApproval";
@@ -521,9 +522,8 @@ export function App() {
   // CGP-DS-R-015: follow a reduce-motion change without reloading the panel.
   useEffect(() => {
     if (!state.config) return;
-    if (state.config.reduceMotion) document.documentElement.dataset.reducedMotion = "true";
-    else delete document.documentElement.dataset.reducedMotion;
-  }, [state.config?.reduceMotion]);
+    applyMotionPreference(state.config.reduceMotion);
+  }, [state.config?.reduceMotion, !!state.config]);
   const beginRequest = () => {
     if (pendingSend.current || state.streamId) return false;
     pendingSend.current = true; setSendPending(true); return true;
