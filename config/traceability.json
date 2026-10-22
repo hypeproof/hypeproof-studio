@@ -10983,6 +10983,64 @@
           "path": "extensions/hypeproof-chat/test/work-power-native.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-KEYBOARD-PANELS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Keyboard chat entry and panel sizing (CGP-SHELL-R-012)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-KEYBOARD-PANELS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-KEYBOARD-PANELS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/KeyboardNavigation.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/keyboardNavigation.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/panelSizes.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TST-KEYBOARD-PANELS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-KEYBOARD-PANELS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/keyboard-navigation.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/keyboard-navigation.smoke.mjs"
+        }
+      ]
     }
   ]
 }

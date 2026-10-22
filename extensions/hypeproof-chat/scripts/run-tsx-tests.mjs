@@ -25,6 +25,9 @@ const BANNER_NO_API = "globalThis.window = globalThis.window ?? { acquireVsCodeA
 // Window stub that records postMessage calls in globalThis.__posted.
 const BANNER_POSTED =
   "globalThis.__posted = []; globalThis.window = globalThis.window ?? {}; globalThis.window.acquireVsCodeApi = () => ({ postMessage: (m) => globalThis.__posted.push(m), getState() {}, setState() {} });";
+// Window stub whose setState/getState keep a webview state in globalThis.__vsState (panel sizes survive a re-mount).
+const BANNER_STATE =
+  "globalThis.__vsState = undefined; globalThis.window = globalThis.window ?? {}; globalThis.window.acquireVsCodeApi = () => ({ postMessage() {}, getState: () => globalThis.__vsState, setState: (s) => { globalThis.__vsState = s; } });";
 const BANNER_POSTED_ARROW =
   "globalThis.__posted = []; globalThis.window = globalThis.window ?? {}; globalThis.window.acquireVsCodeApi = () => ({ postMessage: (m) => globalThis.__posted.push(m), getState: () => undefined, setState: () => {} });";
 
@@ -34,6 +37,7 @@ const BANNER_POSTED_ARROW =
 //   logLevel: the --log-level value; null means esbuild's default (flag omitted)
 const OVERRIDES = {
   "goal-status": { banner: BANNER_POSTED },
+  "keyboard-navigation": { banner: BANNER_STATE },
   "lesson-capability-entry": { banner: BANNER_POSTED_ARROW },
   "activity-trash": { banner: BANNER_POSTED },
   "write-approval-dialog": { banner: BANNER_POSTED },

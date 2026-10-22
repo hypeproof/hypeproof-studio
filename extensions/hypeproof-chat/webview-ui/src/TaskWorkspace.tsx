@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import type { ChatMessage, Citation } from '../../src/protocol';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
 import { taskCountLine, taskRunAccessibleName, type TaskRunState } from '../../src/taskRunState';
@@ -14,6 +14,8 @@ import { imeComposing } from './imeGuard';
 import { ActivityTrashPanel } from './ActivityTrashPanel';
 import { actionable, returnFocus, returnFocusSoon, returnTarget, trapTab } from './dialogFocus';
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
+import { KeyboardSplitter, SkipToInput } from './KeyboardNavigation';
+import { loadPanelSizes, PANEL_LIMITS, savePanelSizes, type PanelName } from './panelSizes';
 import { PanelBoundary } from './PanelBoundary';
 
 interface Props {
@@ -32,7 +34,7 @@ interface Props {
 }
 
 export function TaskWorkspaceFrame(props: Omit<Props, 'view'> & { view?: TaskWorkspaceView }) {
-  return props.view ? <TaskWorkspace {...props} view={props.view} /> : <>{props.children}</>;
+  return <><SkipToInput />{props.view ? <TaskWorkspace {...props} view={props.view} /> : props.children}</>;
 }
 
 interface PreviewSelection { url: string; messageId?: string; scopeKey: string }
@@ -67,6 +69,16 @@ interface ReadingPosition {
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
 export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, children }: Props) {
   const [filter, setFilter] = useState('');
+  // CGP-SHELL-R-012: a size is the user's own choice, remembered per seat; until then the design-token width applies.
+  const workspaceEl = useRef<HTMLDivElement>(null);
+  const [panelSizes, setPanelSizes] = useState(() => ({ scope: view.scope, sizes: loadPanelSizes(view.scope) }));
+  const [tokenWidths, setTokenWidths] = useState<Partial<Record<PanelName, number>>>({});
+  const sizes = panelSizes.scope === view.scope ? panelSizes.sizes : loadPanelSizes(view.scope);
+  const resizePanel = (panel: PanelName, value: number) => {
+    const next = { ...sizes, [panel]: value };
+    setPanelSizes({ scope: view.scope, sizes: next });
+    savePanelSizes(view.scope, next);
+  };
   const [railOpen, setRailOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   // REQ-STUDIO-ARTIFACT-PROVENANCE — undefined until the host answers for this scope.
@@ -251,9 +263,18 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       if (target.isConnected && current.current.scopeKey === scopeKey && sourceDisplay.current.open === sourcesOpen && unchangedFocus) target.focus({ preventScroll: true });
     });
   }, [sourcesOpen, preview, scopeKey, sourceRequest?.requestId]);
+  useLayoutEffect(() => {
+    const style = workspaceEl.current ? getComputedStyle(workspaceEl.current) : null;
+    const read = (name: string, panel: PanelName) => { const px = parseFloat(style?.getPropertyValue(name) ?? ''); return Number.isFinite(px) ? px : PANEL_LIMITS[panel].min; };
+    setTokenWidths({ rail: read('--tw-rail-default', 'rail'), sources: read('--tw-source-default', 'sources') });
+  }, []);
   useEffect(() => { if (renaming) titleInput.current?.focus({ preventScroll: true }); }, [renaming]);
   useEffect(() => {
-    const resize = () => setViewport(window.innerWidth);
+    const resize = () => {
+      const focused = document.activeElement;
+      if (window.innerWidth <= 700 && focused?.classList.contains('tw-splitter-rail')) railToggle.current?.focus();
+      setViewport(window.innerWidth);
+    };
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
   }, []);
@@ -356,7 +377,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     if (citation && trigger) previewSource(citation, trigger);
   };
 
-  return <CitationPreviewContext.Provider value={{ previewSource, openSource, preview: sourcesOpen && previewSourceValue && preview ? { url: preview.url, messageId: preview.messageId } : null }}><div className="tw-workspace" data-sources-open={sourcesOpen} data-rail-open={railOpen} onKeyDown={event => {
+  return <CitationPreviewContext.Provider value={{ previewSource, openSource, preview: sourcesOpen && previewSourceValue && preview ? { url: preview.url, messageId: preview.messageId } : null }}><div ref={workspaceEl} className="tw-workspace" style={{ '--tw-rail-width': sizes.rail ? `${sizes.rail}px` : undefined, '--tw-source-width': sizes.sources ? `${sizes.sources}px` : undefined } as CSSProperties} data-sources-open={sourcesOpen} data-rail-open={railOpen} onKeyDown={event => {
     // D019: a local current-conversation shortcut, never a claim to navigate native approvals.
     if (event.code === 'KeyJ' && event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.repeat && !event.defaultPrevented && !imeComposing(event) && !(event.target as HTMLElement).closest?.('dialog[open], [aria-modal="true"]')) {
       event.preventDefault();
@@ -374,7 +395,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     }
   }}>
     <a className="tw-skip" href="#task-conversation" data-hp-tooltip="대화로 바로 가기 (Alt+Shift+J 또는 Enter)" aria-keyshortcuts="Alt+Shift+J" onClick={event => { event.preventDefault(); conversation.current?.focus(); }}>대화로 바로 가기</a>
-    <nav ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
+    <nav id="task-rail" ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
       <button className="tw-new" disabled={blocked} onClick={() => { setRailOpen(false); postToHost({ type: 'taskCreate' }); }}><span aria-hidden="true">＋</span> 새 작업</button>
@@ -400,6 +421,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       </>}</PanelBoundary>
       <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
+    {viewport > 700 && <KeyboardSplitter panel="rail" label="작업 목록 너비 조절" controls="task-rail" value={sizes.rail ?? tokenWidths.rail ?? PANEL_LIMITS.rail.min} onChange={value => resizePanel('rail', value)} />}
     <section ref={main} className="tw-main" aria-label="작업 공간">
       <header className="tw-heading">
         <button ref={railToggle} className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}><ChatIcon kind="menu" size={20} /></button>
@@ -432,6 +454,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
       <div ref={conversation} id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}>{children}</HeadingSlotContext.Provider></div>
     </section>
+    {sourcesOpen && !sourceDialog && <KeyboardSplitter panel="sources" label="자료 패널 너비 조절" controls="task-sources" value={sizes.sources ?? tokenWidths.sources ?? PANEL_LIMITS.sources.min} onChange={value => resizePanel('sources', value)} />}
     {sourceDialog && <div className="tw-source-backdrop" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={() => closeSources()} />}
     <aside ref={sourcePanel} id="task-sources" className="tw-sources" aria-label="작업 자료" role={sourceDialog ? 'dialog' : undefined} aria-modal={sourceDialog || undefined} tabIndex={-1} hidden={!sourcesOpen} onKeyDown={event => { if (event.key === 'Escape' && !imeComposing(event)) { event.preventDefault(); closeSources(); } }}>
       <header><h2>작업 자료</h2><button type="button" className="tw-quiet tw-source-close" aria-label="자료 닫기" onClick={() => closeSources()}><SourceIcon kind="close" /></button></header>

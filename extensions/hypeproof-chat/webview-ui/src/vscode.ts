@@ -38,3 +38,11 @@ export function onHostMessage(handler: (m: HostMessage) => void): () => void {
 }
 
 export function postLocalReview(msg: LocalReviewRequest): void { api?.postMessage(msg); }
+
+/** The webview's own persisted state (survives a reload of the same panel). Outside a webview it is a no-op. */
+export function readWebviewState<T extends object>(): Partial<T> {
+  try { const state = api?.getState<T>(); return state && typeof state === "object" ? state : {}; } catch { return {}; }
+}
+export function patchWebviewState(patch: object): void {
+  try { api?.setState({ ...readWebviewState(), ...patch }); } catch { /* state is a convenience, never required */ }
+}

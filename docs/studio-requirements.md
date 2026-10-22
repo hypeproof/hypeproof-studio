@@ -4663,3 +4663,39 @@ measures the actual macOS assertion with `pmset`. Windows owner acceptance remai
 `powercfg /requests` during each work type and within five seconds of success,
 cancel and failure, including two windows and extension-host termination. Mock
 checks are not Windows device evidence.
+
+## Keyboard chat entry and panel sizing (CGP-SHELL-R-012)
+
+REQ-SHELL-12 / CGP-SHELL-024 (source register CGP-24), Product Intent #1. Acceptance,
+quoted: "First Tab focuses a visible skip link that moves focus to the composer;
+panel splitters are focusable with Arrow keys changing size in 16 px steps and have an
+accessible name." Interpretation (owner decision 2026-10-23): the composer keeps its
+initial autofocus, because learners are elementary students who must be able to type
+immediately, and a keyboard user who starts in the composer already has what the link
+gives. The visible Korean `입력창으로 바로 가기` link is the first focusable in the frame:
+whenever focus is not in the composer (a click elsewhere, a view without autofocus, a
+reload that moved focus) the first Tab lands on it, and from the composer it is reached
+with Shift+Tab. Activation focuses the current composer without changing its draft.
+This applies to personal, trial, pass, classroom, lesson, instructor and unresolved
+seats through the shared frame. Explicit host focus commands still work. The existing
+conversation link and Alt+Shift+J remain separate navigation actions.
+
+The task-list and sources panel splitters are named, focusable vertical separators.
+Left/Right moves their boundary by 16 CSS pixels (Shift: 64); the sources panel grows
+on Left; a mouse or pen drag moves the same boundary. Panels start at their design-token
+widths (task list 204px, sources 280px) and clamp to 200-320 and 240-400 pixels
+respectively, announced through ARIA values. IME and Ctrl/Alt/Meta combinations do not
+resize. Below the existing 700/1050 breakpoints those panels become overlays, with no
+inactive splitter in the Tab order. A chosen size is remembered per seat (the host scope
+digest) in the webview's own saved state and survives a reload. Focus rings are the
+shared 2px ring (focusGeometry.css, Highlight in forced colors). The splitter's hit
+target is at least 44px wide and full height; only a thin line shows on hover and drag.
+The skip link is at top-left, visible on focus, with 44px minimum height and 14px
+text, including forced-colors support.
+
+This reduces keyboard navigation effort so the learner can resume framing a request;
+it does not assess capability. Tests: `keyboard-navigation.test.tsx` (real React
+interactions), `keyboard-navigation.smoke.mjs` (headless computed layout: composer autofocus on load, Shift+Tab and first-Tab
+reach of the skip link, real Tab to each splitter, visibility, position, topmost hit, ring width and contrast, forced
+colors, keys, drag and reload persistence; missing browser fails under
+FOCUS_REQUIRE_BROWSER=1).

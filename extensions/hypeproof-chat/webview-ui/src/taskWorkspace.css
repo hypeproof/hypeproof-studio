@@ -6,7 +6,9 @@
   --tw-canvas: var(--vscode-editor-background, var(--ds-c-studio-taskworkspace-ink-38));
   --tw-line: var(--vscode-panel-border, var(--ds-c-studio-taskworkspace-boundary-3));
   --tw-muted: var(--vscode-descriptionForeground, var(--ds-c-studio-taskworkspace-ink-5));
-  display: grid; grid-template-columns: var(--ds-c-studio-taskworkspace-size-68) minmax(0, 1fr); height: 100%; min-height: 0;
+  display: grid; --tw-rail-default: var(--ds-c-studio-taskworkspace-size-68); --tw-source-default: var(--ds-c-studio-taskworkspace-size-29);
+  --tw-rail-width: var(--tw-rail-default); --tw-source-width: var(--tw-source-default);
+  grid-template-columns: var(--tw-rail-width) minmax(0, 1fr); height: 100%; min-height: 0;
   container-type: inline-size; position: relative; background: var(--tw-canvas); font-size: var(--hp-font-caption);
   /* CGP-DS-D-005: label leading is the workspace default; Hangul prose sets 1.65 where it is read. */
   line-height: var(--hp-leading-label);
@@ -15,7 +17,7 @@
    this rule comes first, so a component rule with the same specificity still decides its own weight. */
 .tw-workspace h1, .tw-workspace h2, .tw-workspace h3, .tw-workspace h4, .tw-workspace h5, .tw-workspace h6,
 .tw-workspace strong, .tw-workspace b, .tw-workspace th { font-weight: var(--hp-weight-strong); }
-.tw-workspace[data-sources-open="true"] { grid-template-columns: var(--ds-c-studio-taskworkspace-size-68) minmax(0, 1fr) var(--ds-c-studio-taskworkspace-size-29); }
+.tw-workspace[data-sources-open="true"] { grid-template-columns: var(--tw-rail-width) minmax(0, 1fr) var(--tw-source-width); }
 .tw-workspace button, .tw-workspace input { font: inherit; }
 .tw-workspace button { touch-action: manipulation; cursor: pointer; }
 .tw-workspace button:disabled { cursor: default; opacity: .5; }
@@ -94,7 +96,7 @@
 .tw-rail-toggle { display: none; }
 .tw-rail-close { margin-bottom: var(--ds-c-studio-taskworkspace-space-18); align-self: flex-end; }
 @media (max-width: 1050px) {
-  .tw-workspace[data-sources-open="true"] { grid-template-columns: var(--ds-c-studio-taskworkspace-size-68) minmax(0, 1fr); }
+  .tw-workspace[data-sources-open="true"] { grid-template-columns: var(--tw-rail-width) minmax(0, 1fr); }
   .tw-sources { position: absolute; z-index: 3; right: 0; top: var(--ds-c-studio-taskworkspace-size-73); bottom: 0; width: min(var(--ds-c-studio-taskworkspace-size-33), 100%); box-sizing: border-box; box-shadow: var(--ds-c-studio-taskworkspace-shadow-15) 0 var(--ds-c-studio-taskworkspace-shadow-10) var(--ds-c-studio-taskworkspace-shadow-5); }
 }
 @media (max-width: 700px) {
@@ -254,3 +256,4 @@
    description colour pulled 20% toward the foreground): Light+ #717171 is 4.4:1 on its #F3F3F3 sidebar,
    the rail's surface. Dark themes keep the host value, and #a4aab3 (6.8:1 on #202226) without one. */
 body.vscode-light .tw-workspace, body.vscode-high-contrast-light .tw-workspace { --tw-muted: var(--hp-text-muted-default); }
+

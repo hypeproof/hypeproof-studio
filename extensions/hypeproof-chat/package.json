@@ -661,6 +661,7 @@
     "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs"
   },
   "devDependencies": {
+    "postcss": "^8.5.6",
     "dom-accessibility-api": "0.7.0",
     "jsdom": "26.1.0",
     "@anthropic-ai/claude-agent-sdk": "0.3.299",
