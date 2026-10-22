@@ -2419,6 +2419,30 @@ was already 56px tall from its 44px checkbox cell). The top flow bar on the othe
 navigation rather than a row action and is not changed here. Test: `chalk/test/row-actions.test.mjs`
 (static parse of every `chalk/src/ui/*.html`, with 12 negative controls). The sidebar 「더보기」 toggle (`.flow-more>summary`) is also 44px and no longer dimmed with opacity.
 
+**DES-CGP-DS-23 / CGP-DS-D-018** extends this contract: list rows have a 44px
+floor on their action targets, including responsive seat grids. The floor is `min-height` on the
+row's interactive targets (and on non-seat table rows); a height is never forced on a `/manage`
+seat row, because below 760px it becomes a grid card and a fixed height squeezes its content.
+Existing native row actions retain their Korean
+names and handlers and show a persistent decorative 16px arrow beside their label (`flex:none`, so a
+narrow cell cannot shrink it; the seat 「상세」 button keeps one line).
+This includes seat/help, authoring step/completion/retrospective, sharing/reliance,
+console token/session actions, budget allocation/request rows and sidebar links. Disclosure summaries retain their
+existing state chevrons. Short Korean titles wrap; no ellipsis is introduced.
+Inline prose links (for example the 「수업 작성」 link inside a numbered step on `/start`) are not list
+actions: they get no arrow and keep their inline box, which WCAG 2.5.8 exempts from the 44px target size.
+The scrolling sidebar, seat/board lists, roster preview and instruction-diff list fade over 16px at the top and 32px at the bottom,
+with matching end padding. Focus within the container and forced-colors mode remove
+the mask so keyboard actions and focus rings are fully visible. No authorization,
+visibility, disabled state, tab order, recipient or request behavior changes.
+On `/manage` the seat table row is exactly the 44px target: its divider is a zero-height cell pseudo-element, not a 1px border, so the 1280x720 ops-g1 requirement of 8 complete rows still holds.
+Tests: `chalk/test/list-rows.test.mjs`, `chalk/test/list-row-keyboard.test.mjs`;
+computed geometry of the real pages at 390/800/1420 px in headless Chromium (targets >= 44px, icon drawn,
+text >= 12px, `/manage` seat rows without overlap or escaping children, last row clear of the bottom fade):
+`chalk/test/list-rows.browser.mjs`, part of `npm test` (reuses the extension's
+`test/lib/headless-chromium.mjs`; `FOCUS_REQUIRE_BROWSER=1`, set in the pr-ci chalk step, fails when no
+browser is found, otherwise it prints NOT RUN).
+
 ## Chalk lesson delivery
 
 | ID | Behavior | Acceptance / evidence |

@@ -204,6 +204,10 @@ jobs:
       - name: Run chalk tests
         if: ${{ !cancelled() && steps.app_install.outcome == 'success' }}
         working-directory: chalk
+        env:
+          # chalk/test/list-rows.browser.mjs measures the real pages in the runner's Google Chrome
+          # (extension test/lib/headless-chromium.mjs). A missing browser fails instead of skipping.
+          FOCUS_REQUIRE_BROWSER: "1"
         run: npm test
 
   extension-typecheck:

@@ -24,6 +24,7 @@ import budgetsHtml from './ui/budgets.html';
 // outside the instructor surface.
 
 import { Hono } from "hono";
+import { withListRows } from "./lib/list-rows.ts";
 import { withDesignTokens } from "./lib/design-tokens.ts";
 import { resolveChalkVersion, type ChalkEnv } from "./env.ts";
 import { makeErrorBody, requestId } from "./middleware.ts";
@@ -65,7 +66,7 @@ app.get("/health", (c) =>
 );
 
 const page = (html: unknown) =>
-  new Response(withDesignTokens(html as string), { headers: { "content-type": "text/html; charset=utf-8" } });
+  new Response(withDesignTokens(withListRows(html as string)), { headers: { "content-type": "text/html; charset=utf-8" } });
 
 app.get("/", (c) => c.redirect("/console", 302));
 // Pages are public; every API call they make carries the instructor's Bearer
