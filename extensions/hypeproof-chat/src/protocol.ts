@@ -762,7 +762,7 @@ export type WebviewMessage = (
 // Host → Webview
 export type HostMessage = (
   | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
-  | {type:'outboundPrompt';prompt:import('./outboundApproval').OutboundPrompt|null}
+  | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
   | { type: 'taskRenameResult'; requestId: string; saved: boolean }

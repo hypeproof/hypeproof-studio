@@ -3,7 +3,7 @@ import './modalSurface.css';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { normalizeTextSize } from '../../src/textSize';
 import { MEMORY_SELECTED_LABEL } from '../../src/outboundConsent';
-import { outboundPromptItemIds, type OutboundPrompt } from '../../src/outboundApproval';
+import { outboundPromptItemIds, PUBLIC_AUDIENCE_ACK, type OutboundPrompt, type PublicAudiencePrompt } from '../../src/outboundApproval';
 import { useDialogFocus } from './dialogFocus';
 import { imeComposing } from './imeGuard';
 import './outboundDialog.css';
@@ -65,6 +65,42 @@ export function OutboundDialog({ prompt, onAnswer, textSize }: { prompt: Outboun
     <div className="hps-outbound-actions">
       <button type="button" data-outbound-cancel onClick={() => finish(null)}>취소</button>
       <button type="button" className="hps-outbound-send" disabled={!complete} aria-describedby={complete ? undefined : 'outbound-hint'} onClick={() => { if (complete) finish([...selected]); }}>보내기</button>
+    </div>
+  </dialog>;
+}
+
+/**
+ * CGP-KNOW-R-007 / REQ-KNOW-10 — the second, separate step before public publication, asked only after the content
+ * checklist. Focus starts on 취소; Enter never confirms (a native dialog's default button would); Escape cancels.
+ * 공개하기 stays disabled until the learner ticks the audience acknowledgement, so a double press or key repeat that
+ * carries over from the first step lands on 취소 or a disabled button. The destination is selectable monospace text.
+ */
+export function PublicAudienceDialog({ prompt, onAnswer, textSize }: { prompt: PublicAudiencePrompt; onAnswer: (id: string, selected: string[] | null) => void; textSize?: unknown }) {
+  const dialog = useRef<HTMLDialogElement>(null), answered = useRef(false), composing = useRef(false);
+  const [understood, setUnderstood] = useState(false);
+  const finish = (value: string[] | null) => { if (answered.current) return; answered.current = true; finishModal(dialog.current, () => onAnswer(prompt.id, value)); };
+  useDialogFocus(dialog, { open: true, kind: 'modal', initialFocus: '[data-public-cancel]' });
+  useEffect(() => { const node = dialog.current; node?.showModal(); node?.querySelector<HTMLButtonElement>('[data-public-cancel]')?.focus(); return () => node?.close(); }, []);
+  return <dialog ref={dialog} className="hps-outbound hps-outbound-public hp-modal" aria-labelledby="public-audience-title" aria-describedby="public-audience-who" data-testid="public-audience-dialog"
+    style={{ '--hp-font-caption': `calc(14px + ${{ base: 0, large: 2, xlarge: 4 }[normalizeTextSize(textSize)]}px)` } as CSSProperties}
+    onCancel={e => { e.preventDefault(); if (!composing.current) finish(null); }}
+    onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
+    onKeyDownCapture={e => {
+      if (imeComposing(e, composing.current)) { e.stopPropagation(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(null); }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); }
+    }}>
+    <h2 id="public-audience-title">누구나 볼 수 있어요</h2>
+    <p id="public-audience-who">공개 대상: <strong data-public-audience>{prompt.audience}</strong> — {prompt.notAudience}만 보는 게 아니에요.</p>
+    <p>받는 곳:</p>
+    <p className="hps-outbound-destination" data-public-destination>{visible(prompt.recipient)}</p>
+    <label className="hps-outbound-item">
+      <input type="checkbox" data-public-ack checked={understood} onChange={e => setUnderstood(e.target.checked)} />
+      <span>{prompt.audience} 볼 수 있다는 걸 확인했어요</span>
+    </label>
+    <div className="hps-outbound-actions">
+      <button type="button" data-public-cancel onClick={() => finish(null)}>취소</button>
+      <button type="button" className="hps-outbound-send" data-public-confirm disabled={!understood} onClick={() => { if (understood) finish([PUBLIC_AUDIENCE_ACK]); }}>공개하기</button>
     </div>
   </dialog>;
 }

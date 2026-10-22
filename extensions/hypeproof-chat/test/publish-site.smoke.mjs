@@ -684,7 +684,7 @@ console.log("\n✓ publish-site smoke 통과");
  const gh=createMockGitHub(),root=site({...GOOD_SITE,'notes/private.txt':'PRIVATE','wiki/memory.md':'MEMORY'});let shown;
  const no=await runPublishSite({},deps(gh,root,{confirmContent:async m=>(shown=m,false)}));
  assert.equal(no.error?.code,'declined');assert.ok(!gh.state.log.some(l=>/^(POST|PUT|PATCH)/.test(l)));
- assert.ok(shown.recipient.includes('octo-clinic/neo-dental'));assert.ok(shown.items.every(i=>!i.name.startsWith('notes/')&&!i.name.startsWith('wiki/')));
+ assert.ok(shown.recipient.includes('github.com/octo-clinic/neo-dental'));assert.ok(shown.recipient.includes(new URL(gh.pagesBase()).host));assert.ok(shown.items.every(i=>!i.name.startsWith('notes/')&&!i.name.startsWith('wiki/')));
  assert.equal(shown.items.find(i=>i.name==='index.html').bytes,Buffer.byteLength(GOOD_SITE['index.html']));
  const absent=await runPublishSite({},deps(gh,root,{confirmContent:undefined}));assert.equal(absent.error?.code,'declined');
  const yes=await runPublishSite({stage:'save'},deps(gh,root,{confirmContent:async()=>{fs.writeFileSync(path.join(root,'index.html'),'UNAPPROVED');return true;}}));
@@ -704,4 +704,21 @@ console.log("\n✓ publish-site smoke 통과");
  const plain=createMockGitHub();let plainShown;await runPublishSite({},deps(plain,site({...GOOD_SITE}),{confirmContent:async m=>(plainShown=m,false)}));
  assert.equal(plainShown.notes,undefined,'no memory store: no note');
  ok('site publish: memory stores left out and named in the confirmation');
+}
+
+// CGP-KNOW-R-007: destination disclosure follows publication, not classroom membership.
+{
+ const gh=createMockGitHub(), root=site(GOOD_SITE); let shown;
+ const capture=async m=>(shown=m,false);
+ await runPublishSite({stage:'save'},deps(gh,root,{confirmContent:capture}));
+ assert.equal(shown.recipient,'GitHub · github.com/octo-clinic/neo-dental');
+ assert.equal(shown.public,true,'save still exposes a public repository');
+ await runPublishSite({},deps(gh,root,{confirmContent:capture}));
+ assert.equal(shown.recipient,`GitHub · github.com/octo-clinic/neo-dental · 사이트 ${new URL(gh.pagesBase()).host}`);assert.equal(shown.public,true,'site publish declares a public audience');
+ await runPublishSite({custom_domain:'www.example.org'},deps(gh,root,{confirmContent:capture}));
+ assert.equal(shown.recipient,'GitHub · github.com/octo-clinic/neo-dental · 사이트 www.example.org');
+ await runPublishSite({custom_domain:'www.example.org'},deps(gh,root));
+ await runPublishSite({},deps(gh,root,{confirmContent:capture}));
+ assert.equal(shown.recipient,'GitHub · github.com/octo-clinic/neo-dental · 사이트 www.example.org','existing CNAME is disclosed on republish');assert.equal(shown.public,true,'republishing an already-public site asks the public step again');
+ ok('public destination hosts: save, planned Pages, custom domain and existing CNAME');
 }

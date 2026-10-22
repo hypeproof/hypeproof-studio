@@ -1,8 +1,8 @@
 import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
-import {OutboundDialog} from "./OutboundDialog";
-import type {OutboundPrompt} from "../../src/outboundApproval";
+import {OutboundDialog, PublicAudienceDialog} from "./OutboundDialog";
+import {isPublicAudiencePrompt, type AnyOutboundPrompt} from "../../src/outboundApproval";
 import type {WriteApprovalPrompt} from "../../src/writeApprovalPrompt";
 import { storedDenialNotice } from "../../src/denialNotice";
 import type { TurnToolMode } from '../../src/turnTools';
@@ -386,7 +386,7 @@ export function App() {
   // REQ-STUDIO-TASK-RUN-STATE — the host raised a tool approval modal and it is still open.
   const [approvalPending, setApprovalPending] = useState(false);
   const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
-  const [outbound,setOutbound]=useState<OutboundPrompt|null>(null);
+  const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
   const verifyRequest = () => {
@@ -725,7 +725,9 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
-      {outbound && <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>}
+      {outbound && (isPublicAudiencePrompt(outbound)
+        ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>
+        : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>)}
       {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);}}/>}
       <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
