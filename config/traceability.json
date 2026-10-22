@@ -10403,6 +10403,67 @@
           "path": "extensions/hypeproof-chat/test/answer-attempts-computed.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-PUBLIC-PUBLISH-CONFIRM",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-OUTBOUND-CONSENT"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Public publication second confirmation (CGP-KNOW-R-007)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PUBLIC-PUBLISH-CONFIRM",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PUBLIC-PUBLISH-CONFIRM"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/outboundConsentHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/outboundApproval.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/OutboundDialog.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/publishSite.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PUBLIC-PUBLISH-CONFIRM",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PUBLIC-PUBLISH-CONFIRM"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/public-publish-confirm.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/public-audience-dialog.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/outbound-approval.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/outbound-consent-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/publish-site.smoke.mjs"
+        }
+      ]
     }
   ]
 }

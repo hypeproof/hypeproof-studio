@@ -5,7 +5,7 @@ import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource
 import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
 import { activityLocalFile } from "./activityLocalFiles.ts";
 import { confirmOutbound, setOutboundPresenter } from "./outboundConsentHost";
-import { OutboundApproval, type OutboundPrompt } from "./outboundApproval";
+import { OutboundApproval, type AnyOutboundPrompt } from "./outboundApproval";
 import { contentBytes, observationOutboundItems } from "./outboundConsent";
 import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "./attachmentFailure";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
@@ -913,7 +913,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     id:()=>crypto.randomUUID(),
     present:prompt=>this.presentOutbound(prompt),
   });
-  private async presentOutbound(prompt:OutboundPrompt|null):Promise<boolean|void> {
+  private async presentOutbound(prompt:AnyOutboundPrompt|null):Promise<boolean|void> {
     if(prompt && !(this.editorChat?.visible || this.view?.visible))return false;
     return this.post({type:'outboundPrompt',prompt});
   }
@@ -2345,7 +2345,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   ) {
     // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen.
     this.provenanceRecorder();
-    context.subscriptions.push(setOutboundPresenter(manifest=>this.outboundApproval?.confirm(manifest) ?? Promise.resolve(null)));
+    context.subscriptions.push(setOutboundPresenter((manifest,step)=>this.outboundApproval?.confirm(manifest,step) ?? Promise.resolve(null)));
     // cr-publish (CR-11 after a restart): know the signed-in person's published origin from
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);

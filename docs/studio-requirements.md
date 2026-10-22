@@ -4406,3 +4406,42 @@ Evidence: `answer-attempts.smoke.mjs`, `answer-attempts.test.tsx`,
 `answer-attempts-style.smoke.mjs`, and `answer-attempts-computed.smoke.mjs` (headless
 Chromium: 44px targets, 14px text, focus ring, both seats, dark and light, 1420/800/320,
 measured against clientWidth) in `extensions/hypeproof-chat/test/`.
+
+## Public publication second confirmation (CGP-KNOW-R-007)
+
+REQ-KNOW-10 / CGP-KNOW-010 / PI#2: after the per-content outbound confirmation
+(CGP-KNOW-R-006), public publication requires
+another explicit confirmation titled "누구나 볼 수 있어요". It names the audience
+and the destination host. Cancel or dismissal at
+either step sends nothing. A nonpublic/cohort-only manifest skips the second step.
+Gallery and site publishing currently always have a public audience, including from
+classroom seats; a class seat is not evidence of class-only access.
+
+The second confirmation is its own in-panel step (`PublicAudienceDialog`, a prompt with
+`step: "public"` and a single acknowledgement id that no content item set can answer).
+It uses the shared modal surface (`.hp-modal`) and focus geometry, titles itself
+"누구나 볼 수 있어요", names the audience "인터넷의 누구나" against "우리 반", and shows
+the destination as selectable monospace text. Focus starts on 취소. Enter never confirms
+(a native dialog's default button would), Escape cancels, and 공개하기 stays disabled
+until the learner ticks "인터넷의 누구나 볼 수 있다는 걸 확인했어요", so a double press or key
+repeat carried over from the checklist cannot publish. Only that tick plus a click or Space
+on 공개하기 publishes.
+
+Public publication is never asked through a native modal. When no chat panel is visible
+(at either step, including a reload between them) the host refuses with a plain Korean
+notice asking the learner to open the chat panel, and sends nothing. Cohort-only sends keep
+the R-006 native fallback. The gate uses a frozen manifest, never remembers an approval and
+refuses a concurrent prompt with a notice that says why. Every public producer sends
+`public: true` through the same gate: gallery publish and re-publish, site save, publish
+and re-publish (including an existing custom domain), the user-test version publish and
+its share link, in both runtimes and every seat. Existing profile grants and producer
+scope checks still apply; no new publication permission or audience-selection control is
+introduced. Site manifests name github.com and, for actual site publication, the approved
+custom domain or planned Pages host. Save-only manifests name github.com.
+
+Evidence: `public-publish-confirm.smoke.mjs` (every producer: cancel, reload and hidden
+panel send nothing; panel-hidden refusal without a native modal), `public-audience-dialog.smoke.mjs`
+(headless Chromium: focus, Enter/repeat, Escape, double press, geometry in the chat
+column, 44px targets), `outbound-approval.smoke.mjs`, `outbound-consent-host.smoke.mjs`,
+`publish-site.smoke.mjs`. PI#2 makes the learner responsible for choosing who receives
+work; this may expose JUDGMENT/OWNERSHIP, without learner-facing capability labels.

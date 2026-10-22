@@ -371,7 +371,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     if (knownPages && !knownPages.ok) return fail(knownPages.code, knownPages.detail);
     const approvedCname = domain ?? (knownPages?.ok ? knownPages.pages?.cname?.toLowerCase() : null) ?? null;
     const generated: TreeFile[] = [{ path: ".nojekyll", bytes: new Uint8Array() }, ...(stage === "save" ? [] : [{ path: WORKFLOW_PATH, bytes: enc(PAGES_WORKFLOW_YAML) }, { path: NONCE_PATH, bytes: enc(`${nonce}\n`) }, ...(approvedCname ? [{ path: "CNAME", bytes: enc(`${approvedCname}\n`) }] : [])])];
-    if (!await deps.confirmContent?.({ recipient: `GitHub · ${login}/${repoName}`, public: true, ...(memoryLeftOut.length ? { notes: [memoryLeftOutNote(memoryLeftOut)] } : {}), items: [...site, ...generated].map(f => ({ name: f.path, bytes: f.bytes.byteLength })) })) return fail("declined");
+    if (!await deps.confirmContent?.({ recipient: `GitHub · github.com/${login}/${repoName}${stage === "save" ? "" : ` · 사이트 ${approvedCname ?? new URL(plannedUrl).host}`}`, public: true, ...(memoryLeftOut.length ? { notes: [memoryLeftOutNote(memoryLeftOut)] } : {}), items: [...site, ...generated].map(f => ({ name: f.path, bytes: f.bytes.byteLength })) })) return fail("declined");
     const expectedHead = deps.lastPushedSha?.(login, repoName);
 
     // ── repository ──────────────────────────────────────────────────────────

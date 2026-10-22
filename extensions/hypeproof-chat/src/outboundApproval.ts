@@ -19,11 +19,27 @@ export function outboundPrompt(id: string, manifest: OutboundManifest): Outbound
 }
 export const outboundPromptItemIds = (prompt: OutboundPrompt): string[] => prompt.sections.flatMap(s => s.items.map(i => i.id));
 
+/**
+ * CGP-KNOW-R-007 / REQ-KNOW-10: the separate public-audience decision, asked only after the content checklist was
+ * approved. It carries no item list: the only answer that publishes is this one acknowledgement id, never an item set.
+ */
+export const PUBLIC_AUDIENCE_ACK = "public-audience";
+export const PUBLIC_AUDIENCE_LABEL = "인터넷의 누구나";
+export const CLASS_AUDIENCE_LABEL = "우리 반";
+export interface PublicAudiencePrompt { id: string; step: "public"; audience: string; notAudience: string; recipient: string }
+export type OutboundStep = "content" | "public";
+export type AnyOutboundPrompt = OutboundPrompt | PublicAudiencePrompt;
+export const isPublicAudiencePrompt = (prompt: AnyOutboundPrompt): prompt is PublicAudiencePrompt => (prompt as PublicAudiencePrompt).step === "public";
+export function publicAudiencePrompt(id: string, manifest: OutboundManifest): PublicAudiencePrompt | null {
+  if (!id || manifest.public !== true || outboundDetails(manifest) === null) return null;
+  return { id, step: "public", audience: PUBLIC_AUDIENCE_LABEL, notAudience: CLASS_AUDIENCE_LABEL, recipient: outboundLabel(manifest.recipient) };
+}
+
 export interface OutboundApprovalPorts {
   scope(): string;
   id(): string;
   /** Show (prompt) or clear (null). `true` only when a visible panel received it. */
-  present(prompt: OutboundPrompt | null): Promise<boolean | void>;
+  present(prompt: AnyOutboundPrompt | null): Promise<boolean | void>;
 }
 
 /** Single flight, scope bound, never remembered. `null`: the panel could not show it (the caller may fall back). */
@@ -32,11 +48,12 @@ export class OutboundApproval {
   private readonly ports: OutboundApprovalPorts;
   private readonly timeoutMs: number;
   constructor(ports: OutboundApprovalPorts, timeoutMs = 180_000) { this.ports = ports; this.timeoutMs = timeoutMs; }
-  confirm(manifest: OutboundManifest): Promise<boolean | null> {
+  confirm(manifest: OutboundManifest, step: OutboundStep = "content"): Promise<boolean | null> {
     if (this.pending) return Promise.resolve(false);
-    const prompt = outboundPrompt(this.ports.id(), structuredClone(manifest));
+    const frozen = structuredClone(manifest);
+    const prompt: AnyOutboundPrompt | null = step === "public" ? publicAudiencePrompt(this.ports.id(), frozen) : outboundPrompt(this.ports.id(), frozen);
     if (!prompt) return Promise.resolve(false);
-    const scope = this.ports.scope(), ids = outboundPromptItemIds(prompt);
+    const scope = this.ports.scope(), ids = isPublicAudiencePrompt(prompt) ? [PUBLIC_AUDIENCE_ACK] : outboundPromptItemIds(prompt);
     return new Promise(resolve => {
       const timer = setTimeout(() => this.cancel(), this.timeoutMs);
       this.pending = { id: prompt.id, scope, ids, finish: value => {

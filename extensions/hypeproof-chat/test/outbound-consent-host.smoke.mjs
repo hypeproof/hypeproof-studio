@@ -48,7 +48,7 @@ async function load(entry, stubs = {}) {
       b.onLoad({ filter: new RegExp(filter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), namespace: "stub" }, () => ({ contents, loader: "js" }));
     }
   } }];
-  const out = await build({ entryPoints: [path.join(ext, entry)], bundle: true, platform: "node", format: "cjs", write: false, external: ["vscode"], plugins, logLevel: "silent" });
+  const out = await build({ ...(entry.startsWith("export ") ? { stdin: { contents: entry, resolveDir: ext, sourcefile: "entry.ts", loader: "ts" } } : { entryPoints: [path.join(ext, entry)] }), bundle: true, platform: "node", format: "cjs", write: false, external: ["vscode"], plugins, logLevel: "silent" });
   return (vscode, fetchImpl) => {
     const mod = { exports: {} };
     vm.runInNewContext(out.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), fetch: (...a) => fetchImpl(...a),
@@ -112,7 +112,7 @@ const ok = (label) => { pass++; console.log("  ok   " + label); };
 }
 
 // ── H3/H4 the real provider ─────────────────────────────────────────────────────────────────────────────────────────────
-const makeProvider = await load("src/chatPanelProvider.ts");
+const makeProvider = await load('export { ChatPanelProvider } from "./src/chatPanelProvider.ts"; export { setOutboundPresenter } from "./src/outboundConsentHost.ts"; export { outboundDetails } from "./src/outboundConsent.ts";');
 const root = mkdtempSync(path.join(os.tmpdir(), "hps-outbound-host-"));
 try {
   const work = path.join(root, "work"), sessionDir = path.join(root, "spool", "2026-10-20", "session-synthetic");
@@ -122,7 +122,7 @@ try {
   const provider = (answer) => {
     const v = fakeVscode(), calls = [], posts = [];
     v.answer = answer;
-    const { ChatPanelProvider } = makeProvider(v, async (url, init = {}) => {
+    const { ChatPanelProvider, setOutboundPresenter, outboundDetails } = makeProvider(v, async (url, init = {}) => {
       calls.push({ url, method: init.method ?? "GET", body: init.body });
       if (url.endsWith("/api/gallery/publish")) return Response.json({ ok: true, url: "/w/1", displayName: "synthetic" });
       if (url.includes("/logs/")) return Response.json({ key: "k" });
@@ -138,25 +138,38 @@ try {
       spool: { currentSessionDir: () => sessionDir }, post: async (m) => { posts.push(m); return true; },
       activeStreams: new Map(), pendingSends: 0, draftWrites: Promise.resolve(), postConfig: async () => {}, loadAccess: async () => {},
     });
-    return { h, v, calls, posts };
+    // CGP-KNOW-R-007: public sends are only ever asked in the panel. `panel` answers each step like the in-panel dialogs:
+    // `panel.content` / `panel.public` (true, false or null = no visible panel); `panel.asked` records [step, details].
+    const panel = { content: answer === "확인하고 보내기", public: answer === "확인하고 보내기", asked: [], on: null };
+    setOutboundPresenter(async (m, step) => { if (!m.public) return null; panel.asked.push([step, outboundDetails(m)]); panel.on?.(step); return panel[step]; });
+    return { h, v, calls, posts, panel };
   };
   const settle = () => new Promise((r) => setTimeout(r, 30));
 
   // H3 gallery
   {
     const c = provider(undefined); await c.h.publishToGallery(); await settle();
-    assert.equal(c.v.dialogs.length, 1, "one confirmation for the whole action");
+    assert.deepEqual(c.panel.asked.map(x => x[0]), ["content"], "one checklist for the whole action; Cancel ends it");
+    assert.equal(c.v.dialogs.length, 0, "a public send never opens a native modal");
     assert.deepEqual(c.calls.filter((x) => x.method !== "GET"), [], "Cancel: no page POST and no log PUT");
-    const lines = c.v.dialogs[0].options.detail.split("\n");
+    const lines = c.panel.asked[0][1].split("\n");
     assert.equal(lines[0], "받는 곳: 갤러리 · site.invalid"); assert.equal(lines[1], "누구나 볼 수 있어요");
     assert.equal(lines[2], "공개 페이지에 내 이름이 함께 보여요 (수업 명단에 적힌 이름을 갤러리가 붙여요)", "F7: the name on the public page is said");
     const at = lines.indexOf("함께 보내는 것 — 받는 곳: 수업 기록 운영자 · service.invalid");
     assert.ok(at > 0, "the session record is its own block with its own recipient: " + lines.join(" | "));
     assert.deepEqual(lines.slice(at + 1, at + 3), ["• 이번 활동 기록 session.meta.json (2 바이트)", `• 이번 활동 기록 events.jsonl (${Buffer.byteLength('{"text":"PRIVATE-EVENT"}\n')} 바이트)`]);
     assert.equal(lines.at(-1), EXCLUDED);
+    const secondCancel = provider("확인하고 보내기"); secondCancel.panel.public = false;
+    await secondCancel.h.publishToGallery(); await settle();
+    assert.deepEqual(secondCancel.panel.asked.map(x => x[0]), ["content", "public"], "the public step is asked separately, after the checklist");
+    assert.deepEqual(secondCancel.calls.filter(x => x.method !== "GET"), [], "second Cancel sends neither page nor logs");
+    const hidden = provider("확인하고 보내기"); hidden.panel.content = null; hidden.v.answer = "확인하고 보내기";
+    await hidden.h.publishToGallery(); await settle();
+    assert.equal(hidden.v.dialogs.length, 0, "panel hidden: no native modal even though it would answer yes");
+    assert.deepEqual(hidden.calls.filter(x => x.method !== "GET"), [], "panel hidden: nothing published");
     const a = provider("확인하고 보내기");
     // The learner keeps working while the dialog is open: the spool grows. What was listed is what goes up.
-    a.v.onDialog = () => writeFileSync(path.join(sessionDir, "events.jsonl"), '{"text":"PRIVATE-EVENT"}\n{"text":"LATER"}\n');
+    a.panel.on = (step) => { if (step === "content") writeFileSync(path.join(sessionDir, "events.jsonl"), '{"text":"PRIVATE-EVENT"}\n{"text":"LATER"}\n'); };
     await a.h.publishToGallery(); await settle();
     const writes = a.calls.filter((x) => x.method !== "GET");
     assert.equal(writes[0].url, "https://site.invalid/api/gallery/publish", "the page goes first");
@@ -165,7 +178,7 @@ try {
     assert.equal(a.posts.at(-1)?.state, "done");
     writeFileSync(path.join(sessionDir, "events.jsonl"), '{"text":"PRIVATE-EVENT"}\n');
     const off = provider(undefined); off.h.cachedProfile = { publishing: { enabled: true, strategy: "hypeproof_gallery" }, analytics: { upload_session_logs: false } };
-    await off.h.publishToGallery(); assert.ok(!off.v.dialogs[0].options.detail.includes("함께 보내는 것"), "no record block when the profile does not upload logs");
+    await off.h.publishToGallery(); assert.ok(!off.panel.asked[0][1].includes("함께 보내는 것"), "no record block when the profile does not upload logs");
     ok("H3 gallery: one dialog lists page and session record; Cancel sends neither; approve sends page then exactly the listed log bytes");
   }
 

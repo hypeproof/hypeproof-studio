@@ -362,3 +362,19 @@ introduced into durable storage. No grant or minor-seat safety policy is widened
 | When the selection is taken | Read in the send's preflight (so a vanished item can still hold the send), taken at the same point as the attached file; a later refusal in that send does not restore it | One lifetime rule for both; restoring would need a second release path for every later refusal | On | no |
 | What is not claimed | The agent-sdk coach can still open files in the work folder (including `자료/`) with its own Read tool under `sdk_tools.read`; the guarantee is about what Studio puts in the request. The copy says "고른 자료만 다음 질문과 함께 AI에게 보내요", not that the AI cannot see the rest | The coach's own tool reads were already allowed on these seats; blocking `자료/` for the coach would also hide AI-made materials | n/a | needed to fence `자료/` from coach tools |
 | Focus ring | The shared focus geometry of CGP-DS-D-014 (`focusGeometry.css`): 2px solid ring token, -2px inside the coach rail's scroll scope, +2px outside one. The card has no ring rule of its own | One ring for every surface; a second rule could only disagree with it | On | no |
+
+## DEC-KNOW-10 — public publication second confirmation
+
+Agent-selected conservative implementation, 2026-10-22; not human approval.
+Use the existing host-owned `public` manifest bit as the audience contract. Gallery,
+GitHub site/save, and public test-version/link flows are public regardless of seat;
+never infer cohort restriction from classroom membership. Nonpublic manifests skip
+the additional confirmation. Ask a separate in-panel step after the content checklist,
+naming 인터넷의 누구나 (not 우리 반) and the destination host. Keep all existing grants
+and default-off publication features unchanged; this restriction grants no new
+minor-seat permission. Each action uses a frozen manifest and fresh answers; concurrent
+prompts are refused with a reason.
+Revised 2026-10-23 after verification: a native modal was rejected because the shipped
+build makes its first action the default button, so Enter or a repeated press published.
+The public step lives in the panel (focus on 취소, Enter inert, tick before 공개하기) and a
+public send with no visible panel is refused, not asked natively.
