@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { checkTransport, source, transport } from '../../../scripts/sync-design-tokens.mjs';
+import { checkTransport, source, tokenCss, transport } from '../../../scripts/sync-design-tokens.mjs';
 import { staticTokens } from './lib/design-token-values.mjs';
 import { withDesignTokens, DESIGN_TOKENS } from '../../../chalk/src/lib/design-tokens.ts';
 const require = createRequire(new URL('../webview-ui/package.json', import.meta.url));
@@ -81,7 +81,7 @@ for (const file of walk(chalkSrc).filter(f=>f.pathname.endsWith('.ts') && !f.pat
   for (const [name,value] of Object.entries(await import(file.href))) if (/Css$/.test(name) && typeof value === 'string') { lint(value,`${file.pathname}#${name}`); injected.push(name); }
 }
 for (const name of ['boardStatusCss','safetySignalCss']) assert.ok(injected.includes(name), `injected Chalk CSS ${name} is linted`);
-assert.equal(DESIGN_TOKENS,css,'Chalk serves exact canonical bytes');
+assert.equal(DESIGN_TOKENS,tokenCss(),'Chalk serves exact canonical bytes');
 
 // Inline chrome is authored CSS too. Parse JSX attributes and their named object constants;
 // logo SVG artwork and the learner artifact document string are content, not style props.

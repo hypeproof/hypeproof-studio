@@ -491,12 +491,45 @@ start-page control whose literal border fails 3:1 on its own background. Not yet
 personal-chat `--tw-line` family (fallback #34383e) and legacy `--vscode-*` fallbacks in
 `styles.css`; tracked as the next DES-11 slice.
 
+### Shared focus geometry (CGP-DS-D-014)
+
+`REQ-STUDIO-SHARED-FOCUS-GEOMETRY` extends DES-06/DES-11 and
+CGP-DS-R-017 (DES-CGP-DS-18). Studio and every Chalk page draw a 2px solid
+semantic focus ring, 2px outside the control, or -2px inside scrolling
+viewports and every control inside them. The semantic token remains
+`--hp-ring-focus-default` (DEC-DS-D-001); the source row's `--hp-ring` is its
+former shorthand, not a second token API.
+
+- **Where it lives.** `focusGeometry.css` (imported after `tokens.css`, so after the role
+  tokens; Chalk receives it appended to the generated design-token transport). One `!important`
+  base rule with low specificity (its exemptions sit in `:where()`); a scroll scope only sets the
+  inherited `--hp-focus-offset: -2px`, so no scope selector has to out-rank the base.
+- **Forced colors.** Highlight over Canvas/CanvasText, including selected controls. The scroll
+  inset remains -2px, avoiding an outside ring clipped by the viewport.
+- **Contrast and fill.** The ring is at least 3:1 against the surrounding surface in dark, light,
+  HC dark and HC light, and also against the control's fill whenever it is inset. Focus never
+  changes a control's fill, text or icon colours (outside forced colors, where the system replaces
+  them): the primary CTA stays lime while focused. Accent-filled controls (primary CTA, Send, Save,
+  Run, Retry) therefore keep the outside +2px ring even inside a scroll scope. No reduced threshold
+  for HC Light or Chalk is permitted.
+- **Evidence.** `focus-geometry.smoke.mjs` guards parsed stylesheet declarations, token contrast,
+  scroll inventory and shared transport. Its browser section reads computed styles with
+  `:focus-visible` forced over CDP, and asserts `.hp-cta-primary` has the same computed background focused
+  and unfocused. The CI `extension-test` job sets `FOCUS_REQUIRE_BROWSER=1` and the helper finds the
+  runner's Google Chrome (or `CHROME_PATH`), so a missing browser fails instead of skipping. `FOCUS_STATIC_ONLY=1` explicitly runs only the non-browser checks
+  in a sandbox; it never reports browser acceptance. Native keyboard and screenshot acceptance
+  remains owner evidence. The earlier full-suite failure is not superseded by focused checks.
+
+### Focus and placeholder baseline (CGP-DS-R-017)
+
 `REQ-STUDIO-FOCUS-AND-PLACEHOLDER` (CGP-DS-R-017 / REQ-CGP-DS-18 and CGP-DS-R-019 /
 REQ-CGP-DS-21 + REQ-CGP-DS-42, 2026-10-20), extending DES-06 and DES-11 for every chat-webview
 stylesheet (`webview-ui/src/*.css`: chat panel, personal chat detail, task workspace, citation
 preview, start page, local review). Focus: one token, `--hp-ring-focus-default`, drawn as `outline: 2px solid
 var(--hp-ring-focus-default); outline-offset: 2px` on `:focus-visible` (inputs may use `:focus`, which matches
-the same moments); only tight rows inside the scrolling task and source lists use a -2px inset.
+the same moments). Before the D-014 checkpoint above, only tight rows inside the
+scrolling task and source lists used a -2px inset. The following color measurements
+remain historical surface-only evidence, not D-014 control-fill acceptance.
 Unlayered baselines in `tokens.css` (`:focus-visible` and `::placeholder`) cover every focusable
 element and every field. They replace VS Code's injected webview defaults
 (`a/input/select/textarea:focus`, 1px, -1px offset), which sit in `@layer vscode-default`, and

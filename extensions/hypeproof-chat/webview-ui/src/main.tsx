@@ -2,6 +2,7 @@
 // is exactly the stylesheet order: tokens.css → localReview.css (LocalReview) →
 // start.css (StartPage) → styles.css (last, explicit import).
 import "./tokens.css";
+import "./focusGeometry.css";
 import { LocalReview } from "./LocalReview";
 import { createRoot } from "react-dom/client";
 import { StartPage } from "./StartPage";
