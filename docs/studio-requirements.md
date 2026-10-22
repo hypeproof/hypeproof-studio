@@ -4191,3 +4191,15 @@ dark, light and forced colours at 1420 and 800px, hover (500ms), keyboard focus
 cascade override or a dropped `data-hp-tooltip` appears (it prints NOT RUN without a
 browser; `FOCUS_REQUIRE_BROWSER=1` makes that a failure). This is automated evidence,
 not a claim of a physical screen-reader or installed-app acceptance run.
+
+## Korean prose wrapping (CGP-DS-D-025)
+
+Extends CGP-DS-R-028 and DES-03 (DES-CGP-DS-31). Studio personal, classroom,
+instructor, start and local-review surfaces and Chalk use language-scoped Korean
+prose rules: `word-break: keep-all; overflow-wrap: anywhere; line-break: strict`.
+Headings use `text-wrap: balance`; paragraphs use `text-wrap: pretty`. At 320px,
+a 40-syllable heading breaks between eojeol and a 120-character URL wraps without
+overflow. Code whitespace is preserved; the new rules directly target only Korean prose. This supports readable learner judgment (Product Intent), not
+capability assessment. Shared declarations are transported to Chalk by the existing
+canonical design stylesheet pipeline. Guards: `test/korean-prose.smoke.mjs`;
+computed guard: `test/korean-prose-computed.smoke.mjs` (headless Chromium, real Studio CSS order and all Chalk pages, light/dark, 320/800; fails on a later higher-specificity or `@media !important` override; NOT RUN without a browser, a failure under `FOCUS_REQUIRE_BROWSER=1`).

@@ -1,0 +1,9 @@
+/* CGP-DS-D-025: shared Korean reading rules for Studio and every Chalk page.
+ * Target prose, never pre/code: preserve code whitespace. */
+:lang(ko):is(p, li, blockquote, dd, dt, h1, h2, h3, h4, h5, h6, .hps-msg-body, .hps-prose, .hp-mission-sentence, .hp-mission-acceptance, .hps-error-banner-msg, .hps-stop-notice) {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  line-break: strict;
+}
+:lang(ko):is(h1, h2, h3, h4, h5, h6) { text-wrap: balance; }
+p:lang(ko) { text-wrap: pretty; }
