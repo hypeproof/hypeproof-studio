@@ -316,3 +316,27 @@ test('both workflow upload scripts stop at the draft and use validated outputs t
     assert.equal(resolveBuildContract({...request(), tagMessage: '', inputs: buildDispatches(plan)[0].inputs}).autoAcceptance, true);
   }
 });
+
+test('both build dispatches forward override_live_session to the release check; a tag push forwards false', t => {
+  for (const name of ['build-mac.yml', 'build-windows.yml']) {
+    const gate = Object.values(workflow(name).jobs)[0].steps.find(s => s.name === 'Trigger both-activity release acceptance');
+    const key = Object.keys(gate.env).find(k => gate.env[k].includes('override_live_session'));
+    assert.ok(key, `${name}: dispatch step must pass override_live_session through env`);
+    assert.equal(gate.env[key], '${{ inputs.override_live_session || false }}', `${name}: a tag push has no inputs, so the value must default to false`);
+    assert.match(gate.run, new RegExp(`-f override_live_session="\\$\\{${key}\\}"`), `${name}: dispatch must forward the value`);
+    for (const [supplied, forwarded] of [['true', 'true'], [undefined, 'false']]) {
+      const dir = tmp(t), bin = path.join(dir, 'bin'), log = path.join(dir, 'gh-args.txt');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(path.join(bin, 'gh'), `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(log)}\n`);
+      fs.chmodSync(path.join(bin, 'gh'), 0o755);
+      // GitHub renders `inputs.x || false`: a dispatched true stays true; a tag push (no inputs) becomes false.
+      const rendered = gate.env[key].replace('${{ inputs.override_live_session || false }}', supplied ?? 'false');
+      const result = spawnSync('bash', ['-e', '-c', gate.run], {encoding: 'utf8', env: {...process.env,
+        GITHUB_REPOSITORY: 'hypeproof/hypeproof-studio', GITHUB_REF: 'refs/tags/v0.1.99', [key]: rendered,
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`}});
+      assert.equal(result.status, 0, result.stderr);
+      assert.ok(fs.readFileSync(log, 'utf8').split('\n').includes(`override_live_session=${forwarded}`),
+        `${name}: ${supplied ?? 'tag push'} must dispatch override_live_session=${forwarded}`);
+    }
+  }
+});
