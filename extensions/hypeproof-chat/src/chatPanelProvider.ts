@@ -1,6 +1,7 @@
 import { attemptGroups, attemptHistory, selectAttempt, visibleAttempts } from './answerAttempts';
 import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntry";
 import { PublishReadGate } from "./publishReadGate";
+import { AnnotationBatch, AnnotationRefusal, ANNOTATION_LIMIT, ANNOTATION_REFUSAL, ANNOTATION_RETRY_DROPPED, recordAnnotations, withAnnotations } from "./annotationBatch";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
 import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
@@ -1458,6 +1459,90 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /** CR-09 — the element the student picked for the NEXT turn, until sent or removed. */
   private readonly elementQueue = new ElementQueue();
+  private _annotationBatch?: AnnotationBatch;
+  private get annotationBatch(): AnnotationBatch { return this._annotationBatch ??= new AnnotationBatch(); }
+  private annotationBoundScope?: string;
+  private syncAnnotationScope(): void {
+    const scope = this.annotationScope();
+    if (scope !== this.annotationBoundScope) {
+      void this.mcpBrowser?.clearAnnotationMarkers?.().catch(() => {});
+      this.annotationBoundScope = scope;
+    }
+    this.annotationBatch.bind(scope);
+  }
+  private annotationScope(): string {
+    return `${activityConnections(this.context)?.scope ?? ''}:${this.currentTaskStore?.()?.getView().activeTaskId ?? ''}`;
+  }
+  /** CGP-ART-R-001 — the flag (machine scope, default off) plus the served CR and image grants and a
+   * non-local runtime. Every one is read fresh; any missing piece means no annotations go. */
+  private annotationFlag(): boolean {
+    return vscode.workspace.getConfiguration("hypeproofChat").get<boolean>("annotationBatchEnabled", false) === true;
+  }
+  private annotationsAllowed(): boolean {
+    return this.annotationFlag() && this.isCurriculumRuntimeEnabled() && this.isImagePasteEnabled() && this.annotationRuntimeAvailable();
+  }
+  /** The annotations each sent turn carried, by user message id, so an error retry resends them. */
+  private annotationTurns?: Map<string, import('./annotationBatch').Annotation[]>;
+  private rememberAnnotationTurn(userId: string, annotations: import('./annotationBatch').Annotation[]): void {
+    if (!annotations.length) return;
+    const turns = (this.annotationTurns ??= new Map());
+    turns.set(userId, annotations);
+    while (turns.size > 20) turns.delete(turns.keys().next().value!);
+  }
+  /** Re-checks a page identity for `annotations`: the same document generation, artifact version and refs. */
+  private async annotationsStillValid(annotations: import('./annotationBatch').Annotation[]): Promise<boolean> {
+    const identity = await this.mcpBrowser?.annotationIdentity().catch(() => null);
+    if (!identity || !this.mcpBrowser?.annotationRefsValid(annotations.flatMap(a => a.contexts))) return false;
+    return annotations.every(a => a.contexts.every(c => c.documentGeneration === identity.generation && c.artifact.id === identity.artifactId));
+  }
+  private async takeAnnotationBatch(retrySourceId: string | undefined, revision: number, scope: string, pinnedCount = 0): Promise<import('./annotationBatch').Annotation[]> {
+    this.syncAnnotationScope();
+    // An error retry is the same request: it carries the annotations the failed turn carried, when the
+    // page is still the one they were marked on, and says so plainly when it is not. It never takes
+    // the new draft (that rides the next fresh message).
+    if (retrySourceId !== undefined) {
+      const prior = this.annotationTurns?.get(retrySourceId);
+      if (!prior?.length) return [];
+      if (this.annotationsAllowed() && scope === this.annotationScope() && await this.annotationsStillValid(prior) && scope === this.annotationScope()) return prior;
+      this.postPageNotice(ANNOTATION_RETRY_DROPPED);
+      return [];
+    }
+    // The activity or task changed during this send: a draft pinned at its start went with the old
+    // task (the sync above dropped it), so the send is refused and says so, never sent without it.
+    if (scope !== this.annotationScope()) { if (pinnedCount > 0) throw new AnnotationRefusal(ANNOTATION_REFUSAL.activity); return []; }
+    if (!this.annotationBatch.size) return [];
+    const identity = await this.mcpBrowser?.annotationIdentity().catch(() => null);
+    if (scope !== this.annotationScope()) throw new AnnotationRefusal(ANNOTATION_REFUSAL.activity);
+    const refsValid = this.mcpBrowser?.annotationRefsValid(this.annotationBatch.contexts());
+    const valid = this.annotationBatch.validate(refsValid ? identity?.generation ?? '' : '', identity?.artifactId ?? '');
+    this.postAnnotations();
+    if (!this.annotationsAllowed()) throw new AnnotationRefusal(ANNOTATION_REFUSAL.gate);
+    if (!valid) throw new AnnotationRefusal(ANNOTATION_REFUSAL.stale);
+    return this.annotationBatch.take(revision);
+  }
+  /** After the batch is taken for a turn: the tray shows the empty draft and the page markers go. */
+  private finishAnnotationSend(annotations: import('./annotationBatch').Annotation[]): void {
+    if (!annotations.length) return;
+    this.postAnnotations();
+    for (const a of annotations) void this.mcpBrowser?.annotationMarker(a.number, null).catch(() => {});
+  }
+  private annotationRuntimeAvailable(): boolean {
+    // Fail closed: a host that cannot say which app it is cannot prove it is not the local runtime.
+    const appName = (vscode as { env?: { appName?: unknown } }).env?.appName;
+    if (typeof appName !== 'string') return false;
+    const cfg = vscode.workspace.getConfiguration('hypeproofChat');
+    return !localRuntimeConfig(appName, cfg.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1'));
+  }
+  /** Last state sent to the webview, so a seat that never had the feature gets no message at all. */
+  private annotationsShown = false;
+  private postAnnotations(): void {
+    this.syncAnnotationScope();
+    const enabled = this.annotationsAllowed();
+    const annotations = this.annotationBatch.preview();
+    if (!enabled && !annotations.length && !this.annotationsShown) return;
+    this.annotationsShown = enabled || annotations.length > 0;
+    void this.post({ type: 'annotations', enabled, annotations });
+  }
 
   // ── AI Verify (cr-verify, #1392) ──────────────────────────────────────────
   /** "Test my product": the session over the record, the preview and the CR executor. */
@@ -2968,30 +3053,38 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the visible tab of its group (recon R2: a covered tab loses the first pick, and page
    * visibility cannot tell). Never waits silently.
    */
-  async pickElement(): Promise<void> {
+  async pickElement(kind: "element" | "rectangle" = "element"): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
       this.postPageNotice(lessonFeatureOff("요소 고르기", this.getSeatAudience()), "lesson");
       return;
     }
+    // CGP-ART-R-001 — a rectangle exists only in the annotation batch (flag on).
+    if (kind === "rectangle" && !this.annotationFlag()) return;
     // The switch above already requires a web-app workshop tier; age does not decide it (2026-10-05).
     if (!this.cachedProfile) {
       // No served profile yet: the app cannot tell which setting applies (source unknown).
       this.postPageNotice(denialCopy({ source: "unknown", feature: "요소 고르기", reason: "수업 정보를 아직 받지 못했어요" }, this.getSeatAudience()), "unknown");
       return;
     }
+    if (this.annotationFlag() && (!this.isImagePasteEnabled() || !this.annotationRuntimeAvailable())) {
+      this.postPageNotice("이 수업에서는 화면 표시를 보낼 수 없어요.");
+      return;
+    }
+    this.syncAnnotationScope();
+    if (this.annotationFlag() && this.annotationBatch.size >= ANNOTATION_LIMIT) { this.postPageNotice("표시는 10개까지 모을 수 있어요."); return; }
     if (this.pickInProgress) {
       this.postPageNotice("이미 요소를 고르는 중이에요. 미리보기에서 요소를 클릭하세요.");
       return;
     }
     this.pickInProgress = true;
     try {
-      await this.pickElementOnce();
+      await this.pickElementOnce(kind);
     } finally {
       this.pickInProgress = false;
     }
   }
 
-  private async pickElementOnce(): Promise<void> {
+  private async pickElementOnce(kind: "element" | "rectangle"): Promise<void> {
     const base = this.liveServer.currentUrl();
     const previewOrigin = (() => {
       try {
@@ -3030,16 +3123,36 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       );
       return;
     }
-    this.postPageNotice("미리보기에서 물어볼 요소를 클릭하세요.");
-    let ctx: ElementContext;
-    try {
-      ctx = await this.mcpBrowser.pickElement({ root: this.liveServer.currentRoot() ?? null });
-    } catch (err) {
-      this.postPageNotice(`요소를 가져오지 못했어요: ${err instanceof Error ? err.message : String(err)}`);
+    this.postPageNotice(kind === 'element' ? "미리보기에서 물어볼 요소를 클릭하세요." : "미리보기에서 영역을 끌어서 골라 주세요. Escape로 취소해요.");
+    const scope = this.annotationScope();
+    const batchEnabled = this.annotationFlag();
+    if (!batchEnabled) {
+      // Flag off: the shipped CR-09 single pick, unchanged.
+      let ctx: ElementContext;
+      try {
+        ctx = await this.mcpBrowser.pickElement({ root: this.liveServer.currentRoot() ?? null });
+      } catch (err) {
+        this.postPageNotice(`요소를 가져오지 못했어요: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+      this.attachElementContext(ctx);
+      await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
       return;
     }
-    this.attachElementContext(ctx);
-    await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+    try {
+      const captured = kind === 'element'
+        ? await this.mcpBrowser.pickElement({ root: this.liveServer.currentRoot() ?? null }).then(ctx => ({ contexts: [ctx], crop: ctx.crop }))
+        : await this.mcpBrowser.pickRectangle(this.liveServer.currentRoot() ?? null);
+      if (scope !== this.annotationScope() || !this.annotationsAllowed()) return;
+      const identity = await this.mcpBrowser.annotationIdentity();
+      if (captured.contexts.some(c => c.documentGeneration !== identity.generation || c.artifact.id !== identity.artifactId)) throw new Error("화면이 바뀌었어요. 다시 골라 주세요.");
+      const a = this.annotationBatch.add(kind, captured.contexts, captured.crop);
+      await this.mcpBrowser.annotationMarker(a.number, a.crop!.clip);
+      this.postAnnotations();
+      await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+    } catch (err) {
+      this.postPageNotice(`표시를 가져오지 못했어요: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /**
@@ -5836,6 +5949,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           void this.post({ type: "pageAttached", label: this.pendingPageNotice });
         }
         // CR-09 — a remount must still show the picked element that is queued to go.
+        this.postAnnotations();
         if (this.elementQueue.queued) this.postElementPreview();
         // CGP-ART-R-007 — and the page text that is queued to go.
         if (this.pendingPageAttachment) void this.post({ type: "pageAttachment", attachment: this.pendingPageAttachment });
@@ -6109,6 +6223,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.clearPageAttachment();
         void this.post({ type: "pageAttachment", attachment: null });
         return;
+      case "annotationAction":
+        this.syncAnnotationScope();
+        if (msg.action === 'remove' && Number.isInteger(msg.number)) {
+          if (this.annotationBatch.remove(msg.number!)) await this.mcpBrowser?.annotationMarker(msg.number!, null).catch(() => {});
+        } else if (msg.action === 'comment' && Number.isInteger(msg.number) && typeof msg.comment === 'string') {
+          this.annotationBatch.edit(msg.number!, msg.comment);
+        } else if (msg.action === 'element' || msg.action === 'rectangle') await this.pickElement(msg.action);
+        this.postAnnotations();
+        return;
       case "removeElementContext":
         // CR-09 — the student removed the picked element; a CR-only message (CR-T02 inventory).
         this.clearElementContext();
@@ -6326,6 +6449,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     this.pendingSends++;
+    // CGP-ART-R-001 — the draft this send may take, pinned before the first await: a later edit, a
+    // task switch or another send makes the take refuse instead of sending a different batch.
+    this.syncAnnotationScope();
+    const annotationRevision = this.annotationBatch.revision;
+    const annotationScope = this.annotationScope();
+    const annotationCount = this.annotationBatch.size;
+    // A message that carries annotations is always a coach turn: no app shortcut may answer it.
+    const carriesAnnotations = this.annotationBatch.size > 0 || (retrySourceId !== undefined && !!this.annotationTurns?.get(retrySourceId)?.length);
     // REQ-STUDIO-STEER-NOW — a stopped turn posts streamStopped before it has saved its partial answer
     // and released the folder lock. This send owns its slot at once (pendingSends) and starts after the
     // previous turn released the lock (at most 15 s), so a send right after a stop is not refused as
@@ -6398,7 +6529,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
     // always a real turn. Reads the profile already held (no await before the turn's first one).
     const wikiSwitch = this.cachedProfile?.learning_wiki;
-    const brainCall = mode === 'auto' && wikiSwitch?.enabled === true && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
+    const brainCall = mode === 'auto' && wikiSwitch?.enabled === true && !carriesAnnotations && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
     if (brainCall) {
       await this.answerBrainCall(text, brainCall, deferCompletion, responseStarted, userId);
       return;
@@ -6407,7 +6538,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // language and a game already exists, just open it. Don't make them hunt
     // for the ▶ Run button or burn an AI round-trip on a deflection. Skipped
     // when an image is attached — a pasted screenshot is always a real turn.
-    if (mode === 'auto' && isShowIntent(text) && (!images || images.length === 0)) {
+    if (mode === 'auto' && !carriesAnnotations && isShowIntent(text) && (!images || images.length === 0)) {
       const lastGame = this.extractLastRenderableCode();
       if (lastGame) {
         const labels = labelsForProfile(this.cachedProfile);
@@ -6439,7 +6570,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     // 2026-10-15 — "프로젝트 변경" opens the project list (switchProject) instead of a coach turn:
     // the switch commits, pulls and reopens folders, which is the app's job, not the coach's.
-    if (mode === 'auto' && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
+    if (mode === 'auto' && !carriesAnnotations && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
       await this.appendHistory([userLine(text)]);
       await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.", deferCompletion, responseStarted);
       // After this send settles: switchProject refuses while a send is pending (idle()).
@@ -6450,7 +6581,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // 2026-08-19 — "다른 친구도 있어?" is answered instantly from the profile's
     // worlds. This used to spend one LLM turn (10–40 s) — the app already holds the
     // list.
-    if (mode === 'auto' && isGuestListRequest(text) && (!images || images.length === 0)) {
+    if (mode === 'auto' && !carriesAnnotations && isGuestListRequest(text) && (!images || images.length === 0)) {
       const ws = this.cachedProfile?.worlds;
       if (ws?.length) {
         const shown = (this.cachedProfile?.ux?.suggestions?.initial ?? []).map((c) => c.text);
@@ -6512,6 +6643,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // sees the prepended page context.
     // kids-quest — fold the latest round from the native preview tab (if any).
     await this.pullQuestResultFromPreview();
+    const annotations = await this.takeAnnotationBatch(retrySourceId, annotationRevision, annotationScope, annotationCount);
+    this.rememberAnnotationTurn(userId, annotations);
     const pageContext = this.pendingPageContext;
     this.pendingPageContext = null;
     // A page attached while this send was between its awaits is consumed now: clear its chip too.
@@ -6520,6 +6653,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // resurrecting it on webview remounts (webview clears its copy on userSent).
     this.pendingPageNotice = null;
     // CR-09 — the picked element goes with this turn only, and only while the switch is on.
+    this.finishAnnotationSend(annotations);
     const element = this.elementQueue.take(this.isCurriculumRuntimeEnabled());
     // CGP-CHAT-R-011 — the attached file rides in front of the learner's text, model-only, as quoted data.
     // It is taken only here, where the model turn starts: a send turned away earlier leaves the chip
@@ -6538,6 +6672,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (materialContext) (this.materialTurnIds ??= new Set()).add(userId);
     if (!carryFile && retrySourceId !== undefined && this.materialTurnIds?.has(retrySourceId)) void this.postMaterials({ notice: MATERIALS_COPY.retryNotice });
     let userTextForModel = withElementText(pageContext ? `${pageContext}\n\n${withMaterials}` : withMaterials, element);
+    // CGP-ART-R-001 — one envelope for the whole batch in front of the learner's text (quoted data).
+    userTextForModel = withAnnotations(userTextForModel, undefined, annotations).text;
     // cr-verify — a test run or fix request rides with the student's own sentence, model-only, while the switch is on.
     const verifyContextText = this.verifySession.takeCoachContext();
     if (verifyContextText && this.isCurriculumRuntimeEnabled()) userTextForModel = `${verifyContextText}\n\n${userTextForModel}`;
@@ -6612,6 +6748,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const pageImage = this.pendingPageImage;
     this.pendingPageImage = null;
     let effectiveImages = turnImages(images, pageImage, element);
+    // CGP-ART-R-001 — and one crop per annotation after the turn's other images.
+    effectiveImages = withAnnotations('', effectiveImages, annotations).images;
 
     // #580 — streamId becomes the spool's turn_id, and the later spool-then-forward
     // has to be able to resend it to the worker's trace. The worker validates turn_id
@@ -6640,6 +6778,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Bytes are stored only when a recorder will write the event that names them.
     const turnBlobSink = roomGuardedSink(this.crBlobSinkFor(crBytesOwner(token)), observation ? (n) => observation.hasRoom(n) : undefined);
     if (element) observationCaptures.push(recordElementCapture(recordObservation, `pick-${crypto.randomUUID()}`, element, turnBlobSink));
+    observationCaptures.push(...recordAnnotations(recordObservation, recordElementCapture, streamId, annotations, turnBlobSink));
     const messageId = randomId();
     const ctrl = new AbortController();
     this.activeStreams.set(streamId, ctrl);
@@ -7637,8 +7776,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // A pre-stream storage/profile failure still owns a pending UI request.
       // Restore its captured input before propagating an unexpected host error.
       await this.post({type:"inputRejected",text,images,toolMode:mode,...(attachmentNames.length ? {photos:attachmentNames} : {})});
-      await this.post({type:"streamError",streamId:responseStreamId ?? "activity",activityUnavailable,error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
-      if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
+      await this.post({type:"streamError",streamId:responseStreamId ?? "activity",activityUnavailable,error:error instanceof AnnotationRefusal || error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
+      // CGP-ART-R-001 — an annotation refusal is a told, handled outcome: the learner has the reason, the text and the draft.
+      if (preflightComplete && !(error instanceof TurnToolModeError) && !(error instanceof AnnotationRefusal)) throw error;
     } finally {
       try { releaseActivity?.(); } finally {
         this.pendingSends--; settle.settled();
@@ -8500,6 +8640,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-ART-R-007 — a config for another activity or task resets the webview's state; queued page
     // text must stay visible for as long as it would be sent.
     if (this.pendingPageAttachment) void this.post({ type: "pageAttachment", attachment: this.pendingPageAttachment });
+    // CGP-ART-R-001 — so does the annotation tray: re-post this task's annotation state (the tray and
+    // its add buttons), and a changed task or activity clears the old task's numbered preview markers.
+    this.postAnnotations();
     // CGP-CHAT-R-011 — a file from another work folder, or on a seat that lost the gate, is dropped; a pending one is re-shown.
     if (this.pendingFileAttachment) {
       if (this.pendingFileAttachment.root !== this.resolveCoachCwd() || !fileAttachAllowed(toolProfile, isInstructor)) this.clearFileAttachment();

@@ -350,6 +350,8 @@ function makeHost(context, profile, provider = proto) {
     getCoach: () => ({ name: "코치", personality: "", configured: true }),
     // postConfig asks whether the one-click publish button may show (src/publish/).
     sitePublisher: () => ({ available: () => false }),
+    // CGP-ART-R-001 — postConfig re-posts the annotation tray state (off and never shown here: no message).
+    postAnnotations: () => {},
     post: async (msg) => { posts.push(msg); return true; },
     handleSend: (...args) => effects.push(["runtime-send", ...args]),
     // Everything a completion, a step move or a record would go through. A goal save must reach none of them.

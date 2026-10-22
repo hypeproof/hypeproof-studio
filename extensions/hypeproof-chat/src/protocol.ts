@@ -569,6 +569,7 @@ export type WebviewMessage = (
   | StartRequest
   | { type: "ready" }
   // CR-09 — the student removes the picked element before sending (CR switch only).
+  | { type: "annotationAction"; action: "element" | "rectangle" | "remove" | "comment"; number?: number; comment?: string }
   | { type: "removeElementContext" }
   /** CGP-ART-R-007 — the learner removed the attached page; nothing from the page is sent. */
   | { type: "removePageContext" }
@@ -866,6 +867,7 @@ export type HostMessage = (
   | { type: "denialNotice"; id: string; label: string; at: number }
   | { type: "pageAttached"; label: string }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
+  | { type: "annotations"; enabled: boolean; annotations: import("./annotationBatch").AnnotationView[] }
   | { type: "elementAttached"; element: ElementPreview | null }
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
   | { type: "pageAttachment"; attachment: import("./pageContext").PageAttachmentPreview | null }

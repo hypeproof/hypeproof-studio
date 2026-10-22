@@ -1,6 +1,7 @@
 import './answerAttempts.css';
 import { visibleAttempts, ATTEMPT_HISTORY_NOTE } from '../../src/answerAttempts';
 import { AttemptPager } from './AttemptPager';
+import { AnnotationTray } from "./AnnotationTray";
 import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
 import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
@@ -112,6 +113,9 @@ interface Props {
   messages: ChatMessage[];
   pageNotice: string | null;           // #308 — inline notice for "페이지를 코치에게"
   /** CR-09 — the picked element queued for the next turn (Curriculum Runtime only). */
+  annotationsEnabled?: boolean;
+  annotations?: import("../../src/annotationBatch").AnnotationView[];
+  onAnnotationAction?: (action: 'element' | 'rectangle' | 'remove' | 'comment', number?: number, comment?: string) => void;
   elementPreview?: import("../../src/protocol").ElementPreview | null;
   onRemoveElement?: () => void;
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
@@ -1738,6 +1742,7 @@ export function ChatPanel(props: Props) {
         {/* CGP-KNOW-R-003 — the 자료 selected for the next message, each removable before Send. */}
         {!props.instructor && config?.materials && <MaterialsChips />}
 
+        {(props.annotationsEnabled || !!props.annotations?.length) && <AnnotationTray annotations={props.annotations ?? []} onAction={props.onAnnotationAction!} />}
         {/* CR-09 — exactly what goes to the coach with the next message, removable before sending. */}
         {props.elementPreview && (
           <div className="hps-element-context" role="group" aria-label="코치에게 함께 보낼 화면 요소" data-testid="element-context">
