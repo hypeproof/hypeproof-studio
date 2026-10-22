@@ -10727,6 +10727,74 @@
           "path": "extensions/hypeproof-chat/test/publish-sharing-app.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-ANNOTATION-BATCH",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Learner preview annotation batches (CGP-ART-R-001)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ANNOTATION-BATCH",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANNOTATION-BATCH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/annotationBatch.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/annotationLimits.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/annotationCapture.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserControl.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AnnotationTray.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/annotationTray.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ANNOTATION-BATCH",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANNOTATION-BATCH",
+        "ST-IMP-ANNOTATION-BATCH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/annotation-batch.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/annotation-layout.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/annotation-host.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/annotation-provider.test.tsx"
+        }
+      ]
     }
   ]
 }

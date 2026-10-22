@@ -1,3 +1,4 @@
+import { dragRectangle, intersects, marker } from "./annotationCapture";
 import { captureReferenceScreenshot, referenceCaptureText } from "./referenceDesign.ts";
 import * as vscode from "vscode";
 import { denialCopy, denialToolText, lessonFeatureOff } from "./denialSource.ts";
@@ -57,6 +58,7 @@ export class BrowserControl {
   private targetTab: vscode.BrowserTab | undefined;
   private refs = new Map<string, number>();
   private cr: CrExecutor | undefined;
+  private annotationMarkers = new Map<number, import("./experimentBrowser").CdpLike>();
 
   private readonly crOptions: CrBrowserOptions | undefined;
 
@@ -159,6 +161,72 @@ export class BrowserControl {
       refFor: (id) => cr.refFor(id),
       adopt: (refs, generation) => cr.adoptRefs(refs, generation),
     });
+  }
+
+  async annotationIdentity(): Promise<{ generation: string; artifactId: string }> {
+    const cr = this.crExecutor();
+    if (!cr || !this.crOptions) throw new Error("표시를 사용할 수 없어요.");
+    const cdp = await this.cdp();
+    const log = await cr.logFor(cdp);
+    // Query the current frame as well: a queued navigation event must not authorize stale refs.
+    const tree = await cdp.send('Page.getFrameTree', {});
+    const frame = tree.frameTree.frame;
+    if (frame.loaderId !== log.documentGeneration) throw new Error("화면이 바뀌었어요.");
+    const artifact = await this.crOptions.artifactVersion(frame.url);
+    return { generation: frame.loaderId, artifactId: artifact.id };
+  }
+
+  async annotationMarker(number: number, rect: import('./annotationCapture').Rectangle | null): Promise<void> {
+    const cdp = rect ? await this.cdp() : this.annotationMarkers.get(number);
+    if (!cdp) return;
+    await marker(cdp, number, rect);
+    if (rect) this.annotationMarkers.set(number, cdp); else this.annotationMarkers.delete(number);
+  }
+
+  async clearAnnotationMarkers(): Promise<void> {
+    for (const [number, cdp] of this.annotationMarkers) await marker(cdp, number, null).catch(() => {});
+    this.annotationMarkers.clear();
+  }
+  annotationRefsValid(contexts: ElementContext[]): boolean {
+    return contexts.every(c => !c.ref || this.crExecutor()?.refFor(c.backendNodeId) === c.ref);
+  }
+
+  async pickRectangle(root: string | null): Promise<{ contexts: ElementContext[]; crop: NonNullable<ElementContext['crop']> }> {
+    const cr = this.crExecutor();
+    if (!cr || !this.crOptions) throw new Error("표시를 사용할 수 없어요.");
+    const hooks = this.crOptions;
+    const scope = checkAgentOrigin(this.currentTab()?.url ?? "", hooks.allowedOrigins());
+    if (!scope.ok) throw new Error(scope.reason);
+    const cdp = await this.cdp();
+    const log = await cr.logFor(cdp);
+    const before = await this.annotationIdentity();
+    const clip = await dragRectangle(cdp);
+    const shot = await cdp.send('Page.captureScreenshot', { format: 'png', clip: { ...clip, scale: 1 } });
+    if (!shot.data) throw new Error("고른 영역을 가져오지 못했어요.");
+    const ax = await cdp.send('Accessibility.getFullAXTree', {});
+    const { refs } = buildAxSnapshot(ax.nodes ?? [], { maxLines: (ax.nodes?.length ?? 0) + 1 });
+    const metrics = await cdp.send('Page.getLayoutMetrics', {});
+    const viewport = metrics.cssLayoutViewport ?? metrics.layoutViewport;
+    const ids: number[] = [];
+    for (const id of new Set(refs.values())) {
+      const model = await cdp.send('DOM.getBoxModel', { backendNodeId: id }).catch(() => null);
+      const q = model?.model?.border;
+      if (!q) continue;
+      const xs = [q[0],q[2],q[4],q[6]], ys = [q[1],q[3],q[5],q[7]];
+      if (intersects(clip, {x: Math.min(...xs)+(viewport?.pageX ?? 0), y: Math.min(...ys)+(viewport?.pageY ?? 0), width: Math.max(...xs)-Math.min(...xs), height: Math.max(...ys)-Math.min(...ys)})) ids.push(id);
+    }
+    if (ids.length > 200) throw new Error("요소가 있는 더 작은 영역을 골라 주세요.");
+    const contexts: ElementContext[] = [];
+    for (const id of ids) contexts.push(await buildElementContext(cdp, log, id, {
+      root, snapshotRefs: refs, artifactVersion: u => hooks.artifactVersion(u), refFor: id => cr.refFor(id), adopt: (refs,generation) => cr.adoptRefs(refs,generation),
+    }));
+    if (!contexts.length) {
+      const url = this.currentTab()?.url ?? '';
+      contexts.push({ref:'', backendNodeId:0, tag:'region', text:'', snippet:'', snippetTruncated:false, style:{}, source:'unmapped', crop:null, url, route:new URL(url).pathname, documentGeneration:before.generation, artifact:await hooks.artifactVersion(url), captureMs:0});
+    }
+    const after = await this.annotationIdentity();
+    if (before.generation !== after.generation || before.artifactId !== after.artifactId) throw new Error("화면이 바뀌었어요. 다시 골라 주세요.");
+    return { contexts, crop: { mimeType: 'image/png', data: shot.data, clip } };
   }
 
   /** Route + run one tool call. Always resolves (errors become is_error results). */

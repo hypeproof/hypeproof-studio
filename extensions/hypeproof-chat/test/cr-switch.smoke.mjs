@@ -63,7 +63,7 @@ assert.ok(plant((m) => (cmd(m).enablement = `true || ${CR_CONTEXT_KEY}`)).some((
 assert.ok(plant((m) => (cmd(m).command = "hypeproof-chat.renamed")).some((p) => /not declared/.test(p)));
 ok("commands: the manifest gates every inventoried CR command; planted ungated variants are caught");
 // Every command handler re-checks the served switch (a command runs without its menu).
-assert.match(providerSrc, /async pickElement\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
+assert.match(providerSrc, /async pickElement\([^)]*\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async showBrowserResults\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async testMyProduct\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async publishTestVersion\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
@@ -259,7 +259,9 @@ ok("glue: the context key mirrors the switch and the SDK server registers CR too
 // ── webview messages ───────────────────────────────────────────────────────
 for (const t of CR_SURFACES.webviewMessages) {
   assert.match(protocolSrc, new RegExp(`\\{ type: "${t}"[ ;}]`), `${t} is a declared webview message`);
-  if (t === "removeElementContext") {
+  if (t === "annotationAction") {
+    assert.match(providerSrc, /case "annotationAction":[\s\S]{0,850}await this\.pickElement\(msg\.action\)/);
+  } else if (t === "removeElementContext") {
     const handler = new RegExp(`case "${t}":[\\s\\S]{0,200}?this\\.clearElementContext\\(\\)`);
     assert.match(providerSrc, handler, `${t} only removes CR state; it has nothing to reach with the switch off`);
   } else if (t === "reviewOpen" || t === "reviewPrepare") {

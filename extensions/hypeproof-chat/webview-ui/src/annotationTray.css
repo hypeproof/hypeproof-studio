@@ -1,0 +1,30 @@
+/* CGP-ART-R-001: the learner's numbered preview annotations, sent with the next message.
+ * Shared role tokens and the Studio type scale only; focus is drawn by focusGeometry.css. */
+.hps-annotations { min-width: 0; max-width: 100%; margin: var(--ds-c-studio-styles-space-15) 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-10); font-size: var(--ds-c-studio-styles-type-17); color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-annotations-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-2); }
+.hps-annotations-title { margin: 0; font-size: var(--ds-c-studio-styles-type-17); font-weight: var(--hp-weight-strong); }
+.hps-annotations-note { margin: 0; flex-basis: 100%; color: var(--hp-text-muted-default); font-size: var(--ds-c-studio-styles-type-17); overflow-wrap: anywhere; }
+.hps-annotations-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); margin-block-start: var(--ds-c-studio-styles-space-2); }
+.hps-annotations-list { list-style: none; margin: var(--ds-c-studio-styles-space-2) 0 0; padding: 0; display: grid; gap: var(--ds-c-studio-styles-space-2); min-width: 0; }
+.hps-annotation { min-width: 0; padding: var(--ds-c-studio-styles-space-2); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-3); display: grid; gap: var(--ds-c-studio-styles-space-15); }
+.hps-annotation[data-stale="true"] { border-color: var(--hp-border-warn-default); }
+.hps-annotation-head { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); min-width: 0; }
+.hps-annotation-number { flex: 1 1 auto; min-width: 0; font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; }
+.hps-annotation-stale { margin: 0; color: var(--hp-text-warn-default); overflow-wrap: anywhere; }
+.hps-annotation-field { display: grid; gap: var(--ds-c-studio-styles-space-13); min-width: 0; }
+.hps-annotations button, .hps-annotations input, .hps-annotations summary { min-height: var(--ds-c-studio-styles-size-8); font: inherit; font-size: var(--ds-c-studio-styles-type-17); color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-annotations button { min-width: var(--ds-c-studio-styles-size-8); padding: 0 var(--ds-c-studio-styles-space-1); white-space: normal; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); cursor: pointer; }
+.hps-annotations button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-annotations button:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
+.hps-annotations button:disabled { color: var(--hp-text-muted-default); cursor: default; }
+.hps-annotation-remove { flex: 0 0 auto; }
+.hps-annotations input { width: 100%; min-width: 0; box-sizing: border-box; padding: 0 var(--ds-c-studio-styles-space-2); background: var(--vscode-input-background, transparent); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); }
+.hps-annotations summary { display: flex; align-items: center; cursor: pointer; }
+.hps-annotations pre { margin: var(--ds-c-studio-styles-space-15) 0 0; max-height: var(--ds-c-studio-styles-size-56); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; font: inherit; font-size: var(--ds-c-studio-styles-type-17); }
+.hps-annotations img { display: block; max-width: 100%; height: auto; margin-block-start: var(--ds-c-studio-styles-space-15); }
+@media (forced-colors: active) {
+  .hps-annotations, .hps-annotation { border-color: CanvasText; }
+  .hps-annotations button { color: ButtonText; border-color: ButtonText; background: Canvas; }
+  .hps-annotations input { border-color: CanvasText; }
+  .hps-annotations button:disabled { color: GrayText; border-color: GrayText; }
+}

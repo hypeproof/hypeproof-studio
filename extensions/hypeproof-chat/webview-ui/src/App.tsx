@@ -67,6 +67,8 @@ interface State {
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
   /** CR-09 — the picked element queued for the next turn; the student can remove it. */
   elementPreview: ElementPreview | null;
+  annotationsEnabled: boolean;
+  annotations: import("../../src/annotationBatch").AnnotationView[];
   /** CGP-ART-R-007 — page text queued for the next turn. */
   pageAttachment: import('../../src/pageContext').PageAttachmentPreview | null;
   /** CGP-CHAT-R-011 — the work-folder file queued for the next turn, and why the last pick was refused. */
@@ -114,6 +116,7 @@ type Action =
   | { type: "streamCitations"; citations: Citation[] }
   | { type: "toolLog"; entry: ToolEntry }
   | { type: "pageAttached"; label: string }
+  | { type: "annotations"; enabled: boolean; annotations: import("../../src/annotationBatch").AnnotationView[] }
   | { type: "elementAttached"; element: ElementPreview | null }
   | { type: "pageAttachment"; attachment: import('../../src/pageContext').PageAttachmentPreview | null }
   | { type: "fileAttachment"; attachment: import('../../src/protocol').FileAttachmentPreview | null; error?: string; notice?: string }
@@ -160,7 +163,7 @@ const initialState: State = {
   trialEndCard: null,
   safetyNotice: null,
   pageNotice: null,
-  elementPreview: null,
+  elementPreview: null, annotations: [], annotationsEnabled: false,
   pageAttachment: null,
   fileAttachment: null,
   fileAttachError: null,
@@ -215,6 +218,7 @@ function reducer(state: State, action: Action): State {
     case "pageAttached":
       // #308 — inline notice; cleared on the next send (userSent) only.
       return { ...state, pageNotice: action.label };
+    case "annotations": return { ...state, annotations: action.annotations, annotationsEnabled: action.enabled };
     case "elementAttached":
       return { ...state, elementPreview: action.element };
     case "pageAttachment":
@@ -491,6 +495,7 @@ export function App() {
           if (storedDenialNotice(msg.label)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: '', label: msg.label, state: 'error', at: msg.at } });
           break;
         case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
+        case "annotations": dispatch({ type: "annotations", enabled: msg.enabled, annotations: msg.annotations }); break;
         case "elementAttached": dispatch({ type: "elementAttached", element: msg.element }); break;
         case "pageAttachment": dispatch({ type: "pageAttachment", attachment: msg.attachment }); break;
         case "fileAttachment": dispatch({ type: "fileAttachment", attachment: msg.attachment, error: msg.error, notice: msg.notice }); break;
@@ -801,6 +806,9 @@ export function App() {
         }}
         verifyPanel={carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         sendLocked={!!state.verify?.running || !!workspace?.error}
+        annotationsEnabled={state.annotationsEnabled}
+        annotations={state.annotations}
+        onAnnotationAction={(action, number, comment) => postToHost({type:'annotationAction', action, number, comment})}
         onRemoveElement={() => {
           dispatch({ type: "elementAttached", element: null });
           postToHost({ type: "removeElementContext" });

@@ -4512,3 +4512,54 @@ on the real Chalk pages: learner share, distribution confirmation, help feedback
 | ID | Requirement | Evidence |
 |---|---|---|
 | REQ-STUDIO-PUBLISH-SHARING | In the publish panel, each distinct test version, including the current unpublished version, has one persistent sharing label: `나만 볼 수 있어요`, `링크가 있는 누구나 · {date}까지`, or `링크 끊김`, plus its active link count. Aggregate across that version's experiments, deduplicate link IDs, exclude revoked/expired/invalid links, and show the last active link's expiry. Copy is disabled with a visible reason when no live link exists. Copy re-reads the Service and checks activity, token, base and capability before writing the clipboard. Expiry updates locally; remote state refreshes on focus and every 15 seconds while open. Older responses cannot overwrite newer state or reopen a closed panel. A failed or malformed read is unknown, never evidence of privacy and never reported as a failed publish: the panel says `공유 상태를 확인하지 못했어요` in a status region, keeps the last known rows marked with the time they were read and with copy off, and clears the marker on the next good read. | `test/publish-sharing.test.tsx`, `test/publish-sharing-layout.smoke.mjs`, `test/publish-sharing-host.smoke.mjs`, `test/publish-sharing-app.test.tsx`; CGP-ART-012 / REQ-ART-11; Product Intent 2 (visible responsibility), OWNERSHIP hypothesis, no learning-outcome claim. |
+
+## Learner preview annotation batches (CGP-ART-R-001)
+
+REQ-STUDIO-ANNOTATION-BATCH extends CR-09/CR-10 and AE-18; traces to
+CGP-ART-002 and Product Intent principles 2 (visible learner judgment) and 1
+(useful work). This exposes learner choice and verification behavior, not a score.
+
+Behind the default-off `hypeproofChat.annotationBatchEnabled` machine setting,
+and only with existing Curriculum Runtime and image permissions, the learner can
+collect at most 10 numbered element or dragged-rectangle annotations. Each has
+an optional comment of at most 300 normalized characters and a number on the page
+and in the tray. The tray discloses the exact ref, snippet, style, crop, source
+mapping or `unmapped`, document generation and artifact version sent. Rectangles
+carry their own crop and every intersected snapshot ref. Removing a row removes
+its outgoing payload and marker. The next ordinary message sends one numbered
+batch in one coach turn on proxy and SDK paths. Local development runtime
+annotation input is unavailable until its image contract supports crops. Browser-result recording
+binds every capture to its artifact version and numbered turn-specific tool id.
+An earlier document generation, changed artifact, invalid ref or concurrent draft
+change refuses sending; stale rows remain visibly flagged for removal/repicking.
+A refused send names its real reason to the learner in Korean (marks from an
+earlier page or artifact version, annotation permission or runtime unavailable,
+marks changed during the send, or the activity or task changed during the send),
+never the activity-connection copy. It returns the typed text to the composer,
+keeps the draft (except after an activity or task change, which already dropped
+the old task's draft) and is a handled outcome, not a host error. A pick re-checks
+the image permission and runtime before touching the preview, and adds nothing
+when the page, task or permission changed during the capture. A task or activity
+switch re-posts that task's annotation state with its config, so the tray and its
+add buttons stay offered, and clears the previous task's preview markers at once.
+Task/activity changes cannot attach another task's annotations; error retries do
+not take a new draft. An error retry resends the annotations the failed turn
+carried when the page generation, artifact version, refs, task and permissions
+still match; otherwise it sends without them and tells the learner so. Retry
+memory keeps the annotations of the last 20 annotated turns. A message
+carrying annotations is always a coach turn: the brain, show, project-switch and
+guest-list shortcuts never answer it. The old single-element path remains when
+the flag is off. Comments drop C0/C1 controls, soft hyphen, U+061C, U+180E,
+U+200B-U+200F, U+2028-U+202E, U+2060-U+2069 and U+FEFF. Page text in the
+envelope is quoted: the same invisible and bidi characters removed, every line
+prefixed with `> ` so page text can never start an envelope line, at most 12
+element blocks of 1800 characters per annotation (the rest counted, not sent).
+The tray uses the shared design tokens, type scale, focus geometry and forced
+colours, with 44px targets.
+
+Validation: `annotation-batch.test.tsx`, `annotation-host.test.tsx`,
+`annotation-provider.test.tsx`, `annotation-layout.test.tsx` (computed, real
+webview entry), existing
+`cr-host.smoke.mjs`, `cr-switch.smoke.mjs` and `element-pick.smoke.mjs`. Browser
+layout tests require `FOCUS_REQUIRE_BROWSER=1` on the owner/CI host; sandbox
+unavailability must be reported as NOT RUN, never visual PASS.
