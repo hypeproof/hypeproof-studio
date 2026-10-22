@@ -4445,3 +4445,19 @@ panel send nothing; panel-hidden refusal without a native modal), `public-audien
 column, 44px targets), `outbound-approval.smoke.mjs`, `outbound-consent-host.smoke.mjs`,
 `publish-site.smoke.mjs`. PI#2 makes the learner responsible for choosing who receives
 work; this may expose JUDGMENT/OWNERSHIP, without learner-facing capability labels.
+
+## Learner goal status above the composer
+
+REQ-CGP-AGENT-13 (CGP-AGENT-R-010, CGP-AGENT-013; PI#2, PI#5; AE-01, AE-17):
+For a learner with a served lesson, show the existing activity/revision-bound goal above the
+composer, with 진행 중 / 이룸 / 멈춤 / 예산 한도. These are explicitly labelled learner
+self-reports, not task completion, runtime stop, or instructor verification. Only an explicit
+learner status action writes status; viewing, editing goal text, model replies and budget
+refreshes do not change it. Legacy records display 진행 중 without writing anything.
+Status saves use the existing serialized, revision-checked local goal store. They never
+start an AI turn. A selected, confirmed lesson-support requests ledger shows remaining
+requests and confirmation time; missing, invalid, unresolved or unsupported data shows
+확인 안 됨, never an invented zero. A confirmed zero remains zero. Free seats continue to
+hide all budget counts (DEC-35). No new Service or observation data flow is introduced.
+This exposes learner ownership and judgment without capability labels or evaluation scores.
+Validation: `goal-status.test.tsx`, `goal-status-css.smoke.mjs`, `student-goal.smoke.mjs`.

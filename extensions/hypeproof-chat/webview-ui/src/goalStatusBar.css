@@ -1,0 +1,38 @@
+.hps-goal-status {
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--ds-c-status-chip-label);
+  color: var(--hp-text-primary-default);
+  overflow-wrap: anywhere;
+}
+.hps-goal-status p { margin: var(--ds-c-status-chip-gap) 0; }
+.hps-goal-status div { display: flex; flex-wrap: wrap; gap: var(--ds-c-status-chip-gap); }
+.hps-goal-status button {
+  min-height: var(--ds-c-studio-tokens-control-md);
+  min-width: var(--ds-c-studio-tokens-control-md);
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: var(--ds-c-status-chip-edge) solid var(--hp-border-control-default);
+  border-radius: var(--ds-c-status-chip-radius);
+  padding-inline: var(--ds-c-status-chip-pad-inline);
+}
+.hps-goal-status button:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }
+.hps-goal-status button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-goal-status button:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
+/* The chosen status is drawn by a filled marker, weight and an inset ring, never by colour alone. */
+.hps-goal-status button[aria-pressed="true"] { font-weight: var(--hp-weight-strong); box-shadow: inset 0 0 0 var(--ds-c-focus-width) currentColor; }
+.hps-goal-status button[aria-pressed="true"]::before {
+  content: "";
+  display: inline-block;
+  width: var(--ds-c-status-chip-pad-inline);
+  height: var(--ds-c-status-chip-pad-inline);
+  margin-inline-end: var(--ds-c-status-chip-pad-inline);
+  background: currentColor;
+  border-radius: var(--ds-c-status-chip-radius);
+}
+@media (forced-colors: active) {
+  .hps-goal-status { color: CanvasText; }
+  .hps-goal-status button { border-color: ButtonText; }
+  .hps-goal-status button[aria-pressed="true"] { border-color: Highlight; }
+}

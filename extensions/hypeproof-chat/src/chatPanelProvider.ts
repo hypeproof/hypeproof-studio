@@ -8287,6 +8287,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const all = this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY);
     const requestId = goalRequestIdOf(msg);
     const echo = requestId ? { requestId } : {};
+    // Re-check at execution time: queued writes may outlive an activity or instructor switch.
+    if (msg && typeof msg === "object" && "status" in msg &&
+        (this._instructorMode?.isInstructor || !("activityId" in msg) || msg.activityId !== activity)) {
+      await this.post({ type: "goalState", error: GOAL_REFUSAL_SENTENCES.other_lesson, ...echo });
+      return;
+    }
     const saved = acceptGoalSave(lesson, activity, msg, all, Date.now());
     if (!saved.ok) {
       const newer = saved.code === "stale" ? goalViewOf(lesson, activity, all) : null;

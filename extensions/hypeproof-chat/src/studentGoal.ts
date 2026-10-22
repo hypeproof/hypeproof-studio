@@ -18,6 +18,10 @@
 // 완료되지 않는다"). Records of earlier lesson revisions stay on this device with no delete path, like `hps.lessonWork`;
 // how long they are kept is an open decision (docs/testing/learning-agent-experience.md#goal-20261006).
 
+export const GOAL_STATUSES = { active: "진행 중", complete: "이룸", paused: "멈춤", budget_limit: "예산 한도" } as const;
+export type GoalStatus = keyof typeof GOAL_STATUSES;
+const isGoalStatus = (value: unknown): value is GoalStatus => typeof value === "string" && Object.hasOwn(GOAL_STATUSES, value);
+
 export const STUDENT_GOAL_KEY = "hps.studentGoal";
 export const STUDENT_GOAL_SCHEMA = "hps-student-goal/1";
 /** Bounds the screen's fields also enforce (`maxLength`); a message past them is refused, never cut. */
@@ -38,6 +42,7 @@ export interface StudentGoalRecord {
   lesson: GoalLessonRef;
   /** The activity the seat is bound to. Null only on a host without activity connections (tests): see `goalScopeKey`. */
   activity: string | null;
+  status?: GoalStatus;
   goal: string;
   criteria: string[];
   /** 1 for the first save, then +1 per save. A save made from an older revision is refused (`stale`). */
@@ -49,6 +54,7 @@ export interface StudentGoalRecord {
 export interface StudentGoalView {
   lesson: GoalLessonRef;
   activity: string | null;
+  status?: GoalStatus;
   goal: string;
   criteria: string[];
   revision: number;
@@ -58,6 +64,7 @@ export interface StudentGoalView {
 /** What the webview sends: the lesson it drew the form under, the edit, and the revision it started from. */
 export interface GoalSaveRequest {
   lesson: string;
+  status?: GoalStatus;
   goal: string;
   criteria: string[];
   base: number;
@@ -141,6 +148,7 @@ function validRecord(value: unknown): value is StudentGoalRecord {
   const lesson = goalLessonRefOf(value.lesson);
   if (!lesson || Object.keys(value.lesson as object).length !== 3) return false;
   if (value.activity !== null && activityOf(value.activity as string) === null) return false;
+  if (value.status !== undefined && !isGoalStatus(value.status)) return false;
   if (typeof value.goal !== "string" || value.goal.length > GOAL_TEXT_MAX) return false;
   const criteria = value.criteria;
   if (!Array.isArray(criteria) || criteria.length > GOAL_CRITERIA_MAX || !criteria.every((c) => nonEmpty(c, GOAL_CRITERION_MAX))) return false;
@@ -167,6 +175,7 @@ export function goalViewOf(lesson: unknown, activity: string | null | undefined,
   return {
     lesson: ref,
     activity: scope,
+    ...(record?.status ? { status: record.status } : {}),
     goal: record?.goal ?? "",
     criteria: record ? [...record.criteria] : [],
     revision: record?.revision ?? 0,
@@ -201,6 +210,7 @@ export function acceptGoalSave(
   // old lesson's goal under the new one.
   if (msg.lesson !== ref.sha256) return { ok: false, code: "other_lesson" };
   if (typeof msg.goal !== "string" || !Array.isArray(msg.criteria) || !msg.criteria.every((c) => typeof c === "string")) return { ok: false, code: "invalid" };
+  if (msg.status !== undefined && !isGoalStatus(msg.status)) return { ok: false, code: "invalid" };
   const goal = msg.goal.trim();
   const criteria = (msg.criteria as string[]).map((c) => c.trim()).filter((c) => c.length > 0);
   if (goal.length > GOAL_TEXT_MAX || criteria.some((c) => c.length > GOAL_CRITERION_MAX)) return { ok: false, code: "too_long" };
@@ -213,6 +223,7 @@ export function acceptGoalSave(
     schema: STUDENT_GOAL_SCHEMA,
     lesson: ref,
     activity: scope,
+    ...((msg.status ?? stored?.status) ? { status: (msg.status ?? stored?.status) as GoalStatus } : {}),
     goal,
     criteria,
     revision: (stored?.revision ?? 0) + 1,
