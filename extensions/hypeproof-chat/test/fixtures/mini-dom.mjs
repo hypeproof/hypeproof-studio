@@ -75,6 +75,8 @@ class Node {
   dispatchEvent(event) {
     const path = [];
     for (let n = this; n; n = n.parentNode) path.push(n);
+    // As in a browser, an event in the document propagates on to the window.
+    if (path.at(-1)?.nodeType === 9 && winTarget) path.push(winTarget);
     event.target = this;
     const run = (node, capture) => {
       event.currentTarget = node;
@@ -85,6 +87,8 @@ class Node {
     return !event.defaultPrevented;
   }
 }
+
+let winTarget = null;
 
 class Text extends Node {
   constructor(data, doc) { super(3, "#text", doc); this.data = data; }
@@ -179,7 +183,7 @@ class HTMLIFrameElement {}
 // Its presence makes react-dom use native composition events (onCompositionStart/End), as in a browser.
 class CompositionEvent {}
 class Observer { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } }
-const winTarget = new Node(0, "#window", document);
+winTarget = new Node(0, "#window", document);
 const win = globalThis.window ?? {};
 Object.assign(win, {
   document, HTMLIFrameElement, CompositionEvent, Node, Element, Text,

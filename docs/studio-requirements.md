@@ -480,6 +480,23 @@ Form submission and native `<dialog>` cancel during composition rely on the brow
 them back; physical macOS 2-set and Windows MS IME runs are not yet recorded. Test:
 `test/korean-input.smoke.mjs` (scans every webview `.tsx` handler).
 
+CGP-DS-D-024 / REQ-CGP-DS-30 (2026-10-22) names the keys: while "안녕" is being composed, Enter,
+Escape, Tab, Arrow-up and Cmd/Ctrl+Enter each stay with the IME. In the composer (personal and
+classroom, idle and mid-turn) none of them sends, queues, clears the draft or closes the sources
+panel; in the task rename and the edit box none saves or cancels; in a modal or popover holding a
+text field Tab neither wraps focus, is held nor dismisses. The composer, edit box and dialog hook
+never `preventDefault` a composing key, so the IME still commits or cancels the syllable; only a
+form field (task rename, the purge dialog) holds a composing Enter back from implicit submission. VS Code's webview host forwards every keydown that reaches
+the iframe window to the workbench keybinding dispatcher without `isComposing`, so the webview
+entry (`main.tsx`) installs one document-level barrier (`installImeHostBarrier`) that stops a
+composing keydown there, after every in-page handler and before the host; plain keys still reach
+the host. Studio has no Arrow-up prompt recall today; the composer's composition check runs before
+every other key branch, so a future recall inherits it. Chalk: `manage.html`'s document Escape
+handler (navigation drawer, pick-by menu, seat detail) ignores a composing Escape from the seat
+search and note fields. Each surface has a positive control (the same key after `compositionend`
+acts). Tests: `test/ime-guard-keys.test.tsx`, `chalk/test/ime-escape.test.mjs`. The physical
+macOS 2-set / Windows MS IME run remains an owner check.
+
 CGP-DS-R-034 (2026-10-19), extending DES-11: a required control boundary (button, text field,
 select, choice card, plan and repository options, lesson-mode Send) is drawn with
 `--hp-border-control-default` (#748F79: 4.9:1 on `--hp-bg-app-default`, 4.1:1 on `--hp-bg-panel-default`; #76837A on the Paper
