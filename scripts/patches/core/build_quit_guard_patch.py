@@ -29,6 +29,14 @@ Staged into vscodium-base/patches/user/ by scripts/stage-core-patches.sh.
 
 """
 
+# Replace the local stop joiner with a Last joiner, matching the remote-host path.
+# Default joiners (including the staged updater) still need the extension host alive.
+REPLACEMENTS = [(
+    "src/vs/workbench/services/extensions/common/abstractExtensionService.ts",
+    "event.join(this._doStopExtensionHosts(), {\n\t\t\t\t\tid: 'join.stopExtensionHosts',\n\t\t\t\t\tlabel: nls.localize('stopExtensionHosts', \"Stopping Extension Hosts\"),",
+    "event.join(() => this._doStopExtensionHosts(), {\n\t\t\t\t\tid: 'join.stopExtensionHosts',\n\t\t\t\t\tlabel: nls.localize('stopExtensionHosts', \"Stopping Extension Hosts\"),\n\t\t\t\t\torder: WillShutdownJoinerOrder.Last,",
+)]
+
 HOOKS = [
     (
         "src/vs/platform/dialogs/common/dialogs.ts",
@@ -59,7 +67,7 @@ def build(vscode: pathlib.Path) -> str:
     with tempfile.TemporaryDirectory() as tmp:
         work = pathlib.Path(tmp)
         git("init", "-q", cwd=work)
-        for rel in sorted({h[0] for h in HOOKS}):
+        for rel in sorted({h[0] for h in HOOKS + REPLACEMENTS}):
             target = work / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(git("show", f"HEAD:{rel}", cwd=vscode))
@@ -71,6 +79,12 @@ def build(vscode: pathlib.Path) -> str:
             if text.count(anchor) != 1:
                 sys.exit(f"anchor not found exactly once in {rel}: {anchor.strip()}")
             target.write_text(text.replace(anchor, anchor + insert))
+        for rel, before, after in REPLACEMENTS:
+            target = work / rel
+            text = target.read_text()
+            if text.count(before) != 1:
+                sys.exit(f"replacement anchor not unique: {rel}")
+            target.write_text(text.replace(before, after))
         shutil.copytree(SRC, work / "src", dirs_exist_ok=True)
         git("add", "-A", cwd=work)
         return HEADER + git("diff", "--cached", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", cwd=work)

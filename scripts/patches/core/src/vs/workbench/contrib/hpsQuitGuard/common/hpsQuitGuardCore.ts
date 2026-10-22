@@ -136,3 +136,30 @@ export async function hpsRunQuitGuard(reason: number, deps: HpsQuitGuardDeps): P
 		return false;
 	}
 }
+
+/**
+ * True when this shutdown ends the app, not just one window. On Windows and Linux the app
+ * exits when its last window closes, and VS Code reports that as CLOSE; the app quit that
+ * follows runs in the main process with no renderer left. Mirrors upstream
+ * workingCopyBackupTracker (CLOSE is an exit when !isMacintosh and one window is left).
+ * On macOS closing a window never quits the app; only QUIT (Cmd+Q) does.
+ */
+export async function hpsIsAppExit(reason: number, isMacintosh: boolean, windowCount: () => Promise<number>): Promise<boolean> {
+	if (reason === HPS_SHUTDOWN_QUIT) {
+		return true;
+	}
+	if (reason !== HPS_SHUTDOWN_CLOSE || isMacintosh) {
+		return false;
+	}
+	return (await windowCount()) === 1;
+}
+
+/** Only a committed app exit consumes the prepared update. Failure keeps the old app. */
+export async function hpsInstallOnQuit(reason: number, install: () => Promise<unknown>, isMacintosh = true, windowCount: () => Promise<number> = async () => 0): Promise<void> {
+	try {
+		if (!await hpsIsAppExit(reason, isMacintosh, windowCount)) {
+			return;
+		}
+		await install();
+	} catch { /* Keep the old app; never trap shutdown. */ }
+}

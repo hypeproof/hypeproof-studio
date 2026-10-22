@@ -81,10 +81,10 @@ index 0000000..9347857
 +}
 diff --git a/src/vs/workbench/contrib/hpsQuitGuard/common/hpsQuitGuardCore.ts b/src/vs/workbench/contrib/hpsQuitGuard/common/hpsQuitGuardCore.ts
 new file mode 100644
-index 0000000..4b73e70
+index 0000000..c8fa114
 --- /dev/null
 +++ b/src/vs/workbench/contrib/hpsQuitGuard/common/hpsQuitGuardCore.ts
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,165 @@
 +/*---------------------------------------------------------------------------------------------
 + *  HypeProof Studio. Canonical source: hypeproof-studio scripts/patches/core/.
 + *  Added to VS Code by scripts/patches/core/hps-quit-guard.patch. Keep it import-free and
@@ -223,12 +223,39 @@ index 0000000..4b73e70
 +		return false;
 +	}
 +}
++
++/**
++ * True when this shutdown ends the app, not just one window. On Windows and Linux the app
++ * exits when its last window closes, and VS Code reports that as CLOSE; the app quit that
++ * follows runs in the main process with no renderer left. Mirrors upstream
++ * workingCopyBackupTracker (CLOSE is an exit when !isMacintosh and one window is left).
++ * On macOS closing a window never quits the app; only QUIT (Cmd+Q) does.
++ */
++export async function hpsIsAppExit(reason: number, isMacintosh: boolean, windowCount: () => Promise<number>): Promise<boolean> {
++	if (reason === HPS_SHUTDOWN_QUIT) {
++		return true;
++	}
++	if (reason !== HPS_SHUTDOWN_CLOSE || isMacintosh) {
++		return false;
++	}
++	return (await windowCount()) === 1;
++}
++
++/** Only a committed app exit consumes the prepared update. Failure keeps the old app. */
++export async function hpsInstallOnQuit(reason: number, install: () => Promise<unknown>, isMacintosh = true, windowCount: () => Promise<number> = async () => 0): Promise<void> {
++	try {
++		if (!await hpsIsAppExit(reason, isMacintosh, windowCount)) {
++			return;
++		}
++		await install();
++	} catch { /* Keep the old app; never trap shutdown. */ }
++}
 diff --git a/src/vs/workbench/contrib/hpsQuitGuard/electron-browser/hpsQuitGuard.contribution.ts b/src/vs/workbench/contrib/hpsQuitGuard/electron-browser/hpsQuitGuard.contribution.ts
 new file mode 100644
-index 0000000..7400c75
+index 0000000..7dff2e1
 --- /dev/null
 +++ b/src/vs/workbench/contrib/hpsQuitGuard/electron-browser/hpsQuitGuard.contribution.ts
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,53 @@
 +/*---------------------------------------------------------------------------------------------
 + *  HypeProof Studio. Canonical source: hypeproof-studio scripts/patches/core/.
 + *  Added to VS Code by scripts/patches/core/hps-quit-guard.patch.
@@ -239,11 +266,12 @@ index 0000000..7400c75
 +
 +import { timeout } from '../../../../base/common/async.js';
 +import { Disposable } from '../../../../base/common/lifecycle.js';
++import { isMacintosh } from '../../../../base/common/platform.js';
 +import { ICommandService } from '../../../../platform/commands/common/commands.js';
 +import { INativeHostService } from '../../../../platform/native/common/native.js';
 +import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 +import { ILifecycleService } from '../../../services/lifecycle/common/lifecycle.js';
-+import { HPS_QUIT_GUARD_COMMAND, hpsGuardsShutdown, hpsRunQuitGuard } from '../common/hpsQuitGuardCore.js';
++import { HPS_QUIT_GUARD_COMMAND, hpsGuardsShutdown, hpsRunQuitGuard, hpsInstallOnQuit } from '../common/hpsQuitGuardCore.js';
 +
 +class HpsQuitGuardContribution extends Disposable implements IWorkbenchContribution {
 +
@@ -255,6 +283,17 @@ index 0000000..7400c75
 +		@INativeHostService private readonly nativeHostService: INativeHostService,
 +	) {
 +		super();
++
++		// Default joiners finish before the extension-host Last joiner. A veto never reaches
++		// onWillShutdown. Reload and switching workspace never install. Closing the last window
++		// on Windows is the app exit, so it installs like File > Exit and Cmd+Q.
++		this._register(lifecycleService.onWillShutdown(e => {
++			e.join(hpsInstallOnQuit(e.reason,
++				() => this.commandService.executeCommand('_hypeproof.update.installOnQuit'),
++				isMacintosh,
++				() => this.nativeHostService.getWindowCount()),
++				{ id: 'join.hpsStagedUpdate', label: '준비된 업데이트 적용' });
++		}));
 +
 +		this._register(lifecycleService.onBeforeShutdown(e => {
 +			if (!hpsGuardsShutdown(e.reason)) {
@@ -270,6 +309,22 @@ index 0000000..7400c75
 +}
 +
 +registerWorkbenchContribution2(HpsQuitGuardContribution.ID, HpsQuitGuardContribution, WorkbenchPhase.AfterRestored);
+diff --git a/src/vs/workbench/services/extensions/common/abstractExtensionService.ts b/src/vs/workbench/services/extensions/common/abstractExtensionService.ts
+index 16ace8d..568d6bf 100644
+--- a/src/vs/workbench/services/extensions/common/abstractExtensionService.ts
++++ b/src/vs/workbench/services/extensions/common/abstractExtensionService.ts
+@@ -226,9 +226,10 @@ export abstract class AbstractExtensionService extends Disposable implements IEx
+ 					order: WillShutdownJoinerOrder.Last // after others have joined that might depend on a remote connection
+ 				});
+ 			} else {
+-				event.join(this._doStopExtensionHosts(), {
++				event.join(() => this._doStopExtensionHosts(), {
+ 					id: 'join.stopExtensionHosts',
+ 					label: nls.localize('stopExtensionHosts', "Stopping Extension Hosts"),
++					order: WillShutdownJoinerOrder.Last,
+ 				});
+ 			}
+ 		}));
 diff --git a/src/vs/workbench/workbench.desktop.main.ts b/src/vs/workbench/workbench.desktop.main.ts
 index 03a9d80..c73df51 100644
 --- a/src/vs/workbench/workbench.desktop.main.ts

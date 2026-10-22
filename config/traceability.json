@@ -10872,6 +10872,65 @@
           "path": "extensions/hypeproof-chat/test/lib/headless-chromium.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-UPDATE-ON-QUIT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-QUIT-GUARD"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Install prepared updates on quit (CGP-SHELL-R-002)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-UPDATE-ON-QUIT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UPDATE-ON-QUIT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/stagedUpdate.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateChecker.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "scripts/patches/core/hps-quit-guard.patch"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-UPDATE-ON-QUIT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UPDATE-ON-QUIT",
+        "ST-IMP-UPDATE-ON-QUIT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/staged-update.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-stage-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-quit-lifecycle.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-installer.smoke.mjs"
+        }
+      ]
     }
   ]
 }

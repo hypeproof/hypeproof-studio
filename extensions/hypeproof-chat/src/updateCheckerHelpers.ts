@@ -146,7 +146,11 @@ export function renderWindowsUpdateWrapper(input: WindowsUpdateWrapperInput): st
     "if (Get-Process -Name $name -ErrorAction SilentlyContinue) { throw 'Studio is still running; update cancelled without installing.' }",
     "# Grace for the OS to release the single-instance lock after the last exit.",
     "Start-Sleep -Milliseconds 1200",
-    `Start-Process -FilePath ${ps(installerPath)} -ArgumentList ${argList}`,
+    "# Hold the handoff lease until Setup itself exits. Not -Wait: that also waits for",
+    "# descendants, and Setup relaunches Studio after an explicit restart, so the wrapper",
+    "# would stay alive for the whole relaunched session and block the next update.",
+    `$setup = Start-Process -PassThru -FilePath ${ps(installerPath)} -ArgumentList ${argList}`,
+    "$setup.WaitForExit()",
     "",
   ].join("\r\n");
 }
@@ -249,6 +253,8 @@ export interface InstallerScriptInput {
   oldVersion: string;
   // Where to write the per-run log (full path).
   logPath: string;
+  /** Natural quit must not reopen the app. Explicit restart keeps the default. */
+  relaunch?: boolean;
 }
 
 /**
@@ -347,7 +353,7 @@ restore_on_exit() {
   status=$?
   if [[ $status -ne 0 && -d "$BACKUP_PATH" && ! -e "$OLD_APP" ]]; then
     mv "$BACKUP_PATH" "$OLD_APP" || { echo "[RECOVERY] previous app retained at $BACKUP_PATH"; exit 1; }
-    open "$OLD_APP" || true
+    ${input.relaunch === false ? ": # stay closed after a user quit" : 'open "$OLD_APP" || true'}
   fi
   # Preserve any backup for manual recovery, including a failed relaunch.
   if [[ ! -d "$BACKUP_PATH" ]]; then rm -rf "$STAGE"; fi
@@ -367,8 +373,8 @@ xattr -dr com.apple.quarantine "$OLD_APP" 2>/dev/null || true
 echo "[ok] stripped quarantine"
 
 # Reopen
-open "$OLD_APP" || abort "could not launch updated app; previous app retained at $BACKUP_PATH"
-echo "[ok] launched updated app"
+${input.relaunch === false ? ": # next launch is user initiated" : 'open "$OLD_APP" || abort "could not launch updated app; previous app retained at $BACKUP_PATH"'}
+echo "[ok] ${input.relaunch === false ? 'ready for next launch' : 'launched updated app'}"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] update complete"
 exit 0
 `;
