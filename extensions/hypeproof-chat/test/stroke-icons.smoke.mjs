@@ -23,7 +23,7 @@ const hostSrc = new URL("../src/", import.meta.url);
 // ── 1. Source scan ──────────────────────────────────────────────────────────────────────────
 
 /** Emoji and pictographs, plus the Unicode status marks that are not in that property. */
-const GLYPH = /\p{Extended_Pictographic}|[✓✗✕☑☐⚠▶◀▸▾☰⚙]/gu;
+const GLYPH = /\p{Extended_Pictographic}|[✓✗✕☑☐⚠▶◀▸▾☰⚙◷]/gu;
 /** Typographic symbols that are text, not icons. */
 const TEXT_SYMBOLS = new Set(["©", "®", "™", "↔"]);
 

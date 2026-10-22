@@ -2394,3 +2394,31 @@ html, body, #root {
 .hps-attachment-failure-cause { display: inline-flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); margin-inline-start: var(--ds-c-studio-styles-space-2); }
 .hps-attachment-error-summary { margin: var(--ds-c-studio-styles-space-15) 0 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; white-space: normal; }
 .hps-attachment-error-summary:empty { margin: 0; }
+
+/* CGP-SHELL-D-028: the model and the ledger chip share one line, in the wide heading row and in the
+   narrow header's own row. Only the model label gives way (ellipsis, down to nothing); no part of the
+   balance (count, confirmation time, reservation/unconfirmed, class source name) is ever cut
+   (DES-SHELL-28, REQ-SHELL-29, AB-15). When the chip is wider than the row, its parts wrap whole onto
+   further lines inside the chip. The chip is a 44px learner control on the learner type scale
+   (DEC-D028); the header keeps main's height at wide widths. */
+.hps-access-header { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); min-width: 0; max-width: 100%; white-space: nowrap; }
+/* Classroom header: the line gives way before the coach name and actions (R-029: never one letter),
+   and keeps a gap after the coach name. */
+.hps-header > .hps-access-header { flex-shrink: 1000; margin-inline-start: var(--ds-c-studio-styles-space-2); }
+.hps-access-model { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hps-header .hps-access-header .hps-access-chip { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: var(--hp-control-min); max-width: 100%; min-height: var(--hp-control-min); box-sizing: border-box; margin: 0; padding: 0 var(--ds-c-studio-styles-space-2); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-styles-typography-5); white-space: nowrap; text-align: start; color: var(--vscode-foreground); background: var(--vscode-editor-background); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-12); }
+/* The chip text is a paragraph: the spaces between parts are the only places it wraps, and every
+   part (and the count's "남은 요청 N회") is a whole unit. A unit wider than the whole chip (an extreme
+   ledger value) wraps inside itself instead of being cut. */
+.hps-access-chip-text { display: block; min-width: 0; white-space: normal; }
+.hps-access-chip .hps-access-part { white-space: normal; }
+.hps-access-chip .hps-access-part:not([data-part="count"]), .hps-access-count, .hps-access-count-prefix { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
+.hps-access-warning, .hps-access-clock { display: inline-flex; vertical-align: text-bottom; margin-inline-end: var(--ds-c-studio-styles-space-13); }
+.hps-header .hps-access-header .hps-access-chip[data-low] { border-color: var(--hp-border-warn-default); }
+.hps-access-chip[data-low] .hps-access-warning { color: var(--hp-text-warn-default); }
+.hps-header .hps-access-header .hps-access-chip:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+@media (forced-colors: active) {
+  .hps-header .hps-access-header .hps-access-chip { color: ButtonText; background: ButtonFace; border-color: ButtonText; }
+  .hps-header .hps-access-header .hps-access-chip[data-low] { color: ButtonText; background: ButtonFace; border-color: ButtonText; }
+  .hps-access-chip[data-low] .hps-access-warning { color: ButtonText; }
+}

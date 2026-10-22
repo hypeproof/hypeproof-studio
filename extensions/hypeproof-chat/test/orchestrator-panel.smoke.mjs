@@ -257,8 +257,13 @@ const BASE = {
   // Re-recorded after the rebase onto CGP-CHAT-D-001 (#2187): the only change from the earlier pair is
   // that invisible response-announcer node moving, the same move main's nine digests took
   // (identical markup after removing that one node, diffed with HPS_A5_DUMP_DIR).
-  "ChatPanel/classroom-class-funded": "9b07c13c930a022633e3266d047c2c20b49bb1ef2200599a9110a90289ce16b0",
-  "ChatPanel/classroom-access-unknown": "ee2d2a4efd55532594a6e8eba69c16eed324d9c2be9aee0c3aebe4cbeeb1e6aa",
+  // Re-recorded for CGP-SHELL-D-028 (TZ=UTC): the header line now pairs the model label with the
+  // remaining-requests chip (a button that opens the usage detail). The detail dialog is mounted only
+  // while open, so the nine digests above stay as recorded on main. Re-recorded again (TZ=UTC) when the
+  // chip parts became whole wrapping units: a space between parts and a "남은 요청 N회" unit span are the
+  // only markup change (diffed with HPS_A5_DUMP_DIR).
+  "ChatPanel/classroom-class-funded": "eef15188e44b6914ebde8c6f0f0b7a5c7d31f3c4653f2a9a677246183e0657c6",
+  "ChatPanel/classroom-access-unknown": "68118eb5bd513f4ec9e6feda19c6bddbc4ce6163c1b6b8ade9292899d73ea062",
 };
 
 const status = rendererStatus();

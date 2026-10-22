@@ -8173,7 +8173,13 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/AccessHeader.tsx"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPreferences.tsx"
         }
       ]
     },
@@ -8191,6 +8197,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/access-header-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/access-chip.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/stylesheet-rules.mjs"
+        },
+        {
+          "path": "e2e/access-chip-geometry.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/orchestrator-panel.smoke.mjs"
         }
       ]
     },

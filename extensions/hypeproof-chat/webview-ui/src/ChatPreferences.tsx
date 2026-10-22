@@ -9,7 +9,7 @@ import { useDialogFocus } from './dialogFocus';
  * REQ-STUDIO-FOCUS-RESTORE: Escape, × and a press on the backdrop close it; Tab stays inside; focus
  * returns to the element that opened it (the menu toggle), or the composer when that is gone.
  */
-export function ChatPreferences({ open, onClose, initialFocus, children }: { open: boolean; onClose: () => void; initialFocus?: string; children: ReactNode }) {
+export function ChatPreferences({ open, onClose, initialFocus, opener, children }: { open: boolean; onClose: () => void; initialFocus?: string; opener?: () => HTMLElement | null; children: ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const composing = useRef(false);
   // Declared before the focus hook: the dialog is shown before focus moves in, and closed (its
@@ -29,7 +29,7 @@ export function ChatPreferences({ open, onClose, initialFocus, children }: { ope
     document.addEventListener('keydown', track, true);
     return () => document.removeEventListener('keydown', track, true);
   }, [open]);
-  useDialogFocus(dialog, { open, kind: 'modal', initialFocus: initialFocus ?? 'header button', onDismiss: onClose });
+  useDialogFocus(dialog, { open, kind: 'modal', initialFocus: initialFocus ?? 'header button', onDismiss: onClose, ...(opener ? { opener } : {}) });
   return <dialog ref={dialog} className="hps-preferences" aria-labelledby="chat-preferences-title"
     onKeyDown={event => {
       // CGP-DS-R-027 (#1880): an Escape that cancels an IME syllable must not close the dialog.

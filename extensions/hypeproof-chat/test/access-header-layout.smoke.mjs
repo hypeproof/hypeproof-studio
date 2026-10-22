@@ -8,8 +8,8 @@
 // Same instrument as test/ui-polish-1.smoke.mjs: the CSS checks are functions over the stylesheet
 // text with each rule's media context, and each one also runs against a mutated copy that must fail
 // (negative controls). The render half bundles the real ChatPanel and checks the markup the
-// selectors rely on. Real layout (menu on the title row, no overflow at 320px) needs a browser and
-// is measured outside this smoke.
+// selectors rely on. Real layout (menu on the title row, no overflow at 320px) needs a browser:
+// e2e/access-chip-geometry.mjs measures it (CGP-SHELL-D-028).
 import assert from "node:assert/strict";
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -28,39 +28,7 @@ const check = async (label, fn) => {
 };
 
 // ─── CSS: rules with their media context ────────────────────────────────────────────────────────
-function splitTop(list) {
-  const out = []; let depth = 0, cur = "";
-  for (const ch of list) {
-    if (ch === "(") depth++;
-    if (ch === ")") depth--;
-    if (ch === "," && depth === 0) { out.push(cur); cur = ""; continue; }
-    cur += ch;
-  }
-  return [...out, cur].map((x) => x.trim()).filter(Boolean);
-}
-function rules(raw) {
-  const css = raw.replace(/\/\*[\s\S]*?\*\//g, "");
-  const out = [];
-  const walk = (from, to, media) => {
-    let i = from;
-    while (i < to) {
-      const open = css.indexOf("{", i);
-      if (open < 0 || open >= to) return;
-      const head = css.slice(i, open).trim();
-      let depth = 1, j = open + 1;
-      for (; j < to && depth; j++) depth += css[j] === "{" ? 1 : css[j] === "}" ? -1 : 0;
-      if (/^@media\b/.test(head)) walk(open + 1, j - 1, head.replace(/^@media\s*/, "").replace(/\s+/g, " ").replace(/:\s*/g, ": "));
-      else if (!head.startsWith("@")) {
-        const decls = {};
-        for (const d of css.slice(open + 1, j - 1).split(";")) { const k = d.indexOf(":"); if (k > 0) decls[d.slice(0, k).trim()] = d.slice(k + 1).trim().replace(/\s+/g, " "); }
-        out.push({ selectors: splitTop(head).map((s) => s.replace(/\s+/g, " ").trim()), decls, media });
-      }
-      i = j;
-    }
-  };
-  walk(0, css.length, "");
-  return out;
-}
+import { rules } from './fixtures/stylesheet-rules.mjs';
 /** The last declaration of `prop` on an exact selector within one media context (later wins). */
 const value = (css, selector, prop, media = "") => {
   let v;
@@ -75,13 +43,13 @@ const HDR = ".hps-header:has(> .hps-access-header)";
 const flex = (v) => (v ?? "").split(" ");
 
 const checks = {
-  "1 the line never shrinks below its longest part and wraps only between parts": (css) => {
+  "1 the header can shrink within the pane": (css) => {
     const bad = [];
     const [, shrink] = flex(value(css, LINE, "flex"));
     if (value(css, LINE, "flex") === undefined || shrink === "0") bad.push(`line flex ${value(css, LINE, "flex")}: it must be able to give way`);
-    if (value(css, LINE, "min-width") !== "min-content") bad.push(`line min-width ${value(css, LINE, "min-width")} (not min-content: a part would be cut)`);
-    if (value(css, LINE, "white-space") !== "normal") bad.push(`line white-space ${value(css, LINE, "white-space")} (nowrap: one row wider than the pane)`);
-    if (value(css, ".hps-access-part", "white-space") !== "nowrap") bad.push("a part can break inside itself (\"남은 요청\" / \"37회\")");
+    if (value(css, LINE, "min-width") !== "0") bad.push(`line min-width ${value(css, LINE, "min-width")} (not zero: a long model can widen the header)`);
+    // D-028 keeps the line on one row; it fits the pane because the model label shrinks (ellipsis).
+    if (value(css, LINE, "white-space") === "nowrap" && (value(css, ".hps-access-model", "overflow") !== "hidden" || value(css, ".hps-access-model", "text-overflow") !== "ellipsis")) bad.push("line is nowrap but the model label cannot shrink: one row wider than the pane");
     return bad;
   },
   "2 personal heading at ≤640px: the line gets its own row, the activity yields first": (css) => {
@@ -104,17 +72,41 @@ const checks = {
   },
 };
 
+// D-028: inspect parsed stylesheet declarations, including their media contexts.
+const CHIP = '.hps-header .hps-access-header .hps-access-chip';
+const PART = '.hps-access-chip .hps-access-part';
+const UNIT = '.hps-access-chip .hps-access-part:not([data-part="count"])';
+const expected = [
+  [LINE, 'display', 'flex'], [LINE, 'align-items', 'center'], [LINE, 'gap', 'var(--ds-c-studio-styles-space-2)'], [LINE, 'min-width', '0'], [LINE, 'max-width', '100%'], [LINE, 'white-space', 'nowrap'],
+  ['.hps-access-model', 'flex', '0 1 auto'], ['.hps-access-model', 'min-width', '0'],
+  ['.hps-access-model', 'overflow', 'hidden'], ['.hps-access-model', 'text-overflow', 'ellipsis'], ['.hps-access-model', 'white-space', 'nowrap'],
+  [CHIP, 'display', 'inline-flex'], [CHIP, 'flex', '0 0 auto'], [CHIP, 'min-width', 'var(--hp-control-min)'], ['.hps-header > .hps-access-header', 'flex-shrink', '1000'], [CHIP, 'max-width', '100%'],
+  ['.hps-header > .hps-access-header', 'margin-inline-start', 'var(--ds-c-studio-styles-space-2)'],
+  [CHIP, 'min-height', 'var(--hp-control-min)'], [CHIP, 'box-sizing', 'border-box'], [CHIP, 'margin', '0'], [CHIP, 'padding', '0 var(--ds-c-studio-styles-space-2)'],
+  [CHIP, 'font-size', 'var(--hp-font-caption)'], [CHIP, 'white-space', 'nowrap'], [CHIP, 'text-align', 'start'], [CHIP, 'color', 'var(--vscode-foreground)'],
+  [CHIP, 'background', 'var(--vscode-editor-background)'], [CHIP, 'border', 'var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default)'],
+  // No balance part is ever cut: the chip text wraps between whole units, never clips or ellipsizes.
+  ['.hps-access-chip-text', 'display', 'block'], ['.hps-access-chip-text', 'min-width', '0'], ['.hps-access-chip-text', 'white-space', 'normal'], ['.hps-access-chip-text', 'overflow', undefined],
+  [PART, 'white-space', 'normal'], [PART, 'overflow', undefined], [PART, 'text-overflow', undefined],
+  ...[UNIT, '.hps-access-count', '.hps-access-count-prefix'].flatMap(sel => [[UNIT, 'display', 'inline-block'], [UNIT, 'max-width', '100%'], [UNIT, 'overflow-wrap', 'anywhere']].map(([, prop, v]) => [sel, prop, v])),
+  [CHIP+'[data-low]', 'border-color', 'var(--hp-border-warn-default)'], ['.hps-access-chip[data-low] .hps-access-warning', 'color', 'var(--hp-text-warn-default)'],
+  [CHIP+':focus-visible', 'outline', 'var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default)'], [CHIP+':focus-visible', 'outline-offset', 'var(--ds-c-studio-styles-size-7)'],
+  ...['', '[data-low]'].flatMap(suffix => [['color','ButtonText'],['background','ButtonFace'],['border-color','ButtonText']].map(([prop,v]) => [CHIP+suffix,prop,v,'(forced-colors: active)'])),
+];
+checks['4 chip and model layout, typography, amber, focus and forced colors'] = css => expected.flatMap(([sel,prop,want,media='']) => value(css,sel,prop,media) === want ? [] : [`${sel} ${prop}: expected ${want}, got ${value(css,sel,prop,media)}`]);
+
 const NARROW_BLOCK = /@media \(max-width: 640px\) \{\n  \.tw-heading:has\(\.hps-access-header\)[\s\S]*?\n\}/;
 const NEGATIVE = [
   ["2", "c01 the whole @media (max-width:640px) block deleted", (s) => s.replace(NARROW_BLOCK, "")],
   ["3", "c01 the whole @media (max-width:640px) block deleted", (s) => s.replace(NARROW_BLOCK, "")],
   ["2", "c02 activity-chip zero basis dropped", (s) => s.replace("  .tw-heading:has(.hps-access-header) .hps-activity-now { flex: 1 1000 0; }\n", "")],
   ["1", "c03 line made flex:0 0 auto; nowrap", (s) => s.replace(".hps-access-header { flex: 0 1 auto; min-width: min-content; white-space: normal;", ".hps-access-header { flex: 0 0 auto; white-space: nowrap;")],
-  ["1", "c04 .hps-access-part nowrap dropped", (s) => s.replace(".hps-access-part { white-space: nowrap; }", "")],
   ["2", "personal heading no longer wraps", (s) => s.replace(".tw-heading:has(.hps-access-header) { flex-wrap: wrap; row-gap: 0; }", ".tw-heading:has(.hps-access-header) { row-gap: 0; }")],
   ["2", "line shares the first row (no full basis)", (s) => s.replace(".tw-heading:has(.hps-access-header) .hps-access-header { order: 3; flex: 1 1 100%;", ".tw-heading:has(.hps-access-header) .hps-access-header { order: 3; flex: 0 1 auto;")],
   ["3", "classroom header rules dropped", (s) => s.replace("  .hps-header:has(> .hps-access-header) { flex-wrap: wrap; row-gap: var(--ds-c-studio-styles-space-14); }\n", "")],
   ["3", "classroom line not a full row", (s) => s.replace(".hps-header > .hps-access-header { order: 3; flex: 1 1 100%; }", ".hps-header > .hps-access-header { order: 3; }")],
+  ["4", "a balance part ellipsizes again", (s) => s.replace(".hps-access-chip .hps-access-part { white-space: normal; }", ".hps-access-chip .hps-access-part { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }")],
+  ["4", "the chip may shrink below its text", (s) => s.replace("flex: 0 0 auto; min-width: var(--hp-control-min); max-width: 100%; min-height", "flex: 0 1 auto; min-width: var(--hp-control-min); max-width: 100%; min-height")],
   ["2", "narrow rules moved to a narrower breakpoint (max-width: 400px)", (s) => s.replace("@media (max-width: 640px) {\n  .tw-heading:has(.hps-access-header)", "@media (max-width: 400px) {\n  .tw-heading:has(.hps-access-header)")],
 ];
 for (const [name, fn] of Object.entries(checks)) await check(`css ${name}`, () => assert.deepEqual(fn(real), [], fn(real).join("; ")));

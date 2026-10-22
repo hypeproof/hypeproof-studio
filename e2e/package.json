@@ -55,6 +55,7 @@
     "test:feedback-native:guards": "node --test feedback-native/*.test.mjs",
     "test:photo-only-send": "node --experimental-strip-types photo-only-send.mjs",
     "test:attachment-error-geometry": "node --experimental-strip-types attachment-error-geometry.mjs",
+    "test:access-chip-geometry": "node access-chip-geometry.mjs",
     "test:hit-target-audit": "node hit-target-audit.mjs"
   },
   "devDependencies": {

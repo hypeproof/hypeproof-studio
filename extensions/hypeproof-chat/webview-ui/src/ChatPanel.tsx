@@ -363,7 +363,10 @@ export function ChatPanel(props: Props) {
   // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
   // section opens with focus on it (the #1814 menu shortcut, kept inside the #1763 dialog).
   const [preferencesUsage, setPreferencesUsage] = useState(false);
-  const openPreferences = (usage: boolean) => { setPreferencesUsage(usage); setPreferencesOpen(true); };
+  const openPreferences = (usage: boolean) => { preferencesOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setPreferencesUsage(usage); setPreferencesOpen(true); };
+  // CGP-SHELL-D-028: the classroom detail dialog mounts only while open, so its close button's
+  // autoFocus runs before the focus hook could see the opener; remember the opener here instead.
+  const preferencesOpener = useRef<HTMLElement | null>(null);
   const lastReplyChoice = useRef<{ messageId: string; answer: string } | null>(null);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
@@ -1367,7 +1370,7 @@ export function ChatPanel(props: Props) {
         {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
             end_card and opens the pass list). A link, not a Primary: no count, no pressure (CU-13). */}
         {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
-        <AccessHeader config={config} />
+        <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its
@@ -2054,6 +2057,10 @@ export function ChatPanel(props: Props) {
         </div>
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
       </footer>
+      {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
+      {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
+        <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+      </ChatPreferences>}
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
         {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}
         <PanelBoundary panel="settings">{() => <>
