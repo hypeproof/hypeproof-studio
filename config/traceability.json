@@ -9943,6 +9943,59 @@
           "path": "extensions/hypeproof-chat/test/focus-placeholder.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-CHALK-LIST-ROWS",
+      "stage": "requirement",
+      "label": "DES-CGP-DS-23: Chalk 44px lists, persistent icons and labels, scroll fade",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Classroom administration extension"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-LIST-ROWS",
+      "stage": "implementation",
+      "label": "Chalk shared native list presentation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-LIST-ROWS"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/lib/list-rows.ts"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-LIST-ROWS",
+      "stage": "test",
+      "label": "Parsed CSS guards and seat/budget row keyboard acceptance",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-LIST-ROWS",
+        "ST-IMP-CHALK-LIST-ROWS"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/list-rows.test.mjs"
+        },
+        {
+          "path": "chalk/test/list-row-keyboard.test.mjs"
+        },
+        {
+          "path": "chalk/test/list-rows.browser.mjs"
+        }
+      ]
     }
   ]
 }
