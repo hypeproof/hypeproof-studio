@@ -350,6 +350,10 @@ function userPromptBefore(messages: ChatMessage[], assistantId: string): ChatMes
 
 export function ChatPanel(props: Props) {
   const { config, messages, streaming, streamingId, error, incomingImage } = props;
+  const [reopenedCapabilities, setReopenedCapabilities] = useState<string | null>(null);
+  const entry = !props.instructor && config?.aiCapabilities ? config.lessonCapabilityEntry : undefined;
+  useEffect(() => setReopenedCapabilities(null), [entry?.id]);
+  const entryOpen = !!entry && (!entry.seen || reopenedCapabilities === entry.id);
   const saved = config?.activityDraft;
   const separateQueue = !!saved?.queued && (saved.queuedPaused === true || (saved.queuedToolMode ?? 'auto') !== (saved.toolMode ?? 'auto'));
   const [draft, setDraft] = useState(() => separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null));
@@ -1381,6 +1385,7 @@ export function ChatPanel(props: Props) {
         {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
             end_card and opens the pass list). A link, not a Primary: no count, no pressure (CU-13). */}
         {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
+        {entry && <button className="hp-capability-reopen" type="button" aria-expanded={entryOpen} onClick={() => setReopenedCapabilities(entry.id)}>AI 안내</button>}
         <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
@@ -1438,6 +1443,13 @@ export function ChatPanel(props: Props) {
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
 
+      {entryOpen && entry && config?.aiCapabilities && <PanelBoundary panel="lesson-capability-entry">
+        <AiCanDo key={entry.id} items={config.aiCapabilities} solo={audience === 'solo'} expanded onNext={() => {
+          setReopenedCapabilities(null);
+          postToHost({ type: "acknowledgeLessonCapabilities", id: entry.id });
+          textareaRef.current?.focus();
+        }} />
+      </PanelBoundary>}
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
       {/* CGP-SHELL-R-013 — each independent panel below fails alone (PanelBoundary); the composer,
           the draft and the conversation keep working, and ChatErrorBoundary stays the last resort. */}
@@ -1525,7 +1537,7 @@ export function ChatPanel(props: Props) {
       {/* #751 U2 — instructor notices/materials: the coach rail's "강사 메시지" kind (SX-06), outside the message stream
           (SX-05), closed by default, no Primary (SX-04). Drawn with or without a lesson. */}
       {/* CGP-AGENT-R-003 — what the AI can do on this seat. Same rail, closed by default, no Primary. */}
-      {!props.instructor && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
+      {!props.instructor && !entryOpen && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
       <PanelBoundary panel="instructor-inbox"><InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} /></PanelBoundary>
       {/* CGP-KNOW-R-003 — the activity's 자료 list. Same rail, closed by default, no Primary; only with the file-attach gate. */}
       {!props.instructor && config?.materials && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
@@ -2124,14 +2136,14 @@ export function ChatPanel(props: Props) {
 
 /**
  * CGP-AGENT-R-003: every REQ-M38 key is listed; an off key reads "안 해요" so nothing is implied.
- * REQ-STUDIO-UI-POLISH-1: always closed, with a one-line summary that already says how many of the
+ * REQ-STUDIO-UI-POLISH-1: closed by default (R-032 opens the first lesson entry), with a one-line summary that already says how many of the
  * listed things the AI does here ("6가지 중 4가지", so the count matches the rows that open); each row is a mark, the label and one state word in the same quiet style.
  */
-function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilities']>; solo: boolean }) {
+function AiCanDo({ items, solo, expanded, onNext }: { items: NonNullable<ChatConfig['aiCapabilities']>; solo: boolean; expanded?: boolean; onNext?: () => void }) {
   const onCount = items.filter(item => item.on).length;
   // Trial diagnosis D3: a solo seat (trial, pass, personal) has no lesson and no teacher.
-  return <details className="hp-rail-lesson hp-ai-can-do">
-    <summary>
+  return <details className="hp-rail-lesson hp-ai-can-do" open={expanded}>
+    <summary onClick={expanded ? event => event.preventDefault() : undefined}>
       <span className="hp-ai-can-do-title">{solo ? '여기서 AI가 할 수 있는 일' : '이 수업에서 AI가 할 수 있는 일'}</span>
       <span className="hp-ai-can-do-count">{onCount ? `${items.length}가지 중 ${onCount}가지` : '지금은 없음'}<span className="hp-ai-can-do-more"> · 자세히</span></span>
     </summary>
@@ -2143,6 +2155,7 @@ function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilitie
       </li>)}
     </ul>
     {items.some(item => item.on && item.asks === true) && <p className="hp-rail-lesson-note">물어봐요: 확인이 필요한 동작을 하기 전에 허락을 받아요. 이미 허락했거나 확인이 필요 없는 동작은 바로 할 수 있어요.</p>}
+    {onNext && <button className="hp-capability-next" type="button" onClick={onNext}>다음</button>}
     <p className="hp-rail-lesson-note">{solo ? '지금 쓰는 체험·이용권에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
   </details>;
 }

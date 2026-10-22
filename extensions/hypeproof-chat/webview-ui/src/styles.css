@@ -2448,3 +2448,23 @@ html, body, #root {
   .hps-header .hps-access-header .hps-access-chip[data-low] { color: ButtonText; background: ButtonFace; border-color: ButtonText; }
   .hps-access-chip[data-low] .hps-access-warning { color: ButtonText; }
 }
+
+/* First lesson disclosure uses the existing card, without a permission control. */
+.hp-capability-next {
+  min-width: var(--hp-control-min);
+  min-height: var(--hp-control-min);
+  font: inherit;
+  font-size: var(--hp-font-body);
+  color: inherit;
+  background: transparent;
+  border: var(--ds-c-studio-styles-size-3) solid currentColor;
+  cursor: pointer;
+}
+
+@media (max-width: 800px) {
+  .hps-header:has(.hp-capability-reopen) { flex-wrap: wrap; }
+  .hps-header .hp-capability-reopen { flex-basis: 100%; margin-left: 0; }
+  .hps-header:has(.hp-capability-reopen) .hps-coach-name { flex-shrink: 0; }
+}
+
+.hps-header .hp-capability-reopen { font-size: var(--hp-font-caption); }

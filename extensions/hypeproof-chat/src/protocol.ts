@@ -141,6 +141,8 @@ export interface FileAttachmentPreview {
 }
 
 export interface ChatConfig {
+  /** CGP-AGENT-R-032: opaque seat/lesson disclosure receipt, device-local only. */
+  lessonCapabilityEntry?: { id: string; seen: boolean };
   /** CGP-AGENT-R-003: what the AI can do on this seat, one row per REQ-M38 key. */
   aiCapabilities?: import('./aiCapabilities').AiCapability[];
   /** CGP-SHELL-R-024: what the AI can do changed on a profile refresh; one card until dismissed. */
@@ -661,6 +663,7 @@ export type WebviewMessage = (
   | { type: "installUpdate" }              // #72: user clicked "Install Now" on update banner
   | { type: "dismissUpdate"; version: string }  // #72: user clicked "Later" — silence for 7d
   /** CGP-SHELL-R-024 — the learner closed the "AI가 할 수 있는 일이 바뀌었어요" card. */
+  | { type: "acknowledgeLessonCapabilities"; id: string }
   | { type: "dismissCapabilityChange"; id: string }
   | { type: "clearHistory" }
   | { type: "namingRitual" }

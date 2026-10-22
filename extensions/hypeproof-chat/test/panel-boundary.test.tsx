@@ -278,6 +278,7 @@ const PANELS: Row[] = [
     { type: "streamError", streamId: "s1", error: "체험이 끝났어요", trialEndCard: { kind: "ended" } }] },
   { panel: "settings", key: "AccessControl.tsx:AccessControl", mode: "personal" },
   { panel: "ai-can-do", key: "ChatPanel.tsx:AiCanDo", mode: "personal", config: { aiCapabilities: [] } },
+  { panel: "lesson-capability-entry", key: "ChatPanel.tsx:AiCanDo", mode: "personal", config: { aiCapabilities: [], lessonCapabilityEntry: { id: "e1", seen: false } } },
   { panel: "capability-change", key: "ChatPanel.tsx:CapabilityChangeCard", mode: "personal", config: { capabilityChange: { id: "c1" } } },
   { panel: "carryover", key: "TrialCarryover.tsx:TrialCarryover", mode: "personal", config: { carryover: {} } },
   { panel: "verify", key: "VerifyPanel.tsx:VerifyPanel", mode: "personal", msgs: () => [{ type: "verifyState", view: {} }] },

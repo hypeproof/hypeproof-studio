@@ -1,4 +1,5 @@
 import { attemptGroups, attemptHistory, selectAttempt, visibleAttempts } from './answerAttempts';
+import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntry";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
 import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
@@ -6025,6 +6026,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #72. User clicked "Later" — silence this version for 7 days.
         void vscode.commands.executeCommand("hypeproof-chat.dismissUpdate", msg.version);
         return;
+      case "acknowledgeLessonCapabilities": {
+        const cfg = vscode.workspace.getConfiguration("hypeproofChat");
+        const token = await this.context.secrets.get(TOKEN_KEY);
+        const service = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+        const id = lessonCapabilityEntryId(this.cachedProfile, token, service,
+          !!localRuntimeConfig(vscode.env.appName, service) || this.lastAllowInstructor === true);
+        // A stale view can acknowledge only the exact seat and lesson it drew.
+        if (!id || msg.id !== id) return;
+        try { await this.context.globalState.update(entryReceiptKey(id), true); }
+        catch { return; } // Keep the card open if its receipt could not be stored.
+        await this.postConfig();
+        return;
+      }
       case "dismissCapabilityChange":
         (this.capChanges ??= new CapabilityChangeTracker()).dismiss(msg.id);
         void this.postConfig();
@@ -8414,9 +8428,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-KNOW-R-015 — the explorer's "이 파일에 대해 묻기" follows the file-attach gate. The host re-checks
     // the gate on every request, so a failed context update never holds up the config post.
     void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
+    const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
     await this.post({
       type: "config",
       config: {
+        ...(entryId ? { lessonCapabilityEntry: { id: entryId, seen: this.context.globalState?.get(entryReceiptKey(entryId)) === true } } : {}),
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
         ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
         ...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),
