@@ -12698,6 +12698,94 @@
           "path": "extensions/hypeproof-chat/test/answer-math.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-SHELL-PROCESSES",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Shell execution visibility (CGP-AGENT-R-029)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SHELL-PROCESSES",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHELL-PROCESSES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/shellPresentation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/runningProcesses.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/liveServer.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/RunningProcesses.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/shellDisplay.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/focusGeometry.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SHELL-PROCESSES",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHELL-PROCESSES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/shell-processes.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/shell-process-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/shell-process-sdk.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/live-server-stop.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/shell-process-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/shell-processes-app.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-tools.test.mjs"
+        }
+      ]
     }
   ]
 }

@@ -19,6 +19,7 @@ import type { ChatMessage } from "./protocol";
 import { storedDenialNotice } from "./denialNotice.ts";
 
 export interface ToolEntry {
+  shell?: import("./shellPresentation").ShellPresentation;
   id: string;
   icon: string;
   label: string;
@@ -71,7 +72,7 @@ function toolMessage(e: ToolEntry, now: number): ChatMessage {
     role: "tool",
     content: "",
     createdAt: e.at ?? now,
-    tool: { icon: e.icon, label: e.label, state: e.state, ...(e.step !== undefined && e.since !== undefined ? { step: e.step, since: e.since } : {}) },
+    tool: { ...(e.shell ? { shell: e.shell } : {}), icon: e.icon, label: e.label, state: e.state, ...(e.step !== undefined && e.since !== undefined ? { step: e.step, since: e.since } : {}) },
   };
 }
 

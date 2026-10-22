@@ -759,3 +759,28 @@ test('tagged denial source reads only a leading complete tag, and stored labels 
   for (const tail of [' SECRET_TOKEN', '\nat /private/file:1', '.']) assert.equal(storedDenialNotice(canonical + tail), null, 'canonical sentence plus a tail is not a stored notice');
   assert.equal(storedDenialNotice('x' + canonical), null);
 });
+
+// REQ-CGP-AGENT-60: real send path. A shell row shows in every seat; a summary seat gets it
+// collapsed, and in both seats the row receives its tool_result (never left at 처리 중).
+test('shell rows: summary seat collapses the row and every seat settles it from the tool_result', async t => {
+  for (const mode of ['summary', 'detailed']) for (const isError of [false, true]) {
+    const f = fixture(t, { resolvedProfile: { ...copy(profile), tool_activity: mode } });
+    f.runtime.sdk = async args => {
+      args.onActivity({ kind: 'tool_use', id: 'sh', name: 'Bash', input: { command: 'npm test', description: '테스트 실행' } });
+      args.onActivity({ kind: 'tool_result', id: 'sh', isError });
+      args.onDelta('끝났어요.');
+      return { kind: 'success' };
+    };
+    await f.h.handleMessage({ type: 'sendMessage', text: '테스트 돌려줘', history: [], toolMode: 'auto', userMessageId: `shell-${mode}-${isError}` });
+    const shells = f.posts.filter(m => m.type === 'toolLog' && m.shell);
+    assert.ok(shells.length >= 1, `${mode}: the shell row is drawn`);
+    for (const log of shells) {
+      assert.deepEqual(log.shell, { purpose: '테스트 실행', command: 'npm test', collapsed: mode === 'summary' }, `${mode}: collapsed only in a summary seat, no folder claimed`);
+    }
+    const row = f.posts.filter(m => m.type === 'toolLog' && m.id === shells[0].id);
+    assert.ok(row.length >= 2, `${mode}: the row receives its tool_result update`);
+    assert.equal(row.at(-1).state, isError ? 'error' : 'done', `${mode}: the row settles (never left at 처리 중)`);
+    if (!isError) assert.ok(row.at(-1).shell, `${mode}: a finished shell row keeps its purpose and command`);
+    assert.equal(f.calls.network, 0);
+  }
+});

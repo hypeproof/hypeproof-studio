@@ -2611,3 +2611,44 @@ html, body, #root {
 .hps-budget-request-notice form small { display: block; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); }
 .hps-budget-request-notice form button { min-height: var(--hp-control-min); margin: 0; }
 .hps-budget-request-notice input { font-size: var(--hp-font-caption); }
+/* REQ-CGP-AGENT-60: purpose and folder remain readable beside long commands.
+ * Keyboard focus uses the shared ring in focusGeometry.css; the scrolling <pre> is one of its
+ * scroll scopes, so controls are never given a component-level focus rule here. */
+.hps-shell-row, .hps-running-processes {
+  min-width: 0;
+  font-size: var(--hp-font-caption);
+  overflow-wrap: anywhere;
+  color: inherit;
+}
+.hps-shell-row p, .hps-running-processes p { margin: var(--ds-c-studio-styles-space-13) 0; }
+.hps-shell-purpose { font-weight: var(--hp-weight-strong); color: var(--hp-text-primary-default); }
+.hps-shell-folder { color: var(--hp-text-muted-default); }
+.hps-shell-row details > p { margin-top: var(--ds-c-studio-styles-space-13); }
+.hps-shell-row pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: var(--ds-c-studio-styles-size-64);
+  overflow: auto;
+}
+.hps-shell-row summary {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-c-studio-styles-space-13);
+  min-height: var(--hp-control-min);
+  cursor: pointer;
+}
+.hps-shell-row summary::before { content: "\25B8"; }
+.hps-shell-row details[open] > summary::before { content: "\25BE"; }
+.hps-running-processes h2 { margin: 0; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.hps-running-processes ul { margin: 0; padding: 0; list-style: none; }
+.hps-running-processes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-c-studio-styles-space-2);
+}
+.hps-process-text { min-width: 0; flex: 1 1 auto; }
+.hps-process-actions { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); }
+.hps-running-processes button { min-height: var(--hp-control-min); font: inherit; }

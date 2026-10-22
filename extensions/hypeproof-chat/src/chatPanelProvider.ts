@@ -17,6 +17,8 @@ import { runWorkTakeaway } from "./workTakeawayHost";
 import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
 import { takeawayTask, takeawayOwnedFiles } from "./workTakeaway";
 import { workPower } from "./workPower";
+import { RunningProcesses } from "./runningProcesses";
+import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
 import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
@@ -2622,6 +2624,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push({ dispose: () => this.imageStaging?.dispose() });
     this.registerPreviewSurface(context);
     context.subscriptions.push({ dispose: () => this.finishNotice?.release() });
+    // REQ-CGP-AGENT-60 — the live-server entry follows the server; hosts built without one (tests) skip it.
+    const liveChange = this.liveServer?.onChange?.(() => this.observeLiveProcess());
+    if (liveChange) context.subscriptions.push(liveChange);
     // REQ-STUDIO-PREVIEW-RECOVERY — a browser tab opened, closed or changed address/title: measure the preview again.
     for (const event of [vscode.window.onDidChangeBrowserTabState, vscode.window.onDidOpenBrowserTab, vscode.window.onDidCloseBrowserTab]) {
       const d = event?.(() => this.schedulePreviewRecovery());
@@ -5028,6 +5033,46 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * Shared by the live_server preview path and the coach's
    * `live_preview_start` MCP tool (#282 P2 slice 2).
    */
+  private processScopes = new Map<string, RunningProcesses>();
+  private get runningProcesses(): RunningProcesses {
+    const scope = activityConnections(this.context)?.scope ?? this.nativeHistoryScope ?? '';
+    const scopes = this.processScopes ??= new Map<string, RunningProcesses>();
+    let registry = scopes.get(scope);
+    if (!registry) {
+      registry = new RunningProcesses(() => {
+        if (scope === (activityConnections(this.context)?.scope ?? this.nativeHistoryScope ?? ''))
+          void this.post({ type: 'runningProcesses', entries: registry!.list() });
+      });
+      scopes.set(scope, registry);
+    }
+    return registry;
+  }
+  private liveProcessRegistry: RunningProcesses | undefined;
+  private liveProcessId: string | undefined;
+  private liveProcessKey: string | undefined;
+  private observeLiveProcess(): void {
+    const url = this.liveServer?.currentUrl?.();
+    const listening = !!url && !!this.liveServer.isListening?.();
+    if (listening && this.liveProcessId === url) return;
+    // The server this entry tracked is gone or now serves another address (LiveServer runs one
+    // server at a time), so the old entry settles before a new one is added.
+    if (this.liveProcessKey) this.liveProcessRegistry?.finish(this.liveProcessKey, 'done');
+    this.liveProcessId = undefined;
+    this.liveProcessKey = undefined;
+    if (!listening) return;
+    this.liveProcessId = url;
+    const id = `live:${randomId()}`;
+    this.liveProcessKey = id;
+    const registry = this.runningProcesses;
+    this.liveProcessRegistry = registry;
+    registry.add(id, '라이브 서버', shellFolder(this.resolveCoachCwd(), this.liveServer.currentRoot()), async () => {
+      // A stale handle never stops whichever server is running now; it only settles its own entry.
+      if (this.liveProcessKey !== id || this.liveServer.currentUrl() !== url) { registry.finish(id, 'done'); return; }
+      await this.liveServer.stop();
+      registry.finish(id, 'stopped');
+    });
+  }
+
   async startLivePreview(): Promise<string | null> {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!root) return null;
@@ -6299,7 +6344,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postAccuracyEducation();
         return;
       }
+      case "stopRunningProcess": await this.runningProcesses.stop(msg.id); return;
       case "ready":
+        this.observeLiveProcess();
         this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
         this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
         this._annotationLeaveRequest?.cancel();
@@ -7393,6 +7440,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // The webview replaces an entry wholesale by id, so a tool_result has to
       // re-send the label the tool_use showed — keep it per stream.
       const toolLabels = new Map<string, string>();
+      const shellRows = new Map<string, import("./shellPresentation").ShellPresentation>();
       const toolLineIds = new Map<string, string>();
       // .html paths Written/Edited during an SDK turn (tool_use id → absolute path) — previewed when the tool_result succeeds.
       const htmlWrites = new Map<string, string>();
@@ -7485,7 +7533,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         const log = (id: string, icon: string, label: string, state: "running" | "done" | "error") =>
           // #503 — a.at: the SDK's own timestamp as it sent it. It becomes the persisted line's createdAt.
-          this.postToolLog(streamId, { id, icon, label, state, ...(a.at ? { at: a.at } : {}) });
+          this.postToolLog(streamId, { id, icon, label, state, ...(shellRows.has(id) ? { shell: shellRows.get(id) } : {}), ...(a.at ? { at: a.at } : {}) });
         switch (a.kind) {
           case "thinking_tokens":
             if (work) {
@@ -7521,6 +7569,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // workspace" all read as the same characters.
             const line = tracker.lineFor(a);
             toolLineIds.set(a.id, line.lineId);
+            const shell = shellPresentation(a.name, a.input, !!work);
+            if (shell) shellRows.set(line.lineId, shell);
             // A helper's call lands inside its row, so the main flow's notice line stays as it is.
             if (!work && line.kind !== "child") clearPending();
             const label = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd(), { urlHostOnly: true })})`;
@@ -7549,7 +7599,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               log(line.lineId, DELEGATION_ICON, header, "running");
               // REQ-STUDIO-LONG-STEP-HINT — no clock yet; it starts at the approval (case "approval").
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: DELEGATION_ICON, label: header, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
-              if (started) this.postToolLog(streamId, started);
+              if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
+            } else if (work && shell) {
+              // REQ-CGP-AGENT-60 — a summary seat still shows each shell row (collapsed), with its purpose.
+              log(line.lineId, "🔧", label, "running");
+              const started = stepLines.begin(a.id, { lineId: line.lineId, icon: "🔧", label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
+              if (started) this.postToolLog(streamId, { ...started, shell });
             } else if (work) {
               pendingShown = true;
               work.show(workPhrase(a.name, a.input));
@@ -7560,7 +7615,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               log(line.lineId, "🔧", label, "running");
               // The words come from the tool name (workPhrase), never from `label`.
               const started = stepLines.begin(a.id, { lineId: line.lineId, icon: "🔧", label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
-              if (started) this.postToolLog(streamId, started);
+              if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
             }
             break;
           }
@@ -7585,7 +7640,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               break;
             }
             const started = stepLines.approved(a.id, startedAt);
-            if (started) this.postToolLog(streamId, started);
+            if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
             break;
           }
           case "tool_result": {
@@ -7626,6 +7681,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 : (toolLabels.get(a.id) ?? ""),
               a.isError ? "error" : "done",
             );
+            // REQ-CGP-AGENT-60 — a summary seat's shell row still settles (errors were settled above).
+            else if (shellRows.has(line.lineId)) log(line.lineId, "🔧", toolLabels.get(a.id) ?? "", "done");
             // Only a **successful** write tool establishes the evidence for "it was
             // fixed". On a failure, or when it was never a write in the first place,
             // the notice line closes with "생각했어요".
@@ -7866,6 +7923,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         try {
           const delegationScope=JSON.stringify([this.turnRequestScope(),this.profileGeneration]);
           const sdkEnd = await runSdkCoach({
+            processes: { registry: this.runningProcesses, prefix: `sdk:${streamId}:` },
             toolMode: mode,
             gatewayUrl: proxyUrl,
             effort,
@@ -9388,6 +9446,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const targets = [this.editorChat?.webview, this.view?.webview].filter((view): view is vscode.Webview => !!view);
     if (!targets.length) return;
     const results = await Promise.all(targets.map(view => view.postMessage(msg)));
+    if (msg.type === 'config') await this.post({ type: 'runningProcesses', entries: this.runningProcesses.list() });
     return results.some(Boolean);
   }
 

@@ -663,3 +663,14 @@ The parent REQ-SHELL-30 asks for an optional reason, approval/refusal states and
 | DEC | Choice | Why | Default state | Confirmed by Jay |
 |---|---|---|---|---|
 | DEC-32 (interim) | Build R40 instead of moving it to DEFER: `$…$` / `$$…$$` in coach answers render with bundled KaTeX (trust off, bounded input) in every seat, personal and classroom, adult and minor alike. Invalid TeX and money-like dollars stay raw text; copy returns TeX. No graphing, no `\(…\)` / `\[…\]`, no math in learner messages | The open question was whether any curriculum needs math beyond adult courses. Rendering is display only: no new data flow, permission, recipient or network request (fonts are bundled, CSP unchanged), and the raw-source fallback means an answer never reads worse than today. Classroom answers that mention a formula (ratios, area, budgets) read better, and money text is protected by the Pandoc dollar rule. Reversal is in `extensions/hypeproof-chat/webview-ui/src/MarkdownText.tsx`: delete `remarkMath` from `remarkPlugins` (line 55) and the `rehypePlugins={[rehypeAnswerMath]}` line (56), then the now-unused `remarkMath` import (line 4) and `rehypeAnswerMath` from the `./mathRender` import (line 8), which `noUnusedLocals` requires. Without remark-math no math node is produced, so KaTeX never loads and the copy listener returns early (no `.katex-mathml`). Deleting only the rehype line is not a revert: remark-math would still turn `$x$` into code spans | On, display only | no (agent-selected 2026-10-25) |
+## CGP-AGENT-R-029 implementation choices
+
+These are conservative implementation choices, not new human agreements.
+
+- Show only Studio-owned live-server and SDK `local_bash` handles, scoped to the connected activity; never enumerate or kill arbitrary PIDs.
+- Missing purpose is explicitly unknown, not inferred from a command. Outside-workspace folders use a neutral label without exposing an absolute path.
+- SDK stop-request acknowledgement is not exit evidence. Terminal notifications or authoritative live-set departure settle a row; query termination without that evidence leaves an unavailable status. No new permission or remembered approval is introduced.
+- The in-process preview server stops only after its HTTP close callback; active connections are closed to avoid an indefinitely pending stop.
+
+- Persist shell details as readable lines (purpose, `$ command`, and a folder line only when the host knows one) in the existing tool label, retaining the strict legacy task-file schema. This build restores those lines as a collapsed shell row; older builds can still read the task.
+- Over-long purpose or command text is cut in the middle, never at the end: the start and the end stay visible around a `… (가운데 N자 생략) …` marker, because the end of a command is where a padded command would hide `| sh`.
