@@ -2,7 +2,7 @@ import { finishModal } from './modalMotion';
 import './modalSurface.css';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { normalizeTextSize } from '../../src/textSize';
-import { MEMORY_SELECTED_LABEL } from '../../src/outboundConsent';
+import { MEMORY_SELECTED_LABEL, RECIPIENT_AI_MEMORY_UNKNOWN } from '../../src/outboundConsent';
 import { outboundPromptItemIds, PUBLIC_AUDIENCE_ACK, type OutboundPrompt, type PublicAudiencePrompt } from '../../src/outboundApproval';
 import { useDialogFocus } from './dialogFocus';
 import { imeComposing } from './imeGuard';
@@ -47,6 +47,7 @@ export function OutboundDialog({ prompt, onAnswer, textSize }: { prompt: Outboun
     <h2 id="outbound-title">보내기 전 확인</h2>
     {prompt.sections.map((section, si) => <fieldset key={si} className="hps-outbound-section">
       <legend>{si === 0 ? '받는 곳' : '함께 보내는 것 — 받는 곳'}: <strong data-outbound-recipient>{visible(section.recipient)}</strong></legend>
+      <p data-recipient-ai-memory>{RECIPIENT_AI_MEMORY_UNKNOWN}</p>
       {si === 0 && prompt.public && <p>누구나 볼 수 있어요</p>}
       {si === 0 && prompt.notes.map((note, ni) => <p key={ni}>{visible(note)}</p>)}
       {section.items.filter(item => !item.memory).map(renderItem)}
@@ -94,6 +95,7 @@ export function PublicAudienceDialog({ prompt, onAnswer, textSize }: { prompt: P
     <p id="public-audience-who">공개 대상: <strong data-public-audience>{prompt.audience}</strong> — {prompt.notAudience}만 보는 게 아니에요.</p>
     <p>받는 곳:</p>
     <p className="hps-outbound-destination" data-public-destination>{visible(prompt.recipient)}</p>
+    <p data-recipient-ai-memory>{RECIPIENT_AI_MEMORY_UNKNOWN}</p>
     <label className="hps-outbound-item">
       <input type="checkbox" data-public-ack checked={understood} onChange={e => setUnderstood(e.target.checked)} />
       <span>{prompt.audience} 볼 수 있다는 걸 확인했어요</span>

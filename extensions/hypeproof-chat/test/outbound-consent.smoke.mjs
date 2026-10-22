@@ -14,12 +14,12 @@ assert.equal(contentBytes('한😀'),7);
 // The fixed copy, literally (REQ-KNOW-09 acceptance) — never compared with the constant itself.
 assert.equal(OUTBOUND_EXCLUDED,'포함하지 않는 것: AI 기억, 개인 메모');
 assert.equal(outboundDetails({recipient:'갤러리 · site.invalid',public:true,items:[{name:'index.html',bytes:1234},{name:'제목',bytes:7}]}),
- ['받는 곳: 갤러리 · site.invalid','누구나 볼 수 있어요','보낼 항목:','• index.html (1,234 바이트)','• 제목 (7 바이트)','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'recipient line, public line, one size line per item, exclusion line');
+ ['받는 곳: 갤러리 · site.invalid','누구나 볼 수 있어요','보낼 항목:','• index.html (1,234 바이트)','• 제목 (7 바이트)','받는 사람의 AI 기억: 확인 안 됨','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'recipient line, public line, one size line per item, exclusion line');
 assert.equal(outboundDetails({recipient:'갤러리 · site.invalid',public:true,items:[{name:'index.html',bytes:3}],also:[{recipient:'수업 기록 운영자 · api.invalid',items:[{name:'events.jsonl',bytes:2048}]}]}),
- ['받는 곳: 갤러리 · site.invalid','누구나 볼 수 있어요','보낼 항목:','• index.html (3 바이트)','','함께 보내는 것 — 받는 곳: 수업 기록 운영자 · api.invalid','• events.jsonl (2,048 바이트)','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'a second recipient is its own block with its own sizes');
+ ['받는 곳: 갤러리 · site.invalid','누구나 볼 수 있어요','보낼 항목:','• index.html (3 바이트)','받는 사람의 AI 기억: 확인 안 됨','','함께 보내는 것 — 받는 곳: 수업 기록 운영자 · api.invalid','받는 사람의 AI 기억: 확인 안 됨','• events.jsonl (2,048 바이트)','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'a second recipient is its own block with its own sizes');
 assert.equal(outboundDetails({recipient:'x',items:[{name:'a',bytes:1}],also:[{recipient:'',items:[{name:'b',bytes:1}]}]}),null,'an unnamed second recipient refuses the whole dialog');
 assert.equal(outboundDetails({recipient:'x',items:[]}),null);
-assert.equal(outboundDetails({recipient:'갤러리 · s',public:true,notes:['이름이 보여요'],items:[{name:'a',bytes:1}]}),['받는 곳: 갤러리 · s','누구나 볼 수 있어요','이름이 보여요','보낼 항목:','• a (1 바이트)','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'a note line follows the public line');
+assert.equal(outboundDetails({recipient:'갤러리 · s',public:true,notes:['이름이 보여요'],items:[{name:'a',bytes:1}]}),['받는 곳: 갤러리 · s','누구나 볼 수 있어요','이름이 보여요','보낼 항목:','• a (1 바이트)','받는 사람의 AI 기억: 확인 안 됨','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'a note line follows the public line');
 assert.ok(outboundDetails({recipient:'teacher',items:[{name:'<b>가</b>',bytes:3}]}).includes(OUTBOUND_EXCLUDED));
 assert.ok(!outboundDetails({recipient:'teacher\u202eevil',items:[{name:'a',bytes:1}]}).includes('\u202e'));
 assert.equal(outboundDetails({recipient:'',items:[{name:'a',bytes:1}]}),null);

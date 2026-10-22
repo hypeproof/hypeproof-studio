@@ -4475,3 +4475,34 @@ OWNERSHIP behavior; viewing is not evidence of learning or task completion.
 Unknown/absent lessons and local/instructor runtimes do not get this entry flow.
 Failed receipt storage keeps the first-entry card pending. Stale acknowledgements
 cannot consume another lesson's entry. See DEC-AGENT-R032 in the parity decisions.
+
+## Receiver AI storage disclosure (CGP-KNOW-R-018)
+
+REQ-KNOW-33 / CGP-KNOW-033 / PI#2 / PI#5, dependent on CGP-KNOW-R-006:
+every send-to-others confirmation must state whether the receiver's AI may store
+its content. A destination-specific Service policy must select
+"받는 사람의 AI가 기억하지 않아요" or "받는 사람의 AI가 기억할 수 있어요";
+unknown policy must say "확인 안 됨", never the safe wording.
+
+Current implementation is **partial**: the pinned Service packages expose no
+receiver-AI storage policy contract. Studio's common native and webview outbound
+confirmations (including each secondary recipient and the public-audience second
+confirmation), classroom help preview/retry, Chalk learner share/feedback-decision
+confirmations, and the Chalk instructor sends to learners (the distribution
+confirmation before "N명에게 보내기" and the help-feedback form before "피드백 저장")
+therefore show "받는 사람의 AI 기억: 확인 안 됨". Instructor-to-learner sends are in
+scope: the acceptance names any send-to-others action, and the learner's coach AI
+reads distributed material, prompts, settings and feedback. The line must be
+visible, not only present: tests measure it in headless Chromium. This is independent of content
+exclusion, share expiry, destination name, seat, and the sender's memory settings.
+No new grant, recipient, policy endpoint, or memory enablement is invented.
+Confirmed-policy branches remain unimplemented pending a Service contract and
+pinned package update. This row is not complete.
+
+This disclosure may expose JUDGMENT/OWNERSHIP through an informed send decision;
+no capability labels appear in the UI. Evidence: outbound-dialog.test.tsx,
+outbound-consent-render.test.tsx, outbound-consent-host.smoke.mjs,
+public-audience-dialog.smoke.mjs (the in-panel public step), chalk/test/outbound-consent.test.mjs,
+recipient-ai-memory-visible.smoke.mjs (computed visibility of every Studio line: checklist,
+public step, help preview) and chalk/test/recipient-ai-memory.browser.mjs (computed visibility
+on the real Chalk pages: learner share, distribution confirmation, help feedback).

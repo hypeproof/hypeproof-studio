@@ -27,6 +27,10 @@ async function main() {
   let modal = host.querySelector('dialog');
   assert.ok(modal.open);
   const text = modal.textContent;
+  for (const section of modal.querySelectorAll('fieldset')) {
+    assert.equal(section.querySelector('[data-recipient-ai-memory]')?.textContent, '받는 사람의 AI 기억: 확인 안 됨');
+    assert.ok(!section.textContent.includes('받는 사람의 AI가 기억하지 않아요'));
+  }
   for (const needle of ['보내기 전 확인', '갤러리 · site.invalid', '누구나 볼 수 있어요', '활동 기록 서버 · service.invalid', '1,200 바이트', '30 바이트', '포함하지 않는 것', 'AI 기억', '개인 메모', '내가 직접 고름']) assert.ok(text.includes(needle), needle);
   assert.ok(text.includes('events\\ufffd.jsonl'), 'bidi shown visibly'); assert.ok(!text.includes('\u202e'));
   assert.ok(modal.querySelector('.hps-outbound-excluded'), 'fixed exclusion box');

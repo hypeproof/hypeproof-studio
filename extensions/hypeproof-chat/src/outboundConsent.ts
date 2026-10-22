@@ -1,4 +1,7 @@
 /** REQ-KNOW-09: describe the immutable content of one outward action, never remembered consent. */
+/** REQ-KNOW-33: the pinned Service exposes no destination-specific receiver AI storage policy.
+ * Content exclusion, expiry and our own memory settings cannot establish the receiver's policy. */
+export const RECIPIENT_AI_MEMORY_UNKNOWN = "받는 사람의 AI 기억: 확인 안 됨";
 export const OUTBOUND_EXCLUDED = "포함하지 않는 것: AI 기억, 개인 메모";
 /** `memory`: a memory-store file the learner selected by hand (REQ-KNOW-51). Without it a memory path refuses the dialog. */
 export interface OutboundItem { name: string; bytes: number; memory?: true }
@@ -22,8 +25,8 @@ export function outboundDetails(manifest: OutboundManifest): string | null {
   const notes = manifest.notes ?? [];
   if (!validSection(manifest) || also.length > 100 || !also.every(validSection) || notes.length > 5 || notes.some(t => !t.trim())) return null;
   return [
-    `받는 곳: ${outboundLabel(manifest.recipient)}`, ...(manifest.public ? ["누구나 볼 수 있어요"] : []), ...notes.map(outboundLabel), "보낼 항목:", ...itemLines(manifest.items),
-    ...also.flatMap(s => ["", `함께 보내는 것 — 받는 곳: ${outboundLabel(s.recipient)}`, ...itemLines(s.items)]),
+    `받는 곳: ${outboundLabel(manifest.recipient)}`, ...(manifest.public ? ["누구나 볼 수 있어요"] : []), ...notes.map(outboundLabel), "보낼 항목:", ...itemLines(manifest.items), RECIPIENT_AI_MEMORY_UNKNOWN,
+    ...also.flatMap(s => ["", `함께 보내는 것 — 받는 곳: ${outboundLabel(s.recipient)}`, RECIPIENT_AI_MEMORY_UNKNOWN, ...itemLines(s.items)]),
     "", OUTBOUND_EXCLUDED,
   ].join("\n");
 }
