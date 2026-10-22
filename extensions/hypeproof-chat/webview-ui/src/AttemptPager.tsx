@@ -4,7 +4,7 @@ export function AttemptPager({ index, count, onPage, label = `답변 ${index + 1
   index: number; count: number; onPage: (index: number) => void;
   label?: string; previousLabel?: string; nextLabel?: string; title?: string; note?: string;
 }) {
-  return <div className="hps-version-pager" role="group" aria-label={label} title={title}>
+  return <div className="hps-version-pager" role="group" aria-label={label} data-hp-tooltip={title}>
     <button type="button" disabled={index === 0} onClick={() => onPage(index - 1)} aria-label={previousLabel}>‹</button>
     <span aria-live="polite">{index + 1}/{count}</span>
     <button type="button" disabled={index === count - 1} onClick={() => onPage(index + 1)} aria-label={nextLabel}>›</button>

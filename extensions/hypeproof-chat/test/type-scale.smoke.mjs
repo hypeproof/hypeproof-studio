@@ -18,7 +18,7 @@ const read = (f) => readDesignFile(new URL(f, SRC), "utf8");
 // Stylesheet order in the built bundle (vite build, checked in dist/assets/index.css): main.tsx
 // imports tokens.css first, then modules pull in localReview/start/citationPreview/quoteAction/codeBlock/
 // quoteAction/taskWorkspace before the explicit styles.css and chatDetails.css imports.
-const ORDER = ["tokens.css", "focusGeometry.css", "localReview.css", "start.css", "writeApprovalDialog.css", "outboundDialog.css", "modalSurface.css", "citationPreview.css", "quoteAction.css", "codeBlock.css", "refusalBanner.css", "taskWorkspace.css", "styles.css", "chatDetails.css"];
+const ORDER = ["tokens.css", "focusGeometry.css", "localReview.css", "start.css", "writeApprovalDialog.css", "outboundDialog.css", "modalSurface.css", "citationPreview.css", "quoteAction.css", "codeBlock.css", "refusalBanner.css", "taskWorkspace.css", "styles.css", "chatDetails.css", "tooltips.css"];
 // The DEC-29 scope: files that style only the personal task workspace and its chat.
 const PERSONAL_FILES = ["chatDetails.css", "taskWorkspace.css", "citationPreview.css", "codeBlock.css"];
 const FLOOR = 14;
@@ -799,9 +799,9 @@ const EXTRA_PROBES = [
 // Learner text in the task heading. `titled` matches the element's own title attribute in its
 // component (the fallback for an ellipsis); `shortFixed` marks short labels allowed to stay rigid.
 const HEADER_TEXT = [
-  { label: "task title button", ctx: HEAD, chain: ["h1", "button.tw-title-button"], tsx: "TaskWorkspace.tsx", titled: /className="tw-title-button" title=\{`[^`]*\$\{active\?\.title/ },
+  { label: "task title button", ctx: HEAD, chain: ["h1", "button.tw-title-button"], tsx: "TaskWorkspace.tsx", titled: /className="tw-title-button" data-hp-tooltip=\{`[^`]*\$\{active\?\.title/ },
   { label: "run note (승인 기다리는 중 / 작업 중)", ctx: HEAD, chain: ["span.tw-run-note"] },
-  { label: "current activity", ctx: PORTAL, chain: ["span.hps-activity-now"], tsx: "ChatPanel.tsx", titled: /className="hps-activity-now" aria-label="현재 활동" title=\{`\$\{kind\} · \$\{config\.activity\.name\}`\}/ },
+  { label: "current activity", ctx: PORTAL, chain: ["span.hps-activity-now"], tsx: "ChatPanel.tsx", titled: /className="hps-activity-now" aria-label="현재 활동" data-hp-tooltip=\{`\$\{kind\} · \$\{config\.activity\.name\}`\}/ },
   { label: "trial remaining count", ctx: PORTAL, chain: ["span.hps-trial-left"], keepWhole: true },
   { label: "sources toggle (자료 N)", ctx: HEAD, chain: ["button.tw-quiet.tw-sources-toggle"], shortFixed: true },
   { label: "rail toggle (☰)", ctx: HEAD, chain: ["button.tw-rail-toggle.tw-quiet"], shortFixed: true },
@@ -873,7 +873,7 @@ const NEGATIVE = [
   ["the AI-can-do note left at 12px in personal chat", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hp-rail-lesson-note,/, "\n")), /AI-can-do card note .* computes to 12px|hp-rail-lesson-note computes to 12px/],
   ["the run note back to nowrap and rigid", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-run-note \{[^}]*\}/, ".tw-run-note { flex: 0 0 auto; color: var(--tw-muted); font-size: var(--hp-font-caption); white-space: nowrap; }")), /run note .* cannot give way at 390px/],
   ["the trial count allowed to shrink again", mutate("taskWorkspace.css", (s) => s.replace(/\n\s*\.tw-heading \.hps-trial-left \{ flex-shrink: 0; \}/, "")), /trial remaining count can shrink at 390px/],
-  ["the task title's full-text title removed", { ...real, "TaskWorkspace.tsx": real["TaskWorkspace.tsx"].replace(/className="tw-title-button" title=\{`[^`]*`\}/, 'className="tw-title-button" title="작업 이름 바꾸기"') }, /task title button is nowrap with an ellipsis but its markup has no title/],
+  ["the task title's full-text title removed", { ...real, "TaskWorkspace.tsx": real["TaskWorkspace.tsx"].replace(/className="tw-title-button" data-hp-tooltip=\{`[^`]*`\}/, 'className="tw-title-button" data-hp-tooltip="작업 이름 바꾸기"') }, /task title button is nowrap with an ellipsis but its markup has no title/],
   ["a stale classification (rule deleted from styles.css)", mutate("styles.css", (s) => s.replace(/\.hps-roll-cancel \{[^}]*\}/, "")), /hps-roll-cancel" no longer sets a font-size/],
 ];
 // CGP-DS-D-005 (DES-CGP-DS-09): weights, tracking, leading and the upper scale steps.

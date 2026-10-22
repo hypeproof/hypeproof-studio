@@ -31,7 +31,7 @@ async function run() {
     assert.equal(host.querySelector('script'), null);
   }
   const link = host.querySelector('.tw-skip'), target = host.querySelector('.tw-conversation');
-  assert.equal(link.getAttribute('title'), '대화로 바로 가기 (Alt+Shift+J 또는 Enter)');
+  assert.equal(link.getAttribute('data-hp-tooltip'), '대화로 바로 가기 (Alt+Shift+J 또는 Enter)');
   assert.equal(link.getAttribute('href'), '#task-conversation');
   assert.equal(link.getAttribute('aria-keyshortcuts'), 'Alt+Shift+J');
   assert.equal(target.getAttribute('tabindex'), '-1');

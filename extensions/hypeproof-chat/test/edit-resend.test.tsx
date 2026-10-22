@@ -78,7 +78,7 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom()]
     ok(html.includes("강아지 그려 줘") && html.includes("강아지 답"), "latest version missing");
     ok(!html.includes("고양이 그려 줘") && !html.includes("고양이 답"), "version 1 drawn at the same time");
     ok(html.includes('aria-label="메시지 버전"') && html.includes('aria-live="polite">2/2</span>'), "pager missing");
-    ok(html.includes(`title="${PAGER_TITLE}"`), "pager title missing");
+    ok(html.includes(`data-hp-tooltip="${PAGER_TITLE}"`), "pager title missing");
     ok(count(html, EDIT) === 1, "수정 missing on the latest version");
   });
 }

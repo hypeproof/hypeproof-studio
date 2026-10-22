@@ -43,7 +43,7 @@ export function CitationRack({ citations, messageId }: { citations: Citation[]; 
         aria-label={`${citation.title || address?.hostname || '출처'}${address ? `, ${address.hostname}, ${workspace ? '출처 미리보기' : '출처 열기'}` : ', 열 수 없는 주소'}`}
         aria-expanded={workspace ? expanded : undefined}
         aria-controls={workspace ? 'task-sources' : undefined}
-        title={address ? citation.url : '이 출처의 주소를 열 수 없습니다.'}
+        data-hp-tooltip={address ? citation.url : '이 출처의 주소를 열 수 없습니다.'}
         onClick={event => {
           if (!address) return;
           if (workspace) workspace.previewSource(citation, event.currentTarget, messageId);

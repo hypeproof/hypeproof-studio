@@ -22,7 +22,7 @@ export function VerdictButtons({ state, onChange }: { state?: VerdictState; onCh
       type="button"
       className={`hps-answer-action hps-verdict hps-verdict-${verdict}`}
       aria-pressed={state?.verdict === verdict}
-      title={VERDICT_PRIVACY}
+      data-hp-tooltip={VERDICT_PRIVACY}
       onClick={() => press(verdict)}
     >
       {state?.verdict === verdict && <ChatIcon kind="check" size={16} />}{VERDICT_LABELS[verdict]}

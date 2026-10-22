@@ -87,7 +87,7 @@ export async function verifyModels({app,window,findContext,cases,out,live,upstre
   }
   if(!live)await choose(chat,'hypeproof-fast');
   // Reconnect to a distinct frozen fixed-model lesson through the real onboarding form.
-  await chat.evaluate("document.querySelector('.hps-actions button[title=\"연결된 수업 확인 및 변경\"]').click()");
+  await chat.evaluate("document.querySelector('.hps-actions button[data-hp-tooltip=\"연결된 활동 확인 및 변경\"]').click()");
   const start=await frame('.studio-start');await start.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='다른 수업에 연결').click()");await wait(()=>start.evaluate("!!document.querySelector('#course-code')"),'code input');
   await fill(start,'#course-code',cases.fixed.token);await wait(()=>start.evaluate("!document.querySelector('form button[type=submit]').disabled"),'submit code');await start.evaluate("document.querySelector('form button[type=submit]').click()");await wait(()=>start.evaluate("!!document.querySelector('.studio-course')"),'fixed lesson');await start.evaluate("document.querySelector('.studio-primary').click()");
   chat=await frame('.hps-model-selection');await wait(()=>chat.evaluate("document.querySelector('.hps-model-selection select').disabled"),'fixed model');

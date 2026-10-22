@@ -27,10 +27,10 @@ try {
   await expect(input).toHaveValue('다음에 이어 쓸 입력');
   await expect(page.locator('.hps-messages')).toContainText('검증이 끝난 같은 파일');
   checks.push('webview reload retains host transcript and draft');
-  await page.getByTitle('작업 이름 바꾸기').click();
+  await page.locator('.tw-title-button[data-hp-tooltip^="작업 이름 바꾸기"]').click();
   await page.getByRole('textbox', { name: '작업 이름', exact: true }).fill('매일 릴리즈');
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByTitle('작업 이름 바꾸기')).toContainText('매일 릴리즈');
+  await expect(page.locator('.tw-title-button[data-hp-tooltip^="작업 이름 바꾸기"]')).toContainText('매일 릴리즈');
   checks.push('rename persists with explicit action');
   await page.getByRole('button', { name: /^자료/ }).click();
   await page.getByRole('button', { name: '이 자료 고정', exact: true }).click();

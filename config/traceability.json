@@ -10083,6 +10083,70 @@
           "path": "chalk/test/outbound-consent.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TOOLTIPS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Tooltip presentation (CGP-DS-D-021)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/visual-system.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TOOLTIPS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TOOLTIPS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tooltips.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tooltips.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/main.tsx"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        },
+        {
+          "path": "chalk/src/lib/tooltips.ts"
+        },
+        {
+          "path": "scripts/sync-tooltips.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-TST-TOOLTIPS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TOOLTIPS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/tooltip.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/tooltip-browser.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/tooltips.test.mjs"
+        }
+      ]
     }
   ]
 }

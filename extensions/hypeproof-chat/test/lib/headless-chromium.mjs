@@ -56,6 +56,7 @@ export async function launch(bin, attempt = 1) {
     if (m.id && pending.has(m.id)) { const [res, rej] = pending.get(m.id); pending.delete(m.id); m.error ? rej(new Error(m.error.message)) : res(m.result); }
   };
   const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, [res, rej]); ws.send(JSON.stringify({ id: i, method, params })); });
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
   await send('Page.enable'); await send('DOM.enable'); await send('CSS.enable'); await send('Runtime.enable');
   const evaluate = async (expression) => {
     const r = await send('Runtime.evaluate', { expression, returnByValue: true });

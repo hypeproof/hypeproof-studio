@@ -294,3 +294,18 @@ row is exactly 44px. Rejected: shrinking the fade padding (departs from the D-01
 | Chalk | Only `manage.html`'s document Escape handler acted on a key a text field can see; it now ignores a composing Escape. Other Chalk pages have no key handlers; form submission during composition stays with the browser | Smallest change at the only handler found by `grep keydown chalk/src/ui` | On | no |
 
 | CGP-DS-D-020 | Apply card geometry to Studio settings, write/outbound/purge and Chalk outbound consent; keep host-native confirms, navigation drawers and nonmodal voice contracts. Use 20px padding and viewport-clamp the 320px minimum; cancel deferred Studio answers on unmount. | Conservative existing-surface scope, no new learning interruptions or permission grants; CSS animations own dismissal timing. | On; visual/lifecycle only | no (agent-selected 2026-10-22) |
+
+## DEC-DS-D-021: shared tooltip hints (2026-10-22; agent implementation choice)
+
+Existing native title hints become explicit `data-hp-tooltip` attributes on DOM
+nodes. A single delegated presenter is installed per Studio webview and embedded
+in Chalk by a generated transport, avoiding per-button wrappers and layout changes.
+The canonical TS/CSS lives in the webview; `scripts/sync-tooltips.mjs --check` locks
+Chalk to it. Native iframe titles and component title props are not hints.
+
+A tooltip is supplementary visual text, aria-hidden, with no aria-describedby:
+the control's own visible text/aria-label remains its independent accessible name.
+Hovering a second control still opens its hint after 500ms; leaving restores the
+focused control's hint. No new shortcut is invented. Native modal hints are mounted
+inside the dialog. No permissions, data recipients, learner scores or safety flags
+change. This is an agent choice, not a new human agreement.

@@ -614,8 +614,8 @@ function discloseActions(act,preferred){
  if(main){
   lead.append(element('h3','다음 행동'));
   if(preferred==='send_question'){const label=act.querySelector('#ops-question')?.closest('label');if(label)lead.append(label);}
-  if(preferred==='issuer'){main.title=main.textContent;main.textContent='참여 코드 재발급';lead.append(element('p','새 코드를 학생에게 전달한 뒤 앱 연결을 확인하세요.','muted'));}
-  if(preferred==='pairing'){main.title=main.textContent;main.textContent='기기 연결 코드 발급';lead.append(element('p','10분 동안 한 번 사용합니다. 이전 미사용 코드는 무효가 됩니다.','muted'));}
+  if(preferred==='issuer'){main.setAttribute('data-hp-tooltip',main.textContent);main.textContent='참여 코드 재발급';lead.append(element('p','새 코드를 학생에게 전달한 뒤 앱 연결을 확인하세요.','muted'));}
+  if(preferred==='pairing'){main.setAttribute('data-hp-tooltip',main.textContent);main.textContent='기기 연결 코드 발급';lead.append(element('p','10분 동안 한 번 사용합니다. 이전 미사용 코드는 무효가 됩니다.','muted'));}
   const confirm=main.nextElementSibling?.classList.contains('confirm')?main.nextElementSibling:null;
   if(main.dataset.act&&actionImpact[main.dataset.act])lead.append(element('p',actionImpact[main.dataset.act],'muted'));
   lead.append(main);if(confirm)lead.append(confirm);

@@ -95,9 +95,9 @@ test('invalid counts, held or unresolved are unconfirmed; confirmed zero stays z
  const c=base(); c.access!.view!.choices[0].resources[0].remaining=0; assert.ok(render(c).includes('남은 요청 0회'));
 });
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('ko-KR',{hour:'numeric',minute:'2-digit',hour12:false});
-/** Every number the line shows (text and title), after removing the confirmation time. */
+/** Every number the line shows (text and tooltip), after removing the confirmation time. */
 const numbers = (html: string, iso: string) => {
- const title = html.match(/title="([^"]*)"/)?.[1] ?? '';
+ const title = html.match(/data-hp-tooltip="([^"]*)"/)?.[1] ?? '';
  // The model alias may contain digits; inspect the actual visible ledger as well as its tooltip.
  const visible = html.replace(/<span class="hps-access-model"[^>]*>[\s\S]*?<\/span>/, '').replace(/<[^>]+>/g, '');
  return ((title + ' ' + visible).split(hhmm(iso)).join(' ').match(/\d[\d,]*/g) ?? []);
@@ -138,10 +138,10 @@ test('DEC-35 class seats: the classroom header shows the class line from Service
   if(marker==='activity') c.profile!.activity_kind='personal'; else (c.activity as {kind:string}).kind='personal';
   c.access=classAccess();
   const want='수업·기관 지원 · 남은 요청 37회 · '+hhmm('2026-10-20T06:42:00Z')+' 확인';
-  assert.ok(render(c).includes(`title="${want}"`),marker);
+  assert.ok(render(c).includes(`data-hp-tooltip="${want}"`),marker);
   const html=renderToStaticMarkup(<ChatPanel {...PROPS} config={c} instructor={instructor}/>);
   assert.match(html, /<header[^>]*>[\s\S]*hps-access-header[\s\S]*<\/header>/, marker+instructor);
-  assert.ok(html.includes(`title="${want}"`),marker+instructor);
+  assert.ok(html.includes(`data-hp-tooltip="${want}"`),marker+instructor);
  }
 });
 test('DEC-35 class seats stay honest when the data does not support a count', () => {
@@ -170,18 +170,18 @@ test('an unusable selected pass shows its state word, never 남은 요청 N회',
   const c=base(); Object.assign(c.access!.view!.choices[0],{state,available});
   const html=render(c);
   assert.ok(!html.includes('남은 요청'),state+available+': '+html); assert.ok(!html.includes('37'),state);
-  assert.ok(html.includes(`title="${word} · ${hhmm(c.access!.view!.as_of)} 확인"`),state+': '+html);
+  assert.ok(html.includes(`data-hp-tooltip="${word} · ${hhmm(c.access!.view!.as_of)} 확인"`),state+': '+html);
   assert.deepEqual(numbers(html,c.access!.view!.as_of),[],state);
   const panel=renderToStaticMarkup(<ChatPanel {...PROPS} config={c} instructor={false}/>);
   const header=panel.slice(0, panel.indexOf('</header>'));
-  assert.ok(header.includes(`title="${word} · `) && !header.includes('남은 요청'),state+': chat header');
+  assert.ok(header.includes(`data-hp-tooltip="${word} · `) && !header.includes('남은 요청'),state+': chat header');
  }
 });
 test('an unusable class source names its state and shows no count', () => {
  for (const [state, word] of Object.entries(UNUSABLE)) {
   const c=base(); Object.assign(c.access!.view!.choices[0],{state,available:false,source_kind:'cohort'}); c.activity!.kind='classroom';
   const html=render(c);
-  assert.ok(html.includes(`title="수업·기관 지원 · ${word} · ${hhmm(c.access!.view!.as_of)} 확인"`),state+': '+html);
+  assert.ok(html.includes(`data-hp-tooltip="수업·기관 지원 · ${word} · ${hhmm(c.access!.view!.as_of)} 확인"`),state+': '+html);
   assert.deepEqual(numbers(html,c.access!.view!.as_of),[],state);
  }
 });
@@ -226,6 +226,6 @@ test('class timestamp also requires a valid Service confirmation', () => {
 });
 test('the full line is kept in the title and split into whole parts', () => {
  const html=render(base());
- assert.match(html, /title="남은 요청 37회 · [^"]+ 확인 · 예약 3회 · 미확인 2건"/);
+ assert.match(html, /data-hp-tooltip="남은 요청 37회 · [^"]+ 확인 · 예약 3회 · 미확인 2건"/);
  assert.equal((html.match(/class="hps-access-part"/g)||[]).length,4);
 });

@@ -27,7 +27,7 @@ export function WriteApprovalDialog({prompt,onAnswer,textSize}:{prompt:WriteAppr
     <p>바꿀 파일 {prompt.files.length}개</p>
     <ul aria-label="바꿀 파일" id="write-approval-files" className="hps-write-files">
       {prompt.files.slice(0,expanded?prompt.files.length:5).map((name,index)=>{const safe=visible(name);return <li key={index}>
-        <span className="hps-write-chip" tabIndex={0} aria-label={safe} title={safe} onFocus={()=>setFocused(index)} onBlur={()=>setFocused(null)}>
+        <span className="hps-write-chip" tabIndex={0} aria-label={safe} data-hp-tooltip={safe} onFocus={()=>setFocused(index)} onBlur={()=>setFocused(null)}>
           <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path d="M3 1h6l4 4v10H3zM9 1v4h4" fill="none" stroke="currentColor"/></svg>
           <span>{middleFileName(safe)}</span>
         </span>

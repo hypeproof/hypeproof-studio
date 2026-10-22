@@ -121,7 +121,7 @@ t("no action where team brain is off or absent, in a lesson, a classroom seat, i
 t("Korean copy, no capability or score labels", async () => {
   const h = await harness(brainOn);
   const b = h.actions()[0];
-  const text = `${b.textContent} ${b.getAttribute("aria-label") ?? ""} ${b.getAttribute("title") ?? ""}`;
+  const text = `${b.textContent} ${b.getAttribute("aria-label") ?? ""} ${b.getAttribute("data-hp-tooltip") ?? ""}`;
   ok(/[가-힣]/.test(text), "not Korean");
   ok(!/FRAMING|JUDGMENT|ORCHESTRATE|VERIFY|ADAPT|OWNERSHIP|점수|역량|등급/.test(text), `capability label in: ${text}`);
 });

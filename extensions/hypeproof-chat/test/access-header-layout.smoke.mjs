@@ -161,7 +161,7 @@ try {
   };
   await check("render: in a classroom (DEC-35 class seat) the line is a direct child of the header, as `.hps-header > .hps-access-header` needs", () => {
     const html = renderToStaticMarkup(h(ChatPanel, { ...PROPS, config: classroom }));
-    assert.ok(html.includes('title="수업·기관 지원 · 남은 요청 37회 · '), "classroom with class funding shows no line");
+    assert.ok(html.includes('data-hp-tooltip="수업·기관 지원 · 남은 요청 37회 · '), "classroom with class funding shows no line");
     assert.equal(depthInHeader(html, "hps-access-header"), 1, "the line is not a direct child of <header class=\"hps-header\">");
     // Control: the instrument finds a nested element at depth > 1.
     assert.ok(depthInHeader(html, "hps-access-part") > 1, "control: a part is nested inside the line");
