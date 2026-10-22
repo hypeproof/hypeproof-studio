@@ -1,11 +1,16 @@
+import { useId } from 'react';
+import { ChatIcon } from './ChatDetails';
 import type { ChatConfig } from '../../src/protocol';
 import { postToHost } from './vscode';
 
 export function ModelControl({ config, streaming }: { config: ChatConfig; streaming: boolean }) {
+  const reasonId = useId();
+  const locked = config.cohortSettings?.model === true;
   return <>
         {config.profile?.model_selection && <div className="hps-model-selection">
           <label>모델 <select aria-label="대화 모델" value={config.model}
-            disabled={config.profile.model_selection.choices.length === 1}
+            disabled={locked || config.profile.model_selection.choices.length === 1}
+            aria-disabled={locked || undefined} aria-describedby={locked ? reasonId : undefined}
             onChange={e => postToHost({ type: 'selectModel', alias: e.target.value })}
             onKeyDown={e => {
               // Embedded Mac webviews can forward native select keys to the workbench.
@@ -22,7 +27,7 @@ export function ModelControl({ config, streaming }: { config: ChatConfig; stream
 
             {config.profile.model_selection.choices.map(c => <option key={c.id} value={c.alias}>{c.label}</option>)}
           </select></label>
-          <small>{config.profile.model_selection.choices.length === 1
+          <small id={locked ? reasonId : undefined} className={locked ? 'hps-managed-reason' : undefined}>{locked ? <><ChatIcon kind="lock" size={20} /> 선생님이 정한 설정이에요</> : config.profile.model_selection.choices.length === 1
             ? (config.profile.model_selection.source === 'lesson' ? '이 수업에서 고정한 모델' : '사용 가능한 모델 1개')
             : streaming ? '변경하면 다음 요청부터 적용돼요' : '대화를 유지하며 모델을 바꿀 수 있어요'}</small>
         </div>}

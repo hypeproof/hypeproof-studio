@@ -11041,6 +11041,64 @@
           "path": "extensions/hypeproof-chat/test/keyboard-navigation.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-COHORT-SETTINGS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Cohort-managed settings (CGP-SHELL-R-015)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COHORT-SETTINGS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COHORT-SETTINGS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ModelControl.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/EffortControl.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COHORT-SETTINGS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COHORT-SETTINGS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/cohort-settings.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/ai-capability-card-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/cohort-settings-computed.smoke.mjs"
+        }
+      ]
     }
   ]
 }

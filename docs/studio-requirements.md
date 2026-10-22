@@ -4699,3 +4699,27 @@ interactions), `keyboard-navigation.smoke.mjs` (headless computed layout: compos
 reach of the skip link, real Tab to each splitter, visibility, position, topmost hit, ring width and contrast, forced
 colors, keys, drag and reload persistence; missing browser fails under
 FOCUS_REQUIRE_BROWSER=1).
+
+## Cohort-managed settings (CGP-SHELL-R-015)
+
+`REQ-STUDIO-COHORT-SETTINGS` extends REQ-K1 and AB-03, tracing to
+CGP-SHELL-027 / REQ-SHELL-15, PI#2, and CGP-AGENT-R-007. Learners can
+understand the boundary of their choices (OWNERSHIP) without changing that boundary.
+The host marks the model and thinking-depth controls as cohort-managed only when
+its resolved Service profile identifies a classroom or contains a lesson and the
+corresponding allowed list has exactly one value. Local development runtime and
+instructor mode never receive this attribution. Personal, trial, pass and unknown
+profiles without lesson/classroom evidence retain their existing copy.
+
+A marked control stays disabled, keeps its current selected value readable, and
+shows the existing stroke lock icon beside “선생님이 정한 설정이에요”. The reason
+is visible without opening details and is connected by `aria-describedby`; the
+control also exposes `aria-disabled`. Classroom composer and personal settings use
+the same controls. Every config publication recomputes the metadata; profile
+refresh, reconnect and seat changes do not retain a previous lock.
+
+The host's existing model/effort allowlists and Service enforcement remain the
+authority. No approval preset is invented: this pinned Service profile has no
+approval-mode value, so that example is not rendered as a fictional setting.
+Validation: `test/cohort-settings.test.tsx` and the actual host publication cases
+in `test/ai-capability-card-host.smoke.mjs`.

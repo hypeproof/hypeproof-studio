@@ -8635,6 +8635,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
         activityUnavailable: this.opsHold ? {cause:this.opsHold === 'paused' ? 'paused' : 'forbidden',audience:'classroom'} : this.lastProfileFailure ? activityFailure(this.lastProfileFailure, activity ? seatAudience(activity) : profileAudience(profile)) ?? (this.lastProfileFailure.reason === 'network' ? {cause:'outage',audience:activity ? seatAudience(activity) : profileAudience(profile)} : undefined) : undefined,
         access:this.accessState,
+        cohortSettings: !local && !isInstructor && profile &&
+          (profile.activity_kind === 'classroom' || !!profile.lesson)
+          ? { model: selection?.choices.length === 1, effort: effort?.allowed.length === 1 }
+          : undefined,
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
         textSize: normalizeTextSize(this.context.globalState?.get(TEXT_SIZE_KEY)),

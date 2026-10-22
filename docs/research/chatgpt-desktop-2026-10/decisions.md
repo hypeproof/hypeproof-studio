@@ -534,3 +534,5 @@ focuses a visible skip link" is read that way. Explicit user/host focus requests
 existing conversation shortcut remain available. No safety
 permission or model/runtime behavior changes. This is an implementation choice, not
 a newly recorded human agreement.
+
+| DEC-SHELL-R015 | Attribute a singleton model/effort setting to the teacher only with a resolved classroom profile or lesson, excluding local development runtime and instructor mode. Preserve single-option personal/trial/pass/unknown menus without teacher attribution. Do not invent an approval-mode value absent from the pinned Service contract. | Singleton availability alone does not prove teacher ownership. This UI-only change explains existing policy without changing approval, recipient, or runtime grants. | On for confirmed cohort settings; no new permission | no (agent-selected 2026-10-22) |
