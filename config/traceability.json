@@ -9846,6 +9846,60 @@
           "path": "e2e/hit-target-audit.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-SHARED-FOCUS-GEOMETRY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Shared focus geometry (CGP-DS-D-014)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SHARED-FOCUS-GEOMETRY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHARED-FOCUS-GEOMETRY"
+      ],
+      "sources": [
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md",
+          "section": "## DEC-DS-D-014: shared focus geometry (2026-10-22; agent implementation choice)"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/focusGeometry.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "chalk/src/lib/design-tokens.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SHARED-FOCUS-GEOMETRY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHARED-FOCUS-GEOMETRY",
+        "ST-IMP-SHARED-FOCUS-GEOMETRY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lib/headless-chromium.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/focus-geometry.smoke.mjs"
+        }
+      ]
     }
   ]
 }

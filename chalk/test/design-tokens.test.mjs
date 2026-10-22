@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
-import { checkTransport, source } from '../../scripts/sync-design-tokens.mjs';
+import { checkTransport, tokenCss } from '../../scripts/sync-design-tokens.mjs';
 const { default: app } = await import('../src/index.ts');
 checkTransport();
-const expected = readFileSync(source, 'utf8');
+const expected = tokenCss();
 for (const route of ['/console','/start','/issuer','/board','/authoring','/manage','/budgets','/sharing','/learn']) {
   const response = await app.fetch(new Request('https://chalk.test'+route), { ENVIRONMENT:'test' });
   assert.equal(response.status,200,route);

@@ -1,0 +1,60 @@
+/* CGP-DS-D-014: shared keyboard focus geometry for Studio and every Chalk page.
+ * Studio imports this after tokens.css (the role tokens); Chalk receives it appended to the
+ * generated design-token transport (scripts/sync-design-tokens.mjs).
+ *
+ * Cascade design: the base rule is !important with a low specificity (every exemption sits in
+ * :where()), and where the ring sits is a custom property, not a second competing rule. A scroll
+ * scope sets --hp-focus-offset once; it inherits to every descendant control, so no
+ * scope-specific selector has to out-rank the base. The ring is 2px solid, 2px outside the
+ * control (the gap separates it from the control's own fill), or -2px inside a scrolling
+ * viewport and its descendants, where an outside ring would be clipped. */
+html body :focus-visible:where(:not(.hps-shell[data-chat-detail="personal"] .hps-input textarea):not(.cp-preview h3)) {
+  outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default, var(--ds-c-focus-ring)) !important;
+  outline-offset: var(--hp-focus-offset, var(--ds-c-focus-offset)) !important;
+}
+/* Focus changes the ring only, never the control's fill or text. A control with an accent fill
+ * (primary CTA, Send, Save, Run, Retry) is therefore always ringed OUTSIDE (+2px) even inside a
+ * scroll scope: an inset ring would sit on its own fill, and the ring colour is usually the fill
+ * colour. The 2px gap separates the ring from the fill, so the ring only has to contrast with
+ * the surface around the control. */
+html body :is(.hp-cta-primary, .hps-btn-send, .hps-edit-save, .hps-msg-run, .hps-error-banner-retry) {
+  --hp-focus-offset: var(--ds-c-focus-offset);
+}
+/* Scroll scopes: the focusable viewport itself and every control inside it. */
+html body :is(
+  .tw-task-list, .tw-source-list, .tw-sources, .tw-trash-dialog,
+  .hps-messages, .hps-markdown-table, .hps-codepill-body, .hps-fatal-detail,
+  .hps-update-banner-notes, .hps-element-meta pre, .hp-rail-lesson, .hp-rail-goal,
+  .hps-native-observation, .hps-effort details[open], .hps-access[open],
+  .hps-voice-body, .hp-evidence, .hp-evidence-compare pre, .hps-carryover-list,
+  .hps-recovery-list, .hps-page-attachment pre, .hps-page-context-panel,
+  .hps-attachment-failures, .local-review pre, .hps-tools-menu, .hps-attachments,
+  .hps-preferences, .hps-outbound, .hps-write-approval,
+  .hps-codeblock[data-wrap="off"] > pre,
+  .hps-shell:has(> .hp-mission .hp-mission-sentence),
+  .hps-shell:has(.hps-effort:not(:empty)),
+  .hps-shell[data-chat-detail="personal"] .hps-input textarea,
+  .scroll, #ops-seats, #confirm-diff-lines, .ri-table-wrap, .side, #ops-detail
+) {
+  --hp-focus-offset: var(--ds-c-focus-inset);
+}
+/* Chalk's responsive scrollers scroll only below their own breakpoints. */
+@media (max-width: 520px) {
+  html body :is(.ops-top) { --hp-focus-offset: var(--ds-c-focus-inset); }
+}
+@media (max-width: 600px) {
+  html body :is(.ops-top>#ops-state-filters) { --hp-focus-offset: var(--ds-c-focus-inset); }
+}
+/* Forced colors only (the browser already replaces author fills with system colors there): keep the
+ * scroll inset and use the system Canvas/CanvasText pair so a Highlight-filled selected control
+ * cannot swallow the Highlight ring. Outside forced colors focus never repaints a control. */
+@media (forced-colors: active) {
+  html body :is(:focus-visible, #disconnect):focus-visible:focus-visible:where(:not(.hps-shell[data-chat-detail="personal"] .hps-input textarea):not(.cp-preview h3)) {
+    outline-color: Highlight !important;
+    background: Canvas !important;
+    color: CanvasText !important;
+  }
+  html body :is(:focus-visible, #disconnect):focus-visible:focus-visible:where(:not(.hps-shell[data-chat-detail="personal"] .hps-input textarea):not(.cp-preview h3)) :where(*) {
+    color: inherit !important;
+  }
+}

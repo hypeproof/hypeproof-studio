@@ -204,7 +204,8 @@ const isFocus = (part) => /:focus(-visible|-within)?\b/.test(part);
 const GEOMETRY = /^2px solid \S.*$/;
 function scanFocus(files, { token = true } = {}) {
   const bad = [];
-  const rules = Object.entries(files).flatMap(([f, css]) => rulesOf(css).map((r) => ({ ...r, f })));
+  // Shared important geometry is parsed separately by focus-geometry.smoke.mjs.
+  const rules = Object.entries(files).filter(([f]) => f !== "designTokens.css" && f !== "focusGeometry.css").flatMap(([f, css]) => rulesOf(css).map((r) => ({ ...r, f })));
   const ringOk = (v) => (token ? v === RING : GEOMETRY.test(v));
   const ringParts = new Set(rules.filter((r) => r.decls.some(([k, v]) => k === "outline" && ringOk(v))).flatMap((r) => r.parts));
   let ringRules = 0;

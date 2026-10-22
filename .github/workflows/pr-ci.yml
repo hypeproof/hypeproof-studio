@@ -261,6 +261,11 @@ jobs:
       # U-layer pure smoke tests (test/*.smoke.mjs) — no vscode host needed.
       - name: Run extension smoke tests
         working-directory: extensions/hypeproof-chat
+        env:
+          # The focus-geometry smoke reads computed styles in the runner's preinstalled Google Chrome
+          # (test/lib/headless-chromium.mjs finds it on PATH). With this set, a missing browser fails
+          # the job instead of skipping the cascade and contrast checks.
+          FOCUS_REQUIRE_BROWSER: "1"
         run: npm test
 
   # The Windows leg for the extension smokes whose verdict depends on the host
