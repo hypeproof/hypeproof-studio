@@ -54,6 +54,7 @@ import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlow
 import { EvidenceDrawer } from './EvidenceDrawer';
 import { CompletionGate } from './CompletionGate';
 import { LessonStepPanel } from './LessonStepPanel';
+import { GoalStatusBar } from './GoalStatusBar';
 import { StudentGoal } from './StudentGoal';
 import type { StepWork } from '../../src/lessonFocus';
 import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
@@ -437,7 +438,11 @@ export function ChatPanel(props: Props) {
   const goalRequest = useRef<string | null>(null);
   const [goalPending, setGoalPending] = useState(false);
   // A note belongs to the lesson it was made under.
-  useEffect(() => { setGoalNote(null); }, [config?.profile?.lesson?.sha256]);
+  useEffect(() => {
+    goalRequest.current = null;
+    setGoalPending(false);
+    setGoalNote(null);
+  }, [config?.profile?.lesson?.sha256, config?.activity?.id]);
   useEffect(() => onHostMessage((msg) => {
     if (msg.type !== "goalState") return;
     // A malformed answer keeps the goal already shown.
@@ -1820,6 +1825,10 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
+        {!props.instructor && config?.profile?.lesson && <PanelBoundary panel="goal-status">{() => <GoalStatusBar
+          config={config} view={goalOfLesson(studentGoal, config.profile!.lesson)}
+          pending={goalPending} onSave={sendGoalSave} />}</PanelBoundary>}
+
         {props.refusal && <RefusalBanner onDismiss={() => {
           props.onDismissRefusal?.();
           textareaRef.current?.focus({ preventScroll: true });

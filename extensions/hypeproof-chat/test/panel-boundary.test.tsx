@@ -289,6 +289,7 @@ const PANELS: Row[] = [
   { panel: "verify", key: "VerifyPanel.tsx:VerifyPanel", mode: "classroom", msgs: () => [{ type: "verifyState", view: {} }] },
   { panel: "mission-header", key: "MissionHeader.tsx:MissionHeader", mode: "classroom" },
   { panel: "student-goal", key: "StudentGoal.tsx:StudentGoal", mode: "classroom" },
+  { panel: "goal-status", key: "GoalStatusBar.tsx:GoalStatusBar", mode: "classroom" },
   { panel: "lesson", key: "LessonStepPanel.tsx:LessonStepPanel", mode: "classroom" },
   { panel: "instructor-inbox", key: "InstructorInbox.tsx:InstructorInbox", mode: "classroom" },
   { panel: "materials", key: "MaterialsPanel.tsx:MaterialsPanel", mode: "classroom", config: { materials: true } },

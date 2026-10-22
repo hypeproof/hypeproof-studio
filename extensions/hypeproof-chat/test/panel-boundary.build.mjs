@@ -19,6 +19,7 @@ export const PANEL_COMPONENTS = {
   // Not a panel of its own: stubbed so the evidence row renders (mini-dom has no <select>).
   "EvidenceDrawer.tsx": ["EvidenceDrawer"],
   "EvidencePanel.tsx": ["EvidencePanel"],
+  "GoalStatusBar.tsx": ["GoalStatusBar"],
   "HelpRequest.tsx": ["HelpRequest"],
   "InstructorInbox.tsx": ["InstructorInbox"],
   "LessonStepPanel.tsx": ["LessonStepPanel"],
