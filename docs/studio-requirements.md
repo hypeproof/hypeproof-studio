@@ -4461,3 +4461,17 @@ requests and confirmation time; missing, invalid, unresolved or unsupported data
 hide all budget counts (DEC-35). No new Service or observation data flow is introduced.
 This exposes learner ownership and judgment without capability labels or evaluation scores.
 Validation: `goal-status.test.tsx`, `goal-status-css.smoke.mjs`, `student-goal.smoke.mjs`.
+
+## Lesson capability first entry (CGP-AGENT-R-032)
+
+REQ-CGP-AGENT-67 / CGP-AGENT-067, PI#2 (learner judgment) and PI#3
+(visible responsibility), depends on CGP-AGENT-R-003 / REQ-M47:
+The first entry into a lesson shows the existing resolved capability card open,
+with a `다음` action. Once acknowledged, it stays collapsed on reload for the same
+lesson course/version/hash and seat on this device. The panel header's
+`AI 안내` reopens the same card. No autonomy choice, permission change,
+AI turn, assessment event, or upload is produced. This may expose JUDGMENT and
+OWNERSHIP behavior; viewing is not evidence of learning or task completion.
+Unknown/absent lessons and local/instructor runtimes do not get this entry flow.
+Failed receipt storage keeps the first-entry card pending. Stale acknowledgements
+cannot consume another lesson's entry. See DEC-AGENT-R032 in the parity decisions.
