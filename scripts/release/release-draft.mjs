@@ -41,7 +41,17 @@ export function pickRelease(releases, tag) {
 }
 
 function gh(...args) {
-  return execFileSync('gh', args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit']});
+  // 64 MB: the default 1 MB buffer overflowed (spawnSync gh ENOBUFS) on a release listing.
+  return execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'inherit']});
+}
+
+// Only id, tag_name and draft are fetched: full release objects (assets included)
+// alone overflowed the buffer. --jq emits one compact JSON object per line.
+function listReleases(repo) {
+  return gh('api', `repos/${repo}/releases`, '--paginate', '--jq', '.[] | {id, tag_name, draft}')
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .map(line => JSON.parse(line));
 }
 
 function main() {
@@ -61,9 +71,7 @@ function main() {
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) { process.stderr.write('release-draft: GITHUB_REPOSITORY env var is required\n'); process.exit(1); }
 
-  const releases = JSON.parse(
-    gh('api', `repos/${repo}/releases`, '--paginate', '--slurp')
-  ).flat();
+  const releases = listReleases(repo);
 
   const decision = pickRelease(releases, tag);
 
@@ -82,9 +90,7 @@ function main() {
     // Race guard: re-list after create. If both builders listed before either
     // created, both will have seen 0 and both will have called create, leaving
     // two drafts. Fail fast here so upload is never ambiguous.
-    const fresh = JSON.parse(
-      gh('api', `repos/${repo}/releases`, '--paginate', '--slurp')
-    ).flat();
+    const fresh = listReleases(repo);
     pickRelease(fresh, tag); // throws with ids if 2+ drafts exist
   } else {
     console.log(`release-draft: reusing existing draft release ${decision.id} for ${tag}`);

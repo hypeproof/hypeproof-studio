@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {pickRelease} from '../release-draft.mjs';
+
+const script = fileURLToPath(new URL('../release-draft.mjs', import.meta.url));
 
 // Helper: make a minimal release object
 const rel = (tag_name, draft, id) => ({id, tag_name, draft});
@@ -75,5 +82,39 @@ test('three releases for same tag → throws naming all ids', () => {
     assert.ok(e.message.includes('1'), 'id 1 should appear');
     assert.ok(e.message.includes('2'), 'id 2 should appear');
     assert.ok(e.message.includes('3'), 'id 3 should appear');
+  }
+});
+
+test('release listing requests compact fields and survives a page larger than the default 1 MB buffer', t => {
+  for (const [name, line, expected] of [
+    ['existing draft', '{"id":42,"tag_name":"v1.0.0","draft":true}', 'reusing existing draft release 42'],
+    ['no release', '', 'created draft release for v1.0.0'],
+  ]) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-draft-'));
+    t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+    const bin = path.join(dir, 'bin'), log = path.join(dir, 'gh-args.jsonl'), asset = path.join(dir, 'asset.zip');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(asset, 'fixture');
+    // Fake gh: a listing without --jq returns 2 MB (full release objects with assets);
+    // only the --jq listing returns the compact lines.
+    fs.writeFileSync(path.join(bin, 'gh'), [
+      `#!${process.execPath}`,
+      'const fs = require("fs"), args = process.argv.slice(2);',
+      'fs.appendFileSync(process.env.FIXTURE_LOG, JSON.stringify(args) + "\\n");',
+      'if (args[0] === "api") {',
+      '  if (args.includes("--jq")) process.stdout.write(process.env.FIXTURE_LINE ? process.env.FIXTURE_LINE + "\\n" : "");',
+      '  else process.stdout.write(JSON.stringify([{id: 9, tag_name: "v0.0.1", draft: false, body: "x".repeat(2 << 20)}]));',
+      '}',
+      'process.exit(0);',
+    ].join('\n'));
+    fs.chmodSync(path.join(bin, 'gh'), 0o755);
+    const result = spawnSync(process.execPath, [script, '--tag', 'v1.0.0', asset], {encoding: 'utf8', env: {...process.env,
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`, GITHUB_REPOSITORY: 'hypeproof/hypeproof-studio', GH_TOKEN: 'fixture',
+      FIXTURE_LOG: log, FIXTURE_LINE: line}});
+    assert.equal(result.status, 0, `${name}: ${result.stderr}`);
+    assert.match(result.stdout, new RegExp(expected));
+    const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
+    const listings = calls.filter(args => args[0] === 'api');
+    assert.ok(listings.length > 0 && listings.every(args => args.includes('--jq')), `${name}: every listing must request --jq`);
   }
 });

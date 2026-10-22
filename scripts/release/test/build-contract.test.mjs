@@ -274,14 +274,14 @@ test('both workflow upload scripts stop at the draft and use validated outputs t
     fs.writeFileSync(stub, [
       'const fs=require("fs"),args=process.argv.slice(2);',
       'fs.appendFileSync(process.env.FIXTURE_LOG,JSON.stringify(args)+"\\n");',
-      'if(args[0]==="api"&&args.some(a=>a.includes("/releases"))&&args.includes("--slurp")){',
+      'if(args[0]==="api"&&args.some(a=>a.includes("/releases"))&&args.includes("--jq")){',
       '  const c=process.env.FIXTURE_LOG+".apicnt";',
       '  let n=0;try{n=parseInt(fs.readFileSync(c,"utf8")||"0");}catch{}',
       '  fs.writeFileSync(c,String(n+1));',
       '  const tag=process.env.GITHUB_REF.replace("refs/tags/","");',
       '  if(process.env.FIXTURE_IS_DRAFT==="true"){',
-      '    console.log(n===0?"[[]]":JSON.stringify([[{id:1,tag_name:tag,draft:true}]]));',
-      '  }else{console.log(JSON.stringify([[{id:2,tag_name:tag,draft:false}]]));} process.exit(0);',
+      '    if(n>0)console.log(JSON.stringify({id:1,tag_name:tag,draft:true}));',
+      '  }else{console.log(JSON.stringify({id:2,tag_name:tag,draft:false}));} process.exit(0);',
       '}',
       'if(args[0]==="release"&&args[1]==="create")process.exit(0);',
       'if(args[0]==="release"&&args[1]==="upload")process.exit(0);',
@@ -301,6 +301,7 @@ test('both workflow upload scripts stop at the draft and use validated outputs t
       [['api', 'repos/hypeproof/hypeproof-studio/releases'], ['release', 'create'],
        ['api', 'repos/hypeproof/hypeproof-studio/releases'], ['release', 'upload']]);
     assert.ok(calls[1].includes('--draft')); assert.ok(calls[1].includes('--prerelease'));
+    assert.ok(calls[0].includes('--jq') && calls[2].includes('--jq'), 'both listings must request only the needed fields');
     assert.ok(calls[3].includes(`dist/draft-build-${platform}.json`));
     assert.ok(!calls[3].includes('--clobber'));
     fs.writeFileSync(log, ''); try { fs.unlinkSync(log + '.apicnt'); } catch {}
