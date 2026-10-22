@@ -1,0 +1,248 @@
+import { staticTokens } from "./lib/expand-design-tokens.mjs";
+import { readFileSync } from "node:fs";
+// CGP-KNOW-R-003 (REQ-STUDIO-ACTIVITY-MATERIALS) — the 자료 list in the coach rail and the
+// "함께 보낼 자료" line above the composer. Mounted with react-dom/client on the minimal DOM
+// (fixtures/mini-dom.mjs) and driven by real clicks; the host is played by window messages, and
+// every press is read from what the webview posted. The CSS half parses the real stylesheet into
+// rules, resolves the --hp-*/--ds-* tokens to pixels, and runs each check against a mutated copy
+// that must fail.
+
+import { click, document as doc, mountPoint } from "./fixtures/mini-dom.mjs";
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { MaterialsChips, MaterialsPanel } from "../webview-ui/src/MaterialsPanel";
+import { ChatPanel } from "../webview-ui/src/ChatPanel";
+import { MATERIALS_COPY, type MaterialsView } from "../src/activityMaterialsView";
+import type { ChatConfig } from "../src/protocol";
+
+const posted = (globalThis as unknown as { __posted: Record<string, unknown>[] }).__posted;
+const act: (fn: () => unknown) => Promise<void> = (React as unknown as { act: (fn: () => unknown) => Promise<void> }).act;
+let fail = 0;
+const tests: [string, () => void | Promise<void>][] = [];
+const t = (label: string, fn: () => void | Promise<void>) => tests.push([label, fn]);
+const ok = (v: unknown, m: string) => { if (!v) throw new Error(m); };
+const eq = (a: unknown, b: unknown, m: string) => ok(JSON.stringify(a) === JSON.stringify(b), `${m}: ${JSON.stringify(a)} !== ${JSON.stringify(b)}`);
+
+type El = { localName: string; textContent: string; value: string; getAttribute(n: string): string | null; hasAttribute(n: string): boolean; findAll(test: (e: El) => boolean): El[]; dispatchEvent(e: unknown): boolean };
+const all = (test: (e: El) => boolean) => (doc as unknown as { documentElement: El }).documentElement.findAll(test);
+const byText = (tag: string, text: string) => all((e) => e.localName === tag && e.textContent === text);
+const hostSays = (data: unknown) => act(async () => { (globalThis as unknown as { window: { dispatchEvent(e: unknown): boolean } }).window.dispatchEvent({ type: "message", data, bubbles: false }); });
+const ev = (type: string) => ({ type, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(), preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} });
+const last = (type: string) => posted.filter((m) => m.type === type).at(-1);
+
+const item = (over: Partial<MaterialsView["items"][number]>) => ({ kind: "file", detail: "", selected: false, removable: true, origin: "learner", originLabel: "나", ...over }) as MaterialsView["items"][number];
+const VIEW: MaterialsView = {
+  scope: "[\"a1\",\"task-a\"]", maxSelected: 3,
+  items: [
+    item({ id: "inbox:obj-12345678:1", kind: "note", title: "강사 읽기 자료", detail: "강사가 보낸 글", origin: "instructor", originLabel: "강사", removable: false }),
+    item({ id: "me:aaaaaaaaaaaa", title: "아주 긴 한국어 자료 제목이 좁은 칸에서도 잘리지 않아야 한다.md", detail: "자료/아주 긴 한국어 자료 제목이 좁은 칸에서도 잘리지 않아야 한다.md" }),
+    item({ id: "me:bbbbbbbbbbbb", kind: "url", title: "example.com", detail: "https://example.com/a" }),
+    item({ id: "ai:자료/요약.md", title: "요약.md", detail: "자료/요약.md", origin: "ai", originLabel: "AI" }),
+  ],
+};
+
+async function mountPanel() {
+  const root = createRoot(mountPoint() as never);
+  posted.length = 0;
+  await act(async () => { root.render(<><MaterialsPanel /><MaterialsChips /></>); });
+  return root;
+}
+
+t("asks the host for the list and draws nothing until it answers", async () => {
+  const root = await mountPanel();
+  ok(posted.some((m) => m.type === "materialsRequest"), "materialsRequest posted");
+  eq(all((e) => e.getAttribute("data-testid") === "materials").length, 0, "no panel before the host answers");
+  await act(async () => { root.unmount(); });
+});
+
+t("every item says who added it in words: 나, 강사, AI; never pre-selected", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const metas = all((e) => e.localName === "span" && (e.getAttribute("class") ?? "") === "hp-materials-meta" && e.textContent.startsWith("추가:")).map((e) => e.textContent);
+  eq(metas, ["추가: 강사 · 강사가 보낸 글", "추가: 나 · 파일", "추가: 나 · 주소", "추가: AI · 파일"], "origin words");
+  eq(all((e) => e.localName === "li" && e.hasAttribute("data-material-origin")).map((e) => e.getAttribute("data-material-origin")), ["instructor", "learner", "learner", "ai"], "origin per row");
+  ok(byText("span", VIEW.items[1].title).length === 1, "the long Korean title is drawn whole");
+  ok(all((e) => e.localName === "button" && e.getAttribute("aria-pressed") === "true").length === 0, "nothing pre-selected");
+  ok(byText("summary", "자료 4개").length === 1, "summary counts the list");
+  ok(byText("p", MATERIALS_COPY.note).length === 1, "says only selected items are sent");
+  await act(async () => { root.unmount(); });
+});
+
+t("an instructor item has no 목록에서 빼기 and says why; learner and AI items have it", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const removes = all((e) => e.localName === "button" && e.hasAttribute("data-material-remove")).map((e) => e.getAttribute("aria-label"));
+  eq(removes, [`목록에서 빼기: ${VIEW.items[1].title}`, "목록에서 빼기: example.com", "목록에서 빼기: 요약.md"], "remove only on removable rows");
+  ok(byText("span", MATERIALS_COPY.instructorLocked).length === 1, "instructor lock said in words");
+  await act(async () => { root.unmount(); });
+});
+
+t("이번 질문에 넣기 asks the host to select that item for this list's scope; nothing is sent", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const pick = all((e) => e.localName === "button" && e.getAttribute("aria-label") === "이번 질문에 넣기: example.com")[0];
+  ok(pick, "select button names the item");
+  await act(async () => { click(pick); });
+  const sel = last("materialSelect") as { scope: string; id: string; selected: boolean; requestId: string };
+  eq([sel.scope, sel.id, sel.selected], [VIEW.scope, "me:bbbbbbbbbbbb", true], "select message");
+  ok(!posted.some((m) => m.type === "sendMessage"), "nothing sent");
+  // The host's answer to that press marks it selected, and the composer line names it.
+  const selected = { ...VIEW, items: VIEW.items.map((i) => i.id === "me:bbbbbbbbbbbb" ? { ...i, selected: true } : i) };
+  await hostSays({ type: "materialsState", view: selected, requestId: sel.requestId });
+  ok(all((e) => e.localName === "button" && e.getAttribute("aria-label") === "넣음: example.com" && e.getAttribute("aria-pressed") === "true").length === 1, "pressed state from the host");
+  const chips = all((e) => e.getAttribute("data-testid") === "materials-chips")[0];
+  ok(chips && chips.textContent.includes("example.com · 추가: 나"), "composer line names the item and its origin");
+  ok(byText("summary", "자료 4개 · 이번 질문에 1개 넣음").length === 1, "summary says how many go");
+  const out = all((e) => e.localName === "button" && e.getAttribute("aria-label") === "example.com 빼기")[0];
+  await act(async () => { click(out); });
+  eq((last("materialSelect") as { selected: boolean; id: string }).selected, false, "빼기 on the chip deselects");
+  await act(async () => { root.unmount(); });
+});
+
+t("a selected item that is gone is named above the composer with why, before Send, and 빼기 takes it out", async () => {
+  const root = await mountPanel();
+  const gone = { ...VIEW, items: VIEW.items.map((i) => i.id === "me:bbbbbbbbbbbb" ? { ...i, selected: true } : i), unavailable: [{ id: "me:cccccccccccc", title: "지운 계획.md", reason: MATERIALS_COPY.goneReason }] };
+  await hostSays({ type: "materialsState", view: gone });
+  const chips = all((e) => e.getAttribute("data-testid") === "materials-chips")[0];
+  ok(chips, "the composer line is drawn");
+  ok(chips.textContent.includes("example.com · 추가: 나"), "the item that can go is listed");
+  ok(chips.textContent.includes(`지운 계획.md · 보낼 수 없음: ${MATERIALS_COPY.goneReason}`), "the gone item is named with why");
+  ok(all((e) => e.getAttribute("role") === "alert" && e.textContent === MATERIALS_COPY.unavailableNote).length === 1, "the learner is told it must be taken out to send");
+  const out = all((e) => e.localName === "button" && e.getAttribute("aria-label") === "지운 계획.md 빼기 (보낼 수 없는 자료)")[0];
+  ok(out, "the gone item has its own 빼기");
+  await act(async () => { click(out); });
+  const sel = last("materialSelect") as { id: string; selected: boolean };
+  eq([sel.id, sel.selected], ["me:cccccccccccc", false], "빼기 deselects the gone item");
+  ok(!posted.some((m) => m.type === "sendMessage"), "nothing sent");
+  await act(async () => { root.unmount(); });
+});
+
+t("only a gone item selected: the line is still drawn, so it is never silently dropped", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: { ...VIEW, unavailable: [{ id: "me:cccccccccccc", title: "지운 계획.md", reason: MATERIALS_COPY.goneReason }] } });
+  ok(all((e) => e.getAttribute("data-testid") === "materials-chips").length === 1, "drawn with no sendable item");
+  await act(async () => { root.unmount(); });
+});
+
+t("adding: 파일 넣기 asks the host's picker; an address is posted as typed; a refusal shows as an alert", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  await act(async () => { click(all((e) => e.localName === "button" && e.hasAttribute("data-material-add-file"))[0]); });
+  const fileReq = last("materialAddFile") as { requestId: string };
+  ok(fileReq, "materialAddFile posted");
+  await hostSays({ type: "materialsState", view: VIEW, requestId: fileReq.requestId });
+  const input = all((e) => e.localName === "input" && e.getAttribute("name") === "material-url")[0];
+  ok(input && input.getAttribute("type") === "url", "address field");
+  // mini-dom does not reflect the type attribute to the property React's change plugin reads.
+  (input as unknown as { type: string }).type = input.getAttribute("type")!;
+  await act(async () => { input.value = "http://example.com"; input.dispatchEvent(ev("input")); });
+  const form = all((e) => e.localName === "form")[0];
+  const submit = all((e) => e.localName === "button" && e.getAttribute("type") === "submit")[0];
+  ok(!submit.hasAttribute("disabled"), "주소 넣기 enabled once an address is typed");
+  await act(async () => { form.dispatchEvent(ev("submit")); });
+  const urlReq = last("materialAddUrl") as { url: string; requestId: string };
+  eq(urlReq?.url, "http://example.com", "posted as typed; the host decides");
+  const reason = "https:// 로 시작하는 주소만 넣을 수 있어요. 암호화되지 않은 http 주소나 다른 종류의 주소는 넣지 않아요.";
+  await hostSays({ type: "materialsState", view: VIEW, requestId: urlReq.requestId, error: reason });
+  ok(all((e) => e.getAttribute("role") === "alert" && e.textContent === reason).length === 1, "refusal reason shown");
+  await act(async () => { root.unmount(); });
+});
+
+t("ChatPanel draws the list only with the host's materials flag, never for an instructor", async () => {
+  const UX = { coach: { naming_mode: "fixed" as const, fallback_name: "HypeProof", naming_prompt_md: "", personality_prompt_md: "" }, suggestions: { initial: [], follow_up: [] }, hints: { short_input: { enabled: false, min_chars: 0, message_md: "" }, roll_input_button: { enabled: false, label: "", probe_md: "" } }, retry_button: { enabled: false, show_counter: false } };
+  const base = { model: "m", hasToken: true, proxyUrl: "http://localhost:8787", fileAttach: true, coach: { name: "HypeProof", personality: "", configured: true },
+    profile: { profile_id: "p", activity_kind: "classroom", observation: null, lesson: null, rehearsal: null, welcome: { greeting_md: "안녕하세요" }, model_selection: null, ux: UX } };
+  const noop = () => {};
+  const props = { messages: [], streaming: false, streamingId: null, error: null, errorRequestId: null, errorRunbookUrl: null, canRetryLast: false, pageNotice: null, aiNotice: null, stopNotice: null, openWorldId: null, publish: null, incomingImage: null,
+    onSend: noop, onRetry: noop, onRetryLast: noop, onDismissError: noop, onCancel: noop, onClear: noop, onSetToken: noop, onSettings: noop, onRunCode: noop, onNamingRitual: noop, onSaveCoach: noop, onReportProblem: noop, onInstallUpdate: noop, onDismissUpdate: noop, onPublish: noop };
+  for (const [label, config, instructor, want] of [["granted learner", { ...base, materials: true }, false, 1], ["no flag", base, false, 0], ["instructor", { ...base, materials: true }, true, 0]] as const) {
+    posted.length = 0;
+    const root = createRoot(mountPoint() as never);
+    await act(async () => { root.render(<ChatPanel {...(props as never)} config={config as unknown as ChatConfig} instructor={instructor} />); });
+    await hostSays({ type: "materialsState", view: VIEW });
+    eq(all((e) => e.getAttribute("data-testid") === "materials").length, want, label);
+    eq(posted.some((m) => m.type === "materialsRequest"), want === 1, `${label}: asks only when drawn`);
+    await act(async () => { root.unmount(); });
+  }
+});
+
+// ── CSS: committed rule guards, each with a mutated copy that must fail. Sizes, text and the focus ring are
+// measured on the cascade in test/activity-materials-computed.smoke.mjs (headless Chromium), not here. ──
+const readDesignFile = (file: string) => staticTokens(readFileSync("webview-ui/src/designTokens.css", "utf8"))(readFileSync(file, "utf8"));
+const CSS = readDesignFile("webview-ui/src/styles.css");
+const TOKENS = readDesignFile("webview-ui/src/tokens.css");
+function rules(raw: string) {
+  const css = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^@import[^;]*;/gm, "");
+  const out: { selectors: string[]; decls: Record<string, string>; media: string }[] = [];
+  const walk = (from: number, to: number, media: string) => {
+    let i = from;
+    while (i < to) {
+      const open = css.indexOf("{", i);
+      if (open < 0 || open >= to) return;
+      const head = css.slice(i, open).trim();
+      let depth = 1, j = open + 1;
+      for (; j < to && depth; j++) depth += css[j] === "{" ? 1 : css[j] === "}" ? -1 : 0;
+      if (/^@media\b/.test(head)) walk(open + 1, j - 1, head);
+      else if (!head.startsWith("@")) {
+        const decls: Record<string, string> = {};
+        for (const d of css.slice(open + 1, j - 1).split(";")) { const k = d.indexOf(":"); if (k > 0) decls[d.slice(0, k).trim()] = d.slice(k + 1).trim(); }
+        out.push({ selectors: head.split(",").map((s) => s.replace(/\s+/g, " ").trim()), decls, media });
+      }
+      i = j;
+    }
+  };
+  walk(0, css.length, "");
+  return out;
+}
+const vars = new Map<string, string>();
+for (const r of rules(TOKENS)) if (r.media === "" && r.selectors.includes(":root")) for (const [k, v] of Object.entries(r.decls)) if (k.startsWith("--") && !vars.has(k)) vars.set(k, v);
+/** A token or declaration as pixels (or a bare number), at the default text size. */
+function px(value: string | undefined): number {
+  let v = value ?? "";
+  for (let n = 0; n < 20 && v.includes("var("); n++) v = v.replace(/var\((--[\w-]+)(?:,\s*([^()]*))?\)/g, (_m, name, fb) => vars.get(name) ?? fb ?? "NaN");
+  const expr = v.replace(/calc\(/g, "(").replace(/(\d*\.?\d+)px/g, "$1");
+  if (!/^[\d\s.+\-*/()]+$/.test(expr)) return NaN;
+  return Function(`return (${expr})`)() as number;
+}
+const decl = (css: string, selector: string, prop: string) => { let v: string | undefined; for (const r of rules(css)) if (r.media === "" && r.selectors.includes(selector) && r.decls[prop] !== undefined) v = r.decls[prop]; return v; };
+const forcedDecl = (css: string, selector: string, prop: string) => { let v: string | undefined; for (const r of rules(css)) if (r.media.includes("forced-colors: active") && r.selectors.includes(selector) && r.decls[prop] !== undefined) v = r.decls[prop]; return v; };
+const cssChecks: Record<string, (css: string) => string[]> = {
+  "forced colours: the pressed 넣음 keeps its word (CanvasText on Canvas, Highlight border)": (css) => {
+    const s = '.hp-materials button[aria-pressed="true"]';
+    const want: Record<string, string> = { "background-color": "Canvas !important", color: "CanvasText !important", "border-color": "Highlight !important" };
+    return Object.entries(want).filter(([k, v]) => forcedDecl(css, s, k) !== v).map(([k]) => `${k} ${forcedDecl(css, s, k)}`);
+  },
+  "a title wraps, never truncates": (css) => {
+    const bad: string[] = [];
+    if (decl(css, ".hp-materials-title", "overflow-wrap") !== "anywhere") bad.push("title does not wrap");
+    if (decl(css, ".hp-materials-title", "white-space") !== "normal") bad.push("title white-space is not normal");
+    for (const s of [".hp-materials-title", ".hp-materials-item", ".hp-materials-chip"]) if (decl(css, s, "text-overflow") || decl(css, s, "white-space") === "nowrap") bad.push(`${s} truncates`);
+    return bad;
+  },
+};
+const MUTANTS: Record<string, (css: string) => string> = {
+  "forced colours: the pressed 넣음 keeps its word (CanvasText on Canvas, Highlight border)": (css) => css.replace('{ background-color: Canvas !important; color: CanvasText !important;', '{ color: CanvasText !important;'),
+  "a title wraps, never truncates": (css) => css.replace(/(\.hp-materials-title \{[^}]*)white-space: normal;/, "$1white-space: nowrap; text-overflow: ellipsis;"),
+};
+for (const [label, check] of Object.entries(cssChecks)) {
+  t(`css: ${label} (and its mutated copy fails)`, () => {
+    eq(check(CSS), [], label);
+    const mutated = MUTANTS[label](CSS);
+    ok(mutated !== CSS, `${label}: the mutation applied`);
+    ok(check(mutated).length > 0, `${label}: the mutated stylesheet still passes`);
+  });
+}
+t("css: the tokens resolve as expected (control for the resolver)", () => {
+  eq(px("var(--hp-control-min)"), 44, "control-min");
+  ok(px("var(--hp-font-caption)") >= 14, "caption ≥ 14px");
+  ok(Number.isNaN(px("auto")), "a keyword is not a size");
+});
+
+(async () => {
+  for (const [label, fn] of tests) {
+    try { await fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${(e as Error).stack ?? e}`); fail++; }
+  }
+  if (fail) { console.error(`activity-materials: ${fail} failed`); process.exit(1); }
+  console.log("activity-materials render OK");
+  process.exit(0);
+})();

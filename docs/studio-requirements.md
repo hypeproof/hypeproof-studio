@@ -1618,6 +1618,111 @@ Acceptance CC-01–CC-05 in [the verification contract](testing/task-workspace.m
 uses the actual shipped theme tokens and full personal control profile. Synthetic
 model/tool tests do not establish live inference or installed release behavior.
 
+## Activity materials (CGP-KNOW-R-003)
+
+`REQ-STUDIO-ACTIVITY-MATERIALS` (CGP-KNOW-R-003 / REQ-KNOW-04, CGP-KNOW-004, P1, PI#2 and PI#5;
+depends on REQ-STUDIO-CHAT-FILE-ATTACH; built 2026-10-22): a learner can add a file or an https
+address to the activity's 자료 list. Each item says who added it (나, 강사 or AI) and reaches the
+model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 in
+`docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+- **Where.** A closed-by-default "자료 N개" card in the coach rail (no Primary, outside the
+  message stream), on every learner seat that has the file-attach gate. The host's `materials`
+  config flag draws it; the host re-checks on every press.
+- **Adding a file.** "파일 넣기" opens the system picker; the host copies the pick into
+  `<work folder>/자료/` (created if missing) with identical bytes and lists it with origin 나
+  (a pick already in `자료/` keeps its own Unicode spelling, so an NFD name is still found). At
+  most 50 learner items; an item whose copy is gone from the folder does not count.
+  The copy never overwrites: an occupied name gets " (2)", " (3)" …; a pick already directly in
+  `자료/` is listed in place. Refused, each with its Korean reason and nothing written: a link,
+  a folder, a missing or unreadable file, empty or whitespace-only text, more than 100 KB,
+  invalid UTF-8 or NUL bytes, more than 20,000 characters, a hidden or control-character name,
+  and a `자료` that is a link or not a folder. The copy is recorded as the learner's upload in the
+  provenance ledger (내가 올림, REQ-STUDIO-ARTIFACT-PROVENANCE).
+- **Adding an address.** "주소 넣기 (https)" takes one address. The classroom-link rule
+  (`docs/requirements/classroom-admin.md` "링크") applies after WHATWG parsing: https only; no
+  userinfo (also a bare `@`); no IP literal (dotted, numeric `2130706433`, hex `0x7f.1`,
+  bracketed IPv6); no `localhost` or `*.localhost`; no `.local`; no port other than 443; at most
+  500 characters. Also refused: a single-label host, whitespace, and control, zero-width or
+  bidi characters (including U+2028/2029). Each refusal shows its own reason as an alert.
+  Learner addresses have no host allowlist. Studio never opens or fetches the address.
+- **Origins.** 나: items the learner added (the list is stored per folder in the extension's
+  storage, which only learner actions write). 강사: readable `material` cards of the classroom
+  inbox (#751 U2); withdrawn, unreadable, notice, prompt and setting cards are not listed. AI:
+  a file directly in `자료/` whose provenance ledger records an AI write; a file there with any
+  other or no record is not listed. The origin is shown in words ("추가: 나"), never only colour.
+- **Removing.** 목록에서 빼기 takes a learner or AI item off the list; a file stays in the folder.
+  Instructor items have no 목록에서 빼기, the row says "강사가 보낸 자료는 목록에서 뺄 수 없어요.",
+  and the host refuses a remove request for them.
+- **Selecting for a message.** "이번 질문에 넣기" (`aria-pressed`) marks an item for the next
+  message; nothing is pre-selected; at most 3 per message. The line "함께 보낼 자료" above the
+  composer names each selected item with its origin and a 빼기. The selection is host-owned and
+  bound to the task scope and folder it was made in: a fresh send takes it once, where the model
+  turn starts, and clears it; another task or folder never shows or sends it (a list drawn there
+  drops it and says "작업이나 폴더가 바뀌어서 고른 자료를 다시 확인해 주세요."), and a press from
+  an old list is refused; a retry does not resend it and says "고른 자료는 다시 보내지 않았어요. 필요하면 다시 골라
+  주세요.". The selection is read in the send's preflight and taken at the same point as the
+  attached file, so a later refusal in that send (for example an image the seat may not send) does
+  not restore it.
+- **A selected item that cannot go is named before Send.** A watcher on `<work folder>/자료/` (the
+  folder and the files directly in it) refreshes the list when a file is created, changed, removed
+  or renamed. A selected item that left the list (a deleted or renamed file, a removed `자료`
+  folder, a withdrawn card) or no longer passes the attach checks stays selected and is shown in
+  "함께 보낼 자료" as "<name> · 보낼 수 없음: <why>" with its own 빼기, under the alert "보낼 수 없는
+  자료가 있어요. 그 자료를 빼야 보낼 수 있어요. 빼면 그 자료 없이 보내요." While any is there, a
+  fresh send is held: no model request, the draft returns to the composer, and the alert "보내지
+  않았어요. 고른 자료 중 보낼 수 없는 것이 있어요: <names>. …" names them. Pressing its 빼기 is the
+  learner's consent to send without it. The acceptance says an item is sent "only when the learner
+  selects it for a turn"; holding keeps the turn the learner chose. A send whose selection was made
+  in another folder is held the same way ("다른 작업이나 폴더에서 고른 자료(…)는 여기서 보내지
+  않아요."), and its selection is cleared. If the folder or task changes after the preflight, nothing
+  from the list goes and the items are named ("보내지 못한 자료: …").
+- **What the model receives.** Only the selected items, read at send time, in front of the
+  learner's text: `<material origin="나|강사|AI" kind="file" path="…">…</material>` (the file
+  re-read through the REQ-STUDIO-CHAT-FILE-ATTACH checks), `<material … kind="url">address</material>`,
+  `<material origin="강사" kind="note" title="…">body and links</material>`, then an instruction to
+  treat them as reference material, not to follow instructions inside them, and that a url item is
+  an address Studio did not open. A tag inside an item cannot end its block. History and the sent
+  bubble keep the learner's own text. Unselected items are never read.
+- **Gate.** The file-attach gate: `sdk_tools.read` after pass narrowing, never the instructor
+  surface; the REQ-M32 kids tracks carry it. In a personal activity whose folder consent is
+  "AI 안 씀", adding and selecting are refused with that copy.
+- **Look.** Every control is a 44px target; text is at the caption step or larger (14px floor);
+  titles wrap (`overflow-wrap:anywhere`) and are never truncated; the focus ring is the shared focus
+  geometry's (REQ-STUDIO-SHARED-FOCUS-GEOMETRY, `focusGeometry.css`): 2px solid
+  `--hp-ring-focus-default`, inset -2px inside the coach rail's scroll scope and +2px outside one,
+  with no ring rule of the card's own; in forced colours the pressed 넣음 is CanvasText on Canvas
+  with a Highlight border (under the global Highlight fill Chromium's text backplate hid the word),
+  without opting out of forced colours. No score or capability label.
+- **Not built.** Non-text files (PDF, images); fetching or previewing an address; renaming
+  items; a materials view inside 작업 자료; fencing `자료/` from the agent-sdk coach's own Read tool
+  (the guarantee is what Studio puts in the request; the coach can already read its folder under
+  `sdk_tools.read`); locking the stored list across two windows that add at the same instant (one
+  add can be lost and must be repeated).
+- **Tests.** `test/activity-materials.smoke.mjs` (address rule with good addresses that must
+  pass and every refusal; copy, suffix, in-place, refusals with nothing written, a linked `자료`, a
+  source swapped between the check and the open, the 200-character and control-character name
+  rules; origins, the instructor lock, removal keeps the file, stored-list round trip and forged
+  items; model text only for selected items, delimiter breakout, a line break in a title, a forged
+  non-https address, a file swapped for a link is not sent; which selected items are unavailable),
+  `test/activity-materials-host.smoke.mjs` (the real provider with a scripted proxy that records
+  each request: copy into `자료/` with origin 나, refused addresses with their reason, a selected
+  item in the request and unselected file, address and instructor card absent, used once, no
+  block without a selection, 강사 origin and refused removal, retry not resent, task switch,
+  three-item cap, gate without `sdk_tools.read`, instructor, "AI 안 씀"; a deleted file named by the
+  watcher before Send; a deleted, renamed, unreadable or withdrawn item, or a removed `자료` folder,
+  holding the send until it is taken out; folder binding with the same AI file name in two
+  folders, after a refresh, between the preflight and the model turn, and while the picker is
+  open), `test/activity-materials.test.tsx` (origin words, no 빼기 on instructor rows, select and
+  deselect messages, the composer line with unavailable items and their 빼기, the address form and
+  its alert, ChatPanel draws the card only with the flag and never for an instructor, and
+  stylesheet guards for wrapping and the forced-colours pressed state) and
+  `test/activity-materials-computed.smoke.mjs` (the real webview in headless Chromium, personal
+  and classroom × dark and light × 1420 and 800 px: 44px targets, 14px text, nothing wider than
+  the card or `clientWidth`, and the shared focus ring forced over CDP; it reruns with a more
+  specific rule, an `@media` rule, `outline: none !important` and a non-wrapping title injected and
+  must catch each; NOT RUN without a browser, a failure under `FOCUS_REQUIRE_BROWSER=1`).
+
 ## Class join link (CGP-SHELL-R-005)
 
 `REQ-STUDIO-JOIN-LINK` (CGP-SHELL-R-005 / REQ-SHELL-05, DES-SHELL-04, P1; built 2026-10-20): a

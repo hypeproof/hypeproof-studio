@@ -291,6 +291,7 @@ const PANELS: Row[] = [
   { panel: "student-goal", key: "StudentGoal.tsx:StudentGoal", mode: "classroom" },
   { panel: "lesson", key: "LessonStepPanel.tsx:LessonStepPanel", mode: "classroom" },
   { panel: "instructor-inbox", key: "InstructorInbox.tsx:InstructorInbox", mode: "classroom" },
+  { panel: "materials", key: "MaterialsPanel.tsx:MaterialsPanel", mode: "classroom", config: { materials: true } },
   { panel: "help-request", key: "HelpRequest.tsx:HelpRequest", mode: "classroom" },
   { panel: "evidence", key: "CompletionGate.tsx:CompletionGate", mode: "classroom", msgs: () => [{ type: "learningState", state: learningState({ task: "t", events: [] }) }] },
   { panel: "observation", key: "NativeObservationPanel.tsx:NativeObservationPanel", mode: "classroom", config: { profile: { ...(classroomApp as unknown as { profile: object }).profile, observation: { format: "hps-observation/1", scope: "s", assess: true, record: true } } } },
