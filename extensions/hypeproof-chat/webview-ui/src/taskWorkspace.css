@@ -74,7 +74,7 @@
 .tw-sources h2 { font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); margin: 0; }
 .tw-source-detail { padding: var(--ds-c-studio-taskworkspace-space-32) var(--ds-c-studio-taskworkspace-space-18) var(--ds-c-studio-taskworkspace-space-5); }
 .tw-source-domain { color: var(--tw-muted); font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
-.tw-sources h3 { font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; margin: var(--ds-c-studio-taskworkspace-space-24) 0; text-wrap: pretty; }
+.tw-sources h3 { font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; margin: var(--ds-c-studio-taskworkspace-space-24) 0; text-wrap: balance; }
 .tw-source-detail p, .tw-source-empty p { font-size: var(--hp-font-caption); color: var(--tw-muted); line-height: var(--hp-leading-prose); }
 .tw-open-source { width: 100%; min-height: var(--hp-control-min); margin-top: var(--ds-c-studio-taskworkspace-space-7); color: var(--vscode-button-foreground, var(--ds-c-studio-taskworkspace-ink-2)); background: var(--vscode-button-background, var(--ds-c-studio-taskworkspace-surface-4)); border: 0; padding: var(--ds-c-studio-taskworkspace-space-7); border-radius: var(--ds-c-studio-taskworkspace-radius-10); }
 .tw-open-source:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }

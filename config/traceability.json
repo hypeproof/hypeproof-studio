@@ -10147,6 +10147,55 @@
           "path": "chalk/test/tooltips.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-KOREAN-PROSE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Korean prose wrapping (CGP-DS-D-025)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-KOREAN-PROSE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-KOREAN-PROSE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/koreanProse.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "chalk/src/lib/design-tokens.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-KOREAN-PROSE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-KOREAN-PROSE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/korean-prose.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/korean-prose-computed.smoke.mjs"
+        }
+      ]
     }
   ]
 }

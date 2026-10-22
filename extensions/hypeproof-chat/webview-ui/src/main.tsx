@@ -12,6 +12,7 @@ import "./styles.css";
 import "./chatDetails.css";
 import "./tooltips.css";
 import { installTooltips } from "./tooltips";
+import "./koreanProse.css";
 
 installImeHostBarrier(document);
 const container = document.getElementById("root");
