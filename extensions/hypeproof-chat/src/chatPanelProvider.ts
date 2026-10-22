@@ -1,5 +1,6 @@
 import { attemptGroups, attemptHistory, selectAttempt, visibleAttempts } from './answerAttempts';
 import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntry";
+import { PublishReadGate } from "./publishReadGate";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
 import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
@@ -1615,13 +1616,28 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     qr: qrDataUrl,
   });
 
+  private readonly publishReadGate = new PublishReadGate();
+
   /** Post the publish panel state (null hides it with the switch off). */
   private async postPublishState(extra: { error?: string; errorLines?: string[]; shareUrl?: string } = {}): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
       await this.post({ type: "publishState", view: null, ...extra });
       return;
     }
-    await this.post({ type: "publishState", view: await this.publishSession.view(), ...extra });
+    await this.publishReadGate.read(() => this.readPublishView(), async view => { await this.post({ type: "publishState", view, ...extra }); });
+  }
+
+  /** The last read that answered, kept per scope: a failed read shows it marked stale, never as current. */
+  private lastGoodPublish: { scope: string; at: number; view: import("./publishView").PublishView } | null = null;
+
+  /** One sharing read. A read that failed keeps the last good rows (same scope) with `read_failed` and the time they were read. */
+  private async readPublishView(): Promise<import("./publishView").PublishView> {
+    const scope = this.publishSession.readScope();
+    const view = await this.publishSession.view();
+    if (view.available) { this.lastGoodPublish = { scope, at: Date.now(), view }; return view; }
+    const last = this.lastGoodPublish;
+    if (!view.read_failed || !last || last.scope !== scope) { if (!view.read_failed) this.lastGoodPublish = null; return view; }
+    return { ...last.view, read_failed: true, stale_at: last.at, reason: view.reason, notice: view.notice };
   }
 
   /** CR-17 — the "Publish for user test" command: re-checks the served switch, then opens the panel. */
@@ -1631,30 +1647,45 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+    this.publishReadGate.open();
     await this.postPublishState();
   }
 
   /** One publish action from the panel, each behind the served switch (a message can be posted without the panel). */
-  private async handlePublishMessage(msg: { type: "publishOpen"; manifest?: string[] } | { type: "publishSubmit"; form: import("./publishView").PublishForm } | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number } | { type: "publishRevoke"; linkId: string }): Promise<void> {
+  private async handlePublishMessage(msg: { type: "publishRefresh" } | { type: "publishClose" } | { type: "publishOpen"; manifest?: string[] } | { type: "publishSubmit"; form: import("./publishView").PublishForm } | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number } | { type: "publishRevoke"; linkId: string } | { type: "publishCopy"; versionId: string }): Promise<void> {
     if (!this.isCurriculumRuntimeEnabled()) {
       await this.postDenialNotice("lesson");
       await this.post({ type: "publishState", view: null, error: lessonFeatureOff("사용자 테스트 공개", this.getSeatAudience()) });
+      this.publishReadGate.close();
       return;
     }
-    if (msg.type === "publishOpen") {
-      if (msg.manifest !== undefined) this.publishSession.setManifest(msg.manifest);
-      return this.postPublishState();
+    if (msg.type === "publishClose") { this.publishReadGate.close(); return; }
+    if (msg.type === "publishRefresh") {
+      if (this.publishReadGate.canRefresh) await this.postPublishState();
+      return;
     }
-    if (msg.type === "publishSubmit") {
-      const r = await this.publishSession.submit(msg.form ?? ({} as import("./publishView").PublishForm));
-      return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message, ...(r.lines ? { errorLines: r.lines } : {}) });
-    }
-    if (msg.type === "publishLink") {
-      const r = await this.publishSession.link(String(msg.experimentId ?? ""), { channel: msg.channel, expires_in_days: msg.expiresInDays });
-      return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message });
-    }
-    const r = await this.publishSession.revoke(String(msg.linkId ?? ""));
-    return this.postPublishState(r.ok ? {} : { error: r.message });
+    if (msg.type === "publishOpen") this.publishReadGate.open();
+    this.publishReadGate.beginAction();
+    try {
+      if (msg.type === "publishOpen") {
+        if (msg.manifest !== undefined) this.publishSession.setManifest(msg.manifest);
+        return this.postPublishState();
+      }
+      if (msg.type === "publishCopy") {
+        const error = await this.publishSession.copyLink(String(msg.versionId ?? ""), url => vscode.env.clipboard.writeText(url));
+        return this.postPublishState(error ? { error } : {});
+      }
+      if (msg.type === "publishSubmit") {
+        const r = await this.publishSession.submit(msg.form ?? ({} as import("./publishView").PublishForm));
+        return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message, ...(r.lines ? { errorLines: r.lines } : {}) });
+      }
+      if (msg.type === "publishLink") {
+        const r = await this.publishSession.link(String(msg.experimentId ?? ""), { channel: msg.channel, expires_in_days: msg.expiresInDays });
+        return this.postPublishState(r.ok ? { shareUrl: r.share_url } : { error: r.message });
+      }
+      const r = await this.publishSession.revoke(String(msg.linkId ?? ""));
+      return this.postPublishState(r.ok ? {} : { error: r.message });
+    } finally { this.publishReadGate.endAction(); }
   }
 
   // ── Experiment evidence (cr-evidence, #1394) ──────────────────────────────
@@ -6091,9 +6122,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // cr-verify — CR-only messages (CR-T02 inventory); the handler re-checks the switch first.
         await this.handleVerifyMessage(msg);
         break;
+      case "publishRefresh":
+      case "publishClose":
       case "publishOpen":
       case "publishSubmit":
       case "publishLink":
+      case "publishCopy":
       case "publishRevoke":
         // cr-publish — CR-only messages (CR-T02 inventory); the handler re-checks the switch first.
         await this.handlePublishMessage(msg);

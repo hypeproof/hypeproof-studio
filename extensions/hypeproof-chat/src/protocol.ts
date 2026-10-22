@@ -599,6 +599,9 @@ export type WebviewMessage = (
   | { type: "verifyResume"; requestId: string }
   // cr-publish — "Publish for user test" (CR-17–CR-22, CR-39, CR-73; CR switch only, re-checked by the host).
   | { type: "publishOpen"; manifest?: string[] }
+  | { type: "publishRefresh" }
+  | { type: "publishClose" }
+  | { type: "publishCopy"; versionId: string }
   | { type: "publishSubmit"; form: import("./publishView").PublishForm }
   | { type: "publishLink"; experimentId: string; channel?: string; expiresInDays?: number }
   | { type: "publishRevoke"; linkId: string }
