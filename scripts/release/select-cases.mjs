@@ -6,6 +6,7 @@
 //   node scripts/release/select-cases.mjs --baseline v2026.1020.1 --candidate origin/main
 //   node scripts/release/select-cases.mjs --out DIR                        # writes DIR/cases.md and DIR/cases.json
 //   node scripts/release/select-cases.mjs --today 2026-10-20               # fixes the escaped-bug window
+//   node scripts/release/select-cases.mjs --pr 2210 --json                 # range from a release PR body
 //
 // A case is selected when any of these holds (reasons are recorded per case):
 //   p0        its priority is P0 (every journey)
@@ -13,10 +14,13 @@
 //             (squash merges carry the PR title and body), or on a changed line of a requirement doc
 //   escaped   its origin is escaped-bug dated within the last 14 days
 // A case marked 자동화됨 is never selected: CI runs it.
-// Everything is read from local git. No GitHub API call.
+// The range is read from local git. The only GitHub call is `gh pr view` under --pr.
+// --pr takes "Candidate commit" and "Range" from the release PR body (templates/release-pr.md, section 1).
+// It cannot be combined with --baseline or --candidate. Unknown options and bad values stop the run.
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {REQ_ID, loadCasebook} from './casebook.mjs';
 
@@ -129,13 +133,61 @@ export function run({root, baseline, candidate = 'origin/main', today, out, dir}
   return {markdown, json};
 }
 
+export const RELEASE_REPO = 'hypeproof/hypeproof-studio';
+
+// Candidate commit and baseline of a release PR body: section 1 of templates/release-pr.md.
+// Any other shape throws. Nothing falls back to a default range.
+export function parseReleasePrBody(body = '') {
+  const cand = body.match(/^\|\s*Candidate commit\s*\|\s*`([0-9a-f]{40})`\s*\|/m);
+  if (!cand) throw new Error('release PR body has no "Candidate commit" row with a full 40-character sha');
+  // A tag name: dot-separated segments, no "..", no trailing dot.
+  const range = body.match(/^\|\s*Range\s*\|\s*`(\w[\w-]*(?:\.[\w-]+)*)\.\.([0-9a-f]{7,40})`/m);
+  if (!range) throw new Error('release PR body has no "Range" row of the form `<baseline>..<candidate>`');
+  const [, baseline, shortSha] = range;
+  const candidate = cand[1];
+  if (!candidate.startsWith(shortSha)) throw new Error(`release PR Range ${shortSha} does not match Candidate commit ${candidate}`);
+  return {baseline, candidate};
+}
+
+const CLI_OPTIONS = {
+  pr: {type: 'string'}, baseline: {type: 'string'}, candidate: {type: 'string'},
+  today: {type: 'string'}, out: {type: 'string'}, json: {type: 'boolean'},
+};
+
+// Strict: an unknown option, a stray argument or a missing value throws instead of being ignored.
+export function parseCliArgs(argv) {
+  const {values} = parseArgs({args: argv, options: CLI_OPTIONS, strict: true, allowPositionals: false});
+  if (values.pr !== undefined) {
+    if (!/^[1-9]\d*$/.test(values.pr)) throw new Error(`--pr needs a PR number, got "${values.pr}"`);
+    if (values.baseline !== undefined || values.candidate !== undefined) {
+      throw new Error('--pr already sets --baseline and --candidate; do not pass them together');
+    }
+  }
+  return {...values};
+}
+
+// The only gh call in this script. It is injectable so tests stay offline.
+export function ghReleasePrBody(pr, exec = execFileSync) {
+  return exec('gh', ['pr', 'view', String(pr), '--repo', RELEASE_REPO, '--json', 'body', '--jq', '.body'],
+    {encoding: 'utf8', maxBuffer: 8 * 1024 * 1024});
+}
+
+export function rangeForPr(pr, fetchBody = ghReleasePrBody) {
+  return parseReleasePrBody(fetchBody(pr));
+}
+
 function main() {
-  const args = process.argv.slice(2);
-  const arg = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-  const {markdown, json} = run({root, baseline: arg('--baseline'), candidate: arg('--candidate'), today: arg('--today'), out: arg('--out')});
-  if (args.includes('--json')) console.log(JSON.stringify(json, null, 2));
-  else console.log(markdown);
+  try {
+    const opts = parseCliArgs(process.argv.slice(2));
+    const range = opts.pr !== undefined ? rangeForPr(opts.pr) : {baseline: opts.baseline, candidate: opts.candidate};
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+    const {markdown, json} = run({root, ...range, today: opts.today, out: opts.out});
+    if (opts.json) console.log(JSON.stringify(json, null, 2));
+    else console.log(markdown);
+  } catch (e) {
+    console.error(`select-cases: ${e.message}`);
+    process.exitCode = 1;
+  }
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main();
