@@ -82,9 +82,10 @@ fixed cap turns the gate into a fail-open no-op once a repo crosses it.
 
 ## Invocation — where this actually runs
 
+The daily live gate (`repo-governance-live.yml` → `weekly-loop-gate`) was retired on 2026-10-20: no `weekly-*` issues are filed, so it examined nothing and failed every run.
+
 | point | what runs | when |
 |---|---|---|
-| `.github/workflows/repo-governance-live.yml` → `weekly-loop-gate` | the live gate against the previous + upcoming cycle across all three repos; fails the job on any violation, on any bypass, or if it examined 0 issues | daily 03:17 UTC + `workflow_dispatch` |
 | `.github/workflows/test.yml` → `repo-governance` | `tests/weekly_loop/` plus a replay of `tests/weekly_loop/fixtures/evidence_corpus.json` whose injected-vs-detected counts must match exactly, plus a check that the bypass is refused | every PR and push to `main` |
 | `weekly-loop` skill / a human | ad-hoc, §5 and §7 of WEEKLY-LOOP.ko.md | on demand |
 

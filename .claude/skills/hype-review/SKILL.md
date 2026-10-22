@@ -27,8 +27,23 @@ The deterministic engine is:
 python3 scripts/hype-review/review.py
 ```
 
-Run it from the repo root. It reads `policy/members.yaml` when present and has
-an embedded fallback lens map for vendored product repos.
+Run it from the repo root. Without `--repo` it searches the `hypeproof`
+organization and, for the repos that were not transferred, the former owner
+`jayleekr`; `--owner` narrows that.
+
+In a product repo the vendored copy hands the request over to the canonical
+Harness checkout: the `hypeproof-harness` directory next to the repo's main
+checkout, or `HYPEPROOF_HARNESS`. Only that checkout has `policy/` and
+`scripts/hype-merge/`, which the script needs to find PRs that wait on the
+reviewer's approval without a request. It runs `hype-pr`'s engine, a
+launcher-owned detached worktree refreshed from that checkout to `origin/main`,
+and never switches the checkout's branch. `HYPEPROOF_HARNESS_PIN=1` runs the
+checkout itself as it is.
+
+If stderr says `showing explicit review requests only`, the queue is partial:
+no usable Harness checkout (or no PyYAML) was found, so only PRs that requested
+the reviewer are listed. Tell the user that, with the reason the line gives,
+instead of presenting the queue as complete.
 
 Maintainers can audit or apply all-member reviewer requests with:
 
@@ -99,6 +114,8 @@ python3 scripts/hype-review/request_reviewers.py --apply
    | `xoqhdgh1002` | `contributor`, `product` |
    | `JinyongShin` | `backend`, `deploy` |
    | `TJ-kr` | `frontend`, `product` |
+   | `rabqatab` | `contributor`, `product` |
+   | `J3llyBe4n` | `contributor`, `backend`, `deploy` |
 
    Add `--role <lens>` only when the user explicitly asks to inspect an extra
    angle for this PR.

@@ -1,0 +1,35 @@
+{
+  "skill_name": "hype-loop",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/hype-loop start 20 --every 30m -- python3 scripts/next-work.py 로 ready 항목 하나 골라서 구현하고 PR까지. 머지는 CI 초록이면 해도 됨",
+      "expected_output": "Interview asks only what the arguments do not answer (deploy, prod writes, verification, budget, reporting), writes a charter, shows the Korean summary, then loopctl start, CronCreate at 7,37, bind-cron, dashboard published.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/hype-loop start",
+      "expected_output": "Full interview via AskUserQuestion (goal first, recommended options first, <=4 per call); nothing scheduled until charter-check passes and the summary is shown.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "루프 진행상황은? 몇 번째야",
+      "expected_output": "Runs loopctl status and answers in Korean from its JSON only: progress n/N, last tick, cron hours left, dashboard link.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "세션 재시작했더니 30분 루프가 안 도는 것 같아. 다시 살려줘",
+      "expected_output": "CronList, loopctl resume with existing cron ids, CronCreate with the stored cron_expr and prompt, bind-cron; the done count continues.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "이번 틱에서 PR #1812 CI 다 초록이고 verifier PASS 났어. 머지해줘",
+      "expected_output": "Does not call gh pr merge directly; runs scripts/loop/merge.py with the sense, verifier, rbg, guard and classes records for the exact head (dry run first, then --apply), and reports waiting/blocked reasons from its JSON instead of overriding them.",
+      "files": []
+    }
+  ]
+}

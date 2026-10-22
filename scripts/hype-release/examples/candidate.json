@@ -1,0 +1,18 @@
+{
+  "repository": "hypeproof/hypeproof-studio",
+  "sourceSha": "REPLACE_WITH_FULL_SOURCE_SHA",
+  "sourcePrs": [
+    1759,
+    1760,
+    1761
+  ],
+  "version": "v2026.1018.0",
+  "tag": "v2026.1018.0-rc.2",
+  "changes": [
+    {
+      "before": "Describe the observed previous behavior",
+      "after": "Describe the candidate behavior"
+    }
+  ],
+  "rollback": "Keep the installed stable app and profile; launch the RC with a separate profile."
+}

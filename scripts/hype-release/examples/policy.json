@@ -1,0 +1,15 @@
+{
+  "schema": "hype-release-policy/1",
+  "revision": "team-policy-r1",
+  "managers": [
+    "manager-a",
+    "manager-b"
+  ],
+  "repositories": [
+    "hypeproof/hypeproof-studio",
+    "hypeproof/hypeproof-harness"
+  ],
+  "budgetLimitUsd": "0.99",
+  "maxAttempts": 2,
+  "modelExecution": "disabled"
+}

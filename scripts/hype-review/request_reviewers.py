@@ -12,8 +12,10 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OWNER = "hypeproof"
-DEFAULT_MEMBERS = ["jayleekr", "JeHyeong2", "ico1036", "xoqhdgh1002", "JinyongShin", "TJ-kr"]
+# The organization first; the repositories that were not transferred are still
+# under the former owner (see review.py).
+DEFAULT_OWNERS = ("hypeproof", "jayleekr")
+DEFAULT_MEMBERS = ["jayleekr", "JeHyeong2", "ico1036", "xoqhdgh1002", "JinyongShin", "TJ-kr", "rabqatab", "J3llyBe4n"]
 REVIEWED_STATES = {"APPROVED", "CHANGES_REQUESTED", "COMMENTED"}
 
 
@@ -125,7 +127,7 @@ def normalize_pr(base: dict[str, Any], detail: dict[str, Any] | None = None) -> 
     return pr
 
 
-def fetch_open_prs(owner: str, repos: list[str], limit: int) -> list[dict[str, Any]]:
+def fetch_open_prs(owners: list[str], repos: list[str], limit: int) -> list[dict[str, Any]]:
     if repos:
         found: list[dict[str, Any]] = []
         for repo in repos:
@@ -149,8 +151,7 @@ def fetch_open_prs(owner: str, repos: list[str], limit: int) -> list[dict[str, A
     return run_gh([
         "search",
         "prs",
-        "--owner",
-        owner,
+        *(arg for owner in owners for arg in ("--owner", owner)),
         "--state",
         "open",
         "--limit",
@@ -283,7 +284,12 @@ def render_markdown(actions: list[ReviewerAction]) -> str:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Request all active HypeProof members on open PRs.")
-    parser.add_argument("--owner", default=DEFAULT_OWNER, help="Owner to search when --repo is omitted.")
+    parser.add_argument(
+        "--owner",
+        action="append",
+        default=[],
+        help=f"Owner to search when --repo is omitted. Can repeat. Default: {', '.join(DEFAULT_OWNERS)}.",
+    )
     parser.add_argument("--repo", action="append", default=[], help="Repository in owner/name form. Can repeat.")
     parser.add_argument("--limit", type=int, default=100, help="Maximum open PRs to inspect.")
     parser.add_argument("--member", action="append", default=[], help="Override policy members. Can repeat.")
@@ -303,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
             prs = data if isinstance(data, list) else [data]
             prs = [normalize_pr(pr) for pr in prs]
         else:
-            prs = enrich_prs(fetch_open_prs(args.owner, args.repo, args.limit))
+            prs = enrich_prs(fetch_open_prs(args.owner or list(DEFAULT_OWNERS), args.repo, args.limit))
         actions = plan_actions(prs, members, apply=args.apply)
     except (RuntimeError, OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"hype-review request-reviewers: {exc}", file=sys.stderr)

@@ -52,8 +52,8 @@ Never patch vendored copies inside consumer repos when the canonical file lives 
 5. Branch: use `fix/`, `feat/`, `docs/`, or `chore/`; avoid direct `main` pushes.
 6. Change: keep edits narrow and aligned with the target repo.
 7. Validate: run the smallest meaningful local tests plus repo-specific checks.
-8. PR: include `Closes #...` or a clear issue link, explain risk, and do not request reviewers for Jay-hosted HypeProof work.
-9. Integrate: after the exact head passes required checks and applicable evidence gates, squash-merge it without waiting for a review, then watch main CI, deployment, and the live surface until the result is verified or a concrete external condition blocks it.
+8. PR: include `Closes #...` or a clear issue link, explain risk, and do not request reviewers unless the current user explicitly requested peer review.
+9. Integrate: after the exact head passes required checks and applicable evidence gates, apply the current user authorization and canonical merge gates, then watch main CI, deployment, and the live surface until the result is verified or a concrete external condition blocks it.
 
 ## Governance Tasks
 
@@ -69,10 +69,11 @@ python3 scripts/repo-governance/apply.py --repo owner/name --module branch_prote
 
 Use `--module` narrowly. If GitHub personal-account plan limits block branch protection or private repo controls, record it in an issue instead of pretending it is fixed.
 
-Public-by-default operating stance:
+Visibility operating stance:
 
-- Public repos are acceptable for HypeProof product/governance work.
-- Code contribution should still be restricted by collaborator permissions and branch protection.
+- Organization repositories default to private unless explicitly exempted in canonical policy.
+- `hypeproof/hypeproof-service` must remain private; source or release access failures never authorize republishing it. Use an existing explicitly authorized credential or report the missing access.
+- Preserve required checks and existing protection. Private GitHub Free repositories may lack enforced protection; the recorded management exception is a platform limitation, not proof of protection or permission to delete it. Keep exact-head manual merge gates separate from GitHub-enforced controls.
 - Pending collaborator invitations are not fixed until the invitee accepts; track them as external blockers.
 
 ## Finding What Needs Review
@@ -96,28 +97,21 @@ worksheet on each PR actually assigned to me, then act.
 
 ## Review Requests
 
-Jay's standing instruction for HypeProof work is: do not request reviewers. This
-applies to ordinary product, content, documentation, test, and deployment PRs in
-the allowed scope, including PRs created by an agent. Do not call
-`hype-pr request-reviewers`, add reviewers during PR creation, or wait for a
-social approval that GitHub does not enforce. Remove stale pending requests when
-they would leave the wrong operational signal.
-
-An explicit per-PR instruction from Jay may re-enable review for that PR. If
-GitHub technically enforces a non-author approval or a control-plane rule blocks
-the merge, record the exact enforced gate and keep doing independent work. Do not
-manufacture an approval, weaken protection, or send a review request without that
-separate instruction.
+Do not request reviewers unless the current user explicitly authorizes that action.
+Existing request-specific authorization persists. A shared skill does not grant
+permission to message teammates or remove their legitimate review requests.
+If GitHub enforces non-author approval or canonical policy blocks integration,
+report the exact gate. Never manufacture approval or weaken protection.
 
 ## Merge And Auto-Merge
 
-Jay's standing instruction grants merge authority for ordinary HypeProof delivery.
-Do not ask Jay to press the merge button or wait for a review request. Squash-merge
-the exact current head as soon as required CI passes, applicable X2 evidence is
-current, dependency order is resolved, and no explicit hold, failed check,
-changes-requested state, conflict, or unresolved material product/security/business
-decision remains. Then verify the merge SHA, main CI, deployment, and live behavior
-that the change claims.
+Use the current user's authorized scope and canonical repository policy for merge
+authority. Do not inherit authority from one named person's historical instruction.
+Within authorized delivery, merge only the exact current head after required CI,
+applicable evidence and dependency order pass, with no explicit hold, conflict,
+changes-requested state or unresolved material decision. A required non-author
+approval remains a gate even when the user authorized development. Then verify the
+merge SHA, main CI and claimed deployed behavior.
 
 Safe auto-merge policy:
 
@@ -217,3 +211,13 @@ End with:
 - What remains blocked externally, such as approvals, pending invitations, provider console rotation, plan limits, or deploy propagation.
 
 If you excluded a repo from scope, name it and explain that it is outside HypeProof-only operation.
+
+## RC release operations
+
+Use `hype-release` for candidate builds, evidence collection, cost bounds, test
+access and manager handoff. Shared state holds no credentials or signing keys.
+Every manager authenticates as themselves. A changed package, native environment
+or Service invalidates only the affected evidence, even at the same source SHA.
+Never replace released bytes or bypass the product signed acceptance engine.
+If a tool rejects a migrated `hypeproof/<repo>` name, fix/update its canonical
+registry or report access failure; never retry under the former owner.

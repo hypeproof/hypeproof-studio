@@ -1,0 +1,8 @@
+{
+  "id": "provider-observation-1",
+  "kind": "reported",
+  "scope": "repository-day",
+  "amountUsd": "0",
+  "observedAt": "REPLACE_WITH_UTC_TIME",
+  "evidence": "REPLACE_WITH_REPOSITORY_BILLING_SNAPSHOT; not final RC-attributed cost"
+}

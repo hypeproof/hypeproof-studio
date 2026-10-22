@@ -43,23 +43,22 @@ CI가 검증하는 버전은 **Python 3.11+**이다(`.github/workflows/test.yml`
 
 PyYAML이 없으면 명령이 어느 인터프리터에 무엇을 설치해야 하는지 알려주며 중단한다.
 
-2026-10-10 조직 이관 호환: #287에서 이관된 일곱 저장소(`hypeproof-harness`,
+2026-10-10 조직 이관: #287에서 이관된 일곱 저장소(`hypeproof-harness`,
 `hypeprooflab`, `hypeproof-studio`, `sediment`, `hypeproof-studio-releases`,
-`sediment-cli-releases`, `homebrew-sediment`)의 `hypeproof/*` 주소와 origin은 기존
-`jayleekr/*` registry ID로 연결한다. manifest와 source revision, assessment, receipt
-검증은 그대로 수행한다. 이 일곱 저장소 외에는 owner를 치환하지 않는다. 정책 ID의
-전체 이관은 #287에서 추적한다. installer는 이관된 Lab·Studio·Sediment origin도
+`sediment-cli-releases`, `homebrew-sediment`)의 registry ID는 조직 주소 `hypeproof/*`다.
+이관 전에 clone해서 origin이 아직 `jayleekr/*`인 checkout, `repository`가 이전 주소인
+manifest, 이전 주소로 기록된 change-impact checkpoint는 같은 저장소로 읽는다.
+manifest와 source revision, assessment, receipt 검증은 그대로 수행한다. 이 일곱 저장소
+외에는 owner를 치환하지 않는다. installer는 이관된 Lab·Studio·Sediment의 이전 origin도
 허용한다.
 
-GitHub을 바꾸는 명령(`gh pr create`, reviewer 편집, auto-merge)과 실행 이슈 조회는
-조직 주소로 보낸다. registry 원본을 읽는 change-impact 조회만 registry ID를 그대로
-쓰고 GitHub redirect에 기댄다. `plan.repo` 같은 출력의 registry ID는 이관 전까지
-`jayleekr/*`로 남는다.
+GitHub을 바꾸는 명령(`gh pr create`, reviewer 편집, auto-merge), 실행 이슈 조회,
+change-impact 조회, `plan.repo` 같은 출력은 모두 조직 주소를 쓴다.
 
 `--repo`에는 항상 `hypeproof/<repo>`를 넘기고, PR 본문의 close 대상도 `#N`이나
 `hypeproof/<repo>#N`으로 쓴다. 이관된 저장소의 이전 주소(`jayleekr/<repo>`)를 넘기면
 조직 주소를 알려주는 안내가 stderr에 나온다. 도구가 조직 주소를 거부하면 이전 주소로
-우회하지 말고 `scripts/hype-pr/preparation.py`의 `TRANSFERRED`나 registry를 고친다.
+우회하지 말고 `scripts/change-impact/impact.py`의 `TRANSFERRED`나 registry를 고친다.
 redirect 때문에 틀린 이름도 성공한 것처럼 보인다 (#290).
 
 ---
@@ -96,6 +95,18 @@ python3 scripts/hype-pr/pr.py prepare --repo hypeproof/hypeprooflab --assessment
 
 consumer 명령은 sibling Harness checkout 또는 `HYPEPROOF_HARNESS`로 정본 명령에 위임한다.
 Harness가 없으면 명시적으로 실패한다. 정책·엔진 복제나 fallback owner 명단은 없다.
+
+sibling checkout은 읽고 fetch만 한다. branch를 바꾸거나 fast-forward하지 않는다. 그 checkout에서
+Harness를 개발하는 세션의 branch와 수정은 그대로 남는다. 실행되는 엔진은 launcher가 소유한
+detached worktree(`~/.cache/hypeproof/harness-engine`, `HYPEPROOF_ENGINE_DIR`로 변경)이고,
+실행할 때마다 `git fetch origin main` 후 `origin/main`으로 옮긴다. 없으면 만든다.
+그 worktree에 커밋되지 않은 수정이 있으면 덮어쓰지 않고 실패하며, 지우는 명령을 알려준다.
+오프라인이거나 정본이 git checkout이 아니면 기존 엔진으로 실행하고 오래됐을 수 있다고 알린다.
+동시에 실행되면 엔진 옆 lock 파일로 순서를 정하고, 잠시 기다려도 lock을 얻지 못하면 기존 엔진으로
+실행하며 오래됐을 수 있다고 알린다.
+`HYPEPROOF_HARNESS=<경로>`는 정본 checkout의 위치만 바꾼다. 엔진은 그대로 그 checkout에서
+만들고 갱신한다. Harness를 개발하면서 정본 checkout을 fetch·엔진 없이 그대로 실행하려면
+`HYPEPROOF_HARNESS_PIN=1`을 설정한다.
 원격 기준 commit이 로컬에 없으면 `git fetch origin main` 후 다시 실행한다. source를 읽을 권한이
 없으면 권한을 복구한다. 코드 변경/새 commit/base·다른 repo의 전진은 다시 검토할 이유다.
 `create`의 `--path`는 dry-run 참고용이며 실제 생성의 위험 판정은 git diff로 계산한다.
@@ -108,7 +119,7 @@ stderr에 낸다. 확인한 경로, 이유, 고치는 명령(`gh repo clone hype
 들어 있다. 도구가 대신 clone하거나 고치지는 않는다. `inspect` JSON의
 `local_source_gaps`에도 같은 내용이 있고, fingerprint와 receipt에는 들어가지 않으므로
 clone을 추가해도 준비가 낡지 않는다. clone은 작업 repo의 main checkout 옆,
-`HYPEPROOF_HARNESS` 옆, 실행 중인 Harness checkout 옆 순서로 찾는다. 일부러 API로만 읽으려면
+`HYPEPROOF_HARNESS` 옆, 엔진을 만든 정본 checkout 옆, 실행 중인 Harness checkout 옆 순서로 찾는다. 일부러 API로만 읽으려면
 `HYPEPROOF_NO_LOCAL_SOURCES=1`을 설정한다. 그러면 안내도 나오지 않는다.
 
 ## Work GitHub transport
