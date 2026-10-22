@@ -442,7 +442,7 @@
 .studio-github .studio-help { margin: 0; }
 
 .studio-saved-activities button { display: block; text-align: left; max-width: 100%; overflow-wrap: anywhere; }
-.studio-saved-activities small { display: block; font-size: var(--ds-c-studio-start-type-18); opacity: .75; }
+.studio-saved-activities small { display: block; font-size: var(--ds-c-studio-start-type-18); color: var(--hp-text-muted-default); }
 .hps-activity-header { padding: var(--ds-c-studio-start-space-2) var(--ds-c-studio-start-space-20); font-size: var(--ds-c-studio-start-type-19); overflow-wrap: anywhere; }
 
 /* #751 U2 — the same inbox on the entry card: a quiet text line under the one Primary, never a second emphasised button. */
@@ -452,11 +452,11 @@
 .hp-inbox-quiet .hp-inbox-card { border-top: var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-7); padding-top: var(--ds-c-studio-start-space-2); min-width: 0; }
 .hp-inbox-quiet .hp-inbox-card summary { min-height: var(--ds-c-studio-start-size-8); cursor: pointer; padding: var(--ds-c-studio-start-space-2) 0; overflow-wrap: anywhere; }
 .hp-inbox-quiet .hp-inbox-title { font-weight: var(--ds-c-studio-start-typography-7); }
-.hp-inbox-quiet .hp-inbox-meta, .hp-inbox-quiet .hp-rail-lesson-note { font-size: var(--ds-c-studio-start-type-1); opacity: .8; overflow-wrap: anywhere; }
+.hp-inbox-quiet .hp-inbox-meta, .hp-inbox-quiet .hp-rail-lesson-note { font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .hp-inbox-quiet .hp-inbox-body { white-space: pre-wrap; overflow-wrap: anywhere; margin: var(--ds-c-studio-start-space-2) 0; }
 .hp-inbox-quiet .hp-inbox-links { list-style: none; margin: var(--ds-c-studio-start-space-2) 0; padding: 0; display: grid; gap: var(--ds-c-studio-start-space-2); }
 .hp-inbox-quiet .hp-inbox-links li { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-start-space-2); align-items: center; min-width: 0; }
-.hp-inbox-quiet .hp-inbox-link-url { font-size: var(--ds-c-studio-start-type-1); opacity: .8; overflow-wrap: anywhere; min-width: 0; }
+.hp-inbox-quiet .hp-inbox-link-url { font-size: var(--ds-c-studio-start-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; min-width: 0; }
 .hp-inbox-quiet button { font: inherit; color: inherit; background: none; border: var(--ds-c-studio-start-size-3) solid currentColor; border-radius: var(--ds-c-studio-start-radius-3); min-height: var(--ds-c-studio-start-size-10); padding: var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-7); cursor: pointer; }
 .hp-inbox-quiet :focus-visible { outline: var(--ds-c-studio-start-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-start-size-7); }
 

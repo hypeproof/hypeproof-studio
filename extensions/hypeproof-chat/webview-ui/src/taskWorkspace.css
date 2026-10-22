@@ -249,3 +249,8 @@
   .tw-trash button, .tw-trash-dialog button, .tw-trash-toast .tw-trash-undo, .tw-trash-error button { border-color: ButtonText; }
   .tw-trash-dialog, .tw-trash-toast[data-shown="true"] { border-color: CanvasText; }
 }
+
+/* CGP-DS-D-028: on light host themes the personal muted text takes the muted role's light value (VS Code's
+   description colour pulled 20% toward the foreground): Light+ #717171 is 4.4:1 on its #F3F3F3 sidebar,
+   the rail's surface. Dark themes keep the host value, and #a4aab3 (6.8:1 on #202226) without one. */
+body.vscode-light .tw-workspace, body.vscode-high-contrast-light .tw-workspace { --tw-muted: var(--hp-text-muted-default); }

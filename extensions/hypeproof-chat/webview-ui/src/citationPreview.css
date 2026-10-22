@@ -5,11 +5,11 @@
 .cp-citation:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 .cp-citation:focus-visible { outline: var(--ds-c-studio-citationpreview-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-citationpreview-size-7); }
 .cp-citation:disabled { cursor: default; opacity: .65; }
-.cp-citation-number { color: var(--tw-muted, var(--vscode-descriptionForeground, var(--ds-c-studio-citationpreview-ink-5))); font-size: var(--ds-c-studio-citationpreview-type-3); min-width: 1ch; flex: none; }
+.cp-citation-number { color: var(--tw-muted, var(--hp-text-muted-default)); font-size: var(--ds-c-studio-citationpreview-type-3); min-width: 1ch; flex: none; }
 .cp-citation-copy { display: flex; flex-direction: column; gap: var(--ds-c-studio-citationpreview-space-14); min-width: 0; }
 .cp-citation-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-c-studio-citationpreview-type-1); line-height: var(--hp-leading-label); }
-.cp-citation-domain { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tw-muted, var(--vscode-descriptionForeground, var(--ds-c-studio-citationpreview-ink-5))); font-size: var(--ds-c-studio-citationpreview-type-4); line-height: var(--hp-leading-label); }
-.cp-citation > svg { flex: none; width: var(--ds-c-studio-citationpreview-size-30); height: var(--ds-c-studio-citationpreview-size-30); color: var(--tw-muted, var(--vscode-descriptionForeground, var(--ds-c-studio-citationpreview-ink-5))); }
+.cp-citation-domain { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tw-muted, var(--hp-text-muted-default)); font-size: var(--ds-c-studio-citationpreview-type-4); line-height: var(--hp-leading-label); }
+.cp-citation > svg { flex: none; width: var(--ds-c-studio-citationpreview-size-30); height: var(--ds-c-studio-citationpreview-size-30); color: var(--tw-muted, var(--hp-text-muted-default)); }
 .cp-preview .cp-preview-domain { display: flex; align-items: center; gap: var(--ds-c-studio-citationpreview-space-12); line-height: var(--hp-leading-prose); }
 .cp-preview-domain svg { flex: none; }
 /* CGP-DS-R-008: the preview's address, status and error lines use the caption step (14px). The chip

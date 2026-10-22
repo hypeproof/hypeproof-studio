@@ -36,6 +36,8 @@ body.vscode-light .hp-modal-backdrop, body.vscode-high-contrast-light .hp-modal-
 .hps-preferences.hp-modal > header { padding: 0 0 var(--ds-c-modal-padding); }
 .hps-preferences.hp-modal .hps-preferences-body { padding: var(--ds-c-modal-padding) 0 0; }
 /* modal-surface:end */
+/* CGP-DS-D-028: placeholders take the page's secondary ink at full opacity (the browser default #757575 is 3.3-3.7:1 on these fields). */
+::placeholder{color:var(--ds-c-chalk-sharing-ink-99);opacity:1}
 </style></head><body><h1>강사에게 질문·결과물 공유</h1><p class="notice">선택한 내용만 지정한 강사에게 전달합니다. 전체 대화와 개인 파일은 자동으로 수집하지 않습니다. 공유는 언제든 철회할 수 있으며, 만료 뒤에는 열 수 없습니다.</p>
 <form id="login"><label>학생 토큰<input id="token" type="password" autocomplete="off" required></label><button>연결</button><button id="logout" type="button">연결 해제</button></form><p id="status" role="status" aria-live="polite">학생 토큰으로 연결하세요.</p>
 <form id="share"><div class="row"><label>강사 ID<input id="recipient" required pattern="[a-zA-Z0-9_-]{1,128}" placeholder="강사에게 안내받은 ID"></label><label>공유 목적<select id="kind"><option value="help">도움 요청</option><option value="submission">결과물 제출</option></select></label></div>

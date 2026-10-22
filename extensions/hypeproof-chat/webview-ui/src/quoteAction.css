@@ -12,5 +12,5 @@
 .hps-quote-action:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .hps-quote-action:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 .hps-quote-action:disabled { cursor: default; opacity: .6; }
-.hps-quote-note { color: var(--vscode-descriptionForeground, var(--ds-c-studio-quoteaction-ink-6)); font-size: var(--ds-c-studio-quoteaction-type-1); }
+.hps-quote-note { color: var(--hp-text-muted-default); font-size: var(--ds-c-studio-quoteaction-type-1); }
 @keyframes hps-quote-in { from { opacity: 0; } to { opacity: 1; } }

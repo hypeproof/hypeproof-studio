@@ -156,12 +156,14 @@ const checks = {
   "1d quiet card text follows the theme at ≥4.5:1": (css) => {
     const bad = [];
     const token = value(css, ".hp-ai-can-do", "--hp-ai-can-do-muted");
-    if (token !== "var(--vscode-descriptionForeground, var(--hp-text-muted-default))") bad.push(`muted token ${token}`);
+    // CGP-DS-D-028: the muted role follows the host theme and lifts Light+'s #717171 (4.4:1 on its #F3F3F3
+    // sidebar) to 4.5:1; reading the host colour directly skipped that (test/text-contrast-table.smoke.mjs).
+    if (token !== "var(--hp-text-muted-default)") bad.push(`muted token ${token}`);
     for (const sel of [".hp-ai-can-do-count", ".hp-ai-can-do > summary::before", '.hp-ai-can-do li[data-on="false"]']) {
-      if (value(css, sel, "color") !== "var(--hp-ai-can-do-muted)") bad.push(`${sel} uses ${value(css, sel, "color")} (a dark-only colour is 2.05:1 on white)`);
+      if (value(css, sel, "color") !== "var(--hp-ai-can-do-muted)") bad.push(`${sel} uses ${value(css, sel, "color")}, not the card's muted token`);
     }
-    // The values that token resolves to: harness light, VS Code Light+ and the HP dark fallback.
-    for (const [fg, bg, name] of [["#626873", "#FFFFFF", "harness light"], ["#717171", "#FFFFFF", "Light+"], ["#ACB9A5", "#151D19", "HP dark"]]) {
+    // The values that token resolves to: harness light, VS Code Light+ (the role's 80% mix) on its sidebar and the HP dark fallback.
+    for (const [fg, bg, name] of [["#626873", "#FFFFFF", "harness light"], ["#6E6E6E", "#F3F3F3", "Light+"], ["#ACB9A5", "#151D19", "HP dark"]]) {
       if (contrast(fg, bg) < 4.5) bad.push(`${name} ${contrast(fg, bg).toFixed(2)}:1`);
     }
     return bad;
@@ -180,8 +182,8 @@ const NEGATIVE = [
   ["2", "access line without the notice surface", mutate("styles.css", (s) => s.replace(".hps-offline-banner, .hps-notice-caution { margin", ".hps-offline-banner { margin"))],
   ["3", "divider on every heading (classroom stray line)", mutate("taskWorkspace.css", (s) => s.replace(".tw-workspace .tw-heading:has(.hps-activity-now, .hps-trial-left, .tw-run-note:not(:empty)) .tw-sources-toggle::before {", ".tw-workspace .tw-heading .tw-sources-toggle::before {"))],
   ["3b", "running heading ellipsizes the name again", mutate("taskWorkspace.css", (s) => s.replace("@media (max-width: 900px) {\n  .tw-heading:has(.tw-run-note:not(:empty)) .hps-activity-name", "@media (max-width: 900px) {\n  .tw-heading:has(.tw-run-note:not(:empty)) .hps-activity-kind"))],
-  ["1d", "count back on the dark-only --hp-text-muted-default", mutate("styles.css", (s) => s.replace(".hp-ai-can-do-count { color: var(--hp-ai-can-do-muted); }", ".hp-ai-can-do-count { color: var(--hp-text-muted-default); }"))],
-  ["1d", "classroom off rows back on --hp-text-muted-default", mutate("styles.css", (s) => s.replace('.hp-ai-can-do li[data-on="false"] { color: var(--hp-ai-can-do-muted); }', '.hp-ai-can-do li[data-on="false"] { color: var(--hp-text-muted-default); }'))],
+  ["1d", "count off the card's muted token", mutate("styles.css", (s) => s.replace(".hp-ai-can-do-count { color: var(--hp-ai-can-do-muted); }", ".hp-ai-can-do-count { color: var(--hp-text-muted-default); }"))],
+  ["1d", "classroom off rows off the card's muted token", mutate("styles.css", (s) => s.replace('.hp-ai-can-do li[data-on="false"] { color: var(--hp-ai-can-do-muted); }', '.hp-ai-can-do li[data-on="false"] { color: var(--hp-text-muted-default); }'))],
   ["1e", "chevron read aloud", mutate("styles.css", (s) => s.replace('content: "›" / "";', 'content: "›";'))],
   ["3", "run note paints its own pill around the chip", mutate("taskWorkspace.css", (s) => s.replace(".tw-heading .tw-run-note:not(:empty) { display: inline-flex; align-items: center; min-width: 0; }", ".tw-heading .tw-run-note:not(:empty) { display: inline-flex; align-items: center; min-width: 0; border: 1px solid var(--tw-line); }"))],
   ["3", "no divider", mutate("taskWorkspace.css", (s) => s.replace("border-inline-start: 1px solid var(--tw-line); pointer-events: none;", "pointer-events: none;"))],

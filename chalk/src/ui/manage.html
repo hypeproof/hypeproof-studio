@@ -184,7 +184,7 @@ body.is-connected .conn .status{font-size:var(--ds-c-chalk-manage-type-29)}
 #ops-help .help-head p{font-size:var(--ds-c-chalk-manage-type-29);flex:1 1 var(--ds-c-chalk-manage-size-116)}
 #ops-help-toggle{min-height:var(--ds-c-chalk-manage-size-23);padding:var(--ds-c-chalk-manage-space-14) var(--ds-c-chalk-manage-space-7);font-size:var(--ds-c-chalk-manage-type-29)}
 body:not(.help-active) #ops-help.group{background:transparent;border-color:transparent;padding:var(--ds-c-chalk-manage-space-14) var(--ds-c-chalk-manage-space-13);margin-top:var(--ds-c-chalk-manage-space-14)}
-body:not(.help-active) #ops-help .help-head p{color:var(--ink-mute);opacity:.75}
+body:not(.help-active) #ops-help .help-head p{color:var(--ink-mute)}
 body:not(.help-active) #ops-help .help-head h3{opacity:.75}
 /* Bulk actions bar: helpers stay reachable, action row (진단·회수·보내기) only appears when at least one row is checked. */
 #ops-bulk{background:transparent;border:var(--ds-c-chalk-manage-size-3) solid var(--ink-line);border-radius:var(--ds-c-chalk-manage-radius-9);padding:var(--ds-c-chalk-manage-space-2) var(--ds-c-chalk-manage-space-1);margin-top:var(--ds-c-chalk-manage-space-2)}
@@ -372,6 +372,8 @@ body:not(.has-selection) #ops-help.group{margin-top:var(--ds-c-chalk-manage-spac
 :is(button:not(.primary),a.btn:not(.primary),summary):hover:not(:disabled){background-image:linear-gradient(var(--ink-state-hover),var(--ink-state-hover))!important}
 :is(button:not(.primary),a.btn:not(.primary),summary):active:not(:disabled){background-image:linear-gradient(var(--ink-state-pressed),var(--ink-state-pressed))!important}
 #ops-summary button[aria-pressed="true"],#ops .ops-seat:hover>td.c-act button,#ops .ops-seat[aria-current="true"]>td.c-act button{background-image:none!important}
+/* CGP-DS-D-028: placeholders take the page's secondary ink at full opacity (the browser default #757575 is 3.3-3.7:1 on these fields). */
+::placeholder{color:var(--ds-c-chalk-manage-ink-58);opacity:1}
 </style></head><body>
 <div class="shell">
 <aside id="side" class="side" aria-label="강사 메뉴"><div class="side-head"><div class="brand"><small>HypeProof · Chalk</small><strong>수업 운영</strong></div><button type="button" id="side-close" class="side-close">메뉴 닫기</button></div><nav class="flow" aria-label="강사 도구"><a href="/authoring">강의 작성</a><a href="/issuer">학생 초대·토큰</a><a href="/budgets">AI 예산</a><a href="/console">수업 열기·종료</a><a href="#ops-title" aria-current="page" class="here">운영 보드</a><a href="#ops-help-title" id="nav-help-link">도움 요청 응대<span id="nav-help" class="nav-badge"></span></a><details class="flow-more"><summary>더보기</summary><a href="/authoring#rehearsal">리허설·확정</a><a href="#shares-title">결과물·공유 기록</a><a href="#ops-wrap-title">마무리 단계</a><a href="#ops-finish-title">기록 회수·보고서</a></details></nav><div class="side-foot"><section class="side-class" aria-label="수업 전체 제어"><div id="ops-control" hidden><details><summary>기기 적용 현황</summary><p id="ops-control-state" class="muted" role="status" aria-live="polite"></p></details><button id="ops-pause" type="button"></button></div></section><p id="conn-where" class="muted" hidden></p></div></aside><button id="side-backdrop" type="button" aria-label="메뉴 닫기" hidden></button>
