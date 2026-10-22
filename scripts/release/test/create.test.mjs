@@ -7,7 +7,10 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {actions, branchPushEnv, prToken} from '../create.mjs';
+import {
+  actions, branchPushEnv, compareReleaseVersions, prToken, smokeFailureTarget, smokeIssueVersion,
+  smokeIssuesToClose, supersededComment,
+} from '../create.mjs';
 import {nextRcTag, versionFor} from '../version.mjs';
 
 test('versionFor: v<year>.<month*100+day>.<n>, no leading zero, next n after a release that day', () => {
@@ -41,7 +44,7 @@ test('nextRcTag counts only rc tags of the same version', () => {
 
 test('actions: create only from a non-trial create plan, by smoke verdict', () => {
   const plan = {schema: 'hps-release-plan/0', mode: 'create', trial: false};
-  assert.deepEqual(actions({...plan, smoke: 'PASS'}).steps, ['tag', 'builds', 'branch', 'pr']);
+  assert.deepEqual(actions({...plan, smoke: 'PASS'}).steps, ['tag', 'builds', 'branch', 'pr', 'close-smoke-issues']);
   assert.deepEqual(actions({...plan, smoke: 'FAIL'}).steps, ['issue']);
   assert.match(actions({...plan, smoke: 'NOT_RUN'}).stop, /NOT_RUN/);
   assert.deepEqual(actions({...plan, smoke: 'NOT_RUN'}, {acceptNotRun: true}).steps, ['tag', 'builds', 'branch', 'pr']);
@@ -49,6 +52,76 @@ test('actions: create only from a non-trial create plan, by smoke verdict', () =
   assert.ok(actions({...plan, trial: true, smoke: 'PASS'}).stop);
   assert.ok(actions({...plan, mode: 'dry-run', smoke: 'PASS'}).stop);
   assert.ok(actions({...plan, schema: 'x', smoke: 'PASS'}).stop);
+});
+
+test('actions: a dry-run or NOT_RUN cut never reaches the issue-closing step', () => {
+  const plan = {schema: 'hps-release-plan/0', mode: 'create', trial: false};
+  for (const decision of [
+    actions({...plan, mode: 'dry-run', smoke: 'PASS'}),
+    actions({...plan, smoke: 'NOT_RUN'}),
+    actions({...plan, trial: true, smoke: 'PASS'}),
+  ]) {
+    assert.equal(decision.steps, undefined);
+    assert.ok(decision.stop);
+  }
+  // an accepted NOT_RUN cut does create the release, but it leaves smoke-failure issues open
+  const accepted = actions({...plan, smoke: 'NOT_RUN'}, {acceptNotRun: true});
+  assert.ok(accepted.steps.includes('pr'));
+  assert.ok(!accepted.steps.includes('close-smoke-issues'));
+});
+
+test('compareReleaseVersions: numeric, so 105 < 1013 and 1013.10 never sorts before 1013.9', () => {
+  assert.ok(compareReleaseVersions('v2026.105.0', 'v2026.1013.0') < 0);
+  assert.ok(compareReleaseVersions('v2026.1013.0', 'v2026.105.0') > 0);
+  assert.ok(compareReleaseVersions('v2026.1013.10', 'v2026.1013.9') > 0);
+  assert.ok(compareReleaseVersions('v2025.1231.0', 'v2026.101.0') < 0);
+  assert.equal(compareReleaseVersions('v2026.1013.0', 'v2026.1013.0'), 0);
+  assert.throws(() => compareReleaseVersions('v2026.1013.0-rc.1', 'v2026.1013.0'), /not a release version/);
+});
+
+test('smokeIssueVersion: only the exact release-cut title names a version', () => {
+  assert.equal(smokeIssueVersion('Smoke failed — release v2026.1013.0 stopped'), 'v2026.1013.0');
+  // negative controls: other titles, a different dash, a suffix, or a prefix are not ours
+  assert.equal(smokeIssueVersion('Smoke failed - release v2026.1013.0 stopped'), null);
+  assert.equal(smokeIssueVersion('Smoke failed — release v2026.1013.0 stopped (rerun)'), null);
+  assert.equal(smokeIssueVersion('[bug] Smoke failed — release v2026.1013.0 stopped'), null);
+  assert.equal(smokeIssueVersion('Smoke failed — release v2026.1013.0-rc.1 stopped'), null);
+  // the pre-2026 v0.1.x format has no date version; it is not matched
+  assert.equal(smokeIssueVersion('Smoke failed — release v0.1.56 stopped'), null);
+});
+
+test('smokeIssuesToClose: same or lower version closes; higher version and other titles stay open', () => {
+  const issue = (number, title) => ({number, title, url: `https://example.invalid/issues/${number}`});
+  const open = [
+    issue(1, 'Smoke failed — release v2026.1013.0 stopped'),  // same version
+    issue(2, 'Smoke failed — release v2026.105.0 stopped'),   // lower (Jan 5 < Oct 13): numeric, not string
+    issue(3, 'Smoke failed — release v2026.1014.0 stopped'),  // higher day
+    issue(4, 'Smoke failed — release v2026.1013.1 stopped'),  // higher n
+    issue(5, 'Smoke failed — release v2026.1013.0 stopped (rerun)'), // other title format
+    issue(6, 'Release notes for v2026.1013.0'),
+  ];
+  assert.deepEqual(smokeIssuesToClose(open, 'v2026.1013.0').map(i => i.number), [1, 2]);
+  assert.deepEqual(smokeIssuesToClose([], 'v2026.1013.0'), []);
+});
+
+test('smokeFailureTarget: comment on an open issue of the same version, else open a new one', () => {
+  const issue = (number, title) => ({number, title, url: `u/${number}`});
+  const open = [issue(7, 'Smoke failed — release v2026.1013.0 stopped'), issue(8, 'Smoke failed — release v2026.1013.1 stopped')];
+  assert.equal(smokeFailureTarget(open, 'v2026.1013.0').number, 7);
+  assert.equal(smokeFailureTarget(open, 'v2026.1013.1').number, 8);
+  // a different version does not match: a new issue is opened
+  assert.equal(smokeFailureTarget(open, 'v2026.1014.0'), null);
+  assert.equal(smokeFailureTarget([issue(9, 'Smoke failed — release v2026.1013.0 stopped (rerun)')], 'v2026.1013.0'), null);
+  assert.equal(smokeFailureTarget([], 'v2026.1013.0'), null);
+});
+
+test('supersededComment: names the rc tag, the candidate and the release PR', () => {
+  const text = supersededComment({rcTag: 'v2026.1013.0-rc.2', candidate: 'abcdef0123456789', version: 'v2026.1013.0',
+    prUrl: 'https://github.com/hypeproof/hypeproof-studio/pull/9999'});
+  assert.match(text, /v2026\.1013\.0-rc\.2/);
+  assert.match(text, /abcdef01/);
+  assert.match(text, /https:\/\/github\.com\/hypeproof\/hypeproof-studio\/pull\/9999/);
+  assert.doesNotMatch(text, /abcdef0123456789/);
 });
 
 test('prToken: the PR step needs its own token, checked before any write', () => {

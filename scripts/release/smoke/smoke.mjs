@@ -27,6 +27,10 @@ function phaseOf(id) {
   return READ_ONLY_FIRST.has(id) ? 0 : SESSION_CHECKS.has(id) ? 1 : 2;
 }
 
+// Colour codes from child output (S4 quotes its last line) would break the release PR and issue tables.
+// SGR and the other CSI sequences are removed here, the one place every check detail passes through.
+export const stripAnsi = text => text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+
 // Exported so tests can inject stub check objects without file I/O.
 export async function runSmokeChecks(checkModules, ctx) {
   const sorted = [...checkModules].sort((a, b) => phaseOf(a.id) - phaseOf(b.id));
@@ -44,7 +48,7 @@ export async function runSmokeChecks(checkModules, ctx) {
     } catch (error) {
       result = {result: 'FAIL', detail: String(error?.message ?? error)};
     }
-    results.push({id: check.id, name: check.name, ...result, ms: Date.now() - started});
+    results.push({id: check.id, name: check.name, ...result, detail: stripAnsi(String(result.detail ?? '')), ms: Date.now() - started});
     if (SKIP_TRIGGERS.has(check.id) && result.result === 'FAIL') failedTriggers.push(check.id);
   }
   return results;

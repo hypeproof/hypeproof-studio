@@ -3,17 +3,21 @@
 //
 //   node scripts/release/create.mjs --plan DIR/plan.json [--accept-not-run] [--managed-draft]
 //
-// smoke FAIL    → the smoke-failure issue. No tag, no PR.
+// smoke FAIL    → the smoke-failure issue of this version: a new one, or a comment on the open one. No tag, no PR.
 // smoke NOT_RUN → stop, unless --accept-not-run (the release PR then says NOT_RUN in its smoke section).
 // smoke PASS    → rc tag on the candidate, the rc builds, branch release/<version> adding
 //                 releases/<version>.md, and the release PR (or, for a later rc of the same version,
-//                 the existing PR updated with a comment).
+//                 the existing PR updated with a comment). Then the open smoke-failure issues of this
+//                 version or lower are closed with a link to the release PR. A failed close is a warning.
 // A trial plan (--since) is never created: its baseline is not a release.
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {assertManagedCandidateSupport, buildDispatches, buildTagMessage} from './build-contract.mjs';
+
+// The title release-cut.mjs gives the smoke-failure issue. Matched exactly: other issues are not ours to close.
+const SMOKE_ISSUE_TITLE = /^Smoke failed — release (v\d{4}\.\d+\.\d+) stopped$/;
 
 export function actions(plan, {acceptNotRun = false} = {}) {
   if (plan.schema !== 'hps-release-plan/0') return {stop: `unknown plan schema ${plan.schema}`};
@@ -22,7 +26,55 @@ export function actions(plan, {acceptNotRun = false} = {}) {
   if (plan.smoke === 'FAIL') return {steps: ['issue']};
   if (plan.smoke === 'NOT_RUN' && !acceptNotRun) return {stop: 'smoke NOT_RUN; rerun with accept_not_run to cut anyway'};
   if (plan.smoke !== 'PASS' && plan.smoke !== 'NOT_RUN') return {stop: `unknown smoke result ${plan.smoke}`};
-  return {steps: ['tag', 'builds', 'branch', 'pr']};
+  // Old smoke-failure issues close only on a PASS. A NOT_RUN cut the manager accepted leaves them open.
+  const steps = ['tag', 'builds', 'branch', 'pr'];
+  return {steps: plan.smoke === 'PASS' ? [...steps, 'close-smoke-issues'] : steps};
+}
+
+// vYYYY.MMDD.N → [YYYY, MMDD, N] as numbers, or null. Format: version.mjs.
+export function parseReleaseVersion(version) {
+  const m = /^v(\d{4})\.(\d+)\.(\d+)$/.exec(version);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+// Compares as numbers, never as strings: v2026.105.0 is older than v2026.1013.0.
+export function compareReleaseVersions(a, b) {
+  const pa = parseReleaseVersion(a);
+  const pb = parseReleaseVersion(b);
+  if (!pa) throw new Error(`not a release version: ${a}`);
+  if (!pb) throw new Error(`not a release version: ${b}`);
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i];
+  return 0;
+}
+
+// The version a smoke-failure issue title names, or null for any other title.
+export function smokeIssueVersion(title) {
+  return SMOKE_ISSUE_TITLE.exec(title)?.[1] ?? null;
+}
+
+// Open smoke-failure issues that a passing cut of `version` supersedes: the same version or a lower one.
+export function smokeIssuesToClose(openIssues, version) {
+  return openIssues.filter(issue => {
+    const issueVersion = smokeIssueVersion(issue.title);
+    return issueVersion !== null && compareReleaseVersions(issueVersion, version) <= 0;
+  });
+}
+
+// On smoke FAIL: the open issue of this same version to comment on, or null to open a new one.
+export function smokeFailureTarget(openIssues, version) {
+  return openIssues.find(issue => smokeIssueVersion(issue.title) === version) ?? null;
+}
+
+// The comment left on a superseded smoke-failure issue before it is closed.
+export function supersededComment({rcTag, candidate, version, prUrl}) {
+  return `Superseded by ${version}: release candidate ${rcTag} on ${candidate.slice(0, 8)} passed smoke. ` +
+    `Release PR: ${prUrl}. Closing this smoke-failure record.`;
+}
+
+// Open issues whose title contains "Smoke failed"; the exact title is checked by the pure functions above.
+function openSmokeIssues(run, repo) {
+  return JSON.parse(run('gh', 'issue', 'list', '--repo', repo, '--state', 'open',
+    '--search', 'Smoke failed in:title', '--limit', '200', '--json', 'number,title,url'));
 }
 
 // The workflow token cannot open pull requests while "Allow GitHub Actions to create and
@@ -91,11 +143,18 @@ function main() {
       `The builders stop after immutable draft upload. Black-box acceptance, manager approval and channel promotion remain NOT_RUN; this PR is not publication authority.\n\n${original}`);
   }
 
+  let releasePrUrl = null;
   for (const step of decision.steps) {
     if (step === 'issue') {
-      const url = run('gh', 'issue', 'create', '--repo', repo, '--title', plan.issueTitle,
-        '--body-file', path.join(dir, plan.issueBody));
-      say(`Smoke FAIL: opened ${url}. No rc tag and no release PR.`);
+      const target = smokeFailureTarget(openSmokeIssues(run, repo), plan.version);
+      if (target) {
+        run('gh', 'issue', 'comment', String(target.number), '--repo', repo, '--body-file', path.join(dir, plan.issueBody));
+        say(`Smoke FAIL: commented on open ${target.url}. No rc tag and no release PR.`);
+      } else {
+        const url = run('gh', 'issue', 'create', '--repo', repo, '--title', plan.issueTitle,
+          '--body-file', path.join(dir, plan.issueBody));
+        say(`Smoke FAIL: opened ${url}. No rc tag and no release PR.`);
+      }
     }
     if (step === 'tag') {
       if (run('git', 'ls-remote', '--tags', 'origin', `refs/tags/${plan.rcTag}`)) throw new Error(`${plan.rcTag} already exists`);
@@ -143,11 +202,32 @@ function main() {
         pr('pr', 'edit', String(open[0].number), '--repo', repo, '--body-file', body, '--add-label', 'release');
         pr('pr', 'comment', String(open[0].number), '--repo', repo, '--body',
           `New candidate ${plan.rcTag} at ${plan.candidate.slice(0, 8)}. Approvals given before this comment were for an earlier candidate; review again.`);
+        releasePrUrl = open[0].url;
         say(`Updated ${open[0].url} for ${plan.rcTag}.`);
       } else {
         const url = pr('pr', 'create', '--repo', repo, '--base', 'main', '--head', plan.branch,
           '--title', plan.title, '--body-file', body, '--label', 'release');
+        releasePrUrl = url;
         say(`Opened ${url}.`);
+      }
+    }
+    // Runs after the tag and the PR exist, so a failure here cannot stop the release. Each close is independent.
+    if (step === 'close-smoke-issues') {
+      try {
+        const targets = smokeIssuesToClose(openSmokeIssues(run, repo), plan.version);
+        if (!targets.length) say(`No open smoke-failure issue of ${plan.version} or lower to close.`);
+        for (const issue of targets) {
+          try {
+            run('gh', 'issue', 'comment', String(issue.number), '--repo', repo, '--body',
+              supersededComment({rcTag: plan.rcTag, candidate: plan.candidate, version: plan.version, prUrl: releasePrUrl ?? plan.branch}));
+            run('gh', 'issue', 'close', String(issue.number), '--repo', repo);
+            say(`Closed ${issue.url}: superseded by ${plan.version}.`);
+          } catch (error) {
+            say(`WARNING: could not close ${issue.url}: ${String(error.message).split('\n')[0]}. Close it by hand.`);
+          }
+        }
+      } catch (error) {
+        say(`WARNING: could not list smoke-failure issues: ${String(error.message).split('\n')[0]}. Close them by hand.`);
       }
     }
   }
