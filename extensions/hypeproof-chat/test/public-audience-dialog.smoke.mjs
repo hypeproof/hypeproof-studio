@@ -92,6 +92,8 @@ try {
   // K1 initial focus, Enter and its auto-repeat, Escape.
   await mount('public');
   assert.equal(await active(), 'cancel', 'initial focus is on 취소');
+  // CGP-KNOW-R-018 / REQ-KNOW-33: the public step states the receiver AI storage policy as unknown, before the tick.
+  assert.deepEqual(await b.evaluate(`(() => { const d = document.querySelector('[data-testid=public-audience-dialog]'); const m = d.querySelector('[data-recipient-ai-memory]'); return [m?.textContent ?? null, !!(m && (m.compareDocumentPosition(d.querySelector('[data-public-ack]')) & Node.DOCUMENT_POSITION_FOLLOWING)), d.textContent.includes('받는 사람의 AI가 기억하지 않아요')]; })()`), ['받는 사람의 AI 기억: 확인 안 됨', true, false], 'unknown receiver AI storage policy shown before the acknowledgement; never the safe wording');
   await key('Enter'); await key('Enter', { repeat: true }); await key('Enter', { repeat: true });
   assert.deepEqual(await answers(), [], 'Enter on 취소 neither publishes nor closes');
   await b.evaluate(`document.querySelector('[data-public-ack]').click()`); await wait(40);

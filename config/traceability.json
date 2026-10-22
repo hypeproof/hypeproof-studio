@@ -10576,6 +10576,83 @@
           "path": "extensions/hypeproof-chat/test/lesson-capability-entry-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-REQ-RECEIVER-AI-STORAGE",
+      "stage": "requirement",
+      "depends_on": [
+        "ST-REQ-OUTBOUND-CONSENT"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Receiver AI storage disclosure (CGP-KNOW-R-018)"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-IMP-RECEIVER-AI-STORAGE-UNKNOWN",
+      "stage": "implementation",
+      "depends_on": [
+        "ST-REQ-RECEIVER-AI-STORAGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/outboundConsent.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/outboundConsentHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/OutboundDialog.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/HelpRequest.tsx"
+        },
+        {
+          "path": "chalk/src/ui/sharing.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-TEST-RECEIVER-AI-STORAGE-UNKNOWN",
+      "stage": "test",
+      "depends_on": [
+        "ST-REQ-RECEIVER-AI-STORAGE",
+        "ST-IMP-RECEIVER-AI-STORAGE-UNKNOWN"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/outbound-dialog.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/outbound-consent-render.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/outbound-consent-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/public-audience-dialog.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/outbound-consent.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/recipient-ai-memory-visible.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lib/visible-text.mjs"
+        },
+        {
+          "path": "chalk/test/recipient-ai-memory.browser.mjs"
+        }
+      ]
     }
   ]
 }

@@ -38,6 +38,8 @@ const view = {
 
 t("R1 help preview: recipient, exact per-field bytes, literal exclusion line, consent unchecked, send disabled", () => {
   const html = renderToStaticMarkup(<HelpRequest view={view} post={() => {}} />);
+  ok(attrText(html, "data-recipient-ai-memory") === "받는 사람의 AI 기억: 확인 안 됨", "unknown receiver AI policy shown before consent");
+  ok(!html.includes("받는 사람의 AI가 기억하지 않아요"), "absence never means safe");
   ok(attrText(html, "data-help-preview-recipient") === "강사-김하나", "recipient shown");
   ok(attrText(html, 'data-help-preview-size="question"') === `내가 쓴 질문 · ${bytes(question)} 바이트`, "question size: " + attrText(html, 'data-help-preview-size="question"'));
   ok(attrText(html, 'data-help-preview-size="prompt"') === `내가 AI에게 보낸 말 · ${bytes(prompt)} 바이트`, "prompt size");
