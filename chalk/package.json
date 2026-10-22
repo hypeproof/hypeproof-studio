@@ -27,5 +27,8 @@
     "typescript": "^5.4.0",
     "wrangler": "^4.147.0",
     "@hypeproof/service-testkit": "file:../.private-service-cache/hypeproof-service-testkit-0.1.2.tgz"
+  },
+  "overrides": {
+    "sharp": "0.35.5"
   }
 }
