@@ -56,12 +56,19 @@ AI는 실행).
    | Item is about | Repo |
    |---|---|
    | 공개 사이트 · 콘텐츠 · 운영 · 멤버/커뮤니티 | `hypeproof/hypeprooflab` |
-   | Studio 제품 (VSCodium fork · 워크숍 도구 · Worker) | `hypeproof/hypeproof-studio` |
+   | Studio 제품 (VSCodium fork · 워크숍 도구 · Worker 배포) | `hypeproof/hypeproof-studio` |
+   | Worker 런타임 코드 · 측정 엔진/기준 · 측정 패키지 | `hypeproof/hypeproof-service` |
    | 지식 DB · ingest · SaaS 백엔드/프론트 | `hypeproof/sediment` |
    | 공유 규약 · 스킬 · 프로세스 자체 | `hypeproof/hypeproof-harness` |
 
    Ambiguous items go to the repo where the deliverable will finally live.
    An item spanning repos becomes one issue per repo.
+
+   `check.py`, `burndown.py` and `announce.py` read `hypeprooflab`,
+   `hypeproof-studio` and `sediment` when no `--repo` is given. If the cycle has
+   issues in `hypeproof-service` or `hypeproof-harness`, pass
+   `--repo hypeproof/<repo>` for each one. Any `--repo` replaces the default
+   three, so name those as well.
 
    Also assign a **theme** — one of the five strategy themes, applied as the
    GitHub label `theme:<id>` at filing time (not retrofitted; it is the only

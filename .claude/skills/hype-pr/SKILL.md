@@ -8,9 +8,16 @@ description: Prepare and create PRs in hypeproof-harness, hypeprooflab, hypeproo
 Use the repository's `scripts/hype-pr/pr.py` entrypoint. It delegates to the canonical
 Harness checkout, found as a sibling of the main consumer checkout or through
 `HYPEPROOF_HARNESS`. If missing, clone `hypeproof/hypeproof-harness` into that sibling
-location (or use an existing checkout via the environment variable). If the entrypoint
-reports an outdated Harness, update a clean main checkout with a fast-forward pull,
-or use a separate updated checkout; preserve existing work. Python 3.11+,
+location (or use an existing checkout via the environment variable). The sibling
+checkout is only read and fetched, never switched or fast-forwarded: the engine runs
+from a launcher-owned detached worktree at `origin/main`
+(`~/.cache/hypeproof/harness-engine`, override with `HYPEPROOF_ENGINE_DIR`), so a
+session developing Harness in that checkout keeps its branch. `HYPEPROOF_HARNESS=<path>`
+only says where the canonical checkout is; the engine is still made and refreshed from
+it. Set `HYPEPROOF_HARNESS_PIN=1` only to run the canonical checkout itself as it is
+(no fetch, no engine), e.g. to test unmerged Harness changes. If the entrypoint says
+the engine has local changes, move them out and remove that worktree; never discard
+them. Preserve existing work. Python 3.11+,
 PyYAML are required. Local execution uses authenticated `gh`; Work can use the
 connected GitHub tools through the explicit host transport in
 `docs/HYPE-PR.ko.md` → `Work GitHub transport`. Both paths execute the same
@@ -70,6 +77,26 @@ uncommitted text. Read working changes directly when developing.
    again and reconsider the judgments; do not merely transplant a fingerprint.
    No additional model-provider key is needed: the coding agent performs reasoning.
 
+   **Assessment rules.** `prepare` checks all of these and lists every failure with
+   its JSON path (for example `validation[0].evidence: 14 chars, needs >= 20`). The
+   template carries the same list under `_rules`; top-level `_` keys are ignored.
+   - `summary`, every `reason` and every `evidence`: at least 20 characters.
+   - `reviews`: exactly one entry per affected node in the report, no other IDs.
+     `disposition` is one of `change-required`, `no-impact`, `satisfied`, `unknown`.
+   - `unknown` and `change-required` need `followups`: a non-empty list of
+     `https://github.com/<owner>/<repo>/issues/<n>` or `/pull/<n>` URLs in a
+     registered repository.
+   - `path_links`: exactly one entry per unmapped watched path. `kind` is one of
+     `implementation`, `supporting`, `editorial`; `nodes` is a non-empty list of node
+     IDs registered in the report; `implementation` needs a requirement and a test node.
+   - `validation`: a non-empty list; each entry has a `check`, a `result` of `pass` or
+     `not-applicable`, and `evidence`.
+
+   A stale assessment or receipt names what moved (`head`, `base_tip`,
+   `source_commits[<repo>]`, `tool_version`, branch or repository). Inspect again
+   and reassess. Pass `--base` as a bare branch name (`main`, not `origin/main`);
+   inspect fetches the base once when its remote tip is not in the checkout yet.
+
 3. Bind the assessment to the current revisions:
 
    ```bash
@@ -124,6 +151,24 @@ uncommitted text. Read working changes directly when developing.
      --title 'feat(scope): 한글 요약' --body-file /tmp/pr-body.md --author LOGIN \
      --issue ISSUE_NUMBER --preparation RECEIPT_PATH --apply
    ```
+
+   **Agent identity (local runs).** An agent session commits, pushes and creates as
+   the `hypeproof-agent` GitHub App, not as the human whose machine it runs on.
+   Prefix each of those commands with the canonical Harness wrapper and pass
+   `--author 'hypeproof-agent[bot]'`:
+
+   ```bash
+   AGENT="$HYPEPROOF_HARNESS/scripts/agent-identity/with-agent-identity.sh"  # or ../hypeproof-harness/...
+   "$AGENT" git commit ...
+   "$AGENT" git push -u origin BRANCH
+   "$AGENT" python3 scripts/hype-pr/pr.py create ... --author 'hypeproof-agent[bot]' --apply
+   ```
+
+   The human is then a real second person on the PR, and their approval satisfies
+   the control-plane gate and review rules that exclude the author. A push after an
+   approval makes that approval stale. If the wrapper cannot mint a token (no App
+   key on this machine), stop and say so instead of falling back to the human's
+   identity without being told to.
 
    The PR body must close that issue and no other issue. Omit `--apply` for a command
    preview. The apply path verifies that the target is an existing open same-repository

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -13,9 +14,13 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OWNER = "hypeproof"
+# Vendored copies carry hype-review only; hype-merge and policy stay in the Harness.
+MONITOR = Path("scripts") / "hype-merge" / "monitor.py"
+# The organization first. Some repositories (hypeproof-agon, hypeproof-game-*,
+# hypeproof-research) were not transferred, so the former owner still counts.
+DEFAULT_OWNERS = ("hypeproof", "jayleekr")
 DEFAULT_ADMINS = {"jayleekr", "JeHyeong2"}
-DEFAULT_WRITERS = {"ico1036", "xoqhdgh1002", "JinyongShin", "TJ-kr"}
+DEFAULT_WRITERS = {"ico1036", "xoqhdgh1002", "JinyongShin", "TJ-kr", "rabqatab", "J3llyBe4n"}
 DEFAULT_REVIEW_LENSES: dict[str, list[str]] = {
     "jayleekr": ["maintainer", "product", "security", "deploy", "docs"],
     "JeHyeong2": ["maintainer", "backend", "security"],
@@ -23,6 +28,8 @@ DEFAULT_REVIEW_LENSES: dict[str, list[str]] = {
     "xoqhdgh1002": ["contributor", "product"],
     "JinyongShin": ["backend", "deploy"],
     "TJ-kr": ["frontend", "product"],
+    "rabqatab": ["contributor", "product"],
+    "J3llyBe4n": ["contributor", "backend", "deploy"],
 }
 
 
@@ -249,7 +256,9 @@ def _monitor_module() -> Any:
     """
     import importlib.util
 
-    path = ROOT / "scripts" / "hype-merge" / "monitor.py"
+    path = ROOT / MONITOR
+    if not path.is_file():
+        raise RuntimeError(f"hype-merge is not part of this checkout: {path}")
     spec = importlib.util.spec_from_file_location("hype_merge_monitor", path)
     if not spec or not spec.loader:
         raise RuntimeError(f"cannot load monitor helpers from {path}")
@@ -312,7 +321,7 @@ def search_unrequested_approvals(reviewer: str, repo: str | None, limit: int) ->
     return found
 
 
-def search_review_requests(reviewer: str, repo: str | None, owner: str, limit: int) -> list[dict[str, Any]]:
+def search_review_requests(reviewer: str, repo: str | None, owners: list[str], limit: int) -> list[dict[str, Any]]:
     fields = "author,isDraft,labels,number,repository,state,title,updatedAt,url"
     args = [
         "search",
@@ -330,7 +339,8 @@ def search_review_requests(reviewer: str, repo: str | None, owner: str, limit: i
     if repo:
         args.extend(["--repo", repo])
     else:
-        args.extend(["--owner", owner])
+        for owner in owners:
+            args.extend(["--owner", owner])
     data = run_gh(args)
     return data or []
 
@@ -603,11 +613,113 @@ def render_markdown(pack: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def canonical_checkout() -> Path | None:
+    """The Harness checkout a vendored copy hands over to, found as hype-pr finds it.
+
+    HYPEPROOF_HARNESS wins. Otherwise it is the `hypeproof-harness` directory
+    next to this repository's main checkout, which a worktree shares.
+    """
+    configured = os.environ.get("HYPEPROOF_HARNESS")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    common = proc.stdout.strip()
+    if proc.returncode != 0 or not common:
+        return None
+    return Path(common).parent.parent / "hypeproof-harness"
+
+
+def engine_for(canonical: Path) -> tuple[Path | None, str | None]:
+    """The Harness tree to hand over to, with hype-pr's own engine, and a notice.
+
+    Which tree runs, and what an update may move, is decided once, in
+    prepare_engine of scripts/hype-pr/pr.py: the canonical checkout is never
+    moved, and a launcher-owned detached worktree is brought to origin/main
+    instead (#359). That function is called as it stands: a second copy here
+    would drift, and two launchers must not treat the same checkout
+    differently.
+
+    Returns (tree, notice). The tree is None when the engine refuses to run,
+    and the notice then says why. HYPEPROOF_HARNESS_PIN=1 runs the canonical
+    checkout as it is; HYPEPROOF_HARNESS only says where that checkout is.
+    """
+    if os.environ.get("HYPEPROOF_HARNESS_PIN"):
+        return canonical, None
+    import importlib.util
+
+    name = "hype_pr_canonical"
+    try:
+        spec = importlib.util.spec_from_file_location(name, canonical / "scripts" / "hype-pr" / "pr.py")
+        module = importlib.util.module_from_spec(spec)
+        # Registered first: dataclasses resolve their annotations through sys.modules.
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        prepare = module.prepare_engine
+    except (Exception, SystemExit) as exc:
+        # hype-pr exits while loading when PyYAML is missing, and a checkout
+        # from before #359 has no prepare_engine. Its older update moved the
+        # checkout itself, so it is not called. Reported like any other
+        # reason: what is checked out may still be able to answer.
+        detail = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
+        return canonical, f"was not updated: hype-pr could not run its update ({detail})"
+    try:
+        return prepare(canonical)
+    except getattr(module, "EngineRefused", ()) as exc:
+        return None, str(exc)
+
+
+def hand_over(argv: list[str]) -> str:
+    """Run this request in the canonical Harness checkout, or return why not.
+
+    A vendored copy has neither hype-merge nor policy, so it cannot tell which
+    PRs wait on an approval. The canonical checkout can. Running its copy also
+    means a fix made there reaches every product repo without a vendor sync.
+
+    Does not return when the canonical checkout takes over.
+    """
+    canonical = canonical_checkout()
+    target = canonical / "scripts" / "hype-review" / "review.py" if canonical else None
+    if not target or not target.is_file() or not (canonical / MONITOR).is_file():
+        return "canonical Harness checkout missing; clone hypeproof-harness as a sibling or set HYPEPROOF_HARNESS"
+    # --offline promises no network, and the update fetches.
+    tree, notice = (canonical, None) if "--offline" in argv else engine_for(canonical)
+    if tree is None:
+        return notice
+    target = tree / "scripts" / "hype-review" / "review.py"
+    # Staleness keeps its own verdict, as in hype-pr. A copy that does not
+    # know DEFAULT_OWNERS searches the former owner only, so letting it answer
+    # would hide every request made in the organization.
+    if not target.is_file() or not (tree / MONITOR).is_file() or not any(
+        line.startswith("DEFAULT_OWNERS") for line in target.read_text(encoding="utf-8").splitlines()
+    ):
+        return (
+            f"canonical Harness checkout at {canonical} is outdated; update it to current main"
+            + (f" (automatic update stopped: {notice})" if notice else "")
+        )
+    if notice:
+        # Reported, not fatal, as in hype-pr: the tree can still answer.
+        print(f"hype-review: canonical Harness checkout at {canonical}: {notice}", file=sys.stderr, flush=True)
+    os.execv(sys.executable, [sys.executable, str(target), *argv])
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate a HypeProof PR review worksheet.")
     parser.add_argument("--reviewer", default=None, help="GitHub login to check. Use @me with gh search, or pass a login.")
     parser.add_argument("--mine", action="store_true", help="Use the authenticated gh user as reviewer.")
-    parser.add_argument("--owner", default=DEFAULT_OWNER, help="Owner to search when --repo is omitted.")
+    parser.add_argument(
+        "--owner",
+        action="append",
+        default=[],
+        help=f"Owner to search when --repo is omitted. Can repeat. Default: {', '.join(DEFAULT_OWNERS)}.",
+    )
     parser.add_argument("--repo", default=None, help="Repository in owner/name form.")
     parser.add_argument("--pr", default=None, help="PR number or GitHub PR URL to build a focused worksheet.")
     parser.add_argument("--title", default=None, help="Offline title for --pr.")
@@ -630,7 +742,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str]) -> int:
+def main(argv: list[str], standalone: str | None = None) -> int:
+    """`standalone` is why a vendored copy answers itself instead of the canonical checkout."""
     args = parse_args(argv)
     try:
         if args.mine and not args.offline:
@@ -646,14 +759,24 @@ def main(argv: list[str]) -> int:
             queue: list[dict[str, Any]] = []
         else:
             pr = fetch_pr(args.repo, args.pr) if args.pr else None
-            queue = search_review_requests(search_reviewer, args.repo, args.owner, args.limit)
+            owners = args.owner or list(DEFAULT_OWNERS)
+            queue = search_review_requests(search_reviewer, args.repo, owners, args.limit)
             if not args.requested_only:
                 # A missing reviewer request must not hide a PR that is blocked
                 # on this reviewer's approval (hypeprooflab#179).
-                queue = merge_queues(
-                    queue,
-                    search_unrequested_approvals(reviewer, args.repo, args.limit),
-                )
+                try:
+                    unrequested = search_unrequested_approvals(reviewer, args.repo, args.limit)
+                except RuntimeError as exc:
+                    # That half needs hype-merge, policy and PyYAML. Without
+                    # them the explicit requests still stand; name what is
+                    # missing rather than pass a shorter queue off as whole.
+                    print(
+                        "hype-review: showing explicit review requests only, as with --requested-only "
+                        f"({standalone or exc})",
+                        file=sys.stderr,
+                    )
+                    unrequested = []
+                queue = merge_queues(queue, unrequested)
 
         pack = build_pack(
             reviewer=reviewer.lstrip("@"),
@@ -674,4 +797,7 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    # Consumer copies delegate to the canonical checkout, like hype-pr, and
+    # answer themselves only when there is none to delegate to.
+    standalone = None if (ROOT / MONITOR).is_file() else hand_over(sys.argv[1:])
+    raise SystemExit(main(sys.argv[1:], standalone))

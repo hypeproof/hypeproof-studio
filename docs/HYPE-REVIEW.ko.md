@@ -1,5 +1,7 @@
 # hype-review
 
+> 갱신일 2026-09-22 · 상태: 활성
+
 > 이 문서는 `hypeproof-harness:docs/HYPE-REVIEW.ko.md`가 원천이다.
 > 제품 repo에 vendoring된 사본은 직접 고치지 말고 harness에서 PR로 바꾼다.
 
@@ -86,6 +88,22 @@ GitHub API가 pending invitation을 노출하지 못하는 repo에서는 `--appl
 `--mine`은 로컬 `gh` 인증 사용자를 읽고 GitHub 검색으로
 `review-requested:@me` PR을 찾는다. 팀원에게 `gh auth login`이 되어 있지 않으면
 GitHub UI에서 PR URL을 복사한 뒤 `--repo`, `--pr`로 먼저 연습해도 된다.
+
+`--repo`를 주지 않으면 `hypeproof` 조직과 이전 소유자 `jayleekr`를 함께 검색한다.
+이관되지 않은 repo(`hypeproof-agon`, `hypeproof-game-*`, `hypeproof-research`)가
+`jayleekr`에 남아 있기 때문이다. 범위를 좁히려면 `--owner hypeproof`처럼 지정한다.
+
+product repo의 vendored 사본은 sibling Harness checkout 또는 `HYPEPROOF_HARNESS`의
+정본 스크립트에 위임한다. 요청 없이 내 승인을 기다리는 PR을 찾으려면 `policy/`와
+`scripts/hype-merge/`가 필요한데, 이 둘은 vendoring되지 않기 때문이다. 정본
+checkout(sibling 또는 `HYPEPROOF_HARNESS`)에서 `hype-pr`와 같은 엔진(`origin/main`에 둔 launcher
+소유 detached worktree)을 갱신해 실행한다. 정본 checkout의 branch는 바꾸지 않는다.
+`HYPEPROOF_HARNESS_PIN=1`이면 정본 checkout을 갱신 없이 그대로 실행한다.
+
+정본 checkout이 없거나 PyYAML이 없으면 실패하지 않고, 명시적으로 요청된 PR만
+보여준다. 이때 stderr에 `showing explicit review requests only`가 들어간 한 줄로
+이유를 알린다. 그 목록은 전체가 아니다. Harness를 product repo 옆에 clone하고 그
+checkout에서 `python3 -m pip install -r requirements.txt`를 실행하면 전체 목록이 나온다.
 
 사용자별 기본 lens는 `policy/members.yaml`의 `review_lenses`에서 읽는다.
 따라서 평소에는 `--role`을 넣지 않는다. 특정 PR에서만 추가로 봐야 할 관점이

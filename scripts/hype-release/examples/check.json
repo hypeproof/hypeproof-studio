@@ -1,0 +1,19 @@
+{
+  "id": "native-chat-entry",
+  "identity": {
+    "kind": "installed-app",
+    "repository": "hypeproof/hypeproof-studio",
+    "sourceSha": "REPLACE_WITH_FULL_SOURCE_SHA",
+    "artifactSha256": "REPLACE_WITH_PACKAGE_SHA256",
+    "os": "macOS",
+    "arch": "arm64",
+    "environmentRevision": "REPLACE_THEME_CERT_ACCOUNT_SETTINGS_REVISION",
+    "serviceRevision": "REPLACE_DEPLOYMENT_REVISION",
+    "testRevision": "rc-native-r1",
+    "acceptanceRevision": "rc-acceptance-r1"
+  },
+  "verdict": "NOT_RUN",
+  "expected": "Enter the connected RC chat and preserve the draft across task changes",
+  "observed": "Not yet executed",
+  "evidence": "REPLACE_WITH_SANITIZED_PRIVATE_EVIDENCE_LOCATOR"
+}

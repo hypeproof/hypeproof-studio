@@ -156,6 +156,10 @@ PR을 만들고, 메인테이너가 `scripts/sync.sh`로 consumer에 반영한�
 - 불확실한 외부 사실이나 최신 정책은 확인한 뒤 쓴다.
 - 배포 설정을 바꿀 때는 provider dashboard의 숨은 상태만 믿지 말고 repo 파일,
   GitHub Actions, policy 선언이 같은 말을 하는지 확인한다.
+- Tests run in the background without taking focus. Any Studio app a test opens is
+  launched through the Studio quiet launcher and is quit and cleaned up on every exit.
+  Match processes by app path or user-data-dir, never by name. Full rule:
+  `docs/BACKGROUND-TESTS.md`.
 
 ## 7. 검증
 

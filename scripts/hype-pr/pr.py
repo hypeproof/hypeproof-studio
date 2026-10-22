@@ -21,57 +21,146 @@ from pathlib import Path
 from typing import Any
 
 
-def refresh_canonical(canonical):
-    """Fast-forward the canonical checkout to origin/main before delegating to it.
+class EngineRefused(RuntimeError):
+    """The launcher-owned engine holds something that only a human can decide about."""
 
-    A consumer that delegates to a stale or broken checkout runs yesterday's
-    engine against today's policy, and the old failure mode only said
-    "outdated" without saying what to do. This repairs the cheap cases and
-    names the rest.
 
-    Nothing is ever discarded. Uncommitted changes and commits that are not on
-    origin/main stop the repair and are reported, because neither can be
-    recreated once overwritten. Being left on a feature branch is repaired:
-    the branch keeps its commits and only the checkout moves to main.
+def engine_dir():
+    """Where the launcher keeps its own detached worktree of the canonical repo.
 
-    Returns None when the checkout is current, otherwise a reason it was left
-    alone. That reason is reported, not fatal: refusing to run because the
-    canonical checkout has local edits punishes exactly the person developing
-    Harness, whose tree is dirty by definition. Only a checkout that cannot
-    serve the engine at all stops the run.
-
-    Set HYPEPROOF_HARNESS_PIN to stay on a chosen revision.
+    HYPEPROOF_ENGINE_DIR names that worktree. The default sits in the user's
+    cache, outside every checkout a person works in.
     """
+    configured = os.environ.get("HYPEPROOF_ENGINE_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return Path.home() / ".cache" / "hypeproof" / "harness-engine"
+
+
+def prepare_engine(canonical):
+    """The Harness tree to run for a consumer, and a notice about it or None.
+
+    A consumer that delegates to a stale checkout runs yesterday's engine
+    against today's policy. Updating the developer's own checkout to fix that
+    switched branches under sessions developing Harness there (#359), and
+    hashing a tree that moved under them invalidated their receipts. So the
+    canonical checkout is only ever read and fetched: the engine is a detached
+    worktree of the same repository that only this launcher owns, moved to
+    origin/main on every run.
+
+    HYPEPROOF_HARNESS only says where the canonical checkout is; the engine is
+    still made from it and refreshed through it. HYPEPROOF_HARNESS_PIN=1 is
+    the explicit override for developing Harness: it runs the canonical
+    checkout as it is, with no fetch and no engine.
+
+    Runs are serialized on a lock file next to the engine. A run that cannot
+    take it within ENGINE_LOCK_SECONDS does not wait for the other one: it
+    runs the existing engine and says it may be stale.
+
+    Nothing is ever discarded. Tracked changes in the engine stop the run with
+    EngineRefused, because they are somebody's work even though the engine is
+    not meant to be edited. When the update cannot happen (offline, the
+    canonical checkout is not a git checkout) the existing engine runs and the
+    notice says it may be stale. With no engine yet, the canonical checkout
+    runs as it is and the notice says why.
+    """
+    canonical = Path(canonical)
     if os.environ.get("HYPEPROOF_HARNESS_PIN"):
-        return None
+        return canonical, None
+    engine = engine_dir()
+    engine.parent.mkdir(parents=True, exist_ok=True)
+    with open(engine.parent / (engine.name + ".lock"), "a") as lock:
+        if not _lock(lock, ENGINE_LOCK_SECONDS):
+            busy = "another run is updating it"
+            if engine.is_dir() and any(engine.iterdir()):
+                return engine, f"running the engine at {engine}, which may be stale: {busy}"
+            return canonical, f"no engine at {engine} yet and {busy}; running {canonical} as it is"
+        return _refresh_engine(canonical, engine)
 
-    def git(*args):
-        return subprocess.run(["git", "-C", str(canonical), *args], text=True, capture_output=True)
 
-    def out(*args):
-        return git(*args).stdout.strip()
+ENGINE_LOCK_SECONDS = 15
 
-    if git("rev-parse", "--git-dir").returncode:
-        return "not a git checkout"
-    if git("fetch", "--quiet", "origin", "main").returncode:
-        return "cannot fetch origin/main; check network access and credentials"
-    if out("rev-parse", "HEAD") == out("rev-parse", "origin/main"):
-        return None
 
-    # Not out(): porcelain pads the status to two columns, so stripping the
-    # output eats the leading space of the first line and its path loses a
-    # character. Naming a file wrongly is worse than not naming it.
-    dirty = sorted(line[3:] for line in git("status", "--porcelain").stdout.splitlines() if line.strip())
-    if dirty:
-        return "left alone, uncommitted changes: " + ", ".join(dirty[:5])
-    branch = out("rev-parse", "--abbrev-ref", "HEAD")
-    if branch != "main" and git("checkout", "main").returncode:
-        return f"cannot leave branch {branch} for main"
-    ahead = [line for line in out("log", "--oneline", "origin/main..HEAD").splitlines() if line]
-    if ahead:
-        return "left alone, local commits not on origin/main: " + ", ".join(ahead[:3])
-    if git("merge", "--ff-only", "origin/main").returncode:
-        return "fast-forward to origin/main failed"
+def _lock(handle, seconds):
+    """Take an exclusive lock on handle within seconds; True when taken.
+
+    Released when the handle is closed, also when the process dies.
+    """
+    try:
+        import fcntl
+    except ImportError:  # No fcntl (Windows): runs are not serialized.
+        return True
+    import time
+
+    deadline = time.monotonic() + seconds
+    while True:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError:
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.1)
+
+
+def _refresh_engine(canonical, engine):
+    """prepare_engine under its lock: fetch, then create or move the engine."""
+
+    def git(where, *args):
+        return subprocess.run(["git", "-C", str(where), *args], text=True, capture_output=True)
+
+    def first_line(proc):
+        return (proc.stderr.strip().splitlines() or ["exit code %d" % proc.returncode])[-1]
+
+    stale = None
+    if git(canonical, "rev-parse", "--git-dir").returncode:
+        stale = f"{canonical} is not a git checkout"
+    elif git(canonical, "fetch", "--quiet", "origin", "main").returncode:
+        stale = "cannot fetch origin/main; check network access and credentials"
+
+    # An empty directory is as good as none: the worktree can be added into it.
+    if engine.exists() and (not engine.is_dir() or any(engine.iterdir())):
+        top = git(engine, "rev-parse", "--show-toplevel")
+        if top.returncode or Path(top.stdout.strip()).resolve() != engine.resolve():
+            raise EngineRefused(f"engine directory {engine} is not a git worktree; move it aside "
+                                "(or set HYPEPROOF_ENGINE_DIR elsewhere) and run again")
+        # Untracked files are left out: a checkout never removes them, it stops
+        # when one is in the way, and that is reported below.
+        # Not stdout.strip(): porcelain pads the status to two columns, so
+        # stripping eats the leading space of the first line and its path
+        # loses a character.
+        dirty = sorted(line[3:] for line in git(engine, "status", "--porcelain", "--untracked-files=no")
+                       .stdout.splitlines() if line.strip())
+        if dirty:
+            raise EngineRefused(f"engine worktree {engine} has local changes ({', '.join(dirty[:5])}); "
+                                "it is launcher-owned and is not updated over them. Move the changes "
+                                f"out, then remove it with: git -C {canonical} worktree remove {engine}")
+        if stale:
+            return engine, f"running the engine at {engine}, which may be stale: {stale}"
+        moved = git(engine, "checkout", "--quiet", "--detach", "origin/main")
+        if moved.returncode:
+            return engine, f"running the engine at {engine}, which may be stale: " \
+                           f"checkout of origin/main failed ({first_line(moved)})"
+        return engine, None
+
+    if stale:
+        return canonical, f"no engine at {engine} yet and {stale}; running {canonical} as it is"
+    # A worktree whose directory was deleted is still registered and blocks the add.
+    git(canonical, "worktree", "prune")
+    added = git(canonical, "worktree", "add", "--quiet", "--detach", str(engine), "origin/main")
+    if added.returncode:
+        return canonical, f"cannot create the engine at {engine} ({first_line(added)}); running {canonical} as it is"
+    return engine, None
+
+
+def refresh_canonical(canonical):
+    """Leave the canonical checkout alone; kept for launchers that still call it.
+
+    Vendored hype-review copies from before #359 load this module from the
+    canonical checkout and call this before running that checkout. It used to
+    move the checkout to main. Moving a developer's checkout is what #359
+    removed, so it now changes nothing and reports nothing.
+    """
     return None
 
 
@@ -108,6 +197,37 @@ def bundle_drift(canonical, root):
     return f"installed bundle is from {installed[:7]} and the canonical bundle has changed since"
 
 
+def drift_notice_due(root, argv, today=None):
+    """Whether to print the bundle drift notice on this run (hypeproof-harness#362).
+
+    The notice printed on every run, so it was read once and then scrolled past
+    for weeks. It now prints at most once a day per checkout, stamped in that
+    checkout's own git dir (never the working tree), and always on `create`,
+    the run that publishes work built on the installed bundle. Consumer sync
+    PRs, not this notice, are what keeps consumers current.
+    """
+    from datetime import date
+
+    if "create" in argv:
+        return True
+    today = today or date.today().isoformat()
+    git_dir = subprocess.run(["git", "-C", str(root), "rev-parse", "--absolute-git-dir"],
+                             text=True, capture_output=True).stdout.strip()
+    if not git_dir:
+        return True
+    stamp = Path(git_dir) / "hype-pr-drift-notice"
+    try:
+        if stamp.read_text().strip() == today:
+            return False
+    except OSError:
+        pass
+    try:
+        stamp.write_text(today + "\n")
+    except OSError:
+        pass
+    return True
+
+
 ROOT = Path(__file__).resolve().parents[2]
 # Consumer copies delegate to the canonical checkout; policy/engine are never vendored.
 if not (ROOT / "policy/repos.yaml").is_file():
@@ -117,23 +237,29 @@ if not (ROOT / "policy/repos.yaml").is_file():
     else:
         common = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True).strip()
         canonical = Path(common).parent.parent / "hypeproof-harness"
-    target = canonical / "scripts/hype-pr/pr.py"
-    if not target.is_file() or not (canonical / "policy/repos.yaml").is_file():
+    if not (canonical / "scripts/hype-pr/pr.py").is_file() or not (canonical / "policy/repos.yaml").is_file():
         raise SystemExit("hype-pr: canonical Harness checkout missing; clone hypeproof-harness as a sibling or set HYPEPROOF_HARNESS")
-    unresolved = refresh_canonical(canonical)
+    try:
+        engine, notice = prepare_engine(canonical)
+    except EngineRefused as exc:
+        raise SystemExit(f"hype-pr: {exc}")
+    target = engine / "scripts/hype-pr/pr.py"
     # Staleness keeps its own verdict: the automatic update is what should have
-    # fixed it, so its reason belongs in that message rather than replacing it.
-    if not (canonical / "scripts/hype-pr/preparation.py").is_file():
+    # fixed it, so its notice belongs in that message rather than replacing it.
+    if not (engine / "scripts/hype-pr/preparation.py").is_file():
         raise SystemExit("hype-pr: canonical Harness checkout is outdated; update it to current main or set HYPEPROOF_HARNESS to an updated checkout"
-                         + (f" (automatic update stopped: {unresolved})" if unresolved else ""))
-    if unresolved:
-        # Reported, not fatal. The checkout can serve the engine; it just was
-        # not brought to main, and the reason is something only a human can
-        # decide about.
-        print(f"hype-pr: canonical Harness checkout at {canonical} was not updated: {unresolved}", file=sys.stderr)
-    drift = bundle_drift(canonical, ROOT)
-    if drift:
-        print(f"hype-pr: {drift}; reinstall with: python3 {canonical}/scripts/hype-pr/install.py {ROOT}", file=sys.stderr)
+                         + (f" (automatic update stopped: {notice})" if notice else ""))
+    if notice:
+        # Reported, not fatal. The tree can serve the engine; it may just not
+        # be current main.
+        print(f"hype-pr: {notice}", file=sys.stderr)
+    drift = bundle_drift(engine, ROOT)
+    if drift and drift_notice_due(ROOT, sys.argv[1:]):
+        print(f"hype-pr: {drift}; reinstall with: python3 {engine}/scripts/hype-pr/install.py {ROOT}", file=sys.stderr)
+    if engine != canonical:
+        # The engine has no sibling clones; the canonical checkout's are the
+        # person's working copies (preparation.source_checkouts).
+        os.environ["HYPEPROOF_CANONICAL_CHECKOUT"] = str(canonical)
     if __name__ == "__main__":
         os.execv(sys.executable, [sys.executable, str(target), *sys.argv[1:]])
     raise RuntimeError("import hype-pr from the canonical Harness checkout")
@@ -142,7 +268,8 @@ from audit import load_policy, repo_full_name, validate_policy  # noqa: E402
 sys.path.insert(0, str(ROOT / "scripts" / "hype-pr"))
 
 
-DEFAULT_OWNER = "jayleekr"
+# Owner of a bare --repo name the registry does not hold.
+DEFAULT_OWNER = "hypeproof"
 DEFAULT_BASE = "main"
 AUTO_MERGE_METHOD = "squash"
 
@@ -186,10 +313,19 @@ def uniq(values: list[str]) -> list[str]:
 
 
 def parse_repo(value: str) -> str:
+    """Full name for a --repo value, by the organization path of a transferred repo.
+
+    A bare name resolves through the registry first, so a repository that stayed
+    with a personal owner keeps its owner; anything else gets DEFAULT_OWNER.
+    """
+    from preparation import policy_repo
     if "/" in value:
         owner, name = value.split("/", 1)
         if owner and name:
-            return value
+            return policy_repo(value)
+    for repo in load_policy()["repos"].get("repositories", []):
+        if repo.get("name") == value:
+            return repo_full_name(repo)
     return f"{DEFAULT_OWNER}/{value}"
 
 
@@ -200,12 +336,10 @@ import body_contract  # noqa: E402
 def github_repo(repo: str) -> str:
     """Address GitHub by the organization path of a transferred repository.
 
-    The registry keeps the former ID until #287 migrates it. GitHub would redirect
-    that path, but then the former name is what lands in commands and output.
+    GitHub would redirect the former owner path, but then the former name is what
+    lands in commands and output (#287).
     """
-    from preparation import organization_repo
-    full = parse_repo(repo)
-    return organization_repo(full) or full
+    return parse_repo(repo)
 
 
 def fetch_scoped_issue(repo: str, number: int) -> dict[str, Any]:
@@ -386,36 +520,31 @@ def command_request_reviewers(args: argparse.Namespace, policy: dict[str, Any]) 
     return 1 if any(item["returncode"] != 0 for item in result["reviewer_results"]) else 0
 
 
-def reviewer_commands(repo: str, pr_ref: str, reviewers: list[str]) -> list[list[str]]:
+def pr_number(pr_ref: str) -> str:
+    """`https://github.com/o/r/pull/12`, `12` or the dry-run placeholder -> the number part."""
+    return str(pr_ref).rstrip("/").rsplit("/", 1)[-1]
+
+
+def requested_reviewers_command(method: str, repo: str, pr_ref: str, reviewer: str) -> list[str]:
+    # REST rather than `gh pr edit --add/--remove-reviewer`: gh pr edit also reads the
+    # org's teams, which an App installation token cannot (hypeproof-agent, #354).
     return [
-        [
-            "gh",
-            "pr",
-            "edit",
-            str(pr_ref),
-            "--repo",
-            github_repo(repo),
-            "--add-reviewer",
-            reviewer,
-        ]
-        for reviewer in reviewers
+        "gh",
+        "api",
+        "--method",
+        method,
+        f"repos/{github_repo(repo)}/pulls/{pr_number(pr_ref)}/requested_reviewers",
+        "-f",
+        f"reviewers[]={reviewer}",
     ]
+
+
+def reviewer_commands(repo: str, pr_ref: str, reviewers: list[str]) -> list[list[str]]:
+    return [requested_reviewers_command("POST", repo, pr_ref, reviewer) for reviewer in reviewers]
 
 
 def reviewer_cleanup_commands(repo: str, pr_ref: str, reviewers: list[str]) -> list[list[str]]:
-    return [
-        [
-            "gh",
-            "pr",
-            "edit",
-            str(pr_ref),
-            "--repo",
-            github_repo(repo),
-            "--remove-reviewer",
-            reviewer,
-        ]
-        for reviewer in reviewers
-    ]
+    return [requested_reviewers_command("DELETE", repo, pr_ref, reviewer) for reviewer in reviewers]
 
 
 def apply_reviewer_requests(repo: str, pr_ref: str, reviewers: list[str]) -> list[dict[str, Any]]:
@@ -777,6 +906,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def describe_process_failure(exc: subprocess.CalledProcessError | subprocess.TimeoutExpired) -> str:
+    """One line naming the command that failed and what to try, not a Python repr."""
+    cmd = [str(part) for part in (exc.cmd if isinstance(exc.cmd, (list, tuple)) else [exc.cmd])]
+    if len(cmd) > 3 and cmd[0] == "git" and cmd[1] == "-C":
+        # `git -C <checkout> merge-base ...` -> where it ran, then the command a person would type.
+        where, cmd = f" in {cmd[2]}", ["git", *cmd[3:]]
+    else:
+        where = ""
+    shown = " ".join(cmd)
+    if isinstance(exc, subprocess.TimeoutExpired):
+        return f"`{shown}`{where} timed out after {exc.timeout:g}s; check network access and retry"
+    stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+    detail = stderr.strip().splitlines()[-1] if stderr.strip() else "its own message, if any, is printed above"
+    hint = ""
+    if cmd[:2] == ["git", "merge-base"]:
+        hint = "; fetch the base (git fetch origin main) and make sure the branch shares history with it"
+    elif cmd[:2] == ["git", "rev-parse"]:
+        hint = "; run hype-pr inside the git worktree of the change, or pass --checkout"
+    return f"`{shown}`{where} failed with exit status {exc.returncode} ({detail}){hint}"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -784,9 +934,16 @@ def main(argv: list[str] | None = None) -> int:
         from preparation import organization_repo, policy_repo
         current = organization_repo(args.repo)
         if current:
-            # A notice, not an error: automation may still pass registry IDs (#287).
+            # A notice, not an error: automation may still pass the former path (#287).
             print(f"hype-pr: {args.repo} was transferred; pass --repo {current}", file=sys.stderr)
         args.repo = policy_repo(args.repo)
+    if getattr(args, "base", None):
+        from preparation import bare_branch
+        bare = bare_branch(args.base)
+        if bare != args.base:
+            # GitHub knows branches, not this machine's remote-tracking names.
+            print(f"hype-pr: --base {args.base} names a local ref; using the branch {bare}", file=sys.stderr)
+            args.base = bare
     try:
         policy = load_policy()
         findings = validate_policy(policy)
@@ -812,7 +969,10 @@ def main(argv: list[str] | None = None) -> int:
             return command_prepare(args, policy)
         if args.command == "create":
             return command_create(args, policy)
-    except (RuntimeError, ValueError, OSError, json.JSONDecodeError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        print(f"hype-pr: {describe_process_failure(exc)}", file=sys.stderr)
+        return 2
+    except (RuntimeError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"hype-pr: {exc}", file=sys.stderr)
         return 2
     parser.error(f"unknown command: {args.command}")
