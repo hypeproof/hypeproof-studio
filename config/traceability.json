@@ -10287,6 +10287,61 @@
           "path": "extensions/hypeproof-chat/test/korean-prose-computed.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-ANSWER-ATTEMPTS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Answer attempts (CGP-CHAT-R-006)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ANSWER-ATTEMPTS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANSWER-ATTEMPTS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/answerAttempts.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ANSWER-ATTEMPTS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANSWER-ATTEMPTS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/answer-attempts.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/answer-attempts.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/answer-attempts-style.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/answer-attempts-computed.smoke.mjs"
+        }
+      ]
     }
   ]
 }

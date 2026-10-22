@@ -141,7 +141,7 @@ try {
 const host = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
 t("host: an edit target is checked before the send is accepted", () => assert.match(host, /msg\.type === 'sendMessage' && msg\.editOf !== undefined\) this\.requireEditTarget\(msg\.editOf\)/));
 t("host: edit_resend is recorded through the spool with the pure payload", () => assert.match(host, /recordWorkflow\(\{ event: "edit_resend", payload: editResendPayload\(/));
-t("host: every saved user line of a turn goes through userLine (keeps editOf)", () => assert.equal((host.match(/userLine\((text|historyText)\)/g) ?? []).length, 5));
+// Actual retry persistence and edit metadata are exercised by answer-attempts.smoke.mjs.
 
 // ── Verifier round 1 ──────────────────────────────────────────────────────────────────────────
 const { modelConversation, splitVersions, joinVersions, composerBlockedByEdit } = await import("../src/editResend.ts");
@@ -178,10 +178,8 @@ t("a hidden version never reaches model history, whatever is on screen (sweep ov
   // Positive control: the sweep can see a leak (v1 IS in the raw conversation).
   assert.deepEqual(leaks(modelHistory(edited)), ["u2", "a2"]);
 });
-t("host: model history is modelConversation(conversation, versionOf), and versionOf inherits on a same-id retry", () => {
-  assert.match(host, /modelHistory\(clampTimeline\(modelConversation\(conversation, versionOf\), HISTORY_MAX\)\)/);
-  assert.match(host, /const versionOf = editOf \?\? \(retrySourceId !== undefined && retrySourceId === userMessageId \? this\.retryMessages\(\)\.find\(message => message\.id === retrySourceId\)\?\.editOf : undefined\);/);
-});
+// Provider runtime-history assertions live in answer-attempts.smoke.mjs.
+
 
 t("storage split: the visible part has no editOf and join restores the flat conversation exactly", () => {
   const three = [...edited, u("u2c", "토끼", { editOf: "u2" }), a("a2c", "토끼 답"), u("u3", "고마워"), a("a3", "천만에")];

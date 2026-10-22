@@ -75,6 +75,9 @@ export interface ChatMessage {
    * conversation written before this field reads as one version per turn.
    */
   editOf?: string;
+  retryOf?: string;
+  visibleAttemptId?: string;
+  chosenAttemptId?: string;
 }
 
 /**
@@ -623,6 +626,7 @@ export type WebviewMessage = (
   | { type: "stageImage"; stageId: string; name: string; mime: string; base64: string }
   /** D-028 — the participant removed a staged photo before sending; the host deletes it. */
   | { type: "discardStagedImage"; stageId: string }
+  | { type: "selectAnswerAttempt"; activityId?: string; taskId?: string; rootId: string; attemptId: string; choose: boolean }
   | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[]; toolMode?: import('./turnTools').TurnToolMode; sourceMessageId?: string; userMessageId?: string }
   | { type: "cancelStream"; streamId: string }
   /**
@@ -807,6 +811,7 @@ export type HostMessage = (
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
   | { type: "history"; messages: ChatMessage[] }
+  | { type: "answerAttemptSelected"; root: ChatMessage; scope: string }
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — first saved message the next model call still sends, when older ones are clamped. */
   | { type: "contextTrim"; boundaryId: string | null }
   /** CGP-CHAT-R-005 — the active task's latest verdict per answer, read from the local sidecar. */

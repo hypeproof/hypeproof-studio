@@ -1,3 +1,4 @@
+import { ATTEMPT_KEYS, visibleAttempts, type AttemptMeta } from './answerAttempts.ts';
 // CGP-CHAT-R-002 (REQ-STUDIO-CHAT-EDIT-RESEND) — edit the latest sent prompt and resend it.
 //
 // Pure: no vscode, no React. The webview (what to draw, when to offer "수정") and the host
@@ -144,24 +145,35 @@ export interface StoredVersions {
   hidden: ChatMessage[];
   /** Visible user-line id → its group root, for every visible line that is an edited resend. */
   groups: Record<string, string>;
+  attempts?: Record<string, AttemptMeta>;
+  transcript?: ChatMessage[];
 }
 export const emptyVersions = (): StoredVersions => ({ hidden: [], groups: {} });
 
 export function splitVersions(flat: readonly ChatMessage[]): { visible: ChatMessage[]; versions: StoredVersions } {
+  if (flat.some(message => message.retryOf)) {
+    const visible = currentVersions(visibleAttempts(flat).items).map(({ retryOf, visibleAttemptId, chosenAttemptId, editOf, ...message }) => message);
+    return { visible, versions: { hidden: [], groups: {}, transcript: [...flat] } };
+  }
   const current = currentVersions(flat);
   const shown = new Set(current.map((m) => m.id));
   const groups: Record<string, string> = {};
-  const visible = current.map((m) => {
+  const attempts: Record<string, AttemptMeta> = {};
+  const visible = current.map((original) => {
+    const { retryOf, visibleAttemptId, chosenAttemptId, ...m } = original;
+    const meta = Object.fromEntries(ATTEMPT_KEYS.filter(key => original[key] !== undefined).map(key => [key, original[key]]));
+    if (Object.keys(meta).length) attempts[m.id] = meta;
     if (m.role !== "user" || m.editOf === undefined) return m;
     const { editOf, ...plain } = m;
     groups[m.id] = editOf;
     return plain;
   });
-  return { visible, versions: { hidden: flat.filter((m) => !shown.has(m.id)), groups } };
+  return { visible, versions: { hidden: flat.filter((m) => !shown.has(m.id)), groups, ...(Object.keys(attempts).length ? { attempts } : {}) } };
 }
 
 /** Inverse of splitVersions. Hidden lines that are also visible (an interrupted write) are ignored. */
 export function joinVersions(visible: readonly ChatMessage[], versions: StoredVersions = emptyVersions()): ChatMessage[] {
+  if (versions.transcript) return versions.transcript;
   const shown = new Set(visible.map((m) => m.id));
   const byRoot = new Map<string, ChatMessage[]>();
   let root: string | null = null;
@@ -179,7 +191,7 @@ export function joinVersions(visible: readonly ChatMessage[], versions: StoredVe
     byRoot.delete(group);
     out.push({ ...m, editOf: group });
   }
-  return out;
+  return out.map(message => ({ ...message, ...versions.attempts?.[message.id] }));
 }
 
 /**
@@ -196,4 +208,4 @@ export const composerBlockedByEdit = (editingId: string | null, editableId: stri
  * dropped. Otherwise only the latest version of every prompt is kept. Never the drawn version.
  */
 export const modelConversation = (conversation: readonly ChatMessage[], versionOf?: string): ChatMessage[] =>
-  versionOf ? historyForEdit(conversation, versionOf) : currentVersions(conversation);
+  versionOf ? historyForEdit(visibleAttempts(conversation, true).items, versionOf) : currentVersions(visibleAttempts(conversation, true).items);

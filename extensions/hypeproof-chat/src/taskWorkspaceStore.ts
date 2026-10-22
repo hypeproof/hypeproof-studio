@@ -1,3 +1,4 @@
+import { ATTEMPT_KEYS, validAttemptMeta } from './answerAttempts.ts';
 import { storedDenialNotice } from "./denialNotice.ts";
 import { createHash, randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
@@ -80,13 +81,14 @@ const sameLock = (a: LockRecord | undefined, b: LockRecord) => !!a &&
  * on lines handed to the store and on the versions sidecar, never in the task file.
  */
 function validMessage(value: unknown, allowEditOf = false): value is ChatMessage {
-  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', ...(allowEditOf ? ['editOf'] : [])])) return false;
+  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', ...(allowEditOf ? ['editOf', ...ATTEMPT_KEYS] : [])])) return false;
   if (!nonempty(value.id, 256) || typeof value.role !== 'string' || !['user', 'assistant', 'system', 'tool'].includes(value.role) ||
       typeof value.content !== 'string' || !timestamp(value.createdAt)) return false;
   if (value.assistantName !== undefined && typeof value.assistantName !== 'string') return false;
   if (value.toolMode !== undefined && (value.role !== 'user' || !['auto', 'web-search'].includes(value.toolMode as string))) return false;
   // CGP-CHAT-R-002 — an edited resend names its group root; only a user line can be one.
   if (value.editOf !== undefined && (value.role !== 'user' || !validEditOf(value.editOf))) return false;
+  if (ATTEMPT_KEYS.some(key => value[key] !== undefined) && (value.role !== 'user' || !validAttemptMeta(Object.fromEntries(ATTEMPT_KEYS.filter(key => value[key] !== undefined).map(key => [key, value[key]]))))) return false;
   if (value.images !== undefined && (!Array.isArray(value.images) || !value.images.every(image => typeof image === 'string' && image.startsWith('data:image/')))) return false;
   if (value.tool !== undefined && (!isRecord(value.tool) || !exactKeys(value.tool, ['icon', 'label', 'state']) ||
       typeof value.tool.icon !== 'string' || typeof value.tool.label !== 'string' || typeof value.tool.state !== 'string' || !['running', 'done', 'error'].includes(value.tool.state))) return false;
@@ -100,7 +102,7 @@ function validMessage(value: unknown, allowEditOf = false): value is ChatMessage
 const validIncoming = (value: unknown): value is ChatMessage => validMessage(value, true);
 
 function validVersions(value: unknown): value is StoredVersions {
-  return isRecord(value) && exactKeys(value, ['hidden', 'groups']) && Array.isArray(value.hidden) && value.hidden.every(validIncoming) &&
+  return isRecord(value) && exactKeys(value, ['hidden', 'groups', 'attempts', 'transcript']) && (value.transcript === undefined || (Array.isArray(value.transcript) && value.transcript.every(validIncoming))) && (value.attempts === undefined || (isRecord(value.attempts) && Object.entries(value.attempts).every(([key, meta]) => validEditOf(key) && validAttemptMeta(meta)))) && Array.isArray(value.hidden) && value.hidden.every(validIncoming) &&
     isRecord(value.groups) && Object.entries(value.groups).every(([id, root]) => validEditOf(id) && validEditOf(root));
 }
 
@@ -285,7 +287,7 @@ export class TaskWorkspaceStore {
       const task = this.newTask('새 작업', now);
       const split = splitVersions(this.mergeMessages([], legacyMessages));
       task.messages = split.visible;
-      if (split.versions.hidden.length || Object.keys(split.versions.groups).length) versions.tasks[task.id] = split.versions;
+      if (split.versions.transcript?.length || split.versions.hidden.length || Object.keys(split.versions.groups).length || Object.keys(split.versions.attempts ?? {}).length) versions.tasks[task.id] = split.versions;
       task.messageCount = task.messages.length;
       task.draft = clone(legacyDraft);
       task.importedLegacy = task.messages.length > 0 || !!task.draft.text || !!task.draft.queued || task.draft.images.length > 0 || !!task.draft.imports?.length || !!task.draft.recovered?.length;
@@ -328,9 +330,11 @@ export class TaskWorkspaceStore {
     if (!validIncoming(message) || message.role !== 'tool' || message.content !== '' || message.tool?.state !== 'error' || !storedDenialNotice(message.tool.label))
       return Promise.reject(new TaskWorkspaceStoreError('invalid', '차단 안내 형식이 올바르지 않습니다.'));
     const safe: ChatMessage = { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '🔒', label: message.tool.label, state: 'error' } };
-    return this.mutate(data => {
+    return this.mutate((data, versions) => {
       const current = this.requireData(data);
       const task = this.requireTask(current, taskId);
+      const transcript = versions.tasks[taskId]?.transcript;
+      if (transcript && !transcript.some(m => m.id === safe.id)) transcript.push(safe);
       if (!task.messages.some(m => m.id === safe.id)) task.messages.push(safe);
       task.messageCount = task.messages.length;
       task.updatedAt = Math.max(Date.now(), task.updatedAt);
@@ -345,7 +349,7 @@ export class TaskWorkspaceStore {
       // file and the superseded turns in the sidecar.
       const split = splitVersions(this.mergeMessages(joinVersions(task.messages, versions.tasks[taskId]), messages));
       task.messages = split.visible;
-      if (split.versions.hidden.length || Object.keys(split.versions.groups).length) versions.tasks[taskId] = split.versions;
+      if (split.versions.transcript?.length || split.versions.hidden.length || Object.keys(split.versions.groups).length || Object.keys(split.versions.attempts ?? {}).length) versions.tasks[taskId] = split.versions;
       else delete versions.tasks[taskId];
       task.messageCount = task.messages.length;
       if (task.titleOrigin === 'default' || task.titleOrigin === 'automatic') {

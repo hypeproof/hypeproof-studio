@@ -331,3 +331,15 @@ new human agreement or a palette change for the HypeProof Studio theme.
 | Studio ancestor surfaces | A leading part of the selector, plus a listed set of TSX parent/child classes | A name prefix alone mistakes variants (`.hps-naming-btn-ghost`) for children; the list was read from the TSX | On | no |
 | Chalk placeholders | Each page's existing secondary ink at full opacity | Chromium's default `#757575` was 3.3–3.7:1 on the dark fields; existing tokens only, so the Chalk transport is unchanged | On | no |
 | Chalk authoring eyebrow and toggles, board button | The page's existing dark muted / quiet-control inks; page ink on the blue accent | They were left on the light-page inks (3.0–3.5:1) and white on `#5B8DEF` (3.2:1); existing tokens only | On | no |
+
+### CGP-CHAT-R-006 — local attempt selection (2026-10-22)
+
+Agent-selected, not human-confirmed: record the optional choice only in extension
+local globalState, keyed by activity/task scope. Store learner actor, root/attempt
+IDs and timestamp; no answer text, score, upload or instructor recipient. Selecting
+an answer and choosing it are separate actions: browsing changes next-turn history;
+the chosen marker stays until explicitly choosing another attempt. Preserve retry
+request IDs for accounting and group them only for display/history projection.
+Use the existing version sidecar for full attempt transcripts, with a plain selected
+conversation for older builds. Same-session images remain in memory and are not
+introduced into durable storage. No grant or minor-seat safety policy is widened.
