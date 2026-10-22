@@ -1174,9 +1174,9 @@ as part of the summary's name) that turns when open, through
 (✓ in a solid circle, – in a dashed one, aria-hidden), the label and one state word, `해요` or
 `안 해요`, in the same weight (no `<strong>`); off rows are muted, so the state is a shape, a word
 and a colour, never colour alone (SX-50). The card's quiet text (count, chevron, off rows, footnote)
-uses `--hp-ai-can-do-muted` = `var(--vscode-descriptionForeground, var(--hp-text-muted-default))`, so it follows a
-light theme too: `--hp-text-muted-default` alone is a dark-only constant, 2.05:1 on white (≥4.5:1 now: 5.6:1 on
-the harness light theme, 4.9:1 on Light+). The footnote is the caption step (14px) under a hairline.
+uses `--hp-ai-can-do-muted` = `var(--hp-text-muted-default)`, which follows a light theme too
+(CGP-DS-D-002; 5.6:1 on the harness light theme, 4.6:1 on the Light+ sidebar since CGP-DS-D-028, where
+the raw `#717171` was 4.4:1). The footnote is the caption step (14px) under a hairline.
 **Closed by default, always**, with a one-line summary that already carries the essential fact:
 "여기서 AI가 할 수 있는 일 · 6가지 중 4가지 · 자세히" (new copy: of the listed capabilities, how many
 are on, so the count matches the rows that open; `지금은 없음` when none is; `자세히` hides while open). Chosen over "open until seen once" because that needs a
@@ -3883,6 +3883,84 @@ palette exactly.
 Test: `extensions/hypeproof-chat/test/host-theme-mapping.smoke.mjs` (recorded theme table,
 re-derived from `theme-defaults` when `vscodium-base` is checked out, and 14 negative controls).
 Decision: DEC-DS-D-002 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+## Text contrast table (CGP-DS-D-028)
+
+DES-CGP-DS-42, traces to CGP-DS-R-034 (REQ-CGP-DS-42, "no text token below 4.5:1 is used for
+readable text") and classroom-design DES-11. Both Studio and Chalk. Product Intent: secondary
+text stays readable for young learners and instructors; Studio never adopts a ChatGPT-style
+3.2:1 tertiary text colour.
+
+- The muted text tokens keep their stated values: forest `--hp-text-muted-default` `#ACB9A5`
+  (8.4:1 on `#151D19`, 7.1:1 on `#202C24`) and the personal chat's CP-R1 `--tw-muted`
+  fallback `#a4aab3` (6.8:1 on `#202226`).
+- Every `color:` declared in the chat webview CSS (`webview-ui/src/*.css`; forced-colors rules
+  and rules for disabled controls excepted) is at least 4.5:1 on every surface it can sit on,
+  icons (an svg, `.hps-icon`, a `*-icon` class, the tool-row mark) at least 3:1 (WCAG 1.4.11).
+  The surfaces are each surface of the rule's scope (chat: the app and panel roles, the webview
+  body and the personal canvas and rail; personal: `--tw-canvas` and `--tw-panel`; branded and
+  Paper: their own app and panel), each surface an ancestor paints over it (a leading part of
+  the selector, or a listed TSX parent such as `.hps-turn-review` for `.hps-turn-review-note`),
+  and the rule's own background on top, including the hover and pressed backgrounds of a
+  control. A rule's own opacity fades its text in the measurement. This holds under the
+  HypeProof Studio theme as VS Code delivers it (its keys plus the colour registry's dark default
+  for each key it leaves out) and with no theme variables at all, so a CSS fallback is never a
+  quieter palette than the colour it stands in for.
+- Muted text reads the muted role (`var(--hp-text-muted-default)`, or `--tw-muted` in the
+  personal workspace), never `--vscode-descriptionForeground` directly: the role carries the
+  light-theme correction (Light+ `#717171` is 4.4:1 on its `#F3F3F3` sidebar). On light theme
+  kinds `--tw-muted` takes the role's light value too. Every muted text keeps 4.5:1 under
+  each VS Code default theme (Light+, Light Modern, Dark+, Dark Modern, HC Dark, HC Light and
+  both 2026 themes).
+- Quiet text is a colour, never an opacity: outside disabled controls, animation frames and
+  icons, no webview rule fades with `opacity` below 1. Of the 24 rules that did, 21 (role labels,
+  citation index and domain, chip labels, verify and publish notes, start-page inbox metadata and
+  others) take the muted role, and the hint, the empty state and the code-progress card simply
+  stop fading.
+- A pressed muted control keeps its hover text colour (muted text on the pressed layer was
+  3.6–4.4:1). On the error banner's tint the notice message and request id take the body text
+  (muted there was 4.0:1 under Light+).
+- Fixed fallbacks: error text falls back to `#f48771` instead of `#c62828` / `#e55` (2.6–3.1:1
+  and 4.2:1 on forest); quiet buttons and banner text fall back to the primary role instead of
+  `#aaa` / `#D97757`; links to the accent role instead of `#5b8def` / `#3794FF`; quiet notes no
+  longer fall back to `#888` / `#647078`. The publish "verified" sentence takes the primary text
+  (the green `#2e7d32` was 3.4:1); the classroom "Stop" label is the app surface on the error
+  fill (white on the dark-theme `#F48771` was 2.5:1).
+- Chalk: on every Chalk page, as served, in real Chromium at 1280 and 390 px with hidden blocks
+  revealed and every `<details>` open, every own text, field value, empty field's placeholder and
+  `::before`/`::after` string is at least 4.5:1 on its composited background, faded by the
+  opacity of the element and its ancestors. Fixed: placeholders take each page's secondary ink at
+  full opacity (Chromium's default `#757575` was 3.3–3.7:1 on the dark fields of six pages); the
+  authoring page's eyebrow and plain disclosure toggles take the dark page's muted and
+  quiet-control inks (they were left on the old light-page inks, 3.0–3.5:1); the board's
+  "보드 열기" button uses the page ink on its blue accent (white was 3.2:1); the manage page's
+  inactive help line no longer fades to 0.75 (3.3:1).
+- Not covered: Chalk rows and panels that a page's script builds from Service data (the audit
+  measures the signed-out render), text drawn on a background image (reported as a finding,
+  none today), Studio ancestors that neither the selector nor the TSX parent list names, and
+  non-muted text under VS Code's default themes other than the HypeProof Studio theme (CGP-DS-D-002
+  covers the colour roles there in `host-theme-mapping.smoke.mjs`).
+
+Tests: `extensions/hypeproof-chat/test/text-contrast-computed.smoke.mjs` (in the extension's
+`npm test`) loads the shipped stylesheets in `main.tsx` order into headless Chromium with each
+theme's `--vscode-*` variables (HypeProof Studio, no theme, the eight VS Code default themes) and
+reads the painted colour: for every rule that declares `color`, `opacity`, `filter` or
+`-webkit-text-fill-color` (the default themes: the rules that read a muted, description or
+placeholder colour) and for the real `ChatPanel` (classroom and personal seats) and `StartPage`
+markup, composited over the stacked ancestor backgrounds and faded by ancestor `opacity` and
+`filter: opacity()`. It excludes, and lists, disabled controls, icons (3:1), transparent and
+screen-reader-only text, pointer states, forced-colors rules and non-opacity filters. Its self-test
+re-runs the matrix with an injected `body { --hp-text-muted-default: #757575 }`, a 3.2:1 muted
+token, a mid-grey app/panel surface, `filter: opacity(.5)`, `-webkit-text-fill-color` and opacity
+fades, and each must fail. It uses `test/lib/headless-chromium.mjs`: no browser prints NOT RUN, and
+`FOCUS_REQUIRE_BROWSER=1` (set in `pr-ci.yml`) turns that into a failure. The declaration table
+`extensions/hypeproof-chat/test/text-contrast-table.smoke.mjs` stays for states and pointer layers
+(`HPS_CONTRAST_TABLE=<file>` writes it, uploaded as `studio-contrast-table`; 19 negative controls).
+`e2e/chalk-contrast-audit.mjs` (`npm run test:chalk-contrast`, a step of the real-Chromium job in
+`pr-ci.yml`, and part of chalk `npm test`) uses the same helper and the same NOT RUN /
+`FOCUS_REQUIRE_BROWSER` contract; 8 positive and negative controls run first; the table goes to
+`CHALK_CONTRAST_REPORT`, uploaded as `chalk-contrast-table`).
+Decision: DEC-DS-D-028 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
 
 ## State layers and control boundary (CGP-DS-D-003)
 

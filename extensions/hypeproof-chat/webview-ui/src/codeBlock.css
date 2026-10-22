@@ -11,10 +11,11 @@
   display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-c-studio-codeblock-space-15);
   min-height: var(--ds-c-studio-codeblock-size-8); min-width: var(--ds-c-studio-codeblock-size-8); box-sizing: border-box; padding: 0 var(--ds-c-studio-codeblock-space-7);
   border: 0; border-radius: var(--ds-c-studio-codeblock-radius-10); background: transparent;
-  color: var(--vscode-descriptionForeground, var(--ds-c-studio-codeblock-ink-6));
+  color: var(--hp-text-muted-default);
   font: inherit; font-size: var(--ds-c-studio-codeblock-type-1); cursor: pointer;
 }
 .hps-codeblock-tool:hover { background-color: var(--hp-bg-control-hover); color: var(--vscode-foreground, var(--ds-c-studio-codeblock-ink-1)); }
-.hps-codeblock-tool:active { background-color: var(--hp-bg-control-pressed); }
+/* CGP-DS-D-028: pressed keeps the hover text colour; muted text on the pressed layer is 3.6–4.4:1. */
+.hps-codeblock-tool:active { background-color: var(--hp-bg-control-pressed); color: var(--vscode-foreground, var(--ds-c-studio-codeblock-ink-1)); }
 .hps-codeblock-tool[aria-pressed="true"] { background: var(--vscode-toolbar-activeBackground, var(--ds-c-studio-codeblock-surface-9)); color: var(--vscode-foreground, var(--ds-c-studio-codeblock-ink-1)); }
-.hps-codeblock-status { margin-left: var(--ds-c-studio-codeblock-space-13); color: var(--vscode-descriptionForeground, var(--ds-c-studio-codeblock-ink-6)); }
+.hps-codeblock-status { margin-left: var(--ds-c-studio-codeblock-space-13); color: var(--hp-text-muted-default); }

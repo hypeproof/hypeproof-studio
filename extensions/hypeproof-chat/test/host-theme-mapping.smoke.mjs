@@ -22,6 +22,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { readDesignFile } from "./lib/design-token-values.mjs";
+import { KIND_CLASS, THEMES } from "./lib/vscode-default-themes.mjs";
 
 const require = createRequire(new URL("../webview-ui/package.json", import.meta.url));
 const postcss = require("postcss");
@@ -47,23 +48,8 @@ const BRANDED = ".studio-start, .studio-disconnected";
 const PAPER = '[data-surface="growth"], .hp-reflection';
 const LIGHT_BODY = "body.vscode-light, body.vscode-high-contrast-light";
 
-// ─── VS Code default themes, as a webview receives them ─────────────────────────────────────────
-// Values are what VS Code writes on the webview's <html> as --vscode-* (theme-defaults/themes/*.json
-// with include chains resolved; where a theme leaves a key out, the colour registry default for its
-// kind from src/vs/platform/theme/common/colors/{baseColors,inputColors,editorColors,listColors,
-// quickpickColors}.ts and src/vs/workbench/common/theme.ts). null = the registry has no value for
-// that kind, so the variable is absent and the CSS fallback applies.
-const KIND_CLASS = { dark: "vscode-dark", light: "vscode-light", hcDark: "vscode-high-contrast", hcLight: "vscode-high-contrast-light" };
-const THEMES = {
-  "Light+": { kind: "light", file: "light_plus.json", foreground: "#616161", descriptionForeground: "#717171", "textLink.foreground": "#006AB1", "list.warningForeground": "#855F00", "editorWarning.foreground": "#BF8803", "button.foreground": "#FFFFFF", "button.background": "#007ACC", "editor.background": "#FFFFFF", "quickInput.background": "#F3F3F3", "panel.border": "#80808059", focusBorder: "#0090F1", "sideBar.background": "#F3F3F3", "input.background": "#FFFFFF", "input.placeholderForeground": "#767676" },
-  "Light Modern": { kind: "light", file: "light_modern.json", foreground: "#3B3B3B", descriptionForeground: "#3B3B3B", "textLink.foreground": "#005FB8", "list.warningForeground": "#855F00", "editorWarning.foreground": "#BF8803", "button.foreground": "#FFFFFF", "button.background": "#005FB8", "editor.background": "#FFFFFF", "quickInput.background": "#F8F8F8", "panel.border": "#E5E5E5", focusBorder: "#005FB8", "sideBar.background": "#F8F8F8", "input.background": "#FFFFFF", "input.placeholderForeground": "#767676" },
-  "Dark+": { kind: "dark", file: "dark_plus.json", foreground: "#CCCCCC", descriptionForeground: "#CCCCCCB3", "textLink.foreground": "#3794FF", "list.warningForeground": "#CCA700", "editorWarning.foreground": "#CCA700", "button.foreground": "#FFFFFF", "button.background": "#0E639C", "editor.background": "#1E1E1E", "quickInput.background": "#252526", "panel.border": "#80808059", focusBorder: "#007FD4", "sideBar.background": "#252526", "input.background": "#3C3C3C", "input.placeholderForeground": "#A6A6A6" },
-  "Dark Modern": { kind: "dark", file: "dark_modern.json", foreground: "#CCCCCC", descriptionForeground: "#9D9D9D", "textLink.foreground": "#4DAAFC", "list.warningForeground": "#CCA700", "editorWarning.foreground": "#CCA700", "button.foreground": "#FFFFFF", "button.background": "#0078D4", "editor.background": "#1F1F1F", "quickInput.background": "#222222", "panel.border": "#2B2B2B", focusBorder: "#0078D4", "sideBar.background": "#181818", "input.background": "#313131", "input.placeholderForeground": "#989898" },
-  "HC Dark": { kind: "hcDark", file: "hc_black.json", foreground: "#FFFFFF", descriptionForeground: "#FFFFFFB3", "textLink.foreground": "#21A6FF", "list.warningForeground": null, "editorWarning.foreground": "#FFD370", "button.foreground": "#FFFFFF", "button.background": "#000000", "editor.background": "#000000", "quickInput.background": "#0C141F", "panel.border": "#6FC3DF", focusBorder: "#F38518", "sideBar.background": "#000000", "input.background": "#000000", "input.placeholderForeground": "#FFFFFFB3" },
-  "HC Light": { kind: "hcLight", file: "hc_light.json", foreground: "#292929", descriptionForeground: "#292929B3", "textLink.foreground": "#0F4A85", "list.warningForeground": null, "editorWarning.foreground": "#895503", "button.foreground": "#FFFFFF", "button.background": "#0F4A85", "editor.background": "#FFFFFF", "quickInput.background": "#FFFFFF", "panel.border": "#0F4A85", focusBorder: "#006BBD", "sideBar.background": "#FFFFFF", "input.background": "#FFFFFF", "input.placeholderForeground": "#292929B3" },
-  "2026 Dark": { kind: "dark", file: "2026-dark.json", foreground: "#BFBFBF", descriptionForeground: "#8C8C8C", "textLink.foreground": "#48A0C7", "list.warningForeground": "#E5BA7D", "editorWarning.foreground": "#CCA700", "button.foreground": "#FFFFFF", "button.background": "#297AA0", "editor.background": "#121314", "quickInput.background": "#202122", "panel.border": "#2A2B2CFF", focusBorder: "#3994BCB3", "sideBar.background": "#191A1B", "input.background": "#191A1B", "input.placeholderForeground": "#555555" },
-  "2026 Light": { kind: "light", file: "2026-light.json", foreground: "#202020", descriptionForeground: "#606060", "textLink.foreground": "#0069CC", "list.warningForeground": "#667309", "editorWarning.foreground": "#BF8803", "button.foreground": "#FFFFFF", "button.background": "#0069CC", "editor.background": "#FFFFFF", "quickInput.background": "#FAFAFD", "panel.border": "#F0F1F2FF", focusBorder: "#0069CCFF", "sideBar.background": "#FAFAFD", "input.background": "#FFFFFF", "input.placeholderForeground": "#999999" },
-};
+// ─── VS Code default themes, as a webview receives them (test/lib/vscode-default-themes.mjs) ──────
+
 // When the vscodium-base submodule is checked out (or VSCODE_THEME_DEFAULTS_DIR points at a copy of
 // theme-defaults/themes), every key a theme file sets explicitly is re-derived, so the table cannot drift.
 const THEME_DIR = process.env.VSCODE_THEME_DEFAULTS_DIR

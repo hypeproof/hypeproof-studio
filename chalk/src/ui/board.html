@@ -45,7 +45,8 @@
   button {
     width: 100%; margin-top: var(--ds-c-chalk-board-space-7); padding: var(--ds-c-chalk-board-space-53);
     border: 0; border-radius: var(--ds-c-chalk-board-radius-3); cursor: pointer; font: inherit; font-weight: var(--ds-c-chalk-board-typography-7);
-    background: var(--accent); color: var(--ds-c-chalk-board-ink-2);
+    /* CGP-DS-D-028: page ink on the blue accent (white on #5B8DEF was 3.2:1). */
+    background: var(--accent); color: var(--bg);
   }
   button.ghost { background: transparent; color: var(--muted); border: var(--ds-c-chalk-board-size-3) solid var(--control-line); font-weight: var(--ds-c-chalk-board-typography-12); }
   button.ghost:hover:not(:disabled) { background: var(--state-hover); }
@@ -90,6 +91,8 @@
   .scroll { overflow-x: auto; }
   @media (max-width: 520px) { .hide-s { display: none; } }
 /* BOARD_STATUS_CSS */
+/* CGP-DS-D-028: placeholders take the page's secondary ink at full opacity (the browser default #757575 is 3.3-3.7:1 on these fields). */
+::placeholder{color:var(--muted);opacity:1}
 </style>
 </head>
 <body>

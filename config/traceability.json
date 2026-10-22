@@ -9442,6 +9442,97 @@
       ]
     },
     {
+      "id": "ST-REQ-TEXT-CONTRAST-TABLE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-HOST-THEME-MAPPING",
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Text contrast table (CGP-DS-D-028)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TEXT-CONTRAST-TABLE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TEXT-CONTRAST-TABLE",
+        "ST-IMP-HOST-THEME-MAPPING"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/codeBlock.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/quoteAction.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/localReview.css"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/board.html"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "chalk/src/ui/console.html"
+        },
+        {
+          "path": "chalk/src/ui/issuer.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/ui/sharing.html"
+        },
+        {
+          "path": ".github/workflows/pr-ci.yml"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TEXT-CONTRAST-TABLE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TEXT-CONTRAST-TABLE",
+        "ST-IMP-TEXT-CONTRAST-TABLE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/text-contrast-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/text-contrast-table.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lib/vscode-default-themes.mjs"
+        },
+        {
+          "path": "e2e/chalk-contrast-audit.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-STATE-LAYERS",
       "stage": "requirement",
       "owner": "jayleekr",
