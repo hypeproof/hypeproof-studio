@@ -1056,6 +1056,31 @@ red on origin/main (60 of 62 checks). Negative controls: `--hp-space` at 5px, th
 step, each of the 23 fixes reverted, the personal send button's dead 36px rule restored, a later
 rule capping the task title at 40px, and a `max-height: 2em` on the citation chip.
 
+### Spacing ladder (CGP-DS-D-007)
+
+`REQ-STUDIO-SPACING-LADDER` (CGP-DS-D-007, 2026-10-22; DES-CGP-DS-11; builds on
+`REQ-STUDIO-CONTROL-LADDER`). `tokens.css` names the spacing ladder by its multiple of `--hp-space`:
+`--hp-space-1` 4px, `-2` 8px, `-3` 12px, `-4` 16px, `-5` 20px, `-6` 24px and `-8` 32px, each derived from `--hp-space` (step 1 directly, others via `calc(var(--hp-space) * n)`) so the ladder moves with the unit; there is no 28px step. Every padding,
+margin, gap or inset that uses the unit or a ladder step lands on one of those seven values (existing
+off-ladder spacing keeps its value, DEC-DS-R-010). Control heights are the ladder's 32px (instructor-only
+dense rows, never a learner target), 44px (every learner control) and 48px: `--hp-control-cta` is the
+48px step, and each primary call to action (one per screen, SX-04) is at least that tall: the start
+page's main button (`.studio-primary`: 코드 확인하기, 이어서 하기, 결제하러 가기, Google로 시작하기 and the
+others), the lesson header's Primary and the trial carry-over's 이어가기 (`.hp-cta-primary`, 44 → 48px)
+the trial end card's 이용권 살펴보기 (44 → 48px) and the "내 제품 테스트" panel's 테스트 시작 (`.hps-verify-primary`, its one action for the learner; the panel's other buttons and fields take the 44px floor), which had no floor before. Copy, padding and colours are unchanged.
+Not covered: instructor surfaces moving onto the 32px step, a migration of existing off-ladder spacing
+(DEC-DS-D-007), and a capture in the built app.
+Test: `e2e/hit-target-audit.mjs` (headless Chromium, the surfaces, states, themes and widths of
+`REQ-STUDIO-CONTROL-LADDER`) holds each primary CTA to 48px tall, fails unless all four were measured,
+reads the ladder back from the DOM on every page (a probe's computed padding per step) and writes the
+audit report, every measured control with its smallest-area sample and floor plus the findings, as Markdown and
+JSON (`HPS_AUDIT_REPORT`). A state a seat does not have is declared per seat with its reason and listed as skipped in the report; a state declared for its seat that fails is a finding. DOM execution is required for acceptance; a sandbox browser launch failure is not a passing audit.
+`test/control-ladder.smoke.mjs` (in `npm test`) locks the seven steps and the CTA step to their px values
+and to `--hp-space`, checks every spacing declaration that uses the unit, and gives each primary CTA a 48px
+floor from an unscoped rule with no rule below it. Negative controls: a step at 28px, a step as a literal,
+a step removed, the CTA step on 44px, a spacing of unit × 7 and × 1.5, and each CTA back on 44px, without
+a floor, or capped by a later `height`.
+
 `REQ-STUDIO-UI-POLISH-1` (2026-10-20; Jay's review of the released 2026.1020.0, personal trial seat,
 dark theme, about 1420px wide). Four details of the personal chat follow rules the design system
 already has; the Korean copy is unchanged except where noted. (1) The REQ-M47 / CGP-AGENT-R-003

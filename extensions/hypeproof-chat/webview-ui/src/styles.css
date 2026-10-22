@@ -1567,7 +1567,7 @@ html, body, #root {
 .hp-mission-action { display: flex; }
 /* One Primary CTA per screen (SX-04). The accent background exists on this class only. */
 .hp-cta-primary {
-  min-height: var(--ds-c-studio-styles-size-8); padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-20); font: inherit; font-weight: var(--ds-c-studio-styles-typography-17); cursor: pointer;
+  min-height: var(--hp-control-cta); padding: var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-20); font: inherit; font-weight: var(--ds-c-studio-styles-typography-17); cursor: pointer;
   color: var(--hp-text-inverse-default); background: var(--hp-bg-accent-default);
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-accent-default); border-radius: var(--ds-c-studio-styles-radius-3);
 }
@@ -1971,6 +1971,10 @@ html, body, #root {
 .hps-verify-label { opacity: 0.8; }
 .hps-verify-row, .hps-verify-fix, .hps-verify-actions { display: flex; gap: var(--ds-c-studio-styles-space-13); align-items: center; flex-wrap: wrap; }
 .hps-verify-row input, .hps-verify-fix input { flex: 1 1 var(--ds-c-studio-styles-size-54); min-width: 0; }
+/* CGP-DS-R-010 / CGP-DS-D-007: the panel's controls take the 44px floor, and 테스트 시작, its one primary action, the 48px CTA step. */
+.hps-verify button, .hps-verify input { min-height: var(--hp-control-min); }
+.hps-verify button { min-width: var(--hp-control-min); }
+.hps-verify .hps-verify-primary { min-height: var(--hp-control-cta); }
 .hps-verify-ai { font-size: var(--ds-c-studio-styles-type-3); opacity: 0.85; }
 .hps-verify-proposals { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); align-items: flex-start; }
 .hps-verify-result { padding: var(--ds-c-studio-styles-space-13) 0; border-top: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, var(--ds-c-studio-styles-boundary-44)); }
@@ -2063,7 +2067,7 @@ html, body, #root {
 .hps-trial-end-card-fact { margin: 0 0 var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-9); line-height: var(--ds-c-studio-styles-typography-5); overflow-wrap: anywhere; }
 .hps-trial-end-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-2); margin-top: var(--ds-c-studio-styles-space-7); }
 .hps-trial-end-card-primary {
-  border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-19); border-radius: var(--ds-c-studio-styles-radius-13); font-size: var(--ds-c-studio-styles-type-9); font-weight: var(--ds-c-studio-styles-typography-7);
+  border: 0; cursor: pointer; min-height: var(--hp-control-cta); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-19); border-radius: var(--ds-c-studio-styles-radius-13); font-size: var(--ds-c-studio-styles-type-9); font-weight: var(--ds-c-studio-styles-typography-7);
   background: var(--vscode-button-background, var(--ds-c-studio-styles-surface-31)); color: var(--vscode-button-foreground, var(--ds-c-studio-styles-ink-2));
 }
 .hps-trial-end-card-primary:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }

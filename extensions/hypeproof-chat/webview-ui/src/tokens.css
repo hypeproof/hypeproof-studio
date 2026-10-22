@@ -107,6 +107,17 @@
   --hp-control-md: var(--ds-c-studio-tokens-control-md);   /* 44px · every learner control */
   --hp-control-lg: var(--ds-c-studio-tokens-control-lg);   /* 48px · large choices and primary actions */
   --hp-control-min: var(--hp-control-md);                  /* the learner floor (DES-06) */
+  /* CGP-DS-D-007 (DES-CGP-DS-11) — the spacing ladder, named by its multiple of --hp-space. New and
+   * changed spacing takes one of these steps; there is no 28px step. A primary call to action (one
+   * per screen, SX-04) is at least --hp-control-cta tall. */
+  --hp-space-1: var(--hp-space);                           /* 4px */
+  --hp-space-2: calc(var(--hp-space) * 2);                 /* 8px */
+  --hp-space-3: calc(var(--hp-space) * 3);                 /* 12px */
+  --hp-space-4: calc(var(--hp-space) * 4);                 /* 16px */
+  --hp-space-5: calc(var(--hp-space) * 5);                 /* 20px */
+  --hp-space-6: calc(var(--hp-space) * 6);                 /* 24px */
+  --hp-space-8: calc(var(--hp-space) * 8);                 /* 32px */
+  --hp-control-cta: var(--hp-control-lg);                  /* 48px · the primary call to action */
 }
 /* CGP-DS-R-008 — semantic type scale (REQ-STUDIO-TYPE-SCALE, DES-CGP-DS-09, DES-02 via DEC-29).
  * Learner-read text takes one of these sizes; the smallest step is 14px. A custom property is

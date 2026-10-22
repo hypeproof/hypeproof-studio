@@ -9792,6 +9792,36 @@
           "path": "e2e/hit-target-audit.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-SPACING-LADDER",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Spacing ladder (CGP-DS-D-007)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SPACING-LADDER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SPACING-LADDER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/control-ladder.smoke.mjs"
+        },
+        {
+          "path": "e2e/hit-target-audit.mjs"
+        }
+      ]
     }
   ]
 }
