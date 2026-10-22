@@ -1,4 +1,4 @@
-// Controls for the release casebook (REQ-STUDIO-RELEASE-CASEBOOK). Local git only, no GitHub.
+// Controls for the release casebook (REQ-STUDIO-RELEASE-CASEBOOK). No network: gh is injected, git is local.
 //   node --test scripts/release/test/select-cases.test.mjs
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
@@ -9,7 +9,7 @@ import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {CASEBOOK_DIR, loadCasebook, parseYaml, validateCasebook} from '../casebook.mjs';
 import {appChanged, decide} from '../daily-gate.mjs';
-import {idsFromDiff, isRecentEscape, linkedTouched, renderMarkdown, requirementIds, run, selectCases} from '../select-cases.mjs';
+import {idsFromDiff, isRecentEscape, linkedTouched, parseCliArgs, parseReleasePrBody, rangeForPr, renderMarkdown, requirementIds, run, selectCases} from '../select-cases.mjs';
 import {CLEAR, HOLD, extractRun, validateRun} from '../validate-blackbox-run.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -196,6 +196,64 @@ test('run: touched ids come from commit bodies and requirement-doc diffs since t
   assert.ok(fs.existsSync(path.join(out, 'cases.json')) && fs.existsSync(path.join(out, 'cases.md')));
   assert.match(markdown, /BB-001/);
   fs.rmSync(tmp, {recursive: true, force: true});
+});
+
+// --- --pr: the range from a release PR body ----------------------------------------------------
+
+const FULL = '7c1254eccb6d50d71083f6e5b25255f8c0428252';
+const prBody = ({cand = `| Candidate commit | \`${FULL}\` |`, range = '| Range | `v2026.1020.2..7c1254ec` · 42 PRs |'} = {}) => [
+  '# Release v2026.1021.0', '', '## 1. Candidate', '',
+  '| Item | Value |', '|---|---|',
+  cand,
+  range,
+  '| rc tag | `v2026.1021.0-rc.2` |',
+].join('\n');
+
+test('parseReleasePrBody: reads baseline and full candidate sha (positive control)', () => {
+  assert.deepEqual(parseReleasePrBody(prBody()), {baseline: 'v2026.1020.2', candidate: FULL});
+});
+
+test('parseReleasePrBody: reads the real template rows, so template and parser cannot drift apart', () => {
+  const tpl = fs.readFileSync(path.join(here, '../templates/release-pr.md'), 'utf8');
+  const filled = tpl
+    .replace('{{CANDIDATE_SHA}}', FULL).replace('{{BASELINE}}', 'v2026.1020.2')
+    .replace('{{CANDIDATE_SHORT}}', '7c1254ec').replace('{{PR_COUNT}}', '42');
+  assert.deepEqual(parseReleasePrBody(filled), {baseline: 'v2026.1020.2', candidate: FULL});
+});
+
+test('parseReleasePrBody: a missing, malformed or inconsistent row stops with a named error (negative controls)', () => {
+  assert.throws(() => parseReleasePrBody(prBody({cand: '| Candidate | `' + FULL + '` |'})), /no "Candidate commit" row/);
+  assert.throws(() => parseReleasePrBody(prBody({cand: '| Candidate commit | `7c1254ec` |'})), /full 40-character/);
+  assert.throws(() => parseReleasePrBody(prBody({range: '| Range | `v2026.1020.2 7c1254ec` |'})), /no "Range" row/);
+  assert.throws(() => parseReleasePrBody(prBody({range: '| Range | `v2026.1020.2...7c1254ec` |'})), /no "Range" row/);
+  assert.throws(() => parseReleasePrBody(prBody({range: '| Range | `v2026.1020.2..deadbeef` |'})), /does not match/);
+  assert.throws(() => parseReleasePrBody(''), /no "Candidate commit" row/);
+});
+
+test('parseCliArgs: --pr with --json parses; --baseline and --candidate still work alone', () => {
+  assert.deepEqual(parseCliArgs(['--pr', '2210', '--json']), {pr: '2210', json: true});
+  assert.deepEqual(parseCliArgs(['--baseline', 'v1', '--candidate', 'main', '--today', '2026-10-22']),
+    {baseline: 'v1', candidate: 'main', today: '2026-10-22'});
+  assert.deepEqual(parseCliArgs([]), {});
+});
+
+test('parseCliArgs: --pr conflicts, unknown options, stray arguments and bad numbers stop the run (negative controls)', () => {
+  assert.throws(() => parseCliArgs(['--pr', '2210', '--baseline', 'v1']), /do not pass them together/);
+  assert.throws(() => parseCliArgs(['--pr', '2210', '--candidate', 'main']), /do not pass them together/);
+  assert.throws(() => parseCliArgs(['--prr', '2210']), /Unknown option/);
+  assert.throws(() => parseCliArgs(['--baseline', 'v1', '--jsn']), /Unknown option/);
+  assert.throws(() => parseCliArgs(['stray']), /positional|Unexpected argument/);
+  assert.throws(() => parseCliArgs(['--pr']), /argument missing/);
+  assert.throws(() => parseCliArgs(['--pr', 'abc']), /PR number/);
+  assert.throws(() => parseCliArgs(['--pr', '0']), /PR number/);
+});
+
+test('rangeForPr: asks gh once for the PR and parses the body it returns; a gh failure is not swallowed', () => {
+  const asked = [];
+  assert.deepEqual(rangeForPr(2210, pr => { asked.push(pr); return prBody(); }), {baseline: 'v2026.1020.2', candidate: FULL});
+  assert.deepEqual(asked, [2210]);
+  assert.throws(() => rangeForPr(2210, () => { throw new Error('gh: HTTP 403'); }), /HTTP 403/);
+  assert.throws(() => rangeForPr(2210, () => '# no table here'), /no "Candidate commit" row/);
 });
 
 // --- results schema ---------------------------------------------------------------------------

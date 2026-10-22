@@ -69,7 +69,12 @@
 ```bash
 node scripts/release/select-cases.mjs                      # 마지막 안정 태그..origin/main
 node scripts/release/select-cases.mjs --json --today 2026-10-21
+node scripts/release/select-cases.mjs --pr 2210 --json     # 릴리스 PR 본문의 범위·커밋 (gh 읽기 1회)
 ```
+
+`--pr <번호>` 는 릴리스 PR 본문의 `Candidate commit` 과 `Range` 를 읽어 범위를 정한다. 본문에 그 줄이
+없거나 형식이 다르면 멈춘다 — 기본 범위로 조용히 바꾸지 않는다. `--baseline`·`--candidate` 와 같이 쓰면
+오류다. 모르는 옵션도 오류로 멈춘다.
 
 케이스북이 깨져 선택이 실패하면 컷은 멈추지 않는다. PR 본문에 **케이스 선택 실패** 가 찍히고,
 관리자는 `cases.yaml` 의 P0 를 전부 실행한다.
