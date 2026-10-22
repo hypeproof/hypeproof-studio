@@ -3852,6 +3852,56 @@ evidence drawer rows), `chalk/test/board-status-css.test.mjs` (geometry, soft fi
 negative controls) and `chalk/test/board-status.test.mjs` (16px SVG icons, distinct shapes).
 Decision: DEC-DS-D-004 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
 
+## Learner type scale (CGP-DS-D-005)
+
+DES-CGP-DS-09, P0, Studio; traces to CGP-DS-R-008 (REQ-CGP-DS-09, `REQ-STUDIO-TYPE-SCALE` above)
+and extends it from sizes to the whole scale. Product Intent: an elementary-school reader meets one
+calm, consistent typography in the personal workspace, so Hangul stays legible and hierarchy is
+carried by a few clear steps instead of many near-identical ones. Scope as DEC-29: the personal task
+workspace; the classroom chat is unchanged (DEC-DS-D-005).
+
+- Sizes: five steps in `tokens.css`, declared on `:root, .hps-shell` so they follow the text-size
+  step: `--hp-font-caption` 14px, `--hp-font-body` 16px, `--hp-font-lead` 18px, `--hp-font-title`
+  22px and `--hp-font-display` 28px. Every learner text the workspace draws computes to one of them
+  at the base size (plus the 2px / 4px step). Answer markdown: h1 22px, h2 and h3 18px, h4-h6 16px
+  (previously 1.15em, 18.4px). The naming screen's title is 18px and its input 16px (were 17/15px);
+  lesson, goal and evidence panels in the shell are 16px (were 15px). 28px is reserved.
+- Weights: two, `--hp-weight-regular` 400 and `--hp-weight-strong` 600. No learner text computes to
+  another weight. `taskWorkspace.css` sets h1-h6, `strong`, `b` and `th` anywhere in the workspace
+  to 600 instead of the user agent's bold (answers, the trash dialog heading, the refusal banner, the
+  greeting's coach name, attachment and page-card names), in a rule placed before the component
+  rules so a component of equal specificity still decides its own weight. Author weights of 500, 550,
+  650 and 700 in the personal files and on shared classes the shell draws (role line, AI-can-do title,
+  goal label, trial carry-over button, naming screen) become 600.
+- Tracking: `--hp-tracking-hangul` 0. No learner text has non-zero `letter-spacing`; answer headings
+  lose -0.2px, the reply-chips label and the week line lose 0.2px / 1px.
+- Line height: labels 1.5 (`--hp-leading-label`), Hangul prose 1.65 (`--hp-leading-prose`). The
+  workspace root sets the label leading, so no text there falls back to `normal` (about 1.2). Answer
+  paragraphs, list items, quotes and table cells, the learner's bubble, the empty-chat greeting and
+  source detail paragraphs compute to 1.65-1.75 at every text size. No learner text computes below
+  1.5 (citation chips, attachment names, update notes, answer actions and the run note were 1.2-1.45);
+  form controls with the user agent's `normal` centre one line and are the only `normal` allowed. The
+  composer keeps 1.5 for its 48px geometry (DES-CGP-DS-21).
+- The write and outbound approval dialogs are drawn at the page root, outside the workspace, in both
+  seats. The write dialog sets the label leading itself and the outbound recipient (`strong`) is 600;
+  this is the one place the classroom also changes (DEC-DS-D-005).
+- In `chatDetails.css`, `taskWorkspace.css`, `citationPreview.css` and `codeBlock.css` every
+  `font-weight`, `letter-spacing` and `line-height` is one of these tokens.
+- Exempt: the Latin `HypeProof` wordmark and its decorative mark, glyph-only buttons and decorative
+  icons (DEC-29), screens the personal workspace does not mount (classroom mission header, world
+  strip, runner, instructor controls, VoicePanel, error boundary).
+
+Tests: `extensions/hypeproof-chat/test/type-scale.smoke.mjs` computes font-size, font-weight,
+letter-spacing and line-height through the real stylesheet cascade (user-agent bold and form-control
+resets modelled, `font: inherit` followed) for 597 learner probes: the size inventory's probes, answer
+markdown, Hangul prose, a sweep of bare h1-h6, strong, b, th, p, span, li, label, legend and summary in
+each workspace region (rail, heading, chat header, sources, chat shell, naming screen), the two dialogs,
+and every shared rule with an off-scale value. It also checks the token values and the token-only rule
+in the four personal files, and proves 23 CGP-DS-D-005 negative controls and 2 positive controls. A
+headless Chromium run of the built webview reads the same computed styles from real Hangul text (see
+the slice report). Decision: DEC-DS-D-005 in
+`docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
 ## Hover and pressed fills and control boundaries everywhere (CGP-DS-R-005)
 
 REQ-CGP-DS-04, P0, Both; traces to CGP-DS-004 and classroom-design DES-11; builds on CGP-DS-D-003

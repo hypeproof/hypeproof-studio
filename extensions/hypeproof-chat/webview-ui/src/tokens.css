@@ -113,13 +113,20 @@
  * substituted where it is declared and inherited as a value, so the size tokens are declared on
  * .hps-shell too: there they pick up the shell's own --hp-font-step and every token-sized text in
  * the chat grows with the learner's text-size choice instead of fighting it
- * (test/type-scale.smoke.mjs). Line heights: 1.5 for labels, 1.65 for Hangul prose. */
+ * (test/type-scale.smoke.mjs). Line heights: 1.5 for labels, 1.65 for Hangul prose.
+ * CGP-DS-D-005 (DES-CGP-DS-09) completes the scale: 14 / 16 / 18 / 22 / 28px, two weights (400 and
+ * 600, never 500, 650 or the user agent's bold) and Hangul tracking 0 (never negative). */
 :root, .hps-shell {
   --hp-font-caption: calc(var(--ds-c-studio-tokens-size-18) + var(--hp-font-step));   /* labels, metadata, captions, controls */
   --hp-font-body: calc(var(--ds-c-studio-tokens-size-30) + var(--hp-font-step));      /* message bodies, the composer */
-  --hp-font-lead: calc(var(--ds-c-studio-tokens-size-52) + var(--hp-font-step));      /* the empty-chat greeting */
+  --hp-font-lead: calc(var(--ds-c-studio-tokens-size-52) + var(--hp-font-step));      /* the empty-chat greeting, answer h2/h3 */
+  --hp-font-title: calc(var(--ds-c-studio-tokens-type-title) + var(--hp-font-step));  /* answer h1 */
+  --hp-font-display: calc(var(--ds-c-studio-tokens-type-display) + var(--hp-font-step)); /* reserved: no personal surface uses it yet */
   --hp-leading-label: var(--ds-c-studio-tokens-leading-label);
   --hp-leading-prose: var(--ds-c-studio-tokens-leading-prose);
+  --hp-weight-regular: var(--ds-c-studio-tokens-weight-regular);
+  --hp-weight-strong: var(--ds-c-studio-tokens-weight-strong);  /* headings, emphasis, strong labels */
+  --hp-tracking-hangul: 0;
 }
 /* VS Code's 2026 themes ship a placeholder below 4.5:1 (Dark 2026 #555555: 2.3:1, Light 2026
  * #999999: 2.8:1); the webview body carries the theme id, and there the mix is used instead. */

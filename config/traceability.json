@@ -9541,6 +9541,68 @@
       ]
     },
     {
+      "id": "ST-REQ-LEARNER-SCALE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Learner type scale (CGP-DS-D-005)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LEARNER-SCALE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNER-SCALE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/citationPreview.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/writeApprovalDialog.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/outboundDialog.css"
+        },
+        {
+          "path": "chalk/src/lib/design-tokens.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LEARNER-SCALE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNER-SCALE",
+        "ST-IMP-LEARNER-SCALE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/type-scale.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-HOVER-PRESSED-FILLS",
       "stage": "requirement",
       "owner": "jayleekr",

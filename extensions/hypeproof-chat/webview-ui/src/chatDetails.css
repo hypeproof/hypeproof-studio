@@ -9,7 +9,7 @@
    Primary (no fill, no border), and it never shrinks into an ellipsis. */
 .hps-header button.hps-header-passes { flex: 0 0 auto; white-space: nowrap; margin-left: 0; padding: var(--ds-c-studio-chatdetails-space-14) var(--ds-c-studio-chatdetails-space-13); border-color: transparent; background: transparent; color: var(--vscode-textLink-foreground, var(--ds-c-studio-chatdetails-ink-36)); text-decoration: underline; text-underline-offset: var(--ds-c-studio-chatdetails-size-7); }
 .hps-header button.hps-header-passes:hover { background: transparent; color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground, var(--ds-c-studio-chatdetails-ink-36))); }
-.hps-free-ended-note { margin: 0 0 var(--ds-c-studio-chatdetails-space-15); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-chatdetails-typography-5); color: var(--vscode-descriptionForeground, var(--ds-c-studio-chatdetails-ink-5)); }
+.hps-free-ended-note { margin: 0 0 var(--ds-c-studio-chatdetails-space-15); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--vscode-descriptionForeground, var(--ds-c-studio-chatdetails-ink-5)); }
 .hps-shell[data-chat-detail="personal"] .hps-messages {
   min-height: 0; gap: var(--ds-c-studio-chatdetails-space-3); overscroll-behavior: contain;
   padding: var(--ds-c-studio-chatdetails-space-4) max(var(--ds-c-studio-chatdetails-space-5), calc((100% - var(--chat-column)) / 2)) var(--ds-c-studio-chatdetails-space-6);
@@ -20,9 +20,9 @@
 }
 .hps-shell[data-chat-detail="personal"] .hps-messages > * { flex-shrink: 0; min-width: 0; }
 .hps-shell[data-chat-detail="personal"] .hps-msg { gap: var(--ds-c-studio-chatdetails-space-7); }
-.hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-font-body); line-height: var(--ds-c-studio-chatdetails-typography-1); overflow-wrap: anywhere; min-width: 0; }
-.hps-shell[data-chat-detail="personal"] .hps-msg-role { opacity: 1; color: var(--tw-muted); letter-spacing: 0; font-size: var(--hp-font-caption); }
-.hps-shell[data-chat-detail="personal"] .hps-msg-role > span { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2); font-weight: var(--ds-c-studio-chatdetails-typography-2); }
+.hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); overflow-wrap: anywhere; min-width: 0; }
+.hps-shell[data-chat-detail="personal"] .hps-msg-role { opacity: 1; color: var(--tw-muted); letter-spacing: var(--hp-tracking-hangul); font-size: var(--hp-font-caption); }
+.hps-shell[data-chat-detail="personal"] .hps-msg-role > span { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2); font-weight: var(--hp-weight-strong); }
 .hps-shell[data-chat-detail="personal"] .hps-assistant-mark {
   display: inline-grid; place-items: center; width: var(--ds-c-studio-chatdetails-size-2); height: var(--ds-c-studio-chatdetails-size-2);
   border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-1); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); font-size: var(--ds-c-studio-chatdetails-type-2); margin: 0;
@@ -35,7 +35,18 @@
 .hps-shell[data-chat-detail="personal"] .hps-prose p:last-child { margin-bottom: 0; }
 .hps-shell[data-chat-detail="personal"] .hps-prose h1,
 .hps-shell[data-chat-detail="personal"] .hps-prose h2,
-.hps-shell[data-chat-detail="personal"] .hps-prose h3 { font-weight: var(--ds-c-studio-chatdetails-typography-3); letter-spacing: var(--ds-c-studio-chatdetails-size-5); margin-top: var(--ds-c-studio-chatdetails-space-10); }
+.hps-shell[data-chat-detail="personal"] .hps-prose h3 { font-weight: var(--hp-weight-strong); letter-spacing: var(--hp-tracking-hangul); margin-top: var(--ds-c-studio-chatdetails-space-10); }
+/* CGP-DS-D-005 (DES-CGP-DS-09) — answer markdown on the learner scale: h1 22px, h2/h3 18px (h4-h6 stay
+   1em, 16px) and label leading. Their weight, and strong, b and th, are 600 (taskWorkspace.css). */
+.hps-shell[data-chat-detail="personal"] .hps-prose h1 { font-size: var(--hp-font-title); }
+.hps-shell[data-chat-detail="personal"] .hps-prose h2,
+.hps-shell[data-chat-detail="personal"] .hps-prose h3 { font-size: var(--hp-font-lead); }
+.hps-shell[data-chat-detail="personal"] .hps-prose h1,
+.hps-shell[data-chat-detail="personal"] .hps-prose h2,
+.hps-shell[data-chat-detail="personal"] .hps-prose h3,
+.hps-shell[data-chat-detail="personal"] .hps-prose h4,
+.hps-shell[data-chat-detail="personal"] .hps-prose h5,
+.hps-shell[data-chat-detail="personal"] .hps-prose h6 { line-height: var(--hp-leading-label); }
 .hps-shell[data-chat-detail="personal"] .hps-prose > :first-child { margin-top: 0; }
 /* CGP-DS-R-020 — prose measure: about 40 Hangul syllables per line (40em of the prose's own font,
    640px at 16px; it scales with the text-size choice). A cap only: narrower panes still wrap to the
@@ -75,11 +86,11 @@
 .hps-shell[data-chat-detail="personal"] .hps-input textarea {
   border: 0; background: transparent; outline: none; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1);
   min-height: var(--ds-c-studio-chatdetails-size-8); max-height: var(--ds-c-studio-chatdetails-size-9); overflow-y: auto; border-radius: var(--ds-c-studio-chatdetails-radius-6);
-  line-height: var(--ds-c-studio-chatdetails-typography-4); font-size: var(--hp-font-body); scrollbar-width: thin;
+  line-height: var(--hp-leading-label); font-size: var(--hp-font-body); scrollbar-width: thin;
 }
 .hps-shell[data-chat-detail="personal"] .hps-input textarea::placeholder { color: var(--hp-text-placeholder-default); opacity: 1; }
 .hps-shell[data-chat-detail="personal"] .hps-input-buttons { align-items: center; padding: 0 var(--ds-c-studio-chatdetails-space-14) var(--ds-c-studio-chatdetails-space-14) var(--ds-c-studio-chatdetails-space-1); gap: var(--ds-c-studio-chatdetails-space-2); }
-.hps-composer-hint { margin-right: auto; font-size: var(--ds-c-studio-chatdetails-type-3); line-height: var(--ds-c-studio-chatdetails-typography-5); color: var(--tw-muted); }
+.hps-composer-hint { margin-right: auto; font-size: var(--ds-c-studio-chatdetails-type-3); line-height: var(--hp-leading-label); color: var(--tw-muted); }
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send,
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-stop {
   width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
@@ -95,7 +106,7 @@
 .tw-workspace .hps-copy-answer { font-size: var(--hp-font-caption); }
 .hps-copy-answer:hover { background-color: var(--hp-bg-control-hover); }
 .hps-copy-answer:active { background-color: var(--hp-bg-control-pressed); }
-.hps-copy-status { font-size: var(--ds-c-studio-chatdetails-type-3); line-height: var(--ds-c-studio-chatdetails-typography-5); }
+.hps-copy-status { font-size: var(--ds-c-studio-chatdetails-type-3); line-height: var(--hp-leading-label); }
 .hps-copy-status:not(:empty) { animation: chat-feedback var(--hp-dur-content) var(--hp-ease); }
 .hps-response-pending { display: flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-7); color: var(--tw-muted); font-size: var(--hp-font-caption); margin: var(--ds-c-studio-chatdetails-space-2) 0; }
 .hps-response-dots { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-13); }
@@ -155,7 +166,7 @@
 .tw-workspace .hps-tools-menu button { display: flex; align-items: flex-start; gap: var(--ds-c-studio-chatdetails-space-7); width: 100%; min-height: var(--ds-c-studio-chatdetails-size-22); padding: var(--ds-c-studio-chatdetails-space-1); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-9); background: transparent; color: inherit; text-align: left; font-size: var(--hp-font-caption); }
 .hps-tools-menu button > svg { flex-shrink: 0; margin-top: var(--ds-c-studio-chatdetails-space-21); }
 .hps-tools-menu button > span { flex: 1; min-width: 0; }
-.hps-tools-menu button small { display: block; margin-top: var(--ds-c-studio-chatdetails-space-13); font-size: var(--ds-c-studio-chatdetails-type-1); color: var(--tw-muted); line-height: var(--ds-c-studio-chatdetails-typography-5); }
+.hps-tools-menu button small { display: block; margin-top: var(--ds-c-studio-chatdetails-space-13); font-size: var(--ds-c-studio-chatdetails-type-1); color: var(--tw-muted); line-height: var(--hp-leading-label); }
 .hps-tools-menu button:hover { background-color: var(--hp-bg-control-hover); }
 .hps-tools-menu button:active { background-color: var(--hp-bg-control-pressed); }
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-tools-menu button:hover { transform: none; }
@@ -202,7 +213,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action {
   display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-width: var(--ds-c-studio-chatdetails-size-8); min-height: var(--ds-c-studio-chatdetails-size-8); margin: 0;
   padding: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-2); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-3); background: transparent; color: var(--tw-muted);
-  font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-chatdetails-typography-6); opacity: 1;
+  font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); opacity: 1;
 }
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions > .hps-answer-action:first-child { margin-left: var(--ds-c-studio-chatdetails-space-23); }
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action:hover { background-color: var(--hp-bg-control-hover); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); opacity: 1; }
@@ -233,7 +244,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-codepill-toggle {
   display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--hp-control-min); margin-left: var(--ds-c-studio-chatdetails-space-23);
   padding: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-2); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-3); background: transparent; color: var(--tw-muted);
-  font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-chatdetails-typography-6);
+  font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
 }
 .hps-shell[data-chat-detail="personal"] .hps-codepill-toggle:hover { background-color: var(--hp-bg-control-hover); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); }
 .hps-shell[data-chat-detail="personal"] .hps-codepill-toggle:active { background-color: var(--hp-bg-control-pressed); }
@@ -247,7 +258,7 @@
 /* Personal chat keeps secondary controls behind settings and the conversation in view. */
 .hps-shell[data-chat-detail="personal"] .hps-header { padding-block: var(--ds-c-studio-chatdetails-space-13); min-height: var(--ds-c-studio-chatdetails-size-10); }
 .hps-shell[data-chat-detail="personal"] .hps-ai-disclosure {
-  border: 0; padding: 0; margin: 0; background: transparent; color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-chatdetails-typography-5);
+  border: 0; padding: 0; margin: 0; background: transparent; color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
 }
 .hps-shell[data-chat-detail="personal"] .hps-empty { padding: var(--ds-c-studio-chatdetails-space-20) 0 0; }
 .hps-shell[data-chat-detail="personal"] .hps-empty-greeting { font-size: var(--hp-font-lead); line-height: var(--hp-leading-prose); max-width: var(--ds-c-studio-chatdetails-size-24); }
@@ -258,16 +269,16 @@
 /* CGP-DS-R-005: the personal resting rule outranks the shared .hps-chip:hover, so the states are restated here. */
 .hps-shell[data-chat-detail="personal"] .hps-chip:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
 .hps-shell[data-chat-detail="personal"] .hps-chip:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
-.hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-chatdetails-typography-5); }
-.hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-chatdetails-typography-5); font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: var(--ds-c-studio-chatdetails-space-16); }
+.hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: var(--ds-c-studio-chatdetails-space-16); }
 .hps-preferences { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); max-height: calc(100vh - var(--ds-c-studio-chatdetails-size-23)); padding: 0; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-4)); background: var(--tw-panel); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-8); box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-4) var(--ds-c-studio-chatdetails-shadow-8) var(--ds-c-studio-chatdetails-shadow-9); overflow: auto; }
 .hps-preferences::backdrop { background: var(--ds-c-studio-chatdetails-surface-8); }
 .hps-preferences > header { display: flex; align-items: center; justify-content: space-between; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-20); border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); }
-.hps-preferences h2 { font-size: var(--hp-font-body); font-weight: var(--ds-c-studio-chatdetails-typography-7); margin: 0; }
+.hps-preferences h2 { font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); margin: 0; }
 .hps-preferences > header button { width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); padding: 0; border: 0; background: transparent; color: inherit; font-size: var(--ds-c-studio-chatdetails-type-6); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
-.hps-preferences-body { padding: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-5) var(--ds-c-studio-chatdetails-space-20); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-chatdetails-typography-4); }
+.hps-preferences-body { padding: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-5) var(--ds-c-studio-chatdetails-space-20); font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); }
 .hps-preferences-body > details { border: 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: 0; padding: var(--ds-c-studio-chatdetails-space-2) 0; margin: 0; max-height: none; }
-.hps-preferences summary { min-height: var(--ds-c-studio-chatdetails-size-8); align-content: center; cursor: pointer; font-weight: var(--ds-c-studio-chatdetails-typography-8); }
+.hps-preferences summary { min-height: var(--ds-c-studio-chatdetails-size-8); align-content: center; cursor: pointer; font-weight: var(--hp-weight-strong); }
 .hps-preferences .hps-model-selection, .hps-preferences .hps-effort { margin: var(--ds-c-studio-chatdetails-space-1) 0; padding: 0; }
 .hps-preferences select { max-width: 100%; min-height: var(--ds-c-studio-chatdetails-size-10); font-size: var(--hp-font-caption); }
 .hps-preferences p, .hps-preferences small { color: var(--tw-muted); overflow-wrap: anywhere; }
@@ -282,7 +293,7 @@
 .hps-access-attention button:active { background-color: var(--hp-bg-control-pressed); }
 .hps-reply-question { width: 100%; max-width: var(--chat-column, var(--ds-c-studio-chatdetails-size-1)); box-sizing: border-box; overflow-wrap: anywhere; }
 .hps-reply-choices { display: flex; flex-direction: column; gap: var(--ds-c-studio-chatdetails-space-2); margin: var(--ds-c-studio-chatdetails-space-20) 0 var(--ds-c-studio-chatdetails-space-13); }
-.hps-shell[data-chat-detail="personal"] .hps-reply-choices button { display: flex; align-items: baseline; gap: var(--ds-c-studio-chatdetails-space-1); width: 100%; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1); min-height: var(--ds-c-studio-chatdetails-size-8); text-align: left; font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-chatdetails-typography-9); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-4); color: inherit; background: transparent; }
+.hps-shell[data-chat-detail="personal"] .hps-reply-choices button { display: flex; align-items: baseline; gap: var(--ds-c-studio-chatdetails-space-1); width: 100%; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1); min-height: var(--ds-c-studio-chatdetails-size-8); text-align: left; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-4); color: inherit; background: transparent; }
 .hps-shell[data-chat-detail="personal"] .hps-reply-choices button:hover { background-color: var(--hp-bg-control-hover); }
 .hps-shell[data-chat-detail="personal"] .hps-reply-choices button:active { background-color: var(--hp-bg-control-pressed); }
 .hps-reply-choices button:hover { background-color: var(--hp-bg-control-hover); }
@@ -424,14 +435,14 @@
 .tw-heading .hps-coach-name, .tw-heading .hps-header button, .tw-heading .hps-trial-left,
 .hps-shell[data-chat-detail="personal"] .hps-coach-name, .hps-shell[data-chat-detail="personal"] .hps-header button, .hps-shell[data-chat-detail="personal"] .hps-trial-left { font-size: var(--hp-font-caption); }
 .hps-text-size { border: 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); margin: 0; padding: var(--ds-c-studio-chatdetails-space-2) 0; display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-1); }
-.hps-text-size legend { padding: 0; font-weight: var(--ds-c-studio-chatdetails-typography-8); min-height: var(--ds-c-studio-chatdetails-size-23); }
+.hps-text-size legend { padding: 0; font-weight: var(--hp-weight-strong); min-height: var(--ds-c-studio-chatdetails-size-23); }
 .hps-text-size label { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--ds-c-studio-chatdetails-size-8); cursor: pointer; }
 
 /* REQ-STUDIO-MISSING-TASK-FOLDER — the missing-folder notice above the composer: one sentence, one 44px action, wraps to one column. */
 .hps-shell[data-chat-detail="personal"] .hps-missing-folder { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-1); margin: 0 0 var(--ds-c-studio-chatdetails-space-2); padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, var(--ds-c-studio-chatdetails-boundary-2))); border-radius: var(--ds-c-studio-chatdetails-radius-9); }
 .hps-shell[data-chat-detail="personal"] .hps-missing-folder-text { margin: 0; flex: 1 1 var(--ds-c-studio-chatdetails-size-27); min-width: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label); }
 .hps-shell[data-chat-detail="personal"] .hps-missing-folder-note { margin: 0; flex: 1 1 100%; color: var(--tw-muted, inherit); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
-.hps-shell[data-chat-detail="personal"] .hps-missing-folder-action { min-height: var(--ds-c-studio-chatdetails-size-8); min-width: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-20); border-radius: var(--ds-c-studio-chatdetails-radius-10); border: var(--ds-c-studio-chatdetails-size-3) solid transparent; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: var(--hp-font-caption); font-weight: var(--ds-c-studio-chatdetails-typography-7); cursor: pointer; }
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder-action { min-height: var(--ds-c-studio-chatdetails-size-8); min-width: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-20); border-radius: var(--ds-c-studio-chatdetails-radius-10); border: var(--ds-c-studio-chatdetails-size-3) solid transparent; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); cursor: pointer; }
 .hps-shell[data-chat-detail="personal"] .hps-missing-folder-action:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
 
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Normal mode is unchanged. */
@@ -481,12 +492,12 @@
   background: var(--tw-panel, transparent); color: inherit;
 }
 .hps-panel-fallback-icon { flex: none; color: var(--tw-muted, var(--vscode-descriptionForeground, inherit)); }
-.hps-panel-fallback-text { flex: 1 1 var(--ds-c-studio-chatdetails-size-28); min-width: 0; margin: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label, 1.45); word-break: keep-all; }
+.hps-panel-fallback-text { flex: 1 1 var(--ds-c-studio-chatdetails-size-28); min-width: 0; margin: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label); word-break: keep-all; }
 .hps-panel-fallback-retry {
   flex: none; min-height: var(--ds-c-studio-chatdetails-size-8); min-width: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-20); border-radius: var(--ds-c-studio-chatdetails-radius-10);
   border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
   background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, inherit);
-  font: inherit; font-size: var(--hp-font-body); font-weight: var(--ds-c-studio-chatdetails-typography-7); cursor: pointer;
+  font: inherit; font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); cursor: pointer;
 }
 .hps-panel-fallback-retry:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .hps-panel-fallback-retry:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
@@ -508,3 +519,23 @@
 
 /* The question occupies the reading column; prose retains its own measure. */
 .hps-shell[data-chat-detail="personal"] .hps-msg-body.hps-msg-question { width: 100%; max-width: var(--chat-column, var(--ds-c-studio-chatdetails-size-1)); box-sizing: border-box; padding: 0; background: transparent; border: 0; }
+
+/* CGP-DS-D-005 (DES-CGP-DS-09) — shared chat classes the personal workspace draws, put on the learner
+   scale there: label leading 1.5 (not 1.2-1.45), Hangul tracking 0 (not 0.2px or 1px), weights 400/600
+   (not 550 or 700) and the 16/18px steps (not 15 or 17px). The classroom keeps its values (DEC-29). */
+.hps-shell[data-chat-detail="personal"] .hps-cit-chip,
+.hps-shell[data-chat-detail="personal"] .hps-codepill-body,
+.hps-shell[data-chat-detail="personal"] .hps-attachment-name,
+.hps-shell[data-chat-detail="personal"] .hps-update-banner-notes { line-height: var(--hp-leading-label); }
+.hps-shell[data-chat-detail="personal"] .hps-chips-label,
+.hps-shell[data-chat-detail="personal"] .hp-mission-week { letter-spacing: var(--hp-tracking-hangul); }
+.hps-shell[data-chat-detail="personal"] .hp-ai-can-do-title,
+.hps-shell[data-chat-detail="personal"] .hp-goal-label,
+.hps-shell[data-chat-detail="personal"] .hp-cta-primary { font-weight: var(--hp-weight-strong); }
+.hps-shell[data-chat-detail="personal"] .hp-rail-lesson,
+.hps-shell[data-chat-detail="personal"] .hp-rail-goal,
+.hps-shell[data-chat-detail="personal"] .hp-evidence { font-size: var(--hp-font-body); }
+/* The naming screen is drawn in the conversation column before the chat shell mounts. */
+.tw-workspace .hps-naming-title { font-size: var(--hp-font-lead); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label); }
+.tw-workspace .hps-naming-input { font-size: var(--hp-font-body); }
+.tw-workspace .hps-naming-btn { font-weight: var(--hp-weight-strong); }

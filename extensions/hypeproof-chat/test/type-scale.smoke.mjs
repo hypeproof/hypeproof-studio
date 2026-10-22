@@ -280,6 +280,101 @@ function compute(rules, descs, env) {
   return winner ?? { px: parentPx, own: false };
 }
 
+// CGP-DS-D-005 (DES-CGP-DS-09) — the other three inherited text properties the scale fixes:
+// font-weight, letter-spacing and line-height, computed with the same cascade as font-size. The
+// user-agent rules that matter are modelled at the lowest priority: headings, b, strong and th are
+// bold; form controls reset weight, tracking and line-height to normal (Chromium's
+// `font: -webkit-small-control`), so they do not inherit them unless an author rule says
+// `font: inherit` or sets the longhand. A `font` shorthand other than `inherit` is not modelled
+// and throws, so a new one cannot slip past.
+const UA_BOLD = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "b", "strong", "th"]);
+const UA_CONTROL = new Set(["button", "input", "textarea", "select"]);
+const TYPE_PROPS = ["font-weight", "letter-spacing", "line-height"];
+function weightOf(v, parent) {
+  if (v === "inherit") return parent;
+  if (v === "normal") return 400;
+  if (v === "bold") return 700;
+  if (v === "bolder") return parent < 350 ? 400 : parent < 550 ? 700 : 900;
+  if (v === "lighter") return parent < 550 ? 100 : parent < 750 ? 400 : 700;
+  if (/^\d+$/.test(v)) return +v;
+  throw new Error(`font-weight value not modelled: ${v}`);
+}
+function trackingOf(v, px, parent) {
+  if (v === "inherit") return parent;
+  if (v === "normal" || v === "0") return 0;
+  let m;
+  if ((m = /^(-?\d*\.?\d+)px$/.exec(v))) return +m[1];
+  if ((m = /^(-?\d*\.?\d+)em$/.exec(v))) return +m[1] * px;
+  throw new Error(`letter-spacing value not modelled: ${v}`);
+}
+// A line-height is kept as it inherits: a unitless number stays a factor, a length is fixed where
+// it is declared. `ratio` is what the reader sees on this element (line box / font size).
+function leadingOf(v, px, parent) {
+  if (v === "inherit") return parent;
+  if (v === "normal") return { normal: true };
+  let m;
+  if ((m = /^(\d*\.?\d+)$/.exec(v))) return { factor: +m[1] };
+  if ((m = /^(\d*\.?\d+)px$/.exec(v))) return { px: +m[1] };
+  if ((m = /^(\d*\.?\d+)(em|%)$/.exec(v))) return { px: (+m[1] / (m[2] === "%" ? 100 : 1)) * px };
+  throw new Error(`line-height value not modelled: ${v}`);
+}
+// Only rules that declare one of these properties take part (cached per rule list and viewport).
+const typeRuleCache = new WeakMap();
+const typeRelevant = (d) => d.prop === "font-size" || d.prop === "font" || TYPE_PROPS.includes(d.prop) || d.prop.startsWith("--");
+function typeLive(rules, env) {
+  let byEnv = typeRuleCache.get(rules);
+  if (!byEnv) typeRuleCache.set(rules, (byEnv = new Map()));
+  const key = `${env.w}x${env.h}:${env.forced}:${env.reduce}`;
+  if (!byEnv.has(key)) byEnv.set(key, rules.filter((r) => mediaOk(r.media, env) && r.decls.some(typeRelevant)));
+  return byEnv.get(key);
+}
+function typeOf(rules, descs, env) {
+  const chain = [{ tag: "html", classes: new Set(), attrs: new Map(), root: true, desc: "html" }, ...descs.map(element)];
+  const live = typeLive(rules, env);
+  let px = 16, vars = new Map();
+  let cur = { "font-weight": 400, "letter-spacing": 0, "line-height": { normal: true } };
+  const from = { "font-weight": "initial", "letter-spacing": "initial", "line-height": "initial" };
+  for (let ci = 0; ci < chain.length; ci++) {
+    const best = new Map();
+    for (const r of live) {
+      const spec = r.selectors.filter((sel) => matchesAt(sel, chain, ci)).map((sel) => sel.spec).sort((x, y) => y - x)[0];
+      if (spec === undefined) continue;
+      r.decls.forEach((d, di) => {
+        if (d.prop !== "font-size" && d.prop !== "font" && !TYPE_PROPS.includes(d.prop) && !d.prop.startsWith("--")) return;
+        const key = [d.important ? 1 : 0, spec, r.order, di];
+        const w = best.get(d.prop);
+        if (!w || beats(key, w.key)) best.set(d.prop, { key, d, r });
+      });
+    }
+    const next = new Map(vars);
+    const declared = new Map([...best].filter(([p]) => p.startsWith("--")).map(([p, w]) => [p, w.d.value]));
+    const lookup = (name) => { if (declared.has(name)) { const v = substitute(declared.get(name), lookup); declared.delete(name); next.set(name, v); return v; } return next.get(name); };
+    for (const name of [...declared.keys()]) if (declared.has(name)) lookup(name);
+    vars = next;
+    const val = (w) => substitute(w.d.value, (n) => vars.get(n)).trim();
+    const fs = best.get("font-size");
+    px = fs ? evalLength(val(fs), px) : chain[ci].tag === "body" ? 13 : px;
+    const font = best.get("font");
+    if (font && val(font) !== "inherit") throw new Error(`font shorthand not modelled: ${font.r.text} { font: ${font.d.value} }`);
+    const tag = chain[ci].tag;
+    const out = {};
+    for (const prop of TYPE_PROPS) {
+      let w = best.get(prop);
+      if (font && (!w || beats(font.key, w.key))) w = { d: { value: "inherit" }, r: font.r, viaFont: true };
+      let v, src;
+      if (w) { v = val(w); src = `${w.r.file}: ${w.r.text} { ${w.viaFont ? "font" : prop}: ${w.d.value} }`; }
+      else if (prop === "font-weight" && UA_BOLD.has(tag)) { v = "bold"; src = `user agent: ${tag} { font-weight: bold }`; }
+      else if (UA_CONTROL.has(tag)) { v = "normal"; src = `user agent: ${tag} { ${prop}: normal }`; }
+      else { v = "inherit"; src = null; }
+      out[prop] = prop === "font-weight" ? weightOf(v, cur[prop]) : prop === "letter-spacing" ? trackingOf(v, px, cur[prop]) : leadingOf(v, px, cur[prop]);
+      if (src) from[prop] = src;
+    }
+    cur = out;
+  }
+  const lh = cur["line-height"];
+  return { px, weight: cur["font-weight"], tracking: cur["letter-spacing"], leading: lh.normal ? null : lh.factor ?? lh.px / px, from: { ...from } };
+}
+
 // ─── Contexts and probes ───────────────────────────────────────────────────────────────────────
 const PAGE = ["body", "div#root"];
 const WS = [...PAGE, "div.tw-workspace"];
@@ -455,7 +550,7 @@ function flexShrink(rules, descs, env) {
   if (short && (!long || beats(short.key, long.key))) return fromShort;
   return long ? +long.value : 1;
 }
-function check(files) {
+function check(files, { typeOnly = false } = {}) {
   const findings = [];
   const rules = []; for (const f of ORDER) rules.push(...parseCss(files[f], f, rules.length));
   const fontRules = (f) => rules.filter((r) => r.file === f && !r.media.some((m) => /forced-colors/.test(m)) && r.decls.some((d) => d.prop === "font-size"));
@@ -501,7 +596,8 @@ function check(files) {
   probes.push(...EXTRA_PROBES);
 
   // 4. Every probe computes to ≥14px at every viewport, and shell probes follow the text-size step.
-  for (const p of probes) {
+  // (CGP-DS-D-005 controls run with typeOnly: they leave sizes alone, and this sweep is the slow part.)
+  for (const p of typeOnly ? [] : probes) {
     for (const env of ENVS) {
       const got = compute(rules, [...p.ctx("base"), ...p.chain], env);
       if (got.px < FLOOR) { findings.push(`${p.label} computes to ${got.px}px at ${env.w}x${env.h} (${got.file}: ${got.rule} { font-size: ${got.value} })`); break; }
@@ -516,6 +612,63 @@ function check(files) {
       }
     }
   }
+  // 6. CGP-DS-D-005 (DES-CGP-DS-09) — the rest of the learner scale on the personal workspace.
+  //  a. In the scope files every weight, tracking and line-height is a token: two weights, Hangul
+  //     tracking 0, label or prose leading.
+  const TOKEN_OF = { "font-weight": /^var\(--hp-weight-(regular|strong)\)$/, "letter-spacing": /^var\(--hp-tracking-hangul\)$/, "line-height": /^var\(--hp-leading-(label|prose)\)$/ };
+  for (const f of PERSONAL_FILES) for (const r of rules.filter((x) => x.file === f && !x.media.some((m) => /forced-colors/.test(m)))) for (const d of r.decls) {
+    if (!TOKEN_OF[d.prop] || TOKEN_OF[d.prop].test(d.value)) continue;
+    if (r.selectors.every((x) => TYPE_EXEMPT[x.text])) continue;
+    findings.push(`${f}: ${r.text} { ${d.prop}: ${d.value} } is not a learner-scale token`);
+  }
+  //  b. Shared rules (classroom and personal use the same classes) that set an off-scale size, a
+  //     third weight, any tracking or a label leading under 1.5 are probed in the personal context, unless classified
+  //     as not rendered there.
+  const typeProbes = [];
+  const offScale = (d) => {
+    if (d.prop === "font-size") { const px = pxOf(d.value); return px !== null ? !SCALE.includes(px) : /^\d*\.?\d+(em|%)$/.test(d.value.trim()) && d.value.trim() !== "1em" && d.value.trim() !== "100%"; }
+    if (d.prop === "font-weight") return !/^(400|600|normal|inherit|var\(--hp-weight-(regular|strong)\))$/.test(d.value);
+    if (d.prop === "letter-spacing") return !/^(0|normal|inherit|var\(--hp-tracking-hangul\))$/.test(d.value);
+    if (d.prop === "line-height") { const n = /^(\d*\.?\d+)$/.exec(d.value); return n ? +n[1] < 1.5 : !/^(normal|inherit|var\(--hp-leading-(label|prose)\))$/.test(d.value); }
+    return false;
+  };
+  const typeListed = new Set();
+  for (const f of SHARED_FILES) for (const r of rules.filter((x) => x.file === f && !x.media.some((m) => /forced-colors/.test(m)))) {
+    if (!r.decls.some(offScale) || r.selectors.every((x) => /^\.studio-/.test(x.text))) continue;
+    for (const sel of r.selectors) {
+      if (/^\.studio-/.test(sel.text)) continue;
+      if (TYPE_SHARED_OUT[sel.text]) { typeListed.add(sel.text); continue; }
+      if (SHARED_OUT[r.text] || SHARED_OUT[sel.text]) continue; // classified by the size inventory above
+      if (/:(hover|focus|active|disabled)/.test(sel.text)) continue;
+      typeProbes.push({ label: `${f}: ${sel.text}`, ctx: contextOf(sel.text), chain: chainOf(sel.text) });
+    }
+  }
+  for (const sel of Object.keys(TYPE_SHARED_OUT)) if (!typeListed.has(sel)) findings.push(`styles.css: TYPE_SHARED_OUT "${sel}" no longer sets an off-scale weight, tracking or leading (stale inventory)`);
+  //  c. Every learner probe on the workspace (and the two approval dialogs drawn over it) computes
+  //     to a scale size, weight 400 or 600, tracking 0 and a line-height of at least 1.5. `normal`
+  //     (about 1.2) passes only where the user agent resets a form control, which centres one line.
+  const workspace = (p) => p.ctx("base").includes("div.tw-workspace");
+  const TYPE_ENVS = [ENVS[0], ENVS.find((e) => e.w === 320)];
+  const typeChecked = [...probes.filter(workspace), ...PROSE_PROBES, ...HEADING_PROBES, ...BARE_PROBES, ...DIALOG_PROBES, ...typeProbes.filter(workspace)];
+  for (const p of typeChecked) {
+    for (const env of TYPE_ENVS) {
+      const t = typeOf(rules, [...p.ctx("base"), ...p.chain], env);
+      const bad = [];
+      if (!SCALE.includes(Math.round(t.px * 100) / 100)) bad.push(`size ${t.px}px is off the 14/16/18/22/28 scale`);
+      if (t.weight !== 400 && t.weight !== 600) bad.push(`weight ${t.weight} (${t.from["font-weight"]})`);
+      if (t.tracking !== 0) bad.push(`letter-spacing ${t.tracking}px (${t.from["letter-spacing"]})`);
+      if (t.leading === null && !/^user agent: (button|input|textarea|select) /.test(t.from["line-height"])) bad.push(`line-height normal (about 1.2) under the 1.5 label leading (${t.from["line-height"]})`);
+      else if (t.leading !== null && t.leading < 1.5 - 1e-9) bad.push(`line-height ${+t.leading.toFixed(3)} under the 1.5 label leading (${t.from["line-height"]})`);
+      if (bad.length) { findings.push(`${p.label} at ${env.w}px: ${bad.join("; ")}`); break; }
+    }
+  }
+  //  d. Hangul prose (answers, the learner's own bubble, the greeting, source detail) reads at
+  //     1.65-1.75 at every text size.
+  for (const p of PROSE_PROBES) for (const size of Object.keys(STEPS)) {
+    const t = typeOf(rules, [...p.ctx(size), ...p.chain], ENVS[0]);
+    if (t.leading === null || t.leading < 1.65 - 1e-9 || t.leading > 1.75 + 1e-9) { findings.push(`${p.label} at ${size}: prose line-height ${t.leading === null ? "normal" : +t.leading.toFixed(3)}, want 1.65-1.75 (${t.from["line-height"]})`); break; }
+  }
+
   // 5. The narrow task heading (390px sidebar). Text there that cannot wrap must either give way with
   // an ellipsis and a title that carries the full text, or be a short fixed label; the trial count
   // never gives way (TUX-SP-13B).
@@ -530,7 +683,7 @@ function check(files) {
     if (ellipsis) { if (!h.titled.test(files[h.tsx] ?? "")) findings.push(`header: ${h.label} is nowrap with an ellipsis but its markup has no title carrying the full text`); continue; }
     if (!h.shortFixed) findings.push(`header: ${h.label} is nowrap and cannot give way at 390px; it pushes the trial count or the task title into an ellipsis`);
   }
-  return { findings, probes: probes.length, rules };
+  return { findings, probes: probes.length, typeChecked: typeChecked.length, rules };
 }
 
 const TOKENS = {
@@ -539,7 +692,74 @@ const TOKENS = {
   "--hp-font-lead": "calc(18px + var(--hp-font-step))",
   "--hp-leading-label": "1.5",
   "--hp-leading-prose": "1.65",
+  "--hp-font-title": "calc(22px + var(--hp-font-step))",
+  "--hp-font-display": "calc(28px + var(--hp-font-step))",
+  "--hp-weight-regular": "400",
+  "--hp-weight-strong": "600",
+  "--hp-tracking-hangul": "0",
 };
+// CGP-DS-D-005 — the five sizes of DES-CGP-DS-09 (at the base text size; the step adds to each).
+const SCALE = [14, 16, 18, 22, 28];
+// Not learner text: the brand wordmark is a Latin logo ("HypeProof") and its mark is aria-hidden.
+const TYPE_EXEMPT = {
+  ".tw-brand": "Latin wordmark (HypeProof), logo typography, not Hangul learner text",
+  ".tw-mark": "decorative brand glyph (aria-hidden)",
+};
+// Shared rules with an off-scale weight, tracking or leading that the personal workspace never draws.
+const TYPE_SHARED_OUT = {
+  ".hps-naming-emoji": "decorative emoji on the naming screen (aria-hidden), line-height 1 boxes the glyph",
+  ".hps-world-emoji": "classroom world strip, not rendered in personal chat",
+  ".hps-world-name": "classroom world strip, not rendered in personal chat",
+  ".hps-runner-face": "classroom runner bar (world cohorts), not rendered in personal chat",
+  ".hps-runner-say": "classroom runner bar (world cohorts), not rendered in personal chat",
+  ".hps-queued-cancel": "glyph button (×) with an aria-label (DEC-29 exempts glyph-only buttons)",
+  ".hps-attachment-remove": "glyph button (×) with an aria-label (DEC-29 exempts glyph-only buttons)",
+  ".hps-roll-probe": "off-screen measuring probe for the rolling hint (aria-hidden, never seen)",
+  ".hps-error-banner-icon": "decorative status icon box (aria-hidden)",
+  ".hps-update-banner-icon": "decorative status icon box (aria-hidden)",
+  ".hp-ai-can-do-mark": "decorative stroke icon (aria-hidden); the row's state word carries the state",
+  ".hp-mission-sentence": "classroom mission header (MissionHeader, !personalWorkspace)",
+  ".hps-instructor-model": "instructor-only",
+  ".hps-voice-head h2": "VoicePanel is not mounted by any screen today",
+  ".hps-voice-status-text": "VoicePanel is not mounted by any screen today",
+  ".hp-mission-goal-label": "classroom mission header (MissionHeader, !personalWorkspace)",
+  ".hps-fatal-icon": "error boundary screen icon (aria-hidden), outside the chat shell",
+};
+// Markdown an answer can carry. Headings take the scale's upper steps, all of it two weights.
+const answerCtx = (size) => [...shellCtx(size), "div.hps-messages", "div.hps-msg.hps-msg-assistant", "div.hps-msg-body.hps-prose"];
+const HEADING_PROBES = [
+  ...["h1", "h2", "h3", "h4", "h5", "h6"].map((h) => ({ label: `answer ${h}`, ctx: answerCtx, chain: [h] })),
+  { label: "answer strong", ctx: answerCtx, chain: ["p", "strong"] },
+  { label: "answer b", ctx: answerCtx, chain: ["p", "b"] },
+  { label: "answer table header cell", ctx: answerCtx, chain: ["table", "thead", "tr", "th"] },
+  { label: "answer link", ctx: answerCtx, chain: ["p", "a"] },
+  { label: "answer emphasis", ctx: answerCtx, chain: ["p", "em"] },
+  { label: "answer inline code", ctx: answerCtx, chain: ["p", "code"] },
+];
+// Elements with a user-agent weight, and plain text, in every region of the workspace: a component
+// that drops a bare <strong>, <h3> or <th> anywhere is caught even without a rule of its own.
+const REGIONS = [["rail", () => RAIL], ["heading", () => HEAD], ["chat header", () => PORTAL], ["sources", () => SOURCES], ["chat shell", shellCtx], ["conversation (naming screen)", () => [...MAIN, "div.tw-conversation"]]];
+const BARE_PROBES = REGIONS.flatMap(([where, ctx]) => ["h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "th", "p", "span", "li", "label", "legend", "summary"].map((tag) => ({ label: `bare <${tag}> in the ${where}`, ctx, chain: tag === "th" ? ["table", "tr", "th"] : tag === "li" ? ["ul", "li"] : [tag] })));
+// The write and outbound approval dialogs are drawn at the page root, outside the workspace, in
+// both seats (App.tsx), so they carry their own leading and weights.
+const DIALOG_PROBES = [
+  { label: "write approval title", ctx: () => PAGE, chain: ["dialog.hps-write-approval", "h2"] },
+  { label: "write approval file chip", ctx: () => PAGE, chain: ["dialog.hps-write-approval", "ul.hps-write-files", "li", "span.hps-write-chip"] },
+  { label: "write approval text", ctx: () => PAGE, chain: ["dialog.hps-write-approval", "p"] },
+  { label: "outbound recipient (strong)", ctx: () => PAGE, chain: ["dialog.hps-outbound", "fieldset", "legend", "strong"] },
+  { label: "outbound excluded heading", ctx: () => PAGE, chain: ["dialog.hps-outbound", "section", "h3"] },
+  { label: "outbound text", ctx: () => PAGE, chain: ["dialog.hps-outbound", "p"] },
+];
+// Hangul prose: line-height 1.65-1.75 (DES-CGP-DS-09 "Body line-height ≥1.6").
+const PROSE_PROBES = [
+  { label: "answer paragraph", ctx: answerCtx, chain: ["p"] },
+  { label: "answer list item", ctx: answerCtx, chain: ["ul", "li"] },
+  { label: "answer quote", ctx: answerCtx, chain: ["blockquote", "p"] },
+  { label: "answer table cell", ctx: answerCtx, chain: ["table", "tbody", "tr", "td"] },
+  { label: "learner bubble", ctx: (size) => [...shellCtx(size), "div.hps-messages", "div.hps-msg.hps-msg-user"], chain: ["div.hps-msg-body"] },
+  { label: "empty-chat greeting", ctx: (size) => [...shellCtx(size), "div.hps-messages", "div.hps-empty"], chain: ["p.hps-empty-greeting"] },
+  { label: "source detail paragraph", ctx: () => SOURCES, chain: ["div.tw-source-detail", "p"] },
+];
 // Elements whose size the scope files set through another selector or inherit (no own rule here).
 const EXTRA_PROBES = [
   { label: "denial source", ctx: shellCtx, chain: ["div.hps-denial-notice", "div", "span.hps-denial-source"] },
@@ -656,12 +876,41 @@ const NEGATIVE = [
   ["the task title's full-text title removed", { ...real, "TaskWorkspace.tsx": real["TaskWorkspace.tsx"].replace(/className="tw-title-button" title=\{`[^`]*`\}/, 'className="tw-title-button" title="작업 이름 바꾸기"') }, /task title button is nowrap with an ellipsis but its markup has no title/],
   ["a stale classification (rule deleted from styles.css)", mutate("styles.css", (s) => s.replace(/\.hps-roll-cancel \{[^}]*\}/, "")), /hps-roll-cancel" no longer sets a font-size/],
 ];
-for (const [what, files, expect] of NEGATIVE) {
+// CGP-DS-D-005 (DES-CGP-DS-09): weights, tracking, leading and the upper scale steps.
+const NEGATIVE_TYPE = [
+  ["the strong weight token at 700", mutate("tokens.css", (s) => s.replace("--hp-weight-strong: 600", "--hp-weight-strong: 700")), /hp-weight-strong is 700|weight 700/],
+  ["the prose leading token at 1.5", mutate("tokens.css", (s) => s.replace("--hp-leading-prose: 1.65", "--hp-leading-prose: 1.5")), /answer paragraph at base: prose line-height 1\.5/],
+  ["the title step at 20px", mutate("tokens.css", (s) => s.replace("--hp-font-title: calc(22px", "--hp-font-title: calc(20px")), /hp-font-title is calc\(20px/],
+  ["a shared rule that tightens the answer body to 1.5", mutate("styles.css", (s) => `${s}\n.tw-workspace .hps-shell[data-chat-detail="personal"] .hps-msg-body { line-height: 1.5; }\n`), /answer paragraph at base: prose line-height 1\.5/],
+  ["prose leading dropped only at 아주 크게", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-msg-body { line-height: var(--hp-leading-label); }\n`), /answer paragraph at xlarge: prose line-height 1\.5/],
+  ["source detail paragraphs at label leading", mutate("taskWorkspace.css", (s) => s.replace(/(\.tw-source-detail p, \.tw-source-empty p \{[^}]*line-height: )var\(--hp-leading-prose\)/, "$1var(--hp-leading-label)")), /source detail paragraph at base: prose line-height 1\.5/],
+  ["negative tracking on a shared learner class", mutate("styles.css", (s) => `${s}\n.hps-cit-domain { letter-spacing: -.2px; }\n`), /hps-cit-domain at 1280px: .*letter-spacing -0\.2px/],
+  ["answer headings back to -.2px tracking", mutate("chatDetails.css", (s) => s.replace("letter-spacing: var(--hp-tracking-hangul); margin-top", "letter-spacing: -.2px; margin-top")), /answer h1 at 1280px: .*letter-spacing -0\.2px/],
+  ["answer strong left at the user agent's bold", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-workspace h1, \.tw-workspace h2,[^{]*\{ font-weight: var\(--hp-weight-strong\); \}/, "")), /answer strong at 1280px: weight 700 \(user agent/],
+  ["answer h1 left at 1.15em", mutate("chatDetails.css", (s) => s.replace('.hps-shell[data-chat-detail="personal"] .hps-prose h1 { font-size: var(--hp-font-title); }', "")), /answer h1 at 1280px: size 18\.4px is off/],
+  ["a 500 weight in a personal file", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-tool-log-line { font-weight: 500; }\n`), /hps-tool-log-line \{ font-weight: 500 \} is not a learner-scale token/],
+  ["a third weight reached through a token-free shared rule", mutate("styles.css", (s) => `${s}\n.tw-workspace .hps-shell[data-chat-detail="personal"] .hps-tool-log-line { font-weight: 500; }\n`), /hps-tool-log-line at 1280px: weight 500/],
+  ["the chips label keeps 0.2px tracking", mutate("chatDetails.css", (s) => s.replace('.hps-shell[data-chat-detail="personal"] .hps-chips-label,\n', "")), /hps-chips-label at 1280px: letter-spacing 0\.2px/],
+  ["the naming title left at 17px bold", mutate("chatDetails.css", (s) => s.replace(/\.tw-workspace \.hps-naming-title \{[^}]*\}/, "")), /hps-naming-title at 1280px: size 17px is off/],
+  ["the trash dialog heading left at the user agent's bold", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-workspace h1, \.tw-workspace h2,[^{]*\{ font-weight: var\(--hp-weight-strong\); \}/, "")), /tw-trash-dialog h3 at 1280px: weight 700/],
+  ["a label leading under 1.5 on a shared class", mutate("styles.css", (s) => `${s}\n.hps-edit-note { line-height: 1.2; }\n`), /hps-edit-note at 1280px: line-height 1\.2 under/],
+  ["a 15px shared size the personal shell draws", mutate("styles.css", (s) => `${s}\n.tw-workspace .hps-shell[data-chat-detail="personal"] .hps-edit-note { font-size: 15px; }\n`), /size 15px is off the 14\/16\/18\/22\/28 scale/],
+  ["a font shorthand that is not modelled", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font: 12px/1 sans-serif; }\n`), /font shorthand not modelled/],
+  ["the workspace's default label leading removed", mutate("taskWorkspace.css", (s) => s.replace("\n  line-height: var(--hp-leading-label);\n}\n/* CGP-DS-D-005: two weights.", "\n}\n/* CGP-DS-D-005: two weights.")), /bare <p> in the rail at 1280px: line-height normal/],
+  ["bare strong / h3 left at the user agent's bold", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-workspace h1, \.tw-workspace h2,[^{]*\{ font-weight: var\(--hp-weight-strong\); \}/, "")), /bare <strong> in the rail at 1280px: weight 700 \(user agent/],
+  ["the write approval dialog without its own leading", mutate("writeApprovalDialog.css", (s) => s.replace(".hps-write-approval { line-height: var(--hp-leading-label); }", "")), /write approval text at 1280px: line-height normal/],
+  ["the outbound recipient at the user agent's bold", mutate("outboundDialog.css", (s) => s.replace(".hps-outbound strong { font-weight: var(--hp-weight-strong); }", "")), /outbound recipient \(strong\) at 1280px: weight 700/],
+  ["a stale TYPE_SHARED_OUT entry", mutate("styles.css", (s) => s.replace(/(\.hps-roll-probe \{[^}]*?)line-height: [^;]*;/, "$1")), /TYPE_SHARED_OUT "\.hps-roll-probe" no longer/],
+];
+for (const [what, files, expect, opts] of [...NEGATIVE, ...NEGATIVE_TYPE.map((n) => [...n, { typeOnly: true }])]) {
   let found;
-  try { found = check(files).findings; } catch (e) { found = [String(e.message)]; }
+  try { found = check(files, opts).findings; } catch (e) { found = [String(e.message)]; }
   assert.ok(found.length > 0, `negative control not caught: ${what}`);
   assert.ok(found.some((f) => expect.test(f)), `negative control "${what}" caught for the wrong reason:\n  ${found.slice(0, 4).join("\n  ")}`);
 }
 // Positive control: a learner rule that moves up the scale must not be flagged.
 assert.deepEqual(check(mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-font-body); }\n`)).findings, [], "positive control flagged");
-console.log(`type-scale OK: ${result.probes} probes ≥${FLOOR}px across ${ENVS.length} viewports, text-size steps followed, ${NEGATIVE.length} negative controls caught`);
+// CGP-DS-D-005 positive controls: the other scale steps, the regular weight and prose leading pass.
+assert.deepEqual(check(mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-font-display); font-weight: var(--hp-weight-regular); line-height: var(--hp-leading-prose); letter-spacing: var(--hp-tracking-hangul); }\n`)).findings, [], "D-005 positive control flagged");
+assert.deepEqual(check(mutate("styles.css", (s) => `${s}\n.hps-edit-note { font-weight: 600; letter-spacing: 0; line-height: 1.7; }\n`)).findings, [], "D-005 shared positive control flagged");
+console.log(`type-scale OK: ${result.probes} probes ≥${FLOOR}px across ${ENVS.length} viewports, text-size steps followed; DES-CGP-DS-09 scale, weights, tracking and leading on ${result.typeChecked} probes; ${NEGATIVE.length + NEGATIVE_TYPE.length} negative controls caught`);

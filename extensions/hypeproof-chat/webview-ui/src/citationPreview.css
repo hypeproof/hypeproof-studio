@@ -7,10 +7,10 @@
 .cp-citation:disabled { cursor: default; opacity: .65; }
 .cp-citation-number { color: var(--tw-muted, var(--vscode-descriptionForeground, var(--ds-c-studio-citationpreview-ink-5))); font-size: var(--ds-c-studio-citationpreview-type-3); min-width: 1ch; flex: none; }
 .cp-citation-copy { display: flex; flex-direction: column; gap: var(--ds-c-studio-citationpreview-space-14); min-width: 0; }
-.cp-citation-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-c-studio-citationpreview-type-1); line-height: var(--ds-c-studio-citationpreview-typography-6); }
-.cp-citation-domain { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tw-muted, var(--vscode-descriptionForeground, var(--ds-c-studio-citationpreview-ink-5))); font-size: var(--ds-c-studio-citationpreview-type-4); line-height: var(--ds-c-studio-citationpreview-typography-6); }
+.cp-citation-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-c-studio-citationpreview-type-1); line-height: var(--hp-leading-label); }
+.cp-citation-domain { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tw-muted, var(--vscode-descriptionForeground, var(--ds-c-studio-citationpreview-ink-5))); font-size: var(--ds-c-studio-citationpreview-type-4); line-height: var(--hp-leading-label); }
 .cp-citation > svg { flex: none; width: var(--ds-c-studio-citationpreview-size-30); height: var(--ds-c-studio-citationpreview-size-30); color: var(--tw-muted, var(--vscode-descriptionForeground, var(--ds-c-studio-citationpreview-ink-5))); }
-.cp-preview .cp-preview-domain { display: flex; align-items: center; gap: var(--ds-c-studio-citationpreview-space-12); line-height: var(--ds-c-studio-citationpreview-typography-4); }
+.cp-preview .cp-preview-domain { display: flex; align-items: center; gap: var(--ds-c-studio-citationpreview-space-12); line-height: var(--hp-leading-prose); }
 .cp-preview-domain svg { flex: none; }
 /* CGP-DS-R-008: the preview's address, status and error lines use the caption step (14px). The chip
    sizes above stay as they are because the classroom renders the same chips; chatDetails.css raises
@@ -18,16 +18,16 @@
 /* Programmatic focus target (tabIndex=-1) after the preview opens: not a control, no ring. */
 .cp-preview h3:focus { outline: none; }
 .cp-preview .cp-source-context { margin: var(--ds-c-studio-citationpreview-space-2) 0; }
-.cp-preview .cp-source-url { margin: 0 0 var(--ds-c-studio-citationpreview-space-20); padding: var(--ds-c-studio-citationpreview-space-24) var(--ds-c-studio-citationpreview-space-7); border: var(--ds-c-studio-citationpreview-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-citationpreview-radius-3); color: inherit; font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-citationpreview-typography-10); overflow-wrap: anywhere; user-select: text; text-align: left; }
+.cp-preview .cp-source-url { margin: 0 0 var(--ds-c-studio-citationpreview-space-20); padding: var(--ds-c-studio-citationpreview-space-24) var(--ds-c-studio-citationpreview-space-7); border: var(--ds-c-studio-citationpreview-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-citationpreview-radius-3); color: inherit; font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); overflow-wrap: anywhere; user-select: text; text-align: left; }
 .cp-preview-actions { display: flex; flex-direction: column; gap: var(--ds-c-studio-citationpreview-space-2); }
-.cp-preview-actions > button { display: flex; align-items: center; justify-content: center; gap: var(--ds-c-studio-citationpreview-space-2); min-height: var(--ds-c-studio-citationpreview-size-8); width: 100%; margin: 0; white-space: normal; line-height: var(--ds-c-studio-citationpreview-typography-6); }
+.cp-preview-actions > button { display: flex; align-items: center; justify-content: center; gap: var(--ds-c-studio-citationpreview-space-2); min-height: var(--ds-c-studio-citationpreview-size-8); width: 100%; margin: 0; white-space: normal; line-height: var(--hp-leading-label); }
 .cp-preview-actions svg { flex: none; }
-.cp-preview .cp-source-error, .cp-source-open-error { color: var(--vscode-errorForeground, var(--vscode-foreground, var(--ds-c-studio-citationpreview-ink-1))); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-citationpreview-typography-4); overflow-wrap: anywhere; }
+.cp-preview .cp-source-error, .cp-source-open-error { color: var(--vscode-errorForeground, var(--vscode-foreground, var(--ds-c-studio-citationpreview-ink-1))); font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); overflow-wrap: anywhere; }
 .cp-preview .cp-source-status { font-size: var(--hp-font-caption); margin-bottom: 0; }
 .cp-source-open-error { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-c-studio-citationpreview-space-7); margin: var(--ds-c-studio-citationpreview-space-2) var(--ds-c-studio-citationpreview-space-5); }
 .cp-source-open-error > button { flex: none; }
 .tw-sources .cp-source-open-error { flex-wrap: wrap; }
-.cp-other-source-status { margin: var(--ds-c-studio-citationpreview-space-1) var(--ds-c-studio-citationpreview-space-18); color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-citationpreview-typography-4); overflow-wrap: anywhere; }
+.cp-other-source-status { margin: var(--ds-c-studio-citationpreview-space-1) var(--ds-c-studio-citationpreview-space-18); color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); overflow-wrap: anywhere; }
 @media (max-width: 390px) { .cp-citation { max-width: 100%; } .cp-rack > [role="listitem"] { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .cp-citation, .cp-preview, .cp-preview-actions > button { animation: none; transition: none; } }
 .tw-open-source[aria-disabled="true"], .cp-return[aria-disabled="true"] { cursor: progress; opacity: .7; }
