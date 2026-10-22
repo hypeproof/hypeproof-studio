@@ -243,7 +243,7 @@ const FLOOR_MUTATIONS = [
   ["나의 변화 기록", "styles.css", " cursor: pointer; min-height: var(--hp-control-min); /* CGP-DS-R-010 */", " cursor: pointer;"],
   ["lesson step fields", "styles.css", "box-sizing: border-box; min-height: var(--hp-control-min); padding: 6px 8px;\n  background: var(--hp-bg-app-default);", "box-sizing: border-box; min-height: 36px; padding: 6px 8px;\n  background: var(--hp-bg-app-default);"],
   ["help mode radio labels", "styles.css", "gap: 6px; min-height: var(--hp-control-min); }", "gap: 6px; min-height: 32px; }"],
-  ["composer buttons", "styles.css", "  min-width: var(--hp-control-min); min-height: var(--hp-control-min); /* CGP-DS-R-010 */\n}\n.hps-btn-roll {", "}\n.hps-btn-roll {"],
+  ["composer buttons", "styles.css", "  min-width: var(--hp-control-min); min-height: var(--hp-control-min); /* CGP-DS-R-010 */\n}\n.hps-btn-roll {", "  min-width: 32px; min-height: 32px;\n}\n.hps-btn-roll {"],
   ["skip link", "taskWorkspace.css", "display: inline-flex; align-items: center; min-height: var(--hp-control-min); }", "display: inline-flex; align-items: center; }"],
   ["task search field", "taskWorkspace.css", ".tw-search input { width: 100%; box-sizing: border-box; min-height: var(--hp-control-min);", ".tw-search input { width: 100%; box-sizing: border-box;"],
   ["task title button", "taskWorkspace.css", ".tw-workspace .tw-quiet { min-width: var(--hp-control-min); min-height: var(--hp-control-min); }", ".tw-workspace .tw-quiet { min-height: var(--hp-control-min); }"],

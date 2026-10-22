@@ -541,3 +541,33 @@
 .tw-workspace .hps-naming-title { font-size: var(--hp-font-lead); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label); }
 .tw-workspace .hps-naming-input { font-size: var(--hp-font-body); }
 .tw-workspace .hps-naming-btn { font-weight: var(--hp-weight-strong); }
+
+/* CGP-DS-D-016: one editing card in both seats. 48px is a floor, not a fixed
+   height: the 44px controls plus 12px inset need more room. Keep the growing
+   textarea's 24px measurement unchanged. The placeholder colour stays the
+   audited --hp-text-placeholder-default role set in styles.css/chatDetails.css
+   (components never declare a role of their own). */
+.hps-input,
+.hps-shell[data-chat-detail="personal"] .hps-input,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] {
+  box-sizing: border-box;
+  border-radius: calc(var(--hp-space) * 5);
+  min-height: var(--hp-control-lg);
+  padding: calc(var(--hp-space) * 3);
+  padding-top: calc(var(--hp-space) * 3);
+}
+.hps-input:not([data-expanded]) {
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
+  background: var(--vscode-input-background, var(--ds-c-studio-chatdetails-surface-3));
+}
+.hps-input:not([data-expanded]) textarea { background: transparent; border: 0; }
+.hps-input .hps-btn-send,
+.hps-input .hps-btn-stop,
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send,
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-stop {
+  box-sizing: border-box;
+  width: var(--hp-control-min);
+  height: var(--hp-control-min);
+  padding: 0;
+  flex-shrink: 0;
+}

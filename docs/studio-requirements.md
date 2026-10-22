@@ -4079,3 +4079,18 @@ one outer height, forced colours keep the edge, no family restyles the chip; 9 n
 `intentChip` fallbacks, and the shipped `/manage` script run in a VM drawing seat tags, wrap-up
 badges and evidence source states) and `chalk/test/board-status-css.test.mjs` (colour, fill and
 edge per intent). Decision: DEC-DS-R-006.
+
+## Composer geometry (CGP-DS-D-016)
+
+`REQ-STUDIO-COMPOSER-GEOMETRY` traces CGP-DS-R-019 and DES-CGP-DS-21.
+The shared classroom and personal composer card has a 20px radius, minimum height
+48px and 12px padding, including its expanded state. Send and Stop remain inside
+it at 44×44px, with border-box sizing and no flex shrinking. The minimum is not a
+fixed height: controls plus padding may make the card taller. The textarea keeps
+its existing growing-input measurement. The placeholder keeps the audited `--hp-text-placeholder-default` role at opacity 1
+(≥4.5:1 on every host theme); the design acceptance names `--hp-text-muted`, but
+components never declare a role of their own, so no alias is added. This supports the Product Intent's accessible learner agency (DES-06/DES-11);
+it introduces no capability scoring or new data flow. Committed guard: `test/composer-geometry.smoke.mjs`
+measures computed geometry and placeholder contrast in headless Chromium (personal and
+classroom, dark and light, 1420/800/320) and fails when a later, higher-specificity or
+`@media` override changes it; with no browser it fails under `FOCUS_REQUIRE_BROWSER=1`.

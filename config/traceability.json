@@ -9900,6 +9900,49 @@
           "path": "extensions/hypeproof-chat/test/focus-geometry.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-COMPOSER-GEOMETRY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Composer geometry (CGP-DS-D-016)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPOSER-GEOMETRY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPOSER-GEOMETRY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COMPOSER-GEOMETRY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPOSER-GEOMETRY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/composer-geometry.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/focus-placeholder.smoke.mjs"
+        }
+      ]
     }
   ]
 }
