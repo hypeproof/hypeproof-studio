@@ -119,8 +119,9 @@
 .tw-sources .tw-source-policy { line-height: var(--hp-leading-prose); }
 .tw-workspace .tw-sources-toggle, .tw-workspace .tw-rail-toggle, .tw-workspace .tw-title-button, .tw-workspace .tw-new, .tw-workspace .tw-quiet { min-width: var(--hp-control-min); min-height: var(--hp-control-min); }
 .tw-sources .tw-source-detail { padding-top: var(--ds-c-studio-taskworkspace-space-5); }
+:where(:root[data-reduced-motion="true"]) .tw-workspace *, :where(:root[data-reduced-motion="true"]) .tw-workspace *::before, :where(:root[data-reduced-motion="true"]) .tw-workspace *::after { scroll-behavior: auto !important; }
 @media (prefers-reduced-motion: reduce) {
-  .tw-workspace *, .tw-workspace *::before, .tw-workspace *::after { scroll-behavior: auto !important; }
+  :where(:root:not([data-reduced-motion])) .tw-workspace *, :where(:root:not([data-reduced-motion])) .tw-workspace *::before, :where(:root:not([data-reduced-motion])) .tw-workspace *::after { scroll-behavior: auto !important; }
 }
 
 

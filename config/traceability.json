@@ -7200,6 +7200,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/src/motionPreference.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/motion.ts"
         }
       ]
     },
@@ -7214,6 +7217,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/reduced-motion.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/reduced-motion-live.test.tsx"
         }
       ]
     },
