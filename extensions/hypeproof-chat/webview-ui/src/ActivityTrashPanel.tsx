@@ -1,3 +1,5 @@
+import { finishModal } from './modalMotion';
+import './modalSurface.css';
 // CGP-KNOW-D-013 (DES-KNOW-24) — 내 작품 with the activity trash at its bottom. The file list is the
 // existing provenance inventory (ArtifactProvenanceList); this adds a move-to-trash press per file,
 // the 휴지통 entry, the 8-second "휴지통으로 옮겼어요 · 되돌리기" toast and the permanent-delete
@@ -55,7 +57,8 @@ export function ActivityTrashPanel({ files, scopeKey, onAsk }: {
   const planAnswered = useRef<{ path?: string } | null>(null);
   const planTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const purgeOpener = useRef<HTMLElement | null>(null);
-  useDialogFocus(dialog, { open: !!purge, kind: 'modal', onDismiss: () => setPurge(null) });
+  const dismissPurge = () => finishModal(dialog.current, () => setPurge(null));
+  useDialogFocus(dialog, { open: !!purge, kind: 'modal', keepFocusOnDismiss: true, onDismiss: dismissPurge });
 
   useEffect(() => {
     setView(null); setOpen(false); setPending(false); setError(''); setToast(null); setHeld({ hover: false, focus: false }); setPurge(null);
@@ -149,16 +152,16 @@ export function ActivityTrashPanel({ files, scopeKey, onAsk }: {
           </li>)}</ul>}
       </div>}
     </div>}
-    {purge && <div className="tw-trash-backdrop">
-      <div ref={dialog} className="tw-trash-dialog" role="dialog" aria-modal="true" aria-labelledby="tw-trash-purge-title" aria-describedby="tw-trash-purge-file tw-trash-purge-note"
+    {purge && <div className="tw-trash-backdrop hp-modal-backdrop">
+      <div ref={dialog} className="tw-trash-dialog hp-modal" role="dialog" aria-modal="true" aria-labelledby="tw-trash-purge-title" aria-describedby="tw-trash-purge-file tw-trash-purge-note"
         onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
         onKeyDown={event => { if (imeComposing(event, composing.current) && event.key === 'Enter') event.preventDefault(); }}>
         <h3 id="tw-trash-purge-title">이 파일을 영구 삭제할까요?</h3>
         <p id="tw-trash-purge-file" className="tw-trash-name">{purge.path}</p>
         <p id="tw-trash-purge-note">영구 삭제한 파일은 다시 복원할 수 없어요.</p>
         <div className="tw-trash-actions">
-          <button type="button" data-trash-cancel="" onClick={() => setPurge(null)}>취소</button>
-          <button type="button" className="tw-trash-danger" onClick={() => { if (composing.current) return; const target = purge.id; const index = view?.entries.findIndex(item => item.id === target) ?? 0; setPurge(null); act('purge', target, { kind: 'list', index, origin: purgeOpener.current }); }}>영구 삭제</button>
+          <button type="button" data-trash-cancel="" onClick={dismissPurge}>취소</button>
+          <button type="button" className="tw-trash-danger" onClick={() => { if (composing.current) return; const target = purge.id; const index = view?.entries.findIndex(item => item.id === target) ?? 0; finishModal(dialog.current, () => { setPurge(null); act('purge', target, { kind: 'list', index, origin: purgeOpener.current }); }); }}>영구 삭제</button>
         </div>
       </div>
     </div>}

@@ -1,3 +1,5 @@
+import { finishModal } from './modalMotion';
+import './modalSurface.css';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { normalizeTextSize } from '../../src/textSize';
 import { MEMORY_SELECTED_LABEL } from '../../src/outboundConsent';
@@ -29,11 +31,11 @@ export function OutboundDialog({ prompt, onAnswer, textSize }: { prompt: Outboun
     <input type="checkbox" checked={selected.includes(item.id)} onChange={e => { const on = e.target.checked; setSelected(cur => on ? (cur.includes(item.id) ? cur : [...cur, item.id]) : cur.filter(id => id !== item.id)); }} />
     <span>{visible(item.label)} · {item.bytes.toLocaleString('ko-KR')} 바이트{item.memory && <span> · {MEMORY_SELECTED_LABEL}</span>}</span>
   </label>;
-  const finish = (value: string[] | null) => { if (answered.current) return; answered.current = true; onAnswer(prompt.id, value); };
+  const finish = (value: string[] | null) => { if (answered.current) return; answered.current = true; finishModal(dialog.current, () => onAnswer(prompt.id, value)); };
   useDialogFocus(dialog, { open: true, kind: 'modal', initialFocus: '[data-outbound-cancel]' });
   useEffect(() => { const node = dialog.current; node?.showModal(); node?.querySelector<HTMLButtonElement>('[data-outbound-cancel]')?.focus(); return () => node?.close(); }, []);
   const excluded = prompt.excluded.replace(/^포함하지 않는 것:\s*/, '').split(/,\s*/).filter(Boolean);
-  return <dialog ref={dialog} className="hps-outbound" aria-labelledby="outbound-title" data-testid="outbound-dialog"
+  return <dialog ref={dialog} className="hps-outbound hp-modal" aria-labelledby="outbound-title" data-testid="outbound-dialog"
     style={{ '--hp-font-caption': `calc(14px + ${{ base: 0, large: 2, xlarge: 4 }[normalizeTextSize(textSize)]}px)` } as CSSProperties}
     onCancel={e => { e.preventDefault(); if (!composing.current) finish(null); }}
     onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}

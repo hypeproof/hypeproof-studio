@@ -82,6 +82,8 @@
   --hp-dur-press: var(--ds-c-studio-tokens-size-80);     /* hover/press state on a control (was 100-150ms literals) */
   --hp-dur-content: var(--ds-c-studio-tokens-size-81);   /* small content appearing in place: copy confirmation, catch-up pill */
   --hp-dur-enter: var(--ds-c-studio-tokens-size-82);     /* a surface or message entering: live message, tools menu, runner bar */
+  --hp-dur-modal-enter: var(--ds-c-modal-enter);   /* CGP-DS-D-020: a dialog entering (fade) */
+  --hp-dur-modal-exit: var(--ds-c-modal-exit);     /* CGP-DS-D-020: a dialog leaving, shorter than it entered */
   --hp-dur-meter: var(--ds-c-studio-tokens-size-83);     /* a live level (voice meter) keeps up with the signal */
   --hp-dur-stagger: var(--ds-c-studio-tokens-size-83);   /* offset between the dots of one indicator */
   /* Status loops: each pauses when its surface is idle and stops under reduced motion. */

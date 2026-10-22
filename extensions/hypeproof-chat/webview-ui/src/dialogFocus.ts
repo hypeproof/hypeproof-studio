@@ -107,6 +107,8 @@ export interface DialogFocusOptions {
   kind: DialogKind;
   /** Called for Escape, an outside pointer press and (popover) Tab. Without it the surface keeps its own keys. */
   onDismiss?: (reason: DismissReason) => void;
+  /** Animated modals retain focus until their delayed unmount. */
+  keepFocusOnDismiss?: boolean;
   /** The opener, when it is not simply the element focused at open time (or must be re-found later). Returning null means there is none. */
   opener?: () => HTMLElement | null | undefined;
   /** Tried after the opener and before the composer. */
@@ -143,7 +145,7 @@ export function useDialogFocus(container: RefObject<HTMLElement | null>, options
 
     const dismiss = (reason: DismissReason) => {
       // Hand focus back before the surface goes, so it never passes through <body>.
-      if (reason !== 'tab' && focusIsLost(container.current)) returnFocus(opener, () => latest.current.fallback?.());
+      if (!latest.current.keepFocusOnDismiss && reason !== 'tab' && focusIsLost(container.current)) returnFocus(opener, () => latest.current.fallback?.());
       latest.current.onDismiss?.(reason);
     };
     const scopeNode = () => latest.current.scope?.current ?? container.current;

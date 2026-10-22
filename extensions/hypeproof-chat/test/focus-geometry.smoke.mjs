@@ -210,7 +210,7 @@ check('every scroll scope sets -2px, responsive scopes only at their actual brea
     const responsive = new Map([['html body :is(.ops-top)', '(max-width: 520px)'], ['html body :is(.ops-top>#ops-state-filters)', '(max-width: 600px)']]);
     assert.equal(media, responsive.get(d.parent.selector) || '');
   });
-  assert.equal(count, 3);
+  assert.equal(count, 4); // the :is() scroll list, the shared .hp-modal card (CGP-DS-D-020), and the two Chalk responsive scrollers
 });
 // Resolve the actual role declarations and primitive tiers, with explicit host fixtures.
 // This is token-pair evidence, not a substitute for the browser's cascade/paint checks.
