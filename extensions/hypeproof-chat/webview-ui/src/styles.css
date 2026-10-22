@@ -1954,6 +1954,32 @@ html, body, #root {
 .hp-inbox-link-url { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-8)); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; min-width: 0; }
 .hp-inbox :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
+/* CGP-KNOW-R-003 — the activity's 자료 list and the "함께 보낼 자료" line above the composer. Learner text at the
+   caption step or larger (14px floor), every control a 44px target, titles wrap instead of truncating, and who
+   added an item is said in words, never colour. */
+.hp-materials-note, .hp-materials-meta, .hp-materials-detail, .hp-materials-error, .hp-materials-notice, .hp-materials-url label { font-size: var(--hp-font-caption); }
+.hp-materials-note, .hp-materials-meta, .hp-materials-detail { color: var(--hp-text-muted-default); }
+.hp-materials-note { margin: var(--hp-space-2) var(--hp-space-1); }
+.hp-materials-list { list-style: none; margin: var(--hp-space-2) 0 0; padding: 0; display: grid; gap: var(--hp-space-2); }
+.hp-materials-item { display: grid; gap: var(--hp-space-1); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); padding: var(--hp-space-2) var(--hp-space-1) 0; min-width: 0; }
+.hp-materials-title { font-weight: var(--ds-c-studio-styles-typography-7); overflow-wrap: anywhere; word-break: keep-all; white-space: normal; }
+.hp-materials-meta, .hp-materials-detail { overflow-wrap: anywhere; min-width: 0; }
+.hp-materials-detail { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-8)); }
+.hp-materials-actions, .hp-materials-add, .hp-materials-url, .hp-materials-chips, .hp-materials-chip { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); align-items: center; min-width: 0; }
+.hp-materials-add { margin: var(--hp-space-2) var(--hp-space-1); }
+.hp-materials-url label { display: grid; gap: var(--hp-space-1); flex: 1 1 auto; min-width: 0; }
+.hp-materials button, .hp-materials-chips button, .hp-materials-url input { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
+.hp-materials-url input { box-sizing: border-box; width: 100%; }
+.hp-materials-chips { margin: 0 0 var(--hp-space-2); }
+.hp-materials-chip { overflow-wrap: anywhere; font-size: var(--hp-font-caption); }
+/* The focus ring is the shared focus geometry's (focusGeometry.css, CGP-DS-D-014): no ring of this card's own. */
+/* Forced colours: under the global pressed rule (tokens.css: Highlight fill, HighlightText word) Chromium's text
+   backplate hid the word 넣음. Here the pressed state is the word itself plus a Highlight border on Canvas. */
+@media (forced-colors: active) {
+  .hp-materials button[aria-pressed="true"] { background-color: Canvas !important; color: CanvasText !important; border-color: Highlight !important; }
+  .hp-materials button[aria-pressed="true"] * { color: CanvasText !important; }
+}
+
 /* #751 native help — the learner's help request in the coach rail (same quiet card language as the inbox). */
 .hp-help-form, .hp-help-preview { display: grid; gap: var(--ds-c-studio-styles-space-2); margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-13); min-width: 0; }
 .hp-help-label { display: grid; gap: var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-9); min-width: 0; }

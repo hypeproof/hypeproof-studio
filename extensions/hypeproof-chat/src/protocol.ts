@@ -152,6 +152,8 @@ export interface ChatConfig {
   turnTools?: import('./turnTools').TurnToolsAvailability;
   /** CGP-CHAT-R-011 — this seat may attach a work-folder text file (sdk_tools.read, never instructors). */
   fileAttach?: boolean;
+  /** CGP-KNOW-R-003 — this seat has the activity's 자료 list (the file-attach gate). */
+  materials?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
   activityUnavailable?: import("./activityAvailability").ActivityUnavailable;
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus;
@@ -577,6 +579,12 @@ export type WebviewMessage = (
   | { type: "askAboutFile"; path: string }
   /** CGP-CHAT-R-011 — the learner removed the attached file; nothing from it is sent. */
   | { type: "removeFileContext" }
+  /** CGP-KNOW-R-003 — the activity's 자료 list: read it, add a file (host picker) or an https address, select an item for the next message, take a learner item off the list. `scope` is the list the press was made on. */
+  | { type: "materialsRequest" }
+  | { type: "materialAddFile"; requestId: string }
+  | { type: "materialAddUrl"; requestId: string; url: string }
+  | { type: "materialSelect"; requestId: string; scope: string; id: string; selected: boolean }
+  | { type: "materialRemove"; requestId: string; scope: string; id: string }
   // cr-verify — "Test my product" (CR-12–CR-16; CR switch only, re-checked by the host).
   | { type: "verifyOpen" }
   // `requestId`: the panel that asked; only it sends the resulting `sendText` (two chat views receive every post).
@@ -859,6 +867,8 @@ export type HostMessage = (
   | { type: "attachmentFailure"; failure: import("./attachmentFailure").AttachmentFailure }
   | { type: "attachmentFailureResolved"; id: string }
   | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string; notice?: string }
+  /** CGP-KNOW-R-003 — the 자료 list (null = this seat has none). `requestId` answers that press; `error`/`notice` say what happened. */
+  | { type: "materialsState"; view: import("./activityMaterialsView").MaterialsView | null; requestId?: string; error?: string; notice?: string }
   // cr-verify — the "Test my product" panel (null = hidden). `sendText`: the student's own
   // sentence the panel sends next through the normal send path (the coach context rides
   // with it, model-only). `error`: why the last action was refused.

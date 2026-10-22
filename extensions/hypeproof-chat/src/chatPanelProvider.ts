@@ -207,6 +207,7 @@ import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { CapabilityChangeTracker, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
+import { addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import { compactionLineId, CONTEXT_COMPACT_NOTE, trimBoundaryId } from "./contextTrim";
@@ -2628,6 +2629,167 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!file) return null;
     this.clearFileAttachment();
     return file.modelText;
+  }
+  // ── CGP-KNOW-R-003 (REQ-STUDIO-ACTIVITY-MATERIALS) — the activity's 자료 list (activityMaterials.ts).
+  // The list is stored per work folder in the extension's storage; the selection is host-owned and
+  // bound to the task scope and folder it was made in, and a fresh send takes it once.
+  /**
+   * `ids`: selected id → its title when selected, so an item that disappears before Send is still named.
+   * An item that left the list stays selected (shown as unavailable above the composer) until the learner
+   * takes it out: the send is held meanwhile, so nothing the learner chose drops without being named.
+   */
+  private materialSelection: { scope: string; root: string; ids: Map<string, string> } | null = null;
+  private materialTurnIds?: Set<string>;
+  /** A watcher on `<root>/자료/`: a file that is deleted or renamed there is named before the next Send. */
+  private materialsWatch?: { root: string; dispose(): void };
+  private materialsWatchTimer?: ReturnType<typeof setTimeout>;
+  /** Same gate as a work-folder file (sdk_tools.read after pass narrowing, never the instructor surface). */
+  private materialsAllowed(): boolean {
+    const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
+    return fileAttachAllowed(profile, this._instructorMode?.isInstructor === true);
+  }
+  private watchMaterials(root: string): void {
+    if (this.materialsWatch?.root === root) return;
+    this.materialsWatch?.dispose();
+    this.materialsWatch = undefined;
+    const ws = vscode.workspace as Partial<typeof vscode.workspace>;
+    if (typeof ws.createFileSystemWatcher !== "function" || typeof vscode.RelativePattern !== "function") return;
+    // The folder itself too: a 자료 folder that is removed or renamed takes every file with it.
+    const watcher = ws.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(root), "{자료,자료/*}"));
+    const refresh = () => {
+      if (this.materialsWatchTimer) clearTimeout(this.materialsWatchTimer);
+      this.materialsWatchTimer = setTimeout(() => { this.materialsWatchTimer = undefined; void this.postMaterials(); }, 150);
+    };
+    const subs = [watcher.onDidCreate(refresh), watcher.onDidDelete(refresh), watcher.onDidChange(refresh)];
+    this.materialsWatch = { root, dispose: () => { for (const d of subs) d.dispose(); watcher.dispose(); } };
+    this.context?.subscriptions?.push({ dispose: () => this.materialsWatch?.dispose() });
+  }
+  private async materialsSnapshot(): Promise<{ root: string; file: string; view: MaterialsView; cards: import("./classroomInbox").InboxCard[]; dropped: string[] } | null> {
+    const base = this.context?.globalStorageUri?.fsPath;
+    const cwd = this.resolveCoachCwd();
+    if (!base || !cwd || !this.materialsAllowed()) return null;
+    let root: string;
+    try { root = await fs.promises.realpath(cwd); } catch { return null; }
+    this.watchMaterials(root);
+    const file = materialsManifestFile(base, root);
+    const cards = this.inboxSource ? (await this.inboxSource.inboxView().catch(() => null))?.cards ?? [] : [];
+    let provenance: import("./artifactProvenanceView").ArtifactProvenanceView | null = null;
+    try { provenance = await this.provenanceRecorder()?.view(root) ?? null; } catch { provenance = null; }
+    const kinds = new Map((provenance?.entries ?? []).map(e => [e.path, e.kind as string]));
+    const scope = this.turnRequestScope();
+    const own = this.materialSelection;
+    // A selection belongs to the task and folder it was made in: another task or folder never shows or sends it.
+    let dropped: string[] = [];
+    if (own && (own.scope !== scope || own.root !== root)) { dropped = [...own.ids.values()]; this.materialSelection = null; }
+    const selected = this.materialSelection?.ids ?? new Map<string, string>();
+    const listed = materialsView({ manifest: loadManifest(file), folderFiles: listMaterialFolder(root), provenance: rel => kinds.get(rel), inbox: cards, selected: new Set(selected.keys()), scope });
+    const view: MaterialsView = { ...listed, unavailable: unavailableSelected(root, listed, selected) };
+    return { root, file, view, cards, dropped };
+  }
+  private async postMaterials(extra?: { requestId?: string; error?: string; notice?: string }): Promise<void> {
+    const snap = await this.materialsSnapshot().catch(() => null);
+    const dropped = snap?.dropped.length && !extra?.error ? { error: MATERIALS_COPY.changed } : {};
+    await this.post({ type: "materialsState", view: snap?.view ?? null, ...extra, ...dropped });
+  }
+  /** The refusal for a seat or folder that may not send work-folder content, or null. */
+  private materialsRefusal(): string | null {
+    if (!this.materialsAllowed()) return denialCopy({ source: "lesson", feature: "자료" }, "neutral");
+    if (!this.resolveCoachCwd()) return FILE_REFUSAL_COPY["no-workspace"];
+    // REQ-STUDIO-FOLDER-CONSENT — "AI 안 씀": nothing from this folder is queued for the model.
+    return folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
+  }
+  private async addMaterial(requestId: string, url?: string): Promise<void> {
+    const refusal = this.materialsRefusal();
+    if (refusal) { await this.postMaterials({ requestId, error: refusal }); return; }
+    const snap = await this.materialsSnapshot();
+    if (!snap) { await this.postMaterials({ requestId, error: FILE_REFUSAL_COPY["no-workspace"] }); return; }
+    const scope = this.turnRequestScope();
+    let item: { kind: "file" | "url"; ref: string; title: string };
+    if (url !== undefined) {
+      const checked = checkMaterialUrl(url);
+      if (!checked.ok) { await this.postMaterials({ requestId, error: checked.reason }); return; }
+      item = { kind: "url", ref: checked.url, title: checked.host };
+    } else {
+      const picked = await vscode.window.showOpenDialog({ canSelectFiles: true, canSelectFolders: false, canSelectMany: false, openLabel: "자료에 넣기", title: "자료에 넣을 파일 고르기" });
+      if (!picked?.[0]) { await this.postMaterials({ requestId }); return; }
+      // The folder or task may have changed while the dialog was open.
+      if (this.turnRequestScope() !== scope || (await fs.promises.realpath(this.resolveCoachCwd() ?? "").catch(() => "")) !== snap.root) { await this.postMaterials({ requestId, error: MATERIALS_COPY.changed }); return; }
+      const added = addMaterialFile(snap.root, picked[0].fsPath);
+      if (!added.ok) { await this.postMaterials({ requestId, error: added.reason }); return; }
+      // REQ-STUDIO-ARTIFACT-PROVENANCE — the copy is the learner's upload.
+      if (added.copied) noteHostWrite([{ absPath: path.join(snap.root, ...added.rel.split("/")), data: added.bytes }], "learner_upload");
+      item = { kind: "file", ref: added.rel, title: added.rel.slice(added.rel.indexOf("/") + 1) };
+    }
+    const next = withLearnerItem(loadManifest(snap.file), item, Date.now(), listMaterialFolder(snap.root));
+    if ("full" in next) { await this.postMaterials({ requestId, error: MATERIALS_COPY.tooManyItems }); return; }
+    try { saveManifest(snap.file, next.manifest); } catch { await this.postMaterials({ requestId, error: FILE_REFUSAL_COPY.unreadable }); return; }
+    await this.postMaterials({ requestId, notice: MATERIALS_COPY.added(item.title) });
+  }
+  private async selectMaterial(msg: { requestId: string; scope: string; id: string; selected: boolean }): Promise<void> {
+    const refusal = msg.selected ? this.materialsRefusal() : null;
+    if (refusal) { await this.postMaterials({ requestId: msg.requestId, error: refusal }); return; }
+    const snap = await this.materialsSnapshot();
+    if (!snap || snap.view.scope !== msg.scope) { await this.postMaterials({ requestId: msg.requestId, error: MATERIALS_COPY.changed }); return; }
+    // Taking out an unavailable item is how the learner agrees to send without it.
+    if (!msg.selected && this.materialSelection?.ids.has(msg.id)) { this.materialSelection.ids.delete(msg.id); await this.postMaterials({ requestId: msg.requestId }); return; }
+    if (!snap.view.items.some(i => i.id === msg.id)) { await this.postMaterials({ requestId: msg.requestId, error: MATERIALS_COPY.gone }); return; }
+    const own = this.materialSelection ??= { scope: snap.view.scope, root: snap.root, ids: new Map() };
+    if (msg.selected && !own.ids.has(msg.id) && own.ids.size >= MATERIALS_MAX_SELECTED) { await this.postMaterials({ requestId: msg.requestId, error: MATERIALS_COPY.tooManySelected }); return; }
+    if (msg.selected) own.ids.set(msg.id, snap.view.items.find(i => i.id === msg.id)!.title); else own.ids.delete(msg.id);
+    await this.postMaterials({ requestId: msg.requestId });
+  }
+  private async removeMaterial(msg: { requestId: string; scope: string; id: string }): Promise<void> {
+    const snap = await this.materialsSnapshot();
+    if (!snap || snap.view.scope !== msg.scope) { await this.postMaterials({ requestId: msg.requestId, error: MATERIALS_COPY.changed }); return; }
+    if (!snap.view.items.some(i => i.id === msg.id)) { await this.postMaterials({ requestId: msg.requestId, error: MATERIALS_COPY.gone }); return; }
+    // withoutItem is the one place that decides what may be removed: an instructor item never.
+    const next = withoutItem(loadManifest(snap.file), msg.id);
+    if ("refused" in next) { await this.postMaterials({ requestId: msg.requestId, error: next.refused === "instructor" ? MATERIALS_COPY.notRemovable : MATERIALS_COPY.gone }); return; }
+    try { saveManifest(snap.file, next.manifest); } catch { await this.postMaterials({ requestId: msg.requestId, error: FILE_REFUSAL_COPY.unreadable }); return; }
+    this.materialSelection?.ids.delete(msg.id);
+    await this.postMaterials({ requestId: msg.requestId, notice: next.kind === "file" ? MATERIALS_COPY.removed(next.title) : MATERIALS_COPY.removedUrl(next.title) });
+  }
+  /**
+   * Part of a fresh send's preflight, before anything of the turn is consumed. The selection must be
+   * this task's and folder's, and every selected item readable now; otherwise the send is held (the
+   * draft goes back, the items are named) and nothing is sent. Returns the items read now, which the
+   * model turn takes once (`takeMaterials`). Nothing unselected is read; a seat without the gate or a
+   * folder set to "AI 안 씀" reads nothing here (REQ-STUDIO-FOLDER-CONSENT holds that turn itself).
+   */
+  private async prepareMaterials(): Promise<{ own: NonNullable<ChatPanelProvider["materialSelection"]>; key: string; text: string | null } | null> {
+    const own = this.materialSelection;
+    if (!own || own.ids.size === 0 || this.materialsRefusal()) return null;
+    const root = await fs.promises.realpath(this.resolveCoachCwd() ?? "").catch(() => "");
+    if (own.scope !== this.turnRequestScope() || own.root !== root) {
+      const titles = [...own.ids.values()];
+      this.materialSelection = null;
+      await this.postMaterials({ error: MATERIALS_COPY.heldChanged(titles) });
+      throw new ActivityConnectionError(MATERIALS_COPY.heldChanged(titles));
+    }
+    const snap = await this.materialsSnapshot();
+    if (!snap) return null;
+    const out = selectedMaterialsText(snap.root, snap.view, new Set(own.ids.keys()), snap.cards);
+    const blocked = [...new Set([...(snap.view.unavailable ?? []).map(u => u.title), ...out.skipped])];
+    if (blocked.length) {
+      await this.post({ type: "materialsState", view: snap.view, error: MATERIALS_COPY.held(blocked) });
+      throw new ActivityConnectionError(MATERIALS_COPY.held(blocked));
+    }
+    return { own, key: [...own.ids.keys()].join("\n"), text: out.text };
+  }
+  /**
+   * The model turn takes the prepared selection once and clears it, whether or not it goes (a later
+   * refusal in the send does not restore it). It goes only when it is still the selection that was
+   * checked, on the same task and folder, and the seat still has the gate; otherwise it is named.
+   */
+  private async takeMaterials(prepared: Awaited<ReturnType<ChatPanelProvider["prepareMaterials"]>>, allowed: boolean): Promise<string | null> {
+    const own = this.materialSelection;
+    if (!own) return null;
+    this.materialSelection = null;
+    const root = await fs.promises.realpath(this.resolveCoachCwd() ?? "").catch(() => "");
+    const same = prepared && prepared.own === own && prepared.key === [...own.ids.keys()].join("\n") && own.scope === this.turnRequestScope() && own.root === root;
+    if (same && allowed) { await this.postMaterials(); return prepared.text; }
+    await this.postMaterials(own.ids.size ? { error: MATERIALS_COPY.skipped([...own.ids.values()]) } : undefined);
+    return null;
   }
   /** CGP-ART-R-007 — remove queued page text, screenshot and notice; nothing from the page is sent. */
   private clearPageAttachment(): void {
@@ -5891,6 +6053,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CGP-CHAT-R-011 — removed before sending: nothing from the file goes with the next turn.
         this.clearFileAttachment();
         return;
+      // CGP-KNOW-R-003 — the 자료 list; the host re-checks the seat, folder and scope on every press.
+      case "materialsRequest": await this.postMaterials(); return;
+      case "materialAddFile": await this.addMaterial(String(msg.requestId)); return;
+      case "materialAddUrl": await this.addMaterial(String(msg.requestId), typeof msg.url === "string" ? msg.url : ""); return;
+      case "materialSelect": if (typeof msg.id === "string" && typeof msg.scope === "string") await this.selectMaterial({ requestId: String(msg.requestId), scope: msg.scope, id: msg.id, selected: msg.selected === true }); return;
+      case "materialRemove": if (typeof msg.id === "string" && typeof msg.scope === "string") await this.removeMaterial({ requestId: String(msg.requestId), scope: msg.scope, id: msg.id }); return;
       case "removePageContext":
         // CGP-ART-R-007 — removed before sending: nothing from the page goes with the next turn.
         this.clearPageAttachment();
@@ -6157,6 +6325,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       ...(images ?? []).map((dataUrl,index) => ({id:`pasted-${index}`,dataUrl})),
     ]);
     if (preparedAttachments.failures.length) throw new ActivityConnectionError(preparedAttachments.failures[0].reason);
+    // CGP-KNOW-R-003 — a selected 자료 that is gone, unreadable or from another task or folder holds the send here, named.
+    // No selection: no await at all, so a send without 자료 keeps its timing.
+    const preparedMaterials = carryFile && this.materialSelection?.ids.size ? await this.prepareMaterials() : null;
     preflightComplete=true;
     // REQ-STUDIO-FOLDER-CONSENT — decided before anything in this turn calls the model (team brain included).
     if (this.cachedProfile) await folderConsentProfile(this.context, this.cachedProfile, this.folderConsentOpts());
@@ -6312,7 +6483,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!carryFile && retrySourceId !== undefined && this.fileTurnIds?.has(retrySourceId)) {
       void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, notice: FILE_RETRY_NOTICE });
     }
-    let userTextForModel = withElementText(pageContext ? `${pageContext}\n\n${withFile}` : withFile, element);
+    // CGP-KNOW-R-003 — the 자료 items the learner selected for this message, read in the preflight; nothing
+    // else from the list. The gate is checked again on this turn's narrowed profile. A retry takes none.
+    const materialContext = carryFile ? await this.takeMaterials(preparedMaterials, fileAttachAllowed(profile, this._instructorMode.isInstructor === true)) : null;
+    const withMaterials = materialContext ? `${materialContext}\n\n${withFile}` : withFile;
+    if (materialContext) (this.materialTurnIds ??= new Set()).add(userId);
+    if (!carryFile && retrySourceId !== undefined && this.materialTurnIds?.has(retrySourceId)) void this.postMaterials({ notice: MATERIALS_COPY.retryNotice });
+    let userTextForModel = withElementText(pageContext ? `${pageContext}\n\n${withMaterials}` : withMaterials, element);
     // cr-verify — a test run or fix request rides with the student's own sentence, model-only, while the switch is on.
     const verifyContextText = this.verifySession.takeCoachContext();
     if (verifyContextText && this.isCurriculumRuntimeEnabled()) userTextForModel = `${verifyContextText}\n\n${userTextForModel}`;
@@ -8236,6 +8413,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       config: {
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
         ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
+        ...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
         ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
         ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),

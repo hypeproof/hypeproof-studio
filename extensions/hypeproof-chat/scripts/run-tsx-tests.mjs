@@ -42,6 +42,7 @@ const OVERRIDES = {
   "missing-task-folder": { banner: BANNER_POSTED },
   "preview-recovery": { banner: BANNER_POSTED },
   "ask-about-file": { banner: BANNER_POSTED_ARROW },
+  "activity-materials": { banner: BANNER_POSTED_ARROW },
   "attachment-failure-ui": { banner: BANNER_POSTED_ARROW },
   "trial-end-card-dismiss": { banner: BANNER_POSTED },
   "activity-status-chatpanel": { banner: BANNER_POSTED },
