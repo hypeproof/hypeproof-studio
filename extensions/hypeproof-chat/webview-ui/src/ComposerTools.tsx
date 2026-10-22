@@ -46,5 +46,5 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
 }
 
 export function SelectedTool({ locked, onClear }: { locked: boolean; onClear: () => void }) {
-  return <button type="button" className="hps-selected-tool" disabled={locked} onClick={onClear} aria-label="웹 검색 선택 해제" title={locked ? '예약 메시지를 먼저 처리해 주세요' : '이번 메시지의 웹 검색 선택 해제'}><ChatIcon kind="globe" /><span>웹 검색</span><span aria-hidden="true">×</span></button>;
+  return <button type="button" className="hps-selected-tool" disabled={locked} onClick={onClear} aria-label="웹 검색 선택 해제" data-hp-tooltip={locked ? '예약 메시지를 먼저 처리해 주세요' : '이번 메시지의 웹 검색 선택 해제'}><ChatIcon kind="globe" /><span>웹 검색</span><span aria-hidden="true">×</span></button>;
 }

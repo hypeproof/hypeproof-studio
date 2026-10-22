@@ -68,8 +68,8 @@ const COUNT = '남은 요청';
 
 function Line({ parts, model, low = false, onOpenDetail }: { parts: string[]; model: string; low?: boolean; onOpenDetail?: () => void }) {
   const text = parts.join(' · ');
-  return <span className="hps-access-header" role="status" title={text}>
-    <span className="hps-access-model" title={model}><bdi>{model}</bdi></span>
+  return <span className="hps-access-header" role="status" data-hp-tooltip={text}>
+    <span className="hps-access-model" data-hp-tooltip={model}><bdi>{model}</bdi></span>
     <button type="button" className="hps-access-chip" data-low={low || undefined} onClick={onOpenDetail} aria-label={`${text} · 이용권과 사용량 자세히`}>
       <span className="hps-access-chip-text">{parts.map((part, i) => {
         const sep = i < parts.length - 1 ? ' ·' : '';

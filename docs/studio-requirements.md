@@ -4154,3 +4154,40 @@ it introduces no capability scoring or new data flow. Committed guard: `test/com
 measures computed geometry and placeholder contrast in headless Chromium (personal and
 classroom, dark and light, 1420/800/320) and fails when a later, higher-specificity or
 `@media` override changes it; with no browser it fails under `FOCUS_REQUIRE_BROWSER=1`.
+
+## Tooltip presentation (CGP-DS-D-021)
+
+REQ-STUDIO-TOOLTIPS — DES-CGP-DS-26, P0, Both; traces to CGP-DS-R-024
+(REQ-CGP-DS-26). Extends DES-06 label association and Product Intent's accessible,
+legible action choices; supports learner agency without adding assessment labels.
+
+- Studio personal/classroom, start and local-review surfaces and Chalk pages share
+  one tooltip implementation. Existing native title hints become explicit
+  `data-hp-tooltip` text; custom component `title` props and iframe titles retain
+  their semantic meaning. Buttons retain visible names or independent aria-labels.
+- Tooltip text is 14px, radius 8px, block padding 4px, inline padding 8px. Hover
+  opens after 500ms; keyboard focus opens immediately. Existing shortcuts and
+  `aria-keyshortcuts` appear as text, never only a symbol or an image.
+- The hint is excluded from the accessibility tree; it never supplies or replaces
+  the button name. No aria-describedby causes duplicate reading of the hint.
+- Pointer departure cancels pending work; focus departure, Escape (outside IME),
+  pointer press, user scrolling (wheel, touch, keys, or any scroll once the focus has
+  settled), window blur/resize and removed triggers hide the hint. The scroll a
+  keyboard focus itself causes (a control scrolled into view) does not: the focused
+  hint stays and is placed next to the control. A pointer moving over plain content
+  returns to the focused control's hint.
+  Another hover target gets its own delay, even while a different control has focus.
+  Leaving that hover restores the focused control's hint. No task state is stored.
+- Text is assigned with textContent. Hints stay within viewport edges and render
+  inside native dialogs' top layer. Forced colours use Canvas/CanvasText boundaries.
+
+Verification: `extensions/hypeproof-chat/test/tooltip.test.mjs` executes the shared
+DOM behavior, CSSOM geometry guards, accessible-name computations on real control
+renders, and Chalk's generated transport. `extensions/hypeproof-chat/test/tooltip-browser.smoke.mjs`
+renders the real ChatPanel, TaskWorkspace and WriteApprovalDialog into the shipped
+stylesheet order in headless Chromium and reads computed 14px / 8px / 4px 8px in
+dark, light and forced colours at 1420 and 800px, hover (500ms), keyboard focus
+(including a focus that scrolls), Escape and wheel dismissal, and fails when a
+cascade override or a dropped `data-hp-tooltip` appears (it prints NOT RUN without a
+browser; `FOCUS_REQUIRE_BROWSER=1` makes that a failure). This is automated evidence,
+not a claim of a physical screen-reader or installed-app acceptance run.

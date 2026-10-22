@@ -74,7 +74,7 @@ export class ChatErrorBoundary extends Component<Props, State> {
             <button
               className="hps-fatal-btn-ghost"
               onClick={() => postToHost({ type: "openSettings" })}
-              title="문제가 계속되면 설정 → 다시 시작"
+              data-hp-tooltip="문제가 계속되면 설정 → 다시 시작"
             >
               설정 열기
             </button>

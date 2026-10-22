@@ -10,8 +10,12 @@ import { App } from "./App";
 import { installImeHostBarrier } from "./imeGuard";
 import "./styles.css";
 import "./chatDetails.css";
+import "./tooltips.css";
+import { installTooltips } from "./tooltips";
 
 installImeHostBarrier(document);
 const container = document.getElementById("root");
 if (!container) throw new Error("Missing #root element");
 createRoot(container).render(document.documentElement.dataset.surface === "local-review" ? <LocalReview /> : document.documentElement.dataset.surface === "start" ? <StartPage /> : <App />);
+
+installTooltips(document);

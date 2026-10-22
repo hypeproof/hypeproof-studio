@@ -373,7 +373,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       closeSources(undefined, panelOwnsFocus);
     }
   }}>
-    <a className="tw-skip" href="#task-conversation" title="대화로 바로 가기 (Alt+Shift+J 또는 Enter)" aria-keyshortcuts="Alt+Shift+J" onClick={event => { event.preventDefault(); conversation.current?.focus(); }}>대화로 바로 가기</a>
+    <a className="tw-skip" href="#task-conversation" data-hp-tooltip="대화로 바로 가기 (Alt+Shift+J 또는 Enter)" aria-keyshortcuts="Alt+Shift+J" onClick={event => { event.preventDefault(); conversation.current?.focus(); }}>대화로 바로 가기</a>
     <nav ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
@@ -413,9 +413,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
             if (event.key === 'Escape') finishRename();
           }} />
           <button className="tw-quiet" disabled={!title.trim() || blocked || !!renamePending} aria-busy={!!renamePending}>{renamePending ? '저장 중…' : '저장'}</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
-        </form> : <h1><button ref={renameButton} className="tw-title-button" title={`작업 이름 바꾸기: ${active?.title ?? '작업 기록'}`} disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
+        </form> : <h1><button ref={renameButton} className="tw-title-button" data-hp-tooltip={`작업 이름 바꾸기: ${active?.title ?? '작업 기록'}`} disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
         <div ref={setHeadingSlot} className="tw-heading-slot" />
-        <span className="tw-run-note" role="status" aria-live="polite" title={busy ? (runState === 'approval' ? '화면에 뜬 확인 창에서 골라 주세요.' : '멈춘 뒤 다른 작업으로 이동할 수 있습니다.') : undefined}>
+        <span className="tw-run-note" role="status" aria-live="polite" data-hp-tooltip={busy ? (runState === 'approval' ? '화면에 뜬 확인 창에서 골라 주세요.' : '멈춘 뒤 다른 작업으로 이동할 수 있습니다.') : undefined}>
           {/* CGP-DS-R-006: the heading's run state is the same intent chip as the rail's; the help sentence stays for screen readers. */}
           {busy && (runState === 'approval'
             ? <><IntentChip chip={TASK_RUN_CHIPS.approval} status="approval" className="tw-run-chip" /><span className="tw-run-help">입니다. 화면에 뜬 확인 창에서 골라 주세요.</span></>

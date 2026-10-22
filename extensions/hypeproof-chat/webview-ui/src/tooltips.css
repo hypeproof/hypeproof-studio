@@ -1,0 +1,25 @@
+/* CGP-DS-D-021: shared by Studio and Chalk through sync-tooltips.mjs. */
+.hp-tooltip {
+  position: fixed;
+  z-index: 10000;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: var(--ds-c-tooltip-font);
+  line-height: var(--ds-c-tooltip-leading);
+  font-weight: var(--ds-c-tooltip-weight);
+  border-radius: var(--ds-c-tooltip-radius-space);
+  padding-block: var(--ds-c-tooltip-block-space);
+  padding-inline: var(--ds-c-tooltip-radius-space);
+  max-width: calc(100vw - var(--ds-c-tooltip-viewport-gutter));
+  max-height: calc(100vh - var(--ds-c-tooltip-viewport-gutter));
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--vscode-editorHoverWidget-foreground, var(--ds-c-tooltip-ink));
+  background: var(--vscode-editorHoverWidget-background, var(--ds-c-tooltip-surface));
+  border: var(--ds-c-tooltip-edge) solid var(--vscode-contrastBorder, var(--ds-c-tooltip-boundary));
+  pointer-events: none;
+}
+.hp-tooltip[hidden] { display: none; }
+@media (forced-colors: active) {
+  .hp-tooltip { color: CanvasText; background: Canvas; border: var(--ds-c-tooltip-edge) solid CanvasText; }
+}

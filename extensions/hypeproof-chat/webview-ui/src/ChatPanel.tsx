@@ -1353,20 +1353,20 @@ export function ChatPanel(props: Props) {
         {ux.coach.naming_mode === "fixed"
           // Personal chat: a fixed name is not a control, and the one header row has no room for a
           // label that names nothing the learner can act on. It stays readable to screen readers.
-          ? <strong title={`이 수업의 AI 이름: ${coachName}`} className={personalWorkspace ? "hps-coach-name hps-sr-only" : "hps-coach-name"}>{coachName}</strong>
-          : <button title="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
+          ? <strong data-hp-tooltip={`이 수업의 AI 이름: ${coachName}`} className={personalWorkspace ? "hps-coach-name hps-sr-only" : "hps-coach-name"}>{coachName}</strong>
+          : <button data-hp-tooltip="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
         {/* US-05 (P0): the work screen's top names the current activity and whether it is a trial or a
             class. Personal chat has no mission header (#1760), so the line that header carried moves
             into this row with the same `현재 활동` label (the a11y contract in MissionHeader.tsx). The
             kind stays visible; the name yields first on a narrow header (title keeps the full line). */}
         {personalWorkspace && config?.activity && (() => {
           const kind = activityLabel(config.activity.kind, config.activity.pass, undefined, !!config.activity.free);
-          return <span className="hps-activity-now" aria-label="현재 활동" title={`${kind} · ${config.activity.name}`}>
+          return <span className="hps-activity-now" aria-label="현재 활동" data-hp-tooltip={`${kind} · ${config.activity.name}`}>
             <span className="hps-activity-kind">{kind}</span><span className="hps-activity-name"> · {config.activity.name}</span>
           </span>;
         })()}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
-        {trialLine &&<span className="hps-trial-left" title={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
+        {trialLine &&<span className="hps-trial-left" data-hp-tooltip={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
         {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
             end_card and opens the pass list). A link, not a Primary: no count, no pressure (CU-13). */}
         {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
@@ -1382,7 +1382,7 @@ export function ChatPanel(props: Props) {
               className="hps-gallery-btn"
               onClick={props.onPublish}
               disabled={busy || props.publish?.state === "uploading"}
-              title="지금 만든 세상을 갤러리에 올려요"
+              data-hp-tooltip="지금 만든 세상을 갤러리에 올려요"
             >
               {props.publish?.state === "uploading"
                 ? "올리는 중…"
@@ -1398,7 +1398,7 @@ export function ChatPanel(props: Props) {
               className="hps-site-publish-btn"
               onClick={props.onPublishSite}
               disabled={props.streaming}
-              title="홈페이지를 내 GitHub 주소로 올려요"
+              data-hp-tooltip="홈페이지를 내 GitHub 주소로 올려요"
               aria-label="인터넷에 올리기"
             >
               인터넷에 올리기
@@ -1409,20 +1409,20 @@ export function ChatPanel(props: Props) {
               className="hps-site-publish-btn"
               onClick={props.onSwitchProject}
               disabled={props.streaming}
-              title="GitHub에 있는 다른 프로젝트로 바꿔요"
+              data-hp-tooltip="GitHub에 있는 다른 프로젝트로 바꿔요"
               aria-label="프로젝트 변경"
             >
               프로젝트 변경
             </button>
           )}
-          <button onClick={props.onSetToken} title="연결된 활동 확인 및 변경">
+          <button onClick={props.onSetToken} data-hp-tooltip="연결된 활동 확인 및 변경">
             활동 변경
           </button>
-          <button onClick={props.onClear} disabled={props.streaming} title="대화 기록 지우기">대화 지우기</button>
+          <button onClick={props.onClear} disabled={props.streaming} data-hp-tooltip="대화 기록 지우기">대화 지우기</button>
           {/* Personal chat: usage opens the settings dialog on its usage section (the remaining line
               already shows the count). */}
-          {personalWorkspace && config?.access && <button onClick={() => openPreferences(true)} title="이용권과 사용량 확인">이용권 · 사용량</button>}
-          <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : <ChatIcon kind="settings" size={20} />}</button>
+          {personalWorkspace && config?.access && <button onClick={() => openPreferences(true)} data-hp-tooltip="이용권과 사용량 확인">이용권 · 사용량</button>}
+          <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} data-hp-tooltip="설정" aria-label="설정">{personalWorkspace ? "설정" : <ChatIcon kind="settings" size={20} />}</button>
         </HeaderActions>
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
@@ -1854,7 +1854,7 @@ export function ChatPanel(props: Props) {
         {recovered.length > 0 && <div className="hps-recovery-list" aria-label={`보내지 못한 메시지 ${recovered.length}개`}>
           {recovered.map((request, index) => <div className="hps-queued hps-recovered" role="status" aria-live="polite" key={index}>
             <span className="hps-queued-label">보내지 못한 메시지{request.toolMode === 'web-search' ? ' · 웹 검색' : ''}{request.images.length ? ` · 사진 ${request.images.length}장` : ''}</span>
-            <span className="hps-queued-text" title={request.text}>{request.text}</span>
+            <span className="hps-queued-text" data-hp-tooltip={request.text}>{request.text}</span>
             <button type="button" className="hps-queued-send" disabled={streaming || frozen || props.sendPending || unavailable || props.sendLocked} onClick={() => retryRecovered(request)}>다시 보내기</button>
             <button type="button" className="hps-queued-send" disabled={streaming || frozen || props.sendPending || props.sendLocked} onClick={() => editRecovered(request)}>수정하기</button>
             {discardRequest === request ? <span className="hps-recovery-confirm" role="group" aria-label="메시지 삭제 확인" onKeyDown={event => {if(event.key === 'Escape' && !imeComposing(event)){event.preventDefault();setDiscardRequest(null);textareaRef.current?.focus({preventScroll:true});}}}>
@@ -1869,7 +1869,7 @@ export function ChatPanel(props: Props) {
           // the draft (see restoreQueuedToDraft): the × must not mean "delete".
           <div className="hps-queued" role="status" aria-live="polite">
             <span className="hps-queued-label">{queuedPaused ? '보관한 메시지' : '다음에 보낼 메시지'}{queuedToolMode === 'web-search' ? ' · 웹 검색' : ''}</span>
-            <span className="hps-queued-text" title={queued}>{queued}</span>
+            <span className="hps-queued-text" data-hp-tooltip={queued}>{queued}</span>
             {queuedPaused && !streaming && <button type="button" className="hps-queued-send" disabled={props.sendPending || unavailable || props.sendLocked} onClick={() => {
               const editor = textareaRef.current;
               const selection = editor && [editor.selectionStart, editor.selectionEnd, editor.selectionDirection] as const;
@@ -1885,7 +1885,7 @@ export function ChatPanel(props: Props) {
               type="button"
               className="hps-queued-cancel"
               onClick={restoreQueuedToDraft}
-              title="예약 취소 — 입력창으로 되돌려요"
+              data-hp-tooltip="예약 취소 — 입력창으로 되돌려요"
               aria-label={queuedPaused ? "보관한 메시지 입력창으로 가져오기" : "예약 취소"}
             >
               ×
@@ -1904,7 +1904,7 @@ export function ChatPanel(props: Props) {
                   type="button"
                   className="hps-attachment-remove"
                   onClick={() => removePendingImage(i)}
-                  title="이미지 제거"
+                  data-hp-tooltip="이미지 제거"
                   aria-label="이미지 제거"
                 >
                   ×
@@ -1917,14 +1917,14 @@ export function ChatPanel(props: Props) {
           <>
             <div className="hps-attachments" aria-label="첨부한 사진">
               {stagedPhotos.map((p) => (
-                <div key={p.id} className="hps-attachment hps-attachment-file" title={p.name}>
+                <div key={p.id} className="hps-attachment hps-attachment-file" data-hp-tooltip={p.name}>
                   {p.thumb ? <img src={p.thumb} alt={p.name} /> : <span className="hps-attachment-name">{p.ready || p.error ? p.name : "준비 중…"}</span>}
                   {p.error && <div className="hps-photo-failure"><AttachmentFailureBadge reason={p.error}/><p>{p.error}</p><button type="button" onClick={() => { const file = photoSources.current.get(p.id); if (file && !p.repick) stagePhoto(p.id, file); else postToHost({type:'repickAttachment',id:p.id,name:p.name}); }}>{p.repick ? '이 파일 다시 선택' : '이 파일만 다시 시도'}</button></div>}
                   <button
                     type="button"
                     className="hps-attachment-remove"
                     onClick={() => removeStagedPhoto(p.id)}
-                    title="사진 빼기"
+                    data-hp-tooltip="사진 빼기"
                     aria-label={`${p.name} 빼기`}
                   >
                     ×
@@ -2013,7 +2013,7 @@ export function ChatPanel(props: Props) {
                 onClick={handleRollClick}
                 disabled={!draft.trim()}
                 className="hps-btn-roll"
-                title="떠오른 것에 한 줄 더 보태기"
+                data-hp-tooltip="떠오른 것에 한 줄 더 보태기"
               >
                 {ux.hints.roll_input_button.label}
               </button>
@@ -2028,7 +2028,7 @@ export function ChatPanel(props: Props) {
                 }}
                 className="hps-btn-stop"
                 aria-label={personalWorkspace ? '응답 멈추기' : undefined}
-                title={personalWorkspace ? '응답 멈추기' : undefined}
+                data-hp-tooltip={personalWorkspace ? '응답 멈추기' : undefined}
               >
                 {personalWorkspace ? <ChatIcon kind="stop" /> : 'Stop'}
               </button>
@@ -2038,7 +2038,7 @@ export function ChatPanel(props: Props) {
                 disabled={!draft.trim()}
                 className="hps-btn-send"
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
-                title={personalWorkspace ? '메시지 보내기' : undefined}
+                data-hp-tooltip={personalWorkspace ? '메시지 보내기' : undefined}
               >
                 {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
@@ -2048,7 +2048,7 @@ export function ChatPanel(props: Props) {
                 disabled={attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
-                title={personalWorkspace ? '메시지 보내기' : undefined}
+                data-hp-tooltip={personalWorkspace ? '메시지 보내기' : undefined}
               >
                 {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
@@ -2224,7 +2224,7 @@ function WorldStrip({
                  3rd/4th grader mis-taps. The archived copy survives, but undoing it is
                  something that has to go through the coach. */
               disabled={disabled || open}
-              title={
+              data-hp-tooltip={
                 open
                   ? `${w.guest} 세상을 열어 뒀어요`
                   : w.line
@@ -2465,7 +2465,7 @@ function ChipRack({
             className={`hps-chip hps-chip-${c.style}`}
             onClick={() => onPick(c)}
             disabled={c.style === "weak"}
-            title={c.style === "weak" ? platformizeKeys(c.caption ?? "예시일 뿐이에요") : "탭하면 입력창에 들어가요"}
+            data-hp-tooltip={c.style === "weak" ? platformizeKeys(c.caption ?? "예시일 뿐이에요") : "탭하면 입력창에 들어가요"}
           >
             <span className="hps-chip-text">{platformizeKeys(c.text)}</span>
             {c.caption && (
@@ -2644,7 +2644,7 @@ function MessageItem({
           <button
             className="hps-msg-run"
             onClick={() => onRunCode(renderable)}
-            title="미리보기 패널에서 실행"
+            data-hp-tooltip="미리보기 패널에서 실행"
           >
             <ChatIcon kind="play" size={16} /> Run
           </button>
@@ -2653,7 +2653,7 @@ function MessageItem({
           <button
             className="hps-msg-retry"
             onClick={() => onRetry(retryPrompt.content, retryPrompt)}
-            title="다른 방식으로 한 번 더 만들기"
+            data-hp-tooltip="다른 방식으로 한 번 더 만들기"
             aria-label="다른 방식으로 한 번 더 만들기"
           >
             <ChatIcon kind="retry" size={16} />
@@ -2726,7 +2726,7 @@ function CitationRack({ citations }: { citations: Citation[] }) {
           type="button"
           className={`hps-cit-chip hps-cit-tier-${c.tier}`}
           onClick={() => postToHost({ type: "openExternal", url: c.url })}
-          title={c.url}
+          data-hp-tooltip={c.url}
         >
           <span className="hps-cit-index">[{i + 1}]</span>
           <span className="hps-cit-title">{c.title || c.domain}</span>
@@ -2948,7 +2948,7 @@ function ErrorBanner({
           </div>
         )}
         {requestId && !notice && (
-          <div className="hps-error-banner-rid" title={errorIdTitle(audience)}>
+          <div className="hps-error-banner-rid" data-hp-tooltip={errorIdTitle(audience)}>
             ID: <code>{requestId}</code>
           </div>
         )}
@@ -2963,7 +2963,7 @@ function ErrorBanner({
           <button
             className="hps-error-banner-report"
             onClick={onReport}
-            title={reportButtonTitle(audience)}
+            data-hp-tooltip={reportButtonTitle(audience)}
           >
             <ChatIcon kind="flag" size={16} /> 신고하기
           </button>
@@ -2971,7 +2971,7 @@ function ErrorBanner({
         <button
           className="hps-error-banner-dismiss"
           onClick={onDismiss}
-          title="이 메시지 숨기기 (대화는 계속할 수 있어요)"
+          data-hp-tooltip="이 메시지 숨기기 (대화는 계속할 수 있어요)"
         >
           닫기
         </button>
@@ -3084,14 +3084,14 @@ function UpdateBanner({
         <button
           className="hps-update-banner-install"
           onClick={onInstall}
-          title={`v${offer.version} 다운로드 + 자동 적용`}
+          data-hp-tooltip={`v${offer.version} 다운로드 + 자동 적용`}
         >
           업데이트
         </button>
         <button
           className="hps-update-banner-dismiss"
           onClick={() => onDismiss(offer.version)}
-          title="이 버전은 7일 동안 다시 묻지 않음"
+          data-hp-tooltip="이 버전은 7일 동안 다시 묻지 않음"
         >
           나중에
         </button>
@@ -3134,7 +3134,7 @@ export function HeaderActions({ personal, taskId, children }: { personal: boolea
       choices[next].focus({ preventScroll: true });
     }
   }}>
-    <button ref={toggle} type="button" className="tw-chat-menu-toggle" aria-label="대화 메뉴" title="대화 메뉴" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} onClick={() => { firstFocus.current = 'first'; setOpen(!open); }} onKeyDown={event => {
+    <button ref={toggle} type="button" className="tw-chat-menu-toggle" aria-label="대화 메뉴" data-hp-tooltip="대화 메뉴" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} onClick={() => { firstFocus.current = 'first'; setOpen(!open); }} onKeyDown={event => {
       if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
         event.preventDefault(); firstFocus.current = event.key === 'ArrowUp' ? 'last' : 'first'; setOpen(true);
       }

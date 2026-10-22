@@ -241,11 +241,13 @@ const OLD_SCREENS = {
 // the old glyph markup back into the HPS_A5_DUMP_DIR dumps reproduces all four prior digests.
 // CGP-CHAT-D-001: moved only the invisible response-announcer outside the transcript.
 // Before/after markup is byte-identical after removing that one exact node.
+// CGP-DS-D-021: the six ChatPanel digests were re-taken because title= became data-hp-tooltip=; the
+// dumps of main and this branch are byte-identical once every data-hp-tooltip= is read back as title=.
 const BASE = {
-  "ChatPanel/adult-plain": "dddb1960b60662bef565379fb2fc4510084791ebcfd9ad31c5ccc139930aae70",
-  "ChatPanel/adult-effort-observed": "2edcafe0cc3c07b73110c0bc0655f7088caa82e1a1af0ed2bd321781d6a16ea0",
-  "ChatPanel/adult-timeline": "6237c9a200928069b5973bdeafdf9b6804b618d83730fb72bc5d6d8c34ec79af",
-  "ChatPanel/kids": "aa58199f8f911945046084670fc21f410cdf4ed00875509af9864ce8bc953dc9",
+  "ChatPanel/adult-plain": "ca6223b85b877e108becc4f9e38e94ec2533b330cdef4c92c9dc62e2775c1242",
+  "ChatPanel/adult-effort-observed": "b406e15c8a76f43b7d8794871f4e19cebbce5c85ead625858ace5d99f1b75b6f",
+  "ChatPanel/adult-timeline": "36da9075c8f346287050c01676ef67997e1463917a95c0e86f3c5d249912bb35",
+  "ChatPanel/kids": "3952e023620aca658290a1ebcb9385642a65eff9f0cc5450af925c2319f015f5",
   "EffortControl/policy-observed": "caea5b1eab6f88d737a96c6dde5f67369dec99657c24d5b25dca26117cd7b9ba",
   "EffortControl/policy-loading": "5d88d9a6ac8f18b171024b26f107bee0c59db5d31f7c7201b5c079aa37b05598",
   "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",
@@ -262,8 +264,8 @@ const BASE = {
   // while open, so the nine digests above stay as recorded on main. Re-recorded again (TZ=UTC) when the
   // chip parts became whole wrapping units: a space between parts and a "남은 요청 N회" unit span are the
   // only markup change (diffed with HPS_A5_DUMP_DIR).
-  "ChatPanel/classroom-class-funded": "eef15188e44b6914ebde8c6f0f0b7a5c7d31f3c4653f2a9a677246183e0657c6",
-  "ChatPanel/classroom-access-unknown": "68118eb5bd513f4ec9e6feda19c6bddbc4ce6163c1b6b8ade9292899d73ea062",
+  "ChatPanel/classroom-class-funded": "697ca11230f0bd50d16f6dd2b4863bab03414de1316154d0be6cdfa89a72d638",
+  "ChatPanel/classroom-access-unknown": "a765e77fad980c4f28d2c1a3571c0462ec2ebdacab3ea27240cbea68036d1636",
 };
 
 const status = rendererStatus();

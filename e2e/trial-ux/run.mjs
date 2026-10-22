@@ -336,7 +336,7 @@ try {
     assert.equal(emitted(await requests(p), 'sendMessage').length, 0);
     const fixedName = p.locator('strong.hps-coach-name');
     await expect(fixedName).toHaveText('코치');
-    await expect(fixedName).toHaveAttribute('title', '이 수업의 AI 이름: 코치');
+    await expect(fixedName).toHaveAttribute('data-hp-tooltip', '이 수업의 AI 이름: 코치');
     await expect(p.getByRole('button', { name: '코치 이름 바꾸기' })).toHaveCount(0);
   });
   await test('TUX-CHAT-02', 'Send rejects empty/space and sends trimmed text once', async p => {
@@ -938,7 +938,7 @@ try {
     await citation.focus();await expect(citation).toBeFocused();await citation.press('Enter');
     await request(p,{type:'openExternal',url:history[1].citations[0].url});
     for(const button of await p.getByRole('button').all()) {
-      if(await button.isVisible())expect(await button.getAttribute('aria-label')||await button.innerText()||await button.getAttribute('title')).toBeTruthy();
+      if(await button.isVisible())expect(await button.getAttribute('aria-label')||await button.innerText()||await button.getAttribute('data-hp-tooltip')).toBeTruthy();
     }
   });
   await test('US-UI-DRAFT', 'Activity draft, attachment, queue restoration and freeze acknowledgment', async p => {

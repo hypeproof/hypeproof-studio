@@ -135,16 +135,16 @@ export const ANSWER_TO_WIKI_LABEL = '팀 브레인에 정리하기';
 export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki }: { content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
   const [state, copy] = useConfirmedCopy(content);
   return <div className="hps-answer-actions">
-    <button type="button" className="hps-copy-answer hps-answer-action" onClick={copy} aria-label="답변 복사" title="답변 복사">
+    <button type="button" className="hps-copy-answer hps-answer-action" onClick={copy} aria-label="답변 복사" data-hp-tooltip="답변 복사">
       <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} size={16} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
     </button>
-    {onRun && <button type="button" className="hps-msg-run hps-answer-action" onClick={onRun} title="미리보기 패널에서 실행">
+    {onRun && <button type="button" className="hps-msg-run hps-answer-action" onClick={onRun} data-hp-tooltip="미리보기 패널에서 실행">
       <ChatIcon kind="play" size={16} /><span>미리보기</span>
     </button>}
-    {onRetry && <button type="button" className="hps-msg-retry hps-answer-action" onClick={onRetry} aria-label="답변 다시 받기" title="같은 요청으로 답변을 한 번 더 받아요">
+    {onRetry && <button type="button" className="hps-msg-retry hps-answer-action" onClick={onRetry} aria-label="답변 다시 받기" data-hp-tooltip="같은 요청으로 답변을 한 번 더 받아요">
       <ChatIcon kind="retry" size={16} /><span>다시 받기</span>
     </button>}
-    {onToWiki && <button type="button" className="hps-answer-wiki hps-answer-action" onClick={onToWiki} title="이 답과 질문을 팀 브레인에 정리해요. 쓰기 전에 한 번 더 물어봐요.">
+    {onToWiki && <button type="button" className="hps-answer-wiki hps-answer-action" onClick={onToWiki} data-hp-tooltip="이 답과 질문을 팀 브레인에 정리해요. 쓰기 전에 한 번 더 물어봐요.">
       <span>{ANSWER_TO_WIKI_LABEL}</span>
     </button>}
     {verdict}

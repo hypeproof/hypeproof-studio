@@ -39,7 +39,7 @@ export async function verifyIdentity({app,window,findContext,cases,out,live,setF
  const key=async(c,key,code=key,extra={})=>{await c.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,...extra});await c.send('Input.dispatchKeyEvent',{type:'keyUp',key,code,...extra});};
  const assertName=async(name)=>{
   const c=await frame('.hps-coach-name');await wait(async()=>await text(c,'.hps-coach-name')===name,'resolved header '+name);
-  assert.equal(await c.evaluate("document.querySelector('.hps-coach-name').title"),'이 수업의 AI 이름: '+name);
+  assert.equal(await c.evaluate("document.querySelector('.hps-coach-name').getAttribute('data-hp-tooltip')"),'이 수업의 AI 이름: '+name);
   await click(c,'.hps-coach-name');assert.equal(await c.evaluate("!!document.querySelector('.hps-naming')"),false);
   const expected=name+'에게 보낼 메시지';
   assert.equal(await c.evaluate("document.querySelector('.hps-input textarea').getAttribute('aria-label')"),expected);
@@ -51,7 +51,7 @@ export async function verifyIdentity({app,window,findContext,cases,out,live,setF
   return c;
  };
  const connect=async(which)=>{
-  const chat=await frame('.hps-coach-name');await click(chat,'.hps-actions button[title="연결된 수업 확인 및 변경"]');
+  const chat=await frame('.hps-coach-name');await click(chat,'.hps-actions button[data-hp-tooltip="연결된 활동 확인 및 변경"]');
   const entry=await frame('.studio-start');
   await entry.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='다른 수업에 연결')?.click()");
   await wait(()=>entry.evaluate("!!document.querySelector('#course-code')"),'course code input');
@@ -99,7 +99,7 @@ export async function verifyIdentity({app,window,findContext,cases,out,live,setF
     const box=await window.locator('.part.sidebar').boundingBox();assert.ok(box,'native sidebar missing');
     await window.mouse.move(box.x+box.width,box.y+box.height/2);await window.mouse.down();await window.mouse.move(box.x+box.width+width-current,box.y+box.height/2,{steps:12});await window.mouse.up();await window.waitForTimeout(300);
    }
-   const metrics=await chat.evaluate(`(()=>{const n=document.querySelector('.hps-coach-name'),a=document.querySelector('.hps-actions'),r=n.getBoundingClientRect(),s=a.getBoundingClientRect();return {width:innerWidth,document_width:document.documentElement.scrollWidth,name:n.textContent,title:n.title,name_width:r.width,actions_right:s.right,overlap:r.right>s.left+1,ellipsized:n.scrollWidth>n.clientWidth};})()`);
+   const metrics=await chat.evaluate(`(()=>{const n=document.querySelector('.hps-coach-name'),a=document.querySelector('.hps-actions'),r=n.getBoundingClientRect(),s=a.getBoundingClientRect();return {width:innerWidth,document_width:document.documentElement.scrollWidth,name:n.textContent,title:n.getAttribute('data-hp-tooltip'),name_width:r.width,actions_right:s.right,overlap:r.right>s.left+1,ellipsized:n.scrollWidth>n.clientWidth};})()`);
    metrics.overflow_elements=await chat.evaluate("[...document.querySelectorAll('body *')].filter(e=>e.getBoundingClientRect().width>0&&e.getBoundingClientRect().right>innerWidth+1).map(e=>({tag:e.tagName,class:e.className,right:e.getBoundingClientRect().right,width:e.getBoundingClientRect().width})).slice(0,12)");
    await shot('long-name-'+width);
    assert.equal(metrics.width,width,'native chat viewport differs from requested width');

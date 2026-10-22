@@ -1989,6 +1989,16 @@
   --ds-c-modal-dim-dark: var(--ds-s-modal-dim-dark);
   --ds-c-modal-dim-light: var(--ds-s-modal-dim-light);
 
+  --ds-c-tooltip-font: var(--ds-s-shadow-2);
+  --ds-c-tooltip-leading: var(--ds-s-typography-5);
+  --ds-c-tooltip-weight: var(--ds-s-typography-12);
+  --ds-c-tooltip-radius-space: var(--ds-s-space-2);
+  --ds-c-tooltip-block-space: var(--ds-s-space-13);
+  --ds-c-tooltip-viewport-gutter: var(--ds-s-space-20);
+  --ds-c-tooltip-ink: var(--ds-s-ink-4);
+  --ds-c-tooltip-surface: var(--ds-s-surface-68);
+  --ds-c-tooltip-edge: var(--ds-s-size-3);
+  --ds-c-tooltip-boundary: var(--ds-s-boundary-1);
   --ds-c-studio-tokens-leading-label: var(--ds-s-typography-5);
   --ds-c-studio-tokens-leading-prose: var(--ds-s-typography-10);
   --ds-c-studio-tokens-type-title: var(--ds-s-type-15);

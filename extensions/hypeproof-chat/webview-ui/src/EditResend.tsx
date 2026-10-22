@@ -14,7 +14,7 @@ export const REVERT_NOTE = "이전 답변이 바꾼 파일은 그대로예요. �
 export const PAGER_TITLE = "버전을 바꿔 봐도 새로 묻지 않아요. 다음 대화는 마지막 버전에서 이어져요.";
 
 export function EditAction({ onEdit }: { onEdit: () => void }) {
-  return <button type="button" className="hps-edit-prompt" onClick={onEdit} aria-label={EDIT_LABEL} title={EDIT_LABEL}><ChatIcon kind="pencil" size={16} />수정</button>;
+  return <button type="button" className="hps-edit-prompt" onClick={onEdit} aria-label={EDIT_LABEL} data-hp-tooltip={EDIT_LABEL}><ChatIcon kind="pencil" size={16} />수정</button>;
 }
 
 /** "‹ 1/2 ›" — switches which version of this prompt and its answer is drawn. Never sends anything. */
