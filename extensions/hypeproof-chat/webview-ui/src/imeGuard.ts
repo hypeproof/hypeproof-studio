@@ -5,5 +5,23 @@
  * `isComposing`.
  */
 export function imeComposing(event: { nativeEvent: { isComposing?: boolean; keyCode?: number } }, composing = false): boolean {
-  return composing || event.nativeEvent.isComposing === true || event.nativeEvent.keyCode === 229;
+  return composing || nativeComposing(event.nativeEvent);
+}
+
+/** The same test for a native `KeyboardEvent` (listeners added with addEventListener). */
+export function nativeComposing(event: { isComposing?: boolean; keyCode?: number }): boolean {
+  return event.isComposing === true || event.keyCode === 229;
+}
+
+/**
+ * CGP-DS-D-024: VS Code's webview host listens for keydown on the iframe's window and forwards
+ * every key it sees to the workbench keybinding dispatcher, without `isComposing`. A composition
+ * key (Enter, Escape, Tab, Arrow-up, Cmd/Ctrl+Enter) from any text field in the webview would
+ * then reach Studio's own shortcuts. Stop it at the document, after every handler inside the
+ * page has run and before the window. Returns the uninstaller.
+ */
+export function installImeHostBarrier(doc: Pick<Document, 'addEventListener' | 'removeEventListener'>): () => void {
+  const stop = (event: Event) => { if (nativeComposing(event as KeyboardEvent)) event.stopPropagation(); };
+  doc.addEventListener('keydown', stop);
+  return () => doc.removeEventListener('keydown', stop);
 }

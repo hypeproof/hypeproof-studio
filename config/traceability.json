@@ -6996,6 +6996,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/imeGuard.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/main.tsx"
         }
       ]
     },
@@ -7010,6 +7013,35 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/korean-input.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-IME-GUARD-KEYS",
+      "stage": "test",
+      "label": "Compose 안녕 then Enter, Escape, Tab, Arrow-up, Cmd/Ctrl+Enter: nothing acts, nothing reaches the host (CGP-DS-D-024)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-IME-GUARD"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/ime-guard-keys.test.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-IME-ESCAPE",
+      "stage": "test",
+      "label": "Chalk manage: a composing Escape closes no drawer, menu or seat detail (CGP-DS-D-024)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/ime-escape.test.mjs"
         }
       ]
     },
