@@ -1,3 +1,4 @@
+import { activePublishLink, publishSharing } from "./publishSharing.ts";
 import { memoryOutboundPath, privateOutboundPath, contentBytes, type OutboundConfirmation } from "./outboundConsent.ts";
 /** REQ-KNOW-51 / DEC-KNOW-51: a stored version with a memory file gets no new link; the learner publishes again and confirms. */
 export const MEMORY_VERSION_LINK = "AI 기억 파일이 들어 있는 버전이라 새 링크를 만들지 않아요. 다시 공개하면 보낼 파일을 확인한 뒤 링크를 받을 수 있어요.";
@@ -20,7 +21,7 @@ import { productVerification } from "@hypeproof/measurement-core/verification";
 import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observation";
 import { buildPublishSet, publishSetRefusalText, type PublishSet } from "./publishSet.ts";
 import { curriculumRequest, publishTestVersion, type CurriculumResult } from "./galleryPublish.ts";
-import type { PublishExperimentView, PublishForm, PublishLinkView, PublishView } from "./publishView.ts";
+import { SHARING_UNKNOWN, type PublishExperimentView, type PublishForm, type PublishLinkView, type PublishView } from "./publishView.ts";
 
 export interface PublishPorts {
   confirmOutbound?: OutboundConfirmation;
@@ -132,6 +133,11 @@ export class PublishSession {
   private async state(client: Client, projectId: string): Promise<CurriculumResult<ProjectState>> {
     const r = await curriculumRequest<ProjectState>(client, "GET", `/projects/${encodeURIComponent(projectId)}`);
     if (!r.ok) return r;
+    // A 200 that is not a Project (an HTML error page, `{}`) is a failed read, never a state to draw.
+    const b = r.body as Partial<ProjectState> | null;
+    if (!b || typeof b !== "object" || !b.project || typeof b.project.id !== "string" || !Array.isArray(b.experiments) || !Array.isArray(b.links) || !Array.isArray(b.hypotheses)) {
+      return { ok: false, status: r.status, code: "malformed", message: `${SHARING_UNKNOWN} (${r.status})` } as CurriculumResult<ProjectState>;
+    }
     this.origin = r.body.test_origin;
     this.cached = r.body;
     await this.ports.rememberOrigin?.(this.origin);
@@ -211,9 +217,22 @@ export class PublishSession {
     return { id: version.id, entry: version.entry_html ?? "", files: version.files };
   }
 
-  /** What the panel draws, computed every time from the files, the record and the Service. */
+  /** What the panel draws, computed every time from the files, the record and the Service. Never throws: an unreadable answer is `read_failed`. */
   async view(notice: string | null = null): Promise<PublishView> {
-    const empty: PublishView = {
+    try {
+      return await this.readView(notice);
+    } catch {
+      return { ...this.emptyView(notice), reason: SHARING_UNKNOWN + ".", read_failed: true };
+    }
+  }
+
+  /** Same scope the host keys its last good read by: another account or folder never sees this one's rows. */
+  readScope(): string {
+    return this.activityKey();
+  }
+
+  private emptyView(notice: string | null): PublishView {
+    return {
       available: false,
       reason: null,
       project: null,
@@ -224,6 +243,10 @@ export class PublishSession {
       timing: this.timing,
       notice,
     };
+  }
+
+  private async readView(notice: string | null): Promise<PublishView> {
+    const empty = this.emptyView(notice);
     if (!this.ports.switchOn()) return { ...empty, reason: lessonFeatureOff("사용자 테스트 공개", this.ports.audience?.()) };
     const client = await this.client();
     if (!client) return { ...empty, reason: SIGN_IN };
@@ -231,6 +254,7 @@ export class PublishSession {
     const state = resolved.ok ? resolved.state : null;
     if (!resolved.ok) notice ??= resolved.message;
     else if (resolved.notice) notice ??= resolved.notice;
+    if (!resolved.ok) return { ...empty, reason: resolved.message.replace(/^공개하지 못했어요/, SHARING_UNKNOWN), read_failed: true };
     const selection = this.selection();
     const built = await this.currentSet(state?.project.id, selection);
     const version: PublishView["version"] = !built
@@ -270,8 +294,21 @@ export class PublishSession {
   }
 
   private linkView(l: ProjectState["links"][number]): PublishLinkView {
-    const live = l.state === "live" && !!l.share_url;
-    return { id: l.id, channel: l.channel ?? null, share_url: l.share_url, qr: live ? this.ports.qr(l.share_url!) : null, expires_at: l.expires_at, state: l.state };
+    const state = l.state === "live" && (!Number.isFinite(l.expires_at) || l.expires_at <= this.now()) ? "expired" : l.state;
+    const live = activePublishLink({ ...l, state, channel: l.channel ?? null, qr: null }, this.now());
+    return { id: l.id, channel: l.channel ?? null, share_url: live ? l.share_url : null, qr: live ? this.ports.qr(l.share_url!) : null, expires_at: l.expires_at, state };
+  }
+
+  /** Re-read before copying: another window may have revoked the link. No URL from the webview is trusted. */
+  async copyLink(versionId: string, write: (url: string) => PromiseLike<void>): Promise<string | null> {
+    const scope = this.activityKey(), base = this.ports.base(), token = await this.ports.token();
+    if (!this.ports.switchOn() || !token) return "공유 상태를 확인할 수 없어요.";
+    const view = await this.view();
+    if (!view.available || this.activityKey() !== scope || this.ports.base() !== base || await this.ports.token() !== token || !this.ports.switchOn()) return "공유 상태를 다시 확인해 주세요.";
+    const sharing = publishSharing(versionId, view.experiments, this.now());
+    if (!sharing.url) return sharing.reason;
+    await write(sharing.url);
+    return null;
   }
 
   /** Add or remove files beyond static reach (the R4 manifest); the panel lists the set again. */

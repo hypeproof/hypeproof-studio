@@ -4,11 +4,13 @@
 // decides nothing: whether the version is verified (CR-81), what is in the published set,
 // the refusal of a file, the links and their QR codes are the host's and the Service's. A
 // disabled button here is a picture, not a lock (the host and the Service refuse by name).
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
 import { useDialogFocus } from "./dialogFocus";
 import type { PublishForm, PublishView } from "../../src/publishView";
-import { EXPIRY_CHOICES, METHOD_CHOICES } from "../../src/publishView";
+import { EXPIRY_CHOICES, METHOD_CHOICES, SHARING_UNKNOWN } from "../../src/publishView";
+
+import { activePublishLink, publishSharing } from "../../src/publishSharing";
 
 const VERIFIED_LINE: Record<PublishView["verification"]["state"], string> = {
   verified: "검증됨 · 이 버전은 기대 조건을 모두 통과했어요",
@@ -44,12 +46,26 @@ export function PublishPanel(props: {
   onSubmit(form: PublishForm): void;
   onLink(experimentId: string, channel: string, expiresInDays: number): void;
   onRevoke(linkId: string): void;
+  onCopy?(versionId: string): void;
+  onRefresh?(): void;
   onClose(): void;
 }) {
   // REQ-STUDIO-FOCUS-RESTORE: host-opened inline panel; closing returns focus, never to <body>.
   const panel = useRef<HTMLElement>(null);
   useDialogFocus(panel, { open: true, kind: "inline", initialFocus: "idle" });
   const { view } = props;
+  const [now, setNow] = useState(Date.now());
+  const refresh = useRef(props.onRefresh);
+  refresh.current = props.onRefresh;
+  useEffect(() => {
+    const clock = setInterval(() => setNow(Date.now()), 1000);
+    const poll = setInterval(() => refresh.current?.(), 15000);
+    const focus = () => { setNow(Date.now()); refresh.current?.(); };
+    window.addEventListener('focus', focus);
+    return () => { clearInterval(clock); clearInterval(poll); window.removeEventListener('focus', focus); };
+  }, []);
+  const versions = [...new Set([view.version.id, ...view.experiments.map(e => e.product_version_id)])].filter((id): id is string => !!id);
+  const stale = !!view.read_failed;
   const [hypothesisId, setHypothesisId] = useState<string>("");
   const [hypothesis, setHypothesis] = useState("");
   const [question, setQuestion] = useState("");
@@ -86,7 +102,12 @@ export function PublishPanel(props: {
         <strong>사용자 테스트용으로 공개</strong>
         <button type="button" onClick={props.onClose} aria-label="닫기"><ChatIcon kind="close" size={16} /></button>
       </header>
-      {!view.available && <p data-testid="publish-unavailable">{view.reason}</p>}
+      {!view.available && !view.read_failed && <p data-testid="publish-unavailable">{view.reason}</p>}
+      {view.read_failed && (
+        <div className="hps-publish-sharing" data-testid="publish-sharing-unknown" data-sharing="unknown">
+          <div role="status">{view.reason ?? SHARING_UNKNOWN}{view.stale_at ? ` · 아래는 ${day(view.stale_at)}에 확인한 마지막 상태예요. 지금과 다를 수 있어요.` : ""}</div>
+        </div>
+      )}
       {props.error && (
         <div className="hps-publish-error" role="alert" data-testid="publish-error">
           {props.error}
@@ -127,6 +148,19 @@ export function PublishPanel(props: {
                 파일 추가
               </button>
             </div>
+          </div>
+
+          <div className="hps-publish-sharing" aria-label="버전별 공유 상태">
+            {versions.map(id => {
+              const sharing = publishSharing(id, view.experiments, now);
+              const copyReason = stale ? `${SHARING_UNKNOWN}. 확인한 뒤에 복사할 수 있어요.` : sharing.reason;
+              return <div key={id} data-testid="publish-sharing" data-version={id} data-sharing={sharing.state} data-stale={stale ? "true" : undefined}>
+                <div>버전 {shortId(id)}{id === view.version.id ? ' (지금 버전)' : ' (이전 버전)'}</div>
+                <div role="status">{sharing.label} · 활성 링크 {sharing.count}개{stale ? ` · ${view.stale_at ? `${day(view.stale_at)}에 확인한 상태` : "마지막으로 확인한 상태"}` : ""}</div>
+                <button type="button" disabled={disabled || stale || !sharing.url} title={copyReason ?? '이 버전의 활성 링크 복사'} onClick={() => { if (!stale && sharing.url && !disabled) props.onCopy?.(id); }}>링크 복사</button>
+                {copyReason && <div>{copyReason}</div>}
+              </div>;
+            })}
           </div>
 
           <div className="hps-publish-form" data-testid="publish-form">
@@ -198,9 +232,9 @@ export function PublishPanel(props: {
               {e.links.map((l) => (
                 <div className="hps-publish-link" key={l.id} data-testid="publish-link" data-state={l.state}>
                   <div>
-                    {l.channel ?? "채널 이름 없음"} · {LINK_STATE[l.state] ?? l.state} · {day(l.expires_at)}까지
+                    {l.channel ?? "채널 이름 없음"} · {LINK_STATE[l.state === "live" && !activePublishLink(l, now) ? "expired" : l.state] ?? l.state} · {day(l.expires_at)}까지
                   </div>
-                  {l.state === "live" && l.share_url && (
+                  {activePublishLink(l, now) && (
                     <>
                       <code data-testid="publish-link-url">{l.share_url}</code>
                       {l.qr && <img src={l.qr} alt={`${l.share_url} QR 코드`} data-testid="publish-qr" width={140} height={140} />}

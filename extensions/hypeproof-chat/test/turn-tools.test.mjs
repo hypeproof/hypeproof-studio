@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { turnToolsAvailability, retryTurnToolMode, WebSearchActivity } from '../src/turnTools.ts';
 import { SdkWebCitations } from '../src/sdkWebCitations.ts';
+import { PublishReadGate } from '../src/publishReadGate.ts';
 import { validActivityDraft, preservedDraftContent } from '../src/activityDraft.ts';
 import { canReserveRecovery, recoveryFull } from '../src/recoveryCapacity.ts';
 import { TaskWorkspaceStore } from '../src/taskWorkspaceStore.ts';
@@ -77,6 +78,7 @@ function fixture(t, { runtimeMode = 'agent-sdk', resolvedProfile = copy(profile)
     buildBrowserMcpHost: () => ({}), saveAgentMdIfPresent: async () => {}, observationWrites: Promise.resolve(), sitePublisher: () => ({ available: () => false }),
     // Object.create skips class fields; the funnel reporter (studio-funnel-events) is one of them.
     funnel: { emit() {}, setTarget() {}, active: false },
+    publishReadGate: new PublishReadGate(),
   });
   return { h, posts, history, runtime, calls, runSdkCoach, SdkUnavailableError, BrowserControl, root, vscode };
 }

@@ -581,11 +581,13 @@ export function App() {
       errorLines={state.testPublish.errorLines}
       shareUrl={state.testPublish.shareUrl}
       busy={!!state.streamId}
+      onCopy={(versionId) => postToHost({ type: "publishCopy", versionId })}
+      onRefresh={() => postToHost({ type: "publishRefresh" })}
       onManifest={(manifest) => postToHost({ type: "publishOpen", manifest })}
       onSubmit={(form) => postToHost({ type: "publishSubmit", form })}
       onLink={(experimentId, channel, expiresInDays) => postToHost({ type: "publishLink", experimentId, channel, expiresInDays })}
       onRevoke={(linkId) => postToHost({ type: "publishRevoke", linkId })}
-      onClose={() => dispatch({ type: "testPublishClose" })}
+      onClose={() => { postToHost({ type: "publishClose" }); dispatch({ type: "testPublishClose" }); }}
     /></PanelBoundary>
   ) : null;
 

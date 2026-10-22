@@ -1,0 +1,101 @@
+import { mountPoint } from './fixtures/mini-dom.mjs';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import assert from 'node:assert/strict';
+import { PublishPanel } from '../webview-ui/src/PublishPanel';
+import { activePublishLink, publishSharing } from '../src/publishSharing';
+import { PublishReadGate } from '../src/publishReadGate';
+import { PublishSession } from '../src/publishSession';
+import type { PublishView, PublishLinkView } from '../src/publishView';
+
+const act = (React as any).act;
+let now = 1800000000000;
+const originalNow = Date.now; Date.now = () => now;
+const timers = new Map<number, () => void>();
+const originalSet = globalThis.setInterval, originalClear = globalThis.clearInterval;
+globalThis.setInterval = ((fn: () => void, ms: number) => { timers.set(ms, fn); return ms; }) as any;
+globalThis.clearInterval = ((ms: number) => timers.delete(ms)) as any;
+const link = (id: string, extra = {}): PublishLinkView => ({ id, channel: null, state: 'live', expires_at: now + 60000, share_url: `https://test.invalid/l/${id}/`, qr: 'data:image/png;base64,AAAA', ...extra });
+const exp = (id: string, version: string, links: PublishLinkView[]) => ({ id, product_version_id: version, links, week: 1, question: '내 페이지', method: 'task_test', hypothesis: null, success_criteria: [], status: 'running', current_version: true, sessions: null });
+const view: PublishView = { available: true, reason: null, project: { id: 'p', title: '내 페이지' }, version: { id: 'v1', files: [], manifest_added: [], refusal: null, refusal_lines: [] }, verification: { state: 'not_verified', open: [] }, experiments: [], hypotheses: [], timing: null, notice: null };
+const host = mountPoint() as any;
+// The lightweight DOM omits select.options; model it for the real publish form.
+Object.defineProperty(Object.getPrototypeOf(host), "options", { configurable: true, get() { return this.querySelectorAll("option"); } });
+const root = createRoot(host);
+const copied: string[] = []; let refreshes = 0;
+const render = () => act(() => root.render(<PublishPanel view={view} error={null} errorLines={[]} shareUrl={null} busy={false} onManifest={() => {}} onSubmit={() => {}} onLink={() => {}} onRevoke={() => {}} onClose={() => {}} onCopy={id => copied.push(id)} onRefresh={() => refreshes++} />));
+const row = (id: string) => host.querySelectorAll('[data-testid="publish-sharing"]').find((e: any) => e.getAttribute('data-version') === id);
+const click = async (el: any) => act(() => el.dispatchEvent({ type: 'click', bubbles: true, cancelable: true, preventDefault() {}, stopPropagation() {} }));
+
+(async () => {
+  await render();
+  assert.match(row('v1').textContent, /나만 볼 수 있어요 · 활성 링크 0개/);
+  assert.match(row('v1').textContent, /먼저 이 버전을 공개해야 링크를 복사할 수 있어요/);
+  assert.ok(row('v1').querySelector('button').hasAttribute('disabled'));
+  await click(row('v1').querySelector('button')); assert.deepEqual(copied, []);
+  view.experiments = [exp('e1', 'v1', [link('a')]), exp('e2', 'v1', [link('b', { expires_at: now + 120000 }), link('a')]), exp('e3', 'v2', [link('closed', { state: 'revoked' })])];
+  await render();
+  assert.equal(host.querySelectorAll('[data-testid="publish-sharing"]').length, 2, 'one label per version, not per experiment');
+  assert.match(row('v1').textContent, /링크가 있는 누구나 · .*까지 · 활성 링크 2개/);
+  assert.equal(publishSharing('v1', view.experiments, now).until, now + 120000);
+  assert.ok(row('v1').textContent.includes(new Date(now + 120000).toLocaleString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })));
+  assert.equal(publishSharing('v1', view.experiments, now).url, 'https://test.invalid/l/b/');
+  assert.match(row('v2').textContent, /링크 끊김 · 활성 링크 0개/);
+  assert.ok(row('v2').querySelector('button').hasAttribute('disabled'));
+  await click(row('v1').querySelector('button')); assert.deepEqual(copied, ['v1']);
+  await act(() => timers.get(15000)!()); assert.equal(refreshes, 1);
+  await act(() => window.dispatchEvent({ type: 'focus' } as Event)); assert.equal(refreshes, 2);
+  // No new host payload: expiration must change the mounted label and remove QR/URL.
+  now += 120001; await act(() => timers.get(1000)!());
+  assert.match(row('v1').textContent, /링크 끊김 · 활성 링크 0개/);
+  assert.ok(row('v1').querySelector('button').hasAttribute('disabled'));
+  assert.equal(host.querySelectorAll('[data-testid="publish-link-url"]').length, 0);
+  assert.equal(host.querySelectorAll('[data-testid="publish-qr"]').length, 0);
+  view.experiments = [exp('e1', 'v1', [link('a')])]; await render();
+  view.experiments[0].links[0].state = 'revoked'; await render();
+  assert.match(row('v1').textContent, /링크 끊김/); assert.doesNotMatch(row('v1').textContent, /누구나/);
+  view.version.id = 'different'; await render(); assert.match(row('different').textContent, /나만 볼 수 있어요/);
+  await act(() => root.unmount()); assert.equal(timers.size, 0);
+  for (const extra of [{ state: 'revoked' }, { state: 'expired' }, { expires_at: NaN }, { expires_at: now }, { share_url: null }, { share_url: 'javascript:alert(1)' }, { share_url: 'https://user:pass@test.invalid' }, { share_url: 'https://test.invalid/\u202e' }, { share_url: 'not a URL' }]) assert.equal(activePublishLink(link('bad', extra), now), false, JSON.stringify(extra));
+
+  // Real host session, fake HTTP only: the clipboard callback runs AFTER the fresh response.
+  let scope = 'one', token: string | null = 'token', enabled = true, base = 'https://api.test/v1/curriculum';
+  let responseHook = () => {}, failed = false;
+  const state = { project: { id: 'p', title: 'page', members: ['a', 'b'] }, test_origin: 'https://test.invalid', versions: [], hypotheses: [], experiments: [exp('e1', 'v1', [])], links: [{ ...link('a'), experiment_id: 'e1' }] };
+  const session = new PublishSession({ switchOn: () => enabled, token: async () => token, scopeKey: () => scope, base: () => base, root: () => null, entry: () => null, events: async () => [], projectId: () => 'p', setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'page', qr: u => u, now: () => now, fetchImpl: async () => { responseHook(); return new Response(JSON.stringify(failed ? { error: 'offline' } : state), { status: failed ? 503 : 200 }); } });
+  const writes: string[] = []; const write = async (url: string) => { writes.push(url); };
+  assert.equal(await session.copyLink('v1', write), null); assert.deepEqual(writes, ['https://test.invalid/l/a/']);
+  writes.length = 0; state.links[0].state = 'revoked';
+  assert.ok(await session.copyLink('v1', write)); assert.deepEqual(writes, [], 'revoked in another window');
+  state.links[0] = { ...link('a', { expires_at: now - 1 }), experiment_id: 'e1' };
+  const expired = await session.view(); assert.equal(expired.experiments[0].links[0].state, 'expired'); assert.equal(expired.experiments[0].links[0].qr, null); assert.equal(expired.experiments[0].links[0].share_url, null);
+  state.links[0] = { ...link('a'), experiment_id: 'e1' };
+  assert.ok(await session.copyLink('wrong-version', write)); assert.deepEqual(writes, []);
+  for (const change of [() => { scope += 'x'; }, () => { token += 'x'; }, () => { base += '/x'; }, () => { enabled = false; }]) {
+    enabled = true; responseHook = change;
+    assert.ok(await session.copyLink('v1', write)); assert.deepEqual(writes, [], 'scope/auth/switch changed during request');
+  }
+  responseHook = () => {}; enabled = false;
+  assert.equal(await session.copyLink('v1', write), '공유 상태를 확인할 수 없어요.'); enabled = true; token = null;
+  assert.equal(await session.copyLink('v1', write), '공유 상태를 확인할 수 없어요.'); token = 'token'; failed = true;
+  assert.equal((await session.view()).available, false, 'failure is not private/unpublished evidence');
+  assert.ok(await session.copyLink('v1', write)); assert.deepEqual(writes, []);
+  const gate = new PublishReadGate(); const posted: string[] = [];
+  const post = async (v: string) => { posted.push(v); };
+  await gate.read(async () => 'closed', post); assert.deepEqual(posted, []);
+  gate.open(); assert.equal(gate.canRefresh, true);
+  let resolve!: (v: string) => void;
+  const slow = gate.read(() => new Promise<string>(r => { resolve = r; }), post);
+  await gate.read(async () => 'revoked', post); resolve('live'); await slow;
+  assert.deepEqual(posted, ['revoked'], 'late live response cannot overwrite revoke');
+  const closing = gate.read(() => new Promise<string>(r => { resolve = r; }), post);
+  gate.close(); resolve('reopen'); await closing; assert.deepEqual(posted, ['revoked']);
+  assert.equal(gate.canRefresh, false);
+  gate.open();
+  const mutating = gate.read(() => new Promise<string>(r => { resolve = r; }), post);
+  gate.beginAction(); assert.equal(gate.canRefresh, false); resolve('pre-revoke'); await mutating;
+  assert.deepEqual(posted, ['revoked']); gate.endAction(); assert.equal(gate.canRefresh, true);
+  Date.now = originalNow; globalThis.setInterval = originalSet; globalThis.clearInterval = originalClear;
+  console.log('PASS publish sharing: mounted labels, expiry, revoke, version grouping, copy and fresh host guards');
+  process.exit(0);
+})().catch(e => { console.error(e); process.exit(1); });

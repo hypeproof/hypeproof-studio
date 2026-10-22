@@ -2468,3 +2468,8 @@ html, body, #root {
 }
 
 .hps-header .hp-capability-reopen { font-size: var(--hp-font-caption); }
+
+/* CGP-ART-R-011: persistent version state; wraps instead of stealing title width. */
+.hps-publish-sharing { font-size: var(--ds-c-studio-styles-type-17); overflow-wrap: anywhere; }
+.hps-publish-sharing button { font: inherit; min-height: var(--ds-c-studio-tokens-control-md); min-width: var(--ds-c-studio-tokens-control-md); }
+.hps-publish-sharing button:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-width); }
