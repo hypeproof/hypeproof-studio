@@ -67,7 +67,7 @@ Not all parts of this process exist yet. This table shows the state on 2026-10-1
 | Release check section in PRs and issues | In `main`, not enforced | #1680, #1682 |
 | `hype-pr` checks the Release check section | In `main`, not enforced in Studio | hypeproof-harness#324 |
 | Hotfix rules in `hype-pr` and the hotfix issue form | In `main` | hypeproof-harness#326, #1686 |
-| Publish gate (rule 5) | Pull request open | #1683, #1684 |
+| Publish gate (rule 5) | In `main` (merged 2026-10-18) | #1683, #1684 |
 | Approval workflow: approval → `v` tag | Not started | — |
 | Smoke credentials | S4 available; S3 missing as observed 2026-10-16 | #1704 |
 
@@ -79,10 +79,13 @@ See [Approval](#approval).
 1. The release cut fixes the candidate commit. The candidate is `origin/main` at that time.
    Later merges go to the next release.
 2. The release cut calculates the range: all commits after the last stable `v` tag.
-3. Smoke runs against the production Service and Chalk.
+3. Smoke runs against the production Service (checks S1, S3, S4 and S5).
 4. If smoke fails, the release cut opens an issue and stops. It does not create a tag or a PR.
+   If an issue for the same version is already open, it comments on that issue instead.
 5. If smoke passes, the release cut creates the rc tag and starts the rc builds. It also opens
-   the release PR.
+   the release PR. Then it closes the open smoke-failure issues of this version or a lower one,
+   each with a comment that links the release PR. A failed close is a warning in the step summary,
+   not a failed release.
 6. The rc builds run the automatic E2E on every platform in
    `config/release-platforms.json` (macOS only since 2026-10-19; Windows is dispatch-only,
    see [fast-mac-release.md](fast-mac-release.md)). Then they publish the rc as a
@@ -250,7 +253,7 @@ the release branch, and an approval of an earlier candidate does not count.
 
 ## Publish gate
 
-This part is in pull request #1684. It is not in `main` yet.
+This part merged in pull request #1684 on 2026-10-18.
 
 Pushing a tag cannot be prevented: the repository plan (GitHub Free, private) has no tag
 protection. The gate is in `verify-unified-release.yml`, right before the release becomes
