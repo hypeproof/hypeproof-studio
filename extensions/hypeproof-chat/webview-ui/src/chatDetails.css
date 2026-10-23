@@ -643,3 +643,15 @@
 .hps-shell .hps-input .hps-file-context button { font: inherit; color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); }
 .hps-shell .hps-input .hps-file-context button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); transform: none; }
 .hps-shell .hps-input .hps-file-context button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); transform: none; }
+/* CGP-KNOW-D-004: local answer review; actual proposed writes keep the host confirmation. */
+.hps-answer-actions .hps-answer-wiki { min-width: var(--hp-control-min); min-height: var(--hp-control-min); border: 0; }
+.hps-wiki-review { margin-block: var(--hp-space-2); padding: var(--hp-space-3); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); background: var(--vscode-editorWidget-background); font-size: var(--hp-font-caption); min-width: 0; overflow-wrap: anywhere; }
+.hps-wiki-review p { margin-block: var(--hp-space-2); }
+.hps-wiki-excerpt { margin: var(--hp-space-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.hps-wiki-excerpt[data-expanded] { display: block; }
+.hps-wiki-turn { color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); }
+.hps-wiki-review-actions { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.hps-wiki-review button { min-width: var(--hp-control-min); min-height: var(--hp-control-min); }
+.hps-wiki-review button { padding: var(--hp-space-1) var(--hp-space-2); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); background: transparent; color: var(--hp-text-primary-default); font: inherit; cursor: pointer; }
+.hps-wiki-review button:hover { background: var(--hp-bg-control-hover); }
+.hps-wiki-review button:active { background: var(--hp-bg-control-pressed); }
