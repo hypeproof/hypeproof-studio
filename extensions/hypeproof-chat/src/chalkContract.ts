@@ -139,12 +139,12 @@ export class ChalkContractHost {
     const controller = new AbortController();
     this.turns.set(turnId, { controller, done: false });
     const sessionNonce = this.nonce;
-    const emit = (event: TurnEvent) => this.bus.executeCommand("hypeproof.chalk.onTurnEvent", {
+    const emit = (event: TurnEvent): Promise<unknown> => Promise.resolve(this.bus.executeCommand("hypeproof.chalk.onTurnEvent", {
       contractVersion: CONTRACT_VERSION,
       sessionNonce,
       turnId,
       event,
-    });
+    }));
     const requested = typeof a.model === "string" && a.model.length > 0 ? a.model : undefined;
     void this.runner.run({
       turnId,
