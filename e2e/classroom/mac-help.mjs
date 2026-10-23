@@ -26,6 +26,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
 import { macWindow } from './mac-window.mjs';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-help'));
 const servicePort = Number(process.env.HPS_HELP_SERVICE_PORT || 18921), boardPort = Number(process.env.HPS_HELP_BOARD_PORT || 18922), debugPort = Number(process.env.HPS_HELP_DEBUG_PORT || 9521), prefix = 'help-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-', HOURS = 12;
@@ -98,7 +99,7 @@ const tokenPath = path.join(home, 'synthetic-learner-token-help.txt'); writeFile
 const appEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/(API_KEY|AUTH_TOKEN|SIGNING_SECRET|ADMIN_PASSWORD|_SECRET$|HPS_TEST|ELECTRON_RUN_AS_NODE)/.test(k)));
 const appArgs = ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', ws];
 const childEnv = { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenPath, HPS_TEST_COACH_NAME: '연습 코치', HPS_SDK_BINARY: manifest.agent_sdk.binary.path };
-let app = null; const launch = () => { app = spawn(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs, { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
+let app = null; const launch = () => { app = spawnStudio(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs, { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }, { label: 'classroom-help', secretStorage: 'inmemory' }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
 
 // ── seat A2: a second learner connected by the real device client in this process; its help request must never change ──
 const cA2 = (await local.pair('A2', 1, 2, ['observe'])).conn.json; assert.ok(cA2.grant_id, 'A2 connected');

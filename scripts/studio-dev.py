@@ -434,6 +434,7 @@ def launch(app, state, local_runtime=None, cdp_port=None, inmemory_secrets=False
         cmd += ['--use-inmemory-secretstorage']
     options = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}
     with (state / 'app.log').open('a', encoding='utf-8') as log:
+        # studio-launch: interactive -- the visible Dev app a developer works in; tests use scripts/studio-launch.mjs
         process = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, **options)
     time.sleep(3)
     if process.poll() is not None:
@@ -512,7 +513,7 @@ def main():
                         help='Development funding: local Codex subscription (Windows default), Claude Code subscription (macOS default), or Service API.')
     parser.add_argument('--cli-executable', type=Path, help='Explicit installed native Claude Code or Codex CLI.')
     parser.add_argument('--setup-local', action='store_true', help='Prepare a developer activity/code through an already running local development Service.')
-    parser.add_argument('--inmemory-secrets', action='store_true', help='Launch with --use-inmemory-secretstorage: no OS keychain access (scripts/cr-dev-kit.sh).')
+    parser.add_argument('--inmemory-secrets', action='store_true', help='Launch with --use-inmemory-secretstorage: no OS keychain access (scripts/cr-dev-kit.sh). Unsafe for any flow that reloads or reopens the window: the secrets are lost and the app claims again.')
     args = parser.parse_args()
     if not (platform.system() == 'Windows' or (platform.system() == 'Darwin' and platform.machine() == 'arm64')):
         raise RuntimeError('This development launcher supports macOS arm64 and Windows only.')

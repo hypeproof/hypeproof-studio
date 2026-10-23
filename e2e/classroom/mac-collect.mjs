@@ -27,6 +27,7 @@ import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { CommandRunner } from '../../extensions/hypeproof-chat/src/classroomOpsCommands.ts';
 import { macWindow } from './mac-window.mjs';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-u1b'));
 const servicePort = Number(process.env.HPS_U1B_SERVICE_PORT || 18901), boardPort = Number(process.env.HPS_U1B_BOARD_PORT || 18902), debugPort = Number(process.env.HPS_U1B_DEBUG_PORT || 9501), HOURS = 6;
@@ -97,7 +98,7 @@ const tokenPath = path.join(home, 'synthetic-learner-token-u1b.txt'); writeFileS
 const appEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/(API_KEY|AUTH_TOKEN|SIGNING_SECRET|ADMIN_PASSWORD|_SECRET$|HPS_TEST|ELECTRON_RUN_AS_NODE)/.test(k)));
 const appArgs = ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', ws];
 const childEnv = { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenPath, HPS_TEST_COACH_NAME: '연습 코치', HPS_SDK_BINARY: manifest.agent_sdk.binary.path };
-let app = null; const pids = []; const launch = () => { app = spawn(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs, { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }); pids.push(app.pid); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
+let app = null; const pids = []; const launch = () => { app = spawnStudio(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs, { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }, { label: 'classroom-collect', secretStorage: 'inmemory' }); pids.push(app.pid); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
 
 // ── synthetic seats in this process ──
 const memory = () => { let s = null; return { async load() { return s && JSON.parse(s); }, async save(v) { s = JSON.stringify(v); } }; }; let eid = 0, a2Runs = 0, a3Runs = 0;

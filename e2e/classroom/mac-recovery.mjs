@@ -32,6 +32,7 @@ import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { CommandRunner } from '../../extensions/hypeproof-chat/src/classroomOpsCommands.ts';
 import { draftAfterStop } from '../../extensions/hypeproof-chat/webview-ui/src/sendQueue.ts';
 import { macWindow } from './mac-window.mjs';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-u4'));
 const servicePort = Number(process.env.HPS_U4_SERVICE_PORT || 18841), boardPort = Number(process.env.HPS_U4_BOARD_PORT || 18842), debugPort = Number(process.env.HPS_U4_DEBUG_PORT || 9441), prefix = 'u4-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-', HOURS = 12;
@@ -114,7 +115,7 @@ const appEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/
 const appArgs = ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', ws];
 const faultFile = path.join(userDir, 'drop-preview-server'); // test-only: its appearance drops the app's live preview server (HPS_TEST_PREVIEW_FAULT)
 const childEnv = { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenPath, HPS_TEST_COACH_NAME: '연습 코치', HPS_SDK_BINARY: manifest.agent_sdk.binary.path, HPS_TEST_PREVIEW_FAULT: faultFile };
-let app = null; const launch = () => { app = spawn(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs, { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
+let app = null; const launch = () => { app = spawnStudio(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs, { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }, { label: 'classroom-recovery', secretStorage: 'inmemory' }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
 
 // ── seat A2: the real device client with a real command runner. It is never selected, so its executors must never run. ──
 const memory = () => { let s = null; return { async load() { return s && JSON.parse(s); }, async save(v) { s = JSON.stringify(v); } }; }; let eid = 0, a2Runs = 0, a2Epoch = 0;

@@ -43,6 +43,16 @@ also a valid state to test.
 
 ### Quiet mode — `HPS_QUIET` (invisible local runs)
 
+Every launch goes through the shared launcher, `scripts/lib/studio-launcher.mjs`
+(`launchStudio(electron, options, meta)` / `spawnStudio(binary, args, options, meta)`,
+CLI `scripts/studio-launch.mjs`). It applies the quiet mode below, starts macOS
+launches paused and makes them unable to activate before VS Code runs (activation
+policy `prohibited`), runs them from an `LSUIElement` copy, fails a run that takes focus, and cleans up
+the run's processes (by its own pids and user-data-dir, never by name) and temp
+dirs on exit, failure and signals. After a crash: `node scripts/studio-launch.mjs sweep`.
+`scripts/check-studio-launches.mjs` fails PR CI on any other launch. Rules:
+[.claude/rules/studio-test-launch.md](../.claude/rules/studio-test-launch.md).
+
 GUI e2e runs LOCALLY (private-repo macOS CI minutes bill at 10x). To keep a run
 from taking over the machine, `launchApp()` runs in **quiet mode by default**
 (`HPS_QUIET=1`; set `HPS_QUIET=0` for headed debugging). In the Electron main

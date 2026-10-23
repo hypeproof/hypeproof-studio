@@ -27,4 +27,6 @@ export default defineConfig({
   },
 
   globalSetup: "./fixtures/global-setup.ts",
+  // Fails the run when a Studio launch left a process, a dir or a focus violation.
+  globalTeardown: "./fixtures/global-teardown.ts",
 });

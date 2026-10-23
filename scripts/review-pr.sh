@@ -503,6 +503,7 @@ else
   # Never write it to local-participant-token.txt (TOKEN_KEY student slot).
 
   T5=$(ms)
+  # studio-launch: interactive -- the reviewer works in this Dev app until Ctrl+C
   DEV_APP_RAW="$(python3 "$WORKTREE_DIR/scripts/studio-dev.py" run \
     --provider "$PROVIDER" \
     --service local \

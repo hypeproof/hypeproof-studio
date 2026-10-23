@@ -22,6 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { _electron as electron } from '@playwright/test';
 import { localOps } from './service-fixture.mjs';
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost'));
 const out = path.join(home, 'gui'); rmSync(out, { recursive: true, force: true }); mkdirSync(out, { recursive: true });
@@ -94,8 +95,8 @@ let app; const sockets = [], port = 9351;
 const status = async () => (await local.request(local.base + '/status')).json, seat = async (id = 'A1') => (await status()).seats.find((s) => s.seat_id === id);
 try {
   const appEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/(API_KEY|AUTH_TOKEN|SIGNING_SECRET|ADMIN_PASSWORD|_SECRET$|^HPS_TEST|ELECTRON_RUN_AS_NODE)/.test(k)));
-  app = await electron.launch({ executablePath: path.join(copy, 'Contents/MacOS/HypeProof Studio'), timeout: 45000, env: { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenFile, HPS_TEST_COACH_NAME: '연습 코치', ...(sdk ? { HPS_SDK_BINARY: manifest.agent_sdk.binary.path } : {}) },
-    args: ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--disable-workspace-trust', '--use-inmemory-secretstorage', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + port, '--folder-uri', pathToFileURL(ws).href] });
+  app = await launchStudio(electron, { executablePath: path.join(copy, 'Contents/MacOS/HypeProof Studio'), timeout: 45000, env: { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenFile, HPS_TEST_COACH_NAME: '연습 코치', ...(sdk ? { HPS_SDK_BINARY: manifest.agent_sdk.binary.path } : {}) },
+    args: ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--disable-workspace-trust', '--use-inmemory-secretstorage', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + port, '--folder-uri', pathToFileURL(ws).href] }, { label: 'classroom-gui', secretStorage: 'inmemory' });
   const window = await app.firstWindow(); await window.waitForTimeout(6000);
   const wait = async (fn, label, ms = 30000) => { const until = Date.now() + ms; let last; while (Date.now() < until) { try { last = await fn(); if (last) return last; } catch (e) { last = e; } await window.waitForTimeout(250); } throw Error('timed out: ' + label + (last instanceof Error ? ' — ' + last.message : '')); };
   const shot = async (name) => { await window.waitForTimeout(400); const png = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64')); writeFileSync(path.join(out, name + '.png'), Buffer.from(png, 'base64')); };

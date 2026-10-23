@@ -3,13 +3,14 @@ import {_electron as electron} from '@playwright/test';
 import {macWindow} from '../classroom/mac-window.mjs';
 import {mkdirSync,writeFileSync,readFileSync,existsSync} from 'node:fs';
 import path from 'node:path';
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 const state=process.env.HPS_ACCOUNT_DEV_STATE;
 const out=process.env.HPS_ACCOUNT_EVIDENCE;
 if(!state||!out)throw Error('Set HPS_ACCOUNT_DEV_STATE and HPS_ACCOUNT_EVIDENCE to isolated owned paths');
 const receipt=JSON.parse(readFileSync(path.join(state,'receipt.json'),'utf8'));
 if(!receipt.official_app_unchanged||receipt.app.startsWith('/Applications/'))throw Error('Prepared isolated app required');
 mkdirSync(out,{recursive:true});
-const app=await electron.launch({executablePath:path.join(receipt.app,'Contents/MacOS/HypeProof Studio'),args:['--user-data-dir='+path.join(state,'user-data'),'--extensions-dir='+path.join(state,'extensions'),'--use-inmemory-secretstorage','--skip-welcome','--skip-release-notes','--disable-workspace-trust','--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','--remote-debugging-port=9393','--folder-uri',new URL('file://'+path.join(state,'workspace')).href],env:{...process.env,VSCODE_CLI:'1',HPS_TEST_E2E:'1'},timeout:45000});
+const app=await launchStudio(electron, {executablePath:path.join(receipt.app,'Contents/MacOS/HypeProof Studio'),args:['--user-data-dir='+path.join(state,'user-data'),'--extensions-dir='+path.join(state,'extensions'),'--use-inmemory-secretstorage','--skip-welcome','--skip-release-notes','--disable-workspace-trust','--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','--remote-debugging-port=9393','--folder-uri',new URL('file://'+path.join(state,'workspace')).href],env:{...process.env,VSCODE_CLI:'1',HPS_TEST_E2E:'1'},timeout:45000}, { label: 'account-preview', secretStorage: 'inmemory', quiet: 'caller' });
 await app.evaluate(({app, BrowserWindow, shell})=>{
  app.dock?.hide();
  globalThis.__accountPreviewRevealed=false;

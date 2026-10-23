@@ -9,6 +9,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { newSessionId, sweep } from "../../scripts/lib/studio-launcher.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../..");
@@ -45,6 +46,13 @@ export const TOKEN_FILE = process.env.HPS_E2E_TOKEN_FILE || "/tmp/hps-token.txt"
 
 export default async function globalSetup() {
   const errors: string[] = [];
+
+  // Studio launch bookkeeping (scripts/lib/studio-launcher.mjs): clean what crashed
+  // earlier runs left, then tag this suite's launches so global-teardown can fail
+  // the run when one of them is left behind. Workers inherit the variable.
+  const swept = sweep();
+  if (swept.cleaned.length || swept.dirs.length) console.log(`studio-launch: swept ${swept.cleaned.length} crashed run(s), ${swept.dirs.length} dir(s)`);
+  process.env.HPS_LAUNCH_SESSION ||= newSessionId();
 
   if (!fs.existsSync(APP_BINARY)) {
     errors.push(`✗ App binary missing: ${APP_BINARY}\n   Run: bash scripts/run-build.sh`);

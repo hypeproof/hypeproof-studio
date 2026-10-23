@@ -3,10 +3,11 @@
 
 import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { APP_BINARY, TOKEN_FILE } from "./global-setup.ts";
+// Every Studio launch goes through the shared quiet launcher (AGENTS.md "Studio test launches").
+import { createOwnedDir, hideStudioApp, launchStudio, ownedDirRoot, removeOwnedDir } from "../../scripts/lib/studio-launcher.mjs";
 
 export interface AppContext {
   app: ElectronApplication;
@@ -131,55 +132,9 @@ export async function evaluateDuringElectronStartup<T>(
   }
 }
 
-async function applyQuietMode(app: ElectronApplication): Promise<void> {
-  if (!QUIET) return;
-  await evaluateDuringElectronStartup(() => app.evaluate(({ app: electronApp, BrowserWindow }) => {
-    try {
-      (electronApp as unknown as { dock?: { hide(): void } }).dock?.hide();
-    } catch {
-      /* non-macOS or already hidden */
-    }
-    type Win = {
-      setPosition(x: number, y: number): void;
-      showInactive?(): void;
-      setFocusable(focusable: boolean): void;
-      once?(ev: string, cb: () => void): void;
-      on?(ev: string, cb: () => void): void;
-      __hpsQuietModeWired?: boolean;
-    };
-    const stash = (w: Win) => {
-      try {
-        // Off-screen alone does not prevent macOS from delivering real keys.
-        // CDP still drives DOM focus; the OS must never target this test window.
-        w.setFocusable(false);
-        w.setPosition(-4000, -4000);
-        w.showInactive?.();
-      } catch {
-        /* window torn down mid-call */
-      }
-    };
-    // VS Code re-centers its window shortly after creation (measured: it
-    // overrode our -4000 back to an on-screen position). Re-stash on every
-    // surfacing event so it never actually lands on a physical display.
-    const wire = (w: Win) => {
-      stash(w);
-      if (w.__hpsQuietModeWired) return;
-      try {
-        w.once?.("ready-to-show", () => stash(w));
-        w.on?.("show", () => stash(w));
-        w.__hpsQuietModeWired = true;
-      } catch {
-        /* ignore */
-      }
-    };
-    for (const w of BrowserWindow.getAllWindows()) wire(w as Win);
-    const quietApp = electronApp as typeof electronApp & { __hpsQuietModeHooked?: boolean };
-    if (!quietApp.__hpsQuietModeHooked) {
-      quietApp.on("browser-window-created", (_e: unknown, w: unknown) => wire(w as Win));
-      quietApp.__hpsQuietModeHooked = true;
-    }
-  }));
-}
+// Quiet mode itself (Dock hidden, windows off-screen, non-focusable, shown
+// inactive) lives in scripts/lib/studio-launcher.mjs `applyQuietMode`, which
+// `launchStudio` applies to every launch.
 
 type ClosableElectronApplication = Pick<ElectronApplication, "close">;
 
@@ -189,7 +144,7 @@ export async function failLaunchAfterCleanup(
   app: ClosableElectronApplication | undefined,
   userDataDir: string,
   ownsUserDataDir: boolean,
-  removeUserDataDir: (directory: string) => void = directory => fs.rmSync(directory, { recursive: true, force: true }),
+  removeUserDataDir: (directory: string) => void = removeOwnedDir,
   closeTimeoutMs = APP_CLOSE_TIMEOUT_MS,
 ): Promise<never> {
   const cleanupErrors: unknown[] = [];
@@ -220,17 +175,6 @@ export async function failLaunchAfterCleanup(
   throw primaryError;
 }
 
-async function hideAppAfterReady(app: ElectronApplication): Promise<void> {
-  if (!QUIET || process.env.HPS_QUIET_NO_HIDE === "1") return;
-  await app.evaluate(({ app: electronApp }) => {
-    try {
-      (electronApp as unknown as { hide?(): void }).hide?.();
-    } catch {
-      /* non-macOS */
-    }
-  });
-}
-
 /** Diagnostic (HPS_QUIET_DEBUG=1): report dock/app/window visibility so a
  *  verification run can assert the window really is off-screen + hidden. */
 async function reportQuietState(app: ElectronApplication): Promise<void> {
@@ -255,8 +199,8 @@ export async function launchApp(opts: LaunchOptions = { preseedToken: true }): P
   // The SDK canonicalizes paths, so an un-resolved workspace root fails the
   // workspace-containment check and every coach Write is auto-denied (#384).
   const ownsUserDataDir = !opts.reuseUserDataDir;
-  const userDataDir = opts.reuseUserDataDir ? fs.realpathSync(opts.reuseUserDataDir) : fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hps-e2e-")));
-  if(opts.reuseUserDataDir && (path.dirname(userDataDir)!==fs.realpathSync(os.tmpdir()) || !path.basename(userDataDir).startsWith('hps-e2e-') || !fs.existsSync(path.join(userDataDir,'User','hps-test-state.json'))))throw Error('not a fixture-owned user data directory');
+  const userDataDir = opts.reuseUserDataDir ? fs.realpathSync(opts.reuseUserDataDir) : createOwnedDir("hps-e2e-");
+  if(opts.reuseUserDataDir && (path.dirname(userDataDir)!==fs.realpathSync(ownedDirRoot()) || !path.basename(userDataDir).startsWith('hps-e2e-') || !fs.existsSync(path.join(userDataDir,'User','hps-test-state.json'))))throw Error('not a fixture-owned user data directory');
   const userDir = path.join(userDataDir, "User");
   fs.mkdirSync(userDir, { recursive: true });
 
@@ -335,7 +279,7 @@ export async function launchApp(opts: LaunchOptions = { preseedToken: true }): P
 
   let app: ElectronApplication | undefined;
   try {
-    app = await electron.launch({
+    app = await launchStudio(electron, {
       executablePath: APP_BINARY,
       args: [
         `--user-data-dir=${userDataDir}`,
@@ -362,18 +306,20 @@ export async function launchApp(opts: LaunchOptions = { preseedToken: true }): P
       ],
       env,
       timeout: 30_000,
+    }, {
+      label: "e2e-fixture",
+      // In-memory secrets are lost when a window reloads or reopens; restart
+      // tests opt into the OS store with persistentTestSecrets.
+      secretStorage: opts.persistentTestSecrets ? "os" : "inmemory",
     });
-
-    // Stash the window off-screen ASAP (before we even resolve firstWindow) so
-    // it doesn't linger on Jay's display during the run.
-    await applyQuietMode(app);
+    // launchStudio already stashed the window off-screen and non-focusable.
 
     const win = await app.firstWindow({ timeout: 30_000 });
     // Wait for workbench to be ready (presence of activity bar)
     await win.waitForSelector(".monaco-workbench", { timeout: 30_000 });
 
     // Now that the workbench is up, hide the app so focus returns to Jay.
-    await hideAppAfterReady(app);
+    await hideStudioApp(app);
     await reportQuietState(app);
 
     if (opts.preseedToken !== false && !opts.stayOnStart) {
@@ -393,7 +339,7 @@ export async function closeApp(ctx: AppContext): Promise<void> {
     /* ignore — test may have left the app in a bad state */
   }
   try {
-    fs.rmSync(ctx.userDataDir, { recursive: true, force: true });
+    removeOwnedDir(ctx.userDataDir);
   } catch {
     /* ignore */
   }

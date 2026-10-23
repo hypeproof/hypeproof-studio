@@ -15,6 +15,7 @@ import * as path from "node:path";
 import * as http from "node:http";
 import { APP_BINARY, TOKEN_FILE } from "../fixtures/global-setup";
 import { runCommand } from "../fixtures/app";
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 // Minimal valid issuer-token payload (HS256-style 3-segment shape, payload
 // has cohort scope c="dental-pilot-2026-a"). Signature segment is arbitrary
@@ -110,7 +111,7 @@ async function launchAtMock(port: number, opts: { preseedIssuer?: string } = {})
   const wsDir = path.join(userDataDir, "ws");
   fs.mkdirSync(wsDir, { recursive: true });
 
-  const app = await electron.launch({
+  const app = await launchStudio(electron, {
     executablePath: APP_BINARY,
     args: [
       `--user-data-dir=${userDataDir}`,
@@ -132,7 +133,7 @@ async function launchAtMock(port: number, opts: { preseedIssuer?: string } = {})
       ...(opts.preseedIssuer ? { HPS_TEST_ISSUER_TOKEN: opts.preseedIssuer } : {}),
     },
     timeout: 30_000,
-  });
+  }, { label: '22-mint-followup', secretStorage: 'inmemory' });
   const win = await app.firstWindow({ timeout: 30_000 });
   await win.waitForSelector(".monaco-workbench", { timeout: 30_000 });
   return { app, win, userDataDir };

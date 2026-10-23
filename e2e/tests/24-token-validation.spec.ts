@@ -5,6 +5,7 @@ import * as path from "node:path";
 import * as http from "node:http";
 import { startFrame } from "../fixtures/app";
 import { APP_BINARY, TOKEN_FILE } from "../fixtures/global-setup";
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 async function startProfileMock(status: number): Promise<{ port: number; close: () => Promise<void> }> {
   const server = http.createServer((req, res) => {
@@ -48,7 +49,7 @@ test("REQ-A5 + REQ-B3: stored token but /v1/profile 401 → inline connection er
   const wsDir = path.join(userDataDir, "ws");
   fs.mkdirSync(wsDir, { recursive: true });
 
-  const app = await electron.launch({
+  const app = await launchStudio(electron, {
     executablePath: APP_BINARY,
     args: [
       `--user-data-dir=${userDataDir}`,
@@ -69,7 +70,7 @@ test("REQ-A5 + REQ-B3: stored token but /v1/profile 401 → inline connection er
       HPS_TEST_COACH_NAME: "코디",
     },
     timeout: 30_000,
-  });
+  }, { label: '24-token-validation', secretStorage: 'inmemory' });
   const win = await app.firstWindow({ timeout: 30_000 });
   await win.waitForSelector(".monaco-workbench", { timeout: 30_000 });
 

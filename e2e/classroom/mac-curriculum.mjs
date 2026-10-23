@@ -30,6 +30,7 @@ import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY } from '../../extensions/hypeproof-chat/src/classroomInbox.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-g2'));
 const servicePort = 18991, boardPort = 18992, debugPort = 9591, HOURS = 12, prefix = 'g2-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-';
@@ -124,8 +125,8 @@ function launch(kind, token, folder) {
   const userDir = path.join(root, 'user-' + kind); mkdirSync(path.join(userDir, 'User'), { recursive: true });
   writeFileSync(path.join(userDir, 'User/settings.json'), JSON.stringify({ 'hypeproofChat.proxyUrl': origin + '/v1', 'window.dialogStyle': 'custom', 'workbench.startupEditor': 'none', 'update.mode': 'none', 'telemetry.telemetryLevel': 'off' }));
   const tokenPath = path.join(root, 'code-' + kind + '.txt'); writeFileSync(tokenPath, token, { mode: 0o600 });
-  app = spawn(path.join(copy, 'Contents/MacOS/HypeProof Studio'), ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', folder],
-    { env: { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenPath, HPS_TEST_COACH_NAME: '연습 코치', HPS_SDK_BINARY: manifest.agent_sdk.binary.path }, stdio: ['ignore', 'ignore', 'inherit'] });
+  app = spawnStudio(path.join(copy, 'Contents/MacOS/HypeProof Studio'), ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', folder],
+    { env: { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenPath, HPS_TEST_COACH_NAME: '연습 코치', HPS_SDK_BINARY: manifest.agent_sdk.binary.path }, stdio: ['ignore', 'ignore', 'inherit'] }, { label: 'classroom-curriculum', secretStorage: 'inmemory' });
   app.on('exit', (code, signal) => console.log('APP_EXIT', kind, code, signal)); step('launch ' + kind, { folder: path.relative(root, folder) });
 }
 async function quit() { if (!app) return; const a = app; app = null; try { await cdp?.close(); } catch {} cdp = null; a.kill('SIGTERM'); await Promise.race([once(a, 'exit'), sleep(15000)]); try { a.kill('SIGKILL'); } catch {} await sleep(1500); }

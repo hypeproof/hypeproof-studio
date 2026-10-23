@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { _electron as electron } from '@playwright/test';
 import { LocalReviewService } from '../../extensions/hypeproof-chat/src/localReviewService.ts';
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 const root=resolve(new URL('../..',import.meta.url).pathname);
 const appPath=process.env.HPS_REVIEW_APP;
 assert.ok(appPath,'Set HPS_REVIEW_APP to the candidate .app containing current bundles');
@@ -52,7 +53,7 @@ try {
   id='task-'+createHash('sha256').update(raw).digest('hex').slice(0,32);
  }
  const launchOptions={executablePath:appPath+'/Contents/MacOS/HypeProof Studio',args:['--use-inmemory-secretstorage','--user-data-dir='+userDir,'--extensions-dir='+userDir+'/extensions','--disable-workspace-trust','--disable-updates','--skip-welcome','--skip-release-notes','--remote-debugging-port='+port,project],env:{...process.env,HPS_TEST_E2E:'1'},timeout:30000};
- app=await electron.launch(launchOptions);
+ app=await launchStudio(electron, launchOptions, { label: 'local-review', secretStorage: 'inmemory' });
  let win=await app.firstWindow();await win.waitForTimeout(4000);
  const start=await connectReview('.studio-start');
  await start.evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='나의 변화 기록').click()`);
@@ -94,7 +95,7 @@ try {
   await win.screenshot({path:out+'/review-receipt.png'});
   for(const socket of sockets.splice(0)) socket.close();
   await app.close();
-  app=await electron.launch(launchOptions);
+  app=await launchStudio(electron, launchOptions, { label: 'local-review', secretStorage: 'inmemory' });
   win=await app.firstWindow();await win.waitForTimeout(4000);
   const reopenedStart=await connectReview('.studio-start');
   await reopenedStart.evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='나의 변화 기록').click()`);

@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { macWindow } from './mac-window.mjs';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-u4'));
 const debugPort = Number(process.env.HPS_U4_NEGATIVE_DEBUG_PORT || 9442), sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -24,7 +25,7 @@ writeFileSync(path.join(ws, 'page.html'), '<!doctype html><title>학생 결과�
 writeFileSync(path.join(userDir, 'User/settings.json'), JSON.stringify({ 'window.dialogStyle': 'custom', 'workbench.startupEditor': 'none', 'update.mode': 'none', 'telemetry.telemetryLevel': 'off' }));
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/(API_KEY|AUTH_TOKEN|SIGNING_SECRET|ADMIN_PASSWORD|_SECRET$|HPS_TEST|ELECTRON_RUN_AS_NODE)/.test(k)));
 assert.equal(env.HPS_TEST_PREVIEW_FAULT, undefined, 'the control launch must not carry the fault variable');
-const app = spawn(path.join(copy, 'Contents/MacOS/HypeProof Studio'), ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', ws], { env: { ...env, HOME: fakeHome }, stdio: ['ignore', 'ignore', 'ignore'] });
+const app = spawnStudio(path.join(copy, 'Contents/MacOS/HypeProof Studio'), ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', ws], { env: { ...env, HOME: fakeHome }, stdio: ['ignore', 'ignore', 'ignore'] }, { label: 'classroom-preview-fault', secretStorage: 'inmemory' });
 const realFetch = globalThis.fetch, W = macWindow({ debugPort, realFetch, out: home }), { sleep, wait, attach, palette } = W;
 try {
   const win = await attach();

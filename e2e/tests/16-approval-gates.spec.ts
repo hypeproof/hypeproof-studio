@@ -23,6 +23,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { APP_BINARY, TOKEN_FILE } from "../fixtures/global-setup";
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 interface GateCtx {
   app: Awaited<ReturnType<typeof electron.launch>>;
@@ -84,7 +85,7 @@ async function launch(opts: {
     }),
   };
 
-  const app = await electron.launch({
+  const app = await launchStudio(electron, {
     executablePath: APP_BINARY,
     args: [
       `--user-data-dir=${userDataDir}`,
@@ -99,7 +100,7 @@ async function launch(opts: {
     ],
     env,
     timeout: 30_000,
-  });
+  }, { label: '16-approval-gates', secretStorage: 'inmemory' });
   const win = await app.firstWindow({ timeout: 30_000 });
   await win.waitForSelector(".monaco-workbench", { timeout: 30_000 });
   return { app, win, userDataDir, wsDir, resultFile };

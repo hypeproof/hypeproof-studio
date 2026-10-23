@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const data = mkdtempSync(join(tmpdir(), 'hps-update-ui-'));
@@ -29,11 +30,11 @@ try {
   copyFileSync(source, injected);
   assert.deepEqual(readFileSync(injected), readFileSync(source));
   execFileSync('/usr/bin/ditto', [join(root, 'extensions/hypeproof-chat/webview-ui/dist'), join(appPath, 'Contents/Resources/app/extensions/hypeproof-chat/webview-ui/dist')]);
-  app = await electron.launch({
+  app = await launchStudio(electron, {
     executablePath: join(appPath, 'Contents/MacOS/HypeProof Studio'),
     args: [`--user-data-dir=${data}`, `--extensions-dir=${join(data, 'extensions')}`, '--use-inmemory-secretstorage', '--skip-welcome', '--skip-release-notes', '--disable-workspace-trust', '--folder-uri', pathToFileURL(join(data, 'workspace')).href],
     timeout: 30_000,
-  });
+  }, { label: 'update-check', secretStorage: 'inmemory' });
   await app.evaluate(({ app: a, BrowserWindow }) => { a.dock?.hide(); for (const w of BrowserWindow.getAllWindows()) w.setPosition(-4000, -4000); });
   const win = await app.firstWindow();
   await win.waitForSelector('.monaco-workbench');

@@ -16,6 +16,7 @@ import {localAuthoring} from '@hypeproof/service-testkit/test/harness/dental-aut
 import {prepareIdentity,verifyIdentity} from './identity.mjs';
 import {surfaceAcceptance} from './surfaces.mjs';
 import {prepareModels,verifyModels} from './models.mjs';
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 const models=process.env.HPS_LESSON_MODELS==='1';
 const modelRuntime=process.env.HPS_LESSON_MODEL_RUNTIME||'agent-sdk';
 const surfaces=process.env.HPS_LESSON_SURFACES==='1';
@@ -115,7 +116,7 @@ try{
  writeFileSync(userDir+'/User/settings.json',JSON.stringify({'hypeproofChat.proxyUrl':proxy,'window.dialogStyle':'custom','workbench.startupEditor':'none','update.mode':'none','telemetry.telemetryLevel':'off',...(surfaces?{'hypeproofChat.requireApprovalFor':['writeFile','executeShell','openBrowser','delegateAgent','browserType']}:{} )}));
  writeFileSync(userDir+'/User/hps-test-state.json',JSON.stringify({token:modelCases?.choice.token||cases?.a.token||invite.token,coach:{name:'연습 코치',personality:''}}),{mode:0o600});
  const appEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/(API_KEY|AUTH_TOKEN|SIGNING_SECRET|ADMIN_PASSWORD)/.test(key)));
- app=await electron.launch({executablePath:process.env.HPS_APP_PATH||'/Applications/HypeProof Studio.app/Contents/MacOS/HypeProof Studio',args:['--user-data-dir='+userDir,'--extensions-dir='+userDir+'/extensions',...(process.env.HPS_LESSON_BUNDLED_EXTENSION==='1'?[]:['--extensionDevelopmentPath='+resolve(sourceRoot,'extensions/hypeproof-chat')]),'--disable-workspace-trust','--use-inmemory-secretstorage','--disable-updates','--skip-welcome','--skip-release-notes','--remote-debugging-port=9347','--folder-uri',pathToFileURL(userDir+'/ws').href],env:{...appEnv,HPS_TEST_E2E:'1'},timeout:30000});
+ app=await launchStudio(electron, {executablePath:process.env.HPS_APP_PATH||'/Applications/HypeProof Studio.app/Contents/MacOS/HypeProof Studio',args:['--user-data-dir='+userDir,'--extensions-dir='+userDir+'/extensions',...(process.env.HPS_LESSON_BUNDLED_EXTENSION==='1'?[]:['--extensionDevelopmentPath='+resolve(sourceRoot,'extensions/hypeproof-chat')]),'--disable-workspace-trust','--use-inmemory-secretstorage','--disable-updates','--skip-welcome','--skip-release-notes','--remote-debugging-port=9347','--folder-uri',pathToFileURL(userDir+'/ws').href],env:{...appEnv,HPS_TEST_E2E:'1'},timeout:30000}, { label: 'lesson-studio', secretStorage: 'inmemory' });
  const window=await app.firstWindow();await window.waitForTimeout(5000);
  // Reuse observe's direct OOPIF/CDP approach; inspect every current frame.
  async function targets(){return (await (await fetch('http://127.0.0.1:9347/json/list')).json()).filter(x=>x.type==='iframe'&&x.url.includes('hypeproof-chat'));}

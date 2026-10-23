@@ -2536,6 +2536,30 @@ No login password, keychain deletion or ACL widening is part of the fix.
 Playwright output is kept under `test-results/playwright` so normal runs do not
 remove separately collected observation bundles in `test-results/`.
 
+### Background test launches and cleanup (2026-10-19)
+
+`REQ-STUDIO-TEST-LAUNCH`: every test or harness launch of the Studio app goes
+through `scripts/lib/studio-launcher.mjs` (CLI `scripts/studio-launch.mjs`). A
+launch runs in the background: on macOS the app starts paused and cannot be
+activated (activation policy `prohibited`, set before VS Code's code runs), from an
+`LSUIElement` bundle, with windows off-screen, transparent and non-focusable; a run
+fails if one of its processes becomes the frontmost app. Each launch has a run id, a manifest and temp
+user-data/extensions dirs under a stable root outside `/private/tmp`. Secret
+storage is declared per launch: in-memory secrets do not survive a window reload
+or reopen, so those flows use the OS store. On exit, failure, SIGINT or SIGTERM the
+launcher stops the servers it registered and kills only the processes it started,
+matched by its own pids, app path and user-data-dir, never by name; it removes its
+dirs and fails the run when a process, a dir or a focus violation remains. `sweep`
+cleans runs whose owner process is dead. A launch outside the launcher fails
+`scripts/check-studio-launches.mjs` in PR CI. Human-facing launchers (`studio-dev.py
+run`, kits) carry an explicit `studio-launch: interactive` marker.
+
+Tests (U): `scripts/test/studio-launcher.test.mjs` (fake app trees: success,
+failure, SIGTERM/SIGINT, crashed owner + `sweep`, a same-named foreign process
+survives, leftover and focus controls), `scripts/test/studio-launch-guard.test.mjs`
+(positive/negative guard controls). Real launch: the Dev app through the launcher
+with a frontmost-app probe and a leftover check (manual run, macOS).
+
 
 ## Classroom administration extension
 

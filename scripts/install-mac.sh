@@ -75,6 +75,7 @@ xattr -dr com.apple.quarantine "/Applications/$APP_NAME.app" || true
 
 # 7. Launch
 say "Done. Launching..."
+# studio-launch: interactive -- the installer opens the installed app for its user
 open "/Applications/$APP_NAME.app"
 
 cat <<EOF

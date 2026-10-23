@@ -17,6 +17,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { APP_BINARY, TOKEN_FILE } from "../fixtures/global-setup";
 import { chatFrame, openChatContainer, type SeedHistoryTurn } from "../fixtures/app";
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 interface ReusableCtx {
   app: ElectronApplication;
@@ -65,7 +66,7 @@ async function launchAt(opts: {
   const wsDir = opts.wsDir ?? path.join(userDataDir, "ws");
   fs.mkdirSync(wsDir, { recursive: true });
 
-  const app = await electron.launch({
+  const app = await launchStudio(electron, {
     executablePath: APP_BINARY,
     args: [
       `--user-data-dir=${userDataDir}`,
@@ -85,7 +86,7 @@ async function launchAt(opts: {
       HPS_TEST_COACH_NAME: "코디",
     },
     timeout: 30_000,
-  });
+  }, { label: '11-history-persistence', secretStorage: 'inmemory' });
   const win = await app.firstWindow({ timeout: 30_000 });
   await win.waitForSelector(".monaco-workbench", { timeout: 30_000 });
 
