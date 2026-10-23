@@ -11859,6 +11859,50 @@
           "path": "extensions/hypeproof-chat/test/verdict-controls.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-ATTEMPT-NAV-PRESENTATION-REQ",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Attempt navigation presentation (CGP-CHAT-D-006)"
+        }
+      ]
+    },
+    {
+      "id": "ST-ATTEMPT-NAV-PRESENTATION-IMP",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-ATTEMPT-NAV-PRESENTATION-REQ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/answerAttempts.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-ATTEMPT-NAV-PRESENTATION-TEST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-ATTEMPT-NAV-PRESENTATION-REQ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/attempt-pager-navigation.smoke.mjs"
+        }
+      ]
     }
   ]
 }

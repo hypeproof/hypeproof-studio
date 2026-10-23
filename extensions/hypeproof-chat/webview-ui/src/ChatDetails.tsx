@@ -170,6 +170,12 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
   const follow = useRef(true);
   const readingAnchor = useRef<{ element: HTMLElement; offset: number } | null>(null);
   const [away, setAway] = useState(false);
+  // Explicit history navigation is reading, not a new live answer to follow.
+  const pauseFollowing = () => {
+    if (!enabled) return;
+    follow.current = false;
+    readingAnchor.current = null;
+  };
   const captureReadingPosition = () => {
     readingAnchor.current = null;
     const node = ref.current;
@@ -200,7 +206,10 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
     setAway(!follow.current);
   };
   useLayoutEffect(() => {
-    if (enabled && follow.current && ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+    if (enabled && ref.current) {
+      if (follow.current) ref.current.scrollTop = ref.current.scrollHeight;
+      else setAway(ref.current.scrollHeight - ref.current.scrollTop - ref.current.clientHeight > 48);
+    }
   }, [enabled, revision, ref, textSize]);
   useLayoutEffect(() => {
     const anchor = readingAnchor.current;
@@ -219,7 +228,7 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
     for (const child of node.children) resize.observe(child);
     return () => resize.disconnect();
   }, [enabled, revision, ref]);
-  return { away, onScroll, toLatest, captureReadingPosition };
+  return { away, onScroll, toLatest, captureReadingPosition, pauseFollowing };
 }
 
 /** Measure the active selection edge with the editor's actual wrapping and font. */
