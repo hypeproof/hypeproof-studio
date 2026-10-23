@@ -611,3 +611,14 @@ After editing canonical values, run `node scripts/sync-design-tokens.mjs` to ref
 Chalk TS transport. Run extension `test/design-tokens.smoke.mjs` and Chalk
 `test/design-tokens.test.mjs`; Chalk builds reject stale transport. Existing accessibility
 probes resolve only static `--ds-*` aliases before evaluating their original assertions.
+
+
+## Independent typography families (CGP-DS-R-007)
+
+UI and prose default to the existing system sans primitive (`--ds-p-136`);
+code defaults to the existing UI monospace/Menlo primitive (`--ds-p-184`).
+Separate semantic/component roles make changing prose independent from controls
+and code. Studio bridges UI to `--vscode-font-family` and code to
+`--vscode-editor-font-family`; technical URLs/identifiers remain fixed-width
+without borrowing the editor preference. Chalk has the same three roles through
+the canonical generated transport. Font sizes and line spacing are unchanged.

@@ -1,0 +1,6 @@
+/* CGP-DS-R-007: Chalk shares the three font roles, with no editor host dependency.
+ * Technical identifiers retain explicit fixed-width component styles on their own selectors. */
+html body { font-family: var(--ds-c-typography-ui); }
+html body :is(p, li, blockquote, dd, dt) { font-family: var(--ds-c-typography-content); }
+html body :is(pre, code) { font-family: var(--ds-c-typography-code); }
+html body :is(button, input, select, textarea) { font-family: var(--ds-c-typography-ui); }

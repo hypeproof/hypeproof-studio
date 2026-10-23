@@ -4814,3 +4814,24 @@ replacement and timer cleanup; `class-window-host.smoke.mjs` exercises real host
 config with both runtimes and negative seats; `class-window-layout.smoke.mjs`
 measures the actual chat markup in headless Chromium. Native installed-app behavior
 is separate owner verification.
+
+## Separate font roles (CGP-DS-R-007)
+
+`REQ-STUDIO-FONT-ROLES` (REQ-CGP-DS-08, PI#1): UI, answer/user prose and code
+have independent component tokens (`--ds-c-typography-ui/content/code`) backed
+by named semantic roles and existing system-sans/monospace primitives in the shared
+light/dark token source. Studio uses the host UI family for controls and the editor
+family only for inline/fenced/indented code. Prose uses its own content role.
+Nested code-copy/wrap/disclosure controls keep the UI family when prose changes.
+Addresses and technical metadata retain fixed component families and do not follow
+editor.fontFamily. Chalk receives the same roles via its generated CSS transport:
+body/controls are UI, ordinary paragraphs/lists are content, and pre/code are code;
+explicit technical-identifier selectors retain their existing fixed-width family.
+Changing the content role does not change controls or code. No font download,
+settings UI, font size change or execution capability is added.
+
+Validation: font-roles-computed.smoke.mjs renders the actual ChatPanel, mounts and
+opens its fenced-code disclosure, changes fonts without reload, and checks all
+nine actual Chalk HTML pages through production token injection. The existing
+Chalk operating-layout test remains required; installed-host theme propagation
+is a separate owner observation.

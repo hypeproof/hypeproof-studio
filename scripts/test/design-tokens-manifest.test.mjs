@@ -5,7 +5,7 @@ import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { focusSource, source } from '../sync-design-tokens.mjs';
+import { focusSource, source, typographySource } from '../sync-design-tokens.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const manifest = JSON.parse(readFileSync(join(repo, 'config/design-tokens.json'), 'utf8'));
@@ -20,7 +20,7 @@ function canonicalFiles() {
   const tokensPath = repoPath(new URL('tokens.css', source));
   const mainText = readFileSync(join(repo, 'extensions/hypeproof-chat/webview-ui/src/main.tsx'), 'utf8');
   assert.match(mainText, /import ["']\.\/tokens\.css["'];/, 'main.tsx imports tokens.css');
-  return new Set([repoPath(source), tokensPath, repoPath(focusSource), koreanPath]);
+  return new Set([repoPath(source), tokensPath, repoPath(focusSource), koreanPath, repoPath(typographySource)]);
 }
 
 test('manifest files are exactly the canonical token files and all exist', () => {

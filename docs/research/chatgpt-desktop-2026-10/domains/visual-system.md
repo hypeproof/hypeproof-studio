@@ -347,3 +347,12 @@ The editor monospace (`--vscode-editor-font-family`) should drive code blocks.
 6. ChatGPT's 22px user bubble and 640px column suit adult reading. The best measure for elementary Korean readers (35 versus 40 syllables per line) should be tested with real learners, not assumed.
 7. Which ChatGPT window type (`electron`, `browser`, `extension`) a given user sees depends on flags. The extension-mode token bridge is observed in CSS, but whether a VS Code extension build of this renderer ships publicly is not confirmed by these files.
 8. CC-R1 "metadata 11px" contradicts DES-02 (labels ≥14px). The question is whether DES-02 applies to the personal chat surface or only to Chalk.
+
+
+## Font role implementation decision (CGP-DS-R-007)
+
+REQ-CGP-DS-08 uses independent named UI/content/code roles over the shared
+primitive-semantic-component tiers. Host editor font changes apply to code only;
+prose cannot change nested action controls. Chalk's generated transport includes
+its typography consumer rules; explicit technical identifiers remain fixed-width.
+No proprietary font, network font load or new learner setting is introduced.

@@ -1,16 +1,18 @@
 {
   "schema": "design-tokens-manifest/1",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "transport_order": [
     "extensions/hypeproof-chat/webview-ui/src/designTokens.css",
     "extensions/hypeproof-chat/webview-ui/src/tokens.css",
     "extensions/hypeproof-chat/webview-ui/src/focusGeometry.css",
-    "extensions/hypeproof-chat/webview-ui/src/koreanProse.css"
+    "extensions/hypeproof-chat/webview-ui/src/koreanProse.css",
+    "chalk/src/lib/typography.css"
   ],
   "files": [
     "extensions/hypeproof-chat/webview-ui/src/designTokens.css",
     "extensions/hypeproof-chat/webview-ui/src/tokens.css",
     "extensions/hypeproof-chat/webview-ui/src/focusGeometry.css",
-    "extensions/hypeproof-chat/webview-ui/src/koreanProse.css"
+    "extensions/hypeproof-chat/webview-ui/src/koreanProse.css",
+    "chalk/src/lib/typography.css"
   ]
 }
