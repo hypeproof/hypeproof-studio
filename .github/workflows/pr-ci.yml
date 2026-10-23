@@ -11,6 +11,8 @@ on:
       - 'config/service-packages.json'
       - 'scripts/bootstrap-service-packages.mjs'
       - 'scripts/test/bootstrap-service-packages.test.mjs'
+      - 'config/design-tokens.json'
+      - 'scripts/test/design-tokens-manifest.test.mjs'
       - 'scripts/release/**'
       - 'test/service-integration/**'
       - 'chalk/**'
@@ -71,6 +73,9 @@ jobs:
       - name: Workflow shells declare bash on Windows runners
         if: ${{ !cancelled() }}
         run: python3 scripts/check-workflow-shells.py
+      - name: Design token manifest
+        if: ${{ !cancelled() }}
+        run: node --test scripts/test/design-tokens-manifest.test.mjs
       # #632 sized the mirror's asset wait for two 1-2h builds and then
       # wrapped it in a 20-minute job. Both numbers looked deliberate;
       # nobody compared them until v0.0.0-rc.3 was cancelled mid-wait.
