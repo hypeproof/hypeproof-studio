@@ -1,0 +1,48 @@
+.hps-accuracy-card {
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  padding: var(--hp-space-3);
+  margin-block: var(--hp-space-2);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
+  border-inline-start: var(--hp-space-1) solid var(--hp-border-warn-default);
+  border-radius: var(--hp-space-3);
+  background: var(--hp-bg-app-default);
+  color: var(--hp-text-primary-default);
+  font-size: var(--hp-font-body);
+  overflow-wrap: anywhere;
+}
+.hps-accuracy-card p { margin: 0; }
+.hps-accuracy-head { display: flex; align-items: flex-start; gap: var(--hp-space-2); }
+.hps-accuracy-icon { flex: none; inline-size: var(--hp-space-5); block-size: var(--hp-space-5); color: var(--hp-text-warn-default); }
+.hps-accuracy-actions { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); margin-block-start: var(--hp-space-3); }
+.hps-accuracy-card button, .hps-accuracy-card label {
+  min-inline-size: var(--hp-control-min);
+  min-block-size: var(--hp-control-min);
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--hp-space-3);
+  font: inherit;
+}
+.hps-accuracy-card button { color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); }
+/* The action carries the lime edge; the fill stays quiet so the screen keeps its single Primary CTA (SX-04). */
+.hps-accuracy-card .hps-accuracy-action { border-color: var(--hp-border-accent-default); }
+.hps-accuracy-card button[aria-pressed="true"] { background: var(--hp-bg-control-selected); }
+.hps-accuracy-card button:disabled { opacity: .55; }
+/* Focus rings come from the shared focus geometry (focusGeometry.css); the answer is a scroll scope there. */
+.hps-accuracy-answer {
+  box-sizing: border-box;
+  margin: var(--hp-space-2) 0 0;
+  padding: var(--hp-space-3);
+  border-inline-start: var(--hp-space-1) solid var(--hp-border-accent-default);
+  border-radius: var(--hp-space-2);
+  background: var(--hp-bg-panel-default);
+  color: var(--hp-text-primary-default);
+  font-size: var(--hp-font-body);
+  white-space: pre-wrap;
+  max-block-size: calc(var(--hp-control-min) * 6);
+  overflow: auto;
+}
+@media (forced-colors: active) {
+  .hps-accuracy-card, .hps-accuracy-card button, .hps-accuracy-answer { color: CanvasText; background: Canvas; border-color: CanvasText; }
+  .hps-accuracy-icon { color: CanvasText; }
+}

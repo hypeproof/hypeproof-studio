@@ -647,6 +647,9 @@ export type WebviewMessage = (
   | { type: "selectAnswerAttempt"; activityId?: string; taskId?: string; rootId: string; attemptId: string; choose: boolean }
   | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[]; toolMode?: import('./turnTools').TurnToolMode; sourceMessageId?: string; userMessageId?: string }
   | { type: "cancelStream"; streamId: string }
+  /** CGP-SHELL-R-023 — local first-result education; no verdict or telemetry. */
+  | { type: "accuracyEducationRequest"; requestId: string }
+  | { type: "accuracyEducationDismiss"; messageId: string }
   /**
    * CGP-CHAT-R-005 (REQ-STUDIO-ANSWER-VERDICT) — the learner's verdict on one finished answer in a
    * personal task; `verdict: null` removes it. Stored locally and recorded in the spool (DEC-09).
@@ -902,6 +905,8 @@ export type HostMessage = (
   // stay silent (host-side AiDisclosureGate remembers). Webview renders a
   // compact role=note + aria-live=polite banner at the top of the messages.
   | { type: "aiDisclosure"; text: string }
+  | { type: "accuracyEducationChanged" }
+  | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
   // #384 — an image opened in an editor tab (VS Code intercepts file drops onto
   // the editor and opens them). The host reads the bytes and hands the webview
   // a data URL to attach to the next turn — making "drag a screenshot in" work

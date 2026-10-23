@@ -4723,3 +4723,24 @@ authority. No approval preset is invented: this pinned Service profile has no
 approval-mode value, so that example is not rendered as a fictional setting.
 Validation: `test/cohort-settings.test.tsx` and the actual host publication cases
 in `test/ai-capability-card-host.smoke.mjs`.
+
+## First-result accuracy education
+
+`REQ-STUDIO-FIRST-RESULT-CHECK` (CGP-SHELL-R-023 / REQ-SHELL-23,
+CGP-SHELL-049; Product Intent #3 and #5): after the first successful, nonempty
+AI result, every learner seat, including minor cohorts, receives one card:
+"AI도 틀릴 수 있어요. 결과를 직접 눌러 확인해 봐요." The check action
+opens that exact answer as inert text and asks the learner to compare it with
+their request and original material. Completion requires a learner comparison
+acknowledgement; a separate close action does not claim verification.
+
+The card is never shown while streaming, for app-authored shortcuts, empty,
+failed or stopped turns, or instructor chat. It remains bound to its first
+answer and task. Local, immutable per-learner records preserve the pending
+answer ID and dismissal across restarts and windows; another learner does not
+inherit them. No answer content, correctness score, telemetry or instructor
+recipient is added. The original session-start disclosure remains distinct.
+This supports VERIFY/JUDGMENT as an opportunity, not a measured learning outcome.
+
+Evidence: `accuracy-education.test.tsx`, `accuracy-education-host.smoke.mjs`,
+`accuracy-education-style.smoke.mjs`, `accuracy-education-computed.smoke.mjs`.

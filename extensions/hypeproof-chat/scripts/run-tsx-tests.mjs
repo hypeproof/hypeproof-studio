@@ -39,6 +39,7 @@ const OVERRIDES = {
   "goal-status": { banner: BANNER_POSTED },
   "keyboard-navigation": { banner: BANNER_STATE },
   "lesson-capability-entry": { banner: BANNER_POSTED_ARROW },
+  "accuracy-education": { banner: BANNER_POSTED },
   "activity-trash": { banner: BANNER_POSTED },
   "write-approval-dialog": { banner: BANNER_POSTED },
   "outbound-dialog-app": { banner: BANNER_POSTED },
