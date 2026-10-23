@@ -40,7 +40,8 @@ const declarations = (selector:string) => {
   const body = new RegExp(escaped + ' \\{([^}]+)\\}').exec(css)?.[1] ?? '';
   return Object.fromEntries(body.split(';').map(s=>s.trim().split(/:\s*/,2)).filter(p=>p.length===2));
 };
-assert.ok([...css.matchAll(/@media \(max-width: 800px\) \{([\s\S]*?)\n\}/g)].some(m=>m[1].includes('.hp-capability-reopen')), 'narrow header breakpoint');
+assert.ok([...css.matchAll(/@container studio-chat \(width < 688px\) \{([\s\S]*?)\n\}/g)].some(m=>m[1].includes('.hp-capability-reopen')), 'narrow header container breakpoint');
+assert.ok(![...css.matchAll(/@media[^{]*\{([\s\S]*?)\n\}/g)].some(m=>m[1].includes('.hp-capability-reopen')), 'capability header must not answer to the viewport');
 assert.equal(declarations('.hps-header .hp-capability-reopen')['font-size'] ?? css.match(/\.hps-header \.hp-capability-reopen \{ font-size: ([^;]+); \}/)?.[1], 'var(--hp-font-caption)');
 const nextStyle = declarations('.hp-capability-next');
 assert.equal(nextStyle['min-width'],'var(--hp-control-min)');

@@ -356,3 +356,11 @@ primitive-semantic-component tiers. Host editor font changes apply to code only;
 prose cannot change nested action controls. Chalk's generated transport includes
 its typography consumer rules; explicit technical identifiers remain fixed-width.
 No proprietary font, network font load or new learner setting is introduced.
+
+## Studio pane-width adoption (CGP-DS-R-013)
+
+REQ-CGP-DS-14 / DES-CGP-DS-14 are implemented by the named `studio-chat` container.
+See `REQ-STUDIO-CHAT-CONTAINER` in studio-requirements.md for the exact 448/688 CSS-pixel
+boundaries, the separate 1024px code-diff threshold, and the outer-workspace scope boundary.
+Local computed evidence is `test/chat-container-layout.smoke.mjs`; native acceptance is not
+implied by that headless result.

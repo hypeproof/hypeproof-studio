@@ -4835,3 +4835,25 @@ opens its fenced-code disclosure, changes fonts without reload, and checks all
 nine actual Chalk HTML pages through production token injection. The existing
 Chalk operating-layout test remains required; installed-host theme propagation
 is a separate owner observation.
+
+## Chat pane container layout (CGP-DS-R-013)
+
+`REQ-STUDIO-CHAT-CONTAINER` adopts REQ-CGP-DS-14 / DES-CGP-DS-14 (PI#1: keep the
+working context readable; supports examination and verification, not a scored outcome).
+ChatPanel owns a named inline-size container, including when embedded below the instructor
+band. The window can remain fixed while the pane changes from 280 to 720 CSS pixels.
+Compact is below 448px: personal message/composer spacing, citation titles and recovery
+lines and attachment failures use compact rules. Classroom access lines retain their separate
+640px wrap threshold, now measured against the pane. Regular starts
+at 448px. Wide starts at 688px: evidence comparisons use two columns and the capability
+reopen control can share the header row. Turn-file diffs retain their separate 1024px minimum
+for two code columns, now measured against the pane. Height, motion and forced-color media
+queries retain their environment semantics. Outer task-workspace rail/source navigation is
+not a chat descendant and retains its own layout rules.
+
+Thresholds are CSS pixels: the design's 28/43rem labels refer to a 16px design reference,
+not the host's configurable root font. Font-size preferences must not silently move them.
+The browser smoke compiles actual application CSS and renders ChatPanel in both seats and
+themes, keeps window width fixed, sweeps both boundaries and shrinks back, checks overflow,
+and keeps a second differently sized pane independent. This is local browser evidence;
+installed-app resizing and owner acceptance remain separate.

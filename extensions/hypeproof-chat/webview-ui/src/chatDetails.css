@@ -119,7 +119,7 @@
 .tw-workspace .hps-catchup button { font-size: var(--hp-font-caption); }
 @keyframes chat-feedback { from { opacity: 0; transform: translateY(var(--ds-c-studio-chatdetails-size-15)); } to { opacity: 1; transform: translateY(0); } }
 @keyframes chat-pending { 0%, 70%, 100% { opacity: .45; transform: translateY(0); } 35% { opacity: 1; transform: translateY(var(--ds-c-studio-chatdetails-size-16)); } }
-@media (max-width: 700px) {
+@container studio-chat (width < 448px) {
   .hps-shell[data-chat-detail="personal"] .hps-messages { padding: var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-4); gap: var(--ds-c-studio-chatdetails-space-4); }
   .hps-shell[data-chat-detail="personal"] .hps-input-area { padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-19); }
   .hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-font-body); }
@@ -475,13 +475,13 @@
 .hps-shell[data-chat-detail="personal"] .hp-ai-can-do li[data-on="false"] { color: var(--tw-muted); }
 .hps-shell[data-chat-detail="personal"] .hp-ai-can-do li { padding-inline: var(--ds-c-studio-chatdetails-space-7); }
 .hps-shell[data-chat-detail="personal"] .hp-ai-can-do > .hp-rail-lesson-note { padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-2); border-top-color: var(--tw-line); color: var(--tw-muted); line-height: var(--hp-leading-label); }
-@media (max-width: 700px) {
+@container studio-chat (width < 448px) {
   .hps-shell[data-chat-detail="personal"] .hp-ai-can-do { margin-inline: var(--ds-c-studio-chatdetails-space-18); }
 }
 /* REQ-STUDIO-PREVIEW-RECOVERY — the preview failure line sits in the same 740px reading column as the messages and
    the composer (the UI-POLISH-1 measure), not across the whole pane. */
 .hps-shell[data-chat-detail="personal"] .hps-preview-recovery { margin: var(--ds-c-studio-chatdetails-space-1) max(var(--ds-c-studio-chatdetails-space-5), calc((100% - var(--chat-column)) / 2)) 0; }
-@media (max-width: 700px) {
+@container studio-chat (width < 448px) {
   .hps-shell[data-chat-detail="personal"] .hps-preview-recovery { margin-inline: var(--ds-c-studio-chatdetails-space-18); }
 }
 

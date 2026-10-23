@@ -13,6 +13,9 @@ html, body, #root {
 }
 
 .hps-shell {
+  /* REQ-CGP-DS-14: the chat pane, including an instructor-nested pane, owns width. */
+  container: studio-chat / inline-size;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   /* #1298 — 100vh breaks when ChatPanel is nested inside InstructorChatPanel's flex column;
@@ -1893,7 +1896,7 @@ html, body, #root {
 .hp-evidence-diff-note { margin: 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-muted-default); }
 /* At narrow widths they stack vertically — at sidebar width neither of the two columns is readable. */
 .hp-evidence-compare { display: grid; grid-template-columns: 1fr; gap: var(--ds-c-studio-styles-space-7); }
-@media (min-width: 720px) { .hp-evidence-compare { grid-template-columns: 1fr 1fr; } }
+@container studio-chat (min-width: 688px) { .hp-evidence-compare { grid-template-columns: 1fr 1fr; } }
 .hp-evidence-compare h5 { margin: 0 0 var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); font-weight: var(--ds-c-studio-styles-typography-7); }
 .hp-evidence-compare pre {
   margin: 0; padding: var(--ds-c-studio-styles-space-2); max-height: var(--ds-c-studio-styles-size-25); overflow: auto;
@@ -2333,6 +2336,8 @@ html, body, #root {
   .tw-heading:has(.hps-access-header) { flex-wrap: wrap; row-gap: 0; }
   .tw-heading:has(.hps-access-header) .hps-access-header { order: 3; flex: 1 1 100%; padding-bottom: var(--ds-c-studio-styles-space-2); }
   .tw-heading:has(.hps-access-header) .hps-activity-now { flex: 1 1000 0; }
+}
+@container studio-chat (max-width: 640px) {
   /* Classroom header (no task heading; DEC-35 class seats): the same own row under the coach name
      and actions, so the coach name is not squeezed to one letter. */
   .hps-header:has(> .hps-access-header) { flex-wrap: wrap; row-gap: var(--ds-c-studio-styles-space-14); }
@@ -2380,7 +2385,7 @@ html, body, #root {
 .hps-turn-split { display: none; }
 .hps-turn-review summary { min-height: var(--ds-c-studio-styles-size-8); padding-block: var(--ds-c-studio-styles-space-7); box-sizing: border-box; cursor: pointer; }
 .hps-turn-review summary:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
-@media (min-width: 1024px) {
+@container studio-chat (min-width: 1024px) {
   .hps-turn-split { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--ds-c-studio-styles-space-2); }
   .hps-turn-unified { display: none; }
 }
@@ -2417,7 +2422,7 @@ html, body, #root {
 .hps-attachment-failure button { grid-row: 1 / span 2; margin-inline-end: 0; }
 .hps-attachment-failure button:first-of-type { grid-column: 2; }
 .hps-attachment-failure button:last-of-type { grid-column: 3; }
-@media (max-width: 520px) { .hps-attachment-failure { grid-template-columns: minmax(0, 1fr) auto; } .hps-attachment-failure button { grid-row: auto; grid-column: 1 / -1; } }
+@container studio-chat (width < 448px) { .hps-attachment-failure { grid-template-columns: minmax(0, 1fr) auto; } .hps-attachment-failure button { grid-row: auto; grid-column: 1 / -1; } }
 /* A classroom lesson makes the shell the scroller: keep the footer (composer and failure rows) at the bottom edge. */
 .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hps-input-area { position: sticky; bottom: 0; z-index: 2; background: var(--vscode-editor-background, var(--ds-c-studio-styles-surface-123)); }
 @media (forced-colors: active) { .hps-attachment-failure, .hps-photo-failure { border-color: CanvasText; } }
@@ -2467,7 +2472,7 @@ html, body, #root {
   cursor: pointer;
 }
 
-@media (max-width: 800px) {
+@container studio-chat (width < 688px) {
   .hps-header:has(.hp-capability-reopen) { flex-wrap: wrap; }
   .hps-header .hp-capability-reopen { flex-basis: 100%; margin-left: 0; }
   .hps-header:has(.hp-capability-reopen) .hps-coach-name { flex-shrink: 0; }
