@@ -28,6 +28,12 @@ for path, (fixture, before, after) in changes.items():
  new = old.replace(before,after)
  if fixture == 'menubar.ts':
   new = new.replace("'lastKnownMenubarData'", "'lastKnownMenubarData.ko.v1'")
+  # Localize only display arguments; keep product identity and native actions intact.
+  for key, english in [('mAbout', 'About {0}'), ('mHide', 'Hide {0}'), ('miQuit', 'Quit {0}')]:
+   label = f'''nls.localize('{key}', "{english}", this.productService.nameLong)'''
+   assert new.count(label) == 1, f'upstream menu changed: {key}'
+   new = new.replace(label, label.replace('this.productService.nameLong', "'하이프루프 스튜디오'"))
+
  if fixture == 'main.ts':
   new = new.replace("if (process.platform === 'win32' || process.platform === 'linux') {\n\tconst electronLocale", "if (true) { // Include macOS native role labels.\n\tconst electronLocale")
   # Avoid TS narrowing errors now that userLocale is a literal.

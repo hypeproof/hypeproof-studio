@@ -5053,6 +5053,22 @@ menu-label expressions, and checks the packaged translation output;
 acceptance uses a newly packaged shell on macOS and Windows, with both Korean
 and English OS language. Unit evidence is not an installed-device screenshot.
 
+### Korean menu conventions (CGP-SHELL-D-005)
+
+DES-SHELL-05 follows the Korean learner shell contract and Product Intent #1.
+About, Hide and Quit menu items interpolate the Korean display name instead of
+mixing the English product identity into Korean labels. Update-check, install-update
+and switch-window native actions use a single ellipsis; the workbench update-check
+label uses the same punctuation. Native mnemonic letters, command IDs, click handlers,
+roles and accelerators are preserved, as are all OS identity and credential keys.
+The generator owns these label-only patches; upstream fixtures remain unmodified.
+
+`korean-shell.smoke.mjs` evaluates the patched item expressions against packaged
+translations and compares the remaining native menu source with upstream, in addition
+to the startup/translation/identity guards above. These are local synthetic checks.
+Installed macOS/Windows menus, OS mnemonic rendering, screenshots and accessibility
+acceptance still require a newly packaged app; no installed-device result is claimed.
+
 ## Learner menu token contract (CGP-DS-R-022)
 
 `REQ-STUDIO-MENU-TOKENS` adopts REQ-CGP-DS-24 (DES-06, PI#1: predictable controls
