@@ -11772,7 +11772,9 @@
       "id": "ST-DS-DIFF-SYMBOLS-REQ",
       "stage": "requirement",
       "owner": "jayleekr",
-      "depends_on": [],
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
       "sources": [
         {
           "path": "docs/studio-requirements.md",
