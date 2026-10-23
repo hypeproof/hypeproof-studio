@@ -11648,6 +11648,52 @@
           "path": "extensions/hypeproof-chat/test/korean-settings.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-MENU-TOKENS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Learner menu token contract (CGP-DS-R-022)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MENU-TOKENS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MENU-TOKENS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ComposerTools.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MENU-TOKENS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MENU-TOKENS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/menu-tokens-computed.smoke.mjs"
+        }
+      ]
     }
   ]
 }

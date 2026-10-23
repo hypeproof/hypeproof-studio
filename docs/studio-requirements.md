@@ -4883,3 +4883,22 @@ menu-label expressions, and checks the packaged translation output;
 `test/korean-settings.test.tsx` renders both settings variants. Native screenshot
 acceptance uses a newly packaged shell on macOS and Windows, with both Korean
 and English OS language. Unit evidence is not an installed-device screenshot.
+
+## Learner menu token contract (CGP-DS-R-022)
+
+`REQ-STUDIO-MENU-TOKENS` adopts REQ-CGP-DS-24 (DES-06, PI#1: predictable controls
+that let learners inspect available actions). ComposerTools in personal/classroom chat and
+the personal HeaderActions popover share menu geometry tokens:12px panel radius,4px gutter,
+minimum44px items,6px item radius and8px/12px block/inline padding. Labels and tool descriptions
+use the semantic caption font (base14px; personal text-size preferences still apply).
+Both read the panel/background and control-boundary semantic color roles. Placement and
+openers remain component-owned; classroom HeaderActions remains an inline toolbar.
+
+ArrowUp/Down wrap, Home/End select first/last, and Escape closes and restores the opener.
+Composition keys do not navigate or dismiss a menu. ComposerTools now applies the same IME
+guard already used by HeaderActions and the shared dismissal hook. This does not change
+capability availability, reservation locks, tool execution or OS dialog approvals.
+The computed guard mounts the real components with built application CSS, exercises both
+composer modes, themes,800/1420 windows, token overrides, keyboard focus and forced colors.
+Type-ahead in DES-CGP-DS-24 and Chalk dense menu styling are separate design-row work; this
+requirement's acceptance is arrow/Home/End/Escape plus learner sizing, not native acceptance.
