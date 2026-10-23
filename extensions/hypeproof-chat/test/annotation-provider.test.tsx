@@ -393,6 +393,46 @@ async function main() {
     const full = renderToStaticMarkup(<AnnotationTray annotations={Array.from({ length: 10 }, (_, i) => ({ number: i + 1, kind: 'element' as const, comment: '', stale: false, sentText: '', imageDataUrl: null }))} onAction={() => {}} />);
     assert.equal(full.match(/<button type="button" disabled="">/g)?.length, 2, 'both add buttons are disabled at 10');
   }
+  // CGP-ART-R-003: every exit keeps drafts unless the same revision is explicitly discarded.
+  {
+    let prompts: any[] = [], answer: any;
+    vscode.window.showWarningMessage = async (...args: any[]) => { prompts.push(args); return answer; };
+    for (const selection of [undefined, { title: '계속 고치기' }]) {
+      const h = host(); fill(h, 2); const before = JSON.stringify(h.annotationBatch.preview()); answer = selection;
+      assert.equal(await h.confirmAnnotationLeave(), false);
+      assert.equal(JSON.stringify(h.annotationBatch.preview()), before, 'Esc/keep preserves exact annotation bytes');
+      const prompt = prompts.at(-1);
+      assert.equal(prompt[0], '보내지 않은 표시가 2개 있어요');
+      eqj(prompt[1], { modal: true });
+      eqj(prompt.slice(2), [{ title: '계속 고치기', isCloseAffordance: true }, { title: '버리기' }], 'keep is first/default and close affordance');
+    }
+    const h = host(); fill(h, 2); answer = { title: '버리기' };
+    assert.equal(await h.confirmAnnotationLeave(), true); assert.equal(h.annotationBatch.size, 0);
+    assert.ok(browserCalls.some(c => c[0] === 'clear'));
+    const empty = host(); const count = prompts.length; assert.equal(await empty.confirmAnnotationLeave(), true); assert.equal(prompts.length, count);
+    let release: (v: any) => void = () => {};
+    vscode.window.showWarningMessage = async () => new Promise(r => { release = r; });
+    const edited = host(); fill(edited, 1); const pending = edited.confirmAnnotationLeave();
+    assert.equal(await Promise.race([edited.confirmAnnotationLeave(), new Promise(r => setTimeout(() => r('pending'), 100))]), false, 'a second leaving request cannot reuse another prompt');
+    edited.annotationBatch.edit(1, 'new comment'); release({ title: '버리기' });
+    assert.equal(await pending, false); assert.equal(edited.annotationBatch.size, 1, 'changed revision is not discarded');
+    const changedScope = host(); fill(changedScope, 1); const changing = changedScope.confirmAnnotationLeave();
+    scope = 'other-activity'; release({ title: '버리기' }); assert.equal(await changing, false); assert.equal(changedScope.annotationBatch.size, 1);
+    scope = 'activity:task';
+    const switched = host(); fill(switched, 1); const switching = switched.confirmAnnotationLeave();
+    scope = 'other-activity'; switched.syncAnnotationScope(); release({ title: '버리기' });
+    assert.equal(await switching, false); assert.equal(switched.annotationBatch.size, 0, 'old draft never appears in new activity');
+    scope = 'activity:task'; switched.syncAnnotationScope(); assert.equal(switched.annotationBatch.size, 1, 'unexpected binding change parks old draft');
+    answer = undefined; vscode.window.showWarningMessage = async (...args: any[]) => { prompts.push(args); return answer; };
+    const close = host(); fill(close, 1); const tab = {}, unrelated = {}; close.annotationPreviewTabs = new Map([[tab, scope]]);
+    const earlier = prompts.length; await close.annotationPreviewClosed(unrelated); assert.equal(prompts.length, earlier);
+    await close.annotationPreviewClosed(tab); assert.equal(prompts.length, earlier + 1); assert.equal(close.annotationBatch.size, 1);
+    const transition = host({ context: {} }); fill(transition, 1);
+    await assert.rejects(transition.setConnectionChanging(true), /표시를 그대로/); assert.equal(transition.annotationBatch.size, 1);
+    const asked = prompts.length; await transition.setConnectionChanging(true, undefined, false); assert.equal(prompts.length, asked, 'input freeze does not discard or prompt');
+    assert.equal(transition.annotationBatch.size, 1);
+    answer = { title: '버리기' }; await transition.setConnectionChanging(true); assert.equal(transition.annotationBatch.size, 0);
+  }
   console.log('PASS annotation provider: default-off gate, shortcut bypass x4, legacy pick, 10-cap, scope sync, markers, retry, envelope, record, hostile text, tray');
 }
 main().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });

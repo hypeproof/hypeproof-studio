@@ -37,25 +37,36 @@ export function annotationText(a: Annotation): string {
     + shown.join('\n\n') + (omitted > 0 ? `\n(이 영역의 요소 ${omitted}개는 생략했어요)` : '');
 }
 /** A send refused because of its annotations. The learner sees this message as it is; the typed
- * text goes back to the composer and the draft stays in the tray (an activity change already
- * dropped the old task's draft). */
+ * text goes back to the composer and the draft stays in the tray (an activity change parks the old task's draft). */
 export class AnnotationRefusal extends Error {}
 const KEPT = '쓴 글은 입력창에 그대로 있어요.';
 export const ANNOTATION_REFUSAL = {
   stale: `이전 화면에서 고른 표시가 있어서 보내지 않았어요. 그 표시를 빼거나 다시 고른 뒤 보내 주세요. ${KEPT}`,
   gate: `지금은 화면 표시를 보낼 수 없어서 보내지 않았어요. 표시를 모두 빼고 다시 보내 주세요. ${KEPT}`,
   edited: `보내는 사이에 표시가 바뀌어서 보내지 않았어요. 표시를 확인한 뒤 다시 보내 주세요. ${KEPT}`,
-  activity: `보내는 사이에 활동이나 작업이 바뀌어서 보내지 않았어요. 이전 작업의 표시는 지웠어요. ${KEPT}`,
+  activity: `보내는 사이에 활동이나 작업이 바뀌어서 보내지 않았어요. 이전 작업의 표시는 그 작업에 보관했어요. ${KEPT}`,
 } as const;
 export class AnnotationBatch {
   private items: Annotation[] = [];
   private sequence = 0;
   revision = 0;
   private scope = '';
+  private parked = new Map<string, { items: Annotation[]; sequence: number }>();
   contexts(): ElementContext[] { return this.items.flatMap(a => a.contexts); }
   get size(): number { return this.items.length; }
   bind(scope: string): void {
-    if (scope !== this.scope) { this.items = []; this.sequence = 0; this.scope = scope; this.revision++; }
+    if (scope !== this.scope) {
+      // An unexpected binding change must not erase another task's unsent work.
+      if (this.items.length) this.parked.set(this.scope, { items: this.items, sequence: this.sequence });
+      else this.parked.delete(this.scope);
+      const saved = this.parked.get(scope);
+      this.items = saved?.items ?? []; this.sequence = saved?.sequence ?? 0;
+      this.parked.delete(scope); this.scope = scope; this.revision++;
+    }
+  }
+  discard(expectedRevision: number): boolean {
+    if (expectedRevision !== this.revision) return false;
+    this.items = []; this.revision++; return true;
   }
   add(kind: Annotation['kind'], contexts: ElementContext[], crop: Annotation['crop']): Annotation {
     if (this.items.length >= ANNOTATION_LIMIT) throw new Error('표시는 10개까지 모을 수 있어요.');
