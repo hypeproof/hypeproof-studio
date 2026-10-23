@@ -4556,6 +4556,19 @@ No new grant, recipient, policy endpoint, or memory enablement is invented.
 Confirmed-policy branches remain unimplemented pending a Service contract and
 pinned package update. This row is not complete.
 
+DES-KNOW-33 / CGP-KNOW-D-018 adds a neutral information icon next to that same
+unknown-policy line on every listed web confirmation. Studio uses one shared
+RecipientMemory component for primary/secondary recipients, the public step and
+help preview/retry. Chalk learner share/feedback decisions use a separate static
+line in the existing confirmation; instructor distribution and feedback keep their
+own lines. The icon is decorative (hidden from assistive technology, not focusable),
+16px with an 8px gap, and inherits the disclosure text colour. Text remains at
+least 14px with 4.5:1 contrast; forced colours use CanvasText. Native fallback
+modals use a plain-text information symbol before the same wording. Unknown is
+never styled or labelled as a safe state. This design work does not supply the
+missing Service policy, and native OS rendering remains owner verification.
+
+
 This disclosure may expose JUDGMENT/OWNERSHIP through an informed send decision;
 no capability labels appear in the UI. Evidence: outbound-dialog.test.tsx,
 outbound-consent-render.test.tsx, outbound-consent-host.smoke.mjs,
