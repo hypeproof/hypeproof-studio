@@ -18,6 +18,8 @@ try{
   const config=chatConfig(3,{activity:{...chatConfig().activity,kind:seat},profile:{...chatConfig().profile,lesson:null},taskWorkspace:seat==='personal'?{tasks:[],sources:[]}:undefined});
   const props=chatPanelProps({config,messages:[{id:'copy-answer',role:'assistant',createdAt:1,content:'코드를 확인해 주세요.\n\n    const answer = 42;'}]});
   await b.load(`<html style="${vars}"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div class="${seat==='personal'?'tw-workspace':''}" style="display:block;height:800px"><div id="root"></div></div><script>window.__copyProps=${JSON.stringify(props)};Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('synthetic denied')}}});</script><script>${script.outputFiles[0].text}</script></body></html>`,{width,height:900,dark});
+  // Force the failure path: headless clipboard access differs by platform (denied on macOS, granted on Linux CI).
+  await b.evaluate(`Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>Promise.reject(new Error('denied'))}})`);
   await b.evaluate(`document.querySelector('[aria-label="코드 복사"]').click()`);await new Promise(r=>setTimeout(r,40));
   const state=await b.evaluate(`(()=>{const e=document.querySelector('.hps-codeblock-status');e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {role:e.getAttribute('role'),text:e.textContent,visible:r.width>0&&r.height>0&&r.left>=0&&r.right<=innerWidth}})()`);
   assert.equal(state.role,'alert');assert.match(state.text,/복사하지 못했습니다/);assert.equal(state.visible,true);
