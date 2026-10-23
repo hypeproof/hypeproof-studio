@@ -4603,3 +4603,37 @@ Evidence: `test/work-takeaway.smoke.mjs`, `test/work-takeaway-host.smoke.mjs`,
 `test/work-takeaway-layout.smoke.mjs` (computed button size, text, focus ring,
 forced colours at 1420/800/360) under the extension. Native-dialog visual acceptance
 is owner-run; automated tests use isolated disk fixtures and stub native dialogs.
+
+## Install prepared updates on quit (CGP-SHELL-R-002)
+
+`REQ-STUDIO-UPDATE-ON-QUIT` extends REQ-I4/I13 and REQ-SHELL-02; traces to
+CGP-SHELL-001, PI#1 and dependency CGP-SHELL-R-001. A downloaded, digest-verified
+update retained by “나중에” (or dismissing the restart dialog) installs on the next
+committed app quit with no running coach turn or held class seat. The native
+REQ-SHELL-04 confirmation and all other shutdown vetoes run first. Cancel installs
+nothing. A committed app quit is Cmd+Q or File > Exit, and on Windows also closing
+the last window (X / Alt+F4), which is how the app exits there. Closing a window on
+macOS, closing one of several windows on Windows, reload and workspace switch do not
+consume it. If a turn is
+still running even after the learner confirms Quit, keep the pending update for a
+later eligible quit. All coach runtimes and seats use the existing provider gates.
+
+The app-specific durable record survives extension reload, is consumed once across
+windows, excludes concurrent immediate/natural installers with a shared process lease
+(pid, nonce and launch time, expiring after 10 minutes so a reused pid cannot block
+updates for long; on Windows held only while Setup runs, not the relaunched session),
+and verifies the prepared script and all payload bytes again. Missing or
+changed files, wrong platform, a target no newer than the installed version, or
+handoff failure leave the old app unchanged. macOS retains REQ-I13 staging, backup
+and rollback. Natural quit suppresses relaunch on both platforms; the next manual
+launch reads the new bundled version. Explicit restart keeps its existing behavior
+and rechecks turn/class state after download and confirmation. When that recheck or
+the lease refuses, Studio does not quit and tells the learner why in Korean, and the
+prepared update stays for the next eligible quit. No background download
+or new restart permission is introduced (no capability-assessment claim).
+
+Evidence: `test/staged-update.smoke.mjs`, `test/update-stage-host.smoke.mjs`,
+`test/update-quit-lifecycle.smoke.mjs` (Cmd+Q on macOS, last-window close on Windows),
+`test/update-installer.smoke.mjs`, `test/update-windows-wrapper.smoke.mjs`, and the
+existing quit-guard and patch fixtures. These isolate native services;
+released-app installation/next-launch and OS-native dialog capture remain owner checks.

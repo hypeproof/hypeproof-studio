@@ -43,12 +43,14 @@ import {
   scheduleUpdateChecks,
   checkForUpdates,
   runUpdate,
+  installStagedUpdate,
   dismissVersion,
   currentBundleVersion,
   reportManualUpdateCheckFailure,
   reportInstallUpdateFailure,
   registerPublicUpdateSignal,
 } from "./updateChecker";
+import { INSTALL_STAGED_UPDATE_COMMAND, updateInstallAllowed } from "./stagedUpdate";
 import { CLASS_UPDATE_HOLD_COPY } from "./updateCheckerHelpers";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
@@ -740,6 +742,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         await runUpdate(info, {
           context,
+          canInstall: () => updateInstallAllowed(provider),
           onUpdateScheduled: () => provider.setAvailableUpdate(null),
         });
       } catch (error) {
@@ -747,6 +750,10 @@ export async function activate(context: vscode.ExtensionContext) {
         void reportInstallUpdateFailure(error);
       }
     }),
+
+    // Invoked only after native shutdown vetoes have accepted an explicit app quit.
+    vscode.commands.registerCommand(INSTALL_STAGED_UPDATE_COMMAND, () =>
+      installStagedUpdate(context, () => updateInstallAllowed(provider))),
 
     // REQ-STUDIO-QUIT-GUARD: asked by the core quit guard on window close and app quit.
     // null = nothing would stop, so the shutdown goes ahead without a dialog.

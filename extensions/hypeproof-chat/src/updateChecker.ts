@@ -17,6 +17,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as cp from "child_process";
+import { createHash } from "crypto";
+import { StagedUpdate } from "./stagedUpdate";
 import {
   downloadVerifiedUpdate,
   fetchLatestUpdateRelease,
@@ -125,6 +127,8 @@ export interface UpdateRunnerDeps {
    * (the modal is still up; the .app will quit shortly).
    */
   onUpdateScheduled?: () => void;
+  /** Re-read after download and modal; a new turn/class must hold installation. */
+  canInstall?: () => boolean;
 }
 
 /**
@@ -132,6 +136,31 @@ export interface UpdateRunnerDeps {
  * keyed on target version.
  */
 const inflight = new Map<string, Promise<void>>();
+
+function stagedUpdate(context: vscode.ExtensionContext): StagedUpdate {
+  const app = detectAppBundle(process.execPath) ?? process.execPath;
+  const identity = createHash("sha256").update(app).digest("hex");
+  return new StagedUpdate(path.join(context.globalStorageUri.fsPath, "updates", identity));
+}
+
+/** Learner copy for an explicit restart that did not start the installer. */
+export function refusedRestartNotice(result: "busy" | "held"): string {
+  return result === "busy"
+    ? "다른 업데이트를 설치하는 중이라 지금은 재시작하지 않았어요. 그 설치가 끝난 뒤 Studio를 끝내면 준비한 업데이트를 설치해요."
+    : "대답이나 수업이 진행 중이라 지금은 재시작하지 않았어요. 끝난 뒤 Studio를 끝내면 준비한 업데이트를 설치해요.";
+}
+
+export async function installStagedUpdate(context: vscode.ExtensionContext, allowed: () => boolean): Promise<boolean> {
+  return stagedUpdate(context).install(allowed, version => isUpdateVersion(currentBundleVersion()) && compareVersions(version, currentBundleVersion()) > 0, async (platform, script) => {
+    if (platform !== process.platform) throw new Error("Staged update platform mismatch");
+    const child = platform === "darwin"
+      ? cp.spawn("/bin/bash", [script], { detached: true, stdio: "ignore" })
+      : cp.spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script], { detached: true, stdio: "ignore" });
+    await waitForSpawn(child);
+    child.unref();
+    return child.pid!;
+  });
+}
 
 export function runUpdate(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<void> {
   if (!info.available) return Promise.resolve();
@@ -212,6 +241,11 @@ async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<v
         logPath,
       });
       fs.writeFileSync(installerPath, script, { mode: 0o755 });
+      const quitInstaller = path.join(workDir, "install-on-quit.sh");
+      fs.writeFileSync(quitInstaller, renderInstallerScript({ newAppPath, oldAppPath: appPath,
+        expectedBundleId: EXPECTED_BUNDLE_ID, newVersion: info.version, oldVersion: currentVersion,
+        logPath, relaunch: false }), { mode: 0o700 });
+      const stageId = stagedUpdate(deps.context).stage("darwin", quitInstaller, [newAppPath], info.version);
 
       // 5. Confirmation modal — give the user a clear "this will restart Studio"
       // moment so the auto-quit isn't surprising.
@@ -221,9 +255,9 @@ async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<v
         "재시작하고 업데이트",
         "나중에",
       );
-      if (choice !== "재시작하고 업데이트") {
+      if (choice !== "재시작하고 업데이트" || deps.canInstall?.() === false) {
         vscode.window.showInformationMessage(
-          "업데이트를 보류했습니다. 설치하려면 업데이트 배너에서 다시 시작해주세요.",
+          "업데이트를 준비했어요. 대답이나 수업이 진행 중이 아닐 때 Studio를 끝내면 설치해요.",
         );
         return;
       }
@@ -240,12 +274,23 @@ async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<v
       // pattern for "survive my exit". exec() doesn't support detached;
       // child must inherit nothing from our process to safely outlive us.
       const wrapper = `(sleep 2; bash ${shellQuote(installerPath)}) >${shellQuote(logPath + ".detach")} 2>&1`;
-      const child = cp.spawn("/bin/bash", ["-c", wrapper], {
-        detached: true,
-        stdio: "ignore",
+      const scheduled = await stagedUpdate(deps.context).handoff(async () => {
+        if (deps.canInstall?.() === false) return undefined;
+        stagedUpdate(deps.context).clear(stageId);
+        const child = cp.spawn("/bin/bash", ["-c", wrapper], {
+          detached: true,
+          stdio: "ignore",
+        });
+        await waitForSpawn(child);
+        child.unref();
+        return child.pid!;
       });
-      await waitForSpawn(child);
-      child.unref();
+      if (scheduled !== "started") {
+        // Refused: no installer was launched, so Studio must not quit. The prepared
+        // update stays staged for the next eligible quit.
+        vscode.window.showInformationMessage(refusedRestartNotice(scheduled));
+        return;
+      }
       deps.onUpdateScheduled?.();
 
       // 7. Quit Studio so the installer can replace the .app
@@ -321,6 +366,13 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
       progress.report({ message: "다운로드 중…" });
       await downloadVerifiedUpdate(info, exePath);
 
+      const quitInstaller = path.join(workDir, "install-on-quit.ps1");
+      fs.writeFileSync(quitInstaller, renderWindowsUpdateWrapper({
+        appProcessName: windowsAppProcessName(), installerPath: exePath,
+        installerArgs: ["/silent", "/norestart", "/mergetasks=!runcode", `/LOG="${path.join(workDir, "update.log")}"`],
+      }), "utf8");
+      const stageId = stagedUpdate(deps.context).stage("win32", quitInstaller, [exePath], info.version);
+
       // 2. Confirmation modal — the installer will close Studio, so warn first.
       const currentVersion = currentBundleVersion();
       const choice = await vscode.window.showInformationMessage(
@@ -332,9 +384,9 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
         "재시작하고 업데이트",
         "나중에",
       );
-      if (choice !== "재시작하고 업데이트") {
+      if (choice !== "재시작하고 업데이트" || deps.canInstall?.() === false) {
         vscode.window.showInformationMessage(
-          `설치 관리자를 준비했어요. 나중에 수동으로 실행해도 됩니다: ${exePath}`,
+          "업데이트를 준비했어요. 대답이나 수업이 진행 중이 아닐 때 Studio를 끝내면 설치해요.",
         );
         return;
       }
@@ -362,13 +414,24 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
         }),
         "utf8",
       );
-      const child = cp.spawn(
-        "powershell.exe",
-        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", wrapperPath],
-        { detached: true, stdio: "ignore" },
-      );
-      await waitForSpawn(child);
-      child.unref();
+      const scheduled = await stagedUpdate(deps.context).handoff(async () => {
+        if (deps.canInstall?.() === false) return undefined;
+        stagedUpdate(deps.context).clear(stageId);
+        const child = cp.spawn(
+          "powershell.exe",
+          ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", wrapperPath],
+          { detached: true, stdio: "ignore" },
+        );
+        await waitForSpawn(child);
+        child.unref();
+        return child.pid!;
+      });
+      if (scheduled !== "started") {
+        // Refused: no installer was launched, so Studio must not quit. The prepared
+        // update stays staged for the next eligible quit.
+        vscode.window.showInformationMessage(refusedRestartNotice(scheduled));
+        return;
+      }
       deps.onUpdateScheduled?.();
 
       // 4. Quit Studio. The wrapper is already waiting for this exit; once the

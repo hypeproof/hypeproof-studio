@@ -46,7 +46,7 @@ try {
   const main = fs.readFileSync(path.join(tree, "src/vs/workbench/workbench.desktop.main.ts"), "utf8");
   assert.ok(main.includes("import './contrib/hpsQuitGuard/electron-browser/hpsQuitGuard.contribution.js';\n"));
   // Nothing else in the upstream files changed.
-  assert.equal(run("git", ["diff", "--numstat"], tree).trim().split("\n").map((l) => l.split("\t").slice(0, 2).join("/")).join(","), "5/0,3/0"); // dialogs.ts: import + 3-line branch + blank; main: blank + comment + import
+  assert.equal(run("git", ["diff", "--numstat"], tree).trim().split("\n").map((l) => l.split("\t").slice(0, 2).join("/")).join(","), "5/0,2/1,3/0"); // dialogs.ts: import + 3-line branch + blank; main: blank + comment + import
 
   // 3. Staging copies every core patch into patches/user/ under a 99- prefix.
   const fake = path.join(tmp, "studio");
