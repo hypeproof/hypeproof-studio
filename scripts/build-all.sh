@@ -45,7 +45,7 @@ run_full() {
   bash scripts/inject-builtin-extensions.sh
 
   echo "==> Phase 3: full build (1–2 h)"
-  (cd vscodium-base && bash build.sh)
+  bash scripts/run-build.sh
 
   echo "==> Verify"
   bash scripts/verify-branding.sh
@@ -59,7 +59,7 @@ run_rebrand() {
   (cd vscodium-base && bash ../scripts/apply-product-overrides.sh)
   bash scripts/inject-builtin-extensions.sh
   echo "==> Build"
-  (cd vscodium-base && bash build.sh)
+  bash scripts/run-build.sh
   bash scripts/verify-branding.sh
 }
 

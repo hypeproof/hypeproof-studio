@@ -243,15 +243,16 @@ const OLD_SCREENS = {
 // Before/after markup is byte-identical after removing that one exact node.
 // CGP-DS-D-021: the six ChatPanel digests were re-taken because title= became data-hp-tooltip=; the
 // dumps of main and this branch are byte-identical once every data-hp-tooltip= is read back as title=.
+// CGP-SHELL-R-006: only the effort labels change to Korean in five affected renders.
 const BASE = {
   "ChatPanel/adult-plain": "ca6223b85b877e108becc4f9e38e94ec2533b330cdef4c92c9dc62e2775c1242",
-  "ChatPanel/adult-effort-observed": "b406e15c8a76f43b7d8794871f4e19cebbce5c85ead625858ace5d99f1b75b6f",
+  "ChatPanel/adult-effort-observed": "c307f0879ba04976db5d9387d454ac10b6885887600f336ca2b38a87623782f2",
   "ChatPanel/adult-timeline": "36da9075c8f346287050c01676ef67997e1463917a95c0e86f3c5d249912bb35",
   "ChatPanel/kids": "3952e023620aca658290a1ebcb9385642a65eff9f0cc5450af925c2319f015f5",
-  "EffortControl/policy-observed": "caea5b1eab6f88d737a96c6dde5f67369dec99657c24d5b25dca26117cd7b9ba",
-  "EffortControl/policy-loading": "5d88d9a6ac8f18b171024b26f107bee0c59db5d31f7c7201b5c079aa37b05598",
-  "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",
-  "EffortControl/observed-truncated": "38784f908976a596bc7605c7cf68bf3238c8650b8c4272a495f91f42267d28c6",
+  "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
+  "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
+  "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
+  "EffortControl/observed-truncated": "90816b9acd113cdb1719bfd17b7fe52276c950d7df6455e84c734296edf3a721",
   "EffortControl/nothing": "4a3c092bd66e1aa89b05f7e4c0444694fbaefce76613185e7cfdc18ea30feeef",
   // DEC-35 class seats (CGP-SHELL-R-029): recorded on this branch with HPS_A5_RECORD_BASE=1 (TZ=UTC).
   // The class-funded header reads "수업·기관 지원 · 남은 요청 37회 · 06:42 확인"; the unreachable one
@@ -1147,15 +1148,15 @@ if (status.available) {
   const items = (html) => [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => visibleText(m[1]));
   const html = await render("EffortControl", effortProps(ATTRIBUTED, { orchestrator: ROSTER }));
   assert.deepEqual(items(html), [
-    "코치 · Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 수업 기본값",
-    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low",
+    "코치 · Claude Sonnet 5.5: 요청 수업 기본값 → 적용 보통 · 수업 기본값",
+    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게",
     "보조 작업 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 처리 수준 미지원",
-    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패",
+    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게 · 요청 실패",
   ], "one agent label per request, before the model (spec §5.2's copy)");
   assert.deepEqual([...html.matchAll(/data-agent="([^"]+)"/g)].map((m) => m[1]), ["coach", "design-reviewer", "aux", "design-reviewer"]);
-  assert.match(html, /<details><summary>Effort 설정 확인<\/summary>/, "closed until opened: visible on demand");
+  assert.match(html, /<details><summary>생각 깊이 설정 확인<\/summary>/, "closed until opened: visible on demand");
   // The untitled row took its title from the served roster; without the roster it shows the wire name.
-  assert.equal(items(await render("EffortControl", effortProps([ATTRIBUTED[3]])))[0], "design-reviewer · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패");
+  assert.equal(items(await render("EffortControl", effortProps([ATTRIBUTED[3]])))[0], "design-reviewer · Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게 · 요청 실패");
   // A helper model the learner's menu does not list is named by the roster, else by its id (as before).
   const noHaiku = { model_selection: { ...MODEL_SELECTION, choices: [CHOICES[0]] } };
   assert.match(items(await render("EffortControl", effortProps([ATTRIBUTED[1]], { ...noHaiku, orchestrator: ROSTER })))[0], /^검토 도우미 · Claude Haiku 5\.5:/);
@@ -1163,10 +1164,10 @@ if (status.available) {
   // Negative control: the same rows without the agent fields read exactly as today.
   const bare = ATTRIBUTED.map(({ agent, agent_title, request_class, ...r }) => r);
   assert.deepEqual(items(await render("EffortControl", effortProps(bare, { orchestrator: ROSTER }))), [
-    "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 수업 기본값",
-    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low",
+    "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 보통 · 수업 기본값",
+    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게",
     "Claude Haiku 5.5: 요청 수업 기본값 → 적용 처리 수준 미지원",
-    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패",
+    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게 · 요청 실패",
   ]);
   assert.doesNotMatch(await render("EffortControl", effortProps(bare)), /data-agent/);
   // A served roster changes no screen by itself (it is labels for attributed rows, never UI):
@@ -1274,11 +1275,11 @@ if (status.available) {
     assert.deepEqual(items(await listOf(failed)), ["검토 도우미 · Claude Haiku 5.5: 처리 수준 기록 없음 · 요청 실패"]);
     // The unknown reason marks its own row; the rows around it read as before.
     assert.deepEqual(items(await listOf(mixed)), [
-      "Claude Sonnet 5.5: 요청 Low → 적용 Low",
+      "Claude Sonnet 5.5: 요청 가볍게 → 적용 가볍게",
       "검토 도우미 · Claude Haiku 5.5: 처리 수준 기록 없음",
-      "Claude Sonnet 5.5: 요청 Low → 적용 High · 적용 이유 미확인",
-      "Claude Sonnet 5.5: 요청 Low → 적용 Low · 적용 이유 미확인",
-      "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 가볍게 → 적용 깊게 · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 가볍게 → 적용 가볍게 · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 보통 · 적용 이유 미확인",
     ]);
     // S4's own agent values, without a title: worded, never shown as English wire values.
     const worded = observedEffortResult({ requests: [

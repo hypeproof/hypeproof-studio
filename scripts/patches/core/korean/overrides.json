@@ -1,0 +1,29 @@
+{
+  "vs/platform/update/common/update.config.contribution": {
+    "update.cooldown": "업데이트가 출시된 뒤 설치하기까지 기다릴 날짜 수를 정합니다."
+  },
+  "vs/workbench/browser/parts/titlebar/menubarControl": {
+    "mFile": "파일(&&F)",
+    "mEdit": "편집(&&E)",
+    "mSelection": "선택(&&S)",
+    "mView": "보기(&&V)",
+    "mGoto": "이동(&&G)",
+    "mTerminal": "터미널(&&T)",
+    "mHelp": "도움말(&&H)",
+    "mPreferences": "설정"
+  },
+  "vs/workbench/contrib/update/browser/updateTooltip": {
+    "updateTooltip.installedDefaultTitle": "새 업데이트를 설치했어요",
+    "updateTooltip.installedDefaultMessage": "이번 버전에서 달라진 점은 릴리스 노트에서 확인하세요.",
+    "updateTooltip.installedTitle": "{0}의 새로운 기능"
+  },
+  "vs/workbench/services/dialogs/browser/fileDialogService": {
+    "pickFolderAndOpen": "폴더를 열 수 없어요. 작업 영역에 폴더를 추가해 보세요.",
+    "pickWorkspaceAndOpen": "작업 영역을 열 수 없어요. 작업 영역에 폴더를 추가해 보세요.",
+    "openRemote": "원격 열기(&&O)...",
+    "learnMore": "자세히 보기(&&L)",
+    "openFiles": "파일 열기(&&F)...",
+    "unsupportedBrowserMessage": "로컬 폴더 열기를 지원하지 않아요",
+    "unsupportedBrowserDetail": "이 브라우저는 로컬 폴더 열기를 지원하지 않아요.\n파일 하나를 열거나 원격 저장소를 열 수 있어요."
+  }
+}
