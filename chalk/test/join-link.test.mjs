@@ -1,3 +1,4 @@
+import { COPY_FEEDBACK_SCRIPT } from '../src/lib/copy-feedback.ts';
 // REQ-CHALK-JOIN-LINK (CGP-SHELL-R-005 / REQ-SHELL-05, ADM-01): "참여 링크 복사" next to the class
 // info on the instructor board copies `hypeproof-studio://hypeproof.hypeproof-chat/join?class=<id>`,
 // built from the connected cohort id only. It never carries a participation code, the instructor
@@ -36,13 +37,14 @@ const ok = (name) => { passed++; console.log('✓ ' + name); };
 const script = html.match(/<script id="join-link-script">([\s\S]*?)<\/script>/);
 assert.ok(script, 'the copy logic is a separate inline script');
 function mount({ clipboardFails = false } = {}) {
-  const el = (id) => ({ id, dataset: {}, textContent: '', hidden: true, onclick: null });
+  const el = (id) => ({ id, dataset: {}, textContent: '', hidden: true, onclick: null, isConnected: true, setAttribute(name,value){this[name]=value;} });
   const els = { 'join-copy': el('join-copy'), 'join-copied': el('join-copied') };
   const copied = [];
   const window = {};
   const navigator = { clipboard: { writeText: async (t) => { if (clipboardFails) throw Error('denied'); copied.push(t); } } };
   // Planted secrets in the page's globals: the script must not read any of them.
   const sandbox = { window, navigator, document: { getElementById: (id) => els[id] ?? null }, token: 'INSTRUCTOR-SECRET', prefix: 'seat-', code: 'PARTICIPATION-SECRET' };
+  vm.runInNewContext(COPY_FEEDBACK_SCRIPT, sandbox);
   vm.runInNewContext(script[1], sandbox);
   return { els, copied, window };
 }

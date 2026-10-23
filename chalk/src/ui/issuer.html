@@ -266,8 +266,9 @@ $("mint").onclick = async () => {
       '<h3>✓ 발급 완료 — ' + esc(u) + ' (' + esc(c) + ')</h3>' +
       '<div class="token" id="tok">' + esc(body.token) + '</div>' +
       '<div class="meta">jti: ' + esc(body.jti) + ' · 만료: ' + esc(expISO) + ' · 유효: ' + esc(String(hours)) + 'h</div>' +
-      '<button onclick="navigator.clipboard.writeText(document.getElementById(\'tok\').textContent);this.textContent=\'복사됨 ✓\'">토큰 복사</button>' +
+      '<button id="copy-token" type="button">토큰 복사</button>' +
       '</div>';
+    $('copy-token').onclick=()=>window.chalkCopyFeedback($('copy-token'),()=>document.getElementById('tok')?.textContent??'');
   } catch (err) {
     result.innerHTML = '<div class="err">네트워크 오류: ' + esc(String(err)) + '</div>';
   } finally {

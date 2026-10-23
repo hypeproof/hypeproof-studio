@@ -149,7 +149,7 @@ async function mount(node: React.ReactElement) {
   await act(async () => { root.render(node); });
   const byLabel = (label: string) => host.findAll((e) => e.getAttribute("aria-label") === label);
   const one = (label: string) => { const all = byLabel(label); ok(all.length === 1, `${all.length} × ${label}`); return all[0]; };
-  const status = () => host.findAll((e) => e.getAttribute("role") === "status" && /hps-codeblock-status|hps-copy-status/.test(e.getAttribute("class") ?? "")).map((e) => e.textContent);
+  const status = () => host.findAll((e) => ["status", "alert"].includes(e.getAttribute("role") ?? "") && /hps-codeblock-status|hps-copy-status/.test(e.getAttribute("class") ?? "")).map((e) => e.textContent);
   const wrapAttr = () => host.findAll((e) => e.getAttribute("class") === "hps-codeblock").map((e) => e.getAttribute("data-wrap"));
   return { host, root, byLabel, one, status, wrapAttr, unmount: () => act(async () => root.unmount()) };
 }
@@ -338,7 +338,7 @@ t("answer copy (CopyAnswer): 답변 복사 confirms only after success, states a
   for (const root of mounted) { try { root.unmount(); } catch { /* already unmounted */ } }
   if (fail) { console.error(`code-block-tools: ${fail} failed`); process.exit(1); }
   console.log("code-block-tools OK");
-  // Pending 2.4s feedback-reset timers belong to unmounted components; do not wait for them.
+  // Pending 4s success-feedback timers belong to unmounted components; do not wait for them.
   process.exit(0);
 })();
 

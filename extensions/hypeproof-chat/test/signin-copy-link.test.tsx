@@ -41,6 +41,7 @@ t("copied: the confirmation is a live status line", () => {
 });
 t("failed: says it could not copy and shows the link to type", () => {
   const html = render(waiting({ link: "failed", linkText: LINK }));
+  ok(html.includes('role="alert"'), "copy failure must be an alert");
   ok(html.includes(SIGN_IN_LINK_COPY.failed), "honest failure line missing");
   ok(!html.includes(SIGN_IN_LINK_COPY.copied), "a failure must not claim a copy");
   ok(html.includes(`>${LINK.replace(/&/g, "&amp;")}<`), "the link is shown for manual entry");
