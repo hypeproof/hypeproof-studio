@@ -501,6 +501,16 @@
           "default": "hypeproof-default",
           "description": "Requested model alias. The Service resolves it using the cohort policy. The Agent SDK route also permits the fast model; other unrecognized values use the default."
         },
+        "hypeproofChat.instructorRuntime": {
+          "type": "string",
+          "enum": [
+            "legacy",
+            "chalk-extension"
+          ],
+          "default": "legacy",
+          "scope": "machine",
+          "description": "Instructor surface. 'legacy' = the instructor mode inside HypeProof Studio (default, current behavior). 'chalk-extension' = the instructor surface is the Chalk extension (hypeproof.hypeproof-chalk) through the Chalk command contract; without that extension installed, Studio shows no instructor surface. Machine-scoped."
+        },
         "hypeproofChat.coachRuntime": {
           "type": "string",
           "enum": [

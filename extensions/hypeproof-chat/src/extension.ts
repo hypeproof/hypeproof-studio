@@ -36,6 +36,7 @@ import {
   LEGACY_HISTORY_KEY,
 } from "./chatPanelHelpers";
 import { PreviewProvider } from "./previewProvider";
+import { ChalkContractHost } from "./chalkContract";
 import { runReportProblemCommand } from "./reportProblem";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
@@ -206,6 +207,15 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: () => clearTimeout(pendingTimer) });
   }
   const provider = new ChatPanelProvider(context, preview, liveServer, spool);
+  const chalkContract = new ChalkContractHost(
+    {
+      registerCommand: (id, handler) => vscode.commands.registerCommand(id, handler),
+      executeCommand: (id, ...args) => vscode.commands.executeCommand(id, ...args),
+    },
+    provider.chalkRunner(),
+  );
+  context.subscriptions.push(...chalkContract.register());
+  provider.attachChalkContract(chalkContract);
   providerRef = provider;
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.editImage", () => provider.editImage()));
   // One-click publish endpoints, decided once: GitHub itself, unless this is a test/dev run
