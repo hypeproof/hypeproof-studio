@@ -2484,3 +2484,15 @@ html, body, #root {
   .hps-model-selection select:disabled[aria-disabled="true"], .hps-effort select:disabled[aria-disabled="true"] { color:GrayText; border-color:GrayText; border-style:dashed !important; }
   .hps-managed-reason { color:CanvasText; }
 }
+
+/* CGP-SHELL-R-025: passive class-time line, within the existing chat rail. */
+.hps-class-window {
+  font-size: var(--ds-c-studio-styles-type-17);
+  line-height: var(--hp-leading-label);
+  margin: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-1);
+  color: var(--vscode-foreground, var(--ds-c-studio-styles-ink-1));
+  overflow-wrap: anywhere;
+}
+@media (forced-colors: active) {
+  .hps-class-window { color: CanvasText; }
+}

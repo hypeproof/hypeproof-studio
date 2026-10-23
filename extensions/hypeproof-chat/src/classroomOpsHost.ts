@@ -512,7 +512,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
       await store.reconcile(Date.now()).catch((err) => this.log(`[inbox] reconcile: ${(err as Error).message}`));
       if (!live()) { runner.close(); return; }
       inbox = new InboxSession({ store, alive: live, clock: { mono: () => performance.now(), wall: () => Date.now() }, log: this.log, changed: () => { if (live()) this.inboxChanged(true); } });
-      this.inbox = inbox; this.inboxStore = store; this.inboxChanged(false);
+      this.inbox = inbox; this.inboxStore = store; // listeners are told once, below, after the loop is assigned
     }
     this.loop = startOpsSync({
       ...(inbox ? { distribution: inbox } : {}),
@@ -527,6 +527,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
       // Normal expiry keeps the credential for the upload-only afterlife; a revoked or replaced connection is dropped outright.
       onDisconnected: (reason) => { if (!live()) return; this.log(`[ops] disconnected: ${reason}`); if (reason === "ops_grant_expired") { void this.inboxExpired(); const stopped = this.stopConnection(), stopGeneration = this.generation; void stopped.then(() => { if (stopGeneration === this.generation) return this.resumeUploadOnly(meta, credential); }).catch((err) => this.log(`[ops] expiry shutdown: ${(err as Error).message}`)); } else { void this.hideInbox(meta.grant_id); void this.forget().catch((err) => this.log(`[ops] disconnect shutdown: ${(err as Error).message}`)); } },
     }, meta.poll_after_ms);
+    this.inboxChanged(false); // One publish, after loop assignment: helpConnection() is only non-null from here, so the class window reaches the open panel.
     this.context.subscriptions.push({ dispose: () => this.loop?.stop() });
     // The usual order in a class is "token first, pair later": the token was verified BEFORE this connection existed, so that
     // result had nowhere to go and the board would show the token as unknown until some later refresh. Ask once, now.

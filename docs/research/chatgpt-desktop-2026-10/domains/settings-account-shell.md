@@ -313,3 +313,13 @@ alone.
    Popout Window) are shipped strings; whether they are on for any given account is unknown.
 8. ChatGPT's Korean menu file has 220 keys; whether VS Code's native menu can be localized in Studio
    without a language pack (and its license/size cost) is unverified.
+
+
+## Class window source decision (CGP-SHELL-R-025)
+
+The existing classroom operations connect response already includes the class run's
+server-provided start/end. Use it only for the matching verified classroom learner,
+cohort and profile. Unknown and unpaired seats remain silent (DEC-25); token/grant
+expiry is not a class end. The passive line counts down only within the final ten
+minutes and disappears at the end without changing Service admission. Connection
+snapshot freshness is explicit: schedule changes require a refreshed connection.

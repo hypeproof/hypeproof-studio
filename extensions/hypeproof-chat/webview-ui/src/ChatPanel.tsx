@@ -1,3 +1,4 @@
+import { ClassWindowNotice } from "./ClassWindowNotice";
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
 import { visibleAttempts, ATTEMPT_HISTORY_NOTE } from '../../src/answerAttempts';
@@ -1497,6 +1498,7 @@ export function ChatPanel(props: Props) {
       />}</PanelBoundary>}
       {draftError && <p role="alert">{draftError}</p>}
       {updateBanner}
+      {!props.instructor && <ClassWindowNotice window={config.classWindow} />}
 
       {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
           Region A keeps drawing the lesson's own criteria from the design file; this block never touches them.
