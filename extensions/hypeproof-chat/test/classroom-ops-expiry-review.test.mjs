@@ -189,3 +189,14 @@ test('a slow connect-time token check never overwrites what the learner\'s first
   assert.ok(sent.some((e) => e.kind === 'error' && e.payload.blocking === true), 'precondition: the fault was sent'); assert.ok(!kinds.some(([k, , cleared]) => k === 'error' && cleared), 'the late check did not clear it: ' + JSON.stringify(kinds));
   assert.ok(!kinds.some(([k, v]) => k === 'activation' && v === 'token_verified'), 'and did not move the entry stage back'); await f.host.disconnectInteractively();
 });
+
+test('CGP-SHELL-R-025 a connection that goes live announces itself with the class already readable (the open panel gets its class window)', async (t) => {
+  const f = await hostFixture(t, { live: true, endedMsAgo: -3_600_000, onFetch: () => new Promise(() => {}) }); // the network never answers: nothing can disconnect it
+  const seen = [];
+  f.host.onInboxChanged(() => seen.push(f.host.helpConnection()?.run?.ends_at ?? null));
+  assert.equal(f.host.helpConnection(), null, 'before connecting there is no class');
+  await f.host.resume();
+  await settle();
+  assert.ok(seen.length > 0, 'listeners were told');
+  assert.ok(seen.every((v) => typeof v === 'number'), 'every notification already sees the live connection: ' + JSON.stringify(seen));
+});

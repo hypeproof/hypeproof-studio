@@ -4791,3 +4791,26 @@ implementation contract for network restrictions and evidence.
 Activity/task transitions and preview close require the explicit annotation
 leave decision described in the CGP-ART-R-003 implementation contract. Default
 and Esc keep the draft; discard is scoped to the unchanged draft revision.
+
+## Class window notice (CGP-SHELL-R-025)
+
+`REQ-STUDIO-CLASS-WINDOW` (PI#4, PI#1; REQ-B5): the chat rail shows a passive
+"수업이 10분 뒤에 끝나요" line at ten minutes before a known server-provided class
+end, then the rounded-up remaining minutes. It vanishes at the end; neither the
+clock nor the line stops a turn or changes admission. Service gates stay authoritative.
+The existing classroom operations connection supplies `run.starts_at/ends_at`.
+Only a live connection whose learner/cohort/profile matches the current verified
+classroom seat may supply the time. Personal, trial, instructor, local runtime,
+unknown seat, disconnected and missing/invalid end times show no countdown.
+A reconnect, seat switch, refreshed host config or focus return replaces/rechecks
+the line. An already-running turn continues normally. No token expiry, grant expiry
+or lesson duration is used as a substitute for a class end. This is the last
+server-provided connection snapshot; unpaired legacy class seats have no end-time
+contract and show nothing. A server schedule change needs a refreshed connection;
+this client does not promise a real-time schedule subscription.
+
+Evidence: `class-window.test.tsx` covers identity and clock boundaries, live mount,
+replacement and timer cleanup; `class-window-host.smoke.mjs` exercises real host
+config with both runtimes and negative seats; `class-window-layout.smoke.mjs`
+measures the actual chat markup in headless Chromium. Native installed-app behavior
+is separate owner verification.

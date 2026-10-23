@@ -1,3 +1,4 @@
+import { currentClassWindow } from "./classWindow";
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
 import { showVisitorPreview } from "./visitorPreviewHost";
@@ -3523,7 +3524,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   opsObserver: (import("./classroomOpsHost").ClassroomOpsObserver & Partial<Pick<import("./classroomOpsHost").ClassroomOpsHost, "switchPendingSetting" | "confirmSettingBound" | "knownBindingKey" | "holdsLessonSetting" | "approvalScope">>) | null = null;
   /** #751 U2 — set by extension.ts. The provider only relays: every answer is read from disk by the host adapter. */
   inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null> } | null = null;
-  async postInbox(): Promise<void> { if (this.inboxSource) await this.post({ type: "inboxState", inbox: await this.inboxSource.inboxView() }); }
+  classWindowSource: (() => import("./classWindow").ClassConnection | null) | null = null;
+  async postInbox(): Promise<void> {
+    if (this.inboxSource) await this.post({ type: "inboxState", inbox: await this.inboxSource.inboxView() });
+    if (this.classWindowSource) await this.postConfig();
+  }
   /** #751 native help — set by extension.ts. The provider only relays; the host adapter re-checks the learner on every call. */
   helpSource: import("./classroomHelpHost").ClassroomHelpHost | null = null;
   // #1298 — called when the auto-read whoami path gets a rejected result (401/403).
@@ -8739,9 +8744,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the gate on every request, so a failed context update never holds up the config post.
     void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
     const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
+    if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     await this.post({
       type: "config",
       config: {
+        classWindow: currentClassWindow(this.classWindowSource?.() ?? null, decodeTokenPayloadUnverified(token),
+          !!profile && !isInstructor && !local && (activity?.kind ?? profile.activity_kind) === 'classroom'),
         ...(entryId ? { lessonCapabilityEntry: { id: entryId, seen: this.context.globalState?.get(entryReceiptKey(entryId)) === true } } : {}),
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
         ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),

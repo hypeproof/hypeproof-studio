@@ -352,6 +352,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }, (line) => console.log(line));
   provider.opsObserver = classroomOps;
   provider.inboxSource = classroomOps;
+  provider.classWindowSource = () => classroomOps.helpConnection();
   // #1298 — when the background refresh path sees a rejected issuer token, delete it and surface the student start page.
   provider.onIssuerAutoRejected = () => {
     void context.secrets.delete(ISSUER_TOKEN_KEY).then(() => startPage.show());
