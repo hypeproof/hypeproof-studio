@@ -5680,7 +5680,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const token = s.issuerToken;
       const replacing = host.active;
       void (async () => {
-        if (replacing) await host.deactivate('superseded');
+        if (replacing) await host.deactivate('superseded').catch(() => undefined);
         const reply = await host.activate({ issuerToken: token, verifiedServerUrl: s.proxyUrl, connection }).catch(() => ({ ok: false }));
         if (reply.ok) {
           this.contractToken = token;
