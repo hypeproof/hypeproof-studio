@@ -4744,3 +4744,9 @@ This supports VERIFY/JUDGMENT as an opportunity, not a measured learning outcome
 
 Evidence: `accuracy-education.test.tsx`, `accuracy-education-host.smoke.mjs`,
 `accuracy-education-style.smoke.mjs`, `accuracy-education-computed.smoke.mjs`.
+
+## Context capture ownership (CGP-VOICE-R-010)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-15 | PI#2 / CGP-VOICE-015 / CR-11: chat/voice page attachments capture only a live Studio integrated browser tab; editor attachments continue through the existing explicit file path. No OS accessibility or screen-recording permission is requested. Off-screen body text is read only when the live document has the exact HTTP(S) origin of this window's current own preview. External, opaque, file, unknown-owner and stale-document captures contain no DOM text. Closing the tab, changing its URL or changing the preview owner during capture rejects the result and closes CDP. Existing default-off page-context and image gates remain authoritative for every seat and runtime. The own-preview owner given to the capture comes from Studio's own preview server, never from the captured tab. The inline notice and the chip name only what was attached: when no page text goes (not the own preview, ownership unknown, or no readable text) the notice says "화면 사진만" or "주소와 제목만" instead of "내용", the chip reads "페이지 정보" with the reason shown on it and no empty quote, and the model text says the page text was withheld. | `test/context-capture.smoke.mjs` (capture, text source and command wiring); `test/page-attachment.test.tsx` (notice, chip and model text per case); `test/coach-identity.smoke.mjs`; existing file-attachment tests; native owner verification separate. |
