@@ -18,9 +18,43 @@ const flags = ['--safe-mode', '--restricted', '--tools', '--strict-mcp-config', 
 const billingNotice = '개인 Claude 계정의 구독 또는 해당 계정에 설정된 추가 사용 요금이 적용돼요. 추가 사용이 켜져 있으면 제공자가 청구할 수 있어요. Studio 이용권으로 자동 전환하지 않아요.';
 const fingerprint = (env: NodeJS.ProcessEnv) => createHash('sha256').update(JSON.stringify(env)).digest('hex');
 type ProcessResult = { code: number | null; stdout: string; stderr: string; failure?: string };
+const isolatedControls: Readonly<Record<string, string>> = Object.freeze({
+  CLAUDE_CODE_SKIP_PROMPT_HISTORY: '1',
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+  CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: '1',
+  CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
+  CLAUDE_CODE_DISABLE_FILE_MENTIONS: '1',
+  CLAUDE_CODE_MAX_RETRIES: '0',
+});
+// Treat unknown variables in CLI/provider namespaces as configuration, not harmless
+// omissions. They may change payer, recipient, headers, model or undisclosed context.
+// https://code.claude.com/docs/en/env-vars
+const influencingEnvironment = /^(?:ANTHROPIC_|CLAUDE_|AWS_|GOOGLE_|CLOUDSDK_|AZURE_|VERTEX_|BEDROCK_|OTEL_|BETA_TRACING_|MCP_|LD_|DYLD_|(?:https?|all|no)_proxy$|(?:HTTPS?|ALL|NO)_PROXY$|SSL_CERT_)/;
+// Standalone documented Claude controls and actual executable/runtime injection.
+// Unrelated host variables such as BUN_INSTALL and NODE_NO_WARNINGS are harmless.
+const influencingSingletons = new Set([
+  'API_TIMEOUT_MS', 'BASH_DEFAULT_TIMEOUT_MS', 'BASH_MAX_TIMEOUT_MS', 'BASH_MAX_OUTPUT_LENGTH', 'BASH_ENV', 'ENV', 'ZDOTDIR',
+  'DEBUG', 'DISABLE_AUTOUPDATER', 'DISABLE_AUTO_COMPACT', 'DISABLE_COMPACT', 'DISABLE_COST_WARNINGS', 'DISABLE_DOCTOR_COMMAND',
+  'DISABLE_ERROR_REPORTING', 'DISABLE_EXTRA_USAGE_COMMAND', 'DISABLE_FEEDBACK_COMMAND', 'DISABLE_BUG_COMMAND', 'DISABLE_GROWTHBOOK',
+  'DISABLE_INSTALLATION_CHECKS', 'DISABLE_INSTALL_GITHUB_APP_COMMAND', 'DISABLE_INTERLEAVED_THINKING', 'DISABLE_LOGIN_COMMAND',
+  'DISABLE_LOGOUT_COMMAND', 'DISABLE_PROMPT_CACHING', 'DISABLE_PROMPT_CACHING_FABLE', 'DISABLE_PROMPT_CACHING_HAIKU',
+  'DISABLE_PROMPT_CACHING_OPUS', 'DISABLE_PROMPT_CACHING_SONNET', 'DISABLE_TELEMETRY', 'DISABLE_UPDATES', 'DISABLE_UPGRADE_COMMAND',
+  'DO_NOT_TRACK', 'ENABLE_BETA_TRACING_DETAILED', 'ENABLE_CLAUDEAI_MCP_SERVERS', 'ENABLE_PROMPT_CACHING_1H',
+  'ENABLE_PROMPT_CACHING_1H_BEDROCK', 'ENABLE_TOOL_SEARCH', 'FORCE_AUTOUPDATE_PLUGINS', 'FORCE_PROMPT_CACHING_5M',
+  'IS_DEMO', 'MAX_MCP_OUTPUT_TOKENS', 'MAX_STRUCTURED_OUTPUT_RETRIES', 'MAX_THINKING_TOKENS', 'SLASH_COMMAND_TOOL_CHAR_BUDGET',
+  'TASK_MAX_OUTPUT_LENGTH', 'USE_BUILTIN_RIPGREP', 'NODE_OPTIONS', 'NODE_PATH', 'NODE_EXTRA_CA_CERTS', 'NODE_TLS_REJECT_UNAUTHORIZED',
+  'BUN_OPTIONS', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE',
+]);
+const influencesClaude = (name: string) => influencingEnvironment.test(name) || influencingSingletons.has(name);
 
-/** Forward official auth/provider configuration without copying credentials into app storage. */
+function hasUnsupportedEnvironment(source: NodeJS.ProcessEnv): boolean {
+  return Object.entries(source).some(([name, value]) => value !== undefined && value !== '' && influencesClaude(name)
+    && name !== 'CLAUDE_CONFIG_DIR' && isolatedControls[name] !== value);
+}
+
+/** Preserve configured auth by refusing unsupported overrides, never stripping them to use another payer. */
 export function personalClaudeEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (hasUnsupportedEnvironment(source)) throw new Error('environment_requires_official_client');
   const env: NodeJS.ProcessEnv = {};
   for (const [name, value] of Object.entries(source)) {
     if (['USER', 'LOGNAME', '__CF_USER_TEXT_ENCODING'].includes(name)) { env[name] = value; continue; }
@@ -28,12 +62,7 @@ export function personalClaudeEnvironment(source: NodeJS.ProcessEnv): NodeJS.Pro
         || /^(?:PATH|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|SYSTEMROOT|SystemRoot|TEMP|TMP|TMPDIR|XDG_CONFIG_HOME|LANG|LC_ALL|HTTPS_PROXY|HTTP_PROXY|NO_PROXY|https_proxy|http_proxy|no_proxy|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR|CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_BEDROCK|CLAUDE_CODE_USE_VERTEX|CLAUDE_CODE_USE_FOUNDRY|CLAUDE_CODE_USE_ANTHROPIC_AWS)$/.test(name)) env[name] = value;
   }
   // These affect retention or optional discovery, never authentication or payment source.
-  env.CLAUDE_CODE_SKIP_PROMPT_HISTORY = '1';
-  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
-  env.CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK = '1';
-  env.CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK = '1';
-  env.CLAUDE_CODE_DISABLE_FILE_MENTIONS = '1';
-  env.CLAUDE_CODE_MAX_RETRIES = '0';
+  Object.assign(env, isolatedControls);
   return env;
 }
 
@@ -146,7 +175,7 @@ async function authSettingsBlocker(env: NodeJS.ProcessEnv): Promise<string | und
     if (['apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport', 'forceLoginMethod', 'forceLoginOrgUUID', 'forceLoginGatewayUrl', 'gatewayInternalNetworks'].some(key => configured[key] !== undefined)) return 'auth_settings_require_official_client';
     if (configured.env !== undefined) {
       if (!configured.env || typeof configured.env !== 'object' || Array.isArray(configured.env)) return 'auth_settings_unverifiable';
-      if (Object.keys(configured.env).some(key => /^(?:ANTHROPIC_|AWS_|GOOGLE_|CLOUDSDK_|AZURE_|VERTEX_|BEDROCK_|CLAUDE_CONFIG_DIR$|CLAUDE_CODE_OAUTH_TOKEN$|CLAUDE_CODE_USE_)/.test(key))) return 'auth_settings_require_official_client';
+      if (Object.keys(configured.env).some(influencesClaude)) return 'auth_settings_require_official_client';
     }
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return 'auth_settings_unverifiable'; }
   return undefined;
@@ -164,6 +193,7 @@ export function createClaudeCliTransport(options: { executable?: string; env?: N
   return {
     async inspect(signal) {
       prepared = undefined;
+      if (hasUnsupportedEnvironment(options.env ?? process.env)) return blocked('environment_requires_official_client');
       const env = environment();
       const executable = await discoverExecutable(options.executable, env);
       if (!executable) return blocked('cli_unavailable');
@@ -178,18 +208,15 @@ export function createClaudeCliTransport(options: { executable?: string; env?: N
         const match = /^(2)\.(1)\.(\d+) \(Claude Code\)\s*$/.exec(versionResult.stdout.trim());
         if (versionResult.failure || versionResult.code !== 0 || !match || Number(match[3]) < MIN_VERSION) return blocked('cli_version_unsupported');
         const version = `2.1.${match[3]}`;
-        // Restricted mode omits user/project settings; official shell auth/provider vars survive.
+        // Restricted mode omits user/project settings. Explicit auth/provider/model
+        // overrides were refused above, preserving them for official-client handoff.
         const auth = await run(executable, ['--safe-mode', '--restricted', 'auth', 'status'], cwd, env, signal);
         if (auth.failure) return blocked('auth_status_unavailable', version);
         let status: Record<string, unknown>;
         try { status = JSON.parse(auth.stdout); } catch { return blocked('auth_status_unavailable', version); }
         if (auth.code !== 0 || !status?.loggedIn) return blocked('login_required', version);
-        // Print mode always uses a configured API key; cached subscription identity must
-        // never be presented as the payer for a separate shell credential or provider.
-        if (['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_PROFILE', 'ANTHROPIC_IDENTITY_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_USE_ANTHROPIC_AWS'].some(name => !!env[name])) return blocked('account_or_funding_unsupported', version);
         const disclosure = claudeAccountDisclosure(status);
         if (!disclosure) return blocked('account_or_funding_unsupported', version);
-        if (env.ANTHROPIC_BASE_URL && env.ANTHROPIC_BASE_URL.replace(/\/$/, '') !== 'https://api.anthropic.com') return blocked('recipient_unsupported', version);
         const doctor = await run(executable, ['--safe-mode', '--restricted', 'doctor'], cwd, env, signal);
         // Positive provider diagnostics are required. A missing policy line is unknown.
         if (doctor.failure || doctor.code !== 0 || !/Managed settings \(remote\): not fetched [^\n]*requires an Enterprise or Team subscription/.test(doctor.stdout)
@@ -201,6 +228,7 @@ export function createClaudeCliTransport(options: { executable?: string; env?: N
     async request(snapshot, signal) {
       const attested = prepared;
       prepared = undefined;
+      if (hasUnsupportedEnvironment(options.env ?? process.env)) return { status: 'blocked', code: 'environment_requires_official_client' };
       const env = environment();
       if (!attested || attested.environment !== fingerprint(env)) return { status: 'blocked', code: 'inspection_required' };
       return inEmptyDirectory(async cwd => {

@@ -8,10 +8,10 @@ import { createClaudeCliTransport, PersonalContinuationSession } from '../src/pe
 
 test('CLI transport uses empty temporary cwd, exact stdin, no tools/retries, bounded output and cancellation', { timeout: 20_000 }, async () => {
   const top = await mkdtemp(join(tmpdir(), 'personal-continuation-test-'));
-  const executable = join(top, 'synthetic-claude'), log = join(top, 'calls.jsonl');
+  const executable = join(top, 'synthetic-claude'), log = join(top, 'calls.jsonl'), scenario = join(top, 'scenario.txt');
   const script = `#!${process.execPath}
-import { appendFileSync, readdirSync } from 'node:fs';
-const args=process.argv.slice(2), mode=process.env.ANTHROPIC_TEST_SCENARIO;
+import { appendFileSync, readdirSync, readFileSync } from 'node:fs';
+const args=process.argv.slice(2), mode=readFileSync(${JSON.stringify(scenario)},'utf8');
 const record=(more={})=>appendFileSync(${JSON.stringify(log)},JSON.stringify({args,cwd:process.cwd(),entries:readdirSync(process.cwd()),envKeys:Object.keys(process.env),...more})+'\\n');
 if(args.includes('--help')) {record();console.log('--safe-mode --restricted --tools --strict-mcp-config --no-session-persistence --permission-prompts');}
 else if(args.includes('--version')) {record();console.log('2.1.309 (Claude Code)');}
@@ -28,8 +28,9 @@ else console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,
 `;
   try {
     await writeFile(executable, script, { mode: 0o700 });
+    await writeFile(scenario, 'success');
     const config = join(top, 'synthetic-config'); await mkdir(config);
-    const env = { ...process.env, CLAUDE_CONFIG_DIR: config, ANTHROPIC_TEST_SCENARIO: 'success', HPS_ADMIN_PASSWORD: 'SYNTHETIC_HOST_SECRET', NODE_OPTIONS: '--throw-deprecation' };
+    const env = { ...Object.fromEntries(['PATH', 'HOME', 'USER', 'LOGNAME', '__CF_USER_TEXT_ENCODING', 'SYSTEMROOT'].filter(name => process.env[name] !== undefined).map(name => [name, process.env[name]])), CLAUDE_CONFIG_DIR: config, HPS_ADMIN_PASSWORD: 'SYNTHETIC_HOST_SECRET', BUN_INSTALL: '/synthetic-bun', NODE_NO_WARNINGS: '1', ENABLE_UNRELATED_APP_FEATURE: '1' };
     const transport = createClaudeCliTransport({ executable, env });
     const session = new PersonalContinuationSession(transport);
     const inspection = await session.inspect();
@@ -51,7 +52,7 @@ else console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,
     }
 
     for (const [mode, status, code] of [['quota', 'quota', 'provider_limit'], ['limit', 'error', 'output_limit']]) {
-      env.ANTHROPIC_TEST_SCENARIO = mode;
+      await writeFile(scenario, mode);
       assert.equal((await session.inspect()).status, 'ready');
       review = session.prepare(payload); approval = session.approve(review.digest);
       const result = await session.send(approval);
@@ -59,27 +60,60 @@ else console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,
       assert.equal(JSON.stringify(result).includes('SYNTHETIC_PRIVATE_STDERR'), false);
     }
     for (const [mode, code] of [['api', 'account_or_funding_unsupported'], ['policy', 'remote_policy_unverified']]) {
-      env.ANTHROPIC_TEST_SCENARIO = mode;
+      await writeFile(scenario, mode);
       const result = await session.inspect();
       assert.equal(result.status, 'blocked'); assert.equal(result.code, code);
       assert.equal(result.manualCommand, 'claude');
       assert.throws(() => session.prepare(payload), /inspection_required/);
     }
 
-    env.ANTHROPIC_TEST_SCENARIO = 'success';
-    env.ANTHROPIC_API_KEY = 'SYNTHETIC_API_KEY';
-    assert.equal((await session.inspect()).code, 'account_or_funding_unsupported', 'an API credential cannot borrow a cached subscription identity');
-    delete env.ANTHROPIC_API_KEY;
-    env.ANTHROPIC_BASE_URL = 'https://undisclosed-recipient.invalid';
-    assert.equal((await session.inspect()).code, 'recipient_unsupported');
-    delete env.ANTHROPIC_BASE_URL;
-    for (const settings of [{ apiKeyHelper: 'must-never-execute' }, { env: { ANTHROPIC_API_KEY: 'SYNTHETIC_SETTINGS_KEY' } }]) {
+    await writeFile(scenario, 'success');
+    const overrides = {
+      ANTHROPIC_CUSTOM_HEADERS: 'Authorization: Bearer SYNTHETIC_OTHER_PAYER\nHost: undisclosed.invalid\nx-organization-id: other-org',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'undisclosed-model', ANTHROPIC_DEFAULT_OPUS_MODEL: 'other-model',
+      ANTHROPIC_MODEL: 'other-model', ANTHROPIC_BETAS: 'other-behavior', ANTHROPIC_CUSTOM_MODEL_OPTION: 'other-model',
+      ANTHROPIC_FUTURE_UNKNOWN_ROUTE: 'unknown-routing', ANTHROPIC_API_KEY: 'SYNTHETIC_API_KEY',
+      ANTHROPIC_BASE_URL: 'https://undisclosed-recipient.invalid', CLAUDE_CODE_OAUTH_TOKEN: 'SYNTHETIC_OTHER_ACCOUNT',
+      CLAUDE_CODE_FUTURE_UNKNOWN_ROUTE: 'unknown-routing', CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: '1',
+      AWS_BEARER_TOKEN_BEDROCK: 'SYNTHETIC_BEDROCK', AWS_PROFILE: 'other-organization',
+      GOOGLE_APPLICATION_CREDENTIALS: '/other-account', GOOGLE_CLOUD_PROJECT: 'other-project', CLOUDSDK_CORE_PROJECT: 'other-project',
+      AZURE_CLIENT_ID: 'other-tenant', VERTEX_REGION: 'other-region', BEDROCK_REGION: 'other-region',
+      HTTPS_PROXY: 'https://undisclosed-proxy.invalid', NODE_EXTRA_CA_CERTS: '/other-tls-root',
+      NODE_OPTIONS: '--import=hidden-code', OTEL_EXPORTER_OTLP_ENDPOINT: 'https://hidden-logs.invalid',
+      ENABLE_PROMPT_CACHING_1H: '1', FORCE_PROMPT_CACHING_5M: '1', DEBUG: '1', DYLD_INSERT_LIBRARIES: '/hidden-runtime.dylib',
+    };
+    const callsBeforeOverrides = (await readFile(log, 'utf8')).trim().split('\n').length;
+    for (const [name, value] of Object.entries(overrides)) {
+      env[name] = value;
+      const result = await session.inspect();
+      assert.equal(result.status, 'blocked', name); assert.equal(result.code, 'environment_requires_official_client', name);
+      assert.equal(result.manualCommand, 'claude');
+      assert.equal(env[name], value, 'the configured auth/routing value remains unchanged for official-client handoff');
+      delete env[name];
+    }
+    assert.equal((await readFile(log, 'utf8')).trim().split('\n').length, callsBeforeOverrides, 'unsupported overrides must not even invoke CLI status, much less --print');
+    for (const settings of [{ apiKeyHelper: 'must-never-execute' }, ...Object.entries(overrides).map(([name, value]) => ({ env: { [name]: value } }))]) {
       await writeFile(join(config, 'settings.json'), JSON.stringify(settings));
       assert.equal((await session.inspect()).code, 'auth_settings_require_official_client');
     }
     await rm(join(config, 'settings.json'));
+    calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(calls.filter(call => call.args.includes('--print')).length, 3, 'environment and settings overrides never trigger inference');
 
-    env.ANTHROPIC_TEST_SCENARIO = 'hang';
+    // Overrides introduced after a reviewed snapshot are also blocked before request.
+    assert.equal((await session.inspect()).status, 'ready');
+    review = session.prepare(payload);
+    env.ANTHROPIC_CUSTOM_HEADERS = overrides.ANTHROPIC_CUSTOM_HEADERS;
+    assert.equal((await session.send(session.approve(review.digest))).status, 'blocked');
+    delete env.ANTHROPIC_CUSTOM_HEADERS;
+    assert.equal((await transport.inspect(new AbortController().signal)).status, 'ready');
+    env.ANTHROPIC_DEFAULT_SONNET_MODEL = 'changed-after-inspection';
+    assert.equal((await transport.request(review, new AbortController().signal)).code, 'environment_requires_official_client');
+    delete env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+    calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(calls.filter(call => call.args.includes('--print')).length, 3);
+
+    await writeFile(scenario, 'hang');
     assert.equal((await session.inspect()).status, 'ready');
     review = session.prepare(payload);
     const sending = session.send(session.approve(review.digest));
@@ -96,7 +130,7 @@ else console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,
     calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
     for (const call of calls) await assert.rejects(access(call.cwd), { code: 'ENOENT' });
     assert.deepEqual(payload, JSON.parse(review.userPrompt));
-    const unavailable = await createClaudeCliTransport({ executable: join(top, 'missing') }).inspect(new AbortController().signal);
+    const unavailable = await createClaudeCliTransport({ executable: join(top, 'missing'), env }).inspect(new AbortController().signal);
     assert.equal(unavailable.code, 'cli_unavailable');
   } finally { await rm(top, { recursive: true, force: true }); }
 });

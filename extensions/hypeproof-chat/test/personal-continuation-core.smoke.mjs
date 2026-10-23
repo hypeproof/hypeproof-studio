@@ -88,10 +88,13 @@ test('failure paths preserve all host-owned work and never replay a request', as
   assert.throws(() => session.prepare({ ...original, draft: 'a'.repeat(CONTINUATION_LIMITS.payloadBytes + 1) }), /payload_limit/);
 });
 
-test('official authentication options survive env isolation; unknown account, recipient and errors fail closed', () => {
+test('configured authentication is never silently replaced; unknown account, recipient and errors fail closed', () => {
   const configured = { USER: 'synthetic', HOME: '/synthetic-home', PATH: '/bin', ANTHROPIC_API_KEY: 'synthetic-api-key', ANTHROPIC_AUTH_TOKEN: 'synthetic-bearer', CLAUDE_CODE_OAUTH_TOKEN: 'synthetic-oauth', CLAUDE_CONFIG_DIR: '/synthetic-config', CLAUDE_CODE_USE_BEDROCK: '1', AWS_PROFILE: 'synthetic-profile', GOOGLE_APPLICATION_CREDENTIALS: '/synthetic-google', CLAUDE_CODE_USE_FOUNDRY: '1', AZURE_CLIENT_ID: 'synthetic-client', HPS_ADMIN_PASSWORD: 'must-not-forward', NODE_OPTIONS: '--import=hidden-code', CLAUDE_CODE_PLUGIN_DIRS: '/hidden-plugin', OTEL_EXPORTER_OTLP_ENDPOINT: 'https://hidden.invalid' };
-  const env = personalClaudeEnvironment(configured);
-  for (const key of ['USER', 'HOME', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_USE_BEDROCK', 'AWS_PROFILE', 'GOOGLE_APPLICATION_CREDENTIALS', 'CLAUDE_CODE_USE_FOUNDRY', 'AZURE_CLIENT_ID']) assert.equal(env[key], configured[key]);
+  const unchanged = structuredClone(configured);
+  assert.throws(() => personalClaudeEnvironment(configured), /environment_requires_official_client/);
+  assert.deepEqual(configured, unchanged, 'a manual handoff retains every configured auth option');
+  const env = personalClaudeEnvironment({ USER: 'synthetic', HOME: '/synthetic-home', PATH: '/bin', CLAUDE_CONFIG_DIR: '/synthetic-config', HPS_ADMIN_PASSWORD: 'must-not-forward' });
+  for (const key of ['USER', 'HOME', 'PATH', 'CLAUDE_CONFIG_DIR']) assert.equal(env[key], configured[key]);
   for (const key of ['HPS_ADMIN_PASSWORD', 'NODE_OPTIONS', 'CLAUDE_CODE_PLUGIN_DIRS', 'OTEL_EXPORTER_OTLP_ENDPOINT']) assert.equal(env[key], undefined);
   assert.equal(env.CLAUDE_CODE_MAX_RETRIES, '0');
   assert.equal(env.CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK, '1');
