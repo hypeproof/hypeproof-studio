@@ -5,7 +5,8 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
-import { buildPageAttachment, pageOrigin, PAGE_TEXT_LIMIT } from "../src/pageContext";
+import { buildPageAttachment, pageOrigin, PAGE_TEXT_LIMIT, PAGE_TEXT_NOTE, type PageTextSource } from "../src/pageContext";
+import { pageAttachedNotice } from "../src/coachIdentity";
 import type { ChatConfig } from "../src/protocol";
 
 (globalThis as unknown as Record<string, unknown>).window = { acquireVsCodeApi: undefined };
@@ -74,7 +75,47 @@ t("chip shows origin, full text and a remove button", () => {
 });
 t("negative control: no chip without an attachment", () => ok(!renderToStaticMarkup(<ChatPanel {...PROPS} config={config} instructor={false} />).includes("hps-page-attachment"), "chip"));
 
+// CGP-VOICE-R-010 — the notice and the chip name only what was attached, and say why text is missing.
+const captured = (textSource: PageTextSource, text: string, withImage: boolean) => {
+  const p = buildPageAttachment({ url: "https://news.example.org/a", title: "기사", text, textSource }, withImage);
+  const html = renderToStaticMarkup(<ChatPanel {...PROPS} config={config} instructor={false} pageAttachment={p.preview} onRemovePageAttachment={noop} />);
+  // The same composition the host does in attachPageContext.
+  return { ...p, html, notice: pageAttachedNotice("코치", withImage, p.preview.title || p.preview.url, p.preview.textNote) };
+};
+t("own preview: the copy says 화면과 내용 and the chip shows the text", () => {
+  for (const shot of [true, false]) {
+    const c = captured("own", "내 페이지 글", shot);
+    ok(c.preview.textNote === "", "no note"); ok(c.notice.includes(shot ? "화면과 내용을" : "📄 내용을"), c.notice);
+    ok(c.html.includes("페이지 내용 · news.example.org") && c.html.includes(">내 페이지 글</pre>"), "text chip");
+    ok(!c.html.includes("page-attachment-text-note"), "no reason line");
+  }
+});
+for (const [source, why] of [["not-own", PAGE_TEXT_NOTE["not-own"]], ["owner-unknown", PAGE_TEXT_NOTE["owner-unknown"]]] as const) {
+  t(`${source}: no 내용 claim, the reason is on the chip and in the notice, and no text is sent`, () => {
+    for (const shot of [true, false]) {
+      // Even text passed in by a caller must not go out for a withheld source.
+      const c = captured(source, "남의 페이지 비밀 글", shot);
+      ok(!c.notice.includes("내용"), `notice claims 내용: ${c.notice}`);
+      ok(c.notice.includes(shot ? "🖼 화면 사진만" : "📄 주소와 제목만") && c.notice.includes(why), c.notice);
+      ok(c.preview.text === "" && c.preview.textNote === why, "preview has no text and the reason");
+      ok(!c.modelText.includes("남의 페이지 비밀 글") && c.modelText.includes("보내지 않았다") && c.modelText.includes("짐작해 말하지 않는다"), "model told text was withheld");
+      ok(!c.html.includes("페이지 내용") && c.html.includes("페이지 정보 · news.example.org"), "chip does not say 페이지 내용");
+      ok(!c.html.includes('data-testid="page-attachment-text"'), "no empty quote");
+      ok(new RegExp(`data-testid="page-attachment-text-note">${why}</p>`).test(c.html), "reason visible on the chip");
+      ok(shot === c.html.includes("화면 사진도 함께 보내요"), "image disclosure matches");
+    }
+  });
+}
+t("own preview with no readable text says so instead of 내용", () => {
+  const c = captured("own", "   ", true);
+  ok(c.preview.textNote === PAGE_TEXT_NOTE.empty && !c.notice.includes("내용") && c.notice.includes(PAGE_TEXT_NOTE.empty), c.notice);
+  ok(c.html.includes(PAGE_TEXT_NOTE.empty) && !c.html.includes("페이지 내용"), "chip reason");
+});
+
 const host = readFileSync("src/chatPanelProvider.ts", "utf8");
+t("host: the notice is built from the same preview the chip shows", () => {
+  ok(/pageAttachedNotice\(this\.coachDisplayName\(\), withShot, page\.preview\.title \|\| page\.preview\.url, page\.preview\.textNote\)/.test(host), "notice gets the reason");
+});
 t("host: remove clears every page slot; send consumes the preview; other writers drop it", () => {
   ok(/case "removePageContext":[\s\S]{0,200}this\.clearPageAttachment\(\)/.test(host), "remove clears");
   const clear = host.slice(host.indexOf("private clearPageAttachment(): void {"), host.indexOf("private dropPageAttachment(): void {"));

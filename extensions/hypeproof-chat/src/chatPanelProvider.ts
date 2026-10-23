@@ -2637,7 +2637,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * has image_paste) rides along as an image so the coach can *see* the page
    * too. History keeps the user's clean text.
    */
-  attachPageContext(ctx: { url: string; title: string; text: string; imageBase64?: string }): void {
+  attachPageContext(ctx: { url: string; title: string; text: string; imageBase64?: string; textSource?: import("./pageContext").PageTextSource }): void {
     // capturePageContext returns raw JPEG base64 (no data: prefix). Only attach
     // when the cohort allows images — otherwise the worker would drop it anyway.
     this.pendingPageImage =
@@ -2652,7 +2652,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #308 — announce inline in the chat panel, NOT via a VS Code toast (a toast
     // pauses the integrated browser). The webview clears it on the next send.
     const withShot = !!this.pendingPageImage;
-    this.postPageNotice(pageAttachedNotice(this.coachDisplayName(), withShot, page.preview.title || page.preview.url));
+    this.postPageNotice(pageAttachedNotice(this.coachDisplayName(), withShot, page.preview.title || page.preview.url, page.preview.textNote));
   }
 
   /**

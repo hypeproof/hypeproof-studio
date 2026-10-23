@@ -137,9 +137,14 @@ export const coachDegradedNotice = (
   );
 };
 
-/** #308 page-attach inline notice. */
-export const pageAttachedNotice = (name: string, withShot: boolean, label: string): string =>
-  `${withShot ? "🖼 화면과 내용을" : "📄 내용을"} ${name}에게 붙였어요 — ${label}. 이제 질문을 입력해 보내세요.`;
+/**
+ * #308 page-attach inline notice. CGP-VOICE-R-010: it names only what was attached; when no page
+ * text goes (`textNote` non-empty, from pageContext PAGE_TEXT_NOTE) it says so and why.
+ */
+export const pageAttachedNotice = (name: string, withShot: boolean, label: string, textNote = ""): string =>
+  textNote
+    ? `${withShot ? "🖼 화면 사진만" : "📄 주소와 제목만"} ${name}에게 붙였어요 — ${label}. ${textNote} 이제 질문을 입력해 보내세요.`
+    : `${withShot ? "🖼 화면과 내용을" : "📄 내용을"} ${name}에게 붙였어요 — ${label}. 이제 질문을 입력해 보내세요.`;
 
 /** Start page copy (webview). `name` falls back to "코치" before a profile is known. */
 export const startPageCopy = (name: string = DEFAULT_COACH_NAME) => ({

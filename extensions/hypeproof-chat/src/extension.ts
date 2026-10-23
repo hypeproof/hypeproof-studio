@@ -53,7 +53,7 @@ import {
 } from "./updateChecker";
 import { INSTALL_STAGED_UPDATE_COMMAND, updateInstallAllowed } from "./stagedUpdate";
 import { CLASS_UPDATE_HOLD_COPY } from "./updateCheckerHelpers";
-import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
+import { openBrowser, sendActivePageToCoach, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
 import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
@@ -773,35 +773,8 @@ export async function activate(context: vscode.ExtensionContext) {
       openBrowser(typeof url === "string" ? url : undefined),
     ),
 
-    vscode.commands.registerCommand("hypeproof-chat.sendPageToCoach", async () => {
-      // Per-cohort gate (default off → minor-safe). Worker emits input.page_context
-      // via /v1/profile; the host enforces it here for the text-injection path.
-      if (!provider.isPageContextEnabled()) {
-        // #308 — inline notice, not a toast: same trigger path, same freeze
-        // mechanism (any visible toast pauses the integrated browser). Focus
-        // the panel so the notice is actually visible; if the webview isn't
-        // mounted yet, the pending-notice flush on "ready" delivers it.
-        provider.postPageNotice(
-          "이 코호트에서는 '페이지를 코치에게' 기능이 꺼져 있어요.",
-        );
-        await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
-        return;
-      }
-      const ctx = await captureActivePage();
-      if (!ctx) return;
-      // #278 Phase 2 — attach the screenshot too (image_paste-gated inside).
-      provider.attachPageContext({
-        url: ctx.url,
-        title: ctx.title,
-        text: ctx.text,
-        imageBase64: ctx.imageBase64,
-      });
-      await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
-      // #308 — the "붙였어요" confirmation is shown inline in the chat panel by
-      // attachPageContext (pageAttached message). A VS Code toast is NOT used
-      // here: a visible toast pauses the integrated browser ("Paused due to
-      // Notification"), which broke every capture in the workshop.
-    }),
+    // CGP-VOICE-R-010: the own-preview owner is Studio's own preview server.
+    vscode.commands.registerCommand("hypeproof-chat.sendPageToCoach", () => sendActivePageToCoach(provider, liveServer)),
 
     // CR-09 (cr-browser) — pick an element in the Experiment Browser and ask the coach
     // about it. Gated by the CR switch in package.json AND re-checked inside
