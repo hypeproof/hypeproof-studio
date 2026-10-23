@@ -16,11 +16,12 @@ const success = () => ({ status: 'success', code: 'completed', text: '직접 시
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 const plain = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 
-function harness({ request = async () => success(), inspection = () => ready(), commitReply } = {}) {
-  const posts = [], requests = [], commits = [], inspections = [];
+function harness({ request = async () => success(), inspection = () => ready(), commitReply, appName = 'HypeProof Studio Dev', experiment = '1', clipboardWrite = async () => {} } = {}) {
+  const posts = [], requests = [], commits = [], inspections = [], clipboard = [];
   let receive, onDispose, closed = false, current = true, panel;
   const vscode = {
     ViewColumn: { Beside: 2 },
+    env: { appName, clipboard: { async writeText(text) { clipboard.push(text); await clipboardWrite(text); } } },
     window: { createWebviewPanel() {
       panel = {
         webview: {
@@ -35,10 +36,14 @@ function harness({ request = async () => success(), inspection = () => ready(), 
     } },
   };
   const module = { exports: {} };
+  const hostProcess = { ...process, env: { ...process.env } };
+  if (experiment === null) delete hostProcess.env.HPS_PERSONAL_CLAUDE_EXPERIMENT;
+  else hostProcess.env.HPS_PERSONAL_CLAUDE_EXPERIMENT = experiment;
   vm.runInNewContext(bundle.outputFiles[0].text, {
     module, exports: module.exports,
     require: id => id === 'vscode' ? vscode : id === 'node:child_process' ? { spawn() { throw Error('A host smoke test must never invoke a real CLI'); } } : require(id),
-    process, Buffer, console, AbortController, AbortSignal, structuredClone, setTimeout, clearTimeout,
+    process: hostProcess,
+    Buffer, console, AbortController, AbortSignal, structuredClone, setTimeout, clearTimeout,
   });
   const original = { projectLabel: 'Current project', draft: 'Original unsent draft', history: [{ role: 'user', content: 'Selected earlier question' }, { role: 'assistant', content: 'Selected earlier answer' }] };
   const ports = {
@@ -61,7 +66,7 @@ function harness({ request = async () => success(), inspection = () => ready(), 
     assert.ok(result, 'the actual host issued a review');
     return result;
   };
-  return { posts, requests, commits, inspections, ports, original, panel, nonce, raw, emit, review, close: () => disposable.dispose(), switchScope() { current = false; } };
+  return { posts, requests, commits, inspections, clipboard, ports, original, panel, nonce, raw, emit, review, close: () => disposable.dispose(), switchScope() { current = false; } };
 }
 
 test('only the current panel nonce and explicit consent authorize a reviewed payload; success commits once to the current task', async () => {
@@ -90,10 +95,87 @@ test('only the current panel nonce and explicit consent authorize a reviewed pay
     assert.match(h.commits[0].id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     assert.equal(h.commits[0].prompt, 'Reviewed continuation request');
     assert.equal(h.commits[0].text, success().text);
+    assert.equal(h.commits[0].source, 'direct');
     await h.emit({ type: 'send', digest: reviewed.digest, consent: true });
     assert.equal(h.requests.length, 1); assert.equal(h.commits.length, 1);
     assert.equal(h.ports.draft, h.original.draft); assert.deepEqual(h.ports.history, h.original.history);
   } finally { h.close(); }
+});
+
+test('public app and either missing experiment gate use exact manual copy and attributed import without inspecting or invoking a provider', async () => {
+  const originalFlag = process.env.HPS_PERSONAL_CLAUDE_EXPERIMENT;
+  for (const config of [{ appName: 'HypeProof Studio', experiment: undefined }, { appName: 'HypeProof Studio', experiment: '1' }, { appName: 'HypeProof Studio Dev', experiment: undefined }, { appName: 'HypeProof Studio Dev', experiment: '0' }]) {
+    // Pass null for absent flags so the harness's direct-test default cannot fill them.
+    const h = harness({ ...config, experiment: config.experiment ?? null, request: async () => { throw Error('manual mode cannot call a provider'); }, inspection: () => { throw Error('manual mode cannot inspect a provider'); } });
+    try {
+      await h.emit({ type: 'ready' });
+      assert.equal(h.posts.at(-1).type, 'inspection'); assert.equal(h.posts.at(-1).ready, true);
+      const reviewed = await h.review({ draft: 'Manual continuation question', material: 'Only my chosen text' });
+      assert.deepEqual(JSON.parse(reviewed.payload.slice(reviewed.payload.indexOf('\n\n') + 2)), { projectLabel: h.original.projectLabel, selectedText: [{ label: '직접 선택한 자료', text: 'Only my chosen text' }], history: [], draft: 'Manual continuation question' });
+      await h.emit({ type: 'saveManualReply', text: 'Unattached answer', consent: true });
+      await h.emit({ type: 'send', digest: reviewed.digest, consent: false });
+      await h.raw({ type: 'send', nonce: 'another-panel', digest: reviewed.digest, consent: true });
+      assert.equal(h.clipboard.length, 0); assert.equal(h.commits.length, 0);
+      await h.emit({ type: 'send', digest: reviewed.digest, consent: true });
+      assert.deepEqual(h.clipboard, [reviewed.payload]);
+      assert.equal(h.posts.at(-1).type, 'copied');
+      await h.emit({ type: 'send', digest: reviewed.digest, consent: true });
+      assert.equal(h.clipboard.length, 1);
+      for (const consent of [undefined, false, 'true']) await h.emit({ type: 'saveManualReply', text: 'User pasted answer', consent });
+      await h.raw({ type: 'saveManualReply', nonce: 'another-panel', text: 'Wrong panel answer', consent: true });
+      assert.equal(h.commits.length, 0);
+      await h.emit({ type: 'saveManualReply', text: 'User pasted answer', consent: true });
+      assert.equal(h.commits.length, 1);
+      assert.equal(h.commits[0].source, 'manual'); assert.equal(h.commits[0].text, 'User pasted answer');
+      assert.equal(h.commits[0].prompt, 'Manual continuation question');
+      await h.emit({ type: 'saveManualReply', text: 'Duplicated pasted answer', consent: true });
+      assert.equal(h.commits.length, 1);
+      assert.equal(h.inspections.length, 0); assert.equal(h.requests.length, 0);
+      assert.equal(h.ports.draft, h.original.draft); assert.deepEqual(h.ports.history, h.original.history);
+    } finally { h.close(); }
+  }
+  assert.equal(process.env.HPS_PERSONAL_CLAUDE_EXPERIMENT, originalFlag, 'per-panel VM gates never mutate the real process');
+});
+
+test('manual copy failure, edits and stale scope never authorize an imported answer or call a provider', async () => {
+  const broken = harness({ appName: 'HypeProof Studio', clipboardWrite: async () => { throw Error('Synthetic unavailable clipboard'); } });
+  try {
+    const review = await broken.review();
+    await broken.emit({ type: 'send', digest: review.digest, consent: true });
+    assert.equal(broken.posts.at(-1).type, 'result');
+    await broken.emit({ type: 'saveManualReply', text: 'Answer without a completed copy', consent: true });
+    assert.equal(broken.commits.length, 0); assert.equal(broken.inspections.length, 0); assert.equal(broken.requests.length, 0);
+  } finally { broken.close(); }
+
+  const edited = harness({ appName: 'HypeProof Studio' });
+  try {
+    const review = await edited.review();
+    await edited.emit({ type: 'send', digest: review.digest, consent: true });
+    await edited.emit({ type: 'edit' });
+    await edited.emit({ type: 'saveManualReply', text: 'Answer for the old request', consent: true });
+    await edited.emit({ type: 'send', digest: review.digest, consent: true });
+    assert.equal(edited.commits.length, 0); assert.equal(edited.clipboard.length, 1);
+    assert.equal(edited.inspections.length, 0); assert.equal(edited.requests.length, 0);
+  } finally { edited.close(); }
+
+  for (const action of ['cancel', 'scope', 'dispose']) {
+    const entered = deferred(), waiting = deferred();
+    const h = harness({ appName: 'HypeProof Studio', clipboardWrite: async () => { entered.resolve(); await waiting.promise; } });
+    try {
+      const review = await h.review();
+      const copying = h.emit({ type: 'send', digest: review.digest, consent: true });
+      await entered.promise;
+      if (action === 'cancel') await h.emit({ type: 'cancel' });
+      if (action === 'scope') h.switchScope();
+      if (action === 'dispose') h.close();
+      const postsBeforeLateCopy = h.posts.length;
+      waiting.resolve(); await copying;
+      await h.emit({ type: 'saveManualReply', text: 'A late manual answer', consent: true });
+      assert.equal(h.commits.length, 0); assert.equal(h.posts.length, postsBeforeLateCopy);
+      assert.equal(h.inspections.length, 0); assert.equal(h.requests.length, 0);
+      assert.equal(h.ports.draft, h.original.draft); assert.deepEqual(h.ports.history, h.original.history);
+    } finally { waiting.resolve(); h.close(); }
+  }
 });
 
 test('editing revokes the previous digest and a new review discloses only newly selected context', async () => {
