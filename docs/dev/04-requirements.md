@@ -255,3 +255,7 @@ other administrator routes. Server-unobserved personal-provider traffic and
 missing historical/invoice data remain outside confirmed coverage. See the
 acceptance map for repository paths and executable checks; no duplicate Studio
 cost ledger or authentication authority is introduced here.
+
+CGP-SHELL-R-006 is owned by `REQ-STUDIO-KOREAN-SHELL` in
+`docs/studio-requirements.md`: bundled native Korean labels and learner settings,
+with startup/menu-expression tests and separate packaged-device screenshots.

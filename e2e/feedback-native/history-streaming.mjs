@@ -5,6 +5,7 @@ import path from 'node:path';
 import {waitFor,sleep} from './native-ui.mjs';
 import {scriptedState,releaseScriptedTurn,revokeSyntheticB} from './session-control.mjs';
 import {markerText,replyText} from './scripted-upstream.mjs';
+import {coreCommandLabel} from '../fixtures/shell-labels.mjs';
 const blocked=message=>Object.assign(Error(message),{blocked:true});
 export function historyMarkers(rows){
  const counts={};for(const name of ['A1','D2','STOP_HOLD','QUIT_HOLD','FILE_HOLD'])counts[name]={user:rows.filter(r=>r.role==='user'&&r.text.includes(markerText(name))).length,assistant:rows.filter(r=>r.role==='assistant'&&r.text.includes(replyText(name))).length};return counts;
@@ -22,7 +23,7 @@ export async function runHistoryStreaming(ctx){
  const history=async()=>{const chat=await ui.frame('.hps-input textarea');return chat.evaluate("[...document.querySelectorAll('.hps-msg-user,.hps-msg-assistant')].map(e=>({role:e.classList.contains('hps-msg-user')?'user':'assistant',text:e.textContent}))");};
  const state=()=>scriptedState(control);
  const bound=async()=>{const value=await state();assert.equal(value.provider_called,false);assert.equal(value.request_limit,12);assert.equal(value.output_cap,4096);assert(value.rows.every(r=>r.attempt<=12&&(!r.max_tokens||r.max_tokens<=4096)));assert.equal(value.rejections.length,0,'Fixture refusals cannot be hidden as a successful turn');return value;};
- const openFolder=async folder=>{await ui.palette('File: Open Folder...');await ui.ownedOpenFolder(folder+path.sep);await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(folder)),'public File Open Folder actual destination',60000);};
+ const openFolder=async folder=>{await ui.palette(coreCommandLabel('workbench.action.files.openFolder'));await ui.ownedOpenFolder(folder+path.sep);await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(folder)),'public File Open Folder actual destination',60000);};
  const send=async(name,held=false)=>{const before=await bound(),chat=await focusChat();await ui.input(chat,'.hps-input textarea',markerText(name));await ui.key(chat,'Enter');await waitFor(()=>chat.evaluate("!!document.querySelector('.hps-btn-stop')"),'actual native stream Stop visible',45000);
   await waitFor(async()=>{const value=await state();return value.rows.some(r=>r.attempt>(before.counts.A??0)&&r.subject==='A'&&r.marker===name&&r.state===(held?'streaming':'complete'));},'actual SDK → actual Service → scripted upstream '+name,60000);
   if(!held){await waitFor(()=>chat.evaluate(`!document.querySelector('.hps-btn-stop')&&[...document.querySelectorAll('.hps-msg-assistant')].some(e=>e.textContent.includes(${JSON.stringify(replyText(name))}))`),'actual completed scripted assistant rendered');assert.equal(await chat.evaluate("document.querySelectorAll('.hps-error-banner').length"),0);}

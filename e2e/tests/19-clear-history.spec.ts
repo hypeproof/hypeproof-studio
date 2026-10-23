@@ -1,11 +1,11 @@
 // REQ-C4 Clear conversation command (#89 epic).
 //
 // Seed history via the test backdoor → assert messages visible → run the
-// HypeProof Chat: Clear Conversation command → assert messages gone +
+// hypeproof-chat.clearHistory command → assert messages gone +
 // workspaceState cleared.
 
 import { test, expect } from "@playwright/test";
-import { chatFrame, closeApp, launchApp, runCommand, type SeedHistoryTurn } from "../fixtures/app";
+import { chatFrame, closeApp, launchApp, runCommandById, type SeedHistoryTurn } from "../fixtures/app";
 
 const seed: SeedHistoryTurn[] = [
   { id: "h-u-1", role: "user", content: "테스트 메시지 1", createdAt: 1 },
@@ -29,7 +29,7 @@ test("REQ-C4: Clear Conversation command empties the panel + workspaceState", as
     await expect(cf.locator("body")).toContainText("테스트 응답 2");
 
     // Run clear command
-    await runCommand(ctx.win, "HypeProof Chat: Clear Conversation");
+    await runCommandById(ctx.win, "hypeproof-chat.clearHistory");
 
     // Messages should disappear; the empty-state greeting (welcome) takes over.
     // Poll because the command runs async and the postHistory[] arrives shortly.

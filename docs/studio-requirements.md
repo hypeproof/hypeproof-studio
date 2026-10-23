@@ -4857,3 +4857,29 @@ The browser smoke compiles actual application CSS and renders ChatPanel in both 
 themes, keeps window width fixed, sweeps both boundaries and shrinks back, checks overflow,
 and keeps a second differently sized pane independent. This is local browser evidence;
 installed-app resizing and owner acceptance remain separate.
+
+## Korean learner shell (CGP-SHELL-R-006)
+
+`REQ-STUDIO-KOREAN-SHELL` (REQ-SHELL-06, P1; CGP-SHELL-010; Product Intent #1):
+App, Edit, View, Window and Help menu titles, quit/update/About dialogs, and the
+learner settings sheet use Korean on Korean and non-Korean operating systems.
+The menu-label test must report zero English titles. Technical version values,
+model identifiers and user-authored names are data, not translated UI labels.
+
+The packaged shell loads its bundled Korean NLS messages without a downloaded
+language pack or a user's display-language setting. Packaging fails when native
+menu/dialog/update translations are missing or have incompatible placeholders.
+The app menu reads `하이프루프 스튜디오`; native accelerators and command IDs remain
+unchanged. The app identity the OS keys on stays exactly as before: product name
+(`HypeProof Studio`, so the Keychain item stays `HypeProof Studio Safe Storage`),
+user-data folder, bundle id and URL protocol. Only display labels are localised, so
+an update never loses a learner's saved tokens or settings (`app.setName` is not
+called). Personal and classroom effort controls both read `생각 깊이`, with
+`가볍게`, `보통`, `깊게` choices. This changes presentation, not service policy.
+
+Evidence: `test/korean-shell.smoke.mjs` executes the patched upstream startup, fails on any
+identity or non-label manifest change versus main, and
+menu-label expressions, and checks the packaged translation output;
+`test/korean-settings.test.tsx` renders both settings variants. Native screenshot
+acceptance uses a newly packaged shell on macOS and Windows, with both Korean
+and English OS language. Unit evidence is not an installed-device screenshot.

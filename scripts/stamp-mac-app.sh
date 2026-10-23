@@ -63,3 +63,6 @@ fi
 # Keep the file mode the build gave it (mktemp creates 0600).
 chmod 644 "$tmp"
 mv "$tmp" "$PJSON"
+
+# CGP-SHELL-R-006: shared by full builds and repacks, before signing.
+node "$REPO_ROOT/scripts/patches/core/korean/install.mjs" "$APP/Contents/Resources/app"

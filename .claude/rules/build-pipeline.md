@@ -226,3 +226,15 @@ Rules:
 ## CI (Phase 6)
 
 Windows build runs in GitHub Actions only. Local Windows reproduction is out of scope. The workflow file is `.github/workflows/build-windows.yml`; since 2026-10-19 it runs only on `workflow_dispatch` (see "Release platforms" above).
+
+## Bundled Korean shell (CGP-SHELL-R-006)
+
+`hps-korean-shell.patch` selects packaged `out/nls.messages.ko.json` independent
+of the OS and user language packs. `scripts/patches/core/korean/install.mjs`
+generates it from the build's own NLS keys/messages and vendored translations.
+`stamp-mac-app.sh` (full and repack) and Windows packaging run it before signing
+or archive creation. Missing native translations fail packaging. The entire
+`core/` tree is already in the Mac base key, so changing translations or the
+startup patch invalidates reuse of older shell bases. Development with
+`VSCODE_DEV` retains the upstream loader; this does not claim localized dev-shell
+source runs. No release or full shell build is performed by the row's unit tests.

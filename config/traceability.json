@@ -11598,6 +11598,56 @@
           "path": "extensions/hypeproof-chat/test/chat-container-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-KOREAN-SHELL",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Korean learner shell (CGP-SHELL-R-006)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-KOREAN-SHELL",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-KOREAN-SHELL"
+      ],
+      "sources": [
+        {
+          "path": "scripts/patches/core/hps-korean-shell.patch"
+        },
+        {
+          "path": "scripts/patches/core/korean/install.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/EffortControl.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-KOREAN-SHELL",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-KOREAN-SHELL",
+        "ST-IMP-KOREAN-SHELL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/korean-shell.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/korean-settings.test.tsx"
+        }
+      ]
     }
   ]
 }

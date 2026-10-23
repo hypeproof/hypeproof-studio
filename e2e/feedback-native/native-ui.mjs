@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {loopback} from './safety.mjs';
+import {coreCommandLabel,menuLabels,openFolderDialogTitles,detectShellLocale} from '../fixtures/shell-labels.mjs';
 export function focusedResource(state){const title=state.editorLabel?.split(',')[0].trim();return !!state.resource&&(title===state.resource||title?.endsWith(' • '+state.resource));}
 // Compare complete absolute identities; only Windows drive spelling and separators
 // are canonicalized. Never accept a matching suffix, another drive or URI text.
@@ -110,8 +111,8 @@ export class NativeUI{
   if(platform==='win32'){
    // Upstream MenubarFileMenu exposes workbench.action.quit as E&&xit.
    // CDP Alt+F4 need not reach the OS window manager; click the actual menu.
-   await this.clickText(w,'File','.menubar-menu-button');
-   try{await this.clickText(w,'Exit','.monaco-menu .action-label');}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+   await this.clickText(w,menuLabels('file'),'.menubar-menu-button');
+   try{await this.clickText(w,menuLabels('exit'),'.monaco-menu .action-label');}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
    return;
   }
   try{await w.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:4});}
@@ -129,6 +130,8 @@ export class NativeUI{
   }
   return target;
  }
+ /** Pick the Korean or English core labels from the running workbench (hosted apps are not Korean-packed). */
+ async detectLocale(appPath){return detectShellLocale(await this.workbench(),appPath);}
  async workbench(observation){
   const id=observation?.workbench??this.workbenchId;
   const discover=async()=>{if(observation&&this.workbenchId&&this.workbenchId!==id)throw Error('Owned workbench changed');const infos=await (observation?observation.run(()=>this.list(observation)):this.list());const info=selectWorkbenchInfo(infos,id);return info?(observation?observation.run(()=>this.target(info,observation)):this.target(info)):null;};
@@ -145,7 +148,7 @@ export class NativeUI{
   if(!this.workbenchId)throw Error('Close requires an explicitly bound owned window');
   const w=await this.workbench();
   if(!await w.evaluate('document.hasFocus()'))throw Error('Owned secondary must be actually focused before Close Window');
-  try{await this.palette('Close Window',{expectReload:true});}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+  try{await this.palette(coreCommandLabel('workbench.action.closeWindow'),{expectReload:true});}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
   await waitFor(async()=>!(await this.list()).some(t=>t.id===this.workbenchId),'owned secondary window closed',30000);
  }
  // Activation is an input action, never part of read-only workbench discovery.
@@ -248,7 +251,7 @@ export class NativeUI{
 
  }
 
- async textSelector(target,text,css='button,.monaco-button'){return target.evaluate(`(()=>{const wanted=${JSON.stringify(text)},nodes=[...document.querySelectorAll(${JSON.stringify(css)})].filter(e=>e.textContent.replace(/[↗→]/g,'').trim()===wanted&&e.getBoundingClientRect().width>0);if(nodes.length!==1)return null;let e=nodes[0],parts=[];while(e&&e!==document.documentElement){parts.unshift(e.tagName.toLowerCase()+':nth-child('+([...e.parentElement.children].indexOf(e)+1)+')');e=e.parentElement;}return 'html>'+parts.join('>');})()`);}
+ async textSelector(target,text,css='button,.monaco-button'){return target.evaluate(`(()=>{const wanted=${JSON.stringify([].concat(text))},nodes=[...document.querySelectorAll(${JSON.stringify(css)})].filter(e=>wanted.includes(e.textContent.replace(/[↗→]/g,'').trim())&&e.getBoundingClientRect().width>0);if(nodes.length!==1)return null;let e=nodes[0],parts=[];while(e&&e!==document.documentElement){parts.unshift(e.tagName.toLowerCase()+':nth-child('+([...e.parentElement.children].indexOf(e)+1)+')');e=e.parentElement;}return 'html>'+parts.join('>');})()`);}
  async hasTextButton(target,text){return !!(await this.textSelector(target,text));}
  async clickText(target,text,css){const selector=await waitFor(()=>this.textSelector(target,text,css), 'control '+text);await this.press(target,selector,text);}
  // These are Chromium Windows virtual keys, not OS scan codes. Let Chromium derive
@@ -295,7 +298,7 @@ export class NativeUI{
  async closeOwnedPreview(target,before,preview,timeout=5000){
   assertOwnedPreviewClose(before,preview,await this.editorState(target));
   // This registered command targets only the verified active editor; no blanket save dialog response.
-  await this.palette('View: Revert and Close Editor');
+  await this.palette(coreCommandLabel('workbench.action.revertAndCloseActiveEditor'));
   const observation=readObservation(timeout,target.info?.id);this.previewDestinationState=undefined;
   const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'preview destination restoration',outcome,state:this.previewDestinationState??null});
   try{for(;;){
@@ -307,7 +310,7 @@ export class NativeUI{
   return {resource:preview.resource,public_ui_revert_and_close:true,other_editors_preserved:true,destination_focus_restored:true};
  }
  async newPreview(target,before,required,timeout=30000){return waitFor(async()=>{const s=await this.editorState(target);return s.focused&&/^Untitled-[0-9]+$/.test(s.resource??'')&&!before.resources.includes(s.resource)&&focusedResource(s)&&required.every(text=>s.text?.includes(text))?s:null;},'new preview resource, focused model and rendered provenance',timeout);}
- async isOpenFolder(target){return target.evaluate("(()=>{const e=document.querySelector('.quick-input-widget');const title=e?.querySelector('.quick-input-title')?.textContent.trim();return e?.getBoundingClientRect().height>0&&['Open Folder','폴더 열기'].includes(title);})()");}
+ async isOpenFolder(target){return target.evaluate(`(()=>{const e=document.querySelector('.quick-input-widget');const title=e?.querySelector('.quick-input-title')?.textContent.trim();return e?.getBoundingClientRect().height>0&&${JSON.stringify(openFolderDialogTitles())}.includes(title);})()`);}
  async ownedOpenFolder(directory,timeout=30000){const w=await this.workbench();await waitFor(()=>this.isOpenFolder(w),'declared Open Folder dialog title',timeout);await this.pathDialog(directory,['Open','열기','OK','확인']);}
  async cancelOwnedOpenFolder(){const w=await this.workbench();if(!await this.isOpenFolder(w))return false;await this.key(w,'Escape');await this.waitQuick(w,s=>!s.visible,'failed owned Open Folder dialog canceled');return true;}
  async newTextFile(text,timeout=30000){

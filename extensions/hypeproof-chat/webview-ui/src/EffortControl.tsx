@@ -2,7 +2,7 @@ import { useId } from 'react';
 import { ChatIcon } from './ChatDetails';
 import type { ChatConfig, CourseEffort, EffortRequestRecord, ResolvedProfile, WebviewMessage } from '../../src/protocol';
 
-const labels: Record<CourseEffort,string> = {low:'Low',medium:'Medium',high:'High'};
+const labels: Record<CourseEffort,string> = {low:'가볍게',medium:'보통',high:'깊게'};
 /** Personal chat: the same levels in the learner's language (Jay 2026-10-19: "Effort" in a Korean UI). */
 export const PERSONAL_EFFORT_LABEL = '생각 깊이';
 const personalLabels: Record<CourseEffort,string> = {low:'가볍게',medium:'보통',high:'깊게'};
@@ -57,7 +57,7 @@ export function EffortControl({config,post,personal=false}:{config:ChatConfig;po
   const result = config.effortResult;
   const shown = personal ? personalLabels : labels;
   return <div className="hps-effort">
-    {policy && <label>{personal ? `${PERSONAL_EFFORT_LABEL} ` : 'Effort '}<select aria-label={personal ? PERSONAL_EFFORT_LABEL : 'Effort'} value={policy.value} disabled={locked || policy.allowed.length===1}
+    {policy && <label>{personal ? `${PERSONAL_EFFORT_LABEL} ` : '생각 깊이 '}<select aria-label={personal ? PERSONAL_EFFORT_LABEL : '생각 깊이'} value={policy.value} disabled={locked || policy.allowed.length===1}
       aria-disabled={locked || undefined} aria-describedby={locked ? reasonId : undefined}
       onChange={e=>post({type:'selectEffort',value:e.target.value as CourseEffort})}
       onKeyDown={e=>{
@@ -68,7 +68,7 @@ export function EffortControl({config,post,personal=false}:{config:ChatConfig;po
       }}>{policy.allowed.map(v=><option key={v} value={v}>{shown[v]}</option>)}</select></label>}
     {policy && locked && <small id={reasonId} className="hps-managed-reason"><ChatIcon kind="lock" size={20} /> 선생님이 정한 설정이에요</small>}
     {config.effortNotice && <small role="status">{config.effortNotice}</small>}
-    {(policy||result) && <details><summary>{personal ? '적용 기록' : 'Effort 설정 확인'}</summary>
+    {(policy||result) && <details><summary>{personal ? '적용 기록' : '생각 깊이 설정 확인'}</summary>
       {policy && <p>{policy.allowed.length===1?'강사가 정한 처리 수준입니다.':'수업에서 허용한 범위 안에서 다음 요청부터 바뀝니다.'} 모델마다 속도와 사용량이 다릅니다.</p>}
       {result?.state==='loading' && <p>이번 요청의 적용 기록을 확인 중입니다.</p>}
       {result?.state==='unknown' && <p>적용 기록 미확인 — 기록이 늦거나 연결되지 않았을 수 있습니다.</p>}

@@ -400,6 +400,51 @@ export async function closeApp(ctx: AppContext): Promise<void> {
 }
 
 /**
+ * Palette label of one of the extension's commands, resolved from its manifest by
+ * command id. The titles are Korean learner copy (CGP-SHELL-R-006) and may be
+ * reworded again, so callers name the id, never the title text.
+ */
+export function commandLabel(commandId: string): string {
+  const manifestPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../extensions/hypeproof-chat/package.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const command = (manifest.contributes?.commands ?? []).find((c: { command: string }) => c.command === commandId);
+  if (!command?.title) throw new Error(`manifest has no command ${commandId}`);
+  return command.category ? `${command.category}: ${command.title}` : command.title;
+}
+
+/**
+ * The palette label of the "show the chat view container" command, as the shipped Korean shell
+ * renders it: the core "{View}: Show {0}" strings come from the bundled Korean pack
+ * (scripts/patches/core/korean/main.i18n.json) and {0} is the manifest's activity bar title.
+ */
+export function showChatViewLabel(): string {
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const manifest = JSON.parse(fs.readFileSync(path.resolve(here, "../../extensions/hypeproof-chat/package.json"), "utf8"));
+  const container = (manifest.contributes?.viewsContainers?.activitybar ?? []).find((c: { id: string }) => c.id === "hypeproof-chat");
+  if (!container?.title) throw new Error("manifest has no hypeproof-chat view container");
+  const pack = JSON.parse(fs.readFileSync(path.resolve(here, "../../scripts/patches/core/korean/main.i18n.json"), "utf8")).contents;
+  const view = pack["vs/platform/action/common/actionCommonCategories"].view;
+  const show = pack["vs/workbench/services/views/browser/viewsService"]["show view"];
+  return `${view}: ${show.replace("{0}", container.title)}`;
+}
+
+/** A learner setting's label as the shipped Korean settings editor shows it (scripts/patches/core/hps-korean-shell.patch). */
+export function settingLabel(key: string): string {
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const patch = fs.readFileSync(path.resolve(here, "../../scripts/patches/core/hps-korean-shell.patch"), "utf8");
+  const match = /koreanLabels: Record<string, string> = (\{.*?\});/.exec(patch);
+  if (!match) throw new Error("hps-korean-shell.patch has no koreanLabels map");
+  const label = (JSON.parse(match[1]) as Record<string, string>)[key];
+  if (!label) throw new Error(`no Korean label for ${key}`);
+  return label;
+}
+
+/** Run an extension command through the palette, looked up by its command id. */
+export async function runCommandById(win: Page, commandId: string): Promise<void> {
+  await runCommand(win, commandLabel(commandId));
+}
+
+/**
  * Open the command palette and run a command by its label, then return the
  * input element so callers can type the next thing (e.g. token).
  */
@@ -459,7 +504,7 @@ export async function openChatContainer(win: Page): Promise<void> {
     }
   }
   // Fallback: command palette.
-  await runCommand(win, "View: Show HypeProof Chat");
+  await runCommand(win, showChatViewLabel());
 }
 
 /**

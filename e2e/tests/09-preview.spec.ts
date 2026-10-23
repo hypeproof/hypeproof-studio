@@ -40,6 +40,7 @@ import {
   launchApp,
   openChatContainer,
   runCommand,
+  runCommandById,
 } from "../fixtures/app";
 import { TOKEN_FILE } from "../fixtures/global-setup";
 
@@ -208,7 +209,7 @@ for (const variant of VARIANTS) {
     await app.win.waitForTimeout(1000);
 
     // REQ-D1: Run Last Code in Preview
-    await runCommand(app.win, "HypeProof Chat: Run Last Code in Preview");
+    await runCommandById(app.win, "hypeproof-chat.runLastCode");
     const opened = await openedPreview(app.win);
     console.log(`09-preview [${variant}]: ${opened.path} path`);
     expect(opened.path, "the preview path the served profile's preview.type picks").toBe(await expectedPreview(service));
@@ -252,7 +253,7 @@ for (const variant of VARIANTS) {
     await app.win.waitForTimeout(1000);
 
     // First run — opens preview
-    await runCommand(app.win, "HypeProof Chat: Run Last Code in Preview");
+    await runCommandById(app.win, "hypeproof-chat.runLastCode");
     const opened = await openedPreview(app.win);
     console.log(`09-preview [${variant}]: ${opened.path} path`);
     expect(opened.path, "the preview path the served profile's preview.type picks").toBe(await expectedPreview(service));
@@ -261,7 +262,7 @@ for (const variant of VARIANTS) {
     if (opened.path === "live") {
       // The live-server path reuses its browser tab (startLivePreview: same URL → reload).
       await expect(liveTabs(app.win)).toHaveCount(1);
-      await runCommand(app.win, "HypeProof Chat: Run Last Code in Preview");
+      await runCommandById(app.win, "hypeproof-chat.runLastCode");
       await app.win.waitForTimeout(1500);
       await expect(liveTabs(app.win)).toHaveCount(1);
       return;
@@ -272,7 +273,7 @@ for (const variant of VARIANTS) {
     expect(beforeCount).toBeGreaterThanOrEqual(2); // chat + preview at minimum
 
     // Second run — must reuse the panel, not spawn a new one
-    await runCommand(app.win, "HypeProof Chat: Run Last Code in Preview");
+    await runCommandById(app.win, "hypeproof-chat.runLastCode");
     await app.win.waitForTimeout(1500);
 
     const afterCount = await app.win.locator("iframe.webview.ready").count();

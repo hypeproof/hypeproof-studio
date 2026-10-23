@@ -51,7 +51,7 @@ if (process.argv.includes('--serve')) {
     await expect(page.getByRole('button',{name:'대화 설정 닫기'})).toBeFocused();
     await page.getByText('응답 고급 설정',{exact:true}).click();
     await expect(page.getByRole('combobox',{name:'대화 모델',exact:true})).toHaveValue('fixture-sonnet');
-    // Personal effort reads 생각 깊이 in the dialog (REQ-STUDIO-CHAT-POLISH ⑤); classroom keeps Effort.
+    // Effort reads 생각 깊이 in the dialog (REQ-STUDIO-CHAT-POLISH ⑤); the classroom control uses the same name since CGP-SHELL-R-006.
     await expect(page.getByRole('combobox',{name:'생각 깊이',exact:true})).toHaveValue('medium');
     await shot('settings-green'); await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden(); await expect(page.getByRole('button',{name:'대화 메뉴',exact:true})).toBeFocused();

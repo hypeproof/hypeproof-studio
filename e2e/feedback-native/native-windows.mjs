@@ -5,6 +5,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {NativeUI,waitFor,sleep,sameDisplayedWorkspace} from './native-ui.mjs';
 import {sha256,within} from './safety.mjs';
+import {coreCommandLabel} from '../fixtures/shell-labels.mjs';
 export function ownedWindowPrerequisite(c,env=process.env){
  if(env.GITHUB_ACTIONS!=='true'||!env.RUNNER_TEMP||c.attach)throw Object.assign(Error('Two-window input requires an owned hosted desktop'),{blocked:true});
  if(!within(fs.realpathSync(c.userDataDir),fs.realpathSync(env.RUNNER_TEMP)))throw Error('Owned profile must be within this hosted runner temp');
@@ -118,7 +119,7 @@ export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,w
   proof.destination_restored=true;proof.no_reload_loop_window_ms=10000;proof.other_binding_draft_files_preserved=true;
   await other.shot(path.join(c.evidence,'simultaneous-other-C.png'));await ui.shot(path.join(c.evidence,'simultaneous-destination-B.png'));persist();
   // Restore the original window using the public native File command before cleanup.
-  phase('original-return-to-A');await ui.palette('File: Open Folder...');await ui.ownedOpenFolder(c.workspace.a+path.sep);
+  phase('original-return-to-A');await ui.palette(coreCommandLabel('workbench.action.files.openFolder'));await ui.ownedOpenFolder(c.workspace.a+path.sep);
   await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)),'original window returns to A',60000);await ui.restoredDraft(draft);await observeOther();
  }catch(error){primary=error;proof.primary_error=error.message;proof.failed_phase=proof.phases.at(-1)?.phase;persist();}
  await finishOwnedWindows({primary,proof,persist,observe:diagnose,cleanup:async()=>{

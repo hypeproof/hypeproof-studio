@@ -23,7 +23,7 @@ for (const personal of [false, true]) {
     assert.equal(select.disabled, true, `disabled ${index}`);
     assert.equal(select.getAttribute('aria-disabled'), 'true');
     assert.equal(select.value, index === 0 ? 'fixed' : 'high');
-    assert.equal(select.selectedOptions[0].textContent, index === 0 ? '수업 모델' : personal ? '깊게' : 'High');
+    assert.equal(select.selectedOptions[0].textContent, index === 0 ? '수업 모델' : '깊게');
     const reason = d.getElementById(select.getAttribute('aria-describedby')!);
     assert.ok(reason, 'description belongs to the control');
     assert.equal(reason.textContent?.trim(), '선생님이 정한 설정이에요');
