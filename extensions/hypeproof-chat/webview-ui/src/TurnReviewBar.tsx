@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { TurnReviewView, TurnFileReview } from "../../src/turnReviewView";
+import { DiffLines } from "./DiffLines";
 import { turnReviewCount } from "../../src/turnReviewView";
 
 export interface TurnReviewBarProps {
@@ -21,8 +22,7 @@ function displayPath(value: string): string {
 
 function FileReview({ file, busy, onRevert }: { file: TurnFileReview; busy: boolean; onRevert: (path: string) => void }) {
   const [expanded, setExpanded] = useState(false);
-  const rows = (side?: "before" | "after") => file.lines?.filter(line => side === "before" ? line.kind !== "added" : side === "after" ? line.kind !== "removed" : true).map((line, i) =>
-    <div key={i} className="hps-turn-diff-line" data-kind={line.kind}><span aria-hidden="true">{line.kind === "added" ? "+" : line.kind === "removed" ? "−" : " "}</span><code>{line.text}</code></div>);
+  const rows = (side?: "before" | "after") => file.lines && <DiffLines lines={file.lines} side={side} />;
   return <li className="hps-turn-file">
     <code>{displayPath(file.path)}</code>
     <p>{file.lines ? `+${file.added}줄 추가 · −${file.removed}줄 삭제` : file.unavailable ?? "줄 수와 비교를 확인할 수 없어요."}</p>

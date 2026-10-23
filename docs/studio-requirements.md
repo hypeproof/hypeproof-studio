@@ -4928,3 +4928,33 @@ Behavioral evidence uses real components/pages with deferred synthetic clipboard
 a deterministic feedback clock; tests cover success timing, failure persistence, repeated
 actions, out-of-order completion and changed content. Native clipboard/screen-reader delivery
 requires owner verification. DES-CGP-DS-27's separate toast geometry is not claimed here.
+
+## Non-color text comparisons (CGP-DS-R-029)
+
+REQ-CGP-DS-34 / DES-CGP-DS-34 / SX-16 / SX-50: Studio-owned text
+comparisons expose a literal `+` (added) or `−` (removed) gutter marker with
+an accessible Korean label. Removed text is struck through; unchanged lines
+carry neither label nor strike. Theme tint is capped at 15% opacity so the
+text, symbols and deletion semantics remain the primary evidence in grayscale
+and forced colors. The same renderer serves the per-turn file review and the
+recorded AI-draft/learner-revision comparison.
+
+The evidence drawer compares only two recorded snapshots using the existing
+bounded physical-line comparison (500 lines per side). Missing history is not
+an empty file: retain the missing-draft explanation and the recorded after
+text without invented changes. Oversized comparisons retain both texts and
+explain why line comparison was omitted. Empty recorded files remain valid.
+All snapshot text is escaped React text, never interpreted HTML.
+
+This supports Product Intent's inspectable learner judgment (JUDGMENT/VERIFY),
+without claiming a learning outcome. Native `vscode.diff` in artifact history
+remains owned by the editor; its installed-app rendering and assistive
+technology behavior require separate acceptance evidence. No host approval,
+filesystem operation or runtime capability changes are part of this slice.
+
+Validation: `test/diff-symbols.smoke.mjs` mounts the actual ChatPanel and sends
+host-shaped learning/turn states. It checks both owned surfaces, personal and
+classroom branches, light/dark themes, 800/1420 windows, grayscale screenshots,
+forced colors, computed deletion/tint/font styles, escaping and updated,
+missing or oversized history. Headless evidence does not establish native
+editor or screen-reader acceptance.
