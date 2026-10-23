@@ -6,7 +6,7 @@ export const CONTINUATION_LIMITS = Object.freeze({ payloadBytes: 128 * 1024, rep
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const copy = <T>(value: T): T => structuredClone(value);
 
-function reviewedPayload(input: ContinuationPayload) {
+export function reviewedPayload(input: ContinuationPayload) {
   if (!input || typeof input.projectLabel !== 'string' || typeof input.draft !== 'string' || !input.draft.trim()
       || !Array.isArray(input.selectedText) || !Array.isArray(input.history)
       || input.selectedText.some(x => !x || typeof x.label !== 'string' || typeof x.text !== 'string')

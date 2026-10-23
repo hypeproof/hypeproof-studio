@@ -4744,3 +4744,24 @@ This supports VERIFY/JUDGMENT as an opportunity, not a measured learning outcome
 
 Evidence: `accuracy-education.test.tsx`, `accuracy-education-host.smoke.mjs`,
 `accuracy-education-style.smoke.mjs`, `accuracy-education-computed.smoke.mjs`.
+
+
+### REQ-STUDIO-PERSONAL-CLAUDE-CONTINUATION
+
+An eligible nonminor personal free seat may explicitly continue in its own official
+Claude Code client after the free end card appears. Public Studio reviews and copies
+selected text to the clipboard, with explicit consent; the user sends it in the
+official client after checking account and funding. An optional pasted reply is
+saved, on explicit request, as a manually imported answer in the same task. Project,
+conversation and original draft remain. Public Studio never invokes the personal
+subscription automatically. Automatic text-only invocation is restricted to the
+Dev application plus an explicit experimental environment flag; general distribution
+is blocked until the provider's supported authentication/distribution conditions
+are confirmed. Editing, cancellation, expiry and scope changes invalidate pending
+transfer consent. No automatic purchase or provider fallback is introduced.
+
+The owned requirements and limitations are [PCC-01–08](requirements/personal-claude-continuation.md);
+the verification contract is [PCC-T01–05](testing/personal-claude-continuation.md).
+This applies the native Studio intent and outbound consent requirement, exposing
+JUDGMENT and OWNERSHIP through an observable transfer decision. It does not claim
+a measured learning outcome, native acceptance or release availability.

@@ -2120,10 +2120,12 @@ html, body, #root {
 }
 .hps-trial-end-card-primary:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .hps-trial-end-card-primary:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+.hps-trial-end-card-personal,
 .hps-trial-end-card-escape {
   border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2); background: transparent; font-size: var(--ds-c-studio-styles-type-9);
   color: var(--hp-text-accent-default);
 }
+.hps-trial-end-card-personal:hover,
 .hps-trial-end-card-escape:hover { text-decoration: underline; }
 /* TUX-COND-08 — optional email section: secondary, below the pass offer, smaller and quieter
    than the Primary (CU-13). A plain secondary button, never the theme's primary colour. */
