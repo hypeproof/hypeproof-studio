@@ -85,6 +85,9 @@ assert.equal(
 assert.equal(COACH_DEGRADED_NOTICE, id.coachDegradedNotice(D), "exported constant keeps the default-name text");
 assert.equal(id.pageAttachedNotice(D, true, "제목"), "🖼 화면과 내용을 코치에게 붙였어요 — 제목. 이제 질문을 입력해 보내세요.");
 assert.equal(id.pageAttachedNotice(D, false, "https://x"), "📄 내용을 코치에게 붙였어요 — https://x. 이제 질문을 입력해 보내세요.");
+// CGP-VOICE-R-010 — no page text: name only what went, and why.
+assert.equal(id.pageAttachedNotice(D, true, "제목", "이 페이지의 글은 보내지 않아요. 내 미리보기 페이지의 글만 보내요."), "🖼 화면 사진만 코치에게 붙였어요 — 제목. 이 페이지의 글은 보내지 않아요. 내 미리보기 페이지의 글만 보내요. 이제 질문을 입력해 보내세요.");
+assert.equal(id.pageAttachedNotice(D, false, "https://x", "이 페이지의 글은 보내지 않아요. 내 미리보기인지 확인할 수 없어요."), "📄 주소와 제목만 코치에게 붙였어요 — https://x. 이 페이지의 글은 보내지 않아요. 내 미리보기인지 확인할 수 없어요. 이제 질문을 입력해 보내세요.");
 const sp = id.startPageCopy();   // undefined name → default
 assert.equal(sp.startedTitle, "코치와 작업을 시작하세요");
 assert.equal(sp.continueButton, "코치와 계속 작업하기");
