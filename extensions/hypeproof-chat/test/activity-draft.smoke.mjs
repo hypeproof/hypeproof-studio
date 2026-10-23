@@ -20,7 +20,7 @@ try{
  const connections=new ActivityConnections(raw,()=> 'https://synthetic.invalid/v1',()=>root,async()=>{});
  await connections.commit('synthetic-credential',{activity_id:'a'.repeat(64),display_name:'Synthetic'},root);
  const proto=ChatPanelProvider.prototype,events=[];
- const host={context:connections.wrap(),draftWrites:Promise.resolve(),post:async msg=>events.push(msg)};
+ const host={confirmAnnotationLeave:async()=>true,context:connections.wrap(),draftWrites:Promise.resolve(),post:async msg=>events.push(msg)};
  const draft={text:'합성 초안',images:['data:image/png;base64,c3ludGhldGlj'],queued:'다음 합성 요청'};
  const source={postMessage:msg=>proto.handleMessage.call(host,{type:'saveActivityDraft',activityId:connections.scope,draft,nonce:msg.nonce},source)};
  await proto.handleMessage.call(host,{type:'saveActivityDraft',activityId:connections.scope,draft},source);

@@ -199,3 +199,21 @@ Common constraints for all rows below:
 8. **Office formats (ART-35, 36).** If a non-web track (dental admin, founder decks as PPTX) appears, revisit spreadsheet and presentation editing. Today CR-42 fixes HTML as the entry format.
 9. **Plugins, skills and auth rows (ART-56, 57, 58)** are inventoried here because their namespaces start with `browser*`. Parity decisions belong to the plugins, skills and account domain files. Check for duplicate IDs at merge.
 10. **Not verified at runtime.** All Studio coverage claims come from source and docs in the snapshot, not from running Studio. "No coverage found" means bounded searches of `extensions/hypeproof-chat/src`, `chalk/src/ui` and `docs/requirements`.
+
+### REQ-ART-03 implementation contract (CGP-ART-R-003)
+
+When unsent annotation drafts exist, leaving an activity or selecting/creating a
+task asks `보내지 않은 표시가 {n}개 있어요`. The first/default action and close
+affordance is `계속 고치기`; only explicit `버리기` permits deletion. Esc/dismiss
+keeps the draft. "프로젝트 변경" (command and chat sentence) and the missing-folder
+re-pick reload the window, so they ask first, before any clone or pull; keep moves nothing. A changed revision or activity while the dialog is open invalidates
+the answer. Renaming/recovering a draft and remote input freezing do not count as
+leaving. Unexpected task binding changes park drafts separately in memory, never
+attach them to the new activity, and restore them when returning in this window.
+
+Closing a browser preview invokes the same prompt for annotations captured from
+that tab. The BrowserTab API provides an after-close event, not a veto; closing
+the tab itself cannot be prevented. Drafts are retained until explicit discard.
+Returning to a reopened page still requires the existing generation/version checks
+before sending. Window/process termination persistence is outside this slice.
+PI #2: the learner owns the decision to keep or discard their unsent judgment.

@@ -439,6 +439,8 @@ export function orchestratorHostArgs(deps: {
 /** The director overview did not open: no instructor token, the Service said no, or it did not answer (source unknown). */
 const DIRECTOR_REVIEW_UNAVAILABLE = denialCopy({ source: "unknown", feature: "주간 리뷰 디렉터 화면", reason: "강사 토큰이 없거나, 서비스가 이 화면을 열어 주지 않았어요", next: "강사 토큰을 확인한 뒤 다시 열어 보세요" });
 
+/** Shown when the learner keeps unsent annotations instead of leaving (REQ-ART-03). */
+const ANNOTATION_LEAVE_KEPT = '표시를 그대로 두었어요. 계속 고친 뒤 다시 활동을 바꿔 주세요.';
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
   /** #897 H-13 — has the model-substitution notice already been attached to this turn? One turn per seat (REQ-M37 ③). */
@@ -616,7 +618,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         try {
           if (source) this.draftSource = source;
           let recoveryDraft: ActivityDraft | undefined;
-          await this.setConnectionChanging(true, msg.type === 'taskRecoverDraft' ? draft => { recoveryDraft = draft; } : undefined);
+          await this.setConnectionChanging(true, msg.type === 'taskRecoverDraft' ? draft => { recoveryDraft = draft; } : undefined, msg.type === 'taskCreate' || msg.type === 'taskSelect');
           if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) throw new Error('열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
           await this.retryInterruptedHistory();
           const expected = { taskId: msg.taskId, revision: store.getView().revision };
@@ -1209,7 +1211,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       catch (error) { if (error instanceof FolderConsentRefusal) { note = error.message; return; } throw error; }
       if (!consent) { note = MISSING_TASK_FOLDER_UNDECIDED; return; }
       if (consent === "none") { note = MISSING_TASK_FOLDER_NO_AI; return; }
-      await this.setConnectionChanging(true);
+      try { await this.setConnectionChanging(true); }
+      catch (error) { note = error instanceof ActivityConnectionError ? error.message : MISSING_TASK_FOLDER_FAILED; return; }
       try {
         if (!(await this.carryTaskStoreTo(choice.folder))) { note = MISSING_TASK_FOLDER_FAILED; return; }
         await this.projectOpener(choice.folder);
@@ -1243,6 +1246,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** "프로젝트 변경" — the command and the chat sentence (isProjectSwitchRequest) both land here. */
   async switchProject(): Promise<void> {
+    // REQ-ART-03: the window reload at the end of this move loses in-memory annotations, so the leave gate runs
+    // before the clone/pull below touches the disk. A refusal leaves everything as it was.
+    if (!(await this.confirmAnnotationLeave())) { this.postPageNotice('표시를 그대로 두었어요. 계속 고친 뒤 다시 프로젝트를 바꿔 주세요.'); return; }
     const profile = this.cachedProfile ?? (await this.ensureProfile());
     const served = this.servedWorkspaceRoot ?? profile?.workspace_root;
     const classRoot = served ? resolveWorkspaceRoot(served) ?? undefined : undefined;
@@ -1489,6 +1495,36 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _annotationBatch?: AnnotationBatch;
   private get annotationBatch(): AnnotationBatch { return this._annotationBatch ??= new AnnotationBatch(); }
   private annotationBoundScope?: string;
+  private annotationPreviewTabs?: Map<vscode.BrowserTab, string>;
+  private annotationLeavePending = false;
+  /** REQ-ART-03: no action or dismissed dialog is permission to discard unsent work. */
+  async confirmAnnotationLeave(): Promise<boolean> {
+    this.syncAnnotationScope();
+    if (!this.annotationBatch.size) return true;
+    if (this.annotationLeavePending) return false;
+    this.annotationLeavePending = true;
+    const scope = this.annotationScope(), revision = this.annotationBatch.revision;
+    try {
+      const answer = await vscode.window.showWarningMessage(
+        `보내지 않은 표시가 ${this.annotationBatch.size}개 있어요`, { modal: true },
+        { title: '계속 고치기', isCloseAffordance: true }, { title: '버리기' },
+      );
+      if (answer?.title !== '버리기' || scope !== this.annotationScope() || !this.annotationBatch.discard(revision)) return false;
+      await this.mcpBrowser?.clearAnnotationMarkers?.().catch(() => {});
+      this.annotationPreviewTabs?.clear();
+      this.postAnnotations();
+      return true;
+    } finally { this.annotationLeavePending = false; }
+  }
+  private async annotationPreviewClosed(tab: vscode.BrowserTab): Promise<void> {
+    const scope = this.annotationPreviewTabs?.get(tab);
+    this.annotationPreviewTabs?.delete(tab);
+    if (!scope || scope !== this.annotationScope() || !this.annotationBatch.size) return;
+    // The browser API reports an already closed tab; keep the draft even when closure cannot be vetoed.
+    await this.confirmAnnotationLeave();
+    this.postAnnotations();
+  }
+
   private syncAnnotationScope(): void {
     const scope = this.annotationScope();
     if (scope !== this.annotationBoundScope) {
@@ -1535,7 +1571,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return [];
     }
     // The activity or task changed during this send: a draft pinned at its start went with the old
-    // task (the sync above dropped it), so the send is refused and says so, never sent without it.
+    // task (the sync above parked it), so the send is refused and says so, never sent without it.
     if (scope !== this.annotationScope()) { if (pinnedCount > 0) throw new AnnotationRefusal(ANNOTATION_REFUSAL.activity); return []; }
     if (!this.annotationBatch.size) return [];
     const identity = await this.mcpBrowser?.annotationIdentity().catch(() => null);
@@ -2519,6 +2555,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const d = event?.(() => this.schedulePreviewRecovery());
       if (d) context.subscriptions.push(d);
     }
+    const annotationClose = vscode.window.onDidCloseBrowserTab?.(tab => { void this.annotationPreviewClosed(tab).catch(() => {}); });
+    if (annotationClose) context.subscriptions.push(annotationClose);
     context.subscriptions.push({ dispose: () => clearTimeout(this.previewRecoveryTimer) });
   }
 
@@ -3177,6 +3215,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const identity = await this.mcpBrowser.annotationIdentity();
       if (captured.contexts.some(c => c.documentGeneration !== identity.generation || c.artifact.id !== identity.artifactId)) throw new Error("화면이 바뀌었어요. 다시 골라 주세요.");
       const a = this.annotationBatch.add(kind, captured.contexts, captured.crop);
+      const annotationTab = this.mcpBrowser.currentTab();
+      if (annotationTab) (this.annotationPreviewTabs ??= new Map()).set(annotationTab, scope);
       await this.mcpBrowser.annotationMarker(a.number, a.crop!.clip);
       this.postAnnotations();
       await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
@@ -3457,7 +3497,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private draftWrites: Promise<void> = Promise.resolve();
   private draftSource?: vscode.Webview;
   private draftFlush?: {nonce:string;source:vscode.Webview;resolve:()=>void;reject:(e:Error)=>void;capture?:(draft:ActivityDraft)=>void};
-  async setConnectionChanging(value: boolean, capture?: (draft: ActivityDraft) => void): Promise<void> {
+  async setConnectionChanging(value: boolean, capture?: (draft: ActivityDraft) => void, leaving = true): Promise<void> {
+    if (value && leaving && !await this.confirmAnnotationLeave()) throw new ActivityConnectionError(ANNOTATION_LEAVE_KEPT);
     this.connectionChanging = value;
     if (value) { this.personalContinuationPane?.dispose(); this.personalContinuationPane = undefined; }
     if (!activityConnections(this.context)) return;
@@ -3541,7 +3582,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.observationAssessment?.abort();
   }
   /** Freeze + confirmed draft save, reusing the activity-switch path. */
-  async opsFreezeInput(frozen: boolean): Promise<void> { await this.setConnectionChanging(frozen); }
+  async opsFreezeInput(frozen: boolean): Promise<void> { await this.setConnectionChanging(frozen, undefined, false); }
   /** Digests only — the conversation itself never leaves this process. Reads; never writes or clears. */
   async opsPreservation(): Promise<{ history_count: number; history_sha256: string; draft_sha256: string | null; spool_session: string | null; spool_flushed: boolean }> {
     const history = this.getHistory();

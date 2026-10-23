@@ -4785,3 +4785,9 @@ opens the exact file list and audience, and lets the learner continue on that li
 the same bytes, so a load timeout is not an unknown preview and authorizes nothing
 by itself. Workspace-only files are inaccessible. See the CGP-KNOW-R-034
 implementation contract for network restrictions and evidence.
+
+### REQ-ART-03 — Keep or discard unsent annotations
+
+Activity/task transitions and preview close require the explicit annotation
+leave decision described in the CGP-ART-R-003 implementation contract. Default
+and Esc keep the draft; discard is scoped to the unchanged draft revision.
