@@ -22,6 +22,7 @@ import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRunti
 import type { BrowserToolsForLocal } from './localRuntime';
 import { FREE_DAILY_CAP_NOTICE, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
+import { openPersonalContinuation } from "./personalContinuationHost";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
 import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
@@ -2476,6 +2477,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * from a card that was never drawn (code-issued trial, pass) or from an older seat sends nothing.
    */
   private endCardOfferToken: string | null = null;
+  private personalContinuationPane?: vscode.Disposable;
+  private personalContinuationOpening = false;
   private readonly artifactGate = new ArtifactChangeGate();
 
   constructor(
@@ -3309,6 +3312,37 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.getHistory();
   }
 
+  /** Explicit personal text continuation; never alters the Service runtime or tool grants. */
+  private async openPersonalClaude(draft: unknown): Promise<void> {
+    if (this.personalContinuationOpening || this.taskChanging || this.connectionChanging || this.activeStreams.size || !this.currentTaskStore?.()?.getView().activeTaskId || this.cachedProfile?.lesson || !endCardAdvertised(this.cachedProfile) || this.cachedProfile?.minor_cohort === true || this._instructorMode.isInstructor || !this.endCardOfferToken || typeof draft !== 'string' || draft.length > 24000) return;
+    this.personalContinuationOpening = true;
+    const token = this.endCardOfferToken;
+    const scope = () => JSON.stringify([this.profileGeneration, activityConnections(this.context)?.scope, this.currentTaskStore?.()?.getView().activeTaskId, this.resolveCoachCwd()]);
+    const bound = scope();
+    const current = () => scope() === bound && this.endCardOfferToken === token && endCardAdvertised(this.cachedProfile) && !this.cachedProfile?.lesson && !this.activeStreams.size && this.cachedProfile?.minor_cohort !== true && !this._instructorMode.isInstructor && !this.taskChanging && !this.connectionChanging;
+    try {
+      if (await this.context.secrets.get(TOKEN_KEY) !== token || !current()) return;
+      const history = this.getHistory().filter((m): m is ChatMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: m.content }));
+      const lastRequest = this.retryMessages().filter(m => m.role === 'user').at(-1)?.content ?? '';
+      this.personalContinuationPane?.dispose();
+      this.personalContinuationPane = openPersonalContinuation({
+        projectLabel: path.basename(this.resolveCoachCwd() ?? '') || '현재 작업',
+        draft: draft || lastRequest,
+        history,
+        isCurrent: current,
+        commitReply: async result => {
+          if (!current()) throw new Error('activity_changed');
+          await this.appendHistory([
+            { id: `personal-${result.id}-user`, role: 'user', content: result.prompt, createdAt: Date.now() },
+            { id: `personal-${result.id}-assistant`, role: 'assistant', content: result.text, createdAt: Date.now(), assistantName: result.source === 'manual' ? 'Claude Code · 직접 가져온 답변' : 'Claude Code · 개인 계정' },
+          ]);
+          if (current()) await this.post({ type: 'history', messages: this.getHistory() });
+        },
+      });
+      this.context.subscriptions.push(this.personalContinuationPane);
+    } finally { this.personalContinuationOpening = false; }
+  }
+
   /**
    * Just before the lesson log is sealed, leave the work folder's real index.html as
    * the last piece of evidence. If the child edited the file by hand after the last
@@ -3423,6 +3457,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private draftFlush?: {nonce:string;source:vscode.Webview;resolve:()=>void;reject:(e:Error)=>void;capture?:(draft:ActivityDraft)=>void};
   async setConnectionChanging(value: boolean, capture?: (draft: ActivityDraft) => void): Promise<void> {
     this.connectionChanging = value;
+    if (value) { this.personalContinuationPane?.dispose(); this.personalContinuationPane = undefined; }
     if (!activityConnections(this.context)) return;
     await this.post({type:'activityFreeze',frozen:value});
     if (!value) return;
@@ -3702,6 +3737,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Force re-fetch on next config push (e.g. after token change). */
   invalidateProfile(): void {
+    this.personalContinuationPane?.dispose(); this.personalContinuationPane = undefined;
     this.writeApprovalRequest?.cancel();
     this.outboundApproval?.cancel();
     this.profileGeneration++;
@@ -6195,6 +6231,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "trialEndCardDismiss":
         // CONV-FUNNEL-R-003 — the card's escape (오늘은 여기까지). The webview closes the card itself.
         this.emitEndCardOffer("offer_dismissed");
+        return;
+      case "trialEndCardClaude":
+        await this.openPersonalClaude(msg.draft);
         return;
       case "notifyOptinSubmit":
       case "notifyOptinWithdraw":

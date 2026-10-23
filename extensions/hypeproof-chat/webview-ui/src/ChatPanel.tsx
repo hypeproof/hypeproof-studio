@@ -1817,9 +1817,9 @@ export function ChatPanel(props: Props) {
           onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
           onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
           onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
-          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
+          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
         </ActivityStatus> : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
-          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
+          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
         ) : error && (
           <ErrorBanner
             message={error}

@@ -668,6 +668,7 @@ export type WebviewMessage = (
   | { type: "trialEndCardPasses"; surface?: "header_menu" }
   /** CONV-FUNNEL-R-003 — the person pressed the end card's escape (오늘은 여기까지); the webview closes the card. */
   | { type: "trialEndCardDismiss" }
+  | { type: "trialEndCardClaude"; draft: string }
   /** TUX-COND-08 — the optional email on the end card. The address goes to the host and on to the Service only. */
   | { type: "notifyOptinSubmit"; email: string }
   | { type: "notifyOptinWithdraw" }
