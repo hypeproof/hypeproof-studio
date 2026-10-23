@@ -2872,6 +2872,15 @@ built** (see below and "Not built"). Built:
   `기록 없음` last, at most 100 rows with a "파일 N개는 더 있어서…" line. This panel was chosen because
   it is the task workspace's only persistent listing surface; the turn review bar is replaced by the
   next turn and the publish panel lists one version's files. No score, percentage or capability name.
+  CGP-KNOW-D-012 / DES-KNOW-21 wraps the recorded glyph and label in a bordered text chip,
+  distinct by words and glyph shape rather than hue. It uses the current 14px text floor
+  instead of the research row's 11–12px, at least 4.5:1 foreground/background contrast,
+  and system colors in forced-colors mode. Long paths/history remain outside the chip;
+  the label does not truncate. The existing conservative `기록 없음` vocabulary and the
+  absence of unproven `내가 고침` attribution remain explicit gaps against DES-KNOW-21.
+  `test/provenance-chip-computed.smoke.mjs` measures built CSS and real list markup in
+  dark/light,320/800/1420,normal/forced colors, including classroom-style robustness
+  contexts (not a claim that the classroom product exposes this list).
 
 Not built: **the `내가 고침` label (CGP-KNOW-R-012 / REQ-KNOW-21, follow-up).** It needs a source of
 learner authorship that survives VS Code's measured event order: for example a Studio-owned editor
