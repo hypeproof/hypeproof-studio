@@ -11236,6 +11236,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/personal-continuation-cli.smoke.mjs"
+        },
+        {
+          "path": "e2e/customer-claude/run.mjs"
         }
       ]
     }
