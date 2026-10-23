@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { checkTransport, source, tokenCss, transport } from '../../../scripts/sync-design-tokens.mjs';
+import { checkTransport, source, typographySource, tokenCss, transport } from '../../../scripts/sync-design-tokens.mjs';
 import { staticTokens } from './lib/design-token-values.mjs';
 import { withDesignTokens, DESIGN_TOKENS } from '../../../chalk/src/lib/design-tokens.ts';
 const require = createRequire(new URL('../webview-ui/package.json', import.meta.url));
@@ -57,6 +57,7 @@ function lint(text, file) {
 const src = new URL('../webview-ui/src/', import.meta.url);
 function walk(dir) { return readdirSync(dir,{withFileTypes:true}).flatMap(e => e.isDirectory()?walk(new URL(e.name+'/',dir)):[new URL(e.name,dir)]); }
 for (const file of walk(src).filter(f=>f.pathname.endsWith('.css') && f.href!==source.href)) lint(readFileSync(file,'utf8'),file.pathname);
+lint(readFileSync(typographySource,'utf8'), typographySource.pathname);
 assert.match(readFileSync(new URL('tokens.css',src),'utf8'), /^@import "\.\/designTokens\.css";/, 'Studio token entry imports canonical source');
 assert.match(readFileSync(new URL('main.tsx',src),'utf8'), /import "\.\/tokens\.css";/, 'Studio imports token entry');
 checkTransport();

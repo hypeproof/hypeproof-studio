@@ -574,6 +574,10 @@
   --ds-p-control-lg: 48px;
 }
 :root, [data-theme="dark"], .vscode-dark {
+  --ds-s-typography-ui: var(--ds-p-136);
+  --ds-s-typography-content: var(--ds-p-136);
+  --ds-s-typography-code: var(--ds-p-184);
+
   --ds-s-modal-max: var(--ds-p-60);
   --ds-s-modal-gutter: var(--ds-p-5);
   --ds-s-modal-min: var(--ds-p-51);
@@ -1271,6 +1275,10 @@
   --ds-s-control-lg: var(--ds-p-control-lg);
 }
 [data-theme="light"], .vscode-light {
+  --ds-s-typography-ui: var(--ds-p-136);
+  --ds-s-typography-content: var(--ds-p-136);
+  --ds-s-typography-code: var(--ds-p-184);
+
   --ds-s-modal-max: var(--ds-p-60);
   --ds-s-modal-gutter: var(--ds-p-5);
   --ds-s-modal-min: var(--ds-p-51);
@@ -1968,6 +1976,9 @@
   --ds-s-control-lg: var(--ds-p-control-lg);
 }
 :root, body {
+  --ds-c-typography-ui: var(--ds-s-typography-ui);
+  --ds-c-typography-content: var(--ds-s-typography-content);
+  --ds-c-typography-code: var(--ds-s-typography-code);
   --ds-c-chalk-list-row: var(--ds-s-control-md);
   --ds-c-chalk-list-icon-size: var(--ds-s-size-30);
   --ds-c-chalk-list-fade-bottom: var(--ds-s-size-23);

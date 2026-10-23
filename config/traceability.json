@@ -11489,6 +11489,72 @@
           "path": "extensions/hypeproof-chat/test/class-window-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-FONT-ROLES",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md"
+        },
+        {
+          "path": "docs/design/studio-learning-experience.md"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/visual-system.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-FONT-ROLES",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-FONT-ROLES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/outboundDialog.css"
+        },
+        {
+          "path": "chalk/src/lib/typography.css"
+        },
+        {
+          "path": "scripts/sync-design-tokens.mjs"
+        },
+        {
+          "path": "chalk/src/lib/design-tokens.ts"
+        },
+        {
+          "path": "config/design-tokens.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-FONT-ROLES",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-FONT-ROLES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/font-roles-computed.smoke.mjs"
+        },
+        {
+          "path": "scripts/test/design-tokens-manifest.test.mjs"
+        }
+      ]
     }
   ]
 }
