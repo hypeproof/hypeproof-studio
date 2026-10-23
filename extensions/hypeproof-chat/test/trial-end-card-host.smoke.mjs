@@ -55,6 +55,12 @@ test('personal continuation entry rechecks the actual host seat, active task and
   changed.context.secrets.get = async () => { changed.profileGeneration++; return 'current-offer'; };
   await ChatPanelProvider.prototype.openPersonalClaude.call(changed, 'Unsent draft');
   assert.equal(panels, 1, 'seat change while checking credential invalidates entry');
+  for (const mutate of [self => { self.cachedProfile = { ...self.cachedProfile, lesson: {} }; }, self => { self.activeStreams.set('new-turn', {}); }]) {
+    const racing = make();
+    racing.context.secrets.get = async () => { mutate(racing); return 'current-offer'; };
+    await ChatPanelProvider.prototype.openPersonalClaude.call(racing, 'Unsent draft');
+    assert.equal(panels, 1, 'lesson or active turn arriving during credential lookup prevents entry');
+  }
 });
 
 let ChatPanelProvider;

@@ -3319,7 +3319,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const token = this.endCardOfferToken;
     const scope = () => JSON.stringify([this.profileGeneration, activityConnections(this.context)?.scope, this.currentTaskStore?.()?.getView().activeTaskId, this.resolveCoachCwd()]);
     const bound = scope();
-    const current = () => scope() === bound && this.endCardOfferToken === token && endCardAdvertised(this.cachedProfile) && this.cachedProfile?.minor_cohort !== true && !this._instructorMode.isInstructor && !this.taskChanging && !this.connectionChanging;
+    const current = () => scope() === bound && this.endCardOfferToken === token && endCardAdvertised(this.cachedProfile) && !this.cachedProfile?.lesson && !this.activeStreams.size && this.cachedProfile?.minor_cohort !== true && !this._instructorMode.isInstructor && !this.taskChanging && !this.connectionChanging;
     try {
       if (await this.context.secrets.get(TOKEN_KEY) !== token || !current()) return;
       const history = this.getHistory().filter((m): m is ChatMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: m.content }));
