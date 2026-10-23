@@ -1610,7 +1610,17 @@ instructor hold on new AI runs still refuses that send and keeps the text (`inpu
 offered on a paused kept item, while a product test holds the tab (`sendLocked`), or when the panel
 cannot send. 44 px target, Korean label, a real button in the tab order, no capability labels.
 Not built: true mid-turn delivery (the register's "send into the running turn" degrades to stop and
-resend until a runtime accepts mid-turn input), and the 140 ms exit animation of CGP-CHAT-D-012.
+resend until a runtime accepts mid-turn input).
+CGP-CHAT-D-012 retains a passive "보내는 중…" row after the steer submits. Posting alone never
+starts its exit: the first subsequent user line must match the parked text and its ID must be
+named by `streamStart`. Only then does the row fade out over 140 ms while that user line is in
+the transcript. Reduced motion removes it without animation. Refusal, pre-start error and
+activity/task changes clear this presentation; existing host recovery still preserves the text.
+The passive row has no resend/cancel controls and never sends anything. If the disappearing steer
+button still owned focus, focus returns to the composer; a later focus choice is preserved.
+`test/steer-delivery-computed.smoke.mjs` mounts the real panel/built styles in personal/classroom,
+dark/light, 320/800/1420 px and forced colors; it measures the secondary button, focus ring,
+host-confirmed animation duration/removal and transcript, with refusal/scope/reduced-motion cases.
 Pure decisions in `webview-ui/src/steerNow.ts`; ChatPanel wiring is the press handler, the edge's
 `cutOff`, the marker and the button. Tests: `test/steer-settle.smoke.mjs` (the actual provider with a
 scripted runtime and a same-process folder lock: stop, then an immediate send is accepted and its
