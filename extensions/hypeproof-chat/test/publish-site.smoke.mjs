@@ -82,6 +82,7 @@ function deps(gh, root, extra = {}) {
   const c = clock();
   let n = 0;
   const d = {
+    previewVisitor: async () => true,
     confirmContent: async () => true,
     fetch: gh.fetch,
     sleep: c.sleep,
@@ -721,4 +722,32 @@ console.log("\n✓ publish-site smoke 통과");
  await runPublishSite({},deps(gh,root,{confirmContent:capture}));
  assert.equal(shown.recipient,'GitHub · github.com/octo-clinic/neo-dental · 사이트 www.example.org','existing CNAME is disclosed on republish');assert.equal(shown.public,true,'republishing an already-public site asks the public step again');
  ok('public destination hosts: save, planned Pages, custom domain and existing CNAME');
+}
+
+// REQ-KNOW-63: preview is before every remote write, including an already registered repo.
+{
+ for (const previewVisitor of [undefined, async () => false]) {
+  const gh=createMockGitHub();
+  const result=await runPublishSite({},deps(gh,site({...GOOD_SITE}),{previewVisitor}));
+  assert.equal(result.error?.code,'declined');
+  assert.equal(gh.state.log.filter(l=>/^(POST|PUT|PATCH|DELETE)/.test(l)).length,0,'preview refusal makes no GitHub mutation');
+ }
+ // The preview names the same destination as the send consent, repository included, plus the
+ // public audience; and its files are exactly the pushed tree, generated files included.
+ for (const input of [{}, {custom_domain:'www.neodental.co.kr'}]) {
+  let preview, shown;
+  const gh=createMockGitHub();
+  const r=await runPublishSite(input,deps(gh,site({...GOOD_SITE}),{previewVisitor:async s=>{preview={...s,files:s.files.map(f=>({path:f.path,data:Buffer.from(f.data)}))};return true;},confirmContent:async m=>{shown=m;return true;}}));
+  assert.equal(r.ok,true,JSON.stringify(r.error));
+  assert.equal(preview.entry,'index.html');
+  assert.match(shown.recipient,/github\.com\/octo-clinic\/neo-dental/);
+  assert.equal(preview.audience,`${shown.recipient} · 인터넷의 누구나`,'preview audience = consent recipient (repo and host) + public');
+  const pushed=tree(gh,'neo-dental');
+  const previewed=new Map(preview.files.map(f=>[f.path,f.data.toString('utf8')]));
+  assert.deepEqual([...previewed.keys()].sort(),[...pushed.keys()].sort(),'previewed paths = pushed tree');
+  for(const [path,text] of pushed)assert.equal(previewed.get(path),text,`previewed bytes = pushed bytes: ${path}`);
+  for(const generated of ['.nojekyll','.github/workflows/pages.yml','hps-build.txt',...(input.custom_domain?['CNAME']:[])])assert.ok([...previewed.keys()].some(p=>p.startsWith(generated)),`generated file previewed: ${generated}`);
+  assert.deepEqual(shown.items.map(i=>i.name).sort(),[...pushed.keys()].sort(),'consent list = pushed tree');
+ }
+ console.log('PASS visitor preview: site gate, audience equals recipient, files equal pushed tree');
 }

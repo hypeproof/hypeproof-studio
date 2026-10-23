@@ -111,7 +111,7 @@ let pass = 0; const ok = label => { pass++; console.log('  ok   ' + label); };
     const project = { id: 'prj-synthetic', title: 'project', members: ['synthetic'] };
     const state = { project, test_origin: null, versions: [{ id: 'v1', files: [{ path: 'index.html', bytes: 11, sha256: 'a' }] }], hypotheses: [], experiments: [{ id: 'exp-1', product_version_id: 'v1' }], links: [] };
     let calls = [];
-    const ports = { switchOn: () => true, scopeKey: () => 'one', confirmOutbound, token: async () => 't', base: () => 'https://service.invalid/v1/curriculum', root: () => root, entry: () => '/index.html', events: async () => [], projectId: () => project.id, setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'title', qr: u => u, privateDirectories: () => [],
+    const ports = { previewVisitor:async()=>true, switchOn: () => true, scopeKey: () => 'one', confirmOutbound, token: async () => 't', base: () => 'https://service.invalid/v1/curriculum', root: () => root, entry: () => '/index.html', events: async () => [], projectId: () => project.id, setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'title', qr: u => u, privateDirectories: () => [],
       fetchImpl: async (u, i) => { calls.push([u, i?.method ?? 'GET']); if ((i?.method ?? 'GET') !== 'GET') return Response.json(new URL(u).pathname.endsWith('/experiments') ? { experiment: { id: 'exp-synthetic' } } : new URL(u).pathname.includes('/versions/') ? { version: { id: 'v' }, created: true } : { share_url: 'https://test.invalid/l/1' }); return Response.json(new URL(u).pathname.endsWith('/projects') ? { projects: [project] } : state); } };
     const form = { question: 'q', method: 'task_test', success_criteria: ['c'], hypothesis: 'h', expires_in_days: 1 };
     const session = new PublishSession(ports);
@@ -119,7 +119,7 @@ let pass = 0; const ok = label => { pass++; console.log('  ok   ' + label); };
     const PATHS = {
       'test-version publish': async () => (await session.submit({ ...form })).ok,
       'share link': async () => (await session.link('exp-1', { expires_in_days: 1 })).ok,
-      'gallery publish': async () => (await publishWorldConfirmed({ siteBase: 'https://gallery.invalid', token: 't', worldId: 'w', title: '작품', html: '<p>x</p>', fetchImpl: async (u, i) => { calls.push([u, i?.method ?? 'GET']); return Response.json({ ok: true, url: '/w/1' }); } }, confirmOutbound, async () => true, null)).ok,
+      'gallery publish': async () => (await publishWorldConfirmed({ previewVisitor:async()=>true, siteBase: 'https://gallery.invalid', token: 't', worldId: 'w', title: '작품', html: '<p>x</p>', fetchImpl: async (u, i) => { calls.push([u, i?.method ?? 'GET']); return Response.json({ ok: true, url: '/w/1' }); } }, confirmOutbound, async () => true, null)).ok,
     };
     for (const [name, run] of Object.entries(PATHS)) {
       for (const [label, presenter, sent] of [

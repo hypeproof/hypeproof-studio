@@ -11308,6 +11308,68 @@
           "path": "extensions/hypeproof-chat/test/coach-identity.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-VISITOR-PREVIEW",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-OUTBOUND-CONSENT"
+      ],
+      "sources": [
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md",
+          "section": "### REQ-KNOW-63 implementation contract (CGP-KNOW-R-034)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VISITOR-PREVIEW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VISITOR-PREVIEW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/visitorPreview.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/visitorPreviewHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publishSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/galleryPublish.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/publishSite.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VISITOR-PREVIEW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VISITOR-PREVIEW",
+        "ST-IMP-VISITOR-PREVIEW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/visitor-preview.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/visitor-preview-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/publish-site.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/visitor-preview-host.smoke.mjs"
+        }
+      ]
     }
   ]
 }

@@ -27,13 +27,13 @@ assert.equal(outboundDetails({recipient:'x',items:[{name:'a',bytes:NaN}]}),null)
 for(const file of ['wiki/a.md','NOTES/a.md','ｎｏｔｅｓ/a.md','.memory/a','memory\\a'])assert.ok(privateOutboundPath(file));
 assert.ok(privateOutboundPath('learning/journal/a.md','learning/journal'));assert.ok(!privateOutboundPath('index.html'));
 let calls=[],shown;
-const input={siteBase:'https://gallery.invalid',token:'synthetic',worldId:'world',title:'작품',html:'<p>한😀</p>',fetchImpl:async(u,i)=>{calls.push(JSON.parse(i.body));return Response.json({ok:true,url:'/w/1'});}};
+const input={previewVisitor:async()=>true,siteBase:'https://gallery.invalid',token:'synthetic',worldId:'world',title:'작품',html:'<p>한😀</p>',fetchImpl:async(u,i)=>{calls.push(JSON.parse(i.body));return Response.json({ok:true,url:'/w/1'});}};
 assert.equal((await publishWorldConfirmed(input,async m=>(shown=m,false),async()=>true)).ok,false);assert.equal(calls.length,0);
 assert.equal(shown.items[0].bytes,Buffer.byteLength(input.html));
 assert.equal((await publishWorldConfirmed(input,async()=>true,async()=>false)).ok,false);assert.equal(calls.length,0);
 { // The account or activity can change while the dialog is open: the approval was for the old one, so nothing is sent.
  let open=false,n=0;const r=await publishWorldConfirmed(input,async()=>{open=true;return true;},async()=>{n++;return !open;});
- assert.equal(r.ok,false);assert.equal(calls.length,0,'identity/activity changed during the dialog: zero publish POSTs');assert.equal(n,2,'checked before and again after the dialog'); }
+ assert.equal(r.ok,false);assert.equal(calls.length,0,'identity/activity changed during the dialog: zero publish POSTs');assert.equal(n,3,'checked before preview, after preview, and after the dialog'); }
 { let sent=0;const record={recipient:'수업 기록 운영자 · api.invalid',items:[{name:'events.jsonl',bytes:9}],send:async()=>{sent++;}};
  calls=[];assert.equal((await publishWorldConfirmed(input,async m=>(shown=m,false),async()=>true,record)).ok,false);assert.equal(calls.length,0);assert.equal(sent,0,'Cancel: no page and no session record');
  assert.deepEqual(shown.also,[{recipient:record.recipient,items:record.items}],'the session record is its own block in the gallery dialog');
@@ -68,7 +68,7 @@ try {
  const project={id:'prj-synthetic',title:'project',members:['synthetic']};
  const state={project,test_origin:null,versions:[{id:'v',files:[{path:'approved.html',bytes:7,sha256:'a'}]}],hypotheses:[],experiments:[{id:'exp-synthetic',product_version_id:'v'}],links:[]};
  let generation='one',confirm=async m=>(shown=m,false);calls=[];
- const ports={switchOn:()=>true,scopeKey:()=>generation,confirmOutbound:m=>confirm(m),token:async()=> 't',base:()=> 'https://service.invalid/v1/curriculum',root:()=>root,entry:()=>'/index.html',events:async()=>[],projectId:()=>project.id,setProjectId:async()=>{},week:()=>1,defaultTitle:()=> 'title',qr:u=>u,fetchImpl:async(u,i)=>{calls.push([u,i]);if((i?.method??'GET')!=='GET')return Response.json(new URL(u).pathname.endsWith('/experiments')?{experiment:{id:'exp-synthetic'}}:{share_url:'https://test.invalid/l/1'});return Response.json(new URL(u).pathname.endsWith('/projects')?{projects:[project]}:state);}};
+ const ports={previewVisitor:async()=>true,switchOn:()=>true,scopeKey:()=>generation,confirmOutbound:m=>confirm(m),token:async()=> 't',base:()=> 'https://service.invalid/v1/curriculum',root:()=>root,entry:()=>'/index.html',events:async()=>[],projectId:()=>project.id,setProjectId:async()=>{},week:()=>1,defaultTitle:()=> 'title',qr:u=>u,fetchImpl:async(u,i)=>{calls.push([u,i]);if((i?.method??'GET')!=='GET')return Response.json(new URL(u).pathname.endsWith('/experiments')?{experiment:{id:'exp-synthetic'}}:{share_url:'https://test.invalid/l/1'});return Response.json(new URL(u).pathname.endsWith('/projects')?{projects:[project]}:state);}};
  const pub=new PublishSession(ports);
  assert.equal((await pub.submit(form)).ok,false);assert.ok(!calls.some(([,i])=>/^(POST|PUT|PATCH|DELETE)$/.test(i?.method??'GET')));
  calls=[];assert.equal((await pub.link('exp-synthetic',{expires_in_days:1})).ok,false);assert.equal(shown.items[0].name,'approved.html');assert.ok(!calls.some(([,i])=>/^(POST|PUT|PATCH|DELETE)$/.test(i?.method??'GET')));

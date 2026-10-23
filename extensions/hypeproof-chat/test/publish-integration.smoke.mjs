@@ -83,6 +83,7 @@ const auth = createGhCliAuthProvider({ execFile, platform: process.platform, ghP
 const steps = [];
 try {
   const r = await runPublishSite({}, {
+    previewVisitor: async () => true,
     confirmContent: async () => true,
     fetch,
     sleep: (ms) => new Promise((res) => setTimeout(res, ms)),

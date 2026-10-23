@@ -301,3 +301,62 @@ The in-panel outbound dialog (CGP-KNOW-D-006) shows memory items in their own gr
 - The summary is a 44px keyboard target inside the dialog's focus trap (Enter and Space toggle natively). Reopening a prompt starts collapsed again.
 - Presentation only: which files are memory, and when one may be listed, stays CGP-KNOW-R-033's host rule. The VS Code modal fallback is unchanged.
 - Evidence: `test/outbound-dialog.test.tsx`, `test/outbound-dialog-styles.smoke.mjs` and a headless Chromium render of both seats, both themes, at 1420 and 800 px. No installed-app run.
+
+### REQ-KNOW-63 implementation contract (CGP-KNOW-R-034)
+
+Before gallery, user-test version, or site publication, an in-App visitor preview
+shows the immutable outbound file snapshot and the destination audience. Test
+versions use `buildPublishSet`; gallery uses its single inlined `index.html`; site
+publication uses the same frozen site files and generated files that it uploads.
+An isolated loopback server serves only that snapshot, never the workspace.
+Closing or cancelling preview, missing preview support, an unknown or foreign
+preview origin (a message that is not this panel host's nonce-bound signal), or an
+activity/account change refuses publication. Existing content and public-audience
+consent follow the preview. Saving to GitHub without site deployment retains its
+content consent.
+
+Load-timeout fallback (owner decision, 2026-10-23). If the frame has not loaded and
+the host has not reported the served entry within `VISITOR_FALLBACK_MS` (15 s), the
+panel says the screen could not be shown, opens the exact file list and audience,
+and relabels the button `화면 없이 목록 확인 · 다음`. This is kept, not failed closed,
+because the existing send consent still follows with the same recipient and the
+same bytes: a load timeout only skips the visual view, it never authorizes a send
+and is not an unknown preview. An unknown or foreign preview origin still fails
+closed.
+
+The preview deliberately blocks external connections, frames, forms, workers and
+device permissions. It is a local view of the selected files, not proof of the
+remote site's login, network integrations, or deployed browser behavior.
+
+Fix round 1 (2026-10-23):
+- The site preview and the send consent are built from one recipient string and one
+  file list, and that same list is pushed: the preview audience is the consent
+  recipient (repository and site host) plus `인터넷의 누구나`, and its files equal the
+  pushed tree, generated files included.
+- 미리보기 확인 · 다음 unlocks only after the frame fires `load` and the host reports,
+  with the panel nonce, that the snapshot server served the entry page; a message from
+  the framed page is ignored. If that has not happened within 15 s, the panel says
+  `이 창에서 미리보기 화면을 열지 못했어요.`, opens the file list and relabels the
+  button `화면 없이 목록 확인 · 다음`; the send consent still follows.
+- The file-list summary, 취소 and 다음 are 44px targets with a 2px focus ring, also in
+  forced colours. The panel may frame only the snapshot origin.
+- The snapshot server names common static-site types (`.mjs` as `text/javascript`,
+  images, fonts, audio, video); unknown types are `text/plain`.
+- The preview hook is a required dependency of all three publish paths, so a caller
+  that drops the wiring fails to compile.
+
+Fix round 2 (2026-10-23):
+- Gallery builds one recipient for the preview and the consent; tests assert the
+  preview audience is exactly that recipient plus `인터넷의 누구나` and that the
+  previewed bytes equal the sent `index.html`.
+- Isolation is tested in headless Chromium: the frame sandbox is exactly
+  `allow-scripts allow-same-origin`, a nested outside frame, a popup and a fetch
+  from the framed page reach nothing, and both the snapshot CSP and the panel CSP
+  are asserted directive by directive (`frame-src 'none'` for the snapshot, the
+  snapshot origin only for the panel, no wildcard).
+- The 15 s delay is pinned: the shipped panel script schedules exactly one 15 s
+  timer, and Next stays disabled with the default delay when the frame never loads.
+- A multi-file user-test version checks that the previewed paths and bytes equal the
+  consented files and the uploaded version files.
+PI #2 and #5: the learner inspects the chosen audience and the exact work they
+are about to share (JUDGMENT and OWNERSHIP; no capability labels in the UI).
