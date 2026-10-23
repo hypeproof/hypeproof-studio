@@ -64,10 +64,10 @@ const checks = {
   },
   "3 classroom header at ≤640px: the line gets its own row under the coach name and actions": (css) => {
     const bad = [];
-    if (value(css, HDR, "flex-wrap", NARROW) !== "wrap") bad.push("the classroom header does not wrap (the coach name is squeezed to one letter)");
-    if (value(css, `.hps-header > ${LINE}`, "order", NARROW) !== "3") bad.push("classroom line is not after the actions");
-    const [grow, , basis] = flex(value(css, `.hps-header > ${LINE}`, "flex", NARROW));
-    if (grow !== "1" || basis !== "100%") bad.push(`classroom line flex ${value(css, `.hps-header > ${LINE}`, "flex", NARROW)} (not a full row)`);
+    if (value(css, HDR, "flex-wrap", "@container studio-chat (max-width: 640px)") !== "wrap") bad.push("the classroom header does not wrap (the coach name is squeezed to one letter)");
+    if (value(css, `.hps-header > ${LINE}`, "order", "@container studio-chat (max-width: 640px)") !== "3") bad.push("classroom line is not after the actions");
+    const [grow, , basis] = flex(value(css, `.hps-header > ${LINE}`, "flex", "@container studio-chat (max-width: 640px)"));
+    if (grow !== "1" || basis !== "100%") bad.push(`classroom line flex ${value(css, `.hps-header > ${LINE}`, "flex", "@container studio-chat (max-width: 640px)")} (not a full row)`);
     return bad;
   },
 };
@@ -98,7 +98,7 @@ checks['4 chip and model layout, typography, amber, focus and forced colors'] = 
 const NARROW_BLOCK = /@media \(max-width: 640px\) \{\n  \.tw-heading:has\(\.hps-access-header\)[\s\S]*?\n\}/;
 const NEGATIVE = [
   ["2", "c01 the whole @media (max-width:640px) block deleted", (s) => s.replace(NARROW_BLOCK, "")],
-  ["3", "c01 the whole @media (max-width:640px) block deleted", (s) => s.replace(NARROW_BLOCK, "")],
+  ["3", "classroom container block deleted", (s) => s.replace(/@container studio-chat \(max-width: 640px\) \{[\s\S]*?\n\}/, "")],
   ["2", "c02 activity-chip zero basis dropped", (s) => s.replace("  .tw-heading:has(.hps-access-header) .hps-activity-now { flex: 1 1000 0; }\n", "")],
   ["1", "c03 line made flex:0 0 auto; nowrap", (s) => s.replace(".hps-access-header { flex: 0 1 auto; min-width: min-content; white-space: normal;", ".hps-access-header { flex: 0 0 auto; white-space: nowrap;")],
   ["2", "personal heading no longer wraps", (s) => s.replace(".tw-heading:has(.hps-access-header) { flex-wrap: wrap; row-gap: 0; }", ".tw-heading:has(.hps-access-header) { row-gap: 0; }")],

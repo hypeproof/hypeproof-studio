@@ -28,7 +28,7 @@
 .cp-source-open-error > button { flex: none; }
 .tw-sources .cp-source-open-error { flex-wrap: wrap; }
 .cp-other-source-status { margin: var(--ds-c-studio-citationpreview-space-1) var(--ds-c-studio-citationpreview-space-18); color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); overflow-wrap: anywhere; }
-@media (max-width: 390px) { .cp-citation { max-width: 100%; } .cp-rack > [role="listitem"] { width: 100%; } } :where(:root[data-reduced-motion="true"]) .cp-citation, :where(:root[data-reduced-motion="true"]) .cp-preview, :where(:root[data-reduced-motion="true"]) .cp-preview-actions > button { animation: none; transition: none; }
+@container studio-chat (max-width: 390px) { .cp-citation { max-width: 100%; } .cp-rack > [role="listitem"] { width: 100%; } } :where(:root[data-reduced-motion="true"]) .cp-citation, :where(:root[data-reduced-motion="true"]) .cp-preview, :where(:root[data-reduced-motion="true"]) .cp-preview-actions > button { animation: none; transition: none; }
 @media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .cp-citation, :where(:root:not([data-reduced-motion])) .cp-preview, :where(:root:not([data-reduced-motion])) .cp-preview-actions > button { animation: none; transition: none; } }
 .tw-open-source[aria-disabled="true"], .cp-return[aria-disabled="true"] { cursor: progress; opacity: .7; }
 

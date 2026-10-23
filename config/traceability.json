@@ -11555,6 +11555,49 @@
           "path": "scripts/test/design-tokens-manifest.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-CHAT-CONTAINER",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Chat pane container layout (CGP-DS-R-013)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHAT-CONTAINER",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-CONTAINER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHAT-CONTAINER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-CONTAINER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/chat-container-layout.smoke.mjs"
+        }
+      ]
     }
   ]
 }
