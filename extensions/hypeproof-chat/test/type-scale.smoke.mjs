@@ -447,7 +447,7 @@ const SHARED_LEARNER = [
   ".hps-update-banner-sub", ".hps-update-banner-notes", ".hps-update-banner-toggle", ".hps-update-banner-install, .hps-update-banner-dismiss",
   ".hps-ai-disclosure", ".hps-page-notice", ".hps-element-context", ".hps-stop-notice", ".hps-turn-review", ".hps-tool-log-line", ".hps-effort",
   ".hps-access", ".hps-verify", ".hps-verify-ai", ".hps-publish", ".hps-publish-note, .hps-publish-timing", ".hps-publish-declare legend",
-  ".hps-evidence", ".hps-evidence-meta", ".hps-trial-end-card-fact", ".hps-trial-end-card-primary", ".hps-trial-end-card-escape",
+  ".hps-evidence", ".hps-evidence-meta", ".hps-trial-end-card-fact", ".hps-trial-end-card-primary", ".hps-trial-end-card-personal, .hps-trial-end-card-escape",
   ".hps-notify-optin", ".hps-notify-optin-input", ".hps-notify-optin-submit", ".hps-notify-optin-consent", ".hps-notify-optin-withdraw",
   ".hps-recovery-notice", ".hps-recovered", ".hps-page-attachment", ".hps-page-attachment-note", ".hps-file-attach-notice", ".hps-file-attach-error",
   ".hps-input:not([data-expanded]) .hps-tools-menu button",
