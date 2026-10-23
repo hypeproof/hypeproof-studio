@@ -583,6 +583,7 @@
   --ds-s-modal-min: var(--ds-p-51);
   --ds-s-modal-padding: var(--ds-p-6);
   --ds-s-modal-radius: var(--ds-p-2);
+  --ds-s-menu-radius: var(--ds-p-2);
   --ds-s-modal-enter: var(--ds-p-dialog-enter);
   --ds-s-modal-exit: var(--ds-p-dialog-exit);
   --ds-s-modal-dim-dark: var(--ds-p-dialog-dim-dark);
@@ -1284,6 +1285,7 @@
   --ds-s-modal-min: var(--ds-p-51);
   --ds-s-modal-padding: var(--ds-p-6);
   --ds-s-modal-radius: var(--ds-p-2);
+  --ds-s-menu-radius: var(--ds-p-2);
   --ds-s-modal-enter: var(--ds-p-dialog-enter);
   --ds-s-modal-exit: var(--ds-p-dialog-exit);
   --ds-s-modal-dim-dark: var(--ds-p-dialog-dim-dark);
@@ -3551,4 +3553,11 @@
   --ds-c-studio-tokens-control-sm: var(--ds-s-control-sm);
   --ds-c-studio-tokens-control-md: var(--ds-s-control-md);
   --ds-c-studio-tokens-control-lg: var(--ds-s-control-lg);
+  /* CGP-DS-R-022: shared learner-menu geometry. */
+  --ds-c-menu-radius: var(--ds-s-menu-radius);
+  --ds-c-menu-gutter: var(--ds-s-space-13);
+  --ds-c-menu-item-height: var(--ds-s-size-8);
+  --ds-c-menu-item-radius: var(--ds-s-radius-3);
+  --ds-c-menu-item-pad-block: var(--ds-s-space-2);
+  --ds-c-menu-item-pad-inline: var(--ds-s-space-1);
 }

@@ -364,3 +364,10 @@ See `REQ-STUDIO-CHAT-CONTAINER` in studio-requirements.md for the exact 448/688 
 boundaries, the separate 1024px code-diff threshold, and the outer-workspace scope boundary.
 Local computed evidence is `test/chat-container-layout.smoke.mjs`; native acceptance is not
 implied by that headless result.
+
+## Studio learner menus (CGP-DS-R-022)
+
+REQ-CGP-DS-24 uses the shared learner-menu tokens and computed browser guard described in
+REQ-STUDIO-MENU-TOKENS. The tools and personal header menus retain their own placement
+and actions. DES-CGP-DS-24 type-ahead and Chalk dense-menu work remain separate; local
+computed evidence does not imply installed-app or owner acceptance.

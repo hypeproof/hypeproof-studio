@@ -572,3 +572,35 @@
   padding: 0;
   flex-shrink: 0;
 }
+
+/* REQ-CGP-DS-24: placement belongs to each opener; menu surfaces and targets share tokens.
+   The header may be portalled into the task heading, outside the chat shell. */
+.hps-shell .hps-input .hps-tools-menu,
+.tw-chat-menu .tw-chat-menu-panel {
+  box-sizing: border-box;
+  border-radius: var(--ds-c-menu-radius);
+  padding: var(--ds-c-menu-gutter);
+  background: var(--hp-bg-panel-default);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
+}
+.hps-shell .hps-input .hps-tools-menu > button,
+.tw-workspace .hps-header .tw-chat-menu-panel > button,
+.tw-chat-menu .tw-chat-menu-panel > button {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--ds-c-menu-item-height);
+  width: 100%;
+  margin: 0;
+  padding: var(--ds-c-menu-item-pad-block) var(--ds-c-menu-item-pad-inline);
+  border-radius: var(--ds-c-menu-item-radius);
+  font-size: var(--hp-font-caption);
+  line-height: var(--hp-leading-label);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.hps-shell .hps-tools-menu button small { font-size: var(--hp-font-caption); }
+/* Title/description hierarchy comes from weight and colour, never from a size below the learner minimum. */
+.hps-shell .hps-input .hps-tools-menu > button > span { font-weight: var(--hp-weight-strong); color: var(--hp-text-primary-default); }
+.hps-shell .hps-input .hps-tools-menu > button > span > small { font-weight: var(--hp-weight-regular); color: var(--hp-text-muted-default); }

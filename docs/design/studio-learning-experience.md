@@ -622,3 +622,13 @@ and code. Studio bridges UI to `--vscode-font-family` and code to
 `--vscode-editor-font-family`; technical URLs/identifiers remain fixed-width
 without borrowing the editor preference. Chalk has the same three roles through
 the canonical generated transport. Font sizes and line spacing are unchanged.
+
+## Shared learner menus (CGP-DS-R-022)
+
+Tools and personal conversation menus use `--ds-c-menu-*` geometry aliases over the
+canonical semantic/primitive tiers:12px panel radius,4px gutter,44px minimum item height,
+6px item radius and8px/12px block/inline item padding. `--hp-font-caption` sets learner
+labels and tool descriptions to at least14px. `--hp-bg-panel-default` and
+`--hp-border-control-default` are the shared surface roles. Popover placement remains local.
+Use arrows/Home/End to navigate and Escape to restore the opener; IME owns composition keys.
+See REQ-STUDIO-MENU-TOKENS for scope and computed-test evidence boundaries.

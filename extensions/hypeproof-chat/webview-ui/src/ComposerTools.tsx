@@ -3,6 +3,7 @@ import type { TurnToolMode } from '../../src/turnTools';
 import { denialCopy } from '../../src/denialSource';
 import { ChatIcon } from './ChatDetails';
 import { useDialogFocus } from './dialogFocus';
+import { imeComposing } from './imeGuard';
 
 /** Selection belongs to the next draft. Execution status comes from host tool events. */
 export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAttachFile, webSearchItem = true }: {
@@ -28,6 +29,7 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
   return <div ref={root} className="hps-composer-tools">
     <button ref={trigger} type="button" className="hps-tool-trigger" aria-label="도구 열기" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}><ChatIcon kind="plus" /></button>
     {open && <div ref={menu} className="hps-tools-menu" role="menu" aria-label="메시지 도구" onKeyDown={event => {
+      if (event.defaultPrevented || imeComposing(event)) return;
       if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
       const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
