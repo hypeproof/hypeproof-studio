@@ -1,3 +1,4 @@
+import { workPower } from "./workPower";
 import { registerActivityTrash } from "./activityTrashCommands";
 import { confirmOutbound } from "./outboundConsentHost.ts";
 import { restoreInitialSurface } from "./initialSurface";
@@ -1338,6 +1339,7 @@ async function applyTestBackdoors(
 }
 
 export function deactivate() {
+  workPower.dispose();
   providerRef = null;
   // #751 U1b — a normal shutdown ends the session with a `session_close` line, so a later collection can prove where it ended.
   // VS Code waits for this promise (bounded); a crash leaves the session without it, and that end stays unproven.

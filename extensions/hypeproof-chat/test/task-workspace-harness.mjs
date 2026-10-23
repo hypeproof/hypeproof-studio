@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
 const require = createRequire(import.meta.url);
-const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {ProxyAuthError, ProxyTransportError} from './src/proxyClient'; export {ActivityConnections} from './src/activityConnections'; export {TaskWorkspaceStore} from './src/taskWorkspaceStore';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
+const bundle = await build({ stdin: { contents: "export {workPower} from './src/workPower'; export {ChatPanelProvider} from './src/chatPanelProvider'; export {ProxyAuthError, ProxyTransportError} from './src/proxyClient'; export {ActivityConnections} from './src/activityConnections'; export {TaskWorkspaceStore} from './src/taskWorkspaceStore';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 
 export async function createTaskHarness(root, onMessage = () => {}, { profile = null, turnTools, configExtras = {}, beforeReadDir } = {}) {
   const opened = [], posts = [], state = new Map(), module = { exports: {} };

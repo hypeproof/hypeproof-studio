@@ -1,3 +1,4 @@
+import { workPower } from "./workPower.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createWriteStream } from "node:fs";
@@ -210,6 +211,7 @@ export async function downloadVerifiedUpdate(
   const total = setTimeout(abort, options.totalTimeoutMs ?? 10 * 60_000);
   let idle = setTimeout(abort, options.idleTimeoutMs ?? 60_000);
   let created = false;
+  const releasePower = workPower.acquire("update-download");
   try {
     const response = await fetchAsset(asset.downloadUrl, controller.signal);
     if (!response.ok || !response.body) throw new Error(`Update download failed: HTTP ${response.status}`);
@@ -235,6 +237,7 @@ export async function downloadVerifiedUpdate(
     if (created) await rm(destination, { force: true });
     throw error;
   } finally {
+    releasePower();
     clearTimeout(total);
     clearTimeout(idle);
   }

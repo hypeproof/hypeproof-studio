@@ -10931,6 +10931,58 @@
           "path": "extensions/hypeproof-chat/test/update-installer.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-WORK-POWER",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Work-scoped system sleep prevention"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-WORK-POWER",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WORK-POWER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/workPower.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateTransport.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-WORK-POWER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WORK-POWER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/work-power.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/work-power-native.mjs"
+        }
+      ]
     }
   ]
 }

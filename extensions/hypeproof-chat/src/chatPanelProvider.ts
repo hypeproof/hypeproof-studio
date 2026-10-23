@@ -5,6 +5,7 @@ import { AnnotationBatch, AnnotationRefusal, ANNOTATION_LIMIT, ANNOTATION_REFUSA
 import { runWorkTakeaway } from "./workTakeawayHost";
 import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
 import { takeawayTask, takeawayOwnedFiles } from "./workTakeaway";
+import { workPower } from "./workPower";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
 import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
@@ -4636,6 +4637,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       engineJs?: string;
     },
   ): Promise<boolean> {
+    const releasePower = workPower.acquire("preview-build");
+    try {
     // #359 — structural guard: auto-repair the known comment-close typo, and
     // refuse to reveal a still-broken document as if it succeeded. Returns
     // false when blocked so the streaming caller can let a corrected block retry.
@@ -4720,9 +4723,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #629 — the srcdoc preview (fallback) cannot read the relative
     // <script src="engine.js">. This path is taken only when the live server did not
     // come up, so the engine is inlined here and only here.
-    void this.preview.show(await this.inlineEngineIfNeeded(checked.html));
+    await this.preview.show(await this.inlineEngineIfNeeded(checked.html));
     logReveal("done", "미리보기를 열었어요");
     return true;
+    } finally { releasePower(); }
   }
 
   /**
@@ -6481,6 +6485,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const deferCompletion = (streamId: string, signal?: AbortSignal, failed = false) => { completedStreamId = streamId; completionSignal = signal; completionFailed = failed; };
     const attachmentNames = (attachments ?? []).map(id=>({id,name:this.imageStaging?.name(id) ?? "사진"}));
     let preflightComplete=false;
+    const releasePower = workPower.acquire("coach-turn");
     try {
     // CGP-CHAT-R-002 — an error retry of an edited prompt (same id) stays a version of its group.
     const retryRoot = retrySourceId ? attemptGroups(this.editableHistory()).find(group => group.attempts.some(attempt => attempt.user.id === retrySourceId))?.root : undefined;
@@ -7784,6 +7789,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // CGP-ART-R-001 — an annotation refusal is a told, handled outcome: the learner has the reason, the text and the draft.
       if (preflightComplete && !(error instanceof TurnToolModeError) && !(error instanceof AnnotationRefusal)) throw error;
     } finally {
+      releasePower();
       try { releaseActivity?.(); } finally {
         this.pendingSends--; settle.settled();
         if (this.turnSettling === settle.promise) this.turnSettling = undefined;

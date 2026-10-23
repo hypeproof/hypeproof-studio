@@ -4637,3 +4637,29 @@ Evidence: `test/staged-update.smoke.mjs`, `test/update-stage-host.smoke.mjs`,
 `test/update-installer.smoke.mjs`, `test/update-windows-wrapper.smoke.mjs`, and the
 existing quit-guard and patch fixtures. These isolate native services;
 released-app installation/next-launch and OS-native dialog capture remain owner checks.
+
+## Work-scoped system sleep prevention
+
+REQ-STUDIO-WORK-POWER (CGP-SHELL-R-009 / REQ-SHELL-09, traces to
+CGP-SHELL-014 and Product Intent #1): Studio inhibits automatic system idle sleep
+while a coach turn (SDK, proxy or local), preview build/reveal, or verified update
+download is pending. Display sleep remains allowed. Completion, error and timeout
+release that work's lease synchronously; the OS assertion must disappear within
+five seconds after the last active work ends. Overlapping work and separate
+windows retain independent protection. Host shutdown/reload/crash must not leave
+an orphan assertion. An idle preview server and queued unsent messages do not hold
+power. The behavior applies to every seat without changing permissions or data
+recipients. It supports uninterrupted learner iteration (ADAPT), not an assessment.
+
+The extension uses macOS `caffeinate -i -w <host-pid>` and a hidden Windows helper
+holding `ES_CONTINUOUS | ES_SYSTEM_REQUIRED`, released on termination or stdin EOF.
+It never requests display/away-mode assertions or overrides explicit user sleep.
+Native-helper failure is diagnostic only; it does not fail the learner's work.
+Linux is outside the shipped macOS/Windows acceptance and adds no assertion.
+
+Evidence: `test/work-power.smoke.mjs` executes real provider/download/deactivation
+boundaries with controlled pending work and process doubles; `test/work-power-native.mjs`
+measures the actual macOS assertion with `pmset`. Windows owner acceptance remains
+`powercfg /requests` during each work type and within five seconds of success,
+cancel and failure, including two windows and extension-host termination. Mock
+checks are not Windows device evidence.
