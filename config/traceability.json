@@ -11767,6 +11767,53 @@
           "path": "chalk/test/copy-feedback.browser.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-DS-DIFF-SYMBOLS-REQ",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Non-color text comparisons (CGP-DS-R-029)"
+        }
+      ]
+    },
+    {
+      "id": "ST-DS-DIFF-SYMBOLS-IMP",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DS-DIFF-SYMBOLS-REQ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/DiffLines.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TurnReviewBar.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/EvidenceDrawer.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-DS-DIFF-SYMBOLS-TEST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DS-DIFF-SYMBOLS-REQ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/diff-symbols.smoke.mjs"
+        }
+      ]
     }
   ]
 }
