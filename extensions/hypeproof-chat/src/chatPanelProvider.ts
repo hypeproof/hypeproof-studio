@@ -2,6 +2,9 @@ import { attemptGroups, attemptHistory, selectAttempt, visibleAttempts } from '.
 import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntry";
 import { PublishReadGate } from "./publishReadGate";
 import { AnnotationBatch, AnnotationRefusal, ANNOTATION_LIMIT, ANNOTATION_REFUSAL, ANNOTATION_RETRY_DROPPED, recordAnnotations, withAnnotations } from "./annotationBatch";
+import { runWorkTakeaway } from "./workTakeawayHost";
+import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
+import { takeawayTask, takeawayOwnedFiles } from "./workTakeaway";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
 import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
@@ -5971,6 +5974,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (disclosure) void this.post({ type: "aiDisclosure", text: disclosure });
         }
         return;
+      case 'workTakeaway': await this.takeMyWork(); return;
       case 'activityLocalFile': {
         if (msg.action !== 'open' && msg.action !== 'export') return;
         if (this.localFileBusy) return;
@@ -8616,6 +8620,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
+        workTakeawayEnabled: vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('workTakeawayEnabled', false),
         ...(taskView ? { taskWorkspace: taskView } : {}),
         ...(activity && carryover ? { carryover } : {}),
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{})},
@@ -8845,6 +8850,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private coachRitualDoneKey(): string {
     return coachRitualDoneKeyForCohort(activityConnections(this.context)?.scope ?? this.activeCohortId);
+  }
+
+  private takeawayBusy = false;
+  /** Explicit local copy remains available when AI has ended; no model/Service call. */
+  async takeMyWork(): Promise<boolean> {
+    const activity = activityConnections(this.context)?.current;
+    const enabled = () => vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('workTakeawayEnabled', false);
+    if (this.takeawayBusy || !activity || !['trial', 'personal', 'classroom'].includes(activity.kind ?? '')) return false;
+    const root = this.resolveCoachCwd();
+    if (!root || root !== activity.workspace) return false;
+    const generation = this.profileGeneration;
+    const scope = this.turnRequestScope();
+    const current = () => enabled() && this.isInstructor === false && !this.hasActiveStream() && !this.taskChanging && !this.connectionChanging
+      && this.profileGeneration === generation && this.turnRequestScope() === scope && activityConnections(this.context)?.current?.id === activity.id
+      && this.resolveCoachCwd() === root;
+    if (!current()) return false;
+    this.takeawayBusy = true;
+    try {
+      const store = this.currentTaskStore();
+      if (store?.getView().error) throw new Error('task_read_failed');
+      const secrets = [activity.token].filter((value): value is string => typeof value === 'string' && !!value);
+      const tasks = store ? store.getView().tasks.map(task => takeawayTask(task.title, store.getHistory(task.id), secrets))
+        : [takeawayTask('이 활동의 대화', this.getHistory(), secrets)];
+      const owned = takeawayOwnedFiles(await loadLedger(provenanceLedgerFile(this.context.globalStorageUri.fsPath, root)));
+      if (!current()) return false;
+      return await runWorkTakeaway({ root, secrets, tasks, owned, wikiDirectory: path.basename(wikiDir(root, this.cachedProfile?.learning_wiki?.plan)), current });
+    } catch { await vscode.window.showWarningMessage('내 작업 가져가기를 완료하지 못했어요. 원본은 그대로 있어요. 위치와 권한을 확인해 주세요.'); return false; }
+    finally { this.takeawayBusy = false; }
   }
 
   private getHistory(): ChatMessage[] {

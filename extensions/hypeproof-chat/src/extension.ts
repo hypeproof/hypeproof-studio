@@ -318,6 +318,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const target = uri ?? vscode.window.activeTextEditor?.document.uri;
     if (target?.scheme === "file") await provider.openArtifactHistoryPanel(target.fsPath);
   }));
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.takeMyWork", () => provider.takeMyWork()));
   provider.setActivityTrashPanel(registerActivityTrash(context, {
     active: () => !!provider.activityTrashBinding,
     binding: () => provider.activityTrashBinding,

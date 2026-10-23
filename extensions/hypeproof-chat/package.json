@@ -52,6 +52,7 @@
       ]
     },
     "commands": [
+      { "command": "hypeproof-chat.takeMyWork", "title": "내 작업 가져가기", "enablement": "config.hypeproofChat.workTakeawayEnabled" },
       { "command": "hypeproof-chat.artifactHistory", "title": "이 파일의 이전 버전", "category": "HypeProof" },
       { "command": "hypeproof-chat.trashFile", "title": "파일을 활동 휴지통으로 이동", "enablement": "config.hypeproofChat.activityTrashEnabled" },
       { "command": "hypeproof-chat.activityTrash", "title": "활동 휴지통 열기", "enablement": "config.hypeproofChat.activityTrashEnabled" },
@@ -473,6 +474,10 @@
         "hypeproofChat.annotationBatchEnabled": {
           "type": "boolean", "default": false, "scope": "machine",
           "description": "Enable learner preview annotation batches. Requires the served curriculum-runtime and image permissions."
+        },
+        "hypeproofChat.workTakeawayEnabled": {
+          "type": "boolean", "default": false, "scope": "machine",
+          "description": "Enable explicit local copies of learner work at activity transitions. Off by default for every seat; does not transfer credentials or AI access."
         },
         "hypeproofChat.activityTrashEnabled": {
           "type": "boolean", "default": false, "scope": "machine",

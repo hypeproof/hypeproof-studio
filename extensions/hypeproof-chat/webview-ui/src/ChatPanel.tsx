@@ -1810,6 +1810,7 @@ export function ChatPanel(props: Props) {
         ) : activityStatus ? <ActivityStatus status={activityStatus}
           onOpen={() => postToHost({type:'activityLocalFile',action:'open'})}
           onExport={() => postToHost({type:'activityLocalFile',action:'export'})}
+          onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
           onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
           onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
           {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}

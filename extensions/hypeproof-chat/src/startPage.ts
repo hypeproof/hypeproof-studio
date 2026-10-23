@@ -919,6 +919,14 @@ export class StartPage {
       this.busy = true; this.error = undefined;
       let profile: ResolvedProfile | null = null;
       try {
+        // Offer the copy while the trial still owns its stores; never copy its binding/token.
+        if (candidate?.profile.activity_kind === 'classroom' && connections?.current?.kind === 'trial'
+            && vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('workTakeawayEnabled', false)) {
+          const answer = await vscode.window.showInformationMessage('수업으로 바꾸기 전에 내 작업을 가져갈까요?', { modal: true }, '내 작업 가져가기', '그대로 계속');
+          if (!answer) return;
+          if (answer === '내 작업 가져가기' && !await this.chat.takeMyWork()) return;
+          if (this.candidate !== candidate) return;
+        }
         await this.chat.setConnectionChanging(true);
         await this.refresh();
         // A connected card is not proof that the session is still live.

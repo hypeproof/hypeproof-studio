@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { ACTIVITY_CAUSE_COPY, type ActivityUnavailable } from '../../src/activityAvailability';
-export function ActivityStatus({ status, onOpen, onExport, onRecover, onSupport, onToken, children }: {
-  status: ActivityUnavailable; onOpen: () => void; onExport: () => void; onRecover: () => void; onSupport: () => void; onToken?: () => void; children?: ReactNode;
+import { ACTIVITY_CAUSE_COPY, TAKEAWAY_CAUSES, type ActivityUnavailable } from '../../src/activityAvailability';
+export function ActivityStatus({ status, onOpen, onExport, onRecover, onSupport, onToken, onTakeaway, children }: {
+  status: ActivityUnavailable; onOpen: () => void; onExport: () => void; onRecover: () => void; onSupport: () => void; onToken?: () => void; onTakeaway?: () => void; children?: ReactNode;
 }) {
   return <section className="hps-activity-status" role="status" aria-label="AI 이용 상태">
     <h3>지금은 AI를 사용할 수 없습니다</h3>
@@ -11,6 +11,7 @@ export function ActivityStatus({ status, onOpen, onExport, onRecover, onSupport,
     <div className="hps-activity-status-actions">
       <button type="button" onClick={onOpen}>내 파일 열기</button>
       <button type="button" onClick={onExport}>내 파일 내보내기</button>
+      {onTakeaway && TAKEAWAY_CAUSES.includes(status.cause) && <button type="button" onClick={onTakeaway}>내 작업 가져가기</button>}
       {(status.cause === 'auth' || status.cause === 'expired') && onToken && <button type="button" onClick={onToken}>참여 코드 확인</button>}
       <button type="button" onClick={onRecover}>상태 다시 확인</button>
       <button type="button" onClick={onSupport}>HypeProof 지원 문의</button>

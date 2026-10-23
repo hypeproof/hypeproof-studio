@@ -1,5 +1,7 @@
 /** REQ-KNOW-68: display only causes supported by transport or access evidence. */
 export type ActivityCause = 'auth' | 'expired' | 'ended' | 'paused' | 'exhausted' | 'forbidden' | 'not_started' | 'outage' | 'limited' | 'unknown' | 'revoked';
+/** CGP-KNOW-R-035: the local takeaway is offered only when the class itself has ended; never for outage, limit, auth or other causes. */
+export const TAKEAWAY_CAUSES: readonly ActivityCause[] = ['ended'];
 export interface ActivityUnavailable { cause: ActivityCause; audience: 'solo' | 'classroom' }
 export interface FailureEvidence { status?: number; code?: string; type?: string; kind?: string }
 export function responseEvidence(status: number, body: string): FailureEvidence {
