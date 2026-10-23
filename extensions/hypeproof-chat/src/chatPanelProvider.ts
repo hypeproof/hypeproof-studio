@@ -1,5 +1,6 @@
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
+import { showVisitorPreview } from "./visitorPreviewHost";
 import { attemptGroups, attemptHistory, selectAttempt, visibleAttempts } from './answerAttempts';
 import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntry";
 import { PublishReadGate } from "./publishReadGate";
@@ -1702,6 +1703,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   );
   /** "사용자 테스트용으로 공개": the session over the preview's files, the record and the Service. */
   private readonly publishSession = new PublishSession({
+    previewVisitor: showVisitorPreview,
     confirmOutbound,
     scopeKey: () => String(this.profileGeneration),
     privateDirectories: () => this.cachedProfile?.learning_wiki?.plan?.dir ? [this.cachedProfile.learning_wiki.plan.dir] : [],
@@ -4486,6 +4488,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
     }
     const result = await publishWorldConfirmed({
+      previewVisitor: showVisitorPreview,
       siteBase,
       token,
       worldId,

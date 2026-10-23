@@ -4771,3 +4771,17 @@ the verification contract is [PCC-T01–05](testing/personal-claude-continuation
 This applies the native Studio intent and outbound consent requirement, exposing
 JUDGMENT and OWNERSHIP through an observable transfer decision. It does not claim
 a measured learning outcome, native acceptance or release availability.
+
+### REQ-KNOW-63 — Visitor preview before publication
+
+Gallery, user-test versions and site deployment require a local preview of the
+exact outbound snapshot and audience before existing send consent. A cancelled or
+closed preview, missing preview support, or a preview message that does not come
+from this panel's host with its nonce (an unknown or foreign origin) fails closed.
+If the preview frame has not loaded and been served within 15 s, the panel says so,
+opens the exact file list and audience, and lets the learner continue on that list
+(`화면 없이 목록 확인 · 다음`). This load-timeout fallback is an owner decision
+(2026-10-23): the existing send consent still follows with the same recipient and
+the same bytes, so a load timeout is not an unknown preview and authorizes nothing
+by itself. Workspace-only files are inaccessible. See the CGP-KNOW-R-034
+implementation contract for network restrictions and evidence.

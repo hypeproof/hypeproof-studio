@@ -112,7 +112,7 @@ const ok = (label) => { pass++; console.log("  ok   " + label); };
 }
 
 // ── H3/H4 the real provider ─────────────────────────────────────────────────────────────────────────────────────────────
-const makeProvider = await load('export { ChatPanelProvider } from "./src/chatPanelProvider.ts"; export { setOutboundPresenter } from "./src/outboundConsentHost.ts"; export { outboundDetails } from "./src/outboundConsent.ts";');
+const makeProvider = await load('export { ChatPanelProvider } from "./src/chatPanelProvider.ts"; export { setOutboundPresenter } from "./src/outboundConsentHost.ts"; export { outboundDetails } from "./src/outboundConsent.ts";', { 'visitorPreviewHost$': 'import * as vscode from "vscode"; export const showVisitorPreview = async snapshot => { vscode.window.previewSnapshot = snapshot; return vscode.window.previewAnswer !== false; };' });
 const root = mkdtempSync(path.join(os.tmpdir(), "hps-outbound-host-"));
 try {
   const work = path.join(root, "work"), sessionDir = path.join(root, "spool", "2026-10-20", "session-synthetic");
@@ -148,6 +148,13 @@ try {
 
   // H3 gallery
   {
+    const previewCancel = provider("확인하고 보내기"); previewCancel.v.window.previewAnswer = false;
+    await previewCancel.h.publishToGallery(); await settle();
+    assert.equal(previewCancel.panel.asked.length, 0, "cancel preview never reaches send consent");
+    assert.deepEqual(previewCancel.calls.filter(x => x.method !== "GET"), [], "cancel preview sends neither page nor record");
+    assert.equal(previewCancel.v.window.previewSnapshot.entry, "index.html");
+    assert.match(previewCancel.v.window.previewSnapshot.audience, /site.invalid.*인터넷의 누구나/);
+    assert.ok(previewCancel.v.window.previewSnapshot.files[0].data.toString().includes("내 세상"));
     const c = provider(undefined); await c.h.publishToGallery(); await settle();
     assert.deepEqual(c.panel.asked.map(x => x[0]), ["content"], "one checklist for the whole action; Cancel ends it");
     assert.equal(c.v.dialogs.length, 0, "a public send never opens a native modal");

@@ -137,7 +137,7 @@ try {
   const project = { id: 'prj-synthetic', title: 'project', members: ['synthetic'] };
   const state = { project, test_origin: null, versions: [], hypotheses: [], experiments: [], links: [] };
   let shown = [], calls = [], answer = true;
-  const ports = { switchOn: () => true, scopeKey: () => 'one', confirmOutbound: async m => { shown.push(m); return answer; }, token: async () => 't', base: () => 'https://service.invalid/v1/curriculum', root: () => root, entry: () => '/index.html', events: async () => [], projectId: () => project.id, setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'title', qr: u => u, privateDirectories: () => ['journal'],
+  const ports = { previewVisitor:async()=>true, switchOn: () => true, scopeKey: () => 'one', confirmOutbound: async m => { shown.push(m); return answer; }, token: async () => 't', base: () => 'https://service.invalid/v1/curriculum', root: () => root, entry: () => '/index.html', events: async () => [], projectId: () => project.id, setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'title', qr: u => u, privateDirectories: () => ['journal'],
     fetchImpl: async (u, i) => { calls.push([u, i]); if ((i?.method ?? 'GET') !== 'GET') return Response.json(new URL(u).pathname.endsWith('/experiments') ? { experiment: { id: 'exp-synthetic' } } : new URL(u).pathname.includes('/versions/') ? { version: { id: 'v' }, created: true } : { share_url: 'https://test.invalid/l/1' }); return Response.json(new URL(u).pathname.endsWith('/projects') ? { projects: [project] } : state); } };
   const form = { question: 'q', method: 'task_test', success_criteria: ['c'], hypothesis: 'h', expires_in_days: 1 };
   const putFiles = () => JSON.parse(calls.find(([u, i]) => i?.method === 'PUT' && u.includes('/versions/'))[1].body).files.map(f => f.path);
@@ -199,7 +199,7 @@ try {
 
   // ── gallery, collect, help: fixed payloads, never a memory path ─────────────
   let galleryShown;
-  await publishWorldConfirmed({ siteBase: 'https://gallery.invalid', token: 't', worldId: 'w', title: '작품', html: '<p>x</p>', fetchImpl: async () => Response.json({ ok: true, url: '/w/1' }) }, async m => (galleryShown = m, false), async () => true,
+  await publishWorldConfirmed({ previewVisitor:async()=>true, siteBase: 'https://gallery.invalid', token: 't', worldId: 'w', title: '작품', html: '<p>x</p>', fetchImpl: async () => Response.json({ ok: true, url: '/w/1' }) }, async m => (galleryShown = m, false), async () => true,
     { recipient: '수업 기록 운영자 · api.invalid', items: [{ name: '이번 활동 기록 events.jsonl', bytes: 1 }], send: async () => {} });
   for (const i of [...galleryShown.items, ...galleryShown.also.flatMap(s => s.items)]) assert.equal(memoryOutboundPath(i.name), false, `gallery item ${i.name}`);
   assert.ok(outboundDetails(galleryShown));
