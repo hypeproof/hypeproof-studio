@@ -1,3 +1,4 @@
+import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
 import { visibleAttempts, ATTEMPT_HISTORY_NOTE } from '../../src/answerAttempts';
 import { AttemptPager } from './AttemptPager';
@@ -353,6 +354,7 @@ function userPromptBefore(messages: ChatMessage[], assistantId: string): ChatMes
 }
 
 export function ChatPanel(props: Props) {
+  const accuracyOffer = useAccuracyEducation(props.config, props.instructor === true);
   const { config, messages, streaming, streamingId, error, incomingImage } = props;
   const [reopenedCapabilities, setReopenedCapabilities] = useState<string | null>(null);
   const entry = !props.instructor && config?.aiCapabilities ? config.lessonCapabilityEntry : undefined;
@@ -1688,6 +1690,8 @@ export function ChatPanel(props: Props) {
               quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
             />
           )}
+          {!streaming && accuracyOffer?.messageId === m.id && m.role === 'assistant' && <AccuracyEducation key={`accuracy-${m.id}`} answer={m.content}
+            onDismiss={() => postToHost({ type: 'accuracyEducationDismiss', messageId: m.id })} />}
           {steerMarkAfter(m.id)}
           {!props.instructor && pageCards.get(m.id) && <PanelBoundary panel="page-card">{() => {
             const card = pageCards.get(m.id)!;

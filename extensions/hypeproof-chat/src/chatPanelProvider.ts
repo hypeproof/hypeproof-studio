@@ -1,3 +1,5 @@
+import { AccuracyEducationStore } from "./accuracyEducationStore";
+import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
 import { attemptGroups, attemptHistory, selectAttempt, visibleAttempts } from './answerAttempts';
 import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntry";
 import { PublishReadGate } from "./publishReadGate";
@@ -1341,6 +1343,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // #320 — AI disclosure at session start (REQ-C14). Host-side gate because
   // the webview forgets everything on hide/show remounts; see AiDisclosureGate.
   private readonly aiDisclosure = new AiDisclosureGate();
+  private accuracyStore(): AccuracyEducationStore {
+    return new AccuracyEducationStore(path.join(this.context.globalStorageUri.fsPath, 'accuracy-education'));
+  }
+  private async accuracyOwner(): Promise<string> {
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    return crBytesOwner(token) ?? createHash('sha256').update(token || this.turnRequestScope()).digest('hex');
+  }
+  private async postAccuracyEducation(requestId?: string): Promise<void> {
+    if (!requestId) { await this.post({ type: 'accuracyEducationChanged' }); return; }
+    const scope = this.turnRequestScope(), token = await this.context.secrets.get(TOKEN_KEY);
+    const owner = crBytesOwner(token) ?? createHash('sha256').update(token || scope).digest('hex');
+    const currentToken = await this.context.secrets.get(TOKEN_KEY);
+    if (scope !== this.turnRequestScope() || token !== currentToken) return;
+    // A store that cannot be built or read means no card, never a thrown host error.
+    let offer: AccuracyOffer | null = null;
+    if (!this._instructorMode.isInstructor) { try { offer = accuracyOffer(this.accuracyStore(), owner, scope); } catch { offer = null; } }
+    await this.post({ type: 'accuracyEducation', requestId, offer });
+  }
+
   private activeCohortId: string | null = null;
   /**
    * CGP-AGENT-R-004 (REQ-E1) — exact shell commands the participant allowed "이번 작업 동안".
@@ -5937,6 +5958,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "helpWithdraw": await this.helpSource?.withdraw(msg.key, msg.id); return;
       case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
       case "outboundAnswer": this.outboundApproval?.respond(msg.id,msg.selected); return;
+      case "accuracyEducationRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postAccuracyEducation(msg.requestId); return;
+      case "accuracyEducationDismiss": {
+        const scope = this.turnRequestScope(), owner = await this.accuracyOwner();
+        if (scope !== this.turnRequestScope() || this._instructorMode.isInstructor) return;
+        try { await dismissAccuracy(this.accuracyStore(), owner, scope, msg.messageId); } catch { /* best effort; the card stays until a dismissal can be stored */ }
+        await this.postAccuracyEducation();
+        return;
+      }
       case "ready":
         this.writeApprovalRequest.cancel();
         this.outboundApproval?.cancel();
@@ -5946,6 +5975,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.postPageCards();
         await this.postConfig();
         await this.postHistory();
+        await this.postAccuracyEducation();
         await this.postLearningState();
         // #308 — flush the pending inline notice. The webview may have just
         // been created for the first time (attachPageContext ran before
@@ -6476,6 +6506,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let releaseActivity: (()=>void) | undefined;
     // streamEnd lets the webview flush its queued follow-up. Announce readiness
     // only after persistence, stream cleanup and the activity lease have settled.
+    let accuracyResult: { owner: string; offer: AccuracyOffer; text: string; instructor: boolean } | undefined;
     let completedStreamId: string | undefined;
     let responseStreamId: string | undefined;
     const responseStarted = (id: string) => { responseStreamId = id; };
@@ -6789,6 +6820,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (element) observationCaptures.push(recordElementCapture(recordObservation, `pick-${crypto.randomUUID()}`, element, turnBlobSink));
     observationCaptures.push(...recordAnnotations(recordObservation, recordElementCapture, streamId, annotations, turnBlobSink));
     const messageId = randomId();
+    const accuracyScope = this.turnRequestScope();
     const ctrl = new AbortController();
     this.activeStreams.set(streamId, ctrl);
     this.finishNotifier.release(); // a new turn is sent from the chat: the learner has seen it
@@ -7641,16 +7673,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // leaves also has to be in this turn's timeline for it to be visible when the
         // window is reopened.
         if (!generalBrowserRequest) await this.saveAgentMdIfPresent(assistantText, streamId);
-        await this.appendHistory([
-          userLine(historyText),
-          ...this.finishTurnItems(
-            streamId,
-            messageId,
-            assistantText,
-            assistantCitations,
-            effectiveCoachName,
-          ),
-        ]);
+        const finishedItems = this.finishTurnItems(
+          streamId,
+          messageId,
+          assistantText,
+          assistantCitations,
+          effectiveCoachName,
+        );
+        await this.appendHistory([userLine(historyText), ...finishedItems]);
+        const answer = finishedItems.filter(item => item.role === 'assistant' && item.content.trim()).at(-1);
+        if (answer) accuracyResult = { owner: crBytesOwner(token) ?? createHash('sha256').update(token || this.turnRequestScope()).digest('hex'),
+          offer: { scope: accuracyScope, messageId: answer.id }, text: assistantText, instructor: this._instructorMode.isInstructor === true };
         // Fallback reveal in case the stream completed but the per-chunk
         // probe missed it (e.g. the closing ``` was in the very last delta).
         tryReveal(assistantText);
@@ -7790,11 +7823,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (preflightComplete && !(error instanceof TurnToolModeError) && !(error instanceof AnnotationRefusal)) throw error;
     } finally {
       releasePower();
+      // Reserve before a queued send is released; immutable disk records also serialize windows.
+      // The education card must never break a finished turn: building the store is inside the guard
+      // so a missing workspace/storage path or a corrupt record cannot skip the release cleanup below.
+      if (accuracyResult && completedStreamId && !completionSignal?.aborted && !completionFailed) {
+        try {
+          await offerAccuracy(this.accuracyStore(), accuracyResult.owner, accuracyResult.offer,
+            { status: 'ok', text: accuracyResult.text, instructor: accuracyResult.instructor });
+        } catch { /* education is best effort */ }
+      }
       try { releaseActivity?.(); } finally {
         this.pendingSends--; settle.settled();
         if (this.turnSettling === settle.promise) this.turnSettling = undefined;
       }
       if (completedStreamId && !completionSignal?.aborted) await this.post({ type: "streamEnd", streamId: completedStreamId, ...(completionFailed ? { failed: true as const } : {}) });
+      if (accuracyResult) await this.postAccuracyEducation().catch(() => undefined);
     }
   }
 
