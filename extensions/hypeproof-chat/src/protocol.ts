@@ -167,6 +167,8 @@ export interface ChatConfig {
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
+  /** CGP-SHELL-R-015: host-confirmed cohort policy, never inferred from a local menu. */
+  cohortSettings?: { model: boolean; effort: boolean };
   effort?: { value: CourseEffort; allowed: CourseEffort[] };
   effortNotice?: string;
   effortResult?: { state: 'loading' | 'observed' | 'unknown'; requests: EffortRequestRecord[]; truncated?: boolean };

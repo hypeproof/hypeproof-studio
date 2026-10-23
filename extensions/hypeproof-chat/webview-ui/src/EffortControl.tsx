@@ -1,3 +1,5 @@
+import { useId } from 'react';
+import { ChatIcon } from './ChatDetails';
 import type { ChatConfig, CourseEffort, EffortRequestRecord, ResolvedProfile, WebviewMessage } from '../../src/protocol';
 
 const labels: Record<CourseEffort,string> = {low:'Low',medium:'Medium',high:'High'};
@@ -49,11 +51,14 @@ export function requestModelLabel(r: EffortRequestRecord, profile: ResolvedProfi
 }
 
 export function EffortControl({config,post,personal=false}:{config:ChatConfig;post:(m:WebviewMessage)=>void;personal?:boolean}) {
+  const reasonId = useId();
+  const locked = config.cohortSettings?.effort === true;
   const policy = config.effort;
   const result = config.effortResult;
   const shown = personal ? personalLabels : labels;
   return <div className="hps-effort">
-    {policy && <label>{personal ? `${PERSONAL_EFFORT_LABEL} ` : 'Effort '}<select aria-label={personal ? PERSONAL_EFFORT_LABEL : 'Effort'} value={policy.value} disabled={policy.allowed.length===1}
+    {policy && <label>{personal ? `${PERSONAL_EFFORT_LABEL} ` : 'Effort '}<select aria-label={personal ? PERSONAL_EFFORT_LABEL : 'Effort'} value={policy.value} disabled={locked || policy.allowed.length===1}
+      aria-disabled={locked || undefined} aria-describedby={locked ? reasonId : undefined}
       onChange={e=>post({type:'selectEffort',value:e.target.value as CourseEffort})}
       onKeyDown={e=>{
         if(e.altKey||e.ctrlKey||e.metaKey||!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;
@@ -61,6 +66,7 @@ export function EffortControl({config,post,personal=false}:{config:ChatConfig;po
         const next=e.key==='Home'?0:e.key==='End'?policy.allowed.length-1:Math.max(0,Math.min(policy.allowed.length-1,current+(e.key==='ArrowDown'?1:-1)));
         e.preventDefault();e.stopPropagation();post({type:'selectEffort',value:policy.allowed[next]});
       }}>{policy.allowed.map(v=><option key={v} value={v}>{shown[v]}</option>)}</select></label>}
+    {policy && locked && <small id={reasonId} className="hps-managed-reason"><ChatIcon kind="lock" size={20} /> 선생님이 정한 설정이에요</small>}
     {config.effortNotice && <small role="status">{config.effortNotice}</small>}
     {(policy||result) && <details><summary>{personal ? '적용 기록' : 'Effort 설정 확인'}</summary>
       {policy && <p>{policy.allowed.length===1?'강사가 정한 처리 수준입니다.':'수업에서 허용한 범위 안에서 다음 요청부터 바뀝니다.'} 모델마다 속도와 사용량이 다릅니다.</p>}

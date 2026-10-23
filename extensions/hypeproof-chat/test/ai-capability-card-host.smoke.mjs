@@ -55,3 +55,48 @@ for (const changed of ['hypeproofChat.requireApprovalFor', 'workbench.reduceMoti
   assert.equal(refreshes - before, changed === 'unrelated.setting' ? 0 : 1, changed);
 }
 console.log('ai-capability-card-host OK');
+
+// CGP-SHELL-R-015: real publication must distinguish cohort locks from local/instructor menus.
+const fixed = { revision: 'hps-model-selection/1', source: 'profile', runtime: 'agent-sdk', provider: 'anthropic', default: 'fixed', choices: [{ alias: 'fixed', id: 'model-fixed', label: '수업 모델', effort: { default: 'high', allowed: ['high'] } }] };
+profile = { profile_id: 'cohort', activity_kind: 'classroom', model_selection: fixed };
+for (const runtime of ['proxy', 'agent-sdk']) {
+  settings.coachRuntime = runtime;
+  profile.model_selection = { ...fixed, runtime };
+  const c = await publish();
+  assert.deepEqual(c.cohortSettings, { model: true, effort: true }, runtime);
+  assert.equal(c.model, 'fixed');
+  assert.deepEqual(c.effort, { value: 'high', allowed: ['high'] });
+}
+profile.model_selection = { ...fixed, choices: [...fixed.choices, { alias: 'other', id: 'other', label: '다른 모델' }] };
+profile.model_selection.choices[0] = { ...fixed.choices[0], effort: { default: 'high', allowed: ['low', 'high'] } };
+assert.deepEqual((await publish()).cohortSettings, { model: false, effort: false }, 'refresh unlocks both controls');
+profile.model_selection = fixed;
+for (const kind of ['personal', 'trial', undefined]) {
+  profile.activity_kind = kind;
+  assert.equal((await publish()).cohortSettings, undefined, `no teacher attribution: ${kind}`);
+}
+profile.lesson = { sha256: 'lesson-a' };
+assert.deepEqual((await publish()).cohortSettings, { model: true, effort: true }, 'legacy lesson without seat kind');
+profile.lesson = undefined;
+profile.activity_kind = 'classroom';
+h._instructorMode.checkInstructorMode = async () => true;
+assert.equal((await publish()).cohortSettings, undefined, 'instructor');
+h._instructorMode.checkInstructorMode = async () => false;
+profile = null;
+assert.equal((await publish()).cohortSettings, undefined, 'profile cleared');
+console.log('cohort settings host OK');
+
+profile = { profile_id: 'cohort', activity_kind: 'classroom', model_selection: fixed };
+vscode.env.appName = 'HypeProof Studio Dev';
+settings.proxyUrl = 'http://127.0.0.1:8787/v1';
+const savedEnv = { ...process.env };
+try {
+  Object.assign(process.env, { HPS_DEV_RUNTIME: '1', HPS_DEV_PROVIDER: 'codex', HPS_DEV_EXECUTABLE: '/tmp/codex.exe', HPS_DEV_MODEL: 'local-model' });
+  const local = await publish();
+  assert.equal(local.model, 'local-model');
+  assert.equal(local.cohortSettings, undefined, 'local singleton must not claim teacher provenance');
+} finally {
+  for (const key of ['HPS_DEV_RUNTIME', 'HPS_DEV_PROVIDER', 'HPS_DEV_EXECUTABLE', 'HPS_DEV_MODEL']) {
+    if (savedEnv[key] === undefined) delete process.env[key]; else process.env[key] = savedEnv[key];
+  }
+}
