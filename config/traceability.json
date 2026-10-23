@@ -11239,6 +11239,15 @@
         },
         {
           "path": "e2e/customer-claude/run.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/customer-claude-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/trial-end-card-dismiss.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/trial-end-card-host.smoke.mjs"
         }
       ]
     }

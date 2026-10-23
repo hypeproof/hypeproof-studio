@@ -13,11 +13,49 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const commandCalls = [];
 const vscode = {
+  env: { appName: 'HypeProof Studio', clipboard: { writeText: async () => {} } },
+  ViewColumn: { Beside: 2 },
   commands: { executeCommand: async (...args) => { commandCalls.push(args); } },
   workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) },
   window: {},
   Uri: { file: (p) => ({ fsPath: p }) },
 };
+
+test('personal continuation entry rechecks the actual host seat, active task and offer credential', async () => {
+  let panels = 0;
+  vscode.window.createWebviewPanel = () => {
+    panels++;
+    let close;
+    return { webview: { html: '', postMessage: async () => true, onDidReceiveMessage: () => ({ dispose() {} }) }, onDidDispose: fn => { close = fn; return { dispose() {} }; }, dispose() { close?.(); close = undefined; } };
+  };
+  const make = (overrides = {}) => ({
+    context: { subscriptions: [], secrets: { get: async () => 'current-offer' } },
+    cachedProfile: { activity_kind: 'trial', profile_id: 'studio-open-trial' },
+    _instructorMode: { isInstructor: false }, activeStreams: new Map(), profileGeneration: 1,
+    endCardOfferToken: 'current-offer', resolveCoachCwd: () => '/synthetic/project',
+    currentTaskStore: () => ({ getView: () => ({ activeTaskId: 'current-task' }) }),
+    getHistory: () => [], retryMessages: () => [], ...overrides,
+  });
+  const eligible = make();
+  await ChatPanelProvider.prototype.openPersonalClaude.call(eligible, 'Unsent draft');
+  assert.equal(panels, 1, 'positive control opens the real handoff panel');
+  eligible.personalContinuationPane.dispose();
+  for (const overrides of [
+    { cachedProfile: { activity_kind: 'trial', profile_id: 'studio-native-trial' } },
+    { cachedProfile: { activity_kind: 'trial', profile_id: 'studio-open-trial', minor_cohort: true } },
+    { cachedProfile: { activity_kind: 'trial', profile_id: 'studio-open-trial', pass: { request_limit: 1 } } },
+    { cachedProfile: { activity_kind: 'trial', profile_id: 'studio-open-trial', lesson: {} } },
+    { _instructorMode: { isInstructor: true } }, { taskChanging: true }, { connectionChanging: true },
+    { activeStreams: new Map([['active', {}]]) }, { endCardOfferToken: null },
+    { currentTaskStore: () => ({ getView: () => ({ activeTaskId: null }) }) },
+    { context: { subscriptions: [], secrets: { get: async () => 'another-seat-token' } } },
+  ]) await ChatPanelProvider.prototype.openPersonalClaude.call(make(overrides), 'Unsent draft');
+  assert.equal(panels, 1, 'no ineligible or stale entry opens a panel');
+  const changed = make();
+  changed.context.secrets.get = async () => { changed.profileGeneration++; return 'current-offer'; };
+  await ChatPanelProvider.prototype.openPersonalClaude.call(changed, 'Unsent draft');
+  assert.equal(panels, 1, 'seat change while checking credential invalidates entry');
+});
 
 let ChatPanelProvider;
 let FunnelReporter;

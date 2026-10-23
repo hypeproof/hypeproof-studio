@@ -3314,7 +3314,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Explicit personal text continuation; never alters the Service runtime or tool grants. */
   private async openPersonalClaude(draft: unknown): Promise<void> {
-    if (this.personalContinuationOpening || this.taskChanging || this.connectionChanging || this.activeStreams.size || !endCardAdvertised(this.cachedProfile) || this.cachedProfile?.minor_cohort === true || this._instructorMode.isInstructor || !this.endCardOfferToken || typeof draft !== 'string' || draft.length > 24000) return;
+    if (this.personalContinuationOpening || this.taskChanging || this.connectionChanging || this.activeStreams.size || !this.currentTaskStore?.()?.getView().activeTaskId || this.cachedProfile?.lesson || !endCardAdvertised(this.cachedProfile) || this.cachedProfile?.minor_cohort === true || this._instructorMode.isInstructor || !this.endCardOfferToken || typeof draft !== 'string' || draft.length > 24000) return;
     this.personalContinuationOpening = true;
     const token = this.endCardOfferToken;
     const scope = () => JSON.stringify([this.profileGeneration, activityConnections(this.context)?.scope, this.currentTaskStore?.()?.getView().activeTaskId, this.resolveCoachCwd()]);
