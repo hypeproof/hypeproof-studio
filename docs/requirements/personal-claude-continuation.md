@@ -1,0 +1,30 @@
+# Personal Claude Code continuation
+
+Status: implementation candidate for Studio [#2485](https://github.com/hypeproof/hypeproof-studio/issues/2485), under ongoing Epic [#1782](https://github.com/hypeproof/hypeproof-studio/issues/1782). This contract does not establish release, deployment, general availability, or customer acceptance.
+
+Registry: `ST-REQ-PERSONAL-CLAUDE-CONTINUATION`. Domain owner: `jayleekr`, matching the existing native Product Intent and outbound consent ownership; authorship does not confer approval authority.
+
+## Intent and parent requirements
+
+[Product Intent](../PRODUCT-INTENT.md) (`ST-INT-NATIVE`) requires Useful work first, Human judgment stays visible, Minimum necessary intervention, and Evidence over claims. When free AI stops, the learner retains the work and chooses the next action. Context selection, payment responsibility, and result verification stay visible decisions. Context, Verify, Delegate, and Ownership are possible observations, never ability scores inferred merely from sending a request.
+
+This is a bounded continuation of [native trial requirements](studio-native-trial.md) (`ST-REQ-NATIVE`, especially NAT-02/07/11/12), with the [outbound consent contract](../research/chatgpt-desktop-2026-10/domains/projects-library-memory.md#req-know-09-implementation-contract-cgp-know-r-006) (`ST-REQ-OUTBOUND-CONSENT`, REQ-KNOW-09). Existing class access, expiry, budget, and purchase rules remain authoritative. This personal transport is not a general replacement of the Service coach runtime.
+
+## Behavioral contract
+
+| ID | Required behavior |
+|---|---|
+| PCC-01 | Offer `개인 Claude Code로 이어하기` only in a personal, non-instructor, nonminor free workspace after the end card is advertised. Require the resolved profile to have exactly `profile_id: studio-open-trial`, `activity_kind: trial`, and no `pass` block. A code-issued `studio-native-trial`, class seat, minor cohort, paid pass, unknown/mismatched profile, or stale offer cannot open it, including forged host messages. |
+| PCC-02 | Keep the current task, project files, original conversation, and composer draft. Cancellation, blocked inspection, authentication failure, offline state, provider quota, expiry, and disconnect do not remove or replace that work. Offer `AI 없이 작업으로 돌아가기`. A successful response appends a clearly attributed personal Claude Code text exchange to that same task only. |
+| PCC-03 | Include only the project label, editable request, text the learner explicitly pastes/selects, and optional current-task user/assistant text history. History defaults off. Do not automatically load workspace files, hidden memory, other tasks, credentials, or attachments. Show the complete system prompt, serialized payload, model, recipient/provider, verified account and funding notice before explicit consent. |
+| PCC-04 | Bind approval to that complete immutable payload, model, account, recipient, funding disclosure, current task/activity, and generation. Approval is unchecked by default, valid for at most five minutes, and consumed by one send. Editing request/material/history, changing account/provider/policy/task/activity, cancellation, expiry, or disconnect invalidates it. Reinspect the account and supported policy immediately before dispatch; stale callbacks cannot append output to another task. |
+| PCC-05 | Use the installed official Claude Code CLI's supported authentication/status interface. Studio does not open token/credential stores, keychains, profiles, or credential files, ask for passwords, extract tokens, or implement OAuth. Preserve official authentication/provider configuration when launching the CLI; reject configurations whose identity, provider, funding, or policy cannot be verified instead of stripping them and selecting cached subscription auth. Reading supported nonsecret settings to detect unsupported auth helpers is distinct from reading credentials. |
+| PCC-06 | Early direct-send scope is a verified first-party `claude.ai` personal Pro/Max account with a supported CLI and verifiably compatible policy. API-key, cloud-provider, Team/Enterprise, managed/unknown policy, helper-based or otherwise unverifiable configurations block direct send and explain the official-client handoff (`claude`). Do not install, log in, change accounts, or execute that handoff automatically. |
+| PCC-07 | Explain that the personal Claude account's subscription and any configured extra usage apply, including possible provider charges. A subscription is not a promise of zero incremental cost. Never purchase, enable extra usage, silently retry, switch model/provider/account, or fall back to a Studio pass. A later attempt requires a fresh explicit review and consent. |
+| PCC-08 | Return text coaching only. Run outside the project in an empty temporary working directory, with tool use, MCP, hooks, connectors, workspace instruction discovery, session persistence, automatic retries, and model fallback disabled through supported CLI controls. Do not read/edit project files, execute commands on the learner's behalf, or claim external actions were completed. The learner applies and verifies suggestions. Bound request/reply sizes and execution lifetime; abort on cancellation and ignore late responses. |
+
+## Implementation and evidence boundary
+
+Implementation mapping: `personalContinuation/{types,session,claudeCli,index}.ts`, `personalContinuationHost.ts`, `personalContinuationView.ts`, and the existing `chatPanelProvider.ts`, `protocol.ts`, `ChatPanel.tsx`, `TrialEndCard.tsx` entry paths under `extensions/hypeproof-chat/`.
+
+Source-level checks, a synthetic executable, and a mocked VS Code host can establish local contract behavior only. They cannot prove official-provider billing, native installed-app persistence/focus/lifecycle behavior, or a real customer's successful continuation. Follow [test requirements](../testing/personal-claude-continuation.md); record package SHA, OS, CLI version, test account scope, and run evidence before any installed-product acceptance claim. Epic #1782 stays ongoing beyond this bounded slice.
