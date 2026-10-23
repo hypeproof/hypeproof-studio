@@ -183,17 +183,17 @@ async function call(path,method='GET',body){const r=await fetch(path,{method,red
 // The page lock disables the editor, which drops focus; a check that names a field hands it back once the lock is released.
 const fix=(el,msg)=>Object.assign(Error(msg),{field:el});
 async function run(fn){if(busy)return;busy=true;controls();let field=null;try{await fn();}catch(e){status(e.message);field=e.field??null;}finally{busy=false;controls();field?.focus();}}
-$('deliver').onclick=()=>run(async()=>{const path=scope();$('student-token').value='';const d=await call(path+'/versions/'+encodeURIComponent($('version').value.trim())+'/participants','POST',{user:$('student').value.trim(),hours:Number($('hours').value)});$('student-token').value=d.token;$('delivery-status').textContent=d.user+' · '+d.lesson.version+' · 코드 만료 '+new Date(d.expires_at*1000).toLocaleString()+' · AI 세션 종료 '+new Date(d.session_ends_at).toLocaleString()+' · 리허설: '+(REHEARSAL_WORDS[d.rehearsal]||d.rehearsal||'확인 불가');status('참여 코드를 발급했습니다. 학생 화면과 Studio에서 확인하세요.');});
-$('copy-student').onclick=async()=>{if(!$('student-token').value)return;try{await navigator.clipboard.writeText($('student-token').value);$('delivery-status').textContent+=' · 복사했습니다';}catch{status('클립보드 접근이 거부됐습니다. 브라우저 권한을 확인하세요.');}};
-$('clear-student').onclick=()=>{$('student-token').value='';$('delivery-status').textContent='화면에서 지웠습니다. 이미 발급한 코드의 권한은 만료까지 유지됩니다.';};
+$('deliver').onclick=()=>run(async()=>{const path=scope();window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';const d=await call(path+'/versions/'+encodeURIComponent($('version').value.trim())+'/participants','POST',{user:$('student').value.trim(),hours:Number($('hours').value)});$('student-token').value=d.token;$('delivery-status').textContent=d.user+' · '+d.lesson.version+' · 코드 만료 '+new Date(d.expires_at*1000).toLocaleString()+' · AI 세션 종료 '+new Date(d.session_ends_at).toLocaleString()+' · 리허설: '+(REHEARSAL_WORDS[d.rehearsal]||d.rehearsal||'확인 불가');status('참여 코드를 발급했습니다. 학생 화면과 Studio에서 확인하세요.');});
+$('copy-student').onclick=()=>window.chalkCopyFeedback($('copy-student'),()=>$('student-token').value);
+$('clear-student').onclick=()=>{window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('delivery-status').textContent='화면에서 지웠습니다. 이미 발급한 코드의 권한은 만료까지 유지됩니다.';};
 $('token').oninput=()=>{clearConnection();};
 $('editor').oninput=changed;
-for(const k of ['cohort','profile','course'])$(k).oninput=()=>{$('version').value='';clearReadiness();$('completion').textContent='';$('student-token').value='';controls();status('대상이 바뀌었습니다. 새 초안 또는 저장된 초안을 선택하세요. 현재 편집은 보존됩니다.');};
+for(const k of ['cohort','profile','course'])$(k).oninput=()=>{$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';controls();status('대상이 바뀌었습니다. 새 초안 또는 저장된 초안을 선택하세요. 현재 편집은 보존됩니다.');};
 $('forget').onclick=()=>{$('token').value='';clearConnection();status('연결을 해제했습니다. 편집 내용은 남아 있습니다.');};
 $('new').onclick=()=>run(async()=>{if(!$('cohort').value||!$('profile').value)throw Error('먼저 수업 설정을 선택하세요.');if(!discard())return;$('course').value='course-'+crypto.randomUUID();$('version').value='';clearReadiness();$('completion').textContent='';scope();render({steps:[]});step();revision=0;bound=identity();pending=null;dirty=true;status('새 강의 — 커리큘럼을 작성하고 저장하세요.');$('title').focus();});
 $('import').onchange=()=>run(async()=>{const f=$('import').files[0];if(!f)return;if(f.size>1024*1024)throw Error('파일은 1 MiB 이하여야 합니다.');const j=JSON.parse(await f.text());const items=j.schema==='hps-authoring-batch/1'?j.courses:[j];if(!Array.isArray(items)||!items.length||items.some(x=>!x.course_id||x.content?.schema!=='hps-session-design/1'||!Array.isArray(x.content.steps)))throw Error('지원하는 강의 초안 파일이 아닙니다.');batch=items;$('courses').replaceChildren(new Option('가져올 강의를 선택하세요',''),...items.map((c,i)=>new Option(c.content.title,String(i))));status('강의를 선택한 뒤 편집하고 저장하세요.');});
-$('courses').onchange=()=>{if($('courses').value===''||!discard())return;const c=batch[Number($('courses').value)];$('version').value='';clearReadiness();$('completion').textContent='';$('student-token').value='';$('course').value=c.course_id;render(c.content);revision=0;bound=identity();pending=null;dirty=true;status('가져온 초안 — 새 수업으로만 저장합니다. 기존 ID가 있으면 충돌로 보호합니다.');controls();};
-$('load').onclick=()=>run(async()=>{const path=scope();if(!discard())return;const d=await call(path);if(d.profile_id!==$('profile').value.trim())throw Error('저장본의 프로필이 선택한 프로필과 다릅니다.');render(d.content);revision=d.revision;bound=identity();dirty=false;pending=null;$('version').value='';clearReadiness();$('completion').textContent='';$('student-token').value='';status('저장본을 열었습니다. revision '+revision);});
+$('courses').onchange=()=>{if($('courses').value===''||!discard())return;const c=batch[Number($('courses').value)];$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('course').value=c.course_id;render(c.content);revision=0;bound=identity();pending=null;dirty=true;status('가져온 초안 — 새 수업으로만 저장합니다. 기존 ID가 있으면 충돌로 보호합니다.');controls();};
+$('load').onclick=()=>run(async()=>{const path=scope();if(!discard())return;const d=await call(path);if(d.profile_id!==$('profile').value.trim())throw Error('저장본의 프로필이 선택한 프로필과 다릅니다.');render(d.content);revision=d.revision;bound=identity();dirty=false;pending=null;$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';status('저장본을 열었습니다. revision '+revision);});
 function renderModels(){
   const available=modelCatalogueScope===identity()&&modelCatalogue;
   $('models-fields').disabled=!available;
@@ -335,7 +335,7 @@ function renderReadiness(){const box=$('readiness');box.replaceChildren();if(!re
  else if(r.confirmation_required)line('이 서버는 확정한 버전만 학생에게 보냅니다.');
  const c=r.rehearsal?.checks;$('readiness-detail').textContent=JSON.stringify({version:r.version,lesson_sha256:r.lesson_sha256,source_revision:r.source_revision,draft_revision:r.draft_revision,rehearsal:r.rehearsal?{id:r.rehearsal.id,learner:r.rehearsal.learner_id,verdict:r.rehearsal.verdict,reasons:r.rehearsal.reasons,app:r.rehearsal.app,steps:c?.steps,mission:c?.mission,requests:c?.turns,tools:c?.tools}:null,confirmed:r.confirmed,history:r.history},null,2);
  controls();}
-function clearReadiness(){clearTimeout(readinessTimer);candidateVersion='';readiness=null;confirmDiff=null;renderConfirmDiff();$('rehearsal-token').value='';$('confirm-status').textContent='';$('readiness-detail').textContent='';renderReadiness();}
+function clearReadiness(){clearTimeout(readinessTimer);candidateVersion='';readiness=null;confirmDiff=null;renderConfirmDiff();window.chalkClearCopyFeedback($('rehearsal-copy'));$('rehearsal-token').value='';$('confirm-status').textContent='';$('readiness-detail').textContent='';renderReadiness();}
 async function loadReadiness(){const v=candidateVersion;clearTimeout(readinessTimer);if(!v){readiness=null;renderReadiness();return;}
  const d=await call(scope()+'/versions/'+encodeURIComponent(v)+'/readiness');readiness={...d,version:v};renderReadiness();await loadConfirmDiff();
  // The background refresh never takes the page lock: a teacher's click is never swallowed by a poll.
@@ -380,8 +380,8 @@ function renderConfirmDiff(){const box=$('confirm-diff-lines'),say=t=>{$('confir
  controls();}
 $('readiness-load').onclick=()=>run(loadReadiness);
 $('rehearsal-issue').onclick=()=>run(async()=>{const learner=$('rehearsal-learner').value.trim();if(!/^[a-zA-Z0-9_-]{1,64}$/.test(learner))throw Error('리허설 학생 ID를 확인하세요.');const v=candidateVersion,sig=JSON.stringify([scope(),v,learner]);if(rehearsalPending?.sig!==sig)rehearsalPending={sig,id:crypto.randomUUID()};
- const d=await call(scope()+'/versions/'+encodeURIComponent(v)+'/rehearsals','POST',{learner,request_id:rehearsalPending.id});rehearsalPending=null;$('rehearsal-token').value=d.token;status('리허설 코드를 발급했습니다 — 아직 준비 완료가 아닙니다. Studio에서 이 코드로 실행한 결과를 기다립니다.');await loadReadiness();});
-$('rehearsal-copy').onclick=async()=>{if(!$('rehearsal-token').value)return;try{await navigator.clipboard.writeText($('rehearsal-token').value);status('리허설 코드를 복사했습니다.');}catch{status('클립보드 접근이 거부됐습니다.');}};
+ const d=await call(scope()+'/versions/'+encodeURIComponent(v)+'/rehearsals','POST',{learner,request_id:rehearsalPending.id});rehearsalPending=null;window.chalkClearCopyFeedback($('rehearsal-copy'));$('rehearsal-token').value=d.token;status('리허설 코드를 발급했습니다 — 아직 준비 완료가 아닙니다. Studio에서 이 코드로 실행한 결과를 기다립니다.');await loadReadiness();});
+$('rehearsal-copy').onclick=()=>window.chalkCopyFeedback($('rehearsal-copy'),()=>$('rehearsal-token').value);
 $('confirm-go').onclick=()=>run(async()=>{const r=readiness;if(!r||r.state!=='passed'||!r.rehearsal)throw Error('리허설을 통과한 후보만 확정할 수 있습니다.');if(!confirm('후보 '+r.version+'을(를) 수업 버전으로 확정할까요? 학생 미션: '+missionLine(r.content?.learning)+'. 진행 중인 수업은 바뀌지 않습니다.'))return;
  const reviewed=confirmDiff;if(reviewed?.candidate!==r.version||reviewed.state!=='ready')throw Error('안내 문구 비교를 본 뒤에 확정할 수 있습니다.');
  // The base can change while the page is open (another tab confirmed a version): re-read it, refuse and re-diff if it moved.
@@ -399,7 +399,7 @@ $('reuse-step-add').onclick=()=>run(async()=>{const {v,content}=await versionCon
 let settings=[];
 function clearConnection(){
  $('completion').textContent='';settings=[];$('setting').replaceChildren(new Option('선택하세요',''));$('setting-label').hidden=true;
- $('cohort').value='';$('profile').value='';$('student-token').value='';$('version-view').textContent='';
+ $('cohort').value='';$('profile').value='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('version-view').textContent='';
  $('connection-status').textContent='강사 토큰을 연결하면 선택 가능한 수업 설정이 나옵니다.';
  modelCatalogue=undefined;featureCatalogue=undefined;controls();
 }
@@ -418,7 +418,7 @@ $('connect').onclick=()=>run(async()=>{
  await retroProbe(found[0].cohort);
  if(settings.length===1){$('setting').value='0';applySetting();}
 });
-function applySetting(){const value=$('setting').value,s=value===''?undefined:settings[Number(value)];$('student-token').value='';$('completion').textContent='';$('version').value='';clearReadiness();$('version-view').textContent='';if(!s){$('cohort').value='';$('profile').value='';controls();status('수업 설정을 비웠습니다. 설정을 다시 선택하거나 연결 정보를 직접 입력하세요. 현재 편집은 보존됩니다.');return;}$('cohort').value=s.cohort;$('profile').value=s.profile;controls();status('수업 설정을 선택했습니다. 새 강의를 만들거나 저장된 강의를 여세요.');}
+function applySetting(){const value=$('setting').value,s=value===''?undefined:settings[Number(value)];window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('completion').textContent='';$('version').value='';clearReadiness();$('version-view').textContent='';if(!s){$('cohort').value='';$('profile').value='';controls();status('수업 설정을 비웠습니다. 설정을 다시 선택하거나 연결 정보를 직접 입력하세요. 현재 편집은 보존됩니다.');return;}$('cohort').value=s.cohort;$('profile').value=s.profile;controls();status('수업 설정을 선택했습니다. 새 강의를 만들거나 저장된 강의를 여세요.');}
 $('setting').onchange=applySetting;
 
 // #1013 feedback-loop — 07 · the instructor's retrospective of a version that ran, and the next draft it starts. The page sends

@@ -805,7 +805,8 @@ tools appear above the code once it is opened. `복사` (`aria-label="코드 복
 block's text (without Markdown's trailing newline) through the same confirmed-copy hook as the answer
 copy: `복사됨` and the status `코드를 복사했습니다` appear only after the clipboard write resolves, a
 rejected or missing clipboard says `복사하지 못했습니다. 코드를 선택해 복사해 주세요.`, and the
-feedback clears after 2.4s. An empty (or whitespace-only) block has its `복사` disabled, so it never
+successful feedback clears after at least4s; failed feedback remains an alert until another
+copy attempt or content/scope replacement (REQ-STUDIO-COPY-FEEDBACK). An empty (or whitespace-only) block has its `복사` disabled, so it never
 claims a copy or clears the clipboard. `줄 바꿈` is a toggle with one fixed name (`aria-label="줄 바꿈"`)
 and `aria-pressed` for its state; the default keeps each surface's existing behaviour (the pill body
 does not wrap, prose blocks wrap). The choice is remembered per block for the webview session only.
@@ -4902,3 +4903,28 @@ The computed guard mounts the real components with built application CSS, exerci
 composer modes, themes,800/1420 windows, token overrides, keyboard focus and forced colors.
 Type-ahead in DES-CGP-DS-24 and Chalk dense menu styling are separate design-row work; this
 requirement's acceptance is arrow/Home/End/Escape plus learner sizing, not native acceptance.
+
+## Confirmed copy feedback lifetime (CGP-DS-R-025)
+
+`REQ-STUDIO-COPY-FEEDBACK` adopts REQ-CGP-DS-27 (PI#5: visible evidence of the actual
+action, not an optimistic success). Studio answer/code copy succeeds only after the clipboard
+write resolves. Its success `role=status` stays at least4000ms after the latest successful
+attempt; each repeat starts a fresh timer. Failure is `role=alert` and never times out.
+The next copy attempt, changed content, or unmount replaces the prior feedback. Stale async
+results cannot replace a newer attempt or another content value. Sign-in-link copy already
+keeps its result; its failed result now has `role=alert`.
+
+Chalk uses one served copy-feedback helper for console individual/bulk/Lab token copy, issuer,
+authoring participant/rehearsal copy, class participation links, and learner lesson instructions.
+These success/status and failure/alert messages persist until a next copy or explicit scope
+clear. Button labels stay stable. No credential or copied payload is written into generic
+feedback/logs. The class link retains its deliberate safe-link fallback on clipboard rejection.
+Content changes and detached buttons invalidate pending results; explicit authoring code clears
+also clear their notices and invalidate pending attempts. Clipboard contents and API contracts
+remain unchanged. Existing trash feedback (8s, holdable) and online recovery announcement (4s)
+already meet the lifetime; progress/timeline text is not converted into a toast.
+
+Behavioral evidence uses real components/pages with deferred synthetic clipboard writes and
+a deterministic feedback clock; tests cover success timing, failure persistence, repeated
+actions, out-of-order completion and changed content. Native clipboard/screen-reader delivery
+requires owner verification. DES-CGP-DS-27's separate toast geometry is not claimed here.

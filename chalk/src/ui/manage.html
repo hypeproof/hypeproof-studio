@@ -1206,9 +1206,6 @@ setInterval(()=>{if(!document.hidden)refresh();},10000);window.addEventListener(
 (()=>{const ID=/^[A-Za-z0-9_-]{1,128}$/;
 window.chalkJoinLink=id=>ID.test(id)?'hypeproof-studio://hypeproof.hypeproof-chat/join?class='+id:null;
 const button=document.getElementById('join-copy'),note=document.getElementById('join-copied');
-button.onclick=async()=>{const link=window.chalkJoinLink(button.dataset.cohort||'');note.textContent='';
-if(!link){note.textContent='코호트 ID를 확인한 뒤 다시 연결해 주세요.';return;}
-try{await navigator.clipboard.writeText(link);note.textContent='참여 링크를 복사했어요. 참여 코드는 들어 있지 않아요.';}
-catch{note.textContent='복사하지 못했어요. 이 링크를 직접 복사해 주세요: '+link;}};})();
+button.onclick=()=>{const link=window.chalkJoinLink(button.dataset.cohort||'');if(!link){note.setAttribute('role','alert');note.textContent='코호트 ID를 확인한 뒤 다시 연결해 주세요.';return;}return window.chalkCopyFeedback(button,()=>window.chalkJoinLink(button.dataset.cohort||''),note,'참여 링크를 복사했어요. 참여 코드는 들어 있지 않아요.','복사하지 못했어요. 이 링크를 직접 복사해 주세요: '+link);};})();
 </script>
 </body></html>

@@ -11694,6 +11694,79 @@
           "path": "extensions/hypeproof-chat/test/menu-tokens-computed.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-COPY-FEEDBACK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Confirmed copy feedback lifetime (CGP-DS-R-025)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COPY-FEEDBACK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COPY-FEEDBACK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CodeBlock.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx"
+        },
+        {
+          "path": "chalk/src/lib/copy-feedback.ts"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        },
+        {
+          "path": "chalk/src/ui/console.html"
+        },
+        {
+          "path": "chalk/src/ui/issuer.html"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/ui/learn.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COPY-FEEDBACK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COPY-FEEDBACK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/copy-feedback-lifetime.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/copy-feedback-visual.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/copy-feedback.browser.mjs"
+        }
+      ]
     }
   ]
 }

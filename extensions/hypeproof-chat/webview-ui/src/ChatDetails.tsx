@@ -104,29 +104,35 @@ export async function writeClipboard(text: string, clipboard: Pick<Clipboard, 'w
   } catch { return 'failed'; }
 }
 
-/**
- * Confirmed copy feedback shared by the answer copy and every code block (CP-R1, CGP-CHAT-R-008):
- * the confirmation appears only after the clipboard write succeeds, a failure is stated, and the
- * state returns to idle after 2.4s.
- */
+/** Confirmed feedback: successful copies stay four seconds; failures stay until another action.
+ * Attempt identity makes repeated success restart its timer and ignores stale completions. */
 export function useConfirmedCopy(text: string): [CopyState, () => Promise<void>] {
-  const [state, setState] = useState<CopyState>('idle');
+  const [feedback, setFeedback] = useState<{ state: CopyState; attempt: number }>({ state: 'idle', attempt: 0 });
   const mounted = useRef(true);
   const copyAttempt = useRef(0);
+  const currentText = useRef(text);
+  currentText.current = text;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    if (state === 'idle') return;
-    const timer = setTimeout(() => setState('idle'), 2400);
+    const attempt = ++copyAttempt.current;
+    setFeedback({ state: 'idle', attempt });
+  }, [text]);
+  useEffect(() => {
+    if (feedback.state !== 'copied') return;
+    const timer = setTimeout(() => setFeedback(current => current.attempt === feedback.attempt
+      ? { state: 'idle', attempt: current.attempt } : current), 4000);
     return () => clearTimeout(timer);
-  }, [state]);
+  }, [feedback]);
   const copy = async () => {
     const attempt = ++copyAttempt.current;
-    setState('idle');
-    // Older clipboard completions must not replace the latest attempt's feedback.
-    const result = await writeClipboard(text);
-    if (mounted.current && attempt === copyAttempt.current) setState(result);
+    const copiedText = text;
+    setFeedback({ state: 'idle', attempt });
+    const result = await writeClipboard(copiedText);
+    if (mounted.current && attempt === copyAttempt.current && currentText.current === copiedText) {
+      setFeedback({ state: result, attempt });
+    }
   };
-  return [state, copy];
+  return [feedback.state, copy];
 }
 
 /** CGP-KNOW-R-004 — the answer action's label (the session command's name, package.json wikiIngest). */
@@ -148,7 +154,7 @@ export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki }: { con
       <span>{ANSWER_TO_WIKI_LABEL}</span>
     </button>}
     {verdict}
-    <span role="status" className="hps-copy-status">{state === 'copied' ? '답변을 복사했습니다' : state === 'failed' ? '복사하지 못했습니다. 답변을 선택해 복사해 주세요.' : ''}</span>
+    <span role={state === 'failed' ? 'alert' : 'status'} className="hps-copy-status">{state === 'copied' ? '답변을 복사했습니다' : state === 'failed' ? '복사하지 못했습니다. 답변을 선택해 복사해 주세요.' : ''}</span>
   </div>;
 }
 

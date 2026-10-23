@@ -371,3 +371,10 @@ REQ-CGP-DS-24 uses the shared learner-menu tokens and computed browser guard des
 REQ-STUDIO-MENU-TOKENS. The tools and personal header menus retain their own placement
 and actions. DES-CGP-DS-24 type-ahead and Chalk dense-menu work remain separate; local
 computed evidence does not imply installed-app or owner acceptance.
+
+## Confirmed copy feedback (CGP-DS-R-025)
+
+REQ-CGP-DS-27 is adopted for Studio and Chalk copy outcomes in
+REQ-STUDIO-COPY-FEEDBACK. Studio success lasts at least4s; Chalk success persists; copy
+errors are alert regions without automatic dismissal. Existing trash/online timers meet
+the floor. Native announcements and DES-CGP-DS-27 toast geometry remain separate evidence.

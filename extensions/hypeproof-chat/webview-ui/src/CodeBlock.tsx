@@ -65,7 +65,7 @@ export function CodeBlockTools({ code, wrap, onToggleWrap }: { code: string; wra
     <button type="button" className="hps-codeblock-tool" onClick={onToggleWrap} aria-label={WRAP_LABEL} aria-pressed={wrap} data-hp-tooltip={WRAP_LABEL}>
       <span>{WRAP_LABEL}</span>
     </button>
-    <span role="status" className="hps-copy-status hps-codeblock-status">{state === 'copied' ? COPY_DONE_STATUS : state === 'failed' ? COPY_FAILED_STATUS : ''}</span>
+    <span role={state === 'failed' ? 'alert' : 'status'} className="hps-copy-status hps-codeblock-status">{state === 'copied' ? COPY_DONE_STATUS : state === 'failed' ? COPY_FAILED_STATUS : ''}</span>
   </div>;
 }
 
