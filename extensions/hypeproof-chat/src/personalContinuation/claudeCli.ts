@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { access, lstat, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { access, lstat, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
@@ -130,6 +130,28 @@ async function policyBlocker(cwd: string, env: NodeJS.ProcessEnv, signal: AbortS
   return undefined;
 }
 
+async function authSettingsBlocker(env: NodeJS.ProcessEnv): Promise<string | undefined> {
+  // Restricted mode must not silently drop a configured helper or switch a user's
+  // provider to cached subscription auth. Inspect settings keys only; never open
+  // .credentials.json, .claude.json, keychains, profiles or cloud credential files.
+  const directory = env.CLAUDE_CONFIG_DIR ?? join(env.HOME ?? homedir(), '.claude');
+  if (!isAbsolute(directory)) return 'auth_settings_unverifiable';
+  const file = join(directory, 'settings.json');
+  try {
+    const stat = await lstat(file);
+    if (!stat.isFile() || stat.size > 2 * 1024 * 1024) return 'auth_settings_unverifiable';
+    const settings: unknown = JSON.parse(await readFile(file, 'utf8'));
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 'auth_settings_unverifiable';
+    const configured = settings as Record<string, unknown>;
+    if (['apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport', 'forceLoginMethod', 'forceLoginOrgUUID', 'forceLoginGatewayUrl', 'gatewayInternalNetworks'].some(key => configured[key] !== undefined)) return 'auth_settings_require_official_client';
+    if (configured.env !== undefined) {
+      if (!configured.env || typeof configured.env !== 'object' || Array.isArray(configured.env)) return 'auth_settings_unverifiable';
+      if (Object.keys(configured.env).some(key => /^(?:ANTHROPIC_|AWS_|GOOGLE_|CLOUDSDK_|AZURE_|VERTEX_|BEDROCK_|CLAUDE_CONFIG_DIR$|CLAUDE_CODE_OAUTH_TOKEN$|CLAUDE_CODE_USE_)/.test(key))) return 'auth_settings_require_official_client';
+    }
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return 'auth_settings_unverifiable'; }
+  return undefined;
+}
+
 /** No login, purchase, credential-file read, automatic retry or provider fallback. */
 export function createClaudeCliTransport(options: { executable?: string; env?: NodeJS.ProcessEnv } = {}): ContinuationTransport {
   let prepared: { executable: string; environment: string; version: string } | undefined;
@@ -148,6 +170,8 @@ export function createClaudeCliTransport(options: { executable?: string; env?: N
       return inEmptyDirectory(async cwd => {
         const policy = await policyBlocker(cwd, env, signal);
         if (policy) return blocked(policy);
+        const authSettings = await authSettingsBlocker(env);
+        if (authSettings) return blocked(authSettings);
         const help = await run(executable, ['--help'], cwd, env, signal);
         if (help.failure || help.code !== 0 || flags.some(flag => !help.stdout.includes(flag))) return blocked('cli_isolation_unsupported');
         const versionResult = await run(executable, ['--version'], cwd, env, signal);
@@ -182,6 +206,8 @@ export function createClaudeCliTransport(options: { executable?: string; env?: N
       return inEmptyDirectory(async cwd => {
         const policy = await policyBlocker(cwd, env, signal);
         if (policy) return { status: 'blocked', code: policy };
+        const authSettings = await authSettingsBlocker(env);
+        if (authSettings) return { status: 'blocked', code: authSettings };
         const result = await run(attested.executable, claudeRequestArguments(snapshot), cwd, env, signal, snapshot.userPrompt, 90_000);
         if (result.failure) return { status: result.failure === 'cancelled' ? 'cancelled' : 'error', code: result.failure };
         let parsed: Record<string, unknown>;

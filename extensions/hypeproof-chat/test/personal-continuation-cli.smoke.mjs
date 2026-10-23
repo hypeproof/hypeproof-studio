@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, writeFile, readFile, rm, access } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as pause } from 'node:timers/promises';
@@ -28,7 +28,8 @@ else console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,
 `;
   try {
     await writeFile(executable, script, { mode: 0o700 });
-    const env = { ...process.env, ANTHROPIC_TEST_SCENARIO: 'success', HPS_ADMIN_PASSWORD: 'SYNTHETIC_HOST_SECRET', NODE_OPTIONS: '--throw-deprecation' };
+    const config = join(top, 'synthetic-config'); await mkdir(config);
+    const env = { ...process.env, CLAUDE_CONFIG_DIR: config, ANTHROPIC_TEST_SCENARIO: 'success', HPS_ADMIN_PASSWORD: 'SYNTHETIC_HOST_SECRET', NODE_OPTIONS: '--throw-deprecation' };
     const transport = createClaudeCliTransport({ executable, env });
     const session = new PersonalContinuationSession(transport);
     const inspection = await session.inspect();
@@ -72,6 +73,11 @@ else console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,
     env.ANTHROPIC_BASE_URL = 'https://undisclosed-recipient.invalid';
     assert.equal((await session.inspect()).code, 'recipient_unsupported');
     delete env.ANTHROPIC_BASE_URL;
+    for (const settings of [{ apiKeyHelper: 'must-never-execute' }, { env: { ANTHROPIC_API_KEY: 'SYNTHETIC_SETTINGS_KEY' } }]) {
+      await writeFile(join(config, 'settings.json'), JSON.stringify(settings));
+      assert.equal((await session.inspect()).code, 'auth_settings_require_official_client');
+    }
+    await rm(join(config, 'settings.json'));
 
     env.ANTHROPIC_TEST_SCENARIO = 'hang';
     assert.equal((await session.inspect()).status, 'ready');
