@@ -169,7 +169,10 @@ try {
       return node;
     };
     const baseManifest=JSON.parse(execFileSync('git',['show',`${base}:extensions/hypeproof-chat/package.json`],{cwd:root}).toString());
-    const only=m=>JSON.stringify(strip(m));
+    // A setting this branch adds is not a relabel of one on main; every setting main already has must still match.
+    const baseKeys=new Set(Object.keys(baseManifest.contributes?.configuration?.properties??{}));
+    const onlyBaseSettings=m=>{const c=structuredClone(m),p=c.contributes?.configuration?.properties;if(p)for(const k of Object.keys(p))if(!baseKeys.has(k))delete p[k];return c;};
+    const only=m=>JSON.stringify(strip(onlyBaseSettings(m)));
     assert.equal(only(manifest),only(baseManifest),'package.json differs from main beyond title/category/description/name/enumItemLabels');
     // Defaults, scopes, enums and ids come through stripping untouched; spot-check the security-relevant ones too.
     const props=manifest.contributes.configuration.properties,baseProps=baseManifest.contributes.configuration.properties;
