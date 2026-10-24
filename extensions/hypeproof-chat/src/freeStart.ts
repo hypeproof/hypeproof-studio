@@ -18,6 +18,9 @@ export const INSTALL_ID_KEY = "hypeproofChat.installId.v1";
 export const AGE_KEY = "hypeproofChat.freeStart.age.v1";
 /** globalState key for "the person paying is 19 or older" on a free seat (§2.5). */
 export const PAYER_ADULT_KEY = "hypeproofChat.freeStart.payerAdult.v1";
+/** Bounded same-install recovery. A persistent lease returns control to the learner. */
+export const FREE_CLAIM_BUSY_RETRY_DELAYS_MS = [3000, 6000, 12000] as const;
+export const FREE_CLAIM_BUSY_RECOVERY = "무료 사용 연결을 아직 마무리하지 못했습니다. 만든 파일과 대화는 그대로 남습니다. 2분 뒤 '바로 시작하기'를 다시 눌러 주세요. 계속되면 명령 팔레트에서 'HypeProof Chat: 문제 신고하기'를 선택해 주세요.";
 
 export type AgeAnswer = "14+" | "under14";
 export const isAgeAnswer = (v: unknown): v is AgeAnswer => v === "14+" || v === "under14";

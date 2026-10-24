@@ -35,12 +35,12 @@ test('the tag, source commit and checksums are baked in', () => {
   assert.ok(script.includes(oneLiner('v2026.1020.0')));
   assert.ok(!script.includes('@@'));
   // The START script is embedded verbatim, so the one-liner and the kit write the same file.
-  assert.ok(script.includes(renderStart('v2026.1020.0').trimEnd()));
+  assert.ok(script.includes(renderStart('v2026.1020.0', SRC).trimEnd()));
 });
 
 test('malformed inputs never render a script', () => {
   for (const bad of [{tag: '2026.1020.0'}, {tag: 'v2026.1020'}, {sourceSha: 'abc'}, {zipSha256: H('A')}, {zipSha256: 'a'.repeat(63)},
-    {seedName: 'claude-agent-sdk-win32-x64-0.3.299.tgz', seedSha256: H('b'), seederSha256: H('c')},
+    {appVersion: '2025.1.0'}, {seedName: 'claude-agent-sdk-win32-x64-0.3.299.tgz', seedSha256: H('b'), seederSha256: H('c')},
     {seedName: 'claude-agent-sdk-darwin-arm64-0.3.299.tgz', seedSha256: H('b')}]) {
     assert.throws(() => renderInstaller({...base, ...bad}), JSON.stringify(bad));
   }
@@ -57,13 +57,15 @@ test('free start wording follows the version', () => {
   assert.match(renderReadme({...base, tag: 'v0.1.56'}), /참여 코드를 붙여넣/);
 });
 
-test('START keeps secrets in the keychain unless asked otherwise', () => {
-  const start = renderStart('v2026.1020.0-rc.3');
+test('START uses durable storage and clears conflicting inherited overrides', () => {
+  const start = renderStart('v2026.1020.0-rc.3', SRC);
   assert.ok(start.includes('$HOME/Applications/HypeProof-RC-2026.1020.0-rc.3/HypeProof Studio.app'));
   assert.ok(start.includes('$HOME/Library/Application Support/HPS-$VERSION'));
   const exec = start.split('\n').find(l => l.startsWith('exec '));
   assert.ok(!exec.includes('--use-inmemory-secretstorage'), 'never unconditional');
-  assert.match(start, /HPS_KIT_INMEMORY_SECRETS:-0\}" == 1 \]\]; then EXTRA\+=\(--use-inmemory-secretstorage\)/);
+  assert.match(start, /unset VSCODE_PORTABLE VSCODE_APPDATA VSCODE_DEV VSCODE_CWD HPS_KIT_INMEMORY_SECRETS/);
+  assert.match(start, /HPS-RC-Profiles\/\$VERSION/);
+  assert.doesNotMatch(start, /EXTRA|--use-inmemory-secretstorage/);
 });
 
 test('layout names and the kit asset name', () => {
@@ -89,7 +91,7 @@ test('release notes gain the one-liner once', () => {
 // ── Install runs: macOS only (ditto, PlistBuddy) ────────────────────────────
 const mac = process.platform === 'darwin';
 
-function fakeAppZip(dir, {version, bundleId = 'ai.hypeproof.studio'}) {
+function fakeAppZip(dir, {version, bundleId = 'ai.hypeproof.studio', source = SRC}) {
   const app = path.join(dir, 'src', 'HypeProof Studio.app');
   fs.mkdirSync(path.join(app, 'Contents/MacOS'), {recursive: true});
   fs.writeFileSync(path.join(app, 'Contents/Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
@@ -101,6 +103,8 @@ function fakeAppZip(dir, {version, bundleId = 'ai.hypeproof.studio'}) {
 </dict></plist>
 `);
   fs.writeFileSync(path.join(app, 'Contents/MacOS/HypeProof Studio'), '#!/bin/sh\nexit 0\n', {mode: 0o755});
+  fs.mkdirSync(path.join(app, 'Contents/Resources/app'), {recursive: true});
+  fs.writeFileSync(path.join(app, 'Contents/Resources/app/product.json'), JSON.stringify({version, commit: source}));
   const assets = path.join(dir, 'assets');
   fs.mkdirSync(assets, {recursive: true});
   const zip = path.join(assets, 'HypeProof-Studio-darwin-arm64.zip');
@@ -152,6 +156,46 @@ test('right sha installs the stable build into ~/Applications; a wrong sha abort
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 });
 
+test('both installer entry points preserve quarantine and report macOS refusal without a bypass', {skip: !mac}, () => {
+  for (const args of [[], ['--from-command']]) {
+    const dir = tmp('hps-install-quarantine-');
+    try {
+      const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0'});
+      const bin = path.join(dir, 'bin');
+      fs.mkdirSync(bin);
+      const log = path.join(dir, 'xattr.log');
+      const state = path.join(dir, 'synthetic-quarantine');
+      const quarantine = '0083;synthetic-download;test-only';
+      fs.writeFileSync(state, quarantine);
+      // Entirely synthetic xattr: read queries return a modeled attribute; any
+      // mutation would change the sentinel and fail this behavioral control.
+      fs.writeFileSync(path.join(bin, 'xattr'), `#!/bin/sh
+printf '%s\n' "$*" >> "$HPS_TEST_XATTR_LOG"
+if [ "$1" = -p ]; then cat "$HPS_TEST_XATTR_STATE"; else printf 'mutated' > "$HPS_TEST_XATTR_STATE"; fi
+`, {mode: 0o755});
+      const result = install(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets}, args, {
+        PATH: `${bin}:${process.env.PATH}`, HPS_TEST_XATTR_LOG: log, HPS_TEST_XATTR_STATE: state,
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(fs.readFileSync(state, 'utf8'), quarantine, 'existing quarantine remains byte-for-byte intact');
+      const commands = fs.readFileSync(log, 'utf8').trim().split('\n');
+      assert.equal(commands.length, 1);
+      assert.ok(commands.every(line => line.startsWith('-p com.apple.quarantine ')), 'only read diagnostics are allowed');
+      assert.match(result.stderr, /macOS가 설치나 실행을 막으면 멈추고 오류 문구를 전달/);
+      assert.doesNotMatch(result.stderr, /아래 한 줄 설치 명령을 쓰세요|격리.*지우/);
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  }
+});
+
+test('distribution instructions separate package verification from Apple launch approval', () => {
+  const readme = renderReadme(base);
+  const notes = notesSection(base.tag);
+  assert.match(readme, /Apple 서명·공증 또는 macOS 실행 허용을 증명하지 않습니다/);
+  assert.match(readme, /설치를 멈추고 보이는 오류 문구/);
+  assert.match(notes, /do not establish Apple signing, notarization or Gatekeeper acceptance/);
+  assert.doesNotMatch(`${readme}\n${notes}`, /macOS가 막지 않습니다|use the one-liner then|curl downloads are not quarantined/);
+});
+
 test('an -rc tag installs side by side with its own profile and START script', {skip: !mac}, () => {
   const dir = tmp('hps-install-kit-');
   try {
@@ -160,13 +204,13 @@ test('an -rc tag installs side by side with its own profile and START script', {
     const r = install(dir, {tag, zipSha256: sha, assets});
     assert.equal(r.status, 0, r.stderr);
     const root = path.join(r.home, 'Applications', `HypeProof-RC-${v}`);
-    const state = path.join(r.home, 'Library/Application Support', `HPS-${v}`);
+    const state = path.join(r.home, 'Library/Application Support', `HPS-RC-Profiles/${v}`);
     assert.equal(plistValue(path.join(root, 'HypeProof Studio.app'), 'CFBundleShortVersionString'), v);
     assert.ok(fs.existsSync(path.join(root, `.hps-kit-${v}`)));
-    assert.ok(fs.existsSync(path.join(state, `.hps-kit-${v}`)));
+    assert.ok(fs.existsSync(path.join(state, '.hps-rc-profile-v1')));
     assert.equal(fs.statSync(state).mode & 0o777, 0o700);
     assert.match(fs.readFileSync(path.join(state, 'User/settings.json'), 'utf8'), /"telemetry\.telemetryLevel": "off"/, 'VS Code telemetry stays off');
-    assert.equal(fs.readFileSync(path.join(root, `START-${v}.command`), 'utf8'), renderStart(tag));
+    assert.equal(fs.readFileSync(path.join(root, `START-${v}.command`), 'utf8'), renderStart(tag, SRC));
     assert.equal(fs.existsSync(path.join(r.home, 'Applications/HypeProof Studio.app')), false, 'the main install is untouched');
     // Re-running over its own kit is allowed.
     assert.equal(install(dir, {tag, zipSha256: sha, assets}).status, 0);
@@ -179,6 +223,65 @@ test('an -rc tag installs side by side with its own profile and START script', {
       assert.match(refused.stderr, /같은 이름의 다른 폴더/);
     } finally { fs.rmSync(other, {recursive: true, force: true}); }
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('managed RC binds candidate tag, embedded app version and source, preserves legacy ciphertext, and launcher clears overrides', {skip: !mac}, () => {
+  const dir = tmp('hps-install-rc-profile-');
+  try {
+    const tag = 'v2026.1024.0-rc.2', candidate = tag.slice(1), appVersion = '2026.1024.0';
+    const old = path.join(dir, 'home/Library/Application Support', `HPS-${candidate}`);
+    fs.mkdirSync(old, {recursive: true});
+    fs.writeFileSync(path.join(old, `.hps-kit-${candidate}`), '');
+    fs.writeFileSync(path.join(old, 'state.vscdb'), 'old production-namespace ciphertext');
+    const {assets, sha} = fakeAppZip(dir, {version: appVersion});
+    const opts = {tag, appVersion, zipSha256: sha, assets};
+    const r = install(dir, opts);
+    assert.equal(r.status, 0, r.stderr);
+    const root = path.join(r.home, 'Applications', `HypeProof-RC-${candidate}`);
+    const profile = path.join(r.home, 'Library/Application Support/HPS-RC-Profiles', candidate);
+    const app = path.join(root, 'HypeProof Studio.app');
+    const marker = ['hps-rc-profile-v1', 'HypeProof Studio RC', candidate, appVersion, SRC, app, profile, ''].join('\n');
+    assert.equal(fs.readFileSync(path.join(profile, '.hps-rc-profile-v1'), 'utf8'), marker);
+    assert.equal(fs.readFileSync(path.join(root, '.hps-rc-profile-v1'), 'utf8'), marker);
+    assert.equal(fs.existsSync(path.join(profile, 'state.vscdb')), false);
+    assert.equal(fs.readFileSync(path.join(old, 'state.vscdb'), 'utf8'), 'old production-namespace ciphertext');
+    const exe = path.join(app, 'Contents/MacOS/HypeProof Studio');
+    fs.writeFileSync(exe, `#!/bin/sh
+printf '%s\n' "$@" > "$HOME/launch-args"
+printf '%s\n' "\${VSCODE_PORTABLE-unset}" "\${VSCODE_APPDATA-unset}" "\${HPS_KIT_INMEMORY_SECRETS-unset}" > "$HOME/launch-env"
+`, {mode: 0o755});
+    const launcher = path.join(root, `START-${candidate}.command`);
+    const launch = () => spawnSync('/bin/bash', [launcher], {encoding: 'utf8', env: {HOME: r.home, PATH: process.env.PATH, VSCODE_PORTABLE: '/old', VSCODE_APPDATA: '/old', HPS_KIT_INMEMORY_SECRETS: '1'}});
+    const started = launch();
+    assert.equal(started.status, 0, started.stderr);
+    assert.equal(fs.readFileSync(path.join(r.home, 'launch-env'), 'utf8'), 'unset\nunset\nunset\n');
+    assert.ok(fs.readFileSync(path.join(r.home, 'launch-args'), 'utf8').includes(`--user-data-dir=${profile}\n`));
+    fs.unlinkSync(path.join(r.home, 'launch-args'));
+    fs.appendFileSync(path.join(profile, '.hps-rc-profile-v1'), '\n');
+    assert.notEqual(launch().status, 0, 'malformed marker does not execute app');
+    assert.equal(fs.existsSync(path.join(r.home, 'launch-args')), false);
+    assert.notEqual(install(dir, opts).status, 0, 'installer also rejects extra marker lines');
+    assert.equal(fs.readFileSync(path.join(old, 'state.vscdb'), 'utf8'), 'old production-namespace ciphertext');
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('RC refuses unmarked pre-existing dedicated profile and mismatched source without changing either', {skip: !mac}, () => {
+  for (const reason of ['profile', 'source']) {
+    const dir = tmp('hps-install-rc-negative-');
+    try {
+      const tag = 'v2026.1024.0-rc.2', appVersion = '2026.1024.0';
+      const {assets, sha} = fakeAppZip(dir, {version: appVersion, source: reason === 'source' ? 'b'.repeat(40) : SRC});
+      const profile = path.join(dir, 'home/Library/Application Support/HPS-RC-Profiles', tag.slice(1));
+      if (reason === 'profile') {
+        fs.mkdirSync(profile, {recursive: true});
+        fs.writeFileSync(path.join(profile, 'state.vscdb'), 'existing ciphertext');
+      }
+      const result = install(dir, {tag, appVersion, zipSha256: sha, assets});
+      assert.notEqual(result.status, 0);
+      assert.equal(fs.existsSync(path.join(result.home, 'Applications', `HypeProof-RC-${tag.slice(1)}`, 'HypeProof Studio.app')), false);
+      if (reason === 'profile') assert.equal(fs.readFileSync(path.join(profile, 'state.vscdb'), 'utf8'), 'existing ciphertext');
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  }
 });
 
 test('refuses an Intel Mac, a mismatched app version and a stray option', {skip: !mac}, () => {

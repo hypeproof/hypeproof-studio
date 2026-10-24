@@ -20,7 +20,15 @@ export async function restoreInitialSurface(host: {
   ensureProfile(): PromiseLike<unknown>;
   openChat(): PromiseLike<unknown>;
 }): Promise<void> {
-  const storedIssuer = await host.getStoredIssuer();
+  let storedIssuer: string | undefined;
+  try { storedIssuer = await host.getStoredIssuer(); }
+  catch {
+    // An unreadable credential is not an absent credential. Keep the entry surface
+    // available without resuming a connection or silently discarding saved secrets.
+    void host.notifyMismatch('저장된 로그인 정보를 읽지 못했습니다. 기존 연결과 파일은 보존됩니다. 잠시 뒤 앱을 다시 열어 주세요.');
+    await host.showStart({ deferProfileUntilEntry: true });
+    return;
+  }
   const decision = host.decision;
   const record = host.connections()?.current;
   if (decision === 'expired') void host.notifyExpired('폴더 전환 확인 시간이 지났습니다. 저장된 활동에서 이어가세요. 작업 파일과 연결은 보존됩니다.');

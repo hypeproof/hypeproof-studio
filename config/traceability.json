@@ -1768,6 +1768,30 @@
         },
         {
           "path": ".github/workflows/release-cut.yml"
+        },
+        {
+          "path": "scripts/patches/core/hps-secure-storage.patch"
+        },
+        {
+          "path": "scripts/patches/core/secure-storage/build_patch.py"
+        },
+        {
+          "path": "scripts/patches/core/hps-rc-storage.patch"
+        },
+        {
+          "path": "scripts/patches/core/rc-storage/build_patch.py"
+        },
+        {
+          "path": "scripts/patches/core/rc-storage/hpsRcStorage.ts"
+        },
+        {
+          "path": "scripts/release/install-kit.mjs"
+        },
+        {
+          "path": "scripts/release/templates/START.command"
+        },
+        {
+          "path": "scripts/release/templates/install-mac.sh"
         }
       ]
     },
@@ -1817,6 +1841,15 @@
         },
         {
           "path": "scripts/release/test/release-cut.test.mjs"
+        },
+        {
+          "path": "scripts/patches/core/secure-storage/secure-storage.test.mjs"
+        },
+        {
+          "path": "scripts/patches/core/rc-storage/rc-storage.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/install-kit.test.mjs"
         }
       ]
     },

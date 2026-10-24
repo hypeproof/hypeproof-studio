@@ -297,9 +297,9 @@ jobs:
           node scripts/release/sdk-seed-assets.mjs manifest "$seed" "$version" "$platforms"
           gh release upload "$TAG" "$seed"/* --clobber
           gh release view "$TAG" --json assets | node scripts/release/sdk-seed-assets.mjs list "$version" "$platforms"
-      # Per-release Mac installer (2026-10-20), rc and stable alike. The zip is not
-      # notarized, so a browser download is quarantined and Gatekeeper refuses it; curl
-      # adds no quarantine flag. install-mac.sh is pinned to this tag and to the accepted
+      # Per-release Mac installer (2026-10-20), rc and stable alike. OS trust checks
+      # remain in force; the installer does not remove quarantine or change security
+      # settings. install-mac.sh is pinned to this tag and to the accepted
       # zip's SHA-256 (dist/ was just checked against the receipts), seeds the coach SDK
       # from the seed attached above and is the release body's one-liner. The Test Kit zip
       # wraps the same script in INSTALL/START .command files with a Korean READ-ME.
@@ -317,7 +317,10 @@ jobs:
           seeds=("$RUNNER_TEMP"/sdk-seed/claude-agent-sdk-darwin-arm64-*.tgz)
           [[ ${#seeds[@]} -eq 1 && -f "${seeds[0]}" ]] || { echo "::error::expected one darwin-arm64 SDK seed"; exit 1; }
           out="$RUNNER_TEMP/install-kit"
-          node scripts/release/install-kit.mjs render --tag "$TAG" --source-sha "$SOURCE_SHA" \
+          # Managed RC tags carry final-version bytes. Bind the kit to the
+          # embedded version instead of assuming it equals the candidate tag.
+          app_version="$(unzip -p "$zip" 'HypeProof Studio.app/Contents/Resources/app/product.json' | jq -er '.version')"
+          node scripts/release/install-kit.mjs render --tag "$TAG" --app-version "$app_version" --source-sha "$SOURCE_SHA" \
             --zip-sha256 "$(sha256sum "$zip" | cut -d' ' -f1)" \
             --seed-name "$(basename "${seeds[0]}")" --seed-sha256 "$(sha256sum "${seeds[0]}" | cut -d' ' -f1)" \
             --seeder-sha256 "$(git show "$SOURCE_SHA:scripts/seed-sdk-binary.sh" | sha256sum | cut -d' ' -f1)" \

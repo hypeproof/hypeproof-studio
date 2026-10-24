@@ -56,6 +56,21 @@
 
 ## 실행 순서와 비용
 
+### US-T11/16/18/20 RC 암호화 저장소 대조
+
+`scripts/patches/core/secure-storage/secure-storage.test.mjs`는 실제 upstream 저장소
+클래스를 패치해 없는 키/목록 조회, 저장·재시작 읽기, OS 거절·복호화 실패 후 암호문
+보존과 재시도를 검사한다. 같은 검사를 패치 없는 소스로 실행해 회귀 검출도 확인한다.
+`scripts/patches/core/rc-storage/rc-storage.test.mjs`는 실제 시작 진입점과 경로 해석기에
+정상 키트·구형/손상 표식·경로/환경 충돌·정식 앱 대조를 넣는다. 설치 스크립트 검사는
+합성 번들과 임시 HOME에서 수행하며 사용자 키체인이나 기존 앱을 수정하지 않는다.
+
+최종 Mac 후보는 새로 빌드한 정확한 digest의 키트로 설치한다. START와 앱 직접 열기를
+각각 실행하고, 승인된 합성 참여 자격을 저장한 뒤 창 새로고침·앱 종료/재실행·폴더
+전환에서 연결과 파일이 유지되는지 확인한다. 정식 프로필·키체인 접근 요청이 나오면
+PASS로 처리하지 않는다. 암호 입력, Always Allow, ACL 수정, 암호화 해제, 임시 메모리
+저장으로 실패를 덮지 않는다. 소스 검사와 실제 키체인·앱 검증 결과를 별도 기록한다.
+
 1. UI/상태 전이/권한/예산/gate의 API 비용 없는 양성·실패 대조를 먼저 실행한다.
 2. 기존 `e2e/native-trial.config.ts`, `scripts/test-native-trial-laptop.sh`, native trial checks와
    manifest를 확장한다. 새 UX는 현재 DOM과 완료 이벤트 확인 후 자동화한다.

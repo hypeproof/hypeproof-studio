@@ -9,12 +9,13 @@
 //                                      install-mac.sh and a Korean READ-ME.txt
 //
 // Both install exactly this release: the tag, the source commit, the SHA-256 of
-// HypeProof-Studio-darwin-arm64.zip and of the native SDK seed are baked in. The zip is
-// not notarized, so a browser download is quarantined and Gatekeeper refuses it; curl
-// adds no quarantine flag, which is why the curl one-liner is the primary path.
+// HypeProof-Studio-darwin-arm64.zip and of the native SDK seed are baked in.
+// Download verification does not establish Apple signing, notarization or macOS
+// launch acceptance; security attributes remain intact.
 //
 // CLI:
 //   install-kit.mjs render --tag vX --source-sha SHA --zip-sha256 HEX
+//       [--app-version EMBEDDED_VERSION] (required when a managed RC embeds its final version)
 //       [--seed-name claude-agent-sdk-darwin-arm64-V.tgz --seed-sha256 HEX --seeder-sha256 HEX]
 //       --out DIR
 //     writes DIR/install-mac.sh and DIR/HypeProof-<tag>-Test-Kit.zip
@@ -70,8 +71,9 @@ function fill(text, values) {
   return out;
 }
 
-function validate({tag, sourceSha, zipSha256, seedName = '', seedSha256 = '', seederSha256 = ''}) {
-  parseTag(tag);
+function validate({tag, appVersion = parseTag(tag).version, sourceSha, zipSha256, seedName = '', seedSha256 = '', seederSha256 = ''}) {
+  const {version} = parseTag(tag);
+  if (appVersion !== version && appVersion !== version.split('-')[0]) throw Error('app version must match candidate version or its numeric base');
   if (!/^[a-f0-9]{40}$/.test(sourceSha ?? '')) throw Error('source sha must be 40 lowercase hex characters');
   if (!HEX64.test(zipSha256 ?? '')) throw Error('zip sha256 must be 64 lowercase hex characters');
   if (seedName || seedSha256 || seederSha256) {
@@ -82,9 +84,11 @@ function validate({tag, sourceSha, zipSha256, seedName = '', seedSha256 = '', se
 
 const template = name => fs.readFileSync(path.join(TEMPLATES, name), 'utf8');
 
-export function renderStart(tag) {
+export function renderStart(tag, sourceSha, appVersion = parseTag(tag).version) {
   const {version} = parseTag(tag);
-  return fill(template('START.command'), {TAG: tag, VERSION: version, KIT_DIR_NAME: kitDirName(tag)});
+  if (!/^[a-f0-9]{40}$/.test(sourceSha ?? '')) throw Error('START source sha must be 40 lowercase hex characters');
+  if (appVersion !== version && appVersion !== version.split('-')[0]) throw Error('START app version must match candidate version or its numeric base');
+  return fill(template('START.command'), {TAG: tag, VERSION: version, APP_VERSION: appVersion, SOURCE_SHA: sourceSha, PRERELEASE: parseTag(tag).prerelease ? '1' : '0', KIT_DIR_NAME: kitDirName(tag)});
 }
 
 export function renderInstallCommand(tag) {
@@ -93,19 +97,19 @@ export function renderInstallCommand(tag) {
 
 export function renderInstaller(opts) {
   validate(opts);
-  const {tag, sourceSha, zipSha256, seedName = '', seedSha256 = '', seederSha256 = ''} = opts;
+  const {tag, sourceSha, zipSha256, appVersion = parseTag(tag).version, seedName = '', seedSha256 = '', seederSha256 = ''} = opts;
   const {version, prerelease} = parseTag(tag);
-  const start = renderStart(tag).replace(/\n$/, '');
+  const start = renderStart(tag, sourceSha, appVersion).replace(/\n$/, '');
   if (/^START_COMMAND$/m.test(start)) throw Error('START.command must not contain the heredoc delimiter');
   return fill(template('install-mac.sh'), {
-    TAG: tag, VERSION: version, SOURCE_SHA: sourceSha, ZIP_SHA256: zipSha256,
+    TAG: tag, VERSION: version, APP_VERSION: appVersion, SOURCE_SHA: sourceSha, ZIP_SHA256: zipSha256,
     SEED_NAME: seedName, SEED_SHA256: seedSha256, SEED_VERSION: SEED_RE.exec(seedName)?.[1] ?? '',
     SEEDER_SHA256: seederSha256, PRERELEASE: prerelease ? '1' : '0', FREE_START: isFreeStart(tag) ? '1' : '0',
     KIT_DIR_NAME: kitDirName(tag), START_COMMAND: start,
   });
 }
 
-export function renderReadme({tag, sourceSha, zipSha256}) {
+export function renderReadme({tag, sourceSha, zipSha256, appVersion = parseTag(tag).version}) {
   const {version} = parseTag(tag);
   const dir = kitDirName(tag);
   const start = isFreeStart(tag)
@@ -117,7 +121,7 @@ export function renderReadme({tag, sourceSha, zipSha256}) {
     '',
     '가장 쉬운 설치 (권장): 터미널에 아래 한 줄을 붙여넣고 Enter',
     `  ${oneLiner(tag)}`,
-    '  브라우저로 받은 파일과 달리 macOS가 막지 않습니다. 설치 위치는 아래와 같습니다.',
+    '  이 버전의 앱과 체크섬을 확인해 설치합니다. 설치 위치는 아래와 같습니다.',
     '',
     '이 키트로 설치하기',
     `1. ${kitZipName(tag)} 을 더블클릭해 압축을 풉니다.`,
@@ -126,13 +130,18 @@ export function renderReadme({tag, sourceSha, zipSha256}) {
     `4. 다음부터는 ~/Applications/${dir}/START-${version}.command 로 엽니다.`,
     '',
     `설치 위치: ~/Applications/${dir}/`,
-    `프로필/기록: ~/Library/Application Support/HPS-${version}/`,
+    `프로필/기록: ~/Library/Application Support/${parseTag(tag).prerelease ? 'HPS-RC-Profiles/' : 'HPS-'}${version}/`,
+    `앱 내부 버전: ${appVersion} (후보: ${version})`,
     '기존 HypeProof Studio 앱과 기존 프로필은 바꾸지 않습니다.',
-    '로그인 정보는 macOS 키체인에 저장됩니다. 키체인 접근을 묻는 창이 뜨면 \'항상 허용\'을 누르세요.',
+    parseTag(tag).prerelease ? 'RC 로그인 정보는 별도 HypeProof Studio RC 키체인 항목에 암호화해 저장됩니다.' : '로그인 정보는 macOS 키체인에 암호화해 저장됩니다.',
+    '키체인 권한 때문에 막히면 취소하고 오류 문구를 전달하세요. 암호 입력이나 기존 항목의 권한 변경은 테스트 절차가 아닙니다.',
+    ...(parseTag(tag).prerelease ? ['이전 HPS-버전 프로필은 옮기지 않습니다. 새 RC 프로필에서 다시 시작합니다.'] : []),
     '',
     '주의',
     '- macOS가 .command 파일을 열지 못하게 막으면 보안 설정을 바꾸거나 우회하지 마세요.',
-    '  위의 한 줄 설치를 쓰거나, 보이는 오류 문구를 그대로 알려 주세요.',
+    '  설치를 멈추고 보이는 오류 문구를 그대로 알려 주세요.',
+    '- SHA-256·버전 확인은 Apple 서명·공증 또는 macOS 실행 허용을 증명하지 않습니다.',
+    '  서명·공증 상태는 해당 릴리스의 검증 기록을 확인하세요. 격리 속성은 지우지 않습니다.',
     '- 설치 스크립트는 내려받은 앱의 SHA-256과 버전이 아래 값과 다르면 설치하지 않습니다.',
     '- 같은 이름의 다른 폴더나 프로필이 있으면 덮어쓰지 않고 멈춥니다.',
     '',
@@ -157,9 +166,9 @@ export function notesSection(tag) {
     oneLiner(tag),
     '```',
     '',
-    `Installs ${where}. The script is pinned to \`${tag}\`: it downloads the darwin-arm64 zip with curl, checks its SHA-256 and the app version, and seeds the coach SDK binary from this release. No sudo. curl downloads are not quarantined, so Gatekeeper does not block the app the way it blocks a browser-downloaded zip.`,
+    `Installs ${where}. The script is pinned to \`${tag}\`: it downloads the darwin-arm64 zip with curl, checks its SHA-256 and the app version, and seeds the coach SDK binary from this release. No sudo. Existing quarantine attributes and macOS security settings are preserved. SHA-256 and version verification do not establish Apple signing, notarization or Gatekeeper acceptance; consult this release's verification evidence for that status.`,
     '',
-    `Testers who prefer double-click: \`${kitZipName(tag)}\` (INSTALL/START .command files and a Korean READ-ME). macOS may refuse a .command file downloaded in a browser; use the one-liner then.`,
+    `Testers who prefer double-click: \`${kitZipName(tag)}\` (INSTALL/START .command files and a Korean READ-ME). If macOS blocks the installer or app, stop and report the displayed message. Do not change security settings or switch download methods to bypass the refusal.`,
     NOTES_END,
   ].join('\n');
 }
@@ -183,7 +192,7 @@ export function writeKit(opts, outDir) {
     const dir = path.join(stage, folder);
     fs.mkdirSync(dir);
     fs.writeFileSync(path.join(dir, `INSTALL-${version}.command`), renderInstallCommand(opts.tag), {mode: 0o755});
-    fs.writeFileSync(path.join(dir, `START-${version}.command`), renderStart(opts.tag), {mode: 0o755});
+    fs.writeFileSync(path.join(dir, `START-${version}.command`), renderStart(opts.tag, opts.sourceSha, opts.appVersion), {mode: 0o755});
     fs.writeFileSync(path.join(dir, INSTALLER_NAME), installer, {mode: 0o755});
     fs.writeFileSync(path.join(dir, 'READ-ME.txt'), renderReadme(opts));
     const zip = path.resolve(outDir, kitZipName(opts.tag));
@@ -198,13 +207,13 @@ export function writeKit(opts, outDir) {
 function main(argv) {
   const [command, ...rest] = argv;
   const {values} = parseArgs({args: rest, options: {
-    tag: {type: 'string'}, 'source-sha': {type: 'string'}, 'zip-sha256': {type: 'string'},
+    tag: {type: 'string'}, 'app-version': {type: 'string'}, 'source-sha': {type: 'string'}, 'zip-sha256': {type: 'string'},
     'seed-name': {type: 'string'}, 'seed-sha256': {type: 'string'}, 'seeder-sha256': {type: 'string'},
     out: {type: 'string'},
   }});
   if (command === 'render') {
     if (!values.out) throw Error('--out is required');
-    const names = writeKit({tag: values.tag, sourceSha: values['source-sha'], zipSha256: values['zip-sha256'],
+    const names = writeKit({tag: values.tag, appVersion: values['app-version'], sourceSha: values['source-sha'], zipSha256: values['zip-sha256'],
       seedName: values['seed-name'], seedSha256: values['seed-sha256'], seederSha256: values['seeder-sha256']}, values.out);
     for (const name of names) console.log(path.join(values.out, name));
   } else if (command === 'notes') {
