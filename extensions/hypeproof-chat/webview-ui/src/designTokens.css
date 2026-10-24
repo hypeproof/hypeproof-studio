@@ -9,6 +9,8 @@
   --ds-p-chalk-list-action-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8h10M9 4l4 4-4 4' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --ds-p-dialog-enter: 180ms;
   --ds-p-dialog-exit: 120ms;
+  --ds-p-motion-move: 240ms;
+  --ds-p-motion-ease-exit: cubic-bezier(.4, 0, 1, 1);
   --ds-p-dialog-dim-dark: rgb(0 0 0 / 40%);
   --ds-p-dialog-dim-light: rgb(0 0 0 / 30%);
   --ds-p-assistant-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5c.6 4.3 2.2 5.9 6.5 6.5-4.3.6-5.9 2.2-6.5 6.5-.6-4.3-2.2-5.9-6.5-6.5 4.3-.6 5.9-2.2 6.5-6.5ZM18.5 16v4M16.5 18h4'/%3E%3C/svg%3E");
@@ -586,6 +588,8 @@
   --ds-s-menu-radius: var(--ds-p-2);
   --ds-s-modal-enter: var(--ds-p-dialog-enter);
   --ds-s-modal-exit: var(--ds-p-dialog-exit);
+  --ds-s-motion-move: var(--ds-p-motion-move);
+  --ds-s-motion-ease-exit: var(--ds-p-motion-ease-exit);
   --ds-s-modal-dim-dark: var(--ds-p-dialog-dim-dark);
   --ds-s-modal-dim-light: var(--ds-p-dialog-dim-light);
 
@@ -1288,6 +1292,8 @@
   --ds-s-menu-radius: var(--ds-p-2);
   --ds-s-modal-enter: var(--ds-p-dialog-enter);
   --ds-s-modal-exit: var(--ds-p-dialog-exit);
+  --ds-s-motion-move: var(--ds-p-motion-move);
+  --ds-s-motion-ease-exit: var(--ds-p-motion-ease-exit);
   --ds-s-modal-dim-dark: var(--ds-p-dialog-dim-dark);
   --ds-s-modal-dim-light: var(--ds-p-dialog-dim-light);
 
@@ -1999,6 +2005,8 @@
   --ds-c-modal-radius: var(--ds-s-modal-radius);
   --ds-c-modal-enter: var(--ds-s-modal-enter);
   --ds-c-modal-exit: var(--ds-s-modal-exit);
+  --ds-c-motion-move: var(--ds-s-motion-move);
+  --ds-c-motion-ease-exit: var(--ds-s-motion-ease-exit);
   --ds-c-modal-dim-dark: var(--ds-s-modal-dim-dark);
   --ds-c-modal-dim-light: var(--ds-s-modal-dim-light);
 
@@ -3435,6 +3443,7 @@
   --ds-c-studio-styles-surface-122: var(--ds-s-surface-122);
   --ds-c-studio-styles-boundary-88: var(--ds-s-boundary-88);
   --ds-c-studio-styles-size-106: var(--ds-s-size-106);
+  --ds-c-page-result-shimmer-duration: var(--ds-s-size-84);
   --ds-c-studio-styles-surface-123: var(--ds-s-surface-123);
   --ds-c-studio-taskworkspace-size-15: var(--ds-s-size-15);
   --ds-c-studio-writeapprovaldialog-size-108: var(--ds-s-size-108);

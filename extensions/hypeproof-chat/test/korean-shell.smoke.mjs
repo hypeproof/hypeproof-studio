@@ -82,6 +82,37 @@ try {
   });
   assert.deepEqual(menuLabels,['하이프루프 스튜디오','파일','편집','선택 영역','보기','이동','실행','터미널','창','도움말']);
   assert.equal(menuLabels.filter(s=>/[A-Za-z]/.test(s)).length,0,'zero English native menu titles');
+  // DES-SHELL-05: evaluate actual item expressions, including the product display argument.
+  const nativeModule = 'vs/platform/menubar/electron-main/menubar';
+  const keyOf = call => ts.isStringLiteral(call.arguments[0]) ? call.arguments[0].text
+    : call.arguments[0]?.properties?.find(p => p.name?.getText() === 'key')?.initializer?.text;
+  const localizedCalls = nodes(menuAst, n => ts.isCallExpression(n) && n.expression.getText(menuAst) === 'nls.localize');
+  for (const [key, expected] of [['mAbout','하이프루프 스튜디오 정보'],['mHide','하이프루프 스튜디오 숨기기'],['miQuit','하이프루프 스튜디오 종료']]) {
+    const calls = localizedCalls.filter(n => keyOf(n) === key);
+    assert.equal(calls.length, 1, `native item ${key}`);
+    const label = vm.runInNewContext(`(function(){return ${calls[0].getText(menuAst)}}).call(target)`, {
+      target: {productService: {nameLong: 'HypeProof Studio'}},
+      nls: {localize: (key, fallback, ...args) => map[nativeModule][key].replace(/\{(\d+)\}/g, (_, i) => args[Number(i)])}
+    });
+    assert.equal(label, expected, `display-only Korean name for ${key}`);
+  }
+  for (const key of ['miCheckForUpdates','miInstallUpdate','miSwitchWindow']) {
+    const call = localizedCalls.find(n => keyOf(n) === key);
+    assert.ok(call, `actual native action ${key}`);
+    const sourceMnemonic = call.arguments[1].text.match(/&&([A-Za-z])/)[1].toUpperCase();
+    const label = map[nativeModule][key];
+    assert.equal(label.match(/&&([A-Za-z])/)[1].toUpperCase(), sourceMnemonic, `${key}: mnemonic preserved`);
+    assert.match(label, /…$/, `${key}: dialog action ellipsis`);
+    assert.doesNotMatch(label.replace(/\(&&[A-Z]\)/g, ''), /[A-Za-z]/, `${key}: no mixed English label`);
+  }
+  assert.equal(translations['vs/workbench/contrib/update/browser/update'].checkForUpdates, '업데이트 확인…');
+  // All non-display menu behavior must remain upstream: includes command IDs, role,
+  // click handlers and accelerator assignments, rather than a few sampled shortcuts.
+  const normalizedMenu = read(path.join(tmp,'src/vs/platform/menubar/electron-main/menubar.ts'))
+    .replace("'lastKnownMenubarData.ko.v1'", "'lastKnownMenubarData'")
+    .replace("label: '하이프루프 스튜디오', submenu: applicationMenu", 'label: this.productService.nameShort, submenu: applicationMenu')
+    .replace(/(nls\.localize\('(mAbout|mHide|miQuit)', "[^"]+", )'하이프루프 스튜디오'(\))/g, '$1this.productService.nameLong$3');
+  assert.equal(normalizedMenu, read(path.join(core,'korean/upstream/menubar.ts')), 'native menu actions/accelerators unchanged');
   assert.equal(map['vs/platform/dialogs/common/dialogs'].cancelButton,'취소');
   assert.match(map['vs/platform/dialogs/electron-browser/dialog'].aboutDetail,/버전: \{0\}/);
   assert.match(map['vs/platform/menubar/electron-main/menubar'].miQuit,/종료/);
@@ -126,11 +157,12 @@ try {
       const diff=execFileSync('git',['diff','--unified=0',base,'--',file],{cwd:root}).toString().split('\n').filter(l=>/^[+-][^+-]/.test(l)&&idLine.test(l));
       assert.deepEqual(diff,[],`${file}: identity lines differ from main`);
     }
-    // package.json: the diff against main may change display labels only.
+    // Runtime manifest differences are label-only; npm scripts are developer tooling, not app identity.
     const labelKeys=new Set(['title','category','description','enumItemLabels']);
     const strip=(node,trail=[])=>{
       if(Array.isArray(node))return node.map(v=>strip(v,trail));
       if(node&&typeof node==='object'){const out={};for(const [k,v] of Object.entries(node)){
+        if(trail.length===0&&k==='scripts')continue;
         const inContrib=trail[0]==='contributes';
         const viewName=k==='name'&&trail[0]==='contributes'&&trail[1]==='views';
         if(inContrib&&(labelKeys.has(k)||viewName)&&typeof v!=='object'||inContrib&&k==='enumItemLabels')continue;
@@ -138,7 +170,10 @@ try {
       return node;
     };
     const baseManifest=JSON.parse(execFileSync('git',['show',`${base}:extensions/hypeproof-chat/package.json`],{cwd:root}).toString());
-    const only=m=>JSON.stringify(strip(m));
+    // A setting this branch adds is not a relabel of one on main; every setting main already has must still match.
+    const baseKeys=new Set(Object.keys(baseManifest.contributes?.configuration?.properties??{}));
+    const onlyBaseSettings=m=>{const c=structuredClone(m),p=c.contributes?.configuration?.properties;if(p)for(const k of Object.keys(p))if(!baseKeys.has(k))delete p[k];return c;};
+    const only=m=>JSON.stringify(strip(onlyBaseSettings(m)));
     assert.equal(only(manifest),only(baseManifest),'package.json differs from main beyond title/category/description/name/enumItemLabels');
     // Defaults, scopes, enums and ids come through stripping untouched; spot-check the security-relevant ones too.
     const props=manifest.contributes.configuration.properties,baseProps=baseManifest.contributes.configuration.properties;

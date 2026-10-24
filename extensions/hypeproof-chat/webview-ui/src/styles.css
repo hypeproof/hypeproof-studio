@@ -1388,6 +1388,21 @@ html, body, #root {
 .hps-page-card-actions button:active { background-color: var(--hp-bg-control-pressed); }
 .hps-page-card-actions button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
+.hps-page-card { font-size: var(--hp-font-caption); box-sizing: border-box; width: 100%; max-width: var(--ds-c-studio-styles-size-106); }
+.hps-page-card-row { display: block; }
+.hps-page-card-name { display: block; margin: var(--ds-c-studio-styles-space-15) 0; }
+.hps-page-result-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hps-page-result-thumbnail { width: 100%; aspect-ratio: 16 / 10; overflow: hidden; display: grid; place-items: center; background: var(--hp-bg-control-hover); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); box-sizing: border-box; border-radius: var(--ds-c-studio-styles-radius-10); }
+.hps-page-result-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.hps-page-result-icon { font-size: var(--hp-font-lead); }
+.hps-page-result-shimmer { width: 100%; height: 100%; background: linear-gradient(90deg,transparent,var(--hp-border-control-default),transparent); animation: page-result-shimmer var(--hp-dur-page-result-shimmer) ease-in-out infinite; }
+.hps-page-result-meta { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-15); margin-bottom: var(--ds-c-studio-styles-space-15); }
+.hps-page-result-badge { color: inherit; }
+@keyframes page-result-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+:where(:root[data-reduced-motion="true"]) .hps-page-result-shimmer { animation: none; }
+@media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-page-result-shimmer { animation: none; } }
+@media (forced-colors: active) { .hps-page-result-thumbnail { border: var(--ds-c-studio-styles-size-3) solid CanvasText; } }
+
 /*
  * #503 — tool rows now sit one per line on the same timeline as the bubbles (the old
  * `.hps-tool-log` box is gone — that was the container that split the screen into two
@@ -2272,6 +2287,10 @@ html, body, #root {
    REQ-STUDIO-UI-POLISH-1: `.hps-notice-caution` is the same surface under a name that is not about
    the network, for any other "please check this" line (the personal access line). */
 .hps-offline-banner, .hps-notice-caution { margin: var(--ds-c-studio-styles-space-15) 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); border-left: var(--ds-c-studio-styles-size-13) solid var(--hp-border-warn-default); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); font-size: var(--ds-c-studio-styles-type-9); line-height: var(--ds-c-studio-styles-typography-5); word-break: keep-all; overflow-wrap: anywhere; }
+/* DES-SHELL-10: a normal-flow top status; large text may grow rather than clip. */
+.hps-shell .hps-offline-banner { box-sizing: border-box; display: flex; align-items: center; flex: 0 0 auto; gap: var(--ds-c-studio-styles-space-15); margin: 0; padding-block: var(--ds-c-studio-styles-space-14); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-offline-banner > svg { flex: 0 0 auto; }
+.hps-offline-banner > span { min-width: 0; }
 /* REQ-STUDIO-PREVIEW-RECOVERY (CGP-ART-R-009, DES-ART-09): the preview cannot show a page. One cause line at
    body size, one 44px action, the technical code folded under 자세히. Personal and classroom chat share it, so
    every size is a type-scale token (14px floor). The edge is the offline banner's amber; text keeps the foreground. */
@@ -2500,12 +2519,18 @@ html, body, #root {
 
 /* CGP-SHELL-R-025: passive class-time line, within the existing chat rail. */
 .hps-class-window {
+  display: flex; align-items: center; gap: var(--hp-space-2); flex: 0 0 auto;
   font-size: var(--ds-c-studio-styles-type-17);
   line-height: var(--hp-leading-label);
   margin: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-1);
   color: var(--vscode-foreground, var(--ds-c-studio-styles-ink-1));
   overflow-wrap: anywhere;
 }
+ .hps-class-window > svg { flex: none; color: var(--hp-text-warn-default); }
+.hps-class-window > span { min-width: 0; flex: 1; }
+.hps-class-window > button { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0; color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); }
+.hps-class-window > button:hover { background: var(--hp-bg-control-hover); }
+.hps-class-window > button:active { background: var(--hp-bg-control-pressed); }
 @media (forced-colors: active) {
   .hps-class-window { color: CanvasText; }
 }
@@ -2514,3 +2539,53 @@ html, body, #root {
 .hps-shell :is(button, input, select, textarea), .hps-codeblock-tools {
   font-family: var(--vscode-font-family, var(--ds-c-typography-ui));
 }
+
+/* DES-CGP-AGENT-12: one turn summary and a responsive helper results panel. */
+.hps-delegation-group { min-width: 0; margin-block: var(--hp-space-2); }
+.hps-delegation-toggle, .hps-delegation-panel button { min-width: var(--ds-c-inline-hit-target); min-height: var(--ds-c-inline-hit-target); padding: var(--hp-space-2); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-10); background: transparent; color: inherit; font: inherit; font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
+.hps-delegation-panel { border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); font: inherit; font-size: var(--hp-font-caption); }
+.hps-delegation-panel header { display: flex; align-items: center; gap: var(--hp-space-2); justify-content: space-between; }
+.hps-delegation-panel h2 { font: inherit; font-weight: var(--hp-weight-strong); }
+.hps-delegation-panel .hps-delegation-summary { flex-wrap: wrap; font-size: var(--hp-font-caption); }
+.hps-delegation-panel .hps-delegation-task { flex-basis: 100%; white-space: normal; overflow-wrap: anywhere; }
+.hps-delegation-result-link { text-decoration: underline; }
+.hps-delegation-panel .hps-delegation-body { padding: var(--hp-space-2); font-size: var(--hp-font-caption); }
+.hps-delegation-panel :focus-visible, .hps-delegation-toggle:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-delegation-panel button:disabled { cursor: default; }
+.hps-delegation-toggle:hover:not(:disabled), .hps-delegation-panel button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-delegation-toggle:active:not(:disabled), .hps-delegation-panel button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+/* CGP-ART-D-011: compact state beside publish; detailed link settings stay explicit. */
+.hps-publish-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
+.hps-sharing-pill, .hps-sharing-refresh { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-c-studio-styles-space-15); min-height: var(--ds-c-studio-tokens-control-md); min-width: var(--ds-c-studio-tokens-control-md); max-width: 100%; padding: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-7); font: inherit; font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-15); cursor: pointer; }
+.hps-sharing-pill svg { flex-shrink: 0; }
+.hps-sharing-pill:hover, .hps-sharing-refresh:hover, .hps-share-settings > summary:hover { background-color: var(--hp-bg-control-hover); }
+.hps-sharing-pill:active, .hps-sharing-refresh:active, .hps-share-settings > summary:active { background-color: var(--hp-bg-control-pressed); }
+.hps-sharing-pill:focus-visible, .hps-sharing-refresh:focus-visible, .hps-share-settings > summary:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-width); }
+.hps-share-settings > summary { min-height: var(--ds-c-studio-tokens-control-md); font-size: var(--hp-font-caption); cursor: pointer; }
+.hps-share-settings { overflow-wrap: anywhere; }
+/* CGP-ART-D-019: keep visible activity without motion when reduced motion is selected. */
+.hps-idle-progress-motion { position: relative; overflow: hidden; display: inline-grid; place-items: center; width: var(--hp-font-caption); height: var(--hp-font-caption); flex-shrink: 0; }
+.hps-idle-progress-motion::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent, currentColor, transparent); transform: translateX(-100%); animation: hps-shimmer var(--hp-dur-shimmer) linear infinite; }
+.hps-long-step-text { flex: 1; min-width: 0; }
+.hps-idle-progress-dot { opacity: 0; }
+:where(:root[data-reduced-motion="true"]) .hps-idle-progress-dot { opacity: 1; }
+:where(:root[data-reduced-motion="true"]) .hps-idle-progress-motion::after { animation: none; opacity: 0; }
+@media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-idle-progress-dot { opacity: 1; } :where(:root:not([data-reduced-motion])) .hps-idle-progress-motion::after { animation: none; opacity: 0; } }
+/* DES-ART-03: keep is the first/default action; both actions fit a 320px pane. */
+.hps-annotation-leave { color: var(--hp-text-primary-default); background: var(--vscode-editor-background); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); }
+.hps-annotation-leave h2 { font-size: var(--hp-font-body); line-height: var(--hp-leading-label); margin: 0 0 var(--ds-c-modal-padding); font-weight: var(--hp-weight-strong); }
+.hps-annotation-leave-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-c-studio-styles-space-2); }
+.hps-annotation-leave button { font: inherit; font-size: var(--hp-font-caption); min-height: var(--hp-control-min); min-width: var(--hp-control-min); color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); cursor: pointer; }
+.hps-annotation-leave button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-annotation-leave button:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
+@media (forced-colors: active) { .hps-annotation-leave { color: CanvasText; background: Canvas; border-color: CanvasText; } .hps-annotation-leave button { color: ButtonText; background: ButtonFace; border-color: ButtonText; } }
+/* CGP-SHELL-D-029: text remains the state cue; a border groups the request receipt. */
+.hps-budget-request-state { display: inline-block; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-12); padding: var(--ds-c-studio-styles-space-2); }
+/* CGP-SHELL-D-029: the reason field stays inside the panel, the counter is a learner-scale hint under it, and both controls are 44px targets. */
+.hps-access input { box-sizing: border-box; }
+.hps-budget-request-notice form { display: flex; flex-direction: column; align-items: flex-start; gap: var(--ds-c-studio-styles-space-2); min-width: 0; }
+.hps-budget-request-notice form label { align-self: stretch; min-width: 0; }
+.hps-budget-request-notice input { min-height: var(--hp-control-min); }
+.hps-budget-request-notice form small { display: block; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); }
+.hps-budget-request-notice form button { min-height: var(--hp-control-min); margin: 0; }
+.hps-budget-request-notice input { font-size: var(--hp-font-caption); }

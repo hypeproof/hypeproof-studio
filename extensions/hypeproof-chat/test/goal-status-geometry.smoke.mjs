@@ -15,7 +15,6 @@
 // Without a headless Chromium this prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 (set by CI) makes that a failure.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +40,7 @@ const bundled = await build({
 });
 const css = bundled.outputFiles.find((o) => o.path.endsWith('.css')).text;
 
-// ---------- the real markup, optionally with a source mutant of GoalStatusBar.tsx ----------
+// Real React ChatPanel: mount closed, then exercise its disclosure in Chromium.
 const lessonContent = JSON.parse(readFileSync(join(root, 'test/fixtures/session-design/week-3.json'), 'utf8'));
 const ux = { coach: { naming_mode: 'fixed', fallback_name: '코치' }, suggestions: { initial: [], follow_up: [] }, hints: { short_input: { enabled: false }, roll_input_button: { enabled: false } }, retry_button: { enabled: false } };
 const lesson = { course_id: 'globalbuddy', version: 'm1', sha256: 'f'.repeat(64), content: lessonContent };
@@ -63,7 +62,6 @@ const CASES = {
 async function render(mutate) {
   const dir = mkdtempSync(join(tmpdir(), 'goal-status-geometry-'));
   try {
-    const out = join(dir, 'render.cjs');
     const mutantPlugin = {
       name: 'goal-status-mutant',
       setup(b) {
@@ -76,15 +74,8 @@ async function render(mutate) {
         });
       },
     };
-    await build({ stdin: { contents: 'export { ChatPanel } from "./webview-ui/src/ChatPanel"; export { renderToStaticMarkup } from "react-dom/server"; export { createElement } from "react";', resolveDir: root, loader: 'tsx' }, bundle: true, platform: 'node', format: 'cjs', outfile: out, jsx: 'automatic', loader: { '.css': 'empty', '.svg': 'empty' }, alias: { react: join(root, 'webview-ui/node_modules/react'), 'react-dom': join(root, 'webview-ui/node_modules/react-dom') }, banner: { js: 'globalThis.window = { innerWidth: 1420, addEventListener() {}, removeEventListener() {} };' }, plugins: [mutantPlugin], logLevel: 'error' });
-    const { ChatPanel, renderToStaticMarkup, createElement } = createRequire(import.meta.url)(out);
-    const originalError = console.error;
-    console.error = (...args) => { if (!String(args[0]).includes('useLayoutEffect does nothing on the server')) originalError(...args); };
-    const noop = () => {};
-    const markup = {};
-    for (const [key, c] of Object.entries(CASES)) markup[key] = renderToStaticMarkup(createElement(ChatPanel, { messages: [], streaming: false, config: c.config, onSend: noop, onCancel: noop, onSettings: noop, onSetToken: noop }));
-    console.error = originalError;
-    return markup;
+    const result = await build({ stdin: { contents: `import {ChatPanel} from './ChatPanel'; import {createRoot} from 'react-dom/client'; import {flushSync} from 'react-dom'; import React from 'react'; window.mountGoal=(config)=>{const noop=()=>{};flushSync(()=>createRoot(document.getElementById('root')).render(<ChatPanel messages={[]} streaming={false} config={config} onSend={noop} onCancel={noop} onSettings={noop} onSetToken={noop}/>));}; window.openGoal=()=>flushSync(()=>document.querySelector('.hps-goal-strip')?.click());`, resolveDir: SRC, loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write:false, jsx: 'automatic', loader: { '.css': 'empty', '.svg': 'empty' }, plugins: [mutantPlugin], logLevel: 'error' });
+    return Object.fromEntries(Object.entries(CASES).map(([key,c])=>[key,`<div id="root"></div><script>${result.outputFiles[0].text.replaceAll('</script','<\\/script')}<\/script><script>window.mountGoal(${JSON.stringify(c.config)})<\/script>`]));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
@@ -114,7 +105,7 @@ const probe = (moveBelow) => {
   out.text = bar.textContent;
   out.status = bar.querySelector('[role="status"]')?.textContent ?? null;
   out.fonts = [bar, ...bar.querySelectorAll('*')].filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())).map((e) => ({ tag: e.tagName, fs: parseFloat(getComputedStyle(e).fontSize) }));
-  out.buttons = [...bar.querySelectorAll('button')].map((b) => {
+  out.buttons = [...bar.querySelectorAll('button[aria-pressed]')].map((b) => {
     const r = rect(b); const s = getComputedStyle(b);
     const hit = document.elementFromPoint(Math.min(Math.max(r.l + r.w / 2, 0), doc.clientWidth - 1), Math.min(Math.max(r.t + r.h / 2, 0), innerHeight - 1));
     const before = getComputedStyle(b, '::before');
@@ -177,11 +168,29 @@ const measure = async ({ extraCss = '', markup, cases = Object.keys(CASES), widt
       const t = THEMES[tname];
       const vars = Object.entries(t.v).map(([k, v]) => `--vscode-${k}:${v}`).join(';');
       await b.load(`<!doctype html><html><head><meta charset="utf-8"><style>:root{${vars}}${css}${extraCss}</style></head><body class="${t.cls}" style="margin:0;background:var(--vscode-editor-background);color:var(--vscode-foreground)">${markup[key]}</body></html>`, { width, height: 800, dark: t.dark });
+      if (!extraCss && !moveBelow && cases.length===Object.keys(CASES).length) {
+        const compact=await b.evaluate(`(()=>{const e=document.querySelector('.hps-goal-strip');if(!e)return null;const t=e.querySelector('.hps-goal-strip-text'),r=e.getBoundingClientRect();return {expanded:e.getAttribute('aria-expanded'),h:r.height,w:r.width,nowrap:getComputedStyle(t).whiteSpace,meter:e.querySelector('meter')?.value,text:e.textContent,editor:!!document.querySelector('.hps-goal-expanded')};})()`);
+        if (CASES[key].kind!=='none') {
+          assert.equal(compact?.expanded,'false');assert.equal(compact.editor,false);assert.equal(compact.nowrap,'nowrap');
+          assert.ok(compact.h>=44, 'interactive summary target');
+          if(CASES[key].kind==='budget'&&!CASES[key].unknownBudget)assert.ok(compact.text.includes('남은 사용량')&&Number.isFinite(compact.meter));
+        }
+      }
+      await b.evaluate('window.openGoal()');
       const m = await b.evaluate(`(${probe})(${moveBelow})`);
       check(`${key} ${tname} ${width}px`, CASES[key], m, bad, false);
     }
     if (forced) for (const width of WIDTHS) for (const key of ['lesson-active', 'lesson-budget-limit-long-goal', 'trial-lesson']) {
       await b.load(`<!doctype html><html><head><meta charset="utf-8"><style>${css}${extraCss}</style></head><body style="margin:0">${markup[key]}</body></html>`, { width, height: 800, dark: true, forcedColors: true });
+      if (!extraCss && !moveBelow && cases.length===Object.keys(CASES).length) {
+        const compact=await b.evaluate(`(()=>{const e=document.querySelector('.hps-goal-strip');if(!e)return null;const t=e.querySelector('.hps-goal-strip-text'),r=e.getBoundingClientRect();return {expanded:e.getAttribute('aria-expanded'),h:r.height,w:r.width,nowrap:getComputedStyle(t).whiteSpace,meter:e.querySelector('meter')?.value,text:e.textContent,editor:!!document.querySelector('.hps-goal-expanded')};})()`);
+        if (CASES[key].kind!=='none') {
+          assert.equal(compact?.expanded,'false');assert.equal(compact.editor,false);assert.equal(compact.nowrap,'nowrap');
+          assert.ok(compact.h>=44, 'interactive summary target');
+          if(CASES[key].kind==='budget'&&!CASES[key].unknownBudget)assert.ok(compact.text.includes('남은 사용량')&&Number.isFinite(compact.meter));
+        }
+      }
+      await b.evaluate('window.openGoal()');
       const m = await b.evaluate(`(${probe})(${moveBelow})`);
       check(`${key} forced-colors ${width}px`, CASES[key], m, bad, true);
     }
@@ -223,11 +232,11 @@ const strip = async (name, mutate) => {
   assert.ok(caught.length > 0, `mutant not caught: ${name}`);
   console.log(`  ok   caught: ${name} (${caught.length} findings, e.g. ${caught[0]})`);
 };
-await strip('M5 aria-pressed removed', ['aria-pressed={(view.status ?? \'active\') === status} ', '']);
+await strip('M5 aria-pressed removed', ["aria-pressed={(view.status??'active')===status} ", '']);
 await strip('M8 role="status" removed', [' role="status"', '']);
 await strip('M6 budget timestamp dropped', [/ · \$\{new Date\(view\.as_of\)\.toLocaleString\('ko-KR'\)\} 확인/, '']);
-await strip('M7 disclaimer deleted', [/\n    <p>상태 표시는 AI를 시작하거나 멈추지 않아요\. AI에게 부탁하려면 메시지를 보내 주세요\.<\/p>/, '']);
-await strip('M15 budget shown on the trial seat', ["config.profile?.profile_id !== 'studio-open-trial' && ", '']);
+await strip('M7 disclaimer deleted', [/\n   <p>상태 표시는 AI를 시작하거나 멈추지 않아요\. AI에게 부탁하려면 메시지를 보내 주세요\.<\/p>/, '']);
+await strip('M15 budget shown on the trial seat', ["&&config.profile?.profile_id!=='studio-open-trial'", '']);
 {
   const caught = await measure({ ...QUICK, markup: baseMarkup, moveBelow: true });
   assert.ok(caught.length > 0, 'mutant not caught: M4 strip moved below the composer');

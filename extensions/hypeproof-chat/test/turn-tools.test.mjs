@@ -66,7 +66,7 @@ function fixture(t, { runtimeMode = 'agent-sdk', resolvedProfile = copy(profile)
   const { ChatPanelProvider, runSdkCoach, SdkUnavailableError, BrowserControl } = module.exports;
   const h = Object.create(ChatPanelProvider.prototype), state = new Map();
   const context = { workspaceState: { get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => state.set(key, value) }, secrets: { get: async () => 'synthetic-test-token' } };
-  Object.assign(h, { context, nativeHistoryScope: 'task-a', pendingSends: 0, activeStreams: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
+  Object.assign(h, { context, nativeHistoryScope: 'task-a', pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
     _instructorMode: { isInstructor: instructor, onTurnSuccess() {}, async revertModelOnTurnError() {} }, cachedProfile: resolvedProfile,
     getHistory: () => history, appendHistory: async items => { for (const item of items) { const i = history.findIndex(previous => previous.id === item.id); if (i < 0) history.push(copy(item)); else history[i] = copy(item); } },
     post: async event => posts.push(copy(event)), postConfig: async () => {}, getCoach: () => ({ name: '코치', personality: '', configured: true }),
@@ -391,7 +391,7 @@ test('real SDK request narrows tools and preserves approval; observed typed resu
   assert.equal(captured[0].options.agents, undefined); assert.equal(captured[0].options.mcpServers, undefined);
   assert.match(captured[0].prompt, /이번 요청의 도구 선택: 웹 검색/);
   assert.equal(approvals.length, 1); assert.equal(approvals[0].toolName, 'WebSearch');
-  assert.deepEqual(copy(citations), [{ url: 'https://example.test/reference', title: 'Observed search hit', domain: 'example.test', tier: 4 }]);
+  assert.deepEqual(copy(citations), [{ url: 'https://example.test/reference', title: 'Observed search hit', domain: 'example.test', tier: 4, kind: 'web' }]);
   await assert.rejects(f.runSdkCoach({ ...args, profile: { ...profile, tools: {} } }), /웹 검색/);
   assert.equal(captured.length, 1, 'grant denial happens before SDK query');
   const control = [];
@@ -401,11 +401,11 @@ test('real SDK request narrows tools and preserves approval; observed typed resu
 
 test('typed citation extraction rejects prose, mismatched/error calls and unsafe URLs; fetch and dedupe work', () => {
   const positive = new SdkWebCitations(['WebSearch', 'WebFetch']);
-  positive.observe(toolUse('a')); assert.equal(positive.observe(toolResult('a', searchOutput())).length, 1);
+  positive.observe(toolUse('a')); const searchCitations = positive.observe(toolResult('a', searchOutput())); assert.equal(searchCitations.length, 1); assert.equal(searchCitations[0].kind, 'web', 'matched WebSearch event supplies the kind');
   positive.observe(toolUse('b')); assert.deepEqual(positive.observe(toolResult('b', searchOutput())), []);
   const fetched = { bytes: 10, code: 200, codeText: 'OK', result: 'Read page', durationMs: 10, url: 'https://official.test/doc' };
   positive.observe(toolUse('f', 'WebFetch', { url: fetched.url, prompt: 'read' }));
-  assert.deepEqual(positive.observe(toolResult('f', fetched)), [{ url: fetched.url, title: 'official.test', domain: 'official.test', tier: 4 }]);
+  assert.deepEqual(positive.observe(toolResult('f', fetched)), [{ url: fetched.url, title: 'official.test', domain: 'official.test', tier: 4, kind: 'web' }]);
   for (const [name, prepare, result] of [
     ['unknown id', c => c.observe(toolUse('known')), toolResult('other', searchOutput())],
     ['error result', c => c.observe(toolUse('a')), toolResult('a', searchOutput(), true)],
@@ -438,7 +438,7 @@ test('actual provider and SDK preserve typed citations and selected mode through
   await f.h.handleMessage({ type: 'sendMessage', taskId: store.getView().activeTaskId, userMessageId: 'durable-search', text: 'source question', history: [], toolMode: 'web-search' });
   const reopened = new TaskWorkspaceStore(f.root, 'typed-source-task');
   assert.equal(reopened.getHistory().find(message => message.id === 'durable-search')?.toolMode, 'web-search');
-  assert.deepEqual(reopened.getHistory().flatMap(message => message.citations ?? []), [{ url: 'https://example.test/reference', title: 'Observed search hit', domain: 'example.test', tier: 4 }]);
+  assert.deepEqual(reopened.getHistory().flatMap(message => message.citations ?? []), [{ url: 'https://example.test/reference', title: 'Observed search hit', domain: 'example.test', tier: 4, kind: 'web' }]);
   assert.ok(reopened.getHistory().some(message => message.role === 'tool' && message.tool.state === 'done'));
   assert.equal(f.posts.some(event => event.type === 'toolLog' && /확인된 웹 출처가 없습니다/.test(event.label)), false);
   assert.equal(f.calls.network, 0);

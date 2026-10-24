@@ -42,6 +42,8 @@ const OVERRIDES = {
   "accuracy-education": { banner: BANNER_POSTED },
   "activity-trash": { banner: BANNER_POSTED },
   "write-approval-dialog": { banner: BANNER_POSTED },
+  "browser-approval": { banner: BANNER_POSTED },
+  "command-approval": { banner: BANNER_POSTED },
   "outbound-dialog-app": { banner: BANNER_POSTED },
   "refusal-banner": { banner: BANNER_POSTED },
   "attachment-error-design": { banner: BANNER_POSTED },
@@ -55,6 +57,7 @@ const OVERRIDES = {
   "activity-status-chatpanel": { banner: BANNER_POSTED },
   "quit-guard-queue": { banner: BANNER_POSTED },
   "publish-sharing-app": { banner: BANNER_POSTED },
+  "turn-idle-progress-app": { banner: BANNER_POSTED },
 };
 
 // Tests in test/ that this runner must skip, because they have their own build step

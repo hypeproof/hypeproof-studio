@@ -1,3 +1,4 @@
+import {DelegationStop, type DelegationStopState} from "./delegationStop";
 // #282 — ORCHESTRATION: run the coach on the Claude Agent SDK instead of the
 // single-turn proxy. Drop-in with proxyChat's callback contract so
 // chatPanelProvider can route to it behind the `hypeproofChat.coachRuntime`
@@ -58,6 +59,7 @@ import { profileAudience, rateLimitStallText } from "./seatVocabulary.ts";
 import {
   buildSdkQueryOptions,
   consumeSdkStream,
+  extractSdkActivity,
   evaluateSdkToolUse,
   isMinorProfile,
   sdkProviderErrorFriendly,
@@ -186,6 +188,8 @@ export interface SdkCoachArgs {
    * proxy path has no equivalent, and a caller that omits it loses nothing else.
    */
   onActivity?: (activity: SdkActivity) => void;
+  onDelegationControl?: (stop: (() => void) | null) => void;
+  onDelegationStop?: (state: DelegationStopState) => void;
   /**
    * #580 — 토큰 usage 탭 (요청 단위 assistant usage / result 턴 합계).
    * Optional: 스풀을 안 쓰는 호출자·테스트는 그대로 동작한다.
@@ -253,7 +257,7 @@ export interface AgentSdkModule {
   query(input: {
     prompt: string | AsyncIterable<unknown>;
     options?: Options;
-  }): AsyncIterable<Record<string, unknown>>;
+  }): AsyncIterable<Record<string, unknown>> & {stopTask?: (id: string) => Promise<void>};
   /**
    * In-process MCP server factory functions (#282 P2 slice 2). Optional on
    * the seam: an older/fake module without them simply gets no browser MCP
@@ -681,6 +685,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // ANTHROPIC_BASE_URL derived from proxyUrl, ANTHROPIC_API_KEY scrubbed) is
   // locked by unit tests via buildSdkQueryOptions (REQ-M5/M6/M13); the two
   // host-bound fields are attached here. `Options` is the REAL SDK type.
+  let delegationStop: DelegationStop | undefined;
   const options: Options = {
     ...buildSdkQueryOptions(opts, {
       proxyUrl: args.gatewayUrl,
@@ -721,9 +726,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     ...(mcpServers ? { mcpServers } : {}),
     canUseTool: async (name, input, options) => {
       const decision = (allowed: boolean, actor: 'user'|'policy' = 'policy', denialSource?: import('./denialSource').DenialSource) => {
-        if (!allowed) webCitations.deny(options.toolUseID);
+        if (!allowed) { webCitations.deny(options.toolUseID);delegationStop?.refused(options.toolUseID); }
         args.onActivity?.({kind:'approval',id:options.toolUseID,name,input,allowed,actor,...(denialSource ? { denialSource } : {}),at:Date.now()});
       };
+      if(delegationStop?.requested && (name==="Task"||name==="Agent")){decision(false,"user");return {behavior:"deny" as const,message:"도우미 중지를 요청한 작업에서는 새 도우미를 시작하지 않아요."};}
       lastToolCallAt = Date.now();
       // A browser-only turn cannot turn a model's mistaken authoring plan into writes,
       // a preview, or a delegated task. The existing capability/approval gates still run.
@@ -839,6 +845,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       // The CLI writes the resolved path the gate judged, not the spelling it was given: no link or `..` in the
       // spelling can be read differently by the CLI than by the gate (CGP-AGENT-R-005 verify 2 F1).
       if (ok && writeScope) input = withResolvedWritePath(input, writeScope) as typeof input;
+      if(delegationStop?.requested && (name==="Task"||name==="Agent")){decision(false,"user");return {behavior:"deny" as const,message:"도우미 중지를 요청한 작업에서는 새 도우미를 시작하지 않아요."};}
       return ok
         ? { behavior: "allow" as const, updatedInput: input }
         : { behavior: "deny" as const, message: "사용자가 이 작업을 허용하지 않았어요." };
@@ -847,11 +854,15 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   };
 
   const stream = sdk.query({ prompt, options });
+  delegationStop = new DelegationStop(id=>stream.stopTask ? stream.stopTask(id) : Promise.reject(new Error("SDK task stop unavailable")),state=>args.onDelegationStop?.(state));
+  if(stream.stopTask)args.onDelegationControl?.(()=>delegationStop?.request());
   // A4 — on an orchestrator turn the stream is read for failure events (F3–F5, spec §7)
   // and passed through unchanged; return() and throw() reach the CLI's iterator as before.
   const tapped = orchestratorTurn ? orchestratorTurn.tap(stream) : stream;
   const observed = (async function* () {
     for await (const event of tapped) {
+      for(const a of extractSdkActivity(event as unknown as Record<string,unknown>)){if(a.kind==="tool_use")delegationStop?.tool(a.id,a.name);else if(a.kind==="tool_result"&&!a.launched)delegationStop?.result(a.id);}
+      delegationStop?.observe(event);
       const citations = args.signal.aborted ? [] : webCitations.observe(event);
       if (citations.length) args.onCitations?.(citations);
       yield event;
@@ -930,10 +941,12 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // A4 — the session keeps how the turn ended (F5 on the next turn); null when it threw.
     // The value and the error pass through as they are.
     (end) => {
+      delegationStop?.end(); args.onDelegationControl?.(null);
       orchestratorTurn?.end(end);
       return end;
     },
     (err: unknown) => {
+      delegationStop?.end(); args.onDelegationControl?.(null);
       orchestratorTurn?.end(null);
       throw err;
     },

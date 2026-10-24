@@ -118,3 +118,32 @@ test('a whitespace-only change is flagged, and composed/decomposed Hangul is not
   // Negative control: a real text change is not flagged as whitespace.
   assert.ok(kit.lineDiff('abc', 'abd').every((r) => !r.ws));
 });
+
+test('grouped fields use the same versions, hide unchanged groups and retain all changed values', () => {
+  const before={title:'이전 제목',model:{default:'a',allowed:['a','b']},steps:[{id:'one',instructions:'이전'}],starter:'자료',learning:{week:1}};
+  const after={...before,title:'<img src=x>',model:{allowed:['a','b'],default:'a'},steps:[{id:'one',instructions:'새 안내'}],learning:{week:2},extra:{a:1}};
+  const groups=kit.groupedChanges(before,after);
+  assert.deepEqual(groups.map(g=>g.label),['이름·소개','지시문','수업 기준','기타 설정']);
+  assert.equal(groups[0].fields[0].before,'이전 제목');assert.equal(groups[0].fields[0].after,'<img src=x>');
+  assert.deepEqual(kit.groupedChanges(before,structuredClone(before)),[]);
+  assert.equal(kit.groupedChanges(before,{...before,model:{default:'a',allowed:['b','a']}})[0].label,'모델·기능','array order is preserved');
+  assert.equal(kit.groupedChanges({starter:'자료'},{} )[0].fields[0].after,undefined,'removed setting remains a deletion');
+  assert.deepEqual(before.steps,[{id:'one',instructions:'이전'}],'comparison never edits draft input');
+});
+
+
+test('grouped instructions normalize line endings and Hangul exactly like the line diff', () => {
+  const old={steps:[{id:'s',title:'안내',instructions:'한글\r\n다음 줄\r\n'.normalize('NFD')}]};
+  const next={steps:[{id:'s',title:'안내',instructions:'한글\n다음 줄'}]};
+  assert.deepEqual(kit.groupedChanges(old,next),[]);
+  assert.deepEqual(kit.instructionDiff(old,next).rows,[]);
+  assert.equal(kit.groupedChanges(next,{steps:[{...next.steps[0],instructions:'한글\n다음 줄 '} ]}).length,1,'meaningful trailing spaces still show');
+});
+
+
+test('hostile property names remain literal labels, never inherited JavaScript members', () => {
+ const next=JSON.parse('{"__proto__":{"title":"목표"},"constructor":"문자열"}');
+ const fields=kit.groupedChanges({},next)[0].fields;
+ assert.deepEqual(fields.map(f=>f.label),['__proto__','constructor']);
+ assert.equal({}.title,undefined);
+});

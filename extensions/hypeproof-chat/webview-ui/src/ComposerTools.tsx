@@ -4,6 +4,7 @@ import { denialCopy } from '../../src/denialSource';
 import { ChatIcon } from './ChatDetails';
 import { useDialogFocus } from './dialogFocus';
 import { imeComposing } from './imeGuard';
+import { useMenuTypeahead } from './menuTypeahead';
 
 /** Selection belongs to the next draft. Execution status comes from host tool events. */
 export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAttachFile, webSearchItem = true }: {
@@ -18,6 +19,7 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
   webSearchItem?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const typeahead = useMenuTypeahead(open);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -28,9 +30,10 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
   const reason = locked ? '예약한 메시지를 보내거나 입력창으로 가져온 뒤 변경할 수 있습니다.' : webSearch?.reason || denialCopy({ source: 'unknown', feature: '웹 검색' }, 'neutral');
   return <div ref={root} className="hps-composer-tools">
     <button ref={trigger} type="button" className="hps-tool-trigger" aria-label="도구 열기" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}><ChatIcon kind="plus" /></button>
-    {open && <div ref={menu} className="hps-tools-menu" role="menu" aria-label="메시지 도구" onKeyDown={event => {
-      if (event.defaultPrevented || imeComposing(event)) return;
-      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    {open && <div ref={menu} className="hps-tools-menu" role="menu" aria-label="메시지 도구" onCompositionStart={typeahead.onCompositionStart} onCompositionEnd={event => typeahead.onCompositionEnd(event, [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])])} onKeyDown={event => {
+      if (event.defaultPrevented || imeComposing(event, typeahead.composing.current)) return;
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { typeahead.search(event, [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])]); return; }
+      typeahead.reset();
       event.preventDefault();
       const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
       const at = items.indexOf(document.activeElement as HTMLButtonElement);

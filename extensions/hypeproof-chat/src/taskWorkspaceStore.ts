@@ -93,7 +93,8 @@ function validMessage(value: unknown, allowEditOf = false): value is ChatMessage
   if (value.tool !== undefined && (!isRecord(value.tool) || !exactKeys(value.tool, ['icon', 'label', 'state']) ||
       typeof value.tool.icon !== 'string' || typeof value.tool.label !== 'string' || typeof value.tool.state !== 'string' || !['running', 'done', 'error'].includes(value.tool.state))) return false;
   if (value.citations !== undefined && (!Array.isArray(value.citations) || !value.citations.every(citation =>
-    isRecord(citation) && exactKeys(citation, ['url', 'title', 'domain', 'tier']) &&
+    isRecord(citation) && exactKeys(citation, ['url', 'title', 'domain', 'tier', 'kind']) &&
+    (citation.kind === undefined || typeof citation.kind === 'string' && citation.kind.length <= 64) &&
     typeof citation.url === 'string' && typeof citation.title === 'string' && typeof citation.domain === 'string' &&
     typeof citation.tier === 'number' && [1, 2, 3, 4].includes(citation.tier)))) return false;
   return true;

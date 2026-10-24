@@ -87,6 +87,8 @@ export interface ChatMessage {
  * 1 academic society·edu·gov, 2 paper·DOI, 3 official manufacturer, 4 blog·YouTube·other.
  */
 export interface Citation {
+  /** Event-owned source kind (web/lesson/file). Missing or future values remain unclassified. */
+  kind?: string;
   url: string;
   title: string;
   domain: string;
@@ -526,6 +528,9 @@ export interface SuggestionChip {
 
 // Webview → Host
 export type WebviewMessage = (
+  | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
+  | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
+  | {type:'annotationLeaveAnswer';id:string;discard:boolean}
   | {type:'writeApprovalAnswer';id:string;approved:boolean}
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
@@ -652,6 +657,7 @@ export type WebviewMessage = (
   | { type: "selectAnswerAttempt"; activityId?: string; taskId?: string; rootId: string; attemptId: string; choose: boolean }
   | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[]; toolMode?: import('./turnTools').TurnToolMode; sourceMessageId?: string; userMessageId?: string }
   | { type: "cancelStream"; streamId: string }
+  | { type: "stopDelegations"; streamId: string }
   /** CGP-SHELL-R-023 — local first-result education; no verdict or telemetry. */
   | { type: "accuracyEducationRequest"; requestId: string }
   | { type: "accuracyEducationDismiss"; messageId: string }
@@ -681,6 +687,7 @@ export type WebviewMessage = (
   | { type: "dismissUpdate"; version: string }  // #72: user clicked "Later" — silence for 7d
   /** CGP-SHELL-R-024 — the learner closed the "AI가 할 수 있는 일이 바뀌었어요" card. */
   | { type: "acknowledgeLessonCapabilities"; id: string }
+  | { type: "dismissClassWindow"; id: string }
   | { type: "dismissCapabilityChange"; id: string }
   | { type: "clearHistory" }
   | { type: "namingRitual" }
@@ -781,6 +788,9 @@ export type WebviewMessage = (
 
 // Host → Webview
 export type HostMessage = (
+  | {type:'browserApprovalPrompt';prompt:import('./browserApprovalPrompt').BrowserApprovalPrompt|null}
+  | {type:'commandApprovalPrompt';prompt:import('./commandApprovalPrompt').CommandApprovalPrompt|null}
+  | {type:'annotationLeavePrompt';prompt:import('./annotationLeavePrompt').AnnotationLeavePrompt|null}
   | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
   | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
@@ -848,6 +858,7 @@ export type HostMessage = (
   /** `userMessageId` (REQ-STUDIO-STEER-NOW): the learner request this turn answers; absent for app-initiated replies. */
   | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
   | { type: "streamChunk"; streamId: string; delta: string }
+  | { type: "delegationStopState"; streamId: string; state: import("./delegationStop").DelegationStopState }
   | { type: "streamCitations"; streamId: string; citations: Citation[] }  // #173
   // SX-59 — the host message that used to leak capability scores to the webview
   // (#204) has been removed. A score reaches the working screen in no shape at all.

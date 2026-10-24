@@ -1,3 +1,4 @@
+import { TaskNotifier } from '../src/taskNotice.ts';
 // REQ-STUDIO-TASK-RUN-STATE (AE-03, CGP-AGENT-R-022 recast) — the active task's run state, derived
 // from what the webview already knows, plus the host's approval-wait signal (chatPanelProvider bundled
 // with a scripted `vscode`, as clear-history.smoke.mjs does). The rail render is test/task-run-state.test.tsx.
@@ -67,10 +68,14 @@ const vscode = {
   workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) },
 };
 const module = { exports: {} };
-vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder });
+vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder, crypto: globalThis.crypto });
 const P = module.exports.ChatPanelProvider.prototype;
 const posts = [];
-const host = { approvalWaits: 0, post: async (m) => { posts.push(m); }, taskCommandAllows: new TaskCommandAllows(), taskCommandAllowState: () => ({ key: "task-1", refusal: null }), approvedBrowserOrigins: new Set(), coachDisplayName: () => "코치", resolveActionApproval: P.resolveActionApproval };
+// Commands are approved in the in-panel dialog (CGP-AGENT-D-003); the stub counts it as a raised modal.
+const commandApprovalRequest = { confirm: async () => { modals++; return new Promise((r) => { release = (v) => r(v === "실행" ? "allow" : v); }); } };
+const notices = [], cancelledNotices = [];
+const finishNotifier = new TaskNotifier({show: request => { notices.push(request); return new Promise(() => {}); }, hide: id => cancelledNotices.push(id), reveal: () => { throw new Error("unanswered notice must not reveal"); }});
+const host = { turnRequestScope: () => JSON.stringify(["activity-1", "task-1"]), cachedProfile: {activity_kind: "personal"}, finishNotifier, approvalWaits: 0, commandApprovalRequest, post: async (m) => { posts.push(m); }, taskCommandAllows: new TaskCommandAllows(), taskCommandAllowState: () => ({ key: "task-1", refusal: null }), approvedBrowserOrigins: new Set(), coachDisplayName: () => "코치", resolveActionApproval: P.resolveActionApproval };
 const waits = () => posts.filter((m) => m.type === "approvalWait").map((m) => m.waiting);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -79,6 +84,8 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
   await tick();
   t("host: a raised modal reports 승인 기다리는 중 while it is open (positive control)", () => {
     assert.equal(modals, 1);
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0].kind, "approval");
     assert.deepEqual(waits(), [true]);
   });
   release("실행");
@@ -87,6 +94,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
     assert.equal(approved, true);
     assert.deepEqual(waits(), [true, false]);
     assert.equal(host.approvalWaits, 0);
+    assert.deepEqual(cancelledNotices, [notices[0].id], "settled approval dismisses its notice");
   });
 }
 {

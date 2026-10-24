@@ -50,7 +50,7 @@ async function main() {
     posts = []; browserCalls.length = 0; commands.length = 0;
     const h = Object.create(proto);
     Object.assign(h, {
-      pendingSends: 0, activeStreams: new Map(), turnTimelines: new Map(), turnRequests: new Map(), getHistory: () => [],
+      pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnTimelines: new Map(), turnRequests: new Map(), getHistory: () => [],
       post: async (m: any) => { posts.push(m); return true; },
       postPageNotice: (text: string) => { posts.push({ type: 'pageNotice', text }); },
       annotationScope: () => scope,
@@ -60,12 +60,15 @@ async function main() {
         annotationIdentity: async () => identity, annotationRefsValid: () => true,
         clearAnnotationMarkers: async () => { browserCalls.push(['clear']); },
         annotationMarker: async (n: number, r: unknown) => { browserCalls.push(['marker', n, r]); },
+        annotationComment: async (n: number, comment: string) => { browserCalls.push(['comment', n, comment]); },
         pickElement: async () => { browserCalls.push(['pickElement']); return ctx(); },
         pickRectangle: async () => { browserCalls.push(['pickRectangle']); return { contexts: [ctx()], crop: ctx().crop }; },
         currentTab: () => ({ url: 'http://127.0.0.1:5173/index.html', title: 'Preview' }), setTargetTab() {},
       },
       liveServer: { currentUrl: () => 'http://127.0.0.1:5173/', currentRoot: () => null },
       revealBrowserTab: async () => {}, coachBrowserTabs: () => [],
+      // postConfig narrows the preview header's file grant (CGP-KNOW-D-015); the real provider always has one.
+      preview: { setAskAboutFileEnabled() {} },
       attachElementContext: (c: ElementContext) => { browserCalls.push(['attachElementContext', c.ref]); },
       ...extra,
     });
@@ -389,9 +392,44 @@ async function main() {
     const html = renderToStaticMarkup(<AnnotationTray annotations={[{ number: 1, kind: 'element', comment: '', stale: true, sentText: 's', imageDataUrl: null }, { number: 2, kind: 'rectangle', comment: '', stale: false, sentText: 's', imageDataUrl: null }]} onAction={() => {}} />);
     assert.equal(html.match(/maxLength="300"/g)?.length, 2);
     assert.equal(html.match(/role="alert"/g)?.length, 1);
-    assert.match(html, /role="alert">이전 화면의 표시예요\. 지우고 다시 골라 주세요\. 보내지 않아요\.</);
+    assert.match(html, /role="alert">표시 1: 이전 화면의 표시예요\. 지우고 다시 골라 주세요\. 보내지 않아요\.</);
     const full = renderToStaticMarkup(<AnnotationTray annotations={Array.from({ length: 10 }, (_, i) => ({ number: i + 1, kind: 'element' as const, comment: '', stale: false, sentText: '', imageDataUrl: null }))} onAction={() => {}} />);
     assert.equal(full.match(/<button type="button" disabled="">/g)?.length, 2, 'both add buttons are disabled at 10');
+  }
+  // DES-ART-03: visible chat uses the request-bound in-app modal, same host discard gate.
+  {
+    let nativeCalls=0;
+    vscode.window.showWarningMessage=async()=>{nativeCalls++;throw new Error('visible panel must use webview');};
+    for(const discard of [false,true]){
+      const h=host({view:{visible:true}});fill(h,2);
+      const pending=h.confirmAnnotationLeave();
+      const prompt=posts.find(p=>p.type==='annotationLeavePrompt'&&p.prompt)?.prompt;
+      assert.equal(prompt.count,2);assert.ok(prompt.id);
+      await h.handleMessage({type:'annotationLeaveAnswer',id:'unrelated',discard:true});
+      assert.equal(h.annotationBatch.size,2);
+      await h.handleMessage({type:'annotationLeaveAnswer',id:prompt.id,discard});
+      assert.equal(await pending,discard);assert.equal(h.annotationBatch.size,discard?0:2);
+      assert.ok(posts.some(p=>p.type==='annotationLeavePrompt'&&p.prompt===null));
+    }
+    const h=host({view:{visible:true}});fill(h,1);const pending=h.confirmAnnotationLeave();
+    const prompt=posts.find(p=>p.type==='annotationLeavePrompt'&&p.prompt).prompt;
+    h.annotationBatch.edit(1,'changed while modal open');
+    await h.handleMessage({type:'annotationLeaveAnswer',id:prompt.id,discard:true});
+    assert.equal(await pending,false);assert.equal(h.annotationBatch.size,1);
+    assert.equal(nativeCalls,0);
+    // A webview reload (`ready`) and panel disposal cancel the open request: the draft stays and the next leave is not refused.
+    {
+      const noop=async()=>{};
+      const h=host({view:{visible:true},writeApprovalRequest:{cancel(){}},postInbox:noop,postTurnReview:noop,postPageCards:noop,postConfig:noop,postHistory:noop,postAccuracyEducation:noop,postLearningState:noop});fill(h,2);
+      const first=h.confirmAnnotationLeave();
+      await h.handleMessage({type:'ready'}).catch((e:any)=>{if(!/postPageNotice|undefined/.test(String(e?.message)))throw e;});
+      assert.equal(await Promise.race([first,new Promise(r=>setTimeout(()=>r('still pending'),500))]),false,'ready cancels the open leave request');
+      assert.equal(h.annotationBatch.size,2);
+      const second=h.confirmAnnotationLeave();
+      const prompt=posts.filter(p=>p.type==='annotationLeavePrompt'&&p.prompt).at(-1).prompt;
+      await h.handleMessage({type:'annotationLeaveAnswer',id:prompt.id,discard:true});
+      assert.equal(await second,true,'a fresh request after reload is answerable, not refused');
+    }
   }
   // CGP-ART-R-003: every exit keeps drafts unless the same revision is explicitly discarded.
   {

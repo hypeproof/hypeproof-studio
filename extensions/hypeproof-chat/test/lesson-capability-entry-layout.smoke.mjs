@@ -1,66 +1,46 @@
+// DES-CGP-AGENT-67: mounted React and the actual shipped stylesheet order.
 import assert from 'node:assert/strict';
-import { readdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { build } from 'esbuild';
-import { findChromium, launch } from './lib/headless-chromium.mjs';
-
-const root = fileURLToPath(new URL('..', import.meta.url));
-const SRC = resolve(root, 'webview-ui/src');
-
-const bin = findChromium();
-if (!bin) {
-  if (process.env.FOCUS_REQUIRE_BROWSER) { console.error('lesson-capability-entry-layout: no headless Chromium and FOCUS_REQUIRE_BROWSER=1'); process.exit(1); }
-  console.log('lesson-capability-entry-layout NOT RUN: no headless Chromium (set HEADLESS_CHROMIUM, or FOCUS_REQUIRE_BROWSER=1 to fail)');
-  process.exit(0);
-}
-
-// ---------- the stylesheets as shipped (main.tsx order: tokens, component css, styles, chatDetails) ----------
-const others = readdirSync(SRC).filter((f) => f.endsWith('.css') && !['tokens.css', 'designTokens.css', 'styles.css', 'chatDetails.css'].includes(f)).sort();
-const bundled = await build({
-  stdin: { contents: ['tokens.css', ...others, 'styles.css', 'chatDetails.css'].map((f) => `@import "./${f}";`).join('\n'), resolveDir: SRC, loader: 'css' },
-  bundle: true, write: false, outdir: 'out', logLevel: 'silent',
-  plugins: [{ name: 'external', setup(b) { b.onResolve({ filter: /\.(svg|png|jpe?g|gif|webp|woff2?)$/ }, (a) => ({ path: a.path, external: true })); } }],
-});
-const css = bundled.outputFiles.find((o) => o.path.endsWith('.css')).text;
-
-// ---------- the real composer markup ----------
-const dir = mkdtempSync(join(tmpdir(), 'lesson-capability-entry-layout-'));
-const markup = {};
-try {
-  const out = join(dir, 'render.cjs');
-  await build({ stdin: { contents: 'export { ChatPanel } from "./webview-ui/src/ChatPanel"; export { renderToStaticMarkup } from "react-dom/server"; export { createElement } from "react";', resolveDir: root, loader: 'tsx' }, bundle: true, platform: 'node', format: 'cjs', outfile: out, jsx: 'automatic', loader: { '.css': 'empty', '.svg': 'empty' }, alias: { react: join(root, 'webview-ui/node_modules/react'), 'react-dom': join(root, 'webview-ui/node_modules/react-dom') }, banner: { js: 'globalThis.window = { innerWidth: 1420, addEventListener() {}, removeEventListener() {} };' }, logLevel: 'error' });
-  const { ChatPanel, renderToStaticMarkup, createElement } = createRequire(import.meta.url)(out);
-  const originalError = console.error;
-  console.error = (...args) => { if (!String(args[0]).includes('useLayoutEffect does nothing on the server')) originalError(...args); };
-  const noop = () => {};
-  const ux = { coach: { naming_mode: 'fixed', fallback_name: 'HypeProof' }, suggestions: { initial: [], follow_up: [] }, hints: { short_input: { enabled: false }, roll_input_button: { enabled: false } }, retry_button: { enabled: false } };
-  for (const seat of ['classroom', 'personal']) for (const streaming of [false, true]) {
-    markup[`${seat}/${streaming ? 'stop' : 'send'}`] = renderToStaticMarkup(createElement(ChatPanel, { messages: [], streaming, config: { hasToken: true, lessonCapabilityEntry: {id:'entry',seen:false}, aiCapabilities: [{key:'read',label:'파일 읽기',on:true},{key:'write',label:'파일 고치기',on:false}], profile: { ux, welcome: { greeting_md: '' }, profile_id: 'studio-native-trial', activity_kind: 'trial', lesson: null }, activity: { id: 'a1', verified: true, workspace: '/tmp/synthetic' }, coach: { name: '코치', configured: true }, taskWorkspace: seat === 'personal' ? { tasks: [], sources: [] } : undefined }, onSend: noop, onCancel: noop, onSettings: noop, onSetToken: noop }));
-  }
-  console.error = originalError;
-} finally { rmSync(dir, { recursive: true, force: true }); }
-
-// Actual card/button layout and cascade, including the narrow header.
-const b = await launch(bin);
-try {
-  for (const width of [1420,800,320]) for (const dark of [true,false]) for (const forcedColors of [false,true]) for (const html of Object.values(markup)) {
-    await b.load(`<!doctype html><style>:root{--vscode-foreground:${dark?'#eee':'#222'};--vscode-editor-background:${dark?'#222':'#fff'}}${css}</style><body class="${dark?'vscode-dark':'vscode-light'}">${html}</body>`, {width,height:800,dark,forcedColors});
-    const result = await b.evaluate(`(() => {
-      const next = document.querySelector('.hp-capability-next');
-      const reopen = document.querySelector('.hp-capability-reopen');
-      const card = document.querySelector('.hp-ai-can-do[open]');
-      return { buttons:[next,reopen].map(e=>({w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height,font:parseFloat(getComputedStyle(e).fontSize)})), open:!!card, next:next.textContent,
-        overflow:document.documentElement.scrollWidth > innerWidth,
-        title:[...document.querySelectorAll('.hps-coach-name:not(.hps-sr-only)')].every(e=>e.scrollWidth<=e.clientWidth) };
-    })()`);
-    assert.equal(result.open,true);
-    assert.equal(result.next,'다음');
-    assert.ok(result.buttons.every(e=>e.w>=44 && e.h>=44 && e.font>=14),JSON.stringify(result));
-    assert.equal(result.overflow,false,`overflow at ${width}`);
-    assert.equal(result.title,true,`short Korean title at ${width}`);
-  }
-} finally { await b.close(); }
-console.log('lesson-capability-entry-layout OK');
+import {build} from 'esbuild';
+import {fileURLToPath} from 'node:url';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {chatConfig,chatPanelProps} from './sx-screen-fixtures.mjs';
+import {THEMES} from './lib/vscode-default-themes.mjs';
+import {findChromium,launch} from './lib/headless-chromium.mjs';
+const root=fileURLToPath(new URL('..',import.meta.url));
+const props=chatPanelProps(),callbacks=Object.entries(props).filter(([,v])=>typeof v==='function').map(([k])=>`${k}:()=>{}`).join(',');
+const asset=await build({entryPoints:[`${root}/webview-ui/src/main.tsx`],bundle:true,write:false,outdir:'out',loader:{'.svg':'dataurl'},logLevel:'silent'});
+const css=asset.outputFiles.find(f=>f.path.endsWith('.css')).text;
+const js=(await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{ChatPanel}from'./src/ChatPanel';const root=createRoot(document.getElementById('root'));window.mount=(config,instructor=false)=>root.render(<ChatPanel {...${JSON.stringify(props)}} {...{${callbacks}}} config={config} instructor={instructor} onSend={(...a)=>window.sent.push(a)}/>);`,resolveDir:root+'/webview-ui',loader:'tsx'},bundle:true,write:false,outdir:'fixture-assets',format:'iife',platform:'browser',loader:{'.svg':'dataurl'},logLevel:'silent'})).outputFiles.find(f=>f.path.endsWith('.js')).text;
+const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER==='1')throw Error('Chromium required');console.log('NOT RUN: lesson entry browser unavailable');process.exit(0);}
+const browser=await launch(bin),evidence=process.env.LESSON_ENTRY_EVIDENCE;if(evidence)mkdirSync(evidence,{recursive:true});
+const delay=()=>new Promise(r=>setTimeout(r,80));
+const caps=['파일 읽기','파일 고치기','명령 실행','인터넷 보기','이미지 보기','검색하기'].map((label,i)=>({key:['read','write','shell','browser','vision','search'][i],label,on:i<3,asks:i===1}));
+const draft='작성 중인 초안 <img src=x onerror=alert(1)> 한글';
+const key=async (key,modifiers=0)=>{for(const type of ['keyDown','keyUp'])await browser.send('Input.dispatchKeyEvent',{type,key,code:key,windowsVirtualKeyCode:key==='Tab'?9:27,modifiers});};
+try{
+ for(const seat of ['personal','classroom'])for(const dark of [false,true])for(const width of [320,800,1420]){
+  const config=chatConfig(3,{profile:{...chatConfig().profile,lesson:null,activity_kind:seat},activity:{id:'a1',name:'작업',kind:seat,workspace:'/w',verified:true},activityDraft:{text:draft,images:[],queued:null},lessonCapabilityEntry:{id:'seat-a-v1',seen:false},aiCapabilities:caps,...(seat==='personal'?{taskWorkspace:{scope:'a',revision:1,activeTaskId:'t1',tasks:[{id:'t1',title:'작업',createdAt:1,updatedAt:1,messageCount:0}],sourceSelection:null}}:{})});
+  const vars=Object.entries(THEMES[dark?'Dark+':'Light+']).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
+  await browser.load(`<html style="${vars}"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div id="root"></div><script>window.sent=[];window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>({}),setState:()=>{}});</script><script>${js}</script></body></html>`,{width,height:800,dark});
+  const render=async(c=config,instructor=false)=>{await browser.evaluate(`mount(${JSON.stringify(c)},${instructor})`);await delay();};await render();
+  const m=await browser.evaluate(`(()=>{const d=document.querySelector('.hp-capability-sheet'),b=d?.querySelector('button');if(!d)return {modal:false};const r=d.getBoundingClientRect(),br=b.getBoundingClientRect();return{modal:d.matches(':modal'),name:d.getAttribute('aria-label'),buttons:[...d.querySelectorAll('button')].map(b=>b.textContent),count:d.querySelectorAll('[data-capability]').length,rows:[...d.querySelectorAll('[data-capability]')].map(e=>({h:e.getBoundingClientRect().height,text:e.getAttribute('aria-label')})),button:{w:br.width,h:br.height,font:parseFloat(getComputedStyle(b).fontSize)},fits:r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,overflow:d.scrollWidth>d.clientWidth||document.documentElement.scrollWidth>innerWidth,focus:document.activeElement===b,draft:document.querySelector('textarea').value,noteFont:Math.min(...[...d.querySelectorAll('.hp-rail-lesson-note')].map(n=>parseFloat(getComputedStyle(n).fontSize))),oneColumn:new Set([...d.querySelectorAll('[data-capability]')].map(e=>Math.round(e.getBoundingClientRect().left))).size===1}})()`);
+  assert.equal(m.modal,true);assert.equal(m.name,'AI 안내');assert.deepEqual(m.buttons,['알겠어요']);assert.equal(m.count,6);assert.ok(m.rows.every(r=>r.h>=44&&r.text.includes(': ')));assert.ok(m.button.w>=44&&m.button.h>=44&&m.button.font>=14);assert.equal(m.fits,true);assert.equal(m.overflow,false);assert.equal(m.focus,true);assert.equal(m.draft,draft);assert.ok(m.noteFont>=14,'sheet notes stay at the 14px floor');assert.equal(m.oneColumn,true,'capability rows form a single column');
+  for(const modifiers of [0,8]){await key('Tab',modifiers);assert.equal(await browser.evaluate(`document.querySelector(':modal').contains(document.activeElement)`),true);assert.ok(await browser.evaluate(`parseFloat(getComputedStyle(document.activeElement).outlineWidth)>=2`));}
+  // An outside press never acknowledges: a real mouse press on the backdrop leaves the receipt unsent and the sheet open.
+  await browser.evaluate(`posted.length=0`);for(const type of ['mousePressed','mouseReleased'])await browser.send('Input.dispatchMouseEvent',{type,x:2,y:2,button:'left',clickCount:1});await delay();assert.equal(await browser.evaluate(`posted.filter(m=>m.type==='acknowledgeLessonCapabilities').length`),0,'backdrop press does not acknowledge');assert.equal(await browser.evaluate(`!!document.querySelector(':modal')`),true,'backdrop press keeps the sheet open');
+  // A short window caps the sheet to the viewport and scrolls inside it instead of clipping the button.
+  if(width===320){await browser.send('Emulation.setDeviceMetricsOverride',{width,height:400,deviceScaleFactor:1,mobile:false});await delay();const s=await browser.evaluate(`(()=>{const d=document.querySelector(':modal'),r=d.getBoundingClientRect();d.querySelector('.hp-capability-next').scrollIntoView();const b=d.querySelector('.hp-capability-next').getBoundingClientRect();return{fits:r.top>=0&&r.bottom<=innerHeight,scrolls:d.scrollHeight>d.clientHeight,reach:b.top>=0&&b.bottom<=innerHeight}})()`);assert.deepEqual(s,{fits:true,scrolls:true,reach:true},'short window: sheet fits the viewport and scrolls to the button');await browser.send('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:false});await delay();}
+  // Native modality prevents focus from escaping even through a programmatic focus request.
+  await browser.evaluate(`document.querySelector('textarea').focus()`);assert.equal(await browser.evaluate(`document.querySelector(':modal').contains(document.activeElement)`),true);
+  if(width===320){await browser.send('Emulation.setEmulatedMedia',{features:[{name:'forced-colors',value:'active'},{name:'prefers-reduced-motion',value:'reduce'}]});assert.ok(await browser.evaluate(`parseFloat(getComputedStyle(document.activeElement).outlineWidth)>=2`));await browser.send('Emulation.setEmulatedMedia',{features:[{name:'forced-colors',value:'none'},{name:'prefers-color-scheme',value:dark?'dark':'light'}]});}
+  if(evidence){const shot=await browser.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${evidence}/${seat}-${dark?'dark':'light'}-${width}.png`,Buffer.from(shot.data,'base64'));}
+  await browser.evaluate(`(()=>{posted.length=0;const sheet=document.querySelector(':modal');sheet.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));sheet.dispatchEvent(new Event('cancel',{cancelable:true}));sheet.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}));})()`);assert.equal(await browser.evaluate(`posted.filter(m=>m.type==='acknowledgeLessonCapabilities').length`),0,'IME cancel does not acknowledge');
+  await browser.evaluate(`posted.length=0;document.querySelector('.hp-capability-next').click()`);await delay();assert.deepEqual(await browser.evaluate(`posted.filter(m=>m.type==='acknowledgeLessonCapabilities')`),[{type:'acknowledgeLessonCapabilities',id:'seat-a-v1'}]);assert.equal(await browser.evaluate(`!!document.querySelector(':modal')`),true,'failed or pending receipt cannot silently dismiss');assert.equal(await browser.evaluate(`sent.length`),0);
+  const seen={...config,lessonCapabilityEntry:{id:'seat-a-v1',seen:true}};await render(seen);assert.equal(await browser.evaluate(`!!document.querySelector(':modal')`),false);assert.equal(await browser.evaluate(`document.activeElement.localName`),'textarea');assert.equal(await browser.evaluate(`document.querySelector('textarea').value`),draft);
+  await browser.evaluate(`document.querySelector('.hp-capability-reopen').click()`);await delay();assert.equal(await browser.evaluate(`!!document.querySelector(':modal')`),true);await key('Escape');await delay();assert.equal(await browser.evaluate(`!!document.querySelector(':modal')`),false);assert.equal(await browser.evaluate(`document.activeElement.localName`),'textarea');
+  await render({...config,lessonCapabilityEntry:{id:'seat-a-v2',seen:false}});assert.equal(await browser.evaluate(`!!document.querySelector(':modal')`),true);
+  await render({...seen,lessonCapabilityEntry:{id:'seat-b-v1',seen:true}});assert.equal(await browser.evaluate(`!!document.querySelector(':modal')`),false,'new seen seat has no stale modal');
+  await render(config,true);assert.equal(await browser.evaluate(`!!document.querySelector(':modal')`),false,'instructor excluded');
+ }
+ console.log('PASS lesson-entry: 12 seat/theme/width cases, modal, focus trap/return, scoped receipt, preserved draft');
+}finally{await browser.close();}

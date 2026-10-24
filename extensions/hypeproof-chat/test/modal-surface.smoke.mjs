@@ -10,7 +10,7 @@ for(const [property,value] of Object.entries({'box-sizing':'border-box',width:'m
 assert.equal(rule('.hp-modal.hp-modal::backdrop').background,'rgb(0 0 0 / 40%)');
 assert.equal(rule('.hp-modal-backdrop.hp-modal-backdrop').background,'rgb(0 0 0 / 40%)');
 for(const theme of ['vscode-light','vscode-high-contrast-light']) for(const target of ['.hp-modal::backdrop','.hp-modal-backdrop']) assert.equal(rule(`body.${theme} ${target}`).background,'rgb(0 0 0 / 30%)');
-assert.equal(rule('.hp-modal[data-closing]').animation,'hp-modal-exit var(--hp-dur-modal-exit) ease-in both');
+assert.equal(rule('.hp-modal[data-closing]').animation,'hp-modal-exit var(--hp-dur-modal-exit) var(--hp-ease-exit) both');
 for(const [property,value] of Object.entries({position:'fixed',inset:'auto 0 0',width:'100%','min-width':'0','max-width':'none','max-height':'90dvh',margin:'0','border-radius':'12px 12px 0 0'})) assert.equal(rule('.hp-modal.hp-modal','(max-width: 390px)')[property],value,`sheet ${property}`);
 assert.equal(rule('.hp-modal-backdrop.hp-modal-backdrop','(max-width: 390px)').padding,'0');
 for(const selector of ['.hp-modal.hp-modal','.hp-modal[data-closing]']) assert.equal(rule(selector,'(prefers-reduced-motion: reduce)').animation,'none');

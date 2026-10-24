@@ -138,6 +138,67 @@ export function iconSizeFindings(css, file = "x.css") {
   ok(`icon size after CSS: ${files.length} stylesheets, every rule that sizes an svg or .hps-icon keeps 16/20/24 (3 negative controls, 1 positive)`);
 }
 
+// ── 1c. Stroke weight (CGP-DS-D-015) ────────────────────────────────────────────────────────
+// Every stroked icon draws a 1.5-2 stroke in its own coordinate system. A stroked svg with no
+// stroke-width falls back to 1, which is why the two approval-dialog icons were fixed. Fill-only
+// glyphs (the three filled dots, the stop square, a brand logo) have no stroke and are exempt.
+// Scanned: the webview source, and Chalk's inline icons (HTML svg and its status-chip icon builder).
+const STROKE_MIN = 1.5, STROKE_MAX = 2;
+export function strokeWeightFindings(code, file = "x") {
+  const out = [];
+  const text = code.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")).replace(/<!--[\s\S]*?-->/g, "");
+  let widths = 0;
+  for (const m of text.matchAll(/stroke-?[wW]idth["']?\s*[=:,]\s*\{?\s*["']?(\d*\.?\d+)/g)) {
+    widths++;
+    const w = Number(m[1]);
+    if (w < STROKE_MIN || w > STROKE_MAX) out.push(`${file}: stroke-width ${m[1]} is outside ${STROKE_MIN}-${STROKE_MAX}`);
+  }
+  let stroked = 0;
+  for (const m of text.matchAll(/<svg\b[\s\S]*?(?:<\/svg>|$)/g)) {
+    const block = m[0].replace(/<svg\b[\s\S]*?<\/svg>[\s\S]*$/, (x) => x.slice(0, x.indexOf("</svg>")));
+    if (!/\bstroke=(["'])(?!none)[^"']+\1/.test(block)) continue; // fill-only: exempt
+    stroked++;
+    if (!/stroke-?[wW]idth/.test(block)) out.push(`${file}: a stroked <svg> sets no stroke-width (the default is 1): ${block.slice(0, 70).replace(/\s+/g, " ")}`);
+  }
+  // Chalk builds its status icon with setAttribute pairs instead of markup.
+  if (/\["stroke",\s*"(?!none)[^"]+"\]/.test(text)) {
+    stroked++;
+    if (!/\["stroke-width",\s*"[\d.]+"\]/.test(text)) out.push(`${file}: a built svg strokes without a stroke-width`);
+  }
+  return { out, widths, stroked };
+}
+{
+  const bad = (c) => strokeWeightFindings(c).out.length;
+  assert.equal(bad(`<path d="M6 12h.01" strokeWidth="2.6" />`), 1, "negative control: the old 2.6 dots stroke is caught");
+  assert.equal(bad(`<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path d="M1 1"/></svg>`), 1, "negative control: a 3 root stroke is caught");
+  assert.equal(bad(`<svg viewBox="0 0 16 16"><path d="M1 1" fill="none" stroke="currentColor"/></svg>`), 1, "negative control: a stroked svg with the default width 1 is caught");
+  assert.equal(bad(`url("data:image/svg+xml,%3Csvg stroke='black' stroke-width='1'%3E")`), 1, "negative control: a thin CSS data-URI stroke is caught");
+  assert.equal(bad(`for (const [k, v] of [["stroke", "currentColor"], ["fill", "none"]]) svg.setAttribute(k, v);`), 1, "negative control: a built svg with no stroke-width is caught");
+  assert.equal(bad(`["stroke-width", "2.6"]`), 1, "negative control: a built svg with 2.6 is caught");
+  assert.equal(bad(`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><g fill="currentColor" stroke="none"><circle r="1.5"/></g></svg>`), 0, "positive control: 1.7 with a fill-only child passes");
+  assert.equal(bad(`<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M1 1"/></svg>`), 0, "positive control: a fill-only logo has no stroke to weigh");
+  assert.equal(bad(`<svg stroke="currentColor" stroke-width={2}><path d="M1 1"/></svg> <svg stroke="currentColor" strokeWidth="1.5"><path d="M2 2"/></svg>`), 0, "positive control: both ends of the range pass, and one svg does not borrow the next one's width");
+  assert.equal(bad(`<svg stroke="currentColor"><path d="M1 1"/></svg><svg stroke="currentColor" strokeWidth="2"/>`), 1, "negative control: a missing width is not rescued by a later svg");
+  const dir = (u) => readdirSync(u).map((f) => new URL(f, u));
+  const chalkSrc = new URL("../../../chalk/src/", import.meta.url);
+  const targets = [
+    ...dir(src).filter((u) => /\.(tsx|css)$/.test(u.pathname)),
+    ...dir(new URL("ui/", chalkSrc)).filter((u) => u.pathname.endsWith(".html")),
+    ...dir(new URL("lib/", chalkSrc)).filter((u) => /board-status\.ts$|design-tokens\.ts$/.test(u.pathname)),
+  ];
+  let widths = 0, stroked = 0;
+  const found = targets.flatMap((u) => {
+    const r = strokeWeightFindings(readFileSync(u, "utf8"), u.pathname.split("/").slice(-3).join("/"));
+    widths += r.widths; stroked += r.stroked;
+    return r.out;
+  });
+  assert.ok(stroked >= 7 && widths >= 9, `the stroke scan saw ${stroked} stroked svgs and ${widths} widths; the instrument is broken`);
+  assert.deepEqual(found, [], `a stroked icon is outside ${STROKE_MIN}-${STROKE_MAX}:\n${found.join("\n")}`);
+  const details = readFileSync(new URL("ChatDetails.tsx", src), "utf8");
+  assert.match(details, /kind === 'dots' && <g fill="currentColor" stroke="none"><circle[^>]*\/><circle[^>]*\/><circle[^>]*\/><\/g>/, "the dots icon is three filled circles, not a heavy stroke");
+  ok(`stroke weight: ${stroked} stroked svgs and ${widths} widths in ${targets.length} Studio and Chalk files, all ${STROKE_MIN}-${STROKE_MAX} (6 negative controls, 3 positive); dots are filled circles`);
+}
+
 {
   // Verify F3: the classroom done check (its row's only visual cue) measured 2.97:1 on the light theme
   // in the theme green alone. The rule mixes the theme foreground in; the screenshots measure the result.
@@ -225,6 +286,8 @@ function auditIcons(html, where) {
     assert.match(svg, /data-icon="[a-z-]+"/, `${where}: an svg outside the icon set: ${svg}`);
     assert.match(svg, /stroke="currentColor"/, `${where}: icon not drawn in currentColor: ${svg}`);
     assert.match(svg, /width="(16|20|24)" height="\1"/, `${where}: icon size outside 16/20/24: ${svg}`);
+    const weight = /stroke-width="([\d.]+)"/.exec(svg)?.[1];
+    assert.ok(weight && Number(weight) >= 1.5 && Number(weight) <= 2, `${where}: icon stroke-width ${weight} is outside 1.5-2: ${svg}`);
     const hidden = /aria-hidden="true"/.test(svg);
     const named = /role="img"/.test(svg) && /aria-label="[^"]*[가-힣][^"]*"/.test(svg);
     assert.ok(hidden !== named, `${where}: an icon must be aria-hidden or a named img, not both or neither: ${svg}`);
@@ -271,10 +334,11 @@ if (!status.available) {
   {
     const old = `<div class="hps-ai-disclosure">🤖 AI 코치와 대화하고 있어요.</div><span class="hps-tool-mark">⚠️</span>`;
     assert.deepEqual(glyphsIn(old), ["🤖", "⚠"], "negative control: the released markup is caught");
-    assert.throws(() => auditIcons(`<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" data-icon="x" aria-hidden="true">`, "control"), /16\/20\/24/, "negative control: an 18px icon fails");
-    assert.throws(() => auditIcons(`<svg width="16" height="16" stroke="currentColor" data-icon="x">`, "control"), /aria-hidden or a named img/, "negative control: an unlabelled visible icon fails");
-    assert.throws(() => auditIcons(`<svg width="16" height="16" stroke="#fff" data-icon="x" aria-hidden="true">`, "control"), /currentColor/, "negative control: a fixed colour fails");
-    ok("render audit: 4 negative controls caught");
+    assert.throws(() => auditIcons(`<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.7" data-icon="x" aria-hidden="true">`, "control"), /16\/20\/24/, "negative control: an 18px icon fails");
+    assert.throws(() => auditIcons(`<svg width="16" height="16" stroke="currentColor" stroke-width="1.7" data-icon="x">`, "control"), /aria-hidden or a named img/, "negative control: an unlabelled visible icon fails");
+    assert.throws(() => auditIcons(`<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.6" data-icon="x" aria-hidden="true">`, "control"), /1\.5-2/, "negative control: a 2.6 stroke fails");
+    assert.throws(() => auditIcons(`<svg width="16" height="16" stroke="#fff" stroke-width="1.7" data-icon="x" aria-hidden="true">`, "control"), /currentColor/, "negative control: a fixed colour fails");
+    ok("render audit: 5 negative controls caught");
   }
   // The side panels' close buttons are not rendered by the fixtures above: check their markup source.
   for (const name of ["EvidencePanel", "MemoryPanel", "SkillsPanel", "PublishPanel", "ReviewPanel"]) {

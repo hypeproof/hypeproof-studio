@@ -464,7 +464,7 @@ try {
       Object.assign(h, {
         context: { globalState: { get: (k) => state.get(k), update: async (k, v) => { state.set(k, v); } }, workspaceState: { get: () => undefined, update: async () => {} }, secrets: { get: async () => "tok" } },
         cachedProfile: personal, servedWorkspaceRoot: home, _instructorMode: { isInstructor: false },
-        folderWriteNoted: new Set(), pendingSends: 0, activeStreams: new Map(),
+        folderWriteNoted: new Set(), pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(),
         postPageNotice: (t) => notices.push(t), postToolLog: (_sid, e) => logs.push(e.label),
         crProjectMemory: { refresh: async () => { calls.skillRequest++; return null; } },
         hasActiveStream: () => false, ensureProfile: async () => personal, proxyUrl: () => "http://127.0.0.1/v1",

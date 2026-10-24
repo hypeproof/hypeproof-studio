@@ -1,5 +1,12 @@
 import { FolderConsentDialog } from './FolderConsentDialog';
 import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
+import {BrowserApprovalDialog} from './BrowserApprovalDialog';
+import type {BrowserApprovalPrompt} from '../../src/browserApprovalPrompt';
+import type {DelegationStopState} from "../../src/delegationStop";
+import {CommandApprovalDialog} from './CommandApprovalDialog';
+import type {CommandApprovalPrompt} from '../../src/commandApprovalPrompt';
+import {AnnotationLeaveDialog} from './AnnotationLeaveDialog';
+import type {AnnotationLeavePrompt} from '../../src/annotationLeavePrompt';
 import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
@@ -56,6 +63,8 @@ interface State {
    */
   timeline: TimelineState;
   streamId: string | null;
+  /** Last accepted visible event in the active turn, using this webview clock. */
+  progressSince?: number;
   error: string | null;
   errorRetryable: boolean;
   activityUnavailable?: import("../../src/activityAvailability").ActivityUnavailable;
@@ -111,6 +120,7 @@ interface State {
 }
 
 type Action =
+  | { type: "visibleProgress" }
   | { type: "config"; config: ChatConfig }
   | { type: "history"; messages: ChatMessage[] }
   | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
@@ -201,6 +211,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         streamId: action.streamId,
+        progressSince: Date.now(),
         streamFor: action.userMessageId ?? null,
         error: null,
         stopNotice: null,   // #497 — 새 턴이 시작되면 이전 중지 안내는 사라진다
@@ -210,13 +221,15 @@ function reducer(state: State, action: Action): State {
         // 통째로 증발했다(스크롤을 올려도 말풍선만 남았다).
         timeline: timelineStart(state.timeline, action.messageId, Date.now()),
       };
+    case "visibleProgress":
+      return state.streamId ? { ...state, progressSince: Date.now() } : state;
     case "streamChunk":
-      return { ...state, timeline: timelineDelta(state.timeline, action.delta, Date.now()) };
+      return { ...state, ...(action.delta ? { progressSince: Date.now() } : {}), timeline: timelineDelta(state.timeline, action.delta, Date.now()) };
     case "streamCitations":
       return { ...state, timeline: timelineCitations(state.timeline, action.citations) };
     case "toolLog":
       // 같은 id 는 제자리 갱신(running → done/error), 새 id 는 지금 이 자리에 삽입.
-      return { ...state, timeline: timelineTool(state.timeline, action.entry, Date.now()) };
+      return { ...state, progressSince: Date.now(), timeline: timelineTool(state.timeline, action.entry, Date.now()) };
     case "pageAttached":
       // #308 — inline notice; cleared on the next send (userSent) only.
       return { ...state, pageNotice: action.label };
@@ -362,6 +375,8 @@ export { reducer as chatPanelReducer, initialState as chatPanelInitialState };
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [refusal, setRefusal] = useState(false);
+  const [delegationStops,setDelegationStops]=useState<Record<string,DelegationStopState>>({});
+  const delegationStreams=useRef(new Set<string>());
   const scope = useRef<string | undefined>();
   const taskScope = useRef<string | undefined>();
   // The bridge can deliver an old turn after Stop. Update this synchronously,
@@ -391,6 +406,9 @@ export function App() {
   const [historySaveError, setHistorySaveError] = useState<string | null>(null);
   // REQ-STUDIO-TASK-RUN-STATE — the host raised a tool approval modal and it is still open.
   const [approvalPending, setApprovalPending] = useState(false);
+  const [browserApproval,setBrowserApproval]=useState<BrowserApprovalPrompt|null>(null);
+  const [commandApproval,setCommandApproval]=useState<CommandApprovalPrompt|null>(null);
+  const [annotationLeave,setAnnotationLeave]=useState<AnnotationLeavePrompt|null>(null);
   const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
   const [folderConsent,setFolderConsent]=useState<FolderConsentPrompt|null>(null);
   const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
@@ -420,16 +438,22 @@ export function App() {
           ownVerdictRequests.current.clear();
           activeStream.current = null;
           setRefusal(false);
+          setDelegationStops({});delegationStreams.current.clear();
           setApprovalPending(false); setWriteApproval(null); setOutbound(null); setFolderConsent(null);
         }
         scope.current = msg.config.activity?.id;
         taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
       } else if (msg.activityId && msg.activityId !== scope.current) return;
+      if(msg.type==='delegationStopState'){
+        if(delegationStreams.current.has(msg.streamId))setDelegationStops(old=>({...old,[msg.streamId]:msg.state}));
+        return;
+      }
       if ("streamId" in msg) {
         if (msg.type === "streamStart") {
           // One turn owns this view; a repeated start must not clear its text.
           if (activeStream.current !== null) return;
           activeStream.current = msg.streamId;
+          delegationStreams.current.add(msg.streamId);
           setRefusal(false);
         } else if (msg.streamId !== activeStream.current) {
           // These host refusal codes are emitted before streamStart. They still
@@ -448,10 +472,13 @@ export function App() {
       switch (msg.type) {
         case "streamRefusal": setRefusal(true); return;
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
+        case 'browserApprovalPrompt': setBrowserApproval(msg.prompt); return;
+        case 'commandApprovalPrompt': setCommandApproval(msg.prompt); return;
+        case 'annotationLeavePrompt': setAnnotationLeave(msg.prompt); return;
         case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
         case 'folderConsentPrompt': setFolderConsent(msg.prompt); return;
         case 'outboundPrompt': setOutbound(msg.prompt); return;
-        case 'approvalWait': setApprovalPending(msg.waiting === true); return;
+        case 'approvalWait': setApprovalPending(msg.waiting === true); if (!msg.waiting) dispatch({ type: 'visibleProgress' }); return;
         case 'taskWorkspaceError':
           if (msg.verdictMessageId && msg.verdictRequestId && ownVerdictRequests.current.has(msg.verdictRequestId) && latestVerdictRequests.current.has(msg.verdictMessageId) && latestVerdictRequests.current.get(msg.verdictMessageId) !== msg.verdictRequestId) return;
           setWorkspaceError(msg.error);
@@ -736,11 +763,14 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
-      {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);}}/>}
+      {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
       {outbound && (isPublicAudiencePrompt(outbound)
-        ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>
-        : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>)}
-      {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);}}/>}
+        ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>
+        : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>)}
+      {browserApproval && <BrowserApprovalDialog key={browserApproval.id} prompt={browserApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'browserApprovalAnswer',id,choice});setBrowserApproval(null);dispatch({type:"visibleProgress"});}}/>}
+      {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
+      {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
+      {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);dispatch({type:"visibleProgress"});}}/>}
       <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
@@ -762,6 +792,8 @@ export function App() {
           streaming={!!state.streamId}
           streamingId={state.timeline.openId}
           runningStreamId={state.streamId}
+          progressSince={state.progressSince}
+          progressApprovalPending={approvalPending || !!writeApproval || !!outbound || !!browserApproval || !!folderConsent}
           refusal={refusal}
           onDismissRefusal={() => setRefusal(false)}
           error={state.error}
@@ -790,6 +822,8 @@ export function App() {
         />
       ) : (
       <ChatPanel
+        delegationStops={delegationStops}
+        onStopDelegations={streamId=>postToHost({type:"stopDelegations",streamId})}
         key={`${state.config?.activity?.id ?? 'disconnected'}:${state.config?.taskWorkspace?.activeTaskId ?? ''}`}
         incomingImage={incomingImage}
         config={state.config}
@@ -834,6 +868,8 @@ export function App() {
         streaming={!!state.streamId}
         streamingId={state.timeline.openId}
         runningStreamId={state.streamId}
+          progressSince={state.progressSince}
+          progressApprovalPending={approvalPending || !!writeApproval || !!outbound || !!browserApproval || !!folderConsent}
         refusal={refusal}
         onDismissRefusal={() => setRefusal(false)}
         error={state.error}

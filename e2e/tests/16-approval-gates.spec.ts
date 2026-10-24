@@ -22,6 +22,7 @@ import { test, expect, _electron as electron, type Page } from "@playwright/test
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { chatFrame } from "../fixtures/app";
 import { APP_BINARY, TOKEN_FILE } from "../fixtures/global-setup";
 
 interface GateCtx {
@@ -131,12 +132,13 @@ test("Tier 1: destructive approval offers no always-allow and cancellation refus
   // Approval-only hook: no command is executed, even if mistakenly approved.
   const ctx = await launch({kind:'executeShell',description:'synthetic destructive classification',destructive:true,payload:{command:'rm -rf ./synthetic-delete-target'}});
   try {
-    const dialog=ctx.win.locator('.monaco-dialog-box').first();
+    const chat=await chatFrame(ctx.win);
+    const dialog=chat.locator('.hps-command-approval');
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText('되돌리기 어려운 명령');
+    await expect(dialog).toContainText('되돌릴 수 없어요');
     await expect(dialog).not.toContainText('항상 허용');
     expect(fs.existsSync(ctx.resultFile)).toBe(false);
-    await dialog.getByRole('button',{name:'취소',exact:true}).click();
+    await dialog.getByRole('button',{name:'거절',exact:true}).click();
     const result=await readResult(ctx.resultFile);
     expect(result.error).toBeUndefined();expect(result.approved).toBe(false);
     if(process.env.HPS_NATIVE_EVIDENCE_DIR)fs.writeFileSync(path.join(process.env.HPS_NATIVE_EVIDENCE_DIR,'destructive-approval.json'),JSON.stringify({scope:'actual App approval-only synthetic action; no shell execution',approved:result.approved}));

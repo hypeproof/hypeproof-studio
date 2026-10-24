@@ -32,8 +32,8 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}/`;
 
 const THEMES = {
-  dark: '--vscode-font-size:13px;--vscode-font-family:-apple-system, "Apple SD Gothic Neo", sans-serif;--vscode-sideBar-background:#181818;--vscode-foreground:#cccccc;--vscode-editor-foreground:#cccccc;--vscode-descriptionForeground:#9d9d9d;--vscode-editor-background:#1f1f1f;--vscode-focusBorder:#0078d4;--vscode-input-background:#313131;--vscode-input-foreground:#cccccc;--vscode-panel-border:#2b2b2b;--vscode-button-background:#0078d4;--vscode-button-foreground:#fff;',
-  light: '--vscode-font-size:13px;--vscode-font-family:-apple-system, "Apple SD Gothic Neo", sans-serif;--vscode-sideBar-background:#f8f8f8;--vscode-foreground:#3b3b3b;--vscode-editor-foreground:#3b3b3b;--vscode-descriptionForeground:#616161;--vscode-editor-background:#ffffff;--vscode-focusBorder:#005fb8;--vscode-input-background:#ffffff;--vscode-input-foreground:#3b3b3b;--vscode-panel-border:#e5e5e5;--vscode-button-background:#005fb8;--vscode-button-foreground:#fff;',
+  dark: '--vscode-font-size:13px;--vscode-font-family:-apple-system, "Apple SD Gothic Neo", sans-serif;--vscode-sideBar-background:#181818;--vscode-foreground:#cccccc;--vscode-editor-foreground:#cccccc;--vscode-descriptionForeground:#9d9d9d;--vscode-editor-background:#1f1f1f;--vscode-focusBorder:#0078d4;--vscode-input-background:#313131;--vscode-input-foreground:#cccccc;--vscode-panel-border:#2b2b2b;--vscode-button-background:#0078d4;--vscode-button-foreground:#fff;--vscode-quickInput-background:#222222;',
+  light: '--vscode-font-size:13px;--vscode-font-family:-apple-system, "Apple SD Gothic Neo", sans-serif;--vscode-sideBar-background:#f8f8f8;--vscode-foreground:#3b3b3b;--vscode-editor-foreground:#3b3b3b;--vscode-descriptionForeground:#616161;--vscode-editor-background:#ffffff;--vscode-focusBorder:#005fb8;--vscode-input-background:#ffffff;--vscode-input-foreground:#3b3b3b;--vscode-panel-border:#e5e5e5;--vscode-button-background:#005fb8;--vscode-button-foreground:#fff;--vscode-quickInput-background:#f8f8f8;',
 };
 const UX = { coach: { naming_mode: 'fixed', fallback_name: '코치', naming_prompt_md: '', personality_prompt_md: '' }, suggestions: { initial: [], follow_up: [] },
   hints: { short_input: { enabled: false, min_chars: 0, message_md: '' }, roll_input_button: { enabled: false, label: '', probe_md: '' } }, retry_button: { enabled: false, show_counter: false } };
@@ -72,9 +72,26 @@ try {
     const fg=luminance(result.fg),bg=luminance(result.bg);assert.ok((Math.max(fg,bg)+.05)/(Math.min(fg,bg)+.05)>=4.5,'text contrast 4.5:1');assert.ok(result.width>0&&result.left>=result.parentLeft&&result.right<=result.parentRight+1,'inside chat column');
     assert.ok(result.scroll<=result.client+1,'no horizontal card overflow');
     for(const x of result.buttons){assert.ok(x.w>=44&&x.h>=44,'44px target');assert.ok(x.font>=14,'14px text');assert.ok(x.scroll<=x.client+1,'whole Korean labels');}
+    if(state==='card') {
+     // DES-SHELL-22: amber icon, headline of at most 2 lines, lime action edge. Measured on the rendered card, not the stylesheet text.
+     const head=await b.evaluate(`(()=>{const c=document.querySelector('.hps-accuracy-card');const p=c.querySelector('.hps-accuracy-head p');const rg=document.createRange();rg.selectNodeContents(p);const tops=new Set([...rg.getClientRects()].filter(q=>q.width>0).map(q=>Math.round(q.top)));const probe=(prop,v)=>{const e=document.createElement('i');e.style[prop]='var('+v+')';c.appendChild(e);const r=getComputedStyle(e)[prop];e.remove();return r;};const icon=c.querySelector('.hps-accuracy-icon'),act=c.querySelector('.hps-accuracy-action'),edge=getComputedStyle(c);return {lines:tops.size,text:p.textContent,iconColor:getComputedStyle(icon).color,iconSize:icon.getBoundingClientRect().width,warn:probe('color','--hp-text-warn-default'),actionBorder:getComputedStyle(act).borderTopColor,actionBorderW:parseFloat(getComputedStyle(act).borderTopWidth),accent:probe('color','--hp-border-accent-default'),otherBorder:(o=>o?getComputedStyle(o).borderTopColor:'')(c.querySelector('.hps-accuracy-actions button:not(.hps-accuracy-action)')),edgeColor:edge.borderInlineStartColor,warnEdge:probe('color','--hp-border-warn-default'),dismiss:!![...c.querySelectorAll('button')].find(x=>x.textContent==='닫기')}})()`);
+     assert.ok(head.lines>=1&&head.lines<=2,'headline is at most 2 lines, got '+head.lines);
+     assert.ok(head.iconSize>=16,'warning icon is visible');
+     if(!forced) {
+      assert.equal(head.iconColor,head.warn,'icon uses the amber warning colour');
+      assert.equal(head.edgeColor,head.warnEdge,'card edge uses the amber warning border');
+      assert.equal(head.actionBorder,head.accent,'primary action carries the lime edge');
+      assert.ok(head.actionBorderW>=1,'lime edge is drawn');
+      assert.notEqual(head.otherBorder,head.accent,'only the check action is lime');
+     }
+     assert.ok(head.dismiss,'a close action is present');
+    }
     if(state==='checking') {
      const answer=await b.evaluate(`(()=>{const a=document.querySelector('.hps-accuracy-card .hps-accuracy-answer');if(!a)return null;const s=getComputedStyle(a),r=a.getBoundingClientRect(),c=a.parentElement.getBoundingClientRect();a.focus();const focused=document.activeElement===a;const bs=[...document.querySelectorAll('.hps-accuracy-card button')].map(e=>{const q=e.getBoundingClientRect();return {l:q.left,r:q.right,t:q.top,b:q.bottom,disabled:e.disabled}});return {font:parseFloat(s.fontSize),overflowY:s.overflowY,whiteSpace:s.whiteSpace,height:r.height,left:r.left,right:r.right,cLeft:c.left,cRight:c.right,scrollW:a.scrollWidth,clientW:a.clientWidth,scrollH:a.scrollHeight,clientH:a.clientHeight,tabIndex:a.tabIndex,focused,bs}})()`);
      assert.ok(answer,'answer mounted');
+     const ac=await b.evaluate(`(()=>{const a=document.querySelector('.hps-accuracy-answer'),s=getComputedStyle(a);return {fg:s.color,bg:s.backgroundColor}})()`);
+     const lum=color=>{const rgb=color.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});return .2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];};
+     assert.ok((Math.max(lum(ac.fg),lum(ac.bg))+.05)/(Math.min(lum(ac.fg),lum(ac.bg))+.05)>=4.5,'answer text contrast 4.5:1 ('+ac.fg+' on '+ac.bg+')');
      assert.ok(answer.font>=14,'answer text is at least 14px');
      assert.ok(/^(auto|scroll)$/.test(answer.overflowY),'answer scrolls instead of growing');
      assert.ok(answer.height<=44*6+1,'answer height is bounded to six control heights');

@@ -27,16 +27,16 @@ html body :is(
   .hps-update-banner-notes, .hps-element-meta pre, .hp-rail-lesson, .hp-rail-goal,
   .hps-native-observation, .hps-effort details[open], .hps-access[open],
   .hps-voice-body, .hp-evidence, .hp-evidence-compare pre, .hps-carryover-list,
-  .hps-recovery-list, .hps-page-attachment pre, .hps-annotations pre, .hps-page-context-panel,
+  .hps-recovery-list, .hps-annotations-list, .hps-page-attachment pre, .hps-annotations pre, .hps-page-context-panel,
   .hps-attachment-failures, .local-review pre, .hps-tools-menu, .hps-attachments,
-  .hps-preferences, .hps-outbound, .hps-write-approval, .hps-accuracy-answer,
+  .hps-preferences, .hps-outbound, .hps-write-approval, .hps-accuracy-answer, .hp-capability-sheet,
   .hps-codeblock[data-wrap="off"] > pre,
   .hps-shell:has(> .hp-mission .hp-mission-sentence),
   .hps-shell:has(.hps-effort:not(:empty)),
   .hps-shell[data-chat-detail="personal"] .hps-input textarea,
   .hps-shell .hps-input[data-file-context] > textarea,
   .hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > textarea,
-  .scroll, #ops-seats, #confirm-diff-lines, .ri-table-wrap, .side, #ops-detail
+  .scroll, #ops-seats, #confirm-diff-lines, #confirm-groups-list, .ri-table-wrap, .side, #ops-detail
 ) {
   --hp-focus-offset: var(--ds-c-focus-inset);
 }

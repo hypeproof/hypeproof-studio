@@ -1,0 +1,38 @@
+import {mountPoint} from './fixtures/mini-dom.mjs';
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import assert from 'node:assert/strict';
+import {AccessControl} from '../webview-ui/src/AccessControl';
+import type {ChatConfig} from '../src/protocol';
+const act=(React as any).act;
+const proto=Object.getPrototypeOf(mountPoint());
+if(!('type' in proto))Object.defineProperty(proto,'type',{get(){return this.getAttribute('type')??'text';},set(v){this.setAttribute('type',v);}});
+if(!('options' in proto))Object.defineProperty(proto,'options',{get(){return this.findAll((e:any)=>e.localName==='option');}});
+const host=mountPoint() as any, root=createRoot(host), posted:any[]=[];
+const choice:any={id:'class-1',label:'수업',source_kind:'cohort',mode:'included',active:true,available:true,state:'ready',ends_at:1,can_request:true,allowed:{models:[],efforts:[],features:[],runtimes:[]},resources:[{meter:'requests:count',limit:100,remaining:10,held:0,spent:90,unresolved:0,overrun:0,shared:true}]};
+const config:any={access:{status:'ready',selected:'class-1',view:{schema:'hps-access-view/1',configured:true,as_of:'2026-10-24T00:00:00Z',choices:[choice]}}};
+const fire=(target:any,type:string,extra:any={})=>{const event={type,bubbles:true,cancelable:true,defaultPrevented:false,timeStamp:Date.now(),...extra,preventDefault(){this.defaultPrevented=true;},stopPropagation(){}};target.dispatchEvent(event);return event;};
+const render=()=>act(async()=>root.render(<AccessControl config={structuredClone(config) as ChatConfig} streaming={false} post={m=>posted.push(m)} defaultOpen/>));
+const input=()=>host.querySelector('input'),form=()=>host.querySelector('form');
+const type=async(text:string)=>act(async()=>{input().value=text;fire(input(),'input',{data:text});});
+async function main(){
+ await render();assert.ok(host.textContent.includes('남은 사용량이 부족해요'));
+ assert.equal(input().getAttribute('maxLength')??input().getAttribute('maxlength'),'200');
+ const counter=input().getAttribute('aria-describedby');assert.ok(host.findAll((e:any)=>e.getAttribute('id')===counter)[0].textContent.includes('0 / 200'));
+ await act(async()=>fire(form(),'submit'));assert.equal(posted.length,0);
+ await type('검증을 마무리하고 싶어요');
+ assert.ok(host.textContent.includes(`${'검증을 마무리하고 싶어요'.length} / 200자`));
+ await act(async()=>fire(input(),'compositionstart',{data:''}));
+ await act(async()=>{assert.equal(fire(input(),'keydown',{key:'Enter',keyCode:13}).defaultPrevented,true);fire(form(),'submit');});assert.equal(posted.length,0,'composition blocks submission');
+ await act(async()=>fire(input(),'compositionend',{data:'요'}));
+ for(const flags of [{isComposing:true,keyCode:13},{isComposing:false,keyCode:229}])await act(async()=>assert.equal(fire(input(),'keydown',{key:'Enter',...flags}).defaultPrevented,true));
+ await act(async()=>fire(form(),'submit'));assert.deepEqual(posted,[{type:'requestBudget',note:'검증을 마무리하고 싶어요'}]);assert.equal(input().value,'검증을 마무리하고 싶어요','keep reason until host confirms; cancellation/failure does not erase it');
+ await type('가'.repeat(201));await act(async()=>fire(form(),'submit'));assert.equal(posted.length,1);
+ await type('가'.repeat(200));await act(async()=>fire(form(),'submit'));assert.equal(posted.length,2);
+ choice.pending_request={id:'r',state:'pending',note:'검증'};await render();assert.equal(form(),null);assert.ok(host.querySelector('.hps-budget-request-state').textContent.includes('요청함'));
+ choice.pending_request={id:'r',state:'resolved',resolution:'내일 다시 확인해 주세요'};await render();assert.ok(host.textContent.includes('내일 다시 확인해 주세요'));assert.ok(!host.textContent.includes('승인'));
+ choice.id='class-2';config.access.selected='class-2';await render();assert.equal(input().value,'');
+ config.access.status='unknown';await render();assert.equal(form(),null,'stale access cannot offer request');
+ await act(async()=>root.unmount());console.log('PASS budget request: counter, length boundary, IME guards, retained draft, authoritative receipt and scope');
+}
+main().then(()=>process.exit(0),e=>{console.error(e);process.exit(1);});

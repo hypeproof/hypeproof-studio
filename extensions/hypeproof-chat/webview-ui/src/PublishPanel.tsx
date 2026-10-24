@@ -4,7 +4,7 @@
 // decides nothing: whether the version is verified (CR-81), what is in the published set,
 // the refusal of a file, the links and their QR codes are the host's and the Service's. A
 // disabled button here is a picture, not a lock (the host and the Service refuse by name).
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
 import { useDialogFocus } from "./dialogFocus";
 import type { PublishForm, PublishView } from "../../src/publishView";
@@ -66,6 +66,29 @@ export function PublishPanel(props: {
   }, []);
   const versions = [...new Set([view.version.id, ...view.experiments.map(e => e.product_version_id)])].filter((id): id is string => !!id);
   const stale = !!view.read_failed;
+  const settingsId = useId();
+  const settings = useRef<HTMLDetailsElement>(null);
+  const currentSharing = publishSharing(view.version.id, view.experiments, now);
+  const sharingState = stale || !view.available || !view.version.id ? 'unknown' : currentSharing.state;
+  const sharingText = { live: '링크가 있는 누구나', closed: '링크 끊김', unpublished: '나만 볼 수 있어요', unknown: '공유 상태 확인 필요' }[sharingState];
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const openSettings = () => {
+    setSettingsOpen(true);
+    if (settings.current) {
+      settings.current.open = true;
+      settings.current.scrollIntoView?.({ block: 'nearest' });
+      settings.current.querySelector('summary')?.focus();
+    }
+  };
+  const sharingPill = <button type="button" className="hps-sharing-pill" data-testid="sharing-pill" data-sharing={sharingState}
+    aria-controls={settingsId} aria-expanded={settingsOpen} aria-label={`${sharingText} · 공유 설정`} onClick={openSettings}>
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" focusable="false">
+      {sharingState === 'unpublished' ? <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>
+        : sharingState === 'unknown' ? <><circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 5M12 17v1"/></>
+        : <><path d="m10 7 2-2a5 5 0 0 1 7 7l-2 2M7 10l-2 2a5 5 0 0 0 7 7l2-2"/>{sharingState === 'closed' ? <path d="m3 3 18 18"/> : <path d="m9 15 6-6"/>}</>}
+    </svg><span>{sharingText}</span>
+  </button>;
+
   const [hypothesisId, setHypothesisId] = useState<string>("");
   const [hypothesis, setHypothesis] = useState("");
   const [question, setQuestion] = useState("");
@@ -102,6 +125,7 @@ export function PublishPanel(props: {
         <strong>사용자 테스트용으로 공개</strong>
         <button type="button" onClick={props.onClose} aria-label="닫기"><ChatIcon kind="close" size={16} /></button>
       </header>
+      {!view.available && sharingPill}
       {!view.available && !view.read_failed && <p data-testid="publish-unavailable">{view.reason}</p>}
       {view.read_failed && (
         <div className="hps-publish-sharing" data-testid="publish-sharing-unknown" data-sharing="unknown">
@@ -200,9 +224,12 @@ export function PublishPanel(props: {
               <small>여기 적은 이름만 기록돼요.</small>
             </fieldset>
             <ExpiryPicker value={expiry} onChange={setExpiry} name="publish-expiry" />
+            <div className="hps-publish-actions">
             <button type="button" data-testid="publish-submit" disabled={!canSubmit} onClick={submit}>
               공개하고 테스트 시작
             </button>
+            {sharingPill}
+            </div>
           </div>
 
           {props.shareUrl && (
@@ -216,7 +243,14 @@ export function PublishPanel(props: {
             </div>
           )}
 
-          {view.experiments.map((e) => (
+        </>
+      )}
+      <details ref={settings} id={settingsId} className="hps-share-settings" open={settingsOpen} onToggle={event => setSettingsOpen(event.currentTarget.open)}>
+        <summary>공유 설정</summary>
+        <p>{sharingState === 'unknown' ? (view.reason ?? SHARING_UNKNOWN) : `${currentSharing.label} · 활성 링크 ${currentSharing.count}개`}</p>
+        {sharingState === 'unpublished' && <p>먼저 이 버전을 공개해야 링크를 만들 수 있어요.</p>}
+        {sharingState === 'unknown' && <button type="button" className="hps-sharing-refresh" onClick={() => props.onRefresh?.()} disabled={props.busy}>상태 다시 확인</button>}
+          {view.available && view.experiments.map((e) => (
             <div className="hps-publish-experiment" key={e.id} data-testid="publish-experiment" data-experiment={e.id}>
               <div>
                 <strong>{e.question}</strong> · {e.week}주차 · 버전 {shortId(e.product_version_id)} {e.current_version ? "(지금 버전)" : "(이전 버전 · 이 실험은 계속 이 버전을 보여 줘요)"}
@@ -256,8 +290,7 @@ export function PublishPanel(props: {
               )}
             </div>
           ))}
-        </>
-      )}
+      </details>
     </section>
   );
 }

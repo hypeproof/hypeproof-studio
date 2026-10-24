@@ -615,3 +615,28 @@ bundle as CI packaging.
 ## CGP-KNOW-D-003: drop zone clause split out (2026-10-24)
 
 The DES-KNOW-04 acceptance names a drop zone outline, but the materials panel has no drop input. A drop input is a new file-input path that needs its own validation and review, so the clause moves to hypeproof-studio#2641 and CGP-KNOW-D-003 ships with the row presentation only.
+
+## CGP-AGENT-D-009: collapsed goal strip height (2026-10-24)
+
+DES-CGP-AGENT-13 asked for a collapsed strip of at most 40px, while every learner control must be a 44px target. The strip is itself the expand control, so the 44px target rule wins. The intent of the original clause, a strip that stays one compact row, is kept.
+
+## DEC-AGENT-D028: lesson disclosure modal (2026-10-24, agent choice)
+
+The separately queued DES-CGP-AGENT-67 now replaces R032's interim inline
+presentation with a native modal sheet and `알겠어요`. R032's local receipt scope,
+failed-write retry, resolved capability rows and seat/runtime gates are unchanged.
+Escape acknowledges this informational disclosure, never grants permission, and
+is ignored during composition. Backdrop presses do not acknowledge it. Focus
+returns to the preserved composer after the host confirms the receipt.
+
+## CGP-DS-D-011: motion names, exit curve and loop exception (2026-10-24, owner decision)
+
+- Confirm: `--hp-dur-confirm: 160ms` is added as an alias of `--hp-dur-content` (one value, two names). Existing uses are not renamed.
+- Move: `--hp-dur-move: 240ms` is added for in-place movement. No transition moves an element in place today (the chevron turn is a 140ms press, the runner bar's height change is a 180ms entry), so nothing uses it yet.
+- Exit: `--hp-ease-exit: cubic-bezier(.4, 0, 1, 1)` replaces the `ease-in` keyword on the dialog exit (Studio `modalSurface.css` and the Chalk copy in `sharing.html`). It is the only dialog or popover exit in the product.
+- Loops: looping pending indicators (runner, shimmer, breathe, response and classroom dots) are the "bounded pending" exception to the 300ms cap. They must stop under `prefers-reduced-motion` and `workbench.reduceMotion`; the global override already sets one iteration and 0.01ms, and `test/motion-computed.smoke.mjs` measures it.
+- No spring or bounce: no cubic-bezier with y outside [0, 1], no `linear()` easing, no spring keyframe names. The runner hop and dust keyframes are looping status animations, covered by the loop exception.
+
+## CGP-SHELL-D-029: reason choices and cooldown blocked on the Service (2026-10-25)
+
+The parent REQ-SHELL-30 asks for an optional reason, approval/refusal states and a 10-minute cooldown between requests. The pinned Service requires a non-blank reason and has no cooldown, so Studio ships the part it can keep honestly: a free-text reason up to 200 characters (labelled required), an IME guard, a live counter and a receipt taken from the Service record. Reason choices and the cooldown are recorded as blocked on the Service contract (owner decision 2026-10-25); they are not simulated in the webview.

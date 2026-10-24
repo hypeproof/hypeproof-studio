@@ -1,3 +1,4 @@
+import {BrowserApprovalRequest} from '../src/browserApprovalPrompt.ts';
 // REQ-E3 / CGP-AGENT-R-006 — a browser-open approval names the destination host on its own line and says whether
 // it is the learner's own preview (내 미리보기), a file on their computer (내 컴퓨터 파일) or anything else (인터넷).
 // The line, the label, the "항상 허용" button, the request description and the detailed tool line all come from
@@ -145,10 +146,15 @@ const vscode = {
   workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) },
 };
 const mod = { exports: {} };
-vm.runInNewContext(source, { module: mod, exports: mod.exports, require: (id) => (id === 'vscode' ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder });
+vm.runInNewContext(source, { module: mod, exports: mod.exports, require: (id) => (id === 'vscode' ? vscode : require(id)), crypto:globalThis.crypto, console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder });
 const P = mod.exports.ChatPanelProvider.prototype;
 const WORK = '/Users/kid/work';
 const host = { approvedBrowserOrigins: new Set(), coachDisplayName: () => '코치', sitePublisher: () => ({ allowed: () => false }), resolveCoachCwd: () => WORK };
+host.browserApprovalRequest=new BrowserApprovalRequest({scope:()=> 'same-task',present:async prompt=>{
+ if(!prompt)return true;
+ modals.push({message:[prompt.title,'',prompt.host,prompt.label].join('\n'),prompt,buttons:['열기','거절',...(prompt.rememberLabel?[prompt.rememberLabel]:[])]});
+ host.browserApprovalRequest.respond(prompt.id,'deny');return true;
+}});
 const ask = async (url) => {
   modals.length = 0;
   const approved = await P.resolveActionApproval.call(host, { requestId: 'r', kind: 'openBrowser', description: `브라우저 열기: ${url}`, payload: { url } });
@@ -161,31 +167,31 @@ const captured = [];
 test('the approval modal: host line, label and 항상 허용 button name the same normalized host', async () => {
   const internet = await ask('https://user:secret@dental.example/admin?token=abc123');
   assert.equal(internet.message, '코치가 브라우저를 열려고 해요:\n\ndental.example\n인터넷');
-  assert.deepEqual(internet.buttons, ['열기', '이 사이트는 항상 허용 (dental.example)']);
+  assert.deepEqual(internet.buttons, ['열기', '거절', '이 사이트는 항상 허용 (dental.example)']);
   assert.ok(!/token|abc123|secret|admin|user/.test(internet.message + internet.buttons.join(' ')), internet.message);
-  assert.equal(internet.options.modal, true);
+  assert.ok(internet.prompt.id,'fresh request id bound to this prompt');
   captured.push(internet);
 
   const preview = await ask('http://127.0.0.1:51884/index.html?x=1');
   assert.equal(preview.message, '코치가 브라우저를 열려고 해요:\n\n127.0.0.1\n내 미리보기');
-  assert.deepEqual(preview.buttons, ['열기', '이 사이트는 항상 허용 (127.0.0.1)']);
+  assert.deepEqual(preview.buttons, ['열기', '거절', '이 사이트는 항상 허용 (127.0.0.1)']);
   captured.push(preview);
 
   for (const [url, normalized] of LOOKALIKES) {
     const m = await ask(url);
     assert.equal(m.message, `코치가 브라우저를 열려고 해요:\n\n${normalized}\n인터넷`, url);
-    assert.deepEqual(m.buttons, ['열기', `이 사이트는 항상 허용 (${normalized})`], `${url}: button and line agree`);
+    assert.deepEqual(m.buttons, ['열기', '거절', `이 사이트는 항상 허용 (${normalized})`], `${url}: button and line agree`);
     captured.push(m);
   }
 
   const idn = await ask('https://аррӏе.com/login');
   assert.equal(idn.message, '코치가 브라우저를 열려고 해요:\n\nxn--80ak6aa92e.com\n인터넷');
-  assert.deepEqual(idn.buttons, ['열기', '이 사이트는 항상 허용 (xn--80ak6aa92e.com)']);
+  assert.deepEqual(idn.buttons, ['열기', '거절', '이 사이트는 항상 허용 (xn--80ak6aa92e.com)']);
   captured.push(idn);
 
   const file = await ask('file:///Users/kid/secret-folder/index.html');
   assert.equal(file.message, '코치가 브라우저를 열려고 해요:\n\n작업 폴더 밖 · index.html\n내 컴퓨터 파일');
-  assert.deepEqual(file.buttons, ['열기'], 'no "항상 허용 (null)" for a file');
+  assert.deepEqual(file.buttons, ['열기','거절'], 'no "항상 허용 (null)" for a file');
   captured.push(file);
 
   const inside = await ask('file:///Users/kid/work/notes/a.txt');

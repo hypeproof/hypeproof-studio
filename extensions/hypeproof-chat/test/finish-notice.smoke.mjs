@@ -223,7 +223,7 @@ const hidden = (status, seat = personal, extra = {}) => ({ status, chatVisible: 
 {
   const src = fs.readFileSync(path.join(extRoot, "src/chatPanelProvider.ts"), "utf8");
   assert.match(src, /from ['"]\.\/finishNoticeHost['"]/, "chatPanelProvider imports the host module");
-  assert.match(src, /finishNotice \?\?= createFinishNotifier\(\{\s*view: \(\) => this\.view,\s*editor: \(\) => this\.editorChat\s*\}\)/, "notifier built lazily over both chat surfaces (fixtures skip field initializers)");
+  assert.match(src, /finishNotice \?\?= createTaskNotifier/, "task-bound notifier built lazily (fixtures skip field initializers)");
   const finalAt = src.indexOf("const finalSpoolStatus = ctrl.signal.aborted ?");
   assert.ok(finalAt > 0, "turn end anchor present");
   const call = src.indexOf("this.finishNotifier.turnEnded(", finalAt);
@@ -238,6 +238,9 @@ const hidden = (status, seat = personal, extra = {}) => ({ status, chatVisible: 
   assert.match(src, /this\.activeStreams\.set\(streamId, ctrl\);\n\s*this\.finishNotifier\.release\(\);/, "the hold ends at the next turn start");
   assert.doesNotMatch(callLine, /assistantText|text:/, "no answer text reaches the notifier");
   assert.equal(src.split("this.finishNotifier.turnEnded(").length - 1, 1, "one call site");
+  assert.match(callLine, /scope: accuracyScope/, "turn-end notice carries the scope captured at turn start");
+  assert.match(src, /dispose: \(\) => this\.finishNotice\?\.release\(\)/, "extension disposal cancels pending task notices");
+  assert.match(src, /approvalStarted\(\{scope: noticeScope,/, "prompted approval raises the task notice with the scope captured before the modal");
   ok("wiring: one call at turn end with the final status and the turn profile, both surfaces watched, release at turn start, no text");
 }
 

@@ -20,7 +20,7 @@ assert.match(batch.preview()[0].sentText,/unmapped/); assert.match(batch.preview
 assert.equal(batch.preview()[1].imageDataUrl,'data:image/png;base64,RECT');
 const html = renderToStaticMarkup(<AnnotationTray annotations={batch.preview()} onAction={()=>{}}/>);
 assert.match(html,/표시 #1 · 요소/); assert.match(html,/표시 #2 · 영역/); assert.match(html,/고쳐 주세요/);
-assert.match(html,/&lt;button&gt;시작/); assert.match(html,/data:image\/png;base64,RECT/);
+assert.doesNotMatch(html,/<pre>/, 'payload opens from its numbered chip');
 const root = createRoot(mountPoint());
 const act = (React as any).act;
 let actions: unknown[][]=[];
@@ -51,18 +51,9 @@ assert.throws(()=>batch.add('rectangle',[ctx(),{...ctx(),documentGeneration:'oth
 assert.throws(()=>batch.add('rectangle',[ctx(),{...ctx(),artifact:{...ctx().artifact,id:'v2'}}],ctx().crop));
 assert.equal(intersects({x:0,y:0,width:10,height:10},{x:9,y:9,width:10,height:10}),true);
 assert.equal(intersects({x:0,y:0,width:10,height:10},{x:10,y:0,width:10,height:10}),false);
-assert.equal(rectangleValid({x:0,y:0,width:2,height:2}),true);
+assert.equal(rectangleValid({x:0,y:0,width:2,height:2}),false);
 for(const bad of [{x:Infinity,y:0,width:10,height:10},{x:0,y:Infinity,width:10,height:10},{x:-1,y:0,width:10,height:10},{x:0,y:0,width:1,height:10},{x:0,y:0,width:NaN,height:10},{x:0,y:0,width:100000,height:100000}]) assert.equal(rectangleValid(bad),false);
-// Execute the actual page marker script against a tiny DOM. Inspect rendered state after the action.
-const nodes = new Map<string,any>();
-const pageDocument = {getElementById:(id:string)=>nodes.get(id),createElement:()=>({style:{},setAttribute(){},remove(){nodes.delete(this.id)},id:'',textContent:''}),documentElement:{append:(n:any)=>nodes.set(n.id,n)}};
-const cdp:any={send:async(method:string,p:any)=>{
-  if(method==='Page.getFrameTree') return {frameTree:{frame:{id:'f'}}};
-  if(method==='Page.createIsolatedWorld') return {executionContextId:7};
-  if(method==='Runtime.evaluate') {assert.equal(p.contextId,7); new Function('document',p.expression)(pageDocument); return {};}
-}};
-await marker(cdp,2,ctx().crop!.clip); assert.equal(nodes.get('hps-annotation-2').textContent,'2'); assert.equal(nodes.get('hps-annotation-2').style.left,'10px');
-await marker(cdp,2,null); assert.equal(nodes.size,0);
+// Marker rendering and removal are exercised against live CDP in annotation-marker-layout.smoke.mjs.
 await assert.rejects(dragRectangle({send:async(m:string)=>m==='Page.getFrameTree'?{frameTree:{frame:{id:'f'}}}:m==='Page.createIsolatedWorld'?{executionContextId:1}:{result:{value:{x:0,y:0,width:1,height:1}}}} as any),/취소/);
 // Run the drag listener code: synthetic page events cannot complete a selection.
 let selectedLayer: any, removed = false, cleared = false;

@@ -1,4 +1,4 @@
-import { dragRectangle, intersects, marker } from "./annotationCapture";
+import { dragRectangle, intersects, marker, markerComment, isAnnotationOverlayNode, type MarkerOptions } from "./annotationCapture";
 import { captureReferenceScreenshot, referenceCaptureText } from "./referenceDesign.ts";
 import * as vscode from "vscode";
 import { denialCopy, denialToolText, lessonFeatureOff } from "./denialSource.ts";
@@ -58,7 +58,9 @@ export class BrowserControl {
   private targetTab: vscode.BrowserTab | undefined;
   private refs = new Map<string, number>();
   private cr: CrExecutor | undefined;
-  private annotationMarkers = new Map<number, import("./experimentBrowser").CdpLike>();
+  private annotationMarkers = new Map<number, { cdp: import("./experimentBrowser").CdpLike; version: number; revision: number }>();
+  private annotationMarkerVersion = 0;
+  private annotationMarkerEpoch = 0;
 
   private readonly crOptions: CrBrowserOptions | undefined;
 
@@ -154,6 +156,7 @@ export class BrowserControl {
     const s = await this.cdp();
     const log = await cr.logFor(s);
     const picked = await waitForPick(s, opts.timeoutMs);
+    if (await isAnnotationOverlayNode(s, picked)) throw new Error("표시 대신 페이지의 요소를 골라 주세요.");
     const hooks = this.crOptions;
     return buildElementContext(s, log, picked, {
       root: opts.root,
@@ -176,16 +179,36 @@ export class BrowserControl {
     return { generation: frame.loaderId, artifactId: artifact.id };
   }
 
-  async annotationMarker(number: number, rect: import('./annotationCapture').Rectangle | null): Promise<void> {
-    const cdp = rect ? await this.cdp() : this.annotationMarkers.get(number);
-    if (!cdp) return;
-    await marker(cdp, number, rect);
-    if (rect) this.annotationMarkers.set(number, cdp); else this.annotationMarkers.delete(number);
+  async annotationMarker(number: number, rect: import('./annotationCapture').Rectangle | null, options: MarkerOptions = {}): Promise<void> {
+    if (!rect) {
+      const record = this.annotationMarkers.get(number);
+      if (!record) return;
+      this.annotationMarkers.delete(number);
+      await marker(record.cdp, number, null, { version: record.version });
+      return;
+    }
+    const epoch = this.annotationMarkerEpoch;
+    const cdp = await this.cdp();
+    if (epoch !== this.annotationMarkerEpoch) return;
+    const version = ++this.annotationMarkerVersion;
+    await marker(cdp, number, rect, { ...options, version });
+    if (epoch !== this.annotationMarkerEpoch) {
+      await marker(cdp, number, null, { version }).catch(() => {});
+      return;
+    }
+    this.annotationMarkers.set(number, { cdp, version, revision: 0 });
+  }
+
+  async annotationComment(number: number, comment: string): Promise<void> {
+    const record = this.annotationMarkers.get(number);
+    if (record) await markerComment(record.cdp, number, comment, record.version, ++record.revision);
   }
 
   async clearAnnotationMarkers(): Promise<void> {
-    for (const [number, cdp] of this.annotationMarkers) await marker(cdp, number, null).catch(() => {});
+    this.annotationMarkerEpoch++;
+    const previous = [...this.annotationMarkers];
     this.annotationMarkers.clear();
+    for (const [number, record] of previous) await marker(record.cdp, number, null, { version: record.version }).catch(() => {});
   }
   annotationRefsValid(contexts: ElementContext[]): boolean {
     return contexts.every(c => !c.ref || this.crExecutor()?.refFor(c.backendNodeId) === c.ref);
@@ -209,6 +232,7 @@ export class BrowserControl {
     const viewport = metrics.cssLayoutViewport ?? metrics.layoutViewport;
     const ids: number[] = [];
     for (const id of new Set(refs.values())) {
+      if (await isAnnotationOverlayNode(cdp, id)) continue;
       const model = await cdp.send('DOM.getBoxModel', { backendNodeId: id }).catch(() => null);
       const q = model?.model?.border;
       if (!q) continue;

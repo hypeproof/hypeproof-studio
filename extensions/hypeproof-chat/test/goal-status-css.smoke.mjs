@@ -52,7 +52,7 @@ const expected = [
  ['.hps-goal-status button:active:not(:disabled)', 'background', 'var(--hp-bg-control-pressed)'],
  ['.hps-goal-status', 'min-width', '0'],
  ['.hps-goal-status', 'max-width', '100%'],
- ['.hps-goal-status', 'font-size', '14px'],
+ ['.hps-goal-status', 'font-size', 'var(--hp-font-caption, 14px)'],
  ['.hps-goal-status', 'color', 'var(--hp-text-primary-default)'],
  ['.hps-goal-status', 'overflow-wrap', 'anywhere'],
  ['.hps-goal-status div', 'display', 'flex'],

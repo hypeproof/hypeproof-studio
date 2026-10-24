@@ -86,6 +86,8 @@ if (!bin) {
    // The composer keeps its initial autofocus (owner decision): a learner types at once, and from there the skip link is
    // one backwards step in a keyboard user's tab order, not a forward one.
    assert.equal(await ev('document.activeElement.tagName'),'TEXTAREA',`${where}: the composer has focus on load`);
+   // DES-SHELL-11: the skip link is visible only on focus. Unfocused, it must sit wholly above the viewport.
+   assert.ok(await ev(`document.querySelector('.hps-skip-input').getBoundingClientRect().bottom<=0`),`${where}: the unfocused skip link is parked above the viewport`);
    await ev(`document.querySelector('textarea').value='보존할 글'`);
    let back = 0; for (; back<60; back++) { await tab(true); if (await ev(`document.activeElement.classList.contains('hps-skip-input')`)) break; }
    assert.ok(back<60,`${where}: Shift+Tab from the composer never reached the skip link`);
