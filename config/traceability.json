@@ -7519,12 +7519,20 @@
       ]
     },
     {
+      "id": "ST-DES-CGP-AGENT-28",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": ["ST-REQ-CHALK-AUTHORING"],
+      "sources": [{"path": "docs/requirements/chalk-authoring.md", "section": "### VER-03 확정 전 안내 문구 줄 비교 · 2026-10-20"}]
+    },
+    {
       "id": "ST-IMP-CHALK-INSTRUCTION-DIFF",
       "stage": "implementation",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CHALK-AUTHORING",
         "ST-DES-CHALK-AUTHORING",
+        "ST-DES-CGP-AGENT-28",
         "ST-IMP-CHALK-REHEARSAL"
       ],
       "sources": [

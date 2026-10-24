@@ -149,7 +149,29 @@ export function instructionDiffKit() {
     };
   }
 
-  return { splitLines, lineDiff, foldRows, instructionText, instructionDiff, MAX_EDITS };
+  /** Stable field comparison: object property order is not a content change; array order is. */
+  function canonical(value: any, key = ""): any {
+    if (typeof value === "string") return key === "instructions" ? splitLines(value).join("\n") : value.replace(/\r\n?/g, "\n").normalize("NFC");
+    if (Array.isArray(value)) return value.map(item => canonical(item));
+    if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key], key)]));
+    return value;
+  }
+  function groupedChanges(before: any, after: any) {
+    const groups = [
+      { label: "이름·소개", keys: ["title", "audience", "objective", "duration_minutes", "assistant", "audience_tier"] },
+      { label: "모델·기능", keys: ["model", "features"] },
+      { label: "지시문", keys: ["steps"] },
+      { label: "자료", keys: ["starter", "prerequisites", "plan_ref"] },
+      { label: "승인 방식", keys: ["approval", "approval_preset"] },
+      { label: "수업 기준", keys: ["learning"] },
+    ];
+    const names: Record<string,string> = {title:"제목",audience:"대상",objective:"목표",duration_minutes:"수업 시간",assistant:"AI 이름·소개",audience_tier:"대상 단계",model:"모델·처리 수준",features:"사용 기능",steps:"단계 안내",starter:"시작 자료",prerequisites:"선수 조건",plan_ref:"강의안 자료",approval:"승인 방식",approval_preset:"승인 프리셋",learning:"미션·완료 조건"};
+    const known = new Set(groups.flatMap(g => g.keys));
+    groups.push({label:"기타 설정",keys:[...new Set([...Object.keys(before ?? {}),...Object.keys(after ?? {})])].filter(key => !known.has(key)).sort()});
+    return groups.map(g => ({label:g.label,fields:g.keys.filter(key => JSON.stringify(canonical(before?.[key])) !== JSON.stringify(canonical(after?.[key]))).map(key => ({key,label:Object.hasOwn(names,key) ? names[key] : key,before:before?.[key],after:after?.[key]}))})).filter(g => g.fields.length);
+  }
+
+  return { splitLines, lineDiff, foldRows, instructionText, instructionDiff, groupedChanges, MAX_EDITS };
 }
 
 /**
