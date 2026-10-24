@@ -5,27 +5,44 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
+import { autoTakeawayPanel } from './lib/takeaway-panel-stub.mjs';
 import {createTaskHarness} from './task-workspace-harness.mjs';
 const require=createRequire(import.meta.url);
 const base=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'takeaway-host-')));
 const built=await build({entryPoints:['src/workTakeawayHost.ts'],bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 try{
  const root=path.join(base,'source'),target=path.join(base,'target');fs.mkdirSync(root);fs.mkdirSync(target);
- let live=true,approve=true,report,details,chooseCount=0;
- const vscode={Uri:{file:fsPath=>({fsPath,scheme:'file'})},window:{
+ let live=true,approve=true,report,details,chooseCount=0,onReview=()=>{};
+ const vscode={ViewColumn:{Beside:2},Uri:{file:fsPath=>({fsPath,scheme:'file'})},window:{
+  createWebviewPanel:autoTakeawayPanel(html=>{if(html.includes('id="results"')){report=html;return {action:'close'};}details=html;onReview();return {action:approve?'confirm':'close'};}),
   showQuickPick:async()=>{chooseCount++;return '작업 대화만 가져가기';},
   showOpenDialog:async()=>[{scheme:'file',fsPath:target}],
   showWarningMessage:async(_title,options)=>{details=options?.detail;return approve?{title:'사본 가져가기'}:undefined;},
   showInformationMessage:async(_title,options)=>{report=options.detail;}
  }};
- const mod={exports:{}};vm.runInNewContext(built.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),Buffer});
+ const mod={exports:{}};vm.runInNewContext(built.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),Buffer,setTimeout,clearTimeout});
  const source={root,wikiDirectory:'wiki',secrets:[],owned:{},tasks:[{label:'두 번째 작업',category:'작업',bytes:Buffer.from('task bytes'),extension:'.txt',reason:'읽기용 사본'}],current:()=>live};
- await mod.exports.runWorkTakeaway(source);assert.match(details,/두 번째 작업/);assert.match(details,/수업 자료/);assert.match(report,/옮김 · 두 번째 작업/);assert.match(report,/제외 · 강사 메모/);
+ await mod.exports.runWorkTakeaway(source);assert.match(details,/class="columns"/,'review uses the responsive panel');assert.match(details,/두 번째 작업/);assert.match(details,/수업 자료/);assert.match(report,/옮김 · 두 번째 작업/);assert.match(report,/제외 · 강사 메모/);
  assert.equal(fs.readFileSync(path.join(target,fs.readdirSync(target)[0],'작업-기록/1.txt'),'utf8'),'task bytes');
  approve=false;await mod.exports.runWorkTakeaway(source);assert.equal(fs.readdirSync(target).length,1);
- approve=true;vscode.window.showWarningMessage=async()=>{live=false;return {title:'사본 가져가기'};};await mod.exports.runWorkTakeaway(source);assert.equal(fs.readdirSync(target).length,1);
+ approve=true;onReview=()=>{live=false;};await mod.exports.runWorkTakeaway(source);assert.equal(fs.readdirSync(target).length,1);
+ // A real write fails once: retry only that frozen item, never copy the successful sibling again.
+ for(const stale of [false,true,'destination']){
+  live=true;onReview=()=>{};const create=vscode.window.createWebviewPanel,write=fs.writeFileSync;let attempts=0,successful=0,views=0;
+  const retrySource={...source,tasks:[source.tasks[0],{...source.tasks[0],label:'실패 후 다시 시도',bytes:Buffer.from('retry frozen bytes')}]};
+  fs.writeFileSync=(file,bytes,...rest)=>{if(String(file).startsWith(target)){if(String(bytes)==='task bytes')successful++;if(String(bytes)==='retry frozen bytes'&&++attempts===1)throw Error('synthetic disk failure');}return write(file,bytes,...rest);};
+  vscode.window.createWebviewPanel=autoTakeawayPanel(html=>{if(!html.includes('id="results"'))return {action:'confirm'};views++;if(stale===true)live=false;if(stale==='destination'&&views===1){fs.renameSync(target,target+'-retry-backup');fs.symlinkSync(root,target);}return html.includes('data-retry="1"')?{action:'retry',index:1}:{action:'close'};});
+  try{assert.equal(await mod.exports.runWorkTakeaway(retrySource),!stale);assert.equal(attempts,stale?1:2);assert.equal(successful,1);assert.equal(views,stale?1:2);}
+  finally{fs.writeFileSync=write;vscode.window.createWebviewPanel=create;if(fs.lstatSync(target).isSymbolicLink()){fs.unlinkSync(target);fs.renameSync(target+'-retry-backup',target);}}
+ }
+ // A folder redirected while review is open cannot become a new destination inside the source.
+ {
+  live=true;const backup=target+'-backup';onReview=()=>{fs.renameSync(target,backup);fs.symlinkSync(root,target);};
+  try{assert.equal(await mod.exports.runWorkTakeaway(source),false,'changed destination refuses before copying');assert.deepEqual(fs.readdirSync(root),[]);}
+  finally{onReview=()=>{};if(fs.lstatSync(target).isSymbolicLink()){fs.unlinkSync(target);fs.renameSync(backup,target);}for(const name of fs.readdirSync(root))fs.rmSync(path.join(root,name),{recursive:true,force:true});}
+ }
  // Destination/selection guards must stop before showing a stale confirmation.
- live=true;let warnings=0;
+ live=true;onReview=()=>{};let warnings=0;
  vscode.window.showWarningMessage=async()=>{warnings++;return {title:'사본 가져가기'};};
  vscode.window.showOpenDialog=async()=>[{scheme:'file',fsPath:root}];
  assert.equal(await mod.exports.runWorkTakeaway(source),false);assert.equal(warnings,1,'source folder refused');assert.deepEqual(fs.readdirSync(root),[]);
@@ -78,7 +95,7 @@ try{
   f.vscode.window.showQuickPick=async()=> '작업 대화만 가져가기';
   f.vscode.window.showOpenDialog=async()=>[{scheme:'file',fsPath:target}];
   f.vscode.window.showWarningMessage=async()=>({title:'사본 가져가기'});
-  let resultText;f.vscode.window.showInformationMessage=async(_,options)=>{resultText=options.detail;};
+  let resultText;f.vscode.ViewColumn={Beside:2};f.vscode.window.createWebviewPanel=autoTakeawayPanel(html=>{if(html.includes('id="results"')){resultText=html;return {action:'close'};}return {action:'confirm'};});
   const old=new Set(fs.readdirSync(target));
   {const r=await f.h.takeMyWork();assert.equal(r,true);}
   const created=fs.readdirSync(target).find(name=>!old.has(name));assert.ok(created);
@@ -95,5 +112,5 @@ try{
 
 
  }
- console.log('takeaway native review, cancel, stale activity, provider seats/races PASS');
+ console.log('takeaway panel review, cancel, stale activity, provider seats/races PASS');
 }finally{fs.rmSync(base,{recursive:true,force:true});}
