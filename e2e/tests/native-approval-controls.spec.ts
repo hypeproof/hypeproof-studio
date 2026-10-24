@@ -68,12 +68,12 @@ test('real browser: open once, remember origin, reuse origin, refuse another ori
   const out = process.env.HPS_NATIVE_EVIDENCE_DIR!;
   try {
     const chat = await chatFrame(ctx.win), input = chat.getByRole('textbox', { name: '코치에게 보낼 메시지' });
-    const dialog = ctx.win.locator('.monaco-dialog-box'), stop = chat.locator('.hps-btn-stop');
+    const dialog = chat.locator('.hps-browser-approval'), stop = chat.locator('.hps-btn-stop');
     writeFileSync(join(ctx.wsDir, 'index.html'), '<!doctype html><html><title>로컬 시료</title><h1>synthetic local preview marker</h1></html>');
     const cases = [
       { url: origins[0] + '/local', choice: null },
       { url: aliases[0] + '/first', choice: '열기' },
-      { url: aliases[0] + '/remember', choice: `이 사이트는 항상 허용 (${aliases[0]})` },
+      { url: aliases[0] + '/remember', choice: `이 사이트는 항상 허용 (${new URL(aliases[0]).hostname})` },
       { url: aliases[0] + '/reuse', choice: null },
       { url: aliases[1] + '/denied', choice: 'Escape' },
     ];
@@ -83,7 +83,8 @@ test('real browser: open once, remember origin, reuse origin, refuse another ori
       await expect(stop).toBeVisible();
       if (c.choice) {
         await expect(dialog).toBeVisible({ timeout: 90000 });
-        await expect(dialog).toContainText(c.url);
+        await expect(dialog.locator('.hps-browser-host')).toHaveText(new URL(c.url).hostname);
+        await expect(dialog.locator('.hps-browser-badge')).toHaveText('인터넷');
         await ctx.win.screenshot({ path: join(out, `browser-${i}-approval.png`) });
         if (c.choice === 'Escape') await ctx.win.keyboard.press('Escape');
         else await dialog.getByRole('button', { name: c.choice, exact: true }).click();

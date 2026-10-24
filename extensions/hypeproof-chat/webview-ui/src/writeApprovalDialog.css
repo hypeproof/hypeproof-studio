@@ -13,3 +13,10 @@
 .hps-write-actions { display: flex; gap: var(--ds-c-studio-writeapprovaldialog-space-2); justify-content: flex-end; margin-top: var(--ds-c-studio-writeapprovaldialog-space-20); }
 .hps-write-approval :focus-visible { outline: var(--ds-c-studio-writeapprovaldialog-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-writeapprovaldialog-size-7); }
 @media (forced-colors: active) { .hps-write-chip { color: CanvasText; background: Canvas; } }
+/* DES-CGP-AGENT-06: full normalized host and a text + shape destination badge. */
+.hps-browser-host { display: block; font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; unicode-bidi: isolate; }
+.hps-browser-badge { display: inline-flex; align-items: center; gap: var(--hp-space-2); padding: var(--hp-space-1) var(--hp-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-3); }
+.hps-browser-badge svg { width: var(--ds-c-studio-writeapprovaldialog-size-30); height: var(--ds-c-studio-writeapprovaldialog-size-30); flex-shrink: 0; }
+.hps-browser-approval .hps-write-actions { flex-wrap: wrap; }
+.hps-browser-approval button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+@media (forced-colors: active) { .hps-browser-badge { border-color: CanvasText; color: CanvasText; } }
