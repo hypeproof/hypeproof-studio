@@ -10879,6 +10879,9 @@
           "path": "extensions/hypeproof-chat/src/workTakeaway.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/workTakeawayPanel.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/workTakeawayHost.ts"
         },
         {
@@ -10906,6 +10909,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/work-takeaway.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/work-takeaway-panel.smoke.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/work-takeaway-host.smoke.mjs"

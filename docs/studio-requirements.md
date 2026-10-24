@@ -4684,8 +4684,8 @@ Files require recorded learner-upload or AI-created origin and an exact current
 byte hash. A file the AI created and the learner later edited is
 excluded on purpose (its origin is no longer known). Unknown origins, class/Studio-created resources, configuration files,
 dot paths, symlinks, private memory outside the selected team-brain folder,
-credential-bearing content and oversized files are excluded. The native dialog
-accepts explicit file selection or tasks-only export. Nothing is sent over a
+credential-bearing content and oversized files are excluded. Native file pickers
+accept explicit file selection or tasks-only export. Nothing is sent over a
 network. This deliberately does not restore a destination's task execution state.
 The learner exercises ownership by choosing and inspecting exactly what leaves the
 activity; no capability labels or scores appear in the UI.
@@ -4693,8 +4693,26 @@ activity; no capability labels or scores appear in the UI.
 Evidence: `test/work-takeaway.smoke.mjs`, `test/work-takeaway-host.smoke.mjs`,
 `test/work-takeaway.test.tsx`, `test/work-takeaway-transition.smoke.mjs`,
 `test/work-takeaway-layout.smoke.mjs` (computed button size, text, focus ring,
-forced colours at 1420/800/360) under the extension. Native-dialog visual acceptance
-is owner-run; automated tests use isolated disk fixtures and stub native dialogs.
+forced colours at 1420/800/360) under the extension.
+
+DES-KNOW-67 / CGP-KNOW-D-035: Studio's review panel displays 가져가는 것 and
+남는 것 in two columns above 600px, one column at or below 600px. The result
+panel follows these lists with every item's 옮김/실패/제외 status and reason.
+Only failed items offer 다시 시도. A retry uses the same frozen bytes, checks the
+current activity and resolved source/destination paths again, and creates a new
+exclusive copy directory for that item;
+successful siblings are never copied again. Each successful result names its own
+copy directory. No percentage is displayed because no incremental byte progress
+is measured. Escape, panel close and the five-minute unattended timeout cancel a
+review; nonce-bound messages cannot request a successful or excluded item retry.
+Native file pickers remain; neither credentials nor file bytes enter the panel.
+`test/work-takeaway-panel.smoke.mjs` covers the actual responsive shell and actions;
+`test/work-takeaway-host.smoke.mjs` drives the real copy/retry path.
+
+Chalk's transfer entry and service-backed export contract remain unimplemented;
+this Studio-local flow is not evidence of Both-surface completion. Installed-app
+focus return and native file-picker visual acceptance remain owner-run; automated
+tests use isolated disk fixtures and stub host windows.
 
 ## Install prepared updates on quit (CGP-SHELL-R-002)
 
