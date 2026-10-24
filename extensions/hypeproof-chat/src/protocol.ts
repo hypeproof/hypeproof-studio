@@ -143,6 +143,8 @@ export interface FileAttachmentPreview {
 export interface ChatConfig {
   /** Server-provided connected class window; absent when not known for this seat. */
   classWindow?: import("./classWindow").ClassWindow | null;
+  /** Persisted consent for this activity and canonical folder; never inferred from UI state. */
+  folderRestricted?: boolean;
   /** CGP-AGENT-R-032: opaque seat/lesson disclosure receipt, device-local only. */
   lessonCapabilityEntry?: { id: string; seen: boolean };
   /** CGP-AGENT-R-003: what the AI can do on this seat, one row per REQ-M38 key. */
@@ -525,6 +527,7 @@ export interface SuggestionChip {
 // Webview → Host
 export type WebviewMessage = (
   | {type:'writeApprovalAnswer';id:string;approved:boolean}
+  | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
   | { type: 'taskCreate' }
   | { type: 'taskRecoverDraft' }
@@ -779,6 +782,7 @@ export type WebviewMessage = (
 // Host → Webview
 export type HostMessage = (
   | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
+  | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }

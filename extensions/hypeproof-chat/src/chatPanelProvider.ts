@@ -1,4 +1,5 @@
 import { currentClassWindow } from "./classWindow";
+import { FolderConsentRequest } from './folderConsentPrompt';
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
 import { showVisitorPreview } from "./visitorPreviewHost";
@@ -40,7 +41,7 @@ const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
 import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, turnToolsDenialSource, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
-import { folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
+import { setFolderConsentPresenter, onFolderConsentChanged, folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { folderConsentApplies, canonicalFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
 import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED } from './missingTaskFolder';
 import { chatVisible, createFinishNotifier, watchChatSurface } from './finishNoticeHost';
@@ -926,6 +927,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     scope:()=>this.writeApprovalScope(),
     id:()=>crypto.randomUUID(),
     present:prompt=>this.presentOutbound(prompt),
+  });
+  private readonly folderConsentRequest = new FolderConsentRequest({
+    scope: () => this.writeApprovalScope(), id: () => crypto.randomUUID(),
+    present: async prompt => {
+      if (prompt && !(this.editorChat?.visible || this.view?.visible)) return false;
+      return this.post({ type: 'folderConsentPrompt', prompt });
+    },
   });
   private async presentOutbound(prompt:AnyOutboundPrompt|null):Promise<boolean|void> {
     if(prompt && !(this.editorChat?.visible || this.view?.visible))return false;
@@ -2529,12 +2537,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   ) {
     // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen.
     this.provenanceRecorder();
+    context.subscriptions.push(setFolderConsentPresenter(folder => this.folderConsentRequest.ask(folder)));
+    context.subscriptions.push(onFolderConsentChanged(() => { this.endTaskCommandAllows(); void this.postConfig().catch(() => {}); }));
+    context.subscriptions.push({ dispose: () => this.folderConsentRequest.cancel() });
     context.subscriptions.push(setOutboundPresenter((manifest,step)=>this.outboundApproval?.confirm(manifest,step) ?? Promise.resolve(null)));
     // cr-publish (CR-11 after a restart): know the signed-in person's published origin from
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
     const sub = context.secrets.onDidChange?.((e) => {
-      if (e.key === TOKEN_KEY) { this.outboundApproval?.cancel(); void this.crProjectMemory.refresh().catch(() => undefined); }
+      if (e.key === TOKEN_KEY) { this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel(); void this.crProjectMemory.refresh().catch(() => undefined); }
       // cr-review — the director's command follows the stored issuer token (set, replaced or forgotten).
       if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
     });
@@ -3440,9 +3451,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const sidebarWebview=view.webview;
     view.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, view.webview));
     watchChatSurface(view, this.finishNotifier);
+    view.onDidChangeVisibility(() => { if (!view.visible && !this.editorChat?.visible) this.folderConsentRequest?.cancel(); });
     view.onDidDispose(() => {
       this.writeApprovalRequest.cancel();
-      this.outboundApproval?.cancel();
+      this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
       if (this.draftSource===sidebarWebview) this.draftSource=undefined;
       this.queuedSources.delete(sidebarWebview);
       if (this.view === view) this.view = undefined;
@@ -3462,10 +3474,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const dist = vscode.Uri.joinPath(this.context.extensionUri, 'webview-ui', 'dist');
       entry.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, entry.webview));
       watchChatSurface(entry, this.finishNotifier);
+      entry.onDidChangeViewState(() => { if (!entry.visible && !this.view?.visible) this.folderConsentRequest?.cancel(); });
       const editorWebview=entry.webview;
       entry.onDidDispose(() => {
         this.writeApprovalRequest.cancel();
-        this.outboundApproval?.cancel();
+        this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
         if(this.draftSource===editorWebview)this.draftSource=undefined;
         this.queuedSources.delete(editorWebview);
         if (this.editorChat === entry) {
@@ -3788,7 +3801,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   invalidateProfile(): void {
     this.personalContinuationPane?.dispose(); this.personalContinuationPane = undefined;
     this.writeApprovalRequest?.cancel();
-    this.outboundApproval?.cancel();
+    this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
     this.profileGeneration++;
     this.observationAssessment?.abort();
     this.nativeObservation=null;
@@ -6043,6 +6056,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "helpConfirm": await this.helpSource?.confirm(msg.key, msg.id, msg.revision); return;
       case "helpWithdraw": await this.helpSource?.withdraw(msg.key, msg.id); return;
       case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
+      case "folderConsentAnswer":
+        if (!(this.editorChat?.visible || this.view?.visible)) this.folderConsentRequest?.cancel();
+        else this.folderConsentRequest?.respond(msg.id,msg.level);
+        return;
       case "outboundAnswer": this.outboundApproval?.respond(msg.id,msg.selected); return;
       case "accuracyEducationRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postAccuracyEducation(msg.requestId); return;
       case "accuracyEducationDismiss": {
@@ -6054,7 +6071,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case "ready":
         this.writeApprovalRequest.cancel();
-        this.outboundApproval?.cancel();
+        this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
         await this.postInbox();
         // AE-15 — a remount must still show the open review bar (it never auto-dismisses).
         this.postTurnReview();
@@ -8751,6 +8768,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       config: {
         classWindow: currentClassWindow(this.classWindowSource?.() ?? null, decodeTokenPayloadUnverified(token),
           !!profile && !isInstructor && !local && (activity?.kind ?? profile.activity_kind) === 'classroom'),
+        folderRestricted: folderConsentState(this.context, profile, { servedRoot: this.servedWorkspaceRoot, instructor: isInstructor }).tag === "read",
         ...(entryId ? { lessonCapabilityEntry: { id: entryId, seen: this.context.globalState?.get(entryReceiptKey(entryId)) === true } } : {}),
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
         ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
@@ -9083,6 +9101,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();
     if(msg.type!=='outboundPrompt')this.outboundApproval?.invalidateIfScopeChanged();
     if(msg.type!=='writeApprovalPrompt') {
       if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type))this.writeApprovalRequest?.cancel();

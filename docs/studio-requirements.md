@@ -31,8 +31,12 @@ separate filesystem/host/built-UI evidence from native, Windows and customer pro
 activity (activity kind personal or trial, or a bought pass; never a classroom seat, a
 seat with a served lesson or lesson binding, or the instructor surface) whose open folder
 is not its own work folder asks once, before the first model call in that folder, what
-Studio's AI may do there: "읽기만 허용 (고치기·명령은 안 함)" (offered first, so Enter
-never grants commands), "읽기·고치기·명령 실행 모두 허용", or "이 폴더에서는 AI를 쓰지 않음".
+Studio's AI may do there. CGP-KNOW-D-010 / DES-KNOW-18 presents an in-panel dialog
+with the title "이 폴더에서 작업할까요?", three plain 읽기/고치기/실행 bullets,
+primary "믿고 열기" (full), secondary "제한 모드로 열기" (read), and the retained
+"이 폴더에서는 AI를 쓰지 않음" (none) choice. Initial focus is on the explanation;
+Enter never chooses a permission, Escape dismisses without remembering, and an explicit
+click or Space on a button answers once. Full still cannot widen the served grants.
 Own folder = exactly the served `workspace_root` or a folder inside it; a look-alike
 sibling (`<home>-taxes`, `<home>Clinic`) and the siblings Studio itself creates
 (`<home>-N`, `<home>-<repo>`) ask once; with no served home every folder asks.
@@ -72,15 +76,33 @@ learner sees one line per turn: "이 폴더에서는 파일 저장을 쓰지 않
 읽기만: the live server and browser tools may serve and run the folder's existing files
 (that is reading them), but nothing is written.
 
-Not built / limits: the persistent "제한 모드" header chip and light/dark dialog styling of
-DES-KNOW-18 (the native modal is used); asking when the folder opens rather than at the
-first model call; follow-up: the REQ-M47 "AI가 할 수 있는 일" card still shows the profile
+The personal chat header shows a persistent "제한 모드" chip only when the host reads
+stored `read` consent for the current activity and canonical folder (`full`, `none`, unanswered
+and classroom seats never show it). The chip is a status with no action, so it is a
+non-focusable `role="note"` (the 44px control rule does not apply; it is at least 24px tall,
+unclipped, inside the header and its text meets 4.5:1). Hover explains
+that AI edits and commands are disabled and names the existing permission-change command.
+A saved choice refreshes config and clears task command allows; normal config refreshes
+re-read the store. Classroom/lesson/instructor/own-folder exclusions remain unchanged.
+The in-panel request is bound to its ID and activity/task/folder scope; closing/reloading,
+hiding the panel, timeout, or changing scope refuses. Before remembering, the host also
+rechecks the canonical folder and current stored decision, so a late full answer cannot
+overwrite another window's changed choice. A registered but hidden panel never falls
+through to a native permission grant. The existing native fallback applies only before
+any panel presenter is installed; the change-permission command retains its quick picker.
+
+Not built / limits: asking when the folder opens rather than at the
+first model call; cross-window immediate header push (the next config refresh re-reads
+the stored decision); follow-up: the REQ-M47 "AI가 할 수 있는 일" card still shows the profile
 before the folder narrowing. Outside the guard on purpose: the learner's own restore of a
 turn (`turnRestore`, it only reverts earlier coach changes), and entry preparation
 (`prepareWorkspaceDirectory`), which only creates a missing folder or starter file when
 the learner connects the activity to that folder, before the question. The choice is a
 client posture, not a Service boundary (same standing as REQ-M38 on the agent-sdk path).
-Tests: `test/folder-consent.smoke.mjs` — pure decisions (canonical path with symlink, case
+Tests: `test/folder-consent-dialog-computed.smoke.mjs` exercises the real dialog and
+ChatPanel header in headless Chromium; `test/folder-consent-prompt.smoke.mjs` covers
+request identity, single flight, scope, malformed answers, cancellation and timeout.
+`test/folder-consent.smoke.mjs` — pure decisions (canonical path with symlink, case
 and drive letter; which seats ask; exact own folder with look-alike negative controls;
 store; fail closed without an activity id; 128 grant combinations proving narrowing never
 widens; gate source with lesson / 이용권 / other-key negative controls; copy), the real host

@@ -1,3 +1,5 @@
+import { FolderConsentDialog } from './FolderConsentDialog';
+import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
 import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
@@ -390,6 +392,7 @@ export function App() {
   // REQ-STUDIO-TASK-RUN-STATE — the host raised a tool approval modal and it is still open.
   const [approvalPending, setApprovalPending] = useState(false);
   const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
+  const [folderConsent,setFolderConsent]=useState<FolderConsentPrompt|null>(null);
   const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
@@ -417,7 +420,7 @@ export function App() {
           ownVerdictRequests.current.clear();
           activeStream.current = null;
           setRefusal(false);
-          setApprovalPending(false); setWriteApproval(null); setOutbound(null);
+          setApprovalPending(false); setWriteApproval(null); setOutbound(null); setFolderConsent(null);
         }
         scope.current = msg.config.activity?.id;
         taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
@@ -446,6 +449,7 @@ export function App() {
         case "streamRefusal": setRefusal(true); return;
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
         case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
+        case 'folderConsentPrompt': setFolderConsent(msg.prompt); return;
         case 'outboundPrompt': setOutbound(msg.prompt); return;
         case 'approvalWait': setApprovalPending(msg.waiting === true); return;
         case 'taskWorkspaceError':
@@ -732,6 +736,7 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
+      {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);}}/>}
       {outbound && (isPublicAudiencePrompt(outbound)
         ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>
         : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>)}
