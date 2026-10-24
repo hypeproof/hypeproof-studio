@@ -43,6 +43,7 @@ const OVERRIDES = {
   "activity-trash": { banner: BANNER_POSTED },
   "write-approval-dialog": { banner: BANNER_POSTED },
   "browser-approval": { banner: BANNER_POSTED },
+  "command-approval": { banner: BANNER_POSTED },
   "outbound-dialog-app": { banner: BANNER_POSTED },
   "refusal-banner": { banner: BANNER_POSTED },
   "attachment-error-design": { banner: BANNER_POSTED },

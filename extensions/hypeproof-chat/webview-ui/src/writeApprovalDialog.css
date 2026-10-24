@@ -20,3 +20,12 @@
 .hps-browser-approval .hps-write-actions { flex-wrap: wrap; }
 .hps-browser-approval button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 @media (forced-colors: active) { .hps-browser-badge { border-color: CanvasText; color: CanvasText; } }
+/* DES-CGP-AGENT-04: purpose before the complete, horizontally scrollable command. */
+.hps-command-approval h2 { font-size: var(--hp-font-body); word-break: keep-all; }
+/* A tall command scrolls inside its own block, so focus on the bottom buttons never scrolls its first line away at 320px. */
+.hps-write-approval .hps-command-code { max-width: 100%; max-height: 40dvh; overflow: auto; white-space: pre; overflow-wrap: normal; font-family: var(--vscode-editor-font-family, monospace); font-size: var(--hp-font-caption); }
+.hps-command-approval code { font: inherit; }
+.hps-command-approval .hps-write-actions { flex-wrap: wrap; }
+.hps-command-approval[data-destructive="true"] { border-color: var(--vscode-errorForeground, currentColor); }
+.hps-command-warning { color: var(--vscode-errorForeground, currentColor); }
+@media (forced-colors: active) { .hps-command-approval[data-destructive="true"] { border-color: CanvasText; } .hps-command-warning { color: CanvasText; } }

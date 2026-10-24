@@ -1,5 +1,6 @@
 import {BrowserApprovalRequest} from "./browserApprovalPrompt";
 import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
+import {CommandApprovalRequest, commandApprovalPurposeFor} from "./commandApprovalPrompt";
 import { currentClassWindow } from "./classWindow";
 import { FolderConsentRequest } from './folderConsentPrompt';
 import { AccuracyEducationStore } from "./accuracyEducationStore";
@@ -193,7 +194,6 @@ import {
   coachDegradedNotice,
   pageAttachedNotice,
   profileNotReadyNotice,
-  shellApprovalTitle,
 } from "./coachIdentity.ts";
 import { isFreeSeat, profileAudience, seatAudience, type SeatAudience } from "./seatVocabulary.ts";
 import { classifyDenial, denialCopy, lessonFeatureOff } from "./denialSource.ts";
@@ -935,6 +935,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return this.post({type:'browserApprovalPrompt',prompt});
     },
   });
+  private readonly commandApprovalRequest = new CommandApprovalRequest({
+    scope:()=>JSON.stringify([this.taskCommandAllowState(),this.taskCommandAllows.generation]),
+    present:prompt=>{
+      if(prompt && !(this.editorChat?.visible || this.view?.visible))return Promise.resolve(false);
+      return this.post({type:'commandApprovalPrompt',prompt});
+    },
+  });
   private readonly writeApprovalRequest = new WriteApprovalRequest({
     scope:()=>this.writeApprovalScope(),
     present:prompt=>this.presentWriteApproval(prompt),
@@ -1428,7 +1435,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private lastAllowInstructor?: boolean;
   /** Ends every task allow now (task create / select, sign-in, instructor flip, the folder-consent command). */
   // Optional chaining: test harnesses build the host with Object.create, without field initializers.
-  endTaskCommandAllows(): void { this.taskCommandAllows?.clear(); }
+  endTaskCommandAllows(): void { this.taskCommandAllows?.clear(); this.commandApprovalRequest?.cancel(); }
   /**
    * Origins the participant pressed "이 사이트는 항상 허용" on. The same discipline as
    * the shell allow (which is now per task) — session-scoped, never persisted. It is per origin, so a
@@ -3468,9 +3475,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const sidebarWebview=view.webview;
     view.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, view.webview));
     watchChatSurface(view, this.finishNotifier);
-    view.onDidChangeVisibility(() => { if (!view.visible && !this.editorChat?.visible) this.folderConsentRequest?.cancel(); });
+    view.onDidChangeVisibility(() => { if (!view.visible && !this.editorChat?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } });
     view.onDidDispose(() => {
-      this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel();
+      this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
       this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
       if (this.draftSource===sidebarWebview) this.draftSource=undefined;
       this.queuedSources.delete(sidebarWebview);
@@ -3491,10 +3498,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const dist = vscode.Uri.joinPath(this.context.extensionUri, 'webview-ui', 'dist');
       entry.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg, entry.webview));
       watchChatSurface(entry, this.finishNotifier);
-      entry.onDidChangeViewState(() => { if (!entry.visible && !this.view?.visible) this.folderConsentRequest?.cancel(); });
+      entry.onDidChangeViewState(() => { if (!entry.visible && !this.view?.visible) { this.folderConsentRequest?.cancel(); this.commandApprovalRequest?.cancel(); } });
       const editorWebview=entry.webview;
       entry.onDidDispose(() => {
-        this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel();
+        this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
         this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
         if(this.draftSource===editorWebview)this.draftSource=undefined;
         this.queuedSources.delete(editorWebview);
@@ -3612,7 +3619,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   opsRuntimeGeneration(): number { return this.opsGeneration; }
   /** Ask every running turn and pending approval to end. Entries leave the maps through their normal finally paths — that is the confirmation. */
   opsRequestStop(): void {
-    this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel();
+    this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
     for (const [streamId, ctrl] of [...this.activeStreams]) { try { ctrl.abort(); } catch { /* best-effort */ } void this.post({ type: "streamStopped", streamId, by: "instructor" }); }
     for (const resolve of [...this.pendingApprovals.values()]) resolve(false);
     this.observationAssessment?.abort();
@@ -3817,7 +3824,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Force re-fetch on next config push (e.g. after token change). */
   invalidateProfile(): void {
     this.personalContinuationPane?.dispose(); this.personalContinuationPane = undefined;
-    this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel();
+    this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
     this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
     this.profileGeneration++;
     this.observationAssessment?.abort();
@@ -6080,6 +6087,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "helpConfirm": await this.helpSource?.confirm(msg.key, msg.id, msg.revision); return;
       case "helpWithdraw": await this.helpSource?.withdraw(msg.key, msg.id); return;
       case "browserApprovalAnswer": this.browserApprovalRequest.respond(msg.id,msg.choice); return;
+      case "commandApprovalAnswer": this.commandApprovalRequest.respond(msg.id,msg.choice); return;
       case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
       case "folderConsentAnswer":
         if (!(this.editorChat?.visible || this.view?.visible)) this.folderConsentRequest?.cancel();
@@ -6095,7 +6103,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "ready":
-        this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel();
+        this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
         this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
         await this.postInbox();
         // AE-15 — a remount must still show the open review bar (it never auto-dismisses).
@@ -8455,37 +8463,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       const allowGeneration = this.taskCommandAllows.generation;
 
-      const pretty = describeCommandForApproval(command);
-      if (destructive) {
-        // Deliberately NOT offering "항상 허용". Approving `rm -rf` once must
-        // never approve it for the rest of the session, and the whole point of
-        // the strong confirm is that it stays interruptive.
-        onPrompted?.();
-    const pick = await vscode.window.showWarningMessage(
-          "⚠️ 되돌리기 어려운 명령이에요. 정말 실행할까요?",
-          { modal: true, detail: pretty },
-          "실행",
-          "취소",
-        );
-        return pick === "실행";
-      }
-
-      const buttons = exact ? ["실행", TASK_COMMAND_ALLOW_LABEL] : ["실행"];
       onPrompted?.();
-    const pick = await vscode.window.showWarningMessage(
-        shellApprovalTitle(this.coachDisplayName()),
-        { modal: true, detail: pretty },
-        ...buttons,
-      );
-      if (pick === TASK_COMMAND_ALLOW_LABEL && exact) {
-        // This task only, in memory only. What we are killing is the fifteen identical modals
-        // inside ONE 20:35 block that train them to stop reading; another task, folder or window
-        // starts the judgment over. Remembered only if nothing ended the allows while the modal was
-        // open (a task switch, even one that came back) and the scope is still the same.
+      const pick = await this.commandApprovalRequest.confirm({
+        id: crypto.randomUUID(), purpose: commandApprovalPurposeFor(req.payload, destructive),
+        command: describeCommandForApproval(command), destructive, rememberAllowed: Boolean(exact),
+      });
+      if (pick === 'remember' && exact) {
         if (this.taskCommandAllows.generation === allowGeneration && this.taskCommandAllowState().key === scope.key) this.taskCommandAllows.remember(scope.key, exact.key);
         return true;
       }
-      return pick === "실행";
+      return pick === 'allow';
     }
 
     // Tier 1.5 — opening the browser. Asked once per origin.
@@ -9140,9 +9127,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async post(msg: HostMessage): Promise<boolean | void> {
     if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();
     if(msg.type!=='browserApprovalPrompt')this.browserApprovalRequest?.invalidate();
+    if(msg.type!=='commandApprovalPrompt')this.commandApprovalRequest?.invalidate();
     if(msg.type!=='outboundPrompt')this.outboundApproval?.invalidateIfScopeChanged();
     if(msg.type!=='writeApprovalPrompt') {
-      if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type)){this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel();}
+      if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type)){this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();}
       else this.writeApprovalRequest?.invalidate();
     }
     if (msg.type === 'streamStart') this.lastActivityStatus = undefined;

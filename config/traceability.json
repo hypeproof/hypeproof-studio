@@ -8236,6 +8236,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## E. Manual-approve modal"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Command approval presentation (CGP-AGENT-D-003)"
         }
       ]
     },
@@ -8261,6 +8265,21 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/folderConsent.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/commandApprovalPrompt.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CommandApprovalDialog.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/writeApprovalDialog.css"
         }
       ]
     },
@@ -8275,6 +8294,21 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/task-command-allow.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/command-approval.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/command-approval-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/command-approval.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/command-approval-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/shell-modal.smoke.mjs"
         }
       ]
     },
