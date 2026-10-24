@@ -76,3 +76,30 @@ const wireAt = ext.search(/provider\.classWindowSource\s*=\s*\(\)\s*=>\s*classro
 assert.ok(hostAt >= 0 && wireAt > hostAt, 'extension.ts assigns provider.classWindowSource from classroomOps.helpConnection() after the host exists');
 assert.match(ext, /classroomOps\.onInboxChanged\(\(\) => \{ void provider\.postInbox\(\);/, 'every connection change reaches postInbox, which republishes the config');
 console.log('PASS extension.ts wiring');
+
+// Dismissals are durable receipts for the exact current learner/window revision.
+const receipts = new Map(); let failWrite = false;
+h.context.globalState = { get: key => receipts.get(key), update: async (key,value) => { if(failWrite)throw Error('disk'); receipts.set(key,value); } };
+let first = (await publish()).classWindow;
+assert.match(first.noticeId,/^[a-f0-9]{64}$/);
+await h.handleMessage({type:'dismissClassWindow',id:'stale'});assert.equal(receipts.size,0);
+failWrite=true;await h.handleMessage({type:'dismissClassWindow',id:first.noticeId});assert.ok((await publish()).classWindow);failWrite=false;
+await h.handleMessage({type:'dismissClassWindow',id:first.noticeId});assert.equal((await publish()).classWindow,null);
+assert.equal(receipts.size,1);assert.ok([...receipts.values()].every(v=>v===true),'only a receipt, no learner data');
+delete h.currentClassNoticeId;assert.equal((await publish()).classWindow,null,'fresh publication reads durable receipt');
+connection.run.ends_at+=60000;let revised=(await publish()).classWindow;assert.ok(revised);assert.notEqual(revised.noticeId,first.noticeId);
+await h.handleMessage({type:'dismissClassWindow',id:first.noticeId});assert.ok((await publish()).classWindow,'stale old schedule cannot dismiss revised window');
+const priorToken=token;connection.student.u='second';token=Buffer.from(JSON.stringify(connection.student)).toString('base64url')+'.renewed';
+let other=(await publish()).classWindow;assert.ok(other);assert.notEqual(other.noticeId,revised.noticeId);
+await h.handleMessage({type:'dismissClassWindow',id:revised.noticeId});assert.equal(receipts.size,1,'old learner cannot dismiss current learner');
+connection.student.u='learner';token=priorToken;connection.run.ends_at-=60000;assert.equal((await publish()).classWindow,null,'same learner and original window stay dismissed');
+connection.class_run_id='next-class';assert.ok((await publish()).classWindow,'next class appears');
+{ // A webview that still shows the previous schedule cannot write a receipt: the host refreshes the seat first.
+  const shown = (await publish()).classWindow; const before = receipts.size; const postsBefore = posts.length;
+  connection.run.ends_at += 120000;
+  await h.handleMessage({type:'dismissClassWindow',id:shown.noticeId});
+  assert.equal(receipts.size, before, 'stale id from the previous schedule writes nothing');
+  assert.ok(posts.length > postsBefore, 'host republished the current window before judging the id');
+  assert.ok((await publish()).classWindow, 'revised window stays visible');
+}
+console.log('PASS class notice receipt: persistence, write failure, stale schedule/learner, next class');

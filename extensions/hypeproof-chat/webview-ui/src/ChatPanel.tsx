@@ -1457,6 +1457,7 @@ export function ChatPanel(props: Props) {
         </HeaderActions>
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
+      {!props.instructor && <ClassWindowNotice window={config.classWindow} />}
 
       {entryOpen && entry && config?.aiCapabilities && <PanelBoundary panel="lesson-capability-entry">
         <LessonCapabilitySheet key={entry.id} items={config.aiCapabilities} solo={audience === 'solo'} onAcknowledge={() => {
@@ -1505,7 +1506,6 @@ export function ChatPanel(props: Props) {
       />}</PanelBoundary>}
       {draftError && <p role="alert">{draftError}</p>}
       {updateBanner}
-      {!props.instructor && <ClassWindowNotice window={config.classWindow} />}
 
       {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
           Region A keeps drawing the lesson's own criteria from the design file; this block never touches them.
