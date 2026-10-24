@@ -4989,6 +4989,18 @@ server-provided connection snapshot; unpaired legacy class seats have no end-tim
 contract and show nothing. A server schedule change needs a refreshed connection;
 this client does not promise a real-time schedule subscription.
 
+DES-SHELL-24 adds an amber clock and a quiet, accessible close button to the single
+line below the header. It keeps the current 14px text floor and 44px hit target
+rather than shrinking the text to the original 13px sketch. Visible time changes
+only by whole minutes. Dismissal stores a host-side boolean receipt keyed by a hash
+of Service, learner/cohort/profile, class run and exact start/end revision; no raw
+identity or credential is saved in it. A refresh/reopen of that same window stays
+hidden; another learner, next class or revised schedule has a different receipt.
+The host refreshes the current seat before accepting the displayed opaque notice ID.
+A stale ID is ignored and a failed write leaves the notice visible. Closing returns
+focus to the composer and does not stop work or change Service admission. This does
+not promise immediate dismissal propagation to an already-open second window.
+
 Evidence: `class-window.test.tsx` covers identity and clock boundaries, live mount,
 replacement and timer cleanup; `class-window-host.smoke.mjs` exercises real host
 config with both runtimes and negative seats; `class-window-layout.smoke.mjs`

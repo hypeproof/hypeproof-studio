@@ -3,6 +3,7 @@ import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
 import {CommandApprovalRequest, commandApprovalPurposeFor} from "./commandApprovalPrompt";
 import { currentClassWindow } from "./classWindow";
 import { FolderConsentRequest } from './folderConsentPrompt';
+import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
 import { showVisitorPreview } from "./visitorPreviewHost";
@@ -3598,6 +3599,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   opsObserver: (import("./classroomOpsHost").ClassroomOpsObserver & Partial<Pick<import("./classroomOpsHost").ClassroomOpsHost, "switchPendingSetting" | "confirmSettingBound" | "knownBindingKey" | "holdsLessonSetting" | "approvalScope">>) | null = null;
   /** #751 U2 — set by extension.ts. The provider only relays: every answer is read from disk by the host adapter. */
   inboxSource: { inboxView(): Promise<import("./classroomInbox").InboxView>; inboxOpened(objectId: string, generation: number): Promise<void>; inboxLink(objectId: string, url: string, generation: number): Promise<string | null> } | null = null;
+  private currentClassNoticeId: string | undefined;
   classWindowSource: (() => import("./classWindow").ClassConnection | null) | null = null;
   async postInbox(): Promise<void> {
     if (this.inboxSource) await this.post({ type: "inboxState", inbox: await this.inboxSource.inboxView() });
@@ -6409,6 +6411,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postConfig();
         return;
       }
+      case "dismissClassWindow": {
+        // Refresh the seat/window before accepting an old webview's dismissal.
+        await this.postConfig();
+        const id = this.currentClassNoticeId;
+        if (!id || msg.id !== id) return;
+        try { await this.context.globalState.update(classWindowReceiptKey(id), true); }
+        catch { return; } // Keep the notice if persistence failed.
+        await this.postConfig();
+        return;
+      }
       case "dismissCapabilityChange":
         (this.capChanges ??= new CapabilityChangeTracker()).dismiss(msg.id);
         void this.postConfig();
@@ -8740,6 +8752,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async postConfig(): Promise<void> {
+    this.currentClassNoticeId = undefined;
     const activity=activityConnections(this.context)?.current;
     const scope=activity?.id;
     await this.draftWrites;
@@ -8821,13 +8834,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the gate on every request, so a failed context update never holds up the config post.
     void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
     this.preview.setAskAboutFileEnabled(fileAttachAllowed(toolProfile, isInstructor));
+    const classWindow = currentClassWindow(this.classWindowSource?.() ?? null, decodeTokenPayloadUnverified(token),
+      !!profile && !isInstructor && !local && (activity?.kind ?? profile.activity_kind) === 'classroom');
+    const classNoticeId = classWindowNoticeId(classWindow, decodeTokenPayloadUnverified(token), proxyUrl);
+    const visibleClassWindow = classWindow && classNoticeId && this.context.globalState?.get(classWindowReceiptKey(classNoticeId)) !== true
+      ? { ...classWindow, noticeId: classNoticeId } : null;
     const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
+    this.currentClassNoticeId = visibleClassWindow?.noticeId;
     await this.post({
       type: "config",
       config: {
-        classWindow: currentClassWindow(this.classWindowSource?.() ?? null, decodeTokenPayloadUnverified(token),
-          !!profile && !isInstructor && !local && (activity?.kind ?? profile.activity_kind) === 'classroom'),
+        classWindow: visibleClassWindow,
         folderRestricted: folderConsentState(this.context, profile, { servedRoot: this.servedWorkspaceRoot, instructor: isInstructor }).tag === "read",
         ...(entryId ? { lessonCapabilityEntry: { id: entryId, seen: this.context.globalState?.get(entryReceiptKey(entryId)) === true } } : {}),
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),

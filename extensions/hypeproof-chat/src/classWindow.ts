@@ -1,5 +1,5 @@
 // CGP-SHELL-R-025: presentation only. The Service remains the admission authority.
-export interface ClassWindow { id: string; startsAt: number; endsAt: number }
+export interface ClassWindow { id: string; startsAt: number; endsAt: number; noticeId?: string }
 export interface ClassConnection {
   class_run_id: string;
   student?: { u: string; c: string; p: string };

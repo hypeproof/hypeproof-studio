@@ -684,6 +684,7 @@ export type WebviewMessage = (
   | { type: "dismissUpdate"; version: string }  // #72: user clicked "Later" — silence for 7d
   /** CGP-SHELL-R-024 — the learner closed the "AI가 할 수 있는 일이 바뀌었어요" card. */
   | { type: "acknowledgeLessonCapabilities"; id: string }
+  | { type: "dismissClassWindow"; id: string }
   | { type: "dismissCapabilityChange"; id: string }
   | { type: "clearHistory" }
   | { type: "namingRitual" }
