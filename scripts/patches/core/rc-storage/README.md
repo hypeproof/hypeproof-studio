@@ -37,7 +37,12 @@ the canonical kit directory selects the same dedicated profile automatically. A
 legacy/malformed kit refuses before secret storage startup. Explicit conflicting
 CLI paths, `VSCODE_PORTABLE`, `VSCODE_APPDATA`, and in-memory secret storage refuse.
 After VS Code resolves `userDataPath`, core validates that final path again, then
-calls `app.setName('HypeProof Studio RC')` before Electron's `ready` event. The
+calls `app.setName('HypeProof Studio RC')` before Electron's `ready` event. Both validated
+canonical paths are also propagated into `process.argv` before a positional `--`.
+VS Code reparses that array later when creating its environment service; setting
+only Electron's path would leave application logs/storage on the production profile.
+Conflicting, duplicate, empty or negated path options refuse before mutation;
+repeated bootstrap preserves one canonical option each. Non-RC launch is unchanged. The
 launcher clears inherited portable/appdata/development overrides and never enables
 in-memory secrets. No production namespace fallback exists for canonical RC kit mode.
 
@@ -56,7 +61,7 @@ Regenerate and test without modifying the cached upstream tree:
 
 ```sh
 python3 scripts/patches/core/rc-storage/build_patch.py <pristine-vscode-tree>
-VSCODE_SOURCE=<pristine-vscode-tree> TYPESCRIPT_PATH=<typescript-module> \
+VSCODE_SOURCE=<pristine-vscode-tree> TYPESCRIPT_PATH=<typescript-module> MINIMIST_PATH=<minimist-module> \
   node --test scripts/patches/core/rc-storage/rc-storage.test.mjs
 node --test scripts/release/test/install-kit.test.mjs
 ```
@@ -66,7 +71,11 @@ combined `main.ts` patch stack: committed VSCodium root patches first, then prec
 Studio core patches in staged filename order. `VSCODIUM_SOURCE` defaults to the
 parent of `VSCODE_SOURCE`; tests read Git objects without editing either checkout.
 Both resulting startup preludes execute with the real upstream path resolver and
-exercise positive and negative profile contracts. The RC helper import is anchored
+exercise positive and negative profile contracts. The Finder/START regressions also
+run both real CLI parsers and the real native environment class/getters against
+synthetic paths, checking logs, global storage, workspace storage and extensions.
+The START fixture replaces only the OS plist executable lookup with its synthetic
+executable; marker validation, override clearing and final exec remain unchanged. The RC helper import is anchored
 next to `getUserDataPath`, outside the Node import block that VSCodium's
 `00-settings-user-product.patch` changes. Installer tests use synthetic bundles and scratch
 homes, including managed candidate/embedded version differences, inherited overrides,

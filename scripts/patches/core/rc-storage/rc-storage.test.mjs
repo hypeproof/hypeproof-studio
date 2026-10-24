@@ -53,7 +53,7 @@ function combinedStartup() {
 
 function compile(source, filename, context = {}) {
   const module = {exports: {}};
-  const result = ts.transpileModule(source, {fileName: filename, reportDiagnostics: true, compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS}});
+  const result = ts.transpileModule(source, {fileName: filename, reportDiagnostics: true, compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, experimentalDecorators: true}});
   assert.equal((result.diagnostics ?? []).filter(d => d.category === ts.DiagnosticCategory.Error).length, 0);
   vm.runInNewContext(result.outputText, {require, exports: module.exports, module, process, ...context}, {filename});
   return module.exports;
@@ -73,7 +73,7 @@ function setup(embeddedVersion = '2026.1024.0') {
   const executable = path.join(app, 'Contents/MacOS/Electron');
   const product = {version: embeddedVersion, commit: source};
   return {home, kit, app, profile, marker, executable, product,
-    prepare(args = {}, env = {}) { return core.prepareRcStorage(args, product, executable, home, 'darwin', env); }};
+    prepare(args = {}, env = {}, argv = [executable]) { return core.prepareRcStorage(args, product, executable, home, 'darwin', env, argv); }};
 }
 
 test('patch regenerates exactly and composes with existing main startup patches', () => {
@@ -154,9 +154,9 @@ test('the identical promoted app outside RC kit keeps production args and namesp
   const f = setup();
   const executable = path.join(f.home, 'Applications/HypeProof Studio.app/Contents/MacOS/Electron');
   const args = {'user-data-dir': '/existing/production-profile'};
-  assert.equal(core.prepareRcStorage(args, f.product, executable, f.home, 'darwin', {}), undefined);
+  assert.equal(core.prepareRcStorage(args, f.product, executable, f.home, 'darwin', {}, [executable]), undefined);
   assert.equal(args['user-data-dir'], '/existing/production-profile');
-  assert.throws(() => core.prepareRcStorage({'user-data-dir': f.profile}, f.product, executable, f.home, 'darwin', {}), /matching kit app/);
+  assert.throws(() => core.prepareRcStorage({'user-data-dir': f.profile}, f.product, executable, f.home, 'darwin', {}, [executable]), /matching kit app/);
 });
 
 test('actual patched startup prelude sets the fixed name only after validation, before app readiness', () => {
@@ -168,7 +168,7 @@ test('actual patched startup prelude sets the fixed name only after validation, 
     const prelude = main.slice(begin, end);
     function start(executable, env = {}, resolveOverride) {
       const events = [];
-      const processStub = {execPath: executable, platform: 'darwin', env};
+      const processStub = {execPath: executable, argv: [executable], platform: 'darwin', env};
       const userDataModule = compile(original('src/vs/platform/environment/node/userDataPath.ts'), 'userDataPath.ts', {process: {...processStub, cwd: () => f.home}, require: name => name === 'os' ? {homedir: () => f.home} : require(name)});
       const app = {setName: name => events.push(['name', name]), setPath: (key, value) => events.push(['path', key, value]), enableSandbox() {}, commandLine: {hasSwitch: () => false, appendSwitch() {}}};
       vm.runInNewContext(ts.transpileModule(prelude, {compilerOptions: {target: ts.ScriptTarget.ES2022}}).outputText, {
@@ -185,4 +185,104 @@ test('actual patched startup prelude sets the fixed name only after validation, 
     assert.throws(() => start(f.executable, {}, () => '/production'), /resolved userDataPath mismatch/);
     assert.throws(() => start(f.executable, {VSCODE_APPDATA: '/production'}), /override/);
   }
+});
+
+function reparseStartup(f, argv, executable = f.executable) {
+  const minimist = require(process.env.MINIMIST_PATH ?? require.resolve('minimist', {paths: [upstream, path.join(repo, 'e2e')]}));
+  const proc = {argv, execPath: executable, platform: 'darwin', env: {}, cwd: () => f.home};
+  const osStub = {homedir: () => f.home, tmpdir: () => fixture};
+  const baseRequire = name => name === 'minimist' ? {default: minimist} : name === 'assert' ? {default: assert} : name.endsWith('/platform.js') ? {isWindows: false} : name.endsWith('/nls.js') ? {localize: (_key, text) => text} : name.endsWith('/path.js') ? path : name === 'os' ? osStub : require(name);
+  const argvModule = compile(original('src/vs/platform/environment/node/argv.ts'), 'argv.ts', {process: proc, require: baseRequire});
+  const parser = compile(original('src/vs/platform/environment/node/argvHelper.ts'), 'argvHelper.ts', {process: proc, require: name => name === './argv.js' ? argvModule : baseRequire(name)});
+  const userData = compile(original('src/vs/platform/environment/node/userDataPath.ts'), 'userDataPath.ts', {process: proc, require: baseRequire});
+  const main = patchedMain;
+  const tree = ts.createSourceFile('main.ts', main, ts.ScriptTarget.Latest, true);
+  const earlyParser = tree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'parseCLIArgs');
+  assert.ok(earlyParser, 'execute actual early parser');
+  const prelude = main.slice(main.indexOf('const args = parseCLIArgs();'), main.indexOf('// Resolve code cache path'));
+  let electronPath, name;
+  vm.runInNewContext(ts.transpileModule(earlyParser.getText(tree) + '\n' + prelude, {compilerOptions: {target: ts.ScriptTarget.ES2022}}).outputText, {
+    ...core, process: proc, minimist, os: osStub, product: {...f.product, nameShort: 'HypeProof Studio'},
+    configureCommandlineSwitchesSync: () => ({}), getUserDataPath: userData.getUserDataPath,
+    app: {setName: value => {name = value;}, setPath: (_key, value) => {electronPath = value;}, enableSandbox() {}, commandLine: {hasSwitch: () => false, appendSwitch() {}}},
+  });
+  const laterArgs = parser.parseMainProcessArgv(proc.argv);
+  const uri = value => ({fsPath: value, with() {return this;}});
+  const environmentSource = original('src/vs/platform/environment/common/environmentService.ts');
+  const environment = compile(environmentSource, 'environmentService.ts', {require: name =>
+    name.endsWith('/decorators.js') ? {memoize: (_target, _key, descriptor) => descriptor} :
+    name.endsWith('/date.js') ? {toLocalISOString: () => '2026-10-24T00:00:00.000Z'} :
+    name.endsWith('/network.js') ? {Schemas: {vscodeUserData: 'vscode-userdata'}} :
+    name.endsWith('/process.js') ? {env: {}} :
+    name.endsWith('/resources.js') ? {joinPath: (base, ...parts) => uri(path.join(base.fsPath, ...parts))} :
+    name.endsWith('/uri.js') ? {URI: {file: uri}} : baseRequire(name)});
+  const native = compile(original('src/vs/platform/environment/node/environmentService.ts'), 'nativeEnvironmentService.ts', {require: name =>
+    name === '../common/environmentService.js' ? environment : name === './userDataPath.js' ? userData : baseRequire(name)});
+  const service = new native.NativeEnvironmentService(laterArgs, {...f.product, nameShort: 'HypeProof Studio'});
+  return {electronPath, name, service, argv: proc.argv, laterArgs};
+}
+
+test('Finder bootstrap and later actual CLI/environment parsing select the same RC profile', () => {
+  const f = setup();
+  const argv = [f.executable, '--new-window', '--', 'notes.txt'];
+  const result = reparseStartup(f, argv);
+  assert.equal(result.electronPath, f.profile);
+  assert.equal(result.service.userDataPath, f.profile, 'later VS Code environment must not reopen production storage');
+  assert.equal(result.service.extensionsPath, path.join(f.profile, 'extensions'));
+  assert.ok(result.service.logsHome.fsPath.startsWith(path.join(f.profile, 'logs') + path.sep));
+  assert.equal(result.service.stateResource.fsPath, path.join(f.profile, 'User/globalStorage/storage.json'));
+  assert.equal(result.service.workspaceStorageHome.fsPath, path.join(f.profile, 'User/workspaceStorage'));
+  assert.deepEqual(Array.from(result.laterArgs._), ['notes.txt']);
+  const once = [...argv];
+  reparseStartup(f, argv);
+  assert.deepEqual(argv, once, 'validated canonical flags are idempotent');
+});
+
+test('real START launcher arguments agree with both parsers and preserve stable launch', async () => {
+  const {renderStart} = await import('../../../release/install-kit.mjs');
+  const f = setup();
+  const capture = path.join(f.home, 'argv.json');
+  fs.writeFileSync(f.executable, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(capture)}, JSON.stringify(process.argv.slice(1)));\n`, {mode: 0o755});
+  const launcher = path.join(f.home, 'START.command');
+  // Only the native plist executable lookup is stubbed. The real marker checks,
+  // environment cleanup, and final exec line run against our disposable app.
+  const start = renderStart('v' + version, source, '2026.1024.0');
+  const lookup = 'EXE=$(/usr/libexec/PlistBuddy -c \'Print CFBundleExecutable\' "$APP/Contents/Info.plist")';
+  assert.ok(start.includes(lookup));
+  fs.writeFileSync(launcher, start.replace(lookup, 'EXE=Electron'));
+  execFileSync('bash', [launcher], {env: {PATH: '/usr/bin:/bin', HOME: f.home, VSCODE_APPDATA: '/synthetic-conflict'}});
+  const argv = JSON.parse(fs.readFileSync(capture, 'utf8'));
+  const result = reparseStartup(f, argv);
+  assert.equal(result.electronPath, f.profile);
+  assert.equal(result.service.userDataPath, f.profile);
+  assert.equal(result.service.extensionsPath, path.join(f.profile, 'extensions'));
+  const stableExecutable = path.join(f.home, 'Applications/HypeProof Studio.app/Contents/MacOS/Electron');
+  const stableArgv = [stableExecutable, '--new-window'];
+  const stable = reparseStartup(f, stableArgv, stableExecutable);
+  assert.equal(stable.service.userDataPath, path.join(f.home, 'Library/Application Support/HypeProof Studio'));
+  assert.equal(stable.name, undefined);
+  assert.deepEqual(stableArgv, [stableExecutable, '--new-window']);
+});
+
+test('RC argv propagation rejects conflicting, duplicate, empty and negated options without mutation', () => {
+  const f = setup();
+  const own = '--user-data-dir=' + f.profile;
+  for (const tail of [
+    ['--user-data-dir=/synthetic-production'], ['--user-data-dir', '/synthetic-production'],
+    ['--user-data-dir='], ['--user-data-dir'], ['--no-user-data-dir'],
+    [own, own], [own, '--user-data-dir=/synthetic-production'],
+    ['--extensions-dir=/synthetic-production'], ['--extensions-dir='], ['--extensions-dir'], ['--no-extensions-dir'],
+    ['--extensions-dir=' + path.join(f.profile, 'extensions'), '--extensions-dir=' + path.join(f.profile, 'extensions')],
+  ]) {
+    const argv = [f.executable, ...tail];
+    const before = [...argv];
+    assert.throws(() => reparseStartup(f, argv), /RC profile isolation blocked/, JSON.stringify(tail));
+    assert.deepEqual(argv, before, 'failed validation must not rewrite raw CLI');
+  }
+  const argv = [f.executable, '--user-data-dir', f.profile, '--extensions-dir', path.join(f.profile, 'extensions'), '--new-window', '--', '--user-data-dir=literal-filename'];
+  const result = reparseStartup(f, argv);
+  assert.equal(result.service.userDataPath, f.profile);
+  assert.deepEqual(Array.from(result.laterArgs._), ['--user-data-dir=literal-filename']);
+  assert.equal(argv.filter(arg => arg === '--user-data-dir=' + f.profile).length, 1);
+  assert.ok(argv.indexOf('--user-data-dir=' + f.profile) < argv.indexOf('--'));
 });

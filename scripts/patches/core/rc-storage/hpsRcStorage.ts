@@ -24,9 +24,30 @@ function noSymlinks(home: string, target: string): void {
 	}
 }
 
+// Later VS Code startup reparses process.argv independently of bootstrap's args.
+// Normalize only validated RC path options, before any positional '--' separator.
+function canonicalRcArgv(argv: string[], profilePath: string): string[] {
+	const paths: Record<string, string> = { 'user-data-dir': profilePath, 'extensions-dir': path.join(profilePath, 'extensions') };
+	const retained: string[] = [];
+	const seen = new Set<string>();
+	let positional: string[] = [];
+	for (let i = 0; i < argv.length; i++) {
+		const arg = argv[i];
+		if (i === 0) { retained.push(arg); continue; }
+		if (arg === '--') { positional = argv.slice(i); break; }
+		const key = Object.keys(paths).find(name => arg === `--${name}` || arg.startsWith(`--${name}=`) || arg === `--no-${name}` || arg.startsWith(`--no-${name}=`));
+		if (!key) { retained.push(arg); continue; }
+		if (seen.has(key) || arg.startsWith('--no-')) { refuse(`duplicate or negated ${key}`); }
+		seen.add(key);
+		const value = arg === `--${key}` ? argv[++i] : arg.slice(key.length + 3);
+		if (!value || value.startsWith('--') || path.resolve(value) !== paths[key]) { refuse(`${key} mismatch`); }
+	}
+	return [...retained, ...Object.entries(paths).map(([key, value]) => `--${key}=${value}`), ...positional];
+}
+
 // Select before argv.json is read. The marker is configuration, not authentication.
 // The only selectable OS encryption namespace is the fixed name above.
-export function prepareRcStorage(args: RcArgs, product: RcProduct, executable: string, home: string, platform: string, env: NodeJS.ProcessEnv): RcStorageProfile | undefined {
+export function prepareRcStorage(args: RcArgs, product: RcProduct, executable: string, home: string, platform: string, env: NodeJS.ProcessEnv, argv: string[]): RcStorageProfile | undefined {
 	if (platform !== 'darwin') { return undefined; }
 	const appPath = path.dirname(path.dirname(path.dirname(executable)));
 	const kit = path.dirname(appPath);
@@ -58,10 +79,12 @@ export function prepareRcStorage(args: RcArgs, product: RcProduct, executable: s
 	}
 	if (env['VSCODE_PORTABLE'] || env['VSCODE_APPDATA']) { refuse('portable/appdata override'); }
 	if (args['use-inmemory-secretstorage']) { refuse('in-memory secret storage is not a durable RC profile'); }
-	if (args['user-data-dir'] && path.resolve(args['user-data-dir']) !== profilePath) { refuse('user-data-dir mismatch'); }
-	if (args['extensions-dir'] && path.resolve(args['extensions-dir']) !== path.join(profilePath, 'extensions')) { refuse('extensions-dir mismatch'); }
+	if (args['user-data-dir'] !== undefined && (typeof args['user-data-dir'] !== 'string' || !args['user-data-dir'] || path.resolve(args['user-data-dir']) !== profilePath)) { refuse('user-data-dir mismatch'); }
+	if (args['extensions-dir'] !== undefined && (typeof args['extensions-dir'] !== 'string' || !args['extensions-dir'] || path.resolve(args['extensions-dir']) !== path.join(profilePath, 'extensions'))) { refuse('extensions-dir mismatch'); }
+	const canonicalArgv = canonicalRcArgv(argv, profilePath);
 	args['user-data-dir'] = profilePath;
 	args['extensions-dir'] = path.join(profilePath, 'extensions');
+	argv.splice(0, argv.length, ...canonicalArgv);
 	return { appPath, profilePath, marker };
 }
 
