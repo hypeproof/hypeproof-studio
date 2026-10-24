@@ -85,6 +85,29 @@ test('RC patch applies after actual VSCodium and preceding staged Studio main.ts
   combinedStartup();
 });
 
+// transpileModule does not perform noUnusedLocals analysis. Check actual combined
+// main.ts with the semantic compiler, without loading the entire VS Code graph.
+function unusedLocalDiagnostics(source) {
+  const file = path.join(fixture, 'unused-locals-main.ts');
+  const options = {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
+    noEmit: true, noUnusedLocals: true, noResolve: true, noLib: true, types: []};
+  const host = ts.createCompilerHost(options);
+  host.getSourceFile = (name, languageVersion) => name === file ? ts.createSourceFile(name, source, languageVersion, true) : undefined;
+  const program = ts.createProgram([file], options, host);
+  assert.deepEqual(program.getSyntacticDiagnostics(), [], 'combined startup parses');
+  // Unresolved external types are outside this single-file check; unused declarations
+  // are still checked by TypeScript, including an injected negative control below.
+  return program.getSemanticDiagnostics().filter(diagnostic => [6133, 6192, 6196, 6198, 6199].includes(diagnostic.code))
+    .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
+}
+
+test('combined startup passes TypeScript noUnusedLocals; an unused function is rejected', () => {
+  const combined = combinedStartup();
+  assert.deepEqual(unusedLocalDiagnostics(combined), [], 'build-stack main.ts has no unused declarations');
+  assert.ok(unusedLocalDiagnostics(combined + '\nfunction hpsUnusedDeclarationCanary() { return 1; }\n')
+    .some(message => message.includes('hpsUnusedDeclarationCanary')), 'semantic compiler must detect an unused helper');
+});
+
 test('launch and restart select the same dedicated persisted profile for both embedded version styles', () => {
   for (const embedded of ['2026.1024.0', version]) {
     const f = setup(embedded);

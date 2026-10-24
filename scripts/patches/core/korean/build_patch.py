@@ -32,5 +32,25 @@ for path, (fixture, before, after) in changes.items():
   new = new.replace("if (process.platform === 'win32' || process.platform === 'linux') {\n\tconst electronLocale", "if (true) { // Include macOS native role labels.\n\tconst electronLocale")
   # Avoid TS narrowing errors now that userLocale is a literal.
   new = new.replace("(!userLocale || userLocale === 'qps-ploc') ? 'en' : userLocale", "userLocale")
+  # Fixed Korean startup no longer calls the user-locale reader. Remove that
+  # obsolete helper rather than leaving a noUnusedLocals build failure behind.
+  locale_helper = """/**
+ * Language tags are case insensitive however an ESM loader is case sensitive
+ * To make this work on case preserving & insensitive FS we do the following:
+ * the language bundles have lower case language tags and we always lower case
+ * the locale we receive from the user or OS.
+ */
+function getUserDefinedLocale(argvConfig: IArgvConfig): string | undefined {
+\tconst locale = args['locale'];
+\tif (locale) {
+\t\treturn locale.toLowerCase(); // a directly provided --locale always wins
+\t}
+
+\treturn typeof argvConfig?.locale === 'string' ? argvConfig.locale.toLowerCase() : undefined;
+}
+
+"""
+  assert new.count(locale_helper) == 1
+  new = new.replace(locale_helper, '')
  patch += ''.join(difflib.unified_diff(old.splitlines(True),new.splitlines(True),fromfile='a/'+path,tofile='b/'+path))
 (HERE.parent/'hps-korean-shell.patch').write_text(patch)
