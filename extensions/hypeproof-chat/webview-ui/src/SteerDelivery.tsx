@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ChatMessage } from '../../src/protocol';
+import { motionReduced } from './motion';
 
 export type SteerDeliverySnapshot = { text: string; from: number; scope: string };
 
@@ -18,7 +19,7 @@ export function SteerDelivery({ delivery, messages, streamFor, streaming, onDone
   }, [streaming, streamFor, request?.id, request?.content, delivery.text]);
   useEffect(() => {
     if (!accepted) return;
-    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const reduced = motionReduced();
     const timer = setTimeout(onDone, reduced ? 0 : 140);
     const cancel = () => clearTimeout(timer);
     return cancel;

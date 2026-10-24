@@ -737,4 +737,5 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
 /* CGP-CHAT-D-012: only a host-accepted steered request exits; waiting has no animation. */
 .hps-steer-delivered { animation: hps-steer-exit var(--hp-dur-press) ease-out both; }
 @keyframes hps-steer-exit { from { opacity: 1; } to { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .hps-steer-delivered { animation: none; } }
+:where(:root[data-reduced-motion="true"]) .hps-steer-delivered { animation: none; }
+@media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-steer-delivered { animation: none; } }
