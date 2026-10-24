@@ -184,39 +184,47 @@ wiring) and `test/missing-task-folder.test.tsx` (the real ChatPanel: notice, hel
 draft kept, re-check that sends the held draft once, 다시 고르기, cleared notice; classroom draws
 nothing).
 
-`REQ-STUDIO-FINISH-NOTICE` (CGP-AGENT-R-023, P1, 2026-10-20): when a coach turn ends
-while no chat surface is on screen (the sidebar view's `visible` and the editor chat
-panel's `visible` are both false, so the panel is hidden or covered), Studio shows one
-non-modal information message: "AI 답이 준비됐어요." for a finished turn, "AI가 이번 답을
-끝내지 못했어요. 채팅에서 확인해 주세요." for a failed one, each with the action "채팅 열기",
-which reveals the editor chat panel when one exists, otherwise focuses the sidebar view
-(`hypeproof-chat.panel.focus`). Approval already asks with a modal, so it is not covered
-here. Never: while a chat surface is visible; for a turn that was stopped (the learner's
-or the instructor's stop, the turn's own abort signal); with any answer text (fixed copy
-only, for shared and projected screens). At most one notice is held at a time: turns that
-end while it is held are coalesced into it, not stacked. The hold ends when the notice is
-clicked or closed, when any chat surface becomes visible however the learner got there
-(`onDidChangeVisibility` / `onDidChangeViewState`), at the next turn start, and after 2
-minutes at the latest (`FINISH_NOTICE_HOLD_MS`), because VS Code never settles an
-information message whose toast timed out into the notification center. Seats: personal work only
-(activity kind personal or trial, or a bought pass); never a classroom seat, a seat with a
-served lesson or an enforced lesson binding, the instructor surface, or an unknown seat.
-This follows the stricter existing quiet rule (the REQ-STUDIO-FOLDER-CONSENT seats, and
-CGP-SHELL-R-001 `classUpdateHold`, where a missing kind counts as a class), so a notice
-never interrupts a class. Pure decisions and coalescing: `src/finishNotice.ts`; VS Code
-binding: `src/finishNoticeHost.ts`; one call at turn end in `chatPanelProvider.ts`.
-Limits: a VS Code information message is in-window; whether it reaches macOS Notification
-Center or Windows when Studio is in the background is not verified (master register open
-question), and the OS notification of CGP-SHELL-R-008 (unfocused window, turns over 60 s)
-is not built. Tests: `test/finish-notice.smoke.mjs` — seats with classroom, lesson,
-unknown and instructor negative controls; visible and stopped give no notice; copy; the
-real host module against a fake VS Code (non-modal, one action, two turns give one notice,
-the action reveals the view or the editor panel, dismissing reveals nothing, no answer
-text); the hold with a notice that never settles (released by the view or the editor panel
-becoming visible but not by a hidden-state event, by the next turn start, and at 2 minutes;
-a stale notice settling late does not release a newer one); and the wiring at the turn's
-final status with the turn's own profile, both surfaces watched and the turn-start release. Each guard was removed once and the
-smoke failed.
+### Task-bound coach notices
+
+`REQ-STUDIO-FINISH-NOTICE` (CGP-AGENT-R-023 / DES-CGP-AGENT-47, 2026-10-24):
+while both chat surfaces are hidden, completion/error and a prompted action approval
+produce a non-modal notice with fixed Korean copy and `열기`. No answer, command, URL or
+prompt is sent to the shell or OS. Personal/trial/pass only; classroom, served lesson,
+instructor and unidentified seats remain quiet. Aborted turns never produce completion
+notices. Auto-allowed or policy-refused actions never produce approval notices.
+
+The task scope is captured at the event. The shell receives an opaque UUID and hashed
+scope, not activity names or paths. A click routes through the existing task selection
+and draft-preservation path, and reveals only the captured task in the current activity;
+removed tasks, another activity or a refused task switch cannot focus an unrelated task.
+Approval settlement, a visible chat, a new turn and extension disposal cancel pending
+notices. Late clicks on cancelled/replaced notices are ignored. One foreground card and
+at most one notice per task per ten seconds; dismissing or cancellation does not reset
+the cooldown.
+
+The Studio core patch supplies a 14px, 44px-target, polite live-region toast with no
+animation or automatic focus. It closes after five seconds; a keyboard-focused action
+stays until blur so it cannot disappear under the learner. Because a hidden chat cannot
+host a visible toast, the current implementation anchors to the containing workbench's
+bottom-right (16px right / 32px bottom), not the hidden chat rectangle. This is a recorded
+DES-CGP-AGENT-47 placement deviation pending owner acceptance, not full design completion.
+
+`hypeproofChat.osTaskNotices` defaults to false. Only an explicit true setting and an
+unfocused window permit the existing native toast service to send silent, fixed copy.
+Browser approval says `코치가 기다려요: 미리보기 열기 허락`; other actions say
+`코치가 기다려요: 작업 허락`. OS and in-app clicks settle once. Only an explicit click
+requests window focus. Old shells without the new command retain the in-window VS Code
+information message: controlled lifetime/placement/native delivery is unavailable there.
+This compatibility path is not evidence that the patched shell is installed.
+
+Implementation: `taskNotice.ts`, `finishNoticeHost.ts`, shared turn/approval hooks in
+`chatPanelProvider.ts`, and `scripts/patches/core/hps-task-notice.patch`. Tests:
+`task-notice.smoke.mjs`, `task-notice-shell.smoke.mjs`, `task-notice-host.smoke.mjs`,
+`task-notice-routing.smoke.mjs`, `task-notice-layout.smoke.mjs` and
+legacy `finish-notice.smoke.mjs`. Browser DOM checks do not prove native Korean IME or
+macOS/Windows notification delivery; those require installed-shell acceptance. Chalk
+help-request notices (R024) and the separate teacher/60-second policy (SHELL-R008) are
+not implemented by this slice.
 
 `REQ-STUDIO-CAPABILITY-CHANGE` (CGP-SHELL-R-024 / CGP-SHELL-D-023, P1, 2026-10-20): when a
 profile refresh changes what the AI can do on the seat, the learner sees one calm card in

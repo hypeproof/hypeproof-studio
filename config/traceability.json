@@ -6855,7 +6855,8 @@
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME",
-        "ST-REQ-CHAT-DETAIL"
+        "ST-REQ-CHAT-DETAIL",
+        "ST-DES-CGP-AGENT-47"
       ],
       "sources": [
         {
@@ -6863,6 +6864,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/finishNoticeHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskNotice.ts"
+        },
+        {
+          "path": "scripts/patches/core/hps-task-notice.patch"
         }
       ]
     },
@@ -6877,6 +6884,21 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/finish-notice.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-notice.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-notice-shell.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-notice-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-notice-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-notice-routing.smoke.mjs"
         }
       ]
     },
@@ -12163,6 +12185,20 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/lesson-capability-entry-layout.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-CGP-AGENT-47",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Task-bound coach notices"
         }
       ]
     }

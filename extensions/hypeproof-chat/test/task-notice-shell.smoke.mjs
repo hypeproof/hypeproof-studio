@@ -1,0 +1,23 @@
+// Shell command against service ports; no real OS notification or desktop interaction.
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import vm from 'node:vm';
+import {fileURLToPath} from 'node:url';
+const dir=new URL('../../../scripts/patches/core/notice-src/vs/workbench/contrib/hpsNotice/browser/',import.meta.url);
+const make=async(name,external=false)=> (await build({entryPoints:[fileURLToPath(new URL(name,dir))],bundle:true,write:false,platform:'node',format:'cjs',plugins:external?[{name:'services',setup(b){b.onResolve({filter:/\.js$/},a=>({path:a.path,external:true}));}}]:[]})).outputFiles[0].text;
+const helper={exports:{}};vm.runInNewContext(await make('hpsNoticeToast.ts'),{module:helper,exports:helper.exports});
+const commands=new Map(),mounts=[],native=[],clears=[],focus=[];let now=1000,enabled=false,focused=false;
+const container={ownerDocument:{defaultView:{id:'window'}}};
+const services={layout:{activeContainer:container},config:{getValue:()=>enabled},host:{get hasFocus(){return focused},focus:async w=>focus.push(w)},native:{showToast:r=>{native.push(r);return new Promise(resolve=>native.at(-1).resolve=resolve)},clearToast:async id=>clears.push(id)}};
+const core={...helper.exports,hpsMountNotice:(root,kind,done)=>{const r={root,kind,done,disposed:false};mounts.push(r);return {dispose(){if(!r.disposed){r.disposed=true;done(false)}}}}};
+const require=id=> id.endsWith('hpsNoticeToast.js')?core:id.endsWith('/commands.js')?{CommandsRegistry:{registerCommand:(id,fn)=>commands.set(id,fn)}}:id.endsWith('/configuration.js')?{IConfigurationService:'config'}:id.endsWith('/native.js')?{INativeHostService:'native'}:id.endsWith('/host.js')?{IHostService:'host'}:{IWorkbenchLayoutService:'layout'};
+const mod={exports:{}};vm.runInNewContext(await make('hpsNotice.contribution.ts',true),{module:mod,exports:mod.exports,require,Date:{now:()=>now},Map,Promise});
+const show=commands.get('_hypeproof.notice.show'),hide=commands.get('_hypeproof.notice.hide'),access={get:k=>services[k]};
+const req={id:'11111111-1111-1111-1111-111111111111',task:'a'.repeat(64),kind:'browserApproval'};
+let result=show(access,req);assert.equal(mounts.length,1);assert.equal(native.length,0,'default opt-out');mounts[0].done(false);assert.equal((await result).clicked,false);
+now+=100;assert.equal((await show(access,{...req,id:'22222222-2222-2222-2222-222222222222'})).clicked,false);assert.equal(mounts.length,1,'dismiss preserves cooldown');
+now+=10000;enabled=true;focused=true;result=show(access,req);assert.equal(native.length,0,'focused window never sends native');hide(access,req.id);await result;
+now+=10000;focused=false;result=show(access,req);assert.equal(native.length,1);assert.equal(native[0].body,'코치가 기다려요: 미리보기 열기 허락');assert.equal(native[0].silent,true);native[0].resolve({clicked:true,supported:true});assert.equal((await result).clicked,true);assert.equal(focus.length,1,'only explicit click focuses window');
+mounts.at(-1).done(true);assert.equal(focus.length,1,'late second click ignored');
+assert.equal((await show(access,{...req,kind:'constructor'})).clicked,false);
+console.log('PASS shell notice: opt-in, unfocused native delivery, fixed copy, cooldown, cancellation and click race');
