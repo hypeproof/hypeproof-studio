@@ -14,5 +14,6 @@
   "hypeproofChat.publicUpdates": "공개 업데이트 확인",
   "hypeproofChat.accountsPreview": "개인 계정 미리보기",
   "hypeproofChat.annotationBatchEnabled": "미리보기 표시 모아 보내기",
-  "hypeproofChat.workTakeawayEnabled": "내 작업 따로 저장"
+  "hypeproofChat.workTakeawayEnabled": "내 작업 따로 저장",
+  "hypeproofChat.osTaskNotices": "운영체제 알림 받기"
 }
