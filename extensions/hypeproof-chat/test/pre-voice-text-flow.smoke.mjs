@@ -197,9 +197,12 @@ const voiceHits = (text) => (text.match(VOICE_SYMBOL) ?? []).length;
   assert.ok(declared.length >= 6, `필드 추출이 실패했다: ${JSON.stringify(declared)}`);
   assert.deepEqual(
     declared,
-    ["id", "role", "content", "createdAt", "toolMode", "tool", "citations", "images", "assistantName", "editOf", "retryOf", "visibleAttemptId", "chosenAttemptId"],
+    ["elapsedTurn", "id", "role", "content", "createdAt", "toolMode", "tool", "citations", "images", "assistantName", "editOf", "retryOf", "visibleAttemptId", "chosenAttemptId"],
     "ChatMessage 필드가 늘었다/줄었다 — 음성이 기록 모양을 바꾸려 한다면 여기서 멈춰라",
   );
+  // CGP-CHAT-R-015: an observed live-view duration is text-turn evidence, never audio.
+  assert.match(block, /elapsedTurn\?: \{ anchorId: string; ms: number; outcome: 'done' \| 'stopped' \};/);
+  assert.ok(persisted.every(message => message.elapsedTurn === undefined), 'the existing host persistence path never invents a live-observer receipt');
   // Search selection is optional text-turn metadata, not an audio payload.
   assert.match(block, /toolMode\?: import\('\.\/turnTools'\)\.TurnToolMode;/);
   // CGP-CHAT-R-002: an edited resend names its prompt group by id; text-turn metadata, not audio.

@@ -18,6 +18,8 @@ import type { StartRequest, StartResponse } from "./startPageProtocol";
 export type ChatRole = "user" | "assistant" | "system" | "tool";
 
 export interface ChatMessage {
+  /** A receipt measured between observed stream events in this mounted view, never an estimate. */
+  elapsedTurn?: { anchorId: string; ms: number; outcome: 'done' | 'stopped' };
   id: string;
   role: ChatRole;
   content: string;
