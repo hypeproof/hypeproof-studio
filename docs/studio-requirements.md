@@ -4539,7 +4539,20 @@ requests and confirmation time; missing, invalid, unresolved or unsupported data
 확인 안 됨, never an invented zero. A confirmed zero remains zero. Free seats continue to
 hide all budget counts (DEC-35). No new Service or observation data flow is introduced.
 This exposes learner ownership and judgment without capability labels or evaluation scores.
-Validation: `goal-status.test.tsx`, `goal-status-css.smoke.mjs`, `student-goal.smoke.mjs`.
+Design CGP-AGENT-D-009 / DES-CGP-AGENT-13: the initial strip contains one ellipsized
+line of goal text, a labelled status chip, and a numeric budget meter. A percentage is
+shown only when the same confirmed ledger has a positive integer limit and remaining
+is within that limit; exhausted ledgers must have zero remaining. Otherwise show
+확인 안 됨. Opening the strip reveals the full goal, confirmation time and inline
+revision-bound goal editor. Closing retains unsaved fields; changing activity or lesson
+resets the editor. A newer host revision arriving during Korean composition cannot
+replace the composing field; composition end merges untouched fields and uses the newer
+save revision. Submitting during composition does nothing.
+The collapsed strip is 44px high: the owner decided on 2026-10-24 that the shared 44px learner
+target wins over the design's original <=40px (see the research decisions log). Installed-app
+acceptance is not claimed.
+Validation: `goal-strip.test.tsx`, `goal-strip-layout.smoke.mjs`, `goal-status.test.tsx`,
+`goal-status-geometry.smoke.mjs`, `goal-status-css.smoke.mjs`, `student-goal.smoke.mjs`.
 
 ## Lesson capability first entry (CGP-AGENT-R-032)
 

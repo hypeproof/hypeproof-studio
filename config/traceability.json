@@ -10555,6 +10555,12 @@
       ],
       "sources": [
         {
+          "path": "extensions/hypeproof-chat/test/goal-strip.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/goal-strip-layout.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/goal-status.test.tsx"
         },
         {

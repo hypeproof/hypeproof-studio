@@ -121,9 +121,9 @@ config.access=undefined;assert.equal(lessonBudget(config),'확인 안 됨');
 async function run() {
  const host:any=mountPoint(),root=createRoot(host);const saves:any[]=[];
  const render=async(view:any,pending=false,cfg=config)=>act(async()=>root.render(<GoalStatusBar config={cfg} view={view} pending={pending} onSave={r=>saves.push(r)}/>));
- const buttons=()=>host.findAll((e:any)=>e.localName==='button');
+ const buttons=()=>host.findAll((e:any)=>e.localName==='button'&&e.hasAttribute('aria-pressed'));
  const view={...old,status:'active' as const};
- await render(view);assert.match(host.textContent,/진행 중 · 내가 표시한 상태/);assert.match(host.textContent,/남은 수업 예산 · 확인 안 됨/);
+ await render(view);await act(async()=>click(host.querySelector('.hps-goal-strip')));assert.match(host.textContent,/진행 중 · 내가 표시한 상태/);assert.match(host.textContent,/남은 수업 예산 · 확인 안 됨/);
  for(const [status,label] of Object.entries(G.GOAL_STATUSES)) {
   await act(async()=>click(buttons().find((e:any)=>e.textContent===label)));
   assert.equal(saves.at(-1).status,status);assert.equal(saves.at(-1).base,view.revision);
@@ -147,6 +147,7 @@ async function run() {
  const bar=panel.findAll((e:any)=>e.getAttribute('aria-label')==='내 목표 상태')[0];
  assert.ok(bar,'real ChatPanel mounts strip');assert.equal(bar.parentNode.localName,'footer');
  assert.ok(bar.textContent.includes('예약 버튼'));
+ await act(async()=>click(bar.querySelector('.hps-goal-strip')));
  const posted=(globalThis as any).__posted;const before=posted.length;
  const complete=bar.findAll((e:any)=>e.localName==='button'&&e.textContent==='이룸')[0];
  await act(async()=>{click(complete);click(complete);});
@@ -155,6 +156,7 @@ async function run() {
  const next={...props,config:{...props.config,activity:{...props.config.activity,id:'a2'},studentGoal:{...view,activity:'a2'}}};
  await act(async()=>pr.render(<ChatPanel {...next}/>));
  const nextBar=panel.findAll((e:any)=>e.getAttribute('aria-label')==='내 목표 상태')[0];
+ await act(async()=>click(nextBar.querySelector('.hps-goal-strip')));
  const nextComplete=nextBar.findAll((e:any)=>e.localName==='button'&&e.textContent==='이룸')[0];
  assert.ok(!nextComplete.hasAttribute('disabled'),'scope switch releases old pending request');
  await act(async()=>click(nextComplete));assert.equal(posted.at(-1).type,'goalSave');

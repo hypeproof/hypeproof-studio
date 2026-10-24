@@ -1840,7 +1840,7 @@ export function ChatPanel(props: Props) {
       <footer className="hps-input-area">
         {!props.instructor && config?.profile?.lesson && <PanelBoundary panel="goal-status">{() => <GoalStatusBar
           config={config} view={goalOfLesson(studentGoal, config.profile!.lesson)}
-          pending={goalPending} onSave={sendGoalSave} />}</PanelBoundary>}
+          pending={goalPending} note={goalNote} onSave={sendGoalSave} />}</PanelBoundary>}
 
         {props.refusal && <RefusalBanner onDismiss={() => {
           props.onDismissRefusal?.();
