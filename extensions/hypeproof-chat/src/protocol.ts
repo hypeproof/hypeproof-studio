@@ -87,6 +87,8 @@ export interface ChatMessage {
  * 1 academic society·edu·gov, 2 paper·DOI, 3 official manufacturer, 4 blog·YouTube·other.
  */
 export interface Citation {
+  /** Event-owned source kind (web/lesson/file). Missing or future values remain unclassified. */
+  kind?: string;
   url: string;
   title: string;
   domain: string;

@@ -1,4 +1,5 @@
 import { useMenuTypeahead } from './menuTypeahead';
+import { citationKindLabel } from './citationKind';
 import { ClassWindowNotice } from "./ClassWindowNotice";
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
@@ -2813,7 +2814,7 @@ function CitationRack({ citations }: { citations: Citation[] }) {
         >
           <span className="hps-cit-index">[{i + 1}]</span>
           <span className="hps-cit-title">{c.title || c.domain}</span>
-          <span className="hps-cit-domain">{c.domain}</span>
+          <span className="hps-cit-domain"><span className="hps-source-kind">{citationKindLabel(c.kind)}</span> · {c.domain}</span>
         </button></span>
       ))}
     </div>
