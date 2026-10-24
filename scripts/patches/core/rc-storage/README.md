@@ -61,9 +61,14 @@ VSCODE_SOURCE=<pristine-vscode-tree> TYPESCRIPT_PATH=<typescript-module> \
 node --test scripts/release/test/install-kit.test.mjs
 ```
 
-The focused tests apply the generated patch to pristine upstream, execute the real
-patched startup prelude with the real upstream path resolver, and exercise positive
-and negative profile contracts. Installer tests use synthetic bundles and scratch
+The focused tests apply the generated patch to pristine upstream and to the build's
+combined `main.ts` patch stack: committed VSCodium root patches first, then preceding
+Studio core patches in staged filename order. `VSCODIUM_SOURCE` defaults to the
+parent of `VSCODE_SOURCE`; tests read Git objects without editing either checkout.
+Both resulting startup preludes execute with the real upstream path resolver and
+exercise positive and negative profile contracts. The RC helper import is anchored
+next to `getUserDataPath`, outside the Node import block that VSCodium's
+`00-settings-user-product.patch` changes. Installer tests use synthetic bundles and scratch
 homes, including managed candidate/embedded version differences, inherited overrides,
 malformed marker refusal, and preservation of legacy ciphertext. These are source
 and installer contract evidence; actual signed-app safeStorage writes and restart

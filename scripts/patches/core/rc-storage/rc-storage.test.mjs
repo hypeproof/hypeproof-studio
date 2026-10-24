@@ -23,6 +23,34 @@ run('git', ['init', '-q'], fixture);
 run('git', ['apply', '--check', path.join(here, '../hps-rc-storage.patch')], fixture);
 run('git', ['apply', path.join(here, '../hps-rc-storage.patch')], fixture);
 const patchedMain = fs.readFileSync(path.join(fixture, 'src/main.ts'), 'utf8');
+function combinedStartup() {
+  const combined = fs.mkdtempSync(path.join(fixture, 'combined-'));
+  fs.mkdirSync(path.join(combined, 'src'));
+  fs.writeFileSync(path.join(combined, 'src/main.ts'), original('src/main.ts'));
+  run('git', ['init', '-q'], combined);
+  const fork = path.resolve(process.env.VSCODIUM_SOURCE ?? path.dirname(upstream));
+  // Read committed patch bytes, never the shared fork's possibly staged/dirty cache.
+  const forkPatches = run('git', ['ls-tree', '-r', '--name-only', 'HEAD', 'patches'], fork).trim().split('\n')
+    .filter(name => /^patches\/[^/]+\.patch$/.test(name)).sort()
+    .map(name => ({name, content: run('git', ['show', `HEAD:${name}`], fork)}));
+  const studioPatches = fs.readdirSync(path.join(here, '..')).filter(name => name.endsWith('.patch') && name < 'hps-rc-storage.patch').sort()
+    .map(name => ({name: `user/99-${name}`, content: fs.readFileSync(path.join(here, '..', name), 'utf8')}));
+  const relevant = [...forkPatches, ...studioPatches].filter(patch => patch.content.includes('+++ b/src/main.ts'));
+  assert.ok(relevant.some(patch => patch.name === 'patches/00-settings-user-product.patch'), 'real build import predecessor is exercised');
+  assert.ok(studioPatches.some(patch => patch.name === 'user/99-hps-quit-guard.patch'), 'staged Studio order includes quit guard');
+  for (const [i, patch] of relevant.entries()) {
+    const file = path.join(combined, `preceding-${i}.patch`);
+    fs.writeFileSync(file, patch.content.replaceAll('!!APP_NAME!!', 'HypeProof Studio'));
+    run('git', ['apply', '--ignore-whitespace', '--include=src/main.ts', file], combined);
+  }
+  run('git', ['apply', '--check', path.join(here, '../hps-rc-storage.patch')], combined);
+  run('git', ['apply', path.join(here, '../hps-rc-storage.patch')], combined);
+  const source = fs.readFileSync(path.join(combined, 'src/main.ts'), 'utf8');
+  assert.match(source, /import \{ createRequire \} from 'node:module'/, 'VSCodium import survives');
+  assert.match(source, /const userLocale = 'ko'/, 'preceding Korean-shell behavior survives');
+  return source;
+}
+
 function compile(source, filename, context = {}) {
   const module = {exports: {}};
   const result = ts.transpileModule(source, {fileName: filename, reportDiagnostics: true, compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS}});
@@ -51,6 +79,10 @@ function setup(embeddedVersion = '2026.1024.0') {
 test('patch regenerates exactly and composes with existing main startup patches', () => {
   run('python3', [path.join(here, 'build_patch.py'), upstream, '--check'], repo);
   run('git', ['apply', '--check', '--include=src/main.ts', path.join(here, '../hps-korean-shell.patch')], fixture);
+});
+
+test('RC patch applies after actual VSCodium and preceding staged Studio main.ts patches', () => {
+  combinedStartup();
 });
 
 test('launch and restart select the same dedicated persisted profile for both embedded version styles', () => {
@@ -105,27 +137,29 @@ test('the identical promoted app outside RC kit keeps production args and namesp
 });
 
 test('actual patched startup prelude sets the fixed name only after validation, before app readiness', () => {
-  const f = setup();
-  const begin = patchedMain.indexOf('const args = parseCLIArgs();');
-  const end = patchedMain.indexOf('// Resolve code cache path');
-  assert.ok(begin >= 0 && end > begin);
-  const prelude = patchedMain.slice(begin, end);
-  function start(executable, env = {}, resolveOverride) {
-    const events = [];
-    const processStub = {execPath: executable, platform: 'darwin', env};
-    const userDataModule = compile(original('src/vs/platform/environment/node/userDataPath.ts'), 'userDataPath.ts', {process: {...processStub, cwd: () => f.home}, require: name => name === 'os' ? {homedir: () => f.home} : require(name)});
-    const app = {setName: name => events.push(['name', name]), setPath: (key, value) => events.push(['path', key, value]), enableSandbox() {}, commandLine: {hasSwitch: () => false, appendSwitch() {}}};
-    vm.runInNewContext(ts.transpileModule(prelude, {compilerOptions: {target: ts.ScriptTarget.ES2022}}).outputText, {
-      ...core, process: processStub, os: {homedir: () => f.home}, product: f.product, parseCLIArgs: () => ({}),
-      configureCommandlineSwitchesSync: () => {events.push(['argv']); return {};},
-      getUserDataPath: resolveOverride ?? userDataModule.getUserDataPath, app,
-    });
-    return events;
+  for (const main of [patchedMain, combinedStartup()]) {
+    const f = setup();
+    const begin = main.indexOf('const args = parseCLIArgs();');
+    const end = main.indexOf('// Resolve code cache path');
+    assert.ok(begin >= 0 && end > begin);
+    const prelude = main.slice(begin, end);
+    function start(executable, env = {}, resolveOverride) {
+      const events = [];
+      const processStub = {execPath: executable, platform: 'darwin', env};
+      const userDataModule = compile(original('src/vs/platform/environment/node/userDataPath.ts'), 'userDataPath.ts', {process: {...processStub, cwd: () => f.home}, require: name => name === 'os' ? {homedir: () => f.home} : require(name)});
+      const app = {setName: name => events.push(['name', name]), setPath: (key, value) => events.push(['path', key, value]), enableSandbox() {}, commandLine: {hasSwitch: () => false, appendSwitch() {}}};
+      vm.runInNewContext(ts.transpileModule(prelude, {compilerOptions: {target: ts.ScriptTarget.ES2022}}).outputText, {
+        ...core, process: processStub, os: {homedir: () => f.home}, product: f.product, parseCLIArgs: () => ({}),
+        configureCommandlineSwitchesSync: () => {events.push(['argv']); return {};},
+        getUserDataPath: resolveOverride ?? userDataModule.getUserDataPath, app,
+      });
+      return events;
+    }
+    const events = start(f.executable);
+    assert.deepEqual(events, [['argv'], ['name', 'HypeProof Studio RC'], ['path', 'userData', f.profile]]);
+    const stableEvents = start(path.join(f.home, 'Applications/HypeProof Studio.app/Contents/MacOS/Electron'));
+    assert.deepEqual(stableEvents, [['argv'], ['path', 'userData', path.join(f.home, 'Library/Application Support/code-oss-dev')]]);
+    assert.throws(() => start(f.executable, {}, () => '/production'), /resolved userDataPath mismatch/);
+    assert.throws(() => start(f.executable, {VSCODE_APPDATA: '/production'}), /override/);
   }
-  const events = start(f.executable);
-  assert.deepEqual(events, [['argv'], ['name', 'HypeProof Studio RC'], ['path', 'userData', f.profile]]);
-  const stableEvents = start(path.join(f.home, 'Applications/HypeProof Studio.app/Contents/MacOS/Electron'));
-  assert.deepEqual(stableEvents, [['argv'], ['path', 'userData', path.join(f.home, 'Library/Application Support/code-oss-dev')]]);
-  assert.throws(() => start(f.executable, {}, () => '/production'), /resolved userDataPath mismatch/);
-  assert.throws(() => start(f.executable, {VSCODE_APPDATA: '/production'}), /override/);
 });
