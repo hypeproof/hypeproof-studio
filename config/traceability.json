@@ -7154,6 +7154,19 @@
       ]
     },
     {
+      "id": "ST-TEST-TRANSCRIPT-SCROLLBAR",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/transcript-scrollbar.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-MOTION-MEASURE-GUTTER",
       "stage": "test",
       "owner": "jayleekr",

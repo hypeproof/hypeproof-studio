@@ -969,10 +969,13 @@ CGP-DS-D-011 (DES-CGP-DS-15) adds `--hp-dur-confirm` 160ms (a second name for `-
 `max-inline-size: 40em` of its own font, about 40 Hangul syllables per line (640px at 16px,
 scaling with the text-size choice). It is a cap only: narrower panes wrap to the pane, nothing
 gains a fixed width, and tables (`overflow-x: auto`) and code blocks (`pre-wrap`) keep their own
-overflow inside it. Gutter: the personal transcript scroller (`.hps-messages`) has
+overflow inside it. Gutter: both personal and classroom transcript scrollers (`.hps-messages`) have
 `scrollbar-gutter: stable`, so the column does not move sideways when a reply first makes it
-scroll. Not covered: the classroom chat transcript keeps its full-width prose and no reserved
-gutter; TSX inline motion (none today); a measured 0px reflow capture in the built app.
+scroll. DES-CGP-DS-36 adds the host `--vscode-scrollbarSlider-*` palette: Chromium uses a 10px
+thumb with separate default/hover/drag colors, while other engines use standard thin scrollbar
+color. Forced colors use the system thumb color. Classroom prose remains full width.
+Not covered: installed OS scrollbar preferences, non-Chromium interaction; TSX inline motion (none
+today); a measured 0px reflow capture in the built app.
 Test: `test/motion-measure-gutter.smoke.mjs` scans every webview CSS file for a literal time in
 any `transition*`/`animation*` declaration (only the 0.01ms reduced-motion override is allowed),
 checks the token values against DES-CGP-DS-15 and the design doc, that every used token is
@@ -981,7 +984,11 @@ scrolling element, with negative controls copied from the replaced lines, plus t
 the dialog, and a no-spring guard. `test/motion-computed.smoke.mjs` (headless Chromium,
 `FOCUS_REQUIRE_BROWSER=1`) measures that transitioning elements resolve 140/160/180/240ms, the
 dialog exit 120ms on the exit curve, nothing but the loops over 300ms, and that every loop stops
-under both reduced-motion routes.
+under both reduced-motion routes. `test/transcript-scrollbar.smoke.mjs` mounts actual ChatPanel in
+both seats, both themes and 320/800/1420px panes. It measures the reading column before/during/after
+overflow, samples painted host thumb colors during default/hover/press, drags the thumb
+to verify scrolling, and checks system thumb ink in forced colors. This is headless
+Chromium evidence; installed OS scrollbar settings still require owner acceptance.
 
 `REQ-STUDIO-FORCED-COLORS` (CGP-DS-R-016, 2026-10-20; REQ-CGP-DS-17; DES-CGP-DS-17). Under forced
 colors (Windows high contrast) the webview keeps every control, its focus and its states visible
