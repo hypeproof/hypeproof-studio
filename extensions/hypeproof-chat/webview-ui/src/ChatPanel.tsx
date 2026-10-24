@@ -1705,11 +1705,12 @@ export function ChatPanel(props: Props) {
             const locked = streaming || !!props.sendPending || !!props.sendLocked || unavailable;
             const selected = group.attempts[group.index].user.id;
             return <div className="hps-answer-attempts">
-              <AttemptPager index={group.index} count={group.attempts.length} title={ATTEMPT_HISTORY_NOTE}
-                disabled={locked} onPage={index => props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false)} />
+              {group.root.chosenAttemptId === selected && <span className="hps-attempt-chosen">이 답변을 골랐어요</span>}
               <button type="button" className="hps-attempt-choose" disabled={locked || !group.attempts[group.index].lines.some(line => line.role === "assistant" && line.content.trim())}
                 aria-pressed={group.root.chosenAttemptId === selected}
-                onClick={() => props.onSelectAttempt?.(group.root.id, selected, true)}>이걸 쓸래요</button>
+                onClick={() => { viewport.pauseFollowing(); props.onSelectAttempt?.(group.root.id, selected, true); }}>이걸 쓸래요</button>
+              <AttemptPager index={group.index} count={group.attempts.length} title={ATTEMPT_HISTORY_NOTE}
+                disabled={locked} onPage={index => { viewport.pauseFollowing(); props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false); }} />
             </div>;
           })()}
           </Fragment>)}

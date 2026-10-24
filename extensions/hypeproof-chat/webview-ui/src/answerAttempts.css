@@ -1,4 +1,4 @@
-.hps-answer-attempts { display: flex; flex-wrap: wrap; max-width: 100%; min-width: 0; gap: var(--ds-c-studio-styles-space-14); align-items: center; font-size: var(--ds-c-studio-styles-type-17); }
+.hps-answer-attempts { display: flex; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; min-width: 0; gap: var(--ds-c-studio-styles-space-14); align-items: center; font-size: var(--ds-c-studio-styles-type-17); }
 .hps-answer-attempts button { min-width: var(--ds-c-studio-styles-size-8); min-height: var(--ds-c-studio-styles-size-8); font: inherit; font-size: var(--ds-c-studio-styles-type-17); color: var(--vscode-foreground, var(--hp-text-primary-default)); background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); }
 .hps-answer-attempts button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-answer-attempts button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
@@ -8,3 +8,10 @@
 }
 
 .hps-answer-attempts .hps-version-pager { font-size: inherit; }
+
+/* CGP-CHAT-D-006: the chosen mark remains explicit in grayscale and forced colors. */
+.hps-attempt-chosen { padding: var(--ds-c-studio-styles-space-2); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); color: var(--hp-text-primary-default); font-size: inherit; }
+@media (forced-colors: active) {
+  .hps-answer-attempts .hps-attempt-choose[aria-pressed="true"] { background-color: Canvas !important; color: CanvasText !important; border-color: Highlight !important; }
+  .hps-attempt-chosen { color: CanvasText; border-color: CanvasText; }
+}

@@ -4981,3 +4981,30 @@ The UI supports Product Intent's explicit learner judgment (JUDGMENT/VERIFY),
 without claiming a measured learning outcome. Tests mount real ChatPanel with
 controlled task-local callbacks; this is headless browser evidence, not installed
 app or native assistive-technology acceptance.
+
+## Attempt navigation presentation (CGP-CHAT-D-006)
+
+CGP-CHAT-D64: the existing44px attempt pager sits at the right end of the
+answer-attempt action row. It keeps its `답변 n/m` accessible name and history
+explanation. The chosen visible attempt has a separate Korean text badge,
+`이 답변을 골랐어요`; browsing another attempt removes that badge from view but
+does not change the stored choice. The row wraps within320px rather than
+clipping its controls. In forced colors, the chosen control uses system
+Canvas/CanvasText and a Highlight border so its text stays readable.
+
+Explicit attempt navigation pauses personal chat's live-bottom following.
+For a visible question above the changed answer, a short→long→short comparison
+keeps its viewport position within2px instead of jumping to the changed
+answer's bottom. `최신 메시지` and sending a new prompt retain their existing
+explicit return-to-live behavior. This changes viewport behavior only, not
+the task-scoped host selection, chosen-attempt history or model request policy.
+Native scrolling can still clamp when a user has independently scrolled deep
+inside content that no longer exists in a shorter answer; this is not a promise
+to preserve an absent passage.
+
+This supports Product Intent's explicit learner choice and inspectable iteration
+(PI#2/PI#5, AE-35), without a score or measured learning-outcome claim. The real
+ChatPanel browser navigation test covers both seats, light/dark and forced colors,
+320/800/1420px, long/short switching, badge persistence and return-to-live. Existing
+host/model and computed geometry tests continue to cover scoped selection, zero
+model calls on browsing,44px targets,14px text and focus/history-note behavior.
