@@ -805,8 +805,9 @@ tools appear above the code once it is opened. `복사` (`aria-label="코드 복
 block's text (without Markdown's trailing newline) through the same confirmed-copy hook as the answer
 copy: `복사됨` and the status `코드를 복사했습니다` appear only after the clipboard write resolves, a
 rejected or missing clipboard says `복사하지 못했습니다. 코드를 선택해 복사해 주세요.`, and the
-successful feedback clears after at least4s; failed feedback remains an alert until another
-copy attempt or content/scope replacement (REQ-STUDIO-COPY-FEEDBACK). An empty (or whitespace-only) block has its `복사` disabled, so it never
+successful feedback clears after at least 4s and is announced through `role=status`; failed feedback remains a `role=alert` until another
+copy attempt or content/scope replacement (REQ-STUDIO-COPY-FEEDBACK, CGP-DS-R-025). CGP-CHAT-D-008's earlier 2s / status-only wording defers to CGP-DS-R-025, the merged design-system rule. The
+confirmation label fades in over 160ms, with no animation under reduced motion. An empty (or whitespace-only) block has its `복사` disabled, so it never
 claims a copy or clears the clipboard. `줄 바꿈` is a toggle with one fixed name (`aria-label="줄 바꿈"`)
 and `aria-pressed` for its state; the default keeps each surface's existing behaviour (the pill body
 does not wrap, prose blocks wrap). The choice is remembered per block for the webview session only.
@@ -817,7 +818,14 @@ and a new conversation never share a choice, and a block that is still streaming
 it grows. Rerenders and remounts (task switch and back) keep it, a reload forgets it, and nothing is
 written to storage or the host. A key needs at least the conversation and the message level; a block
 rendered with less keeps its choice only while mounted. Both controls are buttons with 44px targets, reachable by Tab, with the
-shared focus ring. Not built: a fence-language label, download, and a per-task saved wrap choice (the
+shared focus ring. CGP-CHAT-D-008 adds a32px visual strip behind the44px control targets;
+the strip does not reduce the hit area. Both pill and prose code use the editor's monospace family
+and editor foreground/background, measured at4.5:1 or higher in default light/dark themes.
+Unwrapped code scrolls inside its own block without page overflow; wrapped code fits the block.
+Forced colors keep the selected wrap label readable with CanvasText/Canvas and a Highlight border.
+`test/code-block-chrome.smoke.mjs` measures these rules in the real ChatPanel with built CSS,
+including successful, pending and failed clipboard promises and the 4s success lifetime.
+Not built: a fence-language label, download, and a per-task saved wrap choice (the
 research row CGP-CHAT-R39 asks for one; this slice keeps it session-only). Test:
 `test/code-block-tools.test.tsx`. Static markup covers where tools render (both modes, no tools
 outside code blocks, collapsed pill unchanged). Mounted on a minimal DOM (`test/fixtures/mini-dom.mjs`),
