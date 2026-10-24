@@ -11864,7 +11864,9 @@
       "id": "ST-ATTEMPT-NAV-PRESENTATION-REQ",
       "stage": "requirement",
       "owner": "jayleekr",
-      "depends_on": [],
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
       "sources": [
         {
           "path": "docs/studio-requirements.md",
