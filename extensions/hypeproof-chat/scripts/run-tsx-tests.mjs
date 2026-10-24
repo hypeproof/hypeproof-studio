@@ -57,6 +57,7 @@ const OVERRIDES = {
   "activity-status-chatpanel": { banner: BANNER_POSTED },
   "quit-guard-queue": { banner: BANNER_POSTED },
   "publish-sharing-app": { banner: BANNER_POSTED },
+  "turn-idle-progress-app": { banner: BANNER_POSTED },
 };
 
 // Tests in test/ that this runner must skip, because they have their own build step

@@ -2538,3 +2538,11 @@ html, body, #root {
 .hps-sharing-pill:focus-visible, .hps-sharing-refresh:focus-visible, .hps-share-settings > summary:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-width); }
 .hps-share-settings > summary { min-height: var(--ds-c-studio-tokens-control-md); font-size: var(--hp-font-caption); cursor: pointer; }
 .hps-share-settings { overflow-wrap: anywhere; }
+/* CGP-ART-D-019: keep visible activity without motion when reduced motion is selected. */
+.hps-idle-progress-motion { position: relative; overflow: hidden; display: inline-grid; place-items: center; width: var(--hp-font-caption); height: var(--hp-font-caption); flex-shrink: 0; }
+.hps-idle-progress-motion::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent, currentColor, transparent); transform: translateX(-100%); animation: hps-shimmer var(--hp-dur-shimmer) linear infinite; }
+.hps-long-step-text { flex: 1; min-width: 0; }
+.hps-idle-progress-dot { opacity: 0; }
+:where(:root[data-reduced-motion="true"]) .hps-idle-progress-dot { opacity: 1; }
+:where(:root[data-reduced-motion="true"]) .hps-idle-progress-motion::after { animation: none; opacity: 0; }
+@media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-idle-progress-dot { opacity: 1; } :where(:root:not([data-reduced-motion])) .hps-idle-progress-motion::after { animation: none; opacity: 0; } }

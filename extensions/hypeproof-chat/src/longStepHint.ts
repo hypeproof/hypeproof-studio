@@ -1,18 +1,9 @@
-// REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019, design CGP-ART-D-019). Extends REQ-M26/M27 and #403.
-//
-// A tool step can run for minutes (a build, a long command, a helper). The tool line then sits
-// still with a "…" mark, and a learner reads a still screen as broken (runner.ts, 2026-08-20).
-// When one tool step has been running 20 s the chat adds one calm hint that names the step in
-// learner words ("명령을 실행하는 중이에요 · 20초째"); at 60 s it says the learner may keep waiting
-// or stop. The words come from the SDK tool name (extractSdkActivity → toolActivity.workPhrase),
-// carried on the tool line as `step`, with `since` = the host's clock when the step began.
-//
-// Rules held here, pure (no DOM, no vscode), so ChatPanel and the smoke test share them:
-// - one step at a time: the latest running tool line with a step, and only if nothing was spoken
-//   after it (streaming text never gets a hint);
-// - the stall watchdog (#403, REQ-M26) wins: with its message on screen there is no hint;
-// - never the raw tool text (D-027): a step that looks like `Bash(...)` falls back to a neutral line;
-// - the announcement changes only at 20 s and at 60 s, not on every tick (DES-ART-19).
+// REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019, design CGP-ART-D-019).
+// ChatPanel uses idleTurnHint with the active turn's last visible-progress clock:
+// after 20 quiet seconds, offer Stop; after 60, add a safe running-tool phrase.
+// Accepted text/tool events reset that clock. Approval waits and the stall watchdog
+// suppress the hint. Announcements change by phase, never on each timer tick.
+// Legacy tool-duration helpers remain below for existing host-clock consumers/tests.
 
 /** First hint after one step has run this long. */
 export const LONG_STEP_HINT_MS = 20_000;
@@ -159,4 +150,38 @@ export function longStepHint(args: {
   }
   const choice = "더 기다려도 되고, 지금 멈춰도 돼요.";
   return { phase: "offer", text, choice, offerStop: true, announce: `${doing}. 1분 넘게 걸리고 있어요. ${choice}` };
+}
+
+/** The quiet interval belongs to visible turn progress, not to a tool's original start. */
+export function idleTurnHint(args: {
+  since: number;
+  now: number;
+  streaming: boolean;
+  stalled: boolean;
+  approvalPending: boolean;
+  step?: string | null;
+}): LongStepHint | null {
+  if (!args.streaming || args.stalled || args.approvalPending) return null;
+  const elapsed = args.now - args.since;
+  if (!Number.isFinite(elapsed) || elapsed < LONG_STEP_HINT_MS) return null;
+  const quiet = '평소보다 오래 걸리고 있어요';
+  const detail = elapsed >= LONG_STEP_OFFER_MS
+    ? (args.step ? learnerDoing(args.step) : '아직 답변을 기다리고 있어요') : '';
+  const text = detail ? `${quiet} · ${detail}` : quiet;
+  return { phase: elapsed >= LONG_STEP_OFFER_MS ? 'offer' : 'wait', text,
+    choice: '', offerStop: true, announce: text };
+}
+
+/** Spoken text resets the idle clock but does not imply an outstanding tool has stopped. */
+export function runningProgressStep(messages: readonly LongStepLine[]): ActiveLongStep | null {
+  let found: ActiveLongStep | null = null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === 'user') break;
+    const tool = m.role === 'tool' ? m.tool : undefined;
+    if (tool?.state === 'running' && typeof tool.step === 'string' && tool.step && typeof tool.since === 'number' && Number.isFinite(tool.since)) {
+      if (!found || tool.since < found.since) found = { id: m.id, step: tool.step, since: tool.since };
+    }
+  }
+  return found;
 }

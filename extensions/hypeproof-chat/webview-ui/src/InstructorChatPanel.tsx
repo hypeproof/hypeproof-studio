@@ -27,6 +27,8 @@ interface Props {
   streamingId: string | null;
   /** REQ-STUDIO-DELEGATION-ROW — passed through to ChatPanel. */
   runningStreamId?: string | null;
+  progressSince?: number;
+  progressApprovalPending?: boolean;
   refusal?: boolean;
   onDismissRefusal?: () => void;
   error: string | null;

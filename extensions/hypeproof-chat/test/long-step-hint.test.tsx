@@ -62,10 +62,10 @@ const detailedLine = (state: "running" | "done", withStep = true): ChatMessage =
 const summaryLine = (state: "running" | "done"): ChatMessage => ({ id: "pending-s1-w0", role: "tool", content: "", createdAt: 3, tool: state === "running" ? { icon: "⌨️", label: STEP, state, step: STEP, since: T0 } : { icon: "✍️", label: "생각했어요", state } });
 const turn = (line: ChatMessage, after: ChatMessage[] = []) => [user, said, line, ...after];
 
-type Extra = { error?: string | null; streaming?: boolean; onCancel?: () => void };
+type Extra = { progressSince?: number; approvalPending?: boolean; error?: string | null; streaming?: boolean; onCancel?: () => void };
 const panel = (config: ChatConfig, messages: ChatMessage[], extra: Extra = {}) => {
   const streaming = extra.streaming ?? true;
-  return <ChatPanel {...PROPS} config={config} instructor={false} messages={messages} streaming={streaming} streamingId={streaming ? "a1" : null} runningStreamId={streaming ? "s1" : null} error={extra.error ?? null} onCancel={extra.onCancel ?? noop} />;
+  return <ChatPanel {...PROPS} config={config} instructor={false} messages={messages} progressSince={extra.progressSince ?? T0} progressApprovalPending={extra.approvalPending} streaming={streaming} streamingId={streaming ? "a1" : null} runningStreamId={streaming ? "s1" : null} error={extra.error ?? null} onCancel={extra.onCancel ?? noop} />;
 };
 const render = (config: ChatConfig, messages: ChatMessage[], extra: Extra = {}) => renderToStaticMarkup(panel(config, messages, extra));
 const at = (ms: number) => { clock = T0 + ms; };
@@ -78,15 +78,15 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom]] 
     at(20 * S);
     const html = render(config, turn(detailedLine("running")));
     ok(count(html, 'class="hps-long-step"') === 1, `${count(html, 'class="hps-long-step"')} hints at 20 s`);
-    ok(hintOf(html).includes("명령을 실행하는 중이에요 · 20초째"), "learner wording missing");
+    ok(hintOf(html).includes("평소보다 오래 걸리고 있어요"), "learner wording missing");
     ok(!hintOf(html).includes("Bash"), "the hint shows the raw tool name");
-    ok(!hintOf(html).includes("멈추기"), "stop offered before 60 s");
+    ok(hintOf(html).includes("멈추기"), "stop missing at 20 s");
   });
   t(`${mode}: at 60 s the hint offers keep waiting or stop, 44px target`, () => {
     at(60 * S);
     const hint = hintOf(render(config, turn(detailedLine("running"))));
-    ok(hint.includes("명령을 실행하는 중이에요 · 1분째"), "minute wording missing");
-    ok(hint.includes("기다려도") && hint.includes("멈춰도"), "the two choices are not named");
+    ok(hint.includes("평소보다 오래 걸리고 있어요 · 명령을 실행하는 중이에요"), "minute wording missing");
+    ok(hint.includes("멈추기"), "Stop missing");
     ok(/<button[^>]*class="hps-long-step-stop"[^>]*>멈추기<\/button>/.test(hint), "no 멈추기 button");
     ok(/hps-long-step-stop"[^>]*min-height:44px/.test(hint) || /min-height:44px[^>]*hps-long-step-stop/.test(hint), "멈추기 below 44px");
     for (const word of ["FRAMING", "JUDGMENT", "ORCHESTRATE", "VERIFY", "ADAPT", "OWNERSHIP", "역량", "점수"]) ok(!hint.includes(word), `hint says ${word}`);
@@ -94,14 +94,14 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom]] 
   t(`${mode}: the hint clears when the step ends`, () => {
     at(90 * S);
     ok(hintOf(render(config, turn(detailedLine("running")))) !== "", "positive control: running at 90 s has a hint");
-    ok(hintOf(render(config, turn(detailedLine("done")))) === "", "a finished step keeps its hint");
+    ok(hintOf(render(config, turn(detailedLine("done")), { progressSince: clock })) === "", "a finished step keeps its hint");
     ok(hintOf(render(config, turn(detailedLine("running")), { streaming: false })) === "", "a finished turn keeps its hint");
   });
   t(`${mode}: streaming text gives no hint`, () => {
     at(90 * S);
-    ok(hintOf(render(config, turn(detailedLine("running"), [{ id: "a1#2", role: "assistant", content: "빌드가 끝나면", createdAt: 4 }]))) === "", "a hint while text streams");
-    ok(hintOf(render(config, [user, { ...said, content: "" }])) === "", "a hint for a text-only turn");
-    ok(hintOf(render(config, turn(detailedLine("running", false)))) === "", "a hint for a running line with no step (thinking)");
+    ok(hintOf(render(config, turn(detailedLine("running"), [{ id: "a1#2", role: "assistant", content: "빌드가 끝나면", createdAt: 4 }]), { progressSince: clock })) === "", "a hint while text streams");
+    ok(hintOf(render(config, [user, { ...said, content: "" }], { progressSince: clock })) === "", "a hint for a text-only turn");
+    ok(hintOf(render(config, turn(detailedLine("running", false)), { approvalPending: true })) === "", "a hint for a running line with no step (thinking)");
   });
   t(`${mode}: the stall message wins`, () => {
     at(240 * S);
@@ -117,12 +117,12 @@ t("summary cohort (D-027): the hint and the screen never show the raw tool name"
     at(ms);
     for (const config of [personal, classroom]) {
       const html = render(config, turn(summaryLine("running")));
-      ok(hintOf(html).includes("명령을 실행하는 중이에요"), "summary hint missing");
+      ok(hintOf(html).includes(ms < 60000 ? "평소보다 오래" : "명령을 실행하는 중이에요"), "summary hint missing");
       for (const raw of ["Bash", "npm run build", "toolu_"]) ok(!html.includes(raw), `summary screen shows ${raw}`);
     }
   }
   at(61 * S);
-  ok(hintOf(render(personal, turn(summaryLine("done")))) === "", "summary: a closed work line keeps a hint");
+  ok(hintOf(render(personal, turn(summaryLine("done")), { progressSince: clock })) === "", "summary: a closed work line keeps a hint");
 });
 
 // ---------- Interactive: one element updated in place; the real Stop path ----------
@@ -141,9 +141,9 @@ t("one hint, updated in place, then gone when the step ends", async () => {
   await act(async () => { root.render(panel(personal, turn(detailedLine("running")))); });
   const second = hints(host);
   ok(second.length === 1 && second[0] === first[0], "the hint is a new element, not updated in place");
-  ok(second[0].textContent.includes("45초째"), `counter not updated: ${second[0].textContent}`);
-  ok(!second[0].textContent.includes("멈추기"), "stop offered at 45 s");
-  await act(async () => { root.render(panel(personal, turn(detailedLine("done")))); });
+  ok(second[0].textContent.includes("평소보다 오래"), "quiet-period text missing");
+  ok(second[0].textContent.includes("멈추기"), "Stop missing at45s");
+  await act(async () => { root.render(panel(personal, turn(detailedLine("done")), { progressSince: clock })); });
   ok(hints(host).length === 0, "the hint stayed after the step ended");
 });
 t("멈추기 calls the same onCancel as Stop, once", async () => {
@@ -197,13 +197,13 @@ t("the hint appears by itself at 20 s (ticker) and is announced once through the
     await advance(1500);
     ok(hints(host).length === 1, "no hint 1.5 s later without an outside re-render (ticker missing?)");
     const first = announcer(host);
-    ok(first.includes("명령을 실행하는 중이에요") && first.includes("조금 오래 걸리고 있어요"), `20 s not announced: "${first}"`);
-    ok(host.findAll((e) => e.getAttribute("role") === "status" && (e.textContent ?? "").includes("조금 오래")).length === 1, "the 20 s line is in more than one live region");
+    ok(first.includes("평소보다 오래 걸리고 있어요"), `20 s not announced: "${first}"`);
+    ok(host.findAll((e) => e.getAttribute("role") === "status" && (e.textContent ?? "").includes("평소보다 오래")).length === 1, "the 20 s line is in more than one live region");
     await advance(10 * S);
     ok(announcer(host) === first, "the announcement changed while the counter ticked");
-    ok(hints(host)[0].textContent.includes("30초째"), `counter did not tick by itself: ${hints(host)[0].textContent}`);
+    ok(hints(host)[0].textContent.includes("평소보다 오래"), "quiet-period hint disappeared");
     await advance(30 * S);
-    ok(announcer(host).includes("멈춰도"), `60 s offer not announced: "${announcer(host)}"`);
+    ok(announcer(host).includes("명령을 실행하는 중이에요"), `60 s offer not announced: "${announcer(host)}"`);
     ok(host.findAll((e) => e.getAttribute("class") === "hps-long-step-stop").length === 1, "멈추기 did not appear by itself at 60 s");
   } finally { useRealIntervals(); }
 });
