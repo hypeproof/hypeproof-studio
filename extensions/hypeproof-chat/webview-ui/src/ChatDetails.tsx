@@ -257,8 +257,9 @@ function composerCaretLine(node: HTMLTextAreaElement) {
 export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled: boolean, draft: string, hasContext = false) {
   const [expanded, setExpanded] = useState(false);
   useLayoutEffect(() => {
-    if (!enabled || !ref.current) return;
+    if (!ref.current) return;
     const node = ref.current;
+    if (!enabled) { node.style.height = ''; node.style.maxHeight = ''; return; }
     const shell = node.closest<HTMLElement>('.hps-shell');
     const footer = node.closest<HTMLElement>('.hps-input-area');
     const card = node.closest<HTMLElement>('.hps-input');
@@ -297,7 +298,9 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       const chrome = shell ? Array.from(shell.children).reduce((height, child) =>
         height + (child === footer || child.classList.contains('hps-messages') ? 0 : (child as HTMLElement).offsetHeight), 0) : 0;
       const fixedFooter = (footer?.offsetHeight ?? node.offsetHeight) - node.offsetHeight;
-      const cap = Math.max(24, Math.min(192, (shell?.clientHeight ?? 600) - fixedFooter - chrome - 96));
+      // File chips share the field's 192px budget, including its controls and inset.
+      const fileChrome = card?.querySelector('.hps-file-context') ? card.offsetHeight - node.offsetHeight : 0;
+      const cap = Math.max(24, Math.min(192 - fileChrome, (shell?.clientHeight ?? 600) - fixedFooter - chrome - 96));
       node.style.maxHeight = `${cap}px`;
       node.style.height = '0px';
       node.style.height = `${Math.min(cap, Math.max(24, node.scrollHeight))}px`;

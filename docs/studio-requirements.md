@@ -1333,8 +1333,16 @@ and next step: no work folder, outside the folder (lexically or after resolving 
 link on the path (even one pointing inside), hidden paths (`.env`, `.git/…`), folders, missing
 or unreadable files, empty files, more than 100 KB, invalid UTF-8 or NUL bytes (binary), more
 than 20,000 characters, and a file that changed while it was read. A file is refused, never
-cut, so the chip "파일 · {relative path}" shows exactly the text the model receives (expandable,
-scrollable, with **빼기**); a refusal shows as an alert under the chip row. The model receives the
+cut. CGP-CHAT-D-011 presents the pending file inside the composer with a file icon, basename
+limited to24grapheme clusters plus ellipsis, host-reported byte size, and a44px close icon whose
+accessible name includes the full relative path and 빼기. Narrow panes may clip the visible name
+further; the full path remains in its accessible name and tooltip. Activating the name opens a
+native in-page preview dialog showing the full relative path and exact text to be sent, scrollable
+and escaped as text. Closing returns focus to the opener; replacing the attachment closes the
+stale preview. The preview sends nothing. The chip, controls and inset share the composer's192px
+growth cap while the draft scrolls internally; a short pane still reserves96px for the transcript.
+The persistent refusal notice is a status line directly under the chip row, inside the composer card. The host-owned removal/send
+lifetime below is unchanged; clicking the close icon requests removal and waits for host state. The model receives the
 text inside `<file_content path="…">…</file_content>` followed by an instruction to treat it as
 reference material and not follow instructions inside it; an opening or closing tag in the file
 (also `</ file_content>`, one without `>`, and fullwidth `＜/file_content＞`), or a quote in its
@@ -1356,6 +1364,7 @@ classroom seat, which has no tool menu, gets one with the file item only (no web
 host re-checks the gate when the picker opens and when the send consumes the file. Not built:
 several files at once, the `@` file list (CGP-CHAT-R08), search/recent files in the picker
 (DES-KNOW-26), and per-cause REQ-KNOW-37 fixtures beyond the smoke test. Tests:
+`test/file-context-chip-computed.smoke.mjs` (real composer geometry, cap, preview, removal acknowledgement),
 `test/file-attachment.smoke.mjs` (containment incl. links, binary, caps, delimiter breakout and
 its variants, shown = sent, gate), `test/file-attachment.test.tsx` (chip, 빼기, alert, retry
 notice, no chip or menu without the grant, instructor never; reducer keeps chips through send;

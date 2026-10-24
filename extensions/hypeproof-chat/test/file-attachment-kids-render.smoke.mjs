@@ -37,6 +37,6 @@ assert.ok(!(await renderComponent("ChatPanel", kids(false))).includes('aria-labe
 
 const withFile = await renderComponent("ChatPanel", { ...kids(true), fileAttachment: { path: "내 이야기.txt", text: "옛날 옛적에", bytes: 18 } });
 const text = visibleText(withFile);
-assert.ok(text.includes("파일 · 내 이야기.txt") && text.includes("옛날 옛적에") && text.includes("빼기"), "chip on the kids seat");
+assert.ok(text.includes("파일 · 내 이야기.txt") && text.includes("옛날 옛적에") && withFile.includes('aria-label="내 이야기.txt 빼기"'), "chip on the kids seat");
 
 console.log("file-attachment-kids-render OK");
