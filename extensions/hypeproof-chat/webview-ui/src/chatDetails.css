@@ -680,5 +680,5 @@
 body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-dim-light); }
 @media (forced-colors: active) {
   .hps-shell .hp-capability-sheet { color: CanvasText; background: Canvas; border-color: CanvasText; }
-  .hps-shell .hp-capability-sheet :focus-visible { outline-color: Highlight; }
+  .hps-shell .hp-capability-sheet :focus-visible { --hp-ring-focus-default: Highlight; outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); }
 }
