@@ -604,3 +604,16 @@
 /* Title/description hierarchy comes from weight and colour, never from a size below the learner minimum. */
 .hps-shell .hps-input .hps-tools-menu > button > span { font-weight: var(--hp-weight-strong); color: var(--hp-text-primary-default); }
 .hps-shell .hps-input .hps-tools-menu > button > span > small { font-weight: var(--hp-weight-regular); color: var(--hp-text-muted-default); }
+/* CGP-CHAT-D-005: keep the note editable while the selected reason folds to a text summary. */
+.hps-verdict-reason-disclosure { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--hp-dur-content), opacity var(--hp-dur-content); }
+.hps-verdict-reason-disclosure[data-expanded="false"] { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+.hps-verdict-reason-clip { min-height: 0; overflow: hidden; }
+.hps-verdict-reason-toggle { display: inline-flex; align-items: center; align-self: flex-start; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--ds-c-studio-chatdetails-size-8); max-width: 100%; padding: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-2); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-3); background: transparent; color: inherit; font: inherit; text-align: start; overflow-wrap: anywhere; cursor: pointer; }
+.hps-verdict-reason-toggle:hover { background: var(--hp-bg-control-hover); }
+.hps-verdict-reason-toggle:active { background: var(--hp-bg-control-pressed); }
+.hps-verdict-reason-toggle:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+@media (forced-colors: active) {
+  /* Match the existing materials control: Canvas avoids Chromium's black text backplate on Highlight. */
+  .hps-shell .hps-verdict[aria-pressed="true"], .hps-shell .hps-verdict-reason[aria-pressed="true"] { background-color: Canvas !important; color: CanvasText !important; border-color: Highlight !important; }
+  .hps-shell .hps-verdict[aria-pressed="true"] *, .hps-shell .hps-verdict-reason[aria-pressed="true"] * { color: CanvasText !important; }
+}
