@@ -65,6 +65,7 @@ export const VISITOR_FALLBACK_MS = 15_000;
 export function visitorPreviewHtml(snapshot: VisitorSnapshot, url: string, nonce: string, fallbackMs = VISITOR_FALLBACK_MS): string {
   const origin = new URL(url).origin;
   const css = `body{font:14px system-ui;color:var(--vscode-foreground);background:var(--vscode-editor-background);margin:16px}`
+    + `h1{overflow-wrap:anywhere}`
     + `button{font:inherit;min-height:44px;margin:4px;padding:8px 16px;border-radius:4px;border:1px solid var(--vscode-button-border,transparent);cursor:pointer}`
     + `#next{color:var(--vscode-button-foreground);background:var(--vscode-button-background)}#cancel{color:var(--vscode-button-secondaryForeground,var(--vscode-foreground));background:var(--vscode-button-secondaryBackground,transparent)}button:disabled{opacity:.5;cursor:default}`
     + `summary{display:list-item;min-height:44px;box-sizing:border-box;padding:12px 8px;cursor:pointer}`

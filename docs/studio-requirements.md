@@ -4896,6 +4896,12 @@ the same bytes, so a load timeout is not an unknown preview and authorizes nothi
 by itself. Workspace-only files are inaccessible. See the CGP-KNOW-R-034
 implementation contract for network restrictions and evidence.
 
+The visitor banner keeps the complete audience visible, including an unbroken
+project address, wrapping without horizontal overflow at 320px (DES-KNOW-63,
+CGP-KNOW-D-034). The banner belongs to the preview shell, never the immutable
+published HTML. This is currently an in-App webview panel; native integrated
+browser placement and return-to-editor focus still require owner verification.
+
 ### REQ-ART-03 — Keep or discard unsent annotations
 
 Activity/task transitions and preview close require the explicit annotation
