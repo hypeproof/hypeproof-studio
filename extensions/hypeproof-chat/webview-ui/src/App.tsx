@@ -1,5 +1,7 @@
 import { FolderConsentDialog } from './FolderConsentDialog';
 import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
+import {BrowserApprovalDialog} from './BrowserApprovalDialog';
+import type {BrowserApprovalPrompt} from '../../src/browserApprovalPrompt';
 import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
@@ -391,6 +393,7 @@ export function App() {
   const [historySaveError, setHistorySaveError] = useState<string | null>(null);
   // REQ-STUDIO-TASK-RUN-STATE — the host raised a tool approval modal and it is still open.
   const [approvalPending, setApprovalPending] = useState(false);
+  const [browserApproval,setBrowserApproval]=useState<BrowserApprovalPrompt|null>(null);
   const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
   const [folderConsent,setFolderConsent]=useState<FolderConsentPrompt|null>(null);
   const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
@@ -448,6 +451,7 @@ export function App() {
       switch (msg.type) {
         case "streamRefusal": setRefusal(true); return;
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
+        case 'browserApprovalPrompt': setBrowserApproval(msg.prompt); return;
         case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
         case 'folderConsentPrompt': setFolderConsent(msg.prompt); return;
         case 'outboundPrompt': setOutbound(msg.prompt); return;
@@ -740,6 +744,7 @@ export function App() {
       {outbound && (isPublicAudiencePrompt(outbound)
         ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>
         : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>)}
+      {browserApproval && <BrowserApprovalDialog key={browserApproval.id} prompt={browserApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'browserApprovalAnswer',id,choice});setBrowserApproval(null);}}/>}
       {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);}}/>}
       <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}

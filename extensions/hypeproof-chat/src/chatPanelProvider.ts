@@ -1,3 +1,5 @@
+import {BrowserApprovalRequest} from "./browserApprovalPrompt";
+import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
 import { currentClassWindow } from "./classWindow";
 import { FolderConsentRequest } from './folderConsentPrompt';
 import { AccuracyEducationStore } from "./accuracyEducationStore";
@@ -209,7 +211,7 @@ import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
-import { browserRememberLabel, browserTargetDetail } from "./browserTargetHost";
+import { browserRememberLabel, browserTarget, cleanName } from "./browserTargetHost";
 import { WriteApprovalRequest } from "./writeApprovalPrompt";
 import { writePathLine, writePathEntries, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
@@ -918,6 +920,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private pendingApprovals = new Map<string, (approved: boolean) => void>();
   /** REQ-STUDIO-TASK-RUN-STATE — approval modals open right now (resolveActionApprovalTracked). */
   private approvalWaits = 0;
+  private readonly browserApprovalRequest = new BrowserApprovalRequest({
+    scope:()=>JSON.stringify([this.writeApprovalScope(),this.profileGeneration]),
+    present:prompt=>{
+      if(prompt && !(this.editorChat?.visible || this.view?.visible))return Promise.resolve(false);
+      return this.post({type:'browserApprovalPrompt',prompt});
+    },
+  });
   private readonly writeApprovalRequest = new WriteApprovalRequest({
     scope:()=>this.writeApprovalScope(),
     present:prompt=>this.presentWriteApproval(prompt),
@@ -3453,7 +3462,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     watchChatSurface(view, this.finishNotifier);
     view.onDidChangeVisibility(() => { if (!view.visible && !this.editorChat?.visible) this.folderConsentRequest?.cancel(); });
     view.onDidDispose(() => {
-      this.writeApprovalRequest.cancel();
+      this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel();
       this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
       if (this.draftSource===sidebarWebview) this.draftSource=undefined;
       this.queuedSources.delete(sidebarWebview);
@@ -3477,7 +3486,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       entry.onDidChangeViewState(() => { if (!entry.visible && !this.view?.visible) this.folderConsentRequest?.cancel(); });
       const editorWebview=entry.webview;
       entry.onDidDispose(() => {
-        this.writeApprovalRequest.cancel();
+        this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel();
         this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
         if(this.draftSource===editorWebview)this.draftSource=undefined;
         this.queuedSources.delete(editorWebview);
@@ -3595,7 +3604,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   opsRuntimeGeneration(): number { return this.opsGeneration; }
   /** Ask every running turn and pending approval to end. Entries leave the maps through their normal finally paths — that is the confirmation. */
   opsRequestStop(): void {
-    this.writeApprovalRequest?.cancel();
+    this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel();
     for (const [streamId, ctrl] of [...this.activeStreams]) { try { ctrl.abort(); } catch { /* best-effort */ } void this.post({ type: "streamStopped", streamId, by: "instructor" }); }
     for (const resolve of [...this.pendingApprovals.values()]) resolve(false);
     this.observationAssessment?.abort();
@@ -3800,7 +3809,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Force re-fetch on next config push (e.g. after token change). */
   invalidateProfile(): void {
     this.personalContinuationPane?.dispose(); this.personalContinuationPane = undefined;
-    this.writeApprovalRequest?.cancel();
+    this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel();
     this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
     this.profileGeneration++;
     this.observationAssessment?.abort();
@@ -6055,6 +6064,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "helpDiscard": await this.helpSource?.discard(msg.key, msg.requestId); return;
       case "helpConfirm": await this.helpSource?.confirm(msg.key, msg.id, msg.revision); return;
       case "helpWithdraw": await this.helpSource?.withdraw(msg.key, msg.id); return;
+      case "browserApprovalAnswer": this.browserApprovalRequest.respond(msg.id,msg.choice); return;
       case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
       case "folderConsentAnswer":
         if (!(this.editorChat?.visible || this.view?.visible)) this.folderConsentRequest?.cancel();
@@ -6070,7 +6080,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "ready":
-        this.writeApprovalRequest.cancel();
+        this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel();
         this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
         await this.postInbox();
         // AE-15 — a remount must still show the open review bar (it never auto-dismisses).
@@ -8456,28 +8466,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the approval gate was meant to train. It is the same device as the shell's
     // `항상 허용` (above) and, likewise, session-scoped.
     if (req.kind === "openBrowser") {
-      const url = (req.payload as { url?: string } | null | undefined)?.url ?? "";
-      const origin = originOfUrl(url);
-      if (origin && this.approvedBrowserOrigins.has(origin)) {
-        return true;
-      }
-      // The button names the same normalized host as the body (REQ-E3); the remembered key stays the origin.
-      // A file: URL has no site to remember (its origin is the string "null").
-      const rememberLabel = browserRememberLabel(url);
-      const REMEMBER = origin && rememberLabel ? rememberLabel : null;
-      const buttons = REMEMBER ? ["열기", REMEMBER] : ["열기"];
+      const url = browserOpenUrl((req.payload as {url?:unknown}|null|undefined)?.url);
+      if (!url) return false;
+      const target = browserTarget(url, {workspaceRoot:this.resolveCoachCwd() ?? null});
+      const blank = url === BLANK_BROWSER_URL;
+      if (!blank && !target.host) return false;
+      const origin = target.web ? originOfUrl(url) : null;
+      if (origin && this.approvedBrowserOrigins.has(origin)) return true;
+      const rememberLabel = origin ? browserRememberLabel(url) : null;
       onPrompted?.();
-    const pick = await vscode.window.showWarningMessage(
-        // REQ-E3 / CGP-AGENT-R-006: the host on its own line + 내 미리보기 / 인터넷, never the full URL.
-        `${browserApprovalTitle(this.coachDisplayName())}\n\n${browserTargetDetail(url, { workspaceRoot: this.resolveCoachCwd() ?? null })}`,
-        { modal: true },
-        ...buttons,
-      );
-      if (pick === REMEMBER && origin) {
-        this.approvedBrowserOrigins.add(origin);
-        return true;
-      }
-      return pick === "열기";
+      const pick = await this.browserApprovalRequest.confirm({
+        id:crypto.randomUUID(), title:cleanName(browserApprovalTitle(this.coachDisplayName())),
+        host:blank?'빈 브라우저':target.host!, label:blank?'아직 주소 없음':target.label,
+        place:blank?'blank':target.place, rememberLabel,
+      });
+      if (pick === 'remember' && origin) { this.approvedBrowserOrigins.add(origin); return true; }
+      return pick === 'open';
     }
 
     // Tier 1.6 — publishing the workspace to a public GitHub repository (publish_site).
@@ -9102,9 +9106,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private async post(msg: HostMessage): Promise<boolean | void> {
     if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();
+    if(msg.type!=='browserApprovalPrompt')this.browserApprovalRequest?.invalidate();
     if(msg.type!=='outboundPrompt')this.outboundApproval?.invalidateIfScopeChanged();
     if(msg.type!=='writeApprovalPrompt') {
-      if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type))this.writeApprovalRequest?.cancel();
+      if(['streamStart','inputRejected','streamEnd','streamStopped','streamError'].includes(msg.type)){this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel();}
       else this.writeApprovalRequest?.invalidate();
     }
     if (msg.type === 'streamStart') this.lastActivityStatus = undefined;

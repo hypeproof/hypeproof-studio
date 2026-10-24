@@ -7997,6 +7997,21 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/sdkCoachHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserApprovalPrompt.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/BrowserApprovalDialog.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/writeApprovalDialog.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
         }
       ]
     },
@@ -8011,6 +8026,18 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/browser-target-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/browser-approval.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/browser-approval-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/browser-approval.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/browser-approval-layout.smoke.mjs"
         }
       ]
     },
