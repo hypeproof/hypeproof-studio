@@ -24,9 +24,9 @@ try{
   const config=chatConfig(3,{activity:{...chatConfig().activity,kind:seat},profile:{...chatConfig().profile,lesson:null},taskWorkspace:seat==='personal'?{tasks:[],sources:[]}:undefined});
   const props=chatPanelProps({config});
   await b.load(`<html style="${vars};--vscode-diffEditor-insertedTextBackground:green;--vscode-diffEditor-removedTextBackground:red"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div class="${seat==='personal'?'tw-workspace':''}" style="display:block;height:900px"><div id="root"></div></div><script>window.__diffProps=${JSON.stringify(props)};</script><script>${script.outputFiles[0].text}</script></body></html>`,{width,height:1000,dark,forcedColors});
-  await dispatch('learningState',{state:learning});await dispatch('turnReviewState',{view});
-  // Wait for the rendered surfaces instead of trusting a fixed delay: slow CI runners render after 60 ms.
-  for(let i=0;i<100&&!await b.evaluate(`!!document.querySelector('.hp-evidence')&&!!document.querySelector('.hps-turn-review')`);i++)await new Promise(r=>setTimeout(r,50));
+  // Wait for the rendered surfaces instead of trusting a fixed delay: slow CI runners render after 60 ms,
+  // and a message posted before ChatPanel's listener is attached is lost, so resend the (idempotent) states.
+  for(let i=0;i<100;i++){if(i%10===0){await dispatch('learningState',{state:learning});await dispatch('turnReviewState',{view});}if(await b.evaluate(`!!document.querySelector('.hp-evidence')&&!!document.querySelector('.hps-turn-review')`))break;await new Promise(r=>setTimeout(r,50));}
   await b.evaluate(`document.querySelectorAll('.hp-evidence,.hp-evidence-diff,.hps-turn-review details').forEach(e=>e.open=true);[...document.querySelectorAll('.hps-turn-review button')].find(e=>e.textContent==='전후 비교 보기').click()`);await new Promise(r=>setTimeout(r,60));
   for(const surface of ['.hps-turn-review','.hp-evidence-compare']){
    await b.evaluate(`document.querySelector('.hp-evidence').open=${surface==='.hp-evidence-compare'}`);await new Promise(r=>setTimeout(r,60));

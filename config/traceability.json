@@ -7043,6 +7043,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/long-step-hint.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-idle-progress.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-idle-progress-app.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-idle-progress-layout.smoke.mjs"
         }
       ]
     },
