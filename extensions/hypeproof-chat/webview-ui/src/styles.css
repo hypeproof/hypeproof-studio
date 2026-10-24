@@ -2272,6 +2272,10 @@ html, body, #root {
    REQ-STUDIO-UI-POLISH-1: `.hps-notice-caution` is the same surface under a name that is not about
    the network, for any other "please check this" line (the personal access line). */
 .hps-offline-banner, .hps-notice-caution { margin: var(--ds-c-studio-styles-space-15) 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); border-left: var(--ds-c-studio-styles-size-13) solid var(--hp-border-warn-default); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); font-size: var(--ds-c-studio-styles-type-9); line-height: var(--ds-c-studio-styles-typography-5); word-break: keep-all; overflow-wrap: anywhere; }
+/* DES-SHELL-10: a normal-flow top status; large text may grow rather than clip. */
+.hps-shell .hps-offline-banner { box-sizing: border-box; display: flex; align-items: center; flex: 0 0 auto; gap: var(--ds-c-studio-styles-space-15); margin: 0; padding-block: var(--ds-c-studio-styles-space-14); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-offline-banner > svg { flex: 0 0 auto; }
+.hps-offline-banner > span { min-width: 0; }
 /* REQ-STUDIO-PREVIEW-RECOVERY (CGP-ART-R-009, DES-ART-09): the preview cannot show a page. One cause line at
    body size, one 44px action, the technical code folded under 자세히. Personal and classroom chat share it, so
    every size is a type-scale token (14px floor). The edge is the offline banner's amber; text keeps the foreground. */

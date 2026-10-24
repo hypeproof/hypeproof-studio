@@ -1375,6 +1375,7 @@ export function ChatPanel(props: Props) {
       {dragActive && (
         <div className="hps-shell-drop-overlay">여기에 놓으면 이미지가 첨부돼요 <ChatIcon kind="image" size={20} /></div>
       )}
+      {!connectivity.online && <div className="hps-offline-banner" role="status" data-testid="offline-banner" aria-atomic="true"><ChatIcon kind="plug" size={16} /><span>{OFFLINE_BANNER_TEXT}</span></div>}
       {(() => { const header = <header className="hps-header">
         {personalWorkspace && config?.folderRestricted && <span className="hps-folder-restricted" role="note" data-hp-tooltip="이 폴더에서는 AI가 읽기만 할 수 있어요. 파일 고치기와 명령 실행은 꺼져 있어요. ‘이 폴더의 AI 권한 바꾸기’에서 다시 고를 수 있어요." aria-label="제한 모드: AI 파일 고치기와 명령 실행 꺼짐">제한 모드</span>}
         {ux.coach.naming_mode === "fixed"
@@ -1601,7 +1602,6 @@ export function ChatPanel(props: Props) {
       {!personalWorkspace && showsObservationResults(config?.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
-      {!connectivity.online && <div className="hps-offline-banner" role="status" data-testid="offline-banner">{OFFLINE_BANNER_TEXT}</div>}
       {(previewView || previewNote) && <PanelBoundary panel="preview-recovery"><PreviewRecoveryNotice view={previewView} note={previewNote} busy={previewBusy} onAction={(action) => {
         setPreviewBusy(true); setPreviewNote(null);
         let sent = false;
