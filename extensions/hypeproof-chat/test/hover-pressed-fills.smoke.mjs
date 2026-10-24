@@ -5,7 +5,8 @@ import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 //      foreground (currentColor) mixed into transparent; hover 8%, pressed 12–20%; no --hp-border-*
 //      role is a color-mix;
 //   2. every :hover/:active fill in the webview CSS is one of those four layers (or transparent):
-//      no host hover colour, no literal, no opacity or filter change;
+//      no host hover colour, no literal, no opacity or filter change; DES-CGP-DS-36
+//      transcript scrollbar thumbs explicitly use the host scrollbar palette instead;
 //   3. every painted hover has a pressed rule of the same shape, later in the same file;
 //   4. every field and secondary-button boundary is the fixed control token (never color-mix,
 //      never the divider, never the host's input/panel border);
@@ -121,6 +122,16 @@ const stateOf = (r) => {
  * fill), "clear" (transparent / none), or null when it paints nothing. Throws a reason otherwise. */
 function paintOf(r, state) {
   const d = r.decls, kinds = [];
+  // DES-CGP-DS-36 is a browser scrollbar contract, not a button-fill exception.
+  // Only the exact transcript thumb selector and prescribed state palette are admitted.
+  if (r.file === "chatDetails.css" && r.selectors.length === 1 &&
+      r.selectors[0] === `.hps-shell .hps-messages::-webkit-scrollbar-thumb:${state}`) {
+    const expected = state === "hover"
+      ? "var(--vscode-scrollbarSlider-hoverBackground, var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default)))"
+      : "var(--vscode-scrollbarSlider-activeBackground, var(--vscode-scrollbarSlider-hoverBackground, var(--hp-text-muted-default)))";
+    if (d.background !== expected || d["background-color"] != null || d["background-image"] != null) throw new Error("scrollbar must use its host state palette");
+    return "scrollbar";
+  }
   for (const k of ["background", "background-color"]) {
     if (d[k] == null) continue;
     const v = noImportant(d[k]);
@@ -156,7 +167,7 @@ const fillChecks = {
       if (stateOf(r) !== "hover") continue;
       let kind;
       try { kind = paintOf(r, "hover"); } catch { continue; } // check 2 reports it
-      if (kind !== "control" && kind !== "image") continue;
+      if (kind !== "control" && kind !== "image" && kind !== "scrollbar") continue;
       for (const s of r.selectors.filter((x) => /:hover\b/.test(x))) {
         const want = s.replace(/:hover\b/g, ":active");
         const ok = list.some((a) => a.file === r.file && a.index > r.index && a.media === r.media && a.selectors.includes(want) && (() => { try { return paintOf(a, "active") === kind; } catch { return false; } })());
@@ -342,6 +353,8 @@ const negatives = [
   ["1 ", "own-foreground layer replaced by a fixed surface", mutate("tokens.css", "  --hp-bg-layer-hover: color-mix(in srgb, currentColor 8%, transparent);\n  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);\n  --hp-bg-control-selected: var(--vscode-editor", "  --hp-bg-layer-hover: var(--vscode-list-hoverBackground, #253526);\n  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);\n  --hp-bg-control-selected: var(--vscode-editor")],
   ["1 ", "pressed own-foreground layer at 30%", mutate("tokens.css", "  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);\n  --hp-bg-control-selected: var(--vscode-editor", "  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 30%, transparent);\n  --hp-bg-control-selected: var(--vscode-editor")],
   ["1 ", "control boundary derived from the text colour", (() => { const t = real["tokens.css"]; const i = t.indexOf("--hp-border-control-default:"); const j = t.indexOf(";", i); return { ...real, "tokens.css": t.slice(0, i) + "--hp-border-control-default: color-mix(in srgb, var(--hp-text-primary-default) 45%, transparent)" + t.slice(j) }; })()],
+  ["2 ", "scrollbar hover replaced with the host button color", mutateRule("chatDetails.css", ".hps-shell .hps-messages::-webkit-scrollbar-thumb:hover", "var(--vscode-scrollbarSlider-hoverBackground, var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default)))", "var(--vscode-button-hoverBackground)")],
+  ["3 ", "scrollbar pressed rule removed", mutate("chatDetails.css", "  .hps-shell .hps-messages::-webkit-scrollbar-thumb:active { background: var(--vscode-scrollbarSlider-activeBackground, var(--vscode-scrollbarSlider-hoverBackground, var(--hp-text-muted-default))); }", "")],
   ["2 ", "copy answer back to the host list hover", mutate("chatDetails.css", ".hps-copy-answer:hover { background-color: var(--hp-bg-control-hover); }", ".hps-copy-answer:hover { background: var(--vscode-list-hoverBackground, #2b3037); }")],
   ["2 ", "fatal retry back to the host button hover", mutate("styles.css", ".hps-fatal-btn:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }", ".hps-fatal-btn:hover { background: var(--vscode-button-hoverBackground, #1177bb); }")],
   ["2 ", "naming button back to an opacity hover", mutate("styles.css", ".hps-naming-btn:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }", ".hps-naming-btn:hover { opacity: 0.88; }")],

@@ -693,3 +693,26 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
   .hps-shell[data-chat-detail="personal"] .hps-missing-folder-actions { flex-direction: column; }
   .hps-shell[data-chat-detail="personal"] .hps-missing-folder-action { width: 100%; }
 }
+
+/* DES-CGP-DS-36: both transcript branches reserve space and follow the host's thumb palette. */
+.hps-shell .hps-messages {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default)) transparent;
+}
+/* Chromium ignores thumb pseudo styles when standard scrollbar-color/width are non-auto.
+   Use its thin custom scrollbar to retain the host's separate hover and drag colors. */
+@supports selector(::-webkit-scrollbar) {
+  .hps-shell .hps-messages, .hps-shell[data-chat-detail="personal"] .hps-messages { scrollbar-width: auto; scrollbar-color: auto; }
+  .hps-shell .hps-messages::-webkit-scrollbar { width: var(--ds-c-studio-chatdetails-space-7); height: var(--ds-c-studio-chatdetails-space-7); }
+  .hps-shell .hps-messages::-webkit-scrollbar-track { background: transparent; }
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default)); }
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground, var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default))); }
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb:active { background: var(--vscode-scrollbarSlider-activeBackground, var(--vscode-scrollbarSlider-hoverBackground, var(--hp-text-muted-default))); }
+}
+@media (forced-colors: active) {
+  .hps-shell .hps-messages { scrollbar-color: auto; }
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb,
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb:hover,
+  .hps-shell .hps-messages::-webkit-scrollbar-thumb:active { background: CanvasText; }
+}
