@@ -12,6 +12,7 @@
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { build } from 'esbuild';
 import { findChromium, launch } from './lib/headless-chromium.mjs';
 
@@ -24,6 +25,8 @@ if (!bin || process.env.FOCUS_STATIC_ONLY) {
   process.exit(0);
 }
 
+// The full destination the host sends; the dialog must render it unchanged (host name and public site domain included).
+const RECIPIENT = 'GitHub · github.com/octo-clinic-with-a-very-long-organisation-name/neo-dental-site-repository · 사이트 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.example.org';
 const entry = `
 import "./tokens.css";
 import "./focusGeometry.css";
@@ -36,7 +39,7 @@ import { OutboundDialog, PublicAudienceDialog } from "./OutboundDialog";
 window.__keep = [App];
 window.__answers = [];
 const content = { id: 'c1', public: true, notes: [], excluded: '포함하지 않는 것: AI 기억, 개인 메모', sections: [{ recipient: 'GitHub · github.com/octo/neo · 사이트 octo.github.io', items: [{ id: '0:0', label: 'index.html', bytes: 1200 }] }] };
-const publicStep = { id: 'p1', step: 'public', audience: '인터넷의 누구나', notAudience: '우리 반', recipient: 'GitHub · github.com/octo-clinic-with-a-very-long-organisation-name/neo-dental-site-repository · 사이트 www.example.org' };
+const publicStep = { id: 'p1', step: 'public', audience: '인터넷의 누구나', notAudience: '우리 반', recipient: ${JSON.stringify(RECIPIENT)} };
 function Page() {
   // window.__start: 'content' mounts the checklist first and the public step right after its answer (the host's next
   // prompt arrives with no gap); 'public' mounts the public step alone.
@@ -57,8 +60,8 @@ const built = await build({
 const js = built.outputFiles.find((o) => o.path.endsWith('.js')).text.replace(/<\/script/g, '<\\/script');
 const css = built.outputFiles.find((o) => o.path.endsWith('.css')).text;
 const THEMES = {
-  dark: { cls: 'vscode-dark', id: 'HypeProof Studio', v: { focusBorder: '#D5F279', 'editor-background': '#151D19', foreground: '#F2F4E8' } },
-  light: { cls: 'vscode-light', id: 'Light Modern', v: { focusBorder: '#005fb8', 'editor-background': '#ffffff', foreground: '#3b3b3b' } },
+  dark: { cls: 'vscode-dark', id: 'HypeProof Studio', v: { focusBorder: '#D5F279', 'editor-background': '#151D19', 'editor-foreground': '#F2F4E8', foreground: '#F2F4E8' } },
+  light: { cls: 'vscode-light', id: 'Light Modern', v: { focusBorder: '#005fb8', 'editor-background': '#ffffff', 'editor-foreground': '#3b3b3b', foreground: '#3b3b3b' } },
 };
 // No transition: the exit animation would delay the answer; reduced motion completes synchronously as in the product.
 const page = (theme, seat, start) => `<!doctype html><html><head><meta charset="utf-8"><style>:root{${Object.entries(theme.v).map(([k, v]) => `--vscode-${k}:${v}`).join(';')}}${css}</style></head>
@@ -81,10 +84,10 @@ const click = async ([x, y]) => {
 const answers = () => b.evaluate('window.__answers');
 const active = () => b.evaluate(`(() => { const a = document.activeElement; return a ? (a.hasAttribute('data-public-cancel') ? 'cancel' : a.hasAttribute('data-public-confirm') ? 'confirm' : a.hasAttribute('data-public-ack') ? 'ack' : a.tagName) : null; })()`);
 const published = (list) => list.some(([id, sel]) => id === 'p1' && sel);
-const mount = async (start, { theme = 'dark', seat = 'personal', width = 800, motion = 'reduce' } = {}) => {
+const mount = async (start, { theme = 'dark', seat = 'personal', width = 800, motion = 'reduce', forcedColors = false } = {}) => {
   await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: motion }] });
-  await b.load(page(THEMES[theme], seat, start), { width, height: 800, dark: theme === 'dark' });
-  await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: motion }, { name: 'prefers-color-scheme', value: theme }] });
+  await b.load(page(THEMES[theme], seat, start), { width, height: 800, dark: theme === 'dark', forcedColors });
+  await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: motion }, { name: 'prefers-color-scheme', value: theme }, { name: 'forced-colors', value: forcedColors ? 'active' : 'none' }] });
   await wait(200);
 };
 let pass = 0; const ok = (label) => { pass++; console.log('  ok   ' + label); };
@@ -142,19 +145,32 @@ try {
 
   // K5 copy, destination style and geometry.
   const findings = [];
-  for (const seat of ['personal', 'classroom']) for (const theme of ['dark', 'light']) for (const width of [1420, 800, 320]) {
-    await mount('public', { theme, seat, width });
+  for (const seat of ['personal', 'classroom']) for (const theme of ['dark', 'light']) for (const width of [1420, 800, 320]) for (const forcedColors of [false, true]) {
+    await mount('public', { theme, seat, width, forcedColors });
     const m = await b.evaluate(`(() => {
       const d = document.querySelector('[data-testid=public-audience-dialog]'), r = d.getBoundingClientRect(), cw = document.documentElement.clientWidth;
       const dest = d.querySelector('[data-public-destination]'), ds = getComputedStyle(dest);
+      const range = document.createRange(); range.selectNodeContents(dest);
+      const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      const selected = selection.toString(); const lines = new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size; selection.removeAllRanges();
+      const h2 = d.querySelector('h2'), hr = h2.getBoundingClientRect(), hs = getComputedStyle(h2), dr = dest.getBoundingClientRect(), bodyP = getComputedStyle(d.querySelector('#public-audience-who'));
+      const leadProbe = document.createElement('span'); leadProbe.style.cssText = 'position:absolute;visibility:hidden;font-size:var(--hp-font-lead)'; d.appendChild(leadProbe); const lead = parseFloat(getComputedStyle(leadProbe).fontSize); leadProbe.remove();
+      const rgba = (c) => { const x = c.match(/[\\d.]+/g).map(Number); return { r: x[0], g: x[1], b: x[2], a: x.length > 3 ? x[3] : 1 }; };
+      const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const fg = rgba(ds.color), bg = rgba(getComputedStyle(d).backgroundColor), l1 = lum(fg), l2 = lum(bg);
+      const heading = { box: [hr.width, hr.height], inside: hr.left >= r.left && hr.right <= r.right && hr.top >= r.top && hr.bottom <= r.bottom, aboveDest: hr.bottom <= dr.top, shown: h2.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }), display: hs.display, visibility: hs.visibility, opacity: hs.opacity, tag: h2.tagName, size: parseFloat(hs.fontSize), weight: parseInt(hs.fontWeight, 10), body: parseFloat(bodyP.fontSize), lead };
+      const hfg = rgba(hs.color), hl = lum(hfg);
+      heading.contrast = { fgA: hfg.a, ratio: (Math.max(hl, l2) + 0.05) / (Math.min(hl, l2) + 0.05) }; heading.clipPath = hs.clipPath; heading.clip = hs.clip;
+      const destClip = { scrollH: dest.scrollHeight, clientH: dest.clientHeight, overflowY: ds.overflowY, maxHeight: ds.maxHeight };
+      const contrast = { fgA: fg.a, bgA: bg.a, ratio: (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05), shown: dest.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }), opacity: ds.opacity };
       const btn = [...d.querySelectorAll('.hps-outbound-actions button')].map(x => Math.round(x.getBoundingClientRect().height));
       const ack = d.querySelector('[data-public-ack]').closest('label').getBoundingClientRect(); // the whole label is the tick target
       return { open: d.open, left: r.left, right: cw - r.right, w: r.width, cw, scroll: document.documentElement.scrollWidth > innerWidth, inner: d.scrollWidth > d.clientWidth,
-        title: d.querySelector('h2').textContent, who: d.querySelector('#public-audience-who').textContent, dest: dest.textContent,
-        font: ds.fontFamily, select: ds.userSelect || ds.webkitUserSelect, destOverflow: dest.scrollWidth > dest.clientWidth, btn, ack: [Math.round(ack.width), Math.round(ack.height)],
+        title: h2.textContent, heading, contrast, destClip, who: d.querySelector('#public-audience-who').textContent, dest: dest.textContent,
+        selected, lines, wrap: ds.overflowWrap, font: ds.fontFamily, select: ds.userSelect || ds.webkitUserSelect, destOverflow: dest.scrollWidth > dest.clientWidth, btn, ack: [Math.round(ack.width), Math.round(ack.height)],
         text: parseFloat(getComputedStyle(d).fontSize), radius: getComputedStyle(d).borderTopLeftRadius, pad: getComputedStyle(d).paddingTop };
     })()`);
-    const at = `${seat}/${theme}@${width}`;
+    const at = `${seat}/${theme}@${width}/${forcedColors ? 'forced' : 'normal'}`;
     if (!m.open) findings.push(`${at}: not open`);
     if (m.left < 0 || m.right < 0 || m.w > m.cw) findings.push(`${at}: outside the chat column ${JSON.stringify([m.left, m.right, m.w, m.cw])}`);
     if (width > 390 && Math.abs(m.w - Math.min(480, m.cw - 24)) > 0.6) findings.push(`${at}: width ${m.w}, want the shared modal width`);
@@ -162,15 +178,32 @@ try {
     if (m.scroll || m.inner || m.destOverflow) findings.push(`${at}: horizontal overflow`);
     if (m.title !== '누구나 볼 수 있어요') findings.push(`${at}: title ${m.title}`);
     if (!m.who.includes('인터넷의 누구나') || !m.who.includes('우리 반만 보는 게 아니에요')) findings.push(`${at}: audience copy ${m.who}`);
-    if (!m.dest.includes('github.com/octo-clinic')) findings.push(`${at}: destination ${m.dest}`);
+    if (m.dest !== RECIPIENT) findings.push(`${at}: destination is not the full host string unchanged: ${m.dest}`);
+    const h = m.heading;
+    if (h.tag !== 'H2') findings.push(`${at}: heading is a ${h.tag}`);
+    if (!h.shown || h.display === 'none' || h.visibility !== 'visible' || Number(h.opacity) === 0) findings.push(`${at}: heading hidden ${JSON.stringify(h)}`);
+    if (h.box[0] <= 0 || h.box[1] <= 0 || !h.inside || !h.aboveDest) findings.push(`${at}: heading not a visible box inside the dialog above the destination ${JSON.stringify(h)}`);
+    if (h.size !== h.lead || h.size <= h.body || h.weight < 600) findings.push(`${at}: heading is not distinct from body text (lead step ${h.lead}px, heading ${h.size}px/${h.weight}, body ${h.body}px)`);
+    if (h.contrast.fgA === 0 || h.contrast.ratio < 4.5) findings.push(`${at}: heading text not legible against the dialog ${JSON.stringify(h.contrast)}`);
+    if ((h.clipPath && h.clipPath !== 'none') || (h.clip && h.clip !== 'auto')) findings.push(`${at}: heading is clipped (${h.clipPath} / ${h.clip})`);
+    if (m.destClip.scrollH > m.destClip.clientH + 1) findings.push(`${at}: destination is cut off vertically ${JSON.stringify(m.destClip)}`);
+    const c = m.contrast;
+    if (!c.shown || Number(c.opacity) === 0 || c.fgA === 0 || c.bgA < 1 || c.ratio < 4.5) findings.push(`${at}: destination text not legible against its background ${JSON.stringify(c)}`);
     if (!/mono/i.test(m.font)) findings.push(`${at}: destination font ${m.font}`);
+    if (m.selected !== m.dest) findings.push(`${at}: selection loses destination text`);
+    if (width === 320 && (m.lines < 3 || m.wrap !== 'anywhere')) findings.push(`${at}: long host does not wrap by character (${m.lines} lines, ${m.wrap})`);
     if (m.select !== 'text') findings.push(`${at}: destination not selectable (${m.select})`);
     if (m.btn.some((h) => h < 44) || m.ack.some((s) => s < 44)) findings.push(`${at}: targets ${JSON.stringify([m.btn, m.ack])}`);
     if (m.text < 14) findings.push(`${at}: text ${m.text}px`);
     const ring = await b.focusVisibleStyle('[data-public-cancel]');
     if (ring['outline-style'] === 'none' || parseFloat(ring['outline-width']) < 2) findings.push(`${at}: focus ring ${JSON.stringify(ring)}`);
+    if (process.env.PUBLIC_AUDIENCE_ARTIFACT_DIR) {
+      mkdirSync(process.env.PUBLIC_AUDIENCE_ARTIFACT_DIR, { recursive: true });
+      const shot = await b.send('Page.captureScreenshot', { format: 'png' });
+      writeFileSync(resolve(process.env.PUBLIC_AUDIENCE_ARTIFACT_DIR, `${seat}-${theme}-${width}-${forcedColors ? 'forced' : 'normal'}.png`), Buffer.from(shot.data, 'base64'));
+    }
   }
   assert.deepEqual(findings, [], findings.join('\n'));
-  ok('K5 copy names 인터넷의 누구나 vs 우리 반; monospace selectable destination; shared modal geometry inside the column at 1420/800/320; 44px targets; focus ring');
+  ok('K5 copy names 인터넷의 누구나 vs 우리 반; monospace selectable destination; long host wraps by character and selects completely; shared modal geometry at 1420/800/320, normal/forced colors; 44px targets; focus ring');
 } finally { await b.close(); }
 console.log(`PASS public-audience-dialog (${pass} groups)`);

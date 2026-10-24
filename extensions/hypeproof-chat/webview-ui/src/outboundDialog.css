@@ -21,4 +21,6 @@
 .hps-outbound-memory summary { box-sizing: border-box; min-height: var(--ds-c-studio-outbounddialog-size-8); padding: var(--ds-c-studio-outbounddialog-space-2) 0; cursor: pointer; }
 /* CGP-KNOW-R-007 / DES-KNOW-10 — the public step names its destination in selectable monospace that wraps at 320px. */
 .hps-outbound-destination { font-family: var(--ds-c-studio-styles-font-5); user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
+/* CGP-KNOW-D-007 — the public step's heading is a header: the learner scale's lead step, not body size. */
+.hps-outbound-public h2 { font-size: var(--hp-font-lead); line-height: var(--hp-leading-label); }
 @media (forced-colors: active) { .hps-outbound, .hps-outbound-excluded { border-color: CanvasText; } }
