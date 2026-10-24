@@ -25,5 +25,13 @@
     "openFiles": "파일 열기(&&F)...",
     "unsupportedBrowserMessage": "로컬 폴더 열기를 지원하지 않아요",
     "unsupportedBrowserDetail": "이 브라우저는 로컬 폴더 열기를 지원하지 않아요.\n파일 하나를 열거나 원격 저장소를 열 수 있어요."
+  },
+  "vs/platform/menubar/electron-main/menubar": {
+    "miCheckForUpdates": "업데이트 확인(&&U)…",
+    "miInstallUpdate": "업데이트 설치(&&U)…",
+    "miSwitchWindow": "창 전환(&&W)…"
+  },
+  "vs/workbench/contrib/update/browser/update": {
+    "checkForUpdates": "업데이트 확인…"
   }
 }
