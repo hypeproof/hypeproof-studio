@@ -1,5 +1,5 @@
 import { readDesignFile } from "./lib/design-token-values.mjs";
-// REQ-STUDIO-MOTION-MEASURE-GUTTER — CGP-DS-R-014 motion tokens, CGP-DS-R-020 prose measure,
+// REQ-STUDIO-MOTION-MEASURE-GUTTER — CGP-DS-R-014 motion tokens (+ CGP-DS-D-011 move/confirm/exit), CGP-DS-R-020 prose measure,
 // CGP-DS-R-031 stable transcript scrollbar gutter.
 //   node --experimental-strip-types test/motion-measure-gutter.smoke.mjs
 import assert from "node:assert/strict";
@@ -64,6 +64,23 @@ assert.equal(def("--hp-dur-press"), "140ms");
 assert.equal(def("--hp-dur-content"), "160ms");
 assert.equal(def("--hp-dur-enter"), "180ms");
 assert.equal(def("--hp-ease"), "cubic-bezier(.19, 1, .22, 1)");
+// CGP-DS-D-011: confirm is a second name for the 160ms content value (not a new number), move is 240ms,
+// and the exit curve accelerates out. Dialog exits use it instead of the ease-in keyword.
+assert.equal(def("--hp-dur-confirm"), "var(--hp-dur-content)", "--hp-dur-confirm aliases --hp-dur-content");
+assert.equal(def("--hp-dur-move"), "240ms");
+assert.equal(def("--hp-ease-exit"), "cubic-bezier(.4, 0, 1, 1)");
+assert.match(read("modalSurface.css"), /\.hp-modal\[data-closing\] \{ animation: hp-modal-exit var\(--hp-dur-modal-exit\) var\(--hp-ease-exit\) both; \}/, "dialog exit uses the exit curve");
+for (const f of cssFiles.filter((n) => n !== "designTokens.css")) {
+  assert.doesNotMatch(strip(read(f)), /(?:animation|transition)[^;{}]*\bease-in\b(?!-)/, `${f}: an exit uses var(--hp-ease-exit), not the ease-in keyword`);
+}
+// No spring or bounce on learner surfaces: no cubic-bezier whose y values leave [0, 1], no linear() easing, no "spring".
+const overshoot = (css) => [...strip(css).matchAll(/cubic-bezier\(([^)]*)\)/g)].filter((m) => { const [, y1, , y2] = m[1].split(",").map(Number); return !(y1 >= 0 && y1 <= 1 && y2 >= 0 && y2 <= 1); }).map((m) => m[0])
+  .concat(strip(css).match(/(?:transition|animation)[^;{}]*(?:\blinear\(|spring|bounce)/gi) ?? []);
+for (const bad of [".a { transition: transform var(--hp-dur-move) cubic-bezier(.34, 1.56, .64, 1); }", ".b { animation: x 1s cubic-bezier(.5, -0.6, .5, 1); }", ".c { transition: transform 1s linear(0, 1.2, 1); }", ".d { animation: spring-in 1s; }"]) assert.ok(overshoot(bad).length > 0, `negative control not caught: ${bad}`);
+for (const f of cssFiles) assert.deepEqual(overshoot(read(f)), [], `${f} has a spring/overshoot curve`);
+// Looping pending indicators are the one exception to the 300ms cap and stop under reduced motion
+// (the override sets one iteration, 0.01ms, for both routes; measured in test/motion-computed.smoke.mjs).
+assert.equal((tokens.match(/animation-iteration-count: 1 !important/g) ?? []).length, 2, "both reduced-motion routes stop loops");
 const seconds = (v) => (v.endsWith("ms") ? parseFloat(v) / 1000 : parseFloat(v));
 assert.ok(3 * seconds(def("--hp-dur-pending")) <= 3.8, "response dots: 3 cycles stay within the CP-R1 3.8s cap");
 assert.match(read("chatDetails.css"), /animation: chat-pending var\(--hp-dur-pending\) ease-in-out 3;/, "response dots stay bounded to 3 cycles");
@@ -85,9 +102,10 @@ for (const decl of tokens.match(/--hp-dur-[a-z-]+:[^;]*;/g)) assert.doesNotMatch
 // The design doc is canonical for token values (sx-audit compares the whole :root block too).
 const design = readFileSync(new URL("../../../docs/design/studio-learning-experience.md", import.meta.url), "utf8");
 const fence = design.slice(design.indexOf("## 디자인 시스템")).match(/```css\n([\s\S]*?)```/)[1];
-for (const name of ["--hp-ease", "--hp-dur-press", "--hp-dur-content", "--hp-dur-enter"]) {
+for (const name of ["--hp-ease", "--hp-dur-press", "--hp-dur-content", "--hp-dur-enter", "--hp-dur-move", "--hp-ease-exit"]) {
   assert.match(fence, new RegExp(`${name}: ${def(name).replace(/[.()]/g, "\\$&")};`), `design doc records ${name}`);
 }
+assert.match(fence, /--hp-dur-confirm: var\(--hp-dur-content\);/, "design doc records --hp-dur-confirm as the content alias");
 
 // ─── CGP-DS-R-020: prose measure ───────────────────────────────────────────────────────────────
 const MEASURE_SEL = '.hps-shell[data-chat-detail="personal"] .hps-prose';
