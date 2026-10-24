@@ -617,3 +617,29 @@
   .hps-shell .hps-verdict[aria-pressed="true"], .hps-shell .hps-verdict-reason[aria-pressed="true"] { background-color: Canvas !important; color: CanvasText !important; border-color: Highlight !important; }
   .hps-shell .hps-verdict[aria-pressed="true"] *, .hps-shell .hps-verdict-reason[aria-pressed="true"] * { color: CanvasText !important; }
 }
+/* CGP-CHAT-D-011: pending workspace context belongs to the editing surface. */
+.hps-file-context { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space); min-width: 0; max-width: 100%; color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); }
+.hps-file-context-stack { display: flex; flex-direction: column; gap: var(--hp-space); min-width: 0; max-width: 100%; }
+.hps-file-context-stack > .hps-file-attach-notice { margin: 0; }
+.hps-file-context-name { display: inline-flex; align-items: center; gap: var(--hp-space); flex: 1 1 0; min-width: 0; min-height: var(--hp-control-min); font: inherit; color: inherit; }
+.hps-file-context-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.hps-file-context-name > svg { flex-shrink: 0; }
+.hps-file-context-size { flex-shrink: 0; white-space: nowrap; }
+.hps-file-context .hps-file-context-remove { display: grid; place-items: center; flex: 0 0 var(--hp-control-min); width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; margin: 0; }
+.hps-shell .hps-input[data-file-context],
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] { display: grid; grid-template-columns: var(--hp-control-min) minmax(0, 1fr) var(--hp-control-min); row-gap: var(--hp-space); }
+.hps-shell .hps-input[data-file-context] > .hps-file-context-stack,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > .hps-file-context-stack { grid-column: 1 / -1; grid-row: 1; }
+.hps-shell .hps-input[data-file-context] > textarea,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > textarea { grid-column: 1 / -1; grid-row: 2; min-height: var(--ds-c-studio-chatdetails-size-17); overflow-y: auto; }
+.hps-shell .hps-input[data-file-context] > .hps-composer-tools,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > .hps-composer-tools { grid-column: 1; grid-row: 3; }
+.hps-shell .hps-input[data-file-context] > .hps-input-buttons,
+.hps-shell[data-chat-detail="personal"] .hps-input[data-file-context] > .hps-input-buttons { grid-column: 3; grid-row: 3; }
+.hps-file-context-preview { color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default); font-size: var(--hp-font-caption); }
+.hps-file-context-preview > strong { overflow-wrap: anywhere; }
+.hps-file-context-preview > button { display: block; margin-inline-start: auto; min-height: var(--hp-control-min); min-width: var(--hp-control-min); }
+.hps-file-context-preview > pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.hps-shell .hps-input .hps-file-context button { font: inherit; color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); }
+.hps-shell .hps-input .hps-file-context button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); transform: none; }
+.hps-shell .hps-input .hps-file-context button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); transform: none; }

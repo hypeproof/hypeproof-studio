@@ -314,7 +314,7 @@ check("composer: a disabled textarea is not focused", () => assert.deepEqual(pre
 check("composer: a read-only textarea (the seat is unavailable) is not focused", () => assert.deepEqual(press(card, { input: { readOnly: true } }), { prevented: false, focused: false }));
 check("composer: only the primary button forwards", () => assert.deepEqual(press(card, { button: 2 }), { prevented: false, focused: false }));
 check("composer: no textarea, no action", () => assert.deepEqual(press(card, { noInput: true }), { prevented: false, focused: false }));
-check("composer: wired on the composer card in ChatPanel", () => assert.match(readFileSync(new URL("ChatPanel.tsx", SRC), "utf8"), /className=\{`hps-input\$\{dragActive \? " hps-input-drag" : ""\}`\}\s+data-expanded=\{[^}]+\}\s+onMouseDown=\{event => composerSurfacePress\(event, textareaRef\.current\)\}/));
+check("composer: wired on the composer card in ChatPanel", () => assert.match(readFileSync(new URL("ChatPanel.tsx", SRC), "utf8"), /className=\{`hps-input\$\{dragActive \? " hps-input-drag" : ""\}`\}\s+data-expanded=\{[^}]+\}\s+data-file-context=\{[^}]+\}\s+onMouseDown=\{event => composerSurfacePress\(event, textareaRef\.current\)\}/));
 
 // ─── The × is a 44px target with a small visible dot: hover/pressed paint the dot, never the 44px box ───────
 // #2377's hover layer is a full-box linear-gradient. Applied to the 44px button it replaces the dark dot with a faint 44px

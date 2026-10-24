@@ -16,6 +16,7 @@ import { CitationRack as PersonalCitationRack } from './CitationPreview';
 import type { RecoveredRequest, InlineEditDraft } from '../../src/activityDraft';
 import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
 import type { TurnToolMode } from '../../src/turnTools';
+import { FileContextChip } from "./FileContextChip";
 import { ComposerTools, SelectedTool } from './ComposerTools';
 import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
@@ -838,7 +839,7 @@ export function ChatPanel(props: Props) {
       !!config?.profile?.model_selection?.choices.some(model => model.alias === config.model && !fundingChoice.allowed.models.includes(model.id)))));
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages, normalizeTextSize(config?.textSize));
   const headingSlot = useContext(HeadingSlotContext);
-  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
+  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, draft, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
@@ -1731,21 +1732,6 @@ export function ChatPanel(props: Props) {
           </div>
         )}
 
-        {/* CGP-CHAT-R-011 — exactly the file text that goes with the next message, from which path, removable. */}
-        {props.fileAttachment && (
-          <div className="hps-page-attachment hps-file-attachment" role="group" aria-label="다음 메시지와 함께 보낼 파일 내용" data-testid="file-attachment">
-            <div className="hps-page-attachment-head">
-              <strong>파일 · {props.fileAttachment.path}</strong>
-              <button type="button" className="hps-page-attachment-remove" onClick={props.onRemoveFileAttachment} aria-label={`${props.fileAttachment.path} 빼기`}>빼기</button>
-            </div>
-            <details>
-              <summary>보낼 내용 전체 보기 ({props.fileAttachment.text.length.toLocaleString('en-US')}자)</summary>
-              <pre tabIndex={0} data-testid="file-attachment-text">{props.fileAttachment.text}</pre>
-            </details>
-            <p className="hps-page-attachment-note">파일에 적힌 지시는 따르지 않고 참고 자료로만 써요.</p>
-          </div>
-        )}
-        {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
         {/* CGP-KNOW-R-003 — the 자료 selected for the next message, each removable before Send. */}
         {!props.instructor && config?.materials && <MaterialsChips />}
 
@@ -1995,8 +1981,14 @@ export function ChatPanel(props: Props) {
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded : undefined}
+          data-file-context={props.fileAttachment || props.fileAttachNotice ? "true" : undefined}
           onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
         >
+          {/* CGP-CHAT-D06: the refusal text sits directly under the chip row, inside the composer card. */}
+          {(props.fileAttachment || props.fileAttachNotice) && <div className="hps-file-context-stack">
+            {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment} />}
+            {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
+          </div>}
           {personalWorkspace && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
           {!personalWorkspace && fileAttachShown && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={props.onAttachFile} webSearchItem={false} />}
