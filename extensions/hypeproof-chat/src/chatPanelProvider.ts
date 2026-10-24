@@ -47,7 +47,7 @@ import { requireTurnTools, turnToolsDenialSource, retryTurnToolMode, turnToolMod
 import { setFolderConsentPresenter, onFolderConsentChanged, folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { folderConsentApplies, canonicalFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
 import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED } from './missingTaskFolder';
-import { chatVisible, createFinishNotifier, watchChatSurface } from './finishNoticeHost';
+import { chatVisible, createTaskNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
 import { verifyActivity } from './proxyClient';
 import { fetchAccessView, sendBudgetRequest, accessProfile, type AccessState } from './accessClient';
@@ -901,8 +901,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private editorChat?: vscode.WebviewPanel;
   // REQ-STUDIO-FINISH-NOTICE — one calm notice when a turn ends while no chat surface is on screen.
   // Lazy: fixtures build the provider with Object.create, which skips field initializers.
-  private finishNotice?: ReturnType<typeof createFinishNotifier>;
-  private get finishNotifier() { return (this.finishNotice ??= createFinishNotifier({ view: () => this.view, editor: () => this.editorChat })); }
+  private finishNotice?: ReturnType<typeof createTaskNotifier>;
+  private get finishNotifier() { return (this.finishNotice ??= createTaskNotifier(scope => this.revealNoticeTask(scope))); }
+  private async revealNoticeTask(scope: string): Promise<void> {
+    // Scope is captured by the host at the event, never supplied by a webview or OS payload.
+    const [activity, task] = JSON.parse(scope) as [string, string | null];
+    const [currentActivity] = JSON.parse(this.turnRequestScope()) as [string];
+    if (activity !== currentActivity) return;
+    const store = this.currentTaskStore?.();
+    if (task && store?.getView().activeTaskId !== task) {
+      if (!store || !store.getView().tasks.some(item => item.id === task)) return;
+      await this.handleTaskMessage({type: 'taskSelect', id: task, taskId: store.getView().activeTaskId ?? undefined}, this.editorChat?.webview ?? this.view?.webview);
+    }
+    if (scope !== this.turnRequestScope()) return;
+    if (this.editorChat) this.editorChat.reveal(vscode.ViewColumn.One);
+    else await vscode.commands.executeCommand('hypeproof-chat.panel.focus');
+  }
   // CGP-SHELL-R-024 — what the learner was last told the AI can do, per token and activity (memory only).
   // Inline `??=` at each use, not a getter: some fixtures call postConfig on a plain object that has no prototype getters.
   private capChanges?: CapabilityChangeTracker;
@@ -2588,6 +2602,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // D-028 — staged photos that were never sent go with the window.
     context.subscriptions.push({ dispose: () => this.imageStaging?.dispose() });
     this.registerPreviewSurface(context);
+    context.subscriptions.push({ dispose: () => this.finishNotice?.release() });
     // REQ-STUDIO-PREVIEW-RECOVERY — a browser tab opened, closed or changed address/title: measure the preview again.
     for (const event of [vscode.window.onDidChangeBrowserTabState, vscode.window.onDidOpenBrowserTab, vscode.window.onDidCloseBrowserTab]) {
       const d = event?.(() => this.schedulePreviewRecovery());
@@ -7942,7 +7957,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.opsObserver?.turnResult({ ok: spoolStatus === "ok", aborted: ctrl.signal.aborted, runtime: spoolRuntime === "agent-sdk" ? "agent-sdk" : "proxy", sdkFallback: opsSdkFallback, ...(spoolErrorKind ? { errorKind: spoolErrorKind } : {}), ...opsFailure });
       const total = sdkTurnTotal.current;
       const finalSpoolStatus = ctrl.signal.aborted ? "aborted" : spoolStatus;
-      this.finishNotifier.turnEnded({ status: finalSpoolStatus, chatVisible: chatVisible({ view: () => this.view, editor: () => this.editorChat }), seat: profile, instructor: this._instructorMode?.isInstructor === true });
+      this.finishNotifier.turnEnded({ scope: accuracyScope, status: finalSpoolStatus, chatVisible: chatVisible({ view: () => this.view, editor: () => this.editorChat }), seat: profile, instructor: this._instructorMode?.isInstructor === true });
       // #1298 — clear pending model revert when the turn succeeded.
       if (finalSpoolStatus === "ok") this._instructorMode.onTurnSuccess();
       await Promise.all(observationCaptures);
@@ -8440,12 +8455,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   async resolveActionApprovalTracked(req: ActionRequest, onPrompted?: () => void, onDenied?: (source: import("./denialSource").DenialSource) => void): Promise<boolean> {
     let prompted = false;
+    const noticeScope = this.turnRequestScope();
+    let cancelNotice: (() => void) | undefined;
     try {
       return await this.resolveActionApproval(req, () => {
         if (!prompted) { prompted = true; this.approvalWaits++; void this.post({ type: "approvalWait", waiting: true }); }
+        cancelNotice ??= this.finishNotifier.approvalStarted({scope: noticeScope, chatVisible: chatVisible({view: () => this.view, editor: () => this.editorChat}), seat: this.cachedProfile, instructor: this._instructorMode?.isInstructor === true}, req.kind === "openBrowser");
         onPrompted?.();
       }, onDenied);
     } finally {
+      cancelNotice?.();
       if (prompted) { this.approvalWaits = Math.max(0, this.approvalWaits - 1); void this.post({ type: "approvalWait", waiting: this.approvalWaits > 0 }); }
     }
   }

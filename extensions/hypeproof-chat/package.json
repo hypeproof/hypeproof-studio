@@ -465,6 +465,10 @@
     "configuration": {
       "title": "대화 설정",
       "properties": {
+        "hypeproofChat.osTaskNotices": {
+          "type": "boolean", "default": false,
+          "description": "창을 보고 있지 않을 때 코치의 완료·승인 대기 알림을 운영체제에 표시합니다. 답변 내용은 보내지 않습니다."
+        },
         "hypeproofChat.artifactHistoryEnabled": {
           "type": "boolean",
           "default": false,
