@@ -67,10 +67,12 @@ const vscode = {
   workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) },
 };
 const module = { exports: {} };
-vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder });
+vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder, crypto: globalThis.crypto });
 const P = module.exports.ChatPanelProvider.prototype;
 const posts = [];
-const host = { approvalWaits: 0, post: async (m) => { posts.push(m); }, taskCommandAllows: new TaskCommandAllows(), taskCommandAllowState: () => ({ key: "task-1", refusal: null }), approvedBrowserOrigins: new Set(), coachDisplayName: () => "코치", resolveActionApproval: P.resolveActionApproval };
+// Commands are approved in the in-panel dialog (CGP-AGENT-D-003); the stub counts it as a raised modal.
+const commandApprovalRequest = { confirm: async () => { modals++; return new Promise((r) => { release = (v) => r(v === "실행" ? "allow" : v); }); } };
+const host = { approvalWaits: 0, commandApprovalRequest, post: async (m) => { posts.push(m); }, taskCommandAllows: new TaskCommandAllows(), taskCommandAllowState: () => ({ key: "task-1", refusal: null }), approvedBrowserOrigins: new Set(), coachDisplayName: () => "코치", resolveActionApproval: P.resolveActionApproval };
 const waits = () => posts.filter((m) => m.type === "approvalWait").map((m) => m.waiting);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
