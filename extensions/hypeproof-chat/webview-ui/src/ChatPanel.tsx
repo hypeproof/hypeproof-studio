@@ -4,6 +4,7 @@ import { elapsedWorkLabel } from '../../src/turnElapsed';
 import { useFileMentions } from './FileMentions';
 import { PastedDraft } from './PasteChip';
 import { fullDraft, visibleDraft, editVisible, replaceVisible, changePaste, longPaste, type DraftPart } from './pastedDraft';
+import { TurnBoundary } from './TurnBoundary';
 import { ClassWindowNotice } from "./ClassWindowNotice";
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
@@ -1668,7 +1669,7 @@ export function ChatPanel(props: Props) {
 
         {/* CGP-CHAT-R-008: code-block wrap choices are scoped to this conversation. */}
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
-        {shown.items.map((m, i) => <Fragment key={m.id}>
+        {shown.items.map((m, i) => <TurnBoundary key={`${activityId ?? ""}/${taskId ?? ""}/${m.id}`} messageId={m.id} rawText={m.content}>{() => <Fragment>
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
           {dividers.has(m.id) && <StepDivider id={m.id} label={stepDividerLabel(dividers.get(m.id)!)} />}
           {m.elapsedTurn && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
@@ -1751,7 +1752,7 @@ export function ChatPanel(props: Props) {
                 disabled={locked} onPage={index => { viewport.pauseFollowing(); props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false); }} />
             </div>;
           })()}
-          </Fragment>)}
+          </Fragment>}</TurnBoundary>)}
         </CodeBlockScope>
 
         {/* CGP-ART-D-019 — one calm hint for the active turn after20s without visible progress. */}

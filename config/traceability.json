@@ -12563,6 +12563,61 @@
           "path": "extensions/hypeproof-chat/test/pasted-draft-browser.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-TURN-RENDER-ISOLATION-REQ",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Response render isolation (CGP-CHAT-R-016)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TURN-RENDER-ISOLATION-IMP",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-TURN-RENDER-ISOLATION-REQ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TurnBoundary.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TURN-RENDER-ISOLATION-TEST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-TURN-RENDER-ISOLATION-REQ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/turn-boundary.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-boundary-host.smoke.mjs"
+        }
+      ]
     }
   ]
 }

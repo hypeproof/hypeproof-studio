@@ -6715,6 +6715,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // reload; don't crash the host.
         console.error(
           `[hypeproof-chat] webview error: ${msg.message}\n` +
+          (msg.messageId && /^[A-Za-z0-9_.:#-]{1,128}$/.test(msg.messageId)
+            ? `messageId: ${msg.messageId}; turnId: ${this.answerTurns?.get(msg.messageId.split("#")[0]) ?? "unknown"}\n` : "") +
           `stack:\n${msg.stack}\n` +
           `componentStack:\n${msg.componentStack}`,
         );
