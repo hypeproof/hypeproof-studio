@@ -11348,6 +11348,10 @@
       ],
       "sources": [
         {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-KNOW-63 — Visitor preview before publication"
+        },
+        {
           "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md",
           "section": "### REQ-KNOW-63 implementation contract (CGP-KNOW-R-034)"
         }

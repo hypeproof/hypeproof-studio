@@ -19,7 +19,7 @@ else {
   {path:'index.html',data:Buffer.from(`<html lang="ko"><h1>내가 만든 정원</h1><p>이 파일만 공개돼요.</p><script type="module" src="app.mjs"></script><script>parent.postMessage({type:'served',nonce:'testnonce'},'*');fetch('${outsideUrl}').then(()=>document.body.dataset.network='allowed',()=>document.body.dataset.network='blocked');const nested=document.createElement('iframe');nested.src='${outsideUrl}?nested';document.body.append(nested);let popup;try{popup=window.open('${outsideUrl}?popup')}catch{}document.body.dataset.popup=popup?'opened':'blocked'</script></html>`)},
   {path:'app.mjs',data:Buffer.from(`document.body.dataset.module='ok';`)}]};
  const server=await startVisitorSnapshot(snapshot);let browser;
- const render=(url,{dark=true,fallbackMs}={})=>visitorPreviewHtml(snapshot,url,'testnonce',fallbackMs)
+ const render=(url,{dark=true,fallbackMs,audience=snapshot.audience}={})=>visitorPreviewHtml({...snapshot,audience},url,'testnonce',fallbackMs)
   .replace('const api=acquireVsCodeApi();','const api={postMessage:m=>window.lastMessage=m};')
   .replace('<style>',`<style>:root{--vscode-foreground:${dark?'#eee':'#111'};--vscode-editor-background:${dark?'#181818':'#fff'};--vscode-focusBorder:#007acc;--vscode-panel-border:#777;--vscode-button-background:#0e639c;--vscode-button-foreground:#fff}`);
  // Page.setDocumentContent reuses the Document, so an earlier case's meta CSP and frames survive
@@ -87,10 +87,11 @@ else {
   assert.equal(await browser.evaluate('document.getElementById("status").textContent'),'공개할 화면과 범위를 확인해 주세요.');
   await browser.evaluate('document.getElementById("next").click()');assert.deepEqual(await browser.evaluate('window.lastMessage'),{action:'next',nonce:'testnonce'});
 
-  // 5. Layout, targets and focus rings: dark/light, 800/1420, plus forced colours.
-  const passes=[...[true,false].flatMap(dark=>[800,1420].map(width=>({dark,width,forced:false}))),{dark:true,width:1420,forced:true},{dark:false,width:800,forced:true}];
+  // 5. Layout, targets and focus rings: dark/light, 320/800/1420, plus forced colours.
+  const passes=[...[true,false].flatMap(dark=>[320,800,1420].map(width=>({dark,width,forced:false}))),{dark:true,width:1420,forced:true},{dark:false,width:800,forced:true}];
   for(const {dark,width,forced} of passes){
-   await fresh(render(server.url,{dark,fallbackMs:60_000}),{width,height:900,dark,forcedColors:forced});
+   const audience = snapshot.audience + ' · https://' + 'longprojectname'.repeat(8) + '.invalid';
+   await fresh(render(server.url,{dark,fallbackMs:60_000,audience}),{width,height:900,dark,forcedColors:forced});
    for(let i=0;i<30&&await frameValue('document.body?.dataset.network')!=='blocked';i++)await wait(100);
    await hostServed('testnonce');for(let i=0;i<20&&await disabled();i++)await wait(50);
    assert.equal(await disabled(),false);
@@ -103,10 +104,18 @@ else {
     assert.deepEqual(focus,{'outline-width':'2px','outline-style':'solid'},`${sel} focus ring dark=${dark} width=${width} forced=${forced}`);
    }
    const box=await browser.evaluate('({size:getComputedStyle(document.body).fontSize,overflow:document.documentElement.scrollWidth>innerWidth,text:document.querySelector("h1").textContent})');
+   assert.equal(await browser.evaluate('document.querySelector("h1").textContent'), '방문자에게 이렇게 보여요 · 공개 범위: ' + audience, 'audience remains complete');
+   // The text being in the DOM is not enough: an ellipsis or a clipped box would hide it. The banner
+   // must not clip its own content, must stay inside the viewport and must wrap onto several lines at 320px.
+   const banner=await browser.evaluate('(()=>{const h=document.querySelector("h1"),r=h.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(h);const tops=new Set([...range.getClientRects()].map(x=>Math.round(x.top)));return {clipX:h.scrollWidth>h.clientWidth,clipY:h.scrollHeight>h.clientHeight,right:r.right,lines:tops.size}})()');
+   assert.equal(banner.clipX,false,`banner clips horizontally width=${width}`);
+   assert.equal(banner.clipY,false,`banner clips vertically width=${width}`);
+   assert.ok(banner.right<=width,`banner stays inside the viewport width=${width}`);
+   if(width===320)assert.ok(banner.lines>1,`banner wraps at 320px (lines=${banner.lines})`);
    assert.equal(box.size,'14px');assert.equal(box.overflow,false);assert.match(box.text,/방문자에게 이렇게 보여요 · 공개 범위: 인터넷의 누구나/);
-   await browser.evaluate('document.querySelector("details").open=true');
+   await browser.evaluate('document.querySelector("details").open=true; window.scrollTo(0,0)');
    await shot(`${forced?'forced-':''}${dark?'dark':'light'}-${width}`);
   }
-  console.log('PASS visitor preview: next waits for load+served (spoof ignored), fallback, frame-src, .mjs, 44px next/cancel/summary, focus rings, forced colours, 800/1420 dark/light');
+  console.log('PASS visitor preview: next waits for load+served (spoof ignored), fallback, frame-src, .mjs, 44px next/cancel/summary, focus rings, forced colours, 320/800/1420 dark/light, unbroken audience wraps');
  }finally{await browser?.close();server.close();outside.closeAllConnections();outside.close();hanging.closeAllConnections();hanging.close();panelHost.close()}
 }
