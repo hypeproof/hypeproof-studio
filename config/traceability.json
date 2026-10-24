@@ -6620,6 +6620,9 @@
           "path": "extensions/hypeproof-chat/test/code-block-tools.test.tsx"
         },
         {
+          "path": "extensions/hypeproof-chat/test/code-block-chrome.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/fixtures/mini-dom.mjs"
         }
       ]
