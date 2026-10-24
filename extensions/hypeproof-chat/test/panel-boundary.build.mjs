@@ -16,6 +16,7 @@ export const PANEL_COMPONENTS = {
   "CitationPreview.tsx": ["CitationPreview", "CitationRack"],
   "CompletionGate.tsx": ["CompletionGate"],
   "DelegationRow.tsx": ["DelegationRow"],
+  "DelegationGroup.tsx": ["DelegationGroup"],
   // Not a panel of its own: stubbed so the evidence row renders (mini-dom has no <select>).
   "EvidenceDrawer.tsx": ["EvidenceDrawer"],
   "EvidencePanel.tsx": ["EvidencePanel"],

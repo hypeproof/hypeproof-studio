@@ -50,7 +50,7 @@ async function main() {
     posts = []; browserCalls.length = 0; commands.length = 0;
     const h = Object.create(proto);
     Object.assign(h, {
-      pendingSends: 0, activeStreams: new Map(), turnTimelines: new Map(), turnRequests: new Map(), getHistory: () => [],
+      pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnTimelines: new Map(), turnRequests: new Map(), getHistory: () => [],
       post: async (m: any) => { posts.push(m); return true; },
       postPageNotice: (text: string) => { posts.push({ type: 'pageNotice', text }); },
       annotationScope: () => scope,

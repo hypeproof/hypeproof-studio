@@ -2,6 +2,7 @@ import { FolderConsentDialog } from './FolderConsentDialog';
 import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
 import {BrowserApprovalDialog} from './BrowserApprovalDialog';
 import type {BrowserApprovalPrompt} from '../../src/browserApprovalPrompt';
+import type {DelegationStopState} from "../../src/delegationStop";
 import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
@@ -364,6 +365,8 @@ export { reducer as chatPanelReducer, initialState as chatPanelInitialState };
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [refusal, setRefusal] = useState(false);
+  const [delegationStops,setDelegationStops]=useState<Record<string,DelegationStopState>>({});
+  const delegationStreams=useRef(new Set<string>());
   const scope = useRef<string | undefined>();
   const taskScope = useRef<string | undefined>();
   // The bridge can deliver an old turn after Stop. Update this synchronously,
@@ -423,16 +426,22 @@ export function App() {
           ownVerdictRequests.current.clear();
           activeStream.current = null;
           setRefusal(false);
+          setDelegationStops({});delegationStreams.current.clear();
           setApprovalPending(false); setWriteApproval(null); setOutbound(null); setFolderConsent(null);
         }
         scope.current = msg.config.activity?.id;
         taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
       } else if (msg.activityId && msg.activityId !== scope.current) return;
+      if(msg.type==='delegationStopState'){
+        if(delegationStreams.current.has(msg.streamId))setDelegationStops(old=>({...old,[msg.streamId]:msg.state}));
+        return;
+      }
       if ("streamId" in msg) {
         if (msg.type === "streamStart") {
           // One turn owns this view; a repeated start must not clear its text.
           if (activeStream.current !== null) return;
           activeStream.current = msg.streamId;
+          delegationStreams.current.add(msg.streamId);
           setRefusal(false);
         } else if (msg.streamId !== activeStream.current) {
           // These host refusal codes are emitted before streamStart. They still
@@ -795,6 +804,8 @@ export function App() {
         />
       ) : (
       <ChatPanel
+        delegationStops={delegationStops}
+        onStopDelegations={streamId=>postToHost({type:"stopDelegations",streamId})}
         key={`${state.config?.activity?.id ?? 'disconnected'}:${state.config?.taskWorkspace?.activeTaskId ?? ''}`}
         incomingImage={incomingImage}
         config={state.config}

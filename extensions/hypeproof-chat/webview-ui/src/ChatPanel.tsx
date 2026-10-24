@@ -86,9 +86,9 @@ import type {
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, postToHost } from "./vscode";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
-import { groupDelegations } from "../../src/delegationRow";
+import { groupDelegations, delegationGroups, parseDelegationId } from "../../src/delegationRow";
 import { activeLongStep, longStepHint, type ActiveLongStep } from "../../src/longStepHint";
-import { DelegationRow } from "./DelegationRow";
+import { DelegationGroup } from "./DelegationGroup";
 import { guardHostPayload, PanelBoundary } from "./PanelBoundary";
 import { CONTEXT_COMPACT_NOTE, CONTEXT_TRIM_NOTE, isCompactionLine, trimMarkerIndex } from "../../src/contextTrim";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
@@ -189,6 +189,8 @@ interface Props {
   trimBoundaryId?: string | null;
   /** REQ-STUDIO-DELEGATION-ROW — the stream running now; a delegation row is live only for it. */
   runningStreamId?: string | null;
+  delegationStops?: Record<string, import("../../src/delegationStop").DelegationStopState>;
+  onStopDelegations?: (streamId:string)=>void;
   onVerdict?: (messageId: string, next: VerdictState | null) => void;
   /** CGP-KNOW-R-004 — "팀 브레인에 정리하기" on one finished answer. Absent: no action. */
   onAnswerToWiki?: (messageId: string) => void;
@@ -1315,6 +1317,7 @@ export function ChatPanel(props: Props) {
   const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
   // REQ-STUDIO-DELEGATION-ROW — a delegation is one row; its helper's tool lines are drawn inside it.
   const delegations = groupDelegations(shown.items, streaming ? props.runningStreamId ?? null : null);
+  const helperGroups = delegationGroups(delegations.rows);
   const editableId = props.onEditResend ? editableUserId(attempts.items, {
     streaming, sendPending: props.sendPending, parked: queued !== null || recovered.length > 0,
     instructor: props.instructor, locked: unavailable || !!props.sendLocked,
@@ -1643,12 +1646,13 @@ export function ChatPanel(props: Props) {
           ) : delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
             <ContextNote text={CONTEXT_COMPACT_NOTE} />
           ) : m.role === "tool" && delegations.rows.has(m.id) ? (
-            <PanelBoundary panel="delegation"><DelegationRow
-              view={delegations.rows.get(m.id)!}
+            helperGroups.has(m.id) ? <PanelBoundary panel="delegation"><DelegationGroup
+              views={helperGroups.get(m.id)!}
+              textSize={config?.textSize}
               renderChild={(child) => child.tool?.state === "error" && storedDenialNotice(child.tool.label) ? null : <ToolLine message={child} onReport={props.onReportProblem} />}
-              // The same path as the Stop button: aborting the turn ends its helpers too.
-              onStopAll={() => { restoreQueuedToDraft(); props.onCancel(); }}
-            /></PanelBoundary>
+              stopState={props.delegationStops?.[parseDelegationId(m.id)?.stream ?? '']}
+              onStopAll={() => { const stream=parseDelegationId(m.id)?.stream;if(!stream||stream!==props.runningStreamId)return;if(props.onStopDelegations)props.onStopDelegations(stream);else {restoreQueuedToDraft();props.onCancel();} }}
+            /></PanelBoundary> : null
           ) : m.role === "tool" ? (
             <ToolLine key={m.id} message={m} onReport={props.onReportProblem} />
           ) : (

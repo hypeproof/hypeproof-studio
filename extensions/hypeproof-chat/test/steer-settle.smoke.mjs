@@ -82,7 +82,7 @@ function fixture({ fixed = true, capMs = TURN_SETTLE_WAIT_MS, cleanupMs = 40 } =
   const profile = { profile_id: "class-a", activity_kind: "classroom", ux: { coach: { naming_mode: "fixed", fallback_name: "코치" } } };
   Object.assign(h, {
     context: { workspaceState: { get: (k, f) => state.get(k) ?? f, update: async (k, v) => state.set(k, v) }, secrets: { get: async () => "synthetic-token" } },
-    nativeHistoryScope: "task-a", pendingSends: 0, activeStreams: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
+    nativeHistoryScope: "task-a", pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
     _instructorMode: { isInstructor: false, onTurnSuccess() {}, async revertModelOnTurnError() {} }, cachedProfile: profile,
     getHistory: () => history,
     // The stopped turn's partial answer is saved here before the lock is released; make that take a moment.

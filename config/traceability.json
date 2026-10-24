@@ -6953,6 +6953,27 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/DelegationRow.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/delegationStop.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/DelegationGroup.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
         }
       ]
     },
@@ -6970,6 +6991,21 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/delegation-row.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/delegation-group.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/delegation-stop.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/delegation-stop-sdk.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/delegation-stop-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/delegation-group-layout.smoke.mjs"
         }
       ]
     },

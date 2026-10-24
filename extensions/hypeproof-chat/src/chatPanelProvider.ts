@@ -906,6 +906,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // Inline `??=` at each use, not a getter: some fixtures call postConfig on a plain object that has no prototype getters.
   private capChanges?: CapabilityChangeTracker;
   private activeStreams = new Map<string, AbortController>();
+  private delegationControls = new Map<string, {scope:string;stop:()=>void}>();
+  private reportDelegationStop(streamId:string,scope:string,ctrl:AbortController,state:import("./delegationStop").DelegationStopState):void {
+    if(scope!==JSON.stringify([this.turnRequestScope(),this.profileGeneration]) || this.activeStreams.get(streamId)!==ctrl)return;
+    void this.post({type:'delegationStopState',streamId,state});
+    // Missing task IDs/control/ack must not leave helpers running after a stop request.
+    if(state==='unconfirmed'&&!ctrl.signal.aborted){ctrl.abort();void this.post({type:'streamStopped',streamId});}
+  }
+
   // REQ-STUDIO-STEER-NOW — the latest turn until its outer finally released the folder lock (turnSettle.ts);
   // undefined once it has. Fixtures build the provider with Object.create, which skips field initializers.
   private turnSettling?: Promise<void>;
@@ -6274,6 +6282,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         return;
       }
+      case "stopDelegations": {
+        const control=this.delegationControls.get(msg.streamId);
+        if(!this.activeStreams.has(msg.streamId))return;
+        if(control?.scope===JSON.stringify([this.turnRequestScope(),this.profileGeneration]))control.stop();
+        else if(!control){
+          // Older/local runtimes keep their existing whole-turn cancel, without claiming SDK acknowledgement.
+          await this.post({type:'delegationStopState',streamId:msg.streamId,state:'unconfirmed'});
+          this.activeStreams.get(msg.streamId)?.abort();
+          await this.post({type:'streamStopped',streamId:msg.streamId});
+        }
+        return;
+      }
       case "cancelStream":
         this.activeStreams.get(msg.streamId)?.abort();
         // #497 — abort() alone tells the webview NOTHING. handleSend and
@@ -7614,11 +7634,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // or failed, the turn continues exactly as before.
         await this.maybeOfferSdkSeed(profile, cfg.get<string>("sdkBinaryPath", "") || undefined, ctrl.signal);
         try {
+          const delegationScope=JSON.stringify([this.turnRequestScope(),this.profileGeneration]);
           const sdkEnd = await runSdkCoach({
             toolMode: mode,
             gatewayUrl: proxyUrl,
             effort,
             turnId: streamId,
+            onDelegationControl:stop=>{if(stop)this.delegationControls.set(streamId,{scope:delegationScope,stop});else this.delegationControls.delete(streamId);},
+            onDelegationStop:state=>this.reportDelegationStop(streamId,delegationScope,ctrl,state),
             fundingSource,
             lessonBinding: bindingKey,
             lessonStep: turnFocus.step,
@@ -7920,6 +7943,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         clearTimeout(timer);
       }
       await this.endTurnRestore(turnRestorePoint, streamId, messageId);
+      this.delegationControls.delete(streamId);
       this.activeStreams.delete(streamId);
       // cr-verify — the run this turn carried takes no more coach calls once the turn ends.
       this.verifySession?.endTurn();

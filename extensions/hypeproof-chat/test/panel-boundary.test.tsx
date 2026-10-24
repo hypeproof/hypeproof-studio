@@ -266,7 +266,7 @@ const PANELS: Row[] = [
   { panel: "citations", key: "CitationPreview.tsx:CitationRack", mode: "personal", history: CITED },
   { panel: "citations", key: "ChatPanel.tsx:CitationRack", mode: "classroom", history: CITED },
   { panel: "page-card", key: "PageCard.tsx:PageCard", mode: "personal", msgs: () => [{ type: "pageCardsState", cards: [{ turnId: "s1", anchorId: "a1", pages: [] }] }] },
-  { panel: "delegation", key: "DelegationRow.tsx:DelegationRow", mode: "personal", history: DELEGATED },
+  { panel: "delegation", key: "DelegationGroup.tsx:DelegationGroup", mode: "personal", history: DELEGATED },
   { panel: "turn-review", key: "TurnReviewBar.tsx:TurnReviewBar", mode: "personal", msgs: () => [{ type: "turnReviewState", view: { turnId: "s1" } }] },
   { panel: "missing-folder", key: "MissingFolderNotice.tsx:MissingFolderNotice", mode: "personal", blocking: true, msgs: () => [{ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") }] },
   { panel: "preview-recovery", key: "PreviewRecoveryNotice.tsx:PreviewRecoveryNotice", mode: "personal", msgs: () => [{ type: "previewRecovery", signals: { server: "stopped", status: null, path: "/", needsNetwork: false } }] },

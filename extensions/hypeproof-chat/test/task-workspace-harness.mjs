@@ -29,7 +29,7 @@ export async function createTaskHarness(root, onMessage = () => {}, { profile = 
   const store = new TaskWorkspaceStore(root, 'synthetic-personal-a');
   await store.initialize();
   const h = Object.create(ChatPanelProvider.prototype);
-  Object.assign(h, { context, taskWorkspace: { activityId: activity.id, store }, taskChanging: false, connectionChanging: false, draftWrites: Promise.resolve(), activeStreams: new Map(), pendingSends: 0, elementQueue: { queued: null }, aiDisclosure: { noticeForReady: () => null }, postInbox: async () => {}, postLearningState: async () => {},
+  Object.assign(h, { context, taskWorkspace: { activityId: activity.id, store }, taskChanging: false, connectionChanging: false, draftWrites: Promise.resolve(), activeStreams: new Map(), delegationControls: new Map(), pendingSends: 0, elementQueue: { queued: null }, aiDisclosure: { noticeForReady: () => null }, postInbox: async () => {}, postLearningState: async () => {},
     // Object.create skips field initializers; the write approval dialog only needs its lifecycle calls here.
     writeApprovalRequest: { cancel() {}, invalidate() {}, respond() {} } });
   const source = { postMessage: async message => { const copy = JSON.parse(JSON.stringify(message)); posts.push(copy); onMessage(copy); return true; } };

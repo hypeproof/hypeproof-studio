@@ -13,7 +13,7 @@ function host(){
  const posts=[];
  // Exercise request snapshots and retry validation too; a partial method copy
  // can fail before the deferred storage boundary this test is meant to cover.
- return Object.assign(Object.create(proto),{pendingSends:0,activeStreams:new Map(),turnTimelines:new Map(),turnRequests:new Map(),getHistory:()=>[],posts,post:async message=>{posts.push(message);}});
+ return Object.assign(Object.create(proto),{pendingSends:0,activeStreams:new Map(), delegationControls: new Map(),turnTimelines:new Map(),turnRequests:new Map(),getHistory:()=>[],posts,post:async message=>{posts.push(message);}});
 }
 // Pause the actual send before profile/stream creation. Both submit routes must
 // own the connection immediately; an exception must release that ownership.

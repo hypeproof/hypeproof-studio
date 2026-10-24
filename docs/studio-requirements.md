@@ -275,10 +275,10 @@ were each removed once and a test failed.
 `REQ-STUDIO-DELEGATION-ROW` (CGP-AGENT-R-009 / REQ-CGP-AGENT-12, design CGP-AGENT-D-008,
 P1, 2026-10-20): when the coach delegates to a helper (an agent SDK `Task`/`Agent` tool call
 at the top level, possible only where the profile grants `sdk_tools.subagents`, REQ-M22;
-folder-consent read-only keeps the grant), the timeline draws one collapsed row instead of
-the raw `Task(...)` tool line. The summary shows the helper (`subagent_type`, else "도우미"),
+folder-consent read-only keeps the grant), the timeline groups delegations of the same originating stream behind one "도우미 N명 · M명 끝남" button instead of
+the raw `Task(...)` tool lines (CGP-AGENT-D-008, 2026-10-24). M counts successful results only; other turns and unbound legacy rows never join this group. Opening the button shows a dialog (bottom sheet at 320px) whose rows show the helper (`subagent_type`, else "도우미"),
 the task (`description`, else `prompt`, one line, clipped at 60 like a tool line) and a
-status. Each row is bound to the stream (turn) that made it (`delegate-<task id>@<stream id>`):
+status, and a "결과 보기" disclosure. Each row is bound to the stream (turn) that made it (`delegate-<task id>@<stream id>`):
 "진행 중" only while that stream is the one running, so 다시 시도 after a failed turn (a new
 stream that adds no user line) never revives an old row; "끝남" after a successful result;
 "실패" after an error result, and also when the turn itself ended in an error or ended
@@ -291,14 +291,23 @@ same short reason a failed tool line shows, or "도우미가 일을 끝내지 �
 (`extractSdkActivity` now carries it). Those lines leave the main flow and do not touch its
 "다음 단계를 준비하는 중…" notice line. A child whose row is not in the list (cut by the
 history clamp) and a stored `Task(...)` line from before this row stay normal lines; every
-other tool line renders byte for byte as before. **모두 멈추기**: only while the row's own turn runs,
-the row offers it, and it calls the same cancel as the Stop button (`cancelStream` → the
-turn's `AbortController` → the SDK `abortController` option). The helpers run inside that
-turn's CLI process, so aborting the query ends them with the turn; no separate per-helper
-stop is used (the SDK's `stopTask` needs a task id from `task_*` events the host does not
-read). Not met from DES-CGP-AGENT-12: "멈춤" follows the host's `streamStopped`, which is
-posted right after the abort, not after the CLI confirms its exit, so there is no
-"멈추는 중…" state; there is no "도우미 N명 · M명 끝남" roll-up for several rows. Persistence:
+other tool line renders byte for byte as before. **모두 멈추기**: the expanded group has one secondary button while its own turn has active helpers.
+It requires no additional confirmation, sends once even on same-frame double clicks, and reads
+"멈추는 중…" while waiting. On an SDK with `Query.stopTask`, the host observes actual
+`task_started` IDs and stops those helper tasks. A returned control promise is not confirmation:
+"멈춤 확인" requires matching `task_notification` terminal events for all tracked helper runs
+and no unmatched delegation tool call. Shell tasks and stale run IDs do not confirm the group.
+New Agent/Task calls are refused for that turn after the stop request, including approval races.
+The main coach can finish its response after helpers stop. Late helper-start events are stopped
+too and reopen pending state. At five seconds without acknowledgement, rejected control, or
+a turn ending with unresolved helpers, the state is "멈춤 확인 안 됨" and the host falls back to
+the existing whole-turn abort. A runtime without task control also uses that abort immediately;
+neither abort nor `streamStopped` is positive SDK acknowledgement. Actual device stop latency
+and the five-second all-children guarantee remain NOT RUN; no fabricated Waiting status is added.
+Requests/callbacks are bound to stream, activity/task and profile generation. Other activities
+cannot receive old confirmations. Stop-state UI is local to the mounted App and is not a durable
+SDK execution receipt; after an app restart, historical "멈춤" is not "멈춤 확인".
+Persistence:
 nothing new. Row and children are ordinary tool lines (id, icon, label, state); the
 grouping is read from the id (`delegate-<task id>` and `delegate-<task id>~<child id>`)
 and the final response rides the row's label. Privacy: the header and the final response

@@ -24,7 +24,7 @@ function host(){
  const history=[],posts=[];
  const h=Object.create(proto); const fields={
  context:{globalStorageUri:{fsPath:directory},secrets:{get:async()=>token},workspaceState:{get:()=>undefined},globalState:{get:()=>undefined}},
- pendingSends:0,activeStreams:new Map(),turnTimelines:new Map(),turnRequests:new Map(),answerTurnIds:new Map(),observationWrites:Promise.resolve(),
+ pendingSends:0,activeStreams:new Map(), delegationControls: new Map(),turnTimelines:new Map(),turnRequests:new Map(),answerTurnIds:new Map(),observationWrites:Promise.resolve(),
  _instructorMode:{isInstructor:false,onTurnSuccess(){},revertModelOnTurnError:async()=>{}},finishNotifier:{release(){},turnEnded(){}},
  crSdkResults:{reset(){}},elementQueue:{take:()=>null},verifySession:{takeCoachContext:()=>null,endTurn(){}},liveServer:{currentUrl:()=>null},
  getHistory:()=>history,appendHistory:async items=>history.push(...items),post:async m=>{posts.push(m);},
