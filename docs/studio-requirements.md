@@ -4464,7 +4464,11 @@ The second confirmation is its own in-panel step (`PublicAudienceDialog`, a prom
 `step: "public"` and a single acknowledgement id that no content item set can answer).
 It uses the shared modal surface (`.hp-modal`) and focus geometry, titles itself
 "누구나 볼 수 있어요", names the audience "인터넷의 누구나" against "우리 반", and shows
-the destination as selectable monospace text. Focus starts on 취소. Enter never confirms
+the destination as selectable monospace text. CGP-KNOW-D-007 / DES-KNOW-10 keeps
+the public warning as its own `<h2>` at the learner scale's lead size (larger than
+body text, weight 600, visible inside the card above the destination) and wraps long destination hosts by character
+at 320px without horizontal overflow or truncating the selected text. This applies
+to personal and classroom seats, including forced colors. Focus starts on 취소. Enter never confirms
 (a native dialog's default button would), Escape cancels, and 공개하기 stays disabled
 until the learner ticks "인터넷의 누구나 볼 수 있다는 걸 확인했어요", so a double press or key
 repeat carried over from the checklist cannot publish. Only that tick plus a click or Space
@@ -4485,7 +4489,8 @@ custom domain or planned Pages host. Save-only manifests name github.com.
 Evidence: `public-publish-confirm.smoke.mjs` (every producer: cancel, reload and hidden
 panel send nothing; panel-hidden refusal without a native modal), `public-audience-dialog.smoke.mjs`
 (headless Chromium: focus, Enter/repeat, Escape, double press, geometry in the chat
-column, 44px targets), `outbound-approval.smoke.mjs`, `outbound-consent-host.smoke.mjs`,
+column, 44px targets, heading visibility and size, full destination string, destination contrast >= 4.5:1, long-host wrapping and complete selection at 320/800/1420px
+in dark/light and normal/forced colors), `outbound-approval.smoke.mjs`, `outbound-consent-host.smoke.mjs`,
 `publish-site.smoke.mjs`. PI#2 makes the learner responsible for choosing who receives
 work; this may expose JUDGMENT/OWNERSHIP, without learner-facing capability labels.
 
