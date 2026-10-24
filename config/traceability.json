@@ -6435,6 +6435,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/signin-copy-link.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/signin-copy-link-computed.smoke.mjs"
         }
       ]
     },
