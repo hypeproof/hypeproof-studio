@@ -1737,7 +1737,7 @@ export function ChatPanel(props: Props) {
         {/* CGP-KNOW-R-003 — the 자료 selected for the next message, each removable before Send. */}
         {!props.instructor && config?.materials && <MaterialsChips />}
 
-        {(props.annotationsEnabled || !!props.annotations?.length) && <AnnotationTray annotations={props.annotations ?? []} onAction={props.onAnnotationAction!} />}
+        {(props.annotationsEnabled || !!props.annotations?.length) && <AnnotationTray key={`${config?.activity?.id ?? ""}/${config?.taskWorkspace?.activeTaskId ?? ""}`} annotations={props.annotations ?? []} onAction={props.onAnnotationAction!} />}
         {/* CR-09 — exactly what goes to the coach with the next message, removable before sending. */}
         {props.elementPreview && (
           <div className="hps-element-context" role="group" aria-label="코치에게 함께 보낼 화면 요소" data-testid="element-context">

@@ -12,17 +12,12 @@ export interface AnnotationView {
   number: number; kind: Annotation['kind']; comment: string; stale: boolean;
   sentText: string; imageDataUrl: string | null;
 }
-import { ANNOTATION_LIMIT, COMMENT_MAX } from './annotationLimits';
+import { ANNOTATION_LIMIT, COMMENT_MAX, neutralizeComment } from './annotationLimits';
 export { ANNOTATION_LIMIT, COMMENT_MAX };
 /** Per annotation: at most this many element blocks, each at most CONTEXT_TEXT_MAX characters. */
 export const CONTEXTS_PER_ANNOTATION = 12;
 export const CONTEXT_TEXT_MAX = 1800;
-/** C0/C1 controls, soft hyphen, Arabic letter mark, zero-width and joiner marks, LRM/RLM,
- * U+2028/2029, the bidi embeddings, overrides and isolates, word joiner and invisible operators, BOM. */
-const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g;
-export function neutralizeComment(raw: string): string {
-  return raw.normalize('NFKC').replace(INVISIBLE, '').slice(0, COMMENT_MAX);
-}
+export { neutralizeComment } from './annotationLimits';
 /** Page content is quoted data: invisible and bidi characters removed (newlines kept), every line
  * fenced with "> " so a page line can never look like an envelope header, and the length bounded. */
 export function quotePageText(raw: string, max = CONTEXT_TEXT_MAX): string {

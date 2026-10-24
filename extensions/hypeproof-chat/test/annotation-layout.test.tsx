@@ -10,7 +10,7 @@
 //   - the shared 2px solid focus ring (focusGeometry.css), forced through the DevTools protocol
 //   - page text and comments render as text (no script runs, no element is created from them)
 //   - element.click() on 빼기 posts annotationAction remove with that number
-// PNGs for 1420 / 800 go to ~/.hypeproof/loop/cgp-artr001-in-the-learner-page/.
+// PNGs for 1420 / 800 go to ~/.hypeproof/loop/cgp-art-d-001-numbered-circular-markers-24/.
 // Without a headless Chromium this prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 (set by CI) makes that a failure.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -49,6 +49,8 @@ const measure = `(() => {
   const rb = box(root), pb = box(root.parentElement);
   out.root = { ...rb, parentLeft: pb.left, parentRight: pb.right, scrollW: root.scrollWidth, clientW: root.clientWidth, fontSize: parseFloat(getComputedStyle(root).fontSize) };
   out.items = root.querySelectorAll('.hps-annotation').length;
+  const list=root.querySelector('.hps-annotations-list'),chips=[...root.querySelectorAll('.hps-annotation')];
+  out.chipList={height:list.getBoundingClientRect().height,scroll:list.scrollHeight,overflow:getComputedStyle(list).overflowY,row:chips[0].getBoundingClientRect().height,gap:parseFloat(getComputedStyle(list).rowGap)};
   out.alerts = root.querySelectorAll('[role="alert"]').length;
   out.controls = [...root.querySelectorAll('button, input, summary')].map((e) => { const b = box(e), s = getComputedStyle(e);
     return { name: e.getAttribute('aria-label') || e.textContent.trim().slice(0, 20) || e.localName, w: b.w, h: b.h, left: b.left, right: b.right, fontSize: parseFloat(s.fontSize), display: s.display, textCut: e.localName === 'button' && e.scrollWidth > e.clientWidth + 0.5 }; });
@@ -68,7 +70,7 @@ async function main() {
   const { build } = require('esbuild');
   const webview = path.join(extension, 'webview-ui');
   const temp = mkdtempSync(path.join(tmpdir(), 'hps-annotation-layout-'));
-  const pngs = path.join(homedir(), '.hypeproof/loop/cgp-artr001-in-the-learner-page');
+  const pngs = path.join(homedir(), '.hypeproof/loop/cgp-art-d-001-numbered-circular-markers-24');
   mkdirSync(pngs, { recursive: true });
   await build({
     entryPoints: [path.join(webview, 'src/main.tsx')], bundle: true, platform: 'browser', jsx: 'automatic', outfile: path.join(temp, 'ui.js'), logLevel: 'error',
@@ -85,7 +87,7 @@ async function main() {
   const base = `http://127.0.0.1:${(server.address() as any).port}/`;
   const b: any = await launch(bin);
   const results: any[] = [];
-  const RING = ['.hps-annotations-actions button', '.hps-annotation-remove', '.hps-annotation input', '.hps-annotation summary'];
+  const RING = ['.hps-annotations-actions button', '.hps-annotation-remove', '.hps-annotation input', '.hps-annotation-preview'];
   try {
     const runs = [...['personal', 'classroom'].flatMap((surface) => ['dark', 'light'].flatMap((theme) => [1420, 800, 320].map((width) => ({ surface, theme, width, forced: false })))),
       { surface: 'personal', theme: 'dark', width: 800, forced: true }, { surface: 'classroom', theme: 'light', width: 800, forced: true }];
@@ -105,13 +107,20 @@ async function main() {
         await new Promise((r) => setTimeout(r, 100));
         await b.evaluate(`window.dispatchEvent(new MessageEvent('message', { data: { type: 'annotations', enabled: true, annotations: ${JSON.stringify(annotations)} } }))`);
         for (let i = 0; i < 50 && !(await b.evaluate(`!!document.querySelector('.hps-annotations .hps-annotation')`)); i++) await new Promise((r) => setTimeout(r, 100));
+        await b.evaluate(`document.querySelector('.hps-annotation-preview').click()`);
         const m = await b.evaluate(measure);
+        await b.evaluate(`(()=>{window.sent.length=0;const input=document.querySelector('.hps-annotation input');input.focus();input.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true,data:'ㅎ'}));Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'하');input.dispatchEvent(new InputEvent('input',{bubbles:true,data:'하',isComposing:true}));})()`);
+        assert.equal((await b.evaluate(`window.sent.filter(m=>m.type==='annotationAction'&&m.action==='comment')`)).length,0,'intermediate composition is not posted');
+        await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'annotations',enabled:true,annotations:${JSON.stringify(annotations)}}}))`);
+        assert.equal(await b.evaluate(`document.querySelector('.hps-annotation input').value`),'하','host echo does not break composition');
+        await b.evaluate(`(()=>{const input=document.querySelector('.hps-annotation input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'한글');input.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'한글'}));})()`);
+        assert.deepEqual(await b.evaluate(`window.sent.filter(m=>m.type==='annotationAction'&&m.action==='comment').map(m=>m.comment)`),['한글'],'one complete composed comment');
         if (m.found) {
           m.ring = {};
           for (const selector of RING) m.ring[selector] = await b.focusVisibleStyle(selector);
           await b.evaluate(`window.sent.length = 0; document.querySelectorAll('.hps-annotation-remove')[2].click()`);
           m.sent = await b.evaluate(`window.sent.filter((x) => x.type === 'annotationAction')`);
-          if (width !== 320 && !forced) {
+          if (!forced) {
             await b.evaluate(`document.querySelector('.hps-annotations').scrollIntoView({ block: 'start' })`);
             const shot = await b.send('Page.captureScreenshot', { format: 'png' });
             writeFileSync(path.join(pngs, `annotations-${surface}-${width}-${theme}.png`), Buffer.from(shot.data, 'base64'));
@@ -128,6 +137,7 @@ async function main() {
   for (const r of results) {
     expect(r.found, `${r.where}: the tray does not render`);
     if (!r.found) continue;
+    expect(r.chipList.height <= 2*r.chipList.row+r.chipList.gap+1 && r.chipList.scroll>r.chipList.height && r.chipList.overflow==='auto', `${r.where}: chips must occupy at most two scrollable rows`);
     expect(r.items === 10 && r.alerts === 1, `${r.where}: ${r.items} items, ${r.alerts} stale alerts`);
     expect(r.injected === null && r.scripts === 0, `${r.where}: hostile text became markup (${r.injected}, ${r.scripts})`);
     expect(r.docScroll <= r.vw + 0.5, `${r.where}: the page scrolls horizontally (${r.docScroll} > clientWidth ${r.vw})`);
