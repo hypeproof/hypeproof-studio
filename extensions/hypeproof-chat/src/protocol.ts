@@ -653,6 +653,7 @@ export type WebviewMessage = (
   | { type: "selectAnswerAttempt"; activityId?: string; taskId?: string; rootId: string; attemptId: string; choose: boolean }
   | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[]; toolMode?: import('./turnTools').TurnToolMode; sourceMessageId?: string; userMessageId?: string }
   | { type: "cancelStream"; streamId: string }
+  | { type: "stopDelegations"; streamId: string }
   /** CGP-SHELL-R-023 — local first-result education; no verdict or telemetry. */
   | { type: "accuracyEducationRequest"; requestId: string }
   | { type: "accuracyEducationDismiss"; messageId: string }
@@ -850,6 +851,7 @@ export type HostMessage = (
   /** `userMessageId` (REQ-STUDIO-STEER-NOW): the learner request this turn answers; absent for app-initiated replies. */
   | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
   | { type: "streamChunk"; streamId: string; delta: string }
+  | { type: "delegationStopState"; streamId: string; state: import("./delegationStop").DelegationStopState }
   | { type: "streamCitations"; streamId: string; citations: Citation[] }  // #173
   // SX-59 — the host message that used to leak capability scores to the webview
   // (#204) has been removed. A score reaches the working screen in no shape at all.

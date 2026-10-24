@@ -152,7 +152,7 @@ try {
       Object.assign(h, {
         context: { globalState: { get: (k) => state.get(k), update: async (k, v) => { state.set(k, v); } }, workspaceState: { get: () => undefined, update: async () => {} }, secrets: { get: async () => "tok" } },
         cachedProfile: profile, servedWorkspaceRoot: home, _instructorMode: { isInstructor: false },
-        pendingSends: 0, activeStreams: new Map(), turnRequests: new Map(),
+        pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnRequests: new Map(),
         currentTaskStore: () => store,
         post: async (m) => { posts.push(J(m)); return true; },
         postHistory: async () => { posts.push({ type: "history" }); },
@@ -387,7 +387,7 @@ try {
       const h = Object.create(ChatPanelProvider.prototype);
       Object.assign(h, {
         context, cachedProfile: profile, servedWorkspaceRoot: home, _instructorMode: { isInstructor: false },
-        pendingSends: 0, activeStreams: new Map(), turnRequests: new Map(),
+        pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnRequests: new Map(),
         post: async () => true, postHistory: async () => {}, ensureProfile: async () => profile,
         setConnectionChanging: async () => {},
       });

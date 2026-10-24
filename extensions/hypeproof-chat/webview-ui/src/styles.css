@@ -2514,3 +2514,18 @@ html, body, #root {
 .hps-shell :is(button, input, select, textarea), .hps-codeblock-tools {
   font-family: var(--vscode-font-family, var(--ds-c-typography-ui));
 }
+
+/* DES-CGP-AGENT-12: one turn summary and a responsive helper results panel. */
+.hps-delegation-group { min-width: 0; margin-block: var(--hp-space-2); }
+.hps-delegation-toggle, .hps-delegation-panel button { min-width: var(--ds-c-inline-hit-target); min-height: var(--ds-c-inline-hit-target); padding: var(--hp-space-2); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-10); background: transparent; color: inherit; font: inherit; font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
+.hps-delegation-panel { border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); font: inherit; font-size: var(--hp-font-caption); }
+.hps-delegation-panel header { display: flex; align-items: center; gap: var(--hp-space-2); justify-content: space-between; }
+.hps-delegation-panel h2 { font: inherit; font-weight: var(--hp-weight-strong); }
+.hps-delegation-panel .hps-delegation-summary { flex-wrap: wrap; font-size: var(--hp-font-caption); }
+.hps-delegation-panel .hps-delegation-task { flex-basis: 100%; white-space: normal; overflow-wrap: anywhere; }
+.hps-delegation-result-link { text-decoration: underline; }
+.hps-delegation-panel .hps-delegation-body { padding: var(--hp-space-2); font-size: var(--hp-font-caption); }
+.hps-delegation-panel :focus-visible, .hps-delegation-toggle:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-delegation-panel button:disabled { cursor: default; }
+.hps-delegation-toggle:hover:not(:disabled), .hps-delegation-panel button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-delegation-toggle:active:not(:disabled), .hps-delegation-panel button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }

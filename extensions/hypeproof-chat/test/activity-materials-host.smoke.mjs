@@ -77,7 +77,7 @@ function fixture({ profile, instructor = false } = {}) {
   let task = "task-a";
   Object.assign(h, {
     context: { globalStorageUri: { fsPath: storage }, workspaceState: { get: (k, f) => state.get(k) ?? f, update: async (k, v) => state.set(k, v) }, globalState: { get: (k) => global.get(k), update: async (k, v) => global.set(k, v) }, secrets: { get: async () => "synthetic-token" }, subscriptions: [] },
-    nativeHistoryScope: "task-a", pendingSends: 0, activeStreams: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
+    nativeHistoryScope: "task-a", pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
     _instructorMode: { isInstructor: instructor, onTurnSuccess() {}, async revertModelOnTurnError() {} }, cachedProfile: seat, accessState: null, servedWorkspaceRoot: null,
     getHistory: () => history, appendHistory: async (items) => { for (const it of items) history.push(copy(it)); },
     post: async (e) => { posts.push(copy(e)); }, postConfig: async () => {}, getCoach: () => ({ name: "코치", personality: "", configured: true }),

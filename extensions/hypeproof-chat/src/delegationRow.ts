@@ -235,3 +235,18 @@ export function groupDelegations(
   }
   return { rows, grouped };
 }
+
+
+/** One summary per originating stream; unbound legacy rows never borrow another turn. */
+export function delegationGroups(rows: ReadonlyMap<string, DelegationView>): Map<string, DelegationView[]> {
+  const groups = new Map<string, DelegationView[]>();
+  const first = new Map<string, string>();
+  for (const view of rows.values()) {
+    const scope = parseDelegationId(view.id)?.stream ?? view.id;
+    const key = first.get(scope) ?? view.id;
+    first.set(scope, key);
+    const group = groups.get(key) ?? [];
+    group.push(view); groups.set(key, group);
+  }
+  return groups;
+}

@@ -66,7 +66,7 @@ function fixture(t, { runtimeMode = 'agent-sdk', resolvedProfile = copy(profile)
   const { ChatPanelProvider, runSdkCoach, SdkUnavailableError, BrowserControl } = module.exports;
   const h = Object.create(ChatPanelProvider.prototype), state = new Map();
   const context = { workspaceState: { get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => state.set(key, value) }, secrets: { get: async () => 'synthetic-test-token' } };
-  Object.assign(h, { context, nativeHistoryScope: 'task-a', pendingSends: 0, activeStreams: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
+  Object.assign(h, { context, nativeHistoryScope: 'task-a', pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
     _instructorMode: { isInstructor: instructor, onTurnSuccess() {}, async revertModelOnTurnError() {} }, cachedProfile: resolvedProfile,
     getHistory: () => history, appendHistory: async items => { for (const item of items) { const i = history.findIndex(previous => previous.id === item.id); if (i < 0) history.push(copy(item)); else history[i] = copy(item); } },
     post: async event => posts.push(copy(event)), postConfig: async () => {}, getCoach: () => ({ name: '코치', personality: '', configured: true }),

@@ -136,7 +136,7 @@ try {
       cachedProfile: { publishing: { enabled: true, strategy: "hypeproof_gallery" }, analytics: { upload_session_logs: true } },
       profileGeneration: 1, resolveCoachCwd: () => work, inlineEngineIfNeeded: async (html) => html,
       spool: { currentSessionDir: () => sessionDir }, post: async (m) => { posts.push(m); return true; },
-      activeStreams: new Map(), pendingSends: 0, draftWrites: Promise.resolve(), postConfig: async () => {}, loadAccess: async () => {},
+      activeStreams: new Map(), delegationControls: new Map(), pendingSends: 0, draftWrites: Promise.resolve(), postConfig: async () => {}, loadAccess: async () => {},
     });
     // CGP-KNOW-R-007: public sends are only ever asked in the panel. `panel` answers each step like the in-panel dialogs:
     // `panel.content` / `panel.public` (true, false or null = no visible panel); `panel.asked` records [step, details].
