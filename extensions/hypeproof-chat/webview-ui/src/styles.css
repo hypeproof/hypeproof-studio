@@ -2529,3 +2529,12 @@ html, body, #root {
 .hps-delegation-panel button:disabled { cursor: default; }
 .hps-delegation-toggle:hover:not(:disabled), .hps-delegation-panel button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
 .hps-delegation-toggle:active:not(:disabled), .hps-delegation-panel button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+/* CGP-ART-D-011: compact state beside publish; detailed link settings stay explicit. */
+.hps-publish-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
+.hps-sharing-pill, .hps-sharing-refresh { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-c-studio-styles-space-15); min-height: var(--ds-c-studio-tokens-control-md); min-width: var(--ds-c-studio-tokens-control-md); max-width: 100%; padding: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-7); font: inherit; font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-15); cursor: pointer; }
+.hps-sharing-pill svg { flex-shrink: 0; }
+.hps-sharing-pill:hover, .hps-sharing-refresh:hover, .hps-share-settings > summary:hover { background-color: var(--hp-bg-control-hover); }
+.hps-sharing-pill:active, .hps-sharing-refresh:active, .hps-share-settings > summary:active { background-color: var(--hp-bg-control-pressed); }
+.hps-sharing-pill:focus-visible, .hps-sharing-refresh:focus-visible, .hps-share-settings > summary:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-width); }
+.hps-share-settings > summary { min-height: var(--ds-c-studio-tokens-control-md); font-size: var(--hp-font-caption); cursor: pointer; }
+.hps-share-settings { overflow-wrap: anywhere; }

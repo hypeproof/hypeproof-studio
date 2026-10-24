@@ -10865,6 +10865,9 @@
           "path": "extensions/hypeproof-chat/test/publish-sharing-layout.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/publish-sharing-pill.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/publish-sharing-host.smoke.mjs"
         },
         {
