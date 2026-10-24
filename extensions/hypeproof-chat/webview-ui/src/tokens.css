@@ -93,6 +93,7 @@
   --hp-dur-pending: var(--ds-c-studio-tokens-size-84);    /* response dots, 3 cycles = 3.6s (CP-R1 3.8s cap) */
   --hp-dur-pulse: var(--ds-c-studio-tokens-size-85);        /* classroom thinking dots */
   --hp-dur-shimmer: var(--ds-c-studio-tokens-size-86);    /* code-progress sweep */
+  --hp-dur-page-result-shimmer: var(--ds-c-page-result-shimmer-duration); /* CGP-ART-D-010: page result thumbnail placeholder sweep */
   --hp-dur-breathe: var(--ds-c-studio-tokens-size-87);    /* code-progress border */
   --hp-dur-runner-run: var(--ds-c-studio-tokens-size-87);
   --hp-dur-runner-hop: var(--ds-c-studio-tokens-size-88);

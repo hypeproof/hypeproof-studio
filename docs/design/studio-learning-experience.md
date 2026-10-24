@@ -319,6 +319,7 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-dur-pending: 1.2s;    /* 응답 점, 3회 = 3.6s (CP-R1 상한 3.8s) */
   --hp-dur-pulse: 1s;        /* 수업 채팅 생각 점 */
   --hp-dur-shimmer: 1.8s;    /* 코드 진행 줄 빛 */
+  --hp-dur-page-result-shimmer: 1.2s; /* 페이지 결과 카드 미리보기 자리 빛 (CGP-ART-D-010) */
   --hp-dur-breathe: 2.4s;    /* 코드 진행 테두리 */
   --hp-dur-runner-run: 2.4s;
   --hp-dur-runner-hop: .42s;

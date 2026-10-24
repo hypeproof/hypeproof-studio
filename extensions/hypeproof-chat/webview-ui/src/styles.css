@@ -1388,6 +1388,21 @@ html, body, #root {
 .hps-page-card-actions button:active { background-color: var(--hp-bg-control-pressed); }
 .hps-page-card-actions button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
+.hps-page-card { font-size: var(--hp-font-caption); box-sizing: border-box; width: 100%; max-width: var(--ds-c-studio-styles-size-106); }
+.hps-page-card-row { display: block; }
+.hps-page-card-name { display: block; margin: var(--ds-c-studio-styles-space-15) 0; }
+.hps-page-result-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hps-page-result-thumbnail { width: 100%; aspect-ratio: 16 / 10; overflow: hidden; display: grid; place-items: center; background: var(--hp-bg-control-hover); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); box-sizing: border-box; border-radius: var(--ds-c-studio-styles-radius-10); }
+.hps-page-result-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.hps-page-result-icon { font-size: var(--hp-font-lead); }
+.hps-page-result-shimmer { width: 100%; height: 100%; background: linear-gradient(90deg,transparent,var(--hp-border-control-default),transparent); animation: page-result-shimmer var(--hp-dur-page-result-shimmer) ease-in-out infinite; }
+.hps-page-result-meta { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-15); margin-bottom: var(--ds-c-studio-styles-space-15); }
+.hps-page-result-badge { color: inherit; }
+@keyframes page-result-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+:where(:root[data-reduced-motion="true"]) .hps-page-result-shimmer { animation: none; }
+@media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-page-result-shimmer { animation: none; } }
+@media (forced-colors: active) { .hps-page-result-thumbnail { border: var(--ds-c-studio-styles-size-3) solid CanvasText; } }
+
 /*
  * #503 — tool rows now sit one per line on the same timeline as the bubbles (the old
  * `.hps-tool-log` box is gone — that was the container that split the screen into two

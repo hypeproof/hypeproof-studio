@@ -7949,6 +7949,12 @@
           "path": "extensions/hypeproof-chat/src/pageCardHost.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/pageCardPresentation.ts"
+        },
+        {
+          "path": "scripts/patches/core/hps-page-thumbnail.patch"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/PageCard.tsx"
         },
         {
@@ -7973,6 +7979,21 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/page-card-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/page-card-result-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/page-card-presentation.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/page-card-result-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/page-thumbnail-capture.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/cr-verify.smoke.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/task-workspace-harness.mjs"

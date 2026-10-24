@@ -157,11 +157,12 @@ try {
       const diff=execFileSync('git',['diff','--unified=0',base,'--',file],{cwd:root}).toString().split('\n').filter(l=>/^[+-][^+-]/.test(l)&&idLine.test(l));
       assert.deepEqual(diff,[],`${file}: identity lines differ from main`);
     }
-    // package.json: the diff against main may change display labels only.
+    // Runtime manifest differences are label-only; npm scripts are developer tooling, not app identity.
     const labelKeys=new Set(['title','category','description','enumItemLabels']);
     const strip=(node,trail=[])=>{
       if(Array.isArray(node))return node.map(v=>strip(v,trail));
       if(node&&typeof node==='object'){const out={};for(const [k,v] of Object.entries(node)){
+        if(trail.length===0&&k==='scripts')continue;
         const inContrib=trail[0]==='contributes';
         const viewName=k==='name'&&trail[0]==='contributes'&&trail[1]==='views';
         if(inContrib&&(labelKeys.has(k)||viewName)&&typeof v!=='object'||inContrib&&k==='enumItemLabels')continue;

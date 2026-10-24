@@ -1,3 +1,4 @@
+import { pageResultState } from '../src/pageCardPresentation.ts';
 // AI Verify over the Experiment Browser (cr-verify #1392), App half at the smoke layer.
 // The runner and the session drive the real CR executor over a scripted kiosk page (the
 // fake CDP page of the cr-browser smokes) and write to a real NativeObservationRecorder
@@ -320,6 +321,9 @@ await test("CR-T16 + CR-T76: fail → fix request (report, criterion 2, v0) → 
   view = await s.session.view();
   assert.deepEqual(view.report.criteria.map((c) => c.id), [c1.id, c2.id], "the re-test is the whole set");
   assert.equal(view.verification.state, "verified");
+  assert.equal(pageResultState(vid("b"), vid("b"), events), "verified", "result card accepts the actual validated all-pass report");
+  assert.equal(pageResultState(vid("b"), vid("c"), events), "previous");
+  assert.equal(pageResultState(vid("c"), vid("c"), events), "unchecked");
 });
 
 await test("CR-T16 negative: a fix request without its report or criterion is refused and nothing is sent or recorded", async () => {
