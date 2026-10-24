@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { copyableSignInLink, copySignInLink, type SignInLinkState } from './signInLink.ts';
 
 /** Host-only personal account credentials. Presentation state deliberately has no credential fields. */
@@ -39,6 +39,8 @@ interface Options {
   freeCredential?(): PromiseLike<string | undefined>;
   fetch?: typeof fetch; now?: () => number;
 }
+const rotationIdentity = (bundle: Bundle): string => createHash('sha256').update(JSON.stringify([bundle.service, bundle.sessionId, bundle.refreshToken])).digest('hex');
+const ROTATION_STORAGE_MESSAGE = '로그인 정보 갱신을 이 기기에 저장하지 못했어요. 기존 정보는 지우지 않았지만 서버에서 이전 갱신 정보가 이미 사용됐을 수 있어요. 키체인 접근을 복구한 뒤 Google로 다시 로그인해 주세요.';
 const record = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const identity = (v: unknown): AccountIdentity | undefined => record(v) && typeof v.id === 'string' && typeof v.email === 'string'
   ? { id: v.id, email: v.email, display_name: typeof v.display_name === 'string' ? v.display_name : v.email } : undefined;
@@ -86,6 +88,11 @@ export class AccountSession {
   private polling?: Promise<void>;
   private passTokens = new Map<string, { token: string; expiresAt: number; sessionId: string }>();
   private lastSession?: string;
+  /** Failure guard only, never a usable credential or a volatile successful login.
+   * Native refresh consumes the old token; replay can revoke the whole session.
+   * A host restart loses this guard, so a later Service rejection still requires re-login.
+   */
+  private failedRotation?: string;
   private state: AccountView = { status: 'signedOut' };
   constructor(options: Options) { this.options = options; this.request = options.fetch ?? fetch; this.now = options.now ?? Date.now; }
   matches(service: string, site: string): boolean { return service === this.options.service && site === this.options.site; }
@@ -120,16 +127,21 @@ export class AccountSession {
     this.passTokens.clear(); this.lastSession = undefined;
     await this.options.secrets.delete(ACCOUNT_SECRET_KEY);
     await this.options.invalidated?.(bundle.sessionId);
+    this.failedRotation = undefined;
     this.state = { status: 'signedOut', message }; this.emit();
   }
   private async save(bundle: Bundle, previous?: Bundle): Promise<void> {
     try { await this.options.secrets.store(ACCOUNT_SECRET_KEY, JSON.stringify(bundle)); }
     catch {
-      await this.call('/auth/logout', {}, bundle.accessToken).catch(() => undefined);
-      await this.options.secrets.delete(ACCOUNT_SECRET_KEY);
-      this.passTokens.clear(); this.lastSession = undefined;
-      if (previous) await this.options.invalidated?.(previous.sessionId);
-      this.state = {status:'signedOut',message:'이 기기에 로그인 정보를 저장하지 못했어요. 다시 로그인해 주세요.'}; this.emit();
+      // A rejected encrypted write must never erase or invalidate the previous
+      // persisted session. A rotated access token belongs to that same session:
+      // logging it out would revoke the session whose ciphertext we preserved.
+      if (previous) this.failedRotation = rotationIdentity(previous);
+      if (!previous || previous.sessionId !== bundle.sessionId) {
+        await this.call('/auth/logout', {}, bundle.accessToken).catch(() => undefined);
+      }
+      this.passTokens.clear();
+      this.state = {status:'signedOut',message:previous ? ROTATION_STORAGE_MESSAGE : '이 기기에 로그인 정보를 저장하지 못했어요. 키체인 접근을 복구한 뒤 다시 로그인해 주세요.'}; this.emit();
       throw new AccountError('storage_failed', this.state.message!);
     }
   }
@@ -137,6 +149,9 @@ export class AccountSession {
   async accessToken(): Promise<string | undefined> {
     return this.exclusive(async () => {
       const b = await this.read(); if (!b) return;
+      if (this.failedRotation === rotationIdentity(b)) throw new AccountError('storage_failed', ROTATION_STORAGE_MESSAGE);
+      // Another window may have persisted a replacement while this one was blocked.
+      this.failedRotation = undefined;
       if (b.expiresAt > this.now() + 300_000) return b.accessToken;
       try { const response = await this.call('/auth/refresh', { refresh_token: b.refreshToken }); const next = this.parseBundle(response.body); await this.save(next, b); return next.accessToken; }
       catch (e) { if (e instanceof AccountError && /^(invalid_refresh|refresh_reuse|session_revoked|invalid_token|authentication_required)$/.test(e.code)) await this.forget(b, e.message); throw e; }
@@ -170,7 +185,20 @@ export class AccountSession {
     await this.completeReturn();
   }
   async start(): Promise<void> {
-    if (await this.read()) return;
+    const existing = await this.read();
+    if (existing) {
+      if (this.failedRotation !== rotationIdentity(existing)) return;
+      // The explicit sign-in action is recovery after a consumed, unpersisted
+      // rotation. Storage deletion/revocation occurs only on this user action.
+      const cleared = await this.exclusive(async () => {
+        const current = await this.read();
+        if (!current) return true;
+        if (this.failedRotation !== rotationIdentity(current)) { this.failedRotation = undefined; return false; }
+        await this.signOutStored(current);
+        return true;
+      });
+      if (!cleared) { await this.refreshView(); return; }
+    }
     this.cancel(false); const generation = this.generation;
     this.state = { status: 'signedOut', busy: true }; this.emit();
     try {
@@ -298,16 +326,19 @@ export class AccountSession {
     this.cancel(false);
     await this.exclusive(async () => {
       const b = await this.read(); if (!b) { this.state = { status: 'signedOut' }; this.emit(); return; }
-      // Local credentials are removed even offline. Remote revoke failures are visible and retryable on the account site.
-      let revoked = true;
-      try {
-        // Already inside the cross-window lock: refresh directly, never nest accessToken().
-        let token = b.accessToken;
-        if (b.expiresAt <= this.now() + 60_000) token = this.parseBundle((await this.call('/auth/refresh', {refresh_token:b.refreshToken})).body).accessToken;
-        await this.call('/auth/logout', {}, token);
-      } catch { revoked = false; }
-      await this.forget(b, revoked ? '이 기기에서 로그아웃했어요.' : '이 기기의 로그인 정보를 지웠어요. 서버에 연결하지 못해 원격 로그아웃은 확인하지 못했어요. 계정 페이지에서 기기 로그아웃을 확인해 주세요.');
+      await this.signOutStored(b);
     });
+  }
+  private async signOutStored(b: Bundle): Promise<void> {
+    // Local credentials are removed even offline. Remote revoke failures are visible and retryable on the account site.
+    let revoked = true;
+    try {
+      // Already inside the cross-window lock: refresh directly, never nest accessToken().
+      let token = b.accessToken;
+      if (b.expiresAt <= this.now() + 60_000 && this.failedRotation !== rotationIdentity(b)) token = this.parseBundle((await this.call('/auth/refresh', {refresh_token:b.refreshToken})).body).accessToken;
+      await this.call('/auth/logout', {}, token);
+    } catch { revoked = false; }
+    await this.forget(b, revoked ? '이 기기에서 로그아웃했어요.' : '이 기기의 로그인 정보를 지웠어요. 서버에 연결하지 못해 원격 로그아웃은 확인하지 못했어요. 계정 페이지에서 기기 로그아웃을 확인해 주세요.');
   }
   async openAccount(): Promise<void> { await this.options.openBrowser(new URL('/account', this.options.site).href); }
   dispose(): void { this.cancel(false); }

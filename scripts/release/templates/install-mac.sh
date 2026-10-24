@@ -9,20 +9,22 @@
 # commit it was built from and the SHA-256 of its darwin-arm64 zip. Nothing is looked
 # up at run time, so this script installs exactly this build or nothing.
 #
-# Why curl: the zip is ad-hoc signed and not notarized. A browser download gets the
-# com.apple.quarantine flag and Gatekeeper refuses the app. curl adds no such flag.
+# curl is the normal download transport. SHA-256/version checks do not establish
+# Apple signing, notarization or Gatekeeper acceptance. Existing quarantine
+# attributes and macOS security settings are preserved; consult release evidence
+# for signing/notarization status, and report any macOS launch refusal.
 #
 # Layouts:
 #   app  ~/Applications/HypeProof Studio.app (default for a stable tag).
 #        --system puts it in /Applications instead (must be writable; never sudo).
 #   kit  side-by-side test install (default for an -rc tag, and what the Test Kit's
 #        INSTALL-*.command uses): ~/Applications/<kit dir>/HypeProof Studio.app with its
-#        own profile at ~/Library/Application Support/HPS-<version>/ and a
+#        own RC profile at ~/Library/Application Support/HPS-RC-Profiles/<version>/ and a
 #        START-<version>.command beside the app. An existing main install is untouched.
 #
 # What it reuses rather than reimplements:
 #   - the app install steps of scripts/install.sh (install_studio_mac): verified zip,
-#     extract, replace, clear quarantine on the curl path;
+#     extract and replace while preserving extended attributes;
 #   - the native SDK seed: this release's own claude-agent-sdk-darwin-arm64-<v>.tgz,
 #     installed by the canonical scripts/seed-sdk-binary.sh --tarball, exactly as Lab's
 #     open install (hypeprooflab web/public/install/studio/install-mac.sh) does. The
@@ -34,8 +36,8 @@
 #   --no-seed          skip the SDK seed (the coach cannot start until it is seeded; the
 #                      in-app download offer, REQ-M46, is off by default)
 #   --open             start Studio when done
-#   --from-command     run by the Test Kit's INSTALL-*.command: never touch quarantine
-#                      attributes, pause before closing on error
+#   --from-command     run by the Test Kit's INSTALL-*.command: pause before
+#                      closing on error (retained for compatibility)
 # Install outcome (CONV-DEC-08, PRA-15): one anonymous, count-only POST at the end, to
 # https://api.hypeproof-ai.xyz/v1/install/events, with exactly
 #   {"result":"ok"|"fail","step":"done"|<failed step>,"os":"macos","app_version":"<version>"}
@@ -49,6 +51,7 @@ set -euo pipefail
 # ── Baked in at release time ─────────────────────────────────────────────────
 HPS_TAG="@@TAG@@"
 HPS_VERSION="@@VERSION@@"
+HPS_APP_VERSION="@@APP_VERSION@@"
 HPS_SOURCE_SHA="@@SOURCE_SHA@@"
 HPS_ZIP_NAME="HypeProof-Studio-darwin-arm64.zip"
 HPS_ZIP_SHA256="@@ZIP_SHA256@@"
@@ -158,6 +161,7 @@ INSTALL_STEP=preflight
 if [ "$LAYOUT" = kit ]; then
   PARENT="$HOME/Applications/$HPS_KIT_DIR_NAME"
   STATE="$HOME/Library/Application Support/HPS-$HPS_VERSION"
+  if [ "$HPS_PRERELEASE" = 1 ]; then STATE="$HOME/Library/Application Support/HPS-RC-Profiles/$HPS_VERSION"; fi
   MARKER=".hps-kit-$HPS_VERSION"
   START="$PARENT/START-$HPS_VERSION.command"
 elif [ "$SYSTEM" = 1 ]; then
@@ -167,6 +171,19 @@ else
 fi
 APP="$PARENT/$APP_NAME"
 
+# Exact text marker: schema, fixed namespace, candidate, embedded version, source, app, profile.
+rc_marker() { printf '%s\n' hps-rc-profile-v1 'HypeProof Studio RC' "$HPS_VERSION" "$HPS_APP_VERSION" "$HPS_SOURCE_SHA" "$APP" "$STATE"; }
+check_rc_path() {
+  local target="$1" current="$HOME" part
+  local relative="${target#"$HOME"/}"
+  while [ -n "$relative" ]; do
+    part="${relative%%/*}"
+    current="$current/$part"
+    [ ! -L "$current" ] || fail "RC 경로가 심볼릭 링크여서 멈췄습니다: $current"
+    if [ "$relative" = "$part" ]; then break; fi
+    relative="${relative#*/}"
+  done
+}
 plist() { /usr/libexec/PlistBuddy -c "Print $1" "$2/Contents/Info.plist" 2>/dev/null || true; }
 
 # ── Safety checks (nothing is written before these pass) ─────────────────────
@@ -178,7 +195,19 @@ if [ "$LAYOUT" = kit ]; then
   if [ -e "$PARENT" ] && [ ! -f "$PARENT/$MARKER" ]; then
     fail "같은 이름의 다른 폴더가 있어 덮어쓰지 않습니다: $PARENT"
   fi
-  if [ -e "$STATE" ] && [ ! -f "$STATE/$MARKER" ]; then
+  if [ "$HPS_PRERELEASE" = 1 ]; then
+    [[ "$HOME" != *$'\n'* && "$HOME" != *$'\r'* ]] || fail "설치 경로에 줄바꿈이 있습니다."
+    check_rc_path "$APP"
+    check_rc_path "$STATE"
+    if [ -e "$STATE" ]; then
+      if [ ! -f "$STATE/.hps-rc-profile-v1" ] || [ -L "$STATE/.hps-rc-profile-v1" ] || ! cmp -s "$STATE/.hps-rc-profile-v1" <(rc_marker); then
+        fail "기존 RC 프로필의 버전·소스·경로가 맞지 않습니다. 기존 프로필은 변경하지 않았습니다."
+      fi
+      if [ ! -f "$PARENT/.hps-rc-profile-v1" ] || [ -L "$PARENT/.hps-rc-profile-v1" ] || ! cmp -s "$PARENT/.hps-rc-profile-v1" <(rc_marker); then
+        fail "기존 RC 키트의 프로필 표식이 맞지 않습니다."
+      fi
+    fi
+  elif [ -e "$STATE" ] && [ ! -f "$STATE/$MARKER" ]; then
     fail "같은 이름의 다른 프로필이 있어 덮어쓰지 않습니다: $STATE"
   fi
 elif [ -e "$APP" ]; then
@@ -225,7 +254,12 @@ NEW="$WORK/x/$APP_NAME"
 INSTALL_STEP=verify
 [ "$(plist CFBundleIdentifier "$NEW")" = "$HPS_BUNDLE_ID" ] || fail "앱 식별자가 맞지 않습니다."
 GOT="$(plist CFBundleShortVersionString "$NEW")"
-[ "$GOT" = "$HPS_VERSION" ] || fail "앱 버전이 맞지 않습니다(기대 $HPS_VERSION, 실제 $GOT)."
+[ "$GOT" = "$HPS_APP_VERSION" ] || fail "앱 버전이 맞지 않습니다(기대 $HPS_APP_VERSION, 실제 $GOT)."
+if [ "$LAYOUT" = kit ] && [ "$HPS_PRERELEASE" = 1 ]; then
+  PRODUCT="$NEW/Contents/Resources/app/product.json"
+  [ "$(/usr/bin/plutil -extract commit raw -o - "$PRODUCT" 2>/dev/null)" = "$HPS_SOURCE_SHA" ] || fail "RC 앱의 소스가 이 설치 명령과 다릅니다."
+  [ "$(/usr/bin/plutil -extract version raw -o - "$PRODUCT" 2>/dev/null)" = "$HPS_APP_VERSION" ] || fail "RC 앱 내부 버전이 이 설치 명령과 다릅니다."
+fi
 
 # ── Install: stage beside the target, then swap (the old copy returns on failure) ──
 INSTALL_STEP=place
@@ -243,21 +277,23 @@ if ! mv "$STAGE" "$APP"; then
   fail "앱을 제자리에 옮기지 못했습니다. 이전 설치는 그대로 두었습니다."
 fi
 rm -rf "$OLD"
-# curl added no quarantine flag; this only clears one an earlier browser copy left
-# behind, as scripts/install.sh does. The .command kit never changes security
-# settings, so it only reports.
-if [ "$FROM_COMMAND" = 0 ]; then
-  xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
-elif xattr -p com.apple.quarantine "$APP" >/dev/null 2>&1; then
-  warn "앱에 다운로드 격리 표시가 있습니다. 보안 설정을 바꾸지 말고 아래 한 줄 설치 명령을 쓰세요: $ONE_LINER"
+# Read-only diagnostic. Both install entry points preserve quarantine attributes.
+if xattr -p com.apple.quarantine "$APP" >/dev/null 2>&1; then
+  warn "앱에 다운로드 격리 표시가 있습니다. macOS가 설치나 실행을 막으면 멈추고 오류 문구를 전달하세요. 보안 설정이나 격리 속성은 변경하지 마세요."
 fi
-[ "$(plist CFBundleShortVersionString "$APP")" = "$HPS_VERSION" ] || fail "설치된 앱 버전을 확인하지 못했습니다."
+[ "$(plist CFBundleShortVersionString "$APP")" = "$HPS_APP_VERSION" ] || fail "설치된 앱 버전을 확인하지 못했습니다."
 
 # ── Kit layout: own profile + START script ───────────────────────────────────
 if [ "$LAYOUT" = kit ]; then
   mkdir -p "$STATE/User" "$STATE/extensions"
   chmod 700 "$STATE"
-  touch "$STATE/$MARKER"
+  if [ "$HPS_PRERELEASE" = 1 ]; then
+    rc_marker > "$STATE/.hps-rc-profile-v1"
+    rc_marker > "$PARENT/.hps-rc-profile-v1"
+    chmod 600 "$STATE/.hps-rc-profile-v1" "$PARENT/.hps-rc-profile-v1"
+  else
+    touch "$STATE/$MARKER"
+  fi
   if [ ! -f "$STATE/User/settings.json" ]; then
     cat > "$STATE/User/settings.json" <<JSON
 {
@@ -319,7 +355,7 @@ else
   note "1. Studio를 엽니다."
   note "2. 강사에게 받은 참여 코드를 처음 화면에 붙여넣습니다."
 fi
-note "키체인 접근을 묻는 창이 뜨면 '항상 허용'을 누르면 다음부터 묻지 않습니다."
+note "키체인 권한 때문에 막히면 취소하고 오류 문구를 전달하세요. 암호 입력이나 기존 키체인 권한 변경은 테스트 절차가 아닙니다."
 printf '\n같은 빌드를 다시 설치하는 명령:\n  %s\n' "$ONE_LINER"
 
 if [ "$OPEN" = 1 ]; then
