@@ -1,4 +1,5 @@
 import { AnswerWikiReview } from './AnswerWikiReview';
+import { CopyFeedback } from './CopyFeedback';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 /**
@@ -159,7 +160,7 @@ export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTur
       <ChatIcon kind="book" size={16} />
     </button>}
     {verdict}
-    <span role={state === 'failed' ? 'alert' : 'status'} className="hps-copy-status">{state === 'copied' ? '답변을 복사했습니다' : state === 'failed' ? '복사하지 못했습니다. 답변을 선택해 복사해 주세요.' : ''}</span>
+    <CopyFeedback failed={state === 'failed'}>{state !== 'idle' && <><ChatIcon kind={state === 'failed' ? 'alert' : 'check'} size={16} /><span>{state === 'copied' ? '답변을 복사했습니다' : '복사하지 못했습니다. 답변을 선택해 복사해 주세요.'}</span></>}</CopyFeedback>
   </div>
     {wikiOpen && onToWiki && wikiTurnId && <AnswerWikiReview key={wikiTurnId} content={content} turnId={wikiTurnId} onCancel={closeWiki} onContinue={() => { closeWiki(); onToWiki(); }} />}
   </>;

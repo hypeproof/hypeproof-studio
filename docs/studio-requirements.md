@@ -5253,7 +5253,15 @@ already meet the lifetime; progress/timeline text is not converted into a toast.
 Behavioral evidence uses real components/pages with deferred synthetic clipboard writes and
 a deterministic feedback clock; tests cover success timing, failure persistence, repeated
 actions, out-of-order completion and changed content. Native clipboard/screen-reader delivery
-requires owner verification. DES-CGP-DS-27's separate toast geometry is not claimed here.
+requires owner verification. DES-CGP-DS-27 now places Studio answer/code copy notices in
+an outlet at the bottom of each chat's composer. Notices use content width capped at360px,
+14px caption text and a decorative success/error icon. They remain in flow so they cannot
+cover the input or steal focus. Each chat owns its outlet; concurrent notices retain their
+own timers and persistent errors rather than silently replacing one another. Multiple notices
+scroll within a25vh maximum-height outlet, preserving room for the composer. Standalone tools
+keep inline feedback. Chalk, sign-in, trash and online-recovery geometry remain separate;
+this slice does not claim a universal toast migration. This supports PI#5 and observable
+VERIFY behavior: the learner can distinguish confirmed clipboard success from failure.
 
 ## Non-color text comparisons (CGP-DS-R-029)
 
