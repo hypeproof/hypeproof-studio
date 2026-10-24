@@ -5361,3 +5361,21 @@ of the request meter, or when the choice is exhausted, the form sits under the n
 Evidence: `budget-request-form.test.tsx` (counter, length boundary, IME guards, retained draft,
 receipt, scope) and `budget-request-layout.test.tsx` (computed layout in headless Chromium; fails
 under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Source-kind labels (CGP-CHAT-R-014)
+
+REQ-CGP-CHAT-R45 / CGP-CHAT-045 / PI#5: each answer citation, workspace source-list
+entry and source preview displays 웹 / 수업 자료 / 내 파일 from its event-owned
+`kind` (web/lesson/file). Missing or unrecognized kinds display 출처. URL scheme,
+hostname, title and trust tier never imply a kind. The label is visible text and
+part of the citation's accessible name. This supports inspectable provenance and
+VERIFY behavior without implying source authority or a learning outcome.
+
+Matched successful permitted SDK WebSearch/WebFetch results set kind=web where
+those typed events are converted to citations. Prose, unmatched/failed/denied calls
+still produce no sources. Other source producers can supply explicit lesson/file
+metadata; this change does not fabricate citations from attached files, lesson
+URLs or answer prose. Legacy records remain unclassified. The task store accepts
+and preserves bounded optional kind strings across restart, including unknown
+future values (which remain labelled 출처), without changing source identity.
+Preview/open/pin/unpin continue using the existing URL and scope semantics.

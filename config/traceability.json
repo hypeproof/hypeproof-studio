@@ -6106,6 +6106,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/CitationPreview.tsx"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/citationKind.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/citationPreview.css"
         },
         {
@@ -6150,6 +6153,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/task-workspace-store.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/citation-kinds.smoke.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/task-workspace-host.test.mjs"
