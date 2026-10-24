@@ -5305,3 +5305,32 @@ actual-App TSX (including the native dialog `cancel` event) and computed layout
 tests (real request shape, command start in view with focus on 거절 at 320px), plus the existing task-command-allow and shell-modal adversarial
 matrices. Installed-App shell execution/approval E2E remains separately required;
 headless synthetic approval tests do not prove real SDK execution or native focus.
+
+## Request more allowance (CGP-SHELL-D-029)
+
+`REQ-STUDIO-BUDGET-REQUEST` (CGP-SHELL-D-029 / DES-SHELL-29, parent REQ-SHELL-30, P1): when the
+selected funding choice can be requested (`can_request`) and the usage details are authoritative
+(`access.status === 'ready'`), the usage panel shows a "선생님께 더 요청하기" form. At 10% or less
+of the request meter, or when the choice is exhausted, the form sits under the notice "남은 사용량이
+부족해요."
+
+- **Reason is required, up to 200 characters.** The pinned Service rejects a blank reason, so the
+  field is labelled "(필수)" and the button stays disabled until it holds text. The input caps at 200
+  UTF-16 units and a live counter ("N / 200자") sits in a block under it.
+- **Korean IME.** Enter during composition (`compositionstart`, `isComposing` or keyCode 229) neither
+  submits nor reaches the form handler; the draft is kept until the host answers.
+- **Receipt.** The Service record decides: "요청함 · 강사 검토 대기" while pending, or the resolution
+  text once handled. The panel never claims approval it did not receive. The form is keyed by the
+  funding choice, so another choice starts with an empty draft.
+- **Layout (computed, headless Chromium).** The input stays inside the usage panel at 1420, 800 and
+  320 px in the personal and classroom seats, dark and light. The reason input and the button are at
+  least 44px high, the counter and input text are at least 14px, and both controls carry the shared
+  2px focus ring.
+- **Blocked on the Service contract, not built.** The parent REQ-SHELL-30 reason choices (an optional
+  reason, approval/refusal wording picked by the learner) and the 10-minute cooldown between requests
+  need a Service change; the pinned Service has no cooldown and requires a non-blank reason. Studio
+  does not invent either. See `docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+Evidence: `budget-request-form.test.tsx` (counter, length boundary, IME guards, retained draft,
+receipt, scope) and `budget-request-layout.test.tsx` (computed layout in headless Chromium; fails
+under `FOCUS_REQUIRE_BROWSER=1` without a browser).

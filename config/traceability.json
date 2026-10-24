@@ -11120,6 +11120,56 @@
       ]
     },
     {
+      "id": "ST-REQ-BUDGET-REQUEST",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Request more allowance (CGP-SHELL-D-029)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-BUDGET-REQUEST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BUDGET-REQUEST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AccessControl.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-BUDGET-REQUEST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BUDGET-REQUEST",
+        "ST-IMP-BUDGET-REQUEST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/budget-request-form.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/budget-request-layout.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lib/headless-chromium.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-UPDATE-ON-QUIT",
       "stage": "requirement",
       "owner": "jayleekr",
