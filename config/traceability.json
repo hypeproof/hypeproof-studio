@@ -6770,6 +6770,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/folderConsentHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/folderConsentPrompt.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/FolderConsentDialog.tsx"
         }
       ]
     },
@@ -6784,6 +6790,15 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/folder-consent.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/folder-consent-prompt.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/folder-consent-dialog-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/folder-consent-config.smoke.mjs"
         }
       ]
     },
@@ -7417,6 +7432,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/ArtifactProvenanceList.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
         }
       ]
     },
@@ -7443,6 +7461,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/artifact-provenance.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/provenance-chip-computed.smoke.mjs"
         }
       ]
     },
@@ -10657,6 +10678,12 @@
       ],
       "sources": [
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/RecipientMemory.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/recipientMemory.css"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/outboundConsent.ts"
         },
         {
@@ -10685,6 +10712,9 @@
         "ST-IMP-RECEIVER-AI-STORAGE-UNKNOWN"
       ],
       "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lib/recipient-memory-probe.mjs"
+        },
         {
           "path": "extensions/hypeproof-chat/test/outbound-dialog.test.tsx"
         },
@@ -10882,6 +10912,9 @@
           "path": "extensions/hypeproof-chat/src/workTakeaway.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/workTakeawayPanel.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/workTakeawayHost.ts"
         },
         {
@@ -10909,6 +10942,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/work-takeaway.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/work-takeaway-panel.smoke.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/work-takeaway-host.smoke.mjs"
@@ -11374,6 +11410,10 @@
         "ST-REQ-OUTBOUND-CONSENT"
       ],
       "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-KNOW-63 — Visitor preview before publication"
+        },
         {
           "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md",
           "section": "### REQ-KNOW-63 implementation contract (CGP-KNOW-R-034)"

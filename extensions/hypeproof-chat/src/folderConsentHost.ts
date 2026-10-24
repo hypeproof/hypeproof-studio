@@ -71,7 +71,20 @@ function scopeFor(context: vscode.ExtensionContext, profile: ResolvedProfile, se
   return { ...(activityId ? { activityId } : {}), folder, ...(home ? { home } : {}) };
 }
 
+type FolderConsentPresenter = (folder: string) => Promise<FolderConsentLevel | undefined>;
+let presenter: FolderConsentPresenter | undefined;
+const changed = new Set<() => void>();
+export function setFolderConsentPresenter(next: FolderConsentPresenter) {
+  presenter = next;
+  return { dispose() { if (presenter === next) presenter = undefined; } };
+}
+export function onFolderConsentChanged(listener: () => void) {
+  changed.add(listener); return { dispose() { changed.delete(listener); } };
+}
+
 async function ask(folder: string): Promise<FolderConsentLevel | undefined> {
+  // A registered panel owns the interaction; hidden/closed panels refuse rather than falling through.
+  if (presenter) return presenter(folder);
   const picked = await vscode.window.showWarningMessage(
     FOLDER_CONSENT_TITLE,
     { modal: true, detail: folderConsentDetail(folder) },
@@ -82,6 +95,7 @@ async function ask(folder: string): Promise<FolderConsentLevel | undefined> {
 
 async function remember(context: vscode.ExtensionContext, activityId: string, folder: string, level: FolderConsentLevel): Promise<void> {
   await context.globalState.update(FOLDER_CONSENT_KEY, writeFolderConsent(context.globalState.get(FOLDER_CONSENT_KEY), activityId, folder, level));
+  for (const listener of changed) { try { listener(); } catch { /* notification cannot alter a stored decision */ } }
 }
 
 function decide(context: vscode.ExtensionContext, profile: ResolvedProfile | null | undefined, opts: FolderConsentOpts, target?: string) {
@@ -105,7 +119,9 @@ export async function folderConsentProfile(context: vscode.ExtensionContext, pro
   if (decision.kind === "refuse") throw new FolderConsentRefusal(decision.message);
   let level = decision.kind === "apply" ? decision.level : undefined;
   if (decision.kind === "ask") {
+    const before = JSON.stringify({ scope, decision });
     level = await ask(decision.folder);
+    if (before !== JSON.stringify(decide(context, profile, opts))) throw new FolderConsentRefusal(FOLDER_CONSENT_UNDECIDED);
     if (!level) throw new FolderConsentRefusal(FOLDER_CONSENT_UNDECIDED);
     await remember(context, scope.activityId!, scope.folder, level);
   }
@@ -124,7 +140,9 @@ export async function folderConsentForFolder(context: vscode.ExtensionContext, p
   if (decision.kind === "skip" || !scope) return "own";
   if (decision.kind === "refuse") throw new FolderConsentRefusal(decision.message);
   if (decision.kind === "apply") return decision.level;
+  const before = JSON.stringify({ scope, decision });
   const level = await ask(decision.folder);
+  if (before !== JSON.stringify(decide(context, profile, opts, folder))) return undefined;
   if (level) await remember(context, scope.activityId!, scope.folder, level);
   return level;
 }

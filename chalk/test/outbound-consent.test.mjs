@@ -26,7 +26,7 @@ await new Promise(r=>setImmediate(r));
 get('recipient').value='synthetic-teacher';get('kind').value='help';get('prompt').value='한😀';get('consent').checked=true;get('duration').value='60';
 const count=()=>requests.filter(r=>r.init.method==='POST').length;
 let send=get('share').onsubmit(event);assert.equal(get('outbound').open,true);assert.equal(count(),0);
-assert.deepEqual(get('outbound-items').textContent.split('\n'),['받는 사람: 강사 synthetic-teacher','받는 사람의 AI 기억: 확인 안 됨','보낼 항목:','내가 AI에게 보낸 말 · 7 바이트'],'recipient line, item list and byte size, exactly');
+assert.deepEqual(get('outbound-items').textContent.split('\n'),['받는 사람: 강사 synthetic-teacher','보낼 항목:','내가 AI에게 보낸 말 · 7 바이트'],'recipient line, item list and byte size, exactly');
 assert.equal(get('outbound-excluded').textContent,'포함하지 않는 것: AI 기억, 개인 메모','the fixed exclusion line is shown in the open dialog');
 get('outbound-cancel').onclick();await send;assert.equal(count(),0,'Cancel has no HTTP POST');
 send=get('share').onsubmit(event);get('prompt').value='not approved';get('outbound-send').onclick();await send;
@@ -48,7 +48,7 @@ radios.find(r=>r.value==='revise').checked=true;reason.value='고치겠습니다
 const posts=()=>requests.filter(r=>r.init.method==='POST');
 send=form.onsubmit(event);await new Promise(r=>setImmediate(r));
 assert.equal(get('outbound').open,true,'the decision opens the confirmation dialog');assert.equal(posts().length,1,'no decision POST while the dialog is open');
-assert.deepEqual(get('outbound-items').textContent.split('\n'),['받는 사람: 강사 teacher-01','받는 사람의 AI 기억: 확인 안 됨','보낼 항목:','피드백 버전 · 1 바이트','내 결정 · 6 바이트','이유 · 18 바이트'],'decision dialog: recipient, items, sizes');
+assert.deepEqual(get('outbound-items').textContent.split('\n'),['받는 사람: 강사 teacher-01','보낼 항목:','피드백 버전 · 1 바이트','내 결정 · 6 바이트','이유 · 18 바이트'],'decision dialog: recipient, items, sizes');
 assert.equal(get('outbound-excluded').textContent,'포함하지 않는 것: AI 기억, 개인 메모');
 get('outbound-cancel').onclick();await send;assert.equal(posts().length,1,'Cancel on the decision dialog has no HTTP POST');assert.equal(document.activeElement,form.all().find(n=>n.tag==='button'),'decision returns to enabled submit');
 send=form.onsubmit(event);await new Promise(r=>setImmediate(r));

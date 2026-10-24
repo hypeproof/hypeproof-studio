@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { recipientMemoryProbe } from './lib/recipient-memory-probe.mjs';
 // REQ-KNOW-33 / CGP-KNOW-R-018: the receiver-AI storage line is SEEN before content leaves, not only present in the DOM.
 //   FOCUS_REQUIRE_BROWSER=1 node test/recipient-ai-memory-visible.smoke.mjs
 //
@@ -97,6 +99,13 @@ try {
             assert.equal(f.text, LINE, `${id} #${i}: exact unknown-policy wording`);
             assert.deepEqual(f.problems, [], `${id} #${i}: the line must be visible — ${f.problems.join('; ')}`);
             checked++;
+          }
+          const icons = await b.evaluate(recipientMemoryProbe(SEL));
+          assert.deepEqual(icons, Array.from({length:EXPECTED[sceneName]},()=>[]), `${id}: visible neutral information icon for each recipient`);
+          if(process.env.RECIPIENT_MEMORY_ARTIFACT_DIR) {
+            mkdirSync(process.env.RECIPIENT_MEMORY_ARTIFACT_DIR,{recursive:true});
+            const shot=await b.send('Page.captureScreenshot',{format:'png'});
+            writeFileSync(`${process.env.RECIPIENT_MEMORY_ARTIFACT_DIR}/studio-${sceneName}-${seat}-${mode.forcedColors?'forced':mode.theme}-${width}.png`,Buffer.from(shot.data,'base64'));
           }
           if (width === 800 && mode.theme === 'dark' && !mode.forcedColors && seat === 'personal') {
             for (const [label, mutate] of Object.entries(MUTATIONS)) {

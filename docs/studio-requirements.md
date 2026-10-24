@@ -31,8 +31,12 @@ separate filesystem/host/built-UI evidence from native, Windows and customer pro
 activity (activity kind personal or trial, or a bought pass; never a classroom seat, a
 seat with a served lesson or lesson binding, or the instructor surface) whose open folder
 is not its own work folder asks once, before the first model call in that folder, what
-Studio's AI may do there: "읽기만 허용 (고치기·명령은 안 함)" (offered first, so Enter
-never grants commands), "읽기·고치기·명령 실행 모두 허용", or "이 폴더에서는 AI를 쓰지 않음".
+Studio's AI may do there. CGP-KNOW-D-010 / DES-KNOW-18 presents an in-panel dialog
+with the title "이 폴더에서 작업할까요?", three plain 읽기/고치기/실행 bullets,
+primary "믿고 열기" (full), secondary "제한 모드로 열기" (read), and the retained
+"이 폴더에서는 AI를 쓰지 않음" (none) choice. Initial focus is on the explanation;
+Enter never chooses a permission, Escape dismisses without remembering, and an explicit
+click or Space on a button answers once. Full still cannot widen the served grants.
 Own folder = exactly the served `workspace_root` or a folder inside it; a look-alike
 sibling (`<home>-taxes`, `<home>Clinic`) and the siblings Studio itself creates
 (`<home>-N`, `<home>-<repo>`) ask once; with no served home every folder asks.
@@ -72,15 +76,33 @@ learner sees one line per turn: "이 폴더에서는 파일 저장을 쓰지 않
 읽기만: the live server and browser tools may serve and run the folder's existing files
 (that is reading them), but nothing is written.
 
-Not built / limits: the persistent "제한 모드" header chip and light/dark dialog styling of
-DES-KNOW-18 (the native modal is used); asking when the folder opens rather than at the
-first model call; follow-up: the REQ-M47 "AI가 할 수 있는 일" card still shows the profile
+The personal chat header shows a persistent "제한 모드" chip only when the host reads
+stored `read` consent for the current activity and canonical folder (`full`, `none`, unanswered
+and classroom seats never show it). The chip is a status with no action, so it is a
+non-focusable `role="note"` (the 44px control rule does not apply; it is at least 24px tall,
+unclipped, inside the header and its text meets 4.5:1). Hover explains
+that AI edits and commands are disabled and names the existing permission-change command.
+A saved choice refreshes config and clears task command allows; normal config refreshes
+re-read the store. Classroom/lesson/instructor/own-folder exclusions remain unchanged.
+The in-panel request is bound to its ID and activity/task/folder scope; closing/reloading,
+hiding the panel, timeout, or changing scope refuses. Before remembering, the host also
+rechecks the canonical folder and current stored decision, so a late full answer cannot
+overwrite another window's changed choice. A registered but hidden panel never falls
+through to a native permission grant. The existing native fallback applies only before
+any panel presenter is installed; the change-permission command retains its quick picker.
+
+Not built / limits: asking when the folder opens rather than at the
+first model call; cross-window immediate header push (the next config refresh re-reads
+the stored decision); follow-up: the REQ-M47 "AI가 할 수 있는 일" card still shows the profile
 before the folder narrowing. Outside the guard on purpose: the learner's own restore of a
 turn (`turnRestore`, it only reverts earlier coach changes), and entry preparation
 (`prepareWorkspaceDirectory`), which only creates a missing folder or starter file when
 the learner connects the activity to that folder, before the question. The choice is a
 client posture, not a Service boundary (same standing as REQ-M38 on the agent-sdk path).
-Tests: `test/folder-consent.smoke.mjs` — pure decisions (canonical path with symlink, case
+Tests: `test/folder-consent-dialog-computed.smoke.mjs` exercises the real dialog and
+ChatPanel header in headless Chromium; `test/folder-consent-prompt.smoke.mjs` covers
+request identity, single flight, scope, malformed answers, cancellation and timeout.
+`test/folder-consent.smoke.mjs` — pure decisions (canonical path with symlink, case
 and drive letter; which seats ask; exact own folder with look-alike negative controls;
 store; fail closed without an activity id; 128 grant combinations proving narrowing never
 widens; gate source with lesson / 이용권 / other-key negative controls; copy), the real host
@@ -2872,6 +2894,15 @@ built** (see below and "Not built"). Built:
   `기록 없음` last, at most 100 rows with a "파일 N개는 더 있어서…" line. This panel was chosen because
   it is the task workspace's only persistent listing surface; the turn review bar is replaced by the
   next turn and the publish panel lists one version's files. No score, percentage or capability name.
+  CGP-KNOW-D-012 / DES-KNOW-21 wraps the recorded glyph and label in a bordered text chip,
+  distinct by words and glyph shape rather than hue. It uses the current 14px text floor
+  instead of the research row's 11–12px, at least 4.5:1 foreground/background contrast,
+  and system colors in forced-colors mode. Long paths/history remain outside the chip;
+  the label does not truncate. The existing conservative `기록 없음` vocabulary and the
+  absence of unproven `내가 고침` attribution remain explicit gaps against DES-KNOW-21.
+  `test/provenance-chip-computed.smoke.mjs` measures built CSS and real list markup in
+  dark/light,320/800/1420,normal/forced colors, including classroom-style robustness
+  contexts (not a claim that the classroom product exposes this list).
 
 Not built: **the `내가 고침` label (CGP-KNOW-R-012 / REQ-KNOW-21, follow-up).** It needs a source of
 learner authorship that survives VS Code's measured event order: for example a Studio-owned editor
@@ -4464,7 +4495,11 @@ The second confirmation is its own in-panel step (`PublicAudienceDialog`, a prom
 `step: "public"` and a single acknowledgement id that no content item set can answer).
 It uses the shared modal surface (`.hp-modal`) and focus geometry, titles itself
 "누구나 볼 수 있어요", names the audience "인터넷의 누구나" against "우리 반", and shows
-the destination as selectable monospace text. Focus starts on 취소. Enter never confirms
+the destination as selectable monospace text. CGP-KNOW-D-007 / DES-KNOW-10 keeps
+the public warning as its own `<h2>` at the learner scale's lead size (larger than
+body text, weight 600, visible inside the card above the destination) and wraps long destination hosts by character
+at 320px without horizontal overflow or truncating the selected text. This applies
+to personal and classroom seats, including forced colors. Focus starts on 취소. Enter never confirms
 (a native dialog's default button would), Escape cancels, and 공개하기 stays disabled
 until the learner ticks "인터넷의 누구나 볼 수 있다는 걸 확인했어요", so a double press or key
 repeat carried over from the checklist cannot publish. Only that tick plus a click or Space
@@ -4485,7 +4520,8 @@ custom domain or planned Pages host. Save-only manifests name github.com.
 Evidence: `public-publish-confirm.smoke.mjs` (every producer: cancel, reload and hidden
 panel send nothing; panel-hidden refusal without a native modal), `public-audience-dialog.smoke.mjs`
 (headless Chromium: focus, Enter/repeat, Escape, double press, geometry in the chat
-column, 44px targets), `outbound-approval.smoke.mjs`, `outbound-consent-host.smoke.mjs`,
+column, 44px targets, heading visibility and size, full destination string, destination contrast >= 4.5:1, long-host wrapping and complete selection at 320/800/1420px
+in dark/light and normal/forced colors), `outbound-approval.smoke.mjs`, `outbound-consent-host.smoke.mjs`,
 `publish-site.smoke.mjs`. PI#2 makes the learner responsible for choosing who receives
 work; this may expose JUDGMENT/OWNERSHIP, without learner-facing capability labels.
 
@@ -4541,6 +4577,19 @@ exclusion, share expiry, destination name, seat, and the sender's memory setting
 No new grant, recipient, policy endpoint, or memory enablement is invented.
 Confirmed-policy branches remain unimplemented pending a Service contract and
 pinned package update. This row is not complete.
+
+DES-KNOW-33 / CGP-KNOW-D-018 adds a neutral information icon next to that same
+unknown-policy line on every listed web confirmation. Studio uses one shared
+RecipientMemory component for primary/secondary recipients, the public step and
+help preview/retry. Chalk learner share/feedback decisions use a separate static
+line in the existing confirmation; instructor distribution and feedback keep their
+own lines. The icon is decorative (hidden from assistive technology, not focusable),
+16px with an 8px gap, and inherits the disclosure text colour. Text remains at
+least 14px with 4.5:1 contrast; forced colours use CanvasText. Native fallback
+modals use a plain-text information symbol before the same wording. Unknown is
+never styled or labelled as a safe state. This design work does not supply the
+missing Service policy, and native OS rendering remains owner verification.
+
 
 This disclosure may expose JUDGMENT/OWNERSHIP through an informed send decision;
 no capability labels appear in the UI. Evidence: outbound-dialog.test.tsx,
@@ -4635,8 +4684,8 @@ Files require recorded learner-upload or AI-created origin and an exact current
 byte hash. A file the AI created and the learner later edited is
 excluded on purpose (its origin is no longer known). Unknown origins, class/Studio-created resources, configuration files,
 dot paths, symlinks, private memory outside the selected team-brain folder,
-credential-bearing content and oversized files are excluded. The native dialog
-accepts explicit file selection or tasks-only export. Nothing is sent over a
+credential-bearing content and oversized files are excluded. Native file pickers
+accept explicit file selection or tasks-only export. Nothing is sent over a
 network. This deliberately does not restore a destination's task execution state.
 The learner exercises ownership by choosing and inspecting exactly what leaves the
 activity; no capability labels or scores appear in the UI.
@@ -4644,8 +4693,26 @@ activity; no capability labels or scores appear in the UI.
 Evidence: `test/work-takeaway.smoke.mjs`, `test/work-takeaway-host.smoke.mjs`,
 `test/work-takeaway.test.tsx`, `test/work-takeaway-transition.smoke.mjs`,
 `test/work-takeaway-layout.smoke.mjs` (computed button size, text, focus ring,
-forced colours at 1420/800/360) under the extension. Native-dialog visual acceptance
-is owner-run; automated tests use isolated disk fixtures and stub native dialogs.
+forced colours at 1420/800/360) under the extension.
+
+DES-KNOW-67 / CGP-KNOW-D-035: Studio's review panel displays 가져가는 것 and
+남는 것 in two columns above 600px, one column at or below 600px. The result
+panel follows these lists with every item's 옮김/실패/제외 status and reason.
+Only failed items offer 다시 시도. A retry uses the same frozen bytes, checks the
+current activity and resolved source/destination paths again, and creates a new
+exclusive copy directory for that item;
+successful siblings are never copied again. Each successful result names its own
+copy directory. No percentage is displayed because no incremental byte progress
+is measured. Escape, panel close and the five-minute unattended timeout cancel a
+review; nonce-bound messages cannot request a successful or excluded item retry.
+Native file pickers remain; neither credentials nor file bytes enter the panel.
+`test/work-takeaway-panel.smoke.mjs` covers the actual responsive shell and actions;
+`test/work-takeaway-host.smoke.mjs` drives the real copy/retry path.
+
+Chalk's transfer entry and service-backed export contract remain unimplemented;
+this Studio-local flow is not evidence of Both-surface completion. Installed-app
+focus return and native file-picker visual acceptance remain owner-run; automated
+tests use isolated disk fixtures and stub host windows.
 
 ## Install prepared updates on quit (CGP-SHELL-R-002)
 
@@ -4828,6 +4895,12 @@ opens the exact file list and audience, and lets the learner continue on that li
 the same bytes, so a load timeout is not an unknown preview and authorizes nothing
 by itself. Workspace-only files are inaccessible. See the CGP-KNOW-R-034
 implementation contract for network restrictions and evidence.
+
+The visitor banner keeps the complete audience visible, including an unbroken
+project address, wrapping without horizontal overflow at 320px (DES-KNOW-63,
+CGP-KNOW-D-034). The banner belongs to the preview shell, never the immutable
+published HTML. This is currently an in-App webview panel; native integrated
+browser placement and return-to-editor focus still require owner verification.
 
 ### REQ-ART-03 — Keep or discard unsent annotations
 
