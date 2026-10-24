@@ -5,10 +5,18 @@
 
 export type PageCardKind = "added" | "changed";
 
+export interface PageCardPresentation {
+  versionId: string;
+  title: string;
+  status: 'verified' | 'unchecked' | 'previous';
+  thumbnail: {state:'loading'} | {state:'failed'} | {state:'ready';dataUrl:string};
+}
+
 export interface PageCardPage {
   /** Work-folder-relative path with "/" separators, as the turn-end scan reports it. */
   path: string;
   kind: PageCardKind;
+  presentation?: PageCardPresentation;
 }
 
 export interface PageCardView {

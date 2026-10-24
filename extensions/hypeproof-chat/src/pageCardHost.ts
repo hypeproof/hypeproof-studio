@@ -17,7 +17,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { canonicalFolder, isInsideFolder } from "./folderConsent.ts";
-import { isPagePath, pageCandidates, PAGE_CARD_COPY, type PageCardView } from "./pageCard.ts";
+import { isPagePath, pageCandidates, PAGE_CARD_COPY, type PageCardView, type PageCardPresentation } from "./pageCard.ts";
 
 export type PageRefusal = "not-page" | "outside" | "link" | "missing" | "not-file" | "changed";
 export type PageResolve =
@@ -118,6 +118,10 @@ export class PageCardRegistry {
   }
   entry(taskKey: string, turnId: string): Entry | undefined {
     return this.entries.find((e) => e.taskKey === taskKey && e.view.turnId === turnId);
+  }
+  setPresentation(taskKey:string, turnId:string, rel:string, presentation:PageCardPresentation): void {
+    const e=this.entry(taskKey,turnId);
+    if(e)e.view={...e.view,pages:e.view.pages.map(p=>p.path===rel?{...p,presentation}:p)};
   }
   setNotice(taskKey: string, turnId: string, notice: string | undefined): void {
     const e = this.entry(taskKey, turnId);

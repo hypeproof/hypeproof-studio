@@ -58,7 +58,7 @@ t("rows: path, kind, two 44px actions each, Korean labels with the path for scre
   const html = renderToStaticMarkup(<PageCard view={CARD} onOpen={noop} onReveal={noop} />);
   ok(html.includes('data-testid="page-card"'), "card");
   ok(html.includes("이번 답에서 바뀐 페이지"), "title");
-  ok(html.includes("<code>index.html</code>") && html.includes("<code>game/level.html</code>"), "paths");
+  ok(/>index\.html<\/code>/.test(html) && />game\/level\.html<\/code>/.test(html), "paths");
   ok(html.includes("새로 만듦") && html.includes("바뀜"), "kinds");
   eq((html.match(/>열기<\/button>/g) ?? []).length, 2, "열기 buttons");
   eq((html.match(/>폴더에서 보기<\/button>/g) ?? []).length, 2, "폴더에서 보기 buttons");

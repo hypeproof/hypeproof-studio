@@ -3027,10 +3027,21 @@ chat (never on the instructor surface, which takes no restore point):
   the panel's `pageCardsRequest`. Nothing new is written to the transcript or to disk, so a window
   reload or an extension host restart shows no card for earlier turns.
 
-Not built: the thumbnail, page title, short version id and verified state of CGP-ART-R-010 /
-CGP-ART-D-010 (no version ids exist yet; CR-81 verification state is separate work), live-server
-cohorts opening the card's page in the native browser (the card uses the iframe preview for every
-cohort), and cards after a reload. Verification: U (`extensions/hypeproof-chat/test/page-card.smoke.mjs`
+CGP-ART-D-010 adds a 16:10 lazy thumbnail, one-line page title, `판 {short id}` and
+icon plus text status (`확인됨`, `아직 확인 안 함`, `이전 판`). The card fills narrow chat
+columns up to 360px and retains both actions. Loading ends within two seconds in the UI;
+missing native capture or image errors show a page icon. A separate hidden, ephemeral
+390px browser view captures the served loopback page without opening or focusing a tab.
+The capture is discarded if the static artifact version changes during capture. The badge
+uses the existing validated `hps-verification/1` report for that exact version; a title,
+thumbnail or coach statement is never verification evidence. File changes invalidate the
+badge and refresh its version comparison. Activity changes discard in-memory cards and
+late captures, while task keys isolate cards within an activity.
+
+Local synthetic host and headless React tests cover this presentation. Native hidden
+capture in a packaged desktop remains NOT RUN. Also not built: live-server cohorts opening
+the card's page in the native browser (the actions retain the iframe preview), and cards
+after a reload. Verification: U (`extensions/hypeproof-chat/test/page-card.smoke.mjs`
 — real temp folder: page change gives the right rows, non-HTML / deleted / missing give no card,
 file and directory links to outside give no row, 3 + 외 N개, the host gate passes open/reveal the real
 path and refuses climbs, absolute paths, links, paths not on the card, another task's card and a row

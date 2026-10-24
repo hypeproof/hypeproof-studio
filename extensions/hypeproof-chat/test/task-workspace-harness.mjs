@@ -7,7 +7,7 @@ import { webcrypto } from 'node:crypto';
 const require = createRequire(import.meta.url);
 const bundle = await build({ stdin: { contents: "export {workPower} from './src/workPower'; export {ChatPanelProvider} from './src/chatPanelProvider'; export {ProxyAuthError, ProxyTransportError} from './src/proxyClient'; export {ActivityConnections} from './src/activityConnections'; export {TaskWorkspaceStore} from './src/taskWorkspaceStore';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 
-export async function createTaskHarness(root, onMessage = () => {}, { profile = null, turnTools, configExtras = {}, beforeReadDir } = {}) {
+export async function createTaskHarness(root, onMessage = () => {}, { profile = null, turnTools, configExtras = {}, beforeReadDir, configureVscode } = {}) {
   const opened = [], posts = [], state = new Map(), module = { exports: {} };
   const browserState = { failOpen: false, failReturn: false, tabs: [], commands: [] };
   const vscode = { ViewColumn: { One: 1, Two: 2, Beside: 2 }, Uri: { file: fsPath => ({ fsPath, scheme: 'file' }) },
@@ -19,6 +19,7 @@ export async function createTaskHarness(root, onMessage = () => {}, { profile = 
       const tab = { url, title: new URL(url).hostname, close: async () => { const at = browserState.tabs.indexOf(tab); if (at >= 0) browserState.tabs.splice(at, 1); } };
       browserState.tabs.push(tab); return tab;
     } }, workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }), fs: { readFile: async uri => require('node:fs/promises').readFile(uri.fsPath) } } };
+  configureVscode?.(vscode);
   vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : id === 'node:fs/promises' && beforeReadDir ? { ...require(id), readdir: async (...args) => { await beforeReadDir(...args); return require(id).readdir(...args); } } : require(id), console, Buffer, structuredClone, process, setTimeout, clearTimeout, setInterval, clearInterval, AbortController, AbortSignal, URL, fetch, TextEncoder, TextDecoder, crypto: webcrypto });
   const { ChatPanelProvider, ActivityConnections, TaskWorkspaceStore } = module.exports;
   const activity = { id: 'synthetic-personal-a', workspace: root, kind: 'personal', name: '내 작업' };

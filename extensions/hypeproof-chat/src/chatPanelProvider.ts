@@ -208,6 +208,7 @@ import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchiv
 import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
+import { capturePageResult, pageResultState } from "./pageCardPresentation";
 import { buildPageCard, handlePageCardAction, PageCardRegistry, type PageCardMessage } from "./pageCardHost";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
@@ -1746,6 +1747,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     await this.post({ type: "verifyState", view: await this.verifySession.view(), ...extra });
+    this.postPageCards();
   }
 
   /** CR-12 — the "Test my product" command: re-checks the served switch, then opens the panel. */
@@ -2623,6 +2625,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const annotationClose = vscode.window.onDidCloseBrowserTab?.(tab => { void this.annotationPreviewClosed(tab).catch(() => {}); });
     if (annotationClose) context.subscriptions.push(annotationClose);
     context.subscriptions.push({ dispose: () => clearTimeout(this.previewRecoveryTimer) });
+    context.subscriptions.push({dispose:()=>{this.pageCardWatch?.dispose();clearTimeout(this.pageCardRefreshTimer);this.pageCardRefreshEpoch++}});
   }
 
   private registerPreviewSurface(context: vscode.ExtensionContext): void {
@@ -5633,7 +5636,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
   // window starts with none, and the transcript stores nothing new for them.
   private pageCardRegistry: PageCardRegistry | undefined;
-  private get pageCards(): PageCardRegistry { return (this.pageCardRegistry ??= new PageCardRegistry()); }
+  private pageCardActivityScope: string | undefined;
+  private pageCardScope(): string { return activityConnections(this.context)?.scope ?? ''; }
+  private get pageCards(): PageCardRegistry {
+    const scope = this.pageCardScope();
+    if (scope !== this.pageCardActivityScope) {
+      this.pageCardActivityScope = scope;
+      this.pageCardRegistry = new PageCardRegistry();
+      this.watchPageCardRoot(undefined);
+    }
+    return (this.pageCardRegistry ??= new PageCardRegistry());
+  }
 
   private turnRestoreTaskKey(): string {
     return this.currentTaskStore()?.getView().activeTaskId ?? "default";
@@ -5645,8 +5658,74 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     void this.post({ type: "turnReviewState", view: review && review.taskKey === this.turnRestoreTaskKey() ? review.view : null });
   }
 
-  private postPageCards(): void {
+  private async enrichPageCard(taskKey:string, root:string, turnId:string):Promise<void> {
+    const entry=this.pageCards.entry(taskKey,turnId),scope=this.annotationScope();
+    const current=()=>!!entry&&this.pageCards.entry(taskKey,turnId)===entry&&this.turnRestoreTaskKey()===taskKey&&this.annotationScope()===scope;
+    if(!entry||!current())return;
+    const recorder=await this.verifyRecorder().catch(()=>null);if(!current())return;
+    for(const page of entry.view.pages.slice(0,3)) {
+      if(!current())return;
+      await capturePageResult(root,page.path,{
+        current,events:()=>recorder?.events()??[],
+        publish:presentation=>{if(current()){this.pageCards.setPresentation(taskKey,turnId,page.path,presentation);this.postPageCards(false)}},
+        capture:async(entryPath,signal)=>{
+          const activeRoot=this.liveServer.currentRoot();
+          if(activeRoot && activeRoot!==root)return null;
+          const base=await this.liveServer.ensure(root);
+          if(signal.aborted||!current()||this.liveServer.currentRoot()!==root)return null;
+          const capture=await vscode.commands.executeCommand<{title:string;dataUrl:string}|null>('_hps.pageThumbnail.capture',new URL(entryPath,base).href);
+          if(signal.aborted||!current())return null;
+          return capture??null;
+        },
+      }).catch(()=>{});
+    }
+  }
+  private pageCardWatch: vscode.FileSystemWatcher | undefined;
+  private pageCardWatchRoot: string | undefined;
+  private pageCardRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  private watchPageCardRoot(root:string|undefined):void {
+    if(root===this.pageCardWatchRoot)return;
+    this.pageCardWatch?.dispose();this.pageCardWatch=undefined;this.pageCardWatchRoot=root;
+    clearTimeout(this.pageCardRefreshTimer);this.pageCardRefreshEpoch++;
+    if(!root||typeof vscode.workspace.createFileSystemWatcher!=='function'||typeof vscode.RelativePattern!=='function')return;
+    const watcher=vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(root),'**/*'));
+    const changed=(uri:vscode.Uri)=>{
+      if(this.pageCardWatch!==watcher)return;
+      const rel=path.relative(root,uri.fsPath);
+      if(rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel))return;
+      for(const card of this.pageCards.forTask(this.turnRestoreTaskKey()))for(const page of card.pages){
+        if(page.presentation?.status==='verified')this.pageCards.setPresentation(this.turnRestoreTaskKey(),card.turnId,page.path,{...page.presentation,status:'unchecked'});
+      }
+      this.postPageCards(false);clearTimeout(this.pageCardRefreshTimer);
+      this.pageCardRefreshTimer=setTimeout(()=>void this.refreshPageCardStates(),200);
+    };
+    watcher.onDidChange(changed);watcher.onDidCreate(changed);watcher.onDidDelete(changed);this.pageCardWatch=watcher;
+  }
+  private pageCardRefreshEpoch=0;
+  private async refreshPageCardStates():Promise<void> {
+    const epoch=++this.pageCardRefreshEpoch,taskKey=this.turnRestoreTaskKey(),scope=this.annotationScope();
+    const current=()=>epoch===this.pageCardRefreshEpoch&&taskKey===this.turnRestoreTaskKey()&&scope===this.annotationScope();
+    const recorder=await this.verifyRecorder().catch(()=>null);if(!current())return;
+    for(const card of this.pageCards.forTask(taskKey)) {
+      const entry=this.pageCards.entry(taskKey,card.turnId);if(!entry)continue;
+      for(const page of card.pages) {
+        if(!page.presentation)continue;
+        const version=await artifactVersionFor(entry.root,'/'+page.path.split('/').map(encodeURIComponent).join('/')).catch(()=>null);
+        if(!current())return;
+        if(this.pageCards.entry(taskKey,card.turnId)!==entry)continue;
+        const latest=entry.view.pages.find(p=>p.path===page.path)?.presentation;
+        if(!latest)continue;
+        const status=pageResultState(latest.versionId,version?.id??null,recorder?.events()??[]);
+        this.pageCards.setPresentation(taskKey,card.turnId,page.path,{...latest,status});
+      }
+    }
+    if(current())this.postPageCards(false);
+  }
+  private postPageCards(refresh=true): void {
+    const newest=this.pageCards.forTask(this.turnRestoreTaskKey()).at(-1);
+    this.watchPageCardRoot(newest?this.pageCards.entry(this.turnRestoreTaskKey(),newest.turnId)?.root:undefined);
     void this.post({ type: "pageCardsState", cards: this.pageCards.forTask(this.turnRestoreTaskKey()) });
+    if(refresh&&this.pageCards.forTask(this.turnRestoreTaskKey()).some(c=>c.pages.some(p=>p.presentation)))void this.refreshPageCardStates();
   }
 
   /** REQ-STUDIO-PAGE-CARD — 열기 opens the page in the Studio preview; 폴더에서 보기 shows it in the OS file manager. */
@@ -5672,7 +5751,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** Before a coach turn: record the work folder. Never throws; a failure is one visible line and the turn runs without a revert. */
-  private async beginTurnRestore(streamId: string): Promise<{ store: string; root: string; point: RestoreManifest; taskKey: string } | null> {
+  private async beginTurnRestore(streamId: string): Promise<{ store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string } | null> {
+    const pageCardScope = this.pageCardScope();
     if (this.turnReview) { this.turnReview = null; this.postTurnReview(); }
     if (this._instructorMode?.isInstructor === true) {
       // The instructor surface draws no bar and records no turn; what its coach changes must not
@@ -5705,7 +5785,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return null;
       }
       await this.provenanceRecorder()?.turnStart(root, point);
-      return { store, root, point, taskKey };
+      return { store, root, point, taskKey, pageCardScope };
     } catch {
       await this.provenanceRecorder()?.unobserved(root);
       this.postToolLog(streamId, { id: `turn-restore-${streamId}`, icon: "⚠️", label: "이번 요청 전 상태를 보관하지 못해서 이번에는 되돌리기를 쓸 수 없어요.", state: "error" });
@@ -5714,7 +5794,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** After a coach turn: compare the folder with the turn's restore point and offer the review bar when anything changed. Never throws. */
-  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string } | null, streamId: string, messageId: string): Promise<void> {
+  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string } | null, streamId: string, messageId: string): Promise<void> {
     if (!handle) return;
     try {
       const now = await scanFolder(handle.root);
@@ -5735,7 +5815,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const items = timeline ? timelineEnd(timeline, Date.now()).items : [];
         const anchorId = [...items].reverse().find((m) => !m.id.startsWith("pending-"))?.id ?? messageId;
         const card = buildPageCard({ root: handle.root, turnId: handle.point.turnId, anchorId, changes });
-        if (card) { this.pageCards.add(handle.taskKey, handle.root, card); this.postPageCards(); }
+        if (card && handle.pageCardScope === this.pageCardScope()) { this.pageCards.add(handle.taskKey, handle.root, card); this.postPageCards(); void this.enrichPageCard(handle.taskKey,handle.root,card.turnId); }
       } catch { /* no card */ }
       this.turnReview = {
         ...handle, measuredDigest: now.digest,

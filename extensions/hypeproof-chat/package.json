@@ -637,7 +637,7 @@
     "test:page-attachment": "node scripts/run-tsx-tests.mjs page-attachment",
     "test:file-attachment": "node scripts/run-tsx-tests.mjs file-attachment",
     "test:page-card": "node scripts/run-tsx-tests.mjs page-card",
-    "test:page-card-host": "node --experimental-strip-types --test test/page-card-host.test.mjs",
+    "test:page-card-host": "node --experimental-strip-types --test test/page-card-host.test.mjs test/page-card-result-host.test.mjs",
     "test:long-step-hint": "node scripts/run-tsx-tests.mjs long-step-hint",
     "test:browser-target-host": "node --experimental-strip-types --test test/browser-target-host.test.mjs",
     "test:write-approval-paths": "node --experimental-strip-types --test test/write-approval-paths.test.mjs",
