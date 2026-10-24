@@ -2,7 +2,7 @@
 // reasons under "고쳐야 해요". Which answers get them and what is stored live in src/answerVerdict.ts;
 // this file only draws them. No score, count or colour-only state: every state is a pressed text button.
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
 import {
   REASON_LABELS, VERDICT_LABELS, VERDICT_NOTE_MAX, VERDICT_REASONS,
@@ -25,7 +25,7 @@ export function VerdictButtons({ state, onChange }: { state?: VerdictState; onCh
       data-hp-tooltip={VERDICT_PRIVACY}
       onClick={() => press(verdict)}
     >
-      {state?.verdict === verdict && <ChatIcon kind="check" size={16} />}{VERDICT_LABELS[verdict]}
+      <ChatIcon kind={state?.verdict === verdict ? "check" : verdict === "right" ? "square" : "pencil"} size={16} />{VERDICT_LABELS[verdict]}
     </button>)}
   </>;
 }
@@ -36,13 +36,33 @@ export function VerdictButtons({ state, onChange }: { state?: VerdictState; onCh
  */
 export function VerdictReasons({ state, onChange }: { state: VerdictState; onChange: (next: VerdictState) => void }) {
   const [note, setNote] = useState(state.note ?? "");
+  const [editingReason, setEditingReason] = useState(false);
+  const expanded = !state.reason || editingReason;
+  const reasonId = useId();
+  const toggle = useRef<HTMLButtonElement>(null);
+  const reasonRow = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef<VerdictReason | null>(null);
+  useEffect(() => {
+    setEditingReason(false);
+    if (returnFocus.current === state.reason && (document.activeElement === document.body || reasonRow.current?.contains(document.activeElement))) toggle.current?.focus();
+    returnFocus.current = null;
+  }, [state.reason]);
   useEffect(() => { setNote(state.note ?? ""); }, [state.note, state.reason]);
   // A different reason keeps the saved note; clearing the reason clears it (a note belongs under a reason).
-  const pick = (reason: VerdictReason) => onChange(state.reason === reason ? { verdict: "fix" } : { verdict: "fix", reason, ...(state.note ? { note: state.note } : {}) });
+  const pick = (reason: VerdictReason) => {
+    returnFocus.current = state.reason !== reason && reasonRow.current?.contains(document.activeElement) ? reason : null;
+    onChange(state.reason === reason ? { verdict: "fix" } : { verdict: "fix", reason, ...(state.note ? { note: state.note } : {}) });
+    setEditingReason(false);
+  };
   const trimmed = note.trim();
   const save = () => { if (state.reason) onChange({ verdict: "fix", reason: state.reason, ...(trimmed ? { note: trimmed } : {}) }); };
   return <div className="hps-verdict-reasons" role="group" aria-label={REASONS_LABEL}>
-    <div className="hps-verdict-reason-row">
+    {state.reason && <button ref={toggle} type="button" className="hps-verdict-reason-toggle" aria-expanded={expanded} aria-controls={reasonId} onClick={() => setEditingReason(!expanded)}>
+      <ChatIcon kind={expanded ? "minus" : "pencil"} size={16} />선택한 이유: {REASON_LABELS[state.reason]} · {expanded ? "접기" : "바꾸기"}
+    </button>}
+    <div id={reasonId} className="hps-verdict-reason-disclosure" data-expanded={expanded} aria-hidden={!expanded} {...(!expanded ? { inert: "" } : {})}>
+    <div className="hps-verdict-reason-clip">
+    <div ref={reasonRow} className="hps-verdict-reason-row">
       {VERDICT_REASONS.map((reason) => <button
         key={reason}
         type="button"
@@ -53,6 +73,7 @@ export function VerdictReasons({ state, onChange }: { state: VerdictState; onCha
         {state.reason === reason && <ChatIcon kind="check" size={16} />}{REASON_LABELS[reason]}
       </button>)}
     </div>
+    </div></div>
     {state.reason && <div className="hps-verdict-note">
       <textarea
         value={note}

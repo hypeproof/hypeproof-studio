@@ -4958,3 +4958,26 @@ classroom branches, light/dark themes, 800/1420 windows, grayscale screenshots,
 forced colors, computed deletion/tint/font styles, escaping and updated,
 missing or oversized history. Headless evidence does not establish native
 editor or screen-reader acceptance.
+## Answer verdict presentation (CGP-CHAT-D-005)
+
+CGP-CHAT-D63 completes REQ-STUDIO-ANSWER-VERDICT's personal-task presentation.
+Both borderless44px verdict controls have16px icons and Korean text before
+selection. The reason summary uses distinct hover and pressed control fills.
+The selected verdict changes to a check mark and a background fill
+with aria-pressed; color is not the only cue. The reason choices remain inline.
+Choosing one folds the choices over160ms (`--hp-dur-content`), or immediately
+under reduced motion, while preserving a visible selected-reason summary and
+the optional note editor. The summary reopens the choices; choosing the same
+reason clears it. Reopening and folding are view-only and create no verdict event.
+In forced colors, selected controls use Canvas/CanvasText with a Highlight border
+to avoid Chromium text backplates hiding their label. A collapsed list is inert
+and hidden from assistive technology. Focus returns
+to the summary only from the user's own reason selection, never an unrelated
+host update. At320px the action row and reason controls wrap without overflow.
+
+DEC-09 remains unchanged: classroom/lesson/instructor seats have no verdict
+controls, and task-local verdict history is never uploaded or used as a score.
+The UI supports Product Intent's explicit learner judgment (JUDGMENT/VERIFY),
+without claiming a measured learning outcome. Tests mount real ChatPanel with
+controlled task-local callbacks; this is headless browser evidence, not installed
+app or native assistive-technology acceptance.
