@@ -1688,6 +1688,7 @@ export function ChatPanel(props: Props) {
               onSaveEdit={(text, images) => saveEdit(m, text, images)}
               verdict={judgeable?.has(m.id) ? props.verdicts?.[m.id] ?? null : undefined}
               onVerdict={judgeable?.has(m.id) && props.onVerdict ? (next) => props.onVerdict?.(m.id, next) : undefined}
+              wikiScope={JSON.stringify([activityId, taskId])}
               onToWiki={wikiTargets?.has(m.id) && props.onAnswerToWiki ? () => props.onAnswerToWiki?.(m.id) : undefined}
               quotable={m.role === 'assistant' && !(streaming && m.id === streamingId)}
               quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
@@ -2616,6 +2617,7 @@ function MessageItem({
   verdict,
   onVerdict,
   onToWiki,
+  wikiScope,
   quotable = false,
   quoteAction,
 }: {
@@ -2662,6 +2664,7 @@ function MessageItem({
   onVerdict?: (next: VerdictState | null) => void;
   /** CGP-KNOW-R-004 — present on an answer that may be filed to the team brain. */
   onToWiki?: () => void;
+  wikiScope?: string;
   /** CGP-CHAT-R-007 — a finished answer whose text may be quoted, and its 인용하기 button. */
   quotable?: boolean;
   quoteAction?: ReactNode;
@@ -2756,7 +2759,7 @@ function MessageItem({
         onRun={renderable ? () => onRunCode(renderable) : undefined}
         onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined}
         verdict={onVerdict ? <VerdictButtons state={verdict ?? undefined} onChange={onVerdict} /> : undefined}
-        onToWiki={onToWiki} />}
+        onToWiki={onToWiki} wikiTurnId={message.id} wikiScope={wikiScope} />}
       {personal && onVerdict && verdict?.verdict === 'fix' && !isStreamingThis && <VerdictReasons state={verdict} onChange={onVerdict} />}
     </div>
   );

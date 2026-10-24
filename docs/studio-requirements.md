@@ -1530,8 +1530,8 @@ no parked text draws no action, plain Stop sends nothing and restores the draft)
 
 `REQ-STUDIO-ANSWER-TO-WIKI` (CGP-KNOW-R-004, CGP-KNOW-D-004, P1; built 2026-10-20): a finished AI
 answer in personal task chat offers one action, **팀 브레인에 정리하기**, in the answer action row with
-복사 and the verdict buttons (REQ-STUDIO-ANSWER-VERDICT): the shared ghost action, 44 px target, at
-least 14 px on the type scale (REQ-STUDIO-TYPE-SCALE), Korean label, no capability labels. It goes on
+복사 and the verdict buttons (REQ-STUDIO-ANSWER-VERDICT): a borderless16px book glyph in a44px target, with a Korean accessible name and hover/focus
+tooltip, no capability labels. It goes on
 the same answers as the verdict (the last bubble of each finished turn, with text; never a user line,
 never the turn still streaming). Seat gate: the session team brain's own switch,
 `learning_wiki.enabled` on the served profile (REQ-STUDIO-LEARNING-WIKI), plus its folder-consent
@@ -1563,9 +1563,19 @@ write is the session ingest's writer (`writeWiki`: the state file, then every pa
 each file goes through the provenance hook (`noteHostWrite`, REQ-STUDIO-ARTIFACT-PROVENANCE); there
 is no second write path. A proposal with nothing citing that turn asks nothing and writes nothing.
 The same answer is not filed twice (`sessionHash`). The result is an in-chat notice like the
-command's. Not built: the inline confirmation card and hover-only glyph of CGP-KNOW-D-004 (the
-confirmation is the modal the other wiki writes and file deletes use, and the action is a text
-label like its row); the action in classroom seats, where SX-06 fixes what the rail may show. Tests:
+command's. CGP-KNOW-D-004 adds a local inline review card beneath the chosen answer before
+requesting the proposal. It quotes that bubble as plain text, initially capped at3lines and
+expandable, and names its answer ID. Metadata uses the current14px personal-chat floor rather
+than the reference's11px. Opening, expanding or canceling sends no request. Cancel starts focused;
+Escape (outside IME composition) cancels and restores the action's focus. The explicit
+"정리할 내용 미리보기" button posts the exact answer ID once and starts the existing host proposal
+path; the card clearly explains that the host will show the proposed changes and ask again before
+writing. The native proposal confirmation remains authoritative for actual disk writes. Content,
+task/activity, answer ID or grant changes close a stale card. No sliding animation is used,
+including under reduced motion. The action remains absent in classroom seats, where SX-06 fixes
+what the rail may show. Tests: `test/answer-wiki-review-computed.smoke.mjs` covers real markup/CSS,
+geometry, full excerpt, tooltip, Escape/IME, scope/capability changes and exact one-shot posting;
+
 `test/answer-to-wiki.smoke.mjs` (the real provider handler with fake VS Code and a scripted model:
 the prompt's sources are that answer and question only; the modal shows the items and the cited
 turn; cancel leaves no file and no host write; confirm writes through `applyWikiProposal` with the

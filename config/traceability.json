@@ -7917,6 +7917,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AnswerWikiReview.tsx"
         }
       ]
     },
@@ -7934,6 +7937,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/answer-to-wiki.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/answer-wiki-review-computed.smoke.mjs"
         }
       ]
     },
