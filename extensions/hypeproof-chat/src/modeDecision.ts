@@ -11,7 +11,7 @@
 //   - network/server failures keep the student active (transient outage must not
 //     expose the instructor panel mid-class)
 
-import { decodeTokenPayload } from "../mintStudentTokenHelpers.ts";
+import { decodeTokenPayload } from "./mintStudentTokenHelpers.ts";
 
 export type StudentProfileStatus =
   | "ok"          // last /v1/profile succeeded

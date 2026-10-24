@@ -502,6 +502,16 @@
           "default": "hypeproof-default",
           "description": "요청할 모델 이름입니다. 실제 모델은 수업 정책에 따라 서비스가 정합니다."
         },
+        "hypeproofChat.instructorRuntime": {
+          "type": "string",
+          "enum": [
+            "legacy",
+            "chalk-extension"
+          ],
+          "default": "legacy",
+          "scope": "machine",
+          "description": "Instructor surface. 'legacy' = the instructor mode inside HypeProof Studio (default, current behavior). 'chalk-extension' = the instructor surface is the Chalk extension (hypeproof.hypeproof-chalk) through the Chalk command contract; without that extension installed, Studio shows no instructor surface. Machine-scoped."
+        },
         "hypeproofChat.coachRuntime": {
           "type": "string",
           "enum": [
