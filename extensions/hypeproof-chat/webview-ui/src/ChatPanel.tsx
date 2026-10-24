@@ -794,7 +794,6 @@ export function ChatPanel(props: Props) {
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
   // Sending is held (the draft stays) while the task's folder is missing.
   const folderMissing = personalWorkspace && !props.instructor && !!missingFolder;
-  const recheckSend = useRef(false);
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error, scope: `${activityId ?? ""}/${taskId ?? ""}` });
@@ -919,9 +918,9 @@ export function ChatPanel(props: Props) {
     if (attachmentFailures.items.length) return false; // The persistent error summary owns this diagnosis.
     if (imagePreparationBlocksSend()) return false;
     // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays. A press
-    // asks the host to look again: a folder that is back clears the notice and this draft goes out then.
+    // asks the host to look again. Recovery never sends a draft without a fresh send action.
     if (folderMissing) {
-      if (text === undefined) { recheckSend.current = true; postToHost({ type: "missingTaskFolderRequest" }); }
+      if (text === undefined) postToHost({ type: "missingTaskFolderRequest" });
       return false;
     }
     const value = (text ?? draft).trim();
@@ -960,14 +959,6 @@ export function ChatPanel(props: Props) {
     }
     return sendPrepared();
   };
-
-  // The host answered the re-check of a held send: folder back → the held draft goes out once;
-  // still missing → the press is answered and nothing is sent later on its behalf.
-  useEffect(() => {
-    if (!recheckSend.current) return;
-    recheckSend.current = false;
-    if (!missingFolder) submit();
-  }, [missingFolder]);
 
   const retryRecovered = (request: RecoveredRequest) => {
     if (streaming || frozen || unavailable || props.sendLocked || props.sendPending) return;
@@ -1120,6 +1111,7 @@ export function ChatPanel(props: Props) {
   // next turn instead of pasting raw text. A normal text paste falls through
   // to the textarea default (we only preventDefault when we found image data).
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (folderMissing) { e.preventDefault(); return; }
     if (!imagePasteEnabled && !imageFilesEnabled) return;          // text-only cohort — let default text paste happen
     const items = e.clipboardData?.items;
     if (!items) return;
@@ -1189,6 +1181,7 @@ export function ChatPanel(props: Props) {
     );
   }
   const handleDragOver = (e: React.DragEvent<HTMLElement>) => {
+    if (folderMissing) { e.preventDefault(); return; }
     if (!imagePasteEnabled && !imageFilesEnabled) return;
     if (!Array.from(e.dataTransfer.items ?? []).some((it) => it.kind === "file")) return;
     e.preventDefault();
@@ -1196,6 +1189,7 @@ export function ChatPanel(props: Props) {
   };
   const handleDragLeave = () => setDragActive(false);
   const handleDrop = (e: React.DragEvent<HTMLElement>) => {
+    if (folderMissing) { e.preventDefault(); setDragActive(false); return; }
     if (!imagePasteEnabled && !imageFilesEnabled) return;
     const files = Array.from(e.dataTransfer.files ?? []).filter(imageFilesEnabled ? () => true : (f) => f.type.startsWith("image/"));
     if (files.length === 0) { setDragActive(false); return; }
@@ -1868,7 +1862,6 @@ export function ChatPanel(props: Props) {
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
-        {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} /></PanelBoundary>}
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read
@@ -1988,27 +1981,32 @@ export function ChatPanel(props: Props) {
         )}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
-          data-expanded={personalWorkspace ? composerExpanded : undefined}
-          data-file-context={props.fileAttachment || props.fileAttachNotice ? "true" : undefined}
+          data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
+          data-file-context={!folderMissing && (props.fileAttachment || props.fileAttachNotice) ? "true" : undefined}
+          data-folder-missing={folderMissing || undefined}
           onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
         >
-          {/* CGP-CHAT-D06: the refusal text sits directly under the chip row, inside the composer card. */}
-          {(props.fileAttachment || props.fileAttachNotice) && <div className="hps-file-context-stack">
+          {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} onRecheck={() => postToHost({ type: "missingTaskFolderRequest" })} /></PanelBoundary>}
+          {folderMissing && <span id="missing-folder-draft-label" className="hps-missing-folder-draft-label">작성 중인 내용 · 읽기 전용</span>}
+          {/* CGP-CHAT-D06: the refusal text sits directly under the chip row, inside the composer card.
+              CGP-AGENT-D-024: in read-only folder recovery nothing can be sent, so pending file chips are not shown. */}
+          {!folderMissing && (props.fileAttachment || props.fileAttachNotice) && <div className="hps-file-context-stack">
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
-          {personalWorkspace && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} />}
+          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
           {!personalWorkspace && fileAttachShown && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={props.onAttachFile} webSearchItem={false} />}
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
           <textarea
             ref={textareaRef}
             autoFocus
-            readOnly={unavailable}
-            aria-label={composerLabel(coachName)}
-            aria-describedby={[freeEnded ? "hps-free-ended-note" : '', personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
+            readOnly={unavailable || folderMissing}
+            aria-label={folderMissing ? "보관한 초안 (읽기 전용)" : composerLabel(coachName)}
+            aria-describedby={[freeEnded ? "hps-free-ended-note" : '', folderMissing ? "missing-folder-draft-label" : personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
             value={draft}
             onChange={(e) => {
+              if (folderMissing) return;
               // Manual edits own the entire draft, even if it ends with an old choice.
               lastReplyChoice.current = null;
               setDraft(e.target.value);
@@ -2032,7 +2030,7 @@ export function ChatPanel(props: Props) {
               // Composing Hangul: Enter commits the syllable, it must never
               // send. Unchanged from before — typing mid-turn does not make the
               // IME any less load-bearing.
-              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable) return;
+              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable || folderMissing) return;
               e.preventDefault();
               if (imagePreparationBlocksSend()) return;
               // Roll-expand owns Enter while it is open (idle-only flow).
@@ -2070,10 +2068,10 @@ export function ChatPanel(props: Props) {
             }
             rows={personalWorkspace ? 1 : 3}
           />
-          {personalWorkspace && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
-          <div className="hps-input-buttons">
-            {personalWorkspace && <span id="personal-composer-hint" className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
-            {!streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
+          {personalWorkspace && !folderMissing && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
+          {(!folderMissing || streaming) && <div className="hps-input-buttons">
+            {personalWorkspace && !folderMissing && <span id="personal-composer-hint" className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
+            {!folderMissing && !streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
               <button
                 onClick={handleRollClick}
                 disabled={!draft.trim()}
@@ -2118,7 +2116,7 @@ export function ChatPanel(props: Props) {
                 {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             )}
-          </div>
+          </div>}
         </div>
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
       </footer>

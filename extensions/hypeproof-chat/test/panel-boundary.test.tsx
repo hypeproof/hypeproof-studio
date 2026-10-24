@@ -260,7 +260,7 @@ const DELEGATED = [
   { id: "a1", role: "assistant", content: "맡겨 볼게요", createdAt: 2 },
   { id: delegationRowId("toolu_T", "s0"), role: "tool", content: "", createdAt: 3, tool: { icon: "🤝", label: "코드리뷰어: 살펴봐 줘", state: "done" } },
 ];
-type Row = { panel: string; key: string | null; mode: "personal" | "classroom"; config?: Record<string, unknown>; history?: unknown[]; msgs?: () => Record<string, unknown>[]; blocking?: boolean };
+type Row = { panel: string; key: string | null; mode: "personal" | "classroom"; config?: Record<string, unknown>; history?: unknown[]; msgs?: () => Record<string, unknown>[]; blocking?: boolean; readOnlyDraft?: boolean };
 const PANELS: Row[] = [
   { panel: "task-sources", key: "CitationPreview.tsx:CitationPreview", mode: "personal", history: CITED },
   { panel: "citations", key: "CitationPreview.tsx:CitationRack", mode: "personal", history: CITED },
@@ -268,7 +268,7 @@ const PANELS: Row[] = [
   { panel: "page-card", key: "PageCard.tsx:PageCard", mode: "personal", msgs: () => [{ type: "pageCardsState", cards: [{ turnId: "s1", anchorId: "a1", pages: [] }] }] },
   { panel: "delegation", key: "DelegationGroup.tsx:DelegationGroup", mode: "personal", history: DELEGATED },
   { panel: "turn-review", key: "TurnReviewBar.tsx:TurnReviewBar", mode: "personal", msgs: () => [{ type: "turnReviewState", view: { turnId: "s1" } }] },
-  { panel: "missing-folder", key: "MissingFolderNotice.tsx:MissingFolderNotice", mode: "personal", blocking: true, msgs: () => [{ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") }] },
+  { panel: "missing-folder", key: "MissingFolderNotice.tsx:MissingFolderNotice", mode: "personal", blocking: true, readOnlyDraft: true, msgs: () => [{ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") }] },
   { panel: "preview-recovery", key: "PreviewRecoveryNotice.tsx:PreviewRecoveryNotice", mode: "personal", msgs: () => [{ type: "previewRecovery", signals: { server: "stopped", status: null, path: "/", needsNetwork: false } }] },
   { panel: "long-step", key: "ChatPanel.tsx:LongStepHintLine", mode: "personal", msgs: () => [
     { type: "userSent", text: "빌드해 줘", id: "u9" }, { type: "streamStart", streamId: "s1", messageId: "a9" },
@@ -346,8 +346,17 @@ for (const row of PANELS) {
     for (const f of fb) eq(f.getAttribute("data-panel-fallback"), row.panel, "only this panel falls back");
     ok(fb[0].textContent.includes(row.blocking ? PANEL_BLOCKED_TEXT : PANEL_FALLBACK_TEXT), row.blocking ? "a send-holding notice says sending is held" : "calm sentence");
     ok(h.textarea(), "the composer is still there");
-    await h.type("계속 쓸 수 있어요");
-    eq(h.textarea().value, "계속 쓸 수 있어요", "the composer still takes input");
+    if (row.readOnlyDraft) {
+      // CGP-AGENT-D-024: while the task folder is missing the composer keeps the draft read-only by design.
+      const ta = h.textarea() as El & { readOnly?: boolean };
+      ok(ta.getAttribute("readonly") !== null || ta.readOnly === true, "the composer holds the draft read-only");
+      const before = ta.value;
+      await h.type("계속 쓸 수 있어요");
+      eq(h.textarea().value, before, "the read-only draft is not changed by input");
+    } else {
+      await h.type("계속 쓸 수 있어요");
+      eq(h.textarea().value, "계속 쓸 수 있어요", "the composer still takes input");
+    }
     eq(reports().filter((r) => /panel render error/.test(r.message ?? "")).length, 1, "one report");
     g.__hpsPanelThrow = undefined; g.__hpsStub = undefined;
   });
