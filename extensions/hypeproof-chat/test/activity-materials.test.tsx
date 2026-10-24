@@ -58,8 +58,8 @@ t("asks the host for the list and draws nothing until it answers", async () => {
 t("every item says who added it in words: 나, 강사, AI; never pre-selected", async () => {
   const root = await mountPanel();
   await hostSays({ type: "materialsState", view: VIEW });
-  const metas = all((e) => e.localName === "span" && (e.getAttribute("class") ?? "") === "hp-materials-meta" && e.textContent.startsWith("추가:")).map((e) => e.textContent);
-  eq(metas, ["추가: 강사 · 강사가 보낸 글", "추가: 나 · 파일", "추가: 나 · 주소", "추가: AI · 파일"], "origin words");
+  const metas = all((e) => e.localName === "span" && (e.getAttribute("class") ?? "") === "hp-materials-origin" && e.textContent.startsWith("추가:")).map((e) => e.textContent);
+  eq(metas, ["추가: 강사", "추가: 나", "추가: 나", "추가: AI"], "origin words");
   eq(all((e) => e.localName === "li" && e.hasAttribute("data-material-origin")).map((e) => e.getAttribute("data-material-origin")), ["instructor", "learner", "learner", "ai"], "origin per row");
   ok(byText("span", VIEW.items[1].title).length === 1, "the long Korean title is drawn whole");
   ok(all((e) => e.localName === "button" && e.getAttribute("aria-pressed") === "true").length === 0, "nothing pre-selected");
@@ -212,17 +212,18 @@ const cssChecks: Record<string, (css: string) => string[]> = {
     const want: Record<string, string> = { "background-color": "Canvas !important", color: "CanvasText !important", "border-color": "Highlight !important" };
     return Object.entries(want).filter(([k, v]) => forcedDecl(css, s, k) !== v).map(([k]) => `${k} ${forcedDecl(css, s, k)}`);
   },
-  "a title wraps, never truncates": (css) => {
+  "a title ellipsizes while the containing row stays unconstrained": (css) => {
     const bad: string[] = [];
-    if (decl(css, ".hp-materials-title", "overflow-wrap") !== "anywhere") bad.push("title does not wrap");
-    if (decl(css, ".hp-materials-title", "white-space") !== "normal") bad.push("title white-space is not normal");
-    for (const s of [".hp-materials-title", ".hp-materials-item", ".hp-materials-chip"]) if (decl(css, s, "text-overflow") || decl(css, s, "white-space") === "nowrap") bad.push(`${s} truncates`);
+    if (decl(css, ".hp-materials-title", "text-overflow") !== "ellipsis") bad.push("title lacks ellipsis");
+    if (decl(css, ".hp-materials-title", "overflow") !== "hidden") bad.push("title overflows");
+    if (decl(css, ".hp-materials-title", "white-space") !== "nowrap") bad.push("title is not one line");
+    for (const s of [".hp-materials-item", ".hp-materials-chip"]) if (decl(css, s, "text-overflow") || decl(css, s, "white-space") === "nowrap") bad.push(`${s} truncates`);
     return bad;
   },
 };
 const MUTANTS: Record<string, (css: string) => string> = {
   "forced colours: the pressed 넣음 keeps its word (CanvasText on Canvas, Highlight border)": (css) => css.replace('{ background-color: Canvas !important; color: CanvasText !important;', '{ color: CanvasText !important;'),
-  "a title wraps, never truncates": (css) => css.replace(/(\.hp-materials-title \{[^}]*)white-space: normal;/, "$1white-space: nowrap; text-overflow: ellipsis;"),
+  "a title ellipsizes while the containing row stays unconstrained": (css) => css.replace(/(\.hp-materials-title \{[^}]*)white-space: nowrap;/, "$1white-space: normal;"),
 };
 for (const [label, check] of Object.entries(cssChecks)) {
   t(`css: ${label} (and its mutated copy fails)`, () => {

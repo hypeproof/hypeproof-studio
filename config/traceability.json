@@ -7714,6 +7714,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/activity-materials-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/material-added-time.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/material-row-computed.smoke.mjs"
         }
       ]
     },

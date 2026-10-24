@@ -244,6 +244,7 @@ export interface MaterialSources {
   folderFiles: readonly string[];
   /** The provenance ledger's label kind for a work-folder path (REQ-STUDIO-ARTIFACT-PROVENANCE). */
   provenance: (rel: string) => string | undefined;
+  provenanceAddedAt?: (rel: string) => number | undefined;
   /** The classroom inbox cards this learner can see now (#751 U2). */
   inbox: readonly InboxCard[];
   selected: ReadonlySet<string>;
@@ -276,20 +277,21 @@ export function instructorMaterials(cards: readonly InboxCard[]): InboxCard[] {
 
 export function materialsView(src: MaterialSources): MaterialsView {
   const files = new Set(src.folderFiles);
-  const item = (id: string, kind: MaterialItemView["kind"], title: string, detail: string, origin: MaterialOrigin): MaterialItemView => ({
+  const item = (id: string, kind: MaterialItemView["kind"], title: string, detail: string, origin: MaterialOrigin, addedAt?: number): MaterialItemView => ({
     id, kind, title, detail, origin, originLabel: MATERIAL_ORIGIN_LABELS[origin], selected: src.selected.has(id), removable: origin !== "instructor",
+    ...(Number.isSafeInteger(addedAt) && addedAt! > 0 && addedAt! <= 8640000000000000 ? { addedAt } : {}),
   });
   const items: MaterialItemView[] = [];
-  for (const card of instructorMaterials(src.inbox)) items.push(item(inboxId(card), "note", card.title, "강사가 보낸 글", "instructor"));
+  for (const card of instructorMaterials(src.inbox)) items.push(item(inboxId(card), "note", card.title, "강사가 보낸 글", "instructor", card.received_at));
   const stored = new Set<string>();
   for (const m of src.manifest.items) {
     if (m.kind === "file") {
       stored.add(m.ref);
       // A copy that is gone from the folder is not offered: it could not be sent.
       if (!files.has(m.ref)) continue;
-      items.push(item(`me:${m.id}`, "file", m.ref.slice(MATERIALS_DIR.length + 1), m.ref, "learner"));
+      items.push(item(`me:${m.id}`, "file", m.ref.slice(MATERIALS_DIR.length + 1), m.ref, "learner", m.addedAt));
     } else {
-      items.push(item(`me:${m.id}`, "url", new URL(m.ref).hostname, m.ref, "learner"));
+      items.push(item(`me:${m.id}`, "url", new URL(m.ref).hostname, m.ref, "learner", m.addedAt));
     }
   }
   const hidden = new Set(src.manifest.hidden);
@@ -297,7 +299,7 @@ export function materialsView(src: MaterialSources): MaterialsView {
     if (stored.has(rel) || hidden.has(rel)) continue;
     // Positive evidence only: a file is the AI's when the ledger recorded the AI writing it.
     if (!AI_KINDS.has(src.provenance(rel) ?? "")) continue;
-    items.push(item(`ai:${rel}`, "file", rel.slice(MATERIALS_DIR.length + 1), rel, "ai"));
+    items.push(item(`ai:${rel}`, "file", rel.slice(MATERIALS_DIR.length + 1), rel, "ai", src.provenanceAddedAt?.(rel)));
   }
   return { scope: src.scope, items, maxSelected: MATERIALS_MAX_SELECTED };
 }

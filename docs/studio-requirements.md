@@ -1675,6 +1675,15 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   inbox (#751 U2); withdrawn, unreadable, notice, prompt and setting cards are not listed. AI:
   a file directly in `자료/` whose provenance ledger records an AI write; a file there with any
   other or no record is not listed. The origin is shown in words ("추가: 나"), never only colour.
+- **Row design (CGP-KNOW-D-003 / DES-KNOW-04).** A decorative file/link/book icon precedes a
+  single-line ellipsized name, with its full text in the accessible name and keyboard/pointer
+  tooltip. The text origin badge stays readable and stacks below the name at 320px. The header
+  and controls are at least 44px. The time is the recorded learner add, instructor receipt, or AI
+  creation event in the current file lifetime, never a later modification time. Missing, invalid,
+  truncated or unconfirmed creation history says "추가 시각 미확인"; no current-time fallback.
+  Selection remains host-owned and nothing is sent by toggling it. The existing system picker
+  remains the file entry; drag/drop intake and its drop-zone treatment are not implemented by
+  this presentation row and remain an explicit design gap.
 - **Removing.** 목록에서 빼기 takes a learner or AI item off the list; a file stays in the folder.
   Instructor items have no 목록에서 빼기, the row says "강사가 보낸 자료는 목록에서 뺄 수 없어요.",
   and the host refuses a remove request for them.

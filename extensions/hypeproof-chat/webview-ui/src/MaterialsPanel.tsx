@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MaterialItemView, MaterialsView } from '../../src/activityMaterialsView';
 import { MATERIALS_COPY } from '../../src/activityMaterialsView';
+import { ChatIcon } from './ChatDetails';
 import { imeComposing } from './imeGuard';
 import { onHostMessage, postToHost } from './vscode';
 
@@ -48,6 +49,14 @@ function selectLabel(item: MaterialItemView): string {
   return `${item.selected ? '넣음' : '이번 질문에 넣기'}: ${item.title}`;
 }
 
+/** Unknown or malformed historical timestamps never become the current time. */
+function MaterialAddedTime({ at }: { at?: number }) {
+  if (!Number.isSafeInteger(at) || at! <= 0 || at! > 8640000000000000) return <span className="hp-materials-meta">추가 시각 미확인</span>;
+  const date = new Date(at!);
+  const label = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+  return <time className="hp-materials-meta" dateTime={date.toISOString()} title={date.toISOString()}>추가: {label}</time>;
+}
+
 export function MaterialsPanel() {
   const { view, error, notice, busy, ask } = useMaterials();
   const [url, setUrl] = useState('');
@@ -59,8 +68,13 @@ export function MaterialsPanel() {
     <p className="hp-materials-note">{MATERIALS_COPY.note}</p>
     {view.items.length > 0 && <ul className="hp-materials-list" aria-label="자료 목록">
       {view.items.map(item => <li key={item.id} className="hp-materials-item" data-material-origin={item.origin}>
-        <span className="hp-materials-title">{item.title}</span>
-        <span className="hp-materials-meta">추가: {item.originLabel} · {item.kind === 'url' ? '주소' : item.kind === 'note' ? '강사가 보낸 글' : '파일'}</span>
+        <div className="hp-materials-heading">
+          <ChatIcon kind={item.kind === 'url' ? 'link' : item.kind === 'note' ? 'book' : 'file'} size={20} />
+          <span className="hp-materials-title" tabIndex={0} aria-label={item.title} title={item.title} data-hp-tooltip={item.title}>{item.title}</span>
+          <span className="hp-materials-origin">추가: {item.originLabel}</span>
+        </div>
+        <MaterialAddedTime at={item.addedAt} />
+        <span className="hp-materials-meta">{item.kind === 'url' ? '주소' : item.kind === 'note' ? '강사가 보낸 글' : '파일'}</span>
         {item.kind !== 'note' && <span className="hp-materials-detail">{item.detail}</span>}
         <div className="hp-materials-actions">
           <button type="button" className="hp-cta-quiet" aria-pressed={item.selected} aria-label={selectLabel(item)} disabled={busy}
