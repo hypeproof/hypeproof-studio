@@ -2,6 +2,8 @@ import { useMenuTypeahead } from './menuTypeahead';
 import { citationKindLabel } from './citationKind';
 import { elapsedWorkLabel } from '../../src/turnElapsed';
 import { useFileMentions } from './FileMentions';
+import { PastedDraft } from './PasteChip';
+import { fullDraft, visibleDraft, editVisible, replaceVisible, changePaste, longPaste, type DraftPart } from './pastedDraft';
 import { ClassWindowNotice } from "./ClassWindowNotice";
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
@@ -75,7 +77,7 @@ import { isObservationFormat, showsObservationResults } from '../../src/nativeOb
 import { CodeBlock, CodeBlockScope } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { Children, cloneElement, Fragment, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
 import type {
@@ -375,7 +377,14 @@ export function ChatPanel(props: Props) {
   const entryOpen = !!entry && (!entry.seen || reopenedCapabilities === entry.id);
   const saved = config?.activityDraft;
   const separateQueue = !!saved?.queued && (saved.queuedPaused === true || (saved.queuedToolMode ?? 'auto') !== (saved.toolMode ?? 'auto'));
-  const [draft, setDraft] = useState(() => separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null));
+  const [draftParts, setDraftParts] = useState<DraftPart[]>(() => [{ text: separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null) }]);
+  const draft = fullDraft(draftParts), composerText = visibleDraft(draftParts);
+  const pasteId = useRef(0);
+  // External replacements/imports operate on the complete draft and restore it inline.
+  const setDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => {
+    const before = fullDraft(previous), next = typeof value === 'function' ? value(before) : value;
+    return next === before ? previous : [{ text: next }];
+  }), []);
   const [toolMode, setToolMode] = useState<TurnToolMode>(saved?.toolMode ?? 'auto');
   const [queuedToolMode, setQueuedToolMode] = useState<TurnToolMode>(saved?.queuedToolMode ?? saved?.toolMode ?? 'auto');
   const [queuedPaused, setQueuedPaused] = useState(separateQueue);
@@ -849,8 +858,9 @@ export function ChatPanel(props: Props) {
       !!config?.profile?.model_selection?.choices.some(model => model.alias === config.model && !fundingChoice.allowed.models.includes(model.id)))));
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages, normalizeTextSize(config?.textSize));
   const headingSlot = useContext(HeadingSlotContext);
-  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, draft, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
-  const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft, setDraft, editor: textareaRef, composing, activityId, taskId });
+  const setVisibleDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => editVisible(previous, typeof value === 'function' ? value(visibleDraft(previous)) : value)), []);
+  const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
+  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
@@ -1120,21 +1130,24 @@ export function ChatPanel(props: Props) {
   // to the textarea default (we only preventDefault when we found image data).
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (folderMissing) { e.preventDefault(); return; }
-    if (!imagePasteEnabled && !imageFilesEnabled) return;          // text-only cohort — let default text paste happen
-    const items = e.clipboardData?.items;
-    if (!items) return;
+    if (unavailable || composing) return;
     const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      if (it.kind === "file" && it.type.startsWith("image/")) {
-        const f = it.getAsFile();
-        if (f) imageFiles.push(f);
-      }
+    if (imagePasteEnabled || imageFilesEnabled) for (const item of Array.from(e.clipboardData?.items ?? [])) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) { const file = item.getAsFile();if (file) imageFiles.push(file); }
     }
-    if (imageFiles.length === 0) return;     // plain text paste — let default happen
+    if (imageFiles.length) {
+      e.preventDefault();
+      if (imageFilesEnabled) stagePhotoFiles(imageFiles);else attachImageFiles(imageFiles);
+      return;
+    }
+    const text = e.clipboardData.getData('text/plain');
+    if (!longPaste(text)) return;
     e.preventDefault();
-    if (imageFilesEnabled) stagePhotoFiles(imageFiles);
-    else attachImageFiles(imageFiles);
+    const start = e.currentTarget.selectionStart, end = e.currentTarget.selectionEnd;
+    const next = replaceVisible(draftParts, start, end, { id: ++pasteId.current, text });
+    if (fullDraft(next).length > 200000) { setImgNote('입력할 수 있는 글의 길이를 넘었어요. 글을 나누어 붙여넣어 주세요.');return; }
+    lastReplyChoice.current = null;setDraftParts(next);
+    requestAnimationFrame(() => { textareaRef.current?.focus();textareaRef.current?.setSelectionRange(start, start); });
   };
 
   // #384 — drag a screenshot file from Finder/desktop straight onto the input.
@@ -2003,6 +2016,15 @@ export function ChatPanel(props: Props) {
           </>
         )}
         {fileMentions.view}
+        {draftParts.some(part => part.id !== undefined) && <div className="hps-pasted-list" aria-label="붙여넣은 글 목록">
+          {draftParts.filter(part => part.id !== undefined).map(part => <PastedDraft key={part.id} part={part} disabled={unavailable || folderMissing}
+            onChange={text => {
+              if (draft.length - part.text.length + text.length > 200000) { setImgNote('입력할 수 있는 글의 길이를 넘었어요.');return; }
+              setDraftParts(previous => changePaste(previous, part.id!, text));
+            }}
+            onRemove={() => { setDraftParts(previous => changePaste(previous, part.id!, null));requestAnimationFrame(() => textareaRef.current?.focus()); }}
+            onInline={() => { setDraftParts(previous => changePaste(previous, part.id!, part.text, true));requestAnimationFrame(() => textareaRef.current?.focus()); }} />)}
+        </div>}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
@@ -2028,16 +2050,16 @@ export function ChatPanel(props: Props) {
             readOnly={unavailable || folderMissing}
             aria-label={folderMissing ? "보관한 초안 (읽기 전용)" : composerLabel(coachName)}
             aria-describedby={[freeEnded ? "hps-free-ended-note" : '', folderMissing ? "missing-folder-draft-label" : personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
-            value={draft}
             aria-autocomplete={config?.fileMentions ? "list" : undefined}
             aria-controls={fileMentions.open ? fileMentions.listId : undefined}
             aria-activedescendant={fileMentions.activeId}
             onSelect={event => fileMentions.setCaret(event.currentTarget.selectionStart)}
+            value={composerText}
             onChange={(e) => {
               if (folderMissing) return;
               // Manual edits own the entire draft, even if it ends with an old choice.
               lastReplyChoice.current = null;
-              setDraft(e.target.value);fileMentions.setCaret(e.target.selectionStart);
+              const value = e.target.value;setDraftParts(previous => editVisible(previous, value));fileMentions.setCaret(e.target.selectionStart);
             }}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}

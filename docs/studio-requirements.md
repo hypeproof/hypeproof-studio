@@ -5262,6 +5262,7 @@ classroom branches, light/dark themes, 800/1420 windows, grayscale screenshots,
 forced colors, computed deletion/tint/font styles, escaping and updated,
 missing or oversized history. Headless evidence does not establish native
 editor or screen-reader acceptance.
+
 ## Answer verdict presentation (CGP-CHAT-D-005)
 
 CGP-CHAT-D63 completes REQ-STUDIO-ANSWER-VERDICT's personal-task presentation.
@@ -5491,3 +5492,20 @@ step change ending in the model path, an app short-circuit or instructor mode, i
 lesson-less seats; the rendered ChatPanel) and `lesson-step-divider-layout.smoke.mjs` (computed
 layout and the real jump in headless Chromium, dark/light, 800/1420 px, forced colours; fails
 under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+### Collapsible pasted text (CGP-CHAT-R-017)
+
+A plain-text paste longer than 2,000 Unicode code points or 40 lines becomes a
+`붙여넣은 글 (N줄)` chip. CRLF is one line break. Expanding exposes an editable
+plain-text area; explicit removal deletes only that paste, while `입력창에 펼치기`
+returns it to inline input. Consecutive pastes retain their order at the caret.
+Image paste retains its existing profile-gated path; text paste works in text-only
+profiles too and does not trigger folding during IME composition.
+
+Chips are a view of the canonical draft. Saves, queueing, recovery and send all use
+the complete ordered text, never labels or placeholder markers. A restored draft
+may be inline; collapsing is not durable metadata. Selecting/deleting all visible
+input does not silently delete a hidden chip; its explicit delete action does.
+External draft replacements/imports restore the resulting complete text inline.
+The existing host draft length bound is honored when adding/editing a chip. No
+paste sends automatically or changes tool grants. This supports PI#1 learner
+agency by keeping long source text inspectable and editable before the send.

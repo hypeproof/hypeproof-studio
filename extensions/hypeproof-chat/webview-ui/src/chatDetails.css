@@ -726,3 +726,6 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
 .hps-file-mentions button > svg { flex-shrink: 0; }
 .hps-file-mentions button > span { min-width: 0; }
 .hps-file-mentions [aria-selected="true"] { border-color: var(--hp-border-control-selected); background-color: var(--hp-bg-control-selected); }
+/* CGP-CHAT-R-017: view-only paste chips keep the complete draft available. */
+.hps-pasted-list { max-height: 30vh; overflow: auto; min-width: 0; }
+.hps-pasted-editor { box-sizing: border-box; flex-basis: 100%; width: 100%; min-width: 0; max-height: 20vh; overflow: auto; font: inherit; font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); color: inherit; background: var(--vscode-input-background, transparent); }

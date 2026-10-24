@@ -12530,6 +12530,39 @@
           "path": "extensions/hypeproof-chat/test/lesson-step-divider-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-PASTED-DRAFT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/pastedDraft.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/PasteChip.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PASTED-DRAFT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-PASTED-DRAFT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/pasted-draft.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/pasted-draft-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }
