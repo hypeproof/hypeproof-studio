@@ -7384,6 +7384,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/ArtifactProvenanceList.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
         }
       ]
     },
@@ -7410,6 +7413,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/artifact-provenance.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/provenance-chip-computed.smoke.mjs"
         }
       ]
     },
