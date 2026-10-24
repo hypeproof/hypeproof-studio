@@ -12201,6 +12201,23 @@
           "section": "### Task-bound coach notices"
         }
       ]
+    },
+    {
+      "id": "ST-TEST-CGP-ART-D003",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANNOTATION-LEAVE",
+        "ST-IMP-ANNOTATION-LEAVE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/annotation-leave-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/annotation-leave-prompt.smoke.mjs"
+        }
+      ]
     }
   ]
 }

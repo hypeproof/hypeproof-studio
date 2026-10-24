@@ -396,6 +396,41 @@ async function main() {
     const full = renderToStaticMarkup(<AnnotationTray annotations={Array.from({ length: 10 }, (_, i) => ({ number: i + 1, kind: 'element' as const, comment: '', stale: false, sentText: '', imageDataUrl: null }))} onAction={() => {}} />);
     assert.equal(full.match(/<button type="button" disabled="">/g)?.length, 2, 'both add buttons are disabled at 10');
   }
+  // DES-ART-03: visible chat uses the request-bound in-app modal, same host discard gate.
+  {
+    let nativeCalls=0;
+    vscode.window.showWarningMessage=async()=>{nativeCalls++;throw new Error('visible panel must use webview');};
+    for(const discard of [false,true]){
+      const h=host({view:{visible:true}});fill(h,2);
+      const pending=h.confirmAnnotationLeave();
+      const prompt=posts.find(p=>p.type==='annotationLeavePrompt'&&p.prompt)?.prompt;
+      assert.equal(prompt.count,2);assert.ok(prompt.id);
+      await h.handleMessage({type:'annotationLeaveAnswer',id:'unrelated',discard:true});
+      assert.equal(h.annotationBatch.size,2);
+      await h.handleMessage({type:'annotationLeaveAnswer',id:prompt.id,discard});
+      assert.equal(await pending,discard);assert.equal(h.annotationBatch.size,discard?0:2);
+      assert.ok(posts.some(p=>p.type==='annotationLeavePrompt'&&p.prompt===null));
+    }
+    const h=host({view:{visible:true}});fill(h,1);const pending=h.confirmAnnotationLeave();
+    const prompt=posts.find(p=>p.type==='annotationLeavePrompt'&&p.prompt).prompt;
+    h.annotationBatch.edit(1,'changed while modal open');
+    await h.handleMessage({type:'annotationLeaveAnswer',id:prompt.id,discard:true});
+    assert.equal(await pending,false);assert.equal(h.annotationBatch.size,1);
+    assert.equal(nativeCalls,0);
+    // A webview reload (`ready`) and panel disposal cancel the open request: the draft stays and the next leave is not refused.
+    {
+      const noop=async()=>{};
+      const h=host({view:{visible:true},writeApprovalRequest:{cancel(){}},postInbox:noop,postTurnReview:noop,postPageCards:noop,postConfig:noop,postHistory:noop,postAccuracyEducation:noop,postLearningState:noop});fill(h,2);
+      const first=h.confirmAnnotationLeave();
+      await h.handleMessage({type:'ready'}).catch((e:any)=>{if(!/postPageNotice|undefined/.test(String(e?.message)))throw e;});
+      assert.equal(await Promise.race([first,new Promise(r=>setTimeout(()=>r('still pending'),500))]),false,'ready cancels the open leave request');
+      assert.equal(h.annotationBatch.size,2);
+      const second=h.confirmAnnotationLeave();
+      const prompt=posts.filter(p=>p.type==='annotationLeavePrompt'&&p.prompt).at(-1).prompt;
+      await h.handleMessage({type:'annotationLeaveAnswer',id:prompt.id,discard:true});
+      assert.equal(await second,true,'a fresh request after reload is answerable, not refused');
+    }
+  }
   // CGP-ART-R-003: every exit keeps drafts unless the same revision is explicitly discarded.
   {
     let prompts: any[] = [], answer: any;

@@ -4980,6 +4980,22 @@ Activity/task transitions and preview close require the explicit annotation
 leave decision described in the CGP-ART-R-003 implementation contract. Default
 and Esc keep the draft; discard is scoped to the unchanged draft revision.
 
+DES-ART-03 / CGP-ART-D-003 uses the in-app modal while a chat panel is visible:
+exactly two buttons (`계속 고치기`, `버리기`), initial focus on keep, Tab contained,
+Escape/backdrop/Enter on the default action keep the draft. The count message
+occupies at most two lines at 320px. Only an explicit discard answer for the
+current request ID and unchanged scope/revision may discard. Composition keys
+cannot answer; duplicate clicks answer once. Reload/disposal, failed delivery
+or timeout keep the draft. With no visible chat panel the existing native modal
+remains; its installed-platform focus/geometry require owner verification.
+Browser close remains an after-close notification, not a close veto.
+
+Evidence: `annotation-leave-layout.smoke.mjs` mounts the actual App and bridge;
+`annotation-leave-prompt.smoke.mjs` and `annotation-provider.test.tsx` cover
+request lifetime and host discard guards. Headless/synthetic IME evidence is
+separate from installed Studio and native OS IME acceptance.
+
+
 ## Class window notice (CGP-SHELL-R-025)
 
 `REQ-STUDIO-CLASS-WINDOW` (PI#4, PI#1; REQ-B5): the chat rail shows a passive
