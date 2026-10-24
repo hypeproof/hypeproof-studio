@@ -657,3 +657,28 @@
 .hps-wiki-review button:active { background: var(--hp-bg-control-pressed); }
 /* CGP-KNOW-D-010: a persisted restriction stays visible beside the activity header. */
 .hps-folder-restricted { flex: 0 0 auto; font-size: var(--hp-font-caption); padding: var(--hp-space-1) var(--hp-space-2); border: var(--ds-c-studio-chatdetails-size-3) solid currentColor; border-radius: var(--hp-space-2); }
+/* DES-CGP-AGENT-67: top-layer disclosure; no permission or runtime change. */
+.hps-shell .hp-capability-sheet {
+  box-sizing: border-box;
+  width: min(var(--ds-c-modal-max), calc(100% - var(--ds-c-modal-gutter)));
+  max-width: calc(100% - var(--ds-c-modal-gutter));
+  max-height: calc(100dvh - var(--ds-c-modal-gutter));
+  margin: auto;
+  padding: var(--ds-c-modal-padding);
+  overflow: auto;
+  color: var(--hp-text-primary-default);
+  background: var(--vscode-editor-background);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
+  border-radius: var(--ds-c-modal-radius);
+  font: inherit;
+}
+.hps-shell .hp-capability-sheet::backdrop { background: var(--ds-c-modal-dim-dark); }
+.hps-shell .hp-capability-sheet .hp-ai-can-do { width: auto; max-width: 100%; max-height: none; margin: 0; overflow: visible; }
+.hps-shell .hp-capability-sheet .hp-ai-can-do ul { grid-template-columns: minmax(0, 1fr); }
+.hps-shell .hp-capability-sheet .hp-capability-next { width: 100%; margin-block: var(--ds-c-studio-chatdetails-space-1); }
+.hps-shell .hp-capability-sheet .hp-rail-lesson-note { font-size: var(--hp-font-caption); }
+body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-dim-light); }
+@media (forced-colors: active) {
+  .hps-shell .hp-capability-sheet { color: CanvasText; background: Canvas; border-color: CanvasText; }
+  .hps-shell .hp-capability-sheet :focus-visible { outline-color: Highlight; }
+}

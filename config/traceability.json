@@ -12145,6 +12145,20 @@
           "path": "extensions/hypeproof-chat/test/preview-shell-bridge.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-TEST-CGP-AGENT-D028",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-CAPABILITY-ENTRY",
+        "ST-IMP-LESSON-CAPABILITY-ENTRY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-capability-entry-layout.smoke.mjs"
+        }
+      ]
     }
   ]
 }

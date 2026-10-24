@@ -1459,10 +1459,9 @@ export function ChatPanel(props: Props) {
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
 
       {entryOpen && entry && config?.aiCapabilities && <PanelBoundary panel="lesson-capability-entry">
-        <AiCanDo key={entry.id} items={config.aiCapabilities} solo={audience === 'solo'} expanded onNext={() => {
+        <LessonCapabilitySheet key={entry.id} items={config.aiCapabilities} solo={audience === 'solo'} onAcknowledge={() => {
           setReopenedCapabilities(null);
           postToHost({ type: "acknowledgeLessonCapabilities", id: entry.id });
-          textareaRef.current?.focus();
         }} />
       </PanelBoundary>}
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
@@ -2161,6 +2160,26 @@ export function ChatPanel(props: Props) {
  * REQ-STUDIO-UI-POLISH-1: closed by default (R-032 opens the first lesson entry), with a one-line summary that already says how many of the
  * listed things the AI does here ("6가지 중 4가지", so the count matches the rows that open); each row is a mark, the label and one state word in the same quiet style.
  */
+function LessonCapabilitySheet({ items, solo, onAcknowledge }: { items: NonNullable<ChatConfig['aiCapabilities']>; solo: boolean; onAcknowledge: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const entryComposing = useRef(false);
+  // No opener return: this disclosure always hands focus to the preserved composer.
+  useDialogFocus(dialog, { open: true, kind: 'modal', initialFocus: '.hp-capability-next', opener: () => null,
+    fallback: () => document.querySelector<HTMLTextAreaElement>('.hps-input textarea') });
+  useEffect(() => {
+    const node = dialog.current;
+    node?.showModal();
+    node?.querySelector<HTMLButtonElement>('.hp-capability-next')?.focus();
+    return () => node?.close();
+  }, []);
+  return <dialog ref={dialog} className="hp-capability-sheet" aria-label="AI 안내"
+    onCompositionStart={() => { entryComposing.current = true; }} onCompositionEnd={() => { entryComposing.current = false; }}
+    onKeyDownCapture={event => { if (imeComposing(event, entryComposing.current)) { event.preventDefault(); event.stopPropagation(); } }}
+    onCancel={event => { event.preventDefault(); if (!entryComposing.current) onAcknowledge(); }}>
+    <AiCanDo items={items} solo={solo} expanded onNext={onAcknowledge} />
+  </dialog>;
+}
+
 function AiCanDo({ items, solo, expanded, onNext }: { items: NonNullable<ChatConfig['aiCapabilities']>; solo: boolean; expanded?: boolean; onNext?: () => void }) {
   const onCount = items.filter(item => item.on).length;
   // Trial diagnosis D3: a solo seat (trial, pass, personal) has no lesson and no teacher.
@@ -2177,7 +2196,7 @@ function AiCanDo({ items, solo, expanded, onNext }: { items: NonNullable<ChatCon
       </li>)}
     </ul>
     {items.some(item => item.on && item.asks === true) && <p className="hp-rail-lesson-note">물어봐요: 확인이 필요한 동작을 하기 전에 허락을 받아요. 이미 허락했거나 확인이 필요 없는 동작은 바로 할 수 있어요.</p>}
-    {onNext && <button className="hp-capability-next" type="button" onClick={onNext}>다음</button>}
+    {onNext && <button className="hp-capability-next" type="button" onClick={onNext}>알겠어요</button>}
     <p className="hp-rail-lesson-note">{solo ? '지금 쓰는 체험·이용권에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
   </details>;
 }

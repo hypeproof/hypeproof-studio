@@ -4574,8 +4574,15 @@ Validation: `goal-strip.test.tsx`, `goal-strip-layout.smoke.mjs`, `goal-status.t
 
 REQ-CGP-AGENT-67 / CGP-AGENT-067, PI#2 (learner judgment) and PI#3
 (visible responsibility), depends on CGP-AGENT-R-003 / REQ-M47:
-The first entry into a lesson shows the existing resolved capability card open,
-with a `다음` action. Once acknowledged, it stays collapsed on reload for the same
+The first entry into a lesson shows the resolved capability card in a native modal
+sheet with one `알겠어요` button (DES-CGP-AGENT-67 / CGP-AGENT-D-028).
+Tab and Shift+Tab stay inside; background controls are inert. Escape has the same
+acknowledgement meaning as the button, except during IME composition. No outside
+press acknowledges the lesson. Only a host receipt closes the first-entry sheet;
+a failed write leaves it available to retry. Closing returns focus to the composer
+and preserves its draft. Header reopening closes immediately on acknowledgement.
+The sheet fits 320px, uses one column, 44px targets and a scrolling viewport for
+short windows. Once acknowledged, it stays collapsed on reload for the same
 lesson course/version/hash and seat on this device. The panel header's
 `AI 안내` reopens the same card. No autonomy choice, permission change,
 AI turn, assessment event, or upload is produced. This may expose JUDGMENT and
