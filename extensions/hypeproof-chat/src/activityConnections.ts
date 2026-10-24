@@ -324,7 +324,12 @@ export class ActivityConnections {
       const free = isFreeSeat(p);
       const replacesFree = (bound: { free?: unknown; id?: unknown }) => !!p.pass && !!opts?.replacesFree && bound.id === opts.replacesFree && bound.free === true;
       this.claim(workspace,id,(bound)=>passTakesOver(p,workspace) || freeTakesOver(p,workspace,bound,owners?.get(bindingOwnerKey(bound))) || replacesFree(bound),free);
-      await this.raw.secrets.store(ref,JSON.stringify(next));
+      try { await this.raw.secrets.store(ref,JSON.stringify(next)); }
+      catch {
+        // Keep the credential in the host's candidate for retry. The outer catch
+        // restores the old binding; no credential may fall back to plain storage.
+        throw new ActivityConnectionError('활동 연결을 안전하게 저장하지 못했습니다. 기기의 보안 저장소 접근을 확인한 뒤 다시 시도해 주세요. 기존 연결과 작업 파일은 보존됩니다.');
+      }
       fs.writeFileSync(tmp,JSON.stringify({version:1,id,ref,...(free?{free:true}:{})}),{flag:'wx',mode:0o600});
       fs.renameSync(tmp,bindingFile);
       if (sameWindowRoot) await this.raw.workspaceState.update(ACTIVE,ref);

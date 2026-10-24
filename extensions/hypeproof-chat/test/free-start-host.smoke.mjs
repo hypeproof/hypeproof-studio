@@ -9,6 +9,9 @@ import http from 'node:http';
 import { build } from 'esbuild';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 const require = createRequire(import.meta.url);
 const bundle = await build({ stdin: { contents: "export * from './src/startPage.ts';export * from './src/activityConnections.ts';", resolveDir: new URL('..', import.meta.url).pathname, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'error' });
 
@@ -32,6 +35,7 @@ const server = http.createServer((req, res) => {
     if (req.url === '/v1/purchase/orders') return send(201, { order_id: 'ord_' + 'a'.repeat(32), order_secret: 'b'.repeat(64), amount: 50000, currency: 'KRW', label: '30일 이용권', expires_at: Date.now() + 1800000, checkout_url: `${SITE}/studio/checkout?order=ord_${'a'.repeat(32)}` });
     if (req.url === '/v1/free/claim') { const next = svc.claims.shift() ?? { status: 200, body: { outcome: 'granted', code: TOKEN_FREE, profile: 'studio-open-trial', expires_at: Date.now() + 720 * 3600e3 } }; if (next.disconnect) return req.socket.destroy(); return send(next.status, next.body); }
     if (req.url === '/v1/profile') return req.headers.authorization === `Bearer ${TOKEN_FREE}` ? send(200, svc.profile) : send(401, { error: { code: 'signature' } });
+    if (req.url === '/v1/activity') return req.headers.authorization === `Bearer ${TOKEN_FREE}` ? send(200, { activity_id: svc.profile.activity_id }) : send(401, {});
     send(404, { error: { message: 'not found', type: 'not_found' } });
   });
 });
@@ -50,20 +54,23 @@ function accountStub(status = 'signedOut') {
     refreshView: async () => { a.refreshes++; }, start: async () => { a.starts++; a.status = 'signedIn'; }, cancel() {}, reopen: async () => {}, openAccount: async () => {}, signOut: async () => { a.status = 'signedOut'; } };
   return a;
 }
-function harness({ freeStart = 'service', version = '0.1.58', secretReadError, secretStoreError, current = null, globals, failure = null, accounts } = {}) {
-  const world = { secrets: new Map(), secretReadError, secretStores: [], generatedIds: 0, retryWaits: [], global: globals ?? new Map(), states: [], opened: [], commands: [], begun: [], claimNotes: [], current, failure };
+function harness({ freeStart = 'service', version = '0.1.58', secretReadError, secretStoreError, current = null, globals, failure = null, accounts, activityFixture, denySecretWrites = false } = {}) {
+  const world = { secrets: new Map(), secretReadError, secretStores: [], denySecretWrites, generatedIds: 0, retryWaits: [], global: globals ?? new Map(), states: [], opened: [], commands: [], begun: [], navigated: [], claimNotes: [], current, failure };
+  let connections;
   const ctx = {
+    ...(activityFixture ? { globalStorageUri: { fsPath: activityFixture.storage } } : {}),
     workspaceState: { keys: () => [], get: (_k, d) => d, update: async () => {} },
     globalState: { get: (k, d) => world.global.has(k) ? world.global.get(k) : d, update: async (k, v) => { world.global.set(k, v); } },
     secrets: {
       get: async k => { if (world.secretReadError && k === 'hypeproofChat.installId.v1') throw world.secretReadError; return world.secrets.get(k); },
-      store: async (k, v) => { world.secretStores.push(k); if (secretStoreError && k === 'hypeproofChat.installId.v1') throw secretStoreError; world.secrets.set(k, v); },
+      store: async (k, v) => { world.secretStores.push(k); if (world.denySecretWrites) throw Error('synthetic private storage failure'); if (secretStoreError && k === 'hypeproofChat.installId.v1') throw secretStoreError; world.secrets.set(k, v); },
       delete: async k => { world.secrets.delete(k); },
+      keys: async () => [...world.secrets.keys()], onDidChange: () => ({ dispose() {} }),
     },
     extension: { packageJSON: { version } }, subscriptions: [],
   };
   const chat = {
-    openInEditor: async () => { world.begun.push('chat'); }, ensureProfile: async () => world.current ?? (world.secrets.get('hypeproofChat.workshopToken') === TOKEN_FREE ? svc.profile : null), profileFailure: () => world.failure, invalidateProfile() {}, refreshConfig() {},
+    openInEditor: async () => { world.begun.push('chat'); }, ensureProfile: async () => world.current ?? ((connections ? await connections.token() : world.secrets.get('hypeproofChat.workshopToken')) === TOKEN_FREE ? svc.profile : null), profileFailure: () => world.failure, invalidateProfile() {}, refreshConfig() {},
     hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => '코치', coachNameIsChosen: () => true,
     noteFreeClaim: (token, outcome) => world.claimNotes.push({ token, outcome }), funnelEmit() {},
   };
@@ -74,11 +81,18 @@ function harness({ freeStart = 'service', version = '0.1.58', secretReadError, s
     // Only bounded claim_busy waits fire, on the next turn of the loop, and only in their own cases. The
     // first-paint bound never fires (the stub always answers the offer) and no purchase poll loop runs.
     setTimeout: (f, ms) => { if ([3000, 6000, 12000].includes(ms) && fireRetry) { world.retryWaits.push(ms); world.onRetryWait?.(); setImmediate(f); } return 0; }, clearTimeout: () => {} });
-  const page = new module.exports.StartPage(ctx, chat, async (profile, commit) => { world.begun.push(profile.workspace_root); await commit('/tmp/hps-free-start-test'); return false; }, undefined, accounts);
+  if (activityFixture) connections = new module.exports.ActivityConnections(ctx, () => SERVICE, () => undefined, async () => svc.profile);
+  const page = new module.exports.StartPage(connections?.wrap() ?? ctx, chat, async (profile, commit) => {
+    world.begun.push(profile.workspace_root);
+    // Same boundary as ensureWorkspace: credential commit must finish before navigation.
+    await commit(activityFixture?.workspace ?? '/tmp/hps-free-start-test');
+    world.navigated.push(profile.workspace_root);
+    return false;
+  }, undefined, accounts);
   page.panel = { webview: { postMessage: async msg => world.states.push(msg) } };
   const state = () => world.states.at(-1).state;
   const settle = () => new Promise(r => setTimeout(r, 30));
-  return { world, page, state, settle };
+  return { world, page, state, settle, connections };
 }
 const claims = () => svc.requests.filter(r => r.path === '/v1/free/claim');
 const reset = () => { svc.requests.length = 0; svc.claims.length = 0; svc.offer = { status: 200, body: OFFER_FREE }; svc.orderReply = null; };
@@ -153,6 +167,72 @@ try {
   assert.equal(claims()[0].body.install_id, fbId, 'confirmed absence preserves a legacy globalState identity');
   assert.equal(h.world.generatedIds, 0);
   assert.equal(h.world.secretStores.includes('hypeproofChat.installId.v1'), false);
+
+  // Deny every encrypted write, not just the non-secret install ID. Use the real
+  // ActivityConnections commit/rollback with disposable folders; OS storage and
+  // window navigation remain doubles. The HTTP Service here is a protocol stub.
+  const storageMessage = '활동 연결을 안전하게 저장하지 못했습니다. 기기의 보안 저장소 접근을 확인한 뒤 다시 시도해 주세요. 기존 연결과 작업 파일은 보존됩니다.';
+  for (const restart of [false, true]) {
+    reset();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hps-free-denial-'));
+    const activityFixture = { storage: path.join(dir, 'storage'), workspace: path.join(dir, 'workspace') };
+    fs.mkdirSync(activityFixture.workspace);
+    const workFile = path.join(activityFixture.workspace, 'my-work.txt');
+    fs.writeFileSync(workFile, 'preserved work');
+    const globals = new Map();
+    svc.profile = { ...freeProfile, activity_id: 'a'.repeat(64), workspace_root: activityFixture.workspace };
+    try {
+      h = harness({ globals, activityFixture, denySecretWrites: true });
+      await h.page.handle({ type: 'startReady' }); await h.settle();
+      await h.page.handle({ type: 'freeStartAge', answer: '14+' });
+      const heldId = globals.get('hypeproofChat.installId.v1');
+      assert.match(heldId, UUID4);
+      assert.equal(claims().length, 1);
+      assert.equal(claims()[0].body.install_id, heldId);
+      assert.ok(h.world.secretStores.includes('hypeproofChat.installId.v1'));
+      assert.ok(h.world.secretStores.some(k => k.startsWith('hps.activity.credential.')));
+      const assertDenied = () => {
+        assert.equal(h.state().error, storageMessage);
+        assert.equal(h.page.candidate?.token, TOKEN_FREE, 'candidate remains only in host memory for retry');
+        assert.equal(h.connections.current, undefined);
+        assert.equal(h.world.secrets.size, 0, 'no credential was persisted');
+        assert.deepEqual(h.world.navigated, [], 'failed commit never reaches navigation');
+        assert.ok(!h.world.begun.includes('chat'));
+        assert.deepEqual(fs.readdirSync(path.join(activityFixture.storage, 'activity-bindings')), [], 'no binding or lock orphan');
+        assert.equal(fs.readFileSync(workFile, 'utf8'), 'preserved work');
+        assert.ok(!JSON.stringify([...globals]).includes(TOKEN_FREE), 'no bearer fallback in globalState');
+        assert.ok(!JSON.stringify(h.world.states).includes(TOKEN_FREE), 'no bearer in webview');
+        assert.ok(!JSON.stringify(h.world.states).includes('synthetic private storage failure'));
+      };
+      assertDenied();
+      if (restart) {
+        // A restart loses the in-memory candidate. Reclaim must retain identity;
+        // the real Service allowance invariant is covered by its route tests.
+        svc.claims.push({ status: 200, body: { outcome: 'reused', code: TOKEN_FREE, profile: 'studio-open-trial', expires_at: Date.now() + 3600e3 } });
+        h = harness({ globals, activityFixture, denySecretWrites: true });
+        await h.page.handle({ type: 'startReady' }); await h.settle();
+        await h.page.handle({ type: 'freeStartClaim' });
+        assert.equal(claims().length, 2);
+        assert.equal(claims()[1].body.install_id, heldId);
+        assert.ok(!h.world.secretStores.includes('hypeproofChat.installId.v1'), 'persisted fallback ID is reused');
+        assertDenied();
+      }
+      const candidate = h.page.candidate, claimed = claims().length;
+      h.world.denySecretWrites = false;
+      await h.page.handle({ type: 'beginCourse' });
+      assert.equal(claims().length, claimed, 'retry the same candidate without another grant request');
+      assert.equal(h.state().error, undefined);
+      assert.equal(h.page.candidate, undefined);
+      assert.equal(await h.connections.token(), candidate.token);
+      assert.deepEqual(h.world.navigated, [activityFixture.workspace]);
+      assert.ok(h.world.begun.includes('chat'));
+      assert.equal(globals.get('hypeproofChat.installId.v1'), heldId);
+      const bindings = fs.readdirSync(path.join(activityFixture.storage, 'activity-bindings'));
+      assert.equal(bindings.length, 1);
+      assert.ok(!fs.readFileSync(path.join(activityFixture.storage, 'activity-bindings', bindings[0]), 'utf8').includes(TOKEN_FREE));
+      assert.equal(fs.readFileSync(workFile, 'utf8'), 'preserved work');
+    } finally { svc.profile = freeProfile; fs.rmSync(dir, { recursive: true, force: true }); }
+  }
 
   // A denied read or unreadable ciphertext is not absence. Retry after recovery must use the
   // original identity, even when a different legacy fallback exists. No claim may rotate it.

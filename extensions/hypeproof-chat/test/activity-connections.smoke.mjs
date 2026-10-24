@@ -10,7 +10,8 @@ import path from 'node:path';
 const require=createRequire(import.meta.url);
 const bundled=await build({entryPoints:[new URL('../src/activityConnections.ts',import.meta.url).pathname],bundle:true,platform:'node',format:'cjs',write:false});
 const module={exports:{}};vm.runInNewContext(bundled.outputFiles[0].text,{module,exports:module.exports,require,process,URL});
-const {ActivityConnections,ACTIVITY_TOKEN_KEY}=module.exports;
+const {ActivityConnections,ActivityConnectionError,ACTIVITY_TOKEN_KEY}=module.exports;
+const secureSaveError=e=>e instanceof ActivityConnectionError && e.message==='활동 연결을 안전하게 저장하지 못했습니다. 기기의 보안 저장소 접근을 확인한 뒤 다시 시도해 주세요. 기존 연결과 작업 파일은 보존됩니다.';
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-activity-'));
 const a=path.join(tmp,'a'),b=path.join(tmp,'b');fs.mkdirSync(a);fs.mkdirSync(b);
 const secrets=new Map([[ACTIVITY_TOKEN_KEY,'synthetic-legacy-never-forward']]);
@@ -41,7 +42,7 @@ try{
  assert.equal(fs.readFileSync(store['bindingPath'](a),'utf8'),beforePass);
  assert.throws(()=>store.prepare(a,pass('c',a),()=>{throw Error('prepare failure');}),/prepare failure/);
  assert.equal(fs.readFileSync(store['bindingPath'](a),'utf8'),beforePass);
- failStore=true;await assert.rejects(()=>store.commit('synthetic-c',pass('c',a),a),/store failure/);failStore=false;
+ failStore=true;await assert.rejects(()=>store.commit('synthetic-c',pass('c',a),a),secureSaveError);failStore=false;
  assert.equal(fs.readFileSync(store['bindingPath'](a),'utf8'),beforePass);
  const undoPass=await store.commit('synthetic-c',pass('c',a),a);
  assert.throws(()=>store.prepare(a,profile('a'),()=>assert.fail('an activity that is not a pass cannot take it back')),/다른 활동/);
@@ -130,7 +131,7 @@ try{
  }
  await undo();assert.equal(store.current.ref,first.ref,'failed navigation rolls back exact old reference');
  root=a;origin='https://different.invalid/v1';assert.equal(await store.token(),undefined,'changed server gets no saved credential');origin='https://synthetic.invalid/v1';
- failStore=true;await assert.rejects(()=>store.commit('rotation',profile('a'),a),/store failure/);failStore=false;
+ failStore=true;await assert.rejects(()=>store.commit('rotation',profile('a'),a),secureSaveError);failStore=false;
  assert.equal(await store.token(),'synthetic-a');
  failState=true;await assert.rejects(()=>store.commit('rotation',profile('a'),a),/state failure/);failState=false;
  assert.equal(await store.token(),'synthetic-a');
