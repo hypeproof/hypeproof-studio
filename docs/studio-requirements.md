@@ -942,7 +942,8 @@ tools menu was 120ms), `--hp-dur-meter` 100ms (voice level bar), `--hp-dur-stagg
 offsets). Status loops keep their former times as tokens: response dots `--hp-dur-pending` 1.2s
 for 3 cycles (3.6s, inside CP-R1's 3.8s cap), classroom dots 1s, code-progress shimmer 1.8s and
 border 2.4s, runner 2.4s / .42s / .9s (dust delays .15s / .3s as fractions of it) / 1.4s blink.
-Loops keep their own linear/ease-in-out shape. The reduced-motion rules (OS
+Loops keep their own linear/ease-in-out shape.
+CGP-DS-D-011 (DES-CGP-DS-15) adds `--hp-dur-confirm` 160ms (a second name for `--hp-dur-content`, one value), `--hp-dur-move` 240ms (in-place movement; no transition uses it yet) and `--hp-ease-exit: cubic-bezier(.4, 0, 1, 1)`, which the dialog exit (120ms, Studio and Chalk) uses instead of the `ease-in` keyword. No spring or bounce: no cubic-bezier with y outside [0, 1], no `linear()` easing. Nothing runs longer than 300ms except the looping pending indicators (runner, shimmer, breathe, response and classroom dots), the bounded-pending exception; every one of them stops (one iteration, 0.01ms) under `prefers-reduced-motion` and `workbench.reduceMotion`. The reduced-motion rules (OS
 `prefers-reduced-motion` and `workbench.reduceMotion`, CGP-DS-R-015) still win; no token is
 `!important`. Measure: in personal chat, assistant prose (`.hps-prose`) is capped at
 `max-inline-size: 40em` of its own font, about 40 Hangul syllables per line (640px at 16px,
@@ -951,13 +952,16 @@ gains a fixed width, and tables (`overflow-x: auto`) and code blocks (`pre-wrap`
 overflow inside it. Gutter: the personal transcript scroller (`.hps-messages`) has
 `scrollbar-gutter: stable`, so the column does not move sideways when a reply first makes it
 scroll. Not covered: the classroom chat transcript keeps its full-width prose and no reserved
-gutter; TSX inline motion (none today); DES-CGP-DS-15's "0 animations over 300ms" rule for the
-existing status loops; the exit/move curves; a measured 0px reflow capture in the built app.
+gutter; TSX inline motion (none today); a measured 0px reflow capture in the built app.
 Test: `test/motion-measure-gutter.smoke.mjs` scans every webview CSS file for a literal time in
 any `transition*`/`animation*` declaration (only the 0.01ms reduced-motion override is allowed),
 checks the token values against DES-CGP-DS-15 and the design doc, that every used token is
 defined and none is `!important`, the 40em cap with no fixed width, and the gutter on the
-scrolling element, with negative controls copied from the replaced lines.
+scrolling element, with negative controls copied from the replaced lines, plus the D-011 tokens, the exit curve on
+the dialog, and a no-spring guard. `test/motion-computed.smoke.mjs` (headless Chromium,
+`FOCUS_REQUIRE_BROWSER=1`) measures that transitioning elements resolve 140/160/180/240ms, the
+dialog exit 120ms on the exit curve, nothing but the loops over 300ms, and that every loop stops
+under both reduced-motion routes.
 
 `REQ-STUDIO-FORCED-COLORS` (CGP-DS-R-016, 2026-10-20; REQ-CGP-DS-17; DES-CGP-DS-17). Under forced
 colors (Windows high contrast) the webview keeps every control, its focus and its states visible

@@ -307,9 +307,12 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-ease: cubic-bezier(.19, 1, .22, 1);   /* UI 곡선 하나: 빨리 나가고 부드럽게 멈춘다 */
   --hp-dur-press: 140ms;     /* 컨트롤 hover/press (기존 100~150ms 리터럴) */
   --hp-dur-content: 160ms;   /* 제자리에 나타나는 작은 내용: 복사 확인, 아래로 가기 */
+  --hp-dur-confirm: var(--hp-dur-content);   /* --hp-dur-content(160ms)의 다른 이름, 값은 하나: 확인 표시 (CGP-DS-D-011) */
   --hp-dur-enter: 180ms;     /* 들어오는 면·메시지: 새 메시지, 도구 메뉴, 러너 바 */
   --hp-dur-modal-enter: 180ms; /* 대화상자가 들어오는 시간 (CGP-DS-D-020) */
   --hp-dur-modal-exit: 120ms;  /* 대화상자가 나가는 시간, 들어올 때보다 짧다 */
+  --hp-dur-move: 240ms;      /* 제자리에서 움직이는 이동 (CGP-DS-D-011); 지금 쓰는 곳은 없다 */
+  --hp-ease-exit: cubic-bezier(.4, 0, 1, 1);   /* 나가는 곡선: 대화상자·팝오버 퇴장 (CGP-DS-D-011) */
   --hp-dur-meter: 100ms;     /* 실시간 수준 표시(음성 막대)가 신호를 따라간다 */
   --hp-dur-stagger: 100ms;   /* 한 표시 안의 점 사이 시차 */
   /* 상태 반복: 면이 쉬면 멈추고, 줄인 움직임에서는 꺼진다 */
@@ -475,7 +478,7 @@ body.vscode-light, body.vscode-high-contrast-light {
 | 실제/AI 예시 라벨·색 분리(SX-12) | 외부 반응 인용은 `--hp-text-primary-default` + "실제 반응", AI 예시는 `--hp-text-muted-default` + "AI 예시". 색이 같아도 라벨이 갈린다 |
 | 포커스 링 하나(CGP-DS-R-017, DES-06/11) | 포커스를 받는 모든 컨트롤은 `outline: 2px solid var(--hp-ring-focus-default); outline-offset: 2px`. 스크롤 목록 안의 촘촘한 행(`.tw-task-list`, `.tw-source-list`)만 `-2px` 안쪽 링. `outline: none`은 같은 요소의 `:focus-visible` 규칙이나 조상의 `:focus-within` 링이 있을 때만 쓴다. 예외는 프로그램으로 포커스를 옮기는 제목(`.cp-preview h3`, `tabIndex=-1`) 하나 |
 | placeholder 4.5:1(CGP-DS-R-019, DES-11) | `tokens.css`의 `::placeholder` 기본값이 모든 입력란에 `color: var(--hp-text-placeholder-default)`를 준다. 브라우저 기본 placeholder와 opacity 조절은 쓰지 않는다. placeholder는 바탕과 4.5:1, 입력한 글자와 1.5:1 이상 떨어진다. Light+만 예외: 입력 글자(#616161)가 흰 바탕에 6.2:1이라 4.5:1을 지키면 최대 1.38:1까지만 벌어진다(실측 #767676: 1.36:1). 링은 컨트롤 밖 2px 틈 너머 바탕 위에 그려지므로 링 대비는 그 바탕과 잰다 |
-| 움직임은 토큰으로(CGP-DS-R-014, DES-CGP-DS-15) | 웹뷰 CSS의 transition/animation 시간은 `--hp-dur-*`만 쓴다. 컨트롤 hover/press `--hp-dur-press` 140ms, 제자리 확인 `--hp-dur-content` 160ms, 들어오는 면 `--hp-dur-enter` 180ms, 곡선은 `--hp-ease` 하나. 상태 반복(응답 점 1.2s×3, 진행 표시, 러너)은 기존 시간을 토큰으로 옮겼다. 줄인 움직임 규칙이 늘 이긴다 |
+| 움직임은 토큰으로(CGP-DS-R-014, DES-CGP-DS-15) | 웹뷰 CSS의 transition/animation 시간은 `--hp-dur-*`만 쓴다. 컨트롤 hover/press `--hp-dur-press` 140ms, 제자리 확인 `--hp-dur-content` 160ms, 들어오는 면 `--hp-dur-enter` 180ms, 곡선은 `--hp-ease` 하나. 제자리 이동 `--hp-dur-move` 240ms(쓰는 곳 아직 없음), 나가는 곡선 `--hp-ease-exit`(대화상자 퇴장), 제자리 확인의 다른 이름 `--hp-dur-confirm`(=content 160ms). 용수철·튕김 곡선 없음. 상태 반복(응답 점 1.2s×3, 진행 표시, 러너)은 기존 시간을 토큰으로 옮겼다. 줄인 움직임 규칙이 늘 이긴다 |
 | 본문 한 줄 길이(CGP-DS-R-020, DES-CGP-DS-22) | 개인 대화의 AI 본문(`.hps-prose`)은 `max-inline-size: 40em`, 한 줄에 한글 약 40자. 상한일 뿐이라 좁은 창에서는 창에 맞춰 줄바꿈하고, 표와 코드는 그 안에서 자기 스크롤을 가진다 |
 | 스크롤 막대 자리(CGP-DS-R-031, DES-CGP-DS-36) | 개인 대화 대화 목록(`.hps-messages`)은 `scrollbar-gutter: stable`. 답이 길어져 스크롤 막대가 생겨도 본문이 옆으로 밀리지 않는다 |
 | 의미 글자 크기와 14px 바닥(CGP-DS-R-008, DES-CGP-DS-09, DEC-29) | 개인 작업 화면(작업 목록, 작업 제목 줄, 대화 셸, 자료 패널, 대화 설정)에서 학생이 읽는 글은 `--hp-font-caption` 14px, `--hp-font-body` 16px, `--hp-font-lead` 18px 셋 중 하나다. 메타 정보도 예외가 아니다: 역할 줄, 도구 줄, 인용 칩, 시간·대화 수, 출처 주소가 10~13px에서 14px이 된다. 줄 높이는 라벨 1.5, 한글 본문 1.65. 글자 크기 선택(기본 · 크게 · 아주 크게)은 셸의 `--hp-font-step` 하나(0 · 2 · 4px)라서 셸 안의 모든 단계가 같이 커지고, 44px 대상과 컨트롤 높이는 그대로다(min-height만 있다). 14px 아래로 남는 것: 화면에 보이지 않는 키보드 안내, 장식 글리프, 접근 이름이 있는 글리프 버튼(×). 수업 채팅은 이번에 바꾸지 않는다(같은 클래스는 개인 셸 아래에서만 올린다) |

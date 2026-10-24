@@ -17,7 +17,7 @@
 .hp-modal-backdrop.hp-modal-backdrop { padding: 0; }
 body.vscode-light .hp-modal::backdrop, body.vscode-high-contrast-light .hp-modal::backdrop,
 body.vscode-light .hp-modal-backdrop, body.vscode-high-contrast-light .hp-modal-backdrop { background: var(--ds-c-modal-dim-light); }
-.hp-modal[data-closing] { animation: hp-modal-exit var(--hp-dur-modal-exit) ease-in both; }
+.hp-modal[data-closing] { animation: hp-modal-exit var(--hp-dur-modal-exit) var(--hp-ease-exit) both; }
 @keyframes hp-modal-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes hp-modal-exit { from { opacity: 1; } to { opacity: 0; } }
 @media (max-width: 390px) {

@@ -7137,6 +7137,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/motion-measure-gutter.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/motion-computed.smoke.mjs"
         }
       ]
     },
