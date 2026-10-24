@@ -11,7 +11,7 @@ export async function createTaskHarness(root, onMessage = () => {}, { profile = 
   const opened = [], posts = [], state = new Map(), module = { exports: {} };
   const browserState = { failOpen: false, failReturn: false, tabs: [], commands: [] };
   const vscode = { ViewColumn: { One: 1, Two: 2, Beside: 2 }, Uri: { file: fsPath => ({ fsPath, scheme: 'file' }) },
-    commands: { executeCommand: async (name, ...args) => { if (browserState.failReturn) throw Error('Synthetic focus failure'); browserState.commands.push(name); browserState.commandArgs = [...(browserState.commandArgs ?? []), [name, ...args]]; } },
+    commands: { registerCommand: () => ({ dispose() {} }), executeCommand: async (name, ...args) => { if (browserState.failReturn) throw Error('Synthetic focus failure'); browserState.commands.push(name); browserState.commandArgs = [...(browserState.commandArgs ?? []), [name, ...args]]; } },
     window: { browserTabs: browserState.tabs, openBrowserTab: async (url, options) => {
       if (browserState.beforeOpen) await browserState.beforeOpen();
       if (browserState.failOpen) throw Error('Synthetic browser open failure');
