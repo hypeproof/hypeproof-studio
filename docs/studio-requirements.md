@@ -1461,11 +1461,20 @@ share one `useSyncExternalStore` reading of `navigator.onLine` that follows the 
 `offline`/`online` events and re-reads the value once the listeners are attached, so a drop or a
 reconnect between the first render and the subscribe is not missed
 (`webview-ui/src/connectivity.ts`; only an explicit `false` counts as offline, so an unknown
-state never blocks anyone). While offline, one non-modal `role="status"` banner sits above the
-message list in personal and classroom chat alike: "인터넷 연결이 끊겼어요. 만든 파일과 쓰던 글은
+state never blocks anyone). While offline, one non-modal `role="status"` banner sits at the top
+of the panel, before the header and in normal flow, in personal and classroom chat alike: "인터넷 연결이 끊겼어요. 만든 파일과 쓰던 글은
 그대로 있어요. 연결되면 다시 보낼 수 있어요." It has no button, no capability or score label, no
 transition, and keeps the panel foreground text on the stop-notice surface; amber (`--hp-border-warn-default`)
-is only the 4 px left edge, so text contrast does not depend on it. Sending is held, never
+is only the 4 px left edge, so text contrast does not depend on it.
+DES-SHELL-10 adds a decorative plug icon and an atomic status region. Compact vertical padding
+keeps the complete existing copy within 48 px at the default 14 px caption size in the 320 px
+panel; no truncation, overlay or fixed-height clipping is used. Personal large-text preferences
+may increase height to preserve readable content. `test/offline-layout.smoke.mjs` mounts the
+real ChatPanel with production CSS in both seats, light/dark and 320/800 px, checking placement,
+4 px edge, icon, 14 px minimum, 4.5:1 text contrast, no overlap/overflow, stable status DOM on
+repeated offline events, reconnect clearing, and large-text layout. This is headless evidence;
+native screen-reader speech and installed-device/network acceptance remain separate checks.
+Sending is held, never
 dropped: every learner turn goes through one gate (`guardSend`; ChatPanel's `sendWhenOnline`,
 App's `verifyWhenOnline`): the composer send and the parked-message send, retrying a kept
 (recovered) message, picking a friend, the roll-input send, edit and resend, retry-last on the
