@@ -385,7 +385,8 @@ at its pinned 200k window, `SDK_AUTO_COMPACT_WINDOW_TOKENS`): the host posts one
 per turn (`compactionLineId(streamId)`, so a second compaction in the same turn replaces it),
 kept in the turn timeline like every tool line and drawn as "대화가 길어져서 AI가 앞 대화를
 짧게 줄여서 기억하고 있어요. 중요한 건 다시 말해 주세요." The `compacting` status tick is not
-a boundary. Both lines are a centered `role="note"` (`hps-context-note`, 13px, secondary
+a boundary. Both lines are a centered `role="note"` (`hps-context-note`, 13px in classroom and14px in
+personal chat under DEC-29, secondary
 text, no icon or animation), not a bubble or a toast. They are never sent to the model:
 the clamp marker is not a message, and `modelHistory` drops tool lines. They show in
 personal and classroom chat alike, with no capability labels and no token numbers. Pure
@@ -398,6 +399,11 @@ activity connection the model clamps the webview's `rawHistory`, and no marker s
 there. The legacy workspaceState history (no task
 store) is itself clamped to 200, so nothing visible is ever left out and no marker shows.
 Any trimming the Service does server-side is not visible to the client and is not covered.
+Computed design coverage (CGP-CHAT-D-010): `test/context-note-computed.smoke.mjs` renders the
+real ChatPanel and built CSS across personal/classroom, light/dark,320/800/1420 and forced
+colors. It measures centered13–14px secondary text, no icon/animation, in-flow placement,
+wrapping and actual visibility. New turns retain the compaction point; an absent event or
+out-of-view host boundary creates no note. Existing runtime behavior is unchanged.
 Tests: `test/context-trim-marker.smoke.mjs` — empty, short, exactly-full, tool-heavy and
 versioned histories give no boundary (negative controls); one message over the cap gives
 exactly one boundary at the first message still sent; the boundary moves; the host's model
