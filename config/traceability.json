@@ -6737,6 +6737,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/folderConsentHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/folderConsentPrompt.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/FolderConsentDialog.tsx"
         }
       ]
     },
@@ -6751,6 +6757,15 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/folder-consent.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/folder-consent-prompt.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/folder-consent-dialog-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/folder-consent-config.smoke.mjs"
         }
       ]
     },

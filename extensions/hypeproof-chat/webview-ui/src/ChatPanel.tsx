@@ -1373,6 +1373,7 @@ export function ChatPanel(props: Props) {
         <div className="hps-shell-drop-overlay">여기에 놓으면 이미지가 첨부돼요 <ChatIcon kind="image" size={20} /></div>
       )}
       {(() => { const header = <header className="hps-header">
+        {personalWorkspace && config?.folderRestricted && <span className="hps-folder-restricted" role="note" data-hp-tooltip="이 폴더에서는 AI가 읽기만 할 수 있어요. 파일 고치기와 명령 실행은 꺼져 있어요. ‘이 폴더의 AI 권한 바꾸기’에서 다시 고를 수 있어요." aria-label="제한 모드: AI 파일 고치기와 명령 실행 꺼짐">제한 모드</span>}
         {ux.coach.naming_mode === "fixed"
           // Personal chat: a fixed name is not a control, and the one header row has no room for a
           // label that names nothing the learner can act on. It stays readable to screen readers.
