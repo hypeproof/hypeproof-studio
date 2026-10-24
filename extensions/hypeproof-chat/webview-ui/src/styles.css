@@ -2579,3 +2579,13 @@ html, body, #root {
 .hps-annotation-leave button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
 .hps-annotation-leave button:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
 @media (forced-colors: active) { .hps-annotation-leave { color: CanvasText; background: Canvas; border-color: CanvasText; } .hps-annotation-leave button { color: ButtonText; background: ButtonFace; border-color: ButtonText; } }
+/* CGP-SHELL-D-029: text remains the state cue; a border groups the request receipt. */
+.hps-budget-request-state { display: inline-block; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-12); padding: var(--ds-c-studio-styles-space-2); }
+/* CGP-SHELL-D-029: the reason field stays inside the panel, the counter is a learner-scale hint under it, and both controls are 44px targets. */
+.hps-access input { box-sizing: border-box; }
+.hps-budget-request-notice form { display: flex; flex-direction: column; align-items: flex-start; gap: var(--ds-c-studio-styles-space-2); min-width: 0; }
+.hps-budget-request-notice form label { align-self: stretch; min-width: 0; }
+.hps-budget-request-notice input { min-height: var(--hp-control-min); }
+.hps-budget-request-notice form small { display: block; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); }
+.hps-budget-request-notice form button { min-height: var(--hp-control-min); margin: 0; }
+.hps-budget-request-notice input { font-size: var(--hp-font-caption); }

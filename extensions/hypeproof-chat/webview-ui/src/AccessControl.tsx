@@ -1,4 +1,4 @@
-import {useState,useEffect,useRef} from 'react';
+import {useState,useEffect,useRef,useId} from 'react';
 import type {ChatConfig,WebviewMessage} from '../../src/protocol';
 /** The usage panel's state words; the chat header (AccessHeader) reads the same ones. */
 export const stateLabels:Record<string,string>={ready:'사용 가능',ended:'이용 기간 종료',paused:'일시정지',review_required:'사용량 확인 필요',exhausted:'남은 자원 부족',not_configured:'이용 한도 설정 대기',external_unknown:'외부 공급자 사용량 미확인'};
@@ -10,7 +10,7 @@ const amount=(n:number,m:string)=>m.startsWith('currency:')?(n/1000000).toLocale
  * and removes it again when the learner closes it. The classroom renders it as before (closed).
  */
 export function AccessControl({config,streaming,post,defaultOpen=false,onClosed,focusOnMount=false}:{config:ChatConfig;streaming:boolean;post:(m:WebviewMessage)=>void;defaultOpen?:boolean;onClosed?:()=>void;focusOnMount?:boolean}){
- const [note,setNote]=useState(''),[expanded,setExpanded]=useState(defaultOpen);const summary=useRef<HTMLElement>(null);
+ const [expanded,setExpanded]=useState(defaultOpen);const summary=useRef<HTMLElement>(null);
  useEffect(()=>{if(focusOnMount)summary.current?.focus({preventScroll:true});},[focusOnMount]);const a=config.access,view=a?.view,choice=view?.choices.find(c=>c.id===a?.selected);
  useEffect(()=>{if(view?.required&&!a?.selected)setExpanded(true);},[view?.required,a?.selected]);
  if(!a)return null;
@@ -34,10 +34,26 @@ export function AccessControl({config,streaming,post,defaultOpen=false,onClosed,
    {choice.resources.some(r=>r.meter.startsWith('currency:'))&&<p className="hps-access-muted">AI 사용을 계산하는 정산 기준이며, 학생이 결제할 금액이나 현금 잔액이 아닙니다.</p>}
    <p className="hps-access-muted">모델·Effort·도구에 따라 사용량이 달라집니다. 응답이 끊기면 비용을 확인할 때까지 예약이 남을 수 있습니다.</p>
    <p>한도에 도달해도 중지, 기존 파일과 결과 열람·내보내기는 계속할 수 있습니다.</p>
-   {choice.pending_request&&<p role="status">{choice.pending_request.state==='pending'?'추가 사용 요청 · 강사 검토 대기':'요청 처리 · '+choice.pending_request.resolution}</p>}
-   {choice.can_request&&choice.pending_request?.state!=='pending'&&<form onSubmit={e=>{e.preventDefault();post({type:'requestBudget',note});setNote('');}}><label>추가 사용이 필요한 이유<input value={note} onChange={e=>setNote(e.target.value)} maxLength={280} required placeholder="예: 마지막 검증을 마무리하고 싶어요"/></label><button type="submit">강사에게 추가 사용 요청</button></form>}
+   {choice.pending_request&&<p role="status"><span className="hps-budget-request-state">{choice.pending_request.state==='pending'?'요청함 · 강사 검토 대기':'요청 처리 · '+(choice.pending_request.resolution??'처리 내용 미확인')}</span></p>}
+   {a.status==='ready'&&choice.can_request&&choice.pending_request?.state!=='pending'&&<div className="hps-budget-request-notice">
+    {(choice.state==='exhausted'||choice.resources.some(r=>r.meter==='requests:count'&&Number.isSafeInteger(r.limit)&&r.limit>0&&Number.isSafeInteger(r.remaining)&&r.remaining>=0&&r.remaining/r.limit<=0.1))&&<p>남은 사용량이 부족해요. 선생님께 추가 사용을 요청할 수 있어요.</p>}
+    <BudgetRequestForm key={choice.id} post={post}/>
+   </div>}
   </>}
   {view&&<small>확인 시각 {new Date(view.as_of).toLocaleString()}{view.truncated?' · 일부 이용권만 표시':''}</small>}
   {a.notice&&<p role="status">{a.notice}</p>}<button type="button" onClick={()=>post({type:'refreshAccess'})}>사용량 새로고침</button>
  </details>;
+}
+
+/** Service currently requires a reason. Keep it explicit until its contract permits omission. */
+function BudgetRequestForm({post}:{post:(m:WebviewMessage)=>void}) {
+ const [note,setNote]=useState('');const composing=useRef(false);const counter=useId();
+ return <form onSubmit={e=>{e.preventDefault();if(composing.current||!note.trim()||note.length>200)return;post({type:'requestBudget',note});}}>
+  <label>추가 사용이 필요한 이유 (필수)<input type="text" value={note} onChange={e=>setNote(e.target.value)} maxLength={200} required aria-describedby={counter}
+   onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
+   onKeyDown={e=>{if(e.key==='Enter'&&(composing.current||e.nativeEvent.isComposing||e.nativeEvent.keyCode===229))e.preventDefault();}}
+   placeholder="예: 마지막 검증을 마무리하고 싶어요"/></label>
+  <small id={counter}>{note.length} / 200자</small>
+  <button type="submit" disabled={!note.trim()||note.length>200}>선생님께 더 요청하기</button>
+ </form>;
 }
