@@ -1419,10 +1419,20 @@ in the shared attach, so the composer picker refuses there too, before the dialo
 Undecided, 읽기만 and 읽고 고치기 attach, and the send that carries the file asks or applies the
 choice as before. The button is a 44px text target at the caption step (14px floor, #2088), and
 its accessible name starts with the visible label and names the file; no capability name or
-score. Not built: the editable starter line of REQ-KNOW-28 (the composer gets focus with the
-learner's own draft instead, so nothing is written for them), the page card (CGP-ART-R-010 is
-not on main), the preview header placement of DES-KNOW-28 (the preview has no file header
-today), and Backspace-at-caret-start chip removal (the chip keeps its 빼기). Tests:
+score. CGP-KNOW-D-015 adds the 44px header action to the page-card HTML preview. The
+host binds it to that card's checked local file, work folder and task; it reuses the same
+attach gateway after revealing the chat. A revision rejects stale clicks and save reads;
+generated HTML without a file callback has no action. The inner sandbox cannot set header
+identity or request this action. Repeated activation is single-flight. Visibility follows the
+resolved file-attach grant, and the attach gateway rechecks consent and the grant.
+Backspace with a collapsed selection at composer offset zero removes the queued file while
+preserving the draft and focus; IME, modifier keys and text selections do not remove it.
+The separate 44px 빼기 action remains. Not built: the editable starter line of REQ-KNOW-28
+(the learner's draft is preserved), and the native integrated-browser toolbar action for
+explorer/live-server previews. This header applies to page-card previews only; native
+browser support and installed-app focus acceptance remain outstanding. The existing classroom
+lesson layout can place the attachment below the visible viewport; computed target size and
+keyboard removal do not establish that placement acceptance. Tests:
 `test/ask-about-file-host.smoke.mjs` (the real provider: attach through fileAttachment, focus
 only after success, every refusal cause with its copy, instructor, no `sdk_tools.read`, no
 profile, a kids track, "AI 안 씀" through both entries with 읽기만/읽고 고치기/undecided controls,
@@ -1430,6 +1440,11 @@ the picker path unchanged, an outside path from the explorer, and wiring locks f
 command, menu `when` and context key) and `test/ask-about-file.test.tsx` (mini-dom clicks: the
 row action names its own path, the dialog closes, no action without the grant, instructor
 never, focus lands in the composer with the draft kept).
+`test/page-card-host.test.mjs` checks the actual provider callback's file, folder and task binding.
+`test/preview-ask-file.smoke.mjs` exercises the real preview host and shell (grant, revision,
+save race, generated preview, disposal, double activation and iframe isolation), computed
+44px header/focus geometry and the real React composer keyboard behavior in personal and
+classroom layouts. These headless checks do not establish native browser acceptance.
 
 `REQ-STUDIO-OFFLINE-BANNER` (CGP-SHELL-R-011, DES-SHELL-10, P1; built 2026-10-20): when the
 webview loses the network, the chat panel says so and says what still works. App and ChatPanel

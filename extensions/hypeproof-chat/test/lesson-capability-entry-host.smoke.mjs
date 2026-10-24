@@ -17,7 +17,9 @@ vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports,
 const h = Object.create(module.exports.ChatPanelProvider.prototype);
 let profile = { activity_kind: 'personal', sdk_tools: { read: true, write: true, shell: true, subagents: true, browser: true }, tools: { web_search: true }, browser_control: { enabled: true } };
 const posts = [];
+let previewFileGrant;
 Object.assign(h, {
+  preview: { setAskAboutFileEnabled: enabled => { previewFileGrant = enabled; } },
   context: { secrets: { get: async key => key === 'hypeproofChat.workshopToken' ? token : undefined }, globalState: { get: key => receipts.get(key), update: async (key, value) => { if (failWrite) throw Error("disk"); receipts.set(key, value); } }, workspaceState: { get: (_key, fallback) => fallback } },
   loadAccess: async () => {}, ensureProfile: async () => (h.cachedProfile = profile), refreshCrDirectorContext: async () => {},
   _instructorMode: { checkInstructorMode: async () => false, reset() {} },
@@ -25,7 +27,7 @@ Object.assign(h, {
   getCoach: () => ({ name: 'HypeProof' }), sitePublisher: () => ({ available: () => false }),
   post: async m => posts.push(JSON.parse(JSON.stringify(m))),
 });
-const publish = async () => { await h.postConfig(); return posts.filter(p => p.type === 'config').at(-1).config; };
+const publish = async () => { await h.postConfig(); const config = posts.filter(p => p.type === 'config').at(-1).config; assert.equal(previewFileGrant, config.fileAttach === true, 'preview header follows the same narrowed grant'); return config; };
 const states = c => Object.fromEntries(c.aiCapabilities.map(r => [r.key, !r.on ? 'off' : r.asks ? 'ask' : 'on']));
 
 profile.activity_id = 'a'.repeat(64);

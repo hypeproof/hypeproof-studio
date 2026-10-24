@@ -22,6 +22,8 @@ Object.assign(h, {
   prepareTaskWorkspace: async () => {}, currentTaskStore: () => null,
   getCoach: () => ({ name: 'HypeProof' }), sitePublisher: () => ({ available: () => false }),
   post: async m => posts.push(JSON.parse(JSON.stringify(m))),
+  // CGP-KNOW-D-015 — postConfig narrows the preview header's file grant.
+  preview: { setAskAboutFileEnabled() {} },
 });
 const publish = async () => { await h.postConfig(); return posts.filter(p => p.type === 'config').at(-1).config; };
 

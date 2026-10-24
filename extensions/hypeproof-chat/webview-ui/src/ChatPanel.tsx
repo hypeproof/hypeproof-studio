@@ -2015,6 +2015,14 @@ export function ChatPanel(props: Props) {
               // CGP-DS-R-027: composition keys stay with the IME and never reach the panel,
               // workspace or menu handlers above (Escape would close the sources panel).
               if (isComposing) { e.stopPropagation(); return; }
+              // Remove only the queued file at the caret's start; preserve the draft and selection edits.
+              if (e.key === "Backspace" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
+                && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0
+                && props.fileAttachment && props.onRemoveFileAttachment) {
+                e.preventDefault();
+                props.onRemoveFileAttachment();
+                return;
+              }
               // Composing Hangul: Enter commits the syllable, it must never
               // send. Unchanged from before — typing mid-turn does not make the
               // IME any less load-bearing.

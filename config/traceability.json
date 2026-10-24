@@ -7650,6 +7650,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/askAboutFile.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/previewProvider.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/ArtifactProvenanceList.tsx"
         },
         {
@@ -7674,6 +7677,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/ask-about-file.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-ask-file.smoke.mjs"
         }
       ]
     },

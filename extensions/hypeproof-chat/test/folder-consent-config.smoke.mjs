@@ -52,7 +52,7 @@ let passed = 0; const ok = n => { passed++; console.log('✓ ' + n); };
   Object.assign(h, {
     context, loadAccess: async () => {}, ensureProfile: async () => profile, refreshCrDirectorContext: async () => {},
     _instructorMode: { checkInstructorMode: async () => false, reset() {} }, prepareTaskWorkspace: async () => {}, currentTaskStore: () => null,
-    getCoach: () => ({ name: 'HypeProof' }), sitePublisher: () => ({ available: () => false }), servedWorkspaceRoot: home,
+    getCoach: () => ({ name: 'HypeProof' }), sitePublisher: () => ({ available: () => false }), servedWorkspaceRoot: home, preview: { setAskAboutFileEnabled() {} },
     post: async m => { posts.push(JSON.parse(JSON.stringify(m))); return true; },
   });
   const flag = async (p, level) => { profile = p; store(p, level); await h.postConfig(); const c = posts.filter(m => m.type === 'config').at(-1).config; return c.folderRestricted; };
