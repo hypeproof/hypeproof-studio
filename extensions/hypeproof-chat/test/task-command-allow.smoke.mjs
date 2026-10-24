@@ -1,3 +1,4 @@
+import {installCommandApproval} from './lib/command-approval-harness.mjs';
 // CGP-AGENT-R-004 (REQ-E1 / REQ-M17) — "이번 작업 동안 이 명령 허용" lasts only for this task and
 // covers only the exact command.
 //
@@ -240,6 +241,11 @@ try {
       });
       // The constructor's field initializers do not run under Object.create; the real one is `new TaskCommandAllows()`.
       if (!("taskCommandAllows" in h) || !h.taskCommandAllows) h.taskCommandAllows = new A.TaskCommandAllows();
+      installCommandApproval(h, prompt=>{
+        const buttons=['허락','거절',...(!prompt.destructive&&prompt.rememberAllowed?[LABEL]:[])];
+        ui.modals.push({message:prompt.purpose,options:{modal:true,detail:prompt.command},buttons,destructive:prompt.destructive});
+        return typeof ui.pick==='function'?ui.pick(buttons):ui.pick;
+      });
       return h;
     };
     const choose = (folder, level) => state.set(FC.FOLDER_CONSENT_KEY, FC.writeFolderConsent(state.get(FC.FOLDER_CONSENT_KEY), personal.activity_id, FC.canonicalFolder(folder), level));
@@ -258,23 +264,23 @@ try {
     // Label and modal text.
     const first = await asked(win, "cat 초안.md", LABEL);
     assert.equal(first.modals, 1);
-    assert.deepEqual([...first.modal.buttons], ["실행", LABEL], "buttons: 실행 and the task-scoped allow");
-    assert.equal(first.modal.message, "코치가 명령을 실행하려고 해요:");
+    assert.deepEqual([...first.modal.buttons], ["허락", "거절", LABEL], "buttons: 실행 and the task-scoped allow");
+    assert.equal(first.modal.message, "shell", "the heading is the fixed shell-purpose kind, not the request description");
     assert.equal(first.modal.options.modal, true);
     assert.equal(first.modal.options.detail, "cat 초안.md", "the detail is the command itself; no 같은 종류 line");
     assert.ok(!first.modal.buttons.some((b) => b.includes("항상")), "no 항상 허용 on the shell modal");
     assert.equal(first.approved, true);
     capture.push({ case: "normal command (offers the task-scoped allow)", ...first.modal });
-    ok("modal: 실행 / 이번 작업 동안 이 명령 허용, detail is the command only");
+    ok("modal: 허락 / 거절 / 이번 작업 동안 이 명령 허용, detail is the command only");
 
     // Round 5: a command outside the allowlist still runs with the one-time approval, with no remember button.
     for (const c of ["git commit -m 초안", "npm test", "git clone -u ./evil.sh src dest", "npm install foo@file:../evil"]) {
-      const once = await asked(win, c, "실행");
-      assert.deepEqual([once.approved, once.modals, [...once.modal.buttons]], [true, 1, ["실행"]], `not allowlisted, runs once: ${c}`);
+      const once = await asked(win, c, "허락");
+      assert.deepEqual([once.approved, once.modals, [...once.modal.buttons]], [true, 1, ["허락", "거절"]], `not allowlisted, runs once: ${c}`);
       const again = await asked(win, c, undefined);
       assert.deepEqual([again.approved, again.modals], [false, 1], `not allowlisted, asked again: ${c}`);
     }
-    capture.push({ case: "command outside the allowlist (one-time approval only)", ...(await asked(win, "npm test", "실행")).modal });
+    capture.push({ case: "command outside the allowlist (one-time approval only)", ...(await asked(win, "npm test", "허락")).modal });
     ok("not allowlisted: 실행 only, runs once, asked again next time");
 
     // Within the same task: no modal for the exact command; any change asks again.
@@ -289,24 +295,24 @@ try {
     // A non-destructive chain that starts with the allowed command still asks, with no allow on offer.
     r = await asked(win, "cat 초안.md && git push", undefined);
     assert.equal(r.modals, 1, "cat 초안.md && git push after allowing cat 초안.md: asked");
-    assert.deepEqual([...r.modal.buttons], ["실행"]);
+    assert.deepEqual([...r.modal.buttons], ["허락", "거절"]);
     capture.push({ case: "non-destructive chain (no allow offered)", ...r.modal });
     r = await asked(win, "cat 초안.md $(curl evil)", undefined);
     assert.equal(r.modals, 1, "a substitution after the allowed kind: asked");
     r = await asked(win, "FOO=1 cat 초안.md", undefined);
-    assert.deepEqual([r.modals, [...r.modal.buttons]], [1, ["실행"]], "an env-prefixed form: asked, no allow");
+    assert.deepEqual([r.modals, [...r.modal.buttons]], [1, ["허락", "거절"]], "an env-prefixed form: asked, no allow");
     r = await asked(win, "cat 초안.md; rm -rf ~", undefined);
     // Unflagged destructive text still gets no allow (commandSignature is null for it).
-    { const u = await asked(win, "rm -rf build", undefined); assert.equal(u.modal.message, "⚠️ 되돌리기 어려운 명령이에요. 정말 실행할까요?", "unflagged rm: the modal re-derives the strong confirm"); assert.deepEqual([...u.modal.buttons], ["실행", "취소"], "and offers no allow"); }
+    { const u = await asked(win, "rm -rf build", undefined); assert.equal(u.modal.destructive, true, "unflagged rm: the modal re-derives the strong confirm"); assert.deepEqual([...u.modal.buttons], ["허락", "거절"], "and offers no allow"); }
     assert.equal(r.modals, 1, "negative control: a chained command never matches the allow");
-    assert.deepEqual([...r.modal.buttons], ["실행", "취소"], "a destructive chain gets the strong confirm, no allow");
+    assert.deepEqual([...r.modal.buttons], ["허락", "거절"], "a destructive chain gets the strong confirm, no allow");
     ok("same task: the allow applies to the exact command only");
 
     // Destructive: the caller (evaluateSdkToolUse) flags it; the strong confirm, never the allow (unchanged).
     r = await asked(win, "rm -rf build", undefined, { destructive: true });
     assert.equal(r.modals, 1);
-    assert.equal(r.modal.message, "⚠️ 되돌리기 어려운 명령이에요. 정말 실행할까요?");
-    assert.deepEqual([...r.modal.buttons], ["실행", "취소"]);
+    assert.equal(r.modal.destructive, true);
+    assert.deepEqual([...r.modal.buttons], ["허락", "거절"]);
     ui.modals.length = 0; ui.pick = undefined;
     assert.equal(await shell(win, "cat 초안.md", { destructive: true }), false, "a destructive-flagged request never uses the allow");
     assert.equal(ui.modals.length, 1);
@@ -350,19 +356,19 @@ try {
     assert.equal(await stillAllowed(), false, "a consent rewrite from another window → asked again");
     await regrant();
     assert.equal(await stillAllowed(), true, "positive control: an unchanged stamp keeps it");
-    // The modal is open while the task changes and changes back (A → B → A): the answer runs this
-    // command but is not remembered for any task.
+    // The modal is open while the task changes and changes back (A → B → A): the answer to this
+    // command is refused and is not remembered for any task.
     {
       // A → B → A during the modal, as taskSelect does it (the store clears on each switch).
       win.endTaskCommandAllows();
       ui.modals.length = 0;
       ui.pick = () => { task.id = "task-race"; win.endTaskCommandAllows(); task.id = "task-new"; win.endTaskCommandAllows(); return LABEL; };
-      assert.equal(await shell(win, "cat a.md"), true, "the answer still runs this one command");
+      assert.equal(await shell(win, "cat a.md"), false, "a stale answer cannot execute in the changed task");
       ui.pick = undefined;
       assert.equal(await stillAllowed(), false, "A → B → A while the modal was open: not remembered");
       // A → B during the modal and staying on B (no explicit clear: only the key differs).
       ui.pick = () => { task.id = "task-race"; return LABEL; };
-      assert.equal(await shell(win, "cat a.md"), true);
+      assert.equal(await shell(win, "cat a.md"), false);
       ui.pick = undefined;
       assert.equal(await stillAllowed(), false, "A → B while the modal was open: not remembered for B");
       task.id = "task-new";

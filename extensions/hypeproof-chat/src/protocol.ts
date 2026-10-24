@@ -527,6 +527,7 @@ export interface SuggestionChip {
 // Webview → Host
 export type WebviewMessage = (
   | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
+  | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
   | {type:'writeApprovalAnswer';id:string;approved:boolean}
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
@@ -784,6 +785,7 @@ export type WebviewMessage = (
 // Host → Webview
 export type HostMessage = (
   | {type:'browserApprovalPrompt';prompt:import('./browserApprovalPrompt').BrowserApprovalPrompt|null}
+  | {type:'commandApprovalPrompt';prompt:import('./commandApprovalPrompt').CommandApprovalPrompt|null}
   | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
   | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}

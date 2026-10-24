@@ -19,11 +19,11 @@ test('real shell: automatic safe action, strong approval, repeated strong cancel
     const chat = await chatFrame(ctx.win);
     const input = chat.getByRole('textbox', { name: '코치에게 보낼 메시지' });
     const stop = chat.locator('.hps-btn-stop');
-    const dialog = ctx.win.locator('.monaco-dialog-box');
+    const dialog = chat.locator('.hps-command-approval');
     writeFileSync(join(ctx.wsDir, 'shell-source.txt'), 'synthetic move approval marker');
     const cases = [
       { command: 'mkdir -p shell-one', path: 'shell-one', choice: null, present: ['shell-one', 'shell-source.txt'], absent: ['shell-moved.txt'] },
-      { command: 'mv shell-source.txt shell-moved.txt', path: 'move-once', choice: '실행', present: ['shell-moved.txt'], absent: ['shell-source.txt'] },
+      { command: 'mv shell-source.txt shell-moved.txt', path: 'move-once', choice: '허락', present: ['shell-moved.txt'], absent: ['shell-source.txt'] },
       { command: 'mv shell-moved.txt shell-source.txt', path: 'move-cancelled', choice: 'Escape', present: ['shell-moved.txt'], absent: ['shell-source.txt'] },
     ];
     for (const c of cases) {
@@ -33,12 +33,12 @@ test('real shell: automatic safe action, strong approval, repeated strong cancel
       if (c.choice) {
         await expect(dialog).toBeVisible({ timeout: 90000 });
         writeFileSync(join(out, c.path + '-dialog.html'), await dialog.evaluate(el => el.outerHTML));
-        const displayedCommand = await dialog.locator('#monaco-dialog-message-detail').innerText();
+        const displayedCommand = await dialog.locator('pre').innerText().then(text=>text.replace(/^\$ /,''));
         expect(normalizedCommand(displayedCommand, ctx.wsDir)).toBe(c.command);
-        await expect(dialog).toContainText('되돌리기 어려운 명령');
+        await expect(dialog).toContainText('되돌릴 수 없어요');
         await expect(dialog).not.toContainText('항상 허용');
         await ctx.win.screenshot({ path: join(out, c.path + '-approval.png') });
-        if (c.choice === 'Escape') await ctx.win.keyboard.press('Escape');
+        if (c.choice === 'Escape') await dialog.press('Escape');
         else await dialog.getByRole('button', { name: c.choice, exact: true }).click();
       }
       await expect.poll(async () => {
