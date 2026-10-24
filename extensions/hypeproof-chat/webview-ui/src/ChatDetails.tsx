@@ -1,3 +1,4 @@
+import { AnswerWikiReview } from './AnswerWikiReview';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 /**
@@ -138,9 +139,13 @@ export function useConfirmedCopy(text: string): [CopyState, () => Promise<void>]
 /** CGP-KNOW-R-004 — the answer action's label (the session command's name, package.json wikiIngest). */
 export const ANSWER_TO_WIKI_LABEL = '팀 브레인에 정리하기';
 
-export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki }: { content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
+export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTurnId, wikiScope }: { wikiScope?: string; wikiTurnId?: string; content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
   const [state, copy] = useConfirmedCopy(content);
-  return <div className="hps-answer-actions">
+  const [wikiOpen, setWikiOpen] = useState(false);
+  const wikiAction = useRef<HTMLButtonElement>(null);
+  useEffect(() => { setWikiOpen(false); }, [content, wikiTurnId, wikiScope, !!onToWiki]);
+  const closeWiki = () => { setWikiOpen(false); wikiAction.current?.focus({ preventScroll: true }); };
+  return <><div className="hps-answer-actions">
     <button type="button" className="hps-copy-answer hps-answer-action" onClick={copy} aria-label="답변 복사" data-hp-tooltip="답변 복사">
       <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} size={16} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
     </button>
@@ -150,12 +155,14 @@ export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki }: { con
     {onRetry && <button type="button" className="hps-msg-retry hps-answer-action" onClick={onRetry} aria-label="답변 다시 받기" data-hp-tooltip="같은 요청으로 답변을 한 번 더 받아요">
       <ChatIcon kind="retry" size={16} /><span>다시 받기</span>
     </button>}
-    {onToWiki && <button type="button" className="hps-answer-wiki hps-answer-action" onClick={onToWiki} data-hp-tooltip="이 답과 질문을 팀 브레인에 정리해요. 쓰기 전에 한 번 더 물어봐요.">
-      <span>{ANSWER_TO_WIKI_LABEL}</span>
+    {onToWiki && wikiTurnId && <button ref={wikiAction} type="button" className="hps-answer-wiki hps-answer-action" aria-label={ANSWER_TO_WIKI_LABEL} aria-expanded={wikiOpen} onClick={() => setWikiOpen(true)} data-hp-tooltip={ANSWER_TO_WIKI_LABEL}>
+      <ChatIcon kind="book" size={16} />
     </button>}
     {verdict}
     <span role={state === 'failed' ? 'alert' : 'status'} className="hps-copy-status">{state === 'copied' ? '답변을 복사했습니다' : state === 'failed' ? '복사하지 못했습니다. 답변을 선택해 복사해 주세요.' : ''}</span>
-  </div>;
+  </div>
+    {wikiOpen && onToWiki && wikiTurnId && <AnswerWikiReview key={wikiTurnId} content={content} turnId={wikiTurnId} onCancel={closeWiki} onContinue={() => { closeWiki(); onToWiki(); }} />}
+  </>;
 }
 
 export function ResponsePending({ hasContent = false }: { hasContent?: boolean }) {
@@ -257,8 +264,9 @@ function composerCaretLine(node: HTMLTextAreaElement) {
 export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled: boolean, draft: string, hasContext = false) {
   const [expanded, setExpanded] = useState(false);
   useLayoutEffect(() => {
-    if (!enabled || !ref.current) return;
+    if (!ref.current) return;
     const node = ref.current;
+    if (!enabled) { node.style.height = ''; node.style.maxHeight = ''; return; }
     const shell = node.closest<HTMLElement>('.hps-shell');
     const footer = node.closest<HTMLElement>('.hps-input-area');
     const card = node.closest<HTMLElement>('.hps-input');
@@ -297,7 +305,9 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       const chrome = shell ? Array.from(shell.children).reduce((height, child) =>
         height + (child === footer || child.classList.contains('hps-messages') ? 0 : (child as HTMLElement).offsetHeight), 0) : 0;
       const fixedFooter = (footer?.offsetHeight ?? node.offsetHeight) - node.offsetHeight;
-      const cap = Math.max(24, Math.min(192, (shell?.clientHeight ?? 600) - fixedFooter - chrome - 96));
+      // File chips share the field's 192px budget, including its controls and inset.
+      const fileChrome = card?.querySelector('.hps-file-context') ? card.offsetHeight - node.offsetHeight : 0;
+      const cap = Math.max(24, Math.min(192 - fileChrome, (shell?.clientHeight ?? 600) - fixedFooter - chrome - 96));
       node.style.maxHeight = `${cap}px`;
       node.style.height = '0px';
       node.style.height = `${Math.min(cap, Math.max(24, node.scrollHeight))}px`;

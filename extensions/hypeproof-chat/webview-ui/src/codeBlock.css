@@ -19,3 +19,21 @@
 .hps-codeblock-tool:active { background-color: var(--hp-bg-control-pressed); color: var(--vscode-foreground, var(--ds-c-studio-codeblock-ink-1)); }
 .hps-codeblock-tool[aria-pressed="true"] { background: var(--vscode-toolbar-activeBackground, var(--ds-c-studio-codeblock-surface-9)); color: var(--vscode-foreground, var(--ds-c-studio-codeblock-ink-1)); }
 .hps-codeblock-status { margin-left: var(--ds-c-studio-codeblock-space-13); color: var(--hp-text-muted-default); }
+
+/* CGP-CHAT-D-008: a 32px visual strip behind independent 44px controls. */
+.hps-codeblock-controls { display: flex; flex-wrap: wrap; position: relative; gap: var(--ds-c-studio-codeblock-space-14); }
+.hps-codeblock-controls::before { content: ""; position: absolute; inset-inline: 0; top: 50%; transform: translateY(-50%); height: var(--ds-c-studio-codeblock-size-23); border-radius: var(--ds-c-studio-codeblock-radius-10); background: var(--hp-bg-panel-default); pointer-events: none; }
+.hps-codeblock-controls > button { position: relative; }
+.hps-codeblock-tool[data-copy-state="copied"] > span { animation: code-copy-confirm var(--hp-dur-content) var(--hp-ease); }
+@keyframes code-copy-confirm { from { opacity: 0; } to { opacity: 1; } }
+.hps-shell .hps-codeblock[data-wrap] > pre { box-sizing: border-box; max-width: 100%; min-width: 0; font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-6)); color: var(--vscode-editor-foreground, var(--hp-text-primary-default)); background: var(--vscode-editor-background, var(--hp-bg-app-default)); }
+.hps-shell .hps-codeblock[data-wrap] > pre code { font-family: inherit; color: inherit; background: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  .hps-codeblock-tool[data-copy-state="copied"] > span { animation: none; }
+}
+@media (forced-colors: active) {
+  .hps-codeblock-controls::before { background: Canvas; }
+  .hps-shell .hps-codeblock-tool[aria-pressed="true"] { color: CanvasText !important; background: Canvas !important; border: var(--ds-c-studio-styles-size-3) solid Highlight; }
+  .hps-shell .hps-codeblock-tool[aria-pressed="true"] > span { color: CanvasText !important; background: transparent !important; }
+  .hps-shell .hps-codeblock[data-wrap] > pre, .hps-shell .hps-codeblock[data-wrap] > pre code { color: CanvasText; background: Canvas; }
+}

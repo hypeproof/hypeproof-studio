@@ -385,7 +385,8 @@ at its pinned 200k window, `SDK_AUTO_COMPACT_WINDOW_TOKENS`): the host posts one
 per turn (`compactionLineId(streamId)`, so a second compaction in the same turn replaces it),
 kept in the turn timeline like every tool line and drawn as "대화가 길어져서 AI가 앞 대화를
 짧게 줄여서 기억하고 있어요. 중요한 건 다시 말해 주세요." The `compacting` status tick is not
-a boundary. Both lines are a centered `role="note"` (`hps-context-note`, 13px, secondary
+a boundary. Both lines are a centered `role="note"` (`hps-context-note`, 13px in classroom and14px in
+personal chat under DEC-29, secondary
 text, no icon or animation), not a bubble or a toast. They are never sent to the model:
 the clamp marker is not a message, and `modelHistory` drops tool lines. They show in
 personal and classroom chat alike, with no capability labels and no token numbers. Pure
@@ -398,6 +399,11 @@ activity connection the model clamps the webview's `rawHistory`, and no marker s
 there. The legacy workspaceState history (no task
 store) is itself clamped to 200, so nothing visible is ever left out and no marker shows.
 Any trimming the Service does server-side is not visible to the client and is not covered.
+Computed design coverage (CGP-CHAT-D-010): `test/context-note-computed.smoke.mjs` renders the
+real ChatPanel and built CSS across personal/classroom, light/dark,320/800/1420 and forced
+colors. It measures centered13–14px secondary text, no icon/animation, in-flow placement,
+wrapping and actual visibility. New turns retain the compaction point; an absent event or
+out-of-view host boundary creates no note. Existing runtime behavior is unchanged.
 Tests: `test/context-trim-marker.smoke.mjs` — empty, short, exactly-full, tool-heavy and
 versioned histories give no boundary (negative controls); one message over the cap gives
 exactly one boundary at the first message still sent; the boundary moves; the host's model
@@ -805,8 +811,9 @@ tools appear above the code once it is opened. `복사` (`aria-label="코드 복
 block's text (without Markdown's trailing newline) through the same confirmed-copy hook as the answer
 copy: `복사됨` and the status `코드를 복사했습니다` appear only after the clipboard write resolves, a
 rejected or missing clipboard says `복사하지 못했습니다. 코드를 선택해 복사해 주세요.`, and the
-successful feedback clears after at least4s; failed feedback remains an alert until another
-copy attempt or content/scope replacement (REQ-STUDIO-COPY-FEEDBACK). An empty (or whitespace-only) block has its `복사` disabled, so it never
+successful feedback clears after at least 4s and is announced through `role=status`; failed feedback remains a `role=alert` until another
+copy attempt or content/scope replacement (REQ-STUDIO-COPY-FEEDBACK, CGP-DS-R-025). CGP-CHAT-D-008's earlier 2s / status-only wording defers to CGP-DS-R-025, the merged design-system rule. The
+confirmation label fades in over 160ms, with no animation under reduced motion. An empty (or whitespace-only) block has its `복사` disabled, so it never
 claims a copy or clears the clipboard. `줄 바꿈` is a toggle with one fixed name (`aria-label="줄 바꿈"`)
 and `aria-pressed` for its state; the default keeps each surface's existing behaviour (the pill body
 does not wrap, prose blocks wrap). The choice is remembered per block for the webview session only.
@@ -817,7 +824,14 @@ and a new conversation never share a choice, and a block that is still streaming
 it grows. Rerenders and remounts (task switch and back) keep it, a reload forgets it, and nothing is
 written to storage or the host. A key needs at least the conversation and the message level; a block
 rendered with less keeps its choice only while mounted. Both controls are buttons with 44px targets, reachable by Tab, with the
-shared focus ring. Not built: a fence-language label, download, and a per-task saved wrap choice (the
+shared focus ring. CGP-CHAT-D-008 adds a32px visual strip behind the44px control targets;
+the strip does not reduce the hit area. Both pill and prose code use the editor's monospace family
+and editor foreground/background, measured at4.5:1 or higher in default light/dark themes.
+Unwrapped code scrolls inside its own block without page overflow; wrapped code fits the block.
+Forced colors keep the selected wrap label readable with CanvasText/Canvas and a Highlight border.
+`test/code-block-chrome.smoke.mjs` measures these rules in the real ChatPanel with built CSS,
+including successful, pending and failed clipboard promises and the 4s success lifetime.
+Not built: a fence-language label, download, and a per-task saved wrap choice (the
 research row CGP-CHAT-R39 asks for one; this slice keeps it session-only). Test:
 `test/code-block-tools.test.tsx`. Static markup covers where tools render (both modes, no tools
 outside code blocks, collapsed pill unchanged). Mounted on a minimal DOM (`test/fixtures/mini-dom.mjs`),
@@ -1319,8 +1333,16 @@ and next step: no work folder, outside the folder (lexically or after resolving 
 link on the path (even one pointing inside), hidden paths (`.env`, `.git/…`), folders, missing
 or unreadable files, empty files, more than 100 KB, invalid UTF-8 or NUL bytes (binary), more
 than 20,000 characters, and a file that changed while it was read. A file is refused, never
-cut, so the chip "파일 · {relative path}" shows exactly the text the model receives (expandable,
-scrollable, with **빼기**); a refusal shows as an alert under the chip row. The model receives the
+cut. CGP-CHAT-D-011 presents the pending file inside the composer with a file icon, basename
+limited to24grapheme clusters plus ellipsis, host-reported byte size, and a44px close icon whose
+accessible name includes the full relative path and 빼기. Narrow panes may clip the visible name
+further; the full path remains in its accessible name and tooltip. Activating the name opens a
+native in-page preview dialog showing the full relative path and exact text to be sent, scrollable
+and escaped as text. Closing returns focus to the opener; replacing the attachment closes the
+stale preview. The preview sends nothing. The chip, controls and inset share the composer's192px
+growth cap while the draft scrolls internally; a short pane still reserves96px for the transcript.
+The persistent refusal notice is a status line directly under the chip row, inside the composer card. The host-owned removal/send
+lifetime below is unchanged; clicking the close icon requests removal and waits for host state. The model receives the
 text inside `<file_content path="…">…</file_content>` followed by an instruction to treat it as
 reference material and not follow instructions inside it; an opening or closing tag in the file
 (also `</ file_content>`, one without `>`, and fullwidth `＜/file_content＞`), or a quote in its
@@ -1342,6 +1364,7 @@ classroom seat, which has no tool menu, gets one with the file item only (no web
 host re-checks the gate when the picker opens and when the send consumes the file. Not built:
 several files at once, the `@` file list (CGP-CHAT-R08), search/recent files in the picker
 (DES-KNOW-26), and per-cause REQ-KNOW-37 fixtures beyond the smoke test. Tests:
+`test/file-context-chip-computed.smoke.mjs` (real composer geometry, cap, preview, removal acknowledgement),
 `test/file-attachment.smoke.mjs` (containment incl. links, binary, caps, delimiter breakout and
 its variants, shown = sent, gate), `test/file-attachment.test.tsx` (chip, 빼기, alert, retry
 notice, no chip or menu without the grant, instructor never; reducer keeps chips through send;
@@ -1507,8 +1530,8 @@ no parked text draws no action, plain Stop sends nothing and restores the draft)
 
 `REQ-STUDIO-ANSWER-TO-WIKI` (CGP-KNOW-R-004, CGP-KNOW-D-004, P1; built 2026-10-20): a finished AI
 answer in personal task chat offers one action, **팀 브레인에 정리하기**, in the answer action row with
-복사 and the verdict buttons (REQ-STUDIO-ANSWER-VERDICT): the shared ghost action, 44 px target, at
-least 14 px on the type scale (REQ-STUDIO-TYPE-SCALE), Korean label, no capability labels. It goes on
+복사 and the verdict buttons (REQ-STUDIO-ANSWER-VERDICT): a borderless16px book glyph in a44px target, with a Korean accessible name and hover/focus
+tooltip, no capability labels. It goes on
 the same answers as the verdict (the last bubble of each finished turn, with text; never a user line,
 never the turn still streaming). Seat gate: the session team brain's own switch,
 `learning_wiki.enabled` on the served profile (REQ-STUDIO-LEARNING-WIKI), plus its folder-consent
@@ -1540,9 +1563,19 @@ write is the session ingest's writer (`writeWiki`: the state file, then every pa
 each file goes through the provenance hook (`noteHostWrite`, REQ-STUDIO-ARTIFACT-PROVENANCE); there
 is no second write path. A proposal with nothing citing that turn asks nothing and writes nothing.
 The same answer is not filed twice (`sessionHash`). The result is an in-chat notice like the
-command's. Not built: the inline confirmation card and hover-only glyph of CGP-KNOW-D-004 (the
-confirmation is the modal the other wiki writes and file deletes use, and the action is a text
-label like its row); the action in classroom seats, where SX-06 fixes what the rail may show. Tests:
+command's. CGP-KNOW-D-004 adds a local inline review card beneath the chosen answer before
+requesting the proposal. It quotes that bubble as plain text, initially capped at3lines and
+expandable, and names its answer ID. Metadata uses the current14px personal-chat floor rather
+than the reference's11px. Opening, expanding or canceling sends no request. Cancel starts focused;
+Escape (outside IME composition) cancels and restores the action's focus. The explicit
+"정리할 내용 미리보기" button posts the exact answer ID once and starts the existing host proposal
+path; the card clearly explains that the host will show the proposed changes and ask again before
+writing. The native proposal confirmation remains authoritative for actual disk writes. Content,
+task/activity, answer ID or grant changes close a stale card. No sliding animation is used,
+including under reduced motion. The action remains absent in classroom seats, where SX-06 fixes
+what the rail may show. Tests: `test/answer-wiki-review-computed.smoke.mjs` covers real markup/CSS,
+geometry, full excerpt, tooltip, Escape/IME, scope/capability changes and exact one-shot posting;
+
 `test/answer-to-wiki.smoke.mjs` (the real provider handler with fake VS Code and a scripted model:
 the prompt's sources are that answer and question only; the modal shows the items and the cited
 turn; cancel leaves no file and no host write; confirm writes through `applyWikiProposal` with the
@@ -1652,6 +1685,15 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   inbox (#751 U2); withdrawn, unreadable, notice, prompt and setting cards are not listed. AI:
   a file directly in `자료/` whose provenance ledger records an AI write; a file there with any
   other or no record is not listed. The origin is shown in words ("추가: 나"), never only colour.
+- **Row design (CGP-KNOW-D-003 / DES-KNOW-04).** A decorative file/link/book icon precedes a
+  single-line ellipsized name, with its full text in the accessible name and keyboard/pointer
+  tooltip. The text origin badge stays readable and stacks below the name at 320px. The header
+  and controls are at least 44px. The time is the recorded learner add, instructor receipt, or AI
+  creation event in the current file lifetime, never a later modification time. Missing, invalid,
+  truncated or unconfirmed creation history says "추가 시각 미확인"; no current-time fallback.
+  Selection remains host-owned and nothing is sent by toggling it. The existing system picker
+  remains the file entry; drag/drop intake and its drop-zone treatment are not implemented by
+  this presentation row and remain an explicit design gap.
 - **Removing.** 목록에서 빼기 takes a learner or AI item off the list; a file stays in the folder.
   Instructor items have no 목록에서 빼기, the row says "강사가 보낸 자료는 목록에서 뺄 수 없어요.",
   and the host refuses a remove request for them.

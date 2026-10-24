@@ -63,7 +63,7 @@ async function harness(config: ChatConfig, extra: Record<string, unknown> = {}) 
     config, instructor: false, ...extra,
   };
   await act(async () => { root.render(<ChatPanel {...(props as React.ComponentProps<typeof ChatPanel>)} />); });
-  const actions = () => host.findAll((e) => e.localName === "button" && e.textContent.trim() === LABEL);
+  const actions = () => host.findAll((e) => e.localName === "button" && e.getAttribute("aria-label") === LABEL);
   return { host, asked, actions, press: (el: El) => act(async () => { click(el); }) };
 }
 /** The text of the message bubble a button sits under: the nearest .hps-msg ancestor's body. */
@@ -73,16 +73,20 @@ const bubbleOf = (el: El) => {
   return n?.textContent ?? "";
 };
 
-t("one action per finished answer, on its last bubble; a click hands that answer's id to App (positive control)", async () => {
+t("one action per finished answer, on its last bubble; a confirmed inline review hands that answer's id to App (positive control)", async () => {
   const h = await harness(brainOn);
   const buttons = h.actions();
   eq(buttons.length, 2, "actions");
   ok(bubbleOf(buttons[0]).includes("첫 답") && !bubbleOf(buttons[0]).includes("고양이"), "first action is not under the first answer");
   ok(bubbleOf(buttons[1]).includes("고양이 답") && !bubbleOf(buttons[1]).includes("만들게요"), "second action is not under the split answer's last bubble");
   await h.press(buttons[1]);
-  eq(h.asked, ["a2#2"], "click payload");
+  eq(h.asked, [], "opening review never posts");
+  const proceed = () => h.host.findAll(e => e.localName === "button" && e.textContent === "정리할 내용 미리보기");
+  await h.press(proceed()[0]);
+  eq(h.asked, ["a2#2"], "confirmed payload");
   await h.press(buttons[0]);
-  eq(h.asked, ["a2#2", "a1"], "second click payload");
+  await h.press(proceed()[0]);
+  eq(h.asked, ["a2#2", "a1"], "second confirmed payload");
 });
 
 t("placed in the existing answer action row, with the copy and verdict actions, as a 44px ghost action", async () => {

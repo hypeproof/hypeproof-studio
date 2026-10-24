@@ -25,6 +25,8 @@ export interface ArtifactProvenanceEntry {
   history: string[];
   /** Time of the latest event, absent when none. */
   at?: number;
+  /** Recorded AI creation in this file lifetime, never the latest modification time. */
+  createdAt?: number;
 }
 
 export interface ArtifactProvenanceView {

@@ -14,6 +14,8 @@ export interface MaterialItemView {
   detail: string;
   origin: MaterialOrigin;
   originLabel: string;
+  /** Recorded add/receipt/AI creation time in milliseconds; absent when not known. */
+  addedAt?: number;
   /** Goes with the next message. */
   selected: boolean;
   /** The learner may take it off the list. Never for an instructor's item. */

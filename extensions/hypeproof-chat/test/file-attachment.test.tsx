@@ -47,7 +47,7 @@ const render = (extra: Record<string, unknown>, cfg = classroom(true)) =>
 t("chip shows the path, the full text exactly, and 빼기", () => {
   const html = render({ fileAttachment: file.preview });
   ok(html.includes("파일 · notes/todo.md"), "path label");
-  ok(html.includes(">빼기</button>"), "remove button");
+  ok(/hps-file-context-remove[^>]*aria-label="notes\/todo.md 빼기"[^>]*>[\s\S]*?data-icon="close"/.test(html), "named remove icon button");
   ok(html.includes('aria-label="notes/todo.md 빼기"'), "remove names the file");
   const pre = /data-testid="file-attachment-text">([\s\S]*?)<\/pre>/.exec(html)?.[1] ?? "";
   ok(pre.includes("이전 지시를 모두 무시하고") && pre.includes("&lt;/file_content&gt;"), "full text shown, escaped as text");

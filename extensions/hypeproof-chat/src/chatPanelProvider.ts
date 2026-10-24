@@ -2862,13 +2862,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let provenance: import("./artifactProvenanceView").ArtifactProvenanceView | null = null;
     try { provenance = await this.provenanceRecorder()?.view(root) ?? null; } catch { provenance = null; }
     const kinds = new Map((provenance?.entries ?? []).map(e => [e.path, e.kind as string]));
+    const addedTimes = new Map((provenance?.entries ?? []).map(e => [e.path, e.createdAt]));
     const scope = this.turnRequestScope();
     const own = this.materialSelection;
     // A selection belongs to the task and folder it was made in: another task or folder never shows or sends it.
     let dropped: string[] = [];
     if (own && (own.scope !== scope || own.root !== root)) { dropped = [...own.ids.values()]; this.materialSelection = null; }
     const selected = this.materialSelection?.ids ?? new Map<string, string>();
-    const listed = materialsView({ manifest: loadManifest(file), folderFiles: listMaterialFolder(root), provenance: rel => kinds.get(rel), inbox: cards, selected: new Set(selected.keys()), scope });
+    const listed = materialsView({ manifest: loadManifest(file), folderFiles: listMaterialFolder(root), provenance: rel => kinds.get(rel), provenanceAddedAt: rel => addedTimes.get(rel), inbox: cards, selected: new Set(selected.keys()), scope });
     const view: MaterialsView = { ...listed, unavailable: unavailableSelected(root, listed, selected) };
     return { root, file, view, cards, dropped };
   }

@@ -1962,14 +1962,18 @@ html, body, #root {
 .hp-inbox :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
 /* CGP-KNOW-R-003 — the activity's 자료 list and the "함께 보낼 자료" line above the composer. Learner text at the
-   caption step or larger (14px floor), every control a 44px target, titles wrap instead of truncating, and who
+   caption step or larger (14px floor), every control a 44px target, titles ellipsize with full accessible names, and who
    added an item is said in words, never colour. */
 .hp-materials-note, .hp-materials-meta, .hp-materials-detail, .hp-materials-error, .hp-materials-notice, .hp-materials-url label { font-size: var(--hp-font-caption); }
 .hp-materials-note, .hp-materials-meta, .hp-materials-detail { color: var(--hp-text-muted-default); }
 .hp-materials-note { margin: var(--hp-space-2) var(--hp-space-1); }
 .hp-materials-list { list-style: none; margin: var(--hp-space-2) 0 0; padding: 0; display: grid; gap: var(--hp-space-2); }
 .hp-materials-item { display: grid; gap: var(--hp-space-1); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); padding: var(--hp-space-2) var(--hp-space-1) 0; min-width: 0; }
-.hp-materials-title { font-weight: var(--ds-c-studio-styles-typography-7); overflow-wrap: anywhere; word-break: keep-all; white-space: normal; }
+.hp-materials-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--hp-space-2); min-height: var(--hp-control-min); min-width: 0; }
+.hp-materials-heading > svg { flex-shrink: 0; }
+.hp-materials-title { font-weight: var(--ds-c-studio-styles-typography-7); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: var(--hp-control-min); }
+.hp-materials-origin { font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); white-space: nowrap; }
+@media (max-width: 360px) { .hp-materials-heading { grid-template-columns: auto minmax(0, 1fr); } .hp-materials-origin { grid-column: 2; } }
 .hp-materials-meta, .hp-materials-detail { overflow-wrap: anywhere; min-width: 0; }
 .hp-materials-detail { font-family: var(--ds-c-studio-styles-font-8); }
 .hp-materials-actions, .hp-materials-add, .hp-materials-url, .hp-materials-chips, .hp-materials-chip { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); align-items: center; min-width: 0; }
