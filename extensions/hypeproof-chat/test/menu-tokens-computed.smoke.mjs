@@ -9,7 +9,7 @@ const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER==='1')thr
 const dir=fileURLToPath(new URL('../webview-ui/',import.meta.url));
 const bundle=await build({entryPoints:[dir+'src/main.tsx'],bundle:true,platform:'browser',format:'esm',outdir:'menu-assets',write:false,loader:{'.svg':'dataurl'},logLevel:'silent'});
 const css=bundle.outputFiles.find(f=>f.path.endsWith('.css')).text;
-const script=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {ComposerTools} from './src/ComposerTools';import {HeaderActions} from './src/ChatPanel';const noop=()=>{};createRoot(document.getElementById('mount')).render(<><header className="hps-header"><span>대화</span><HeaderActions personal taskId="t"><button>설정</button><button>기록</button><button>닫기</button></HeaderActions></header><div className="hps-input"><ComposerTools mode="auto" onMode={noop} locked={false} onAttach={noop} onAttachFile={noop} webSearch={{available:true}}/></div></>);`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
+const script=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {ComposerTools} from './src/ComposerTools';import {HeaderActions} from './src/ChatPanel';const noop=()=>{};createRoot(document.getElementById('mount')).render(<><header className="hps-header"><span>대화</span><HeaderActions personal taskId="t"><button>설정</button><button>기록</button><button>기타</button></HeaderActions></header><div className="hps-input"><ComposerTools mode="auto" onMode={noop} locked={false} onAttach={noop} onAttachFile={noop} webSearch={{available:true}}/></div></>);`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
 const b=await launch(bin);const evidence=process.env.MENU_EVIDENCE;if(evidence)mkdirSync(evidence,{recursive:true});
 const wait=()=>new Promise(r=>setTimeout(r,25));
 const key=async(k,ime=false)=>{await b.evaluate(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:${JSON.stringify(k)},bubbles:true,cancelable:true,isComposing:${ime}}))`);await wait();};
@@ -30,6 +30,35 @@ try{
    if(name==='tools')assert.ok(m.descriptions.length===3&&m.descriptions.every(d=>d.title>d.weight&&d.titleColor!==d.color),`${seat}: tools title must outrank its description by weight and colour ${JSON.stringify(m.descriptions)}`);
    await key('End');assert.equal((await measure()).at,2);await key('ArrowDown');assert.equal((await measure()).at,0);await key('ArrowUp');assert.equal((await measure()).at,2);await key('Home');assert.equal((await measure()).at,0);
    await key('ArrowDown',true);assert.equal((await measure()).at,0,'composition keys must not move menu focus');await key('Escape',true);assert.ok(await b.evaluate(`!!document.querySelector('${menu}')`),'composition Escape keeps menu');
+   // Printable keys search labels, without activating an action.
+   await key(name==='tools'?'웹':'기');assert.equal((await measure()).at,name==='tools'?2:1,'type-ahead finds a Korean label');
+   if(name!=='tools'){await key('기');assert.equal((await measure()).at,2,'repeated first letter cycles');}
+   await key('Home');await key(name==='tools'?'작':'기');await key(name==='tools'?'업':'록');assert.equal((await measure()).at,1,'growing prefix retains its match');
+   await key('Home');await b.evaluate(`document.activeElement.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}))`);
+   await key(name==='tools'?'웹':'기');assert.equal((await measure()).at,0,'composition ref blocks unflagged printable key');
+   await key('ArrowDown');assert.equal((await measure()).at,0,'composition ref blocks unflagged navigation');
+   await b.evaluate(`document.activeElement.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}))`);
+   await key(name==='tools'?'웹':'기');assert.equal((await measure()).at,name==='tools'?2:1,'after composition normal search works');
+   await key('Home');await b.evaluate(`document.activeElement.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));document.activeElement.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:${JSON.stringify(name==='tools'?'웹':'기록')}}))`);await wait();
+   assert.equal((await measure()).at,name==='tools'?2:1,'committed Korean IME text searches without a synthetic Hangul keydown');
+   await key('Home');
+   for(const syllable of (name==='tools'?['작','업']:['기','록'])){await b.evaluate(`document.activeElement.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));document.activeElement.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:${JSON.stringify(syllable)}}))`);await wait();}
+   assert.equal((await measure()).at,1,'separate IME commits accumulate a prefix');
+   await key('Home');await key('z');assert.equal((await measure()).at,0,'unmatched key preserves focus');
+   if(seat==='personal'&&!dark&&width===800){await new Promise(r=>setTimeout(r,750));await key(name==='tools'?'웹':'기');assert.equal((await measure()).at,name==='tools'?2:1,'expired prefix starts a fresh search');}
+   if(name==='tools'){
+    // Search edge cases on injected extra rows: a native-disabled match, a Latin label and a longer shared prefix.
+    await b.evaluate(`document.querySelector('${menu}').insertAdjacentHTML('beforeend','<button disabled>웹D</button><button>웹B</button><button>Alpha</button><button>작업Z</button>')`);
+    const keyEv=async(k,mods={})=>{const r=await b.evaluate(`(()=>{const e=new KeyboardEvent('keydown',{key:${JSON.stringify(k)},bubbles:true,cancelable:true,ctrlKey:${!!mods.ctrl},metaKey:${!!mods.meta},altKey:${!!mods.alt}});document.activeElement.dispatchEvent(e);return e.defaultPrevented})()`);await wait();return r;};
+    await key('Home');await key('웹');assert.equal((await measure()).at,2);await key('웹');assert.equal((await measure()).at,4,'repeat cycling skips a native-disabled match');
+    await key('Home');await key('a');assert.equal((await measure()).at,5,'labels match case-insensitively');
+    await key('Home');await key('작');await key('업');assert.equal((await measure()).at,1,'growing prefix stays on its current match when a later row shares it');
+    await key('Home');for(const mods of [{ctrl:1},{meta:1},{alt:1}]){assert.equal(await keyEv('웹',mods),false,'modified keys are not consumed');assert.equal((await measure()).at,0,'modified keys do not search');}
+    await key('Home');await key(' ');await key('웹');assert.equal((await measure()).at,2,'Space is not part of the search prefix');
+    await key('Home');assert.equal(await keyEv('웹'),true,'a matched key is consumed');assert.equal(await keyEv('z'),false,'an unmatched key is not consumed');
+    await b.evaluate(`[...document.querySelectorAll('${menu} button')].slice(3).forEach(e=>e.remove())`);
+   }
+   await key('Home');
    if(evidence){const shot=await b.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${evidence}/${seat}-${width}-${dark?'dark':'light'}-${name}.png`,Buffer.from(shot.data,'base64'));}
    // The semantic role must remain connected even if an old component override comes later.
    await b.evaluate(`document.body.style.setProperty('--ds-c-menu-radius','18px');document.body.style.setProperty('--ds-c-menu-item-height','60px')`);
@@ -46,5 +75,5 @@ try{
    await key('Escape');assert.equal(await b.evaluate(`!!document.querySelector('${menu}')`),false);assert.equal(await b.evaluate(`document.activeElement===document.querySelector('${trigger}')`),true,'Escape restores opener');
   }
  }
- console.log('PASS menu token linkage, geometry, arrows/Home/End/Escape and IME across both fixture contexts/themes/windows');
+ console.log('PASS menu token linkage, geometry, arrows/Home/End/Escape, type-ahead and committed IME text across both fixture contexts/themes/windows');
 }finally{await b.close();}

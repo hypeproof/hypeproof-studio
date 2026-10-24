@@ -1,3 +1,4 @@
+import { useMenuTypeahead } from './menuTypeahead';
 import { ClassWindowNotice } from "./ClassWindowNotice";
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
@@ -3188,6 +3189,7 @@ function UpdateBanner({
 /** Personal secondary actions share a full-size target; classroom controls keep their existing layout. */
 export function HeaderActions({ personal, taskId, children }: { personal: boolean; taskId?: string; children: import('react').ReactNode }) {
   const [open, setOpen] = useState(false);
+  const typeahead = useMenuTypeahead(open);
   const root = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -3205,18 +3207,19 @@ export function HeaderActions({ personal, taskId, children }: { personal: boolea
     (firstFocus.current === 'last' ? choices.at(-1) : choices[0])?.focus({ preventScroll: true });
   }, [personal, open]);
   if (!personal) return <div className="hps-actions">{children}</div>;
-  return <div className="hps-actions tw-chat-menu" ref={root} onBlur={event => {
+  return <div className="hps-actions tw-chat-menu" ref={root} onCompositionStart={typeahead.onCompositionStart} onCompositionEnd={event => typeahead.onCompositionEnd(event, items())} onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }} onKeyDown={event => {
-    if (!open || event.defaultPrevented || imeComposing(event)) return;
+    if (!open || event.defaultPrevented || imeComposing(event, typeahead.composing.current)) return;
     if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      typeahead.reset();
       const choices = items();
       if (!choices.length) return;
       event.preventDefault();
       const at = choices.indexOf(document.activeElement as HTMLButtonElement);
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (at + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
       choices[next].focus({ preventScroll: true });
-    }
+    } else typeahead.search(event, items());
   }}>
     <button ref={toggle} type="button" className="tw-chat-menu-toggle" aria-label="대화 메뉴" data-hp-tooltip="대화 메뉴" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} onClick={() => { firstFocus.current = 'first'; setOpen(!open); }} onKeyDown={event => {
       if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {

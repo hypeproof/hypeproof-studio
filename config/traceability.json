@@ -11929,6 +11929,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/ComposerTools.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/menuTypeahead.ts"
         }
       ]
     },

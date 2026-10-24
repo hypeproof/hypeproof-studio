@@ -5159,8 +5159,12 @@ guard already used by HeaderActions and the shared dismissal hook. This does not
 capability availability, reservation locks, tool execution or OS dialog approvals.
 The computed guard mounts the real components with built application CSS, exercises both
 composer modes, themes,800/1420 windows, token overrides, keyboard focus and forced colors.
-Type-ahead in DES-CGP-DS-24 and Chalk dense menu styling are separate design-row work; this
-requirement's acceptance is arrow/Home/End/Escape plus learner sizing, not native acceptance.
+CGP-DS-D-019 adds label-prefix focus search to both menus: printable keys accumulate for 700ms,
+repeating the same first letter cycles matches, navigation and closing reset the prefix.
+Committed IME text searches only after composition ends; composition keys never navigate or
+dismiss. Search moves focus without activating actions. Native disabled items are skipped;
+aria-disabled choices remain inspectable so their reason can be read. Chalk dense menu styling
+and native acceptance remain separate; the learner menus keep their 44px target minimum.
 
 ## Confirmed copy feedback lifetime (CGP-DS-R-025)
 
