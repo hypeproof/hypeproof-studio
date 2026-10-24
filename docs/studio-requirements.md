@@ -114,15 +114,17 @@ controls), and a source scan that every write call site in the chat host and pre
 passes the guard (a planted direct write fails it; each guard was removed once and the
 smoke failed). `test/denial-source.smoke.mjs` covers the sixth source.
 
+### Missing task folder recovery surface
+
 `REQ-STUDIO-MISSING-TASK-FOLDER` (CGP-AGENT-R-028 / REQ-CGP-AGENT-57, DES-CGP-AGENT-57, P1;
 built 2026-10-20): when a personal task's folder (the open folder, or the activity's recorded
 folder when none is open) is missing — moved, renamed or deleted, before or while Studio is open,
 or gone across a restart; not a folder; not readable and writable by Studio (`stat` plus
 `access(R_OK|W_OK|X_OK)`, so `chmod 000` and a locked parent count); or no longer resolving to
 the activity's recorded canonical folder (a symlink swapped in, which the activity lock would
-refuse anyway) — the chat shows one calm notice above the composer instead of a failed send:
-"이 작업의 폴더를 찾을 수 없어요. 옮기거나 지웠다면 폴더를 다시 골라 주세요.", with one action,
-**다시 고르기** (44px target, learner text on the type-scale tokens, ≥14px; `role="status"`).
+refuse anyway) — the chat shows one calm notice in place of the editing controls instead of a failed send:
+"이 작업의 폴더를 찾을 수 없어요. 옮기거나 지웠다면 폴더를 다시 골라 주세요.", with **다시 확인** and
+**다시 고르기** (44px targets, learner text on the type-scale tokens, ≥14px; `role="status"`).
 The check is asynchronous (a hung network mount does not block the extension host) and runs
 again on every send, so a one-off read error is not remembered. Seats: the
 REQ-STUDIO-FOLDER-CONSENT seats with personal tasks (personal or trial activity, or a bought
@@ -130,8 +132,12 @@ pass; never a classroom seat, a seat with a served lesson or lesson binding, or 
 surface). Classroom and lesson seats get no notice: their folder is the class's, and they keep
 the existing, stricter refusal of the send ("활동 연결 또는 작업 폴더를 확인하지 못했습니다…" from the
 activity lock). While the folder is missing nothing is sent and no turn starts. The webview
-holds the send and keeps the draft; a press asks the host to look again, and if the folder is
-back the held draft goes out once. The host holds a new message and a retry before `handleSend`
+replaces editing tools and send controls with `다시 확인` and `다시 고르기`, and keeps the
+same draft textarea visible read-only beneath the notice. `다시 확인` asks the host to probe
+again; a recovered folder restores editing but never sends the draft automatically. Enter,
+paste and file drop do not edit or send while the recovery surface is shown. A running turn
+retains its stop button. The two recovery buttons are at least 44px; at 320px they stack in
+one column, and keyboard focus remains visible in normal and forced colours. The host holds a new message and a retry before `handleSend`
 runs: the text goes back to the composer (`inputRejected`), the conversation is redrawn from
 history so no unsent bubble remains, and the notice is posted. No error banner, no VS Code toast.
 The webview asks for the state on mount (each task), when the panel becomes visible and when the
@@ -163,9 +169,13 @@ activity's own reason (for example a folder bound to another activity), or a gen
 (also when the store could not be carried); a raw error never reaches the learner. 다시 고르기 does
 nothing while a turn runs.
 
-Not built: the "다시 가져오기" (REQ-P4 source re-download) option of the register row, dropped by
-the audit to one action; a read-only draft view under a notice that replaces the composer (the
-composer stays, held). Known limits: re-entry from the start page with a saved activity whose
+Not built: the "다시 가져오기" (REQ-P4 source re-download) option of the register row. The second
+button implemented by DES-CGP-AGENT-57 is a local state re-check, not source restoration;
+this distinction remains a requirement gap and needs owner acceptance. Owner decision
+(2026-10-25): 다시 가져오기 stays a local re-check for now; source re-download (REQ-P4) is a
+follow-up, not part of this row. In this read-only recovery state the pending file chips are
+not shown (nothing can be sent), and the recovery layout outranks the file-context grid. The
+read-only draft and two-action layout are implemented. Known limits: re-entry from the start page with a saved activity whose
 folder is gone still recreates that folder empty (`openWorkspaceFolder` →
 `prepareWorkspaceDirectory`), so that path opens an empty folder rather than this notice; a
 picked folder nested inside another activity's folder is accepted (the activity binding checks
@@ -181,8 +191,10 @@ level, a diverged target copy stays as "· 이전", an existing backup is never 
 same-millisecond carry takes unique names), and a carry whose task-file write fails leaves the
 verdicts unchanged;
 wiring) and `test/missing-task-folder.test.tsx` (the real ChatPanel: notice, held send with the
-draft kept, re-check that sends the held draft once, 다시 고르기, cleared notice; classroom draws
-nothing).
+draft kept read-only, re-check without sending, 다시 고르기, cleared notice and a fresh explicit
+send; classroom draws nothing), plus `test/missing-folder-layout.smoke.mjs` (mounted ChatPanel,
+shipped stylesheet cascade, personal/classroom × light/dark × 320/800/1420, read-only long draft,
+44px actions, narrow stacking, keyboard/forced-colour focus, escaped text and stale task reply).
 
 ### Task-bound coach notices
 

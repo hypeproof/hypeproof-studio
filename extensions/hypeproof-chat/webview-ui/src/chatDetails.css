@@ -441,7 +441,7 @@
 .hps-text-size legend { padding: 0; font-weight: var(--hp-weight-strong); min-height: var(--ds-c-studio-chatdetails-size-23); }
 .hps-text-size label { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--ds-c-studio-chatdetails-size-8); cursor: pointer; }
 
-/* REQ-STUDIO-MISSING-TASK-FOLDER — the missing-folder notice above the composer: one sentence, one 44px action, wraps to one column. */
+/* REQ-STUDIO-MISSING-TASK-FOLDER — the missing-folder recovery notice: two 44px actions, wrapping on narrow panels. */
 .hps-shell[data-chat-detail="personal"] .hps-missing-folder { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-1); margin: 0 0 var(--ds-c-studio-chatdetails-space-2); padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, var(--ds-c-studio-chatdetails-boundary-2))); border-radius: var(--ds-c-studio-chatdetails-radius-9); }
 .hps-shell[data-chat-detail="personal"] .hps-missing-folder-text { margin: 0; flex: 1 1 var(--ds-c-studio-chatdetails-size-27); min-width: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label); }
 .hps-shell[data-chat-detail="personal"] .hps-missing-folder-note { margin: 0; flex: 1 1 100%; color: var(--tw-muted, inherit); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
@@ -681,4 +681,15 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
 @media (forced-colors: active) {
   .hps-shell .hp-capability-sheet { color: CanvasText; background: Canvas; border-color: CanvasText; }
   .hps-shell .hp-capability-sheet :focus-visible { --hp-ring-focus-default: Highlight; outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); }
+}
+/* DES-CGP-AGENT-57: recovery replaces editing controls while preserving the same draft field. */
+.hps-shell[data-chat-detail="personal"] .hps-input[data-folder-missing="true"],
+.hps-shell[data-chat-detail="personal"] .hps-input[data-folder-missing="true"][data-file-context] { display: flex; flex-direction: column; align-items: stretch; }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-folder-missing="true"] > .hps-file-context-stack { display: none; }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-folder-missing="true"] textarea { width: 100%; min-height: var(--hp-control-min); }
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-2); width: 100%; }
+.hps-shell[data-chat-detail="personal"] .hps-missing-folder-draft-label { font-size: var(--hp-font-caption); color: var(--tw-muted); }
+@container studio-chat (width < 448px) {
+  .hps-shell[data-chat-detail="personal"] .hps-missing-folder-actions { flex-direction: column; }
+  .hps-shell[data-chat-detail="personal"] .hps-missing-folder-action { width: 100%; }
 }

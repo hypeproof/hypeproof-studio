@@ -1,7 +1,7 @@
 import { staticTokens } from "./lib/expand-design-tokens.mjs";
 // REQ-STUDIO-MISSING-TASK-FOLDER (CGP-AGENT-R-028, DES-CGP-AGENT-57) — the webview side: the real
 // ChatPanel on the minimal DOM (fixtures/mini-dom.mjs) receives the host's notice, shows one sentence
-// and one 다시 고르기 action, holds the send with the draft kept, and drops the notice when the host
+// and two recovery actions, holds the read-only draft, and drops the notice when the host
 // says the folder is back. The host side (hold, rebind, consent) is test/missing-task-folder.smoke.mjs.
 // Bundled with esbuild and run with plain Node; the banner captures what the panel posts to the host.
 
@@ -72,6 +72,8 @@ async function harness(config: ChatConfig) {
     type: async (text: string) => { const ta = textarea(); await act(async () => { ta.value = text; ta.dispatchEvent(ev("input")); }); },
     enter: async () => act(async () => { textarea().dispatchEvent(ev("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, shiftKey: false, isComposing: false })); }),
     draft: () => textarea().value,
+    readonly: () => textarea().hasAttribute("readonly"),
+    recheck: () => host.findAll(e => e.localName === "button" && e.textContent.trim() === "다시 확인")[0],
     press: async (el: El) => act(async () => { click(el); }),
     hostMsg: async (data: Record<string, unknown>) => act(async () => {
       const w = (globalThis as unknown as { window: { dispatchEvent(e: unknown): boolean } }).window;
@@ -89,9 +91,10 @@ t("personal: the panel asks the host on mount", async () => {
   ok(posted.some((m) => m.type === "missingTaskFolderRequest"), "missingTaskFolderRequest posted");
 });
 
-t("personal: a missing folder shows one notice with one action; the send is held and the draft kept", async () => {
+t("personal: recovery actions replace editing while the draft remains read-only", async () => {
   const h = await harness(personal);
   eq(h.notice(), undefined, "no notice before the host says so (negative control)");
+  await h.type("고양이 그려 줘");
   await h.hostMsg({ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") });
   ok(h.notice(), "notice drawn");
   ok(h.text().includes(MISSING_TASK_FOLDER_COPY), "the sentence");
@@ -99,12 +102,14 @@ t("personal: a missing folder shows one notice with one action; the send is held
   eq(h.action()[0].getAttribute("type"), "button", "a real button");
   ok((h.action()[0].getAttribute("class") ?? "").includes("hps-missing-folder-action"), "44px class");
   eq(h.notice().getAttribute("role"), "status", "announced politely");
-  await h.type("고양이 그려 줘");
+  ok(h.readonly(), "draft is read-only");
+  ok(h.recheck(), "second action rechecks the folder");
   posted.length = 0;
   await h.enter();
   eq(h.sent.length, 0, "the send is held");
   eq(h.draft(), "고양이 그려 줘", "the draft stays");
-  ok(posted.some((m) => m.type === "missingTaskFolderRequest"), "the press asks the host to look again (a one-off error does not stick)");
+  await h.press(h.recheck());
+  ok(posted.some((m) => m.type === "missingTaskFolderRequest"), "recheck asks the host without sending");
   // Still missing: the notice stays and nothing goes out.
   await h.hostMsg({ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") });
   eq(h.sent.length, 0, "still held");
@@ -126,14 +131,16 @@ t("personal: a missing folder shows one notice with one action; the send is held
   eq(h.sent[0], "고양이 그려 줘");
 });
 
-t("personal: a held press whose re-check finds the folder back sends that draft once", async () => {
+t("personal: recovery preserves the draft and requires a new send", async () => {
   const h = await harness(personal);
-  await h.hostMsg({ type: "missingTaskFolder", notice: missingTaskFolderNotice("/flaky") });
   await h.type("다시 보내 줘");
+  await h.hostMsg({ type: "missingTaskFolder", notice: missingTaskFolderNotice("/flaky") });
   await h.enter();
   eq(h.sent.length, 0, "held");
   await h.hostMsg({ type: "missingTaskFolder", notice: null });
-  eq(h.sent.length, 1, "the re-check cleared the notice: the held draft goes out");
+  eq(h.sent.length, 0, "recovery does not implicitly send");
+  eq(h.draft(), "다시 보내 줘");
+  await h.enter();
   eq(h.sent[0], "다시 보내 줘");
   await h.hostMsg({ type: "missingTaskFolder", notice: null });
   eq(h.sent.length, 1, "exactly once");
