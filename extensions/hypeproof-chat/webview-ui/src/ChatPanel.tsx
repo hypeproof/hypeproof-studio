@@ -1955,7 +1955,7 @@ export function ChatPanel(props: Props) {
             </span> : <button type="button" className="hps-queued-send" onClick={() => setDiscardRequest(request)}>삭제</button>}
           </div>)}
         </div>}
-        {steerDelivery?.scope === steerScope && <SteerDelivery key={`${steerDelivery.scope}:${steerDelivery.from}`} delivery={steerDelivery} messages={messages} streamFor={props.streamFor} streaming={streaming} onDone={clearSteerDelivery} />}
+        {steerDelivery?.scope === steerScope && <SteerDelivery key={`${steerDelivery.scope}:${steerDelivery.from}`} delivery={steerDelivery} messages={messages} streamFor={props.streamFor} streaming={streaming} sendPending={props.sendPending} onDone={clearSteerDelivery} />}
         {queued !== null && (
           // #416 — what is parked, and how to take it back. Cancel returns it to
           // the draft (see restoreQueuedToDraft): the × must not mean "delete".
