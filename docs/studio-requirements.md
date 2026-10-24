@@ -720,7 +720,7 @@ choice is a device preference (`globalState`, not part of any lesson or activity
 the host confirms it. The default size adds no markup. Not built: classroom seats have no settings
 dialog, so they keep the base size. Since `REQ-STUDIO-TYPE-SCALE` the choice is one step
 variable on the shell, so every caption in the personal chat (code pills included) follows it too.
-Test: `test/text-size.test.tsx`.
+Test: `test/text-size.test.tsx`; `test/text-size-geometry.smoke.mjs` (CGP-DS-D-006) measures the built webview in headless Chromium: 16/18/20px body and composer, no horizontal overflow at 320px, Send stays 44px and inside the viewport.
 
 CGP-CHAT-D-002 (D65, 2026-10-20) extends this edit flow: the latest prompt's
 44px edit control has a 16px pencil and the Korean label `수정`. It remains visible
