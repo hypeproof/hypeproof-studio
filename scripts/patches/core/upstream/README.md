@@ -5,3 +5,5 @@ upstream commit `560a9dba96f961efea7b1612916f89e5d5d4d679` (VS Code 1.116.0, MIT
 `extensions/hypeproof-chat/test/quit-guard-patch.smoke.mjs` regenerates the patch from them
 and applies it. When the `vscodium-base` pin moves to a new upstream commit, refresh these
 copies from `vscodium-base/vscode` and regenerate the patch.
+
+`browserView/electron-browser/browserEditor.ts` is also a pristine copy at the same commit, used by `hps-preview-recovery.patch` and the isolated patched-method test. Regenerate with `build_preview_recovery_patch.py`. The snapshot is not a full native build or installed-app acceptance.

@@ -12076,6 +12076,26 @@
           "path": "extensions/hypeproof-chat/test/annotation-layout.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-TEST-CGP-ART-D009",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER",
+        "ST-IMP-PREVIEW-RECOVERY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/preview-error-surface.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-surface-requests.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-shell-bridge.smoke.mjs"
+        }
+      ]
     }
   ]
 }

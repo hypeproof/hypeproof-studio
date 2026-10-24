@@ -40,12 +40,12 @@ vm.runInNewContext(bundle.outputFiles[0].text, {
 });
 const { ChatPanelProvider, confirmOutbound } = mod.exports;
 
-const listeners = {};
+const listeners = { secret: new Set() };
 const memento = () => ({ get: () => undefined, update: async () => {}, keys: () => [] });
 const context = {
   subscriptions: [], extensionUri: { fsPath: '/ext' }, extensionPath: '/ext', extension: { packageJSON: {} },
   globalState: memento(), workspaceState: memento(), globalStorageUri: { fsPath: '/tmp/hps-none' }, storageUri: { fsPath: '/tmp/hps-none' },
-  secrets: { get: async () => undefined, store: async () => {}, delete: async () => {}, onDidChange: f => { listeners.secret = f; return { dispose() {} }; } },
+  secrets: { get: async () => undefined, store: async () => {}, delete: async () => {}, onDidChange: f => { listeners.secret.add(f); return { dispose() { listeners.secret.delete(f); } }; } },
 };
 const provider = new ChatPanelProvider(context, {}, {});
 const posted = [];
@@ -96,7 +96,7 @@ test('H3 reload, dispose, sign-out and token change deny an open prompt without 
   const cases = {
     ready: () => swallow(() => provider.handleMessage({ type: 'ready' })),
     invalidateProfile: () => swallow(() => provider.invalidateProfile()),
-    tokenChange: () => listeners.secret({ key: 'hypeproofChat.workshopToken' }),
+    tokenChange: () => { for (const listener of listeners.secret) listener({ key: 'hypeproofChat.workshopToken' }); },
     sidebarDispose: null, // fired through the handler resolveWebviewView registers
     editorDispose: null, // fired through the handler openInEditor registers
   };
