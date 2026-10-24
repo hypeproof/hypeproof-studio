@@ -13,12 +13,13 @@ import {HelpRequest} from './src/HelpRequest';
 const root=createRoot(document.getElementById('root'));
 window.messages=[];
 window.draw=(view)=>root.render(<HelpRequest view={view} post={m=>window.messages.push(m)}/>);
-`,resolveDir:path.join(repo,'extensions/hypeproof-chat/webview-ui'),loader:'tsx'},bundle:true,write:false,format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'}});
+`,resolveDir:path.join(repo,'extensions/hypeproof-chat/webview-ui'),loader:'tsx'},bundle:true,write:false,outdir:'out',format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'}});
 const browser = await chromium.launch({headless:true});
 try {
  const page=await browser.newPage();
  await page.setContent('<html lang="ko"><body><div id="root"></div></body></html>');
- await page.addScriptTag({content:built.outputFiles[0].text});
+ await page.addStyleTag({content:built.outputFiles.find(f=>f.path.endsWith('.css')).text});
+ await page.addScriptTag({content:built.outputFiles.find(f=>f.path.endsWith('.js')).text});
  const key='c|p|synthetic|run';
  const view={generation:1,draft_key:key,seat:'A1',availability:{state:'unknown'},draft:{question:'QUESTION',turnId:null,duration:30,updated_at:1},turns:[],current:[],history:[],refresh:{state:'ok',at:1},note:null};
  const envelope=(id,state)=>({request_id:id,state,recipient_id:'teacher',seat_id:'A1',content:{question:'QUESTION'},truncated:[],consent_expires_at:4000000000});

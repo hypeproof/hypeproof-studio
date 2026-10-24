@@ -10645,6 +10645,12 @@
       ],
       "sources": [
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/RecipientMemory.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/recipientMemory.css"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/outboundConsent.ts"
         },
         {
@@ -10673,6 +10679,9 @@
         "ST-IMP-RECEIVER-AI-STORAGE-UNKNOWN"
       ],
       "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lib/recipient-memory-probe.mjs"
+        },
         {
           "path": "extensions/hypeproof-chat/test/outbound-dialog.test.tsx"
         },
