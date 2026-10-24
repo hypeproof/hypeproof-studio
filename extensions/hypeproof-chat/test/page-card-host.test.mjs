@@ -19,7 +19,8 @@ test('a page change posts a card; buttons reach preview and revealFileInOS; outs
     f.h.resolveCoachCwd = () => work;
     const shown = [];
     const reloads = [];
-    f.h.preview = { show: async (html, base) => { shown.push({ html, base: base.fsPath }); }, watchForReload: (uri, read) => { reloads.push(read); } };
+    let askFromHeader;
+    f.h.preview = { show: async (html, base, ask) => { askFromHeader = ask; shown.push({ html, base: base.fsPath }); }, watchForReload: (uri, read) => { reloads.push(read); } };
     const cards = () => f.posts.filter((m) => m.type === 'pageCardsState').at(-1)?.cards;
 
     // Negative control first: a turn that changes only a non-page file posts no card.
@@ -40,6 +41,24 @@ test('a page change posts a card; buttons reach preview and revealFileInOS; outs
     assert.deepEqual(shown, [{ html: '<!doctype html><title>내 게임</title>', base: real }]);
     assert.equal(typeof reloads[0], 'function', 'the reload uses the checked reader');
     assert.equal(await reloads[0](), '<!doctype html><title>내 게임</title>');
+    // The trusted header binds the checked file, not a path supplied by page script.
+    const asks = [];
+    const originalAsk = f.h.askAboutFile;
+    const originalTaskKey = f.h.turnRestoreTaskKey;
+    f.h.askAboutFile = async target => { asks.push(target); };
+    assert.equal(typeof askFromHeader, 'function');
+    await askFromHeader();
+    assert.deepEqual(asks, [join(real, 'index.html')]);
+    assert.equal(f.browserState.commands.at(-1), 'hypeproof-chat.panel.focus');
+    f.h.resolveCoachCwd = () => outside;
+    await askFromHeader();
+    f.h.resolveCoachCwd = () => work;
+    f.h.turnRestoreTaskKey = () => 'another-task';
+    await askFromHeader();
+    assert.equal(asks.length, 1, 'changed root or task cannot attach the earlier card');
+    f.h.turnRestoreTaskKey = originalTaskKey;
+    f.h.askAboutFile = originalAsk;
+
     await f.handle(f.scoped({ type: 'pageCardReveal', turnId: 'turn-page', path: 'index.html' }));
     assert.deepEqual(f.browserState.commandArgs.at(-1), ['revealFileInOS', { fsPath: join(real, 'index.html'), scheme: 'file' }]);
 

@@ -5563,7 +5563,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const out = await handlePageCardAction(this.pageCards, this.turnRestoreTaskKey(), msg, {
       // The bytes come from the checked inode (pageCardHost readPageInFolder), never a second read by name.
       open: async (abs, html, reload) => {
-        await this.preview.show(html, vscode.Uri.file(path.dirname(abs)));
+        const task = this.turnRestoreTaskKey();
+        const root = this.resolveCoachCwd();
+        await this.preview.show(html, vscode.Uri.file(path.dirname(abs)), async () => {
+          if (task !== this.turnRestoreTaskKey() || root !== this.resolveCoachCwd()) return;
+          await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+          if (task !== this.turnRestoreTaskKey() || root !== this.resolveCoachCwd()) return;
+          await this.askAboutFile(abs);
+        });
         this.preview.watchForReload(vscode.Uri.file(abs), async () => reload());
       },
       reveal: async (abs) => { await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(abs)); },
@@ -8761,6 +8768,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CGP-KNOW-R-015 — the explorer's "이 파일에 대해 묻기" follows the file-attach gate. The host re-checks
     // the gate on every request, so a failed context update never holds up the config post.
     void (async () => vscode.commands.executeCommand("setContext", ASK_ABOUT_FILE_CONTEXT_KEY, fileAttachAllowed(toolProfile, isInstructor)))().catch(() => undefined);
+    this.preview.setAskAboutFileEnabled(fileAttachAllowed(toolProfile, isInstructor));
     const entryId = lessonCapabilityEntryId(profile, token, proxyUrl, !!local || isInstructor);
     if (token !== await this.context.secrets.get(TOKEN_KEY) || scope !== activityConnections(this.context)?.scope) return;
     await this.post({

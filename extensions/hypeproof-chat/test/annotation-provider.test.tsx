@@ -66,6 +66,8 @@ async function main() {
       },
       liveServer: { currentUrl: () => 'http://127.0.0.1:5173/', currentRoot: () => null },
       revealBrowserTab: async () => {}, coachBrowserTabs: () => [],
+      // postConfig narrows the preview header's file grant (CGP-KNOW-D-015); the real provider always has one.
+      preview: { setAskAboutFileEnabled() {} },
       attachElementContext: (c: ElementContext) => { browserCalls.push(['attachElementContext', c.ref]); },
       ...extra,
     });
