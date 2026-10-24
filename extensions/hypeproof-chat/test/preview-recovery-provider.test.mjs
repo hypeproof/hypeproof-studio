@@ -88,3 +88,34 @@ test("다시 켜기 opens one fresh tab and closes only tabs of addresses this r
     assert.equal(states().at(-1).result, "done");
   } finally { await new Promise((r) => live.close(r)); }
 });
+
+
+test("shell bridge registers owned-tab commands and refuses ambiguous tabs", async () => {
+  const live = http.createServer((_q,r)=>{r.writeHead(404);r.end('missing')});
+  await new Promise(r=>live.listen(0,'127.0.0.1',r));
+  try {
+    const base=`${ORIGIN(live.address().port)}/`;
+    const {f,tab}=await harness([live.address().port],{base});
+    const commands=new Map();
+    f.vscode.commands.registerCommand=(name,fn)=>{commands.set(name,fn);return {dispose(){commands.delete(name)}}};
+    f.h.registerPreviewSurface({subscriptions:[],secrets:{onDidChange(){return {dispose(){}}}}});
+    const resolve=commands.get('_hps.previewRecovery.resolve'),act=commands.get('_hps.previewRecovery.act');
+    assert.equal(await resolve(base),null);
+    tab(base);let view=await resolve(base);assert.equal(view.action,'show_files');
+    assert.equal(await act(view.requestId,base,view.action),true);
+    assert.ok(f.browserState.commands.includes('workbench.view.explorer'));
+    assert.equal(await act(view.requestId,base,view.action),false);
+    // Ownership: a loopback tab on a server Studio never served, and the viewport wrapper, get no surface even though
+    // both would measure as a 404 (each guard removed in turn must fail here).
+    const other=http.createServer((_q,r)=>{r.writeHead(404);r.end('missing')});
+    await new Promise(r=>other.listen(0,'127.0.0.1',r));
+    try {
+      const foreign=`${ORIGIN(other.address().port)}/`;
+      tab(foreign);assert.equal(await resolve(foreign),null,'a server Studio never served is not judged');
+      const wrapper=`${base}__hp_viewport?w=320`;
+      tab(wrapper);assert.equal(await resolve(wrapper),null,'the viewport wrapper is not a recoverable preview');
+    } finally {await new Promise(r=>other.close(r))}
+    view=await resolve(base);tab(base);assert.equal(await resolve(base),null);
+    assert.equal(await act(view.requestId,base,view.action),false);
+  } finally {await new Promise(r=>live.close(r))}
+});

@@ -210,6 +210,7 @@ import { buildPageCard, handlePageCardAction, PageCardRegistry, type PageCardMes
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
+import { PreviewSurfaceRequests } from "./previewSurfaceRequests";
 import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { browserRememberLabel, browserTarget, cleanName } from "./browserTargetHost";
 import { WriteApprovalRequest } from "./writeApprovalPrompt";
@@ -2586,6 +2587,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push({ dispose: () => clearInterval(directorProbe) });
     // D-028 — staged photos that were never sent go with the window.
     context.subscriptions.push({ dispose: () => this.imageStaging?.dispose() });
+    this.registerPreviewSurface(context);
     // REQ-STUDIO-PREVIEW-RECOVERY — a browser tab opened, closed or changed address/title: measure the preview again.
     for (const event of [vscode.window.onDidChangeBrowserTabState, vscode.window.onDidOpenBrowserTab, vscode.window.onDidCloseBrowserTab]) {
       const d = event?.(() => this.schedulePreviewRecovery());
@@ -2594,6 +2596,40 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const annotationClose = vscode.window.onDidCloseBrowserTab?.(tab => { void this.annotationPreviewClosed(tab).catch(() => {}); });
     if (annotationClose) context.subscriptions.push(annotationClose);
     context.subscriptions.push({ dispose: () => clearTimeout(this.previewRecoveryTimer) });
+  }
+
+  private registerPreviewSurface(context: vscode.ExtensionContext): void {
+    const surface = new PreviewSurfaceRequests<vscode.BrowserTab>({
+      select: url => {
+        const tabs = this.coachBrowserTabs().filter(t => t.url === url && isLoopbackPreview(url) && !previewPagePath(url).startsWith('/__hp_viewport') && this.liveServer?.servedBefore(url));
+        return tabs.length === 1 ? tabs[0] : undefined;
+      },
+      scope: () => this.annotationScope(), id: () => crypto.randomUUID(),
+      measure: tab => measurePreview(tab.url, () => ({base:this.liveServer?.currentUrl(),listening:!!this.liveServer?.isListening()}), url => probePreviewPage(url)),
+      run: async (tab, action, current) => {
+        if (!current()) return false;
+        if (action === 'show_files') { await vscode.commands.executeCommand('workbench.view.explorer'); return true; }
+        let target = tab.url;
+        if (action === 'restart_preview') {
+          const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+          if (!root) return false;
+          const base = await this.liveServer.ensure(root);
+          if (!current() || root !== vscode.workspace.workspaceFolders?.[0]?.uri.fsPath) return false;
+          const old = new URL(target);
+          target = new URL(old.pathname + old.search + old.hash, base).href;
+        }
+        const pinned = new BrowserControl(); pinned.setTargetTab(tab);
+        try { if (!current()) return false; await pinned.loadInPinnedTab(target); return true; }
+        finally { await pinned.dispose(); }
+      },
+    });
+    context.subscriptions.push(
+      vscode.commands.registerCommand('_hps.previewRecovery.resolve', (url: unknown) => surface.resolve(url)),
+      vscode.commands.registerCommand('_hps.previewRecovery.act', (id: unknown, url: unknown, action: unknown) => surface.act(id, url, action)),
+      {dispose: () => surface.clear()},
+    );
+    const surfaceTokenChange = context.secrets.onDidChange?.(e => { if (e.key === TOKEN_KEY) surface.clear(); });
+    if (surfaceTokenChange) context.subscriptions.push(surfaceTokenChange);
   }
 
   private previewRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
