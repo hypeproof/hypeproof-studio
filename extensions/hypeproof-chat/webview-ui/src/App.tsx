@@ -5,6 +5,8 @@ import type {BrowserApprovalPrompt} from '../../src/browserApprovalPrompt';
 import type {DelegationStopState} from "../../src/delegationStop";
 import {CommandApprovalDialog} from './CommandApprovalDialog';
 import type {CommandApprovalPrompt} from '../../src/commandApprovalPrompt';
+import {AnnotationLeaveDialog} from './AnnotationLeaveDialog';
+import type {AnnotationLeavePrompt} from '../../src/annotationLeavePrompt';
 import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
@@ -406,6 +408,7 @@ export function App() {
   const [approvalPending, setApprovalPending] = useState(false);
   const [browserApproval,setBrowserApproval]=useState<BrowserApprovalPrompt|null>(null);
   const [commandApproval,setCommandApproval]=useState<CommandApprovalPrompt|null>(null);
+  const [annotationLeave,setAnnotationLeave]=useState<AnnotationLeavePrompt|null>(null);
   const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
   const [folderConsent,setFolderConsent]=useState<FolderConsentPrompt|null>(null);
   const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
@@ -471,6 +474,7 @@ export function App() {
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
         case 'browserApprovalPrompt': setBrowserApproval(msg.prompt); return;
         case 'commandApprovalPrompt': setCommandApproval(msg.prompt); return;
+        case 'annotationLeavePrompt': setAnnotationLeave(msg.prompt); return;
         case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
         case 'folderConsentPrompt': setFolderConsent(msg.prompt); return;
         case 'outboundPrompt': setOutbound(msg.prompt); return;
@@ -765,6 +769,7 @@ export function App() {
         : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>)}
       {browserApproval && <BrowserApprovalDialog key={browserApproval.id} prompt={browserApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'browserApprovalAnswer',id,choice});setBrowserApproval(null);dispatch({type:"visibleProgress"});}}/>}
       {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
+      {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
       {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);dispatch({type:"visibleProgress"});}}/>}
       <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}

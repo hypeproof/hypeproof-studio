@@ -1,6 +1,7 @@
 import {BrowserApprovalRequest} from "./browserApprovalPrompt";
 import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
 import {CommandApprovalRequest, commandApprovalPurposeFor} from "./commandApprovalPrompt";
+import { AnnotationLeaveRequest } from './annotationLeavePrompt';
 import { currentClassWindow } from "./classWindow";
 import { FolderConsentRequest } from './folderConsentPrompt';
 import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
@@ -1546,6 +1547,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private annotationBoundScope?: string;
   private annotationPreviewTabs?: Map<vscode.BrowserTab, string>;
   private annotationLeavePending = false;
+  private _annotationLeaveRequest?: AnnotationLeaveRequest;
+  private get annotationLeaveRequest(): AnnotationLeaveRequest {
+    return this._annotationLeaveRequest ??= new AnnotationLeaveRequest({
+      scope: () => JSON.stringify([this.annotationScope(), this.annotationBatch.revision]),
+      id: () => crypto.randomUUID(),
+      present: prompt => this.post({ type: 'annotationLeavePrompt', prompt }),
+    });
+  }
   /** REQ-ART-03: no action or dismissed dialog is permission to discard unsent work. */
   async confirmAnnotationLeave(): Promise<boolean> {
     this.syncAnnotationScope();
@@ -1554,11 +1563,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.annotationLeavePending = true;
     const scope = this.annotationScope(), revision = this.annotationBatch.revision;
     try {
-      const answer = await vscode.window.showWarningMessage(
-        `보내지 않은 표시가 ${this.annotationBatch.size}개 있어요`, { modal: true },
-        { title: '계속 고치기', isCloseAffordance: true }, { title: '버리기' },
-      );
-      if (answer?.title !== '버리기' || scope !== this.annotationScope() || !this.annotationBatch.discard(revision)) return false;
+      const discard = (this.editorChat?.visible || this.view?.visible)
+        ? await this.annotationLeaveRequest.confirm(this.annotationBatch.size)
+        : (await vscode.window.showWarningMessage(
+          `보내지 않은 표시가 ${this.annotationBatch.size}개 있어요`, { modal: true },
+          { title: '계속 고치기', isCloseAffordance: true }, { title: '버리기' },
+        ))?.title === '버리기';
+      if (!discard || scope !== this.annotationScope() || !this.annotationBatch.discard(revision)) return false;
       await this.mcpBrowser?.clearAnnotationMarkers?.().catch(() => {});
       this.annotationPreviewTabs?.clear();
       this.postAnnotations();
@@ -2585,7 +2596,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
     const sub = context.secrets.onDidChange?.((e) => {
-      if (e.key === TOKEN_KEY) { this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel(); void this.crProjectMemory.refresh().catch(() => undefined); }
+      if (e.key === TOKEN_KEY) { this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel(); this._annotationLeaveRequest?.cancel(); void this.crProjectMemory.refresh().catch(() => undefined); }
       // cr-review — the director's command follows the stored issuer token (set, replaced or forgotten).
       if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
     });
@@ -3531,6 +3542,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     view.onDidDispose(() => {
       this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
       this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
+      this._annotationLeaveRequest?.cancel();
       if (this.draftSource===sidebarWebview) this.draftSource=undefined;
       this.queuedSources.delete(sidebarWebview);
       if (this.view === view) this.view = undefined;
@@ -3555,6 +3567,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       entry.onDidDispose(() => {
         this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
         this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
+        this._annotationLeaveRequest?.cancel();
         if(this.draftSource===editorWebview)this.draftSource=undefined;
         this.queuedSources.delete(editorWebview);
         if (this.editorChat === entry) {
@@ -3879,6 +3892,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.personalContinuationPane?.dispose(); this.personalContinuationPane = undefined;
     this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
     this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
+    this._annotationLeaveRequest?.cancel();
     this.profileGeneration++;
     this.observationAssessment?.abort();
     this.nativeObservation=null;
@@ -6141,6 +6155,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "helpWithdraw": await this.helpSource?.withdraw(msg.key, msg.id); return;
       case "browserApprovalAnswer": this.browserApprovalRequest.respond(msg.id,msg.choice); return;
       case "commandApprovalAnswer": this.commandApprovalRequest.respond(msg.id,msg.choice); return;
+      case "annotationLeaveAnswer": this._annotationLeaveRequest?.respond(msg.id,msg.discard); return;
       case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
       case "folderConsentAnswer":
         if (!(this.editorChat?.visible || this.view?.visible)) this.folderConsentRequest?.cancel();
@@ -6158,6 +6173,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "ready":
         this.writeApprovalRequest.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
         this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
+        this._annotationLeaveRequest?.cancel();
         await this.postInbox();
         // AE-15 — a remount must still show the open review bar (it never auto-dismisses).
         this.postTurnReview();

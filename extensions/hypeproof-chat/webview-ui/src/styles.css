@@ -2556,3 +2556,11 @@ html, body, #root {
 :where(:root[data-reduced-motion="true"]) .hps-idle-progress-dot { opacity: 1; }
 :where(:root[data-reduced-motion="true"]) .hps-idle-progress-motion::after { animation: none; opacity: 0; }
 @media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-idle-progress-dot { opacity: 1; } :where(:root:not([data-reduced-motion])) .hps-idle-progress-motion::after { animation: none; opacity: 0; } }
+/* DES-ART-03: keep is the first/default action; both actions fit a 320px pane. */
+.hps-annotation-leave { color: var(--hp-text-primary-default); background: var(--vscode-editor-background); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); }
+.hps-annotation-leave h2 { font-size: var(--hp-font-body); line-height: var(--hp-leading-label); margin: 0 0 var(--ds-c-modal-padding); font-weight: var(--hp-weight-strong); }
+.hps-annotation-leave-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-c-studio-styles-space-2); }
+.hps-annotation-leave button { font: inherit; font-size: var(--hp-font-caption); min-height: var(--hp-control-min); min-width: var(--hp-control-min); color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); cursor: pointer; }
+.hps-annotation-leave button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-annotation-leave button:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
+@media (forced-colors: active) { .hps-annotation-leave { color: CanvasText; background: Canvas; border-color: CanvasText; } .hps-annotation-leave button { color: ButtonText; background: ButtonFace; border-color: ButtonText; } }

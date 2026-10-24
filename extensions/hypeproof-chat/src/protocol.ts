@@ -528,6 +528,7 @@ export interface SuggestionChip {
 export type WebviewMessage = (
   | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
   | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
+  | {type:'annotationLeaveAnswer';id:string;discard:boolean}
   | {type:'writeApprovalAnswer';id:string;approved:boolean}
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
@@ -787,6 +788,7 @@ export type WebviewMessage = (
 export type HostMessage = (
   | {type:'browserApprovalPrompt';prompt:import('./browserApprovalPrompt').BrowserApprovalPrompt|null}
   | {type:'commandApprovalPrompt';prompt:import('./commandApprovalPrompt').CommandApprovalPrompt|null}
+  | {type:'annotationLeavePrompt';prompt:import('./annotationLeavePrompt').AnnotationLeavePrompt|null}
   | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
   | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
