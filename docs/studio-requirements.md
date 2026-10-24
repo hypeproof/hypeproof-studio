@@ -4640,6 +4640,20 @@ on the real Chalk pages: learner share, distribution confirmation, help feedback
 
 ## Published test version sharing state (CGP-ART-R-011)
 
+CGP-ART-D-011 adds an always-visible, rounded sharing-state button beside the publish
+button (or beside the unavailable notice when publishing is unavailable). A lock, link,
+broken-link or unknown icon accompanies Korean text of at most 20 characters. It reflects
+the current immutable version using the same link aggregate as the persistent details;
+expiry updates locally and failed reads show `공유 상태 확인 필요`, never privacy inferred
+from missing evidence. Activating it opens the existing sharing controls in a disclosure
+and moves keyboard focus to its summary. Full expiry and active-link counts remain in
+persistent version rows and in settings. Link creation, revoke, copy and refresh retain
+their existing host and Service gates. This presentation exposes responsibility (Product
+Intent 2 / OWNERSHIP hypothesis), not a learning-outcome claim. Local headless tests cover
+states, 320/800/1420 widths, themes, focus and expiry; installed desktop acceptance remains
+separate.
+
+
 | ID | Requirement | Evidence |
 |---|---|---|
 | REQ-STUDIO-PUBLISH-SHARING | In the publish panel, each distinct test version, including the current unpublished version, has one persistent sharing label: `나만 볼 수 있어요`, `링크가 있는 누구나 · {date}까지`, or `링크 끊김`, plus its active link count. Aggregate across that version's experiments, deduplicate link IDs, exclude revoked/expired/invalid links, and show the last active link's expiry. Copy is disabled with a visible reason when no live link exists. Copy re-reads the Service and checks activity, token, base and capability before writing the clipboard. Expiry updates locally; remote state refreshes on focus and every 15 seconds while open. Older responses cannot overwrite newer state or reopen a closed panel. A failed or malformed read is unknown, never evidence of privacy and never reported as a failed publish: the panel says `공유 상태를 확인하지 못했어요` in a status region, keeps the last known rows marked with the time they were read and with copy off, and clears the marker on the next good read. | `test/publish-sharing.test.tsx`, `test/publish-sharing-layout.smoke.mjs`, `test/publish-sharing-host.smoke.mjs`, `test/publish-sharing-app.test.tsx`; CGP-ART-012 / REQ-ART-11; Product Intent 2 (visible responsibility), OWNERSHIP hypothesis, no learning-outcome claim. |

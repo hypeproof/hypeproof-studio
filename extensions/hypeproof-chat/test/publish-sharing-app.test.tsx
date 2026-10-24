@@ -37,6 +37,13 @@ async function main() {
   assert.equal(rows().length, 1);
   assert.match(rows()[0].textContent, /링크가 있는 누구나 · .*까지 · 활성 링크 1개/);
   assert.equal(rows()[0].querySelector('[role="status"]') !== null, true, 'the label is a status region');
+  // Opening settings is local navigation; revoking keeps the existing exact-link host message.
+  const beforeSettings = posted().length;
+  await act(async () => click(panel().querySelector('[data-testid="sharing-pill"]')));
+  assert.equal(panel().querySelector('[data-testid="sharing-pill"]').getAttribute('aria-expanded'), 'true');
+  assert.equal(posted().length, beforeSettings, 'opening settings cannot publish or create a link');
+  await act(async () => click(panel().querySelector('[data-testid="publish-revoke"]')));
+  assert.deepEqual(ofType('publishRevoke').map(m => m.linkId), ['l']);
   // copy -> host with the version id only
   await act(async () => click(rows()[0].querySelector('button')));
   assert.deepEqual(ofType('publishCopy').map(m => m.versionId), ['v1']);
