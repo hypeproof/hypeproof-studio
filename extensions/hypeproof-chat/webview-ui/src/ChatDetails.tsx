@@ -60,7 +60,7 @@ export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: Ic
     {kind === 'package' && <><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" /><path d="m4 7.5 8 4.5 8-4.5M12 12v9" /></>}
     {kind === 'folder' && <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />}
     {kind === 'ruler' && <><rect x="2.5" y="8" width="19" height="8" rx="1.5" /><path d="M6.5 8v3M10.5 8v4M14.5 8v3M18.5 8v4" /></>}
-    {kind === 'dots' && <path d="M6 12h.01M12 12h.01M18 12h.01" strokeWidth="2.6" />}
+    {kind === 'dots' && <g fill="currentColor" stroke="none"><circle cx="6" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="18" cy="12" r="1.5" /></g>}
     {kind === 'sparkle' && <path d="M12 3.5c.6 4.3 2.2 5.9 6.5 6.5-4.3.6-5.9 2.2-6.5 6.5-.6-4.3-2.2-5.9-6.5-6.5 4.3-.6 5.9-2.2 6.5-6.5ZM18.5 16v4M16.5 18h4" />}
     {kind === 'square' && <rect x="4" y="4" width="16" height="16" rx="3" />}
     {kind === 'check-square' && <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8 12 3 3 5-6" /></>}
