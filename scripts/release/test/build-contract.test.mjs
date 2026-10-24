@@ -229,6 +229,37 @@ function workflow(name) {
     path.join(root, '.github/workflows', name)], {encoding: 'utf8'}));
 }
 
+test('Windows compile passes the existing GitHub token to bundled-extension downloads', t => {
+  const windows = workflow('build-windows.yml');
+  const job = windows.jobs['build-win'];
+  const compile = job.steps.find(step => step.name === 'Compile Windows source');
+  const mac = Object.values(workflow('build-mac.yml').jobs)[0].steps.find(step => step.name === 'Build (macOS)');
+  const tokenExpression = '${{ secrets.GITHUB_TOKEN }}';
+  assert.equal(mac.env.GITHUB_TOKEN, tokenExpression);
+  const dir = tmp(t), bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  fs.mkdirSync(path.join(dir, 'vscode'));
+  // Execute the actual compile shell with an offline npm stand-in. Earlier and
+  // later steps' env must not leak into this process, just as in Actions.
+  fs.writeFileSync(path.join(bin, 'npm'), `#!/bin/bash
+test "$*" = 'run gulp vscode-min-prepack' || exit 41
+test "$GITHUB_TOKEN" = 'offline-fixture-token' || exit 42
+printf 'authenticated compile reached\\n'
+`, {mode: 0o755});
+  const effectiveEnv = {...windows.env, ...job.env, ...compile.env};
+  const execute = env => spawnSync('bash', ['--noprofile', '--norc', '-e', '-c', compile.run], {
+    cwd: dir, encoding: 'utf8', env: {
+      PATH: `${bin}:/usr/bin:/bin`,
+      GITHUB_TOKEN: env.GITHUB_TOKEN === tokenExpression ? 'offline-fixture-token' : '',
+    },
+  });
+  assert.equal(execute({...effectiveEnv, GITHUB_TOKEN: undefined}).status, 42,
+    'the download stand-in must reject missing authentication');
+  const result = execute(effectiveEnv);
+  assert.equal(result.status, 0, 'the compile step must receive the existing GitHub token');
+  assert.equal(result.stdout.trim(), 'authenticated compile reached');
+});
+
 test('managed Windows collects distributable packages without unpacked helper executables', t => {
   const dir = tmp(t), build = path.join(dir, 'vscodium-base'), dist = path.join(dir, 'dist');
   fs.mkdirSync(path.join(build, 'assets'), {recursive: true});

@@ -230,6 +230,10 @@ jobs:
       - name: Compile Windows source
         shell: bash
         working-directory: vscodium-base
+        env:
+          # vscode-min-prepack downloads bundled MS extensions from GitHub.
+          # Step-scoped tokens from Fetch/Package do not reach compilation.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           cd vscode
