@@ -243,11 +243,14 @@ const OLD_SCREENS = {
 // Before/after markup is byte-identical after removing that one exact node.
 // CGP-DS-D-021: the six ChatPanel digests were re-taken because title= became data-hp-tooltip=; the
 // dumps of main and this branch are byte-identical once every data-hp-tooltip= is read back as title=.
+// CGP-DS-D-015: only ChatPanel/adult-timeline was re-taken; the `dots` icon is now three filled circles
+// (<g fill="currentColor" stroke="none"> with three <circle r="1.5">) instead of a 2.6-stroke <path>.
+// The dumps of main and this branch differ only in that one element (diffed with HPS_A5_DUMP_DIR).
 // CGP-SHELL-R-006: only the effort labels change to Korean in five affected renders.
 const BASE = {
   "ChatPanel/adult-plain": "ca6223b85b877e108becc4f9e38e94ec2533b330cdef4c92c9dc62e2775c1242",
   "ChatPanel/adult-effort-observed": "c307f0879ba04976db5d9387d454ac10b6885887600f336ca2b38a87623782f2",
-  "ChatPanel/adult-timeline": "36da9075c8f346287050c01676ef67997e1463917a95c0e86f3c5d249912bb35",
+  "ChatPanel/adult-timeline": "7cd482c1e010cbeea0c1114cf1cc5c3b41bc9d805bbbebdfca93a4812e153d5a",
   "ChatPanel/kids": "3952e023620aca658290a1ebcb9385642a65eff9f0cc5450af925c2319f015f5",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",

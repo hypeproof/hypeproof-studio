@@ -7203,6 +7203,19 @@
       ]
     },
     {
+      "id": "ST-TEST-ICON-METRICS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/icon-metrics-computed.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-TYPE-SCALE",
       "stage": "test",
       "owner": "jayleekr",

@@ -1051,8 +1051,26 @@ label that repeats its icon as its first character (`📏 390·1280px 확인`) d
 copy is otherwise unchanged. Kept, by classification: learner content (the model's markdown task-list
 boxes, cohort world faces in the runner) and the protocol keys above, which are never drawn. Not
 covered: VS Code native dialogs and notifications the host raises (`imageAttachPrompt`), the artifact
-provenance marks (typographic symbols, not emoji), Chalk, and a capture on a real high-contrast
-display.
+provenance marks (typographic symbols, not emoji), and a capture on a real high-contrast display.
+CGP-DS-D-015 (Both seats; icon sizes 16 inline / 20 toolbar / 24 empty states, 1.5-2px stroke,
+`currentColor`) is the design clause of this requirement. Stroke weight is the `stroke-width` of the
+icon's own drawing in its viewBox units (not scaled to rendered px), 1.5 to 2 inclusive (ChatIcon draws 1.7 on its 24 grid, Chalk's inline icons 1.7
+or 2). Every stroked inline icon must set it, because an unset stroke draws at 1; the two approval
+dialog icons were unset and now draw 1.5. A fill-only glyph has no stroke to weigh and is exempt:
+the `dots` icon is three filled circles (`fill="currentColor"`, `stroke="none"`) instead of a 2.6
+stroke, the stop square is filled, and the Google sign-in logo keeps its brand colours. Chalk is in
+scope for the stroke-weight rule only: its inline icons (`board-status.ts` status chips, the
+recipient-AI-memory icon in `manage.html` and `sharing.html`, the CSS data-URI marks) are scanned and
+none is outside 1.5-2; Chalk icons stay 16px.
+Test: `test/stroke-icons.smoke.mjs` also scans every Studio webview source file and Chalk's inline
+icons for a stroke-width outside 1.5-2 or a stroked svg that sets none (planted 2.6, 3, 1 and unset
+widths fail; filled glyphs pass). `test/icon-metrics-computed.smoke.mjs` measures in headless
+Chromium (`FOCUS_REQUIRE_BROWSER=1` fails without a browser): every ChatIcon kind at 16, 20 and 24
+plus every drawn icon of the real classroom and personal webview, in dark and light, must be a
+16/20/24 box whose stroked shapes use the computed text colour with a 1.5-2px stroke and whose filled
+shapes fill with it, and the colour must differ between the themes. Mutations that fail it: dots back
+to a 2.6 stroke, root stroke 3, `.hps-icon` forced to 18px, a fixed stroke colour, `.hps-icon *`
+forced to a 1px stroke, an unset approval-dialog stroke, and a Chalk icon at 2.6.
 Test: `test/stroke-icons.smoke.mjs` scans every webview source file outside comments for emoji and
 status marks against an allowlist with exact counts and reasons (stale entries fail), checks every CSS rule that sizes an svg or `.hps-icon` (16/20/24 only) and that
 every icon the host emits maps to a named stroke icon, that the run-state labels and free-start copy
