@@ -7348,6 +7348,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/text-size.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/text-size-geometry.smoke.mjs"
         }
       ]
     },
