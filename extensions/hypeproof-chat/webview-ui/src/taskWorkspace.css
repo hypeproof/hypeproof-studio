@@ -257,3 +257,9 @@
    the rail's surface. Dark themes keep the host value, and #a4aab3 (6.8:1 on #202226) without one. */
 body.vscode-light .tw-workspace, body.vscode-high-contrast-light .tw-workspace { --tw-muted: var(--hp-text-muted-default); }
 
+
+/* CGP-KNOW-D-012: recorded provenance uses words and glyph shape, never a score or hue-only cue. */
+.tw-provenance-chip { display: inline-flex; align-items: center; gap: var(--hp-space-1); max-width: 100%; box-sizing: border-box; padding: var(--hp-space-1) var(--hp-space-2); border: var(--ds-c-studio-taskworkspace-size-3) solid currentColor; border-radius: var(--hp-space-2); font-size: var(--hp-font-caption); color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default); vertical-align: middle; }
+.tw-provenance-chip [data-provenance-symbol] { flex: 0 0 auto; }
+.tw-provenance-chip strong { font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; }
+@media (forced-colors: active) { .tw-provenance-chip { color: CanvasText; background: Canvas; border-color: CanvasText; } }

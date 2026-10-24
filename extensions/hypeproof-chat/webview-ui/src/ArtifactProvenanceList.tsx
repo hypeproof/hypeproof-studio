@@ -34,7 +34,7 @@ export function ArtifactProvenanceList({ view, onAsk, onTrash, trashPending = fa
             const history = provenanceHistoryText(entry);
             return <li key={entry.path}><div style={ROW} data-provenance={entry.kind}>
               <span>{entry.path}</span>
-              <small><span aria-hidden="true" data-provenance-symbol>{entry.symbol}</span> <strong>{entry.label}</strong>{history && <> · 지금까지: {history}</>}</small>
+              <small><span className="tw-provenance-chip"><span aria-hidden="true" data-provenance-symbol>{entry.symbol}</span><strong>{entry.label}</strong></span>{history && <> · 지금까지: {history}</>}</small>
               {onTrash && <button type="button" className="tw-artifact-ask" data-trash-move="" aria-disabled={trashPending || undefined} aria-label={`휴지통으로 옮기기: ${entry.path}`} onClick={event => { if (!trashPending) onTrash(entry.path, event.currentTarget); }}>휴지통으로 옮기기</button>}
               {onAsk && <button type="button" className="tw-artifact-ask" aria-label={`${ASK_ABOUT_FILE_LABEL}: ${entry.path}`} onClick={() => onAsk(entry.path)}>{ASK_ABOUT_FILE_LABEL}</button>}
             </div></li>;
