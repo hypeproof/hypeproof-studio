@@ -7635,12 +7635,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         try {
           const delegationScope=JSON.stringify([this.turnRequestScope(),this.profileGeneration]);
           const sdkEnd = await runSdkCoach({
-            onDelegationControl:stop=>{if(stop)this.delegationControls.set(streamId,{scope:delegationScope,stop});else this.delegationControls.delete(streamId);},
-            onDelegationStop:state=>this.reportDelegationStop(streamId,delegationScope,ctrl,state),
             toolMode: mode,
             gatewayUrl: proxyUrl,
             effort,
             turnId: streamId,
+            onDelegationControl:stop=>{if(stop)this.delegationControls.set(streamId,{scope:delegationScope,stop});else this.delegationControls.delete(streamId);},
+            onDelegationStop:state=>this.reportDelegationStop(streamId,delegationScope,ctrl,state),
             fundingSource,
             lessonBinding: bindingKey,
             lessonStep: turnFocus.step,
