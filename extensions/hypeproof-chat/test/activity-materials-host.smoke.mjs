@@ -114,6 +114,8 @@ await t("adding a file copies it into <work folder>/자료/ and lists it with or
   assert.ok(mine, "listed");
   assert.equal(mine.originLabel, "나");
   assert.equal(mine.origin, "learner");
+  assert.ok(Number.isSafeInteger(mine.addedAt) && mine.addedAt > 0, "host exposes recorded learner add time");
+  assert.equal(item(s, i => i.origin === "instructor").addedAt, CARD.received_at, "host exposes receipt time");
   assert.equal(mine.selected, false, "never pre-selected");
   assert.match(s.notice, /자료에 넣었어요: 계획\.md/);
   assert.deepEqual(copy(f.hostWrites), [{ paths: [path.join(f.root, "자료", "계획.md")], actor: "learner_upload" }], "the copy is recorded as the learner's upload (내가 올림)");
@@ -208,7 +210,7 @@ await t("folder consent changed to \"AI 안 씀\" after selecting: the folder-co
 });
 
 // A ledger that records one AI write, 자료/요약.md; every other recorder call is a no-op.
-const aiRecorder = () => new Proxy({ view: async () => ({ entries: [{ path: "자료/요약.md", kind: "ai_created" }] }) }, { get: (o, k) => o[k] ?? (() => undefined) });
+const aiRecorder = () => new Proxy({ view: async () => ({ entries: [{ path: "자료/요약.md", kind: "ai_created", createdAt: 1700000000000, at: 1700000060000 }] }) }, { get: (o, k) => o[k] ?? (() => undefined) });
 const HELD = (f, titles) => f.posts.filter((e) => e.type === "streamError").some((e) => e.error === f.mat.MATERIALS_COPY.held(titles));
 const rejected = (f, text) => f.posts.some((e) => e.type === "inputRejected" && e.text === text);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -352,6 +354,7 @@ await t("folder binding: a selection made in folder A is never sent from folder 
   f.h.provenanceRecorder = aiRecorder;
   let s = await f.req("materialsRequest");
   const ai = item(s, (i) => i.origin === "ai");
+  assert.equal(ai.addedAt, 1700000000000, "host uses creation rather than latest edit time");
   assert.equal(ai.id, "ai:자료/요약.md", "control: an AI file, whose id is the same in both folders");
   s = await f.req("materialSelect", { scope: s.view.scope, id: ai.id, selected: true });
   f.h.resolveCoachCwd = () => other; // the coach folder changes; the task scope does not
