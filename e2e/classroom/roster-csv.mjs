@@ -31,7 +31,9 @@ const server = createServer(async (req, res) => { try { const parts = []; for aw
 server.listen(0, '127.0.0.1'); await once(server, 'listening');
 const BASE_ROSTER = ['student-a', 'student-b', 'student-c', 'legacy-test-seat'];
 // The fixture roster already holds student-a and student-b; s01 and s02 are new.
-const CSV = '\uFEFFhandle,name\r\ns01,김민지\r\nstudent-a,"에이, 학생"\r\n\r\n=HYPERLINK("x"),수식\r\n김서준,한글 handle\r\ns02,이서준\r\ns01,중복\r\nstudent-b,\r\n';
+// s02's name is markup: the page must show it as text and never parse it (names are untrusted CSV input).
+const HOSTILE_NAME = '<img src=x onerror=window.__xss=1>이서준';
+const CSV = '\uFEFFhandle,name\r\ns01,김민지\r\nstudent-a,"에이, 학생"\r\n\r\n=HYPERLINK("x"),수식\r\n김서준,한글 handle\r\ns02,' + HOSTILE_NAME + '\r\ns01,중복\r\nstudent-b,\r\n';
 const SENT = ['s01', 'student-a', 's02', 'student-b'];
 
 let browser;
@@ -59,7 +61,7 @@ try {
     await box.locator('input[type=file]').setInputFiles({ name: 'roster.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV, 'utf8') });
     await box.locator('[data-ri-summary]').filter({ hasText: '정상 4 · 확인 필요 3' }).waitFor();
     const rows = await box.locator('.ri-table tbody tr').evaluateAll((trs) => trs.map((tr) => ({ bad: tr.classList.contains('ri-bad'), cells: [...tr.children].map((td) => td.textContent) })));
-    assert.deepEqual(rows.map((r) => r.cells.slice(0, 3)), [['2', 's01', '김민지'], ['3', 'student-a', '에이, 학생'], ['5', '=HYPERLINK("x")', '수식'], ['6', '김서준', '한글 handle'], ['7', 's02', '이서준'], ['8', 's01', '중복'], ['9', 'student-b', '']]);
+    assert.deepEqual(rows.map((r) => r.cells.slice(0, 3)), [['2', 's01', '김민지'], ['3', 'student-a', '에이, 학생'], ['5', '=HYPERLINK("x")', '수식'], ['6', '김서준', '한글 handle'], ['7', 's02', HOSTILE_NAME], ['8', 's01', '중복'], ['9', 'student-b', '']]);
     assert.deepEqual(rows.map((r) => r.bad), [false, false, true, true, false, true, false]);
     assert.match(rows[2].cells[3], /^!확인 필요 — =, \+, -, @로 시작하는 칸/, 'formula row: icon + text, shown verbatim, refused');
     assert.match(rows[3].cells[3], /영문 소문자·숫자·하이픈/); assert.match(rows[5].cells[3], /2번째 줄과 같은 handle/);
@@ -79,7 +81,7 @@ try {
     await page.keyboard.press('Enter');
     await box.locator('[data-ri-count]').filter({ hasText: '추가됨 0 · 이미 있음 0 · 실패 4' }).waitFor();
     assert.deepEqual(appends[0], { users: SENT }, 'handles only, valid rows only, in file order');
-    assert.doesNotMatch(JSON.stringify(appends[0]), /김민지|이서준|에이|HYPERLINK|김서준/);
+    assert.doesNotMatch(JSON.stringify(appends[0]), /김민지|이서준|에이|HYPERLINK|김서준|img/);
     const failed = await box.locator('.ri-results li').allInnerTexts();
     assert.equal(failed.length, 4); for (const t of failed) assert.match(t, /^✕실패 · .+ — 결과를 확인하지 못했어요\. 다시 보내도 같은 학생이 두 번 등록되지는 않아요\.$/);
     assert.equal(await box.locator('[data-ri-retry]').isVisible(), true);
@@ -100,7 +102,9 @@ try {
     assert.equal(await box.locator('[data-ri-retry]').isVisible(), false, 'no failures, no retry button');
     assert.equal(await box.locator('input[type=file]').isDisabled(), false, 'inputs unlocked after the answer');
     // M1: the name sits in its own <bdi>, so its direction cannot reorder the rest of the line.
-    assert.deepEqual(await box.locator('.ri-results li bdi').allTextContents(), ['김민지', '에이, 학생', '이서준']);
+    assert.deepEqual(await box.locator('.ri-results li bdi').allTextContents(), ['김민지', '에이, 학생', HOSTILE_NAME]);
+    assert.equal(await box.locator('.ri-results img, .ri-table img').count(), 0, 'a name is never parsed as markup');
+    assert.equal(await page.evaluate(() => typeof window.__xss), 'undefined', 'a name never runs as script');
     // L2: the same CSV cannot be sent again; the button says why and the results stay.
     assert.equal(await send.isDisabled(), true, '추가 is off after a send'); assert.equal(await send.innerText(), '보냈어요 · CSV를 바꾸면 다시 보낼 수 있어요');
     await box.locator('[data-ri-preview]').click(); await box.locator('[data-ri-summary]').filter({ hasText: '정상 4' }).waitFor();
