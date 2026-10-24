@@ -7150,6 +7150,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/forced-colors.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/forced-colors-computed.smoke.mjs"
         }
       ]
     },

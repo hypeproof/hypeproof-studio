@@ -993,6 +993,11 @@ evidence only); VS Code high-contrast themes without OS forced colors, which do 
 media query (DES-CGP-DS-13's `--vscode-contrastBorder`, a separate row); text links keep the system
 `LinkText` and underline with no box; the Primary CTA is not otherwise distinguished from other
 buttons in forced colors; the citation trust tier still has no words in normal mode.
+Computed test (CGP-DS-D-013): `test/forced-colors-computed.smoke.mjs` bundles the real webview, emulates
+`forced-colors: active` in headless Chromium (personal and classroom, dark and light, 1420 and 800 px) and measures
+the cascade: every visible control has a 1px+ border on all four sides in `ButtonText` (`Highlight` when current,
+`GrayText` when disabled), the user bubble and the classroom assistant bubble have a `CanvasText` border, and the
+focus ring on a button and on the composer is 2px solid `Highlight`. Injected later `!important` rules must be caught.
 Test: `test/forced-colors.smoke.mjs` parses every webview CSS file, separates the forced-colors
 blocks from the rest, and checks the four required files have one, no system colour leaks into
 normal mode, every ring scope resets to `Highlight`, focus is an outline (never box-shadow) with only
