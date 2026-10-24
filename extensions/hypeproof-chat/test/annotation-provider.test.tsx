@@ -60,6 +60,7 @@ async function main() {
         annotationIdentity: async () => identity, annotationRefsValid: () => true,
         clearAnnotationMarkers: async () => { browserCalls.push(['clear']); },
         annotationMarker: async (n: number, r: unknown) => { browserCalls.push(['marker', n, r]); },
+        annotationComment: async (n: number, comment: string) => { browserCalls.push(['comment', n, comment]); },
         pickElement: async () => { browserCalls.push(['pickElement']); return ctx(); },
         pickRectangle: async () => { browserCalls.push(['pickRectangle']); return { contexts: [ctx()], crop: ctx().crop }; },
         currentTab: () => ({ url: 'http://127.0.0.1:5173/index.html', title: 'Preview' }), setTargetTab() {},
@@ -391,7 +392,7 @@ async function main() {
     const html = renderToStaticMarkup(<AnnotationTray annotations={[{ number: 1, kind: 'element', comment: '', stale: true, sentText: 's', imageDataUrl: null }, { number: 2, kind: 'rectangle', comment: '', stale: false, sentText: 's', imageDataUrl: null }]} onAction={() => {}} />);
     assert.equal(html.match(/maxLength="300"/g)?.length, 2);
     assert.equal(html.match(/role="alert"/g)?.length, 1);
-    assert.match(html, /role="alert">이전 화면의 표시예요\. 지우고 다시 골라 주세요\. 보내지 않아요\.</);
+    assert.match(html, /role="alert">표시 1: 이전 화면의 표시예요\. 지우고 다시 골라 주세요\. 보내지 않아요\.</);
     const full = renderToStaticMarkup(<AnnotationTray annotations={Array.from({ length: 10 }, (_, i) => ({ number: i + 1, kind: 'element' as const, comment: '', stale: false, sentText: '', imageDataUrl: null }))} onAction={() => {}} />);
     assert.equal(full.match(/<button type="button" disabled="">/g)?.length, 2, 'both add buttons are disabled at 10');
   }

@@ -4679,6 +4679,20 @@ element blocks of 1800 characters per annotation (the rest counted, not sent).
 The tray uses the shared design tokens, type scale, focus geometry and forced
 colours, with 44px targets.
 
+DES-ART-01 / CGP-ART-D-001 adds 24px circular page markers inside 44px keyboard
+and pointer targets. Their accessible name is `표시 {n}: {comment}`; Tab follows
+number order. Element markers follow their actual DOM node across scroll, resize
+and layout changes; rectangle markers retain document coordinates with a 2px
+dashed outline. A drag requires at least 8px Euclidean movement and nondegenerate
+width/height. Removed or navigated elements are not rebound to another node.
+Overlay nodes are excluded from element/rectangle captures. Comment updates are
+bound to marker instance and revision; clear invalidates pending marker creation.
+The composer-bottom tray shows editable chips in at most two rows, then scrolls.
+The numbered chip reveals its full outgoing text and crop below the list. Native
+IME intermediate text is kept locally until composition ends; host echo renders
+cannot overwrite it. Activity/task changes remount the tray to isolate drafts.
+
+
 Validation: `annotation-batch.test.tsx`, `annotation-host.test.tsx`,
 `annotation-provider.test.tsx`, `annotation-layout.test.tsx` (computed, real
 webview entry), existing

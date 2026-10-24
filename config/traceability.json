@@ -7522,8 +7522,15 @@
       "id": "ST-DES-CGP-AGENT-28",
       "stage": "design",
       "owner": "jayleekr",
-      "depends_on": ["ST-REQ-CHALK-AUTHORING"],
-      "sources": [{"path": "docs/requirements/chalk-authoring.md", "section": "### VER-03 확정 전 안내 문구 줄 비교 · 2026-10-20"}]
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/chalk-authoring.md",
+          "section": "### VER-03 확정 전 안내 문구 줄 비교 · 2026-10-20"
+        }
+      ]
     },
     {
       "id": "ST-IMP-CHALK-INSTRUCTION-DIFF",
@@ -12014,6 +12021,23 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/attempt-pager-navigation.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CGP-ART-D001",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANNOTATION-BATCH",
+        "ST-IMP-ANNOTATION-BATCH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/annotation-marker-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/annotation-layout.test.tsx"
         }
       ]
     }

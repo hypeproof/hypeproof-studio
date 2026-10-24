@@ -3239,7 +3239,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const a = this.annotationBatch.add(kind, captured.contexts, captured.crop);
       const annotationTab = this.mcpBrowser.currentTab();
       if (annotationTab) (this.annotationPreviewTabs ??= new Map()).set(annotationTab, scope);
-      await this.mcpBrowser.annotationMarker(a.number, a.crop!.clip);
+      await this.mcpBrowser.annotationMarker(a.number, a.crop!.clip, { comment: a.comment, kind, documentGeneration: a.contexts[0].documentGeneration, ...(kind === 'element' ? { backendNodeId: a.contexts[0].backendNodeId } : {}) });
       this.postAnnotations();
       await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
     } catch (err) {
@@ -6390,6 +6390,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (this.annotationBatch.remove(msg.number!)) await this.mcpBrowser?.annotationMarker(msg.number!, null).catch(() => {});
         } else if (msg.action === 'comment' && Number.isInteger(msg.number) && typeof msg.comment === 'string') {
           this.annotationBatch.edit(msg.number!, msg.comment);
+          await this.mcpBrowser?.annotationComment(msg.number!, msg.comment).catch(() => {});
         } else if (msg.action === 'element' || msg.action === 'rectangle') await this.pickElement(msg.action);
         this.postAnnotations();
         return;
