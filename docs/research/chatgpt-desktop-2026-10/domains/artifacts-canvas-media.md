@@ -217,3 +217,12 @@ the tab itself cannot be prevented. Drafts are retained until explicit discard.
 Returning to a reopened page still requires the existing generation/version checks
 before sending. Window/process termination persistence is outside this slice.
 PI #2: the learner owns the decision to keep or discard their unsent judgment.
+
+### REQ-ART-21 implementation contract (CGP-ART-R-021)
+
+Studio requirement: `REQ-STUDIO-WRITE-APPROVAL-CHANGE` in `docs/studio-requirements.md` (PI#2). Implementation choices (agent-selected 2026-10-26, recorded in `decisions.md`):
+
+- Surface: the existing optional write approval dialog (REQ-E1 / DES-CGP-AGENT-05). `writeFile` stays out of the default `requireApprovalFor`, so the summary appears only where a machine opted into write approval. No new approval is added.
+- Source: `diffGuard` run in the host before the dialog opens, on the file as it is now and on the text the call leaves behind (Write `content`; Edit/MultiEdit replacements with the CLI's rules). Share changed = `changed_ratio`; units = lines changed and new lines. A rewrite is `changed_ratio > REWRITE_RATIO` (0.5) and is warned with an icon: "거의 전부 바뀌어요" at 80% or more, "절반 넘게 바뀌어요" between, so the label never overstates the percentage beside it.
+- Fail closed on the negative clause: an existing file whose change cannot be computed (larger than 2 MB, not UTF-8 text, unreadable, NotebookEdit, a replacement the CLI would refuse: not found, ambiguous, or a no-op, a webview-origin request, or several targets for one call) shows "얼마나 바뀌는지 미리 알 수 없어요 · {reason}" in the same warning style. A file created, changed or removed while the dialog is open is refused after the answer (sha256 fingerprint; size and mtime above 64 MB), so no overwrite is approved against a summary of other bytes.
+- Not built here: DES-ART-21's 4-step bar and "바뀐 곳 보기" diff link (CGP-ART-D-021 owns them). The gap between approval and the CLI's write is the one REQ-E1 already records.

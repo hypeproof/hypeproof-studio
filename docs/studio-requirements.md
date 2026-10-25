@@ -3952,6 +3952,33 @@ can answer once. Missing/hidden UI, reload, disposal, timeout, terminal events,
 account changes, and scope changes across either asynchronous credential read
 cannot approve a stale write. Two simultaneous requests do not replace each other.
 
+### REQ-STUDIO-WRITE-APPROVAL-CHANGE (CGP-ART-R-021 / REQ-ART-21)
+
+Extends REQ-E1's optional write approval (REQ-STUDIO-WRITE-APPROVAL-CHIPS); the default
+`requireApprovalFor` still has no `writeFile`, so nothing changes for a machine that did
+not opt in. Product Intent PI#2 (the learner judges a delegated change before it lands):
+when the coach asks approval to overwrite an existing workspace file, the dialog shows,
+for each such file, a before and after summary from `diffGuard` computed in the host
+before the dialog opens and before the write: "바뀌는 정도: {pct}%" (`changed_ratio`) and
+the units changed ("바뀌는 줄 N개 · 새 줄 M개"; "내용은 그대로예요" when nothing differs;
+"글자는 그대로, 띄어쓰기·줄바꿈만 달라져요" when only whitespace differs). A rewrite
+(`changed_ratio` above diffGuard's `REWRITE_RATIO`, 0.5) gets a warning icon and warning
+colour, never colour alone: "거의 전부 바뀌어요" at 80% or more, "절반 넘게 바뀌어요"
+between, so the label never overstates the percentage beside it. A file that does not
+exist yet gets no summary. When the change cannot be computed for an existing file (over
+2 MB, not UTF-8 text, unreadable, NotebookEdit, a replacement the CLI would refuse (not
+found, found more than once without `replace_all`, or identical before and after),
+several targets in one call, or a webview-origin request, whose text is never trusted),
+the dialog says "얼마나 바뀌는지 미리 알 수 없어요 · {reason}" in the same warning style,
+so no overwrite is approved with no summary shown. The file's sha256 (or absence) at
+prompt time must still hold after the answer; a file created, changed or removed while
+the dialog is open refuses the write (files over 64 MB compare size and modification time
+only). The gap between this re-check and the CLI's own write is the one REQ-E1 records. The call's text stays in the host; the webview gets
+only the summary. Text is at least 14px, the section stays inside the dialog at 320px,
+and forced colours draw its edge and warning in CanvasText. Not built here: DES-ART-21's
+4-step bar and diff link (CGP-ART-D-021). Tests: `test/write-approval-change.smoke.mjs`,
+`test/write-approval-change-layout.smoke.mjs`, `test/write-approval-dialog.test.tsx`.
+
 ### Version side panel (CGP-KNOW-D-017 / DES-KNOW-30)
 
 The existing history command opens a local side panel on every eligible learner seat.

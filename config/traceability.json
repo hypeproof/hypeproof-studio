@@ -13226,6 +13226,75 @@
           "path": "extensions/hypeproof-chat/test/task-archive-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-WRITE-APPROVAL-CHANGE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WRITE-APPROVAL-CHIPS"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-WRITE-APPROVAL-CHANGE (CGP-ART-R-021 / REQ-ART-21)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md",
+          "section": "### REQ-ART-21 implementation contract (CGP-ART-R-021)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-WRITE-APPROVAL-CHANGE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WRITE-APPROVAL-CHANGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/writeApprovalChange.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/writeApprovalPrompt.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoachHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/WriteApprovalDialog.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/writeApprovalDialog.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-WRITE-APPROVAL-CHANGE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WRITE-APPROVAL-CHANGE",
+        "ST-IMP-WRITE-APPROVAL-CHANGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/write-approval-change.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/write-approval-change-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/write-approval-dialog.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/modal-geometry.smoke.mjs"
+        }
+      ]
     }
   ]
 }

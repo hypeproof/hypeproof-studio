@@ -222,6 +222,7 @@ import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type Artifac
 import { browserRememberLabel, browserTarget, cleanName } from "./browserTargetHost";
 import { WriteApprovalRequest } from "./writeApprovalPrompt";
 import { writePathLine, writePathEntries, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
+import { asWriteEdit, existingFingerprint, readExistingText, writeChangeView } from "./writeApprovalChange";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
@@ -1027,14 +1028,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private writeApprovalScope():string {
     return JSON.stringify([activityConnections(this.context)?.scope,this.currentTaskStore?.()?.getView().activeTaskId,this.resolveCoachCwd(),this.cachedProfile?.profile_id,this._instructorMode.isInstructor]);
   }
-  private async confirmWriteFiles(id:string,title:string,verb:string,entries:WritePathEntry[]):Promise<boolean> {
+  private async confirmWriteFiles(id:string,title:string,verb:string,entries:WritePathEntry[],payload?:unknown):Promise<boolean> {
     this.writeApprovalRequest.invalidate();
     const scope=this.writeApprovalScope(), generation=this.writeApprovalRequest.generation;
     const current=()=>scope===this.writeApprovalScope() && generation===this.writeApprovalRequest.generation;
     const token=await this.context.secrets.get(TOKEN_KEY);
     if(!current())return false;
-    const approved=await this.writeApprovalRequest.confirm({id,title,verb,files:entries.map(writePathLine)});
+    // REQ-STUDIO-WRITE-APPROVAL-CHANGE (CGP-ART-R-021): every existing file the call overwrites is summarised from
+    // diffGuard before the dialog opens. The call's text applies only when it names one file; otherwise an
+    // existing file reads "미리 알 수 없어요". Each file's state is fingerprinted, and an answer is honoured only when
+    // every file is still what the summary described (a file created, removed or changed meanwhile is refused).
+    const edit=entries.length===1?asWriteEdit((payload as {edit?:unknown}|null|undefined)?.edit):null;
+    const existing=entries.map(e=>readExistingText(e.key));
+    const changes=entries.map((e,i)=>writeChangeView(existing[i],edit,e.display));
+    const approved=await this.writeApprovalRequest.confirm({id,title,verb,files:entries.map(writePathLine),changes});
     if(!approved)return false;
+    if(entries.some((e,i)=>existingFingerprint(e.key)!==existing[i].fingerprint))return false;
     const after=await this.context.secrets.get(TOKEN_KEY);
     return token===after && current();
   }
@@ -8801,6 +8810,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleActionRequest(req: ActionRequest): Promise<void> {
+    // A webview-origin write never supplies the text the approval summarises (CGP-ART-R-021): only host-built
+    // requests (sdkToolToActionRequest) do, so an existing file here reads "미리 알 수 없어요".
+    if (req.kind === "writeFile" && req.payload && typeof req.payload === "object") {
+      const { edit: _ignored, ...rest } = req.payload as Record<string, unknown>;
+      req = { ...req, payload: rest };
+    }
     const approved = await this.resolveActionApprovalTracked(req);
     void this.post({ type: "actionResult", requestId: req.requestId, approved });
   }
@@ -9015,7 +9030,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // DES-CGP-AGENT-05 changes presentation only; the opt-in policy and path gates above remain.
     if (req.kind === "writeFile") {
       onPrompted?.();
-      return this.confirmWriteFiles(randomId(),title,verb,writeEntries);
+      return this.confirmWriteFiles(randomId(),title,verb,writeEntries,req.payload);
     }
     onPrompted?.();
     const pick = await vscode.window.showWarningMessage(

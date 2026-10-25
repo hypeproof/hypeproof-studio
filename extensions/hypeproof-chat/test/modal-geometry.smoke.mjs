@@ -47,7 +47,7 @@ import { ActivityTrashPanel } from "./ActivityTrashPanel";
 window.__keep = [LocalReview, StartPage, App];
 const which = window.__kind;
 const outbound = { id: 'r1', public: true, notes: [], excluded: '포함하지 않는 것: 비밀번호, 다른 파일', sections: [{ recipient: '갤러리 · site.invalid', items: [{ id: 'a', label: '아주아주긴이름의한글파일이름이어서줄바꿈이필요한파일.html', bytes: 1200 }] }] };
-const write = { id: 'w', title: '파일을 바꿔도 될까요?', verb: '바꿈', files: ['a.html', '긴이름'.repeat(20) + '.md'] };
+const write = { id: 'w', title: '파일을 바꿔도 될까요?', verb: '바꿈', files: ['a.html', '긴이름'.repeat(20) + '.md'], changes: [{ kind: 'measured', percent: '82%', ratio: 0.82, changedLines: 9, addedLines: 4, rewrite: true, almostAll: true, spacingOnly: false }, { kind: 'unknown', reason: 'no-match' }] };
 function Prefs() { const [o, s] = useState(true); return <ChatPreferences open={o} onClose={() => s(false)}><p>설정 내용</p><details open><summary>사용량</summary><p>내용</p></details></ChatPreferences>; }
 function Page() {
   if (which === 'write') return <WriteApprovalDialog prompt={write} onAnswer={() => {}} />;
