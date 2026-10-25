@@ -267,6 +267,10 @@ Layout rule applied to all blocks (DES from CGP-LEARN-11): container ≥ 448 px 
 text; < 448 px (VS Code side rail is usually below this) → stacked, diagram full width then caption; at 320 px
 width nothing scrolls horizontally and captions use the short variant.
 
+REQ/DES-CGP-LEARN-14 as built (2026-10-26, DEC-LEARN-14): Chalk `/authoring` asks once per browser
+(`localStorage`, no Service store), pre-fills only lessons made with 새 강의 만들기, maps 초 1–6 → lv1, 중/고 → lv2,
+성인 → adult and 유아 → no tier, and adds a per-lesson 대상 단계 select. Owning requirement: chalk-authoring CH-01.
+
 ## 4. Open questions / unknowns
 
 1. **Who generates blocks?** ChatGPT appears to let the model choose type + params at answer time
