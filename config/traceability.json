@@ -9264,6 +9264,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/AttachmentFailures.tsx"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/SketchDialog.tsx"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
         }
       ]
@@ -9294,6 +9297,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/attachment-failure-render.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/sketch-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/sketch-browser.smoke.mjs"
         }
       ]
     },

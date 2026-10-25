@@ -7,7 +7,7 @@ import { imeComposing } from './imeGuard';
 import { useMenuTypeahead } from './menuTypeahead';
 
 /** Selection belongs to the next draft. Execution status comes from host tool events. */
-export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAttachFile, webSearchItem = true }: {
+export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAttachFile, onSketch, webSearchItem = true }: {
   mode: TurnToolMode;
   onMode: (mode: TurnToolMode) => void;
   webSearch?: { available: boolean; reason?: string };
@@ -15,6 +15,7 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
   onAttach?: () => void;
   /** CGP-CHAT-R-011 — attach a work-folder text file to the next message. */
   onAttachFile?: () => void;
+  onSketch?: () => void;
   /** False on a classroom seat, whose menu carries only the file item. */
   webSearchItem?: boolean;
 }) {
@@ -41,6 +42,7 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
       items[next]?.focus();
     }}>
       {onAttach && <button type="button" role="menuitem" onClick={() => { close(); onAttach(); }}><ChatIcon kind="image" /><span>이미지 첨부<small>이 메시지에 사진이나 화면 추가</small></span></button>}
+      {onSketch && <button type="button" role="menuitem" onClick={() => { close(); onSketch(); }}><ChatIcon kind="image" /><span>그려서 보여주기<small>그림을 그려 이 메시지에 붙여요</small></span></button>}
       {onAttachFile && <button type="button" role="menuitem" onClick={() => { close(); onAttachFile(); }}><ChatIcon kind="file" /><span>작업 폴더 파일 붙이기<small>글로 된 파일 내용을 다음 메시지에 함께 보내요</small></span></button>}
       {webSearchItem && <button type="button" role="menuitemcheckbox" aria-checked={mode === 'web-search'} aria-disabled={locked || !webSearch?.available} onClick={() => {
         if (locked || !webSearch?.available) return;

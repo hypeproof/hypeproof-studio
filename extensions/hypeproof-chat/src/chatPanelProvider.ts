@@ -4477,10 +4477,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** Actual safe writes before optimistic UI send; retries use cached successful destinations. */
-  private prepareAttachments(files: Array<{ id: string; stageId?: string; dataUrl?: string }>): { relPaths: string[]; pastedPaths: string[]; failures: import("./attachmentFailure").AttachmentFailure[]; stageIds: string[] } {
+  private prepareAttachments(files: Array<{ id: string; stageId?: string; dataUrl?: string }>, sketch = false): { relPaths: string[]; pastedPaths: string[]; failures: import("./attachmentFailure").AttachmentFailure[]; stageIds: string[] } {
     const relPaths: string[] = [], pastedPaths: string[] = [], failures: import("./attachmentFailure").AttachmentFailure[] = [], stageIds: string[] = [];
     if (!Array.isArray(files) || files.length > 14 || files.some(f=>!f || typeof f.id!=="string" || f.id.length>128) || files.filter(f=>f.dataUrl!==undefined).length>4 || files.filter(f=>f.stageId!==undefined).length>10) return { relPaths, pastedPaths, failures: [{id:"limit",name:"첨부 파일",reason:ATTACHMENT_FAILURE_COPY.tooMany,final:true}], stageIds };
     const root = this.resolveCoachCwd();
+    if (sketch) {
+      const parsed = files.length === 1 && !files[0].stageId && typeof files[0].dataUrl === 'string' && files[0].dataUrl.length <= 12 * 1024 * 1024 ? parsePastedImage(files[0].dataUrl) : null;
+      const validPng = parsed?.mime === 'image/png' && Buffer.from(parsed.base64, 'base64').subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+      if (!root || !validPng || !this.isImagePasteEnabled()) return { relPaths, pastedPaths, stageIds, failures: [{id:files[0]?.id ?? 'sketch',name:'그림',reason:!root ? '작업 폴더를 연 뒤 그림을 붙여 주세요.' : '지금은 이 그림을 저장할 수 없어요. 이미지 권한과 그림을 확인해 주세요.'}] };
+    }
     if (files.length) this.ensureAttachmentStaging();
     for (const file of files) {
       const name = file.stageId ? this.imageStaging?.name(file.stageId) ?? "사진" : "붙인 이미지";
@@ -4498,7 +4503,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (!parsed) throw new Error("attachment_format");
           stageId = `paste-${createHash("sha256").update(file.dataUrl).digest("hex").slice(0,40)}`;
           const staging=this.ensureAttachmentStaging();
-          if (!staging.has(stageId)) staging.stage(stageId, `붙인-이미지.${parsed.ext}`, Buffer.from(parsed.base64,"base64"));
+          if (!staging.has(stageId)) staging.stage(stageId, sketch ? pastedImageName(new Date(), 1, "png") : `붙인-이미지.${parsed.ext}`, Buffer.from(parsed.base64,"base64"));
         }
         if (!stageId || !this.imageStaging) throw new Error("missing_stage");
         const result = this.imageStaging.commit([stageId], root, file.dataUrl ? PASTED_IMAGE_DIR : ATTACHED_IMAGE_DIR);
@@ -6435,7 +6440,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true); // CGP-CHAT-R-011 — a fresh send may carry the attached file
         return;
       case "prepareAttachments": {
-        const result = this.prepareAttachments(msg.files);
+        const result = this.prepareAttachments(msg.files, msg.sketch === true);
         await this.post({type:"attachmentsPrepared",requestId:msg.requestId,failures:result.failures}); return;
       }
       case "stageImage":
