@@ -5799,3 +5799,41 @@ text at the 14px floor. Tests: `extensions/hypeproof-chat/test/chat-find.smoke.m
 Chromium: personal and classroom, dark/light, 320/800/1420 px, forced colours; fails
 under `FOCUS_REQUIRE_BROWSER=1` without a browser). This supports PI#1: the learner can
 re-read and check what was said, without asking the coach to repeat it.
+
+## Personal workspace metadata — REA W01 partial
+
+Approved REA W01 adds a signed-in personal-space entry to the existing start page
+(REQ-L13 account boundary; Product Intent PI#1 and PI#5). It exposes learner naming
+and ownership without showing capability labels. This slice stores and reopens
+**project metadata only**; it is not the full REA workspace requirement or evidence
+of conversation/file synchronization.
+
+- Only an enabled existing account runtime and a signed-in identity expose the
+  entry. Viewing uses `GET /v1/me/workspaces`; an empty result creates nothing.
+  `개인 공간 만들기` explicitly calls the idempotent `POST` with `{}`. The client
+  accepts only the current account's personal workspace.
+- The learner names a project (trimmed 1–160 JS characters). Creation sends a
+  host-generated mutation ID; retry after a lost reply keeps the exact ID/title
+  while the host session remains open. A different title cannot overwrite the
+  pending request. The host never sends account credentials to the webview.
+- The list comes from the Service. `다시 열기` refreshes that account's list and
+  opens the matching saved title record; a missing record is recoverable. The UI
+  states that no conversation/file is synchronized or automatically imported.
+- Account changes clear the list, selection and retry request. Logout clears and
+  fences them before remote revocation finishes. Late responses and intents
+  tagged with the previous account cannot paint or mutate the next account.
+- Network/auth refusal offers a retry or existing account refresh/sign-in path.
+  Metadata actions never activate a pass, send an AI request, open a local folder,
+  import local activities, or change runtime authority. Existing free/local entry
+  remains independent.
+
+Implementation: `src/personalSpace.ts`, the start-page bridge, and
+`webview-ui/src/PersonalSpace.tsx` under `extensions/hypeproof-chat/`.
+Focused evidence: `test/personal-space.test.mjs` (persistence across a new client,
+exact mutation retry, validation, auth failures and account-response fences),
+`test/personal-space-host.test.mjs` (scoped bridge and immediate logout), and
+`test/personal-space-render.test.tsx` (explicit actions, retry UI, escaped titles,
+metadata reopening and busy controls). These use synthetic accounts/Service
+responses. Production deployment, installed-app acceptance and real account data
+are **NOT RUN**. Retry intent is host-memory only: after a host restart, refresh
+and inspect the saved list before creating the same title again.

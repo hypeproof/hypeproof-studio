@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import vm from 'node:vm';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const bundle = await build({ entryPoints: ['src/startPage.ts'], bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
+const states = [], calls = [], commands = [];
+let identity = 'alice', workspace, revoked;
+const account = { view: () => identity ? { status: 'signedIn', account: { id: identity } } : { status: 'signedOut' }, accessToken: async () => 'host-secret', matches: () => true,
+  signOut: async () => { await new Promise(resolve => { revoked = resolve; }); identity = undefined; page.accountChanged(); } };
+const ctx = { workspaceState: { keys: () => [] }, extension: { packageJSON: { version: 'test' } } };
+const chat = { ensureProfile: async () => null, profileFailure: () => null };
+const vscode = { workspace: { workspaceFolders: [], getConfiguration: () => ({ get: (key, fallback) => key === 'proxyUrl' ? 'http://localhost/v1' : key === 'siteBase' ? 'http://localhost' : fallback }) }, commands: { executeCommand: async command => commands.push(command) } };
+const fetch = async (url, init) => {
+  calls.push({ url, init });
+  let body;
+  if (url.endsWith('/workspaces')) {
+    if (init.method === 'POST') workspace ??= { id: 'w', kind: 'personal', name: '개인 공간', owner_account_id: identity, created_at: 1 };
+    body = init.method === 'POST' ? { workspace } : { workspaces: workspace ? [workspace] : [] };
+  } else body = { projects: [] };
+  return new Response(JSON.stringify(body));
+};
+const module = { exports: {} };
+vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, Buffer, AbortSignal, URL, process, TextEncoder, fetch });
+const page = new module.exports.StartPage(ctx, chat, async () => { throw Error('no activity start allowed'); }, undefined, account);
+page.panel = { webview: { postMessage: async message => states.push(message) } };
+await page.handle({ type: 'personalSpaceEnsure', accountId: 'old-account' });
+assert.equal(calls.length, 0, 'stale account UI cannot mutate the new account');
+await page.handle({ type: 'personalSpaceOpen', accountId: 'alice' });
+assert.equal(calls.length, 1); assert.equal(calls[0].init.method, 'GET');
+await page.handle({ type: 'personalSpaceEnsure', accountId: 'alice' });
+assert.equal(states.at(-1).state.personalSpace.workspace.id, 'w');
+assert.ok(!JSON.stringify(states).includes('host-secret'));
+const signOut = page.handle({ type: 'accountSignOut' });
+await new Promise(resolve => setImmediate(resolve));
+assert.deepEqual(JSON.parse(JSON.stringify(states.at(-1).state.personalSpace)), { opened: false, projects: [] });
+const count = calls.length;
+await page.handle({ type: 'personalSpaceEnsure', accountId: 'alice' });
+assert.equal(calls.length, count, 'logout clears and disables metadata before remote revocation resolves');
+revoked(); await signOut;
+assert.deepEqual(commands, []);
+console.log('PASS personal-space host bridge: account-scoped dispatch, explicit creation, host-only token, immediate logout fence, no local activity effects');
