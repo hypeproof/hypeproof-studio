@@ -23,7 +23,7 @@ export function SteerDelivery({ delivery, messages, streamFor, streaming, sendPe
   const ran = useRef(false);
   useEffect(() => {
     if (accepted) return;
-    if (streaming && request) ran.current = true;
+    if (streaming) ran.current = true;
     else if (!streaming && ran.current) onDone();
   }, [accepted, streaming, request, onDone]);
   const sawPending = useRef(!!sendPending);

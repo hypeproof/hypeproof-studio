@@ -1618,6 +1618,12 @@ the transcript. Reduced motion removes it without animation. Refusal, pre-start 
 activity/task changes clear this presentation; existing host recovery still preserves the text.
 The passive row has no resend/cancel controls and never sends anything. If the disappearing steer
 button still owned focus, focus returns to the composer; a later focus choice is preserved.
+The row also clears once its turn ends without a `streamStart` that names it (an app-written reply,
+no stream, an error or a stop), including when the history is reset between the steered send and
+the turn's start. The instructor seat gets the same row: App passes `streamFor` to the instructor
+panel. `sendPending` is deliberately not passed there, so the instructor composer is not locked
+while a send is pending. `test/steer-delivery-app.smoke.mjs` drives the real App with host messages
+in the personal, classroom and instructor seats through ten ways a turn ends.
 `test/steer-delivery-computed.smoke.mjs` mounts the real panel/built styles in personal/classroom,
 dark/light, 320/800/1420 px and forced colors; it measures the secondary button, focus ring,
 host-confirmed animation duration/removal and transcript, with refusal/scope/reduced-motion cases.

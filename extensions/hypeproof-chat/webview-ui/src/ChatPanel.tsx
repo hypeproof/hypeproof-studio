@@ -6,7 +6,6 @@ import { PastedDraft } from './PasteChip';
 import { fullDraft, visibleDraft, editVisible, replaceVisible, changePaste, longPaste, type DraftPart } from './pastedDraft';
 import { TurnBoundary } from './TurnBoundary';
 import { ClassWindowNotice } from "./ClassWindowNotice";
-import { useCallback } from 'react';
 import { SteerDelivery, type SteerDeliverySnapshot } from './SteerDelivery';
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
