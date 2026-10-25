@@ -447,7 +447,6 @@ await t("folder consent \"AI 안 씀\" (personal activity): adding and selecting
   assert.ok(s.view.items.every((i) => !i.selected));
 });
 
-// await t("wiring: the config flag follows the file-attach gate", ...). Uses the file's own fixture, t, item, put, outside, copy.
 // #2641: a dropped file goes through the same gates and the same list as a pick.
 const dropped = (name, text) => ({ name, size: Buffer.byteLength(text), base64: Buffer.from(text).toString("base64") });
 const materialsDir = (f) => path.join(f.root, "자료");

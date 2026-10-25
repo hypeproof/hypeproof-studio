@@ -219,7 +219,6 @@ t("#2641: a file over the cap is never read; the host gets only its name and siz
   await act(async () => { root.unmount(); });
 });
 
-// t("ChatPanel draws the list only with the host's materials flag, ..."). Uses the file's own mountPanel, hostSays, card, drag, textFile, settle, drops, FakeFile.
 t("#2641: a file whose read fails still gets an answer: the host gets its name and size, no bytes", async () => {
   const root = await mountPanel();
   await hostSays({ type: "materialsState", view: VIEW });
