@@ -48,6 +48,8 @@ export const MATERIALS_MAX_SELECTED = 3;
 /** At most this many learner items per activity. */
 export const MATERIALS_MAX_ITEMS = 50;
 
+/** #2641 — the webview reads a dropped file only under this size; the host checks the bytes again (FILE_ATTACH_MAX_BYTES). */
+export const MATERIALS_DROP_MAX_BYTES = 100 * 1024;
 export const MATERIALS_COPY = {
   note: "고른 자료만 다음 질문과 함께 AI에게 보내요. 고르지 않은 자료는 보내지 않아요.",
   instructorLocked: "강사가 보낸 자료는 목록에서 뺄 수 없어요.",
@@ -69,4 +71,6 @@ export const MATERIALS_COPY = {
   added: (title: string) => `자료에 넣었어요: ${title}`,
   removed: (title: string) => `목록에서 뺐어요: ${title}. 파일은 작업 폴더에 그대로 있어요.`,
   removedUrl: (title: string) => `목록에서 뺐어요: ${title}`,
+  /** #2641 — several files dropped at once: none is added. */
+  dropOne: "파일은 한 번에 하나씩 놓아 주세요.",
 } as const;

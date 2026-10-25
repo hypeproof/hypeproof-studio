@@ -5,10 +5,14 @@
 //
 // Rail rules (SX-04/05): closed by default, no Primary, outside the message stream. Who added an
 // item is said in words (추가: 나/강사/AI); an instructor's item has no 빼기.
+//
+// #2641 — the open card also takes one dropped file, the same file 파일 넣기 takes. A webview File has no
+// path, so its bytes go to the host as base64 and the host runs the picker's checks on them. The drop
+// stops here: it never reaches the shell, which would attach it to the composer instead.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import type { MaterialItemView, MaterialsView } from '../../src/activityMaterialsView';
-import { MATERIALS_COPY } from '../../src/activityMaterialsView';
+import { MATERIALS_COPY, MATERIALS_DROP_MAX_BYTES } from '../../src/activityMaterialsView';
 import { ChatIcon } from './ChatDetails';
 import { imeComposing } from './imeGuard';
 import { onHostMessage, postToHost } from './vscode';
@@ -42,7 +46,18 @@ function useMaterials() {
     pending.current = requestId; setBusy(true); setError(''); setNotice('');
     postToHost(build(requestId));
   };
-  return { view, error, notice, busy, ask };
+  /** A refusal decided here, with no host request (several files in one drop). */
+  const refuse = (message: string) => { setError(message); setNotice(''); };
+  return { view, error, notice, busy, ask, refuse };
+}
+
+const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.items ?? []).some(item => item.kind === 'file');
+
+function base64Of(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
 }
 
 function selectLabel(item: MaterialItemView): string {
@@ -58,12 +73,36 @@ function MaterialAddedTime({ at }: { at?: number }) {
 }
 
 export function MaterialsPanel() {
-  const { view, error, notice, busy, ask } = useMaterials();
+  const { view, error, notice, busy, ask, refuse } = useMaterials();
   const [url, setUrl] = useState('');
+  const [dropping, setDropping] = useState(false);
   if (!view) return null;
   const chosen = view.items.filter(item => item.selected).length;
   const submitUrl = () => { if (url.trim()) ask(requestId => ({ type: 'materialAddUrl', requestId, url })); };
-  return <details className="hp-rail-lesson hp-materials" data-testid="materials">
+  // Only the open card is a drop target; the closed summary row leaves a drop to the shell.
+  const target = (event: DragEvent<HTMLDetailsElement>) => event.currentTarget.open && hasFiles(event);
+  const onDragOver = (event: DragEvent<HTMLDetailsElement>) => {
+    if (!target(event)) return;
+    event.preventDefault(); event.stopPropagation();
+    if (!dropping) setDropping(true);
+  };
+  const onDragLeave = (event: DragEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+  };
+  const onDrop = (event: DragEvent<HTMLDetailsElement>) => {
+    if (!target(event)) return;
+    event.preventDefault(); event.stopPropagation();
+    setDropping(false);
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (files.length !== 1) { refuse(MATERIALS_COPY.dropOne); return; }
+    const [file] = files;
+    // Over the cap the bytes are never read: the host answers with the picker's size refusal.
+    const read = file.size > MATERIALS_DROP_MAX_BYTES ? Promise.resolve('') : file.arrayBuffer().then(base64Of);
+    void read.then(base64 => ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64 })))
+      .catch(() => ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64: '' })));
+  };
+  return <details className="hp-rail-lesson hp-materials" data-testid="materials" data-drop-active={dropping ? '' : undefined}
+    onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
     <summary>자료 {view.items.length}개{chosen ? ` · 이번 질문에 ${chosen}개 넣음` : ''}</summary>
     <p className="hp-materials-note">{MATERIALS_COPY.note}</p>
     {view.items.length > 0 && <ul className="hp-materials-list" aria-label="자료 목록">

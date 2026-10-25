@@ -188,28 +188,11 @@ export function addMaterialFile(root: string, source: string): { ok: true; rel: 
     if (text === null) return refuseFile("binary");
     if (text.trim() === "") return refuseFile("empty-text");
     if (text.length > FILE_ATTACH_MAX_CHARS) return refuseFile("too-many-chars");
-    try {
-      const d = fs.lstatSync(dir);
-      if (d.isSymbolicLink() || !d.isDirectory()) return refuseFile("materials-folder");
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      fs.mkdirSync(dir);
-    }
+    if (!materialsFolderUsable(dir)) return refuseFile("materials-folder");
     // Already directly in 자료/ (the picker may spell the folder differently): list it in place.
     // The entry's own spelling (an NFD name stays NFD), so the list finds it in the folder.
     if (fs.realpathSync(path.dirname(source)) === dir) return { ok: true, rel: `${MATERIALS_DIR}/${path.basename(source)}`, bytes, copied: false };
-    const ext = path.extname(name), stem = name.slice(0, name.length - ext.length);
-    for (let n = 1; n <= 100; n++) {
-      const candidate = n === 1 ? name : `${stem} (${n})${ext}`;
-      try {
-        // `wx` = O_CREAT|O_EXCL: never replaces a file and never follows a link at the target.
-        fs.writeFileSync(path.join(dir, candidate), bytes, { flag: "wx" });
-        return { ok: true, rel: `${MATERIALS_DIR}/${candidate}`, bytes, copied: true };
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      }
-    }
-    return refuseFile("full");
+    return writeMaterialCopy(dir, name, bytes);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     if (code === "ENOENT") return refuseFile("missing");
@@ -219,6 +202,66 @@ export function addMaterialFile(root: string, source: string): { ok: true; rel: 
     return refuseFile("unreadable");
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+/** `자료/` must be a real folder (created when missing): a link or a file there is refused. */
+function materialsFolderUsable(dir: string): boolean {
+  try {
+    const d = fs.lstatSync(dir);
+    return !d.isSymbolicLink() && d.isDirectory();
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    fs.mkdirSync(dir);
+    return true;
+  }
+}
+
+/** Write the copy into `자료/` without ever replacing a file: an occupied name gets " (2)", " (3)" … */
+function writeMaterialCopy(dir: string, name: string, bytes: Uint8Array): { ok: true; rel: string; bytes: Uint8Array; copied: true } | { ok: false; cause: MaterialFileRefusalCause; reason: string } {
+  const ext = path.extname(name), stem = name.slice(0, name.length - ext.length);
+  for (let n = 1; n <= 100; n++) {
+    const candidate = n === 1 ? name : `${stem} (${n})${ext}`;
+    try {
+      // `wx` = O_CREAT|O_EXCL: never replaces a file and never follows a link at the target.
+      fs.writeFileSync(path.join(dir, candidate), bytes, { flag: "wx" });
+      return { ok: true, rel: `${MATERIALS_DIR}/${candidate}`, bytes, copied: true };
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    }
+  }
+  return refuseFile("full");
+}
+
+/**
+ * #2641 — a file dropped on the open 자료 panel. A webview `File` has no path, so the webview sends
+ * the name, the size it saw and the bytes as base64 (empty when the file is over the cap, so it is
+ * never read into memory). The same rules as the picker apply to the bytes: the name rules of
+ * `materialFileName`, 100 KB, valid UTF-8, 20,000 characters, not empty, and a `wx` copy into
+ * `자료/` that never overwrites.
+ */
+export function addMaterialDrop(root: string, drop: { name: string; size: number; base64: string }): { ok: true; rel: string; bytes: Uint8Array; copied: true } | { ok: false; cause: MaterialFileRefusalCause; reason: string } {
+  try {
+    const name = materialFileName(drop.name);
+    if (!name || drop.name.includes("/") || drop.name.includes("\\")) return refuseFile("name");
+    // Checked before decoding: base64 of 100 KB is at most 136,536 characters.
+    if (drop.size > FILE_ATTACH_MAX_BYTES || drop.base64.length > Math.ceil(FILE_ATTACH_MAX_BYTES / 3) * 4) return refuseFile("too-large");
+    const bytes = Buffer.from(drop.base64, "base64");
+    // No bytes for a non-empty file: the webview could not read it.
+    if (bytes.length === 0) return refuseFile(drop.size > 0 ? "unreadable" : "empty");
+    if (bytes.length > FILE_ATTACH_MAX_BYTES) return refuseFile("too-large");
+    if (bytes.length !== drop.size) return refuseFile("changed");
+    const text = decodeTextFile(bytes);
+    if (text === null) return refuseFile("binary");
+    if (text.trim() === "") return refuseFile("empty-text");
+    if (text.length > FILE_ATTACH_MAX_CHARS) return refuseFile("too-many-chars");
+    const dir = path.join(fs.realpathSync(root), MATERIALS_DIR);
+    if (!materialsFolderUsable(dir)) return refuseFile("materials-folder");
+    return writeMaterialCopy(dir, name, bytes);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") return refuseFile("permission");
+    return refuseFile("unreadable");
   }
 }
 
