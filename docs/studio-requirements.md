@@ -6009,3 +6009,37 @@ button and rows at the 14px floor, 10 visible rows, viewport containment, keyboa
 focus return, keyboard jump that scrolls and focuses the bubble with an inset ring, temporary tab
 stop removed, forced colours, and the editor, fallback-box and missing-target jumps; fails under
 `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Deck present mode (CGP-ART-R-015)
+
+REQ-ART-15 (CGP-ART-16, design DES-ART-15, PI#1). The rendered deck (`deck.html`, CR-54,
+written by the 팀 브레인 deck skill and opened in the Studio preview) has a **발표하기** button
+in its header whenever at least one slide is drafted. It presents the drafted slides one at a
+time, in template order, starting at the first: a black letterbox with the 16:9 slide laid
+out at a 1280x720 design size and scaled to fit the window, centred. Right arrow, Space and
+PageDown advance; left arrow and PageUp go back; both ends clamp (no wrap). Esc exits. A
+bottom-right group shows **이전**, `{n} / {total}`, **다음** and **발표 끝내기**; all are 44px
+targets with 14px text. The group hides after 2 s without input and reappears on mouse move,
+pointer press or keyboard focus; a control that has keyboard focus is never hidden. Space on
+a focused control advances rather than pressing it. Present mode asks for fullscreen; where
+fullscreen is refused (the Studio preview iframe does not grant it) a status line says
+"전체 화면을 열 수 없어 이 창을 가득 채워 발표해요." and the slide fills the window instead.
+Leaving fullscreen by the browser exits present mode. Exiting returns focus to 발표하기,
+scrolls the last presented slide into view and keeps the notes switch as it was.
+
+The notes layer (speaker notes, citation ids, gaps, not-yet-drafted slides and the deck
+checks) is never visible in present mode, even with the 발표자 노트·근거 switch on. No
+separate presenter window is opened in this slice (REQ-ART-15 (3) applies only "if one is
+opened"; the preview iframe has no popup permission), so notes appear nowhere while
+presenting. The slide face keeps its computed basis line (근거: 실제 관찰 n), which is not a
+citation layer. The script is one constant: no slide data is interpolated into it, and it
+reads only the deck's DOM (no network, storage, popups or messages). A deck with no drafted
+slide has no button and no script. Every seat that can open the deck gets the same file;
+there is no seat difference. Tests: `extensions/hypeproof-chat/test/learning-wiki.smoke.mjs`
+(the one constant script, no network/storage APIs, none without slides) and
+`extensions/hypeproof-chat/test/deck-present-computed.smoke.mjs` (headless Chromium on the real
+deck.html: dark/light at 1420 and 800 px, forced colours, and inside a sandboxed iframe like
+the preview; keys, buttons, position text, notes hidden with the switch on, letterbox fit,
+idle hide, Esc and fullscreen refusal; fails under `FOCUS_REQUIRE_BROWSER=1` without a
+browser). This supports PI#1: the learner shows their own work to an audience from the same
+artifact they built, without the evidence layer leaking onto the slides.
