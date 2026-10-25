@@ -13039,6 +13039,74 @@
           "path": "extensions/hypeproof-chat/test/task-rail-search.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-REMOVAL-UNDO",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-INT-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Low-stakes removal undo (CGP-CHAT-R-029)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-REMOVAL-UNDO",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-REMOVAL-UNDO"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/removalUndo.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/UndoToast.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-REMOVAL-UNDO",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-REMOVAL-UNDO"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/removal-undo-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/removal-undo-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }

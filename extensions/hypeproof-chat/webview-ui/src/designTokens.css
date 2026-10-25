@@ -2216,6 +2216,11 @@
   --ds-c-studio-quoteaction-surface-10: var(--ds-s-surface-10);
   --ds-c-studio-quoteaction-ink-6: var(--ds-s-ink-6);
   --ds-c-studio-quoteaction-type-1: var(--ds-s-type-1);
+  --ds-c-studio-undotoast-size-3: var(--ds-s-size-3);
+  --ds-c-studio-undotoast-size-106: var(--ds-s-size-106);
+  --ds-c-studio-undotoast-space-2: var(--ds-s-space-2);
+  --ds-c-studio-undotoast-space-15: var(--ds-s-space-15);
+  --ds-c-studio-undotoast-radius-8: var(--ds-s-radius-8);
   --ds-c-studio-start-font-1: var(--ds-s-font-1);
   --ds-c-studio-start-typography-4: var(--ds-s-typography-4);
   --ds-c-studio-start-space-27: var(--ds-s-space-27);

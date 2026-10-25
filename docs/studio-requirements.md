@@ -5837,3 +5837,56 @@ Tests: `extensions/hypeproof-chat/test/task-rail-search.smoke.mjs` (pure control
 App bundle in headless Chromium: IME composition through CDP, NFD title, clear, blank and
 non-matching queries, activity switch, zero host posts, field geometry in dark/light at 1420 and
 800 px; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Low-stakes removal undo (CGP-CHAT-R-029)
+
+REQ-STUDIO-REMOVAL-UNDO / CGP-CHAT-R85 (CGP-CHAT-085) / CGP-CHAT-D85 / PI#4 (the learner keeps
+control and can recover from their own action without being asked twice): a low-stakes removal
+happens at once and offers 되돌리기, instead of a confirm dialog. It covers, on every seat whose chat
+composer draws them:
+
+- composer attachment chips: a pasted, dropped or sketched image, a staged photo (D-028), a folded
+  long paste (CGP-CHAT-R-017), the work-folder file chip (CGP-CHAT-R-011, × or Backspace at the
+  caret start) and the page chip (CGP-ART-R-007);
+- the queued message's × (#416): as before its text returns to the draft, never away;
+- renaming the task (task header, personal and trial seats).
+
+One toast at the bottom of the chat panel, centred directly above the composer, content-width up
+to 360px, 14px text with an icon, a 44px 되돌리기, `role="status"` with `aria-live="polite"` (an
+empty, zero-height live region when nothing is offered). It stays 6 s, and the time stops while it
+is hovered or focused; a fresh offer starts a fresh 6 s. Copy: "이미지를 뺐어요", "사진을 뺐어요",
+"붙여넣은 글을 뺐어요", "파일을 뺐어요", "페이지를 뺐어요", "예약을 취소했어요. 글은 입력창에 있어요",
+"작업 이름을 바꿨어요"; after an undo "되돌렸어요" (no button, same lifetime); a refused host undo
+"되돌리지 못했어요" with 닫기, which does not time out (CGP-DS-R-025: failures persist).
+
+Undo restores the exact prior state or nothing:
+
+- One offer at a time. A newer removal replaces the older offer and the older removal stays done.
+- An offer ends without undo when its subject changed since the removal (the image list, the photo
+  list, the draft, the queue), when the turn the queued message waited for ended (a paused item
+  waits for nothing), on a send, on a task or activity switch and on unmount. An image or paste
+  goes back at its place; a queued message is queued again with its tool mode and the draft is put
+  back as it was.
+- Host-held chips: the webview sends an undo id with the removal; the host keeps the removed
+  snapshot (file preview, model text and work folder; page text, screenshot, chip and notice)
+  unsent, in that task scope only, and restores that same snapshot once, only while the slot is
+  still empty, in the same task, with the same work folder, the attach gate (`sdk_tools.read`, not
+  an instructor) and no "AI 안 씀" folder choice. A new attach, a send, a task switch or a clear
+  forgets it. The toast waits for the host's `removalUndoResult` for that id; a missing answer
+  (15 s) or `restored: false` is a failure, never an optimistic success; a later `restored: true`
+  for that id still turns it into 되돌렸어요, so the toast never contradicts the chip. A second press
+  while waiting does nothing. A stale or foreign id never spends a kept snapshot or rename, and a
+  refused rename undo is answered on the toast only (no workspace error banner).
+- A staged photo's host file is deleted only when its offer ends without undo; undo never deletes
+  it. A photo still being prepared or refused has no settled state to restore and is deleted at
+  once without an offer.
+- Rename: the host keeps the prior title and its origin (default, automatic or manual) under an undo
+  id sent with `taskRenameResult` (none when nothing changed). `taskRenameUndo` puts both back only
+  while the task still carries exactly that rename, in the same task store; an automatic title then
+  keeps following the conversation. The task list keeps ordering by last activity. Leaving the task
+  ends the offer.
+- Focus that was on 되돌리기 lands on the composer (the task title for a rename), never `<body>`.
+
+Recovery items (보내지 못한 메시지, UX38) are not low-stakes: their 삭제 keeps the inline confirm with
+취소 and offers no undo. The element chip (curriculum runtime only), annotation marks and the quote
+chip are outside this row.
