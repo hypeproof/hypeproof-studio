@@ -316,6 +316,7 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
+import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
 import type { QuitGuardActivity } from "./quitGuardHelpers";
 import { FunnelReporter, entryOutcome, funnelOs, funnelProfileStep, funnelToolKind, isTrialGrantToken, parseTrialEventsProbe, trialEventsUrl, usesTraceRoute, type ToolResultKind } from "./funnelEvents";
 import {
@@ -5833,7 +5834,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private postTurnReview(): void {
     const review = this.turnReview;
     // A bar belongs to the task it was taken in; another open task sees none.
-    void this.post({ type: "turnReviewState", view: review && review.taskKey === this.turnRestoreTaskKey() ? review.view : null });
+    let view = review && review.taskKey === this.turnRestoreTaskKey() ? review.view : null;
+    // CGP-AGENT-R-027 — the checkpoint offer and its history go only to a seat that qualifies now: a seat
+    // that became a minor, moved to another track, became the instructor or lost its profile never sees
+    // them again (a remount re-posts this view through turnReviewRequest).
+    if (view?.checkpoint && !checkpointApplies(this.cachedProfile, this._instructorMode?.isInstructor)) {
+      const { checkpoint: _withheld, ...rest } = view;
+      view = rest;
+    }
+    void this.post({ type: "turnReviewState", view });
   }
 
   private async enrichPageCard(taskKey:string, root:string, turnId:string):Promise<void> {
@@ -5972,7 +5981,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** After a coach turn: compare the folder with the turn's restore point and offer the review bar when anything changed. Never throws. */
-  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string } | null, streamId: string, messageId: string): Promise<void> {
+  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string } | null, streamId: string, messageId: string, assistantText = ""): Promise<void> {
     if (!handle) return;
     try {
       const now = await scanFolder(handle.root);
@@ -5999,6 +6008,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...handle, measuredDigest: now.digest,
         view: { files: await reviewTurnFiles(handle.store, handle.root, handle.point, now), turnId: handle.point.turnId, state: "open", added: changes.added, changed: changes.changed, deleted: changes.deleted, notCovered: changes.notCovered.map((n) => n.path) },
       };
+      // CGP-AGENT-R-027 — adult website tracks may save this state as a checkpoint; the AI's answer
+      // for this turn prefills the message the learner reviews. Never a new model request.
+      const base = this.context?.globalStorageUri?.fsPath;
+      if (base && checkpointApplies(this.cachedProfile, this._instructorMode?.isInstructor)) {
+        const suggestion = suggestCheckpointMessage(assistantText, changes);
+        const history = await listCheckpoints(checkpointStoreDir(base, handle.root, handle.taskKey)).catch(() => []);
+        this.turnReview.view = { ...this.turnReview.view, checkpoint: { suggestion: suggestion.message, source: suggestion.source, history } };
+      }
       this.postTurnReview();
     } catch {
       // The folder could not be read after the turn: no bar; the point stays until pruned.
@@ -6015,6 +6032,67 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.post({ type: "streamError", streamId: "activity", error: "파일을 되돌리는 중이에요. 끝난 뒤에 보내 주세요." });
   }
 
+  /**
+   * CGP-AGENT-R-027 / REQ-CGP-AGENT-53 — save the work folder as a checkpoint with the message the learner
+   * reviewed. Bound to the open review's turn, task, folder and profile; refused while anything runs; the
+   * point is dropped when a turn, task or folder change lands during the walk. Local only: the store is
+   * outside the work folder, nothing is committed, published or sent.
+   */
+  private checkpointSaving = false;
+  private async handleCheckpointSave(msg: { turnId?: unknown; message?: unknown }): Promise<void> {
+    const review = this.turnReview;
+    if (!review || typeof msg.turnId !== "string" || review.view.turnId !== msg.turnId || review.taskKey !== this.turnRestoreTaskKey()) return;
+    const checkpoint = review.view.checkpoint;
+    const base = this.context?.globalStorageUri?.fsPath;
+    if (!checkpoint || !base || review.view.state !== "open" || checkpoint.saving || this.checkpointSaving) return;
+    const set = (patch: Partial<NonNullable<TurnReviewView["checkpoint"]>>) => {
+      if (this.turnReview !== review || !review.view.checkpoint) return;
+      review.view = { ...review.view, checkpoint: { ...review.view.checkpoint, ...patch } };
+      this.postTurnReview();
+    };
+    if (!checkpointApplies(this.cachedProfile, this._instructorMode?.isInstructor)) {
+      review.view = { ...review.view, checkpoint: undefined };
+      this.postTurnReview();
+      return;
+    }
+    const busy = () => this.hasActiveStream() || this.pendingSends > 0 || this.turnRestoreBusy || this.taskChanging || this.connectionChanging || !!this.verifySession?.running;
+    if (busy()) { set({ notice: "진행 중인 작업이 끝난 뒤에 저장 지점을 남길 수 있어요." }); return; }
+    const cleaned = cleanCheckpointMessage(msg.message, Infinity);
+    if (!cleaned) { set({ notice: "저장 지점 메시지를 적어 주세요." }); return; }
+    if (Array.from(cleaned).length > CHECKPOINT_MESSAGE_MAX) { set({ notice: `저장 지점 메시지는 ${CHECKPOINT_MESSAGE_MAX}자까지 쓸 수 있어요.` }); return; }
+    const generation = this.profileGeneration;
+    const current = () => {
+      if (this.turnReview !== review || generation !== this.profileGeneration || review.taskKey !== this.turnRestoreTaskKey() || busy()) return false;
+      if (!checkpointApplies(this.cachedProfile, this._instructorMode?.isInstructor)) return false;
+      try { return fs.realpathSync(this.resolveCoachCwd() ?? "") === review.root; } catch { return false; }
+    };
+    if (!current()) return;
+    const store = checkpointStoreDir(base, review.root, review.taskKey);
+    this.checkpointSaving = true;
+    set({ saving: true, notice: undefined });
+    try {
+      const out = await saveCheckpoint({ store, root: review.root, turnId: review.point.turnId, message: msg.message, stillCurrent: current });
+      const history = await listCheckpoints(store).catch(() => checkpoint.history);
+      if (out.ok) {
+        const message = cleaned;
+        // REQ-Q1 — local evidence: ids, digest and counts only; never the message or any path.
+        this.spool?.recordWorkflow({ turnId: review.point.turnId, event: "checkpoint_save", payload: { checkpoint: out.id, digest: out.digest, files: out.fileCount, not_covered: out.notCovered, message_length: Array.from(message).length, edited: message !== checkpoint.suggestion, suggestion_source: checkpoint.source } });
+        set({ saving: false, savedId: out.id, history, notice: "저장 지점을 남겼어요. 이 컴퓨터에만 보관했고 웹에 올리지 않았어요." });
+      } else {
+        const notice = out.error === "folder_too_large" ? "작업 폴더에 파일이 너무 많아서 저장 지점을 남기지 못했어요."
+          : out.error === "stale" ? "작업이 바뀌어서 저장 지점을 남기지 않았어요."
+          : out.error === "empty_message" ? "저장 지점 메시지를 적어 주세요."
+          : out.error === "too_long" ? `저장 지점 메시지는 ${CHECKPOINT_MESSAGE_MAX}자까지 쓸 수 있어요.`
+          : "저장 지점을 남기지 못했어요.";
+        set({ saving: false, history, notice });
+      }
+    } catch {
+      set({ saving: false, notice: "저장 지점을 남기지 못했어요." });
+    } finally {
+      this.checkpointSaving = false;
+    }
+  }
+
   private async handleTurnReviewMessage(msg: { type: "turnRevert" | "turnKeep" | "turnReviewClose"; turnId: string; path?: string }): Promise<void> {
     const review = this.turnReview;
     if (!review || review.view.turnId !== msg.turnId || review.taskKey !== this.turnRestoreTaskKey()) return;
@@ -6024,6 +6102,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     if (review.view.state !== "open") return;
     const counts = { added: review.view.added.length, changed: review.view.changed.length, deleted: review.view.deleted.length, not_covered: review.view.notCovered.length };
+    if (msg.type === "turnKeep" && this.checkpointSaving) {
+      // CGP-AGENT-R-027 — a keep while a checkpoint is being saved would silently drop that save.
+      review.view = { ...review.view, notice: "저장 지점을 남기는 중이에요. 끝난 뒤에 골라 주세요." };
+      this.postTurnReview();
+      return;
+    }
     if (msg.type === "turnKeep") {
       // Accept the decision before awaiting evidence; a second click cannot undo it.
       this.turnReview = null;
@@ -6034,7 +6118,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.spool?.recordWorkflow({ turnId: review.point.turnId, event: "turn_review_keep", payload: { restore_point: review.point.id, before_digest: review.point.digest, ...(afterDigest ? { after_digest: afterDigest } : {}), ...counts } });
       return;
     }
-    if (this.hasActiveStream() || this.pendingSends > 0 || this.turnRestoreBusy || this.taskChanging || this.verifySession?.running) {
+    if (this.hasActiveStream() || this.pendingSends > 0 || this.turnRestoreBusy || this.checkpointSaving || this.taskChanging || this.verifySession?.running) {
       review.view = { ...review.view, notice: "진행 중인 작업이 끝난 뒤에 되돌릴 수 있어요." };
       this.postTurnReview();
       return;
@@ -6401,6 +6485,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "turnReviewClose":
         await this.handleTurnReviewMessage(msg);
         return;
+      case "checkpointSave": await this.handleCheckpointSave(msg); return;
       case "inboxOpen": await this.inboxSource?.inboxOpened(msg.objectId, msg.generation); return;
       case "inboxLink": await this.handleInboxLink(msg); return;
       case "helpRequest": await this.helpSource?.refresh(); return;
@@ -8328,7 +8413,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await Promise.race([Promise.allSettled(pendingReveals), new Promise((r) => { timer = setTimeout(r, 10_000); })]);
         clearTimeout(timer);
       }
-      await this.endTurnRestore(turnRestorePoint, streamId, messageId);
+      await this.endTurnRestore(turnRestorePoint, streamId, messageId, assistantText);
       this.delegationControls.delete(streamId);
       this.activeStreams.delete(streamId);
       // cr-verify — the run this turn carried takes no more coach calls once the turn ends.

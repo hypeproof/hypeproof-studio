@@ -752,6 +752,8 @@ export type WebviewMessage = (
   | { type: "turnRevert"; turnId: string; path?: string }
   | { type: "turnKeep"; turnId: string }
   | { type: "turnReviewClose"; turnId: string }
+  /** CGP-AGENT-R-027 — save the work folder as a checkpoint with the message the learner reviewed. Never pushed. */
+  | { type: "checkpointSave"; turnId: string; message: string }
   // REQ-STUDIO-ARTIFACT-PROVENANCE — the 작업 자료 panel asks for the work folder's provenance list.
   // CGP-KNOW-D-013 — the 내 작품 panel's trash: list, and one press (move a file, restore or purge an item) bound to the listed scope.
   | { type: "activityTrashRequest" }

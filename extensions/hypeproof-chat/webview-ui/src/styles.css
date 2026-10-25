@@ -1372,6 +1372,17 @@ html, body, #root {
   outline-offset: var(--ds-c-studio-styles-size-7);
 }
 .hps-turn-review-actions button:disabled { opacity: 0.55; cursor: default; }
+/* CGP-AGENT-R-027 / DES-CGP-AGENT-53 — checkpoint form and history inside the 바뀐 것 panel. */
+.hps-checkpoint { margin-top: var(--ds-c-studio-styles-space-15); padding-top: var(--ds-c-studio-styles-space-15); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); min-width: 0; }
+.hps-checkpoint-title { display: block; }
+.hps-checkpoint-form { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); margin-top: var(--ds-c-studio-styles-space-13); min-width: 0; }
+.hps-checkpoint-field { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: var(--ds-c-studio-styles-size-8); resize: vertical; padding: var(--ds-c-studio-styles-space-24) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-9); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); background: var(--vscode-input-background, var(--ds-c-studio-styles-surface-7)); color: var(--vscode-input-foreground, inherit); font: inherit; }
+.hps-checkpoint-field:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-turn-review .hps-checkpoint-history { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); }
+.hps-checkpoint-history li { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.hps-checkpoint-message { white-space: pre-wrap; }
+.hps-checkpoint-history .hps-turn-review-note { margin: 0; }
+@media (forced-colors: active) { .hps-checkpoint-field { border-color: CanvasText; } .hps-checkpoint { border-top-color: CanvasText; } }
 
 /* REQ-STUDIO-PAGE-CARD / CGP-ART-R-010 — pages a coach turn built or changed, under that turn. Same neutral
    surface as the review bar; every action is a 44px target. */

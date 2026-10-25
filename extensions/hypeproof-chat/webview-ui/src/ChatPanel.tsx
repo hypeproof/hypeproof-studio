@@ -1969,6 +1969,7 @@ export function ChatPanel(props: Props) {
             onRevert={(path) => postToHost({ type: "turnRevert", turnId: turnReview.turnId, ...(path === undefined ? {} : { path }) })}
             onKeep={() => postToHost({ type: "turnKeep", turnId: turnReview.turnId })}
             onClose={() => postToHost({ type: "turnReviewClose", turnId: turnReview.turnId })}
+            onCheckpointSave={(message) => postToHost({ type: "checkpointSave", turnId: turnReview.turnId, message })}
           /></PanelBoundary>
         )}
 

@@ -4082,6 +4082,75 @@ UI interactions. The CSS clauses (unified below 1024px and split from it, 44px s
 the 14px caption token, focus ring, added/removed tint, forced-colours border) are locked
 by `test/turn-review-css.smoke.mjs` with negative controls. Browser, installed-shell and live classroom evidence remain distinct.
 
+## Checkpoints with a reviewed message (CGP-AGENT-R-027)
+
+`REQ-STUDIO-CHECKPOINT` (CGP-AGENT-R-027 / REQ-CGP-AGENT-53, CGP-AGENT-053, P2; design
+DES-CGP-AGENT-53; builds on `REQ-STUDIO-TURN-RESTORE` and `REQ-STUDIO-TURN-FILE-DIFF`).
+Product Intent: PI#2 (the learner owns what is kept: the AI proposes, the learner reads, edits
+and decides) and PI#5 (honest visibility: the field says where its text came from, and nothing
+claims to be published). It may expose OWNERSHIP and JUDGMENT; no capability is measured or
+labelled on the work screen. ChatGPT's "Commit / push / PR with a generated message" is adapted:
+there is no git vocabulary and no push.
+
+- **Who.** Adults on a website track only: a known profile whose `game.template_tier` is
+  `website`, not a minor (`minor_cohort` or a minor/unknown tier, `isMinorProfile`), and not the
+  instructor surface. Personal, trial, pass and classroom seats that meet this all get it; every
+  other seat draws nothing and a forged `checkpointSave` stores nothing (`checkpoint.ts`
+  `checkpointApplies`, rechecked by the host on every save). Every post of the review bar rechecks it
+  too: a seat that stops qualifying (now a minor, another track, the instructor, no profile) gets the
+  bar without the checkpoint offer and history, also after a webview remount.
+- **Where.** The 바뀐 것 review bar of the last request (open state) shows a 저장 지점 part with
+  **저장 지점 남기기**. Pressing it opens a form: a labelled textarea prefilled with the suggested
+  message, focused, with the whole text selected, so typing replaces it. A line says where the
+  text came from and that the checkpoint stays on this computer and is not put on the web. Enter
+  inserts a newline (IME composition never saves); Cmd/Ctrl+Enter and the primary
+  **저장 지점 남기기** save; **취소** closes. An empty message cannot be saved. There is no push,
+  publish, upload or commit control.
+- **Suggestion.** No new model request. Source `ai`: the first prose line of the AI's own
+  text for that turn (the whole streamed answer, so it can be an opening sentence rather than
+  a summary; the learner reviews it), with Markdown decoration, code fences, tables, rules and bare
+  tags skipped, cleaned and capped at 72 code points. When the answer has no usable line (for
+  example a tool-only turn), source `files`: the measured changed file names ("index.html, site.css 외 1개
+  바꿈"), and the line says so.
+- **Stored.** The host cleans the learner's text (NFC; CR, U+2028/2029 to newlines; tabs to
+  spaces; C0/C1 controls, bidi marks and controls, zero-width space and non-joiner, invisible
+  operators, interlinear annotation and tag characters removed (the emoji joiner U+200D is kept); at most one blank line in a row;
+  trimmed). Empty is refused ("저장 지점 메시지를 적어 주세요."); more than 200 code points is
+  refused, never silently shortened ("…200자까지…"); the field caps input at 200 UTF-16 units
+  (stricter for emoji). While saving, the field is read-only, not disabled, so it keeps focus. The checkpoint
+  is a restore point (same manifest and content-addressed copies as `REQ-STUDIO-TURN-RESTORE`,
+  kind `checkpoint`, with the message) in its own store `<turn store>/checkpoints` in the
+  extension's global storage, never in the work folder: no `.git`, no commit, no file written in
+  the folder, nothing a site publish could carry, no network. The newest 20 checkpoints per work
+  folder and task are kept; turn pruning (newest 10 turn points) never removes one, and a refused
+  save never costs an older one (pruning runs only after the new point is accepted).
+- **History.** Saved checkpoints are listed in the same 바뀐 것 panel, newest first: the message
+  as text (control and bidi characters shown as escapes, never markup), the local time
+  (`10월 25일 14:03`) and the file count. Saving closes the form and shows "저장 지점을 남겼어요.
+  이 컴퓨터에만 보관했고 웹에 올리지 않았어요." The next request's review lists them again.
+- **Binding.** A save is bound to the open review's turn id, task, work folder (real path),
+  profile generation and seat. It is refused with a notice while a turn, a send, a revert, a verify
+  run, a task switch or a connection change is in progress, and a revert or 이대로 둘게요 is refused
+  with a notice while a save runs ("저장 지점을 남기는 중이에요. 끝난 뒤에 골라 주세요."). When any of those change during the folder walk the new point is dropped ("작업이 바뀌어서
+  저장 지점을 남기지 않았어요."). One save at a time (a double press stores one). A folder past the
+  restore-point entry cap stores nothing and says so.
+- **Evidence (REQ-Q1).** Local spool workflow event `checkpoint_save` with the checkpoint id,
+  folder digest, file and not-covered counts, message length, whether the learner edited the
+  suggestion and the suggestion source. Never the message text or any path.
+
+Not built: restoring the folder to a checkpoint, renaming or deleting one, and any Chalk view. The
+checkpoint part and its history live in the last-request review bar only: after 이대로 둘게요, a
+revert's 확인, or a request that changed nothing, the history is not shown until the next request
+that changes files opens a review again (the checkpoints stay stored). Verification:
+U (`extensions/hypeproof-chat/test/checkpoint.smoke.mjs`: real temp folders and the real provider
+handler — seat matrix, suggestion and cleaning with hostile input, folder bytes unchanged and no
+`.git`, survival of turn pruning, keep 20, refused saves keep history, forged turn, busy, stale
+walk, single flight, seat change, revert/save exclusion, evidence without text;
+`extensions/hypeproof-chat/test/checkpoint.test.tsx`: the real TurnReviewBar and ChatPanel on
+mini-dom — prefill, focus and selection, Enter/IME/Cmd+Enter, no push control, history as text,
+posted message). Layout: `extensions/hypeproof-chat/test/checkpoint-layout.smoke.mjs` measures the
+44px targets and 14px text in headless Chromium. Native app run: NOT RUN.
+
 ### Attachment failure retention — REQ-STUDIO-ATTACHMENT-FAILURE
 
 CGP-KNOW-R-020 / REQ-KNOW-37 extends REQ-STUDIO-CHAT-FILE-ATTACH and

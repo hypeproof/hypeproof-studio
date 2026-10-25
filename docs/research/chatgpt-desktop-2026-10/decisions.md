@@ -732,3 +732,12 @@ These are conservative implementation choices, not new human agreements.
 | Draft safety | Switching is local state only: no host message, no remount of the conversation | The row's acceptance (20 switches, byte-identical draft); keeping the composer mounted is stronger than restoring it | On | no |
 | Selected-state presentation | Weight 600 and a 2px underline in the text colour; forced colours keep Canvas/CanvasText with a 2px Highlight underline instead of the shared selection fill | Not colour only (DES-KNOW-02). The shared `[aria-selected]` Highlight fill sits under Chrome's text backplate and hid the label (measured 1:1) | On | no |
 | Activity title | Not added above the tabs | DES-KNOW-02 ("under the activity title") is CGP-KNOW-D-002; this row ships the behaviour | n/a | no |
+
+## CGP-AGENT-R-027: checkpoints with a reviewed message (2026-10-25, agent choice)
+
+- Seat: adults on a website track (`game.template_tier === "website"`, not a minor or unknown tier, not the instructor). Other adult tiers (`search-webapp`) do not get it; the row names website tracks only.
+- Store: a restore point of kind `checkpoint` in the extension's global storage beside the turn store, not a git commit in the work folder. "Nothing is pushed" then holds structurally: nothing in the folder changes, so neither a push nor the GitHub Pages publish can carry it. Keep 20; refused saves never prune.
+- Suggestion: the first prose line of the AI's own answer for the turn, no new model request (no new data flow or cost). Without a usable line the field is filled from the changed file names and says so.
+- Message: cleaned on the host, refused when empty or over 200 code points (never shortened silently). Evidence carries counts and an edited flag, never the text.
+- History: listed in the 바뀐 것 review bar of the last request. Restoring to a checkpoint is not built (acceptance does not ask for it).
+- Default state: on for the seats above (local only; no permission change, no upload).

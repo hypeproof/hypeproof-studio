@@ -3,15 +3,17 @@
 // replaces it, or the learner closes it after a decision.
 
 import { useEffect, useRef, useState } from "react";
-import type { TurnReviewView, TurnFileReview } from "../../src/turnReviewView";
+import type { TurnReviewView, TurnFileReview, CheckpointView } from "../../src/turnReviewView";
 import { DiffLines } from "./DiffLines";
-import { turnReviewCount } from "../../src/turnReviewView";
+import { turnReviewCount, CHECKPOINT_MESSAGE_MAX } from "../../src/turnReviewView";
 
 export interface TurnReviewBarProps {
   view: TurnReviewView;
   onRevert: (path?: string) => void;
   onKeep: () => void;
   onClose: () => void;
+  /** CGP-AGENT-R-027 — save the work folder as a checkpoint with the reviewed message (adult website tracks). */
+  onCheckpointSave?: (message: string) => void;
 }
 
 const EXTERNAL_NOTE = "웹에 올린 사이트, 브라우저, 명령 실행으로 작업 폴더 밖에서 바뀐 것은 되돌리지 않아요.";
@@ -59,7 +61,84 @@ function failedTitle(view: TurnReviewView): string {
   return "되돌리지 못했어요";
 }
 
-export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBarProps) {
+function checkpointTime(at: number): string {
+  const d = new Date(at);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${two(d.getHours())}:${two(d.getMinutes())}`;
+}
+
+// CGP-AGENT-R-027 / REQ-CGP-AGENT-53 / DES-CGP-AGENT-53 — "저장 지점 남기기". The form opens with the
+// suggested message in a textarea that has focus and the whole text selected, so typing replaces it
+// and reading it is the default. Enter is a newline (IME-safe); Cmd/Ctrl+Enter saves. There is no
+// push, publish or upload control: a checkpoint stays on this computer.
+export function CheckpointSection({ checkpoint, busy, onSave }: { checkpoint: CheckpointView; busy: boolean; onSave: (message: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(checkpoint.suggestion);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const openRef = useRef<HTMLButtonElement>(null);
+  const seenSaved = useRef(checkpoint.savedId);
+  useEffect(() => {
+    if (!open) return;
+    const field = fieldRef.current;
+    if (!field) return;
+    field.focus();
+    field.setSelectionRange(0, field.value.length);
+  }, [open]);
+  useEffect(() => {
+    if (checkpoint.savedId === seenSaved.current) return;
+    seenSaved.current = checkpoint.savedId;
+    if (!open) return;
+    setOpen(false);
+    const restore = fieldRef.current && document.activeElement === fieldRef.current;
+    if (restore || document.activeElement === document.body) queueMicrotask(() => openRef.current?.focus());
+  }, [checkpoint.savedId, open]);
+  const saving = !!checkpoint.saving;
+  const empty = !draft.trim();
+  const submit = () => { if (!saving && !busy && !empty) onSave(draft); };
+  const sourceNote = checkpoint.source === "ai"
+    ? "AI가 이번 답의 첫 줄로 메시지를 제안했어요. 읽어 보고 맞게 고쳐서 남겨 주세요."
+    : "AI 답에서 쓸 문장이 없어서 바뀐 파일 이름으로 채웠어요. 읽어 보고 맞게 고쳐서 남겨 주세요.";
+  return <div className="hps-checkpoint" data-testid="checkpoint">
+    <strong className="hps-checkpoint-title">저장 지점</strong>
+    {!open && <div className="hps-turn-review-actions">
+      <button ref={openRef} type="button" disabled={busy} onClick={() => { setDraft(checkpoint.suggestion); setOpen(true); }}>저장 지점 남기기</button>
+    </div>}
+    {open && <div className="hps-checkpoint-form" role="group" aria-label="저장 지점 남기기">
+      <label htmlFor="hps-checkpoint-message">저장 지점 메시지</label>
+      <p className="hps-turn-review-note" id="hps-checkpoint-source">{sourceNote} 이 컴퓨터에만 보관하고 웹에는 올리지 않아요.</p>
+      <textarea
+        ref={fieldRef}
+        id="hps-checkpoint-message"
+        className="hps-checkpoint-field"
+        aria-describedby="hps-checkpoint-source"
+        rows={3}
+        maxLength={CHECKPOINT_MESSAGE_MAX}
+        value={draft}
+        readOnly={saving}
+        aria-busy={saving}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          const native = event.nativeEvent as KeyboardEvent & { isComposing?: boolean; keyCode?: number };
+          if (event.key !== "Enter" || native.isComposing || native.keyCode === 229) return;
+          if (event.metaKey || event.ctrlKey) { event.preventDefault(); submit(); }
+        }}
+      />
+      <div className="hps-turn-review-actions">
+        <button type="button" className="hps-checkpoint-save" disabled={saving || busy || empty} onClick={submit}>{saving ? "남기는 중…" : "저장 지점 남기기"}</button>
+        <button type="button" disabled={saving} onClick={() => { setOpen(false); queueMicrotask(() => openRef.current?.focus()); }}>취소</button>
+      </div>
+    </div>}
+    {checkpoint.notice && <p className="hps-turn-review-note" role="status">{checkpoint.notice}</p>}
+    {checkpoint.history.length > 0 && <ol className="hps-checkpoint-history" aria-label="저장 지점 기록">
+      {checkpoint.history.map((entry) => <li key={entry.id} data-checkpoint-id={entry.id}>
+        <span className="hps-checkpoint-message">{displayPath(entry.message)}</span>
+        <span className="hps-turn-review-note">{checkpointTime(entry.createdAt)} · 파일 {entry.fileCount}개</span>
+      </li>)}
+    </ol>}
+  </div>;
+}
+
+export function TurnReviewBar({ view, onRevert, onKeep, onClose, onCheckpointSave }: TurnReviewBarProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<string | null>(null);
@@ -130,5 +209,6 @@ export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBar
       }} disabled={busy}>{busy ? "되돌리는 중…" : "모두 되돌리기"}</button>
       <button type="button" onClick={onKeep} disabled={busy}>이대로 둘게요</button>
     </div>
+    {view.checkpoint && onCheckpointSave && <CheckpointSection key={`checkpoint-${view.turnId}`} checkpoint={view.checkpoint} busy={busy} onSave={onCheckpointSave} />}
   </section>;
 }
