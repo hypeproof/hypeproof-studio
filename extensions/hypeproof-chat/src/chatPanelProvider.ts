@@ -50,7 +50,7 @@ import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from '.
 import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, turnToolsDenialSource, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
 import { setFolderConsentPresenter, onFolderConsentChanged, folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
-import { folderConsentApplies, canonicalFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
+import { folderConsentApplies, canonicalFolder, isInsideFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
 import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED } from './missingTaskFolder';
 import { chatVisible, createTaskNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
@@ -213,7 +213,8 @@ import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRest
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
-import { buildPageCard, handlePageCardAction, PageCardRegistry, type PageCardMessage } from "./pageCardHost";
+import { buildPageCard, handlePageCardAction, PageCardRegistry, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
+import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
@@ -2049,6 +2050,90 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   async deckDraft(): Promise<void> {
     const run = await this.runDeckDraft({ ask: true });
     if (run) await this.showBrainRun(run);
+  }
+
+  /**
+   * REQ-STUDIO-DECK-PDF (CGP-ART-R-023) — the command "덱 PDF로 저장": the served deck.html in a background browser
+   * tab, one page per drafted slide (deckPdf.ts), written next to it as deck.pdf. Progress and the result are
+   * in-chat notices; the first one is posted before anything is awaited. One export at a time; nothing is written
+   * unless every slide was captured and deck.html is byte-identical before and after.
+   */
+  private deckPdfBusy = false;
+  /** Test seam: the CDP channel to a tab. Production attaches a CdpSession. */
+  deckPdfAttach: (tab: vscode.BrowserTab) => Promise<{ send: CdpSend; close(): Promise<void> }> = async (tab) => {
+    const session = await CdpSession.attach(tab);
+    return { send: (method, params) => session.send(method, params ?? {}, 20_000), close: () => session.close() };
+  };
+  async deckPdf(): Promise<void> {
+    if (this.deckPdfBusy) { this.postPageNotice(DECK_PDF_COPY.busy); return; }
+    if (!this.isLearningWikiEnabled()) { await this.postDenialNotice("lesson"); return; }
+    const plan = this.learningWikiPlan();
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder || !plan?.deck) { this.postPageNotice("이 수업에는 덱 템플릿이 없어요."); return; }
+    const workRoot = folder.uri.fsPath;
+    const dir = wikiDir(workRoot, plan);
+    const state = loadState(dir);
+    const drafted = state ? plan.deck.slides.filter((t) => state.deck[String(t.no)]).length : 0;
+    // The preview server that will serve the deck: the running one when it already serves a folder holding the
+    // deck (never replaced), otherwise one started on the work folder.
+    const active = this.liveServer.currentRoot();
+    let root: string;
+    try {
+      const deckReal = canonicalFolder(path.join(dir, "deck.html"));
+      if (active && isInsideFolder(deckReal, canonicalFolder(active))) root = active;
+      else if (active) { this.postPageNotice(DECK_PDF_COPY.otherPreview); return; }
+      else root = workRoot;
+    } catch { this.postPageNotice(DECK_PDF_COPY.noDeck); return; }
+    const rel = path.relative(canonicalFolder(root), canonicalFolder(path.join(dir, "deck.html"))).split(path.sep).join("/");
+    const deck = resolvePageInFolder(root, rel);
+    if (!deck.ok) { this.postPageNotice(DECK_PDF_COPY.noDeck); return; }
+    if (!drafted) { this.postPageNotice(DECK_PDF_COPY.empty); return; }
+    const target = path.join(path.dirname(deck.abs), "deck.pdf");
+    const blocked = this.folderWriteRefusalFor(target);
+    if (blocked) { this.postPageNotice(blocked); return; }
+    this.deckPdfBusy = true;
+    this.postPageNotice(DECK_PDF_COPY.started(drafted));
+    let tab: vscode.BrowserTab | undefined;
+    let channel: { send: CdpSend; close(): Promise<void> } | undefined;
+    try {
+      const before = createHash("sha256").update(fs.readFileSync(deck.abs)).digest("hex");
+      const base = await this.liveServer.ensure(root);
+      const url = new URL(rel.split("/").map(encodeURIComponent).join("/"), base).href;
+      try {
+        tab = await vscode.window.openBrowserTab(url, { viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One, preserveFocus: true, background: true });
+        channel = await this.deckPdfAttach(tab);
+      } catch { this.postPageNotice(DECK_PDF_COPY.openFailed); return; }
+      const result = await exportDeckPdf(channel.send, {
+        expectedUrl: url, token: randomId(),
+        onProgress: (done, total) => this.postPageNotice(DECK_PDF_COPY.progress(done, total)),
+      });
+      if (!result.ok) {
+        this.postPageNotice(result.reason === "slide" ? DECK_PDF_COPY.slideFailed(result.file) : result.reason === "changed" ? DECK_PDF_COPY.changed : result.reason === "empty" ? DECK_PDF_COPY.empty : DECK_PDF_COPY.notLoaded);
+        return;
+      }
+      const again = resolvePageInFolder(root, rel);
+      const after = again.ok ? createHash("sha256").update(fs.readFileSync(again.abs)).digest("hex") : null;
+      if (after !== before) { this.postPageNotice(DECK_PDF_COPY.changed); return; }
+      if (this.folderWriteRefusalFor(target)) { this.postPageNotice(this.folderWriteRefusalFor(target)!); return; }
+      // Write beside, then rename over: a link left at deck.pdf is replaced, never followed.
+      const tmp = path.join(path.dirname(target), `.deck.pdf.${randomId()}.tmp`);
+      try {
+        fs.writeFileSync(tmp, result.pdf, { flag: "wx" });
+        fs.renameSync(tmp, target);
+      } catch {
+        try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to clean */ }
+        this.postPageNotice(DECK_PDF_COPY.writeFailed);
+        return;
+      }
+      noteHostWrite([{ absPath: target, data: result.pdf }], "studio");
+      this.postPageNotice(DECK_PDF_COPY.saved(path.relative(workRoot, target).split(path.sep).join("/"), result.pages));
+    } catch {
+      this.postPageNotice(DECK_PDF_COPY.notLoaded);
+    } finally {
+      try { await channel?.close(); } catch { /* the tab may be gone already */ }
+      try { await tab?.close(); } catch { /* as above */ }
+      this.deckPdfBusy = false;
+    }
   }
 
   /** A command's result: in-chat, not a toast (a notification pauses the integrated browser over the weekly pack). */

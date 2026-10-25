@@ -5936,3 +5936,45 @@ Undo restores the exact prior state or nothing:
 Recovery items (보내지 못한 메시지, UX38) are not low-stakes: their 삭제 keeps the inline confirm with
 취소 and offers no undo. The element chip (curriculum runtime only), annotation marks and the quote
 chip are outside this row.
+
+## Deck PDF export (CGP-ART-R-023)
+
+REQ-STUDIO-DECK-PDF / CGP-ART-R-023 (REQ-ART-23, CGP-ART-024) / design CGP-ART-D-023 / PI#1 (the
+learner takes their work out of Studio in a form they can hand to others): the command **HypeProof: 덱
+PDF로 저장** (`hypeproof-chat.deckPdf`, in the command palette next to "팀 브레인으로 덱 만들기", the deck
+skill's menu) saves the deck skill's `deck.html` as `deck.pdf` in the same folder.
+
+- **Gate.** The same switch as the deck skill (`learning_wiki.enabled`, context key
+  `hypeproof-chat.learningWikiEnabled`); off, it shows the lesson denial notice and opens nothing. The
+  deck must exist as a regular file inside the served folder with no link on its path
+  (`resolvePageInFolder`), the wiki state must hold at least one drafted slide ("아직 만든 장이 없어서
+  PDF로 저장할 게 없어요."), and the folder write gate (REQ-STUDIO-FOLDER-CONSENT) must allow
+  `deck.pdf`, checked before the export and again before the write.
+- **Rendering.** The served `deck.html` (the running preview server when it already serves a folder
+  holding the deck, otherwise one started on the work folder; a preview serving another folder is
+  never replaced) opens in a background browser tab without taking focus; the tab is closed after.
+  `src/deckPdf.ts` lays out each drafted slide alone at 1280x720 (viewport emulation, or an exact
+  1/n scale when the page refuses it) and captures exactly the slide frame.
+- **One page per slide, no notes.** Pages are the drafted slides (`main > article.slide`) in deck
+  order; not-yet-drafted slides, lint checks and the toolbar are not pages. Before the first capture
+  the notes layer (발표자 노트, 근거, 아직 확인 못 한 것) is removed from the document whether or not the
+  notes switch is on, and every capture re-checks that it is gone. The PDF holds only the slide
+  images (no text layer, scripts, links or actions), one 16:9 page each.
+- **All or nothing.** A slide that cannot be captured fails the export and the notice names its file
+  ("deck/05.md 장을 PDF로 옮기지 못해 저장하지 않았어요. …"). A reload of the deck during the export, or
+  `deck.html` bytes that differ before and after, writes nothing ("저장하는 동안 덱이 바뀌어서 …"). The
+  file is written beside and renamed over `deck.pdf`, so a link left there is replaced, not followed.
+- **Progress.** The first in-chat notice ("덱을 PDF로 저장하고 있어요 (0 / N장)") is posted before
+  anything is awaited (DES-ART-23: within 300 ms), then one per slide, then "덱을 PDF로 저장했어요:
+  <path> (N장, 발표자 노트 없이)". One export at a time; a second press while one runs is refused.
+- **Folder.** REQ-ART-23 (2), **폴더에서 보기** from the result card, is the page card's action
+  (REQ-STUDIO-PAGE-CARD): for the learner's page in the served root it reveals that root with the page
+  selected; a nested page reveals its own folder inside the root (kept from CGP-ART-R-010).
+
+Tests: `test/deck-pdf.smoke.mjs` (PDF structure; the real `renderDeck` deck in headless Chromium with
+the notes painted red over every slide and the switch on: three pages at 1280x720 and no red pixel on
+any page, the no-emulation fallback, a failed slide named, a reload mid-export, another document in the
+tab, an empty deck) and `test/deck-pdf-host.test.mjs` (the real provider: gate, refused folder write,
+another preview root, background tab and close, busy press, a deck changed mid-export, a link at
+`deck.pdf`, the failure notice). Both fail under `FOCUS_REQUIRE_BROWSER=1` without a browser. NOT RUN
+here: the export inside the installed Studio (its integrated browser's CDP and background-tab capture).

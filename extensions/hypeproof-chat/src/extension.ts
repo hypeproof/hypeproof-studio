@@ -800,6 +800,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => provider.ventureMemory()),
     vscode.commands.registerCommand("hypeproof-chat.wikiIngest", () => provider.wikiIngest()),
     vscode.commands.registerCommand("hypeproof-chat.deckDraft", () => provider.deckDraft()),
+    vscode.commands.registerCommand("hypeproof-chat.deckPdf", () => provider.deckPdf()),
     vscode.commands.registerCommand("hypeproof-chat.curriculumSkills", () => provider.curriculumSkills()),
     vscode.commands.registerCommand("hypeproof-chat.weeklyReview", () => provider.weeklyReview()),
     vscode.commands.registerCommand("hypeproof-chat.weeklyReviewDirector", () => provider.weeklyReviewDirector()),

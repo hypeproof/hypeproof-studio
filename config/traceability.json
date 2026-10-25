@@ -13163,6 +13163,66 @@
           "path": "extensions/hypeproof-chat/test/activity-home-computed.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-DECK-PDF",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-PAGE-CARD"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Deck PDF export (CGP-ART-R-023)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-DECK-PDF",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-PDF"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/deckPdf.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-DECK-PDF",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-PDF",
+        "ST-IMP-DECK-PDF"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/deck-pdf.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/deck-pdf-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lib/deck-pdf-fixture.mjs"
+        }
+      ]
     }
   ]
 }

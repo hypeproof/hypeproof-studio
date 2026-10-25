@@ -732,3 +732,12 @@ These are conservative implementation choices, not new human agreements.
 | Draft safety | Switching is local state only: no host message, no remount of the conversation | The row's acceptance (20 switches, byte-identical draft); keeping the composer mounted is stronger than restoring it | On | no |
 | Selected-state presentation | Weight 600 and a 2px underline in the text colour; forced colours keep Canvas/CanvasText with a 2px Highlight underline instead of the shared selection fill | Not colour only (DES-KNOW-02). The shared `[aria-selected]` Highlight fill sits under Chrome's text backplate and hid the label (measured 1:1) | On | no |
 | Activity title | Not added above the tabs | DES-KNOW-02 ("under the activity title") is CGP-KNOW-D-002; this row ships the behaviour | n/a | no |
+
+## CGP-ART-R-023: deck PDF export (2026-10-26, agent-selected conservative implementation)
+
+- Where: a command, "HypeProof: 덱 PDF로 저장", next to the deck skill's "팀 브레인으로 덱 만들기" in the command palette (the deck skill's only menu today). No button inside `deck.html`: the deck page has no host channel, and CGP-ART-R-015 (present mode, open PR) owns its toolbar.
+- How: the served deck in a background integrated-browser tab over CDP, one 1280x720 JPEG per drafted slide, assembled into an image-only PDF by `src/deckPdf.ts`. No core patch and no new permission; the notes layer is removed from the export document and the PDF has no text layer.
+- All or nothing: a failed slide, a reload or a changed `deck.html` writes no file. Output is always `deck.pdf` beside `deck.html` (overwritten on the next export); no save dialog.
+- 폴더에서 보기 (REQ-ART-23 (2)) stays the page card's action from CGP-ART-R-010; for a page in the served root it reveals that root. Nested pages keep revealing their own folder (more useful than the root; owner may ask for the root instead).
+- Default state: on wherever the deck skill is on (`learning_wiki.enabled`); no new data flow off the machine.
+- Owner verification: the export inside the installed Studio (integrated browser CDP `Emulation.setDeviceMetricsOverride` and capture on a background tab) was not run; the fallback without emulation is covered in headless Chromium.

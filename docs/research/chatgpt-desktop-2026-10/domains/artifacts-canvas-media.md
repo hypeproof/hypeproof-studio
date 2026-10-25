@@ -217,3 +217,12 @@ the tab itself cannot be prevented. Drafts are retained until explicit discard.
 Returning to a reopened page still requires the existing generation/version checks
 before sending. Window/process termination persistence is outside this slice.
 PI #2: the learner owns the decision to keep or discard their unsent judgment.
+
+### REQ-ART-23 implementation choices (CGP-ART-R-023)
+
+"PDF로 저장" is the command "HypeProof: 덱 PDF로 저장" beside the deck skill's command (no button in
+`deck.html`). It writes `deck.pdf` next to `deck.html`: one image page per drafted slide at 16:9, the
+notes layer removed before capture, nothing written unless every slide was captured from an unchanged
+deck. 폴더에서 보기 stays the page card's action (CGP-ART-R-010). Contract:
+`docs/studio-requirements.md` "Deck PDF export (CGP-ART-R-023)"; choices: `decisions.md`.
+PI #1: the learner can hand the deck to others in a form that works outside Studio.
