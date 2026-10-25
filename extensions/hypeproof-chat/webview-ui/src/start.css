@@ -441,8 +441,16 @@
 .studio-repo-one { cursor: default; }
 .studio-github .studio-help { margin: 0; }
 
-.studio-saved-activities button { display: block; text-align: left; max-width: 100%; overflow-wrap: anywhere; }
-.studio-saved-activities small { display: block; font-size: var(--ds-c-studio-start-type-18); color: var(--hp-text-muted-default); }
+/* #2646: saved activities share one left edge, span the card and read as choices. A block-level
+   .studio-text-button shrinks to its content and centres itself with margin auto, which staggered the rows. */
+.studio-saved-activities { display: flex; flex-direction: column; gap: var(--ds-c-studio-start-space-2); }
+.studio-saved-activities .studio-saved-activity { display: flex; flex-direction: column; align-items: flex-start; box-sizing: border-box; width: 100%; max-width: 100%; min-height: var(--hp-control-min); margin: 0; text-align: left; border-radius: var(--ds-c-studio-start-radius-1); }
+.studio-saved-activities .studio-saved-activity:hover:enabled { background: var(--hp-bg-control-hover); }
+.studio-saved-activities .studio-saved-activity:active:enabled { background: var(--hp-bg-control-pressed); }
+.studio-saved-activity-name { max-width: 100%; overflow-wrap: anywhere; }
+/* width 0 + min-width 100%: the one-line workspace must not set the card's minimum width (the card is a grid item
+   with min-width auto), or a long folder name widens the page at 320 px instead of ending in an ellipsis. */
+.studio-saved-activities small { display: block; width: 0; min-width: 100%; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-c-studio-start-type-18); color: var(--hp-text-muted-default); }
 .hps-activity-header { padding: var(--ds-c-studio-start-space-2) var(--ds-c-studio-start-space-20); font-size: var(--ds-c-studio-start-type-19); overflow-wrap: anywhere; }
 
 /* #751 U2 — the same inbox on the entry card: a quiet text line under the one Primary, never a second emphasised button. */

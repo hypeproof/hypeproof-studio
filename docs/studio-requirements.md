@@ -3486,6 +3486,12 @@ Its Start surface lists locally saved activities without passively revalidating
 the previous profile on mount, reveal or inbox refresh. Explicit activity
 selection and entry retain Service validation; cancel or denied selection keeps
 the previous credentials and does not reactivate that profile.
+The saved activities read as one list of choices (#2646): every row shares one
+left edge and spans the card, is a 44px target with a hover and focus state,
+puts the activity label and name first, and shows the workspace short (the last
+two path segments, e.g. `…/local-trial-744/workspace`) on one line; the full
+path stays in the row's title and accessible name. Measured in headless Chromium
+at 320/800/1420 px in both themes by `test/start-saved-activities-computed.smoke.mjs`.
 Only the current activity's known history/draft keys can fill an empty
 destination; a destination's existing saved work wins. Cancel, failed draft
 flush, failed navigation and invalid credentials preserve the original state.
