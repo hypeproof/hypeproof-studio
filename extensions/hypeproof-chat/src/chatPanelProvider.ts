@@ -2,6 +2,7 @@ import {BrowserApprovalRequest} from "./browserApprovalPrompt";
 import {browserOpenUrl, BLANK_BROWSER_URL} from "./browserControlHelpers";
 import {CommandApprovalRequest, commandApprovalPurposeFor} from "./commandApprovalPrompt";
 import { AnnotationLeaveRequest } from './annotationLeavePrompt';
+import { fileMentionsAllowed, listMentionFiles } from "./workspaceFileMentions";
 import { currentClassWindow } from "./classWindow";
 import { FolderConsentRequest } from './folderConsentPrompt';
 import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
@@ -2904,6 +2905,45 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   async askAboutFile(target: string): Promise<void> {
     if (await this.attachWorkspaceFile(target)) void this.post({ type: "focusInput" });
+  }
+  /** CGP-CHAT-R-018 — one live mention search per requesting panel (sidebar or editor chat). */
+  private fileMentionSearches = new Map<vscode.Webview | undefined, { requestId: string; root: string; scope: string; generation: number; files: string[]; source?: vscode.Webview }>();
+  private mentionAllowed(): boolean {
+    const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
+    return fileMentionsAllowed(profile, this._instructorMode.isInstructor === true) && !folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
+  }
+  private mentionCurrent(search: { requestId: string; root: string; scope: string; generation: number; source?: vscode.Webview }): boolean {
+    return this.fileMentionSearches.get(search.source) === search && this.mentionAllowed() && this.resolveCoachCwd() === search.root && this.turnRequestScope() === search.scope && this.profileGeneration === search.generation;
+  }
+  /** Mention lists and pick results answer only the panel that asked; the other panel never sees them. */
+  private async postMention(source: vscode.Webview | undefined, msg: Extract<HostMessage, { type: 'fileMentionResults' | 'fileMentionPicked' }>): Promise<void> {
+    if (!source) { await this.post(msg); return; }
+    if (source !== this.editorChat?.webview && source !== this.view?.webview) return;
+    try { await source.postMessage({ ...msg, activityId: activityConnections(this.context)?.scope, taskId: this.currentTaskStore?.()?.getView().activeTaskId ?? undefined }); } catch { /* the panel closed */ }
+  }
+  private async searchFileMentions(requestId: string, query: string, source?: vscode.Webview): Promise<void> {
+    if (!/^[A-Za-z0-9_.:-]{1,100}$/.test(requestId) || typeof query !== 'string' || query.length > 256) return;
+    this.fileMentionSearches.delete(source);
+    const root = this.resolveCoachCwd();
+    if (!root || !this.mentionAllowed()) { await this.postMention(source, { type: 'fileMentionResults', requestId, files: [], limited: false, error: '현재 작업 폴더의 파일을 붙일 수 없어요.' });return; }
+    const search = { requestId, root, scope: this.turnRequestScope(), generation: this.profileGeneration, files: [] as string[], source };
+    this.fileMentionSearches.set(source, search);
+    try {
+      const result = await listMentionFiles(root, query);
+      if (!this.mentionCurrent(search)) return;
+      search.files = result.files.map(file => file.path);
+      await this.postMention(source, { type: 'fileMentionResults', requestId, ...result });
+    } catch {
+      if (this.mentionCurrent(search)) await this.postMention(source, { type: 'fileMentionResults', requestId, files: [], limited: false, error: '파일 목록을 읽지 못했어요. 작업 폴더를 확인하고 다시 입력해 주세요.' });
+    }
+  }
+  private async pickFileMention(requestId: string, file: string, source?: vscode.Webview): Promise<void> {
+    const search = this.fileMentionSearches.get(source);
+    const current = !!search && search.requestId === requestId && this.mentionCurrent(search) && search.files.includes(file);
+    if (!current) { await this.postMention(source, { type: 'fileMentionPicked', requestId, ok: false });return; }
+    this.fileMentionSearches.delete(source);
+    const ok = await this.attachWorkspaceFile(file);
+    await this.postMention(source, { type: 'fileMentionPicked', requestId, ok });
   }
   /** CGP-CHAT-R-011 — remove the queued file; nothing from it is sent. */
   private clearFileAttachment(): void {
@@ -6550,6 +6590,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "discardAttachmentFailure":
         this.failedAttachmentReads.delete(msg.id);
         return;
+      case "fileMentionSearch": await this.searchFileMentions(msg.requestId, msg.query, source); return;
+      case "fileMentionPick": if (typeof msg.path === 'string') await this.pickFileMention(msg.requestId, msg.path, source); return;
+      case "fileMentionCancel": if (this.fileMentionSearches.get(source)?.requestId === msg.requestId) this.fileMentionSearches.delete(source); return;
       case "attachWorkspaceFile":
         await this.attachWorkspaceFile();
         return;
@@ -8965,6 +9008,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(entryId ? { lessonCapabilityEntry: { id: entryId, seen: this.context.globalState?.get(entryReceiptKey(entryId)) === true } } : {}),
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
         ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
+        ...(fileMentionsAllowed(toolProfile, isInstructor) ? { fileMentions: true } : {}),
         ...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
         ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),

@@ -88,7 +88,10 @@ if (!bin) {
    assert.equal(await ev('document.activeElement.tagName'),'TEXTAREA',`${where}: the composer has focus on load`);
    // DES-SHELL-11: the skip link is visible only on focus. Unfocused, it must sit wholly above the viewport.
    assert.ok(await ev(`document.querySelector('.hps-skip-input').getBoundingClientRect().bottom<=0`),`${where}: the unfocused skip link is parked above the viewport`);
-   await ev(`document.querySelector('textarea').value='보존할 글'`);
+   // Typed the way a learner types (native setter plus an input event), so React state owns the draft; a DOM-only write is
+   // reverted by any controlled re-render, e.g. the caret tracking that file mentions (CGP-CHAT-R-018) does on selection.
+   await ev(`(()=>{const t=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'보존할 글');t.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+   await sleep(50);
    let back = 0; for (; back<60; back++) { await tab(true); if (await ev(`document.activeElement.classList.contains('hps-skip-input')`)) break; }
    assert.ok(back<60,`${where}: Shift+Tab from the composer never reached the skip link`);
    const skipBack = await assertRinged(`${where}: skip link (Shift+Tab)`,forced);

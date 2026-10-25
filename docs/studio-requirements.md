@@ -5425,3 +5425,36 @@ terminal idempotence and model exclusion. Actual App bridge tests cover both sea
 themes and320/800/1420px panes, including lifecycle and scope/history transitions.
 Native desktop timing, background/suspended-view delivery and speech need owner
 verification before acceptance.
+
+## Workspace file mentions (CGP-CHAT-R-018)
+
+Typing `@` at the start of input or after whitespace offers a searchable list of
+files in the current work folder. The affordance requires the served
+`sdk_tools.read` attachment grant and either `activity_kind: personal` or explicit
+`minor_cohort: false`; instructors and unknown/minor classroom profiles do not
+receive it. It adds no new file or runtime capability (PI#2).
+
+The host lists relative names and byte sizes, not contents, with hidden paths and
+symbolic links excluded. VS Code's default excluded dependency folders
+(`node_modules`, `bower_components`, `CVS`; `.git` is already a hidden path) are
+skipped without counting toward the budget. `.gitignore` is not parsed. Non-dot
+secret-looking files (e.g. `secrets.json`) remain listable, the same as the
+existing "+ 파일" attach. Matching compares the query and each name in Unicode
+NFC, case-folded, so a Korean name stored decomposed (NFD) is found by the
+composed text an IME produces; the stored path is shown and attached unchanged.
+Search is bounded to 100 matches / 5,000 visited entries;
+a visible notice asks for a narrower name when the result is partial. An unreadable
+folder is an error, not an empty-success result. Lists and selections are bound to
+the current request, folder, task and profile generation, and to the panel that
+asked: request ids are random per request, the host keeps one search per panel
+(sidebar or editor chat) and answers only that panel, and a list or pick result
+carrying another panel's id is ignored. Selection accepts only
+an offered path and reuses the existing file attachment read/consent checks and
+removable preview; binary, oversize, changed or outside paths retain their existing
+refusals. Nothing is sent automatically.
+
+The input retains focus. Arrow keys choose a result, Enter attaches, and Escape
+closes without changing the draft. IME composition does not open or select a list.
+Only a successful, current attachment acknowledgement removes the exact unchanged
+`@query`; a refusal or stale reply preserves the text. Email-like inline `@` does
+not trigger the picker. Profiles without this affordance retain ordinary typing.
