@@ -86,6 +86,7 @@ import { sdkSeedOfferDecision, sdkSeedOnDemandEnabled, sdkSeedPlatformKey, sdkSe
 import { SDK_BINARY_MANIFEST } from "./sdkBinaryManifest";
 import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
+import { acceptStepMarks, forgetStepMarks, marksFor, rememberStepMark, servedStepMark, type LessonStepMark } from "./lessonStepMarks";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
 import {
@@ -450,6 +451,9 @@ const DIRECTOR_REVIEW_UNAVAILABLE = denialCopy({ source: "unknown", feature: "�
 
 /** Shown when the learner keeps unsent annotations instead of leaving (REQ-ART-03). */
 const ANNOTATION_LEAVE_KEPT = '표시를 그대로 두었어요. 계속 고친 뒤 다시 활동을 바꿔 주세요.';
+/** CGP-CHAT-R-023 — served lesson step per user message id (lessonStepMarks.ts). */
+const STEP_MARKS_KEY = "hps.lessonStepMarks";
+
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
   /** #897 H-13 — has the model-substitution notice already been attached to this turn? One turn per seat (REQ-M37 ③). */
@@ -6880,6 +6884,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const userId = this.rememberTurnRequest(text, mode, userMessageId, retrySourceId, versionOf);
     const userLine = (content: string): ChatMessage => ({ id: userId, role: "user", content, createdAt: Date.now(), toolMode: mode, ...(versionOf ? { editOf: versionOf } : {}), ...(retryRoot && userId !== retryRoot.id ? { retryOf: retryRoot.id } : {}) });
     if (retryRoot) Object.assign(this.turnRequests.get(userId)!.message, { retryOf: retryRoot.id });
+    // CGP-CHAT-R-023 — a re-sent id (retry, resend) loses its old step mark before this turn picks its path: only
+    // the model path below stamps it again. An app shortcut answer or an unstamped seat (instructor) then shows
+    // no boundary there rather than the step it was first served under. An open panel drops it at once.
+    if (retrySourceId !== undefined || Object.prototype.hasOwnProperty.call(this.stepMarks(), userId)) await this.forgetStepMark(userId);
     const connections=activityConnections(this.context);
     // Instructor mode has no student activity connection — skip the acquire/verify gate.
     if (connections && !this._instructorMode.isInstructor) {
@@ -7018,6 +7026,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const bindingKey = profile?.lesson_binding?.enforced ? profile.lesson_binding.key : undefined;
     // #751 G2 — the step and help choice for THIS turn, from the focus at turn start against the turn's own lesson.
     const turnFocus = turnLesson(profile?.lesson, this.lessonFocus);
+    // CGP-CHAT-R-023 — the step this turn is served under, stamped on its user message id for the chat's step divider.
+    // Learner seats only: instructor mode draws no lesson rail, so it gets no step divider either.
+    const stepMark = this._instructorMode.isInstructor === true ? undefined : servedStepMark(profile?.lesson, turnFocus.step);
     const selection = availableModelSelection(profile, cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'));
     const runtime: 'proxy' | 'agent-sdk' = selection?.source === 'lesson' ? selection.runtime : resolveCoachRuntime({
       settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: profile?.coach_runtime, minorCohort: profile?.minor_cohort,
@@ -7180,7 +7191,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.finishNotifier.release(); // a new turn is sent from the chat: the learner has seen it
 
     responseStarted(streamId);
-    void this.post({ type: "streamStart", streamId, messageId, userMessageId: userId });
+    // Kept before it is announced, so a history post racing this turn already carries the mark.
+    if (stepMark) await this.rememberStepMark(userId, stepMark);
+    void this.post({ type: "streamStart", streamId, messageId, userMessageId: userId, ...(stepMark ? { lessonStep: stepMark } : {}) });
     this.rememberAnswerTurn(messageId, streamId);
     // #503 — this turn's single timeline. It runs the same reducer as the webview, so
     // the history keeps exactly the on-screen order.
@@ -9161,6 +9174,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** CGP-CHAT-R-023 — the step marks of the transcript on screen (beside it, never inside the task file). */
+  private stepMarks() { try { return acceptStepMarks(this.context.workspaceState.get(STEP_MARKS_KEY)); } catch { return acceptStepMarks(null); } }
+  private async rememberStepMark(messageId: string, mark: LessonStepMark): Promise<void> {
+    try { await this.context.workspaceState.update(STEP_MARKS_KEY, rememberStepMark(this.stepMarks(), messageId, mark)); }
+    catch { /* display-only: a mark that could not be kept leaves this turn without a divider after reload */ }
+  }
+  private async forgetStepMark(messageId: string): Promise<void> {
+    try { await this.context.workspaceState.update(STEP_MARKS_KEY, forgetStepMarks(this.stepMarks(), [messageId])); }
+    catch { /* display-only: the next stamp or history post replaces it */ }
+    await this.post({ type: "lessonStepMarks", marks: {}, forget: [messageId] });
+  }
+  private async postStepMarks(messages: ChatMessage[]): Promise<void> {
+    await this.post({ type: "lessonStepMarks", marks: marksFor(this.stepMarks(), messages.filter(m => m.role === "user").map(m => m.id)) });
+  }
+
   private async postHistory(): Promise<void> {
     await this.denialWrites;
     const error = this.currentTaskStore?.()?.getView().error;
@@ -9170,6 +9198,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const ids = new Set(saved.map(message => message.id));
     const messages = pending ? [...saved, ...pending.messages.filter(message => !ids.has(message.id))] : saved;
     await this.post({ type: "history", messages });
+    await this.postStepMarks(messages);
     await this.postContextTrim();
     await this.postVerdicts();
     if (pending) await this.post({ type: 'taskWorkspaceError', error: this.interruptedHistoryError(), historySaveFailed: true });

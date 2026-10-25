@@ -5458,3 +5458,36 @@ closes without changing the draft. IME composition does not open or select a lis
 Only a successful, current attachment acknowledgement removes the exact unchanged
 `@query`; a refusal or stale reply preserves the text. Email-like inline `@` does
 not trigger the picker. Profiles without this affordance retain ordinary typing.
+
+## Lesson step dividers (CGP-CHAT-R-023)
+
+REQ-STUDIO-LESSON-STEP-DIVIDER / CGP-CHAT-R56 (CGP-CHAT-056) / PI#3 (learning is embedded in
+the work) / AE-01: on a learner seat with a served lesson, the transcript marks where the served
+step changes. The served step is the one REQ-STUDIO-LESSON-STEP captures at turn start and sends
+as `x-hps-lesson-step` (both runtimes); the host stamps that step (lesson digest, step id, its
+1-based number, its title cleaned of control and bidi characters and capped at 60 characters) on
+the turn's user message id, announces it on `streamStart` and keeps it beside the transcript in
+workspace state (at most 400 marks; the task file keeps its shape). A history post (reload, task
+switch) sends the marks of the posted messages. A re-sent message id (retry, resend) loses its
+old mark at the start of that send, and an open panel drops it at once (`lessonStepMarks` with
+`forget`); only the model path stamps it again, with the step served on the re-send. An app
+short-circuit answer or an instructor-mode re-send therefore leaves that message with no
+boundary rather than a stale one.
+
+The chat draws a read-only divider "n단계: {name}" (a full-width hairline with the label centred,
+14px floor, not focusable, `role="separator"`) before the first prompt served under a step and
+wherever the served step differs from the previous marked prompt. Unmarked lines (older history,
+app-answered shortcuts, tool lines) neither start nor break a run. Region A's footer shows a quiet
+44px "지금 단계로" button only when the step on screen in the rail has a divider; it scrolls the
+transcript to that step's latest divider (instantly under reduced motion) and never changes the
+rail, the header's step or the host's focus. Personal workspaces (no lesson) and instructor mode
+draw no dividers. Owner-delegated choices are in
+`docs/research/chatgpt-desktop-2026-10/decisions.md`. The divider is orientation only; it is not a
+completion judgement, score or capability label (SX-59).
+
+Evidence: `extensions/hypeproof-chat/test/lesson-step-divider.smoke.mjs` (pure rules with negative
+controls; real agent-sdk and proxy provider turns including reload, retry, a re-send after a
+step change ending in the model path, an app short-circuit or instructor mode, instructor and
+lesson-less seats; the rendered ChatPanel) and `lesson-step-divider-layout.smoke.mjs` (computed
+layout and the real jump in headless Chromium, dark/light, 800/1420 px, forced colours; fails
+under `FOCUS_REQUIRE_BROWSER=1` without a browser).

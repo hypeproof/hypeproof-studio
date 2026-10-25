@@ -55,6 +55,7 @@ import type { VerifyView } from "../../src/verifyView";
 import { deriveTaskRunState, type TaskTurnOutcome } from "../../src/taskRunState";
 import { useOnline, guardSend } from "./connectivity";
 import { verifyPressAction, verifyNote } from "./verifyOffline";
+import { acceptStepMarks, nextStepMarks, rememberStepMark, validStepMark, type LessonStepMarks } from "../../src/lessonStepMarks";
 
 interface State {
   config: ChatConfig | null;
@@ -397,6 +398,8 @@ export function App() {
   const [verdicts, setVerdicts] = useState<VerdictMap>({});
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — computed by the host from the saved history it sends.
   const [trimBoundaryId, setTrimBoundaryId] = useState<string | null>(null);
+  // CGP-CHAT-R-023 — served lesson step per user message id (host-owned), for the transcript's step dividers.
+  const [stepMarks, setStepMarks] = useState<LessonStepMarks>(() => acceptStepMarks(null));
   const pendingVerdicts = useRef(new Map<string, { requestId: string; value: VerdictState | null }>());
   const latestVerdictRequests = useRef(new Map<string, string>());
   const ownVerdictRequests = useRef(new Set<string>());
@@ -518,7 +521,11 @@ export function App() {
           setVerdicts(next);
           break;
         }
-        case "streamStart": dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId, userMessageId: msg.userMessageId }); break;
+        case "streamStart":
+          dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId, userMessageId: msg.userMessageId });
+          if (msg.userMessageId && validStepMark(msg.lessonStep)) { const id = msg.userMessageId, mark = msg.lessonStep; setStepMarks(prev => rememberStepMark(prev, id, mark)); }
+          break;
+        case "lessonStepMarks": { const post = { marks: msg.marks, forget: msg.forget }; setStepMarks(prev => nextStepMarks(prev, post)); break; }
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
@@ -893,6 +900,7 @@ export function App() {
         onEditResend={editResend}
         verdicts={verdicts}
         trimBoundaryId={trimBoundaryId}
+        stepMarks={stepMarks}
         onVerdict={judgeAnswer}
         onAnswerToWiki={(messageId) => postToHost({ type: "answerToWiki", messageId })}
         onDismissError={dismissError}

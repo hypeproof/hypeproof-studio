@@ -95,6 +95,7 @@ import { idleTurnHint, runningProgressStep } from "../../src/longStepHint";
 import { DelegationGroup } from "./DelegationGroup";
 import { guardHostPayload, PanelBoundary } from "./PanelBoundary";
 import { CONTEXT_COMPACT_NOTE, CONTEXT_TRIM_NOTE, isCompactionLine, trimMarkerIndex } from "../../src/contextTrim";
+import { currentDividerId, stepDividerLabel, stepDividers, type LessonStepMarks } from "../../src/lessonStepMarks";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
 import { classroomPanelsShown } from "../../src/classroomPanels";
@@ -191,6 +192,8 @@ interface Props {
   verdicts?: VerdictMap;
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the host's clamp boundary id (null: nothing is left out). */
   trimBoundaryId?: string | null;
+  /** CGP-CHAT-R-023 — the host's served-step mark per user message id. Absent: no step dividers. */
+  stepMarks?: LessonStepMarks;
   /** REQ-STUDIO-DELEGATION-ROW — the stream running now; a delegation row is live only for it. */
   runningStreamId?: string | null;
   delegationStops?: Record<string, import("../../src/delegationStop").DelegationStopState>;
@@ -1316,6 +1319,18 @@ export function ChatPanel(props: Props) {
   const shown = visibleVersions(attempts.items, versionChoice);
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — derived from the conversation each render; -1 when nothing is left out.
   const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
+  // CGP-CHAT-R-023 — read-only step dividers where the served step changes, and the "지금 단계로" target: the
+  // divider of the step on screen (the rail's step, the first step when none is picked). Learner seats only.
+  const servedLesson = props.instructor ? null : config?.profile?.lesson ?? null;
+  const dividers = stepDividers(shown.items, servedLesson ? props.stepMarks : null);
+  const stepOnScreen = servedLesson ? (servedLesson.content.steps.find(s => s.id === currentStepId) ?? servedLesson.content.steps[0])?.id ?? null : null;
+  const jumpTarget = currentDividerId(dividers, servedLesson?.sha256, stepOnScreen);
+  const jumpToStep = jumpTarget ? () => {
+    const box = scrollRef.current;
+    const divider = box ? [...box.querySelectorAll<HTMLElement>("[data-step-divider]")].find(el => el.dataset.stepDivider === jumpTarget) : undefined;
+    if (!box || !divider) return;
+    box.scrollTo({ top: divider.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop, behavior: scrollBehavior() });
+  } : null;
   // REQ-STUDIO-DELEGATION-ROW — a delegation is one row; its helper's tool lines are drawn inside it.
   const delegations = groupDelegations(shown.items, streaming ? props.runningStreamId ?? null : null);
   const helperGroups = delegationGroups(delegations.rows);
@@ -1479,6 +1494,7 @@ export function ChatPanel(props: Props) {
         goal={goalOfLesson(studentGoal, config?.profile?.lesson)?.goal || null}
         currentStepId={currentStepId}
         onSelectStep={pickStep}
+        onJumpToStep={jumpToStep}
         onStartStep={(step) => {
           pickStep(step.id);
           const lesson = config?.profile?.lesson;
@@ -1641,6 +1657,7 @@ export function ChatPanel(props: Props) {
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
         {shown.items.map((m, i) => <Fragment key={m.id}>
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
+          {dividers.has(m.id) && <StepDivider id={m.id} label={stepDividerLabel(dividers.get(m.id)!)} />}
           {m.elapsedTurn && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
             <ToolLine message={m} onReport={props.onReportProblem} />
           ) : delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
@@ -2580,6 +2597,11 @@ function ChipRack({
  * the observer (e2e/observe/watch.mjs) read activity through these selectors.
  */
 /** REQ-STUDIO-CONTEXT-TRIM-MARKER — one quiet line in the conversation (CGP-CHAT-D16): not a bubble, not a toast. */
+/** CGP-CHAT-R-023 (CGP-CHAT-D56) — a full-width hairline with the served step centred. Read-only: not focusable, no action. */
+function StepDivider({ id, label }: { id: string; label: string }) {
+  return <div className="hps-step-divider" role="separator" aria-label={label} data-step-divider={id}><span className="hps-step-divider-label" aria-hidden="true">{label}</span></div>;
+}
+
 function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
 }
