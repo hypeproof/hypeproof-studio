@@ -60,6 +60,7 @@ import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
+import { NicknameSetting } from './NicknameSetting';
 import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
 import { SafetyNotice } from './SafetyNotice';
@@ -2366,6 +2367,7 @@ export function ChatPanel(props: Props) {
             <span>{TEXT_SIZE_LABELS[size]}</span>
           </label>)}
         </fieldset>
+        {config.learnerNickname && <NicknameSetting key={config.activity?.id ?? ''} saved={config.learnerNickname.value} post={postToHost} />}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>

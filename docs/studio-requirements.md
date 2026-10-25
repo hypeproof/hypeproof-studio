@@ -5609,6 +5609,7 @@ step change ending in the model path, an app short-circuit or instructor mode, i
 lesson-less seats; the rendered ChatPanel) and `lesson-step-divider-layout.smoke.mjs` (computed
 layout and the real jump in headless Chromium, dark/light, 800/1420 px, forced colours; fails
 under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
 ### Collapsible pasted text (CGP-CHAT-R-017)
 
 A plain-text paste longer than 2,000 Unicode code points or 40 lines becomes a
@@ -5711,6 +5712,7 @@ colour and size, raw text, selection copy and `답변 복사`, personal and clas
 800 and 1420 px, forced colours; the built CSS lists woff2 only; KaTeX is a separate chunk that a
 page without math never requests; `\href` shows its raw source with no link; the wide block's
 scrollbar does not cover its subscripts).
+
 ### Draw and attach a sketch (CGP-CHAT-R-020)
 
 `그려서 보여주기` in the composer tools opens a local drawing canvas with a pen,
@@ -6009,3 +6011,92 @@ button and rows at the 14px floor, 10 visible rows, viewport containment, keyboa
 focus return, keyboard jump that scrolls and focuses the bubble with an inset ring, temporary tab
 stop removed, forced colours, and the editor, fallback-box and missing-target jumps; fails under
 `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Learner nickname (CGP-KNOW-R-032)
+
+REQ-STUDIO-LEARNER-NICKNAME. CGP-KNOW-R-032 / REQ-KNOW-50 / CGP-KNOW-050 / design CGP-KNOW-D-032
+(DES-KNOW-50) / PI#1 (useful work first), REQ-O: the learner can set the nickname the AI calls them
+by, in 대화 설정 under "뭐라고 불러 줄까요?". It is the only learner field: Studio collects no
+occupation, no free "about me" text and no instructions to the AI for any seat, so a minor cohort
+sees only the nickname. The nickname is at most 20 characters (code points after NFC; a Hangul
+syllable is one) on one line. Control, format and bidi characters and blank-looking letters (the
+Hangul fillers U+3164, U+115F, U+1160 and U+FFA0) are dropped and spaces collapsed first, and a
+line break is refused. Only an empty submission clears the nickname; a value with no visible
+letter left is refused. The screen runs on the NFKC form; the value kept and sent is the NFC form
+the learner typed. Owner decision 2026-10-25: the rule is structural, an allowlist of scripts, not
+a growing deny list. Only Hangul (syllables and jamo), Latin letters A-Z and a-z (full-width forms
+fold to them), space, `-` and `_` are allowed. Every other character is refused: digits of every
+script, circled, superscript and Roman-numeral forms, Hanja, Cyrillic, Greek and other homoglyph
+sources (Latin alpha ɑ too), `.`, `@`, `:`, `/`, `·`, quotes, brackets and emoji. On top of the
+allowlist, the following are refused whether the markers are spaced or glued:
+
+- **Contact shapes.** 앳/엣/at, 골뱅이/골벵이, 닷/쩜/점/dot followed by com/net/kr/컴/넷, a mail host
+  followed by com/net/kr (navercom), `www`, and `http`/`https`. Messenger and social handles (verify
+  round 3): any platform word, glued or spaced, such as 카톡/카카오/kakao, 인스타/instagram, 디코/디스코드/
+  discord, 유튜브/youtube, 틱톡/tiktok, 페북/facebook, 트위터/twitter, 텔레/telegram, 라인, 메일/gmail (so
+  `kimjay 네이버 메일` is refused), 아이디 (not 아이디어), 번호 and 폰. The short Latin words id, fb, yt,
+  line, mail, email, insta and dm count only as separate words, so Idol and Lined stay names.
+- **Phone and resident numbers spelled out in words** (the spirit of REQ-O2). Six or more numeral
+  words in total: Sino-Korean 공/영/빵/일/이/삼/사/오/육/칠/팔/구/십, native Korean 하나/둘/셋…,
+  and English zero to nine.
+- **Addresses.** A road or area suffix (로, 길, 동, 읍, 면, 리, 호, 번지, 층) next to numeral words
+  (역삼동 일이삼, 테헤란로 십이길, 천이백삼호), plus 아파트, "시 + 구" and "구 + 동" with two-syllable
+  names, so 포도 친구 stays a nickname.
+- **School and grade** (owner decisions 2026-10-25, for minors). A word ending in 학교; 학년 or 반
+  with a numeral word (삼학년, 이반); a word ending in 초/중/고 followed by a grade or class pair
+  (별빛중 이-삼); a school demonym (초등학생, 중학생, 고등학생, 초딩, 중딩, 고딩, a word ending in 초등,
+  or a 초/중/고 word followed by 학생). A bare 하늘초 and grade shorthands such as 고삼 pass, as the
+  owner decided.
+
+The filter is best-effort. A determined learner can still encode data in letters (spelling numbers
+as look-alike letters, or Roman numerals written as XII). The model-side line keeps the nickname
+quoted and labelled as a nickname, never as the learner's words, and quotes, brackets, `:` and
+line breaks cannot occur in it. These residual risks are accepted:
+
+- data spelled in look-alike letters, or Roman numerals written as XII;
+- a mail host with no TLD and no 메일 (kimjay naver);
+- five or fewer numeral words (하나 둘 셋 넷 다섯);
+- one numeral word after an address suffix (역삼동 삼), because 동이 and 골목길이 must stay names;
+- grade shorthands with no 학년 (고삼, 중일), a neighbourhood on its own (대치동 별이);
+- "at" spelled in Hangul (에이티);
+- plain instruction text, which stays quoted on the model line.
+
+Ordinary nicknames that contain digit-word syllables still pass
+(구름이, 영희, 이수일, 오이 구이, 사오리 이수아). These costs are known and accepted:
+
+- any digit is refused (별이2);
+- six numeral-word syllables are refused (이영일 오빠 사랑이);
+- a numeral word before 반 is refused (일반, 이반);
+- "at" or "dot" between two words is refused (look at me, dot com);
+- 우리 학교 is refused, and so is Latin next to 앳 (Kim 앳된);
+- Hangul words that contain a platform word are refused (온라인, 텔레토비, 스마트폰, 메일함).
+
+Each refusal names its reason (phone/address/RRN, e-mail or web address, school or grade, blank,
+characters, length). A refusal
+shows its reason inline and posts nothing; the host applies the same check again and a refused value
+changes nothing. The counter is text (`N/20자`) and counts committed characters only: an open IME
+composition does not move it. "저장했어요. 다음 요청부터 이 이름으로 불러요." (or, after 지우기,
+"지웠어요. …") appears only once the host's saved value comes back, never on the post alone; after
+지우기 focus stays in the field. The hint says the name is kept in this activity on this device. A
+draft never carries into another activity, and a save whose activity changes while the host reads
+the profile is dropped.
+
+The nickname is stored per activity on this device (VS Code global state, keyed like the coach
+name) and is offered and sent only on personal and trial seats outside a lesson, never for an
+instructor; classroom, lesson and unknown seats neither show the field nor send a stored value. The
+Service has no nickname contract, so the host lays one model-only line
+(`[Studio 안내: 학습자가 대화 설정에서 정한 호칭은 "…"이다. …]`) in front of the learner's text on
+every request of such a seat, all runtimes alike (the line is added before the proxy, agent-sdk and
+local runtimes split), retries included. It is read at send time, so a change applies to the next
+request; the stored value is screened again before it is sent, and the history keeps the learner's
+own words. Controls keep the 44px target and 14px text floor.
+
+Tests: `extensions/hypeproof-chat/test/learner-nickname-host.smoke.mjs` (the real
+ChatPanelProvider with a scripted proxy request log: pure screen controls for the three verify rounds
+(allowlist and homoglyphs, platform words, school demonyms, glued contact markers, numeral-word addresses and numbers, blank names,
+school and grade) with positive controls, next-request presence,
+change and clear, host refusals, seat gate, a stored value that fails the screen, another activity's
+value) and `extensions/hypeproof-chat/test/learner-nickname-browser.smoke.mjs` (the real App bundle
+in headless Chromium: adult and minor personal seats, classroom and no-key controls, IME composition
+through CDP, refusals posting nothing, one post on save, 44px/14px geometry in dark/light at 1420 and
+800 px and a forced-colours border; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).

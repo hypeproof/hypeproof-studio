@@ -227,6 +227,7 @@ import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./b
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
+import { nicknameContext, nicknameKeyForScope, nicknameSeat, screenNickname } from "./learnerNickname";
 import { CapabilityChangeTracker, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { RemovalSlot, validUndoId } from "./removalUndo";
@@ -6655,6 +6656,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.context.globalState.update(TEXT_SIZE_KEY, normalizeTextSize(msg.size));
         await this.postConfig();
         return;
+      case "setLearnerNickname": {
+        // CGP-KNOW-R-032 — the host's check is the authoritative one: the seat must offer the field
+        // and the value must pass the same screen the field ran. A refused value changes nothing.
+        if (typeof msg.nickname !== "string" || msg.nickname.length > 200) return;
+        // The key is the activity the message came from; an activity switch during the profile read drops it.
+        const nicknameKey = this.learnerNicknameKey(), nicknameScope = activityConnections(this.context)?.scope;
+        const seat = await this.ensureProfile();
+        if (activityConnections(this.context)?.scope !== nicknameScope || this.learnerNicknameKey() !== nicknameKey) return;
+        if (!nicknameSeat(seat, this._instructorMode.isInstructor === true)) return;
+        const screened = screenNickname(msg.nickname);
+        if (!screened.ok) return;
+        await this.context.globalState.update(nicknameKey, screened.value || undefined);
+        await this.postConfig();
+        return;
+      }
       case "openSettings":
         void vscode.commands.executeCommand("workbench.action.openSettings", "hypeproofChat");
         return;
@@ -7198,6 +7214,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const effort = profile && selection ? selectedEffort(profile,selection,model,this.context.workspaceState.get<SavedEffortChoice>('hps.effortChoice'))?.value : undefined;
     const { name: effectiveCoachName, personality: effectiveCoachPersonality } =
       resolveCoach(coach, profile);
+    // CGP-KNOW-R-032 — the nickname is bound to this turn's activity, taken with its profile.
+    const nicknameStored = nicknameSeat(profile, this._instructorMode.isInstructor === true) ? this.context.globalState?.get(this.learnerNicknameKey()) : undefined;
 
     // #278 — consume any queued browser-page context for THIS turn only. The
     // user message stored in history keeps their clean text; only the model
@@ -7247,6 +7265,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const saved = workContext(step?.title ?? turnFocus.step, this.lessonWorkFor(profile.lesson.sha256)[turnFocus.step]);
       if (saved) userTextForModel = `${saved}\n\n${userTextForModel}`;
     }
+    // CGP-KNOW-R-032 — the learner's nickname rides in front of every request on a seat that offers it,
+    // model-only (the history keeps the learner's own words). Read at send time, so a change applies to
+    // the next request; the stored value (read with the turn's profile above) is screened again here.
+    const nickname = nicknameContext(nicknameStored);
+    if (nickname) userTextForModel = `${nickname}\n\n${userTextForModel}`;
     // 2026-08-19 — pre-built guest worlds. When a child picks a guest they are not
     // made to wait 30–40 s for the coach to produce 5 KB: the filled-in HTML is
     // fetched from the worker, saved and shown immediately, and the coach is told
@@ -9212,6 +9235,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
         textSize: normalizeTextSize(this.context.globalState?.get(TEXT_SIZE_KEY)),
+        // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
+        ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         update: local ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile, activity) },
@@ -9444,8 +9469,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return coachKeyForCohort(activityConnections(this.context)?.scope ?? this.activeCohortId);
   }
 
+  /** CGP-KNOW-R-032 — per activity, like the coach name. */
+  private learnerNicknameKey(): string {
+    return nicknameKeyForScope(stateBucketId(activityConnections(this.context)?.scope ?? this.activeCohortId));
+  }
+
   private coachRitualDoneKey(): string {
     return coachRitualDoneKeyForCohort(activityConnections(this.context)?.scope ?? this.activeCohortId);
+  }
+
+  private storedLearnerNickname(): string {
+    const stored = this.context.globalState?.get<unknown>(this.learnerNicknameKey());
+    const screened = typeof stored === "string" ? screenNickname(stored) : null;
+    return screened?.ok ? screened.value : "";
   }
 
   private takeawayBusy = false;

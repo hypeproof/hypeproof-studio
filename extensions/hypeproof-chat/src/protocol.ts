@@ -158,6 +158,8 @@ export interface ChatConfig {
   capabilityChange?: import('./aiCapabilities').CapabilityChange;
   /** CGP-DS-R-009: chat text size chosen on this device. */
   textSize?: import('./textSize').TextSize;
+  /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
+  learnerNickname?: { value: string };
   /** CGP-DS-R-015: `workbench.reduceMotion`: true = on, false = off, absent = system. */
   reduceMotion?: boolean;
   turnTools?: import('./turnTools').TurnToolsAvailability;
@@ -690,6 +692,8 @@ export type WebviewMessage = (
   | { type: "openSettings" }
   /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */
   | { type: "setTextSize"; size: string }
+  /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
+  | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }
   | { type: "openReportModal" }            // #64: user clicked 🚨 on error banner
   /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
