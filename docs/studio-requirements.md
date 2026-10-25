@@ -5802,6 +5802,12 @@ re-read and check what was said, without asking the coach to repeat it.
 
 ## Personal workspace metadata — REA W01 partial
 
+`ST-REQ-PERSONAL-WORKSPACE-METADATA` is the bounded metadata contract below.
+Its parent `ST-REQ-PERSONAL-ACCOUNT` already assigns the account domain to
+`jayleekr`; the new requirement, test and implementation nodes retain that owner.
+This registration does not assign the whole REA W01 to a new owner or accept its
+remaining identity, organization, child-policy or admission scope.
+
 Approved REA W01 adds a signed-in personal-space entry to the existing start page
 (REQ-L13 account boundary; Product Intent PI#1 and PI#5). It exposes learner naming
 and ownership without showing capability labels. This slice stores and reopens

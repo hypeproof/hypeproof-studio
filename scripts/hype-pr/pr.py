@@ -606,6 +606,20 @@ def preparation_module():
     return preparation
 
 
+def agent_identity_errors(args, report) -> list[str]:
+    """The bot's PR must hold only bot-authored and bot-committed commits (#403)."""
+    sys.path.insert(0, str(ROOT / "scripts/agent-identity"))
+    import branch_identity
+    bot = branch_identity.bot_identity().split(" <", 1)[0]
+    if args.author != bot or not report:
+        return []
+    try:
+        bad = branch_identity.check(getattr(args, "checkout", "."), [report["head"]], report["base_tip"])
+    except ValueError as exc:
+        return [f"agent identity check failed: {exc}"]
+    return [branch_identity.report(bad, branch_identity.bot_identity(), f"origin/{args.base}")] if bad else []
+
+
 def prepared_report(args, policy):
     return preparation_module().verify(
         getattr(args, "preparation", None), getattr(args, "checkout", "."),
@@ -724,12 +738,31 @@ def fetch_pull(repo: str, number: int) -> dict[str, Any]:
     return json.loads(response.stdout)
 
 
+def board_on_create(repo_ref: str, pr_url: str, issue: int) -> dict[str, Any]:
+    """Put the new PR and the issue it closes on the project boards as in_review (#397).
+
+    The PR already exists, so a board failure does not fail `create`; it is
+    reported in the result and on stderr.
+    """
+    board = ROOT / "scripts/board/board.py"
+    if not board.is_file():
+        return {"ok": False, "error": f"{board} is missing"}
+    items = []
+    for url in (pr_url, f"https://github.com/{github_repo(repo_ref)}/issues/{issue}"):
+        done = run([sys.executable, str(board), "set", url, "--state", "in_review"])
+        items.append({"url": url, "returncode": done.returncode, "detail": (done.stdout or done.stderr).strip()[-300:]})
+    return {"ok": all(item["returncode"] == 0 for item in items), "items": items}
+
+
 def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
     work = bool(os.environ.get("HYPE_PR_WORK_DIR"))
     if work and args.auto_merge:
         raise ValueError("Work transport does not schedule auto-merge; follow existing review policy")
     preparation_required = parse_repo(args.repo) in json.loads((ROOT / "policy/change-impact.json").read_text())["repositories"]
     report = prepared_report(args, policy) if args.apply and preparation_required else None
+    identity_errors = agent_identity_errors(args, report) if args.apply else []
+    if identity_errors:
+        raise ValueError("\n".join(identity_errors))
     lane = release_lane(args, report)
     labels = lane["labels"]
     paths = report["paths"] if report else (args.path or [])
@@ -849,6 +882,10 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
             "stdout": merged.stdout.strip(),
             "stderr": merged.stderr.strip(),
         }
+    if not work:  # the Work transport has no local gh to write the boards with
+        result["board"] = board_on_create(args.repo, pr_ref, args.issue)
+        if not result["board"]["ok"]:
+            print(f"hype-pr: the PR was created but the board was not updated: {result['board']}", file=sys.stderr)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     cleanup_failed = any(item["returncode"] != 0 for item in result["reviewer_cleanup_results"])
     return 1 if cleanup_failed else 0
