@@ -219,6 +219,29 @@ t("#2641: a file over the cap is never read; the host gets only its name and siz
   await act(async () => { root.unmount(); });
 });
 
+// t("ChatPanel draws the list only with the host's materials flag, ..."). Uses the file's own mountPanel, hostSays, card, drag, textFile, settle, drops, FakeFile.
+t("#2641: a file whose read fails still gets an answer: the host gets its name and size, no bytes", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const c = card(); c.open = true;
+  // A folder dragged from the file manager is a File whose bytes cannot be read.
+  const folder: FakeFile = { name: "폴더", size: 96, type: "", arrayBuffer: () => Promise.reject(new Error("NotReadableError")) };
+  await act(async () => { c.dispatchEvent(drag("drop", [folder])); await settle(); await settle(); });
+  eq(drops().map((m) => [m.name, m.size, m.base64]), [["폴더", 96, ""]], "sent with no bytes, so the host answers unreadable");
+  await act(async () => { root.unmount(); });
+});
+
+t("#2641: a drop while another 자료 request is pending sends nothing", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const c = card(); c.open = true;
+  await act(async () => { c.dispatchEvent(drag("drop", [textFile("a.md", "a")])); await settle(); });
+  await act(async () => { c.dispatchEvent(drag("drop", [textFile("b.md", "b")])); await settle(); });
+  eq(drops().map((m) => m.name), ["a.md"], "only the first drop went to the host");
+  await act(async () => { root.unmount(); });
+});
+
+
 t("ChatPanel draws the list only with the host's materials flag, never for an instructor", async () => {
   const UX = { coach: { naming_mode: "fixed" as const, fallback_name: "HypeProof", naming_prompt_md: "", personality_prompt_md: "" }, suggestions: { initial: [], follow_up: [] }, hints: { short_input: { enabled: false, min_chars: 0, message_md: "" }, roll_input_button: { enabled: false, label: "", probe_md: "" } }, retry_button: { enabled: false, show_counter: false } };
   const base = { model: "m", hasToken: true, proxyUrl: "http://localhost:8787", fileAttach: true, coach: { name: "HypeProof", personality: "", configured: true },

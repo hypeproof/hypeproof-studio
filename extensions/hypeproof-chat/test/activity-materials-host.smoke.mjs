@@ -447,6 +447,51 @@ await t("folder consent \"AI 안 씀\" (personal activity): adding and selecting
   assert.ok(s.view.items.every((i) => !i.selected));
 });
 
+// await t("wiring: the config flag follows the file-attach gate", ...). Uses the file's own fixture, t, item, put, outside, copy.
+// #2641: a dropped file goes through the same gates and the same list as a pick.
+const dropped = (name, text) => ({ name, size: Buffer.byteLength(text), base64: Buffer.from(text).toString("base64") });
+const materialsDir = (f) => path.join(f.root, "자료");
+await t("#2641: a dropped file is copied into 자료/, listed with origin 나 and recorded as the learner's upload", async () => {
+  const f = fixture();
+  const s = await f.req("materialAddDrop", dropped("메모.md", "# 메모\n"));
+  assert.equal(s.error, undefined, s.error);
+  assert.equal(fs.readFileSync(path.join(materialsDir(f), "메모.md"), "utf8"), "# 메모\n");
+  assert.equal(item(s, (i) => i.detail === "자료/메모.md")?.originLabel, "나");
+  assert.match(s.notice, /자료에 넣었어요: 메모\.md/);
+  assert.deepEqual(copy(f.hostWrites), [{ paths: [path.join(materialsDir(f), "메모.md")], actor: "learner_upload" }], "the copy is the learner's upload (내가 올림)");
+});
+await t("#2641: a refused drop answers with the picker's reason for the same bytes; nothing is written or recorded", async () => {
+  const f = fixture();
+  const bytes = Buffer.from([137, 80, 0, 1]);
+  const s = await f.req("materialAddDrop", { name: "drop-pic.md", size: bytes.length, base64: bytes.toString("base64") });
+  f.setPick(put(outside, "drop-pic.md", bytes));
+  const picked = await f.req("materialAddFile");
+  assert.ok(s.error && s.error === picked.error, `${s.error} / ${picked.error}`);
+  assert.equal(fs.existsSync(materialsDir(f)) ? fs.readdirSync(materialsDir(f)).length : 0, 0, "nothing written");
+  assert.deepEqual(f.hostWrites, [], "nothing recorded");
+});
+await t("#2641: the gates hold for a drop: no sdk_tools.read, the instructor surface, \"AI 안 씀\"", async () => {
+  const seat = fixture({ profile: { profile_id: "p", activity_kind: "classroom", sdk_tools: { read: false } } });
+  const instructor = fixture({ instructor: true });
+  const personal = fixture({ profile: { profile_id: "p", activity_kind: "personal", activity_id: "act-1", sdk_tools: { read: true } } });
+  personal.global.set(personal.FOLDER_CONSENT_KEY, { "act-1": { [personal.root]: { level: "none", at: 1 } } });
+  for (const [f, want] of [[seat, /자료/], [instructor, /자료/], [personal, personal.folderNoAiCopy()]]) {
+    const s = await f.req("materialAddDrop", dropped("a.md", "a\n"));
+    if (typeof want === "string") assert.equal(s.error, want); else assert.match(s.error ?? "", want);
+    assert.equal(fs.existsSync(materialsDir(f)), false, "nothing written");
+    assert.deepEqual(f.hostWrites, [], "nothing recorded");
+  }
+});
+await t("#2641: a read-only 자료 refuses a drop with the permission reason", async () => {
+  const f = fixture();
+  fs.mkdirSync(materialsDir(f)); fs.chmodSync(materialsDir(f), 0o555);
+  try {
+    const s = await f.req("materialAddDrop", dropped("a.md", "a\n"));
+    assert.equal(s.error, f.mat.addMaterialDrop(f.root, dropped("a.md", "a\n")).reason);
+    assert.equal(f.mat.addMaterialDrop(f.root, dropped("a.md", "a\n")).cause, "permission");
+  } finally { fs.chmodSync(materialsDir(f), 0o755); }
+});
+
 await t("wiring: the config flag follows the file-attach gate", async () => {
   const src = fs.readFileSync(path.join(extension, "src/chatPanelProvider.ts"), "utf8");
   assert.ok(src.includes("...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),"));
