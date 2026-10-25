@@ -11,6 +11,7 @@ import { suggestTaskTitle } from './taskTitle.ts';
 import type { RenameUndo } from './removalUndo.ts';
 import { emptyVersions, joinVersions, splitVersions, validEditOf, type StoredVersions } from './editResend.ts';
 import { appendVerdict, latestVerdicts, validVerdictEvent, type VerdictEvent, type VerdictMap } from './answerVerdict.ts';
+import { validTaskAppearance, type TaskAppearance } from './taskAppearance.ts';
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
 import type {
@@ -44,6 +45,13 @@ interface VerdictsData { version: 1; scope: string; tasks: Record<string, Verdic
  * loses nothing.
  */
 interface ArchiveData { version: 1; scope: string; tasks: Record<string, number> }
+
+/**
+ * CGP-KNOW-R-008 — the task appearance sidecar, `<scope>.appearance.json`: per task, the emoji and
+ * colour ids the learner picked. Earlier builds never read it and the task file is not touched, so
+ * a downgrade only loses the drawn marks; the strict task-file schema stays readable by them.
+ */
+interface AppearanceData { version: 1; scope: string; tasks: Record<string, TaskAppearance> }
 
 interface LockOwner { version: 1; host: string; pid: number; nonce: string; createdAt: number }
 interface LockRecord { owner: LockOwner; dev: number; ino: number }
@@ -162,6 +170,17 @@ function decodeArchive(text: string, scope: string): ArchiveData {
 
 const archivedIn = (archive: ArchiveData, taskId: string) => Object.prototype.hasOwnProperty.call(archive.tasks, taskId);
 
+function decodeAppearance(text: string, scope: string): AppearanceData {
+  let envelope: unknown;
+  try { envelope = JSON.parse(text); } catch { return fail('corrupt', '작업 아이콘 기록을 읽을 수 없습니다.'); }
+  if (!isRecord(envelope) || !exactKeys(envelope, ['checksum', 'data']) || !isRecord(envelope.data) ||
+      typeof envelope.checksum !== 'string' || envelope.checksum !== hash(JSON.stringify(envelope.data))) return fail('corrupt', '작업 아이콘 기록의 무결성을 확인할 수 없습니다.');
+  const data = envelope.data;
+  if (!exactKeys(data, ['version', 'scope', 'tasks']) || data.version !== 1 || data.scope !== scope || !isRecord(data.tasks) ||
+      !Object.entries(data.tasks).every(([id, appearance]) => nonempty(id, 256) && validTaskAppearance(appearance))) return fail('corrupt', '작업 아이콘 기록의 형식이 일치하지 않습니다.');
+  return data as unknown as AppearanceData;
+}
+
 function validDraft(value: unknown): value is ActivityDraft {
   return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused', 'recovered', 'inlineEdit']) && validActivityDraft(value);
 }
@@ -220,6 +239,7 @@ export class TaskWorkspaceStore {
   readonly versionsPath: string;
   readonly verdictsPath: string;
   readonly archivePath: string;
+  readonly appearancePath: string;
   private readonly directory: string;
   private readonly rootPath: string;
   private data?: WorkspaceData;
@@ -229,6 +249,8 @@ export class TaskWorkspaceStore {
   private verdicts: VerdictsData;
   /** Archive sidecar as last read or written. A missing or unreadable one reads as nothing archived. */
   private archive: ArchiveData;
+  /** Appearance sidecar as last read or written. A missing or unreadable one reads as no marks. */
+  private appearance: AppearanceData;
   private loadError?: TaskWorkspaceStoreError;
   private queue: Promise<void> = Promise.resolve();
 
@@ -244,6 +266,8 @@ export class TaskWorkspaceStore {
     this.verdicts = { version: 1, scope: this.scope, tasks: {} };
     this.archivePath = join(this.directory, `${this.scope}.archive.json`);
     this.archive = { version: 1, scope: this.scope, tasks: {} };
+    this.appearancePath = join(this.directory, `${this.scope}.appearance.json`);
+    this.appearance = { version: 1, scope: this.scope, tasks: {} };
     this.load();
   }
 
@@ -259,6 +283,7 @@ export class TaskWorkspaceStore {
       this.versions = this.readVersionsSync();
       this.verdicts = this.readVerdictsSync();
       this.archive = this.readArchiveSync();
+      this.appearance = this.readAppearanceSync();
     } catch (error) {
       if (codeOf(error) === 'ENOENT') return;
       this.loadError = error instanceof TaskWorkspaceStoreError ? error :
@@ -293,10 +318,22 @@ export class TaskWorkspaceStore {
     return { version: 1, scope: this.scope, tasks: {} };
   }
 
+  /** A lost appearance sidecar costs only the emoji and colour marks; titles and turns are in the task file. */
+  private readAppearanceSync(): AppearanceData {
+    try {
+      const stat = lstatSync(this.appearancePath);
+      if (stat.isFile() && !stat.isSymbolicLink()) return decodeAppearance(readFileSync(this.appearancePath, 'utf8'), this.scope);
+    } catch { /* missing or unreadable: no marks */ }
+    return { version: 1, scope: this.scope, tasks: {} };
+  }
+
   getView(): TaskWorkspaceView {
     const activeTaskId = this.data?.activeTaskId ?? null;
-    const summaries: TaskSummary[] = (this.data?.tasks ?? []).map(({ id, title, createdAt, updatedAt, messageCount }) =>
-      ({ id, title, createdAt, updatedAt, messageCount })).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+    const summaries: TaskSummary[] = (this.data?.tasks ?? []).map(({ id, title, createdAt, updatedAt, messageCount }) => {
+      // CGP-KNOW-R-008 — the learner's emoji and colour, if any, from the appearance sidecar.
+      const appearance = this.loadError ? undefined : this.appearance.tasks[id];
+      return { id, title, createdAt, updatedAt, messageCount, ...(appearance ? { appearance: clone(appearance) } : {}) };
+    }).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     // CGP-CHAT-R-025 — the open task always stays in the list (an interrupted archive leaves it
     // open and visible); every other archived task is listed only in 보관함, newest archive first.
     const hidden = (task: TaskSummary) => task.id !== activeTaskId && archivedIn(this.archive, task.id);
@@ -522,6 +559,44 @@ export class TaskWorkspaceStore {
     if (!validVerdictEvent(event)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 답변 선택 형식이 올바르지 않습니다.'));
     return this.mutateVerdicts(taskId, history => appendVerdict(history, clone(event)));
   }
+  /**
+   * CGP-KNOW-R-008 — set (or, with null, clear) the ACTIVE task's emoji/colour under the task lock,
+   * writing only the appearance sidecar. Neither the title nor `updatedAt` changes, so the task does
+   * not jump to the top of the list for a cosmetic choice.
+   */
+  setAppearance(taskId: string, appearance: TaskAppearance | null): Promise<TaskWorkspaceView> {
+    if (appearance !== null && !validTaskAppearance(appearance)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '고를 수 있는 아이콘과 색이 아닙니다.'));
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      const current = this.requireData(this.data);
+      if (taskId !== current.activeTaskId) fail('stale', '다른 작업의 저장 요청입니다. 현재 작업에서 다시 시도해 주세요.');
+      this.requireTask(current, taskId);
+      try {
+        await this.prepareDirectory();
+        const lock = await this.acquireLock();
+        try {
+          const disk = await this.readAppearanceLocked(lock.owner.nonce);
+          const next = clone(disk);
+          if (appearance) next.tasks[taskId] = { ...(appearance.emoji ? { emoji: appearance.emoji } : {}), ...(appearance.colour ? { colour: appearance.colour } : {}) };
+          else delete next.tasks[taskId];
+          if (JSON.stringify(next) !== JSON.stringify(disk)) {
+            const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+            decodeAppearance(content, this.scope);
+            await this.writeAtomic(this.appearancePath, content, lock.owner.nonce);
+          }
+          this.appearance = next;
+          return this.getView();
+        } finally {
+          await this.releaseLock(lock);
+        }
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '아이콘과 색을 저장하지 못했습니다. 다시 시도해 주세요.');
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
   saveSurface(taskId: string, selection: TaskSurfaceSelection | null): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => {
       if (!validSurface(selection)) fail('invalid', '저장할 출처 주소가 올바르지 않습니다.');
@@ -549,6 +624,7 @@ export class TaskWorkspaceStore {
     const fromVersions = clone(source.versions.tasks);
     const fromVerdicts = clone(source.verdicts.tasks);
     const fromArchive = clone(source.archive.tasks);
+    const fromAppearance = clone(source.appearance.tasks);
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
@@ -565,6 +641,8 @@ export class TaskWorkspaceStore {
           const diskVerdicts = await this.readVerdictsLocked(lock.owner.nonce);
           const diskArchive = await this.readArchiveLocked(lock.owner.nonce);
           const archive = clone(diskArchive);
+          const diskAppearance = await this.readAppearanceLocked(lock.owner.nonce);
+          const appearance = clone(diskAppearance);
           const tasks = clone(disk?.tasks ?? []);
           const versions = clone(diskVersions);
           const verdicts = clone(diskVerdicts);
@@ -582,6 +660,7 @@ export class TaskWorkspaceStore {
                 tasks.push(kept);
                 if (diskVersions.tasks[old.id]) versions.tasks[kept.id] = clone(diskVersions.tasks[old.id]);
                 if (diskVerdicts.tasks[old.id]?.length) verdicts.tasks[kept.id] = clone(diskVerdicts.tasks[old.id]);
+                if (diskAppearance.tasks[old.id]) appearance.tasks[kept.id] = clone(diskAppearance.tasks[old.id]);
               }
               tasks[at] = task;
             } else tasks.push(task);
@@ -589,6 +668,7 @@ export class TaskWorkspaceStore {
             if (fromVerdicts[task.id]?.length) verdicts.tasks[task.id] = fromVerdicts[task.id]; else delete verdicts.tasks[task.id];
             // CGP-CHAT-R-025 — an archived task stays archived in the new folder, a listed one stays listed.
             if (Object.prototype.hasOwnProperty.call(fromArchive, task.id)) archive.tasks[task.id] = fromArchive[task.id]; else delete archive.tasks[task.id];
+            if (fromAppearance[task.id]) appearance.tasks[task.id] = fromAppearance[task.id]; else delete appearance.tasks[task.id];
           }
           const next: WorkspaceData = { version: 1, scope: this.scope, revision: (disk?.revision ?? 0) + 1, activeTaskId: from.activeTaskId, tasks };
           if (JSON.stringify(versions) !== JSON.stringify(diskVersions)) {
@@ -609,6 +689,13 @@ export class TaskWorkspaceStore {
             await this.writeAtomic(this.verdictsPath, sidecar, lock.owner.nonce);
           }
           this.verdicts = verdicts;
+          // After the commit point, like the verdicts: a failed carry never changes the target's marks.
+          if (JSON.stringify(appearance) !== JSON.stringify(diskAppearance)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(appearance)), data: appearance });
+            decodeAppearance(sidecar, this.scope);
+            await this.writeAtomic(this.appearancePath, sidecar, lock.owner.nonce);
+          }
+          this.appearance = appearance;
           return this.getView();
         } finally {
           await this.releaseLock(lock);
@@ -827,6 +914,19 @@ export class TaskWorkspaceStore {
     const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
     decodeArchive(sidecar, this.scope);
     await this.writeAtomic(this.archivePath, sidecar, nonce);
+  }
+
+  /** The appearance sidecar on disk, read under the lock. An unreadable one is set aside (kept, never overwritten). */
+  private async readAppearanceLocked(nonce: string): Promise<AppearanceData> {
+    const empty: AppearanceData = { version: 1, scope: this.scope, tasks: {} };
+    let text: string;
+    try {
+      const stat = await lstat(this.appearancePath);
+      if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 아이콘 기록 파일의 위치를 확인해야 합니다.');
+      text = await readFile(this.appearancePath, 'utf8');
+    } catch (error) { if (codeOf(error) === 'ENOENT') return empty; throw error; }
+    try { return decodeAppearance(text, this.scope); }
+    catch { await rename(this.appearancePath, `${this.appearancePath}.unreadable-${nonce}`); return empty; }
   }
 
   /**

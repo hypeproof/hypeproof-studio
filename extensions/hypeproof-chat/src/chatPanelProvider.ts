@@ -71,6 +71,7 @@ import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
 import { TaskWorkspaceStore, TaskWorkspaceStoreError } from './taskWorkspaceStore';
+import { parseTaskAppearanceRequest } from './taskAppearance';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
@@ -583,7 +584,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const store = this.currentTaskStore?.();
     if (!store) return;
     const before = store.getView();
-    if (!msg.taskId || msg.taskId !== before.activeTaskId || this.taskChanging) return;
+    if (!msg.taskId || msg.taskId !== before.activeTaskId || this.taskChanging) {
+      // CGP-KNOW-R-008 — the picker waits for its own answer; a dropped request says so at once.
+      if (msg.type === 'taskAppearance' && msg.taskId && typeof msg.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) await this.post({ type: 'taskAppearanceResult', requestId: msg.requestId, taskId: msg.taskId, saved: false });
+      return;
+    }
     let renameUndoId: string | undefined, renameUndone = false;
     const knownSource = (value: string) => {
       try {
@@ -627,6 +632,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       } else if (msg.type === 'taskSourceSelection') {
         if (!knownSource(msg.selection.url)) throw new Error('이 작업에서 확인한 출처를 선택해 주세요.');
         await store.saveSurface(msg.taskId, msg.selection);
+      } else if (msg.type === 'taskAppearance') {
+        // CGP-KNOW-R-008 — a cosmetic mark in its own sidecar: no conversation, draft or title changes,
+        // so it does not wait for a running turn. Only listed ids pass; anything else is refused.
+        if (typeof msg.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) throw new Error('저장 요청을 확인할 수 없습니다. 다시 시도해 주세요.');
+        const appearance = parseTaskAppearanceRequest(msg.appearance);
+        if (appearance === undefined) throw new Error('고를 수 있는 아이콘과 색이 아닙니다.');
+        await store.setAppearance(msg.taskId, appearance);
       } else {
         if (this.hasActiveStream() || this.verifySession?.running || this.connectionChanging || this.clearingHistory) {
           // Stop hides the control immediately, while the aborted transport may still be settling.
@@ -689,6 +701,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({ type: 'taskWorkspaceState', view: store.getView() });
       if (msg.type === 'taskRename' && msg.requestId) await this.post({ type: 'taskRenameResult', requestId: msg.requestId, taskId: msg.taskId, saved: true, ...(renameUndoId ? { undoId: renameUndoId } : {}) });
       if (msg.type === 'taskRenameUndo') await this.post({ type: 'removalUndoResult', undoId: String(msg.undoId), restored: renameUndone });
+      if (msg.type === 'taskAppearance') await this.post({ type: 'taskAppearanceResult', requestId: msg.requestId, taskId: msg.taskId, saved: true });
     } catch (error) {
       let message = error instanceof Error ? error.message : '작업 기록을 저장하지 못했습니다. 다시 시도해 주세요.';
       if (msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') {
@@ -707,6 +720,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       } else if (msg.type !== 'taskRenameUndo') await this.post({ type: 'taskWorkspaceError', error: message, ...(msg.type === 'taskRecoverDraft' ? { draftSaveFailed: true } : {}) });
       if (msg.type === 'taskRename' && msg.requestId) await this.post({ type: 'taskRenameResult', requestId: msg.requestId, taskId: msg.taskId, saved: false });
       if (msg.type === 'taskRenameUndo') await this.post({ type: 'removalUndoResult', undoId: String(msg.undoId), restored: false });
+      if (msg.type === 'taskAppearance' && typeof msg.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) await this.post({ type: 'taskAppearanceResult', requestId: msg.requestId, taskId: msg.taskId, saved: false });
     }
   }
   private accessState:AccessState|undefined;
@@ -6206,7 +6220,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
-    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskArchive', 'taskRestore', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
+    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskAppearance', 'taskArchive', 'taskRestore', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
     if (msg.type==='saveActivityDraft') {

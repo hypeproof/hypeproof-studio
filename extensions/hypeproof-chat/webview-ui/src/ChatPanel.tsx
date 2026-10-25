@@ -40,6 +40,7 @@ import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '.
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
+import { TASK_APPEARANCE_LABEL, useTaskAppearance } from './TaskAppearance';
 import { COPY_CONVERSATION_LABEL } from '../../src/conversationCopy';
 import { glyphIconKind, splitLeadingGlyph, stripLeadingGlyph } from './glyphIcon';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
@@ -919,6 +920,7 @@ export function ChatPanel(props: Props) {
   // CGP-CHAT-R-024 — the personal task's own conversation, copied as Markdown from the task menu.
   // Exactly the conversation as drawn: one version per prompt (the one on screen), never hidden attempts.
   const drawnConversation = useMemo(() => visibleVersions(visibleAttempts(messages).items, versionChoice).items, [messages, versionChoice]);
+  const taskAppearance = useTaskAppearance();
   const conversationCopy = useConversationCopy(JSON.stringify([activityId ?? null, taskId ?? null]), {
     messages: drawnConversation,
     title: config?.taskWorkspace?.tasks.find(task => task.id === taskId)?.title,
@@ -1615,6 +1617,7 @@ export function ChatPanel(props: Props) {
           <button onClick={props.onSetToken} data-hp-tooltip="연결된 활동 확인 및 변경">
             활동 변경
           </button>
+          {personalWorkspace && !props.instructor && taskAppearance.open && <button type="button" className="tw-task-appearance" onClick={taskAppearance.open} data-hp-tooltip="목록에서 이 작업을 찾기 쉽게 표시를 붙여요">{TASK_APPEARANCE_LABEL}</button>}
           {personalWorkspace && !props.instructor && <button type="button" className="tw-copy-conversation" onClick={() => { void conversationCopy.copy(); }} disabled={props.streaming || !conversationCopy.available} data-hp-tooltip="이 작업의 대화를 글로 복사해요">{COPY_CONVERSATION_LABEL}</button>}
           <button onClick={props.onClear} disabled={props.streaming} data-hp-tooltip="대화 기록 지우기">대화 지우기</button>
           {/* CGP-CHAT-R-025 — hide this task from the list; its conversation, draft and records stay. Personal tasks only. */}

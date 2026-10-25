@@ -372,3 +372,17 @@ webview state. Seats without the 자료 list, instructors and classroom/lesson s
 layout. The activity title above the tabs is left to CGP-KNOW-D-002. Decisions: DEC-KNOW-R-002.
 PI #1: the learner moves between their work and its materials without losing what they were
 writing (no capability labels).
+
+### REQ-KNOW-13 implementation contract (CGP-KNOW-R-008)
+
+- Entry: the personal task menu (대화 메뉴) item 아이콘과 색 정하기 (DES-KNOW-13 says "task
+  context menu"; the task list has no per-row menu, so the open task's menu is that menu).
+  Classroom, lesson and instructor seats have no task menu and are unchanged.
+- Choices are fixed lists stored as ids (12 emoji, eight named colours, or none). No free emoji
+  or text is accepted, so no title-like string enters the accessible name or the store.
+- Storage is a sidecar (`<scope>.appearance.json`), not a task-file field: the task file's
+  strict schema would make earlier builds read a new key as corruption.
+- The emoji and colour are `aria-hidden` decoration next to the always-visible title; colours
+  are 3:1 against the task list in both themes and the dot keeps an outline in forced colours.
+- Contract text: `docs/studio-requirements.md` "Task emoji and colour (CGP-KNOW-R-008)". See
+  decisions.md "CGP-KNOW-R-008".

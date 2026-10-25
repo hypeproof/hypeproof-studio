@@ -22,6 +22,7 @@ import { filterTasksByTitle, TASK_SEARCH_MAX } from './taskTitleFilter';
 import { offerUndo } from './UndoToast';
 import { MaterialsPanel } from './MaterialsPanel';
 import { ActivityHomeContext, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
+import { TaskAppearanceContext, TaskAppearanceDialog, TaskMark } from './TaskAppearance';
 
 interface Props {
   view: TaskWorkspaceView;
@@ -118,6 +119,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const [headingSlot, setHeadingSlot] = useState<HTMLDivElement | null>(null);
   const [sourceRequest, setSourceRequest] = useState<SourceRequest | null>(null);
   const [renaming, setRenaming] = useState(false);
+  // CGP-KNOW-R-008 — the scope the appearance picker was opened in; a task switch closes it.
+  const [appearanceScope, setAppearanceScope] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [renamePending, setRenamePending] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -294,6 +297,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     setRenameError(null);
     setRailOpen(false);
     setArchiveOpen(false);
+    setAppearanceScope(null);
   }, [scopeKey, clearRequestTimer, updateRequest]);
   useEffect(() => clearRequestTimer, [clearRequestTimer]);
   useEffect(() => onHostMessage(message => { if (message.type === 'artifactProvenance') setArtifacts(message.view); }), []);
@@ -495,7 +499,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <button type="button" className="tw-quiet tw-archive-back" onClick={() => openArchive(false)}>최근 작업으로 돌아가기</button>
       <ul className="tw-task-list tw-archive-list" aria-label="보관한 작업">
         {visibleArchived.map(task => <li key={task.id} className="tw-archived">
-          <span className="tw-task-title">{task.title}</span>
+          <span className="tw-task-title"><TaskMark appearance={task.appearance} />{task.title}</span>
           <span className="tw-task-meta"><span>{taskCountLine(task.messageCount, null)}</span><time dateTime={new Date(task.archivedAt).toISOString()}>{date.format(task.archivedAt)} 보관</time></span>
           <button type="button" className="tw-quiet tw-reopen" aria-label={`다시 열기: ${task.title}`} disabled={blocked} onClick={() => { reopenPending.current = task.id; setRailOpen(false); postToHost({ type: 'taskRestore', id: task.id }); }}>다시 열기</button>
         </li>)}
@@ -513,7 +517,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           const metaId = `tw-task-meta-${task.id}`;
           return <li key={task.id}>
           <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={taskRunAccessibleName(task.title, state)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
-            <span className="tw-task-title">{task.title}</span>
+            <span className="tw-task-title"><TaskMark appearance={task.appearance} />{task.title}</span>
             {state && <IntentChip chip={TASK_RUN_CHIPS[state]} status={state} className="tw-task-state" attrs={{ 'data-run-state': state }} />}
             <span id={metaId} className="tw-task-meta"><span>{taskCountLine(task.messageCount, state)}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
@@ -561,7 +565,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         : <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>)}</div>}
       {archiveNote?.scopeKey === scopeKey && <p className="tw-archive-note" role="status">‘{archiveNote.title}’ 작업을 보관함에 넣었어요. 대화는 그대로 있고, 작업 목록의 보관함에서 다시 열 수 있어요.</p>}
       {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
-      <div ref={conversation} id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}><ActivityHomeContext.Provider value={materials ? HOME_WITH_MATERIALS : HOME_WITHOUT_MATERIALS}>{children}</ActivityHomeContext.Provider></HeadingSlotContext.Provider></div>
+      <div ref={conversation} id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}><ActivityHomeContext.Provider value={materials ? HOME_WITH_MATERIALS : HOME_WITHOUT_MATERIALS}><TaskAppearanceContext.Provider value={{ open: active && !view.error ? () => setAppearanceScope(scopeKey) : null }}>{children}</TaskAppearanceContext.Provider></ActivityHomeContext.Provider></HeadingSlotContext.Provider></div>
     </section>
     {sourcesOpen && !sourceDialog && <KeyboardSplitter panel="sources" label="자료 패널 너비 조절" controls="task-sources" value={sizes.sources ?? tokenWidths.sources ?? PANEL_LIMITS.sources.min} onChange={value => resizePanel('sources', value)} />}
     {sourceDialog && <div className="tw-source-backdrop" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={() => closeSources()} />}
@@ -586,5 +590,6 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       })} />}
       </>}</PanelBoundary>
     </aside>
+    {active && appearanceScope === scopeKey && <TaskAppearanceDialog key={scopeKey} task={active} onClose={() => setAppearanceScope(null)} />}
   </div></CitationPreviewContext.Provider>;
 }

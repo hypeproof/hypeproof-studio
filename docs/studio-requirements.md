@@ -5965,3 +5965,44 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## Task emoji and colour (CGP-KNOW-R-008)
+
+REQ-STUDIO-TASK-APPEARANCE. REQ-KNOW-13 / CGP-KNOW-013 / PI#1 (useful work first: a learner who
+reads slowly finds their own work), design DES-KNOW-13 (CGP-KNOW-D-008): in a personal (or trial)
+task workspace the task menu (대화 메뉴) has 아이콘과 색 정하기. It opens a modal picker for the
+open task with one of 12 listed emoji or none, and one of eight named colours (빨강, 주황, 노랑,
+초록, 청록, 파랑, 보라, 분홍) or none. Classroom, lesson and instructor seats have no task menu and
+no picker.
+
+- Only ids from the fixed lists are posted, stored and drawn. The host re-validates the request
+  (`parseTaskAppearanceRequest`) and refuses unknown ids, extra keys and malformed request ids;
+  a request for a task that is no longer open writes nothing.
+- The mark persists across restart in a sidecar next to the task file,
+  `<scope>.appearance.json` (checksum envelope, exact keys, listed ids only). The task file is
+  not rewritten, so its strict schema stays readable by earlier builds; a downgrade loses only
+  the marks. A missing, unreadable or forged sidecar reads as no marks; the next write sets an
+  unreadable one aside instead of overwriting it. Setting a mark changes neither the title nor
+  the task's position in the list. A folder move carries the marks with the tasks.
+- In the task list the mark (colour dot, then emoji) is drawn before the title and is
+  `aria-hidden`: the task's accessible name is its title (plus the existing run state and count
+  line), never the emoji. The title is always drawn next to the mark, so colour is never the only
+  cue. Each colour is at least 3:1 against the task list background in the dark and light
+  themes; in forced colours the dot keeps an outline.
+- The picker: every choice is a 44px target with at least 14px text; every colour shows its
+  name as text and every emoji choice is named in Korean for assistive technology; the selected
+  choice has a 2px ring and, for colours, a check mark; arrow keys move within each group; Save
+  is disabled while a save is pending. Only a saved result for its own request and task closes
+  it (focus returns to the task menu); a failure keeps the choice and shows an alert; Escape or
+  취소 saves nothing; switching task closes it. A request the host drops (the task changed or a
+  task switch is in progress) is answered with a failure at once.
+- Limits: another window's marks appear after that window's list is reloaded; for the same task
+  the last save wins. A folder move carries the marks the moving store has loaded.
+
+Tests: `test/task-appearance.smoke.mjs` (id validation, restart persistence, byte-identical
+task file, open-task only, corrupt and forged sidecar, folder move, provider result and refusal)
+and `test/task-appearance-browser.smoke.mjs` (real App bundle in headless Chromium; dark/light,
+800/1420 px, forced colours, classroom seat; the accessibility tree has no emoji in any name;
+computed swatch contrast; 44px choices; check and ring; ids-only post; request binding; failure
+alert; Escape; task switch; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). The
+installed app across a real restart is owner-verified (NOT RUN here).

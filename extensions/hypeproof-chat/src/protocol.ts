@@ -549,6 +549,8 @@ export type WebviewMessage = (
   /** CGP-CHAT-R-025 — 보관하기 (the open task) and 보관함's 다시 열기 (an archived task). */
   | { type: 'taskArchive' }
   | { type: 'taskRestore'; id: string }
+  /** CGP-KNOW-R-008 — ids from TASK_EMOJI / TASK_COLOURS, or null to clear. Validated again on the host. */
+  | { type: 'taskAppearance'; appearance: import('./taskAppearance').TaskAppearance | null; requestId: string }
   | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
   | { type: 'taskOpenSource'; url: string; requestId?: string }
   | { type: 'taskReturnFromSource'; requestId: string; url: string }
@@ -822,6 +824,7 @@ export type HostMessage = (
   | { type: 'removalUndoResult'; undoId: string; restored: boolean }
   /** CGP-CHAT-R-029 — a send started: every host-held 되돌리기 (file, page, rename) is gone; offers end. */
   | { type: 'removalsFinal' }
+  | { type: 'taskAppearanceResult'; requestId: string; taskId: string; saved: boolean }
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
   | { type: 'taskWorkspaceError'; verdictRequestId?: string; verdictMessageId?: string; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */

@@ -13226,6 +13226,80 @@
           "path": "extensions/hypeproof-chat/test/task-archive-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TASK-APPEARANCE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Task emoji and colour (CGP-KNOW-R-008)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md",
+          "section": "### REQ-KNOW-13 implementation contract (CGP-KNOW-R-008)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-APPEARANCE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-APPEARANCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskAppearance.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceContract.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskAppearance.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskAppearance.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-APPEARANCE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-APPEARANCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-appearance.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-appearance-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }

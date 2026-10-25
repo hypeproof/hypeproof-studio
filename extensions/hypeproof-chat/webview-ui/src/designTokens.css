@@ -574,6 +574,23 @@
   --ds-p-control-sm: 32px;
   --ds-p-control-md: 44px;
   --ds-p-control-lg: 48px;
+  /* CGP-KNOW-R-008 / DES-KNOW-13: task mark colours, at least 3:1 against the task list in each theme. */
+  --ds-p-task-mark-red-dark: #f87171;
+  --ds-p-task-mark-red-light: #b91c1c;
+  --ds-p-task-mark-orange-dark: #fb923c;
+  --ds-p-task-mark-orange-light: #c2410c;
+  --ds-p-task-mark-yellow-dark: #facc15;
+  --ds-p-task-mark-yellow-light: #a16207;
+  --ds-p-task-mark-green-dark: #4ade80;
+  --ds-p-task-mark-green-light: #15803d;
+  --ds-p-task-mark-teal-dark: #2dd4bf;
+  --ds-p-task-mark-teal-light: #0f766e;
+  --ds-p-task-mark-blue-dark: #60a5fa;
+  --ds-p-task-mark-blue-light: #1d4ed8;
+  --ds-p-task-mark-purple-dark: #c084fc;
+  --ds-p-task-mark-purple-light: #7e22ce;
+  --ds-p-task-mark-pink-dark: #f472b6;
+  --ds-p-task-mark-pink-light: #be185d;
 }
 :root, [data-theme="dark"], .vscode-dark {
   --ds-s-typography-ui: var(--ds-p-136);
@@ -1278,6 +1295,22 @@
   --ds-s-control-sm: var(--ds-p-control-sm);
   --ds-s-control-md: var(--ds-p-control-md);
   --ds-s-control-lg: var(--ds-p-control-lg);
+  --ds-s-task-mark-red-dark: var(--ds-p-task-mark-red-dark);
+  --ds-s-task-mark-red-light: var(--ds-p-task-mark-red-light);
+  --ds-s-task-mark-orange-dark: var(--ds-p-task-mark-orange-dark);
+  --ds-s-task-mark-orange-light: var(--ds-p-task-mark-orange-light);
+  --ds-s-task-mark-yellow-dark: var(--ds-p-task-mark-yellow-dark);
+  --ds-s-task-mark-yellow-light: var(--ds-p-task-mark-yellow-light);
+  --ds-s-task-mark-green-dark: var(--ds-p-task-mark-green-dark);
+  --ds-s-task-mark-green-light: var(--ds-p-task-mark-green-light);
+  --ds-s-task-mark-teal-dark: var(--ds-p-task-mark-teal-dark);
+  --ds-s-task-mark-teal-light: var(--ds-p-task-mark-teal-light);
+  --ds-s-task-mark-blue-dark: var(--ds-p-task-mark-blue-dark);
+  --ds-s-task-mark-blue-light: var(--ds-p-task-mark-blue-light);
+  --ds-s-task-mark-purple-dark: var(--ds-p-task-mark-purple-dark);
+  --ds-s-task-mark-purple-light: var(--ds-p-task-mark-purple-light);
+  --ds-s-task-mark-pink-dark: var(--ds-p-task-mark-pink-dark);
+  --ds-s-task-mark-pink-light: var(--ds-p-task-mark-pink-light);
 }
 [data-theme="light"], .vscode-light {
   --ds-s-typography-ui: var(--ds-p-136);
@@ -1982,6 +2015,22 @@
   --ds-s-control-sm: var(--ds-p-control-sm);
   --ds-s-control-md: var(--ds-p-control-md);
   --ds-s-control-lg: var(--ds-p-control-lg);
+  --ds-s-task-mark-red-dark: var(--ds-p-task-mark-red-dark);
+  --ds-s-task-mark-red-light: var(--ds-p-task-mark-red-light);
+  --ds-s-task-mark-orange-dark: var(--ds-p-task-mark-orange-dark);
+  --ds-s-task-mark-orange-light: var(--ds-p-task-mark-orange-light);
+  --ds-s-task-mark-yellow-dark: var(--ds-p-task-mark-yellow-dark);
+  --ds-s-task-mark-yellow-light: var(--ds-p-task-mark-yellow-light);
+  --ds-s-task-mark-green-dark: var(--ds-p-task-mark-green-dark);
+  --ds-s-task-mark-green-light: var(--ds-p-task-mark-green-light);
+  --ds-s-task-mark-teal-dark: var(--ds-p-task-mark-teal-dark);
+  --ds-s-task-mark-teal-light: var(--ds-p-task-mark-teal-light);
+  --ds-s-task-mark-blue-dark: var(--ds-p-task-mark-blue-dark);
+  --ds-s-task-mark-blue-light: var(--ds-p-task-mark-blue-light);
+  --ds-s-task-mark-purple-dark: var(--ds-p-task-mark-purple-dark);
+  --ds-s-task-mark-purple-light: var(--ds-p-task-mark-purple-light);
+  --ds-s-task-mark-pink-dark: var(--ds-p-task-mark-pink-dark);
+  --ds-s-task-mark-pink-light: var(--ds-p-task-mark-pink-light);
 }
 :root, body {
   --ds-c-studio-copy-toast-max: var(--ds-s-size-106);
@@ -3575,4 +3624,21 @@
   --ds-c-menu-item-radius: var(--ds-s-radius-3);
   --ds-c-menu-item-pad-block: var(--ds-s-space-2);
   --ds-c-menu-item-pad-inline: var(--ds-s-space-1);
+  /* CGP-KNOW-R-008: task mark colours (DES-KNOW-13). */
+  --ds-c-task-mark-red-dark: var(--ds-s-task-mark-red-dark);
+  --ds-c-task-mark-red-light: var(--ds-s-task-mark-red-light);
+  --ds-c-task-mark-orange-dark: var(--ds-s-task-mark-orange-dark);
+  --ds-c-task-mark-orange-light: var(--ds-s-task-mark-orange-light);
+  --ds-c-task-mark-yellow-dark: var(--ds-s-task-mark-yellow-dark);
+  --ds-c-task-mark-yellow-light: var(--ds-s-task-mark-yellow-light);
+  --ds-c-task-mark-green-dark: var(--ds-s-task-mark-green-dark);
+  --ds-c-task-mark-green-light: var(--ds-s-task-mark-green-light);
+  --ds-c-task-mark-teal-dark: var(--ds-s-task-mark-teal-dark);
+  --ds-c-task-mark-teal-light: var(--ds-s-task-mark-teal-light);
+  --ds-c-task-mark-blue-dark: var(--ds-s-task-mark-blue-dark);
+  --ds-c-task-mark-blue-light: var(--ds-s-task-mark-blue-light);
+  --ds-c-task-mark-purple-dark: var(--ds-s-task-mark-purple-dark);
+  --ds-c-task-mark-purple-light: var(--ds-s-task-mark-purple-light);
+  --ds-c-task-mark-pink-dark: var(--ds-s-task-mark-pink-dark);
+  --ds-c-task-mark-pink-light: var(--ds-s-task-mark-pink-light);
 }
