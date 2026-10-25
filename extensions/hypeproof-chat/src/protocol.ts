@@ -168,6 +168,8 @@ export interface ChatConfig {
   /** CGP-KNOW-R-003 — this seat has the activity's 자료 list (the file-attach gate). */
   materials?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
+  /** CGP-KNOW-R-009 — what the task menu may offer for moving; absent where there is no task list. */
+  taskMove?: import('./taskMove').TaskMoveView;
   activityUnavailable?: import("./activityAvailability").ActivityUnavailable;
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus;
     /** Free start (SPEC iteration 4 §2.4) — the seat is the free allowance (`studio-open-trial`, no pass): its copy says 무료 사용, never 체험. */
@@ -546,6 +548,8 @@ export type WebviewMessage = (
   | { type: 'taskRename'; title: string; requestId?: string }
   /** CGP-CHAT-R-029 — 되돌리기 on the rename toast: the host puts back the rename it kept under this id. */
   | { type: 'taskRenameUndo'; undoId: string }
+  /** CGP-KNOW-R-009 — move task `id` to the personal activity `destination` (an activity ref the host re-checks). */
+  | { type: 'taskMove'; id: string; destination: string; requestId?: string }
   | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
   | { type: 'taskOpenSource'; url: string; requestId?: string }
   | { type: 'taskReturnFromSource'; requestId: string; url: string }
@@ -819,6 +823,7 @@ export type HostMessage = (
   | { type: 'removalUndoResult'; undoId: string; restored: boolean }
   /** CGP-CHAT-R-029 — a send started: every host-held 되돌리기 (file, page, rename) is gone; offers end. */
   | { type: 'removalsFinal' }
+  | { type: 'taskMoveResult'; requestId: string; moved: boolean; title?: string; destination?: string }
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
   | { type: 'taskWorkspaceError'; verdictRequestId?: string; verdictMessageId?: string; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */

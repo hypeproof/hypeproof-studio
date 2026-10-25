@@ -37,6 +37,9 @@ interface VersionsData { version: 1; scope: string; tasks: Record<string, Stored
  */
 interface VerdictsData { version: 1; scope: string; tasks: Record<string, VerdictEvent[]> }
 
+/** CGP-KNOW-R-009 — one task as it moves between two personal activities' scopes. */
+export interface MovedTask { task: TaskDocument; versions: StoredVersions | null; verdicts: VerdictEvent[] }
+
 interface LockOwner { version: 1; host: string; pid: number; nonce: string; createdAt: number }
 interface LockRecord { owner: LockOwner; dev: number; ino: number }
 interface LockLease extends LockRecord { path: string }
@@ -200,6 +203,8 @@ export class TaskWorkspaceStore {
   readonly verdictsPath: string;
   private readonly directory: string;
   private readonly rootPath: string;
+  /** The scope as given (before hashing), so a fresh read of the same store can be made. */
+  private readonly scopeInput: string;
   private data?: WorkspaceData;
   /** Versions sidecar as last read or written. A missing or unreadable sidecar reads as no versions. */
   private versions: VersionsData;
@@ -211,6 +216,7 @@ export class TaskWorkspaceStore {
   constructor(rootPath: string, scope: string) {
     if (!nonempty(rootPath, 4096) || !nonempty(scope, 16384)) fail('invalid', '작업 저장 범위가 필요합니다.');
     this.scope = hash(scope);
+    this.scopeInput = scope;
     this.rootPath = rootPath;
     this.directory = join(rootPath, 'task-workspaces');
     this.filePath = join(this.directory, `${this.scope}.json`);
@@ -444,6 +450,167 @@ export class TaskWorkspaceStore {
       if (!validSurface(selection)) fail('invalid', '저장할 출처 주소가 올바르지 않습니다.');
       task.sourceSelection = clone(selection);
     });
+  }
+
+  /** CGP-KNOW-R-009 — the same scope read again from disk now, independent of this instance's memory. */
+  reread(): TaskWorkspaceStore { return new TaskWorkspaceStore(this.rootPath, this.scopeInput); }
+
+  /**
+   * CGP-KNOW-R-009 — one task exactly as this scope stores it (task document with its draft, the
+   * versions sidecar entry and the verdict events), for a move to another personal activity.
+   */
+  exportTask(taskId: string): MovedTask {
+    const task = this.getTask(taskId) ?? fail('not_found', '이 작업을 찾을 수 없습니다. 작업 목록을 다시 열어 주세요.');
+    return { task, versions: this.versions.tasks[taskId] ? clone(this.versions.tasks[taskId]) : null, verdicts: clone(this.verdicts.tasks[taskId] ?? []) };
+  }
+
+  /**
+   * CGP-KNOW-R-009 — receive a task moved from another scope. The moved task joins the list as it
+   * is (same id, title, transcript, draft, versions and verdicts); this scope's active task does not
+   * change. Only a scope that already has a task file receives: one that was never opened would
+   * otherwise skip its first-open import of older history. A task id this scope already holds is
+   * accepted only when it is the identical task (a retry after a half-done move); anything else is
+   * refused and nothing is written. Order: versions, verdicts, then the task file (the commit point),
+   * so a task that is present always has its sidecar entries; an interrupted receive leaves at most
+   * sidecar entries for a task id the list does not hold, which the next receive overwrites.
+   */
+  receiveTask(moved: MovedTask): Promise<TaskWorkspaceView> {
+    if (!isRecord(moved) || !validTask(moved.task) || (moved.versions !== null && !validVersions(moved.versions)) ||
+        !Array.isArray(moved.verdicts) || !moved.verdicts.every(validVerdictEvent)) {
+      return Promise.reject(new TaskWorkspaceStoreError('invalid', '옮길 작업의 형식을 확인할 수 없습니다.'));
+    }
+    const incoming = clone(moved);
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      try {
+        await this.prepareDirectory();
+        const lock = await this.acquireLock();
+        try {
+          let disk: WorkspaceData;
+          try {
+            const stat = await lstat(this.filePath);
+            if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 기록 파일의 위치를 확인해야 합니다.');
+            disk = decode(await readFile(this.filePath, 'utf8'), this.scope);
+          } catch (error) {
+            if (codeOf(error) === 'ENOENT') fail('not_initialized', '옮길 활동을 한 번 연 뒤에 다시 시도해 주세요.');
+            throw error;
+          }
+          const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
+          const diskVerdicts = await this.readVerdictsLocked(lock.owner.nonce);
+          const existing = disk.tasks.find(task => task.id === incoming.task.id);
+          if (existing) {
+            const same = JSON.stringify(existing) === JSON.stringify(incoming.task) &&
+              JSON.stringify(diskVersions.tasks[existing.id] ?? null) === JSON.stringify(incoming.versions) &&
+              JSON.stringify(diskVerdicts.tasks[existing.id] ?? []) === JSON.stringify(incoming.verdicts);
+            if (!same) fail('invalid', '옮길 활동에 같은 작업이 이미 있어요. 작업 목록을 확인해 주세요.');
+            this.data = disk; this.versions = diskVersions; this.verdicts = diskVerdicts;
+            return this.getView();
+          }
+          // A sidecar entry for an id the list does not hold is left over (an interrupted receive or
+          // release); the incoming task replaces it, and an incoming task without one clears it.
+          const versions = clone(diskVersions);
+          if (incoming.versions) versions.tasks[incoming.task.id] = incoming.versions;
+          else delete versions.tasks[incoming.task.id];
+          const verdicts = clone(diskVerdicts);
+          if (incoming.verdicts.length) verdicts.tasks[incoming.task.id] = incoming.verdicts;
+          else delete verdicts.tasks[incoming.task.id];
+          const next: WorkspaceData = { ...disk, revision: disk.revision + 1, tasks: [...disk.tasks, incoming.task] };
+          if (JSON.stringify(versions) !== JSON.stringify(diskVersions)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(versions)), data: versions });
+            decodeVersions(sidecar, this.scope);
+            await this.writeAtomic(this.versionsPath, sidecar, lock.owner.nonce);
+          }
+          this.versions = versions;
+          if (JSON.stringify(verdicts) !== JSON.stringify(diskVerdicts)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(verdicts)), data: verdicts });
+            decodeVerdicts(sidecar, this.scope);
+            await this.writeAtomic(this.verdictsPath, sidecar, lock.owner.nonce);
+          }
+          this.verdicts = verdicts;
+          const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+          decode(content, this.scope);
+          await this.writeAtomic(this.filePath, content, lock.owner.nonce);
+          this.data = next;
+          return this.getView();
+        } finally {
+          await this.releaseLock(lock);
+        }
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '작업을 옮기지 못했습니다. 원래 기록은 그대로 있어요.');
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
+
+  /**
+   * CGP-KNOW-R-009 — undo a receive when the move cannot finish (the copy did not read back, or the
+   * source could not let go). Only the exact task that was received is removed, and only while it is
+   * not the open task here; anything else is left alone and reported as not withdrawn.
+   */
+  async withdrawTask(moved: MovedTask): Promise<boolean> {
+    const current = this.data;
+    const task = current?.tasks.find(value => value.id === moved?.task?.id);
+    if (!current || !task || current.activeTaskId === task.id || current.tasks.length < 2 || JSON.stringify(task) !== JSON.stringify(moved.task)) return false;
+    await this.mutate(data => {
+      const latest = this.requireData(data);
+      latest.tasks = latest.tasks.filter(value => value.id !== task.id);
+      return latest;
+    });
+    await this.dropSidecarEntries(task.id);
+    return true;
+  }
+
+  /**
+   * CGP-KNOW-R-009 — take a task out of this scope after another scope received it. Refused when
+   * the list changed since the learner chose (expected). Moving the open task opens the most
+   * recently changed remaining one; moving the only task leaves a new empty one. Order: the task
+   * file first (the commit point), then the task's versions entry, then its verdict events. A
+   * failed task-file write leaves the task with all its earlier versions; a failure after it only
+   * leaves unreachable sidecar entries behind, which a later receive of the same id overwrites.
+   */
+  async releaseTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    const view = await this.mutate(data => {
+      const current = this.requireData(data);
+      this.checkExpected(current, expected);
+      this.requireTask(current, taskId);
+      current.tasks = current.tasks.filter(task => task.id !== taskId);
+      if (!current.tasks.length) current.tasks.push(this.newTask('새 작업', Date.now()));
+      if (current.activeTaskId === taskId) {
+        current.activeTaskId = [...current.tasks].sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))[0].id;
+      }
+      return current;
+    });
+    await this.dropSidecarEntries(taskId);
+    return view;
+  }
+
+  /** CGP-KNOW-R-009 — after a task left the task file: drop its versions, then its verdicts (best effort). */
+  private async dropSidecarEntries(taskId: string): Promise<void> {
+    await this.mutate((data, versions) => { delete versions.tasks[taskId]; return this.requireData(data); }).catch(() => {});
+    await this.dropVerdicts(taskId).catch(() => {});
+  }
+
+  private dropVerdicts(taskId: string): Promise<void> {
+    const operation = this.queue.then(async () => {
+      await this.prepareDirectory();
+      const lock = await this.acquireLock();
+      try {
+        const disk = await this.readVerdictsLocked(lock.owner.nonce);
+        if (!disk.tasks[taskId]) { this.verdicts = disk; return; }
+        const next = clone(disk);
+        delete next.tasks[taskId];
+        const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+        decodeVerdicts(content, this.scope);
+        await this.writeAtomic(this.verdictsPath, content, lock.owner.nonce);
+        this.verdicts = next;
+      } finally {
+        await this.releaseLock(lock);
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
   }
 
   /**

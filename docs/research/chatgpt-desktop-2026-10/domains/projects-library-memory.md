@@ -179,6 +179,8 @@ IDs `REQ-KNOW-NN` match the inventory row number.
 | REQ-KNOW-68 | When an activity can no longer run AI (class ended, token expired, cohort paused, budget exhausted), one status screen states the cause, what still works and who can fix it. | Cause matches structured transport or access evidence (401/403/exhausted/outage per US-12), with unknown causes left unknown and task-scoped remount recovery; "열기·내보내기" for own files remains enabled; contact line names instructor or HypeProof support; no payment button for class seats. | P0 | #1, AB, US-12 |
 | REQ-KNOW-70 | Chalk lessons can carry up to 4 conversation starters shown to learners as editable suggestions, and authoring shows that learners may elicit lesson material. | Starters render on the start page/empty task; picking inserts editable text, never auto-sends; the authoring screen shows the disclosure next to the material upload; frozen versions keep starters byte-identical (VER-01). | P1 | #4, #6 |
 
+REQ-KNOW-14 is built as REQ-STUDIO-TASK-MOVE (`docs/studio-requirements.md`, CGP-KNOW-R-009): "personal" means kind `personal` or a pass with no served lesson, and a trial keeps its REQ-L12 carryover (DEC-KNOW-R009).
+
 ---
 
 ## 3. Design requirements (same rows)

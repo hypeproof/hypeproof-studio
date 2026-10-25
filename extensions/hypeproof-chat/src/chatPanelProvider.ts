@@ -71,6 +71,7 @@ import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
 import { TaskWorkspaceStore, TaskWorkspaceStoreError } from './taskWorkspaceStore';
+import type { TaskWorkspaceExpected } from './taskWorkspaceContract';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
@@ -270,6 +271,7 @@ import {
 } from "./protocol";
 import { applyCarryoverDecision, carryoverAdvertised, carryoverState, type CarryoverStores } from "./trialCarryoverHelpers";
 import { carryoverStoresFor, taskWorkspaceRoot, taskWorkspaceScope } from "./trialCarryoverSource";
+import { TASK_MOVE_UNKNOWN_REASON, taskMoveTarget, taskMoveView, type TaskMoveView } from './taskMove';
 import {
   isShowIntent,
   clampHistory,
@@ -579,12 +581,109 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * CGP-KNOW-R-009 (REQ-KNOW-14) — the current activity as the move rule sees it. A served lesson
+   * (live profile) or a lesson recorded on the activity makes it a class activity.
+   */
+  private taskMoveCurrent() {
+    const record = activityConnections(this.context)?.current;
+    if (!record) return undefined;
+    const profile = this.cachedProfile;
+    return { ...record, lesson: !!record.lesson || !!profile?.lesson || !!profile?.lesson_binding?.enforced };
+  }
+  /** Fails closed: with no loaded profile the seat's lesson state is unknown, so nothing moves. */
+  private async taskMoveState(): Promise<TaskMoveView | undefined> {
+    const current = this.taskMoveCurrent();
+    if (!current || !this.currentTaskStore?.() || this._instructorMode?.isInstructor) return undefined;
+    if (!this.cachedProfile) return { allowed: false, reason: TASK_MOVE_UNKNOWN_REASON };
+    const activities = await activityConnections(this.context)?.list().catch(() => []) ?? [];
+    return taskMoveView(current, activities);
+  }
+  /**
+   * CGP-KNOW-R-009 — copy one task (transcript, draft, versions, verdicts) into the destination
+   * personal activity's store, read it back from disk and compare it byte for byte, and only then
+   * take it out of this activity. A failed or unconfirmed copy leaves the task where it was.
+   */
+  private async moveTask(store: TaskWorkspaceStore, taskId: string, ref: string, expected: TaskWorkspaceExpected): Promise<{ title: string; destination: string }> {
+    const view = await this.taskMoveState();
+    if (!view) throw new Error('활동 연결을 확인하지 못했어요. 다시 시도해 주세요.');
+    if (!view.allowed) throw new Error(view.reason);
+    const current = this.taskMoveCurrent()!;
+    const activities = await activityConnections(this.context)?.list().catch(() => []) ?? [];
+    const target = taskMoveTarget(current, activities, ref);
+    if (!target) throw new Error('옮길 활동을 찾지 못했어요. 작업 메뉴에서 다시 골라 주세요.');
+    const root = taskWorkspaceRoot(this.context.globalStorageUri.fsPath);
+    const scope = taskWorkspaceScope(target);
+    const moving = store.exportTask(taskId);
+    const destination = new TaskWorkspaceStore(root, scope);
+    if (destination.scope === store.scope) throw new Error('같은 활동으로는 옮길 수 없어요.');
+    const exact = JSON.stringify(moving);
+    // Where the task is now, read from disk (never from a store's memory): 'exact' when the scope
+    // lists the task exactly as it was copied, 'other' when it lists a different task under that id,
+    // 'absent' when it does not list it, undefined when the scope cannot be read.
+    const holds = (read: () => TaskWorkspaceStore): 'exact' | 'other' | 'absent' | undefined => {
+      try {
+        const fresh = read();
+        if (fresh.getView().error) return undefined;
+        if (!fresh.getTask(taskId)) return 'absent';
+        return JSON.stringify(fresh.exportTask(taskId)) === exact ? 'exact' : 'other';
+      } catch { return undefined; }
+    };
+    const atDestination = () => holds(() => new TaskWorkspaceStore(root, scope));
+    const both = () => new Error(`‘${target.name}’에도 같은 작업이 남았어요. 두 곳에 같은 작업이 있으니 하나를 확인해 주세요.`);
+    const unsure = () => new Error(`작업이 ‘${target.name}’에도 남았을 수 있어요. 두 활동의 작업 목록을 확인해 주세요.`);
+    try { await destination.receiveTask(moving); }
+    catch (error) {
+      // The destination may have saved its task file and failed only afterwards (lock release or
+      // temporary-file cleanup). An exact copy there means the receive happened: carry on.
+      const landed = atDestination();
+      if (landed === undefined) throw unsure();
+      if (landed !== 'exact') throw error;
+    }
+    // Undo the copy when the move cannot finish. "Both places" is said only when the disk shows it.
+    const undo = async (kept: string) => {
+      const withdrawn = await new TaskWorkspaceStore(root, scope).withdrawTask(moving).catch(() => false);
+      if (withdrawn) return new Error(kept);
+      const left = atDestination();
+      return left === 'absent' ? new Error(kept) : left === undefined ? unsure() : both();
+    };
+    let copied = false;
+    try { copied = JSON.stringify(new TaskWorkspaceStore(root, scope).exportTask(taskId)) === exact; } catch { copied = false; }
+    if (!copied) throw await undo('옮긴 작업을 확인하지 못해 옮기지 않았어요. 작업은 이 활동에 그대로 있어요.');
+    try { await store.releaseTask(taskId, expected); }
+    catch {
+      // A failed release may still have taken the task out (the task file was saved, then the lock
+      // release failed). Ask the disk, not this store: withdraw the copy only while the source still
+      // holds the task exactly as it was copied; if the source no longer lists it, the move is done.
+      const left = holds(() => store.reread());
+      if (left === 'absent') return { title: moving.task.title, destination: target.name };
+      if (left === 'exact') throw await undo('이 활동의 작업 목록이 바뀌어 옮기지 않았어요. 작업은 이 활동에 그대로 있어요. 다시 시도해 주세요.');
+      // The source changed or cannot be read: keep the copy and say so.
+      throw left === 'other' ? both() : unsure();
+    }
+    return { title: moving.task.title, destination: target.name };
+  }
+
+  /** CGP-KNOW-R-009 — a move request always gets an answer, so the task menu never waits out its guard. */
+  private async refuseTaskMove(msg: WebviewMessage, error?: string): Promise<void> {
+    if (msg.type !== 'taskMove') return;
+    if (error) await this.post({ type: 'taskWorkspaceError', error });
+    if (typeof msg.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) await this.post({ type: 'taskMoveResult', requestId: msg.requestId, moved: false });
+  }
+
   private async handleTaskMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
     const store = this.currentTaskStore?.();
-    if (!store) return;
+    if (!store) {
+      if (msg.type === 'taskMove') await this.refuseTaskMove(msg, '작업 목록을 열지 못해 옮기지 않았어요.');
+      return;
+    }
     const before = store.getView();
-    if (!msg.taskId || msg.taskId !== before.activeTaskId || this.taskChanging) return;
+    if (!msg.taskId || msg.taskId !== before.activeTaskId || this.taskChanging) {
+      if (msg.type === 'taskMove') await this.refuseTaskMove(msg, this.taskChanging ? '다른 작업 변경이 끝난 뒤 다시 시도해 주세요.' : '열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
+      return;
+    }
     let renameUndoId: string | undefined, renameUndone = false;
+    let moved: { title: string; destination: string } | undefined;
     const knownSource = (value: string) => {
       try {
         const url = new URL(value);
@@ -642,7 +741,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         try {
           if (source) this.draftSource = source;
           let recoveryDraft: ActivityDraft | undefined;
-          await this.setConnectionChanging(true, msg.type === 'taskRecoverDraft' ? draft => { recoveryDraft = draft; } : undefined, msg.type === 'taskCreate' || msg.type === 'taskSelect');
+          await this.setConnectionChanging(true, msg.type === 'taskRecoverDraft' ? draft => { recoveryDraft = draft; } : undefined, msg.type === 'taskCreate' || msg.type === 'taskSelect' || (msg.type === 'taskMove' && msg.id === msg.taskId));
           if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) throw new Error('열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
           await this.retryInterruptedHistory();
           const expected = { taskId: msg.taskId, revision: store.getView().revision };
@@ -666,15 +765,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               renameUndone = await store.undoRename(held.undo).then(() => true, () => false);
             }
           }
+          else if (msg.type === 'taskMove') moved = await this.moveTask(store, msg.id, msg.destination, expected);
           this.orchestratorState = undefined;
           // CGP-AGENT-R-004 — "이번 작업 동안" ends with the task.
+          // CGP-KNOW-R-009 — moving the open task away leaves it like a switch does.
+          const leftTask = msg.type === 'taskCreate' || msg.type === 'taskSelect' || (msg.type === 'taskMove' && msg.id === msg.taskId);
           if (msg.type === 'taskCreate' || msg.type === 'taskSelect') this.endTaskCommandAllows();
-          // CGP-CHAT-R-029 — so does a rename's 되돌리기.
-          if (msg.type === 'taskCreate' || msg.type === 'taskSelect') this.renameUndo = null;
+          else if (leftTask) this.endTaskCommandAllows();
+          // CGP-CHAT-R-029 — so does a rename's 되돌리기 (also when a move takes the open task away).
+          if (leftTask) this.renameUndo = null;
           // CGP-ART-R-007 — queued page text belongs to the conversation it was attached in.
-          if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingPageAttachment) this.clearPageAttachment();
+          if (leftTask && this.pendingPageAttachment) this.clearPageAttachment();
           // CGP-CHAT-R-011 — so does an attached work-folder file.
-          if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingFileAttachment) this.clearFileAttachment();
+          if (leftTask && this.pendingFileAttachment) this.clearFileAttachment();
           await this.postConfig();
           await this.postHistory();
         } finally {
@@ -685,6 +788,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({ type: 'taskWorkspaceState', view: store.getView() });
       if (msg.type === 'taskRename' && msg.requestId) await this.post({ type: 'taskRenameResult', requestId: msg.requestId, taskId: msg.taskId, saved: true, ...(renameUndoId ? { undoId: renameUndoId } : {}) });
       if (msg.type === 'taskRenameUndo') await this.post({ type: 'removalUndoResult', undoId: String(msg.undoId), restored: renameUndone });
+      if (msg.type === 'taskMove' && typeof msg.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) await this.post({ type: 'taskMoveResult', requestId: msg.requestId, moved: !!moved, ...(moved ? { title: moved.title, destination: moved.destination } : {}) });
     } catch (error) {
       let message = error instanceof Error ? error.message : '작업 기록을 저장하지 못했습니다. 다시 시도해 주세요.';
       if (msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') {
@@ -703,6 +807,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       } else if (msg.type !== 'taskRenameUndo') await this.post({ type: 'taskWorkspaceError', error: message, ...(msg.type === 'taskRecoverDraft' ? { draftSaveFailed: true } : {}) });
       if (msg.type === 'taskRename' && msg.requestId) await this.post({ type: 'taskRenameResult', requestId: msg.requestId, taskId: msg.taskId, saved: false });
       if (msg.type === 'taskRenameUndo') await this.post({ type: 'removalUndoResult', undoId: String(msg.undoId), restored: false });
+      if (msg.type === 'taskMove' && typeof msg.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) await this.post({ type: 'taskMoveResult', requestId: msg.requestId, moved: false });
     }
   }
   private accessState:AccessState|undefined;
@@ -6191,18 +6296,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     const connections=activityConnections(this.context);
-    if (connections && msg.activityId && msg.activityId!==connections.scope) return;
+    if (connections && msg.activityId && msg.activityId!==connections.scope) {
+      if (msg.type === 'taskMove') await this.refuseTaskMove(msg);
+      return;
+    }
     const taskStore = this.currentTaskStore?.();
     if (taskStore && msg.type !== 'ready') {
       const task = taskStore.getView();
       if (task.error || !msg.taskId || msg.taskId !== task.activeTaskId) {
         await this.post({ type: 'taskWorkspaceError', error: task.error?.message ?? '작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.' });
+        if (msg.type === 'taskMove') await this.refuseTaskMove(msg);
         return;
       }
     }
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
-    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
+    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskMove', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
     if (msg.type==='saveActivityDraft') {
@@ -9154,6 +9263,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (scope !== activityConnections(this.context)?.scope) return;
     const taskStore = this.currentTaskStore?.();
     const taskView = taskStore?.getView();
+    const taskMove = taskView ? await this.taskMoveState() : undefined;
     // REQ-L12 ⑫ — flag off (no Service offer) reads nothing and changes nothing.
     const carryover = activity && carryoverAdvertised(profile) ? carryoverState(activity.id, true, this.carryoverStores()).view : null;
     const toolProfile = profile ? accessProfile(profile, this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected)) : null;
@@ -9194,6 +9304,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         hasToken: !!token,
         workTakeawayEnabled: vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('workTakeawayEnabled', false),
         ...(taskView ? { taskWorkspace: taskView } : {}),
+        ...(taskView && taskMove ? { taskMove } : {}),
         ...(activity && carryover ? { carryover } : {}),
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{})},
           activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),

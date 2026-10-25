@@ -1770,6 +1770,62 @@ Acceptance CC-01–CC-05 in [the verification contract](testing/task-workspace.m
 uses the actual shipped theme tokens and full personal control profile. Synthetic
 model/tool tests do not establish live inference or installed release behavior.
 
+## Task move between personal activities (CGP-KNOW-R-009)
+
+`REQ-STUDIO-TASK-MOVE` (CGP-KNOW-R-009 / REQ-KNOW-14, traces CGP-KNOW-014, P2, PI#1; design
+DES-KNOW-14; depends on REQ-STUDIO-TASK-WORKSPACE; built 2026-10-25): a personal task can move
+between personal activities; class tasks cannot leave their class activity. Decisions:
+DEC-KNOW-R009 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+- **Who is personal.** A personal activity is one of kind `personal`, or a bought pass, with no
+  served lesson. A classroom activity, any seat with a served lesson (live profile, or a lesson
+  recorded on the saved activity), and an activity of unknown kind are class activities. A trial
+  that is not a pass keeps its own carryover flow (REQ-L12): its tasks do not move and nothing
+  moves into it.
+- **Where.** Every task row in the rail has a 44px "작업 메뉴: <task>" toggle. Its menu lists, under
+  "다른 활동으로 옮기기", exactly the other personal activities saved for the current service, by
+  name, as plain text. Nothing else is listed.
+- **Class task.** There is nothing to pick. The one item "다른 활동으로 옮기기" stays focusable
+  (`aria-disabled="true"`, not `disabled`) and its description is the reason, shown and announced on
+  focus: "수업 작업은 이 수업 활동 안에만 둘 수 있어요. 다른 활동으로 옮길 수 없어요." A trial shows
+  "체험 활동의 작업은 다른 활동으로 옮길 수 없어요." and a personal activity with no other personal
+  activity shows "옮길 수 있는 다른 개인 활동이 없어요." Pressing it sends nothing. A classroom seat
+  has no task rail, so there is no task menu at all.
+- **Moving.** The host re-derives the destination from a fresh activity list (the webview's ref is
+  only a choice). It refuses while a turn, a verification run or another task change is in progress,
+  and when the list changed since the choice. Moving the open task first flushes the draft on
+  screen. The task (transcript, earlier versions, draft, verdicts, title) is written into the
+  destination's task store, read back from disk and compared byte for byte; only then is it taken
+  out of this activity. When the destination reports that the receive failed, the host reads it
+  again from disk: if it holds the task exactly as copied (the task file was saved and only a later
+  step failed), the move carries on; otherwise nothing was received and the move stops. A copy that
+  does not read back identical is withdrawn from the destination and the task stays where it was.
+  "Both places" is said only when the disk shows the task in both; when a scope cannot be read, the
+  message says the task may also be in the destination. When the source reports that it could not let go, the host reads
+  the source again from disk before it undoes anything: if the source no longer lists the task (it
+  was saved without it and only a later step failed), the move is done and the copy stays; if the
+  source still holds the task exactly as it was copied, the copy is withdrawn and the task stays
+  where it was; otherwise, or if that withdrawal fails, both copies stay and the message says the
+  task is in both places. No failure leaves the task in neither activity. Taking a task out saves
+  the task file first and drops its earlier versions and verdicts afterwards, so a failed save
+  keeps every earlier version; a leftover entry is cleared when a task with that id arrives again.
+  A move changes the destination's task store, so another window that has the destination open
+  sees its next save refused as changed elsewhere and reopens the list (existing two-window rule).
+  Every move request is answered (`taskMoveResult`), including one refused before it starts.
+  Until the seat's profile has loaded, its lesson state is unknown and nothing moves ("활동 정보를
+  아직 확인하지 못해 옮길 수 없어요."). A destination
+  that was never opened under the task store is refused ("옮길 활동을 한 번 연 뒤에 다시 시도해
+  주세요."), so its first-open history import is never skipped. The destination's open task does
+  not change. Moving the open task opens the most recently changed remaining task; moving the only
+  task leaves a new empty "새 작업". The result is announced in the rail's polite status line.
+- **Tests.** `test/task-move.test.mjs` (rule and store, including a failed task-file save on
+  release and on withdraw), the host cases in `test/task-workspace-host.test.mjs` (including a
+  release that fails after the save, before it, with an edited source, and with a failed withdraw;
+  a fault matrix over every write, lock and cleanup step of receive, read-back, release and withdraw;
+  and refused requests that are still answered), `test/task-menu.test.tsx` (menu) and
+  `test/task-menu-computed.smoke.mjs` (44px targets, 14px text and focus ring measured in headless
+  Chromium).
+
 ## Activity materials (CGP-KNOW-R-003)
 
 `REQ-STUDIO-ACTIVITY-MATERIALS` (CGP-KNOW-R-003 / REQ-KNOW-04, CGP-KNOW-004, P1, PI#2 and PI#5;

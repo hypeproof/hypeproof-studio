@@ -20,6 +20,8 @@ import { loadPanelSizes, PANEL_LIMITS, savePanelSizes, type PanelName } from './
 import { PanelBoundary } from './PanelBoundary';
 import { filterTasksByTitle, TASK_SEARCH_MAX } from './taskTitleFilter';
 import { offerUndo } from './UndoToast';
+import { TaskMenu } from './TaskMenu';
+import type { TaskMoveView } from '../../src/taskMove';
 
 interface Props {
   view: TaskWorkspaceView;
@@ -33,6 +35,8 @@ interface Props {
   onDismissError: () => void;
   /** CGP-KNOW-R-015 — set only where the seat may attach work-folder files: 이 파일에 대해 묻기 per listed file. */
   onAskAboutFile?: (path: string) => void;
+  /** CGP-KNOW-R-009 — the host's move rule for this activity's tasks; absent → no task menu. */
+  taskMove?: TaskMoveView;
   children: ReactNode;
 }
 
@@ -70,12 +74,16 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, taskMove, children }: Props) {
   // REQ-STUDIO-TASK-RAIL-SEARCH: `text` is what the field shows, `applied` the committed query the list
   // filters by. An open IME composition (a half-built Hangul syllable) never filters; the commit does.
   // Both belong to one activity: a different scope starts with an empty search.
   const [search, setSearch] = useState({ scope: view.scope, text: '', applied: '' });
   const railSearch = search.scope === view.scope ? search : { scope: view.scope, text: '', applied: '' };
+  // CGP-KNOW-R-009 — at most one task menu is open; a move is bound to its request id.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [moveStatus, setMoveStatus] = useState('');
+  const moveRequest = useRef<string | null>(null);
   // CGP-SHELL-R-012: a size is the user's own choice, remembered per seat; until then the design-token width applies.
   const workspaceEl = useRef<HTMLDivElement>(null);
   const [panelSizes, setPanelSizes] = useState(() => ({ scope: view.scope, sizes: loadPanelSizes(view.scope) }));
@@ -241,6 +249,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     setRenamePending(null);
     setRenameError(null);
     setRailOpen(false);
+    setMenuFor(null);
   }, [scopeKey, clearRequestTimer, updateRequest]);
   useEffect(() => clearRequestTimer, [clearRequestTimer]);
   useEffect(() => onHostMessage(message => { if (message.type === 'artifactProvenance') setArtifacts(message.view); }), []);
@@ -336,6 +345,24 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     setRenamePending(null);
     setRenameError(null);
     setRenaming(false);
+  };
+  useEffect(() => onHostMessage(message => {
+    if (message.type !== 'taskMoveResult' || message.requestId !== moveRequest.current) return;
+    moveRequest.current = null;
+    setMoveStatus(message.moved && message.title && message.destination ? `‘${message.title}’ 작업을 ‘${message.destination}’ 활동으로 옮겼어요. 그 활동을 열면 이어서 할 수 있어요.` : '');
+    // The moved row is gone (or, on failure, focus would otherwise stay on <body>): land on the open task.
+    const target = rail.current?.querySelector<HTMLElement>('.tw-task[aria-current="page"]') ?? rail.current;
+    requestAnimationFrame(() => { if (!document.activeElement || document.activeElement === document.body) target?.focus({ preventScroll: true }); });
+  }), []);
+  useEffect(() => { if (blocked) setMenuFor(null); }, [blocked]);
+  const moveTask = (taskId: string, destination: string) => {
+    if (blocked || moveRequest.current) return;
+    const requestId = sourceRequestId();
+    moveRequest.current = requestId;
+    setMoveStatus('');
+    postToHost({ type: 'taskMove', id: taskId, destination, requestId });
+    // A lost reply must not block later moves; the host answers well within this.
+    setTimeout(() => { if (moveRequest.current === requestId) moveRequest.current = null; }, 20000);
   };
   useEffect(() => onHostMessage(message => {
     if (message.type !== 'taskRenameResult') return;
@@ -435,16 +462,18 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           // Only the active task has a run state: tasks never run concurrently, and a stored transcript cannot tell how it ended.
           const state = task.id === view.activeTaskId ? runState : null;
           const metaId = `tw-task-meta-${task.id}`;
-          return <li key={task.id}>
+          return <li key={task.id} className={taskMove ? 'tw-task-row' : undefined}>
           <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={taskRunAccessibleName(task.title, state)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
             <span className="tw-task-title">{task.title}</span>
             {state && <IntentChip chip={TASK_RUN_CHIPS[state]} status={state} className="tw-task-state" attrs={{ 'data-run-state': state }} />}
             <span id={metaId} className="tw-task-meta"><span>{taskCountLine(task.messageCount, state)}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
+          {taskMove && <TaskMenu title={task.title} move={taskMove} open={menuFor === task.id} disabled={blocked} onOpenChange={open => setMenuFor(open ? task.id : null)} onMove={destination => moveTask(task.id, destination)} />}
         </li>;
         })}
       </ul>
       </>}</PanelBoundary>
+      {taskMove && <p className="tw-move-status" role="status" aria-live="polite">{moveStatus}</p>}
       <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
     {viewport > 700 && <KeyboardSplitter panel="rail" label="작업 목록 너비 조절" controls="task-rail" value={sizes.rail ?? tokenWidths.rail ?? PANEL_LIMITS.rail.min} onChange={value => resizePanel('rail', value)} />}
