@@ -73,6 +73,12 @@
 .tw-archived .tw-task-meta > * { white-space: nowrap; }
 .tw-archived .tw-reopen { grid-column: 2; grid-row: 1; font-size: var(--hp-font-caption); }
 .tw-archive-note { margin: var(--ds-c-studio-taskworkspace-space-12) var(--ds-c-studio-taskworkspace-space-5) 0; color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); }
+/* CGP-CHAT-R-026: a search result's matched passage, two lines at most; the match itself is <strong>. */
+.tw-task-snippet { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); margin-top: var(--ds-c-studio-taskworkspace-space-12); }
+/* KNOW-R-001 x CHAT-R-026: while message matches are shown, the title list keeps its own height so the
+   찾은 대화 group sits right under it instead of at the rail's foot; both lists scroll on their own. */
+.tw-rail:has(.tw-search-group) .tw-task-list:not(.tw-search-results) { flex: 0 1 auto; }
+.tw-search-group { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin-top: var(--ds-c-studio-taskworkspace-space-18); }
 .tw-empty-search { font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); padding: 0 var(--ds-c-studio-taskworkspace-space-2); color: var(--tw-muted); }
 .tw-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .tw-heading { display: flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-1); min-height: var(--ds-c-studio-taskworkspace-size-72); padding: 0 var(--ds-c-studio-taskworkspace-space-5); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }

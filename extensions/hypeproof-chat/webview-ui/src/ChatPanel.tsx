@@ -2945,7 +2945,8 @@ function MessageItem({
   const retryPrompt = canRetry ? userPromptBefore(messages, message.id) : null;
 
   return (
-    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`} {...(quotable ? { [QUOTE_ROW_ATTR]: message.id } : {})}>
+    // CGP-CHAT-R-026 — data-message-id is the task-search jump target.
+    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`} data-message-id={message.id} {...(quotable ? { [QUOTE_ROW_ATTR]: message.id } : {})}>
       <div className={personal ? "hps-msg-role hps-sr-only" : "hps-msg-role"}>
         {/*
           * #747 (AE-08) — if a stored name exists, use **that**. If not (rows from

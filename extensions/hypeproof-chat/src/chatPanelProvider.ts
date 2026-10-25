@@ -6196,6 +6196,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     const connections=activityConnections(this.context);
     if (connections && msg.activityId && msg.activityId!==connections.scope) return;
+    // CGP-CHAT-R-026 — read-only local search: answered to the asking view only, before the task gate
+    // (a stale task id is not an error here) and without post(), which would invalidate open prompts.
+    if (msg.type === 'taskSearch') {
+      const store = this.currentTaskStore?.();
+      if (!store || !source || typeof msg.requestId !== 'string' || msg.requestId.length > 100 || typeof msg.query !== 'string') return;
+      await source.postMessage({ type: 'taskSearchResult', requestId: msg.requestId, scope: store.scope, results: store.search(msg.query),
+        activityId: connections?.scope, taskId: store.getView().activeTaskId ?? undefined } satisfies HostMessage);
+      return;
+    }
     const taskStore = this.currentTaskStore?.();
     if (taskStore && msg.type !== 'ready') {
       const task = taskStore.getView();

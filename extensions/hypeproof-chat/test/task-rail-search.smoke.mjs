@@ -1,9 +1,11 @@
 // REQ-STUDIO-TASK-RAIL-SEARCH (CGP-KNOW-R-001): the real App bundle in headless Chromium. Typing in the
 // rail search shows only the current activity's tasks whose title contains the text; an open Korean
 // IME composition never filters, the commit does; a title stored in decomposed jamo still matches;
-// clearing restores the full list; another activity's tasks never appear and its search starts empty;
-// typing posts nothing to the host (so no model request). Computed geometry: the field is a 44px
-// target with >=14px text inside the rail, dark and light, 1420 and 800 px.
+// clearing restores the full list; another activity's tasks never appear and its search starts empty.
+// The title filter itself posts nothing to the host: no post while an IME composition is open or for a
+// blank query. Owner reconciliation with CGP-CHAT-R-026: each committed, non-blank query posts exactly one
+// `taskSearch` (message-text search, debounced) and nothing else, so no model request. Computed
+// geometry: the field is a 44px target with >=14px text inside the rail, dark and light, 1420 and 800 px.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +39,8 @@ const emptyNote = () => b.evaluate(`document.querySelector('.tw-empty-search')?.
 const focusField = () => b.evaluate(`(${field}).focus()`);
 const typeCommitted = async (text) => { await focusField(); await b.send('Input.insertText', { text }); await settle(); };
 const clearField = async () => { await focusField(); await b.evaluate(`(${field}).select()`); await b.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 }); await b.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 }); await settle(); };
+// The message-text search (CGP-CHAT-R-026) asks after a 150 ms pause; wait past it before counting posts.
+const pause = () => settle(300);
 const compose = async (text) => { await focusField(); await b.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length }); await settle(); };
 
 const taskA = [
@@ -59,6 +63,7 @@ try {
     assert.deepEqual(await titles(), allA, 'the rail lists the activity\'s tasks');
     assert.equal(await emptyNote(), null, 'no "not found" line before a search');
     const posted = await b.evaluate(`window.__posted.length`);
+    const postsSince = (from) => b.evaluate(`window.__posted.slice(${from})`);
 
     // Geometry of the field on the real markup.
     const g = await b.evaluate(`(()=>{const e=${field};const r=e.getBoundingClientRect();const rail=document.querySelector('.tw-rail').getBoundingClientRect();return {h:r.height,font:parseFloat(getComputedStyle(e).fontSize),label:parseFloat(getComputedStyle(e.closest('label').querySelector('span')).fontSize),inside:r.left>=rail.left-0.5&&r.right<=rail.right+0.5}})()`);
@@ -72,8 +77,13 @@ try {
     await compose('고양');
     assert.equal(await b.evaluate(`(${field}).value`), '고양', 'the field shows the composing text');
     assert.deepEqual(await titles(), allA, 'an open composition (고양) does not filter');
+    await pause();
+    assert.deepEqual(await postsSince(posted), [], 'nothing is posted to the host while an IME composition is open');
     await b.send('Input.insertText', { text: '고양' }); await settle();
     assert.deepEqual(await titles(), ['고양이 페이지'], 'after the IME commit only matching titles remain');
+    await pause();
+    const afterCommit = await postsSince(posted);
+    assert.deepEqual(afterCommit.map(m => [m.type, m.query]), [['taskSearch', '고양']], `a committed query posts exactly one taskSearch: ${JSON.stringify(afterCommit)}`);
     if (evidence) { const shot = await b.send('Page.captureScreenshot', { format: 'png' }); writeFileSync(`${evidence}/rail-search-${width}-${dark ? 'dark' : 'light'}.png`, Buffer.from(shot.data, 'base64')); }
 
     // Clearing restores the full list.
@@ -84,15 +94,18 @@ try {
     // A title stored decomposed matches the composed syllables an IME commits.
     await compose('강아지'); await b.send('Input.insertText', { text: '강아지' }); await settle();
     assert.deepEqual(await titles(), [taskA[1].title], 'NFD title matches a committed NFC query');
-    await clearField();
+    await pause(); await clearField();
 
     // Case folded; outer whitespace ignored; no match says so.
     await typeCommitted('cat');
     assert.deepEqual(await titles(), ['Cat Notes'], 'case-insensitive Latin match');
-    await clearField();
+    await pause(); await clearField();
+    const beforeBlank = await b.evaluate(`window.__posted.length`);
     await typeCommitted('   ');
     assert.deepEqual(await titles(), allA, 'a blank query shows every task');
     assert.equal(await emptyNote(), null);
+    await pause();
+    assert.deepEqual(await postsSince(beforeBlank), [], 'a blank query posts nothing to the host');
     await clearField();
     await typeCommitted('토끼');
     assert.deepEqual(await titles(), [], 'no title contains the text');
@@ -104,8 +117,11 @@ try {
     assert.ok(near.gap >= 0 && near.gap <= 120, `no-match line next to the search field: ${JSON.stringify(near)}`); assert.ok(near.font >= 14, `no-match text >= 14px: ${near.font}`);
     if (evidence) { const shot = await b.send('Page.captureScreenshot', { format: 'png' }); writeFileSync(`${evidence}/rail-search-empty-${width}-${dark ? 'dark' : 'light'}.png`, Buffer.from(shot.data, 'base64')); }
 
-    // Nothing was posted to the host while searching: the filter never leaves the webview.
-    assert.equal(await b.evaluate(`window.__posted.length`), posted, `search posts nothing: ${await b.evaluate('JSON.stringify(window.__posted.slice(' + posted + '))')}`);
+    // The title filter never leaves the webview: the only host messages are one taskSearch per committed,
+    // non-blank query (CGP-CHAT-R-026), none for composing, clearing or the blank query.
+    await pause();
+    const sent = await postsSince(posted);
+    assert.deepEqual(sent.map(m => [m.type, m.query]), [['taskSearch', '고양'], ['taskSearch', '강아지'], ['taskSearch', 'cat'], ['taskSearch', '토끼']], `only committed queries reach the host: ${JSON.stringify(sent)}`);
 
     // Another activity: only its own tasks, and the search starts empty (a stale query would hide them).
     await typeCommitted(''); await clearField(); await typeCommitted('고양');

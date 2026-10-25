@@ -5609,6 +5609,7 @@ step change ending in the model path, an app short-circuit or instructor mode, i
 lesson-less seats; the rendered ChatPanel) and `lesson-step-divider-layout.smoke.mjs` (computed
 layout and the real jump in headless Chromium, dark/light, 800/1420 px, forced colours; fails
 under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
 ### Collapsible pasted text (CGP-CHAT-R-017)
 
 A plain-text paste longer than 2,000 Unicode code points or 40 lines becomes a
@@ -5871,18 +5872,23 @@ with case folded and the query's outer whitespace ignored, so a title stored in 
 matches the composed syllables a Korean IME commits. While an IME composition is open the list
 does not change (a lone ㄱ or a half-built syllable never filters); the committed text filters.
 Clearing the field, or a blank query, restores the full list. Switching to another activity shows
-that activity's tasks with an empty search; a task of another activity never appears. Filtering
-happens in the webview only: no host message, file read, network or model request is made.
+that activity's tasks with an empty search; a task of another activity never appears. The title
+filter runs in the webview only: filtering titles, and every keystroke while an IME composition is
+open, sends no host message and makes no file read, network or model request. A committed,
+non-blank query additionally asks the host once, after a typing pause, for matches in message
+text; that is CGP-CHAT-R-026 (below), whose results form a separate group under the filtered
+title list.
 찾는 이름이 없습니다. 다른 이름으로 찾아보세요. appears only when a non-blank query matches no
 title, not for an activity that has no tasks, and it sits under the list heading next to the
 field (the list grows to fill the rail). The field keeps the 44px target and 14px text floor
-and accepts at most 160 characters (the longest stored title). Titles only: full-text search over
-transcripts stays out of scope (`docs/design/task-workspace.md`).
+and accepts at most 160 characters (the longest stored title). This filter matches titles only;
+search over message text is the committed-query addition of CGP-CHAT-R-026, not part of this filter.
 
 Tests: `extensions/hypeproof-chat/test/task-rail-search.smoke.mjs` (pure controls, then the real
 App bundle in headless Chromium: IME composition through CDP, NFD title, clear, blank and
-non-matching queries, activity switch, zero host posts, field geometry in dark/light at 1420 and
-800 px; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+non-matching queries, activity switch, zero host posts while composing and for a blank query and
+exactly one `taskSearch` per committed query, field geometry in dark/light at 1420 and 800 px;
+fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
 
 ## Low-stakes removal undo (CGP-CHAT-R-029)
 
@@ -5965,3 +5971,38 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## Task search (CGP-CHAT-R-026)
+
+`REQ-STUDIO-TASK-WORKSPACE` extension (CGP-CHAT-R-026 / CGP-CHAT-D-026, P2, PI#1). In a personal or
+trial task workspace the rail's `작업 찾기` field also searches the text of user and assistant
+messages in every task of the current activity scope, on this device. It is an addition on top of
+the title filter (CGP-KNOW-R-001, above), which stays as it is: instant, local and IME-safe. Only a
+committed, non-blank query asks the host, never while an IME composition is open, and only once
+typing pauses (150 ms): the webview posts one `taskSearch`. The host searches its in-memory copy of
+the task file (`TaskWorkspaceStore.search`); the request `taskSearch` and answer `taskSearchResult`
+never leave the extension, there is no model, Service or network request, and searching never
+switches task or saves anything. Matching is case-insensitive after NFKC; control, format and bidi
+characters are dropped and U+2028/2029 read as spaces; queries are capped at 100 characters. Tool
+lines, system notices and superseded answer versions are not searched. The host returns at most one
+result per task, at its latest matching message, newest first, at most 50. Tasks that match only in
+message text are shown as a separate group, `찾은 대화`, under the filtered title list; a task that
+already matched by title is not listed twice, and a name-only answer from the host is not shown again.
+A result shows the task name, a plain-text snippet around the match and the matched message's date;
+the match is bold, never colour alone, and everything is rendered as text. When neither a title nor
+message text matches, the group says `찾는 대화가 없어요` under the title filter's no-match line; when
+the host cannot read the task file it says `작업 기록을 읽지 못해 지금은 찾을 수 없어요` instead of
+claiming no match. The previous answer stays on screen until the next one arrives. Opening a result
+in another task asks the host to switch (the usual navigation gates apply); once that task's
+messages are on screen the transcript scrolls to the matched message and stops following the
+latest message. A result in the open task scrolls at once. A switch that is refused (a task error),
+fails, or ends on another task drops the pending jump. The host answers only the view that asked,
+tagged with the activity and open task, without the broadcast path that invalidates open approval
+prompts; an answer to an older query is ignored. Classroom seats have no task workspace and no
+search. Evidence: `extensions/hypeproof-chat/test/task-search.smoke.mjs` (pure search, disk store,
+host routing, no network) and `extensions/hypeproof-chat/test/task-search-browser.smoke.mjs`
+(mounted rail and transcript in headless Chromium, dark/light, 800/1420 px, forced colours, 44px
+targets, 14px text, no task listed twice; fails under `FOCUS_REQUIRE_BROWSER=1` without a
+browser); `task-rail-search.smoke.mjs` proves no post while composing or for a blank query. This
+supports PI#1 learner agency: the learner finds and reopens their own earlier work without asking
+the AI.

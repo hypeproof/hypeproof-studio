@@ -552,6 +552,8 @@ export type WebviewMessage = (
   | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
   | { type: 'taskOpenSource'; url: string; requestId?: string }
   | { type: 'taskReturnFromSource'; requestId: string; url: string }
+  /** CGP-CHAT-R-026 — search this activity's own tasks on this device. */
+  | { type: 'taskSearch'; query: string; requestId: string }
   | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string;imagePreparationFailed?:boolean}
   /** REQ-STUDIO-QUIT-GUARD — whether this chat surface holds a queued, unsent message. */
   | { type: 'queueState'; queued: boolean }
@@ -822,6 +824,7 @@ export type HostMessage = (
   | { type: 'removalUndoResult'; undoId: string; restored: boolean }
   /** CGP-CHAT-R-029 — a send started: every host-held 되돌리기 (file, page, rename) is gone; offers end. */
   | { type: 'removalsFinal' }
+  | { type: 'taskSearchResult'; requestId: string; scope: string; results: import('./taskSearch').TaskSearchResult[] | null }
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
   | { type: 'taskWorkspaceError'; verdictRequestId?: string; verdictMessageId?: string; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */

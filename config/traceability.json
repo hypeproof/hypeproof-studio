@@ -6031,6 +6031,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Compact personal conversation (CC-R1, #1762)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Task search (CGP-CHAT-R-026)"
         }
       ]
     },
@@ -13224,6 +13228,54 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/task-archive-layout.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-SEARCH",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskSearch.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-SEARCH",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-IMP-TASK-SEARCH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-search.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-search-browser.smoke.mjs"
         }
       ]
     }

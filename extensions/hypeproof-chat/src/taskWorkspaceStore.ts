@@ -12,6 +12,7 @@ import type { RenameUndo } from './removalUndo.ts';
 import { emptyVersions, joinVersions, splitVersions, validEditOf, type StoredVersions } from './editResend.ts';
 import { appendVerdict, latestVerdicts, validVerdictEvent, type VerdictEvent, type VerdictMap } from './answerVerdict.ts';
 import type { ActivityDraft } from './activityDraft';
+import { searchTasks, type TaskSearchResult } from './taskSearch.ts';
 import type { ChatMessage } from './protocol';
 import type {
   ArchivedTaskSummary, TaskDocument, TaskSummary, TaskSurfaceSelection, TaskWorkspaceErrorCode, TaskWorkspaceExpected, TaskWorkspaceView,
@@ -311,6 +312,15 @@ export class TaskWorkspaceStore {
       sourceSelection: clone(this.data?.tasks.find(task => task.id === this.data?.activeTaskId)?.sourceSelection ?? null),
       ...(this.loadError ? { error: { code: this.loadError.code, message: this.loadError.message } } : {}),
     };
+  }
+
+  /**
+   * CGP-CHAT-R-026 — local search over this scope's tasks (visible conversation only); never touches disk or
+   * network. null when the task file could not be read: "no match" would be a false answer.
+   */
+  search(query: string): TaskSearchResult[] | null {
+    if (this.loadError || !this.data) return null;
+    return searchTasks(this.data.tasks, query);
   }
 
   getActiveTask(): TaskDocument | undefined { return this.getTask(this.data?.activeTaskId); }

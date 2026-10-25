@@ -2,6 +2,7 @@ import { citationKindLabel } from './citationKind';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import type { ChatMessage, Citation } from '../../src/protocol';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
+import type { TaskSearchPart, TaskSearchResult } from '../../src/taskSearch';
 import { taskCountLine, taskRunAccessibleName, type TaskRunState } from '../../src/taskRunState';
 import { onHostMessage, postToHost } from './vscode';
 import { CitationPreview, CitationPreviewContext, SourceIcon, citationAddress } from './CitationPreview';
@@ -67,6 +68,15 @@ function sourceRequestId(): string {
 // Stable context values: a new object each render would re-render every consumer in the conversation.
 const HOME_WITH_MATERIALS = { materialsHome: true }, HOME_WITHOUT_MATERIALS = { materialsHome: false };
 
+/** CGP-CHAT-R-026 — the matched text is bold (a <strong>), never colour alone. */
+function SearchParts({ parts }: { parts: TaskSearchPart[] }) {
+  return <>{parts.map((part, index) => part.match ? <strong key={index}>{part.text}</strong> : <span key={index}>{part.text}</span>)}</>;
+}
+
+const SEARCH_PAUSE_MS = 150;
+
+interface PendingReveal { taskId: string; messageId?: string; from: string | null }
+
 interface ReadingPosition {
   scroller: HTMLElement;
   anchor?: HTMLElement;
@@ -93,6 +103,12 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     saveHomeView(view.scope, next);
     if (focus) homeTabs.current?.querySelector<HTMLElement>(`#tw-home-tab-${next}`)?.focus();
   };
+  // CGP-CHAT-R-026 — on top of the local title filter, a committed query also asks the host to search
+  // message text in the task files on this device. `results` null = the host could not read the task file.
+  const [hostSearch, setHostSearch] = useState<{ scope: string; results: TaskSearchResult[] | null } | null>(null);
+  const searchRequest = useRef<{ requestId: string; scope: string } | null>(null);
+  const pendingReveal = useRef<PendingReveal | null>(null);
+  const [revealTick, setRevealTick] = useState(0);
   // CGP-SHELL-R-012: a size is the user's own choice, remembered per seat; until then the design-token width applies.
   const workspaceEl = useRef<HTMLDivElement>(null);
   const [panelSizes, setPanelSizes] = useState(() => ({ scope: view.scope, sizes: loadPanelSizes(view.scope) }));
@@ -194,6 +210,15 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     // REQ-STUDIO-FOCUS-RESTORE: the reopened task's row, else the composer, never <body>.
     returnFocus(() => rail.current?.querySelector<HTMLElement>('.tw-task[aria-current="page"]') ?? null);
   }, [view.activeTaskId, archiveOpen]);
+  // The last answer stays on screen while a newer query or a saved turn is asked again, so the list does not blink.
+  const answered = searching && hostSearch?.scope === view.scope ? hostSearch : null;
+  // Owner reconciliation (KNOW-R-001 x CHAT-R-026): a task already listed by title is never listed again,
+  // and a host answer that matched only the name adds nothing to the title list.
+  const messageResults = useMemo(() => {
+    if (!answered?.results) return [];
+    const byTitle = new Set(visibleTasks.map(task => task.id));
+    return answered.results.filter(result => result.messageId && !byTitle.has(result.taskId));
+  }, [answered, visibleTasks]);
   const date = useMemo(() => new Intl.DateTimeFormat('ko', { month: 'short', day: 'numeric' }), []);
 
   const updateRequest = useCallback((next: SourceRequest | null) => {
@@ -297,6 +322,45 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   }, [scopeKey, clearRequestTimer, updateRequest]);
   useEffect(() => clearRequestTimer, [clearRequestTimer]);
   useEffect(() => onHostMessage(message => { if (message.type === 'artifactProvenance') setArtifacts(message.view); }), []);
+  // A newer query, task change or saved turn asks again; only the latest request's answer is shown.
+  useEffect(() => {
+    // Only the committed query asks (an open IME composition never changes `applied`), and a blank one never does.
+    const query = railSearch.applied;
+    if (!query.trim()) { searchRequest.current = null; setHostSearch(null); return; }
+    const request = { requestId: sourceRequestId(), scope: view.scope };
+    searchRequest.current = request;
+    // Typing asks once it pauses; the host scans every task, and it also runs the live turn.
+    const timer = setTimeout(() => postToHost({ type: 'taskSearch', query, requestId: request.requestId }), SEARCH_PAUSE_MS);
+    return () => clearTimeout(timer);
+  }, [railSearch.applied, view.scope, view.revision]);
+  useEffect(() => onHostMessage(message => {
+    if (message.type !== 'taskSearchResult') return;
+    const waiting = searchRequest.current;
+    if (!waiting || message.requestId !== waiting.requestId || message.scope !== waiting.scope || (message.results !== null && !Array.isArray(message.results))) return;
+    setHostSearch({ scope: waiting.scope, results: message.results });
+  }), []);
+  // A refused or failed switch leaves the learner where they were: drop the jump so a later, unrelated
+  // opening of that task does not scroll.
+  useEffect(() => onHostMessage(message => { if (message.type === 'taskWorkspaceError' && message.error) pendingReveal.current = null; }), []);
+  // CGP-CHAT-R-026 — opening a result scrolls the transcript to the matched message once it is on screen.
+  useLayoutEffect(() => {
+    const pending = pendingReveal.current;
+    if (!pending) return;
+    if (view.activeTaskId !== pending.taskId) {
+      // The switch failed or another task was chosen: never jump later in an unrelated view.
+      if (view.activeTaskId !== pending.from) pendingReveal.current = null;
+      return;
+    }
+    if (!pending.messageId) { pendingReveal.current = null; return; }
+    if (!messages.some(message => message.id === pending.messageId)) return;
+    pendingReveal.current = null;
+    const row = conversation.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(pending.messageId)}"]`);
+    const scroller = row?.closest<HTMLElement>('.hps-messages');
+    if (!row || !scroller) return;
+    scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    // Tell the transcript the reader moved now, so following the latest message cannot pull it back.
+    scroller.dispatchEvent(new Event('scroll'));
+  }, [messages, view.activeTaskId, revealTick]);
   useEffect(() => { setArtifacts(undefined); }, [scopeKey]);
   // Each opening asks again: the host rescans the folder when no turn runs.
   useEffect(() => { if (sourcesOpen) postToHost({ type: 'artifactProvenanceRequest' }); }, [sourcesOpen, scopeKey]);
@@ -487,7 +551,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         const text = event.target.value;
         const composing = (event.nativeEvent as InputEvent).isComposing === true;
         setSearch({ scope: view.scope, text, applied: composing ? railSearch.applied : text });
-      }} onCompositionEnd={event => { const text = event.currentTarget.value; setSearch({ scope: view.scope, text, applied: text }); }} placeholder="작업 이름으로 찾기…" /></label>
+      }} onCompositionEnd={event => { const text = event.currentTarget.value; setSearch({ scope: view.scope, text, applied: text }); }} placeholder="작업 이름이나 대화 내용으로 찾기…" /></label>
       {/* CGP-SHELL-R-013 — the task list fails alone; 새 작업, search and the chat keep working. */}
       <PanelBoundary panel="task-rail">{() => archiveOpen ? <>
       {/* CGP-CHAT-R-025 — archived tasks keep their whole conversation; 다시 열기 lists and opens one. Nothing here deletes. */}
@@ -521,6 +585,28 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         })}
       </ul>
       {archivedTasks.length > 0 && <button ref={archiveToggle} type="button" className="tw-quiet tw-archive-open" onClick={() => openArchive(true)}>보관함 <span>{archivedTasks.length}</span></button>}
+      {/* CGP-CHAT-R-026 — tasks that match only in message text, under the filtered title list. */}
+      {answered && (answered.results === null || messageResults.length > 0 || !visibleTasks.length) && <div className="tw-search-group">
+      <div className="tw-rail-heading">찾은 대화 <span>{answered.results ? messageResults.length : ''}</span></div>
+      {answered.results === null && <p className="tw-empty-search" role="status">작업 기록을 읽지 못해 지금은 찾을 수 없어요</p>}
+      {messageResults.length > 0 && <ul className="tw-task-list tw-search-results" aria-label="찾은 대화">
+        {messageResults.map(result => <li key={result.taskId}>
+          <button className="tw-task tw-search-result" aria-current={result.taskId === view.activeTaskId ? 'page' : undefined}
+            disabled={blocked && result.taskId !== view.activeTaskId} data-task-id={result.taskId}
+            onClick={() => {
+              setRailOpen(false);
+              pendingReveal.current = { taskId: result.taskId, messageId: result.messageId, from: view.activeTaskId };
+              if (result.taskId !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: result.taskId });
+              setRevealTick(tick => tick + 1);
+            }}>
+            <span className="tw-task-title"><SearchParts parts={result.title} /></span>
+            {result.snippet.length > 0 && <span className="tw-task-snippet"><SearchParts parts={result.snippet} /></span>}
+            <span className="tw-task-meta"><span>대화에서 찾음</span><time dateTime={new Date(result.at).toISOString()}>{date.format(result.at)}</time></span>
+          </button>
+        </li>)}
+      </ul>}
+      {answered.results !== null && !messageResults.length && <p className="tw-empty-search" role="status">찾는 대화가 없어요</p>}
+      </div>}
       </>}</PanelBoundary>
       </div>
       {materials && <div id="tw-home-materials" className="tw-home-panel tw-home-materials" role="tabpanel" aria-labelledby="tw-home-tab-materials" hidden={homeView !== 'materials'}>
