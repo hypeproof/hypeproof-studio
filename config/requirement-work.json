@@ -13,6 +13,10 @@
     "docs/requirements/local-task-review.md": {
       "reason": "#1020 로컬 검토 슬라이스의 서술형 계약. 자체 요구사항 번호 없이 measurement-core.md의 MC-07·MC-21–25·MC-27–32·MC-34–35를 구현 범위로 인용하므로, 원장은 그 상위 문서를 센다.",
       "sha256": "84a4998d1f89c9b8fe6f217bdfa81c85590e8a8ff3e74d9c0d5519551dd1926c"
+    },
+    "docs/requirements/personal-workspace-metadata.md": {
+      "reason": "Verbatim REA W01 partial prose contract tracked by ST-REQ-PERSONAL-WORKSPACE-METADATA, ST-TEST-PERSONAL-WORKSPACE-METADATA and ST-IMP-PERSONAL-WORKSPACE-METADATA in config/traceability.json, with bounded execution issue hypeproof/hypeproof-studio#2811. It defines no numbered requirement rows for this work-discovery ledger; exclusion does not assert completion or full W01 acceptance.",
+      "sha256": "98e9db9f23f4ad9b203fcd82cf4f3d5fe44fcf5d808df703df1d846fc60b9633"
     }
   },
   "documents": [
