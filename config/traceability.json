@@ -12618,6 +12618,65 @@
           "path": "extensions/hypeproof-chat/test/turn-boundary-host.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-ANSWER-MATH",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Math in answers (CGP-CHAT-R-022)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ANSWER-MATH",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANSWER-MATH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/mathRender.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/mathTypeset.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/mathRender.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/styles/katex.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MarkdownText.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ANSWER-MATH",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ANSWER-MATH",
+        "ST-IMP-ANSWER-MATH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/answer-math.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/answer-math-stream.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/answer-math.smoke.mjs"
+        }
+      ]
     }
   ]
 }
