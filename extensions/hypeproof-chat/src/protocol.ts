@@ -863,7 +863,9 @@ export type HostMessage = (
   /** CGP-CHAT-R-005 — the active task's latest verdict per answer, read from the local sidecar. */
   | { type: "answerVerdicts"; requestId?: string; messageId?: string; taskId?: string; verdicts: import('./answerVerdict').VerdictMap }
   /** `userMessageId` (REQ-STUDIO-STEER-NOW): the learner request this turn answers; absent for app-initiated replies. */
-  | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
+  | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string; /** CGP-CHAT-R-023 */ lessonStep?: import("./lessonStepMarks").LessonStepMark }
+  /** CGP-CHAT-R-023 — served lesson step per user message id, for the transcript's step dividers. */
+  | { type: "lessonStepMarks"; marks: import("./lessonStepMarks").LessonStepMarks; /** CGP-CHAT-R-023 — a delta: these ids lose their mark (lessonStepMarks.nextStepMarks). */ forget?: string[] }
   | { type: "streamChunk"; streamId: string; delta: string }
   | { type: "delegationStopState"; streamId: string; state: import("./delegationStop").DelegationStopState }
   | { type: "streamCitations"; streamId: string; citations: Citation[] }  // #173

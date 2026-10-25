@@ -1205,6 +1205,25 @@ html, body, #root {
   color: var(--hp-text-muted-default);
 }
 
+/* CGP-CHAT-R-023 (CGP-CHAT-D56) — a lesson step boundary: full-width hairline, the served step centred, muted
+   caption text (14px floor, DEC-29), no icon, no motion, not focusable. */
+.hps-step-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-c-studio-styles-space-2);
+  margin: var(--ds-c-studio-styles-space-1) 0;
+  font-size: var(--hp-font-caption);
+  line-height: var(--ds-c-studio-styles-typography-5);
+  color: var(--hp-text-muted-default);
+}
+.hps-step-divider::before,
+.hps-step-divider::after {
+  content: "";
+  flex: 1 1 0;
+  border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default);
+}
+.hps-step-divider-label { flex: 0 1 auto; min-width: 0; text-align: center; overflow-wrap: anywhere; }
+
 .hps-page-notice {
   margin: var(--ds-c-studio-styles-space-15) 0 var(--ds-c-studio-styles-space-7);
   padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7);
@@ -1594,6 +1613,7 @@ html, body, #root {
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-acceptance { order:9; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-activity { order:10; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-growth { order:11; flex:0 0 auto; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-jump { order:11; flex:0 0 auto; }
 }
 .hp-mission-week { margin: 0 0 var(--ds-c-studio-styles-space-14); font-size: var(--ds-c-studio-styles-type-1); letter-spacing: var(--ds-c-studio-styles-size-3); color: var(--hp-text-muted-default); }
 .hp-mission-sentence { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-15); line-height: var(--ds-c-studio-styles-typography-16); font-weight: var(--ds-c-studio-styles-typography-17); overflow-wrap: anywhere; }
@@ -1675,6 +1695,8 @@ html, body, #root {
   font: inherit; font-size: var(--ds-c-studio-styles-type-1); padding: var(--ds-c-studio-styles-space-15) 0; cursor: pointer; min-height: var(--hp-control-min); /* CGP-DS-R-010 */
   color: var(--hp-text-muted-default); background: none; border: 0; text-decoration: underline;
 }
+/* CGP-CHAT-R-023 — "지금 단계로": a quiet 44px button (hp-cta-quiet) at the 14px caption floor, not the foot's 12px. */
+.hp-mission-jump { font-size: var(--hp-font-caption); }
 .hp-mission :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
 /* ── Region B's learning information — inside the coach rail, outside the message stream (SX-05) ──

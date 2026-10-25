@@ -290,3 +290,7 @@ via shipped theme tokens. All below must hold at 320px width and with Korean IME
    move it to DEFER.
 9. The 901 `localConversation.mcpToolActivity.*` strings were sampled only. They describe
    per-connector verbs (Figma, Drive, …) that the plugins domain should inventory.
+
+## Implementation notes
+
+- **CGP-CHAT-R56 (CGP-CHAT-R-023), 2026-10-25.** Implemented in Studio as REQ-STUDIO-LESSON-STEP-DIVIDER (`docs/studio-requirements.md`). Owner-delegated choices (served step = turn-start capture, divider on the first served step, marks stored beside the transcript, jump target = latest divider of the rail's step, learner lesson seats only) are recorded in `../decisions.md`.
