@@ -13062,6 +13062,49 @@
           "path": "release.json"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TASK-RAIL-SEARCH",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Task rail search (CGP-KNOW-R-001)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-RAIL-SEARCH",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-RAIL-SEARCH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskTitleFilter.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-RAIL-SEARCH",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-RAIL-SEARCH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-rail-search.smoke.mjs"
+        }
+      ]
     }
   ]
 }

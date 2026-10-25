@@ -18,6 +18,7 @@ import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { KeyboardSplitter, SkipToInput } from './KeyboardNavigation';
 import { loadPanelSizes, PANEL_LIMITS, savePanelSizes, type PanelName } from './panelSizes';
 import { PanelBoundary } from './PanelBoundary';
+import { filterTasksByTitle, TASK_SEARCH_MAX } from './taskTitleFilter';
 
 interface Props {
   view: TaskWorkspaceView;
@@ -69,7 +70,11 @@ interface ReadingPosition {
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
 export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, children }: Props) {
-  const [filter, setFilter] = useState('');
+  // REQ-STUDIO-TASK-RAIL-SEARCH: `text` is what the field shows, `applied` the committed query the list
+  // filters by. An open IME composition (a half-built Hangul syllable) never filters; the commit does.
+  // Both belong to one activity: a different scope starts with an empty search.
+  const [search, setSearch] = useState({ scope: view.scope, text: '', applied: '' });
+  const railSearch = search.scope === view.scope ? search : { scope: view.scope, text: '', applied: '' };
   // CGP-SHELL-R-012: a size is the user's own choice, remembered per seat; until then the design-token width applies.
   const workspaceEl = useRef<HTMLDivElement>(null);
   const [panelSizes, setPanelSizes] = useState(() => ({ scope: view.scope, sizes: loadPanelSizes(view.scope) }));
@@ -132,7 +137,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const sourceDisplay = useRef({ open: sourcesOpen, url: selected?.url });
   sourceDisplay.current = { open: sourcesOpen, url: selected?.url };
   const blocked = busy || !!view.error;
-  const visibleTasks = view.tasks.filter(task => task.title.toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
+  const visibleTasks = useMemo(() => filterTasksByTitle(view.tasks, railSearch.applied), [view.tasks, railSearch.applied]);
+  const searching = railSearch.applied.trim() !== '';
   const date = useMemo(() => new Intl.DateTimeFormat('ko', { month: 'short', day: 'numeric' }), []);
 
   const updateRequest = useCallback((next: SourceRequest | null) => {
@@ -400,10 +406,17 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
       <button className="tw-new" disabled={blocked} onClick={() => { setRailOpen(false); postToHost({ type: 'taskCreate' }); }}><span aria-hidden="true">＋</span> 새 작업</button>
-      <label className="tw-search"><span>작업 찾기</span><input name="task-search" autoComplete="off" type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="작업 이름으로 찾기…" /></label>
+      <label className="tw-search"><span>작업 찾기</span><input name="task-search" autoComplete="off" type="search" maxLength={TASK_SEARCH_MAX} value={railSearch.text} onChange={event => {
+        const text = event.target.value;
+        const composing = (event.nativeEvent as InputEvent).isComposing === true;
+        setSearch({ scope: view.scope, text, applied: composing ? railSearch.applied : text });
+      }} onCompositionEnd={event => { const text = event.currentTarget.value; setSearch({ scope: view.scope, text, applied: text }); }} placeholder="작업 이름으로 찾기…" /></label>
       {/* CGP-SHELL-R-013 — the task list fails alone; 새 작업, search and the chat keep working. */}
       <PanelBoundary panel="task-rail">{() => <>
       <div className="tw-rail-heading">최근 작업 <span>{view.tasks.length}</span></div>
+      {/* The list grows to fill the rail, so the no-match line sits above it, next to the field. */}
+      {/* The polite live region stays mounted so a screen reader announces the line when it appears. */}
+      <div role="status" aria-live="polite">{searching && !visibleTasks.length && <p className="tw-empty-search">찾는 이름이 없습니다. 다른 이름으로 찾아보세요.</p>}</div>
       <ul className="tw-task-list">
         {visibleTasks.map(task => {
           // Only the active task has a run state: tasks never run concurrently, and a stored transcript cannot tell how it ended.
@@ -418,7 +431,6 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         </li>;
         })}
       </ul>
-      {!visibleTasks.length && <p className="tw-empty-search">찾는 이름이 없습니다. 다른 이름으로 찾아보세요.</p>}
       </>}</PanelBoundary>
       <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
