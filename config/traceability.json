@@ -12786,6 +12786,58 @@
           "path": "extensions/hypeproof-chat/test/turn-tools.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-COPY-CONVERSATION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Copy the task conversation (CGP-CHAT-R-024)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COPY-CONVERSATION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COPY-CONVERSATION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/conversationCopy.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ConversationCopy.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COPY-CONVERSATION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COPY-CONVERSATION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/conversation-copy.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/conversation-copy-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }
