@@ -5965,3 +5965,56 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## Browser downloads (CGP-KNOW-R-021)
+
+REQ-STUDIO-BROWSER-DOWNLOADS (REQ-KNOW-38 / CGP-KNOW-038, design CGP-KNOW-D-021, PI#1;
+spec `docs/native-browser-spec.md` §5.2). A file downloaded in the Studio browser (the
+integrated browser tab) is saved into the open activity's `downloads/` folder, directly
+under the canonical workspace root, under the name Chromium derives from the server
+(path separators in a server-sent name are replaced, so it cannot leave the folder). The
+folder is created on the first download. Studio never opens or runs a downloaded file.
+
+The host keeps one CDP session per browser tab and sends it `Page.setDownloadBehavior`:
+`allow` with `<real workspace root>/downloads`, or `deny`. It denies while no cohort
+profile is loaded (the cohort may be a minor one), when the cohort uses the safe session
+(a minor cohort), when there is no workspace root that resolves to a folder, and when
+`downloads` exists but is a symlink (dangling included), a file, or resolves anywhere
+else. The policy is re-sent to every tab when a tab closes (Chromium drops a closed
+session's behaviour for the whole browser context), when workspace folders change, when
+the cohort profile is applied or reset, and on every config push; calls are serialized so
+the latest policy wins, and a refused send is retried once.
+
+Each download gives exactly one line in the chat timeline of the task that was open when
+it began (it is persisted there even if the learner switches tasks; it is shown only while
+that task is open):
+
+- `다운로드 완료: downloads/<name> (<size>)` (done) — only after the file is found at
+  `<downloads>/<name>` as a regular file whose real path is that path; the size is read from
+  disk. A same-name file is overwritten by Chromium; the line does not claim otherwise.
+- `다운로드 실패: <name> — <cause>` (error) — interrupted or cancelled; completed but not
+  found as such a file; `downloads/` stopped being that real folder while it ran; or the
+  tab (its session) closed before the download ended, so its end could not be observed.
+- `다운로드 막힘: <name> — <cause>` (error) — denied: profile not loaded, safe-session
+  cohort, no workspace, or an unusable `downloads` entry.
+
+Names in lines drop C0/C1 controls, bidi marks/overrides/isolates, U+2028/2029, zero-width
+characters and the BOM, and are capped at 80 characters. The task store and the webview
+accept only labels of this shape (`isDownloadNoticeLabel`). The line reuses the existing
+tool-row presentation (file icon, 완료/실패 mark); CGP-KNOW-D-021's 열기/폴더에서 보기
+actions are a separate design row and are not built here.
+
+Known limits: downloads that start in a tab before its session is attached (the first
+moment after a tab opens), a tab whose behaviour send failed twice, and tabs on a build
+without the `browser` proposal follow the browser's default (Electron's save dialog). A
+`downloads` entry swapped for a symlink after the policy was sent cannot be stopped (the
+proxy stubs `Browser.cancelDownload`); the line then reports that the location could not
+be confirmed instead of success. Seats: every seat, including classroom, lesson and instructor; only the
+safe session denies. Tests: `extensions/hypeproof-chat/test/browser-downloads.smoke.mjs`
+(policy against a real temp workspace with symlinks, names, labels, the tracker and the
+task store) and `browser-downloads-browser.smoke.mjs` (the real watcher and CdpSession
+against headless Chromium: completed, Korean name, traversal name, interrupted, workspace
+change, three denials, one of two tabs closing, another feature's session closing, a tab
+closed mid-download; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser). This supports PI#1: what the learner takes
+from the web stays in their own activity, visibly, and nothing runs on its own.

@@ -372,3 +372,13 @@ webview state. Seats without the 자료 list, instructors and classroom/lesson s
 layout. The activity title above the tabs is left to CGP-KNOW-D-002. Decisions: DEC-KNOW-R-002.
 PI #1: the learner moves between their work and its materials without losing what they were
 writing (no capability labels).
+
+### REQ-KNOW-38 implementation contract (CGP-KNOW-R-021)
+
+Implemented in Studio as REQ-STUDIO-BROWSER-DOWNLOADS (`docs/studio-requirements.md`,
+2026-10-25). Each integrated browser tab gets a CDP session that points downloads at the
+activity's `downloads/` folder or denies them (safe-session cohort, no workspace, a
+`downloads` entry that is a symlink or file). Every download gives one timeline line in the
+task where it began: done only after the file is found as a regular file inside
+`downloads/`; failure and blocked lines name the file and the cause. Nothing is opened or
+run. Owner-delegated choices are in `decisions.md` (CGP-KNOW-R-021).

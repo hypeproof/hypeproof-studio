@@ -13226,6 +13226,68 @@
           "path": "extensions/hypeproof-chat/test/task-archive-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-BROWSER-DOWNLOADS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Browser downloads (CGP-KNOW-R-021)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-BROWSER-DOWNLOADS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BROWSER-DOWNLOADS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/browserDownloads.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserDownloadNotice.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserDownloadWatcher.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-BROWSER-DOWNLOADS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BROWSER-DOWNLOADS",
+        "ST-IMP-BROWSER-DOWNLOADS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/browser-downloads.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/browser-downloads-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }

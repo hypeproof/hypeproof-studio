@@ -917,6 +917,8 @@ export type HostMessage = (
   // behaviour), so this is announced on the chat panel's inline status line instead
   // of a toast.
   | { type: "denialNotice"; id: string; label: string; at: number }
+  // CGP-KNOW-R-021 — how a download from the Studio browser ended (re-checked by the webview).
+  | { type: "downloadNotice"; id: string; icon: string; label: string; state: "done" | "error"; at: number }
   | { type: "pageAttached"; label: string }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
   | { type: "annotations"; enabled: boolean; annotations: import("./annotationBatch").AnnotationView[] }

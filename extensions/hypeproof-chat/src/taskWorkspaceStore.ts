@@ -1,6 +1,7 @@
 import { ATTEMPT_KEYS, validAttemptMeta } from './answerAttempts.ts';
 import { shellLabel } from "./shellDisplay.ts";
 import { storedDenialNotice } from "./denialNotice.ts";
+import { isDownloadNoticeLabel } from "./browserDownloadNotice.ts";
 import { createHash, randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
@@ -454,7 +455,17 @@ export class TaskWorkspaceStore {
   appendDenial(taskId: string, message: ChatMessage): Promise<TaskWorkspaceView> {
     if (!validIncoming(message) || message.role !== 'tool' || message.content !== '' || message.tool?.state !== 'error' || !storedDenialNotice(message.tool.label))
       return Promise.reject(new TaskWorkspaceStoreError('invalid', '차단 안내 형식이 올바르지 않습니다.'));
-    const safe: ChatMessage = { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '🔒', label: message.tool.label, state: 'error' } };
+    return this.appendSystemLine(taskId, { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '🔒', label: message.tool.label, state: 'error' } });
+  }
+
+  /** CGP-KNOW-R-021 — a browser download line, written outside any turn like a denial notice. */
+  appendDownloadNotice(taskId: string, message: ChatMessage): Promise<TaskWorkspaceView> {
+    if (!validIncoming(message) || message.role !== 'tool' || message.content !== '' || !message.tool || !isDownloadNoticeLabel(message.tool.label, message.tool.state))
+      return Promise.reject(new TaskWorkspaceStoreError('invalid', '다운로드 안내 형식이 올바르지 않습니다.'));
+    return this.appendSystemLine(taskId, { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '📄', label: message.tool.label, state: message.tool.state } });
+  }
+
+  private appendSystemLine(taskId: string, safe: ChatMessage): Promise<TaskWorkspaceView> {
     return this.mutate((data, versions) => {
       const current = this.requireData(data);
       const task = this.requireTask(current, taskId);

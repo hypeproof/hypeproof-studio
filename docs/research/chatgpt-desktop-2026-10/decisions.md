@@ -741,3 +741,12 @@ These are conservative implementation choices, not new human agreements.
 - 보관함 lives in the task rail as a separate view (DES-CHAT-77), entered from a "보관함 N" button shown only when something is archived. 다시 열기 is the quiet neutral 44px button at the 14px floor (DEC-29), no red.
 - Seats: personal task workspaces only (no lesson, not instructor). Class seats have no task list; nothing on any seat deletes a task permanently.
 - Default state: on (local display state only; no data leaves the device, no permission change).
+
+## CGP-KNOW-R-021: Studio-browser downloads (2026-10-25, agent-selected conservative implementation)
+
+- Mechanism: the fork core has no download hook (verification.md CGP-ART-32: specified only), and core patches cannot be built or checked in this loop. The extension's per-tab CDP session uses `Page.setDownloadBehavior` and `Page.downloadWillBegin`/`downloadProgress`, which the integrated browser's CDP proxy routes to the page (`Browser.setDownloadBehavior` is a no-op stub there). Verified against headless Chromium; the Electron integrated browser itself is NOT RUN here (owner check listed in the report).
+- Safe session (minor cohorts): downloads are denied with a blocked line, also from the extension side. With no profile loaded, downloads are denied (the cohort may be a minor one). The persisted `hypeproof.browser.safeSession` is not used as the fallback here: `applyBrowserSafety(null)` writes `false` to it when a profile fetch fails, so it is not fail-closed (this also affects CGP-ART-R-008's `linkSafety` fallback; reported, not changed in this row).
+- All other seats (personal, trial, pass, classroom, lesson, instructor) save into `<workspace>/downloads/`. No workspace or an unusable `downloads` entry (symlink, file) denies; Studio never follows a symlink out of the workspace and never renames the learner's entry for them.
+- Overwrite: Chromium overwrites a same-name file in `downloads/`. The "replaced an older copy" hint was dropped because Chromium reserves the target before `downloadWillBegin` arrives, so it cannot be told apart; the line makes no claim either way.
+- Presentation: the existing tool row (file icon, done/failed mark), persisted like a denial notice in the task where the download began. CGP-KNOW-D-021's 13px size and 열기/폴더에서 보기 actions are left to that design row; 14px learner text keeps winning over the register's 13px.
+- No progress line, no automatic open, no quarantine or execution change.

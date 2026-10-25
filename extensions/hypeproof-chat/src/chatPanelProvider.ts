@@ -216,6 +216,8 @@ import { capturePageResult, pageResultState } from "./pageCardPresentation";
 import { buildPageCard, handlePageCardAction, PageCardRegistry, type PageCardMessage } from "./pageCardHost";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
+import { BrowserDownloadWatcher } from "./browserDownloadWatcher";
+import { downloadPolicy, type DownloadNotice } from "./browserDownloads";
 import { LiveServer } from "./liveServer";
 import { PreviewSurfaceRequests } from "./previewSurfaceRequests";
 import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
@@ -348,6 +350,8 @@ class LessonBindingPreflightError extends Error {}
 
 /** What one 팀 브레인 run tells the student (one short sentence per line) and the page to open when it worked. */
 interface BrainRun { lines: string[]; open?: string }
+/** CGP-KNOW-R-021 — where a download line goes: the activity and task open when the download began. */
+interface DownloadDestination { store: TaskWorkspaceStore | undefined; taskId: string | undefined; activityId: string | undefined; historyKey: string }
 
 // ── The front-line orchestrator, panel side (A5; ADR 0011, spec §5.1, §5.2, §6.3) ──
 // Pure (no vscode), exported for test/orchestrator-panel.smoke.mjs. Without a roster this
@@ -2664,6 +2668,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const d = event?.(() => this.schedulePreviewRecovery());
       if (d) context.subscriptions.push(d);
     }
+    this.registerBrowserDownloads(context);
     const annotationClose = vscode.window.onDidCloseBrowserTab?.(tab => { void this.annotationPreviewClosed(tab).catch(() => {}); });
     if (annotationClose) context.subscriptions.push(annotationClose);
     context.subscriptions.push({ dispose: () => clearTimeout(this.previewRecoveryTimer) });
@@ -2801,6 +2806,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch {
       /* setting not registered → build without the fork patch; nothing to enforce */
     }
+    // CGP-KNOW-R-021 — the cohort (safe session) and workspace root decide where downloads go.
+    await this.downloadWatcher?.reapply();
   }
 
   /** #278 Phase 2 — may we attach a page screenshot (image)? Worker enforces the same gate. */
@@ -3318,6 +3325,73 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     });
     return this.denialWrites;
   }
+
+  // ── Browser downloads (CGP-KNOW-R-021, REQ-STUDIO-BROWSER-DOWNLOADS) ─────────
+
+  private downloadWatcher?: BrowserDownloadWatcher<vscode.BrowserTab, DownloadDestination>;
+
+  /**
+   * Every integrated browser tab gets a CDP session that sends downloads to the activity's
+   * `downloads/` folder (or denies them for a safe-session cohort / without a workspace) and
+   * reports how each one ended as a line in the chat timeline. Nothing is opened afterwards.
+   */
+  private registerBrowserDownloads(context: vscode.ExtensionContext): void {
+    if (!vscode.window.onDidOpenBrowserTab) return; // build without the `browser` proposal
+    const watcher = new BrowserDownloadWatcher<vscode.BrowserTab, DownloadDestination>({
+      policy: () => this.browserDownloadPolicy(),
+      capture: () => this.downloadDestination(),
+      notify: (notice, dest) => { void this.postDownloadNotice(notice, dest); },
+      isOpen: (tab) => (vscode.window.browserTabs ?? []).includes(tab),
+    });
+    this.downloadWatcher = watcher;
+    for (const tab of vscode.window.browserTabs ?? []) void watcher.watch(tab);
+    const subs = [
+      vscode.window.onDidOpenBrowserTab((tab) => { void watcher.watch(tab); }),
+      vscode.window.onDidCloseBrowserTab?.((tab) => { void watcher.unwatch(tab); }),
+      vscode.workspace.onDidChangeWorkspaceFolders?.(() => { void watcher.reapply(); }),
+    ];
+    for (const d of subs) if (d) context.subscriptions.push(d);
+    context.subscriptions.push({ dispose: () => { void watcher.dispose(); } });
+  }
+
+  /**
+   * Safe-session cohorts get no downloads. Without a loaded profile the cohort is unknown and
+   * downloads are denied too: the persisted safeSession setting is not used here, because
+   * applyBrowserSafety(null) writes `false` to it when a profile fetch fails.
+   */
+  private browserDownloadPolicy() {
+    return downloadPolicy({ profileKnown: !!this.cachedProfile, safeSession: resolveBrowserSafety(this.cachedProfile).safeSession, workspaceRoot: this.resolveCoachCwd() });
+  }
+
+  private downloadDestination(): DownloadDestination {
+    const store = this.currentTaskStore?.();
+    return { store, taskId: store?.getView().activeTaskId ?? undefined, activityId: activityConnections(this.context)?.scope, historyKey: this.historyKey() };
+  }
+
+  /** Same delivery as a denial notice: persisted in the task where the download began, posted only if it is still open. */
+  private postDownloadNotice(notice: DownloadNotice, dest: DownloadDestination): Promise<void> {
+    const id = `download-${randomId()}`;
+    const message: ChatMessage = { id, role: 'tool', content: '', createdAt: Date.now(), tool: { icon: '📄', label: notice.label, state: notice.state } };
+    const write = async () => {
+      if (dest.store) {
+        if (!dest.taskId) throw Error('missing task');
+        await dest.store.appendDownloadNotice(dest.taskId, message);
+      } else {
+        const current = this.context.workspaceState.get<ChatMessage[]>(dest.historyKey, []);
+        await this.context.workspaceState.update(dest.historyKey, clampTimeline([...current, message], HISTORY_MAX));
+      }
+      if (this.historyKey() !== dest.historyKey || activityConnections(this.context)?.scope !== dest.activityId || this.currentTaskStore?.()?.getView().activeTaskId !== dest.taskId) return;
+      await this.post({ type: 'downloadNotice', id, icon: '📄', label: notice.label, state: notice.state, at: message.createdAt });
+    };
+    const operation = (this.downloadWrites ?? Promise.resolve()).then(write);
+    this.downloadWrites = operation.catch(async () => {
+      if (this.historyKey() === dest.historyKey && activityConnections(this.context)?.scope === dest.activityId && this.currentTaskStore?.()?.getView().activeTaskId === dest.taskId)
+        await this.post({ type: 'taskWorkspaceError', error: '다운로드 안내를 대화에 저장하지 못했어요. downloads 폴더를 확인해 주세요.', historySaveFailed: true });
+    });
+    return this.downloadWrites;
+  }
+
+  private downloadWrites?: Promise<void>;
 
   // ── Curriculum Runtime (cr-browser, #1391) ────────────────────────────────
 
@@ -4041,6 +4115,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.servedWorkspaceRoot = null;
     this.profileFetchPromise = null;
     this.lastProfileFailure = null;
+    void this.downloadWatcher?.reapply(); // CGP-KNOW-R-021 — no profile: downloads are denied until one loads
     this.activeCohortId = null;
     this.nativeHistoryScope = null;
     // CGP-AGENT-R-004 — a sign-in, sign-out or token change ends every "이번 작업 동안" allow.
@@ -9091,6 +9166,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private async postConfig(): Promise<void> {
     this.currentClassNoticeId = undefined;
+    // CGP-KNOW-R-021 — profile and workspace root decide where browser downloads go.
+    void this.downloadWatcher?.reapply();
     const activity=activityConnections(this.context)?.current;
     const scope=activity?.id;
     await this.draftWrites;

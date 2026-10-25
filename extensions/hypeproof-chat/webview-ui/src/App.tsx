@@ -16,6 +16,7 @@ import {OutboundDialog, PublicAudienceDialog} from "./OutboundDialog";
 import {isPublicAudiencePrompt, type AnyOutboundPrompt} from "../../src/outboundApproval";
 import type {WriteApprovalPrompt} from "../../src/writeApprovalPrompt";
 import { storedDenialNotice } from "../../src/denialNotice";
+import { isDownloadNoticeLabel } from "../../src/browserDownloadNotice";
 import type { TurnToolMode } from '../../src/turnTools';
 import { useEffect, useReducer, useState, useRef } from "react";
 import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage, TrialEndCardView } from "../../src/protocol";
@@ -536,6 +537,9 @@ export function App() {
         case "toolLog": dispatch({ type: "toolLog", entry: { ...(msg.shell ? { shell: msg.shell } : {}), id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}), ...(msg.step !== undefined && msg.since !== undefined ? { step: msg.step, since: msg.since } : {}) } }); break;
         case "denialNotice":
           if (storedDenialNotice(msg.label)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: '', label: msg.label, state: 'error', at: msg.at } });
+          break;
+        case "downloadNotice":
+          if (isDownloadNoticeLabel(msg.label, msg.state)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, at: msg.at } });
           break;
         case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
         case "annotations": dispatch({ type: "annotations", enabled: msg.enabled, annotations: msg.annotations }); break;
