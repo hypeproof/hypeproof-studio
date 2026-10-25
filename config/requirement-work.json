@@ -15,8 +15,12 @@
       "sha256": "84a4998d1f89c9b8fe6f217bdfa81c85590e8a8ff3e74d9c0d5519551dd1926c"
     },
     "docs/requirements/personal-workspace-metadata.md": {
-      "reason": "Verbatim REA W01 partial prose contract tracked by ST-REQ-PERSONAL-WORKSPACE-METADATA, ST-TEST-PERSONAL-WORKSPACE-METADATA and ST-IMP-PERSONAL-WORKSPACE-METADATA in config/traceability.json, with bounded execution issue hypeproof/hypeproof-studio#2811. It defines no numbered requirement rows for this work-discovery ledger; exclusion does not assert completion or full W01 acceptance.",
-      "sha256": "98e9db9f23f4ad9b203fcd82cf4f3d5fe44fcf5d808df703df1d846fc60b9633"
+      "reason": "Verbatim REA W01 partial prose contract tracked by ST-REQ-PERSONAL-WORKSPACE-METADATA, ST-TEST-PERSONAL-WORKSPACE-METADATA and ST-IMP-PERSONAL-WORKSPACE-METADATA in config/traceability.json, with bounded execution issue hypeproof/hypeproof-studio#2811. It defines no numbered requirement rows for this work-discovery ledger; exclusion does not assert completion or full W01 acceptance. This stacked consumer retains the reviewed account-api3 clarification; the hash binds its exact bytes.",
+      "sha256": "c6ff17ccc8254e1bb9392afdf7ecd77c379e6f7c07f410daaef2122ab043e43a"
+    },
+    "docs/requirements/synthetic-personal-records.md": {
+      "reason": "REA W02 partial prose contract tracked by ST-REQ-SYNTHETIC-PERSONAL-RECORDS, ST-TEST-SYNTHETIC-PERSONAL-RECORDS and ST-IMP-SYNTHETIC-PERSONAL-RECORDS in config/traceability.json, with bounded execution issue hypeproof/hypeproof-studio#2832. It defines no numbered requirement rows for this work-discovery ledger; exclusion does not assert completion or full W02 acceptance.",
+      "sha256": "04ac019b567cfc4e9331727238782a828a87436b350a62fdc6729e4a78811f9f"
     }
   },
   "documents": [

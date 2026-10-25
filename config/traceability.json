@@ -13237,6 +13237,103 @@
       ]
     },
     {
+      "id": "ST-REQ-SYNTHETIC-PERSONAL-RECORDS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-WORKSPACE-METADATA",
+        "ST-REQ-PERSONAL-ACCOUNT",
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/synthetic-personal-records.md",
+          "section": "## Synthetic personal records — REA W02 partial (local only)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SYNTHETIC-PERSONAL-RECORDS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SYNTHETIC-PERSONAL-RECORDS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/personal-records.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/personal-records-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/personal-records-render.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/personal-records-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "scripts/release/test/release-manifest.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SYNTHETIC-PERSONAL-RECORDS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SYNTHETIC-PERSONAL-RECORDS",
+        "ST-TEST-SYNTHETIC-PERSONAL-RECORDS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/personalRecords.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/personalRecordStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/personalRecordFixture.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/personalRecordTypes.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/personalRecordHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPageProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/PersonalRecords.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/PersonalSpace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/scripts/run-tsx-tests.mjs"
+        },
+        {
+          "path": "release.json"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-TASK-ARCHIVE",
       "stage": "requirement",
       "owner": "jayleekr",

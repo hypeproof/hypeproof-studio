@@ -34,9 +34,10 @@ of conversation/file synchronization.
   import local activities, or change runtime authority. Existing free/local entry
   remains independent.
 
-Release dependency: `release.json` requires the literal `account-api@2` line
-from Service in addition to the existing `studio-api` package surface. Service
-line 2 must cover the earlier account contract plus these workspace endpoints and
+Release dependency: this metadata slice needs the `account-api@2` capability
+from Service in addition to the existing `studio-api` package surface. A combined
+build containing the later synthetic record consumer requires line 3, which must
+retain line 2. Service line 2 covers the earlier account contract plus these workspace endpoints and
 continue serving line 1 for existing consumers such as Lab. A Service
 that only provides the earlier account/chat API is not a compatible provider for
 this metadata UI. The line-2 provider must include the workspace contract and additive
