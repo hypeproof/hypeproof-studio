@@ -1,3 +1,4 @@
+import { elapsedWorkLabel } from './turnElapsed.ts';
 // #503 — 대화와 툴 실행을 **하나의 타임라인**으로 합치는 순수 리듀서.
 //
 // 왜 이 모듈이 별도로 있나: 같은 규칙을 두 곳이 써야 한다.
@@ -31,6 +32,9 @@ export interface ToolEntry {
 }
 
 export interface TimelineState {
+  /** Optional monotonic clock supplied by a live observer; history alone cannot start a timer. */
+  startedClock?: number;
+  startedIndex?: number;
   /** 화면에 그려지는 단일 타임라인. user / assistant / tool 이 섞여 있다. */
   items: ChatMessage[];
   /** 지금 텍스트가 쌓이고 있는 어시스턴트 말풍선. 닫혀 있으면 null. */
@@ -98,9 +102,12 @@ export function timelineStart(
   state: TimelineState,
   messageId: string,
   now: number,
+  clock?: number,
 ): TimelineState {
   return {
     ...state,
+    startedClock: clock,
+    startedIndex: clock === undefined ? undefined : state.items.length,
     items: [
       ...state.items,
       { id: messageId, role: "assistant", content: "", createdAt: now },
@@ -204,9 +211,23 @@ export function timelineCitations(
 }
 
 /** 턴 종료. 펜스가 끝내 안 닫혔더라도 보류분은 반드시 흘려 넣는다. */
-export function timelineEnd(state: TimelineState, now: number): TimelineState {
-  const flushed = flushPending(state, now);
-  return { ...closeOpen(flushed), baseId: null, seg: 0 };
+export function timelineEnd(state: TimelineState, now: number, outcome?: 'done' | 'stopped', clock?: number): TimelineState {
+  const closed = closeOpen(flushPending(state, now));
+  const ms = state.startedClock !== undefined && clock !== undefined ? clock - state.startedClock : NaN;
+  const label = outcome ? elapsedWorkLabel(ms, outcome) : null;
+  const items = [...closed.items];
+  if (state.baseId && outcome && label) {
+    if (state.startedIndex !== undefined && items.length > state.startedIndex) {
+      const last = items.length - 1;
+      items[last] = { ...items[last], elapsedTurn: { anchorId: items[last].id, ms, outcome } };
+    } else {
+      const id = `${state.baseId}#elapsed`;
+      items.push({ id, role: 'system', content: '', createdAt: now,
+        elapsedTurn: { anchorId: id, ms, outcome } });
+    }
+  }
+  const { startedClock: _clock, startedIndex: _index, ...rest } = closed;
+  return { ...rest, items, baseId: null, seg: 0 };
 }
 
 /** 히스토리 교체 / Clear — 타임라인을 통째로 갈아끼운다. */
@@ -220,7 +241,11 @@ export function timelineReset(items: ChatMessage[]): TimelineState {
  * `role:"tool"` 이 섞여 들어가면 400 이거나 조용히 무시된다.
  */
 export function modelHistory(messages: ChatMessage[]): ChatMessage[] {
-  return messages.filter((m) => m.role === "user" || m.role === "assistant");
+  return messages.filter((m) => m.role === "user" || m.role === "assistant").map(message => {
+    if (!message.elapsedTurn) return message;
+    const { elapsedTurn: _receipt, ...spoken } = message;
+    return spoken;
+  });
 }
 
 /**

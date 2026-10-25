@@ -1,5 +1,6 @@
 import { useMenuTypeahead } from './menuTypeahead';
 import { citationKindLabel } from './citationKind';
+import { elapsedWorkLabel } from '../../src/turnElapsed';
 import { ClassWindowNotice } from "./ClassWindowNotice";
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
@@ -1638,7 +1639,7 @@ export function ChatPanel(props: Props) {
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
         {shown.items.map((m, i) => <Fragment key={m.id}>
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
-          {m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
+          {m.elapsedTurn && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
             <ToolLine message={m} onReport={props.onReportProblem} />
           ) : delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
             <ContextNote text={CONTEXT_COMPACT_NOTE} />
@@ -1696,6 +1697,7 @@ export function ChatPanel(props: Props) {
               quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
             />
           )}
+          {m.elapsedTurn && <p className="hps-turn-elapsed" role="status">{elapsedWorkLabel(m.elapsedTurn.ms, m.elapsedTurn.outcome)}{m.role === 'system' && !m.content ? ' · 답변 없음' : ''}</p>}
           {!streaming && accuracyOffer?.messageId === m.id && m.role === 'assistant' && <AccuracyEducation key={`accuracy-${m.id}`} answer={m.content}
             onDismiss={() => postToHost({ type: 'accuracyEducationDismiss', messageId: m.id })} />}
           {steerMarkAfter(m.id)}

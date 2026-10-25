@@ -5398,3 +5398,30 @@ URLs or answer prose. Legacy records remain unclassified. The task store accepts
 and preserves bounded optional kind strings across restart, including unknown
 future values (which remain labelled 출처), without changing source identity.
 Preview/open/pin/unpin continue using the existing URL and scope semantics.
+
+## Observed elapsed work time (CGP-CHAT-R-015)
+
+CGP-CHAT-R46 / CGP-CHAT-046 / PI#5: a mounted conversation measures the interval
+between its accepted streamStart and successful streamEnd or streamStopped using
+a monotonic clock. It shows N초 동안 작업했어요 or N분 N초 동안 작업했어요;
+a learner/instructor stop shows N초 뒤 멈췄어요. Fractional seconds are floored.
+No duration or estimate appears while running. Failed endings, errors, missing
+starts, invalid clocks, stale streams and duplicate terminals do not invent a
+completed-work claim. Clock changes do not change the measured interval.
+
+The receipt is a14px status below the final answer/tool row, outside answer prose,
+copy/quote and model history. A stop with no answer or tool row shows its receipt with 답변 없음, so it cannot be
+confused with the previous turn.
+It must not insert an extra spoken message that disables the latest answer's reply
+choices. Same-view saved-history refresh retains receipts by exact row identity;
+clear/scope change drops them. Old history or a newly mounted view without an
+observed start/end pair shows no fabricated time. This slice does not persist a
+host-owned timing record across restart or claim model/server execution duration;
+it measures the stream-event interval observed by the live conversation.
+
+This supports inspectable work evidence (VERIFY), not a learning-outcome claim.
+Pure timing tests cover clock boundaries, tool-split answers, no-answer stop,
+terminal idempotence and model exclusion. Actual App bridge tests cover both seats,
+themes and320/800/1420px panes, including lifecycle and scope/history transitions.
+Native desktop timing, background/suspended-view delivery and speech need owner
+verification before acceptance.

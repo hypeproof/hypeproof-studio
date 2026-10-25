@@ -716,3 +716,5 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
   .hps-shell .hps-messages::-webkit-scrollbar-thumb:hover,
   .hps-shell .hps-messages::-webkit-scrollbar-thumb:active { background: CanvasText; }
 }
+/* CGP-CHAT-R-015: terminal evidence is separate from the coach's answer prose. */
+.hps-turn-elapsed { margin: 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }

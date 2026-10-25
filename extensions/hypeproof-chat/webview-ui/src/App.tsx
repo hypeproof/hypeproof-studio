@@ -7,6 +7,7 @@ import {CommandApprovalDialog} from './CommandApprovalDialog';
 import type {CommandApprovalPrompt} from '../../src/commandApprovalPrompt';
 import {AnnotationLeaveDialog} from './AnnotationLeaveDialog';
 import type {AnnotationLeavePrompt} from '../../src/annotationLeavePrompt';
+import { retainElapsedReceipts } from '../../src/turnElapsed';
 import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
@@ -206,7 +207,7 @@ function reducer(state: State, action: Action): State {
       // 대화·툴·에러가 한 번에 갈린다. Clear 를 눌러도 직전 턴의 툴 호출 목록이
       // 화면에 남아 있었다(2026-07-27 실사용) — 이제 툴이 타임라인의 일부라
       // 배열 하나를 갈아끼우면 끝이다.
-      return { ...state, timeline: timelineReset(action.messages), error: null };
+      return { ...state, timeline: timelineReset(retainElapsedReceipts(action.messages, state.timeline.items)), error: null };
     case "streamStart":
       return {
         ...state,
@@ -219,7 +220,7 @@ function reducer(state: State, action: Action): State {
         // #503 — 직전 턴의 툴 줄을 **비우지 않는다**. 예전에는 여기서 toolLog 를
         // [] 로 밀어서, 다음 턴이 시작되는 순간 이전 턴이 무슨 도구를 썼는지가
         // 통째로 증발했다(스크롤을 올려도 말풍선만 남았다).
-        timeline: timelineStart(state.timeline, action.messageId, Date.now()),
+        timeline: timelineStart(state.timeline, action.messageId, Date.now(), performance.now()),
       };
     case "visibleProgress":
       return state.streamId ? { ...state, progressSince: Date.now() } : state;
@@ -288,7 +289,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         streamId: null,
-        timeline: timelineEnd(state.timeline, Date.now()),
+        timeline: timelineEnd(state.timeline, Date.now(), action.failed || action.dismissed ? undefined : "done", performance.now()),
         error: null,
         errorRequestId: null,
         errorRunbookUrl: null,
@@ -306,7 +307,7 @@ function reducer(state: State, action: Action): State {
         streamId: null,
         // #503 — 끊긴 턴도 타임라인은 닫는다: 보류된 툴 줄이 남아 있으면
         // 흘려 넣고 말풍선을 닫는다. 스트리밍된 부분 답변은 그대로 둔다.
-        timeline: timelineEnd(state.timeline, Date.now()),
+        timeline: timelineEnd(state.timeline, Date.now(), "stopped", performance.now()),
         error: null,
         errorRequestId: null,
         errorRunbookUrl: null,

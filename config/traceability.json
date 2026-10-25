@@ -12362,6 +12362,64 @@
           "section": "### Missing task folder recovery surface"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TURN-ELAPSED",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Observed elapsed work time (CGP-CHAT-R-015)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TURN-ELAPSED",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TURN-ELAPSED"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/turnElapsed.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatTimeline.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TURN-ELAPSED",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TURN-ELAPSED"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/turn-elapsed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-elapsed-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }
