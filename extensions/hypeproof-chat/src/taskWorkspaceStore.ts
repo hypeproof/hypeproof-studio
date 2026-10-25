@@ -14,7 +14,7 @@ import { appendVerdict, latestVerdicts, validVerdictEvent, type VerdictEvent, ty
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
 import type {
-  TaskDocument, TaskSurfaceSelection, TaskWorkspaceErrorCode, TaskWorkspaceExpected, TaskWorkspaceView,
+  ArchivedTaskSummary, TaskDocument, TaskSummary, TaskSurfaceSelection, TaskWorkspaceErrorCode, TaskWorkspaceExpected, TaskWorkspaceView,
 } from './taskWorkspaceContract';
 
 type TitleOrigin = NonNullable<TaskDocument['titleOrigin']>;
@@ -36,6 +36,14 @@ interface VersionsData { version: 1; scope: string; tasks: Record<string, Stored
  * file is not touched by a verdict, so a downgrade only loses the drawn verdicts.
  */
 interface VerdictsData { version: 1; scope: string; tasks: Record<string, VerdictEvent[]> }
+
+/**
+ * CGP-CHAT-R-025 — the archive sidecar, `<scope>.archive.json`: task id → the time it was archived.
+ * Archiving never touches the task's transcript, draft, versions or verdicts; it only hides the task
+ * from the list. Earlier builds never read this file, so a downgrade lists archived tasks again and
+ * loses nothing.
+ */
+interface ArchiveData { version: 1; scope: string; tasks: Record<string, number> }
 
 interface LockOwner { version: 1; host: string; pid: number; nonce: string; createdAt: number }
 interface LockRecord { owner: LockOwner; dev: number; ino: number }
@@ -141,6 +149,19 @@ function decodeVerdicts(text: string, scope: string): VerdictsData {
   return data as unknown as VerdictsData;
 }
 
+function decodeArchive(text: string, scope: string): ArchiveData {
+  let envelope: unknown;
+  try { envelope = JSON.parse(text); } catch { return fail('corrupt', '보관함 기록을 읽을 수 없습니다.'); }
+  if (!isRecord(envelope) || !exactKeys(envelope, ['checksum', 'data']) || !isRecord(envelope.data) ||
+      typeof envelope.checksum !== 'string' || envelope.checksum !== hash(JSON.stringify(envelope.data))) return fail('corrupt', '보관함 기록의 무결성을 확인할 수 없습니다.');
+  const data = envelope.data;
+  if (!exactKeys(data, ['version', 'scope', 'tasks']) || data.version !== 1 || data.scope !== scope || !isRecord(data.tasks) ||
+      !Object.entries(data.tasks).every(([id, at]) => nonempty(id, 256) && timestamp(at))) return fail('corrupt', '보관함 기록의 형식이 일치하지 않습니다.');
+  return data as unknown as ArchiveData;
+}
+
+const archivedIn = (archive: ArchiveData, taskId: string) => Object.prototype.hasOwnProperty.call(archive.tasks, taskId);
+
 function validDraft(value: unknown): value is ActivityDraft {
   return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused', 'recovered', 'inlineEdit']) && validActivityDraft(value);
 }
@@ -198,6 +219,7 @@ export class TaskWorkspaceStore {
   readonly filePath: string;
   readonly versionsPath: string;
   readonly verdictsPath: string;
+  readonly archivePath: string;
   private readonly directory: string;
   private readonly rootPath: string;
   private data?: WorkspaceData;
@@ -205,6 +227,8 @@ export class TaskWorkspaceStore {
   private versions: VersionsData;
   /** Answer-verdict sidecar as last read or written. A missing or unreadable one reads as no verdicts. */
   private verdicts: VerdictsData;
+  /** Archive sidecar as last read or written. A missing or unreadable one reads as nothing archived. */
+  private archive: ArchiveData;
   private loadError?: TaskWorkspaceStoreError;
   private queue: Promise<void> = Promise.resolve();
 
@@ -218,6 +242,8 @@ export class TaskWorkspaceStore {
     this.versions = { version: 1, scope: this.scope, tasks: {} };
     this.verdictsPath = join(this.directory, `${this.scope}.verdicts.json`);
     this.verdicts = { version: 1, scope: this.scope, tasks: {} };
+    this.archivePath = join(this.directory, `${this.scope}.archive.json`);
+    this.archive = { version: 1, scope: this.scope, tasks: {} };
     this.load();
   }
 
@@ -232,6 +258,7 @@ export class TaskWorkspaceStore {
       this.data = decode(readFileSync(this.filePath, 'utf8'), this.scope);
       this.versions = this.readVersionsSync();
       this.verdicts = this.readVerdictsSync();
+      this.archive = this.readArchiveSync();
     } catch (error) {
       if (codeOf(error) === 'ENOENT') return;
       this.loadError = error instanceof TaskWorkspaceStoreError ? error :
@@ -257,13 +284,30 @@ export class TaskWorkspaceStore {
     return { version: 1, scope: this.scope, tasks: {} };
   }
 
+  /** A lost archive sidecar only shows the archived tasks in the list again; their content is in the task file. */
+  private readArchiveSync(): ArchiveData {
+    try {
+      const stat = lstatSync(this.archivePath);
+      if (stat.isFile() && !stat.isSymbolicLink()) return decodeArchive(readFileSync(this.archivePath, 'utf8'), this.scope);
+    } catch { /* missing or unreadable: nothing archived */ }
+    return { version: 1, scope: this.scope, tasks: {} };
+  }
+
   getView(): TaskWorkspaceView {
+    const activeTaskId = this.data?.activeTaskId ?? null;
+    const summaries: TaskSummary[] = (this.data?.tasks ?? []).map(({ id, title, createdAt, updatedAt, messageCount }) =>
+      ({ id, title, createdAt, updatedAt, messageCount })).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+    // CGP-CHAT-R-025 — the open task always stays in the list (an interrupted archive leaves it
+    // open and visible); every other archived task is listed only in 보관함, newest archive first.
+    const hidden = (task: TaskSummary) => task.id !== activeTaskId && archivedIn(this.archive, task.id);
+    const archived: ArchivedTaskSummary[] = summaries.filter(hidden).map(task => ({ ...task, archivedAt: this.archive.tasks[task.id] }))
+      .sort((a, b) => b.archivedAt - a.archivedAt || a.id.localeCompare(b.id));
     return {
       scope: this.scope,
       revision: this.data?.revision ?? 0,
-      activeTaskId: this.data?.activeTaskId ?? null,
-      tasks: (this.data?.tasks ?? []).map(({ id, title, createdAt, updatedAt, messageCount }) =>
-        ({ id, title, createdAt, updatedAt, messageCount })).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id)),
+      activeTaskId,
+      tasks: summaries.filter(task => !hidden(task)),
+      archived,
       sourceSelection: clone(this.data?.tasks.find(task => task.id === this.data?.activeTaskId)?.sourceSelection ?? null),
       ...(this.loadError ? { error: { code: this.loadError.code, message: this.loadError.message } } : {}),
     };
@@ -326,10 +370,49 @@ export class TaskWorkspaceStore {
   }
 
   select(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
-    return this.mutate(data => {
+    return this.mutate((data, _versions, archive) => {
       const current = this.requireData(data);
       this.checkExpected(current, expected);
       this.requireTask(current, taskId);
+      // CGP-CHAT-R-025 — an archived task opens only through 보관함's 다시 열기.
+      if (taskId !== current.activeTaskId && archivedIn(archive, taskId)) fail('not_found', '보관한 작업입니다. 보관함에서 다시 열어 주세요.');
+      current.activeTaskId = taskId;
+      return current;
+    });
+  }
+
+  /**
+   * CGP-CHAT-R-025 — hide the open task from the list. Only the archive sidecar records it: the
+   * transcript, draft, earlier versions and verdicts stay exactly as they are. The most recently
+   * updated listed task opens next; with none left, a new empty task does.
+   */
+  archiveTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    return this.mutate((data, _versions, archive) => {
+      const current = this.requireData(data);
+      this.checkExpected(current, expected);
+      if (taskId !== current.activeTaskId) fail('stale', '열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
+      this.requireTask(current, taskId);
+      archive.tasks[taskId] = Date.now();
+      const next = current.tasks.filter(task => !archivedIn(archive, task.id))
+        .sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))[0];
+      if (next) current.activeTaskId = next.id;
+      else {
+        const task = this.newTask('새 작업', Date.now());
+        current.tasks.push(task);
+        current.activeTaskId = task.id;
+      }
+      return current;
+    });
+  }
+
+  /** CGP-CHAT-R-025 — 다시 열기: back in the list, and open. The task's content was never changed. */
+  restoreTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    return this.mutate((data, _versions, archive) => {
+      const current = this.requireData(data);
+      this.checkExpected(current, expected);
+      this.requireTask(current, taskId);
+      if (!archivedIn(archive, taskId)) fail('not_found', '보관함에서 이 작업을 찾을 수 없습니다. 보관함을 다시 열어 주세요.');
+      delete archive.tasks[taskId];
       current.activeTaskId = taskId;
       return current;
     });
@@ -465,6 +548,7 @@ export class TaskWorkspaceStore {
     const from = clone(source.requireData(source.data));
     const fromVersions = clone(source.versions.tasks);
     const fromVerdicts = clone(source.verdicts.tasks);
+    const fromArchive = clone(source.archive.tasks);
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
@@ -479,6 +563,8 @@ export class TaskWorkspaceStore {
           } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
           const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
           const diskVerdicts = await this.readVerdictsLocked(lock.owner.nonce);
+          const diskArchive = await this.readArchiveLocked(lock.owner.nonce);
+          const archive = clone(diskArchive);
           const tasks = clone(disk?.tasks ?? []);
           const versions = clone(diskVersions);
           const verdicts = clone(diskVerdicts);
@@ -501,6 +587,8 @@ export class TaskWorkspaceStore {
             } else tasks.push(task);
             if (fromVersions[task.id]) versions.tasks[task.id] = fromVersions[task.id]; else delete versions.tasks[task.id];
             if (fromVerdicts[task.id]?.length) verdicts.tasks[task.id] = fromVerdicts[task.id]; else delete verdicts.tasks[task.id];
+            // CGP-CHAT-R-025 — an archived task stays archived in the new folder, a listed one stays listed.
+            if (Object.prototype.hasOwnProperty.call(fromArchive, task.id)) archive.tasks[task.id] = fromArchive[task.id]; else delete archive.tasks[task.id];
           }
           const next: WorkspaceData = { version: 1, scope: this.scope, revision: (disk?.revision ?? 0) + 1, activeTaskId: from.activeTaskId, tasks };
           if (JSON.stringify(versions) !== JSON.stringify(diskVersions)) {
@@ -508,6 +596,8 @@ export class TaskWorkspaceStore {
             decodeVersions(sidecar, this.scope);
             await this.writeAtomic(this.versionsPath, sidecar, lock.owner.nonce);
           }
+          await this.writeArchive(archive, diskArchive, lock.owner.nonce);
+          this.archive = archive;
           const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
           decode(content, this.scope);
           await this.writeAtomic(this.filePath, content, lock.owner.nonce);
@@ -629,6 +719,7 @@ export class TaskWorkspaceStore {
       await unlink(`${this.filePath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
       await unlink(`${this.versionsPath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
       await unlink(`${this.verdictsPath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
+      await unlink(`${this.archivePath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
     } finally {
       if (removed) await unlink(claimPath);
       else await rename(claimPath, lease.path);
@@ -717,6 +808,27 @@ export class TaskWorkspaceStore {
     catch { await rename(this.verdictsPath, `${this.verdictsPath}.unreadable-${nonce}`); return empty; }
   }
 
+  /** The archive sidecar on disk, read under the lock. An unreadable one is set aside (kept, never overwritten). */
+  private async readArchiveLocked(nonce: string): Promise<ArchiveData> {
+    const empty: ArchiveData = { version: 1, scope: this.scope, tasks: {} };
+    let text: string;
+    try {
+      const stat = await lstat(this.archivePath);
+      if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '보관함 기록 파일의 위치를 확인해야 합니다.');
+      text = await readFile(this.archivePath, 'utf8');
+    } catch (error) { if (codeOf(error) === 'ENOENT') return empty; throw error; }
+    try { return decodeArchive(text, this.scope); }
+    catch { await rename(this.archivePath, `${this.archivePath}.unreadable-${nonce}`); return empty; }
+  }
+
+  /** Writes the archive sidecar when it changed (validated before the atomic replace). */
+  private async writeArchive(next: ArchiveData, disk: ArchiveData, nonce: string): Promise<void> {
+    if (JSON.stringify(next) === JSON.stringify(disk)) return;
+    const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+    decodeArchive(sidecar, this.scope);
+    await this.writeAtomic(this.archivePath, sidecar, nonce);
+  }
+
   /**
    * Read-modify-write of one task's verdict events. Only the active task of a loaded store may be
    * changed; `null` from `change` removes the task's entry. The task file itself is never written.
@@ -755,7 +867,7 @@ export class TaskWorkspaceStore {
     return operation;
   }
 
-  private mutate(change: (data: WorkspaceData | undefined, versions: VersionsData) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
+  private mutate(change: (data: WorkspaceData | undefined, versions: VersionsData, archive: ArchiveData) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
@@ -772,8 +884,14 @@ export class TaskWorkspaceStore {
           const base = recoverFromDisk ? disk : this.data;
           const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
           const versions = clone(diskVersions);
-          const next = change(base ? clone(base) : undefined, versions);
+          const diskArchive = await this.readArchiveLocked(lock.owner.nonce);
+          const archive = clone(diskArchive);
+          const next = change(base ? clone(base) : undefined, versions, archive);
           const versionsChanged = JSON.stringify(versions) !== JSON.stringify(diskVersions);
+          // CGP-CHAT-R-025 — the archive sidecar is written before the task file: a crash between them
+          // leaves the archived task open, and the open task always stays in the list.
+          await this.writeArchive(archive, diskArchive, lock.owner.nonce);
+          this.archive = archive;
           if (this.data && JSON.stringify(next) === JSON.stringify(this.data) && !versionsChanged) { this.versions = diskVersions; return this.getView(); }
           // The sidecar is written first: a crash between the two writes leaves the earlier version
           // visible in the task file and a duplicate in the sidecar, which joinVersions ignores.

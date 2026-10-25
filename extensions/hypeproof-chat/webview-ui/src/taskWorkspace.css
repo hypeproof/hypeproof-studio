@@ -64,6 +64,15 @@
 .tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-font-caption); }
 .tw-task-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); margin-top: var(--ds-c-studio-taskworkspace-space-12); color: var(--tw-muted); font-variant-numeric: tabular-nums; }
 .tw-local-note { color: var(--tw-muted); margin: var(--ds-c-studio-taskworkspace-space-18) var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-13); font-size: var(--hp-font-caption); }
+/* CGP-CHAT-R-025 — 보관함: same quiet rail rows, no destructive colour (nothing is deleted). */
+.tw-archive-heading h2 { font: inherit; color: inherit; margin: 0; }
+.tw-archive-back, .tw-archive-open { margin: 0 var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-12); text-align: left; font-size: var(--hp-font-caption); }
+.tw-archive-open { display: flex; justify-content: space-between; gap: var(--ds-c-studio-taskworkspace-space-2); margin-top: var(--ds-c-studio-taskworkspace-space-12); }
+.tw-archived { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-12) var(--ds-c-studio-taskworkspace-space-2); padding: var(--ds-c-studio-taskworkspace-space-53) var(--ds-c-studio-taskworkspace-space-24); margin: var(--ds-c-studio-taskworkspace-space-14) 0; }
+.tw-archived .tw-task-meta { grid-column: 1 / -1; grid-row: 2; margin-top: 0; flex-wrap: wrap; }
+.tw-archived .tw-task-meta > * { white-space: nowrap; }
+.tw-archived .tw-reopen { grid-column: 2; grid-row: 1; font-size: var(--hp-font-caption); }
+.tw-archive-note { margin: var(--ds-c-studio-taskworkspace-space-12) var(--ds-c-studio-taskworkspace-space-5) 0; color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); }
 .tw-empty-search { font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); padding: 0 var(--ds-c-studio-taskworkspace-space-2); color: var(--tw-muted); }
 .tw-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .tw-heading { display: flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-1); min-height: var(--ds-c-studio-taskworkspace-size-72); padding: 0 var(--ds-c-studio-taskworkspace-space-5); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }

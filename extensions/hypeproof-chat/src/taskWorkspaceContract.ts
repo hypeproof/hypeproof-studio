@@ -10,6 +10,9 @@ export interface TaskSummary {
   messageCount: number;
 }
 
+/** CGP-CHAT-R-025 — a task listed only in 보관함. */
+export interface ArchivedTaskSummary extends TaskSummary { archivedAt: number }
+
 export interface TaskSurfaceSelection { url: string; pinned: boolean }
 
 export interface TaskDocument extends TaskSummary {
@@ -29,7 +32,10 @@ export interface TaskWorkspaceView {
   scope: string;
   revision: number;
   activeTaskId: string | null;
+  /** Listed tasks. The open task is always among them, even when it is archived. */
   tasks: TaskSummary[];
+  /** CGP-CHAT-R-025 — archived tasks other than the open one, newest archive first. Absent on older views. */
+  archived?: ArchivedTaskSummary[];
   sourceSelection: TaskSurfaceSelection | null;
   error?: TaskWorkspaceError;
 }
