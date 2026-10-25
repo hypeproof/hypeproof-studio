@@ -976,7 +976,19 @@ thumb with separate default/hover/drag colors, while other engines use standard 
 color. Forced colors use the system thumb color. Classroom prose remains full width.
 Not covered: installed OS scrollbar preferences, non-Chromium interaction; TSX inline motion (none
 today); a measured 0px reflow capture in the built app.
-Test: `test/motion-measure-gutter.smoke.mjs` scans every webview CSS file for a literal time in
+Message bubble (CGP-DS-D-017, DES-CGP-DS-22, owner decisions 2026-10-25): in personal chat the
+user bubble is at most 85% of the column including its padding (`box-sizing: border-box`; the
+compact breakpoint no longer widens it to 88%), has radii 18px / 18px / 6px / 18px (the 6px
+bottom-right tail corner is deliberate), and its background is the mapped host colour
+`--vscode-list-inactiveSelectionBackground`, not a fixed text colour at 6-8%, so it follows the
+learner's VS Code theme; text on it keeps at least 4.5:1. The assistant message is unboxed (no
+border, no fill) and renders no identity mark: the later personal-chat polish removed boxed
+assistant icons on purpose, so DES-CGP-DS-22's 18px mark is not built. Not covered: classroom
+bubbles; forced-colors borders (REQ-STUDIO-FORCED-COLORS).
+Test: `test/prose-bubble-geometry.smoke.mjs` (headless Chromium, `FOCUS_REQUIRE_BROWSER=1`, personal
+and classroom x dark/light x 320/390/800/1280px) measures computed prose cap, bubble share, radii,
+background against the host token, contrast, unboxed assistant and the absence of any 18px mark
+node or pseudo-element. `test/motion-measure-gutter.smoke.mjs` scans every webview CSS file for a literal time in
 any `transition*`/`animation*` declaration (only the 0.01ms reduced-motion override is allowed),
 checks the token values against DES-CGP-DS-15 and the design doc, that every used token is
 defined and none is `!important`, the 40em cap with no fixed width, and the gutter on the

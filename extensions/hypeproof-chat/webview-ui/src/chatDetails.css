@@ -28,7 +28,7 @@
   border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-1); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); font-size: var(--ds-c-studio-chatdetails-type-2); margin: 0;
 }
 .hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body {
-  padding: var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-8); max-width: min(85%, var(--ds-c-studio-chatdetails-size-4)); border-radius: var(--ds-c-studio-chatdetails-radius-2) var(--ds-c-studio-chatdetails-radius-2) var(--ds-c-studio-chatdetails-radius-3) var(--ds-c-studio-chatdetails-radius-2);
+  box-sizing: border-box; padding: var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-8); max-width: min(85%, var(--ds-c-studio-chatdetails-size-4)); border-radius: var(--ds-c-studio-chatdetails-radius-2) var(--ds-c-studio-chatdetails-radius-2) var(--ds-c-studio-chatdetails-radius-3) var(--ds-c-studio-chatdetails-radius-2);
   background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-chatdetails-surface-1));
 }
 .hps-shell[data-chat-detail="personal"] .hps-prose p { margin-bottom: var(--ds-c-studio-chatdetails-space-9); }
@@ -123,7 +123,7 @@
   .hps-shell[data-chat-detail="personal"] .hps-messages { padding: var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-4); gap: var(--ds-c-studio-chatdetails-space-4); }
   .hps-shell[data-chat-detail="personal"] .hps-input-area { padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-19); }
   .hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-font-body); }
-  .hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body { max-width: 88%; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-19); }
+  .hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body { max-width: 85%; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-19); }
   .hps-shell[data-chat-detail="personal"] .hps-cit-domain { display: none; }
   .hps-shell[data-chat-detail="personal"] .hps-cit-title { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
   .hps-composer-hint { font-size: var(--ds-c-studio-chatdetails-type-4); }

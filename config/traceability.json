@@ -7189,6 +7189,20 @@
       ]
     },
     {
+      "id": "ST-TEST-PROSE-BUBBLE-GEOMETRY",
+      "stage": "test",
+      "label": "Personal chat bubble: 85% share, 18/18/6/18 radii, host-token background with 4.5:1 text, unboxed assistant, no identity mark (CGP-DS-D-017)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/prose-bubble-geometry.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-FORCED-COLORS",
       "stage": "test",
       "owner": "jayleekr",
