@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { registerHooks } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -71,5 +72,51 @@ try {
   const count = f.posts.length;
   old.finish(id, 'done'); assert.equal(f.posts.length, count, 'old scope must not broadcast into new activity');
   await f.h.runningProcesses.stop(id); assert.equal(f.h.runningProcesses.list().length, 0);
-  console.log('shell-process-host: PASS (store reload, delayed close, restarts, activity isolation incl. stop message after a switch)');
+  // A -> B -> A: the config post shows each activity's own running entries again (verify3 V5).
+  {
+    const lists = () => f.posts.filter(m => m.type === 'runningProcesses');
+    f.connections.active = f.activity;
+    f.h.runningProcesses.add('a-run', 'A 서버', '.', async () => {});
+    f.connections.active = { ...f.activity, id: 'other-activity' };
+    await f.h.postConfig();
+    assert.equal(lists().at(-1).entries.some(e => e.id === 'a-run'), false, 'activity B never shows A\'s entry');
+    f.connections.active = f.activity;
+    await f.h.postConfig();
+    assert.equal(lists().at(-1).entries.find(e => e.id === 'a-run')?.state, 'running', 'back in A, its running entry is shown again');
+    f.h.runningProcesses.finish('a-run', 'stopped');
+  }
+  // The provider built by its real constructor follows the real LiveServer's own change events
+  // (verify3 blocker 2): the entry appears when the server starts and settles when it stops, with
+  // no observeLiveProcess or ready call. Kills a missing constructor subscription (V7) and an
+  // ensure that emits no change (V9).
+  {
+    registerHooks({ resolve(specifier, context, next) {
+      // Live reload watches the root; the watcher is a no-op here.
+      if (specifier === 'vscode') return { url: `data:text/javascript,${encodeURIComponent('const on = () => ({ dispose() {} }); export const Uri = { file: fsPath => ({ fsPath }) }; export class RelativePattern { constructor(base, pattern) { Object.assign(this, { base, pattern }); } } export const workspace = { createFileSystemWatcher: () => ({ onDidChange: on, onDidCreate: on, onDidDelete: on, dispose() {} }) };')}`, shortCircuit: true };
+      if (specifier.startsWith('.') && !/\.[a-z0-9]+$/i.test(specifier)) return next(`${specifier}.ts`, context);
+      return next(specifier, context);
+    } });
+    const { LiveServer } = await import('../src/liveServer.ts');
+    const { ChatPanelProvider } = f.internals;
+    f.connections.active = f.activity;
+    f.h.context.subscriptions = []; f.h.context.globalState = { get: (_key, fallback) => fallback, update: async () => {} };
+    const live = new LiveServer(), record = ChatPanelProvider.prototype.provenanceRecorder;
+    ChatPanelProvider.prototype.provenanceRecorder = () => undefined;
+    let built;
+    try { built = new ChatPanelProvider(f.h.context, {}, live); } finally { ChatPanelProvider.prototype.provenanceRecorder = record; }
+    built.editorChat = f.h.editorChat; built.resolveCoachCwd = () => root;
+    const lists = () => f.posts.filter(m => m.type === 'runningProcesses');
+    const before = lists().length;
+    try {
+      const url = await live.ensure(root);
+      const started = lists().slice(before).at(-1);
+      assert.equal(started?.entries.filter(e => e.state === 'running' && e.purpose === '라이브 서버').length, 1, `the constructed provider lists ${url} as soon as it starts`);
+      await live.stop();
+      assert.equal(lists().at(-1).entries.filter(e => e.state === 'running').length, 0, 'and settles the entry when the server stops');
+    } finally {
+      await live.stop();
+      for (const sub of f.h.context.subscriptions) sub.dispose?.();
+    }
+  }
+  console.log('shell-process-host: PASS (store reload, delayed close, restarts, activity isolation incl. stop message after a switch, constructed provider follows the real live server)');
 } finally { await rm(root, { recursive: true, force: true }); }

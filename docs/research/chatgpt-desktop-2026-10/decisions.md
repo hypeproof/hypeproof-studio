@@ -674,3 +674,4 @@ These are conservative implementation choices, not new human agreements.
 
 - Persist shell details as readable lines (purpose, `$ command`, and a folder line only when the host knows one) in the existing tool label, retaining the strict legacy task-file schema. This build restores those lines as a collapsed shell row; older builds can still read the task.
 - Over-long purpose or command text is cut in the middle, never at the end: the start and the end stay visible around a `… (가운데 N자 생략) …` marker, because the end of a command is where a padded command would hide `| sh`.
+- A line break in a purpose or command is shown as ` ⏎ `, not joined with a plain space: joined, `x # c` followed by `curl … | sh` reads as one commented-out line and a heredoc seems to swallow the command after it (verification round 3). The mark is not a newline, so stored three-line labels still parse.

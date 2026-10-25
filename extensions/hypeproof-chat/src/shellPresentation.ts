@@ -9,8 +9,17 @@ export const SHELL_COMMAND_MAX = 2000;
  * separators, bidi embeddings/overrides/isolates, the LRM/RLM/ALM marks, zero-width characters,
  * invisible operators, the soft hyphen, the BOM, the combining grapheme joiner, the Hangul
  * fillers, the interlinear annotation marks and the tag block. Each becomes a visible space.
+ * Line breaks are handled first (LINE_BREAK), so none of them reaches this as a space.
  */
 const HIDDEN = /[\u0000-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u206f\u3164\ufeff\uffa0\ufff9-\ufffb\u{e0000}-\u{e007f}]/gu;
+/**
+ * A line break the shell acts on is shown as a mark, never joined with a plain space: joined,
+ * `npm test # c` + newline + `curl … | sh` reads as one commented-out line and a heredoc seems to
+ * swallow the command after it. CRLF is one break. The mark is not a newline, so a stored label
+ * keeps its purpose / `$ command` / folder lines.
+ */
+const LINE_BREAK = /\r\n|[\n\r\u0085\u2028\u2029]/g;
+const SHELL_LINE_BREAK = ' ⏎ ';
 /** Never end (or start) a slice on half of a surrogate pair. */
 const head = (text: string, n: number) => { const s = text.slice(0, n); return /[\ud800-\udbff]$/.test(s) ? s.slice(0, -1) : s; };
 const tail = (text: string, n: number) => { const s = n > 0 ? text.slice(-n) : ''; return /^[\udc00-\udfff]/.test(s) ? s.slice(1) : s; };
@@ -22,7 +31,8 @@ const tail = (text: string, n: number) => { const s = n > 0 ? text.slice(-n) : '
  */
 export function shellText(value: unknown, fallback: string, limit = SHELL_COMMAND_MAX): string {
   if (typeof value !== 'string' || !value.trim()) return fallback;
-  const clean = value.replace(HIDDEN, ' ');
+  // A trailing line break hides nothing after it, so it is dropped rather than marked.
+  const clean = value.replace(/(?:\r\n|[\n\r\u0085\u2028\u2029])+$/, '').replace(LINE_BREAK, SHELL_LINE_BREAK).replace(HIDDEN, ' ');
   if (clean.length <= limit) return clean.trim() ? clean : fallback;
   const widest = shellOmission(clean.length);
   const budget = limit - widest.length;
