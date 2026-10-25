@@ -26,6 +26,35 @@ export interface TurnReviewView {
   tooLarge?: boolean;
   /** A one-line refusal for the last button press (e.g. a turn is running); the bar stays as it was. */
   notice?: string;
+  /** CGP-AGENT-R-027 — present only on an adult website-track seat (checkpoint.ts checkpointApplies). */
+  checkpoint?: CheckpointView;
+}
+
+/** Longest checkpoint message, in code points (the webview field and the host share it). */
+export const CHECKPOINT_MESSAGE_MAX = 200;
+
+/** Where the prefilled checkpoint message came from: the AI's answer, or the measured file names. */
+export type CheckpointSource = "ai" | "files";
+
+export interface CheckpointEntryView {
+  id: string;
+  /** The learner-reviewed message, cleaned and bounded by the host. Rendered as text only. */
+  message: string;
+  createdAt: number;
+  fileCount: number;
+}
+
+export interface CheckpointView {
+  /** The prefilled message; the learner reads and may edit it before saving. */
+  suggestion: string;
+  source: CheckpointSource;
+  /** Saved checkpoints of this work folder and task, newest first. */
+  history: CheckpointEntryView[];
+  saving?: boolean;
+  /** The id of the checkpoint the last save created (closes the form). */
+  savedId?: string;
+  /** One line about the last save (saved, refused, failed). */
+  notice?: string;
 }
 
 export function turnReviewCount(v: Pick<TurnReviewView, "added" | "changed" | "deleted">): number {

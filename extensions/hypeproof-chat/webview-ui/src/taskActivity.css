@@ -1,0 +1,44 @@
+/* CGP-ART-D-020 (REQ-STUDIO-TASK-ACTIVITY): the task's "AI가 한 일" row. Chips wrap at 320px; learner floor 44px targets, 14px text. */
+.hps-task-activity {
+  margin: var(--hp-space-2) 0;
+  padding: var(--hp-space-2) var(--hp-space-3);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default);
+  border-radius: var(--ds-c-studio-styles-radius-10);
+  color: var(--hp-text-primary-default);
+  font-size: var(--hp-font-caption);
+  line-height: var(--hp-leading-label);
+  min-width: 0;
+}
+.hps-task-activity-title { margin: 0 0 var(--hp-space-2); font-weight: var(--hp-weight-strong); }
+.hps-task-activity-chips { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.hps-task-activity-chip,
+.hps-task-activity-review,
+.hps-task-activity-more {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--hp-space-1);
+  min-height: var(--hp-control-min); min-width: var(--hp-control-min); box-sizing: border-box;
+  padding: 0 var(--hp-space-3);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
+  border-radius: var(--ds-c-studio-styles-radius-10);
+  background: transparent; color: inherit;
+  font: inherit; font-size: var(--hp-font-caption); cursor: pointer;
+  transition: background-color var(--hp-dur-press) var(--hp-ease);
+}
+.hps-task-activity-chip[aria-expanded="true"] { border-color: var(--hp-border-control-selected); background: var(--hp-bg-control-selected); }
+.hps-task-activity-chip:hover, .hps-task-activity-review:hover, .hps-task-activity-more:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-task-activity-chip:active, .hps-task-activity-review:active, .hps-task-activity-more:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+.hps-task-activity button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-task-activity-panel { margin-top: var(--hp-space-2); }
+.hps-task-activity-list { margin: 0; padding: 0; list-style: none; }
+.hps-task-activity-item {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-2);
+  padding: var(--hp-space-1) 0; border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); min-width: 0;
+}
+.hps-task-activity-target { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.hps-task-activity-more { margin-top: var(--hp-space-2); }
+.hps-task-activity-note { margin: var(--hp-space-2) 0 0; color: var(--hp-text-muted-default); }
+@media (prefers-reduced-motion: reduce) { .hps-task-activity-chip, .hps-task-activity-review, .hps-task-activity-more { transition: none; } }
+@media (forced-colors: active) {
+  .hps-task-activity { border-color: CanvasText; }
+  .hps-task-activity-chip, .hps-task-activity-review, .hps-task-activity-more { border-color: ButtonText; }
+  .hps-task-activity-chip[aria-expanded="true"] { border-color: Highlight; }
+}

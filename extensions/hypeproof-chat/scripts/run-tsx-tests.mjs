@@ -45,6 +45,7 @@ const OVERRIDES = {
   "lesson-capability-entry": { banner: BANNER_POSTED_ARROW },
   "accuracy-education": { banner: BANNER_POSTED },
   "activity-trash": { banner: BANNER_POSTED },
+  "task-menu": { banner: BANNER_POSTED },
   "write-approval-dialog": { banner: BANNER_POSTED },
   "browser-approval": { banner: BANNER_POSTED },
   "command-approval": { banner: BANNER_POSTED },
@@ -64,6 +65,7 @@ const OVERRIDES = {
   "publish-sharing-app": { banner: BANNER_POSTED },
   "turn-idle-progress-app": { banner: BANNER_POSTED },
   "shell-processes-app": { banner: BANNER_POSTED },
+  "checkpoint": { banner: BANNER_POSTED },
 };
 
 // Tests in test/ that this runner must skip, because they have their own build step

@@ -4,6 +4,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {App} from '../webview-ui/src/App';
 import {WriteApprovalDialog,middleFileName} from '../webview-ui/src/WriteApprovalDialog';
+import {writeChangeView} from '../src/writeApprovalChange';
 for(const name of ['Node','Element','HTMLElement']) (globalThis as any)[name]??=(globalThis.window as any).Element;
 const act=(React as any).act;
 const full='작업 폴더/src/아주_긴_파일_이름_with_unique_suffix_main.css';
@@ -32,6 +33,32 @@ async function main(){
  await act(async()=>click(host.querySelector('.hps-write-actions').querySelectorAll('button')[1]));assert.deepEqual(answers.at(-1),['new',true]);
  await act(async()=>root.render(<WriteApprovalDialog key="one" prompt={{...prompt,id:'one',files:['only.txt']}} onAnswer={()=>{}}/>));
  assert.equal(chips().length,1);assert.ok(!host.querySelector('.hps-write-expand'));
+ // REQ-STUDIO-WRITE-APPROVAL-CHANGE (CGP-ART-R-021): each existing file's summary; a rewrite and an unknown change say so in words with an icon.
+ // The views come from the real host function (writeChangeView), so a mismatch between view and renderer shows here.
+ const page='<main>\n<h1>가게</h1>\n<p>커피</p>\n<p>차</p>\n<p>휴무</p>\n</main>\n';
+ const changes=[writeChangeView({exists:true,fingerprint:'f',text:page},{tool:'write',content:'<div>\n완전히 다른 글\n</div>\n'},'index.html'),null,
+  writeChangeView({exists:true,fingerprint:'f',text:'a\nb\nc\nd\ne\nf\ng\nh\n'},{tool:'edit',edits:[{old_string:'h',new_string:'z',replace_all:false}]},'style.css'),{kind:'unknown',reason:'large'} as const];
+ assert.equal(changes[0]?.kind==='measured'&&changes[0].almostAll,true);
+ await act(async()=>root.render(<WriteApprovalDialog key="change" prompt={{...prompt,id:'change',files:['작업 폴더/index.html · 바꿈','작업 폴더/new.html','작업 폴더/style.css','작업 폴더/big.json'],changes}} onAnswer={(...a)=>answers.push(a)}/>));
+ const sections=host.querySelectorAll('.hps-write-change');
+ assert.equal(sections.length,3,'one summary per existing file, none for the new file');
+ assert.equal(sections[0].getAttribute('data-change'),'rewrite');
+ assert.ok(sections[0].textContent.includes('바뀌는 정도: 100%'),sections[0].textContent);assert.ok(sections[0].textContent.includes('바뀌는 줄 6개 · 새 줄 3개'),sections[0].textContent);
+ assert.ok(sections[0].querySelector('.hps-write-change-warning').textContent.includes('거의 전부 바뀌어요'),'rewrite label');
+ assert.equal(sections[0].querySelector('.hps-write-change-warning svg').getAttribute('aria-hidden'),'true','icon is decoration beside words');
+ assert.equal(sections[0].getAttribute('aria-label'),'작업 폴더/index.html · 바꿈 바뀌는 정도');
+ assert.equal(sections[1].getAttribute('data-change'),'partial');assert.ok(/바뀌는 정도: \d+%/.test(sections[1].textContent));
+ assert.ok(!sections[1].querySelector('.hps-write-change-warning'),'negative control: a partial edit has no rewrite label');
+ assert.ok(!sections[1].textContent.includes('거의 전부'));
+ assert.equal(sections[2].getAttribute('data-change'),'unknown');
+ assert.ok(sections[2].textContent.includes('얼마나 바뀌는지 미리 알 수 없어요 · 파일이 너무 커요'));
+ await act(async()=>root.render(<WriteApprovalDialog key="nochange" prompt={{...prompt,id:'nochange'}} onAnswer={()=>{}}/>));
+ assert.equal(host.querySelectorAll('.hps-write-change').length,0,'no changes field: no section');
+ // A rewrite below ALMOST_ALL_RATIO is warned without saying 거의 전부; whitespace-only says so.
+ await act(async()=>root.render(<WriteApprovalDialog key="half" prompt={{...prompt,id:'half',files:['a','b'],changes:[{kind:'measured',percent:'55%',ratio:0.55,changedLines:3,addedLines:0,rewrite:true,almostAll:false,spacingOnly:false},{kind:'measured',percent:'0%',ratio:0,changedLines:0,addedLines:0,rewrite:false,almostAll:false,spacingOnly:true}]}} onAnswer={()=>{}}/>));
+ const half=host.querySelectorAll('.hps-write-change');
+ assert.equal(half[0].querySelector('.hps-write-change-warning').textContent,'절반 넘게 바뀌어요');assert.ok(!half[0].textContent.includes('거의 전부'));
+ assert.ok(half[1].textContent.includes('글자는 그대로, 띄어쓰기·줄바꿈만 달라져요'));assert.ok(!half[1].querySelector('.hps-write-change-warning'));
  await act(async()=>root.render(<App/>));
  const hostMessage=async(data:any)=>act(async()=>{(globalThis.window as any).dispatchEvent({type:'message',data,bubbles:false});});
  await hostMessage({type:'writeApprovalPrompt',prompt});

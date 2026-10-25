@@ -16,6 +16,7 @@ import {OutboundDialog, PublicAudienceDialog} from "./OutboundDialog";
 import {isPublicAudiencePrompt, type AnyOutboundPrompt} from "../../src/outboundApproval";
 import type {WriteApprovalPrompt} from "../../src/writeApprovalPrompt";
 import { storedDenialNotice } from "../../src/denialNotice";
+import { isDownloadNoticeLabel } from "../../src/browserDownloadNotice";
 import type { TurnToolMode } from '../../src/turnTools';
 import { useEffect, useReducer, useState, useRef } from "react";
 import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage, TrialEndCardView } from "../../src/protocol";
@@ -537,6 +538,9 @@ export function App() {
         case "denialNotice":
           if (storedDenialNotice(msg.label)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: '', label: msg.label, state: 'error', at: msg.at } });
           break;
+        case "downloadNotice":
+          if (isDownloadNoticeLabel(msg.label, msg.state)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, at: msg.at } });
+          break;
         case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
         case "annotations": dispatch({ type: "annotations", enabled: msg.enabled, annotations: msg.annotations }); break;
         case "elementAttached": dispatch({ type: "elementAttached", element: msg.element }); break;
@@ -787,7 +791,7 @@ export function App() {
       {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
       {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
       {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);dispatch({type:"visibleProgress"});}}/>}
-      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined} materials={!!state.config?.materials && !state.config?.isInstructor}>
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} taskMove={state.config?.taskMove} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined} materials={!!state.config?.materials && !state.config?.isInstructor}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel
@@ -869,6 +873,7 @@ export function App() {
           dispatch({ type: "elementAttached", element: null });
           postToHost({ type: "removeElementContext" });
         }}
+        onStyleTweakSet={(id, prop, value) => postToHost({ type: "styleTweakSet", id, prop, value })}
         aiNotice={state.aiNotice}
         stopNotice={state.stopNotice}
         streamFor={state.streamFor}

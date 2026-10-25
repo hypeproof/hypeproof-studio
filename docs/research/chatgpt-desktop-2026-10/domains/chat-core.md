@@ -295,6 +295,10 @@ via shipped theme tokens. All below must hold at 320px width and with Korean IME
     the personal task menu only; classroom, lesson and instructor seats have no task menu, so
     their copy is a follow-up. It copies visible learner/coach text only and applies the AE-39
     exclusions. See decisions.md "CGP-CHAT-R-024".
+11. **Shortcut sheet keys (R86, decided 2026-10-25, agent choice).** The sheet lists only keys
+    the chat webview binds today: Enter, Shift+Enter, Esc (close), Alt+Shift+J (personal task
+    layout) and `?`. Esc-to-stop, Cmd/Ctrl+F and a focus-composer key are not bound, so they are
+    not listed and not invented here. See decisions.md "CGP-CHAT-R-030".
 
 **CGP-CHAT-R19 tip source (2026-10-25, owner decision).** The served step has no tip key, so the
 lesson tip is the step's Chalk-authored `hint`, and its action prefills that hint. See
@@ -307,3 +311,5 @@ lesson tip is the step's Chalk-authored `hint`, and its action prefills that hin
 - **CGP-CHAT-R85 (CGP-CHAT-R-029), 2026-10-25.** Implemented in Studio as REQ-STUDIO-REMOVAL-UNDO (`docs/studio-requirements.md`) with the CGP-CHAT-D85 toast. Owner-delegated choices (which chips count, queue × keeps returning text to the draft, exact-or-nothing offers that end on any change, host-kept snapshots for file/page chips, deferred staged-photo delete, rename keeps list order) are recorded in `../decisions.md`.
 - **CGP-CHAT-R77 (CGP-CHAT-R-025), 2026-10-25.** Implemented in Studio as REQ-STUDIO-TASK-ARCHIVE (`docs/studio-requirements.md`), with CGP-CHAT-D77. Owner-delegated choices (sidecar-only archive, open task only, next task choice, rail view, personal seats only) are recorded in `../decisions.md`.
 - **CGP-CHAT-R81 (CGP-CHAT-R-028), 2026-10-25.** Implemented in Studio as REQ-STUDIO-MY-QUESTIONS (`docs/studio-requirements.md`). Owner-delegated choices (count = drawn user turns, one version per edited prompt; first line of the learner's own words, quote skipped; 60-cluster cut; focus on the bubble; every seat that draws the task header) are recorded in `../decisions.md`.
+
+- **CGP-CHAT-R79 (CGP-CHAT-R-026), 2026-10-25.** Implemented in Studio as the "Task search (CGP-CHAT-R-026)" extension of REQ-STUDIO-TASK-WORKSPACE (`docs/studio-requirements.md`). The rail's `작업 찾기` field keeps the KNOW-R-001 local title filter and, for a committed query, also searches message text through the host's local store; message-only matches form a separate group (owner reconciliation in `../decisions.md`). Owner-delegated choices (one result per task at its latest match, name-only results, tool/system lines and superseded versions not searched, scroll without moving focus, personal/trial seats only) are recorded in `../decisions.md`.
