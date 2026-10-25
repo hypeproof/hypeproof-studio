@@ -28,7 +28,7 @@ html body :is(
   .hps-native-observation, .hps-effort details[open], .hps-access[open],
   .hps-voice-body, .hp-evidence, .hp-evidence-compare pre, .hps-carryover-list,
   .hps-recovery-list, .hps-annotations-list, .hps-page-attachment pre, .hps-annotations pre, .hps-page-context-panel,
-  .hps-attachment-failures, .local-review pre, .hps-tools-menu, .hps-attachments,
+  .hps-attachment-failures, .local-review pre, .hps-tools-menu, .hps-attachments, .hps-myq-list,
   .hps-preferences, .hps-outbound, .hps-write-approval, .hps-accuracy-answer, .hp-capability-sheet, .hps-copy-toasts,
   .hps-codeblock[data-wrap="off"] > pre,
   .hps-shell:has(> .hp-mission .hp-mission-sentence),

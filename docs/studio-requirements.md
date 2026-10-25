@@ -5965,3 +5965,47 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## My-questions jump list (CGP-CHAT-R-028)
+
+REQ-STUDIO-MY-QUESTIONS / CGP-CHAT-R81 (CGP-CHAT-081) / CGP-CHAT-D81 / PI#3 (learning is embedded
+in the work): a long task lets the learner go back to each of their own prompts, which supports
+looking back over how they framed the work (reflection at submit time). The task header offers a
+quiet 44px "내 질문" button (14px floor, DEC-29) when the transcript as drawn holds at least 4
+user turns; below 4 there is no button. "As drawn" means one version per prompt group
+(REQ-STUDIO-CHAT-EDIT-RESEND): an edited prompt counts once and the list points at the version
+on screen. Tool, system and assistant lines never count.
+
+The button opens a popover (`role="dialog"`, labelled "내 질문") under it with a numbered list:
+one 44px row per prompt in transcript order, at most 10 rows visible before the list scrolls,
+inside the viewport, focus moving to the first row. Each row shows the prompt's first non-empty
+line of the learner's own words: a leading `> ` quote block (CGP-CHAT-R-007) is skipped when the
+learner wrote something after it, C0/C1 controls other than whitespace, bidi embeddings,
+overrides, isolates and marks, the zero-width space and the BOM are removed (ZWJ/ZWNJ stay; tab,
+VT and FF collapse to one space), U+2028/2029 end the line, a line that draws nothing (only
+joiners, Hangul fillers or soft hyphens) is skipped, and the line is cut at 60 grapheme clusters
+or 240 UTF-16 code units, whichever comes first, with "…"; a prompt with no visible text reads
+"이미지만 보낸 질문" or "내용 없는 질문". Text is rendered as text, never as markup.
+
+Choosing a row closes the list, stops following the live answer (personal chat), scrolls the
+transcript so that prompt sits at its top (instantly under reduced motion) and moves keyboard
+focus onto that prompt's bubble, whose focus ring sits inside the scrolling transcript. A prompt
+being edited in place focuses its editor; a prompt whose row failed to render (CGP-CHAT-R50) jumps
+to its turn fallback box. The bubble or box is focusable only for that jump (`tabindex="-1"`,
+removed when focus leaves or when focus does not take), so the transcript's Tab order is
+unchanged. Escape, an outside press or Tab closes the list per REQ-STUDIO-FOCUS-RESTORE;
+a task or activity switch closes it. The list is display only: no host message, no stored
+state, no data leaves the device. It is available in every seat whose chat panel draws the task
+header (personal, trial, pass and classroom/lesson; also instructor mode, where the prompts are the
+instructor's own). The classroom transcript keeps its existing scroll-to-latest on a new message
+or stream change, so a reply arriving after a jump scrolls it back down there (a jump while a turn
+streams is not pinned in the classroom seat). Owner-delegated choices are in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+Evidence: `extensions/hypeproof-chat/test/my-questions.smoke.mjs` (pure rules with positive and
+negative controls: threshold, drawn versions, quote skip, hostile characters, grapheme cut) and
+`my-questions-browser.smoke.mjs` (the mounted ChatPanel in headless Chromium, personal inside the
+task workspace frame and classroom lesson seat, dark/light, 800/1420 px: hidden below 4, 44px
+button and rows at the 14px floor, 10 visible rows, viewport containment, keyboard open, Escape
+focus return, keyboard jump that scrolls and focuses the bubble with an inset ring, temporary tab
+stop removed, forced colours, and the editor, fallback-box and missing-target jumps; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser).
