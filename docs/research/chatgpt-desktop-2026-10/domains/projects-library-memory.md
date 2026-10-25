@@ -372,3 +372,7 @@ webview state. Seats without the 자료 list, instructors and classroom/lesson s
 layout. The activity title above the tabs is left to CGP-KNOW-D-002. Decisions: DEC-KNOW-R-002.
 PI #1: the learner moves between their work and its materials without losing what they were
 writing (no capability labels).
+
+Implementation note (2026-10-25, CGP-KNOW-R-019): REQ-KNOW-35 ships as a non-blocking bar in
+every seat; owner choices are recorded as DEC-KNOW-35 in `../decisions.md` and the behaviour in
+`docs/studio-requirements.md` "## Low disk space warning (CGP-KNOW-R-019)".

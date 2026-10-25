@@ -2349,6 +2349,19 @@ html, body, #root {
 .hps-preview-recovery-detail code { font-size: var(--hp-font-caption); }
 .hps-preview-recovery-note { margin: 0; flex: 1 1 100%; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
 .hps-preview-recovery-solo { display: block; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+/* REQ-KNOW-35 / DES-KNOW-35 (CGP-KNOW-R-019): low free space, a persistent bar above the composer in every seat.
+   Same calm surface as the preview recovery line (amber is only the edge; text keeps the foreground). The one
+   control is the "공간 확보 방법" disclosure: a 44px target, text at the caption step or larger (14px floor). */
+.hps-low-disk { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); margin: 0; padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); border-left: var(--ds-c-studio-styles-size-13) solid var(--hp-border-warn-default); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); word-break: keep-all; overflow-wrap: anywhere; min-width: 0; }
+.hps-low-disk-text { margin: 0; flex: 1 1 var(--ds-c-studio-styles-size-27); min-width: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label); }
+.hps-low-disk-help { flex: 0 0 auto; min-height: var(--ds-c-studio-styles-size-8); min-width: var(--ds-c-studio-styles-size-8); padding: 0 var(--ds-c-studio-styles-space-2); border: var(--ds-c-studio-styles-size-3) solid transparent; border-radius: var(--ds-c-studio-styles-radius-10); background: transparent; color: var(--vscode-textLink-foreground, inherit); font: inherit; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); text-decoration: underline; text-underline-offset: var(--ds-c-studio-styles-size-7); cursor: pointer; }
+.hps-low-disk-help:hover { background-color: var(--hp-bg-control-hover); }
+.hps-low-disk-help:active { background-color: var(--hp-bg-control-pressed); }
+.hps-low-disk-help:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-low-disk-detail { flex: 1 1 100%; min-width: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-low-disk-detail[hidden] { display: none; }
+.hps-low-disk-amounts, .hps-low-disk-keep { margin: 0; }
+.hps-low-disk-steps { margin: var(--ds-c-studio-styles-space-13) 0; padding-inline-start: var(--ds-c-studio-styles-space-20); }
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Marks drawn only in colour, or only as a
    background (which forced colors repaints as Canvas), get a line or a shape. Normal mode is unchanged. */
 @media (forced-colors: active) {
@@ -2382,6 +2395,9 @@ html, body, #root {
   .hps-msg-assistant .hps-msg-role > span::before { background-color: CanvasText; }
   /* REQ-STUDIO-PREVIEW-RECOVERY: the edge becomes a text line; the action keeps a button outline. */
   .hps-preview-recovery { border-left-color: CanvasText; }
+  /* REQ-KNOW-35: the amber edge becomes a text line; the disclosure keeps a link colour and an outline on focus. */
+  .hps-low-disk { border-left-color: CanvasText; }
+  .hps-low-disk-help { color: LinkText; }
   .hps-preview-recovery-action { border: var(--ds-c-studio-styles-size-3) solid ButtonText; background: ButtonFace; color: ButtonText; }
 }
 

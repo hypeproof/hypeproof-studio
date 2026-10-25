@@ -35,6 +35,7 @@ import { ComposerTools, SelectedTool } from './ComposerTools';
 import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
+import { LowDiskBar } from './LowDiskBar';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
@@ -247,6 +248,9 @@ function extractRenderableHtml(text: string): string | null {
   }
   return null;
 }
+
+/** REQ-KNOW-35 — how often a visible panel asks the host to measure free space again. */
+const LOW_DISK_POLL_MS = 60_000;
 
 // Pasted-image context (website-copyclone). Bounds match the worker's
 // translate.ts caps so a paste that the webview accepts is one the worker
@@ -698,6 +702,20 @@ export function ChatPanel(props: Props) {
     const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "missingTaskFolderRequest" }); };
     ask(); document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
     const stop = () => { off(); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
+    return stop;
+  }, []);
+  // REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume. The host also measures as every turn
+  // starts and ends; the panel asks on mount, when it comes back into view, on focus and once a minute while visible.
+  const [lowDisk, setLowDisk] = useState<import("../../src/lowDisk").LowDiskNotice | null>(null);
+  useEffect(() => {
+    const off = onHostMessage((msg) => { if (msg.type === "lowDisk") setLowDisk(msg.notice); });
+    const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "lowDiskRequest" }); };
+    postToHost({ type: "lowDiskRequest", mount: true });
+    document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
+    const timer = setInterval(ask, LOW_DISK_POLL_MS);
+    // Render tests run this panel in Node: an always-on poll must not keep their process alive.
+    (timer as unknown as { unref?: () => void }).unref?.();
+    const stop = () => { off(); clearInterval(timer); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
     return stop;
   }, []);
   // REQ-STUDIO-PREVIEW-RECOVERY — the host measures the learner's preview tab (server state, HTTP status) and pushes it when a
@@ -2024,6 +2042,7 @@ export function ChatPanel(props: Props) {
           config={config} view={goalOfLesson(studentGoal, config.profile!.lesson)}
           pending={goalPending} note={goalNote} onSave={sendGoalSave} />}</PanelBoundary>}
 
+        {lowDisk && <LowDiskBar notice={lowDisk} />}
         {props.refusal && <RefusalBanner onDismiss={() => {
           props.onDismissRefusal?.();
           textareaRef.current?.focus({ preventScroll: true });

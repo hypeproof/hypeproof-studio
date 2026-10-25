@@ -51,6 +51,7 @@ import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, turnToolsDenialSource, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
 import { setFolderConsentPresenter, onFolderConsentChanged, folderConsentForFolder, folderConsentProfile, folderConsentState, folderNoAiRefusal, folderWriteRefusal, FolderConsentRefusal } from './folderConsentHost';
 import { folderConsentApplies, canonicalFolder, folderNoAiCopy, folderShellRefusalNotice, folderShellUndecidedNotice } from './folderConsent';
+import { freeBytesAt, lowDiskKey, lowDiskNotice, lowDiskThresholdBytes, LOW_DISK_SETTING, type LowDiskNotice, type Statfs } from './lowDisk';
 import { missingTaskFolder, missingTaskFolderNotice, repickedFolder, MISSING_TASK_FOLDER_FAILED, MISSING_TASK_FOLDER_NO_AI, MISSING_TASK_FOLDER_NOT_A_FOLDER, MISSING_TASK_FOLDER_PICK_LABEL, MISSING_TASK_FOLDER_PICK_TITLE, MISSING_TASK_FOLDER_UNDECIDED } from './missingTaskFolder';
 import { chatVisible, createTaskNotifier, watchChatSurface } from './finishNoticeHost';
 import { TURN_SETTLING_REFUSAL, turnSettleSignal, waitAtMost } from './turnSettle';
@@ -1245,6 +1246,51 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   private async postMissingTaskFolder(note?: string): Promise<void> {
     await this.post({ type: "missingTaskFolder", notice: missingTaskFolderNotice(await this.missingTaskFolderPath(), note) });
+  }
+  /**
+   * REQ-KNOW-35 (CGP-KNOW-R-019) — measure free space on the volume holding the work folder and post the
+   * bar (or null) when the state changed. Every seat gets it, the instructor surface too: any seat's turn
+   * can write files. The bar only informs: it holds no send and changes no file. A folder change while
+   * the measurement runs drops the stale answer. Concurrent calls share one measurement.
+   */
+  private lowDiskPosted: string | undefined;
+  private lowDiskRun: Promise<void> | undefined;
+  /** Test seam: the statfs used to measure (undefined = node's fs.promises.statfs). */
+  lowDiskStatfs: Statfs | undefined;
+  /** The coach's working folder (resolveCoachCwd's answer) without its "no folder" console warning. */
+  private lowDiskFolder(): string | undefined {
+    const opened = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (opened) return opened;
+    const root = this.cachedProfile?.workspace_root;
+    return (root ? resolveWorkspaceRoot(root) : null) ?? undefined;
+  }
+  refreshLowDisk(): Promise<void> {
+    if (this.lowDiskRun) return this.lowDiskRun;
+    let rerun = false;
+    const run = (async () => {
+      try {
+        const folder = this.lowDiskFolder();
+        let notice: LowDiskNotice | null = null;
+        if (folder) {
+          const threshold = lowDiskThresholdBytes(vscode.workspace.getConfiguration('hypeproofChat').get<unknown>(LOW_DISK_SETTING));
+          const free = threshold > 0 ? await freeBytesAt(folder, this.lowDiskStatfs) : null;
+          // The folder changed while measuring: this answer is about the old one; measure the new one.
+          if (this.lowDiskFolder() !== folder) { rerun = true; return; }
+          // Unknown (statfs error or timeout) keeps whatever the panel shows: a slow volume must not make the
+          // bar flap away while space is still low. With nothing shown yet, unknown shows nothing.
+          if (threshold > 0 && free === null && this.lowDiskPosted !== undefined) return;
+          notice = lowDiskNotice({ free, threshold, platform: process.platform, classroom: this._instructorMode?.isInstructor !== true && this.getSeatAudience() === 'classroom' });
+        }
+        const key = lowDiskKey(notice);
+        if (key === this.lowDiskPosted) return;
+        if (await this.post({ type: "lowDisk", notice }) !== false) this.lowDiskPosted = key;
+      } catch (error) {
+        console.warn('[lowDisk] measurement failed', error);
+      }
+    })();
+    this.lowDiskRun = run;
+    void run.finally(() => { if (this.lowDiskRun === run) this.lowDiskRun = undefined; if (rerun) void this.refreshLowDisk(); });
+    return run;
   }
   /** A send while the folder is missing is held: the text goes back to the composer, the notice is shown, no turn starts. */
   private async holdSendForMissingFolder(text: string, images: string[] | undefined, toolMode: TurnToolMode): Promise<void> {
@@ -6389,6 +6435,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "inboxRequest": await this.postInbox(); return;
       case "turnReviewRequest": this.postTurnReview(); return;
       case "missingTaskFolderRequest": await this.postMissingTaskFolder(); return;
+      case "lowDiskRequest": if (msg.mount === true) this.lowDiskPosted = undefined; await this.refreshLowDisk(); return;
       case "missingTaskFolderRepick": await this.repickTaskFolder(); return;
       case "previewRecoveryRequest": await this.postPreviewRecovery(); return;
       case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;
@@ -7001,6 +7048,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     this.pendingSends++;
+    // REQ-KNOW-35 — measure free space as the turn starts; awaited just before the runtime runs (below),
+    // so the bar is up before the turn can write a file. Started here so earlier awaits keep their order.
+    const lowDiskCheck = this.refreshLowDisk();
     // CGP-ART-R-001 — the draft this send may take, pinned before the first await: a later edit, a
     // task switch or another send makes the take refuse instead of sending a different batch.
     this.syncAnnotationScope();
@@ -7920,6 +7970,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // The seat key is derived from the token and the profile (only a hash of the
       // token is used). With no token it is blocked below anyway, so the lock is left
       // best-effort.
+      await lowDiskCheck;
       await withCoachSeatLock(coachSeatKeyFor({ token: token ?? undefined, profile: profile ?? undefined }), async () => {
       const local = localRuntimeConfig(vscode.env.appName, proxyUrl);
       if (local) {
@@ -8261,6 +8312,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this._instructorMode.revertModelOnTurnError(c => Promise.resolve(this.context.workspaceState.update('hps.modelChoice', c)));
     } finally {
       runtimeSettled = true;
+      // REQ-KNOW-35 — the turn may have written files: measure again so the bar follows.
+      void this.refreshLowDisk();
       let interruptedSaveError: unknown;
       let interruptedSaveFailed = false;
       if (ctrl.signal.aborted || failedPartial) {

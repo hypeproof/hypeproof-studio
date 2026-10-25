@@ -5965,3 +5965,45 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## Low disk space warning (CGP-KNOW-R-019)
+
+REQ-KNOW-35 / CGP-KNOW-035 / DES-KNOW-35 / PI#1 / AB: when free space on the volume
+that holds the work folder is below the threshold needed to save work, Studio warns
+before a turn writes files.
+
+- Threshold: setting `hypeproofChat.lowDiskWarningMB` (number, default 500, machine
+  scope so a workspace cannot silence it; 0 turns the warning off; an invalid or absurd
+  value falls back to 500). Free space is the volume's space available to this user
+  (`statfs` `bavail × bsize`) at the open work folder (or the profile's workspace root).
+- When: the host measures as every turn starts, and the turn's model request is sent
+  only after that measurement has posted its state, so the bar is up before the turn
+  can write a file. It measures again when the turn ends, and when the panel asks
+  (mount, coming back into view, window focus, once a minute while visible). An
+  unchanged state is not re-posted.
+- What: one persistent bar above the composer, in every seat (personal, trial, pass,
+  classroom, lesson, instructor): "저장 공간이 거의 없어요. 새 파일이 저장되지 않을 수
+  있어요." and a "공간 확보 방법" disclosure. It has no close button: it leaves on its
+  own when a measurement finds enough space. The disclosure shows the measured amounts
+  ("남은 공간 312MB · 필요한 여유 500MB"), the steps for the seat and platform
+  (classroom and lesson seats: "선생님께 저장 공간이 부족하다고 알려 주세요." instead of
+  deleting files on a class PC; macOS/Windows: empty the trash, large downloads, the OS
+  storage settings path), and "지금 있는 파일은 그대로 열 수 있어요."
+- Not: no purchase, upgrade or "get more" control or wording; the bar never holds a send,
+  disables the composer or touches a file, so existing files stay openable. An unreadable
+  volume (statfs error, a hung mount past 2 s) is unknown: it shows no bar rather than a
+  guess, and keeps a bar that is already up so a slow volume does not make it flap. A hung
+  mount can delay a turn's start by at most those 2 s. A folder change during a measurement
+  measures the new folder at once.
+- Design (DES-KNOW-35): bar text at most two lines at 320 px, text and control at least
+  14px, the disclosure is a 44px target with the shared focus ring, forced colours keep
+  the edge and the ring.
+
+Evidence: `extensions/hypeproof-chat/test/low-disk.smoke.mjs` (pure rules; the real
+`ChatPanelProvider` for every seat, dedupe, remount, the setting, concurrency and a folder
+change; the real `handleSend` posts the bar before its model request and still sends) and
+`low-disk-bar.smoke.mjs` (the real ChatPanel in headless Chromium: personal and classroom,
+dark/light, 320/800/1420 px, forced colours; fails under `FOCUS_REQUIRE_BROWSER=1` without
+a browser). This serves PI#1 (useful work first: the learner learns why a save may fail
+before losing work) and the access principle that limits never hide or take away the
+learner's own files; no capability labels appear. See DEC-KNOW-35 in the parity decisions.
