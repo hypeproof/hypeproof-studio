@@ -12841,6 +12841,59 @@
           "path": "extensions/hypeproof-chat/test/conversation-copy-browser.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-LESSON-TIP",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Lesson tip above the composer (CGP-CHAT-R-021)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LESSON-TIP",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-TIP"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/lessonTipModel.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LessonTip.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/lessonTip.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LESSON-TIP",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LESSON-TIP",
+        "ST-IMP-LESSON-TIP"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-tip.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lesson-tip-layout.smoke.mjs"
+        }
+      ]
     }
   ]
 }

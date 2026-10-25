@@ -97,7 +97,9 @@ import type {
   UxConfig,
 } from "../../src/protocol";
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
-import { onHostMessage, postToHost } from "./vscode";
+import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
+import { LessonTip } from "./LessonTip";
+import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { groupDelegations, delegationGroups, parseDelegationId } from "../../src/delegationRow";
 import { idleTurnHint, runningProgressStep } from "../../src/longStepHint";
@@ -455,6 +457,8 @@ export function ChatPanel(props: Props) {
   const [draftError, setDraftError] = useState<string | null>(null);
   // SX-01/SX-02 — the step currently being viewed. A **view state**. Not a completion judgment.
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
+  // CGP-CHAT-R-021 — lesson tips the learner closed, per served step; kept in this panel's webview state.
+  const [dismissedTips, setDismissedTips] = useState<string[]>(() => readDismissed(readWebviewState<Record<string, unknown>>()));
   // #751 F4 — local display state for the learner's step self-report; it is separate from task completion.
   const [lessonSteps, setLessonSteps] = useState<Record<string, 'in_progress' | 'submitted'>>({});
   // #751 G2 — the learner's saved work-surface entries for the current lesson digest, and the rehearsal send result.
@@ -821,6 +825,8 @@ export function ChatPanel(props: Props) {
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
   // Sending is held (the draft stays) while the task's folder is missing.
   const folderMissing = personalWorkspace && !props.instructor && !!missingFolder;
+  // CGP-CHAT-R-021 — the step the rail shows (the first before any is picked); no tip for the instructor console.
+  const lessonTip = props.instructor ? null : lessonTipFor(config?.profile?.lesson, currentStepId);
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error, scope: `${activityId ?? ""}/${taskId ?? ""}` });
@@ -2001,6 +2007,22 @@ export function ChatPanel(props: Props) {
             </button>
           </div>
         )}
+        {/* CGP-CHAT-R-021 — at most one tip, from the served step's Chalk-authored hint only. Hidden while a turn runs. */}
+        {lessonTip && !streaming && !props.sendPending && !dismissedTips.includes(lessonTip.key) && <PanelBoundary panel="lesson-tip">{() => <LessonTip
+          tip={lessonTip}
+          disabled={frozen || unavailable || !!props.sendLocked || folderMissing}
+          onUse={() => {
+            if (streaming || frozen || unavailable || props.sendLocked || props.sendPending || folderMissing) return;
+            setDraft(current => prefillWithTip(current, lessonTip.text));
+            requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+          }}
+          onDismiss={() => {
+            const next = withDismissed(dismissedTips, lessonTip.key);
+            setDismissedTips(next);
+            patchWebviewState({ [LESSON_TIP_STATE_KEY]: next });
+            requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+          }}
+        />}</PanelBoundary>}
         {preparingImages > 0 && (
           <div className="hps-image-preparing" role="status">이미지 {preparingImages}장을 준비하고 있어요. 준비가 끝나면 보낼 수 있어요.</div>
         )}

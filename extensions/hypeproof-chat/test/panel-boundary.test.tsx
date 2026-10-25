@@ -292,6 +292,7 @@ const PANELS: Row[] = [
   { panel: "student-goal", key: "StudentGoal.tsx:StudentGoal", mode: "classroom" },
   { panel: "goal-status", key: "GoalStatusBar.tsx:GoalStatusBar", mode: "classroom" },
   { panel: "lesson", key: "LessonStepPanel.tsx:LessonStepPanel", mode: "classroom" },
+  { panel: "lesson-tip", key: "LessonTip.tsx:LessonTip", mode: "classroom" },
   { panel: "instructor-inbox", key: "InstructorInbox.tsx:InstructorInbox", mode: "classroom" },
   { panel: "materials", key: "MaterialsPanel.tsx:MaterialsPanel", mode: "classroom", config: { materials: true } },
   { panel: "help-request", key: "HelpRequest.tsx:HelpRequest", mode: "classroom" },

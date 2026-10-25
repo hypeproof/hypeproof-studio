@@ -296,6 +296,10 @@ via shipped theme tokens. All below must hold at 320px width and with Korean IME
     their copy is a follow-up. It copies visible learner/coach text only and applies the AE-39
     exclusions. See decisions.md "CGP-CHAT-R-024".
 
+**CGP-CHAT-R19 tip source (2026-10-25, owner decision).** The served step has no tip key, so the
+lesson tip is the step's Chalk-authored `hint`, and its action prefills that hint. See
+`CGP-CHAT-R-021` in `decisions.md`.
+
 ## Implementation notes
 
 - **CGP-CHAT-R56 (CGP-CHAT-R-023), 2026-10-25.** Implemented in Studio as REQ-STUDIO-LESSON-STEP-DIVIDER (`docs/studio-requirements.md`). Owner-delegated choices (served step = turn-start capture, divider on the first served step, marks stored beside the transcript, jump target = latest divider of the rail's step, learner lesson seats only) are recorded in `../decisions.md`.
