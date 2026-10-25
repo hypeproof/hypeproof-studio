@@ -3,7 +3,7 @@ import type { AttachmentFailure } from '../../src/attachmentFailure';
 import { onHostMessage, postToHost } from './vscode';
 export interface PreparationFile { id: string; stageId?: string; dataUrl?: string }
 /** A prepare request never calls the model or clears composer state. */
-export function useAttachmentSendPreparation(scope: string) {
+export function useAttachmentSendPreparation(scope: string, sketch = false) {
   const [failures, setFailures] = useState<(AttachmentFailure & {busy?:boolean})[]>([]);
   const [busy, setBusy] = useState(false);
   const inputs = useRef(new Map<string,PreparationFile>());
@@ -26,7 +26,7 @@ export function useAttachmentSendPreparation(scope: string) {
     const id=crypto.randomUUID();setBusy(true);
     return new Promise(resolve=>{
       const timer=setTimeout(()=>{if(pending.current?.id!==id)return;pending.current=null;setBusy(false);setFailures(files.map(f=>({id:f.id,name:'첨부 파일',reason:'파일 저장 응답이 늦어요. 이 파일만 다시 시도해 주세요.'})));resolve(false);},15000);
-      pending.current={id,resolve,timer};postToHost({type:'prepareAttachments',requestId:id,files});
+      pending.current={id,resolve,timer};postToHost({type:'prepareAttachments',requestId:id,files,...(sketch?{sketch:true}:{})});
     });
   };
   const allInputs=useRef(new Map<string,PreparationFile>());

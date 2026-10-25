@@ -657,7 +657,7 @@ export type WebviewMessage = (
       /** CGP-CHAT-R-002 — this send is an edited resend of the latest prompt group (its root user-message id). */
       editOf?: string }
   /** D-028 — a photo dropped or pasted into the chat, kept in the host's staging folder until sent. */
-  | { type: "prepareAttachments"; requestId: string; files: Array<{ id: string; stageId?: string; dataUrl?: string }> }
+  | { type: "prepareAttachments"; requestId: string; sketch?: boolean; files: Array<{ id: string; stageId?: string; dataUrl?: string }> }
   | { type: "stageImage"; stageId: string; name: string; mime: string; base64: string }
   /** D-028 — the participant removed a staged photo before sending; the host deletes it. */
   | { type: "discardStagedImage"; stageId: string }

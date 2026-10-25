@@ -739,3 +739,9 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
 @keyframes hps-steer-exit { from { opacity: 1; } to { opacity: 0; } }
 :where(:root[data-reduced-motion="true"]) .hps-steer-delivered { animation: none; }
 @media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-steer-delivered { animation: none; } }
+
+/* CGP-CHAT-R-020: drawing colors are image data; surrounding controls follow the host theme. */
+.hps-sketch { color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default); font-size: var(--hp-font-body); }
+.hps-sketch-tools { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-2); }
+.hps-sketch-tools [aria-pressed="true"] { border-color: var(--hp-border-control-selected); background-color: var(--hp-bg-control-selected); font-weight: var(--hp-weight-strong); }
+.hps-sketch-canvas { display: block; width: 100%; max-width: 100%; height: auto; aspect-ratio: 1; touch-action: none; margin: var(--ds-c-studio-chatdetails-space-2) 0; }

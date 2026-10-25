@@ -5610,3 +5610,27 @@ colour and size, raw text, selection copy and `답변 복사`, personal and clas
 800 and 1420 px, forced colours; the built CSS lists woff2 only; KaTeX is a separate chunk that a
 page without math never requests; `\href` shows its raw source with no link; the wide block's
 scrollbar does not cover its subscripts).
+### Draw and attach a sketch (CGP-CHAT-R-020)
+
+`그려서 보여주기` in the composer tools opens a local drawing canvas with a pen,
+six named ink colors, an eraser, undo and clear. It follows the existing
+`input.image_paste` grant, excludes instructors, and respects unavailable states
+and the four-image attachment limit. The drawing is learner-authored material,
+not generated content. Inspecting and revising it before sending supports PI#3.
+
+Pointer strokes use normalized canvas coordinates; Shift plus arrow keys can draw
+from the keyboard cursor. Escape/close with remaining strokes asks whether to
+discard; continuing retains the pixels and restores canvas focus. Tool and color
+choices carry text/check markers and pressed state. The modal uses the shared
+focus trap, scrolling and theme geometry; the white drawing surface and ink colors
+are image data rather than application theme colors.
+
+Attaching requests host preparation with `sketch: true`. The host requires one
+bounded PNG, the current image permission and a real current workspace, then uses
+the existing folder-write consent and safe image staging path to save under
+`assets/pasted-YYYYMMDD-HHMMSS-1.png` (collision-safe). Only successful preparation
+adds the exact PNG to the normal removable pending image list. A refusal or timeout
+keeps the drawing available to retry. Preparation does not send to a model; the
+normal send path reuses the cached successful file and rechecks current permission.
+Removing the pending attachment excludes it from the next send and does not erase
+the saved learner asset. Unattached canvas marks are local to the open dialog.

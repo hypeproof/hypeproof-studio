@@ -5,6 +5,7 @@ import { useFileMentions } from './FileMentions';
 import { PastedDraft } from './PasteChip';
 import { fullDraft, visibleDraft, editVisible, replaceVisible, changePaste, longPaste, type DraftPart } from './pastedDraft';
 import { TurnBoundary } from './TurnBoundary';
+import { SketchDialog } from './SketchDialog';
 import { ClassWindowNotice } from "./ClassWindowNotice";
 import { SteerDelivery, type SteerDeliverySnapshot } from './SteerDelivery';
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
@@ -400,6 +401,7 @@ export function ChatPanel(props: Props) {
   const editFocusScope = useRef('');
   const [composing, setComposing] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [sketchOpen, setSketchOpen] = useState(false);
   // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
   // section opens with focus on it (the #1814 menu shortcut, kept inside the #1763 dialog).
   const [preferencesUsage, setPreferencesUsage] = useState(false);
@@ -781,6 +783,8 @@ export function ChatPanel(props: Props) {
   // gate server-side, this just keeps the UI honest (no thumbnail, plain text
   // paste). Absent on older cached /v1/profile responses → treated as off.
   const imagePasteEnabled = config?.profile?.input?.image_paste === true;
+  const sketchAllowed = imagePasteEnabled && !props.instructor && !unavailable && pendingImages.length < MAX_IMAGES;
+  const sketchAllowedRef = useRef(sketchAllowed);sketchAllowedRef.current = sketchAllowed;
   // D-028 — photos as files, paths only to the model. Takes over drop and paste where on.
   const imageFilesEnabled = config?.profile?.input?.image_files === true;
   // #649 — switching worlds is **click-only**. Only for cohorts whose profile carries
@@ -2051,9 +2055,9 @@ export function ChatPanel(props: Props) {
             {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
-          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} />}
+          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
-          {!personalWorkspace && fileAttachShown && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={props.onAttachFile} webSearchItem={false} />}
+          {!personalWorkspace && (fileAttachShown || sketchAllowed) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} />}
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
           <textarea
             ref={textareaRef}
@@ -2182,6 +2186,10 @@ export function ChatPanel(props: Props) {
         </div>
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
       </footer>
+      {sketchOpen && <SketchDialog scope={JSON.stringify([activityId,taskId])} allowed={sketchAllowed} onClose={() => setSketchOpen(false)} onAttach={png => {
+        if (!sketchAllowedRef.current || imageCount.current >= MAX_IMAGES) return false;
+        imageCount.current++;setPendingImages(previous => [...previous,png]);setImgNote('그림을 작업 폴더의 assets에 저장하고 붙였어요. 보내기를 누르면 함께 보내요.');return true;
+      }} />}
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
