@@ -5695,3 +5695,34 @@ characters, empty conversation, positive control) and `test/conversation-copy-br
 (real App bundle in headless Chromium, both seats, dark/light, 320/800/1420 px, forced colours,
 44px menu item, >=14px status, success only after the write, failure alert, double press, task
 switch, streaming, retried answers, edited prompts and the version pager). Native clipboard behaviour in the packaged app is owner-verified (NOT RUN here).
+
+## Lesson tip above the composer (CGP-CHAT-R-021)
+
+REQ-CGP-CHAT-R19 / CGP-CHAT-019 / PI#4 (minimum necessary intervention), design
+CGP-CHAT-D-021: when a lesson is served, at most one tip row appears directly above the
+composer, labelled 도움말. Its only source is the current served step's Chalk-authored `hint`
+(the first step before the learner picks one, the same step the rail shows). The served step
+schema `hps-session-design/1` has no separate tip key and rejects unknown step keys, so the
+hint is the lesson-authored tip (decision in the research decisions log). A step with a blank,
+non-string, over-cap (8000 characters) or invisible-only hint shows no tip; Studio never
+substitutes a generic, feature or product-promotion tip. The text is rendered as text (a React
+text child); C0/C1 controls, soft hyphen, zero-width and joiner characters, bidi marks and
+controls, Hangul and braille blank fillers, tag characters and BOM are removed, the rest is
+NFC-normalized and whitespace (including U+2028/2029) folds to one space; the row clamps it to
+two lines. The rail's 힌트 보기 keeps the same hint; the tip is its one-line surface.
+`입력창에 넣기` only prefills the composer: an empty draft becomes the tip text, other text is
+kept with the tip appended on a new line, and a draft that already holds it is unchanged (a
+double press adds nothing). It never posts `sendMessage`. The close button hides the tip for that
+step only; the dismissal is keyed by course, version, sha256 and step id (not by task), persists
+in this panel's webview state across reloads (newest 200 kept; another window keeps its own), and
+returns focus to the composer. A new lesson
+version shows its tip again. The row is hidden while a turn runs or a send is pending, is absent
+for personal seats (no lesson) and the instructor console, and is disabled (not hidden) while the
+seat cannot accept input. Targets are 44px, text follows the caption scale (at least 14px), and
+the row stays in flow inside the composer column at 320-1420px.
+The tip may expose FRAMING and JUDGMENT behaviour (whether a learner uses or edits the lesson's
+help); showing, using or dismissing it is not recorded as evidence and is not a learning outcome.
+Validation: `lesson-tip.test.tsx` (source, hygiene, keys, dismiss bound, prefill) and
+`lesson-tip-layout.smoke.mjs` (actual App in headless Chromium; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser). The instructor-console and disabled-seat branches
+are code-level guards without a dedicated test.

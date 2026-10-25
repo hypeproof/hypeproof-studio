@@ -252,10 +252,10 @@ const OLD_SCREENS = {
 // main and this branch (HPS_A5_DUMP_DIR) differ only by those nodes: div.hps-copy-feedback wrapping
 // div[role=status][aria-live=polite].hps-sr-only and div[aria-live=assertive][aria-atomic=true].hps-sr-only. The EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "1a51419f8c7e357e63311986e6bb2ea3e5c212b3f100615bfd00c892433e856d",
-  "ChatPanel/adult-effort-observed": "36d74f630dd8bbbeac3e728cfe62bd8e6aa3792a2afcca5e3479b5bedb545451",
-  "ChatPanel/adult-timeline": "f286ee1618d51c4eeb668f6cbe8390c27123a085e80eb315e74fe66d6f0f6478",
-  "ChatPanel/kids": "fe30c56d0909764bfd5ce3bc0d0f7cad26d84647ff9e126a5911aeec64cf0d76",
+  "ChatPanel/adult-plain": "efcacd7dd5bdb7e6dab6ac545fdc0b03fd6c0a60ada22ec2a736e8bf4f0ecff0",
+  "ChatPanel/adult-effort-observed": "edd1924b26b70409d665b17a76d879b59950518bd53aa77a9ff6d728f7f52274",
+  "ChatPanel/adult-timeline": "0a6651b2f451436f0d249f2817756cd1773b167a6a109d09a8fd908d6d2f8249",
+  "ChatPanel/kids": "5594fbf2d514b4e1ada65ef7b3c50cff5a8915c08b683f3e63ab9c3940fbd38f",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -272,8 +272,11 @@ const BASE = {
   // while open, so the nine digests above stay as recorded on main. Re-recorded again (TZ=UTC) when the
   // chip parts became whole wrapping units: a space between parts and a "남은 요청 N회" unit span are the
   // only markup change (diffed with HPS_A5_DUMP_DIR).
-  "ChatPanel/classroom-class-funded": "37f19a1546d13f618a2e1a2f87bd9ab1916ac24acc334858e0e906a2b7880dc5",
-  "ChatPanel/classroom-access-unknown": "751451d5dc2ba5bae2df2bdc169a3e9cabeabb23fa81dd48f4ed7beff891f296",
+  // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
+  // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
+  // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
+  "ChatPanel/classroom-class-funded": "496c9e1e16ab4f3cf377d9466a08209351385cb498b4ad22b6ae6a2a648da1e4",
+  "ChatPanel/classroom-access-unknown": "454d91b88284fed18c839170409cdac60aa32b20bbcbfff79259e268d8f779e1",
 };
 
 const status = rendererStatus();

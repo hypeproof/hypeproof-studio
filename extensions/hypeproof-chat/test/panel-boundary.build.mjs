@@ -24,6 +24,7 @@ export const PANEL_COMPONENTS = {
   "HelpRequest.tsx": ["HelpRequest"],
   "InstructorInbox.tsx": ["InstructorInbox"],
   "LessonStepPanel.tsx": ["LessonStepPanel"],
+  "LessonTip.tsx": ["LessonTip"],
   "MaterialsPanel.tsx": ["MaterialsPanel"],
   "MemoryPanel.tsx": ["MemoryPanel"],
   "MissingFolderNotice.tsx": ["MissingFolderNotice"],
