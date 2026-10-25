@@ -69,6 +69,7 @@ import { imagePathsFromNotes, selectReferencedImagePaths, readWorkspaceReference
 import { selectedExternalInstructions } from "./externalSkillCommands";
 import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
 import * as fs from "fs";
+import { TaskActivityTurns, type TaskActivityEvent } from "./taskActivityHost";
 import {createHash} from 'node:crypto';
 import { TaskWorkspaceStore, TaskWorkspaceStoreError } from './taskWorkspaceStore';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -978,6 +979,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * Two sets of rules would mean a different order once the window is reopened.
    */
   private turnTimelines = new Map<string, TimelineState>();
+  /** CGP-ART-R-020 — per running turn: its "AI가 한 일" recorder and the scope it was started in. */
+  private taskActivityTurns?: TaskActivityTurns;
+  private get taskActivity(): TaskActivityTurns { return (this.taskActivityTurns ??= new TaskActivityTurns()); }
   private pendingApprovals = new Map<string, (approved: boolean) => void>();
   /** REQ-STUDIO-TASK-RUN-STATE — approval modals open right now (resolveActionApprovalTracked). */
   private approvalWaits = 0;
@@ -7423,6 +7427,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #173 — accumulate citations across the stream so they persist to history.
     const assistantCitations: import("./protocol").Citation[] = [];
     const webActivity = new WebSearchActivity();
+    // CGP-ART-R-020 — this turn's "AI가 한 일" entries, bound to the task and activity it started in.
+    this.taskActivity.begin(streamId, { signal: ctrl.signal, cwd: this.resolveCoachCwd(), activityId: activityConnections(this.context)?.scope, taskId: this.currentTaskStore?.()?.getView().activeTaskId ?? undefined });
     // Freeze the visible conversation at cancellation. Runtime callbacks may settle
     // later; neither those bytes nor a later task belong to this interrupted turn.
     let interruptedItems: ChatMessage[] | undefined;
@@ -7597,6 +7603,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.mcpBrowser?.crNewTurn();
       const onActivity = (a: import("./sdkCoachHelpers").SdkActivity) => {
         webActivity.observe(a);
+        if (a.kind === 'tool_use') this.noteTaskActivity(streamId, { kind: 'use', id: a.id, name: a.name, input: a.input });
+        else if (a.kind === 'approval' && !a.allowed) this.noteTaskActivity(streamId, { kind: 'deny', id: a.id });
+        else if (a.kind === 'tool_result') this.noteTaskActivity(streamId, { kind: 'result', id: a.id, isError: a.isError });
         // studio-funnel-events — first write/edit/preview/publish result (kind + ok only).
         if (a.kind==='tool_use') { const k = funnelToolKind(a.name); if (k) funnelTools.set(a.id, k); }
         if (a.kind==='tool_result' && funnelTools.has(a.id)) { this.funnel.emit({ type: "trial_tool_result", kind: funnelTools.get(a.id), ok: !a.isError }); funnelTools.delete(a.id); }
@@ -8336,6 +8345,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.verifyTurnRecorder = null;
       void this.loadAccess(true).then(()=>this.postConfig()).catch(()=>{});
       this.turnTimelines.delete(streamId);
+      this.taskActivity.end(streamId);
       // Persistence failure must not skip closing the runtime and verification turn.
       if (interruptedSaveFailed) throw interruptedSaveError;
     }
@@ -8397,6 +8407,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * is not put into it; it is stamped **on the way out**.
    */
   private finishTurnItems(
+    streamId: string,
+    messageId: string,
+    assistantText: string,
+    citations: import("./protocol").Citation[],
+    assistantName?: string,
+  ): ChatMessage[] {
+    return this.taskActivity.attach(streamId, this.finishTurnTimeline(streamId, messageId, assistantText, citations, assistantName), messageId);
+  }
+
+  private finishTurnTimeline(
     streamId: string,
     messageId: string,
     assistantText: string,
@@ -8570,6 +8590,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             ? { call: blankOpen ? { ...call, input: { ...call.input, url: "about:blank" } } : call }
             : this.retargetLoopbackNavigation(call);
           const line = browserToolLogLine(fixed.call.name, fixed.call.input);
+          if (!outsideBrowserIntent) this.noteTaskActivity(p.streamId, { kind: 'use', id: call.id, name: fixed.call.name, input: fixed.call.input });
           this.postToolLog(p.streamId, { id: call.id, ...line, state: "running" });
           // cr-verify — the verify tools go to the session (its runner drives the same control), switch on only.
           const tr = outsideBrowserIntent
@@ -8577,6 +8598,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             : isCrVerifyTool(fixed.call.name) && this.isCurriculumRuntimeEnabled()
             ? await this.runVerifyTool(fixed.call.name, (fixed.call.input ?? {}) as Record<string, unknown>)
             : await browser.execute(fixed.call);
+          this.noteTaskActivity(p.streamId, { kind: 'result', id: call.id, isError: !!tr.isError });
           this.postToolLog(p.streamId, { id: call.id, ...line, state: tr.isError ? "error" : "done",
             ...(tr.isError ? { denial: denialNotice(taggedDenialSource(tr.content.find(c => c.type === 'text')?.text), this.getSeatAudience() === 'classroom') } : {}) });
           // If it was corrected, tell the model too — fix it silently and it guesses
@@ -9511,6 +9533,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       await this.context.globalState.update(COACH_MIGRATION_DONE_KEY, true);
     }
+  }
+
+  /** CGP-ART-R-020 — one tool event of a turn; a successful result is shown at once (taskActivityHost.ts). */
+  private noteTaskActivity(streamId: string, event: TaskActivityEvent): void {
+    const msg = this.taskActivity.note(streamId, event);
+    if (msg) void this.post(msg);
   }
 
   /**

@@ -18,7 +18,7 @@ const read = (f) => readDesignFile(new URL(f, SRC), "utf8");
 // Stylesheet order in the built bundle (vite build, checked in dist/assets/index.css): main.tsx
 // imports tokens.css first, then modules pull in localReview/start/citationPreview/quoteAction/codeBlock/
 // quoteAction/taskWorkspace before the explicit styles.css and chatDetails.css imports.
-const ORDER = ["tokens.css", "focusGeometry.css", "localReview.css", "start.css", "writeApprovalDialog.css", "recipientMemory.css", "outboundDialog.css", "modalSurface.css", "answerAttempts.css", "accuracyEducation.css", "annotationTray.css", "citationPreview.css", "quoteAction.css", "mathRender.css", "codeBlock.css", "refusalBanner.css", "goalStatusBar.css", "lessonTip.css", "taskWorkspace.css", "keyboardNavigation.css", "styles.css", "chatDetails.css", "tooltips.css", "koreanProse.css"];
+const ORDER = ["tokens.css", "focusGeometry.css", "localReview.css", "start.css", "writeApprovalDialog.css", "recipientMemory.css", "outboundDialog.css", "modalSurface.css", "answerAttempts.css", "accuracyEducation.css", "annotationTray.css", "citationPreview.css", "quoteAction.css", "taskActivity.css", "mathRender.css", "codeBlock.css", "refusalBanner.css", "goalStatusBar.css", "lessonTip.css", "taskWorkspace.css", "keyboardNavigation.css", "styles.css", "chatDetails.css", "tooltips.css", "koreanProse.css"];
 // The DEC-29 scope: files that style only the personal task workspace and its chat.
 const PERSONAL_FILES = ["chatDetails.css", "taskWorkspace.css", "citationPreview.css", "codeBlock.css"];
 const FLOOR = 14;

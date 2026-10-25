@@ -2,7 +2,7 @@
 // Drawn only from what the host measured (turnReviewView.ts); it never auto-dismisses: the next turn
 // replaces it, or the learner closes it after a decision.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TurnReviewView, TurnFileReview } from "../../src/turnReviewView";
 import { DiffLines } from "./DiffLines";
 import { turnReviewCount } from "../../src/turnReviewView";
@@ -12,6 +12,8 @@ export interface TurnReviewBarProps {
   onRevert: (path?: string) => void;
   onKeep: () => void;
   onClose: () => void;
+  /** CGP-ART-R-020 — "바뀐 곳 보기" from the task's activity row: open this file's comparison. */
+  focus?: { path: string; seq: number } | null;
 }
 
 const EXTERNAL_NOTE = "웹에 올린 사이트, 브라우저, 명령 실행으로 작업 폴더 밖에서 바뀐 것은 되돌리지 않아요.";
@@ -20,10 +22,18 @@ function displayPath(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
-function FileReview({ file, busy, onRevert }: { file: TurnFileReview; busy: boolean; onRevert: (path: string) => void }) {
+function FileReview({ file, busy, onRevert, focus }: { file: TurnFileReview; busy: boolean; onRevert: (path: string) => void; focus?: { path: string; seq: number } | null }) {
   const [expanded, setExpanded] = useState(false);
+  const itemRef = useRef<HTMLLIElement>(null);
+  const seq = focus?.path === file.path ? focus.seq : 0;
+  useEffect(() => {
+    if (!seq) return;
+    if (file.lines) setExpanded(true);
+    itemRef.current?.scrollIntoView({ block: "nearest" });
+    itemRef.current?.querySelector<HTMLElement>("button")?.focus();
+  }, [seq]);
   const rows = (side?: "before" | "after") => file.lines && <DiffLines lines={file.lines} side={side} />;
-  return <li className="hps-turn-file">
+  return <li className="hps-turn-file" ref={itemRef}>
     <code>{displayPath(file.path)}</code>
     <p>{file.lines ? `+${file.added}줄 추가 · −${file.removed}줄 삭제` : file.unavailable ?? "줄 수와 비교를 확인할 수 없어요."}</p>
     <div className="hps-turn-review-actions">
@@ -37,11 +47,11 @@ function FileReview({ file, busy, onRevert }: { file: TurnFileReview; busy: bool
   </li>;
 }
 
-function Group({ title, kind, items, files, busy, onRevert }: { title: string; kind: string; items: string[]; files?: TurnFileReview[]; busy: boolean; onRevert: (path: string) => void }) {
+function Group({ title, kind, items, files, busy, onRevert, focus }: { title: string; kind: string; items: string[]; files?: TurnFileReview[]; busy: boolean; onRevert: (path: string) => void; focus?: { path: string; seq: number } | null }) {
   if (!items.length) return null;
   return <div className="hps-turn-review-group" data-kind={kind}>
     <strong>{title} {items.length}개</strong>
-    <ul>{items.map(p => <FileReview key={p} file={files?.find(f => f.path === p) ?? { path: p }} busy={busy} onRevert={onRevert} />)}</ul>
+    <ul>{items.map(p => <FileReview key={p} file={files?.find(f => f.path === p) ?? { path: p }} busy={busy} onRevert={onRevert} focus={focus} />)}</ul>
   </div>;
 }
 
@@ -59,7 +69,10 @@ function failedTitle(view: TurnReviewView): string {
   return "되돌리지 못했어요";
 }
 
-export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBarProps) {
+export function TurnReviewBar({ view, onRevert, onKeep, onClose, focus }: TurnReviewBarProps) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  // Open the file list before the file's own effect scrolls and focuses it (layout effects run first).
+  useLayoutEffect(() => { if (focus?.seq && detailsRef.current) detailsRef.current.open = true; }, [focus?.seq]);
   const sectionRef = useRef<HTMLElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<string | null>(null);
@@ -113,11 +126,11 @@ export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBar
   const busy = view.state === "restoring";
   return <section ref={sectionRef} className="hps-turn-review" data-testid="turn-review" data-state={view.state} aria-label="바뀐 것 · 이번 요청">
     <p className="hps-turn-review-title">이번 요청 동안 바뀐 파일 {n}개</p>
-    <details key={view.turnId}>
+    <details key={view.turnId} ref={detailsRef}>
       <summary>바뀐 파일 보기</summary>
-      <Group title="새로 만듦" kind="added" items={view.added} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} />
-      <Group title="바뀜" kind="changed" items={view.changed} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} />
-      <Group title="지움" kind="deleted" items={view.deleted} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} />
+      <Group title="새로 만듦" kind="added" items={view.added} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} focus={focus} />
+      <Group title="바뀜" kind="changed" items={view.changed} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} focus={focus} />
+      <Group title="지움" kind="deleted" items={view.deleted} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} focus={focus} />
     </details>
     <p className="hps-turn-review-note">AI가 일하는 동안 내가 직접 고친 파일도 함께 셌어요.</p>
     <NotCovered items={view.notCovered} />

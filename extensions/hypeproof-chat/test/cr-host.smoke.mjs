@@ -610,7 +610,10 @@ await test("CR-11 proxy: with the switch on the guard outlives the turn; an esca
   assert.equal(off.origin, "https://example.com", "instrument: without the shared control the late escape really completes");
   // The provider's proxy loop is this call, and does not close the shared control itself.
   assert.match(providerSrc, /proxyTurnBrowser\(\s*this\.isCurriculumRuntimeEnabled\(\),\s*\(\) => \(this\.mcpBrowser \?\?= new BrowserControl\(this\.crBrowserOptions\(\)\)\),/);
-  const loop = providerSrc.slice(providerSrc.indexOf("private async runBrowserLoop("), providerSrc.indexOf("private async runBrowserLoop(") + 8000);
+  // The whole method, up to the next member (a fixed character window broke when the loop grew, CGP-ART-R-020).
+  const loopAt = providerSrc.indexOf("private async runBrowserLoop(");
+  const loop = providerSrc.slice(loopAt, providerSrc.indexOf("\n  private ", loopAt + 1));
+  assert.ok(loop.length > 4000, "runBrowserLoop body found");
   assert.match(loop, /finally \{\s*await turnBrowser\.release\(\);/);
   assert.doesNotMatch(loop, /browser\.dispose\(\)/);
 });

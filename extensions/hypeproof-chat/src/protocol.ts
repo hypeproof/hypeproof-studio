@@ -78,6 +78,11 @@ export interface ChatMessage {
    * conversation written before this field reads as one version per turn.
    */
   editOf?: string;
+  /**
+   * CGP-ART-R-020 — the successful tool calls of the turn this line closes (taskActivity.ts), carried
+   * on the turn's last persisted line. Display only: never part of the model history.
+   */
+  activity?: import("./taskActivity").TaskActivityFact[];
   retryOf?: string;
   visibleAttemptId?: string;
   chosenAttemptId?: string;
@@ -908,6 +913,8 @@ export type HostMessage = (
   // splices this line into the **same array** as `streamChunk` to build
   // [bubble] → [tool] → [bubble]. `at` is the SDK's own timestamp as it sent it (ms;
   // the host clock when absent) — the createdAt of the persisted line.
+  // CGP-ART-R-020 — one successful tool call of a running turn, bound to the task it started in.
+  | { type: "taskActivityFact"; streamId: string; fact: import("./taskActivity").TaskActivityFact; activityId?: string; taskId?: string }
   | { type: "toolLog"; shell?: import("./shellPresentation").ShellPresentation; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number; step?: string; since?: number }
   // #308 — the "페이지를 코치에게" completion notice. Raising a VS Code notification
   // toast stops the integrated browser with "Paused due to Notification" (core

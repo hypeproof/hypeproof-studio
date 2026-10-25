@@ -115,6 +115,8 @@ import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/c
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
 import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
+import { TaskActivity } from "./TaskActivity";
+import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
   RUNNER_PHRASE_MS,
   isRunnerCohort,
@@ -682,6 +684,16 @@ export function ChatPanel(props: Props) {
     postToHost({ type: "turnReviewRequest" });
     return off;
   }, []);
+  // CGP-ART-R-020 — entries of a running turn, shown before the turn's history is saved. The host binds
+  // each to the task it started in (onHostMessage drops another task's); a history load or a scope change
+  // replaces them with what was persisted.
+  const [liveActivity, setLiveActivity] = useState<TaskActivityFact[]>([]);
+  useEffect(() => onHostMessage((msg) => {
+    if (msg.type === "history") setLiveActivity([]);
+    else if (msg.type === "taskActivityFact" && validTaskActivityFact(msg.fact)) setLiveActivity((list) => list.some((f) => f.id === msg.fact.id) ? list : [...list, msg.fact]);
+  }), []);
+  useEffect(() => { setLiveActivity([]); }, [activityId, taskId]);
+  const [reviewFocus, setReviewFocus] = useState<{ path: string; seq: number; turnId: string } | null>(null);
   // REQ-STUDIO-PAGE-CARD — page cards of this task's coach turns, keyed by the chat row each sits under.
   const [pageCards, setPageCards] = useState<Map<string, import("../../src/pageCard").PageCardView>>(() => new Map());
   useEffect(() => {
@@ -919,6 +931,7 @@ export function ChatPanel(props: Props) {
   // CGP-CHAT-R-024 — the personal task's own conversation, copied as Markdown from the task menu.
   // Exactly the conversation as drawn: one version per prompt (the one on screen), never hidden attempts.
   const drawnConversation = useMemo(() => visibleVersions(visibleAttempts(messages).items, versionChoice).items, [messages, versionChoice]);
+  const taskActivity = useMemo(() => summarizeTaskActivity(drawnConversation, liveActivity), [drawnConversation, liveActivity]);
   const conversationCopy = useConversationCopy(JSON.stringify([activityId ?? null, taskId ?? null]), {
     messages: drawnConversation,
     title: config?.taskWorkspace?.tasks.find(task => task.id === taskId)?.title,
@@ -1815,7 +1828,7 @@ export function ChatPanel(props: Props) {
         {shown.items.map((m, i) => <TurnBoundary key={`${activityId ?? ""}/${taskId ?? ""}/${m.id}`} messageId={m.id} rawText={m.content}>{() => <Fragment>
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
           {dividers.has(m.id) && <StepDivider id={m.id} label={stepDividerLabel(dividers.get(m.id)!)} />}
-          {m.elapsedTurn && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
+          {(m.elapsedTurn || m.activity) && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
             <ToolLine message={m} onReport={props.onReportProblem} />
           ) : delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
             <ContextNote text={CONTEXT_COMPACT_NOTE} />
@@ -1962,10 +1975,18 @@ export function ChatPanel(props: Props) {
           <PanelBoundary panel="capability-change"><CapabilityChangeCard change={config.capabilityChange} onDismiss={(id) => postToHost({ type: "dismissCapabilityChange", id })} /></PanelBoundary>
         )}
 
+        {/* CGP-ART-R-020 — what the AI did in this task, from its tool events only. */}
+        <PanelBoundary panel="task-activity"><TaskActivity
+          summary={taskActivity}
+          reviewPaths={new Set(!props.instructor && turnReview?.state === "open" ? [...turnReview.added, ...turnReview.changed] : [])}
+          onShowReview={(path) => { if (turnReview) setReviewFocus((f) => ({ path, seq: (f?.seq ?? 0) + 1, turnId: turnReview.turnId })); }}
+        /></PanelBoundary>
+
         {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
         {!props.instructor && turnReview && (
           <PanelBoundary panel="turn-review"><TurnReviewBar
             view={turnReview}
+            focus={reviewFocus?.turnId === turnReview.turnId ? reviewFocus : null}
             onRevert={(path) => postToHost({ type: "turnRevert", turnId: turnReview.turnId, ...(path === undefined ? {} : { path }) })}
             onKeep={() => postToHost({ type: "turnKeep", turnId: turnReview.turnId })}
             onClose={() => postToHost({ type: "turnReviewClose", turnId: turnReview.turnId })}

@@ -144,6 +144,8 @@ Product Intent principle numbers (`docs/PRODUCT-INTENT.md`): 1 Useful work first
 | REQ-ART-22 (CGP-ART-23) | Chalk shows a class-results view: one card per learner with the latest approved artifact version, thumbnail, approval time, and open. It has grid and list layouts and a filter for "승인 없음". | (1) Only versions marked through U1b appear. (2) Opening serves the approved bytes, not the learner's current file. Negative: an unapproved version visible. | P2 | 5, 2 |
 | REQ-ART-23 (CGP-ART-24) | The learner can export the deck as a single PDF and open their page's folder from the result card. | (1) The PDF has one page per slide, without notes. (2) **폴더에서 보기** reveals the served root. Negative: the PDF includes the notes layer. | P2 | 1 |
 
+REQ-ART-20 status (2026-10-26): implemented as REQ-STUDIO-TASK-ACTIVITY (`docs/studio-requirements.md`, "Task activity summary (CGP-ART-R-020)"). The verb mapping, distinct-target counts, review-link scope and exclusions are recorded in `decisions.md` ("CGP-ART-R-020: task activity summary").
+
 Top P0s: **REQ-ART-02** (revert or keep the coach's last change), **REQ-ART-07** (show exact page text before it reaches the
 model), and **REQ-ART-08** (minor-cohort links never escape the safe browser).
 

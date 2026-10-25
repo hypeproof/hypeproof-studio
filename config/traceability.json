@@ -13163,6 +13163,83 @@
           "path": "extensions/hypeproof-chat/test/activity-home-computed.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TASK-ACTIVITY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Task activity summary (CGP-ART-R-020)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-ACTIVITY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-ACTIVITY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskActivity.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskActivityHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskActivity.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskActivity.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TurnReviewBar.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-ACTIVITY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-ACTIVITY",
+        "ST-IMP-TASK-ACTIVITY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-activity.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-activity-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/panel-boundary.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/panel-boundary.build.mjs"
+        }
+      ]
     }
   ]
 }

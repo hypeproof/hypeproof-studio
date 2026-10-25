@@ -11,6 +11,7 @@ import { suggestTaskTitle } from './taskTitle.ts';
 import type { RenameUndo } from './removalUndo.ts';
 import { emptyVersions, joinVersions, splitVersions, validEditOf, type StoredVersions } from './editResend.ts';
 import { appendVerdict, latestVerdicts, validVerdictEvent, type VerdictEvent, type VerdictMap } from './answerVerdict.ts';
+import { validTaskActivity } from './taskActivity.ts';
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
 import type {
@@ -85,10 +86,12 @@ const sameLock = (a: LockRecord | undefined, b: LockRecord) => !!a &&
  * on lines handed to the store and on the versions sidecar, never in the task file.
  */
 function validMessage(value: unknown, allowEditOf = false): value is ChatMessage {
-  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', ...(allowEditOf ? ['editOf', ...ATTEMPT_KEYS] : [])])) return false;
+  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', 'activity', ...(allowEditOf ? ['editOf', ...ATTEMPT_KEYS] : [])])) return false;
   if (!nonempty(value.id, 256) || typeof value.role !== 'string' || !['user', 'assistant', 'system', 'tool'].includes(value.role) ||
       typeof value.content !== 'string' || !timestamp(value.createdAt)) return false;
   if (value.assistantName !== undefined && typeof value.assistantName !== 'string') return false;
+  // CGP-ART-R-020 — "AI가 한 일" entries: bounded, exact shape, no control or bidi characters.
+  if (value.activity !== undefined && !validTaskActivity(value.activity)) return false;
   if (value.toolMode !== undefined && (value.role !== 'user' || !['auto', 'web-search'].includes(value.toolMode as string))) return false;
   // CGP-CHAT-R-002 — an edited resend names its group root; only a user line can be one.
   if (value.editOf !== undefined && (value.role !== 'user' || !validEditOf(value.editOf))) return false;
