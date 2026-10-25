@@ -230,7 +230,7 @@ import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { CapabilityChangeTracker, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
-import { addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
+import { addMaterialDrop, addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import { compactionLineId, CONTEXT_COMPACT_NOTE, trimBoundaryId } from "./contextTrim";
@@ -3035,17 +3035,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // REQ-STUDIO-FOLDER-CONSENT — "AI 안 씀": nothing from this folder is queued for the model.
     return folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
   }
-  private async addMaterial(requestId: string, url?: string): Promise<void> {
+  private async addMaterial(requestId: string, url?: string, dropped?: { name: string; size: number; base64: string }): Promise<void> {
     const refusal = this.materialsRefusal();
     if (refusal) { await this.postMaterials({ requestId, error: refusal }); return; }
     const snap = await this.materialsSnapshot();
     if (!snap) { await this.postMaterials({ requestId, error: FILE_REFUSAL_COPY["no-workspace"] }); return; }
     const scope = this.turnRequestScope();
+    // A full list refuses a file before anything is copied, so no unlisted copy is left in 자료/.
+    if (url === undefined && "full" in withLearnerItem(loadManifest(snap.file), { kind: "file", ref: "\u0000" }, Date.now(), listMaterialFolder(snap.root))) { await this.postMaterials({ requestId, error: MATERIALS_COPY.tooManyItems }); return; }
     let item: { kind: "file" | "url"; ref: string; title: string };
     if (url !== undefined) {
       const checked = checkMaterialUrl(url);
       if (!checked.ok) { await this.postMaterials({ requestId, error: checked.reason }); return; }
       item = { kind: "url", ref: checked.url, title: checked.host };
+    } else if (dropped) {
+      // #2641 — a drop on the open 자료 panel: the picker's checks on the bytes, then the same list.
+      const added = addMaterialDrop(snap.root, dropped);
+      if (!added.ok) { await this.postMaterials({ requestId, error: added.reason }); return; }
+      noteHostWrite([{ absPath: path.join(snap.root, ...added.rel.split("/")), data: added.bytes }], "learner_upload");
+      item = { kind: "file", ref: added.rel, title: added.rel.slice(added.rel.indexOf("/") + 1) };
     } else {
       const picked = await vscode.window.showOpenDialog({ canSelectFiles: true, canSelectFolders: false, canSelectMany: false, openLabel: "자료에 넣기", title: "자료에 넣을 파일 고르기" });
       if (!picked?.[0]) { await this.postMaterials({ requestId }); return; }
@@ -6663,6 +6671,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "materialsRequest": await this.postMaterials(); return;
       case "materialAddFile": await this.addMaterial(String(msg.requestId)); return;
       case "materialAddUrl": await this.addMaterial(String(msg.requestId), typeof msg.url === "string" ? msg.url : ""); return;
+      case "materialAddDrop": await this.addMaterial(String(msg.requestId), undefined, { name: typeof msg.name === "string" ? msg.name : "",
+        size: typeof msg.size === "number" ? msg.size : Number.POSITIVE_INFINITY, base64: typeof msg.base64 === "string" ? msg.base64 : "" }); return;
       case "materialSelect": if (typeof msg.id === "string" && typeof msg.scope === "string") await this.selectMaterial({ requestId: String(msg.requestId), scope: msg.scope, id: msg.id, selected: msg.selected === true }); return;
       case "materialRemove": if (typeof msg.id === "string" && typeof msg.scope === "string") await this.removeMaterial({ requestId: String(msg.requestId), scope: msg.scope, id: msg.id }); return;
       case "removePageContext":

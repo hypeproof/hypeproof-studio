@@ -1784,7 +1784,8 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
 - **Adding a file.** "파일 넣기" opens the system picker; the host copies the pick into
   `<work folder>/자료/` (created if missing) with identical bytes and lists it with origin 나
   (a pick already in `자료/` keeps its own Unicode spelling, so an NFD name is still found). At
-  most 50 learner items; an item whose copy is gone from the folder does not count.
+  most 50 learner items; an item whose copy is gone from the folder does not count. A full list
+  refuses a pick or a drop before anything is copied, so no unlisted copy is left in `자료/`.
   The copy never overwrites: an occupied name gets " (2)", " (3)" …; a pick already directly in
   `자료/` is listed in place. Refused, each with its Korean reason and nothing written: a link,
   a folder, a missing or unreadable file, empty or whitespace-only text, more than 100 KB,
@@ -1809,9 +1810,23 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   and controls are at least 44px. The time is the recorded learner add, instructor receipt, or AI
   creation event in the current file lifetime, never a later modification time. Missing, invalid,
   truncated or unconfirmed creation history says "추가 시각 미확인"; no current-time fallback.
-  Selection remains host-owned and nothing is sent by toggling it. The existing system picker
-  remains the file entry; drag/drop intake and its drop-zone treatment are not implemented by
-  this presentation row and remain an explicit design gap.
+  Selection remains host-owned and nothing is sent by toggling it. The drop zone of DES-KNOW-04
+  is the next bullet (#2641).
+- **Dropping a file (#2641).** The open card also takes one dropped file, the same file "파일
+  넣기" takes; the closed summary row is not a drop target. While a file is dragged over the
+  open card its own border becomes 2px in the focus-ring colour (Highlight in forced colours),
+  and its padding gives back the extra 1px so nothing moves; outline stays reserved for focus
+  rings. A webview `File` has no path, so the webview
+  sends the name, the size and the bytes as base64; over 100 KB it sends no bytes and is never
+  read. The host applies the picker's gates (seat, "AI 안 씀", an open workspace) and its rules
+  to the bytes: the `materialFileName` name rules (and no `/` or `\`), 100 KB, valid UTF-8,
+  20,000 characters, not empty, a `자료` that is a real folder, and a `wx` copy with " (2)"
+  suffixes that never overwrites. A size that does not match the bytes is refused as changed,
+  and no bytes for a non-empty file as unreadable. The copy is recorded as the learner's upload,
+  as for a pick. Several files in one drop are refused with one message ("파일은 한 번에 하나씩
+  놓아 주세요.") and nothing is added. A drop on the open card stops there: the shell's photo
+  drop never attaches it to the composer. While another 자료 request is pending a drop does
+  nothing.
 - **Removing.** 목록에서 빼기 takes a learner or AI item off the list; a file stays in the folder.
   Instructor items have no 목록에서 빼기, the row says "강사가 보낸 자료는 목록에서 뺄 수 없어요.",
   and the host refuses a remove request for them.

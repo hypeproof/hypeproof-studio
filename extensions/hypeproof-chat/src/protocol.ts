@@ -609,6 +609,7 @@ export type WebviewMessage = (
   | { type: "materialsRequest" }
   | { type: "materialAddFile"; requestId: string }
   | { type: "materialAddUrl"; requestId: string; url: string }
+  | { type: "materialAddDrop"; requestId: string; name: string; size: number; base64: string }
   | { type: "materialSelect"; requestId: string; scope: string; id: string; selected: boolean }
   | { type: "materialRemove"; requestId: string; scope: string; id: string }
   // cr-verify — "Test my product" (CR-12–CR-16; CR switch only, re-checked by the host).

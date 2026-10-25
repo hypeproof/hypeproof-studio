@@ -7894,6 +7894,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/material-row-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/materials-drop-computed.smoke.mjs"
         }
       ]
     },
