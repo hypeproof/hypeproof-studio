@@ -6,6 +6,7 @@ import { PastedDraft } from './PasteChip';
 import { fullDraft, visibleDraft, editVisible, replaceVisible, changePaste, longPaste, type DraftPart } from './pastedDraft';
 import { TurnBoundary } from './TurnBoundary';
 import { SketchDialog } from './SketchDialog';
+import { CopyFeedbackRegion, CopyFeedbackOutlet } from './CopyFeedback';
 import { ClassWindowNotice } from "./ClassWindowNotice";
 import { SteerDelivery, type SteerDeliverySnapshot } from './SteerDelivery';
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
@@ -1418,7 +1419,7 @@ export function ChatPanel(props: Props) {
   const runnerWho = runnerFace(worlds, props.openWorldId);
 
   return (
-    <div
+    <CopyFeedbackRegion><div
       className={`hps-shell${dragActive ? " hps-shell-drag" : ""}`}
       data-chat-detail={personalWorkspace ? 'personal' : undefined}
       data-text-size={normalizeTextSize(config?.textSize) === 'base' ? undefined : normalizeTextSize(config?.textSize)}
@@ -2198,6 +2199,7 @@ export function ChatPanel(props: Props) {
           </div>}
         </div>
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
+        <CopyFeedbackOutlet />
       </footer>
       {sketchOpen && <SketchDialog scope={JSON.stringify([activityId,taskId])} allowed={sketchAllowed} onClose={() => setSketchOpen(false)} onAttach={png => {
         if (!sketchAllowedRef.current || imageCount.current >= MAX_IMAGES) return false;
@@ -2228,7 +2230,7 @@ export function ChatPanel(props: Props) {
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
         </>}</PanelBoundary>
       </ChatPreferences>}
-    </div>
+    </div></CopyFeedbackRegion>
   );
 }
 

@@ -1984,6 +1984,7 @@
   --ds-s-control-lg: var(--ds-p-control-lg);
 }
 :root, body {
+  --ds-c-studio-copy-toast-max: var(--ds-s-size-106);
   --ds-c-typography-ui: var(--ds-s-typography-ui);
   --ds-c-typography-content: var(--ds-s-typography-content);
   --ds-c-typography-code: var(--ds-s-typography-code);

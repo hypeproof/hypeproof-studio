@@ -247,11 +247,15 @@ const OLD_SCREENS = {
 // (<g fill="currentColor" stroke="none"> with three <circle r="1.5">) instead of a 2.6-stroke <path>.
 // The dumps of main and this branch differ only in that one element (diffed with HPS_A5_DUMP_DIR).
 // CGP-SHELL-R-006: only the effort labels change to Korean in five affected renders.
+// CGP-DS-D-022: the six ChatPanel digests were re-taken (TZ=UTC) because the footer now always mounts one
+// empty polite status region and one empty assertive region so copy results are announced. The dumps of
+// main and this branch (HPS_A5_DUMP_DIR) differ only by those nodes: div.hps-copy-feedback wrapping
+// div[role=status][aria-live=polite].hps-sr-only and div[aria-live=assertive][aria-atomic=true].hps-sr-only. The EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "ca6223b85b877e108becc4f9e38e94ec2533b330cdef4c92c9dc62e2775c1242",
-  "ChatPanel/adult-effort-observed": "c307f0879ba04976db5d9387d454ac10b6885887600f336ca2b38a87623782f2",
-  "ChatPanel/adult-timeline": "7cd482c1e010cbeea0c1114cf1cc5c3b41bc9d805bbbebdfca93a4812e153d5a",
-  "ChatPanel/kids": "3952e023620aca658290a1ebcb9385642a65eff9f0cc5450af925c2319f015f5",
+  "ChatPanel/adult-plain": "1a51419f8c7e357e63311986e6bb2ea3e5c212b3f100615bfd00c892433e856d",
+  "ChatPanel/adult-effort-observed": "36d74f630dd8bbbeac3e728cfe62bd8e6aa3792a2afcca5e3479b5bedb545451",
+  "ChatPanel/adult-timeline": "f286ee1618d51c4eeb668f6cbe8390c27123a085e80eb315e74fe66d6f0f6478",
+  "ChatPanel/kids": "fe30c56d0909764bfd5ce3bc0d0f7cad26d84647ff9e126a5911aeec64cf0d76",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -268,8 +272,8 @@ const BASE = {
   // while open, so the nine digests above stay as recorded on main. Re-recorded again (TZ=UTC) when the
   // chip parts became whole wrapping units: a space between parts and a "남은 요청 N회" unit span are the
   // only markup change (diffed with HPS_A5_DUMP_DIR).
-  "ChatPanel/classroom-class-funded": "697ca11230f0bd50d16f6dd2b4863bab03414de1316154d0be6cdfa89a72d638",
-  "ChatPanel/classroom-access-unknown": "a765e77fad980c4f28d2c1a3571c0462ec2ebdacab3ea27240cbea68036d1636",
+  "ChatPanel/classroom-class-funded": "37f19a1546d13f618a2e1a2f87bd9ab1916ac24acc334858e0e906a2b7880dc5",
+  "ChatPanel/classroom-access-unknown": "751451d5dc2ba5bae2df2bdc169a3e9cabeabb23fa81dd48f4ed7beff891f296",
 };
 
 const status = rendererStatus();

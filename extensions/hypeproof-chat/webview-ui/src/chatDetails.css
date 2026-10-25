@@ -758,3 +758,11 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
 .hps-sketch-tools { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-2); }
 .hps-sketch-tools [aria-pressed="true"] { border-color: var(--hp-border-control-selected); background-color: var(--hp-bg-control-selected); font-weight: var(--hp-weight-strong); }
 .hps-sketch-canvas { display: block; width: 100%; max-width: 100%; height: auto; aspect-ratio: 1; touch-action: none; margin: var(--ds-c-studio-chatdetails-space-2) 0; }
+/* DES-CGP-DS-27: in-flow at the pane bottom, never covering the composer or stealing focus. */
+.hps-copy-feedback { display: contents; }
+.hps-copy-toasts { display: flex; flex-direction: column; align-items: center; min-width: 0; max-height: 25vh; overflow-y: auto; gap: var(--ds-c-studio-chatdetails-space-7); }
+.hps-copy-toast-entry { display: contents; }
+.hps-shell .hps-copy-toasts .hps-copy-toast { display: flex; align-items: flex-start; gap: var(--ds-c-studio-chatdetails-space-7); box-sizing: border-box; width: fit-content; max-width: min(100%, var(--ds-c-studio-copy-toast-max)); margin: 0; padding: var(--ds-c-studio-chatdetails-space-7); border: var(--ds-c-studio-styles-size-7) solid var(--hp-border-divider-default); border-radius: var(--ds-c-studio-chatdetails-radius-3); background: var(--hp-bg-panel-default); color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; }
+.hps-shell .hps-copy-toasts .hps-copy-toast:empty { display: none; }
+.hps-copy-toast > .hps-icon { flex-shrink: 0; }
+@media (forced-colors: active) { .hps-shell .hps-copy-toasts .hps-copy-toast { color: CanvasText; background: Canvas; border-color: CanvasText; } }

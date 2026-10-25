@@ -12106,6 +12106,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/CodeBlock.tsx"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CopyFeedback.tsx"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx"
         },
         {

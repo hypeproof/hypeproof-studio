@@ -1,3 +1,4 @@
+import { CopyFeedback } from './CopyFeedback';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { ChatIcon, useConfirmedCopy } from './ChatDetails';
 import './codeBlock.css';
@@ -67,7 +68,7 @@ export function CodeBlockTools({ code, wrap, onToggleWrap }: { code: string; wra
       <span>{WRAP_LABEL}</span>
     </button>
     </div>
-    <span role={state === 'failed' ? 'alert' : 'status'} className="hps-copy-status hps-codeblock-status">{state === 'copied' ? COPY_DONE_STATUS : state === 'failed' ? COPY_FAILED_STATUS : ''}</span>
+    <CopyFeedback failed={state === 'failed'} className="hps-codeblock-status">{state !== 'idle' && <><ChatIcon kind={state === 'failed' ? 'alert' : 'check'} size={16} /><span>{state === 'copied' ? COPY_DONE_STATUS : COPY_FAILED_STATUS}</span></>}</CopyFeedback>
   </div>;
 }
 
