@@ -260,7 +260,7 @@ const DELEGATED = [
   { id: "a1", role: "assistant", content: "맡겨 볼게요", createdAt: 2 },
   { id: delegationRowId("toolu_T", "s0"), role: "tool", content: "", createdAt: 3, tool: { icon: "🤝", label: "코드리뷰어: 살펴봐 줘", state: "done" } },
 ];
-type Row = { panel: string; key: string | null; mode: "personal" | "classroom"; config?: Record<string, unknown>; history?: unknown[]; msgs?: () => Record<string, unknown>[]; after?: () => Promise<void>; blocking?: boolean; readOnlyDraft?: boolean };
+type Row = { panel: string; key: string | null; mode: "personal" | "classroom"; config?: Record<string, unknown>; history?: unknown[]; msgs?: () => Record<string, unknown>[]; after?: () => Promise<void>; blocking?: boolean; readOnlyDraft?: boolean; tab?: string };
 const PANELS: Row[] = [
   { panel: "task-sources", key: "CitationPreview.tsx:CitationPreview", mode: "personal", history: CITED },
   { panel: "citations", key: "CitationPreview.tsx:CitationRack", mode: "personal", history: CITED },
@@ -300,6 +300,8 @@ const PANELS: Row[] = [
   { panel: "lesson-tip", key: "LessonTip.tsx:LessonTip", mode: "classroom" },
   { panel: "instructor-inbox", key: "InstructorInbox.tsx:InstructorInbox", mode: "classroom" },
   { panel: "materials", key: "MaterialsPanel.tsx:MaterialsPanel", mode: "classroom", config: { materials: true } },
+  // CGP-KNOW-R-002: the same list as the activity home's 자료 view in the task workspace rail.
+  { panel: "activity-home-materials", key: "MaterialsPanel.tsx:MaterialsPanel", mode: "personal", config: { materials: true }, tab: "자료" },
   { panel: "help-request", key: "HelpRequest.tsx:HelpRequest", mode: "classroom" },
   { panel: "evidence", key: "CompletionGate.tsx:CompletionGate", mode: "classroom", msgs: () => [{ type: "learningState", state: learningState({ task: "t", events: [] }) }] },
   { panel: "observation", key: "NativeObservationPanel.tsx:NativeObservationPanel", mode: "classroom", config: { profile: { ...(classroomApp as unknown as { profile: object }).profile, observation: { format: "hps-observation/1", scope: "s", assess: true, record: true } } } },
@@ -321,6 +323,11 @@ async function scenario(row: Row) {
   if (row.mode === "personal") await hostMsg({ type: "taskWorkspaceState", view: view(5), ...ctx });
   for (const msg of row.msgs?.() ?? []) await hostMsg({ ...ctx, ...msg });
   await row.after?.();
+  if (row.tab) {
+    const tab = m.host.findAll((e) => e.getAttribute("role") === "tab" && e.textContent === row.tab)[0];
+    ok(tab, `the ${row.tab} tab is drawn`);
+    await act(async () => { click(tab); });
+  }
   return { ...probe(m.host), host: m.host };
 }
 

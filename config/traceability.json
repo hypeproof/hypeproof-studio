@@ -13107,6 +13107,62 @@
           "path": "extensions/hypeproof-chat/test/removal-undo-browser.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-ACTIVITY-HOME",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-REQ-ACTIVITY-MATERIALS"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Activity home views (CGP-KNOW-R-002)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ACTIVITY-HOME",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACTIVITY-HOME",
+        "ST-IMP-TASK-WORKSPACE",
+        "ST-IMP-ACTIVITY-MATERIALS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/activityHome.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MaterialsPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ACTIVITY-HOME",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACTIVITY-HOME",
+        "ST-IMP-ACTIVITY-HOME"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/activity-home.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-home-computed.smoke.mjs"
+        }
+      ]
     }
   ]
 }
