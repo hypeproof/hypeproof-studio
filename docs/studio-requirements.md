@@ -5812,7 +5812,7 @@ of conversation/file synchronization.
   entry. Viewing uses `GET /v1/me/workspaces`; an empty result creates nothing.
   `개인 공간 만들기` explicitly calls the idempotent `POST` with `{}`. The client
   accepts only the current account's personal workspace.
-- The learner names a project (trimmed 1–160 JS characters). Creation sends a
+- The learner names a project (trimmed 1–160 JS characters; NUL is rejected). Creation sends a
   host-generated mutation ID; retry after a lost reply keeps the exact ID/title
   while the host session remains open. A different title cannot overwrite the
   pending request. The host never sends account credentials to the webview.
@@ -5823,7 +5823,10 @@ of conversation/file synchronization.
   fences them before remote revocation finishes. Late responses and intents
   tagged with the previous account cannot paint or mutate the next account.
 - Network/auth refusal offers a retry or existing account refresh/sign-in path.
-  Metadata actions never activate a pass, send an AI request, open a local folder,
+  On an authentication refusal, previously shown cloud metadata and the selected
+  record are cleared; an uncertain retry remains host-private until the same
+  account recovers. A matching creation acknowledgement clears the submitted
+  name form. Metadata actions never activate a pass, send an AI request, open a local folder,
   import local activities, or change runtime authority. Existing free/local entry
   remains independent.
 

@@ -8,6 +8,7 @@ export interface PersonalSpaceView {
   opened: boolean; busy?: boolean; loaded?: boolean; workspace?: PersonalWorkspace;
   projects: PersonalProject[]; selected?: PersonalProject; message?: string; failed?: boolean;
   pendingTitle?: string; authenticationRequired?: boolean;
+  created?: { id: string; title: string };
 }
 interface Options {
   account: { view(): AccountView; accessToken(): Promise<string | undefined>; matches(service: string, site: string): boolean };
@@ -17,7 +18,7 @@ interface Options {
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const id = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 256;
 const time = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
-export const projectTitle = (v: unknown): string | undefined => typeof v === 'string' && v.trim().length > 0 && v.trim().length <= 160 ? v.trim() : undefined;
+export const projectTitle = (v: unknown): string | undefined => typeof v === 'string' && !v.includes('\0') && v.trim().length > 0 && v.trim().length <= 160 ? v.trim() : undefined;
 class SpaceError extends Error { readonly code: string; constructor(code: string) { super(code); this.code = code; } }
 const needsAccount = (error: unknown): boolean => object(error) && typeof error.code === 'string' && /401|unauthorized|authentication_required|invalid_token|session_revoked|account_suspended|account_deleted/.test(error.code);
 const message = (error: unknown): string => needsAccount(error)
@@ -74,7 +75,14 @@ export class PersonalSpace {
     const generation = this.generation;
     this.state = { ...this.state, opened: true, busy: true, message: undefined, failed: false, authenticationRequired: false }; this.options.changed();
     try { await work(generation); }
-    catch (error) { if (this.current(generation)) { this.state.message = message(error); this.state.failed = true; this.state.authenticationRequired = needsAccount(error); } }
+    catch (error) {
+      if (this.current(generation)) {
+        // A refused session may keep its account presentation until refresh. Do not keep
+        // that account's cloud records on screen; an uncertain write stays host-private.
+        if (needsAccount(error)) this.state = { opened: true, projects: [], authenticationRequired: true };
+        this.state.message = message(error); this.state.failed = true;
+      }
+    }
     finally { if (this.current(generation)) { this.state.busy = false; this.options.changed(); } }
   }
   private async projects(workspace: PersonalWorkspace, generation: number): Promise<PersonalProject[]> {
@@ -90,7 +98,7 @@ export class PersonalSpace {
       const projects = workspace ? await this.projects(workspace, generation) : [];
       if (!this.current(generation)) return;
       const selected = projects.find(p => p.id === (selectedId ?? this.state.selected?.id));
-      this.state = { ...this.state, loaded: true, workspace, projects, selected,
+      this.state = { ...this.state, loaded: true, workspace, projects, selected, pendingTitle: this.pending?.title,
         ...(selectedId && !selected ? { message: '이 프로젝트를 찾지 못했어요. 새로고침한 목록에서 다시 골라 주세요.' } : {}) };
     });
   }
@@ -98,7 +106,7 @@ export class PersonalSpace {
     await this.run(async generation => {
       const workspace = this.workspace((await this.call('/me/workspaces', generation, {})).workspace);
       const projects = await this.projects(workspace, generation);
-      if (this.current(generation)) this.state = { ...this.state, loaded: true, workspace, projects };
+      if (this.current(generation)) this.state = { ...this.state, loaded: true, workspace, projects, pendingTitle: this.pending?.title };
     });
   }
   async create(title: unknown): Promise<void> {
@@ -112,7 +120,7 @@ export class PersonalSpace {
       const project = this.project((await this.call(`/me/workspaces/${encodeURIComponent(workspace.id)}/projects`, generation, this.pending)).project, workspace.id);
       if (!this.current(generation)) return;
       this.pending = undefined;
-      this.state = { ...this.state, pendingTitle: undefined, projects: [project, ...this.state.projects.filter(p => p.id !== project.id)], selected: project, message: '프로젝트 이름을 저장했어요.' };
+      this.state = { ...this.state, pendingTitle: undefined, created: { id: project.id, title: project.title }, projects: [project, ...this.state.projects.filter(p => p.id !== project.id)], selected: project, message: '프로젝트 이름을 저장했어요.' };
     });
   }
 }

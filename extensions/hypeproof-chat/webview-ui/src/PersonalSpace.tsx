@@ -1,10 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PersonalSpaceView } from '../../src/personalSpace';
 import type { StartRequest } from '../../src/startPageProtocol';
 
 /** This surface opens a saved metadata record, never a local folder or conversation. */
 export function PersonalSpace({ space, accountId, post }: { space: PersonalSpaceView; accountId: string; post(message: StartRequest): void }) {
   const [title, setTitle] = useState('');
+  const submitted = useRef<string>();
+  useEffect(() => {
+    if (space.created && submitted.current === space.created.title) {
+      setTitle(current => current.trim() === space.created!.title ? '' : current);
+      submitted.current = undefined;
+    }
+  }, [space.created?.id, space.created?.title]);
+  const create = (value: string) => { submitted.current = value.trim(); post({ accountId, type: 'personalProjectCreate', title: value }); };
   const pending = space.pendingTitle;
   const selected = space.selected;
   return <section className="studio-personal-space" aria-label="개인 공간" aria-busy={!!space.busy}>
@@ -17,10 +25,10 @@ export function PersonalSpace({ space, accountId, post }: { space: PersonalSpace
         <button className="studio-choice" disabled={space.busy} onClick={() => post({ accountId, type: 'personalSpaceEnsure' })}>개인 공간 만들기</button>
       </>}
       {space.workspace && <>
-        <form onSubmit={event => { event.preventDefault(); if (!space.busy && title.trim()) post({ accountId, type: 'personalProjectCreate', title }); }}>
+        <form onSubmit={event => { event.preventDefault(); if (!space.busy && title.trim()) create(title); }}>
           <label htmlFor="personal-project-title">새 프로젝트 이름</label>
           <input id="personal-project-title" value={pending ?? title} maxLength={160} disabled={space.busy || !!pending} autoComplete="off" placeholder="만들고 싶은 것의 이름" onChange={event => setTitle(event.target.value)} />
-          {pending ? <button className="studio-choice" type="button" disabled={space.busy} onClick={() => post({ accountId, type: 'personalProjectCreate', title: pending })}>이 이름 저장 다시 시도</button>
+          {pending ? <button className="studio-choice" type="button" disabled={space.busy} onClick={() => create(pending)}>이 이름 저장 다시 시도</button>
             : <button className="studio-choice" type="submit" disabled={space.busy || !title.trim()}>프로젝트 이름 저장</button>}
         </form>
         <h3>저장된 프로젝트</h3>
