@@ -5966,59 +5966,46 @@ host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
 
-## Personal workspace metadata — REA W01 partial
+## My-questions jump list (CGP-CHAT-R-028)
 
-`ST-REQ-PERSONAL-WORKSPACE-METADATA` is the bounded metadata contract below.
-Its parent `ST-REQ-PERSONAL-ACCOUNT` already assigns the account domain to
-`jayleekr`; the new requirement, test and implementation nodes retain that owner.
-This registration does not assign the whole REA W01 to a new owner or accept its
-remaining identity, organization, child-policy or admission scope.
+REQ-STUDIO-MY-QUESTIONS / CGP-CHAT-R81 (CGP-CHAT-081) / CGP-CHAT-D81 / PI#3 (learning is embedded
+in the work): a long task lets the learner go back to each of their own prompts, which supports
+looking back over how they framed the work (reflection at submit time). The task header offers a
+quiet 44px "내 질문" button (14px floor, DEC-29) when the transcript as drawn holds at least 4
+user turns; below 4 there is no button. "As drawn" means one version per prompt group
+(REQ-STUDIO-CHAT-EDIT-RESEND): an edited prompt counts once and the list points at the version
+on screen. Tool, system and assistant lines never count.
 
-Approved REA W01 adds a signed-in personal-space entry to the existing start page
-(REQ-L13 account boundary; Product Intent PI#1 and PI#5). It exposes learner naming
-and ownership without showing capability labels. This slice stores and reopens
-**project metadata only**; it is not the full REA workspace requirement or evidence
-of conversation/file synchronization.
+The button opens a popover (`role="dialog"`, labelled "내 질문") under it with a numbered list:
+one 44px row per prompt in transcript order, at most 10 rows visible before the list scrolls,
+inside the viewport, focus moving to the first row. Each row shows the prompt's first non-empty
+line of the learner's own words: a leading `> ` quote block (CGP-CHAT-R-007) is skipped when the
+learner wrote something after it, C0/C1 controls other than whitespace, bidi embeddings,
+overrides, isolates and marks, the zero-width space and the BOM are removed (ZWJ/ZWNJ stay; tab,
+VT and FF collapse to one space), U+2028/2029 end the line, a line that draws nothing (only
+joiners, Hangul fillers or soft hyphens) is skipped, and the line is cut at 60 grapheme clusters
+or 240 UTF-16 code units, whichever comes first, with "…"; a prompt with no visible text reads
+"이미지만 보낸 질문" or "내용 없는 질문". Text is rendered as text, never as markup.
 
-- Only an enabled existing account runtime and a signed-in identity expose the
-  entry. Viewing uses `GET /v1/me/workspaces`; an empty result creates nothing.
-  `개인 공간 만들기` explicitly calls the idempotent `POST` with `{}`. The client
-  accepts only the current account's personal workspace.
-- The learner names a project (trimmed 1–160 JS characters; NUL is rejected). Creation sends a
-  host-generated mutation ID; retry after a lost reply keeps the exact ID/title
-  while the host session remains open. A different title cannot overwrite the
-  pending request. The host never sends account credentials to the webview.
-- The list comes from the Service. `다시 열기` refreshes that account's list and
-  opens the matching saved title record; a missing record is recoverable. The UI
-  states that no conversation/file is synchronized or automatically imported.
-- Account changes clear the list, selection and retry request. Logout clears and
-  fences them before remote revocation finishes. Late responses and intents
-  tagged with the previous account cannot paint or mutate the next account.
-- Network/auth refusal offers a retry or existing account refresh/sign-in path.
-  On an authentication refusal, previously shown cloud metadata and the selected
-  record are cleared; an uncertain retry remains host-private until the same
-  account recovers. A matching creation acknowledgement clears the submitted
-  name form. Metadata actions never activate a pass, send an AI request, open a local folder,
-  import local activities, or change runtime authority. Existing free/local entry
-  remains independent.
+Choosing a row closes the list, stops following the live answer (personal chat), scrolls the
+transcript so that prompt sits at its top (instantly under reduced motion) and moves keyboard
+focus onto that prompt's bubble, whose focus ring sits inside the scrolling transcript. A prompt
+being edited in place focuses its editor; a prompt whose row failed to render (CGP-CHAT-R50) jumps
+to its turn fallback box. The bubble or box is focusable only for that jump (`tabindex="-1"`,
+removed when focus leaves or when focus does not take), so the transcript's Tab order is
+unchanged. Escape, an outside press or Tab closes the list per REQ-STUDIO-FOCUS-RESTORE;
+a task or activity switch closes it. The list is display only: no host message, no stored
+state, no data leaves the device. It is available in every seat whose chat panel draws the task
+header (personal, trial, pass and classroom/lesson; also instructor mode, where the prompts are the
+instructor's own). The classroom transcript keeps its existing scroll-to-latest on a new message
+or stream change, so a reply arriving after a jump scrolls it back down there (a jump while a turn
+streams is not pinned in the classroom seat). Owner-delegated choices are in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
 
-Release dependency: `release.json` requires the literal `account-api@2` line
-from Service in addition to the existing `studio-api` package surface. Service
-line 2 must cover the earlier account contract plus these workspace endpoints and
-continue serving line 1 for existing consumers such as Lab. A Service
-that only provides the earlier account/chat API is not a compatible provider for
-this metadata UI. The line-2 provider must include the workspace contract and additive
-migration `0061-personal-workspaces.sql`; declaring a line does not prove that the
-production migration or deployment has happened. Existing account/model contracts
-remain unchanged.
-
-Implementation: `src/personalSpace.ts`, the start-page bridge, and
-`webview-ui/src/PersonalSpace.tsx` under `extensions/hypeproof-chat/`.
-Focused evidence: `test/personal-space.test.mjs` (persistence across a new client,
-exact mutation retry, validation, auth failures and account-response fences),
-`test/personal-space-host.test.mjs` (scoped bridge and immediate logout), and
-`test/personal-space-render.test.tsx` (explicit actions, retry UI, escaped titles,
-metadata reopening and busy controls). These use synthetic accounts/Service
-responses. Production deployment, installed-app acceptance and real account data
-are **NOT RUN**. Retry intent is host-memory only: after a host restart, refresh
-and inspect the saved list before creating the same title again.
+Evidence: `extensions/hypeproof-chat/test/my-questions.smoke.mjs` (pure rules with positive and
+negative controls: threshold, drawn versions, quote skip, hostile characters, grapheme cut) and
+`my-questions-browser.smoke.mjs` (the mounted ChatPanel in headless Chromium, personal inside the
+task workspace frame and classroom lesson seat, dark/light, 800/1420 px: hidden below 4, 44px
+button and rows at the 14px floor, 10 visible rows, viewport containment, keyboard open, Escape
+focus return, keyboard jump that scrolls and focuses the bubble with an inset ring, temporary tab
+stop removed, forced colours, and the editor, fallback-box and missing-target jumps; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser).
