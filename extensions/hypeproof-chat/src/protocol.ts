@@ -788,6 +788,8 @@ export type WebviewMessage = (
   // logs to output channel so post-incident reconstruction has a trail.
   | {
       type: "webviewError";
+      /** Opaque response-row identity; the host can correlate current rows to their stream. */
+      messageId?: string;
       message: string;
       stack: string;
       componentStack: string;

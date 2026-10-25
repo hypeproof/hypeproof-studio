@@ -5509,3 +5509,23 @@ External draft replacements/imports restore the resulting complete text inline.
 The existing host draft length bound is honored when adding/editing a chip. No
 paste sends automatically or changes tool grants. This supports PI#1 learner
 agency by keeping long source text inspectable and editable before the send.
+
+## Response render isolation (CGP-CHAT-R-016)
+
+CGP-CHAT-R50 / CGP-CHAT-050 / PI#1: each transcript row has a render boundary below
+the chat/composer. A throw in that row shows 이 답변을 표시하지 못했어요 with
+다시 보기 and 원문 보기. Retry remounts only that row, never sends another model
+request, and never loops automatically. Raw view renders the original string as
+escaped selectable text with bounded scrolling, without Markdown/HTML execution.
+Other responses and the composer keep their state and remain interactive.
+
+The boundary reports once per mounted row through webviewError, with opaque
+message ID and sanitized error class; no answer, error message or stack is sent.
+The host records the matching current stream/turn ID where its answer mapping is
+available, otherwise explicitly unknown (historical rows can outlive that map).
+Activity/task identity keys reset fallbacks so one conversation cannot inherit
+another's failure. Keyboard retry refocuses the restored row (or retry control
+when it throws again); opening raw view focuses the readable text. This supports
+uninterrupted learner agency (PI#1), not an automatic resend or capability change.
+React event-handler errors and failures before row rendering remain under their
+existing guards; this boundary covers row render/descendant lifecycle failures.
