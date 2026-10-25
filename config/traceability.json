@@ -7937,6 +7937,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/turnSettle.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/SteerDelivery.tsx"
         }
       ]
     },
@@ -7954,6 +7957,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/steer-settle.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/steer-delivery-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/steer-delivery-app.smoke.mjs"
         }
       ]
     },

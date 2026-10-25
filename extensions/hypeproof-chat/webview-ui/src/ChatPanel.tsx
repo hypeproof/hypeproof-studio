@@ -6,6 +6,7 @@ import { PastedDraft } from './PasteChip';
 import { fullDraft, visibleDraft, editVisible, replaceVisible, changePaste, longPaste, type DraftPart } from './pastedDraft';
 import { TurnBoundary } from './TurnBoundary';
 import { ClassWindowNotice } from "./ClassWindowNotice";
+import { SteerDelivery, type SteerDeliverySnapshot } from './SteerDelivery';
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
 import { visibleAttempts, ATTEMPT_HISTORY_NOTE } from '../../src/answerAttempts';
@@ -570,6 +571,7 @@ export function ChatPanel(props: Props) {
       if (msg.type === "inputRejected") {
         if(msg.photos?.length) setStagedPhotos(old=>[...old,...msg.photos!.filter(p=>!old.some(own=>own.id===p.id)).map(p=>({id:p.id,name:attachmentDisplayName(p.name),thumb:null,ready:true}))]);
         setSteerMarks(steerMarksRefuse);
+        setSteerDelivery(null);
         const rejectedMode = msg.toolMode ?? 'auto';
         const current = snapshot.current;
         if (current.queued !== null || current.text.trim() || current.recovered?.length || composerHasAttachments.current || preparingImagesRef.current) {
@@ -826,13 +828,20 @@ export function ChatPanel(props: Props) {
   const sendWhenOnline = (send: () => unknown, held: HeldNoteKind) => guardSend(connectivity.online, send, () => setImgNote(OFFLINE_HELD_NOTES[held]));
   // CGP-CHAT-R-012 — "지금 방향 바꾸기": stop through the Stop path; the parked text goes on the end edge (steerNow.ts).
   const steerRef = useRef<true | null>(null);
+  const steerFocus = useRef<Element | null>(null);
   const [steerPending, setSteerPending] = useState(false);
+  const [steerDelivery, setSteerDelivery] = useState<SteerDeliverySnapshot | null>(null);
+  const steerScope = JSON.stringify([activityId, taskId]);
+  const clearSteerDelivery = useCallback(() => setSteerDelivery(null), []);
+  useEffect(() => { setSteerDelivery(null); }, [steerScope]);
+  useEffect(() => { if (error && !streaming) setSteerDelivery(null); }, [error, streaming]);
   const [steerMarks, setSteerMarks] = useState<SteerMark[]>([]);
   const steerShown = steerOffered({ streaming, queued, queuedPaused, sendLocked: props.sendLocked, unavailable });
   const steerNow = () => {
     const press = steerPress({ offered: steerShown, online: connectivity.online, pending: steerRef.current !== null });
     if (press === 'ignore') return;
     if (press === 'hold') { setImgNote(STEER_OFFLINE_NOTE); return; }
+    steerFocus.current = document.activeElement?.classList?.contains('hps-queued-steer') ? document.activeElement : null;
     steerRef.current = true; setSteerPending(true); setImgNote(null);
     props.onCancel();
   };
@@ -1020,7 +1029,7 @@ export function ChatPanel(props: Props) {
     // its mode until acceptance; a paused item gives it an explicit retry path
     // instead of silently losing it or sending later on an unrelated render.
     const stoppedAt = steer?.stoppedHere ? steerMarkTarget(messages) : undefined;
-    if (submit(text, queuedToolMode)) { setQueued(null); if (stoppedAt) setSteerMarks((marks) => [...marks, { id: stoppedAt, sent: false, from: messages.length }]); }
+    if (submit(text, queuedToolMode)) { setQueued(null); if (steer) { setSteerDelivery({ text, from: messages.length, scope: steerScope }); if (steerFocus.current && (document.activeElement === steerFocus.current || document.activeElement === document.body)) textareaRef.current?.focus({ preventScroll: true }); steerFocus.current = null; } if (stoppedAt) setSteerMarks((marks) => [...marks, { id: stoppedAt, sent: false, from: messages.length }]); }
     else {
       setQueuedPaused(true);
       setImgNote(note => note ?? '메시지를 보내지 못해 보관했습니다. 준비가 끝나면 보관한 메시지의 보내기를 눌러 주세요.');
@@ -1945,6 +1954,7 @@ export function ChatPanel(props: Props) {
             </span> : <button type="button" className="hps-queued-send" onClick={() => setDiscardRequest(request)}>삭제</button>}
           </div>)}
         </div>}
+        {steerDelivery?.scope === steerScope && <SteerDelivery key={`${steerDelivery.scope}:${steerDelivery.from}`} delivery={steerDelivery} messages={messages} streamFor={props.streamFor} streaming={streaming} sendPending={props.sendPending} onDone={clearSteerDelivery} />}
         {queued !== null && (
           // #416 — what is parked, and how to take it back. Cancel returns it to
           // the draft (see restoreQueuedToDraft): the × must not mean "delete".

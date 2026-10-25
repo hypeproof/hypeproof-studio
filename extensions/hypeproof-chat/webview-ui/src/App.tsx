@@ -809,6 +809,7 @@ export function App() {
           errorRequestId={state.errorRequestId}
           errorRunbookUrl={state.errorRunbookUrl}
           canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId && state.errorRetry}
+          streamFor={state.streamFor}
           onSend={send}
           onRetry={retry}
           onRetryLast={retryLast}
