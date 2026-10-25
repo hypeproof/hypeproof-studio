@@ -694,8 +694,11 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
   .hps-shell[data-chat-detail="personal"] .hps-missing-folder-action { width: 100%; }
 }
 
-/* DES-CGP-DS-36: both transcript branches reserve space and follow the host's thumb palette. */
+/* DES-CGP-DS-36: both transcript branches reserve space and follow the host's thumb palette.
+   position: relative makes the transcript the containing block of its sr-only rows (#2735), so they
+   cannot grow the page and draw a second, page-level scrollbar on hosts with classic scrollbars. */
 .hps-shell .hps-messages {
+  position: relative;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default)) transparent;

@@ -41,5 +41,18 @@ try{
  await b.evaluate(`document.querySelector('.hps-messages').scrollTop=0`);await b.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:0,y:0});await settle();
  const forced=await geometry();assert.equal(forced.gutter,'stable');const ink=await pixel(Math.floor(forced.right-5),Math.ceil(forced.top+8));const want=await b.evaluate(`(()=>{const p=document.createElement('i');p.style.color='CanvasText';document.body.append(p);const c=getComputedStyle(p).color.match(/\\d+/g).slice(0,3).map(Number);p.remove();return c})()`);assert.deepEqual(ink.slice(0,3),want,`forced-colors thumb paints CanvasText exactly: ${ink} vs ${want}`);
  if(evidence){const shot=await b.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${evidence}/forced-colors.png`,Buffer.from(shot.data,'base64'));}
- console.log('PASS transcript stable geometry before/during/after overflow and painted default/hover/pressed host colors in12 actual ChatPanel states');
+ // #2735: the host webview does not clip the page (html, body and #root are only height:100%), so the transcript
+ // must contain its sr-only rows itself. Otherwise they grow the document, and hosts with classic scrollbars
+ // (Windows, many Linux desktops) draw a second, page-level scrollbar next to the transcript's own.
+ await b.send('Emulation.setEmulatedMedia',{features:[]});
+ for(const seat of ['personal','classroom']){
+  const config=chatConfig(3,{activity:{...chatConfig().activity,kind:seat},profile:{...chatConfig().profile,lesson:null},taskWorkspace:seat==='personal'?{tasks:[],sources:[]}:undefined});
+  const props=chatPanelProps({config,messages:Array.from({length:30},(_,i)=>({id:'page-'+i,role:i%2?'assistant':'user',createdAt:i+1,content:'페이지 높이 '+i}))});
+  await b.load(`<html><style>${css}</style><body class="vscode-dark"><div id="root"></div><script>window.__scrollProps=${JSON.stringify(props)};</script><script>${script.outputFiles[0].text}</script></body></html>`,{width:800,height:900,dark:true});
+  await settle();
+  const page=await b.evaluate(`(()=>{const m=document.querySelector('.hps-messages'),rows=[...m.querySelectorAll('.hps-sr-only')];return {height:document.documentElement.scrollHeight,inner:innerHeight,rows:rows.length,escaped:rows.filter(r=>r.offsetParent!==m).length}})()`);
+  assert.ok(page.height<=page.inner,`${seat}: the page grew to ${page.height}px of ${page.inner}px because sr-only rows escape the transcript`);
+  assert.equal(page.escaped,0,`${seat}: ${page.escaped} of ${page.rows} sr-only rows are positioned outside the transcript`);
+ }
+ console.log('PASS transcript stable geometry before/during/after overflow and painted default/hover/pressed host colors in12 actual ChatPanel states; unclipped page keeps its height in both seats');
 }finally{try{if(evidence)writeFileSync(`${evidence}/geometry.json`,JSON.stringify(results,null,2));}finally{await b.close();}}
