@@ -295,6 +295,10 @@ via shipped theme tokens. All below must hold at 320px width and with Korean IME
     the personal task menu only; classroom, lesson and instructor seats have no task menu, so
     their copy is a follow-up. It copies visible learner/coach text only and applies the AE-39
     exclusions. See decisions.md "CGP-CHAT-R-024".
+11. **Shortcut sheet keys (R86, decided 2026-10-25, agent choice).** The sheet lists only keys
+    the chat webview binds today: Enter, Shift+Enter, Esc (close), Alt+Shift+J (personal task
+    layout) and `?`. Esc-to-stop, Cmd/Ctrl+F and a focus-composer key are not bound, so they are
+    not listed and not invented here. See decisions.md "CGP-CHAT-R-030".
 
 **CGP-CHAT-R19 tip source (2026-10-25, owner decision).** The served step has no tip key, so the
 lesson tip is the step's Chalk-authored `hint`, and its action prefills that hint. See

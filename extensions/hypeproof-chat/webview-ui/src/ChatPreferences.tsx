@@ -1,6 +1,6 @@
 import { finishModal } from './modalMotion';
 import './modalSurface.css';
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { imeComposing } from './imeGuard';
 import { useDialogFocus } from './dialogFocus';
 
@@ -11,7 +11,9 @@ import { useDialogFocus } from './dialogFocus';
  * REQ-STUDIO-FOCUS-RESTORE: Escape, × and a press on the backdrop close it; Tab stays inside; focus
  * returns to the element that opened it (the menu toggle), or the composer when that is gone.
  */
-export function ChatPreferences({ open, onClose, initialFocus, opener, children }: { open: boolean; onClose: () => void; initialFocus?: string; opener?: () => HTMLElement | null; children: ReactNode }) {
+export function ChatPreferences({ open, onClose, initialFocus, opener, children, title = '대화 설정', closeLabel = '대화 설정 닫기', className }: { open: boolean; onClose: () => void; initialFocus?: string; opener?: () => HTMLElement | null; children: ReactNode; title?: string; closeLabel?: string; className?: string }) {
+  // CGP-CHAT-R-030: the shortcut sheet is the same modal with its own title, so the heading id is unique.
+  const titleId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const composing = useRef(false);
   // Declared before the focus hook: the dialog is shown before focus moves in, and closed (its
@@ -33,7 +35,7 @@ export function ChatPreferences({ open, onClose, initialFocus, opener, children 
   }, [open]);
   const dismiss = () => finishModal(dialog.current, onClose);
   useDialogFocus(dialog, { open, kind: 'modal', keepFocusOnDismiss: true, initialFocus: initialFocus ?? 'header button', onDismiss: dismiss, ...(opener ? { opener } : {}) });
-  return <dialog ref={dialog} className="hps-preferences hp-modal" aria-labelledby="chat-preferences-title"
+  return <dialog ref={dialog} className={['hps-preferences hp-modal', className].filter(Boolean).join(' ')} aria-labelledby={titleId}
     onKeyDown={event => {
       // CGP-DS-R-027 (#1880): an Escape that cancels an IME syllable must not close the dialog.
       // preventDefault stops the dialog's own close request; the cancel guard below covers a
@@ -44,7 +46,7 @@ export function ChatPreferences({ open, onClose, initialFocus, opener, children 
       if (event.key === 'Escape') event.stopPropagation();
     }}
     onCancel={event => { event.preventDefault(); if (!composing.current) dismiss(); }}>
-    <header><h2 id="chat-preferences-title">대화 설정</h2><button type="button" autoFocus aria-label="대화 설정 닫기" onClick={dismiss}>×</button></header>
+    <header><h2 id={titleId}>{title}</h2><button type="button" autoFocus aria-label={closeLabel} onClick={dismiss}>×</button></header>
     <div className="hps-preferences-body">{children}</div>
   </dialog>;
 }

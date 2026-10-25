@@ -5965,3 +5965,45 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## Keyboard shortcut sheet (CGP-CHAT-R-030)
+
+REQ-STUDIO-SHORTCUT-SHEET. CGP-CHAT-R86 / CGP-CHAT-086 / PI#1 (Useful work first): a learner can
+see which keys the chat panel answers to without leaving the work. 키보드 단축키 is a modal
+sheet with the settings dialog's surface and focus contract (REQ-STUDIO-FOCUS-RESTORE). It opens
+two ways:
+
+- from the settings dialog: a 키보드 단축키 button (44px target) in the personal 대화 설정 dialog
+  and in the classroom detail dialog opened from the access chip. Settings closes and the sheet
+  opens; closing the sheet returns focus to what opened settings, else the composer;
+- by `?` (Shift+/ on most layouts) when focus is outside every text field: not in the composer,
+  an input, a select, a contenteditable or a textbox/combobox, not inside an open dialog, menu or
+  list, with no Ctrl/Cmd/Alt, no key repeat and no IME composition. Typing `?` in the composer
+  stays text. Focus returns to the element that had it.
+
+It lists only keys this webview binds today, each named for the platform (`⌥ Option` and
+`⇧ Shift` on macOS, `Alt` and `Shift` elsewhere, from `navigator.platform`):
+
+| Keys | Row | Bound by |
+|---|---|---|
+| Enter | 메시지 보내기 (답하는 중에 누르면 끝나고 보내도록 예약해요) | composer key handler, #416 queue; nothing while the composer is read-only |
+| Shift + Enter | 줄 바꾸기 | the textarea's own newline |
+| Esc | 열린 창·메뉴 닫기 | dialog, menu and panel focus contract |
+| Alt + Shift + J | 대화로 바로 가기 (작업 화면 안에서 눌러요; listed only while the personal task layout is shown) | TaskWorkspace (CGP-AGENT-D-019), focus inside the task layout |
+| ? | 이 단축키 목록 열기 (입력창 밖에서) | this sheet |
+
+Not listed because nothing binds them yet: Esc to stop an answer (Stop stays the button),
+Cmd/Ctrl+F (no find in the chat webview), and a focus-the-composer key. A row is added in
+`webview-ui/src/chatShortcuts.ts` in the same change that binds its key. The sheet does not
+read the VS Code keybinding editor and does not reflect user rebinding (REQ-CGPV-29 asks for
+that later). The classroom settings dialog now draws on the theme surface outside the task
+layout (it had no background there before).
+
+Tests: `test/shortcut-sheet-browser.smoke.mjs` (real App bundle in headless Chromium; personal
+and classroom, dark and light, 320/800/1420 px, macOS and Windows platform names, forced
+colours; opens from settings and from `?`, not from the composer or with a modifier, repeat or
+composition; the listed rows equal the bound set and each listed key is pressed on the real
+panel with real key input: Enter sends, Shift+Enter inserts a line break without sending, Esc
+closes, Alt+Shift+J focuses the conversation, `?` opens; 44px entry and close, >=14px text,
+opaque surface inside the viewport, outlined key caps). It fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser.

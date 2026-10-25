@@ -60,6 +60,7 @@ import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
+import { ShortcutSheet, useShortcutSheetKey } from './ShortcutSheet';
 import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
 import { SafetyNotice } from './SafetyNotice';
@@ -421,6 +422,12 @@ export function ChatPanel(props: Props) {
   // CGP-SHELL-D-028: the classroom detail dialog mounts only while open, so its close button's
   // autoFocus runs before the focus hook could see the opener; remember the opener here instead.
   const preferencesOpener = useRef<HTMLElement | null>(null);
+  // CGP-CHAT-R-030 — 키보드 단축키: opened by `?` outside a text field, or from the settings dialog.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutsOpener = useRef<HTMLElement | null>(null);
+  useShortcutSheetKey(!shortcutsOpen, () => { shortcutsOpener.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null; setShortcutsOpen(true); });
+  // From settings: the settings dialog closes first, so focus later returns to what opened settings.
+  const openShortcutsFromPreferences = () => { shortcutsOpener.current = preferencesOpener.current; setPreferencesOpen(false); setPreferencesUsage(false); setShortcutsOpen(true); };
   const lastReplyChoice = useRef<{ messageId: string; answer: string } | null>(null);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
@@ -2344,6 +2351,7 @@ export function ChatPanel(props: Props) {
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
       </ChatPreferences>}
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
         {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}
@@ -2363,9 +2371,11 @@ export function ChatPanel(props: Props) {
         </fieldset>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
+        <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
         </>}</PanelBoundary>
       </ChatPreferences>}
+      <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} opener={() => shortcutsOpener.current} />
     </div></CopyFeedbackRegion>
   );
 }

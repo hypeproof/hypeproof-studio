@@ -741,3 +741,12 @@ These are conservative implementation choices, not new human agreements.
 - 보관함 lives in the task rail as a separate view (DES-CHAT-77), entered from a "보관함 N" button shown only when something is archived. 다시 열기 is the quiet neutral 44px button at the 14px floor (DEC-29), no red.
 - Seats: personal task workspaces only (no lesson, not instructor). Class seats have no task list; nothing on any seat deletes a task permanently.
 - Default state: on (local display state only; no data leaves the device, no permission change).
+
+## CGP-CHAT-R-030: shortcut sheet scope (2026-10-25, agent choice)
+
+- What is listed: only keys the chat webview binds today (Enter send/queue, Shift+Enter newline, Esc close, Alt+Shift+J conversation while the personal task layout is mounted, `?` this sheet), each with the platform's modifier name. The acceptance names Esc stop, Cmd/Ctrl+F and focus composer as examples, but none of them is bound on main; the row's own rule ("lists only bound keys") wins, so they are not listed and not built here. Binding Esc to stop would overload the key that closes panels and cancels IME syllables, and find belongs to a search row. Each later binding adds its row in `chatShortcuts.ts` in the same change.
+- Where: the personal 대화 설정 dialog and the classroom detail dialog (opened from the access chip) get a 키보드 단축키 button; `?` opens it in every ChatPanel seat (instructor mode included) when focus is outside text fields, dialogs, menus and lists; a seat without the settings dialog has only `?`.
+- Rebinding: the sheet does not read VS Code keybindings (REQ-CGPV-29's "reflects user rebinding" is not claimed).
+- Side fix: the classroom settings dialog had no surface colour outside `.tw-workspace`; it now falls back to the theme sidebar/editor colour so the page no longer shows through.
+- Default state: on; display only, no host message, file or network request.
+

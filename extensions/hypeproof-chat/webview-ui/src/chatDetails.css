@@ -273,7 +273,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-chip:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 .hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
 .hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: var(--ds-c-studio-chatdetails-space-16); }
-.hps-preferences { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); max-height: calc(100vh - var(--ds-c-studio-chatdetails-size-23)); padding: 0; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-4)); background: var(--tw-panel); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-8); box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-4) var(--ds-c-studio-chatdetails-shadow-8) var(--ds-c-studio-chatdetails-shadow-9); overflow: auto; }
+.hps-preferences { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); max-height: calc(100vh - var(--ds-c-studio-chatdetails-size-23)); padding: 0; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-4)); background: var(--tw-panel, var(--vscode-sideBar-background, var(--vscode-editor-background))); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); border-radius: var(--ds-c-studio-chatdetails-radius-8); box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-4) var(--ds-c-studio-chatdetails-shadow-8) var(--ds-c-studio-chatdetails-shadow-9); overflow: auto; }
 .hps-preferences::backdrop { background: var(--ds-c-studio-chatdetails-surface-8); }
 .hps-preferences > header { display: flex; align-items: center; justify-content: space-between; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-20); border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); }
 .hps-preferences h2 { font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); margin: 0; }
@@ -285,6 +285,17 @@
 .hps-preferences select { max-width: 100%; min-height: var(--ds-c-studio-chatdetails-size-10); font-size: var(--hp-font-caption); }
 .hps-preferences p, .hps-preferences small { color: var(--tw-muted); overflow-wrap: anywhere; }
 .hps-preferences .hps-all-settings { margin-top: var(--ds-c-studio-chatdetails-space-1); padding: var(--ds-c-studio-chatdetails-space-2) 0; border: 0; min-height: var(--ds-c-studio-chatdetails-size-8); background: transparent; color: inherit; }
+/* CGP-CHAT-R-030: the shortcut sheet. Key caps and notes keep the caption size (>=14px); a row
+   wraps its description under the keys when the dialog is narrow. The classroom dialog sits outside
+   .tw-workspace (no --tw-* values), so its surface and lines fall back to the theme's own colours;
+   before this the classroom dialog had no background and the page showed through. */
+.hps-preferences .hps-open-shortcuts { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
+.hps-shortcut-list { margin: 0; padding: 0; display: grid; gap: var(--ds-c-studio-chatdetails-space-2); }
+.hps-shortcut-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-5); padding: var(--ds-c-studio-chatdetails-space-2) 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); }
+.hps-shortcut-row dt { flex: 0 0 auto; margin: 0; white-space: nowrap; }
+.hps-shortcut-row dd { flex: 1 1 auto; margin: 0; color: var(--vscode-foreground, inherit); }
+.hps-shortcut-row dd small { display: block; font-size: var(--hp-font-caption); }
+.hps-shortcut-row kbd { font: inherit; font-size: var(--hp-font-caption); padding: 0 var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
 /* REQ-STUDIO-UI-POLISH-1: the access line is an inline notice (.hps-notice-caution, the offline
    banner's surface in styles.css) inside the composer's column, not loose text above it. Its one
    action keeps a 44px target; the notice's block padding shrinks so the row stays one line tall. */
