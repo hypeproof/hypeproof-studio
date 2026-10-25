@@ -19,6 +19,7 @@ import { KeyboardSplitter, SkipToInput } from './KeyboardNavigation';
 import { loadPanelSizes, PANEL_LIMITS, savePanelSizes, type PanelName } from './panelSizes';
 import { PanelBoundary } from './PanelBoundary';
 import { filterTasksByTitle, TASK_SEARCH_MAX } from './taskTitleFilter';
+import { offerUndo } from './UndoToast';
 
 interface Props {
   view: TaskWorkspaceView;
@@ -96,10 +97,11 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const [title, setTitle] = useState('');
   const [renamePending, setRenamePending] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
-  const renameRequest = useRef<{ id: string; scopeKey: string } | null>(null);
+  const renameRequest = useRef<{ id: string; scopeKey: string; taskId: string | null; title: string } | null>(null);
   const renameForm = useRef<HTMLFormElement>(null);
   const renameButton = useRef<HTMLButtonElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
+  const currentTitle = useRef<string | undefined>(undefined);
   const main = useRef<HTMLElement>(null);
   const conversation = useRef<HTMLDivElement>(null);
   const rail = useRef<HTMLElement>(null);
@@ -117,6 +119,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const railDialog = railOpen && viewport <= 700;
   const scopeKey = JSON.stringify([view.scope, view.activeTaskId]);
   const active = view.tasks.find(task => task.id === view.activeTaskId);
+  currentTitle.current = active?.title;
   const sources = useMemo(() => {
     const byUrl = new Map<string, Citation>();
     for (const message of messages) for (const source of message.citations ?? []) {
@@ -340,7 +343,17 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     if (!pending || pending.id !== message.requestId || pending.scopeKey !== current.current.scopeKey) return;
     renameRequest.current = null;
     setRenamePending(null);
-    if (message.saved) finishRename();
+    if (message.saved) {
+      finishRename();
+      // CGP-CHAT-R-029 — a rename offers 되돌리기; the host puts back the exact prior title it kept.
+      const undoId = message.undoId;
+      if (undoId) offerUndo({
+        kind: 'rename', scope: { taskId: pending.taskId }, hostUndoId: undoId,
+        undo: () => postToHost({ type: 'taskRenameUndo', undoId }),
+        stillValid: () => current.current.taskId === pending.taskId && currentTitle.current === pending.title,
+        focusAfter: () => renameButton.current,
+      });
+    }
     else {
       setRenameError('이름을 저장하지 못했습니다. 입력한 이름으로 다시 시도해 주세요.');
       restoreRenameFocus(() => titleInput.current);
@@ -359,7 +372,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const submitRename = () => {
     if (!title.trim() || blocked || renameRequest.current) return;
     const id = sourceRequestId();
-    renameRequest.current = { id, scopeKey };
+    renameRequest.current = { id, scopeKey, taskId: view.activeTaskId, title: title.trim() };
     setRenamePending(id);
     setRenameError(null);
     onDismissError();

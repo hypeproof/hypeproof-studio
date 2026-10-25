@@ -2243,6 +2243,21 @@ html, body, #root {
 .hps-queued-send:disabled { opacity: .5; cursor: default; }
 .hps-queued-send:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-recovered { font-size: var(--ds-c-studio-styles-type-1); }
+
+/* CGP-CHAT-R-029 (CGP-CHAT-D85): the 되돌리기 toast, centred at the bottom of the chat pane right above the
+   composer, content-width up to 360px, 14px text, a 44px 되돌리기. Empty, it is an invisible live region. */
+.hps-undo-toast { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--ds-c-studio-undotoast-space-15) var(--ds-c-studio-undotoast-space-2); box-sizing: border-box; width: fit-content; max-width: min(100%, var(--ds-c-studio-undotoast-size-106)); margin-inline: auto; font-size: var(--hp-font-caption); color: var(--hp-text-primary-default); }
+.hps-undo-toast[data-shown="true"] { margin-block: var(--ds-c-studio-undotoast-space-15); padding: var(--ds-c-studio-undotoast-space-15) var(--ds-c-studio-undotoast-space-2); background: var(--hp-bg-panel-default); border: var(--ds-c-studio-undotoast-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-undotoast-radius-8); }
+.hps-undo-toast-text { display: inline-flex; align-items: center; gap: var(--ds-c-studio-undotoast-space-15); min-width: 0; overflow-wrap: anywhere; }
+.hps-undo-toast-text > .hps-icon { flex: 0 0 auto; }
+.hps-undo-toast-action { flex: 0 0 auto; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0 var(--ds-c-studio-undotoast-space-2); font: inherit; color: inherit; background: transparent; border: var(--ds-c-studio-undotoast-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-undotoast-radius-8); cursor: pointer; }
+.hps-undo-toast-action:hover { background-color: var(--hp-bg-control-hover); }
+.hps-undo-toast-action:active { background-color: var(--hp-bg-control-pressed); }
+.hps-undo-toast-action[aria-disabled="true"] { cursor: default; }
+@media (forced-colors: active) {
+  .hps-undo-toast[data-shown="true"] { border-color: CanvasText; }
+  .hps-undo-toast-action { border-color: ButtonText; }
+}
 /* CGP-CHAT-R-012 — "지금 방향 바꾸기": a secondary action on the parked message, 44px target. */
 .hps-queued-steer { min-width: var(--ds-c-studio-styles-size-8); min-height: var(--ds-c-studio-styles-size-8); }
 .hps-queued-steer[aria-disabled="true"] { opacity: .6; cursor: default; }

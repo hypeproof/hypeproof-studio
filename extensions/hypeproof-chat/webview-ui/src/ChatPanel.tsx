@@ -19,6 +19,7 @@ import { AnnotationTray } from "./AnnotationTray";
 import { storedShell } from "../../src/shellDisplay";
 import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
+import { UndoToast, newUndoId, offerUndo, settleUndo } from './UndoToast';
 import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
 import { ActivityStatus } from "./ActivityStatus";
 import { accessFailure, type ActivityUnavailable } from "../../src/activityAvailability";
@@ -141,7 +142,8 @@ interface Props {
   onRemoveElement?: () => void;
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
   pageAttachment?: import("../../src/pageContext").PageAttachmentPreview | null;
-  onRemovePageAttachment?: () => void;
+  /** CGP-CHAT-R-029 — `undoId`: the host keeps the removed page under it for 되돌리기. */
+  onRemovePageAttachment?: (undoId?: string) => void;
   /** CGP-CHAT-R-011 — the work-folder file queued for the next turn, shown in full and removable. */
   fileAttachment?: import("../../src/protocol").FileAttachmentPreview | null;
   /** CGP-CHAT-R-011 — why the last picked file was refused (Korean, one per cause). */
@@ -149,7 +151,8 @@ interface Props {
   /** CGP-CHAT-R-011 — a one-line notice (a retry did not resend the file). */
   fileAttachNotice?: string | null;
   onAttachFile?: () => void;
-  onRemoveFileAttachment?: () => void;
+  /** CGP-CHAT-R-029 — `undoId`: the host keeps the removed file under it for 되돌리기. */
+  onRemoveFileAttachment?: (undoId?: string) => void;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
   verifyPanel?: import("react").ReactNode;
   /** cr-verify — a product test is driving the browser: nothing is sent until it ends. */
@@ -559,6 +562,10 @@ export function ChatPanel(props: Props) {
   const composerIdentity = [activityId,taskId,draft,pendingImages,stagedPhotos.map(p=>p.id).join("|"),imports,toolMode,queued,streaming,frozen,config?.activity?.verified,props.sendLocked,props.sendPending];
   const composerIdentityRef = useRef(composerIdentity); composerIdentityRef.current=composerIdentity;
   const photoSources = useRef(new Map<string, File>());
+  // CGP-CHAT-R-029 — the state an undo offer was made against; an offer is valid only while it is unchanged.
+  const undoScope = { activityId: activityId ?? null, taskId: taskId ?? null };
+  const undoSubject = useRef({ pendingImages, stagedPhotos, draftParts, queued, streaming, file: props.fileAttachment, page: props.pageAttachment });
+  undoSubject.current = { pendingImages, stagedPhotos, draftParts, queued, streaming, file: props.fileAttachment, page: props.pageAttachment };
   const photoReading = useRef(new Set<string>());
   const imageCount = useRef(pendingImages.length); imageCount.current = pendingImages.length;
   useEffect(() => () => {
@@ -841,7 +848,13 @@ export function ChatPanel(props: Props) {
   const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
   const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement]);
   /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
-  const sendWhenOnline = (send: () => unknown, held: HeldNoteKind) => guardSend(connectivity.online, send, () => setImgNote(OFFLINE_HELD_NOTES[held]));
+  // CGP-CHAT-R-029 — every send path goes through here (send, resend of an unsent message, roll, world chip,
+  // retry, edit): a send that went out makes every earlier removal final, so the 되돌리기 offer ends.
+  const sendWhenOnline = (send: () => unknown, held: HeldNoteKind) => {
+    const sent = guardSend(connectivity.online, send, () => setImgNote(OFFLINE_HELD_NOTES[held]));
+    if (sent) settleUndo();
+    return sent;
+  };
   // CGP-CHAT-R-012 — "지금 방향 바꾸기": stop through the Stop path; the parked text goes on the end edge (steerNow.ts).
   const steerRef = useRef<true | null>(null);
   const steerFocus = useRef<Element | null>(null);
@@ -1083,6 +1096,32 @@ export function ChatPanel(props: Props) {
     if (canUndoImport(snapshot.current.text, last)) { setImports((refs) => dropImportRef(refs, last)); setLastImport(null); }
   };
 
+  /**
+   * CGP-CHAT-R-029 — the queued item's ×: as before, its text goes back to the draft (never away), and
+   * 되돌리기 queues it again exactly as it was, while the draft is untouched and the turn it waits for is
+   * still running (a paused item waits for nothing). A mismatched tool mode only pauses: nothing is removed.
+   */
+  const cancelQueued = () => {
+    if (queued === null) return;
+    if (draft.trim() && toolMode !== queuedToolMode) { restoreQueuedToDraft(); return; }
+    const before = { parts: draftParts, queued, queuedToolMode, toolMode, paused: queuedPaused };
+    const text = draftAfterStop(draft, queued);
+    const after: DraftPart[] = text === draft ? draftParts : [{ text }];
+    setDraftParts(after);
+    setToolMode(queuedToolMode);
+    setQueued(null); setQueuedPaused(false);
+    const valid = () => undoSubject.current.draftParts === after && undoSubject.current.queued === null && (before.paused || undoSubject.current.streaming);
+    offerUndo({
+      kind: 'queued', scope: undoScope,
+      undo: () => {
+        if (!valid()) return;
+        setDraftParts(before.parts); setToolMode(before.toolMode);
+        setQueued(before.queued); setQueuedToolMode(before.queuedToolMode); setQueuedPaused(before.paused);
+      },
+      stillValid: valid,
+    });
+  };
+
   /** Stop / cancel-reservation: the parked text goes back to the draft, never away. */
   const restoreQueuedToDraft = () => {
     if (queued === null) return;
@@ -1254,20 +1293,83 @@ export function ChatPanel(props: Props) {
     else attachImageFiles(files);
   };
 
-  /** D-028 — the × on a staged photo: it was never sent, so the host deletes the file. */
+  /**
+   * D-028 — the × on a staged photo: it was never sent, so the host deletes the file. CGP-CHAT-R-029: a
+   * staged (ready) photo is deleted only when its 되돌리기 offer ends; 되돌리기 puts the same chip back.
+   * A photo still being prepared or refused is deleted at once (there is no settled state to restore).
+   */
   const removeStagedPhoto = (id: string) => {
+    const before = stagedPhotos, photo = before.find(p => p.id === id);
+    const source = photoSources.current.get(id);
     photoSources.current.delete(id);
     discardedPhotos.current.add(id);
-    postToHost({ type: "discardStagedImage", stageId: id });
-    setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
+    const after = before.filter((p) => p.id !== id);
+    const undoable = !!photo && photo.ready && !photo.error && !photo.repick;
+    if (!undoable) postToHost({ type: "discardStagedImage", stageId: id });
+    setStagedPhotos(after);
     setImgNote(null);
+    if (undoable) offerUndo({
+      kind: 'photo', scope: undoScope,
+      undo: () => {
+        if (undoSubject.current.stagedPhotos !== after) return;
+        discardedPhotos.current.delete(id);
+        if (source) photoSources.current.set(id, source);
+        setStagedPhotos(before);
+      },
+      stillValid: () => undoSubject.current.stagedPhotos === after,
+      onExpire: () => postToHost({ type: "discardStagedImage", stageId: id }),
+    });
     if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
   };
 
   const removePendingImage = (idx: number) => {
-    setPendingImages((prev) => prev.filter((_, i) => i !== idx));
+    const before = pendingImages;
+    if (idx < 0 || idx >= before.length) return;
+    const after = before.filter((_, i) => i !== idx);
+    setPendingImages(after);
     setImgNote(null);
+    // CGP-CHAT-R-029 — the same image back at the same place, while nothing else changed the list.
+    offerUndo({
+      kind: 'image', scope: undoScope,
+      undo: () => { if (undoSubject.current.pendingImages === after) setPendingImages(before); },
+      stillValid: () => undoSubject.current.pendingImages === after,
+    });
     if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
+  };
+
+  /** CGP-CHAT-R-029 — a host-held chip (work-folder file, page): the host keeps it under `undoId`, unsent. */
+  const removeFileAttachment = () => {
+    const file = props.fileAttachment, remove = props.onRemoveFileAttachment;
+    if (!file || !remove) return;
+    const undoId = newUndoId();
+    remove(undoId);
+    offerUndo({
+      kind: 'file', scope: undoScope, hostUndoId: undoId,
+      undo: () => postToHost({ type: 'restoreFileContext', undoId }),
+      stillValid: () => !undoSubject.current.file || undoSubject.current.file === file,
+    });
+  };
+  const removePageAttachment = () => {
+    const page = props.pageAttachment, remove = props.onRemovePageAttachment;
+    if (!page || !remove) return;
+    const undoId = newUndoId();
+    remove(undoId);
+    offerUndo({
+      kind: 'page', scope: undoScope, hostUndoId: undoId,
+      undo: () => postToHost({ type: 'restorePageContext', undoId }),
+      stillValid: () => !undoSubject.current.page || undoSubject.current.page === page,
+    });
+  };
+  const removePaste = (id: number) => {
+    const before = draftParts, after = changePaste(before, id, null);
+    setDraftParts(after);
+    // CGP-CHAT-R-029 — the folded paste back in its place, until the draft is edited.
+    offerUndo({
+      kind: 'paste', scope: undoScope,
+      undo: () => { if (undoSubject.current.draftParts === after) setDraftParts(before); },
+      stillValid: () => undoSubject.current.draftParts === after,
+    });
+    requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
   const handleReplyChoice = (answer: string, focusComposer = true) => {
@@ -1920,7 +2022,7 @@ export function ChatPanel(props: Props) {
           props.onDismissRefusal?.();
           textareaRef.current?.focus({ preventScroll: true });
         }} />}
-        {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment} />}
+        {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment ? removePageAttachment : undefined} />}
         {/* CGP-KNOW-R-020: failure rows live in the footer (never inside the shrinking message list), so the reason stays readable. */}
         <AttachmentFailures items={attachmentSend.failures} retry={attachmentSend.retry} remove={id=>{
           const file=attachmentSend.remove(id);
@@ -2003,7 +2105,7 @@ export function ChatPanel(props: Props) {
             <button
               type="button"
               className="hps-queued-cancel"
-              onClick={restoreQueuedToDraft}
+              onClick={cancelQueued}
               data-hp-tooltip="예약 취소 — 입력창으로 되돌려요"
               aria-label={queuedPaused ? "보관한 메시지 입력창으로 가져오기" : "예약 취소"}
             >
@@ -2077,9 +2179,11 @@ export function ChatPanel(props: Props) {
               if (draft.length - part.text.length + text.length > 200000) { setImgNote('입력할 수 있는 글의 길이를 넘었어요.');return; }
               setDraftParts(previous => changePaste(previous, part.id!, text));
             }}
-            onRemove={() => { setDraftParts(previous => changePaste(previous, part.id!, null));requestAnimationFrame(() => textareaRef.current?.focus()); }}
+            onRemove={() => removePaste(part.id!)}
             onInline={() => { setDraftParts(previous => changePaste(previous, part.id!, part.text, true));requestAnimationFrame(() => textareaRef.current?.focus()); }} />)}
         </div>}
+        {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
+        <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
@@ -2092,7 +2196,7 @@ export function ChatPanel(props: Props) {
           {/* CGP-CHAT-D06: the refusal text sits directly under the chip row, inside the composer card.
               CGP-AGENT-D-024: in read-only folder recovery nothing can be sent, so pending file chips are not shown. */}
           {!folderMissing && (props.fileAttachment || props.fileAttachNotice) && <div className="hps-file-context-stack">
-            {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment} />}
+            {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
             {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
           </div>}
           {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
@@ -2130,7 +2234,7 @@ export function ChatPanel(props: Props) {
                 && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0
                 && props.fileAttachment && props.onRemoveFileAttachment) {
                 e.preventDefault();
-                props.onRemoveFileAttachment();
+                removeFileAttachment();
                 return;
               }
               // Composing Hangul: Enter commits the syllable, it must never

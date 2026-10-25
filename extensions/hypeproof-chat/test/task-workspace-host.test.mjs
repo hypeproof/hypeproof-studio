@@ -193,12 +193,13 @@ test('rename acknowledges the matching request only after persistence and report
     f = await createTaskHarness(root, message => {
       if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft: { text: '보존할 초안', images: [], queued: null } }));
     });
-    const original = f.store.rename.bind(f.store), id = f.store.getView().activeTaskId;
-    f.store.rename = async () => { throw new Error('Synthetic write failure'); };
+    // CGP-CHAT-R-029: the host renames through renameWithUndo (the rename plus what it replaced).
+    const original = f.store.renameWithUndo.bind(f.store), id = f.store.getView().activeTaskId;
+    f.store.renameWithUndo = async () => { throw new Error('Synthetic write failure'); };
     await f.handle(f.scoped({ type: 'taskRename', title: '새 이름', requestId: 'rename-failure' }));
     assert.deepEqual(f.posts.findLast(p => p.type === 'taskRenameResult'), { type: 'taskRenameResult', requestId: 'rename-failure', taskId: id, saved: false, activityId: f.activity.id });
     assert.equal(f.store.getActiveTask().title, '새 작업');
-    f.store.rename = original;
+    f.store.renameWithUndo = original;
     await f.handle(f.scoped({ type: 'taskRename', title: '새 이름', requestId: 'rename-retry' }));
     assert.equal(f.posts.findLast(p => p.type === 'taskRenameResult').saved, true);
     assert.equal(f.posts.findLast(p => p.type === 'taskRenameResult').requestId, 'rename-retry');

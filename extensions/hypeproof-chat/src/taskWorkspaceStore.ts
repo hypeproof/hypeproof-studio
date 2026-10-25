@@ -8,6 +8,7 @@ import { basename, join } from 'node:path';
 import { hostname } from 'node:os';
 import { emptyActivityDraft, validActivityDraft } from './activityDraft.ts';
 import { suggestTaskTitle } from './taskTitle.ts';
+import type { RenameUndo } from './removalUndo.ts';
 import { emptyVersions, joinVersions, splitVersions, validEditOf, type StoredVersions } from './editResend.ts';
 import { appendVerdict, latestVerdicts, validVerdictEvent, type VerdictEvent, type VerdictMap } from './answerVerdict.ts';
 import type { ActivityDraft } from './activityDraft';
@@ -15,6 +16,8 @@ import type { ChatMessage } from './protocol';
 import type {
   TaskDocument, TaskSurfaceSelection, TaskWorkspaceErrorCode, TaskWorkspaceExpected, TaskWorkspaceView,
 } from './taskWorkspaceContract';
+
+type TitleOrigin = NonNullable<TaskDocument['titleOrigin']>;
 
 interface WorkspaceData {
   version: 1;
@@ -333,7 +336,36 @@ export class TaskWorkspaceStore {
   }
 
   rename(taskId: string, title: string): Promise<TaskWorkspaceView> {
-    return this.updateTask(taskId, task => { task.title = normalizedTitle(title); task.titleOrigin = 'manual'; });
+    return this.renameWithUndo(taskId, title).then(result => result.view);
+  }
+  /**
+   * CGP-CHAT-R-029 — rename and keep what it replaced, so 되돌리기 can put the exact prior title and its
+   * origin back (an automatic or default title then keeps following the conversation). The list keeps
+   * ordering by last activity: the draft flush around a rename and its undo is activity too.
+   * `undo` is null when nothing changed.
+   */
+  async renameWithUndo(taskId: string, title: string): Promise<{ view: TaskWorkspaceView; undo: RenameUndo<TitleOrigin> | null }> {
+    let undo: RenameUndo<TitleOrigin> | null = null;
+    const view = await this.updateTask(taskId, task => {
+      const before = { title: task.title, titleOrigin: task.titleOrigin };
+      task.title = normalizedTitle(title); task.titleOrigin = 'manual';
+      if (before.title !== task.title || before.titleOrigin !== 'manual')
+        undo = { taskId, renamedTo: task.title, title: before.title, titleOrigin: before.titleOrigin };
+    });
+    return { view, undo };
+  }
+  /** Put a rename back, only while the task still carries exactly that rename (nothing renamed it since). */
+  undoRename(undo: RenameUndo<TitleOrigin>): Promise<TaskWorkspaceView> {
+    return this.mutate(data => {
+      const current = this.requireData(data);
+      if (undo.taskId !== current.activeTaskId) fail('stale', '다른 작업의 이름은 되돌릴 수 없어요.');
+      const task = this.requireTask(current, undo.taskId);
+      if (task.title !== undo.renamedTo || task.titleOrigin !== 'manual') fail('stale', '이름이 이미 바뀌어서 되돌리지 못했어요.');
+      task.title = undo.title;
+      if (undo.titleOrigin === undefined) delete task.titleOrigin; else task.titleOrigin = undo.titleOrigin;
+      task.updatedAt = Math.max(Date.now(), task.updatedAt);
+      return current;
+    });
   }
   /** A captured system notice may finish after selection changes; it never edits another task's content. */
   appendDenial(taskId: string, message: ChatMessage): Promise<TaskWorkspaceView> {
