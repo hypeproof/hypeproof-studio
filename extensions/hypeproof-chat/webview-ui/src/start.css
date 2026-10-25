@@ -538,4 +538,5 @@
 .studio-record-preview { margin: 12px 0; padding: 12px; border: 1px solid var(--vscode-panel-border); border-radius: 6px; overflow-wrap: anywhere; }
 .studio-record-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .studio-record-preview code { white-space: normal; overflow-wrap: anywhere; }
+.studio-record-preview summary { min-height: 44px; padding-block: 10px; box-sizing: border-box; cursor: pointer; }
 .studio-record-preview article { margin: 12px 0; }

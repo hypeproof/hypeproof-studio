@@ -44,7 +44,7 @@ function serviceRequirements(manifest, product) {
     assert.deepEqual(requirements['studio-api'], {
       package: '@hypeproof/service-contracts', manifest: 'extensions/hypeproof-chat/package.json', surface: 'studio-api',
     }, 'studio-api must retain its package, manifest and surface pin');
-    assert.deepEqual(requirements['account-api'], {line: '2'}, 'personal metadata requires exactly account-api@2');
+    assert.deepEqual(requirements['account-api'], {line: '3'}, 'synthetic records require exactly account-api@3');
   }
   for (const [contract, entry] of Object.entries(requirements)) {
     if (product === 'studio' && contract === 'account-api') continue; // Exact literal form was checked above.
@@ -62,7 +62,7 @@ for (const {file, product} of MANIFESTS) {
     assert.ok(Object.keys(m.requires ?? {}).length > 0, 'a product with no requirements is never checked');
   });
 
-  test(`${file}: requirements preserve package surfaces and the exact metadata account line`, () => {
+  test(`${file}: requirements preserve package surfaces and the exact personal-record account line`, () => {
     serviceRequirements(readJson(file), product);
   });
 
@@ -83,12 +83,12 @@ test('negative control: a requirement on a package the manifest does not pin fai
 });
 
 
-test('negative controls: missing or downgraded metadata account requirement fails', () => {
-  for (const account of [undefined, {line: '1'}, {line: 2}]) {
+test('negative controls: missing or downgraded personal-record account requirement fails', () => {
+  for (const account of [undefined, {line: '1'}, {line: '2'}, {line: 3}]) {
     const manifest = structuredClone(readJson('release.json'));
     if (account === undefined) delete manifest.requires['account-api'];
     else manifest.requires['account-api'] = account;
-    assert.throws(() => serviceRequirements(manifest, 'studio'), /exactly account-api@2/);
+    assert.throws(() => serviceRequirements(manifest, 'studio'), /exactly account-api@3/);
   }
 });
 
@@ -96,7 +96,7 @@ test('negative controls: mixed account pins and unknown literal requirements fai
   for (const extra of [{surface: 'account-api'}, {package: '@hypeproof/service-contracts'}, {also: ['1']}]) {
     const manifest = structuredClone(readJson('release.json'));
     Object.assign(manifest.requires['account-api'], extra);
-    assert.throws(() => serviceRequirements(manifest, 'studio'), /exactly account-api@2/);
+    assert.throws(() => serviceRequirements(manifest, 'studio'), /exactly account-api@3/);
   }
   const manifest = structuredClone(readJson('release.json'));
   manifest.requires['unknown-api'] = {line: '2'};
