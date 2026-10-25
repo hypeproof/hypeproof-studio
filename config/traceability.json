@@ -13163,6 +13163,69 @@
           "path": "extensions/hypeproof-chat/test/activity-home-computed.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TASK-ARCHIVE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-INT-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Task archive (CGP-CHAT-R-025)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-ARCHIVE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-ARCHIVE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceContract.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-ARCHIVE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-ARCHIVE",
+        "ST-IMP-TASK-ARCHIVE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-archive.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-archive-ui.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-archive-layout.smoke.mjs"
+        }
+      ]
     }
   ]
 }

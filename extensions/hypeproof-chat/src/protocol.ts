@@ -546,6 +546,9 @@ export type WebviewMessage = (
   | { type: 'taskRename'; title: string; requestId?: string }
   /** CGP-CHAT-R-029 — 되돌리기 on the rename toast: the host puts back the rename it kept under this id. */
   | { type: 'taskRenameUndo'; undoId: string }
+  /** CGP-CHAT-R-025 — 보관하기 (the open task) and 보관함's 다시 열기 (an archived task). */
+  | { type: 'taskArchive' }
+  | { type: 'taskRestore'; id: string }
   | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
   | { type: 'taskOpenSource'; url: string; requestId?: string }
   | { type: 'taskReturnFromSource'; requestId: string; url: string }
