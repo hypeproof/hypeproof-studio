@@ -581,6 +581,12 @@
           "default": false,
           "scope": "machine",
           "description": "이 기기의 개인 계정 미리보기를 켭니다. 서비스와 계정 사이트가 모두 로컬 주소일 때만 사용할 수 있습니다."
+        },
+        "hypeproofChat.personalRecordsPreview": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "개발·테스트 호스트에서 로컬 합성 개인 기록 테스트를 켭니다. 서비스와 계정 사이트가 모두 localhost일 때만 표시되며 실제 작업이나 파일은 가져오지 않습니다."
         }
       }
     },
@@ -619,8 +625,9 @@
     "build:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js",
     "build:webview": "cd webview-ui && npm install && npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs && npm run test:personal-space",
+    "test": "node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs && npm run test:personal-space && npm run test:personal-records",
     "test:personal-space": "node --experimental-strip-types --test test/personal-space.test.mjs && node test/personal-space-host.test.mjs",
+    "test:personal-records": "node test/personal-records.test.mjs && node test/personal-records-host.test.mjs",
     "test:activity-resume": "node --experimental-strip-types test/activity-resume.test.mjs",
     "test:instructor-render": "node scripts/run-tsx-tests.mjs instructor-render",
     "test:signin-copy-link": "node scripts/run-tsx-tests.mjs signin-copy-link",

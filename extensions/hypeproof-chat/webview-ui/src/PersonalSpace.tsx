@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PersonalSpaceView } from '../../src/personalSpace';
 import type { StartRequest } from '../../src/startPageProtocol';
+import type { PersonalRecordsView } from '../../src/personalRecordTypes';
+import { PersonalRecords } from './PersonalRecords';
 
 /** This surface opens a saved metadata record, never a local folder or conversation. */
-export function PersonalSpace({ space, accountId, post }: { space: PersonalSpaceView; accountId: string; post(message: StartRequest): void }) {
+export function PersonalSpace({ space, records, accountId, post }: { space: PersonalSpaceView; records?: PersonalRecordsView; accountId: string; post(message: StartRequest): void }) {
   const [title, setTitle] = useState('');
   const submitted = useRef<string>();
   useEffect(() => {
@@ -40,6 +42,7 @@ export function PersonalSpace({ space, accountId, post }: { space: PersonalSpace
           <h3>{selected.title}</h3>
           <p className="studio-help">저장된 이름 기록을 열었어요. 이 화면에는 대화나 파일이 포함되지 않아요.</p>
           <p className="studio-help">만든 날 · {new Date(selected.created_at * 1000).toLocaleDateString('ko-KR')}</p>
+          {records?.projectId === selected.id && <PersonalRecords key={selected.id} view={records} accountId={accountId} projectId={selected.id} post={post} />}
         </div>}
       </>}
     </>}

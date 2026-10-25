@@ -1,4 +1,6 @@
 import { PersonalSpace } from "./personalSpace";
+import { PersonalRecords } from './personalRecords';
+import { confirmPersonalRecord, downloadPersonalRecord } from './personalRecordHost';
 import * as vscode from "vscode";
 import { AccountError, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
@@ -119,6 +121,19 @@ export class StartPage {
   /** CONV-FUNNEL-R-006 — a purchase-time sign-in begun from the list on this surface and not finished yet. */
   private purchaseSignIn?: PassSurface;
   private personalSpace?: PersonalSpace;
+  private personalRecords?: PersonalRecords;
+  private recordsEnabled(): boolean {
+    return vscode.workspace.getConfiguration('hypeproofChat').get<boolean>('personalRecordsPreview', false)
+      && (this.context.extensionMode === vscode.ExtensionMode.Development || this.context.extensionMode === vscode.ExtensionMode.Test);
+  }
+  private records(): PersonalRecords | undefined {
+    if (!this.personalRecords && this.accounts && this.context.globalStorageUri?.fsPath && this.recordsEnabled()) {
+      this.personalRecords = new PersonalRecords({ account: this.accounts, directory: path.join(this.context.globalStorageUri.fsPath, 'personal-record-outbox'),
+        settings: () => ({ ...this.settings(), preview: this.recordsEnabled() }),
+        changed: () => { void this.refresh(); }, confirm: confirmPersonalRecord, download: downloadPersonalRecord });
+    }
+    return this.personalRecords;
+  }
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
@@ -131,6 +146,7 @@ export class StartPage {
 
   accountChanged(): void {
     this.personalSpace?.sync();
+    this.records()?.sync();
     // CONV-FUNNEL-R-006 — the purchase-time sign-in finished (or ended without an account).
     const account = this.accounts?.view();
     if (this.purchaseSignIn && account?.status === "signedIn") { this.purchasePathEvent("sign_in_completed", this.purchaseSignIn); this.purchaseSignIn = undefined; }
@@ -300,7 +316,7 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.purchaseSignIn = undefined; this.stopPurchaseWait();
+    panel.onDidDispose(() => { if (this.panel === panel) { const preview = this.personalRecords?.view()?.preview; if (preview) this.personalRecords?.cancel(preview.nonce); this.panel = undefined; this.candidate = undefined; this.purchaseFocus = undefined; this.purchasePick = undefined; this.purchaseSignIn = undefined; this.stopPurchaseWait();
       // CONV-FUNNEL-R-006 — a reopened tab starts on the start choices, not on the list (the webview
       // draws the list only after an open), so a list left in `choosing` is not a new view until opened again.
       this.passListShown = true; this.accounts?.cancel(false); } });
@@ -753,7 +769,7 @@ export class StartPage {
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
-      ...(this.accounts ? {account:this.accounts.view(), personalSpace:this.personalSpace?.view()} : {}),
+      ...(this.accounts ? {account:this.accounts.view(), personalSpace:this.personalSpace?.view(), personalRecords:this.records()?.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(freeStart ? { freeStart } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
@@ -784,12 +800,28 @@ export class StartPage {
 
   private async handle(msg: StartRequest): Promise<void> {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    if (['personalRecordPrepare', 'personalRecordSave', 'personalRecordCancel', 'personalRecordRetry', 'personalRecordsOpen', 'personalRecordOpen', 'personalRecordDownload'].includes(msg.type)) {
+      const intent = msg as Extract<StartRequest, { projectId: string }>, space = this.personalSpace?.view();
+      if (this.accounts?.view().account?.id !== intent.accountId || space?.selected?.id !== intent.projectId || !space.workspace) return;
+      const records = this.records(); if (!records) return;
+      await records.select(space.workspace, space.selected);
+      if (msg.type === 'personalRecordPrepare') records.prepare(msg.includeFile);
+      else if (msg.type === 'personalRecordSave') await records.save(msg.nonce, msg.digest);
+      else if (msg.type === 'personalRecordCancel') records.cancel(msg.nonce);
+      else if (msg.type === 'personalRecordRetry') await records.retry();
+      else if (msg.type === 'personalRecordsOpen') await records.open();
+      else if (msg.type === 'personalRecordOpen') await records.open(msg.recordId);
+      else if (msg.type === 'personalRecordDownload') await records.download(msg.artifactId);
+      await this.refresh(); return;
+    }
     if (["personalSpaceOpen", "personalSpaceEnsure", "personalProjectCreate", "personalProjectOpen"].includes(msg.type)) {
       if (this.accounts?.view().account?.id !== (msg as { accountId?: string }).accountId) return;
+      if (msg.type === 'personalProjectCreate' || msg.type === 'personalProjectOpen') await this.records()?.select();
       if (msg.type === "personalSpaceOpen") await this.personalSpace?.open();
       else if (msg.type === "personalSpaceEnsure") await this.personalSpace?.ensure();
       else if (msg.type === "personalProjectCreate") await this.personalSpace?.create(msg.title);
       else if (msg.type === "personalProjectOpen" && typeof msg.projectId === "string") await this.personalSpace?.open(msg.projectId);
+      const space = this.personalSpace?.view(); await this.records()?.select(space?.workspace, space?.selected);
       await this.refresh(); return;
     }
     if (msg.type.startsWith("account")) {
@@ -809,7 +841,7 @@ export class StartPage {
         else if (msg.type === "accountCopyLink") await this.accounts.copyLink(text => vscode.env.clipboard.writeText(text));
         else if (msg.type === "accountRefresh") await this.accounts.refreshView();
         else if (msg.type === "accountManage") await this.accounts.openAccount();
-        else if (msg.type === "accountSignOut") { this.personalSpace?.signOut(); void this.refresh(); this.candidate = undefined; await this.accounts.signOut(); }
+        else if (msg.type === "accountSignOut") { this.personalSpace?.signOut(); this.personalRecords?.signOut(); void this.refresh(); this.candidate = undefined; await this.accounts.signOut(); }
         else if (msg.type === "accountActivate") await this.activateAccountPass(msg.passId);
       } catch (e) { this.error = e instanceof AccountError ? e.message : "계정을 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요."; }
       await this.refresh(); return;

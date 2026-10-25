@@ -1,0 +1,41 @@
+import { click, mountPoint } from './fixtures/mini-dom.mjs';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import assert from 'node:assert/strict';
+import { StartPage } from '../webview-ui/src/StartPage';
+import { syntheticRecord, canonicalRecord, recordHash, fixtureText } from '../src/personalRecordFixture';
+
+const container = mountPoint(), root = createRoot(container), posted = (globalThis as any).__posted;
+const act = React.act;
+const host = async (state: any) => act(async () => { window.dispatchEvent({ type: 'message', data: { type: 'startState', state } } as any); });
+const press = async (text: string) => { const button = container.findAll((e: any) => e.localName === 'button' && e.textContent === text)[0]; assert.ok(button, text); await act(async () => click(button)); };
+const fixture = syntheticRecord(true), digest = recordHash(canonicalRecord(fixture.manifest));
+const workspace = { id: 'w1', kind: 'personal', name: '개인 공간', owner_account_id: 'alice', created_at: 1 }, project = { id: 'p1', workspace_id: 'w1', title: '현재 개인 프로젝트', revision: 1, created_at: 1, updated_at: 1 };
+const state: any = { checking: false, version: 'synthetic', account: { status: 'signedIn', account: { id: 'alice', email: 'alice@synthetic.invalid' } }, personalSpace: { opened: true, loaded: true, workspace, projects: [project], selected: project } };
+const view: any = { enabled: true, projectId: 'p1', records: [] };
+async function main() {
+  await act(async () => root.render(<StartPage />)); assert.deepEqual(posted.splice(0), [{ type: 'startReady' }]);
+  await host(state); assert.ok(!container.textContent.includes('로컬 합성 기록 테스트'), 'default host view contains no prototype');
+  await host({ ...state, personalRecords: view }); await press('합성 기록 검토');
+  assert.deepEqual(posted.splice(0), [{ type: 'personalRecordPrepare', accountId: 'alice', projectId: 'p1', includeFile: false }]);
+  const preview = { nonce: 'review-1', digest, account: 'alice@synthetic.invalid', service: 'http://localhost:8793/v1', destination: project.title, manifest: fixture.manifest, files: fixture.manifest.artifacts.map(f => ({ ...f, text: fixtureText })) };
+  await host({ ...state, personalRecords: { ...view, preview } });
+  assert.match(container.textContent, /저장할 서비스 · http:\/\/localhost:8793\/v1/); assert.ok(container.textContent.includes(fixtureText));
+  assert.equal(container.findAll((e: any) => e.localName === 'iframe' || e.localName === 'script').length, 0, 'file markup is escaped text');
+  assert.equal(posted.length, 0, 'showing reviewed bytes never implies consent');
+  await press('검토한 합성 기록 저장'); assert.deepEqual(posted.splice(0), [{ type: 'personalRecordSave', accountId: 'alice', projectId: 'p1', nonce: 'review-1', digest }]);
+  await press('검토 취소'); assert.deepEqual(posted.splice(0), [{ type: 'personalRecordCancel', accountId: 'alice', projectId: 'p1', nonce: 'review-1' }]);
+  await host({ ...state, personalRecords: { ...view, loaded: true } }); assert.match(container.textContent, /저장된 합성 기록이 없어요/);
+  await host({ ...state, personalRecords: { ...view, pending: { mutation_id: 'same-request', digest, title: fixture.manifest.title } } });
+  await press('같은 기록 저장 다시 시도'); assert.deepEqual(posted.splice(0), [{ type: 'personalRecordRetry', accountId: 'alice', projectId: 'p1' }]);
+  const record = { id: 'rec1', workspace_id: 'w1', project_id: 'p1', revision: 1, state: 'complete', manifest_sha256: digest, created_at: 1, completed_at: 2, manifest: fixture.manifest, artifacts: fixture.manifest.artifacts.map(f => ({ ...f, id: 'file1' })) };
+  await host({ ...state, personalRecords: { ...view, records: [record], selected: record } });
+  await press('확인 후 파일 사본 저장'); assert.deepEqual(posted.splice(0), [{ type: 'personalRecordDownload', accountId: 'alice', projectId: 'p1', artifactId: 'file1' }]);
+  await host({ ...state, personalRecords: { ...view, records: [], authenticationRequired: true, failed: true, message: '로그인을 확인해 주세요.' } });
+  assert.ok(!container.textContent.includes(fixture.manifest.messages[0].content));
+  await press('로그인 상태 새로고침'); assert.deepEqual(posted.splice(0), [{ type: 'accountRefresh' }]);
+  await host({ ...state, account: { status: 'signedOut' }, personalRecords: { ...view, selected: record } }); assert.ok(!container.textContent.includes(fixture.manifest.messages[0].content));
+  await act(async () => root.unmount());
+  console.log('PASS actual StartPage record UI: opt-in presentation, scoped preview/save/cancel/retry/read/download intents, exact recipient, escaped HTML, empty state and authentication clearing');
+}
+void main().then(() => process.exit(0), error => { console.error(error); process.exit(1); });

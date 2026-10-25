@@ -530,3 +530,12 @@
 .studio-personal-projects button span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .studio-personal-projects button span:last-child { flex-shrink: 0; }
 .studio-personal-record { border-left: var(--ds-c-studio-start-size-7) solid var(--hp-border-control-default); padding-left: var(--ds-c-studio-start-space-7); }
+
+/* #2832: scoped local synthetic record preview; all stored markup remains text. */
+.studio-records { margin-top: 18px; border-top: 1px solid var(--vscode-panel-border); padding-top: 12px; }
+.studio-record-file { display: flex; align-items: center; gap: 8px; min-height: 44px; overflow-wrap: anywhere; }
+.studio-record-file input { width: auto; flex: 0 0 auto; }
+.studio-record-preview { margin: 12px 0; padding: 12px; border: 1px solid var(--vscode-panel-border); border-radius: 6px; overflow-wrap: anywhere; }
+.studio-record-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.studio-record-preview code { white-space: normal; overflow-wrap: anywhere; }
+.studio-record-preview article { margin: 12px 0; }

@@ -13,6 +13,7 @@ export interface ActivitySummary {
 export interface StartState {
   account?: import("./accountSession").AccountView;
   personalSpace?: import("./personalSpace").PersonalSpaceView;
+  personalRecords?: import("./personalRecordTypes").PersonalRecordsView;
   activities?: ActivitySummary[];
   legacyConnection?: boolean;
   legacyHistory?: boolean;
@@ -85,6 +86,12 @@ export type StartRequest =
   | { type: "personalSpaceOpen" | "personalSpaceEnsure"; accountId: string }
   | { type: "personalProjectCreate"; title: string; accountId: string }
   | { type: "personalProjectOpen"; projectId: string; accountId: string }
+  | { type: 'personalRecordPrepare'; accountId: string; projectId: string; includeFile: boolean }
+  | { type: 'personalRecordSave'; accountId: string; projectId: string; nonce: string; digest: string }
+  | { type: 'personalRecordCancel'; accountId: string; projectId: string; nonce: string }
+  | { type: 'personalRecordRetry' | 'personalRecordsOpen'; accountId: string; projectId: string }
+  | { type: 'personalRecordOpen'; accountId: string; projectId: string; recordId: string }
+  | { type: 'personalRecordDownload'; accountId: string; projectId: string; artifactId: string }
   /**
    * CONV-PURCHASE-R-002 — `productId`: the pass chosen on the list when the sign-in is pressed from
    * login at purchase. The host keeps it (memory only) and gives it back as `purchase.selected`.
