@@ -5965,3 +5965,71 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## Preview follow (CGP-ART-R-017)
+
+REQ-STUDIO-PREVIEW-FOLLOW. CGP-ART-R-017 / REQ-ART-17 / DES-ART-17 / CGP-ART-018 / PI#1 (useful
+work first): while a coach turn is running, the live-server preview shows a **따라 보기** toggle
+(eye icon and label, on by default). After each live reload caused by a file change in the served
+root during that turn, the page scrolls to the first element (document order) whose tag,
+attributes or own text are new compared with the page before the reload, and outlines it with a
+2 px ring for about 1 s. The scroll is smooth and at most 300 ms (250 ms), and an instant jump
+under `prefers-reduced-motion`. A change made outside a coach turn, the host's own reload
+(recovery, 다시 켜기) and a change with no new element (CSS only) do not scroll.
+
+- The toggle lives on the preview page itself, top right, inside a closed shadow root on a host
+  appended after `<body>`: the integrated browser's toolbar is VS Code chrome Studio does not own.
+  It is hidden when no coach turn runs. Target ≥44×44 px, text 14 px, 2 px focus ring with its own white
+  halo (the page behind may be light or dark), light and dark colour schemes, forced colours with
+  system colours (on = open eye and a 3 px Highlight border, off = slashed eye).
+- A manual scroll while the coach edits (wheel, touch, PageUp/PageDown/arrows/Home/End/Space
+  outside a text field, a press on the page scrollbar) turns it off. `aria-pressed` reflects the
+  state and a polite live region says "직접 스크롤해서 따라 보기를 껐어요." The learner turns it back on
+  with the toggle ("따라 보기를 켰어요. 코치가 고친 곳으로 화면이 따라가요."). The choice is kept by the
+  live server for its lifetime (every tab of that preview), not in page storage: the page client
+  posts it to `/__hp_follow` with a per-server token that only served HTML carries, and a reload
+  serves it back. While it is off, a reload keeps the browser's restored scroll position: the page
+  never jumps to the change.
+- The served page is coach-written and runs in the same realm as the toggle, so page script must
+  not silently change the learner's choice or the control (owner scope 2026-10-26: not a sandbox,
+  no silent override):
+  - only trusted input counts (`isTrusted`); a synthetic wheel, key, touch, pointer or click event
+    from page script never turns follow off or on;
+  - the client is injected first in the document (after the doctype), runs before any page script,
+    captures the DOM primitives it uses (`attachShadow`, `setAttribute`, `appendChild`, style,
+    `EventSource`, `fetch`, `JSON.parse`, …) and removes its own `<script>` element, so a page that
+    overrides a prototype later cannot open the closed root or get a reference to its nodes;
+  - showing the toggle is decided inside the closed root from Studio's coach-turn state only; the
+    host carries `:host{… !important}` rules (which beat any page rule or inline style on it) and
+    inline `!important` styles, and a MutationObserver puts the host back if a page removes,
+    moves or restyles it (at most 200 repairs per document, so two observers cannot loop forever);
+  - the closed shadow root on its own does not protect the host element; the measures above do.
+  - The live server answers only its own loopback Host (`127.0.0.1:<port>` or `localhost:<port>`
+    for the port it listens on): any other Host gets 403 on every path. This closes DNS rebinding,
+    where a website resolved to 127.0.0.1 could read the served folder and the token. A POST to
+    `/__hp_follow` that carries an `Origin` other than the server's own also gets 403; a missing
+    `Origin` stays allowed because the token still gates it.
+  - Residuals, accepted: a page can draw its own element over the toggle; a page that fetches its
+    own HTML can read the token and post a choice, and one that keeps fighting the observer past
+    200 repairs wins. These are deliberate attacks, not silent overwrites, and the effect stays
+    display-only. The pre-reload snapshot stays in `sessionStorage`; forging it can only steer a
+    scroll the page could do itself.
+- CR-68: while browser automation acts on the page (a coach browser step or an AI Verify run, the
+  same moments the page outline indicator is drawn), the toggle is hidden, no follow scroll runs
+  and input is not read as the learner's scroll.
+- The host (`LiveServer`) decides follow when the change is seen, not when the 150 ms debounce
+  fires, so the turn's last write is followed even if the turn ends inside the debounce. The SSE
+  stream sends `reload` (unchanged), `reload:follow` and `state:{coach,automation}`; served HTML
+  embeds the state at serve time and the stream repeats it on connect.
+
+Out of scope: the sandboxed iframe preview (`PreviewProvider`, not live reload), elements inside
+nested scroll containers (the window scrolls), published test origins (no injection). Tests:
+`extensions/hypeproof-chat/test/live-follow.smoke.mjs` and `live-follow-host.smoke.mjs` (the real provider: a proxy turn start and end, CR-68 browser steps and AI Verify runs reach the live server). The first runs the real `LiveServer` over HTTP and the injected
+script in headless Chromium: follow, edit-in-place, manual-scroll switch-off and announcement,
+off-state no-jump negative, toggle back on, CR-68 pause, coach-only, reduced motion, 44 px/14 px,
+focus ring, both colour schemes at 1420 and 800 px, forced colours; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser. `live-follow-hostile.smoke.mjs` serves hostile pages
+(CSS hide, host removal, synthetic input, storage and forged-request overwrite, showing the toggle
+outside a coach turn, `attachShadow`/`setAttribute`/`appendChild` overrides) and requires every
+attack to fail. `live-server.smoke.mjs` sends foreign Host headers to every path (GET and POST) and foreign
+Origins to the choice endpoint and requires 403, while the server's own Host and Origin pass.

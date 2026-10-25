@@ -1732,7 +1732,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return digest ?? null;
     },
     // CR-68, chat-panel half: the panel shows the run while it acts on the page.
-    onRun: () => void this.postVerifyState(),
+    onRun: (running) => {
+      // CGP-ART-R-017 — while a run acts on the page, 따라 보기 neither scrolls nor reads input.
+      this.liveServer.setAutomation?.("verify", running);
+      void this.postVerifyState();
+    },
     release: () => { this.verifyRunRecorder = null; },
   });
 
@@ -3336,6 +3340,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       enabled: () => this.isCurriculumRuntimeEnabled(),
       // CR-11 — the live preview, plus the published test origin of the student's own Project (cr-publish).
       allowedOrigins: () => crAllowedOrigins(this.liveServer.currentUrl(), this.publishSession.publishedOrigins()),
+      // CGP-ART-R-017 — the page half of CR-68 is on: 따라 보기 pauses (no scroll, no toggle, input not the learner's).
+      onIndicator: (visible: boolean) => this.liveServer.setAutomation?.("browser", visible),
       artifactVersion: async (url: string) => {
         // cr-publish — a page on the Project's published test origin is the version its link pins.
         const published = this.publishSession.publishedArtifactVersion(url);
@@ -3904,6 +3910,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const status = (this.pendingApprovals?.size ?? 0) > 0 ? "waiting_approval" : this.hasActiveStream() ? "running" : "idle";
     return { idleMs: Date.now() - this.lastActivityAt, status };
   }
+  /** CGP-ART-R-017 — the live preview follows file changes (따라 보기) only while a coach turn runs. */
+  private syncCoachEditing(): void {
+    this.liveServer?.setCoachEditing?.(this.activeStreams.size > 0);
+  }
+
   hasActiveStream(): boolean { return !!this.attemptWrite || this.pendingSends > 0 || this.activeStreams.size > 0 || !!this.worldOpening || !!this.observationAssessment || (this.pendingApprovals?.size ?? 0) > 0; }
   /** REQ-STUDIO-QUIT-GUARD — chat surfaces that last reported a queued, unsent message. */
   private queuedSources = new Set<vscode.Webview>();
@@ -7345,6 +7356,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const ctrl = new AbortController();
     this.activeStreams.set(streamId, ctrl);
     this.finishNotifier.release(); // a new turn is sent from the chat: the learner has seen it
+    this.syncCoachEditing();
 
     responseStarted(streamId);
     // Kept before it is announced, so a history post racing this turn already carries the mark.
@@ -8338,6 +8350,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // cr-verify — the run this turn carried takes no more coach calls once the turn ends.
       this.verifySession?.endTurn();
       this.verifyTurnRecorder = null;
+      this.syncCoachEditing();
       void this.loadAccess(true).then(()=>this.postConfig()).catch(()=>{});
       this.turnTimelines.delete(streamId);
       // Persistence failure must not skip closing the runtime and verification turn.
@@ -8350,6 +8363,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (responseStreamId) {
         this.activeStreams.get(responseStreamId)?.abort();
         this.activeStreams.delete(responseStreamId);
+        this.syncCoachEditing();
         this.turnTimelines.delete(responseStreamId);
       }
       const activityUnavailable: import("./activityAvailability").ActivityUnavailable | undefined = error instanceof ProxyTransportError ? activityFailure(error.evidence ?? {},profileAudience(this.cachedProfile)) ?? {cause:"unknown",audience:profileAudience(this.cachedProfile)} : undefined;
