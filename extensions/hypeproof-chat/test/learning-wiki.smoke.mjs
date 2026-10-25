@@ -120,7 +120,10 @@ assert.match(files["deck.html"], /class="v-quote"/);
 assert.match(files["deck.html"], /1 \/ 8장/);
 assert.match(files["deck.html"], /class="notes notes-only"/, "notes and citations are in the notes layer");
 assert.ok(!/<article[^>]*>[\s\S]*?<div class="frame">[\s\S]*?E-1[\s\S]*?<\/div>\s*<aside/.test(files["deck.html"]), "citations are not on the slide face");
-assert.ok(!files["deck.html"].includes("<script"), "no script; the notes switch is an inline handler only");
+// The one script is the constant present-mode script (CGP-ART-R-015): no slide data in it, no network or storage.
+assert.deepEqual([...files["deck.html"].matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]), [deck.PRESENT_SCRIPT], "only the constant present-mode script runs");
+assert.ok(!/fetch|XMLHttpRequest|WebSocket|localStorage|sessionStorage|indexedDB|window\.open|postMessage|innerHTML|eval\(/.test(deck.PRESENT_SCRIPT), "present mode reads the DOM only");
+assert.ok(!deck.renderDeck({ ...sDeck, deck: {} }, template, PLAN)["deck.html"].includes("<script"), "a deck with no drafted slide has no present mode");
 const withProduct = deck.renderDeck({ ...sDeck, deck: { "3": { headline: "써 보세요", visual: { type: "product", label: "길 안내 화면" }, support: [], notes: "", refs: ["E-1"], gaps: [], session: 2 } } }, template, PLAN, "../index.html")["deck.html"];
 assert.match(withProduct, /<iframe src="\.\.\/index\.html"/, "the product visual embeds the student's page");
 const xss = deck.renderDeck({ ...sDeck, team: "<img src=x onerror=alert(1)>" }, template, PLAN)["deck.html"];
