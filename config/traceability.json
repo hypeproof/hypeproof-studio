@@ -1404,6 +1404,9 @@
       "sources": [
         {
           "path": "e2e/tests/native-unified-entry.spec.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/start-saved-activities-computed.smoke.mjs"
         }
       ]
     },
