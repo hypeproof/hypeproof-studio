@@ -9,3 +9,7 @@
 
 # PowerShell is happiest with CRLF on Windows.
 *.ps1 text eol=crlf
+
+# The trace registry merges by node id when the clone registered the Harness driver
+# (hypeproof-harness scripts/git-merge/install.sh <clone>); otherwise git's text merge.
+config/traceability.json merge=hp-json-nodes
