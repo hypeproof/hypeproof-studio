@@ -741,3 +741,13 @@ These are conservative implementation choices, not new human agreements.
 - 보관함 lives in the task rail as a separate view (DES-CHAT-77), entered from a "보관함 N" button shown only when something is archived. 다시 열기 is the quiet neutral 44px button at the 14px floor (DEC-29), no red.
 - Seats: personal task workspaces only (no lesson, not instructor). Class seats have no task list; nothing on any seat deletes a task permanently.
 - Default state: on (local display state only; no data leaves the device, no permission change).
+
+## CGP-ART-R-006: style tweak for a picked element (2026-10-25, agent-selected conservative implementation)
+
+- Where: inside the single-pick element chip in the chat panel. DES-ART-06 asks for a popover anchored to the element in the page; the native BrowserTab contract has no trusted in-tab surface (the same gap blocked CGP-ART-D-002 and D-008), and a page-injected popover could be styled or clicked by the page itself. The annotation batch path (default off) is not covered.
+- Live preview: an inline `!important` declaration on the picked node through CDP, resolved in an isolated world, after restoring the node's original `style` attribute exactly; the whole state is re-applied on each press, in order, and the offer's read waits behind any pending restore. Bound to the pick (a sequence number), its node and document generation. A reload ends the preview; the next press clears every choice and says so (no navigation listener: the request still names the values the learner chose for that pick). Restored on removal, re-pick, send, switch off and tab switch. Nothing is written to disk.
+- Which send carries the request: only the panel's own button, whose message is exactly the summary of the current choices. A composer message sends the element alone (as the chip shows), so the coach never edits from choices the learner did not send, and every request has the values on the learner's own turn.
+- Offered set: page colours computed from at most 1,500 elements, top 8 after normalizing to `rgb()`/`rgba()` (other syntaxes and transparent dropped); fixed px steps for font size, padding and radius. Old values the browser did not report as px or rgb are `알 수 없음`, never echoed.
+- Evidence: the send button sends the learner's own message listing the chosen values, so the `user` observation of that turn records them. No new learning-event kind is written: `change_requested` requires a criterion and an artifact reference this flow does not have.
+- Sizes: 44px targets and 14px text win over the design row's 32px stepper (owner rule); swatches draw 24px inside a 44px button.
+- Default state: on wherever element pick is on (CR switch); no new recipient or data flow beyond the element text the pick already sends.

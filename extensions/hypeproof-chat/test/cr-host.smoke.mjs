@@ -90,7 +90,8 @@ await test("CR-09 negative: after a remove, the next turn carries no element tex
   // A cohort that takes no images: no crop, and the preview says so.
   assert.equal(new w.ElementQueue().attach(CTX, { imagesAllowed: false }).imageDataUrl, null);
   // The provider's handlers are these calls, not copies of them.
-  assert.match(providerSrc, /clearElementContext\(\): void \{\s*if \(this\.elementQueue\.clear\(\)\) this\.postElementPreview\(\);/);
+  // CGP-ART-R-006 — removing the element first takes its style preview off the page.
+  assert.match(providerSrc, /clearElementContext\(\): void \{\s*this\.restoreStyleTweakPreview\(\);\s*if \(this\.elementQueue\.clear\(\)\) this\.postElementPreview\(\);/);
   assert.match(providerSrc, /let userTextForModel = withElementText\(/);
   assert.match(providerSrc, /let effectiveImages = turnImages\(images, pageImage, element\);/);
   assert.match(providerSrc, /element: this\.elementQueue\.preview\(\)/);

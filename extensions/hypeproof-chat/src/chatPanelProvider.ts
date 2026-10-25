@@ -127,6 +127,7 @@ import { isCurriculumRuntimeEnabled, isCrVerifyTool, CR_CONTEXT_KEY, CR_DIRECTOR
 import { VerifySession, recordChecked, refusalText, verifyContext, verifyToolResult, type VerifyRecorderPort } from "./verifySession";
 import { artifactVersionFor } from "./artifactVersion";
 import type { ElementContext } from "./elementPick";
+import { buildStyleTweak, previewValues, styleChanges, type StyleTweakState } from "./styleTweak";
 import { checkAgentOrigin } from "./experimentBrowser";
 import {
   crContextKeyValue,
@@ -3571,14 +3572,84 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Queue a picked element for the NEXT turn and show the student exactly what goes. */
   attachElementContext(ctx: ElementContext): void {
+    // CGP-ART-R-006 — a new pick replaces the old one: its preview leaves the page first.
+    this.restoreStyleTweakPreview();
     // The crop rides the page-image conduit when the cohort accepts images (recon R2).
     this.elementQueue.attach(ctx, { imagesAllowed: this.isImagePasteEnabled() });
     this.postElementPreview();
+    void this.offerStyleTweak(ctx);
   }
 
   /** The student removed the element before sending: nothing of it is sent. */
   clearElementContext(): void {
+    this.restoreStyleTweakPreview();
     if (this.elementQueue.clear()) this.postElementPreview();
+  }
+
+  /**
+   * CGP-ART-R-006 — read the picked node once and offer the five rows. Reads only; a failed
+   * read offers nothing (the element itself stays attached). Bound to this pick: a later pick
+   * or a removal in the meantime makes `setTweak` refuse it.
+   */
+  private async offerStyleTweak(ctx: ElementContext): Promise<void> {
+    const browser = this.mcpBrowser;
+    if (!browser || !ctx.backendNodeId || !ctx.documentGeneration) return;
+    const pick = this.elementQueue.pick;
+    // The read waits behind any restore still queued, so it never reads a preview as the original.
+    const read = this.styleTweakChain.then(() => browser.styleTweakRead(ctx.backendNodeId, ctx.documentGeneration));
+    this.styleTweakChain = read.then(() => undefined, () => undefined);
+    try {
+      const state = buildStyleTweak(crypto.randomUUID(), ctx, await read);
+      if (this.elementQueue.setTweak(state, pick)) this.postElementPreview();
+    } catch {
+      /* no offer: the chip keeps working without the tweak rows */
+    }
+  }
+
+  /** Page writes for the tweak run one at a time, in the order the learner made them. */
+  private styleTweakChain: Promise<void> = Promise.resolve();
+
+  private applyStyleTweakPreview(state: StyleTweakState, values: Record<string, string>): Promise<void> {
+    const browser = this.mcpBrowser;
+    const run = this.styleTweakChain.then(async () => {
+      if (!browser) throw new Error("no browser");
+      await browser.styleTweakApply(state.backendNodeId, state.documentGeneration, state.styleAttr, values);
+    });
+    this.styleTweakChain = run.catch(() => undefined);
+    return run;
+  }
+
+  /** Take the preview off the page (best effort: a reloaded page has already dropped it). */
+  private restoreStyleTweakPreview(): void {
+    const state = this.elementQueue.tweak;
+    if (state && styleChanges(state).length) void this.applyStyleTweakPreview(state, {}).catch(() => undefined);
+  }
+
+  /** CGP-ART-R-006 — the learner chose (or reset) one offered value; the host validates, then previews. */
+  private async handleStyleTweakMessage(msg: { id?: unknown; prop?: unknown; value?: unknown }): Promise<void> {
+    if (!this.isCurriculumRuntimeEnabled()) {
+      await this.postDenialNotice("lesson");
+      this.clearElementContext();
+      return;
+    }
+    // The state changes now, before any await, so a send right after this message carries it.
+    const r = this.elementQueue.chooseStyle(msg.id, msg.prop, msg.value === undefined ? null : msg.value);
+    if (!r.ok) {
+      if (r.reason !== "stale") this.postPageNotice("고를 수 있는 값만 바꿔 볼 수 있어요.");
+      this.postElementPreview();
+      return;
+    }
+    this.postElementPreview();
+    try {
+      await this.applyStyleTweakPreview(r.state, previewValues(r.state));
+    } catch {
+      // The page changed under the preview: nothing chosen on it is sent.
+      if (this.elementQueue.tweak?.id === r.state.id) {
+        this.elementQueue.resetTweak();
+        this.postPageNotice("화면이 바뀌어서 고른 스타일을 지웠어요. 요소를 다시 골라 주세요.");
+        this.postElementPreview();
+      }
+    }
   }
 
   private postElementPreview(): void {
@@ -6786,6 +6857,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // CR-09 — the student removed the picked element; a CR-only message (CR-T02 inventory).
         this.clearElementContext();
         break;
+      case "styleTweakSet":
+        // CGP-ART-R-006 — a CR-only message: the handler re-checks the switch first.
+        await this.handleStyleTweakMessage(msg);
+        return;
       case "verifyOpen":
       case "verifyStart":
       case "verifyRetest":
@@ -7215,7 +7290,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.pendingPageNotice = null;
     // CR-09 — the picked element goes with this turn only, and only while the switch is on.
     this.finishAnnotationSend(annotations);
-    const element = this.elementQueue.take(this.isCurriculumRuntimeEnabled());
+    // CGP-ART-R-006 — the preview was only for choosing; it leaves the page as the request goes.
+    this.restoreStyleTweakPreview();
+    const element = this.elementQueue.take(this.isCurriculumRuntimeEnabled(), text);
     // CGP-CHAT-R-011 — the attached file rides in front of the learner's text, model-only, as quoted data.
     // It is taken only here, where the model turn starts: a send turned away earlier leaves the chip
     // (host-owned; the webview never clears it on its own) and the file pending.

@@ -16,6 +16,7 @@ import './answerAttempts.css';
 import { visibleAttempts, ATTEMPT_HISTORY_NOTE } from '../../src/answerAttempts';
 import { AttemptPager } from './AttemptPager';
 import { AnnotationTray } from "./AnnotationTray";
+import { StyleTweakPanel } from "./StyleTweakPanel";
 import { storedShell } from "../../src/shellDisplay";
 import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
@@ -141,6 +142,8 @@ interface Props {
   onAnnotationAction?: (action: 'element' | 'rectangle' | 'remove' | 'comment', number?: number, comment?: string) => void;
   elementPreview?: import("../../src/protocol").ElementPreview | null;
   onRemoveElement?: () => void;
+  /** CGP-ART-R-006 — preview one offered style value on the picked element (null resets it). */
+  onStyleTweakSet?: (id: string, prop: string, value: string | null) => void;
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
   pageAttachment?: import("../../src/pageContext").PageAttachmentPreview | null;
   /** CGP-CHAT-R-029 — `undoId`: the host keeps the removed page under it for 되돌리기. */
@@ -1410,6 +1413,18 @@ export function ChatPanel(props: Props) {
     setRollExpand(null);
   };
 
+  /**
+   * CGP-ART-R-006 — "{n}개 바꿔 달라고 하기" sends the learner's chosen values as their own message,
+   * verbatim, like a friend button: the draft is left alone. The host adds the element block and
+   * the structured request (property, old value, new value) that the chip already showed.
+   */
+  const handleStyleTweakSend = (text: string) => {
+    if (busy || props.sendLocked || !text) return;
+    if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; }
+    if (!reserveRecovery(text, [], 'auto')) return;
+    sendWhenOnline(() => props.onSend(text), 'press');
+  };
+
   const handleRollClick = () => {
     // Capture the current draft as the "first thought" and prompt expansion.
     setRollExpand({ original: draft.trim() });
@@ -1939,6 +1954,15 @@ export function ChatPanel(props: Props) {
                 <summary>코치에게 보낼 내용 보기</summary>
                 <pre data-testid="element-context-sent">{props.elementPreview.sentText}</pre>
               </details>
+              {props.elementPreview.styleTweak && props.onStyleTweakSet && (
+                <StyleTweakPanel
+                  key={props.elementPreview.styleTweak.id}
+                  view={props.elementPreview.styleTweak}
+                  disabled={busy || !!props.sendLocked}
+                  onSet={(prop, value) => props.onStyleTweakSet!(props.elementPreview!.styleTweak!.id, prop, value)}
+                  onSend={handleStyleTweakSend}
+                />
+              )}
             </div>
             <button type="button" className="hps-element-remove" aria-label="이 요소 빼기" onClick={props.onRemoveElement}>
               <ChatIcon kind="close" size={16} />

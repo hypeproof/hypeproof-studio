@@ -596,6 +596,8 @@ export type WebviewMessage = (
   // CR-09 — the student removes the picked element before sending (CR switch only).
   | { type: "annotationAction"; action: "element" | "rectangle" | "remove" | "comment"; number?: number; comment?: string }
   | { type: "removeElementContext" }
+  /** CGP-ART-R-006 — preview one offered style value on the picked element (null = reset that property). */
+  | { type: "styleTweakSet"; id: string; prop: string; value: string | null }
   /** CGP-ART-R-007 — the learner removed the attached page; nothing from the page is sent. */
   | { type: "removePageContext"; undoId?: string }
   /** CGP-CHAT-R-029 — 되돌리기: the host restores the page/file snapshot it kept under this id, or nothing. */
@@ -1030,6 +1032,8 @@ export interface ElementPreview {
   sentText: string;
   /** The element crop as it will be sent, or null when the cohort sends no images. */
   imageDataUrl: string | null;
+  /** CGP-ART-R-006 — the style tweak offered for this element, or null/absent when none. */
+  styleTweak?: import("./styleTweak").StyleTweakView | null;
 }
 
 /** Cohort plan for the learning wiki and deck skills (served as `learning_wiki.plan`; learningWiki.ts re-exports it). */

@@ -869,6 +869,7 @@ export function App() {
           dispatch({ type: "elementAttached", element: null });
           postToHost({ type: "removeElementContext" });
         }}
+        onStyleTweakSet={(id, prop, value) => postToHost({ type: "styleTweakSet", id, prop, value })}
         aiNotice={state.aiNotice}
         stopNotice={state.stopNotice}
         streamFor={state.streamFor}

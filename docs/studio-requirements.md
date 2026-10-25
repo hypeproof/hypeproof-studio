@@ -5965,3 +5965,46 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## Style tweak for a picked element (CGP-ART-R-006)
+
+REQ-STUDIO-STYLE-TWEAK. CGP-ART-R-006 / REQ-ART-06 / CGP-ART-007 / PI#2 (human judgment stays
+visible: the learner's own choice of values) and PI#3 (learning is embedded in the real edit). After the learner picks one
+element in the preview (CR-09, the single-pick chip), the chip offers `스타일 바꿔 보기` with five
+rows: 색, 배경, 글자 크기, 간격 (padding), 모서리 (border-radius). Colour rows offer only swatches
+of colours computed on the page (`이 페이지에 쓰인 색`, at most 8, normalized to `rgb()`/`rgba()`,
+transparent and other colour syntaxes dropped); size rows step through fixed px sets (글자 크기
+12–48, 간격 0–48, 모서리 0–32). The host refuses any value outside the offered set, any property
+outside the five, and any press from an earlier pick's panel; nothing of a refused press reaches
+the page or the coach. Each accepted press shows on the picked node in the preview tab only: the
+node is resolved in a Studio-owned isolated world (page scripts cannot override the DOM methods
+used), its original `style` attribute is restored exactly and the chosen values are set inline, so
+a reset (per property, or all) returns the attribute byte for byte; each page call gives up after
+2 s. No file is written; the coach changes the source in its turn. The panel's `이 버튼이 보낼 요청
+보기` shows the exact element text its send carries: the element block, then a `[학생이 고른 스타일
+변경 요청]` block with one JSON line per change carrying `property`, `old` (the computed value read
+at the pick, or `알 수 없음`) and `new`. Only `{n}개 바꿔 달라고 하기` carries that block: it sends the
+learner's own message `고른 요소를 이렇게 바꿔 주세요: …` listing every chosen value, so the values
+are recorded on the learner's turn (the `user` observation event) as their choice; the host adds the
+block only when the message equals the summary of the current choices. Any other message sends the
+element alone, as the chip's `코치에게 보낼 내용 보기` shows. The preview is taken off the page when
+the element is removed, on a new pick (before the new pick is read), on any send, when the switch
+turns off, and before the control's session to that tab closes (a tab switch). A reload or
+navigation of the preview ends the preview; the next press finds the document changed, clears every
+choice and says `화면이 바뀌어서 고른 스타일을 지웠어요. 요소를 다시 골라 주세요.` The rows are CR-only
+(`styleTweakSet` is in the CR webview inventory; the handler re-checks the switch first). Not
+offered on the annotation batch path (`annotationBatchEnabled`), which has no single-element chip.
+Learner targets are 44px and text 14px, overriding the design row's 32px stepper.
+
+Tests: `extensions/hypeproof-chat/test/style-tweak.test.tsx` (offer, validation, request text,
+stepper, queue binding, panel presses), `test/style-tweak-host.test.tsx` (the real provider:
+refusal before any page write, ordered writes, restore before a re-pick's read, a stale read refused,
+page change, removal, new pick, switch off), `test/style-tweak-control.test.tsx` (the real
+BrowserControl on a fake CDP session: isolated world, generation and origin checks, restore with the
+switch off, restore before a tab switch closes the session, a page that never answers),
+`test/style-tweak-page.smoke.mjs` (real headless Chromium: read, live preview on that node only
+within 100 ms, exact restore, a hostile page's DOM overrides defeated by the isolated world, source
+file byte-identical) and `test/style-tweak-layout.smoke.mjs`
+(computed 44px targets, 14px text, 24px swatches, focus ring, inside the chip at 320/800/1420,
+personal and classroom, dark/light/forced colours). The browser smokes fail under
+`FOCUS_REQUIRE_BROWSER=1` without a browser.

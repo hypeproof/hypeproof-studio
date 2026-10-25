@@ -217,3 +217,14 @@ the tab itself cannot be prevented. Drafts are retained until explicit discard.
 Returning to a reopened page still requires the existing generation/version checks
 before sending. Window/process termination persistence is outside this slice.
 PI #2: the learner owns the decision to keep or discard their unsent judgment.
+
+### REQ-ART-06 implementation contract (CGP-ART-R-006)
+
+Built in the single-pick element chip, not as a popover in the page (no trusted in-tab surface;
+see decisions.md CGP-ART-R-006). Five rows (색, 배경, 글자 크기, 간격, 모서리); colour swatches are
+the page's own computed colours (max 8), sizes step through fixed px sets, and the host refuses
+any other value. The preview is an inline style on the picked node only, restored exactly on
+reset, removal, a new pick, any send, switch off or a tab switch; no file is written. Only the
+panel's send carries one `{property, old, new}` line per change after the element block, and its
+message lists the chosen values (their own choice on the record). 44px targets and 14px text
+override the 32px stepper. Requirement: REQ-STUDIO-STYLE-TWEAK in docs/studio-requirements.md.
