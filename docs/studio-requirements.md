@@ -1784,7 +1784,8 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
 - **Adding a file.** "파일 넣기" opens the system picker; the host copies the pick into
   `<work folder>/자료/` (created if missing) with identical bytes and lists it with origin 나
   (a pick already in `자료/` keeps its own Unicode spelling, so an NFD name is still found). At
-  most 50 learner items; an item whose copy is gone from the folder does not count.
+  most 50 learner items; an item whose copy is gone from the folder does not count. A full list
+  refuses a pick or a drop before anything is copied, so no unlisted copy is left in `자료/`.
   The copy never overwrites: an occupied name gets " (2)", " (3)" …; a pick already directly in
   `자료/` is listed in place. Refused, each with its Korean reason and nothing written: a link,
   a folder, a missing or unreadable file, empty or whitespace-only text, more than 100 KB,

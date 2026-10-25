@@ -492,6 +492,18 @@ await t("#2641: a read-only 자료 refuses a drop with the permission reason", a
   } finally { fs.chmodSync(materialsDir(f), 0o755); }
 });
 
+await t("#2641: a full list refuses a drop or a pick before anything is copied into 자료/", async () => {
+  const f = fixture();
+  let manifest = f.mat.emptyManifest();
+  for (let n = 0; n < f.mat.MATERIALS_MAX_ITEMS; n++) manifest = f.mat.withLearnerItem(manifest, { kind: "url", ref: `https://example.com/${n}` }, 1).manifest;
+  f.mat.saveManifest(f.mat.materialsManifestFile(storage, f.root), manifest);
+  const s = await f.req("materialAddDrop", dropped("가득.md", "a\n"));
+  assert.equal(s.error, f.mat.MATERIALS_COPY.tooManyItems);
+  f.setPick(put(outside, "가득.md", "a\n"));
+  assert.equal((await f.req("materialAddFile")).error, f.mat.MATERIALS_COPY.tooManyItems);
+  assert.equal(fs.existsSync(materialsDir(f)) ? fs.readdirSync(materialsDir(f)).length : 0, 0, "no unlisted copy is left");
+  assert.deepEqual(f.hostWrites, [], "nothing recorded");
+});
 await t("wiring: the config flag follows the file-attach gate", async () => {
   const src = fs.readFileSync(path.join(extension, "src/chatPanelProvider.ts"), "utf8");
   assert.ok(src.includes("...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),"));

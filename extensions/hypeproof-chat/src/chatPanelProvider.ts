@@ -3041,6 +3041,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const snap = await this.materialsSnapshot();
     if (!snap) { await this.postMaterials({ requestId, error: FILE_REFUSAL_COPY["no-workspace"] }); return; }
     const scope = this.turnRequestScope();
+    // A full list refuses a file before anything is copied, so no unlisted copy is left in 자료/.
+    if (url === undefined && "full" in withLearnerItem(loadManifest(snap.file), { kind: "file", ref: "\u0000" }, Date.now(), listMaterialFolder(snap.root))) { await this.postMaterials({ requestId, error: MATERIALS_COPY.tooManyItems }); return; }
     let item: { kind: "file" | "url"; ref: string; title: string };
     if (url !== undefined) {
       const checked = checkMaterialUrl(url);
