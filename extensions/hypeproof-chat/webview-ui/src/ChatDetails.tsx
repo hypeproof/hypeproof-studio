@@ -15,7 +15,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefO
 export type IconKind =
   | 'send' | 'stop' | 'copy' | 'check' | 'down' | 'plus' | 'globe' | 'image' | 'retry' | 'code' | 'play' | 'chevron' | 'file'
   | 'info' | 'alert' | 'close' | 'search' | 'pencil' | 'terminal' | 'tool' | 'link' | 'external' | 'eye' | 'pointer'
-  | 'back' | 'forward' | 'message' | 'chevron-down' | 'scroll' | 'flask' | 'bulb' | 'clock' | 'lock' | 'book' | 'package'
+  | 'back' | 'forward' | 'message' | 'chevron-down' | 'chevron-up' | 'scroll' | 'flask' | 'bulb' | 'clock' | 'lock' | 'book' | 'package'
   | 'folder' | 'ruler' | 'dots' | 'sparkle' | 'square' | 'check-square' | 'help' | 'upload' | 'plug' | 'ticket' | 'moon'
   | 'flag' | 'people' | 'camera' | 'keyboard' | 'thought' | 'dot' | 'open-window' | 'pin' | 'source' | 'return'
   | 'minus' | 'menu' | 'settings' | 'hand' | 'game' | 'ban';
@@ -52,6 +52,7 @@ export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: Ic
     {kind === 'forward' && <path d="M5 12h14m-6-6 6 6-6 6" />}
     {kind === 'message' && <path d="M4 5h16v11H9l-5 4V5Z" />}
     {kind === 'chevron-down' && <path d="m6 9 6 6 6-6" />}
+    {kind === 'chevron-up' && <path d="m6 15 6-6 6 6" />}
     {kind === 'scroll' && <path d="M12 3v18m-4-14 4-4 4 4m-8 10 4 4 4-4" />}
     {kind === 'flask' && <><path d="M9.5 3h5M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3" /><path d="M7 15h10" /></>}
     {kind === 'bulb' && <><path d="M9 18h6M10 21h4" /><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3Z" /></>}

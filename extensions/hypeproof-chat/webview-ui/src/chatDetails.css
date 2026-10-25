@@ -766,3 +766,38 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
 .hps-shell .hps-copy-toasts .hps-copy-toast:empty { display: none; }
 .hps-copy-toast > .hps-icon { flex-shrink: 0; }
 @media (forced-colors: active) { .hps-shell .hps-copy-toasts .hps-copy-toast { color: CanvasText; background: Canvas; border-color: CanvasText; } }
+
+/* CGP-CHAT-R-027 / CGP-CHAT-D-027: find bar at the transcript's top edge, right-aligned in the chat
+   column (ChatFindBar keeps the reading position when it opens or closes); 44px controls, 14px
+   floor, paints no transcript node. */
+.hps-find {
+  flex: none; align-self: flex-end; box-sizing: border-box; display: flex; align-items: center; gap: var(--hp-space-1);
+  width: calc(var(--hp-control-md) * 9); max-width: calc(100% - var(--hp-space-4)); margin: var(--hp-space-2); padding: var(--hp-space-1);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2);
+  background: var(--vscode-editorWidget-background, var(--hp-bg-panel-default)); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, inherit));
+  font-size: var(--hp-font-body);
+}
+.hps-find-input {
+  flex: 1 1 auto; min-width: 0; min-height: var(--hp-control-md); box-sizing: border-box; padding: 0 var(--hp-space-2);
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-1);
+  background: var(--vscode-input-background, transparent); color: var(--vscode-input-foreground, inherit); font: inherit; font-size: var(--hp-font-body);
+}
+.hps-find-input:focus-visible, .hps-find-btn:focus-visible { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
+.hps-find-count { flex: none; min-width: calc(var(--hp-space) * 10); text-align: center; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); font-variant-numeric: tabular-nums; }
+.hps-find-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  min-width: var(--hp-control-md); min-height: var(--hp-control-md); padding: 0; border: 0; border-radius: var(--hp-space-1);
+  background: transparent; color: inherit; font: inherit; font-size: var(--hp-font-caption); cursor: pointer;
+}
+.hps-find-btn:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-find-btn:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+.hps-find-btn:disabled { cursor: default; color: var(--hp-text-muted-default); }
+::highlight(hp-find) { background-color: var(--vscode-editor-findMatchHighlightBackground, color-mix(in srgb, var(--hp-bg-accent-default) 20%, transparent)); }
+/* The current match also underlines, so it differs from the others without colour. */
+::highlight(hp-find-current) { background-color: var(--vscode-editor-findMatchBackground, color-mix(in srgb, var(--hp-bg-accent-default) 45%, transparent)); text-decoration: underline; }
+@media (forced-colors: active) {
+  .hps-find, .hps-find-input { border-color: CanvasText; }
+  .hps-find-btn:disabled { color: GrayText; }
+  ::highlight(hp-find) { background-color: Mark; color: MarkText; }
+  ::highlight(hp-find-current) { background-color: Highlight; color: HighlightText; }
+}

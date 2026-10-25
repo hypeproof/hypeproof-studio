@@ -12940,6 +12940,59 @@
           "path": "extensions/hypeproof-chat/test/secondary-sidebar.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-CHAT-FIND",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Find in chat (CGP-CHAT-R-027)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHAT-FIND",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-FIND"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatFind.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatFindBar.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHAT-FIND",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-FIND",
+        "ST-IMP-CHAT-FIND"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/chat-find.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/chat-find-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }
