@@ -39,6 +39,7 @@ try{for(const dark of [true,false])for(const width of [320,800,1420]){
  assert.deepEqual(m.rows.map(r=>r.title),activities.map(a=>a.workspace),'the full path stays in the title');
  assert.ok(m.rows.every((r,i)=>r.name.endsWith(', '+activities[i].workspace)),'the full path is in the accessible name: '+label);
  assert.deepEqual(m.rows.map(r=>r.visible).slice(0,3),['…/local-trial-744/workspace','…/수업 자료/2학기 프로젝트','…\\Documents\\class'],'the visible workspace is short: '+label);
+ assert.ok(m.rows.slice(0,3).every(r=>!r.cut),'a short workspace is shown whole: '+label);
  const longRow=m.rows[3];
  assert.ok(longRow.cut&&longRow.ellipsis==='ellipsis'&&longRow.clip==='hidden','a folder longer than the row ends in an ellipsis: '+label);
  assert.ok(m.page<=width+1,'no horizontal page scroll: '+label);
