@@ -162,6 +162,8 @@ export interface ChatConfig {
   turnTools?: import('./turnTools').TurnToolsAvailability;
   /** CGP-CHAT-R-011 — this seat may attach a work-folder text file (sdk_tools.read, never instructors). */
   fileAttach?: boolean;
+  /** Personal/adult profile with the existing workspace read grant. */
+  fileMentions?: boolean;
   /** CGP-KNOW-R-003 — this seat has the activity's 자료 list (the file-attach gate). */
   materials?: boolean;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
@@ -594,6 +596,9 @@ export type WebviewMessage = (
   | { type: "repickAttachment"; id: string; name: string }
   | { type: "discardAttachmentFailure"; id: string }
   | { type: "attachWorkspaceFile" }
+  | { type: "fileMentionSearch"; requestId: string; query: string }
+  | { type: "fileMentionPick"; requestId: string; path: string }
+  | { type: "fileMentionCancel"; requestId: string }
   /** CGP-KNOW-R-015 — "이 파일에 대해 묻기" from the 작업 자료 list: attach this work-folder path (relative) through the same checks, then focus the composer. */
   | { type: "askAboutFile"; path: string }
   /** CGP-CHAT-R-011 — the learner removed the attached file; nothing from it is sent. */
@@ -902,6 +907,8 @@ export type HostMessage = (
   | { type: "attachmentFailure"; failure: import("./attachmentFailure").AttachmentFailure }
   | { type: "attachmentFailureResolved"; id: string }
   | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string; notice?: string }
+  | { type: "fileMentionResults"; requestId: string; files: import("./workspaceFileMentions").MentionFile[]; limited: boolean; error?: string }
+  | { type: "fileMentionPicked"; requestId: string; ok: boolean }
   /** CGP-KNOW-R-003 — the 자료 list (null = this seat has none). `requestId` answers that press; `error`/`notice` say what happened. */
   | { type: "materialsState"; view: import("./activityMaterialsView").MaterialsView | null; requestId?: string; error?: string; notice?: string }
   // cr-verify — the "Test my product" panel (null = hidden). `sendText`: the student's own

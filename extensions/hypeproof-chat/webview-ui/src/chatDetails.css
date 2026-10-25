@@ -718,3 +718,11 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
 }
 /* CGP-CHAT-R-015: terminal evidence is separate from the coach's answer prose. */
 .hps-turn-elapsed { margin: 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+/* CGP-CHAT-R-018: locally scoped file names, with the composer retaining keyboard focus. */
+.hps-file-mentions { max-height: 30vh; overflow: auto; min-width: 0; font-size: var(--hp-font-body); }
+.hps-file-mentions p { margin: var(--ds-c-studio-chatdetails-space-2) 0; }
+.hps-file-mentions [role="listbox"] { display: flex; flex-direction: column; gap: var(--ds-c-studio-chatdetails-space-2); }
+.hps-file-mentions button { display: flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2); text-align: start; white-space: normal; overflow-wrap: anywhere; }
+.hps-file-mentions button > svg { flex-shrink: 0; }
+.hps-file-mentions button > span { min-width: 0; }
+.hps-file-mentions [aria-selected="true"] { border-color: var(--hp-border-control-selected); background-color: var(--hp-bg-control-selected); }

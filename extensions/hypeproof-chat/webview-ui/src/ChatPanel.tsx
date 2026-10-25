@@ -1,6 +1,7 @@
 import { useMenuTypeahead } from './menuTypeahead';
 import { citationKindLabel } from './citationKind';
 import { elapsedWorkLabel } from '../../src/turnElapsed';
+import { useFileMentions } from './FileMentions';
 import { ClassWindowNotice } from "./ClassWindowNotice";
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
@@ -846,6 +847,7 @@ export function ChatPanel(props: Props) {
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages, normalizeTextSize(config?.textSize));
   const headingSlot = useContext(HeadingSlotContext);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, draft, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
+  const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft, setDraft, editor: textareaRef, composing, activityId, taskId });
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
@@ -1983,6 +1985,7 @@ export function ChatPanel(props: Props) {
             <div className="hps-img-note">보내면 작업 폴더의 images 폴더에 저장돼요.</div>
           </>
         )}
+        {fileMentions.view}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
           data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
@@ -2009,17 +2012,22 @@ export function ChatPanel(props: Props) {
             aria-label={folderMissing ? "보관한 초안 (읽기 전용)" : composerLabel(coachName)}
             aria-describedby={[freeEnded ? "hps-free-ended-note" : '', folderMissing ? "missing-folder-draft-label" : personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
             value={draft}
+            aria-autocomplete={config?.fileMentions ? "list" : undefined}
+            aria-controls={fileMentions.open ? fileMentions.listId : undefined}
+            aria-activedescendant={fileMentions.activeId}
+            onSelect={event => fileMentions.setCaret(event.currentTarget.selectionStart)}
             onChange={(e) => {
               if (folderMissing) return;
               // Manual edits own the entire draft, even if it ends with an old choice.
               lastReplyChoice.current = null;
-              setDraft(e.target.value);
+              setDraft(e.target.value);fileMentions.setCaret(e.target.selectionStart);
             }}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
             onKeyDown={(e) => {
               const isComposing = imeComposing(e, composing);
+              if (!isComposing && fileMentions.keyDown(e)) return;
               // CGP-DS-R-027: composition keys stay with the IME and never reach the panel,
               // workspace or menu handlers above (Escape would close the sources panel).
               if (isComposing) { e.stopPropagation(); return; }
