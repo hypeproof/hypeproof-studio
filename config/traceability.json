@@ -13057,6 +13057,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "release.json"
         }
       ]
     }

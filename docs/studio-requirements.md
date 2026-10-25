@@ -5836,6 +5836,16 @@ of conversation/file synchronization.
   import local activities, or change runtime authority. Existing free/local entry
   remains independent.
 
+Release dependency: `release.json` requires the literal `account-api@2` line
+from Service in addition to the existing `studio-api` package surface. Service
+line 2 must cover the earlier account contract plus these workspace endpoints and
+continue serving line 1 for existing consumers such as Lab. A Service
+that only provides the earlier account/chat API is not a compatible provider for
+this metadata UI. The line-2 provider must include the workspace contract and additive
+migration `0061-personal-workspaces.sql`; declaring a line does not prove that the
+production migration or deployment has happened. Existing account/model contracts
+remain unchanged.
+
 Implementation: `src/personalSpace.ts`, the start-page bridge, and
 `webview-ui/src/PersonalSpace.tsx` under `extensions/hypeproof-chat/`.
 Focused evidence: `test/personal-space.test.mjs` (persistence across a new client,

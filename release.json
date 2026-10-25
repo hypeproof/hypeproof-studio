@@ -3,6 +3,7 @@
   "product": "studio",
   "provides": {},
   "requires": {
-    "studio-api": { "package": "@hypeproof/service-contracts", "manifest": "extensions/hypeproof-chat/package.json", "surface": "studio-api" }
+    "studio-api": { "package": "@hypeproof/service-contracts", "manifest": "extensions/hypeproof-chat/package.json", "surface": "studio-api" },
+    "account-api": { "line": "2" }
   }
 }
