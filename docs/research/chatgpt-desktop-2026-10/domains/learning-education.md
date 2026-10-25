@@ -308,3 +308,7 @@ REQ/DES-CGP-LEARN-14 as built (2026-10-26, DEC-LEARN-14): Chalk `/authoring` ask
 - DEFER 10: 07, 14, 17, 18, 19, 20, 23, 24, 26, 34.
 - REJECT 12: 08, 16, 22, 30, 31, 33, 38, 39, 40, 41, 42, 43.
 - 43 inventory rows, 17 requirements, 17 design requirements.
+
+## Implementation notes
+
+- **REQ-CGP-LEARN-17 (CGP-LEARN-R-017), 2026-10-26.** Implemented in Chalk `/manage` as REQ-CHALK-HELP-TRIAGE (`docs/requirements/classroom-admin.md#help-queue-keyboard-triage`), with DES-CGP-LEARN-17. Agent choices under the owner rules (recorded in `decisions.md`): "resolve" for the instructor is 답변 완료 · 학생 확인 대기, because only the learner marks a request resolved (ADM-05); the documented key is `E`; selection is keyboard focus on the row's own button; keys listen only in the help region and the open record.
