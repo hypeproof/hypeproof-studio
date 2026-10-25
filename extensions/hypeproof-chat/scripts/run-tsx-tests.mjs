@@ -28,6 +28,9 @@ const BANNER_POSTED =
 // Window stub whose setState/getState keep a webview state in globalThis.__vsState (panel sizes survive a re-mount).
 const BANNER_STATE =
   "globalThis.__vsState = undefined; globalThis.window = globalThis.window ?? {}; globalThis.window.acquireVsCodeApi = () => ({ postMessage() {}, getState: () => globalThis.__vsState, setState: (s) => { globalThis.__vsState = s; } });";
+// Window stub that records postMessage calls and keeps a real webview state (CGP-KNOW-R-002: the view survives a re-mount).
+const BANNER_POSTED_STATE =
+  "globalThis.__posted = []; globalThis.__vsState = undefined; globalThis.window = globalThis.window ?? {}; globalThis.window.acquireVsCodeApi = () => ({ postMessage: (m) => globalThis.__posted.push(m), getState: () => globalThis.__vsState, setState: (s) => { globalThis.__vsState = s; } });";
 const BANNER_POSTED_ARROW =
   "globalThis.__posted = []; globalThis.window = globalThis.window ?? {}; globalThis.window.acquireVsCodeApi = () => ({ postMessage: (m) => globalThis.__posted.push(m), getState: () => undefined, setState: () => {} });";
 
@@ -52,6 +55,7 @@ const OVERRIDES = {
   "preview-recovery": { banner: BANNER_POSTED },
   "ask-about-file": { banner: BANNER_POSTED_ARROW },
   "activity-materials": { banner: BANNER_POSTED_ARROW },
+  "activity-home": { banner: BANNER_POSTED_STATE },
   "attachment-failure-ui": { banner: BANNER_POSTED_ARROW },
   "trial-end-card-dismiss": { banner: BANNER_POSTED },
   "activity-status-chatpanel": { banner: BANNER_POSTED },

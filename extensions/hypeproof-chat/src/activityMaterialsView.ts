@@ -53,6 +53,9 @@ export const MATERIALS_DROP_MAX_BYTES = 100 * 1024;
 export const MATERIALS_COPY = {
   note: "고른 자료만 다음 질문과 함께 AI에게 보내요. 고르지 않은 자료는 보내지 않아요.",
   instructorLocked: "강사가 보낸 자료는 목록에서 뺄 수 없어요.",
+  /** CGP-KNOW-R-002: the activity home's 자료 view before the host answers, and when it answers with no list. */
+  homeLoading: "자료 목록을 불러오는 중이에요.",
+  homeUnavailable: "이 작업 폴더에서는 지금 자료 목록을 쓸 수 없어요.",
   tooManySelected: `한 번에 ${MATERIALS_MAX_SELECTED}개까지 넣을 수 있어요. 다른 자료를 먼저 빼 주세요.`,
   tooManyItems: `자료는 ${MATERIALS_MAX_ITEMS}개까지 둘 수 있어요. 쓰지 않는 자료를 먼저 빼 주세요.`,
   notRemovable: "강사가 보낸 자료는 뺄 수 없어요.",

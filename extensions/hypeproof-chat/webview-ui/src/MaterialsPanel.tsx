@@ -23,6 +23,8 @@ const nextId = () => `material-${Date.now().toString(36)}-${(++seq).toString(36)
 /** One subscription per mounted surface; both read the same host message. */
 function useMaterials() {
   const [view, setView] = useState<MaterialsView | null>(null);
+  // CGP-KNOW-R-002: the activity home tells "not answered yet" from "the host has no list here".
+  const [answered, setAnswered] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const pending = useRef<string | null>(null);
@@ -31,6 +33,7 @@ function useMaterials() {
     const dispose = onHostMessage(message => {
       if (message.type !== 'materialsState') return;
       setView(message.view);
+      setAnswered(true);
       // An answer to another surface's press updates the list, not this surface's messages.
       if (message.requestId !== undefined && message.requestId !== pending.current) return;
       if (message.requestId !== undefined) { pending.current = null; setBusy(false); }
@@ -48,7 +51,7 @@ function useMaterials() {
   };
   /** A refusal decided here, with no host request (several files in one drop). */
   const refuse = (message: string) => { setError(message); setNotice(''); };
-  return { view, error, notice, busy, ask, refuse };
+  return { view, answered, error, notice, busy, ask, refuse };
 }
 
 const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.items ?? []).some(item => item.kind === 'file');
@@ -72,24 +75,28 @@ function MaterialAddedTime({ at }: { at?: number }) {
   return <time className="hp-materials-meta" dateTime={date.toISOString()} title={date.toISOString()}>추가: {label}</time>;
 }
 
-export function MaterialsPanel() {
-  const { view, error, notice, busy, ask, refuse } = useMaterials();
+/**
+ * `home` (CGP-KNOW-R-002): drawn as the activity home's 자료 view in the task workspace rail, open,
+ * with a heading instead of a disclosure. Without it, the coach rail's closed card (classroom seats).
+ */
+export function MaterialsPanel({ home = false }: { home?: boolean }) {
+  const { view, answered, error, notice, busy, ask, refuse } = useMaterials();
   const [url, setUrl] = useState('');
   const [dropping, setDropping] = useState(false);
-  if (!view) return null;
+  if (!view) return home ? <p className="hp-materials-note hp-materials-home-state" role="status">{answered ? MATERIALS_COPY.homeUnavailable : MATERIALS_COPY.homeLoading}</p> : null;
   const chosen = view.items.filter(item => item.selected).length;
   const submitUrl = () => { if (url.trim()) ask(requestId => ({ type: 'materialAddUrl', requestId, url })); };
-  // Only the open card is a drop target; the closed summary row leaves a drop to the shell.
-  const target = (event: DragEvent<HTMLDetailsElement>) => event.currentTarget.open && hasFiles(event);
-  const onDragOver = (event: DragEvent<HTMLDetailsElement>) => {
+  // Only the open card is a drop target (the home view is always open); the closed summary row leaves a drop to the shell.
+  const target = (event: DragEvent<HTMLElement>) => (home || (event.currentTarget as HTMLDetailsElement).open) && hasFiles(event);
+  const onDragOver = (event: DragEvent<HTMLElement>) => {
     if (!target(event)) return;
     event.preventDefault(); event.stopPropagation();
     if (!dropping) setDropping(true);
   };
-  const onDragLeave = (event: DragEvent<HTMLDetailsElement>) => {
+  const onDragLeave = (event: DragEvent<HTMLElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
   };
-  const onDrop = (event: DragEvent<HTMLDetailsElement>) => {
+  const onDrop = (event: DragEvent<HTMLElement>) => {
     if (!target(event)) return;
     event.preventDefault(); event.stopPropagation();
     setDropping(false);
@@ -101,9 +108,11 @@ export function MaterialsPanel() {
     void read.then(base64 => ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64 })))
       .catch(() => ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64: '' })));
   };
-  return <details className="hp-rail-lesson hp-materials" data-testid="materials" data-drop-active={dropping ? '' : undefined}
-    onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
-    <summary>자료 {view.items.length}개{chosen ? ` · 이번 질문에 ${chosen}개 넣음` : ''}</summary>
+  const Root = home ? 'section' : 'details';
+  const count = `자료 ${view.items.length}개${chosen ? ` · 이번 질문에 ${chosen}개 넣음` : ''}`;
+  return <Root className={home ? 'hp-materials hp-materials-home' : 'hp-rail-lesson hp-materials'} data-testid="materials" aria-labelledby={home ? 'hp-materials-home-count' : undefined}
+    data-drop-active={dropping ? '' : undefined} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+    {home ? <h2 id="hp-materials-home-count" className="hp-materials-home-count">{count}</h2> : <summary>{count}</summary>}
     <p className="hp-materials-note">{MATERIALS_COPY.note}</p>
     {view.items.length > 0 && <ul className="hp-materials-list" aria-label="자료 목록">
       {view.items.map(item => <li key={item.id} className="hp-materials-item" data-material-origin={item.origin}>
@@ -141,7 +150,7 @@ export function MaterialsPanel() {
     </div>
     {error && <p role="alert" className="hp-materials-error">{error}</p>}
     {notice && <p role="status" className="hp-materials-notice">{notice}</p>}
-  </details>;
+  </Root>;
 }
 
 /**

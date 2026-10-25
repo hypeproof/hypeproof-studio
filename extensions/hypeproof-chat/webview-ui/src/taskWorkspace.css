@@ -36,6 +36,22 @@
 .tw-new span { margin-right: var(--ds-c-studio-taskworkspace-space-12); }
 .tw-quiet:hover:not(:disabled), .tw-task:hover:not(:disabled), .tw-title-button:hover:not(:disabled), .tw-source-list button:hover { background-color: var(--hp-bg-control-hover); }
 .tw-quiet:active:not(:disabled), .tw-task:active:not(:disabled), .tw-title-button:active:not(:disabled), .tw-source-list button:active { background-color: var(--hp-bg-control-pressed); }
+/* CGP-KNOW-R-002 — the activity home's 작업/자료 views: two equal tabs under the brand. The chosen tab is
+   marked by weight and an underline, never by colour alone; each tab is a 44px target. A panel is a flex
+   column so the task list keeps its own scroll; the 자료 panel scrolls as a whole. */
+.tw-home-tabs { display: flex; gap: var(--ds-c-studio-taskworkspace-space-12); margin: 0 0 var(--ds-c-studio-taskworkspace-space-18); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
+.tw-workspace .tw-home-tab { flex: 1 1 0; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0 var(--ds-c-studio-taskworkspace-space-2); color: inherit; background: transparent; border: 0; border-bottom: var(--ds-c-studio-taskworkspace-size-7) solid transparent; border-radius: 0; font-size: var(--hp-font-caption); }
+.tw-workspace .tw-home-tab[aria-selected="true"] { font-weight: var(--hp-weight-strong); border-bottom-color: currentColor; }
+.tw-workspace .tw-home-tab:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.tw-workspace .tw-home-tab:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+/* Forced colours: the system selection fill would sit under Chrome's Canvas text backplate and hide the label,
+   so the chosen tab keeps Canvas/CanvasText and shows its state as a 2px Highlight underline plus the weight. */
+@media (forced-colors: active) {
+  .tw-workspace .tw-home-tabs .tw-home-tab[aria-selected="true"] { background-color: Canvas !important; color: CanvasText !important; border-bottom: var(--ds-c-studio-taskworkspace-size-7) solid Highlight !important; }
+}
+.tw-home-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tw-home-panel[hidden] { display: none; }
+.tw-home-materials { overflow: auto; overscroll-behavior: contain; }
 .tw-search { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-12); margin: var(--ds-c-studio-taskworkspace-space-34) var(--ds-c-studio-taskworkspace-space-13) var(--ds-c-studio-taskworkspace-space-18); color: var(--tw-muted); font-size: var(--hp-font-caption); }
 .tw-search input { width: 100%; box-sizing: border-box; min-height: var(--hp-control-min); padding: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); }
 .tw-rail-heading { color: var(--tw-muted); display: flex; justify-content: space-between; margin: 0 var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-12); font-size: var(--hp-font-caption); }

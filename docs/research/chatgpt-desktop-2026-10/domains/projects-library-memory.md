@@ -360,3 +360,15 @@ Fix round 2 (2026-10-23):
   consented files and the uploaded version files.
 PI #2 and #5: the learner inspects the chosen audience and the exact work they
 are about to share (JUDGMENT and OWNERSHIP; no capability labels in the UI).
+
+### REQ-KNOW-02 implementation contract (CGP-KNOW-R-002)
+
+Built 2026-10-25 as `REQ-STUDIO-ACTIVITY-HOME` in `docs/studio-requirements.md`. The task
+workspace rail (personal and trial seats) is the activity home: a 작업/자료 tablist under the
+brand. 작업 is the existing task rail; 자료 is the CGP-KNOW-R-003 list, moved out of the chat
+column on those seats so it has one place. Switching posts nothing to the host and never remounts
+the conversation, so the draft stays byte-identical; the chosen view is remembered per seat in the
+webview state. Seats without the 자료 list, instructors and classroom/lesson seats keep today's
+layout. The activity title above the tabs is left to CGP-KNOW-D-002. Decisions: DEC-KNOW-R-002.
+PI #1: the learner moves between their work and its materials without losing what they were
+writing (no capability labels).
