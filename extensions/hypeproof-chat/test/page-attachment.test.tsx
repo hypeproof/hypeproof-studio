@@ -121,7 +121,7 @@ t("host: remove clears every page slot; send consumes the preview; other writers
   const clear = host.slice(host.indexOf("private clearPageAttachment(): void {"), host.indexOf("private dropPageAttachment(): void {"));
   for (const s of ["this.pendingPageContext = null", "this.pendingPageImage = null", "this.pendingPageNotice = null", "this.dropPageAttachment()"]) ok(clear.includes(s), s);
   ok(/this\.pendingPageContext = null;\n[^\n]*\n\s*this\.dropPageAttachment\(\);/.test(host), "consumed with the turn and its chip cleared");
-  ok(/if \(\(msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect'\) && this\.pendingPageAttachment\) this\.clearPageAttachment\(\);/.test(host), "a task switch drops the page");
+  ok(/const leaving = msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect' \|\| msg\.type === 'taskArchive' \|\| msg\.type === 'taskRestore';/.test(host) && /if \(leaving && this\.pendingPageAttachment\) this\.clearPageAttachment\(\);/.test(host), "a task switch (and archive / reopen, CGP-CHAT-R-025) drops the page");
   ok(/this\.clearingHistory = true;\n\s*if \(this\.pendingPageAttachment\) this\.clearPageAttachment\(\);/.test(host), "a cleared conversation drops the page");
   ok(/if \(this\.pendingPageAttachment\) void this\.post\(\{ type: "pageAttachment", attachment: this\.pendingPageAttachment \}\);\n/.test(host.slice(host.indexOf('type: "config",'))), "config re-posts a pending chip");
   ok((host.match(/this\.dropPageAttachment\(\); \/\/ CGP-ART-R-007/g) ?? []).length === 2, "quest result and experiment capture drop the preview");

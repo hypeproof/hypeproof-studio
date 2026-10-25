@@ -5937,6 +5937,35 @@ Recovery items (보내지 못한 메시지, UX38) are not low-stakes: their 삭�
 취소 and offers no undo. The element chip (curriculum runtime only), annotation marks and the quote
 chip are outside this row.
 
+## Task archive (CGP-CHAT-R-025)
+
+REQ-STUDIO-TASK-ARCHIVE / CGP-CHAT-R77 (CGP-CHAT-077) / CGP-CHAT-D77 / PI#2 (human judgment stays
+visible: the learner decides what stays in view, and nothing of their work is lost): on a personal
+task workspace (REQ-STUDIO-TASK-WORKSPACE), the task menu (대화 메뉴) offers **보관하기** for the open
+task. It hides the task from 최근 작업 and keeps its transcript, draft, earlier versions and answer
+verdicts byte for byte: only an archive sidecar (`<scope>.archive.json`, task id → archive time,
+checksummed like the other sidecars) records it, so the task file keeps the shape older builds read
+(a downgrade lists archived tasks again and loses nothing). The open draft is flushed into the task
+before it is archived, like a task switch; the most recently updated listed task then opens, or a
+new empty task when none is left, and the main pane says once, in a status line, that the task went
+to 보관함 and can be reopened there. A running task must be stopped first: the menu item is
+disabled while a turn streams, and the host refuses archive and 다시 열기 while a turn, a stopped turn
+still settling, an approval or a verification run is in flight (the same refusal as a task switch),
+and only for the task that is open at the current revision. When archived tasks exist, the task list
+ends with **보관함 N**, a separate view of the rail listing archived tasks (newest archive first,
+title as text, message count and archive date) with one **다시 열기** button each (44px, the quiet
+neutral button, no destructive colour, because nothing is deleted). 다시 열기 lists the task again and
+opens it; focus moves to the 보관함 heading on open, back to its button on return, and to the reopened
+task's row after a reopen. An archived task cannot be opened by a plain select, a stale message or a
+finish notice; the open task is always listed, so a crash between the sidecar and the task file
+leaves the task open and visible. An unreadable sidecar reads as nothing archived and is set aside,
+never overwritten. A folder move carries archive state. 내 작업 가져가기 still includes archived
+tasks. Class, lesson and instructor seats have no 보관하기 (class profiles keep no permanent delete
+either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs` (store and the real
+host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
+`test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
+forced colours in headless Chromium).
+
 ## Personal workspace metadata — REA W01 partial
 
 `ST-REQ-PERSONAL-WORKSPACE-METADATA` is the bounded metadata contract below.
@@ -5994,7 +6023,6 @@ metadata reopening and busy controls). These use synthetic accounts/Service
 responses. Production deployment, installed-app acceptance and real account data
 are **NOT RUN**. Retry intent is host-memory only: after a host restart, refresh
 and inspect the saved list before creating the same title again.
-
 
 ## Synthetic personal records — REA W02 partial (local only)
 

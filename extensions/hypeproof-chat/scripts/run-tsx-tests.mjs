@@ -42,6 +42,7 @@ const OVERRIDES = {
   "personal-records-render": { banner: BANNER_POSTED },
   "goal-status": { banner: BANNER_POSTED },
   "keyboard-navigation": { banner: BANNER_STATE },
+  "task-archive-ui": { banner: BANNER_POSTED },
   "lesson-capability-entry": { banner: BANNER_POSTED_ARROW },
   "accuracy-education": { banner: BANNER_POSTED },
   "activity-trash": { banner: BANNER_POSTED },

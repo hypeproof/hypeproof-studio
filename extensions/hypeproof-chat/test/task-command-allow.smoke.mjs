@@ -441,7 +441,9 @@ try {
     assert.doesNotMatch(provider, /항상 허용 \(\$\{signature\}\)/, "the old label is gone");
     assert.match(provider, /private readonly taskCommandAllows = new TaskCommandAllows\(\);/);
     assert.doesNotMatch(provider, /\.update\([^)]*taskCommandAllows/, "never persisted");
-    assert.match(provider, /msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect'\) this\.endTaskCommandAllows\(\)/, "task create / select clears");
+    // CGP-CHAT-R-025: archive and 다시 열기 leave the task too, so they clear with create / select.
+    assert.match(provider, /const leaving = msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect' \|\| msg\.type === 'taskArchive' \|\| msg\.type === 'taskRestore';/, "task create / select / archive / restore leave the task");
+    assert.match(provider, /if \(leaving\) this\.endTaskCommandAllows\(\)/, "leaving the task clears");
     assert.match(read("src/extension.ts"), /await changeFolderConsent\([^;]*\);\s*(?:\/\/[^\n]*\n\s*)?provider\.endTaskCommandAllows\(\);/, "the consent command clears");
     assert.match(provider, /invalidateProfile\(\): void \{[\s\S]{0,900}this\.endTaskCommandAllows\(\);/, "a token change (sign-in / sign-out) clears");
     assert.match(provider, /this\.lastAllowInstructor !== undefined && this\.lastAllowInstructor !== isInstructor\) this\.endTaskCommandAllows\(\)/, "an instructor flip clears");

@@ -104,6 +104,13 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     savePanelSizes(view.scope, next);
   };
   const [railOpen, setRailOpen] = useState(false);
+  // CGP-CHAT-R-025 — 보관함 is a separate view of the task list, inside the same rail.
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const archiveToggle = useRef<HTMLButtonElement>(null);
+  const archiveHeading = useRef<HTMLHeadingElement>(null);
+  const archiveFocus = useRef<'heading' | 'toggle' | null>(null);
+  /** The task 다시 열기 asked for; focus follows it only if that task really opened. */
+  const reopenPending = useRef<string | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   // REQ-STUDIO-ARTIFACT-PROVENANCE — undefined until the host answers for this scope.
   const [artifacts, setArtifacts] = useState<ArtifactProvenanceView | null | undefined>(undefined);
@@ -159,6 +166,34 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const blocked = busy || !!view.error;
   const visibleTasks = useMemo(() => filterTasksByTitle(view.tasks, railSearch.applied), [view.tasks, railSearch.applied]);
   const searching = railSearch.applied.trim() !== '';
+  const archivedTasks = view.archived ?? [];
+  const visibleArchived = useMemo(() => filterTasksByTitle(archivedTasks, railSearch.applied), [archivedTasks, railSearch.applied]);
+  // CGP-CHAT-R-025 — say where the task went when 보관하기 replaced it with another one. Bound to the
+  // scope it was archived from and cleared by the next task change.
+  const [archiveNote, setArchiveNote] = useState<{ title: string; scopeKey: string } | null>(null);
+  const lastOpen = useRef({ scope: view.scope, taskId: view.activeTaskId });
+  useEffect(() => {
+    const before = lastOpen.current;
+    lastOpen.current = { scope: view.scope, taskId: view.activeTaskId };
+    if (before.scope !== view.scope || before.taskId === view.activeTaskId) return;
+    const moved = before.taskId ? view.archived?.find(task => task.id === before.taskId) : undefined;
+    setArchiveNote(moved ? { title: moved.title, scopeKey } : null);
+  }, [view, scopeKey]);
+  const openArchive = (open: boolean) => {
+    archiveFocus.current = open ? 'heading' : 'toggle';
+    setArchiveOpen(open);
+  };
+  useLayoutEffect(() => {
+    const target = archiveFocus.current === 'heading' ? archiveHeading.current : archiveFocus.current === 'toggle' ? archiveToggle.current : null;
+    archiveFocus.current = null;
+    target?.focus({ preventScroll: true });
+  }, [archiveOpen]);
+  useLayoutEffect(() => {
+    if (!reopenPending.current || reopenPending.current !== view.activeTaskId || archiveOpen) return;
+    reopenPending.current = null;
+    // REQ-STUDIO-FOCUS-RESTORE: the reopened task's row, else the composer, never <body>.
+    returnFocus(() => rail.current?.querySelector<HTMLElement>('.tw-task[aria-current="page"]') ?? null);
+  }, [view.activeTaskId, archiveOpen]);
   const date = useMemo(() => new Intl.DateTimeFormat('ko', { month: 'short', day: 'numeric' }), []);
 
   const updateRequest = useCallback((next: SourceRequest | null) => {
@@ -258,6 +293,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     setRenamePending(null);
     setRenameError(null);
     setRailOpen(false);
+    setArchiveOpen(false);
   }, [scopeKey, clearRequestTimer, updateRequest]);
   useEffect(() => clearRequestTimer, [clearRequestTimer]);
   useEffect(() => onHostMessage(message => { if (message.type === 'artifactProvenance') setArtifacts(message.view); }), []);
@@ -453,7 +489,19 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         setSearch({ scope: view.scope, text, applied: composing ? railSearch.applied : text });
       }} onCompositionEnd={event => { const text = event.currentTarget.value; setSearch({ scope: view.scope, text, applied: text }); }} placeholder="작업 이름으로 찾기…" /></label>
       {/* CGP-SHELL-R-013 — the task list fails alone; 새 작업, search and the chat keep working. */}
-      <PanelBoundary panel="task-rail">{() => <>
+      <PanelBoundary panel="task-rail">{() => archiveOpen ? <>
+      {/* CGP-CHAT-R-025 — archived tasks keep their whole conversation; 다시 열기 lists and opens one. Nothing here deletes. */}
+      <div className="tw-rail-heading tw-archive-heading"><h2 ref={archiveHeading} tabIndex={-1}>보관함</h2><span>{archivedTasks.length}</span></div>
+      <button type="button" className="tw-quiet tw-archive-back" onClick={() => openArchive(false)}>최근 작업으로 돌아가기</button>
+      <ul className="tw-task-list tw-archive-list" aria-label="보관한 작업">
+        {visibleArchived.map(task => <li key={task.id} className="tw-archived">
+          <span className="tw-task-title">{task.title}</span>
+          <span className="tw-task-meta"><span>{taskCountLine(task.messageCount, null)}</span><time dateTime={new Date(task.archivedAt).toISOString()}>{date.format(task.archivedAt)} 보관</time></span>
+          <button type="button" className="tw-quiet tw-reopen" aria-label={`다시 열기: ${task.title}`} disabled={blocked} onClick={() => { reopenPending.current = task.id; setRailOpen(false); postToHost({ type: 'taskRestore', id: task.id }); }}>다시 열기</button>
+        </li>)}
+      </ul>
+      {!visibleArchived.length && <p className="tw-empty-search">{archivedTasks.length ? '찾는 이름이 없습니다. 다른 이름으로 찾아보세요.' : '보관한 작업이 없어요.'}</p>}
+      </> : <>
       <div className="tw-rail-heading">최근 작업 <span>{view.tasks.length}</span></div>
       {/* The list grows to fill the rail, so the no-match line sits above it, next to the field. */}
       {/* The polite live region stays mounted so a screen reader announces the line when it appears. */}
@@ -472,6 +520,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         </li>;
         })}
       </ul>
+      {archivedTasks.length > 0 && <button ref={archiveToggle} type="button" className="tw-quiet tw-archive-open" onClick={() => openArchive(true)}>보관함 <span>{archivedTasks.length}</span></button>}
       </>}</PanelBoundary>
       </div>
       {materials && <div id="tw-home-materials" className="tw-home-panel tw-home-materials" role="tabpanel" aria-labelledby="tw-home-tab-materials" hidden={homeView !== 'materials'}>
@@ -510,6 +559,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         : unsavedDraft
         ? <button className="tw-quiet" disabled={blocked} onClick={() => postToHost({ type: 'taskRecoverDraft' })}>새 작업에 보관</button>
         : <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>)}</div>}
+      {archiveNote?.scopeKey === scopeKey && <p className="tw-archive-note" role="status">‘{archiveNote.title}’ 작업을 보관함에 넣었어요. 대화는 그대로 있고, 작업 목록의 보관함에서 다시 열 수 있어요.</p>}
       {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
       <div ref={conversation} id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}><ActivityHomeContext.Provider value={materials ? HOME_WITH_MATERIALS : HOME_WITHOUT_MATERIALS}>{children}</ActivityHomeContext.Provider></HeadingSlotContext.Provider></div>
     </section>

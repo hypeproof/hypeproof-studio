@@ -642,7 +642,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         try {
           if (source) this.draftSource = source;
           let recoveryDraft: ActivityDraft | undefined;
-          await this.setConnectionChanging(true, msg.type === 'taskRecoverDraft' ? draft => { recoveryDraft = draft; } : undefined, msg.type === 'taskCreate' || msg.type === 'taskSelect');
+          // CGP-CHAT-R-025 — archive and 다시 열기 leave the open task like a switch does: its draft is flushed first.
+          const leaving = msg.type === 'taskCreate' || msg.type === 'taskSelect' || msg.type === 'taskArchive' || msg.type === 'taskRestore';
+          await this.setConnectionChanging(true, msg.type === 'taskRecoverDraft' ? draft => { recoveryDraft = draft; } : undefined, leaving);
           if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) throw new Error('열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
           await this.retryInterruptedHistory();
           const expected = { taskId: msg.taskId, revision: store.getView().revision };
@@ -666,15 +668,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               renameUndone = await store.undoRename(held.undo).then(() => true, () => false);
             }
           }
+          else if (msg.type === 'taskArchive') await store.archiveTask(msg.taskId, expected);
+          else if (msg.type === 'taskRestore') await store.restoreTask(msg.id, expected);
           this.orchestratorState = undefined;
           // CGP-AGENT-R-004 — "이번 작업 동안" ends with the task.
-          if (msg.type === 'taskCreate' || msg.type === 'taskSelect') this.endTaskCommandAllows();
+          if (leaving) this.endTaskCommandAllows();
           // CGP-CHAT-R-029 — so does a rename's 되돌리기.
-          if (msg.type === 'taskCreate' || msg.type === 'taskSelect') this.renameUndo = null;
+          if (leaving) this.renameUndo = null;
           // CGP-ART-R-007 — queued page text belongs to the conversation it was attached in.
-          if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingPageAttachment) this.clearPageAttachment();
+          if (leaving && this.pendingPageAttachment) this.clearPageAttachment();
           // CGP-CHAT-R-011 — so does an attached work-folder file.
-          if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingFileAttachment) this.clearFileAttachment();
+          if (leaving && this.pendingFileAttachment) this.clearFileAttachment();
           await this.postConfig();
           await this.postHistory();
         } finally {
@@ -6202,7 +6206,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
-    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
+    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskArchive', 'taskRestore', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
     if (msg.type==='saveActivityDraft') {
@@ -9463,7 +9467,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const store = this.currentTaskStore();
       if (store?.getView().error) throw new Error('task_read_failed');
       const secrets = [activity.token].filter((value): value is string => typeof value === 'string' && !!value);
-      const tasks = store ? store.getView().tasks.map(task => takeawayTask(task.title, store.getHistory(task.id), secrets))
+      // CGP-CHAT-R-025 — archived tasks are still the learner's work.
+      const tasks = store ? [...store.getView().tasks, ...store.getView().archived ?? []].map(task => takeawayTask(task.title, store.getHistory(task.id), secrets))
         : [takeawayTask('이 활동의 대화', this.getHistory(), secrets)];
       const owned = takeawayOwnedFiles(await loadLedger(provenanceLedgerFile(this.context.globalStorageUri.fsPath, root)));
       if (!current()) return false;

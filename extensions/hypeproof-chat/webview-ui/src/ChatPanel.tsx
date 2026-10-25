@@ -1617,6 +1617,8 @@ export function ChatPanel(props: Props) {
           </button>
           {personalWorkspace && !props.instructor && <button type="button" className="tw-copy-conversation" onClick={() => { void conversationCopy.copy(); }} disabled={props.streaming || !conversationCopy.available} data-hp-tooltip="이 작업의 대화를 글로 복사해요">{COPY_CONVERSATION_LABEL}</button>}
           <button onClick={props.onClear} disabled={props.streaming} data-hp-tooltip="대화 기록 지우기">대화 지우기</button>
+          {/* CGP-CHAT-R-025 — hide this task from the list; its conversation, draft and records stay. Personal tasks only. */}
+          {personalWorkspace && !props.instructor && <button type="button" className="tw-archive-task" onClick={() => postToHost({ type: 'taskArchive' })} disabled={props.streaming} data-hp-tooltip="목록에서 숨기고 대화는 그대로 둬요">보관하기</button>}
           {/* Personal chat: usage opens the settings dialog on its usage section (the remaining line
               already shows the count). */}
           {personalWorkspace && config?.access && <button onClick={() => openPreferences(true)} data-hp-tooltip="이용권과 사용량 확인">이용권 · 사용량</button>}

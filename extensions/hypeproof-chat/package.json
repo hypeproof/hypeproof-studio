@@ -673,7 +673,7 @@
     "test:reference-transport": "node --experimental-strip-types --test test/reference-transport.test.mjs",
     "test:trial-end-notice": "node --test test/sdk-trial-end-notice.test.mjs",
     "test:sdk-required": "node --experimental-strip-types --test test/sdk-required.test.mjs",
-    "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs"
+    "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs test/task-archive.test.mjs"
   },
   "devDependencies": {
     "postcss": "^8.5.6",
