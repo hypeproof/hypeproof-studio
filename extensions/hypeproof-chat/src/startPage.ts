@@ -1,3 +1,4 @@
+import { PersonalSpace } from "./personalSpace";
 import * as vscode from "vscode";
 import { AccountError, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
@@ -117,15 +118,19 @@ export class StartPage {
   private passListShown = false;
   /** CONV-FUNNEL-R-006 — a purchase-time sign-in begun from the list on this surface and not finished yet. */
   private purchaseSignIn?: PassSurface;
+  private personalSpace?: PersonalSpace;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
     private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string) => Promise<boolean>,
     private githubSource?: GithubContinueSource,
     private accounts?: AccountSession,
-  ) {}
+  ) {
+    if (accounts) this.personalSpace = new PersonalSpace({ account: accounts, settings: () => this.settings(), changed: () => { void this.refresh(); } });
+  }
 
   accountChanged(): void {
+    this.personalSpace?.sync();
     // CONV-FUNNEL-R-006 — the purchase-time sign-in finished (or ended without an account).
     const account = this.accounts?.view();
     if (this.purchaseSignIn && account?.status === "signedIn") { this.purchasePathEvent("sign_in_completed", this.purchaseSignIn); this.purchaseSignIn = undefined; }
@@ -748,7 +753,7 @@ export class StartPage {
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
-      ...(this.accounts ? {account:this.accounts.view()} : {}),
+      ...(this.accounts ? {account:this.accounts.view(), personalSpace:this.personalSpace?.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(freeStart ? { freeStart } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
@@ -779,6 +784,14 @@ export class StartPage {
 
   private async handle(msg: StartRequest): Promise<void> {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    if (["personalSpaceOpen", "personalSpaceEnsure", "personalProjectCreate", "personalProjectOpen"].includes(msg.type)) {
+      if (this.accounts?.view().account?.id !== (msg as { accountId?: string }).accountId) return;
+      if (msg.type === "personalSpaceOpen") await this.personalSpace?.open();
+      else if (msg.type === "personalSpaceEnsure") await this.personalSpace?.ensure();
+      else if (msg.type === "personalProjectCreate") await this.personalSpace?.create(msg.title);
+      else if (msg.type === "personalProjectOpen" && typeof msg.projectId === "string") await this.personalSpace?.open(msg.projectId);
+      await this.refresh(); return;
+    }
     if (msg.type.startsWith("account")) {
       if (!this.accounts) return;
       this.error = undefined;
@@ -796,7 +809,7 @@ export class StartPage {
         else if (msg.type === "accountCopyLink") await this.accounts.copyLink(text => vscode.env.clipboard.writeText(text));
         else if (msg.type === "accountRefresh") await this.accounts.refreshView();
         else if (msg.type === "accountManage") await this.accounts.openAccount();
-        else if (msg.type === "accountSignOut") { this.candidate = undefined; await this.accounts.signOut(); }
+        else if (msg.type === "accountSignOut") { this.personalSpace?.signOut(); void this.refresh(); this.candidate = undefined; await this.accounts.signOut(); }
         else if (msg.type === "accountActivate") await this.activateAccountPass(msg.passId);
       } catch (e) { this.error = e instanceof AccountError ? e.message : "계정을 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요."; }
       await this.refresh(); return;

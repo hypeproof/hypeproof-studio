@@ -6,6 +6,7 @@ import { Brand } from "./Brand";
 import { ChatIcon } from "./ChatDetails";
 import "./start.css";
 
+import { PersonalSpace } from "./PersonalSpace";
 import { AccountEntry } from "./AccountEntry";
 import { chosenPass } from "./purchaseChoice";
 import { InstructorInbox } from "./InstructorInbox";
@@ -221,6 +222,7 @@ export function StartPage() {
           {joinClass && <button className="studio-text-button" type="button" disabled={state.checking} onClick={() => postToHost({ type: "joinLinkDismiss" })}>링크 닫기</button>}
           <button className="studio-text-button" type="button" disabled={state.checking} onClick={() => { dropJoin(); setEntry(null); setToken(""); }}>{free ? "돌아가기" : "시작 방법 다시 선택"}</button>
         </form>}
+        {state.account?.status === "signedIn" && state.personalSpace && <PersonalSpace key={state.account.account?.id} space={state.personalSpace} accountId={state.account.account!.id} post={postToHost} />}
         {!!state.activities?.length && !state.candidate && <nav aria-label="저장된 활동" className="studio-saved-activities"><h3>저장된 활동</h3>{state.activities.map(a => { const label = `${activityLabel(a.kind, a.pass, undefined, !!a.free)} · ${a.name}`; return <button className="studio-text-button studio-saved-activity" key={a.ref} disabled={state.checking} title={a.workspace} aria-label={`${label}, ${a.workspace}`} onClick={() => postToHost({type:"selectActivity",ref:a.ref})}><span className="studio-saved-activity-name">{label}</span><small>{shortWorkspace(a.workspace)}</small></button>; })}</nav>}
         {state.legacyConnection && !state.profile && <p className="studio-help">이전 연결은 이 기기에 보관돼 있습니다. 사용할 서버의 참여 코드를 다시 입력해 주세요.</p>}
         {state.legacyHistory && <button className="studio-text-button" disabled={state.checking} onClick={()=>postToHost({type:'exportLegacyHistory'})}>이전 기록 내보내기</button>}

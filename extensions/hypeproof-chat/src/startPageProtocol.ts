@@ -12,6 +12,7 @@ export interface ActivitySummary {
 }
 export interface StartState {
   account?: import("./accountSession").AccountView;
+  personalSpace?: import("./personalSpace").PersonalSpaceView;
   activities?: ActivitySummary[];
   legacyConnection?: boolean;
   legacyHistory?: boolean;
@@ -81,6 +82,9 @@ export interface FreeStartView {
 }
 export type StartRequest =
   | { type: "startReady" }
+  | { type: "personalSpaceOpen" | "personalSpaceEnsure"; accountId: string }
+  | { type: "personalProjectCreate"; title: string; accountId: string }
+  | { type: "personalProjectOpen"; projectId: string; accountId: string }
   /**
    * CONV-PURCHASE-R-002 — `productId`: the pass chosen on the list when the sign-in is pressed from
    * login at purchase. The host keeps it (memory only) and gives it back as `purchase.selected`.
