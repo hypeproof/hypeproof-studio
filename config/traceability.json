@@ -13028,6 +13028,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "scripts/release/test/release-manifest.test.mjs"
         }
       ]
     },
