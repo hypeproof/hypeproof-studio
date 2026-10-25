@@ -229,6 +229,7 @@ import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { CapabilityChangeTracker, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
+import { RemovalSlot, validUndoId } from "./removalUndo";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
 import { addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
 import { classUpdateHold } from "./updateCheckerHelpers";
@@ -497,6 +498,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore };
   /** Failed turns are not in durable history yet; keep only bounded, task-bound retry metadata. */
   private turnRequests = new Map<string, { scope: string; message: ChatMessage }>();
+  /** CGP-CHAT-R-029 — the one removed file/page chip and the one rename that 되돌리기 can still put back. */
+  // Created on first use: test harnesses build the provider with Object.create, which skips field initializers.
+  private removedFileSlot?: RemovalSlot<{ preview: import("./protocol").FileAttachmentPreview; modelText: string; root: string }>;
+  private removedPageSlot?: RemovalSlot<{ context: string | null; image: string | null; notice: string | null; attachment: import("./pageContext").PageAttachmentPreview }>;
+  private get removedFile() { return this.removedFileSlot ??= new RemovalSlot(); }
+  private get removedPage() { return this.removedPageSlot ??= new RemovalSlot(); }
+  private renameUndo: { id: string; store: object; undo: import("./removalUndo").RenameUndo<'default' | 'automatic' | 'manual'> } | null = null;
   private turnRequestScope(): string {
     return JSON.stringify([activityConnections(this.context)?.scope ?? this.nativeHistoryScope ?? '', this.currentTaskStore?.()?.getView().activeTaskId ?? null]);
   }
@@ -576,6 +584,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!store) return;
     const before = store.getView();
     if (!msg.taskId || msg.taskId !== before.activeTaskId || this.taskChanging) return;
+    let renameUndoId: string | undefined, renameUndone = false;
     const knownSource = (value: string) => {
       try {
         const url = new URL(value);
@@ -643,10 +652,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             await store.recoverDraft(msg.taskId, recoveryDraft);
           }
           else if (msg.type === 'taskSelect') await store.select(msg.id, expected);
-          else if (msg.type === 'taskRename') await store.rename(msg.taskId, msg.title);
+          else if (msg.type === 'taskRename') {
+            // CGP-CHAT-R-029 — the rename is kept so 되돌리기 can put the exact prior title back.
+            const renamed = await store.renameWithUndo(msg.taskId, msg.title);
+            this.renameUndo = renamed.undo ? { id: randomId(), store, undo: renamed.undo } : null;
+            renameUndoId = this.renameUndo?.id;
+          } else if (msg.type === 'taskRenameUndo') {
+            // Only the matching id spends the kept rename; a stale or foreign id leaves it for its owner.
+            // A refusal is answered on the toast alone (removalUndoResult), not as a workspace error.
+            const held = this.renameUndo;
+            if (held && validUndoId(msg.undoId) && held.id === msg.undoId && held.store === store && held.undo.taskId === msg.taskId) {
+              this.renameUndo = null;
+              renameUndone = await store.undoRename(held.undo).then(() => true, () => false);
+            }
+          }
           this.orchestratorState = undefined;
           // CGP-AGENT-R-004 — "이번 작업 동안" ends with the task.
           if (msg.type === 'taskCreate' || msg.type === 'taskSelect') this.endTaskCommandAllows();
+          // CGP-CHAT-R-029 — so does a rename's 되돌리기.
+          if (msg.type === 'taskCreate' || msg.type === 'taskSelect') this.renameUndo = null;
           // CGP-ART-R-007 — queued page text belongs to the conversation it was attached in.
           if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingPageAttachment) this.clearPageAttachment();
           // CGP-CHAT-R-011 — so does an attached work-folder file.
@@ -659,7 +683,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
       }
       await this.post({ type: 'taskWorkspaceState', view: store.getView() });
-      if (msg.type === 'taskRename' && msg.requestId) await this.post({ type: 'taskRenameResult', requestId: msg.requestId, taskId: msg.taskId, saved: true });
+      if (msg.type === 'taskRename' && msg.requestId) await this.post({ type: 'taskRenameResult', requestId: msg.requestId, taskId: msg.taskId, saved: true, ...(renameUndoId ? { undoId: renameUndoId } : {}) });
+      if (msg.type === 'taskRenameUndo') await this.post({ type: 'removalUndoResult', undoId: String(msg.undoId), restored: renameUndone });
     } catch (error) {
       let message = error instanceof Error ? error.message : '작업 기록을 저장하지 못했습니다. 다시 시도해 주세요.';
       if (msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') {
@@ -673,8 +698,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       if ((msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') && msg.requestId) {
         await this.post({ type: 'sourceOpenResult', requestId: msg.requestId, url: msg.url, taskId: msg.taskId, opened: false, error: message });
-      } else await this.post({ type: 'taskWorkspaceError', error: message, ...(msg.type === 'taskRecoverDraft' ? { draftSaveFailed: true } : {}) });
+      // CGP-CHAT-R-029 — a refused rename undo (a reply streaming, a test running) is answered on the toast
+      // alone: no workspace banner, and sending is not locked by it.
+      } else if (msg.type !== 'taskRenameUndo') await this.post({ type: 'taskWorkspaceError', error: message, ...(msg.type === 'taskRecoverDraft' ? { draftSaveFailed: true } : {}) });
       if (msg.type === 'taskRename' && msg.requestId) await this.post({ type: 'taskRenameResult', requestId: msg.requestId, taskId: msg.taskId, saved: false });
+      if (msg.type === 'taskRenameUndo') await this.post({ type: 'removalUndoResult', undoId: String(msg.undoId), restored: false });
     }
   }
   private accessState:AccessState|undefined;
@@ -2803,6 +2831,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const page = buildPageAttachment(ctx, !!this.pendingPageImage);
     this.pendingPageContext = page.modelText;
     this.pendingPageAttachment = page.preview;
+    this.removedPage.forget();
     void this.post({ type: "pageAttachment", attachment: page.preview });
     // #308 — announce inline in the chat panel, NOT via a VS Code toast (a toast
     // pauses the integrated browser). The webview clears it on the next send.
@@ -2904,8 +2933,51 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const read = readWorkspaceTextFile(root, file);
     if (!read.ok) { this.failAttachmentRead(file, 'text', read.reason, retryId); return refuse(read.reason); }
     this.pendingFileAttachment = { preview: read.preview, modelText: read.modelText, root };
+    this.removedFile.forget();
     void this.post({ type: "fileAttachment", attachment: read.preview });
     return true;
+  }
+  /**
+   * CGP-CHAT-R-029 — 되돌리기 on a removed file chip puts back the exact snapshot the host kept (never
+   * content from the webview), once, in the same task, same work folder and with the same gate.
+   */
+  private async restoreRemovedFile(undoId: unknown): Promise<void> {
+    const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
+    const file = this.pendingFileAttachment ? null : this.removedFile.take(undoId, this.turnRequestScope());
+    const restored = !!file && file.root === this.resolveCoachCwd() && fileAttachAllowed(profile, this._instructorMode.isInstructor === true) && !folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
+    if (restored) {
+      this.pendingFileAttachment = file;
+      void this.post({ type: "fileAttachment", attachment: file.preview });
+    }
+    await this.post({ type: "removalUndoResult", undoId: validUndoId(undoId) ? undoId : "", restored });
+  }
+  private pageSnapshot() {
+    return this.pendingPageAttachment ? { context: this.pendingPageContext, image: this.pendingPageImage, notice: this.pendingPageNotice, attachment: this.pendingPageAttachment } : null;
+  }
+  /** CGP-CHAT-R-029 — the same for a removed page chip: its text, screenshot and notice, exactly as they were. */
+  private async restoreRemovedPage(undoId: unknown): Promise<void> {
+    const kept = this.pendingPageAttachment || this.pendingPageContext ? null : this.removedPage.take(undoId, this.turnRequestScope());
+    // The screenshot goes back only while the seat still allows images; without it the page would not be
+    // the exact prior state, so nothing is restored.
+    const page = kept && (!kept.image || this.isImagePasteEnabled()) ? kept : null;
+    if (page) {
+      this.pendingPageContext = page.context;
+      this.pendingPageImage = page.image;
+      this.pendingPageAttachment = page.attachment;
+      void this.post({ type: "pageAttachment", attachment: page.attachment });
+      if (page.notice) this.postPageNotice(page.notice);
+    }
+    await this.post({ type: "removalUndoResult", undoId: validUndoId(undoId) ? undoId : "", restored: !!page });
+  }
+  /**
+   * CGP-CHAT-R-029 — a send makes every earlier removal final, whether or not anything is pending and on
+   * every send path (fresh send, retry, a send held or refused before its turn starts). Both webviews
+   * share this slot, so the other one is told to end its offer too.
+   */
+  private finalizeRemovals(): void {
+    const file = this.removedFile.forget(), page = this.removedPage.forget(), rename = this.renameUndo !== null;
+    this.renameUndo = null;
+    if (file || page || rename) void this.post({ type: "removalsFinal" });
   }
   /**
    * CGP-KNOW-R-015 — "이 파일에 대해 묻기" (작업 자료 list, explorer context menu): attach that file
@@ -2957,11 +3029,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** CGP-CHAT-R-011 — remove the queued file; nothing from it is sent. */
   private clearFileAttachment(): void {
     this.pendingFileAttachment = null;
+    this.removedFile.forget();
     void this.post({ type: "fileAttachment", attachment: null });
   }
   /** CGP-CHAT-R-011 — hand the queued file text to the send that is starting, and stop showing it as going out. */
   private takeFileAttachment(): string | null {
     const file = this.pendingFileAttachment;
+    this.removedFile.forget(); // CGP-CHAT-R-029 — the turn started: an earlier removal is final, pending or not.
     if (!file) return null;
     this.clearFileAttachment();
     return file.modelText;
@@ -3130,6 +3204,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /** CGP-ART-R-007 — remove queued page text, screenshot and notice; nothing from the page is sent. */
   private clearPageAttachment(): void {
+    this.removedPage.forget();
     if (!this.pendingPageAttachment) return;
     this.pendingPageContext = null;
     this.pendingPageImage = null;
@@ -3139,6 +3214,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /** CGP-ART-R-007 — the queued page text is replaced or gone; stop showing it as going out. */
   private dropPageAttachment(): void {
+    this.removedPage.forget();
     if (!this.pendingPageAttachment) return;
     this.pendingPageAttachment = null;
     void this.post({ type: "pageAttachment", attachment: null });
@@ -6116,7 +6192,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
     }
-    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
+    // CGP-CHAT-R-029 — every send in this task, before any refusal or hold, makes earlier removals final.
+    if (msg.type === 'sendMessage' || msg.type === 'retryMessage') this.finalizeRemovals();
+    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskRenameUndo', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
     if (msg.type==='saveActivityDraft') {
@@ -6655,21 +6733,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "askAboutFile":
         if (typeof msg.path === "string") await this.askAboutFile(msg.path);
         return;
-      case "removeFileContext":
+      case "removeFileContext": {
         // CGP-CHAT-R-011 — removed before sending: nothing from the file goes with the next turn.
+        const removed = this.pendingFileAttachment;
         this.clearFileAttachment();
+        // CGP-CHAT-R-029 — kept, unsent, for 되돌리기 (this task only).
+        if (removed) this.removedFile.keep(msg.undoId, this.turnRequestScope(), removed);
         return;
+      }
+      case "restoreFileContext": await this.restoreRemovedFile(msg.undoId); return;
+      case "restorePageContext": await this.restoreRemovedPage(msg.undoId); return;
       // CGP-KNOW-R-003 — the 자료 list; the host re-checks the seat, folder and scope on every press.
       case "materialsRequest": await this.postMaterials(); return;
       case "materialAddFile": await this.addMaterial(String(msg.requestId)); return;
       case "materialAddUrl": await this.addMaterial(String(msg.requestId), typeof msg.url === "string" ? msg.url : ""); return;
       case "materialSelect": if (typeof msg.id === "string" && typeof msg.scope === "string") await this.selectMaterial({ requestId: String(msg.requestId), scope: msg.scope, id: msg.id, selected: msg.selected === true }); return;
       case "materialRemove": if (typeof msg.id === "string" && typeof msg.scope === "string") await this.removeMaterial({ requestId: String(msg.requestId), scope: msg.scope, id: msg.id }); return;
-      case "removePageContext":
+      case "removePageContext": {
         // CGP-ART-R-007 — removed before sending: nothing from the page goes with the next turn.
+        const removed = this.pageSnapshot();
         this.clearPageAttachment();
         void this.post({ type: "pageAttachment", attachment: null });
+        // CGP-CHAT-R-029 — kept, unsent, for 되돌리기 (this task only).
+        if (removed) this.removedPage.keep(msg.undoId, this.turnRequestScope(), removed);
         return;
+      }
       case "annotationAction":
         this.syncAnnotationScope();
         if (msg.action === 'remove' && Number.isInteger(msg.number)) {

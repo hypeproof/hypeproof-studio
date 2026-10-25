@@ -709,3 +709,14 @@ These are conservative implementation choices, not new human agreements.
 - Matching: one substring of the title in NFC, case folded, query trimmed. No word splitting, no fuzzy or initial-consonant (초성) search; both would need their own acceptance.
 - Scope: the search belongs to one activity and resets when the activity changes. The heading count (최근 작업 N) keeps the activity total.
 - Default state: on for personal tasks; no new data flow (webview only, nothing posted to the host).
+
+## CGP-CHAT-R-029: low-stakes removal undo (2026-10-25, agent-selected conservative implementation)
+
+- Scope of "attachment chip": every chip the composer draws with a remove control that sends nothing yet: pasted/dropped/sketched images, staged photos, folded long pastes, the work-folder file chip and the page chip. Out of scope: the element chip (curriculum runtime only, its message inventory is fixed by CR-T02), annotation marks (removal also clears the numbered marker in the preview, which is not a composer state), and the quote chip (a reference to visible text the learner can quote again).
+- "Queued item" is the #416 parked message. Its × already returns the text to the draft; the toast says so and 되돌리기 queues it again. A tool-mode mismatch only pauses the item (nothing removed), so it has no toast. Stop and the end of a turn are not learner removals and show none.
+- Exact prior state or nothing: an offer ends as soon as its subject changes (one keystroke in the draft ends a paste or queue offer), on a send, and on a task or activity switch. No merge of a removed item into a changed list.
+- Host-held chips: the host keeps its own snapshot under the webview's undo id and restores that object; the webview never sends content back. The attach gate and folder consent are re-checked at undo. No optimistic success: the toast waits for the host's answer (15 s, then failure).
+- Staged photos: the host file is deleted when the offer ends without undo, not at the press. A photo still being prepared or refused is deleted at once without an offer.
+- Rename: undo restores the title and its origin; it is refused if the title changed since. The task list order is not rewound (the draft flush around a rename and its undo is activity, and rewinding `updatedAt` would misreport it).
+- Lifetime 6 s per CGP-CHAT-D85 (longer than the 4 s floor of CGP-DS-R-025), held while hovered or focused; "되돌렸어요" uses the same lifetime; a refused undo persists with 닫기 (DS-R-025: errors persist).
+- Seats: every seat whose composer draws the chip or queue (personal, trial, pass, classroom/lesson); rename only where the task header exists (personal, trial). Instructor mode draws no file or sketch controls. Default state: on (no new data flow; a removed host chip is held in memory only and never sent).

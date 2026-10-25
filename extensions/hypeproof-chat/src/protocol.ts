@@ -544,6 +544,8 @@ export type WebviewMessage = (
   | { type: 'taskRecoverDraft' }
   | { type: 'taskSelect'; id: string }
   | { type: 'taskRename'; title: string; requestId?: string }
+  /** CGP-CHAT-R-029 — 되돌리기 on the rename toast: the host puts back the rename it kept under this id. */
+  | { type: 'taskRenameUndo'; undoId: string }
   | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
   | { type: 'taskOpenSource'; url: string; requestId?: string }
   | { type: 'taskReturnFromSource'; requestId: string; url: string }
@@ -592,7 +594,10 @@ export type WebviewMessage = (
   | { type: "annotationAction"; action: "element" | "rectangle" | "remove" | "comment"; number?: number; comment?: string }
   | { type: "removeElementContext" }
   /** CGP-ART-R-007 — the learner removed the attached page; nothing from the page is sent. */
-  | { type: "removePageContext" }
+  | { type: "removePageContext"; undoId?: string }
+  /** CGP-CHAT-R-029 — 되돌리기: the host restores the page/file snapshot it kept under this id, or nothing. */
+  | { type: "restorePageContext"; undoId: string }
+  | { type: "restoreFileContext"; undoId: string }
   /** CGP-CHAT-R-011 — open the work-folder file picker (host re-checks the gate). */
   | { type: "retryAttachment"; id: string }
   | { type: "repickAttachment"; id: string; name: string }
@@ -604,7 +609,7 @@ export type WebviewMessage = (
   /** CGP-KNOW-R-015 — "이 파일에 대해 묻기" from the 작업 자료 list: attach this work-folder path (relative) through the same checks, then focus the composer. */
   | { type: "askAboutFile"; path: string }
   /** CGP-CHAT-R-011 — the learner removed the attached file; nothing from it is sent. */
-  | { type: "removeFileContext" }
+  | { type: "removeFileContext"; undoId?: string }
   /** CGP-KNOW-R-003 — the activity's 자료 list: read it, add a file (host picker) or an https address, select an item for the next message, take a learner item off the list. `scope` is the list the press was made on. */
   | { type: "materialsRequest" }
   | { type: "materialAddFile"; requestId: string }
@@ -808,7 +813,11 @@ export type HostMessage = (
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
-  | { type: 'taskRenameResult'; requestId: string; saved: boolean }
+  | { type: 'taskRenameResult'; requestId: string; saved: boolean; undoId?: string }
+  /** CGP-CHAT-R-029 — whether a host-side 되돌리기 (file, page, rename) put the prior state back. */
+  | { type: 'removalUndoResult'; undoId: string; restored: boolean }
+  /** CGP-CHAT-R-029 — a send started: every host-held 되돌리기 (file, page, rename) is gone; offers end. */
+  | { type: 'removalsFinal' }
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
   | { type: 'taskWorkspaceError'; verdictRequestId?: string; verdictMessageId?: string; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */

@@ -30,7 +30,9 @@ const ok = (name) => {
 // D020's empty recovery containers are covered by attachment-error-design, not A5.
 const withoutEmptyRecovery = html => html
   .replaceAll('<div class="hps-attachment-failures" aria-label="다시 확인할 첨부 파일"></div>', '')
-  .replace('<p class="hps-attachment-error-summary" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-error-summary"></p>', '');
+  .replace('<p class="hps-attachment-error-summary" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-error-summary"></p>', '')
+  // CGP-CHAT-R-029: the persistent, empty 되돌리기 live region; stripping this exact node reproduces every prior digest.
+  .replace('<div class="hps-undo-toast" role="status" aria-live="polite" aria-atomic="true" data-testid="undo-toast" data-shown="false"></div>', '');
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 
 // ── The render instrument: the real components, bundled once ────────────────

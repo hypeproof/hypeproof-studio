@@ -55,6 +55,7 @@ import type { PublishView } from "../../src/publishView";
 import type { VerifyView } from "../../src/verifyView";
 import { deriveTaskRunState, type TaskTurnOutcome } from "../../src/taskRunState";
 import { useOnline, guardSend } from "./connectivity";
+import { settleUndo } from "./UndoToast";
 import { verifyPressAction, verifyNote } from "./verifyOffline";
 import { acceptStepMarks, nextStepMarks, rememberStepMark, validStepMark, type LessonStepMarks } from "../../src/lessonStepMarks";
 
@@ -590,6 +591,7 @@ export function App() {
     // images (a retry would send those to the model); the host answers with the saved paths,
     // which are appended to this message (attachedImagesSaved).
     const userMessageId = `local-${crypto.randomUUID()}`;
+    settleUndo(); // CGP-CHAT-R-029 — a send makes every earlier removal final.
     dispatch({ type: "userSent", text: trimmed, images, toolMode, id: userMessageId });
     postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
   };
@@ -702,6 +704,7 @@ export function App() {
     const toolMode = source?.toolMode ?? 'auto';
     const userMessageId = `local-${crypto.randomUUID()}`;
     const root = attemptGroups(messages).find(group => group.attempts.some(attempt => attempt.user.id === source?.id))?.root;
+    settleUndo();
     dispatch({ type: "userSent", text: prompt, toolMode, id: userMessageId, images: source?.images, retryOf: root?.id, editOf: root?.editOf });
     postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt, history: messages, toolMode, sourceMessageId: source?.id, userMessageId, images: source?.images });
   };
@@ -715,6 +718,7 @@ export function App() {
     const toolMode = original.toolMode ?? 'auto';
     const userMessageId = `local-${crypto.randomUUID()}`;
     const kept = images.length > 0 ? images : undefined;
+    settleUndo();
     dispatch({ type: "userSent", text: trimmed, images: kept, toolMode, id: userMessageId, editOf });
     postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images: kept, editOf });
     return true;
@@ -748,6 +752,7 @@ export function App() {
         const userMessageId = `local-${crypto.randomUUID()}`;
         const root = attemptGroups(messages).find(group => group.attempts.some(attempt => attempt.user.id === m.id))?.root;
         if (!beginRequest()) return;
+        settleUndo();
         dispatch({ type: "userSent", text: m.content, toolMode, id: userMessageId, images: m.images, retryOf: root?.id, editOf: root?.editOf });
         postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt: m.content, history: messages, toolMode, sourceMessageId: m.id, userMessageId, images: m.images });
         return;
@@ -843,17 +848,17 @@ export function App() {
         pageNotice={state.pageNotice}
         elementPreview={state.elementPreview}
         pageAttachment={state.pageAttachment}
-        onRemovePageAttachment={() => {
+        onRemovePageAttachment={(undoId) => {
           dispatch({ type: "pageAttachment", attachment: null });
-          postToHost({ type: "removePageContext" });
+          postToHost({ type: "removePageContext", ...(undoId ? { undoId } : {}) });
         }}
         fileAttachment={state.fileAttachment}
         fileAttachError={state.fileAttachError}
         fileAttachNotice={state.fileAttachNotice}
         onAttachFile={() => postToHost({ type: "attachWorkspaceFile" })}
-        onRemoveFileAttachment={() => {
+        onRemoveFileAttachment={(undoId) => {
           dispatch({ type: "fileAttachment", attachment: null });
-          postToHost({ type: "removeFileContext" });
+          postToHost({ type: "removeFileContext", ...(undoId ? { undoId } : {}) });
         }}
         verifyPanel={runningProcesses.length || carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         sendLocked={!!state.verify?.running || !!workspace?.error}
