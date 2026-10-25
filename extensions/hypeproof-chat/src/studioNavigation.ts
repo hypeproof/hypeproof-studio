@@ -43,6 +43,32 @@ export async function initializeFilesLayout(execute: (command: string) => Thenab
   await execute('workbench.action.closeSidebar');
 }
 
+/**
+ * globalState (per profile) marker for the one-time cleanup of #2787. Profiles opened before the
+ * `workbench.secondarySideBar.defaultVisibility: hidden` default persisted the secondary side bar as
+ * open with the native Chat container, which is empty while `chat.disableAIFeatures` is on.
+ */
+export const NATIVE_CHAT_BAR_CLOSED_KEY = 'hypeproofChat.nativeChatBarClosedOnce';
+
+/**
+ * Close a restored secondary side bar once per profile when native AI features are disabled.
+ * The extension API cannot tell which view container the bar holds, so the one-time marker is the
+ * bound: a bar the learner opens later, for any view, is never closed again. The marker is written
+ * before the command runs so a failing close is not retried either. Never blocks activation.
+ */
+export async function closeNativeChatBarOnce(state: Pick<vscode.Memento, 'get' | 'update'> | undefined,
+  aiFeaturesDisabled: () => boolean, execute: (command: string) => Thenable<unknown>): Promise<boolean> {
+  try {
+    if (!state || !aiFeaturesDisabled() || state.get<boolean>(NATIVE_CHAT_BAR_CLOSED_KEY) === true) return false;
+    await state.update(NATIVE_CHAT_BAR_CLOSED_KEY, true);
+    await execute('workbench.action.closeAuxiliaryBar');
+    return true;
+  } catch {
+    console.warn('HypeProof: could not close the restored secondary side bar.');
+    return false;
+  }
+}
+
 /** Browser previews belong to one session; leave later preview requests alone. */
 export async function closeRestoredBrowserTabs(tabs: readonly Pick<vscode.BrowserTab, 'close'>[]): Promise<void> {
   const results = await Promise.allSettled([...tabs].map(async tab => { await tab.close(); }));

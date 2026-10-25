@@ -2685,6 +2685,32 @@ menus and shortcuts remain available; this is not removal of all editor function
 Tests: `test/shell-brand.smoke.mjs`, `test/start-page.smoke.mjs`, `e2e/start-page/run.mjs`,
 `e2e/tests/27-hp-shell.spec.ts`. Screens: `e2e/start-page/hp-shell-evidence/`.
 
+### Secondary side bar stays hidden (#2787)
+
+**REQ-STUDIO-SECONDARY-SIDEBAR-HIDDEN** (derives from Useful work first and Minimum necessary
+intervention in [Product Intent](PRODUCT-INTENT.md)). Studio's chat is the HypeProof chat view;
+learners never see an empty native "채팅" pane. With `chat.disableAIFeatures: true` the native
+Chat container in the secondary side bar has no content, but recent VS Code opens that bar by
+default.
+
+- Configuration defaults set `workbench.secondarySideBar.defaultVisibility` to `hidden`, so a
+  first-opened workspace or empty window starts with the bar closed. An explicit user setting
+  still overrides it.
+- A profile that already persisted the bar as open gets it closed once: on activation, when
+  `chat.disableAIFeatures` is `true` and the per-profile globalState marker
+  `hypeproofChat.nativeChatBarClosedOnce` is absent, Studio writes the marker and then runs
+  `workbench.action.closeAuxiliaryBar`. The marker is written first, so a failed close is not
+  retried, and a failure never blocks activation.
+- The extension API exposes neither the `activeAuxiliary` context key nor the bar's view
+  containers, so Studio cannot tell whether the bar holds only the native Chat container. The
+  one-time marker is the bound: a bar the learner opens later, for any view, is never closed
+  again. With AI features enabled nothing is closed and the marker stays unset.
+- No learner copy is added; the Korean core i18n already translates the setting.
+
+Tests: `test/secondary-sidebar.smoke.mjs` (packaged default; real `activate()` with stubbed
+`vscode.commands`, configuration and globalState: closes once, never when AI features are on,
+a rejected close is neither retried nor blocking).
+
 ### Automated Mac credential isolation (#728)
 
 Temporary Electron test profiles use `--use-inmemory-secretstorage`. A distinct

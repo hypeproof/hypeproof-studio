@@ -12894,6 +12894,52 @@
           "path": "extensions/hypeproof-chat/test/lesson-tip-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-SECONDARY-SIDEBAR",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Secondary side bar stays hidden (#2787)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SECONDARY-SIDEBAR",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SECONDARY-SIDEBAR"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/studioNavigation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SECONDARY-SIDEBAR",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SECONDARY-SIDEBAR"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/secondary-sidebar.smoke.mjs"
+        }
+      ]
     }
   ]
 }
