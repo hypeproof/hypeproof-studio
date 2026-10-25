@@ -91,6 +91,8 @@ import { DisconnectedChat } from "./StartPage";
 import { Children, cloneElement, Fragment, isValidElement, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
+import { MyQuestions } from "./MyQuestions";
+import { myQuestions, MY_QUESTION_ATTR } from "../../src/myQuestions";
 import type {
   ChatConfig,
   ChatMessage,
@@ -1476,6 +1478,8 @@ export function ChatPanel(props: Props) {
   const servedLesson = props.instructor ? null : config?.profile?.lesson ?? null;
   const dividers = stepDividers(shown.items, servedLesson ? props.stepMarks : null);
   const stepOnScreen = servedLesson ? (servedLesson.content.steps.find(s => s.id === currentStepId) ?? servedLesson.content.steps[0])?.id ?? null : null;
+  // CGP-CHAT-R-028 — the "내 질문" list: the drawn prompts (one version each), offered from 4 on.
+  const questionList = myQuestions(shown.items);
   const jumpTarget = currentDividerId(dividers, servedLesson?.sha256, stepOnScreen);
   const jumpToStep = jumpTarget ? () => {
     const box = scrollRef.current;
@@ -1567,6 +1571,7 @@ export function ChatPanel(props: Props) {
             end_card and opens the pass list). A link, not a Primary: no count, no pressure (CU-13). */}
         {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
         {entry && <button className="hp-capability-reopen" type="button" aria-expanded={entryOpen} onClick={() => setReopenedCapabilities(entry.id)}>AI 안내</button>}
+        <MyQuestions items={questionList} scrollRoot={scrollRef} scope={JSON.stringify([activityId, taskId])} onBeforeJump={viewport.pauseFollowing} />
         <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
@@ -2945,7 +2950,7 @@ function MessageItem({
   const retryPrompt = canRetry ? userPromptBefore(messages, message.id) : null;
 
   return (
-    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`} {...(quotable ? { [QUOTE_ROW_ATTR]: message.id } : {})}>
+    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`} {...(quotable ? { [QUOTE_ROW_ATTR]: message.id } : {})} {...(message.role === 'user' ? { [MY_QUESTION_ATTR]: message.id } : {})}>
       <div className={personal ? "hps-msg-role hps-sr-only" : "hps-msg-role"}>
         {/*
           * #747 (AE-08) — if a stored name exists, use **that**. If not (rows from

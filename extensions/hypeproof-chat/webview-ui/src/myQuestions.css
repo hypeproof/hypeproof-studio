@@ -1,0 +1,29 @@
+/* CGP-CHAT-R-028 (CGP-CHAT-D81): the "내 질문" popover in the task header. 44px numbered rows, at most
+   10 rows visible before the list scrolls, anchored under its button at the header's end. */
+.hps-myq { position: relative; flex: 0 0 auto; }
+.hps-header .hps-myq > .hps-myq-toggle { white-space: nowrap; font-size: var(--hp-font-caption); }
+.hps-myq-panel {
+  position: absolute; z-index: 6; top: calc(100% + var(--ds-c-studio-myquestions-size-37)); inset-inline-end: 0;
+  width: min(var(--ds-c-studio-myquestions-size-21), calc(100vw - var(--ds-c-studio-myquestions-size-23)));
+  box-sizing: border-box; padding: var(--ds-c-studio-myquestions-space-15);
+  border: var(--ds-c-studio-myquestions-size-3) solid var(--hp-border-control-default);
+  border-radius: var(--ds-c-studio-myquestions-radius-4);
+  background: var(--hp-bg-panel-default); color: var(--vscode-foreground);
+  box-shadow: 0 var(--ds-c-studio-myquestions-shadow-16) var(--ds-c-studio-myquestions-shadow-17) var(--ds-c-studio-myquestions-shadow-18);
+}
+.hps-myq-list {
+  list-style: none; margin: 0; padding: 0;
+  max-height: calc(var(--ds-c-studio-myquestions-size-8) * 10); overflow-y: auto; overscroll-behavior: contain;
+}
+.hps-header .hps-myq-list .hps-myq-item {
+  display: flex; align-items: center; gap: var(--ds-c-studio-myquestions-space-2);
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: var(--ds-c-studio-myquestions-size-8); height: var(--ds-c-studio-myquestions-size-8);
+  margin: 0; padding: 0 var(--ds-c-studio-myquestions-space-1);
+  border: 0; border-radius: var(--ds-c-studio-myquestions-radius-12);
+  background: transparent; color: inherit; text-align: start;
+  font: inherit; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); cursor: pointer;
+}
+.hps-header .hps-myq-list .hps-myq-item:hover { background-color: var(--hp-bg-control-hover); }
+.hps-header .hps-myq-list .hps-myq-item:active { background-color: var(--hp-bg-control-pressed); }
+.hps-myq-n { flex: 0 0 auto; min-width: 2ch; color: var(--hp-text-muted-default); font-variant-numeric: tabular-nums; text-align: end; }
+.hps-myq-line { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
