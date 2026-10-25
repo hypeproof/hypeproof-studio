@@ -56,6 +56,8 @@
       { "command": "hypeproof-chat.artifactHistory", "title": "이 파일의 이전 버전", "category": "HypeProof" },
       { "command": "hypeproof-chat.trashFile", "title": "파일을 활동 휴지통으로 이동", "enablement": "config.hypeproofChat.activityTrashEnabled" },
       { "command": "hypeproof-chat.activityTrash", "title": "활동 휴지통 열기", "enablement": "config.hypeproofChat.activityTrashEnabled" },
+      { "command": "hypeproof-chat.recordPerformanceTrace", "title": "느려요 기록 시작", "category": "HypeProof", "enablement": "config.hypeproofChat.performanceTraceEnabled" },
+      { "command": "hypeproof-chat.stopPerformanceTrace", "title": "느려요 기록 멈추기", "category": "HypeProof" },
       {
         "command": "hypeproof-chat.focus",
         "title": "대화로 이동"
@@ -233,6 +235,18 @@
         "command": "hypeproof-chat.deckDraft",
         "title": "HypeProof: 팀 브레인으로 덱 만들기",
         "icon": "$(preview)",
+        "enablement": "hypeproof-chat.learningWikiEnabled"
+      },
+      {
+        "command": "hypeproof-chat.deckSlideSuggest",
+        "title": "HypeProof: 덱 장 다듬기",
+        "icon": "$(sparkle)",
+        "enablement": "hypeproof-chat.learningWikiEnabled"
+      },
+      {
+        "command": "hypeproof-chat.deckPdf",
+        "title": "HypeProof: 덱 PDF로 저장",
+        "icon": "$(file-pdf)",
         "enablement": "hypeproof-chat.learningWikiEnabled"
       },
       {
@@ -445,6 +459,14 @@
           "when": "hypeproof-chat.learningWikiEnabled"
         },
         {
+          "command": "hypeproof-chat.deckSlideSuggest",
+            "when": "hypeproof-chat.learningWikiEnabled"
+          },
+          {
+          "command": "hypeproof-chat.deckPdf",
+          "when": "hypeproof-chat.learningWikiEnabled"
+        },
+        {
           "command": "hypeproof-chat.curriculumSkills",
           "when": "hypeproof-chat.curriculumRuntimeEnabled"
         },
@@ -465,6 +487,10 @@
     "configuration": {
       "title": "대화 설정",
       "properties": {
+        "hypeproofChat.lowDiskWarningMB": {
+          "type": "number", "default": 500, "minimum": 0, "maximum": 1048576, "scope": "machine",
+          "description": "작업 폴더가 있는 디스크의 남은 공간이 이 값(MB)보다 적으면 입력창 위에 안내를 띄웁니다. 0이면 끕니다. 보내기와 파일 열기는 막지 않습니다."
+        },
         "hypeproofChat.osTaskNotices": {
           "type": "boolean", "default": false,
           "description": "창을 보고 있지 않을 때 코치의 완료·승인 대기 알림을 운영체제에 표시합니다. 답변 내용은 보내지 않습니다."
@@ -486,6 +512,10 @@
         "hypeproofChat.activityTrashEnabled": {
           "type": "boolean", "default": false, "scope": "machine",
           "description": "활동 파일을 지울 때 암호화된 활동 휴지통에 보관합니다. 모든 이용 방식에서 기본은 꺼짐입니다. 키는 운영체제의 키 저장소에 보관하며 활동 폴더를 제거할 때 사본도 제거합니다. 사용 여부는 소유자가 결정합니다."
+        },
+        "hypeproofChat.performanceTraceEnabled": {
+          "type": "boolean", "default": false, "scope": "machine",
+          "description": "느려요 기록(성능 기록)을 쓸 수 있게 합니다. 성인 이용자와 강사만 쓸 수 있고, 기록은 이 기기에만 저장되며 ‘보내기’를 직접 누를 때만 요약이 전송됩니다. 기본은 꺼짐입니다."
         },
         "hypeproofChat.proxyUrl": {
           "type": "string",
@@ -619,7 +649,7 @@
     "build:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js",
     "build:webview": "cd webview-ui && npm install && npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs",
+    "test": "node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:deck-pdf-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs",
     "test:activity-resume": "node --experimental-strip-types test/activity-resume.test.mjs",
     "test:instructor-render": "node scripts/run-tsx-tests.mjs instructor-render",
     "test:signin-copy-link": "node scripts/run-tsx-tests.mjs signin-copy-link",
@@ -639,6 +669,7 @@
     "test:file-attachment": "node scripts/run-tsx-tests.mjs file-attachment",
     "test:page-card": "node scripts/run-tsx-tests.mjs page-card",
     "test:page-card-host": "node --experimental-strip-types --test test/page-card-host.test.mjs test/page-card-result-host.test.mjs",
+    "test:deck-pdf-host": "node --experimental-strip-types --test test/deck-pdf-host.test.mjs",
     "test:long-step-hint": "node scripts/run-tsx-tests.mjs long-step-hint",
     "test:browser-target-host": "node --experimental-strip-types --test test/browser-target-host.test.mjs",
     "test:write-approval-paths": "node --experimental-strip-types --test test/write-approval-paths.test.mjs",
@@ -665,7 +696,7 @@
     "test:reference-transport": "node --experimental-strip-types --test test/reference-transport.test.mjs",
     "test:trial-end-notice": "node --test test/sdk-trial-end-notice.test.mjs",
     "test:sdk-required": "node --experimental-strip-types --test test/sdk-required.test.mjs",
-    "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs test/task-archive.test.mjs"
+    "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-move.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs test/task-archive.test.mjs"
   },
   "devDependencies": {
     "postcss": "^8.5.6",

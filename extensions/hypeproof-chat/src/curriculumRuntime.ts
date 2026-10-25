@@ -108,7 +108,7 @@ export const CR_SURFACES: CrSurfaceInventory = {
   directorCommands: ["hypeproof-chat.weeklyReviewDirector"],
   mcpTools: [...CR_BROWSER_TOOL_NAMES, ...CR_VERIFY_TOOL_NAMES].map((n) => `mcp__hypeproof__${n}`),
   proxyTools: [...CR_BROWSER_TOOL_NAMES, ...CR_VERIFY_TOOL_NAMES],
-  webviewMessages: ["annotationAction", "removeElementContext", "verifyOpen", "verifyStart", "verifyRetest", "verifyFix", "verifyPark", "verifyResume", "publishOpen", "publishSubmit", "publishLink", "publishRevoke", "evidenceOpen", "evidenceNote", "evidenceDraft", "evidenceReview", "evidenceDelete", "memoryOpen", "memoryDiff", "memoryDecision", "skillsOpen", "skillRun", "reviewOpen", "reviewPrepare", "reviewDirectorOpen", "reviewDecision"],
+  webviewMessages: ["annotationAction", "removeElementContext", "styleTweakSet", "verifyOpen", "verifyStart", "verifyRetest", "verifyFix", "verifyPark", "verifyResume", "publishOpen", "publishSubmit", "publishLink", "publishRevoke", "evidenceOpen", "evidenceNote", "evidenceDraft", "evidenceReview", "evidenceDelete", "memoryOpen", "memoryDiff", "memoryDecision", "skillsOpen", "skillRun", "reviewOpen", "reviewPrepare", "reviewDirectorOpen", "reviewDecision"],
   // cr-verify adds no Worker route. cr-publish adds the Publish for User Test routes
   // (worker/src/routes/curriculum.ts `CURRICULUM_ROUTES`) and the test origin's.
   workerRoutes: [

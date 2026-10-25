@@ -6031,6 +6031,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Compact personal conversation (CC-R1, #1762)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Task search (CGP-CHAT-R-026)"
         }
       ]
     },
@@ -13278,6 +13282,1012 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/my-questions-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-TOOL-LINE-LABELS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Learner tool lines and a compact turn layout (#2788)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TOOL-LINE-LABELS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TOOL-LINE-LABELS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/toolLineLabel.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TOOL-LINE-LABELS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TOOL-LINE-LABELS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/tool-line-label.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-compact-layout-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-SHORTCUT-SHEET",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Keyboard shortcut sheet (CGP-CHAT-R-030)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SHORTCUT-SHEET",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHORTCUT-SHEET"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatShortcuts.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ShortcutSheet.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPreferences.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SHORTCUT-SHEET",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SHORTCUT-SHEET"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/shortcut-sheet-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-SEARCH",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskSearch.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-SEARCH",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-IMP-TASK-SEARCH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-search.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-search-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-TASK-APPEARANCE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Task emoji and colour (CGP-KNOW-R-008)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md",
+          "section": "### REQ-KNOW-13 implementation contract (CGP-KNOW-R-008)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-APPEARANCE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-APPEARANCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskAppearance.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceContract.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskAppearance.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskAppearance.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-APPEARANCE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-APPEARANCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-appearance.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-appearance-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-REQ-LOW-DISK-WARNING",
+      "stage": "requirement",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Low disk space warning (CGP-KNOW-R-019)"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-IMP-LOW-DISK-WARNING",
+      "stage": "implementation",
+      "depends_on": [
+        "ST-REQ-LOW-DISK-WARNING"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/lowDisk.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LowDiskBar.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "owner": "jayleekr",
+      "id": "ST-TEST-LOW-DISK-WARNING",
+      "stage": "test",
+      "depends_on": [
+        "ST-REQ-LOW-DISK-WARNING",
+        "ST-IMP-LOW-DISK-WARNING"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/low-disk.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/low-disk-bar.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-BROWSER-DOWNLOADS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Browser downloads (CGP-KNOW-R-021)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-BROWSER-DOWNLOADS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BROWSER-DOWNLOADS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/browserDownloads.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserDownloadNotice.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserDownloadWatcher.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-BROWSER-DOWNLOADS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BROWSER-DOWNLOADS",
+        "ST-IMP-BROWSER-DOWNLOADS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/browser-downloads.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/browser-downloads-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-LEARNER-NICKNAME",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Learner nickname (CGP-KNOW-R-032)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LEARNER-NICKNAME",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNER-NICKNAME"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/learnerNickname.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/NicknameSetting.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LEARNER-NICKNAME",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNER-NICKNAME"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/learner-nickname-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/learner-nickname-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-TASK-MOVE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Task move between personal activities (CGP-KNOW-R-009)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-MOVE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-MOVE",
+        "ST-IMP-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskMove.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskMenu.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-MOVE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-MOVE",
+        "ST-IMP-TASK-MOVE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-move.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-workspace-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-menu.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-menu-computed.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CGP-AGENT-64",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Performance trace recording (CGP-AGENT-R-030)"
+        },
+        {
+          "path": "docs/session-log-consent.ko.md",
+          "section": "## 8. 느려요 기록 (성능 기록) 고지문"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CGP-AGENT-64",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-AGENT-64"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/perfTrace.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/perfTraceHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CGP-AGENT-64",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-AGENT-64",
+        "ST-IMP-CGP-AGENT-64"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/perf-trace.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-DECK-SLIDE-SUGGEST",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Deck slide suggestion chips (CGP-ART-R-016)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-DECK-SLIDE-SUGGEST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-SLIDE-SUGGEST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/slideSuggestion.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/deckGenerator.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/numerals.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-DECK-SLIDE-SUGGEST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-SLIDE-SUGGEST",
+        "ST-IMP-DECK-SLIDE-SUGGEST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/slide-suggestion.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/learning-wiki.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-DECK-PDF",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-PAGE-CARD"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Deck PDF export (CGP-ART-R-023)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-DECK-PDF",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-PDF"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/deckPdf.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-DECK-PDF",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-PDF",
+        "ST-IMP-DECK-PDF"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/deck-pdf.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/deck-pdf-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lib/deck-pdf-fixture.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHECKPOINT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TURN-FILE-DIFF"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Checkpoints with a reviewed message (CGP-AGENT-R-027)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHECKPOINT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHECKPOINT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/checkpoint.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/turnRestore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/turnReviewView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TurnReviewBar.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHECKPOINT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHECKPOINT",
+        "ST-IMP-CHECKPOINT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/checkpoint.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/checkpoint.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/checkpoint-layout.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-TASK-ACTIVITY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Task activity summary (CGP-ART-R-020)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-ACTIVITY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-ACTIVITY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskActivity.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskActivityHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskActivity.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskActivity.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TurnReviewBar.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-ACTIVITY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-ACTIVITY",
+        "ST-IMP-TASK-ACTIVITY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-activity.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-activity-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/panel-boundary.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/panel-boundary.build.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-PREVIEW-FOLLOW",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Preview follow (CGP-ART-R-017)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PREVIEW-FOLLOW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PREVIEW-FOLLOW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/liveFollow.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/liveServer.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/liveServerHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PREVIEW-FOLLOW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PREVIEW-FOLLOW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/live-follow.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/live-follow-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/live-follow-hostile.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-WRITE-APPROVAL-CHANGE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WRITE-APPROVAL-CHIPS"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-WRITE-APPROVAL-CHANGE (CGP-ART-R-021 / REQ-ART-21)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md",
+          "section": "### REQ-ART-21 implementation contract (CGP-ART-R-021)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-WRITE-APPROVAL-CHANGE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WRITE-APPROVAL-CHANGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/writeApprovalChange.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/writeApprovalPrompt.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoachHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/WriteApprovalDialog.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/writeApprovalDialog.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-WRITE-APPROVAL-CHANGE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WRITE-APPROVAL-CHANGE",
+        "ST-IMP-WRITE-APPROVAL-CHANGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/write-approval-change.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/write-approval-change-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/write-approval-dialog.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/modal-geometry.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-STYLE-TWEAK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-INT-CR"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Style tweak for a picked element (CGP-ART-R-006)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-STYLE-TWEAK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STYLE-TWEAK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/styleTweak.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/crHostWiring.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserControl.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/curriculumRuntime.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StyleTweakPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styleTweak.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-STYLE-TWEAK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STYLE-TWEAK",
+        "ST-IMP-STYLE-TWEAK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/style-tweak.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/style-tweak-host.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/style-tweak-control.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/style-tweak-page.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/style-tweak-layout.smoke.mjs"
         }
       ]
     }

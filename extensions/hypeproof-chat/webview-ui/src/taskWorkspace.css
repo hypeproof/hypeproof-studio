@@ -73,6 +73,12 @@
 .tw-archived .tw-task-meta > * { white-space: nowrap; }
 .tw-archived .tw-reopen { grid-column: 2; grid-row: 1; font-size: var(--hp-font-caption); }
 .tw-archive-note { margin: var(--ds-c-studio-taskworkspace-space-12) var(--ds-c-studio-taskworkspace-space-5) 0; color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); }
+/* CGP-CHAT-R-026: a search result's matched passage, two lines at most; the match itself is <strong>. */
+.tw-task-snippet { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); margin-top: var(--ds-c-studio-taskworkspace-space-12); }
+/* KNOW-R-001 x CHAT-R-026: while message matches are shown, the title list keeps its own height so the
+   찾은 대화 group sits right under it instead of at the rail's foot; both lists scroll on their own. */
+.tw-rail:has(.tw-search-group) .tw-task-list:not(.tw-search-results) { flex: 0 1 auto; }
+.tw-search-group { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin-top: var(--ds-c-studio-taskworkspace-space-18); }
 .tw-empty-search { font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); padding: 0 var(--ds-c-studio-taskworkspace-space-2); color: var(--tw-muted); }
 .tw-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .tw-heading { display: flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-1); min-height: var(--ds-c-studio-taskworkspace-size-72); padding: 0 var(--ds-c-studio-taskworkspace-space-5); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
@@ -85,7 +91,7 @@
 .tw-conversation { flex: 1; min-height: 0; min-width: 0; }
 .tw-conversation .hps-shell { background: var(--tw-canvas); }
 .tw-conversation .hps-header { border-bottom: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-5); }
-.tw-conversation .hps-messages { padding: var(--ds-c-studio-taskworkspace-space-5) max(var(--ds-c-studio-taskworkspace-space-5), calc((100% - var(--ds-c-studio-taskworkspace-space-54)) / 2)); gap: var(--ds-c-studio-taskworkspace-space-32); }
+.tw-conversation .hps-messages { padding: var(--ds-c-studio-taskworkspace-space-5) max(var(--ds-c-studio-taskworkspace-space-5), calc((100% - var(--ds-c-studio-taskworkspace-space-54)) / 2)); --hps-list-gap: var(--ds-c-studio-taskworkspace-space-32); gap: var(--hps-list-gap); }
 .tw-conversation .hps-msg-body { font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); }
 .tw-conversation .hps-msg-assistant .hps-msg-body { background: transparent; border: 0; padding: 0; max-width: 100%; }
 .tw-conversation .hps-msg-assistant .hps-msg-role > span::before { content: none; }
@@ -288,3 +294,16 @@ body.vscode-light .tw-workspace, body.vscode-high-contrast-light .tw-workspace {
 .tw-provenance-chip [data-provenance-symbol] { flex: 0 0 auto; }
 .tw-provenance-chip strong { font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; }
 @media (forced-colors: active) { .tw-provenance-chip { color: CanvasText; background: Canvas; border-color: CanvasText; } }
+/* CGP-KNOW-R-009 / DES-KNOW-14 — a 44px task-menu toggle beside each rail row. The menu opens in
+   flow under its row, because the task list scrolls and would clip a popover. */
+.tw-task-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--ds-c-studio-taskworkspace-space-2); }
+.tw-task-menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: var(--hp-control-min); min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0; margin: 0; border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-task-menu-panel { grid-column: 1 / -1; margin: 0 0 var(--ds-c-studio-taskworkspace-space-14); padding: var(--ds-c-studio-taskworkspace-space-15); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-4); background: var(--tw-panel); }
+.tw-task-menu-heading, .tw-task-menu-reason { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--tw-muted); overflow-wrap: anywhere; }
+.tw-task-menu-heading { margin-bottom: var(--ds-c-studio-taskworkspace-space-12); }
+.tw-task-menu-reason { margin-top: var(--ds-c-studio-taskworkspace-space-12); }
+.tw-task-menu-panel button[role="menuitem"] { display: block; width: 100%; min-height: var(--hp-control-min); box-sizing: border-box; margin: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: var(--ds-c-studio-taskworkspace-radius-12); background: transparent; color: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.tw-task-menu-panel button[role="menuitem"]:hover:not([aria-disabled="true"]) { background-color: var(--hp-bg-control-hover); }
+.tw-task-menu-panel button[role="menuitem"]:active:not([aria-disabled="true"]) { background-color: var(--hp-bg-control-pressed); }
+.tw-task-menu-panel button[role="menuitem"][aria-disabled="true"] { color: var(--tw-muted); cursor: not-allowed; }
+.tw-move-status { margin: 0; font-size: var(--hp-font-caption); color: var(--tw-muted); overflow-wrap: anywhere; }

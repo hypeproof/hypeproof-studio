@@ -708,7 +708,7 @@ These are conservative implementation choices, not new human agreements.
 - IME: the committed query filters; composing text is shown in the field but does not filter. Chromium sends the commit's last `input` with `isComposing` true and then `compositionend`, so the commit is taken from `compositionend`.
 - Matching: one substring of the title in NFC, case folded, query trimmed. No word splitting, no fuzzy or initial-consonant (초성) search; both would need their own acceptance.
 - Scope: the search belongs to one activity and resets when the activity changes. The heading count (최근 작업 N) keeps the activity total.
-- Default state: on for personal tasks; no new data flow (webview only, nothing posted to the host).
+- Default state: on for personal tasks; no new data flow (webview only, nothing posted to the host for the title filter or while composing). A committed query's message-text search is CGP-CHAT-R-026; see the reconciliation below.
 
 ## CGP-CHAT-R-029: low-stakes removal undo (2026-10-25, agent-selected conservative implementation)
 
@@ -750,3 +750,168 @@ These are conservative implementation choices, not new human agreements.
 - Placement: a quiet 44px header button at the 14px floor (DEC-29), next to the header controls; in the personal workspace it is drawn into the task heading with the rest of the chat header. Popover: `role="dialog"` labelled "내 질문", REQ-STUDIO-FOCUS-RESTORE popover contract.
 - Seats: every seat whose chat panel draws the task header, including instructor mode (the label still names that user's own prompts). The classroom transcript keeps its scroll-to-latest on a new message, so a reply arriving after a jump scrolls back down there; pinning a jump in the classroom seat would change that seat's scroll rule and is left out.
 - Default state: on (display only; no host message, no stored state, nothing leaves the device).
+
+## CGP-CHAT-R-030: shortcut sheet scope (2026-10-25, agent choice)
+
+- What is listed: only keys the chat webview binds today (Enter send/queue, Shift+Enter newline, Esc close, Alt+Shift+J conversation while the personal task layout is mounted, `?` this sheet), each with the platform's modifier name. The acceptance names Esc stop, Cmd/Ctrl+F and focus composer as examples, but none of them is bound on main; the row's own rule ("lists only bound keys") wins, so they are not listed and not built here. Binding Esc to stop would overload the key that closes panels and cancels IME syllables, and find belongs to a search row. Each later binding adds its row in `chatShortcuts.ts` in the same change.
+- Where: the personal 대화 설정 dialog and the classroom detail dialog (opened from the access chip) get a 키보드 단축키 button; `?` opens it in every ChatPanel seat (instructor mode included) when focus is outside text fields, dialogs, menus and lists; a seat without the settings dialog has only `?`.
+- Rebinding: the sheet does not read VS Code keybindings (REQ-CGPV-29's "reflects user rebinding" is not claimed).
+- Side fix: the classroom settings dialog had no surface colour outside `.tw-workspace`; it now falls back to the theme sidebar/editor colour so the page no longer shows through.
+- Default state: on; display only, no host message, file or network request.
+
+## CGP-CHAT-R-026: task search (2026-10-25, agent-selected conservative implementation)
+
+- Where it runs: the host searches the task file it already holds in memory (`TaskWorkspaceStore.search`). The webview holds only the open task's messages, so a webview-only search could not find other tasks. Nothing is written, no task is switched, and no model, Service or network request is made.
+- What is searched: task names and the text of user and assistant messages. Tool lines, system notices and superseded answer versions (the edit-and-resend sidecar) are not searched. They are not the conversation the learner reads, and a result has to be something the transcript can scroll to.
+- Results: one per task, at the task's latest matching message (newest first, at most 50). The date is the matched message's time. The rail shows only tasks whose title did not match (see the reconciliation below); title matches stay in the KNOW-R-001 list.
+- Opening: a result in another task goes through the normal `taskSelect` path and its gates (a running turn still blocks it). The jump waits until that task's messages are on screen, then scrolls the transcript and stops "follow latest". Focus stays where it was (the rail on wide windows; the narrow rail dialog returns focus to its toggle). A refused or failed switch (a task error, or another task shown) drops the jump.
+- An unreadable task file answers "cannot search" (`작업 기록을 읽지 못해 지금은 찾을 수 없어요`), never "no match". The webview asks once typing pauses (150 ms), because the host scans every task on the thread that also runs the live turn.
+- Adds to the title filter in the same field instead of replacing it (owner reconciliation below). The empty state follows CGP-CHAT-D79: `찾는 대화가 없어요`.
+- The answer goes only to the view that asked, outside the broadcast `post()` path, because that path invalidates open approval prompts.
+- Seats: personal and trial task workspaces. Classroom seats have no task list, so no search.
+- Default state: on (local read only; no new data leaves the device, no permission change).
+
+## CGP-CHAT-R-026 × KNOW-R-001 reconciliation (2026-10-25, owner)
+
+- Context: KNOW-R-001 (#2800, merged) made the 작업 찾기 field a webview-only title filter with no host message. CHAT-R-026 (#2782) replaced that filter with a host search over titles and message text. Both rows touched the same field and the same requirement text.
+- Decision (conservative merge of both rows): the KNOW-R-001 title filter stays exactly as is: instant, local, NFC and case folded, IME-safe, scoped per activity.
+- CHAT-R-026's message-text search is an addition on top of it. Only a committed, non-blank query (never while an IME composition is open), after a 150 ms pause, posts one `taskSearch` to the host.
+- Tasks that match only in message text appear as a separate group, `찾은 대화`, under the filtered title list, with snippets. A task that already matched by title is not listed twice; a host answer that matched only the name is not shown again.
+- No-match lines: the title filter's `찾는 이름이 없습니다. 다른 이름으로 찾아보세요.` keeps its place under the list heading; the message group adds `찾는 대화가 없어요` only when nothing matched at all, and the unreadable-file line when the host cannot search.
+- Requirement text: KNOW-R-001's no-host-message rule now covers the title filter and composition, and points to CHAT-R-026 for the committed full-text query. `task-rail-search.smoke.mjs` asserts zero posts while composing and for a blank query, and exactly one `taskSearch` per committed query; `task-search-browser.smoke.mjs` asserts no task is listed twice.
+
+## CGP-KNOW-R-008: task emoji and colour (2026-10-25, agent choice)
+
+- Where: the personal task menu (대화 메뉴) of the open task. The task list has no per-row
+  context menu; adding one would be a new navigation pattern. Classroom and lesson seats have no
+  task workspace, so they get nothing.
+- What: fixed lists only (12 emoji, eight colours with Korean names, or none), stored as ids.
+  Free emoji input was not built: it would need bidi/control/length hygiene and could carry text
+  into the list. The host re-validates every request.
+- Storage: a sidecar next to the task file, so the strict task-file schema of earlier builds
+  keeps reading the workspace after a downgrade; only the marks are lost. A mark does not change
+  `updatedAt`, so a cosmetic choice does not reorder the list.
+- Accessibility: the mark is `aria-hidden`; the title stays the accessible name; the title is
+  always drawn, so colour is never the only cue. Colours were picked for at least 3:1 against
+  the task list in each theme (measured in the browser test).
+- Default state: available to personal and trial learner tasks; no new data flow (local file
+  only, no Service call).
+
+## DEC-KNOW-35: low disk space bar (CGP-KNOW-R-019)
+
+Agent implementation choice, 2026-10-25; not a human policy decision.
+The bar informs and never blocks: a send, the composer and every file stay usable,
+because holding a turn on a measured number would take work away (AB). It shows in every
+seat, the instructor surface included, since any seat's turn can write files. Classroom and
+lesson learners are told to tell the teacher rather than to delete files on a class PC.
+The threshold is a machine-scope setting (default 500 MB, 0 = off) so a workspace folder
+cannot silence it. An unreadable volume shows nothing when nothing is shown yet and keeps a bar already up (unknown is neither "low" nor "fine"). The
+"공간 확보 방법" link is an in-panel disclosure, not an external page: no help page exists
+to link to, and an external link would add a confirm step for some seats.
+Default state: on (local measurement only; no data leaves the device, no permission change).
+
+## CGP-KNOW-R-021: Studio-browser downloads (2026-10-25, agent-selected conservative implementation)
+
+- Mechanism: the fork core has no download hook (verification.md CGP-ART-32: specified only), and core patches cannot be built or checked in this loop. The extension's per-tab CDP session uses `Page.setDownloadBehavior` and `Page.downloadWillBegin`/`downloadProgress`, which the integrated browser's CDP proxy routes to the page (`Browser.setDownloadBehavior` is a no-op stub there). Verified against headless Chromium; the Electron integrated browser itself is NOT RUN here (owner check listed in the report).
+- Safe session (minor cohorts): downloads are denied with a blocked line, also from the extension side. With no profile loaded, downloads are denied (the cohort may be a minor one). The persisted `hypeproof.browser.safeSession` is not used as the fallback here: `applyBrowserSafety(null)` writes `false` to it when a profile fetch fails, so it is not fail-closed (this also affects CGP-ART-R-008's `linkSafety` fallback; reported, not changed in this row).
+- All other seats (personal, trial, pass, classroom, lesson, instructor) save into `<workspace>/downloads/`. No workspace or an unusable `downloads` entry (symlink, file) denies; Studio never follows a symlink out of the workspace and never renames the learner's entry for them.
+- Overwrite: Chromium overwrites a same-name file in `downloads/`. The "replaced an older copy" hint was dropped because Chromium reserves the target before `downloadWillBegin` arrives, so it cannot be told apart; the line makes no claim either way.
+- Presentation: the existing tool row (file icon, done/failed mark), persisted like a denial notice in the task where the download began. CGP-KNOW-D-021's 13px size and 열기/폴더에서 보기 actions are left to that design row; 14px learner text keeps winning over the register's 13px.
+- No progress line, no automatic open, no quarantine or execution change.
+
+## CGP-KNOW-R-032: learner nickname (2026-10-25, agent-selected conservative implementation)
+
+- Seats: personal and trial seats outside a lesson, in 대화 설정. Classroom, lesson and unknown seats have no learner settings dialog (their gear opens app settings and the classroom header layout is fixed), so the field is not offered there and a stored value is not sent; classroom nicknames are a follow-up with their own layout check. Instructors never get it.
+- Delivery: the Service has no nickname contract (only `x-hps-coach-name` / `x-hps-coach-personality` on the proxy path; the agent-sdk path sends neither). Studio therefore sends it as a model-only `[Studio 안내: …]` line in front of the learner's text on every request, the same channel as page context and lesson work. A Service header can replace it later without a learner-visible change.
+- Screen: stricter than REQ-O2's inbound screen because the value repeats on every request. Verify rounds 1 and 2 (2026-10-25) each found new bypasses in a deny-list design (digit words, Hanja, `at` addresses, bare domains, filler-only names, then glued or misspelled markers such as 앳/엣/골벵이, homoglyphs, addresses in numeral words and school abbreviations). The first version also claimed the value "cannot carry a URL", which overclaimed because a bare `naver.com` passed. All of these are refused now.
+- Structural rule (owner decision, 2026-10-25): stop the deny-list whack-a-mole. NFKC first, then an allowlist of scripts: Hangul syllables and jamo, Latin A-Z/a-z, space, `-` and `_`. Every other script and every digit form is refused (Cyrillic, Greek, Latin alpha, Hanja, digits of any script, circled, superscript and Roman-numeral forms, `.`, `@`, `·`, emoji). A small lexicon covers what letters can still spell: contact markers (앳/엣/at, 골뱅이/골벵이, 닷/쩜/점/dot + TLD, www, http, mail host + TLD), spaced or glued; six or more numeral words (Sino-Korean incl. 십, native Korean, English); address suffixes (로, 길, 동, 읍, 면, 리, 호, 번지) next to a numeral word; school and grade (below).
+- Best-effort, accepted residual risk (owner decision, 2026-10-25): a determined learner can still encode data in letters (look-alike letters for digits, XII, a mail host without a TLD). The model-side line keeps the nickname quoted and labelled as a nickname, and quotes, brackets, `:` and line breaks cannot occur in it. These false positives are accepted as the cost of a conservative screen: any digit (별이2), six numeral-word syllables, 일반 and 이반, "look at me" and "dot com".
+- Messenger and social handles (verify round 3, 2026-10-26): the most common way a Korean child shares contact details is an ID next to its platform word (카톡 kimjay, 인스타 kimjay, kimjay 네이버 메일). Any platform word is refused as `contact`, glued or spaced: 카톡, 카카오, kakao, 인스타, instagram, 디코, 디스코드, discord, 유튜브, youtube, 틱톡, tiktok, 페북, 페이스북, facebook, 트위터, twitter, 텔레, telegram, 스냅챗, 위챗, 라인, 메일, gmail, 아이디 (not 아이디어), 번호 and 폰. The short Latin words id, fb, yt, line, mail, email, insta and dm count only as separate words. Accepted false positives: Hangul words that contain one (온라인, 텔레토비, 스마트폰, 메일함). No common Korean given name contains 라인 or 메일, so no such control is added.
+- Full residual list (best-effort, accepted 2026-10-25/26): look-alike letters and XII; a mail host with no TLD and no 메일; five or fewer numeral words; one numeral word after an address suffix (역삼동 삼); grade shorthands without 학년 (고삼, 중일), which stay allowed by owner decision; a neighbourhood on its own; "at" spelled in Hangul (에이티); plain instruction text, which stays quoted. Accepted false positives besides those above: 우리 학교, Kim 앳된.
+- School and grade (owner decisions, 2026-10-25): minors use this field, so a school or grade identifier is treated as personal information even though REQ-O2 does not list it. Refused: a word ending in 학교 (초등학교, 중학교, 고등학교, 학교); 학년 or 반 with a numeral word (삼학년, 이반); a word ending in 초/중/고 followed by a grade or class pair (별빛중 이-삼); and, from verify round 3, a school demonym (초등학생, 중학생, 고등학생, 초딩, 중딩, 고딩, a word ending in 초등, a 초/중/고 word + 학생). These get their own reason ("학교 이름이나 학년·반은 넣을 수 없어요."). A bare abbreviation such as 하늘초 passes.
+- Storage: VS Code global state on this device, per activity like the coach name; nothing leaves the device except the line in the learner's own requests. Default state: empty (no nickname, nothing sent).
+- Minors: allowed on a personal or trial minor seat because the row requires minors to see the nickname only; no other learner field exists for any seat.
+
+## DEC-KNOW-R009: task move between personal activities (CGP-KNOW-R-009, 2026-10-25, agent choice)
+
+- Personal activity: kind `personal`, or a bought pass, with no served lesson. Class activity: kind `classroom`, any seat with a served lesson (live profile, or `lesson` now recorded on the saved activity), or an unknown kind. A trial that is not a pass is neither: its tasks do not move and nothing moves into it, because REQ-L12 owns trial-to-pass carryover. Activities saved before this build carry no lesson flag: as a destination, such a record is judged by its kind (a personal-kind lesson activity saved earlier would be listed) until it is connected again, which writes a new record with the flag. As the current activity the live profile decides, so a class task never leaves.
+- Placement: a 44px "작업 메뉴" toggle on every rail row; the menu opens in flow under its row because the task list scrolls and would clip a popover. Classroom seats have no task rail, so they get no task menu; the reason surfaces where a class task has a row (a lesson on a task-workspace seat). The disabled item stays focusable (`aria-disabled`) with the reason as its visible description (DES-KNOW-14).
+- Move: copy (sidecars first, the task file last), read back and compare byte for byte, then release; an unconfirmed copy or a failed release withdraws the copy. The seat fails closed until its profile is loaded. The destination must already have a task store (opened once), so its first-open legacy import is never skipped. A same-id task in the destination is accepted only when identical (retry); otherwise refused. The destination's open task is unchanged. No confirmation dialog: a move is reversible by moving back, and nothing leaves the device.
+- Default state: on for personal seats (local only, no new data destination, no permission change).
+
+## CGP-AGENT-R-030: performance trace recording (2026-10-25, agent-selected conservative implementation)
+
+- Default state: off. Machine setting `hypeproofChat.performanceTraceEnabled=false`; the start command is disabled until it is on. Turning it on for any seat is the owner's decision. Even when on, only an instructor or a resolved non-minor seat can start (an unknown workshop tier counts as a minor, so it fails closed).
+- What is recorded: numbers only. Per turn (bound to its stream id): start offset, time to first chunk, total time, chunk count, outcome; once a second: extension-host RSS and heap, event-loop lag. No prompt, answer, error text, file name, path or stream id. Ten-minute auto-stop, 200-turn cap.
+- Send path: no Service change. 보내기 reuses the existing problem-report route (`POST /report`) with the summary in its schemaless `attachments` (`kind: "perf_trace"`, at most 6,000 characters, under the route's 8,192-character cap) and the note as the description; the shared outbound confirmation (REQ-KNOW-09) lists items and sizes first. A dedicated trace upload (the full file) would need a Service route and is not built.
+- Surfaces: native, like 문제 신고하기. Start is a VS Code modal with the consent text (one 기록 시작 button); the pill is a red status bar item; the review is a modal with 내 컴퓨터에만 두기 first. The in-panel pill and dialog of DES-CGP-AGENT-64 (CGP-AGENT-D-026) stay with that design row; the status bar item does not meet its 44px target.
+- Consent text: added as §8 of `docs/session-log-consent.ko.md`; the start dialog uses the same lines and a test compares them. The text promises no retention period, because the report route's retention was not verified.
+- Kept files are not deleted automatically and there is no viewer; both are follow-ups.
+
+## CGP-ART-R-016: slide suggestion chips (2026-10-25, agent-selected conservative implementation)
+
+- Deck: the learner's deck in Studio is the wiki-folder deck (`deckGenerator.ts`, `deck.html`). The Service Deck Builder's proposals (CR-56) have no `cr-deck` store yet, so the chips patch the wiki-folder deck and a proposal lives only for its one run; nothing is stored on the Service. Recording accept/reject as a CR-56 learning event waits for `cr-deck`.
+- "Never adds a number or claim absent from cited entries": a patch may change only the slide face; the slide's citations (refs), notes and gaps are fixed, so no new source can enter. Numbers follow the deckGenerator rule over the slide's own cited entries, after NFKC (full-width digits count). A quote must be the slide's own quote or verbatim in those entries. An answer that names any other slide is refused whole (no partial apply).
+- Numbers, sources and speakers (fix 1, after the first verify): one shared detector (`numerals.ts`) serves the slide gate and deck generation. It reads every script (Unicode digits, Roman and circled numerals before NFKC, Hanja numerals, Korean number words with a counter or %) and compares exact values; spelled-out numbers in the evidence count as values. Uncertain parsing counts as a number (fail closed); only "한 번에", "한번" and "한 …씩" are treated as idioms. A quote's speaker label must be the slide's own label for its own quote or appear in the cited entries; a source word (조사, 통계, 장관, …) and the word before it must appear in the cited entries; a wiki id on the face is refused.
+- No new quantity words (owner decision, fix 2): value equality cannot see quantities it cannot parse (절반, 열에 아홉, 첫째, 서너 명, five users). A second, lexical rule refuses any quantity word (Korean and English number words, fractions and parts, N 중 M, ordinals, approximations, percent and %) absent from the slide's current face and its cited entries; deck generation applies it against the cited entries. Both sides are tokenized by the same lexicon, so the check is token against token. Residual risk: the lexicon is best-effort; words outside it (처음, 대부분, 몇, 여러) still pass, and so do source words outside SOURCE_TERMS. Source-word stems no longer cut a source word (보도 is not 보 + 도).
+- Accept is bound to the exact slide: 반영 applies only while the slide on disk is still the proposal's "before"; a slide changed meanwhile is kept and the learner is told to pick again. The switch and folder gate are checked again before the write. One run at a time.
+- Surface: the existing deck command surface (command palette quick picks, like 덱 만들기) and VS Code's native modal for 지금 / 바꾼 안 with 반영 / 그대로 (Esc or close = 그대로). The webview chips under a slide thumbnail and the side-by-side view are the design row CGP-ART-D-016, not built here.
+- Chips: all three for any drafted slide, none for an undrafted one. Seats: wherever `learning_wiki.enabled` is served (lesson cohorts); default off with that switch.
+
+## CGP-ART-R-023: deck PDF export (2026-10-26, agent-selected conservative implementation)
+
+- Where: a command, "HypeProof: 덱 PDF로 저장", next to the deck skill's "팀 브레인으로 덱 만들기" in the command palette (the deck skill's only menu today). No button inside `deck.html`: the deck page has no host channel, and CGP-ART-R-015 (present mode, open PR) owns its toolbar.
+- How: the served deck in a background integrated-browser tab over CDP, one 1280x720 JPEG per drafted slide, assembled into an image-only PDF by `src/deckPdf.ts`. No core patch and no new permission; the notes layer is removed from the export document and the PDF has no text layer.
+- All or nothing: a failed slide, a reload or a changed `deck.html` writes no file. Output is always `deck.pdf` beside `deck.html` (overwritten on the next export); no save dialog.
+- 폴더에서 보기 (REQ-ART-23 (2)) stays the page card's action from CGP-ART-R-010; for a page in the served root it reveals that root. Nested pages keep revealing their own folder (more useful than the root; owner may ask for the root instead).
+- Default state: on wherever the deck skill is on (`learning_wiki.enabled`); no new data flow off the machine.
+- Owner verification: the export inside the installed Studio (integrated browser CDP `Emulation.setDeviceMetricsOverride` and capture on a background tab) was not run; the fallback without emulation is covered in headless Chromium.
+
+## CGP-AGENT-R-027: checkpoints with a reviewed message (2026-10-25, agent choice)
+
+- Seat: adults on a website track (`game.template_tier === "website"`, not a minor or unknown tier, not the instructor). Other adult tiers (`search-webapp`) do not get it; the row names website tracks only.
+- Store: a restore point of kind `checkpoint` in the extension's global storage beside the turn store, not a git commit in the work folder. "Nothing is pushed" then holds structurally: nothing in the folder changes, so neither a push nor the GitHub Pages publish can carry it. Keep 20; refused saves never prune.
+- Suggestion: the first prose line of the AI's own answer for the turn, no new model request (no new data flow or cost). Without a usable line the field is filled from the changed file names and says so.
+- Message: cleaned on the host, refused when empty or over 200 code points (never shortened silently). Evidence carries counts and an edited flag, never the text.
+- History: listed in the 바뀐 것 review bar of the last request. Restoring to a checkpoint is not built (acceptance does not ask for it).
+- Default state: on for the seats above (local only; no permission change, no upload).
+
+## CGP-ART-R-020: task activity summary (2026-10-26, agent choice)
+
+- Source of truth: one entry per coach tool call of the task that reached a successful tool_result. Refused, failed, unanswered and post-stop calls make no entry, and prose or tool-line labels are never parsed. A count with no event cannot exist.
+- Verbs: Read = 읽음. Write to a path absent at tool_use time = 만듦, otherwise 바꿈. Edit, MultiEdit and NotebookEdit = 바꿈. WebFetch, browser_open and browser_navigate to an http(s) page off this machine = 웹 페이지. The learner's own loopback preview and about:blank are not web pages. WebSearch = 검색. Grep, Glob, Bash and others are not counted.
+- Chips count distinct targets per verb. A file created and then edited appears under both, because both events happened.
+- Storage: entries ride on the turn's last persisted history line in the task store (local, same file as the conversation). They are never sent to the model and nothing new leaves the device.
+- Not counted: provider-hosted search on the proxy route (no client tool event) and calls of an older edited version that is no longer shown (the summary follows the visible conversation).
+- Review link: only created or changed files that the open turn review (REQ-ART-02) lists get 바뀐 곳 보기. Older turns have no restore-point comparison, so they get a note instead of a link.
+- Seats: every seat that draws the transcript (personal, trial, pass, classroom and lesson, and instructor). Default state: on (local display only; no permission change). Target and text floors follow the owner rule (44px, 14px).
+
+## CGP-ART-R-017: preview follow (2026-10-26, agent choice)
+
+- Placement: the learner's preview is a top-level integrated-browser tab whose toolbar is VS Code chrome (no patch is allowed for this row). DES-ART-17's "toggle in the preview toolbar" is built as a small fixed control on the served page itself, in a closed shadow root on a host after `<body>`, shown only while a coach turn runs. It never reaches published test origins. Correction (fix round 1): the closed root protects only what is inside it, not the host element; the first version let a page hide, remove or show the toggle, read the root through an overridden `attachShadow`, and change the choice through synthetic events or `sessionStorage`.
+- "Most recently changed element": a reload carries no element. The page signs every `<body>` element (tag, attributes, own text) before the reload and scrolls to the first new signature in document order after it. A CSS-only change or a removal finds nothing and does not scroll.
+- "While the coach is editing" = a coach turn is running in this window (`activeStreams`). The learner's own saves outside a turn and Studio's recovery reload are never followed.
+- CR-68: while the automation indicator is on (coach browser step or AI Verify run) the toggle hides, follow is skipped and wheel or key input is not counted as the learner's. Known gap: the hide reaches the page over SSE, so an observation taken in the first milliseconds of a step may still include the toggle in its tree.
+- Off persists for the live server's lifetime (every tab of the preview) and is not reset by a new turn: the learner's choice wins (PI#2). It is kept by the host, posted with a per-server token, not in page-writable storage.
+- Page script (owner scope 2026-10-26: no silent override, not a sandbox): the snippet is injected first, captures the DOM primitives before page script runs and removes its own `<script>`; only `isTrusted` input counts; showing is decided inside the closed root from Studio's coach-turn state; the host carries `:host{… !important}` plus inline `!important` styles and a MutationObserver re-attaches it (200 repairs per document). Accepted residuals: a page can draw over the toggle, can fetch its own HTML to read the token, and can outlast the repair cap; all deliberate, display-only.
+- Host and Origin (fix round 2, owner decision): every path of the live server refuses a Host other than `127.0.0.1:<port>` / `localhost:<port>` for its own port with 403, not only `/__hp_follow`. This also closes the older DNS-rebinding read of the served folder. Before the change I checked that the server binds 127.0.0.1 only and that every caller in the repo reaches it through `127.0.0.1:<port>` (`currentUrl()`/`ensure()`), and that the e2e servers use their own `serveStatic` instances. No phone or LAN preview uses it: QR codes point at published test origins. `/__hp_follow` also refuses a present `Origin` that is not the server's own; a missing `Origin` is allowed because the token still gates it. Learner targets 44 px and 14 px text win over DES-ART-17. Timing: 250 ms smooth scroll, 1 s outline.
+- Default state: on (local display only; no new data flow, nothing leaves the device).
+
+## CGP-ART-R-021: overwrite change summary in the write approval (2026-10-26, agent-selected conservative implementation)
+
+- Scope: only the optional write approval dialog (`writeFile` in `requireApprovalFor`; not in the default list). The default stays off; no new approval, data flow or permission. Every seat that reaches the dialog (personal, trial, pass, classroom/lesson, instructor local runtime) gets the same summary.
+- Numbers: `diffGuard` on the current file and the call's resulting text, computed in the host before the dialog opens. Every rewrite in diffGuard's sense (`changed_ratio > 0.5`, `REWRITE_RATIO`) is warned. The register's label "거의 전부 바뀌어요" is shown from 80% (`ALMOST_ALL_RATIO`); between 50% and 80% the warning reads "절반 넘게 바뀌어요", because "거의 전부" next to "51%" would overstate it (copy honesty wins over the literal label).
+- Whitespace-only changes read "글자는 그대로, 띄어쓰기·줄바꿈만 달라져요", not "그대로" (diffGuard ignores whitespace inside a unit).
+- Unknown is a warning, not silence: when the change cannot be computed for an existing file, the dialog says so with the reason. The call's text is taken only from host-built requests (`sdkToolToActionRequest`); a webview-origin request never supplies it, so it cannot forge "내용은 그대로예요".
+- Race: the file's sha256 (or absence) at prompt time must still hold after the answer, else the write is refused. A file that appears during the dialog is refused too: that would be an overwrite with no summary.
+- Not built: DES-ART-21 bar and diff link (CGP-ART-D-021).
+
+## CGP-ART-R-006: style tweak for a picked element (2026-10-25, agent-selected conservative implementation)
+
+- Where: inside the single-pick element chip in the chat panel. DES-ART-06 asks for a popover anchored to the element in the page; the native BrowserTab contract has no trusted in-tab surface (the same gap blocked CGP-ART-D-002 and D-008), and a page-injected popover could be styled or clicked by the page itself. The annotation batch path (default off) is not covered.
+- Live preview: an inline `!important` declaration on the picked node through CDP, resolved in an isolated world, after restoring the node's original `style` attribute exactly; the whole state is re-applied on each press, in order, and the offer's read waits behind any pending restore. Bound to the pick (a sequence number), its node and document generation. A reload ends the preview; the next press clears every choice and says so (no navigation listener: the request still names the values the learner chose for that pick). Restored on removal, re-pick, send, switch off and tab switch. Nothing is written to disk.
+- Which send carries the request: only the panel's own button, whose message is exactly the summary of the current choices. A composer message sends the element alone (as the chip shows), so the coach never edits from choices the learner did not send, and every request has the values on the learner's own turn.
+- Offered set: page colours computed from at most 1,500 elements, top 8 after normalizing to `rgb()`/`rgba()` (other syntaxes and transparent dropped); fixed px steps for font size, padding and radius. Old values the browser did not report as px or rgb are `알 수 없음`, never echoed.
+- Evidence: the send button sends the learner's own message listing the chosen values, so the `user` observation of that turn records them. No new learning-event kind is written: `change_requested` requires a criterion and an artifact reference this flow does not have.
+- Sizes: 44px targets and 14px text win over the design row's 32px stepper (owner rule); swatches draw 24px inside a 44px button.
+- Default state: on wherever element pick is on (CR switch); no new recipient or data flow beyond the element text the pick already sends.

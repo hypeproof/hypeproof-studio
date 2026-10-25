@@ -11,6 +11,7 @@
 
 import type { LearningWikiPlan, WikiState } from "./learningWiki.ts";
 import { sessionFocus, sessionLabel } from "./learningWiki.ts";
+import { unsupportedNumbers, unsupportedQuantityWords } from "./numerals.ts";
 
 export type DeckTemplate = NonNullable<LearningWikiPlan["deck"]>;
 export type VisualType = "number" | "quote" | "product" | "steps" | "compare" | "statement";
@@ -29,7 +30,7 @@ export function citableIds(s: WikiState): Set<string> {
 }
 
 /** The text of the wiki entries a slide cites (what its numbers may come from). */
-function citedText(s: WikiState, refs: string[]): string {
+export function citedText(s: WikiState, refs: string[]): string {
   const parts: string[] = [];
   for (const r of refs) {
     if (r === "P" && s.problem) parts.push(s.problem.text);
@@ -43,11 +44,11 @@ function citedText(s: WikiState, refs: string[]): string {
   return parts.join(" ");
 }
 
-/** Numbers on a slide (digits, with "명", "%", "번" and the like stripped) that its cited entries do not contain. */
-export function unsupportedNumbers(slideText: string, cited: string): string[] {
-  const nums = slideText.match(/\d+(?:[.,]\d+)?/g) ?? [];
-  return [...new Set(nums)].filter((n) => !cited.includes(n));
-}
+/**
+ * Numbers on a slide whose exact value its cited entries do not contain, in any script (numerals.ts: Unicode
+ * digits, number forms, Hanja numerals and Korean number words, read the same way on both sides).
+ */
+export { unsupportedNumbers, unsupportedQuantityWords };
 
 export function deckPrompt(s: WikiState, template: DeckTemplate, slides: number[], plan?: LearningWikiPlan): string {
   const want = template.slides.filter((x) => slides.includes(x.no));
@@ -184,7 +185,7 @@ export function applyDeckProposal(prev: WikiState, template: DeckTemplate, slide
       continue;
     }
     const onScreen = [headline, visual.value, visual.label, ...(visual.items ?? []), visual.left, visual.right, ...support].join(" ");
-    const bad = unsupportedNumbers(onScreen, citedText(s, refs));
+    const bad = [...unsupportedNumbers(onScreen, citedText(s, refs)), ...unsupportedQuantityWords(onScreen, citedText(s, refs))];
     if (bad.length) {
       dropped.push(`덱 ${nn}: "${headline.slice(0, 30)}…" (근거에 없는 숫자 ${bad.join(", ")})`);
       continue;

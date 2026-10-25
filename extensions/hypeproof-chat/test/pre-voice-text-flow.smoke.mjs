@@ -197,7 +197,7 @@ const voiceHits = (text) => (text.match(VOICE_SYMBOL) ?? []).length;
   assert.ok(declared.length >= 6, `필드 추출이 실패했다: ${JSON.stringify(declared)}`);
   assert.deepEqual(
     declared,
-    ["elapsedTurn", "id", "role", "content", "createdAt", "toolMode", "tool", "citations", "images", "assistantName", "editOf", "retryOf", "visibleAttemptId", "chosenAttemptId"],
+    ["elapsedTurn", "id", "role", "content", "createdAt", "toolMode", "tool", "citations", "images", "assistantName", "editOf", "activity", "retryOf", "visibleAttemptId", "chosenAttemptId"],
     "ChatMessage 필드가 늘었다/줄었다 — 음성이 기록 모양을 바꾸려 한다면 여기서 멈춰라",
   );
   // CGP-CHAT-R-015: an observed live-view duration is text-turn evidence, never audio.

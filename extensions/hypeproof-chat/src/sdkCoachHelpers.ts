@@ -31,6 +31,7 @@ import * as path from "node:path";
 import { BLANK_BROWSER_URL, browserOpenUrl, isLoopbackUrl } from "./browserControlHelpers.ts";
 import { browserTargetInline, UNKNOWN_HOST_TEXT } from "./browserTargetHost.ts";
 import { writeTargetsOf } from "./writeApprovalPaths.ts";
+import { writeEditOf } from "./writeApprovalChange.ts";
 import { relativeEscapes } from "./workspaceRouting.ts";
 import { linkCommandVerdict, shellUnreadable } from "./shellLinkPolicy.ts";
 import {
@@ -2740,7 +2741,9 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
       kind: "writeFile",
       description: path ? `${action.toolName} ${path}` : `${action.toolName} ${safeStringify(action.input)}`,
       // REQ-E1 / CGP-AGENT-R-005: every path the call writes, with 새 파일 / 바꿈 when the input says so.
-      payload: { path, paths: writeTargetsOf(action.toolName, action.input) },
+      // REQ-STUDIO-WRITE-APPROVAL-CHANGE (CGP-ART-R-021): the text the call would write, so the approval can say how
+      // much of an existing file changes before the learner answers. Host-side only; never posted to the webview.
+      payload: { path, paths: writeTargetsOf(action.toolName, action.input), edit: writeEditOf(action.toolName, action.input) },
     };
   }
   if (READ_TOOLS.has(name)) {

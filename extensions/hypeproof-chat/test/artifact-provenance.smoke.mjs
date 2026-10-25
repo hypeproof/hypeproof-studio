@@ -344,7 +344,7 @@ await t("3. a reveal that lands after the post-turn scan still reads AI, in eith
 
 await t("3. the host waits for pending reveals before its post-turn scan (wiring lock)", () => {
   const src = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
-  const wait = src.indexOf("Promise.allSettled(pendingReveals)"), end = src.indexOf("await this.endTurnRestore(turnRestorePoint, streamId, messageId)");
+  const wait = src.indexOf("Promise.allSettled(pendingReveals)"), end = src.indexOf("await this.endTurnRestore(turnRestorePoint, streamId, messageId, assistantText)");
   if (wait < 0 || end < 0 || wait > end) throw new Error("pending reveals are not awaited before endTurnRestore");
   if (!src.includes("pendingReveals.push(this.revealBuilt(")) throw new Error("tryReveal's write is not tracked");
   for (const [file, needle] of [["../src/imageEditAssets.ts", "noteHostWrite([{absPath:file,data:bytes}],'ai')"], ["../src/learningWiki.ts", "noteHostWrite("], ["../src/workspacePreparation.ts", "noteHostWrite("], ["../src/previewProvider.ts", "noteHostWrite("]]) {

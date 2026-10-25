@@ -37,6 +37,7 @@ export const PANEL_COMPONENTS = {
   "ReviewPanel.tsx": ["ReviewPanel"],
   "SkillsPanel.tsx": ["SkillsPanel"],
   "StudentGoal.tsx": ["StudentGoal"],
+  "TaskActivity.tsx": ["TaskActivity"],
   "TrialCarryover.tsx": ["TrialCarryover"],
   "TrialEndCard.tsx": ["TrialEndCard"],
   "TurnReviewBar.tsx": ["TurnReviewBar"],
