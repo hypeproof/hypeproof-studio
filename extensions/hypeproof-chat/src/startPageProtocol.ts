@@ -8,6 +8,8 @@ export interface ActivitySummary {
   pass?: boolean;
   /** Free start (SPEC iteration 4 §2.4) — the free allowance; labelled 무료 사용, never 체험. */
   free?: boolean;
+  /** CGP-KNOW-R-009 — entered with a served lesson (a class activity). Absent on records saved before. */
+  lesson?: boolean;
   workspace: string;
 }
 export interface StartState {

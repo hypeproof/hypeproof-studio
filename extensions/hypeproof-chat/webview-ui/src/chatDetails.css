@@ -11,7 +11,7 @@
 .hps-header button.hps-header-passes:hover { background: transparent; color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground, var(--ds-c-studio-chatdetails-ink-36))); }
 .hps-free-ended-note { margin: 0 0 var(--ds-c-studio-chatdetails-space-15); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--hp-text-muted-default); }
 .hps-shell[data-chat-detail="personal"] .hps-messages {
-  min-height: 0; gap: var(--ds-c-studio-chatdetails-space-3); overscroll-behavior: contain;
+  min-height: 0; --hps-list-gap: var(--ds-c-studio-chatdetails-space-3); gap: var(--hps-list-gap); overscroll-behavior: contain;
   padding: var(--ds-c-studio-chatdetails-space-4) max(var(--ds-c-studio-chatdetails-space-5), calc((100% - var(--chat-column)) / 2)) var(--ds-c-studio-chatdetails-space-6);
   scrollbar-width: thin;
   /* CGP-DS-R-031 — the scrollbar's space is reserved before it appears, so the column does not
@@ -114,13 +114,15 @@
 .hps-response-dots i:nth-child(2) { animation-delay: var(--hp-dur-stagger); }
 .hps-response-dots i:nth-child(3) { animation-delay: calc(var(--hp-dur-stagger) * 2); }
 .hps-msg-live { animation: chat-feedback var(--hp-dur-enter) var(--hp-ease); }
-.hps-catchup { position: relative; height: 0; flex-shrink: 0; display: flex; justify-content: center; z-index: 1; }
-.hps-catchup button { position: absolute; bottom: var(--ds-c-studio-chatdetails-size-14); display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); padding: var(--ds-c-studio-chatdetails-space-12) var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-2); background: var(--tw-panel); color: inherit; box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-1) var(--ds-c-studio-chatdetails-shadow-4) var(--ds-c-studio-chatdetails-shadow-5); animation: chat-feedback var(--hp-dur-content) var(--hp-ease); }
+/* #2788 — the pill takes its own row between the transcript and the composer instead of floating over
+   the last lines: while it shows, the list is that much shorter, so no transcript text sits under it. */
+.hps-catchup { flex-shrink: 0; display: flex; justify-content: center; padding-block: var(--ds-c-studio-chatdetails-space-13); }
+.hps-catchup button { min-height: var(--ds-c-studio-chatdetails-size-8); display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); padding: var(--ds-c-studio-chatdetails-space-12) var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-2); background: var(--tw-panel); color: inherit; box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-1) var(--ds-c-studio-chatdetails-shadow-4) var(--ds-c-studio-chatdetails-shadow-5); animation: chat-feedback var(--hp-dur-content) var(--hp-ease); }
 .tw-workspace .hps-catchup button { font-size: var(--hp-font-caption); }
 @keyframes chat-feedback { from { opacity: 0; transform: translateY(var(--ds-c-studio-chatdetails-size-15)); } to { opacity: 1; transform: translateY(0); } }
 @keyframes chat-pending { 0%, 70%, 100% { opacity: .45; transform: translateY(0); } 35% { opacity: 1; transform: translateY(var(--ds-c-studio-chatdetails-size-16)); } }
 @container studio-chat (width < 448px) {
-  .hps-shell[data-chat-detail="personal"] .hps-messages { padding: var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-4); gap: var(--ds-c-studio-chatdetails-space-4); }
+  .hps-shell[data-chat-detail="personal"] .hps-messages { padding: var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-18) var(--ds-c-studio-chatdetails-space-4); --hps-list-gap: var(--ds-c-studio-chatdetails-space-4); gap: var(--hps-list-gap); }
   .hps-shell[data-chat-detail="personal"] .hps-input-area { padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-19); }
   .hps-shell[data-chat-detail="personal"] .hps-msg-body { font-size: var(--hp-font-body); }
   .hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body { max-width: 85%; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-19); }
@@ -203,7 +205,7 @@
    One reading column, one spacing scale (4 · 8 · 12 · 24), one ghost-button family for every
    control that follows an answer, no boxed icon squares. Classroom screens are untouched. */
 .hps-sr-only { position: absolute !important; width: var(--ds-c-studio-chatdetails-size-3); height: var(--ds-c-studio-chatdetails-size-3); padding: 0; margin: var(--ds-c-studio-chatdetails-space-22); overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.hps-shell[data-chat-detail="personal"] .hps-messages { gap: var(--ds-c-studio-chatdetails-space-4); }
+.hps-shell[data-chat-detail="personal"] .hps-messages { --hps-list-gap: var(--ds-c-studio-chatdetails-space-4); gap: var(--hps-list-gap); }
 .hps-shell[data-chat-detail="personal"] .hps-msg { gap: var(--ds-c-studio-chatdetails-space-2); }
 .hps-shell[data-chat-detail="personal"] .hps-msg-user + .hps-msg-assistant,
 .hps-shell[data-chat-detail="personal"] .hps-msg-assistant + .hps-msg-user { margin-top: 0; }
@@ -273,7 +275,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-chip:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 .hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
 .hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: var(--ds-c-studio-chatdetails-space-16); }
-.hps-preferences { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); max-height: calc(100vh - var(--ds-c-studio-chatdetails-size-23)); padding: 0; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-4)); background: var(--tw-panel); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-8); box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-4) var(--ds-c-studio-chatdetails-shadow-8) var(--ds-c-studio-chatdetails-shadow-9); overflow: auto; }
+.hps-preferences { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); max-height: calc(100vh - var(--ds-c-studio-chatdetails-size-23)); padding: 0; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-4)); background: var(--tw-panel, var(--vscode-sideBar-background, var(--vscode-editor-background))); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); border-radius: var(--ds-c-studio-chatdetails-radius-8); box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-4) var(--ds-c-studio-chatdetails-shadow-8) var(--ds-c-studio-chatdetails-shadow-9); overflow: auto; }
 .hps-preferences::backdrop { background: var(--ds-c-studio-chatdetails-surface-8); }
 .hps-preferences > header { display: flex; align-items: center; justify-content: space-between; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-20); border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); }
 .hps-preferences h2 { font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); margin: 0; }
@@ -285,6 +287,17 @@
 .hps-preferences select { max-width: 100%; min-height: var(--ds-c-studio-chatdetails-size-10); font-size: var(--hp-font-caption); }
 .hps-preferences p, .hps-preferences small { color: var(--tw-muted); overflow-wrap: anywhere; }
 .hps-preferences .hps-all-settings { margin-top: var(--ds-c-studio-chatdetails-space-1); padding: var(--ds-c-studio-chatdetails-space-2) 0; border: 0; min-height: var(--ds-c-studio-chatdetails-size-8); background: transparent; color: inherit; }
+/* CGP-CHAT-R-030: the shortcut sheet. Key caps and notes keep the caption size (>=14px); a row
+   wraps its description under the keys when the dialog is narrow. The classroom dialog sits outside
+   .tw-workspace (no --tw-* values), so its surface and lines fall back to the theme's own colours;
+   before this the classroom dialog had no background and the page showed through. */
+.hps-preferences .hps-open-shortcuts { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
+.hps-shortcut-list { margin: 0; padding: 0; display: grid; gap: var(--ds-c-studio-chatdetails-space-2); }
+.hps-shortcut-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-5); padding: var(--ds-c-studio-chatdetails-space-2) 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); }
+.hps-shortcut-row dt { flex: 0 0 auto; margin: 0; white-space: nowrap; }
+.hps-shortcut-row dd { flex: 1 1 auto; margin: 0; color: var(--vscode-foreground, inherit); }
+.hps-shortcut-row dd small { display: block; font-size: var(--hp-font-caption); }
+.hps-shortcut-row kbd { font: inherit; font-size: var(--hp-font-caption); padding: 0 var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
 /* REQ-STUDIO-UI-POLISH-1: the access line is an inline notice (.hps-notice-caution, the offline
    banner's surface in styles.css) inside the composer's column, not loose text above it. Its one
    action keeps a 44px target; the notice's block padding shrinks so the row stays one line tall. */
@@ -305,7 +318,7 @@
 .hps-choice-help button { border: 0; background: transparent; color: inherit; text-decoration: underline; min-height: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-2); font-size: var(--hp-font-caption); }
 @media (max-height: 500px) {
   .hps-shell[data-chat-detail="personal"] .hps-empty { padding-top: 0; }
-  .hps-shell[data-chat-detail="personal"] .hps-messages { gap: var(--ds-c-studio-chatdetails-space-20); }
+  .hps-shell[data-chat-detail="personal"] .hps-messages { --hps-list-gap: var(--ds-c-studio-chatdetails-space-20); gap: var(--hps-list-gap); }
 }
 
 /* CGP-DS-R-028: personal prose keeps eojeol line breaks too. */
@@ -440,6 +453,16 @@
 .hps-text-size { border: 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); margin: 0; padding: var(--ds-c-studio-chatdetails-space-2) 0; display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-13) var(--ds-c-studio-chatdetails-space-1); }
 .hps-text-size legend { padding: 0; font-weight: var(--hp-weight-strong); min-height: var(--ds-c-studio-chatdetails-size-23); }
 .hps-text-size label { display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); min-height: var(--ds-c-studio-chatdetails-size-8); cursor: pointer; }
+/* CGP-KNOW-R-032 / DES-KNOW-50 — the nickname field in 대화 설정: 44px controls, the counter and refusal as text. */
+.hps-nickname { border: 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); margin: 0; padding: var(--ds-c-studio-chatdetails-space-2) 0; min-width: 0; }
+.hps-nickname legend { padding: 0; font-weight: var(--hp-weight-strong); min-height: var(--ds-c-studio-chatdetails-size-23); }
+.hps-nickname p { margin: 0; word-break: keep-all; }
+.hps-nickname-row { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-chatdetails-space-1); margin-top: var(--ds-c-studio-chatdetails-space-1); }
+.hps-nickname input { box-sizing: border-box; flex: 1 1 var(--ds-c-studio-chatdetails-size-27); min-width: 0; min-height: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-2); font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
+.hps-nickname button { min-height: var(--ds-c-studio-chatdetails-size-8); min-width: var(--ds-c-studio-chatdetails-size-8); padding: 0 var(--ds-c-studio-chatdetails-space-5); font: inherit; color: inherit; background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-10); cursor: pointer; }
+.hps-nickname button:hover { background: var(--hp-bg-control-hover); }
+.hps-nickname button:active { background: var(--hp-bg-control-pressed); }
+.hps-nickname .hps-nickname-error { color: var(--vscode-errorForeground, inherit); }
 
 /* REQ-STUDIO-MISSING-TASK-FOLDER — the missing-folder recovery notice: two 44px actions, wrapping on narrow panels. */
 .hps-shell[data-chat-detail="personal"] .hps-missing-folder { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-chatdetails-space-2) var(--ds-c-studio-chatdetails-space-1); margin: 0 0 var(--ds-c-studio-chatdetails-space-2); padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, var(--ds-c-studio-chatdetails-boundary-2))); border-radius: var(--ds-c-studio-chatdetails-radius-9); }

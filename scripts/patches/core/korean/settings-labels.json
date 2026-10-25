@@ -15,5 +15,7 @@
   "hypeproofChat.accountsPreview": "개인 계정 미리보기",
   "hypeproofChat.annotationBatchEnabled": "미리보기 표시 모아 보내기",
   "hypeproofChat.workTakeawayEnabled": "내 작업 따로 저장",
-  "hypeproofChat.osTaskNotices": "운영체제 알림 받기"
+  "hypeproofChat.osTaskNotices": "운영체제 알림 받기",
+  "hypeproofChat.lowDiskWarningMB": "저장 공간 부족 안내 기준(MB)",
+  "hypeproofChat.performanceTraceEnabled": "느려요 기록"
 }

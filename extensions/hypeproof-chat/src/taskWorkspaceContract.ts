@@ -1,5 +1,6 @@
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
+import type { TaskAppearance } from './taskAppearance';
 
 /** Persisted task data belongs to the host; this contract is also safe for the webview. */
 export interface TaskSummary {
@@ -8,6 +9,8 @@ export interface TaskSummary {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
+  /** CGP-KNOW-R-008 — set only in a view; it lives in the appearance sidecar, never in the task file. */
+  appearance?: TaskAppearance;
 }
 
 /** CGP-CHAT-R-025 — a task listed only in 보관함. */

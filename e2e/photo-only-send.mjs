@@ -15,7 +15,7 @@ const out=path.join(root,'e2e/test-results/photo-only-send');await mkdir(out,{re
 const fixture=chatPanelProps();fixture.config.profile.input={image_files:true};
 fixture.config.profile.classroom_panels={help_request:false,artifact_approval:false};
 await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {ChatPanel} from ${JSON.stringify(path.join(ext,'webview-ui/src/ChatPanel.tsx'))};const root=createRoot(document.getElementById('root'));const props=${JSON.stringify(fixture)};window.baseConfig=props.config;props.onSend=(...args)=>window.sends.push(args);window.render=(over={})=>root.render(<ChatPanel {...props} {...over}/>);window.render();`,resolveDir:path.join(ext,'webview-ui'),loader:'tsx'},bundle:true,loader:{'.svg':'dataurl','.css':'empty'},platform:'browser',jsx:'automatic',outfile:path.join(temp,'ui.js')});
-const server=createServer(async(req,res)=>{res.setHeader('content-type',req.url==='/ui.js'?'text/javascript':'text/html');res.end(req.url==='/ui.js'?await readFile(path.join(temp,'ui.js')):'<div id="root"></div><script src="/ui.js"></script>');});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const server=createServer(async(req,res)=>{res.setHeader('content-type',req.url==='/ui.js'?'text/javascript':'text/html');res.end(req.url==='/ui.js'?await readFile(path.join(temp,'ui.js')):'<meta charset="utf-8"><div id="root"></div><script src="/ui.js"></script>');});await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const browser=await chromium.launch();
 try {
  const p=await browser.newPage();await p.setContent('<body style="background:green">owned fixture</body>');const photo=await p.screenshot();

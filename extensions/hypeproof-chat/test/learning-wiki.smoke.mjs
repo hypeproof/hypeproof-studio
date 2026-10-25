@@ -80,7 +80,7 @@ assert.ok(!prompt.includes('1번 "문제·기회"'), "only the requested slides 
 assert.match(prompt, /주장 하나, 시각 요소 하나/);
 const dp = {
   slides: [
-    { no: 2, headline: "다음 버튼은 바로 통했다", visual: { type: "quote", value: "다음 버튼이 작다", label: "할아버지, 첫 시험" }, support: ["직접 보여 드림"], notes: "첫 시험에서 들은 말", refs: ["E-1", "E-42"], gaps: ["실제 어르신 3명"] },
+    { no: 2, headline: "다음 버튼은 바로 통했다", visual: { type: "quote", value: "다음 버튼이 작다", label: "할아버지, 시험 자리" }, support: ["직접 보여 드림"], notes: "첫 시험에서 들은 말", refs: ["E-1", "E-42"], gaps: ["실제 어르신 3명"] },
     { no: 3, headline: "버튼을 52px로 키웠다", visual: { type: "number", value: "52px", label: "다음 버튼" }, refs: ["D-1"] },
     { no: 5, headline: "요청하지 않은 장", visual: { type: "statement", value: "x" }, refs: ["E-1"] },
   ],
@@ -95,7 +95,26 @@ assert.deepEqual(deck.applyDeckProposal(s1, template, [2], { slides: [{ no: 2, h
 assert.deepEqual(deck.applyDeckProposal({ ...s1, problem: null }, template, [2], { slides: [{ no: 2, headline: "문제", refs: ["P"] }] }, 2).written, [], "planted: P without a problem is not citable");
 assert.deepEqual(deck.applyDeckProposal(s1, template, [9], { slides: [{ no: 9, headline: "t", refs: ["E-1"] }] }, 2).written, [], "planted: a slide outside the template is never written");
 assert.equal(deck.applyDeckProposal(s1, template, [2], { slides: [{ no: 2, headline: "h", visual: { type: "hologram" }, refs: ["E-1"] }] }, 2).state.deck["2"].visual.type, "statement", "an unknown visual falls back to a statement");
-assert.deepEqual(deck.unsupportedNumbers("3명 중 2명", "세 분 중 두 분"), ["3", "2"]);
+// The numbers rule compares exact values in any script (numerals.ts, shared with the slide suggestion gate).
+assert.deepEqual(deck.unsupportedNumbers("3명 중 2명", "어르신 분들이 혼자 감"), ["3", "2"]);
+assert.deepEqual(deck.unsupportedNumbers("3명 중 2명", "세 분 중 두 분"), [], "spelled-out Korean numbers in the evidence are values");
+assert.deepEqual(deck.unsupportedNumbers("2명", "52px"), ["2"], "planted: 2 is not supported by 52 (exact value, not a substring)");
+for (const [planted, value] of [["٩٠٪ 만족", "90"], ["۹۰ 명", "90"], ["९० 명", "90"], ["๙๐ 명", "90"], ["九十 퍼센트", "90"], ["Ⅻ명 시험", "12"], ["구십 퍼센트", "90"], ["열 명 중 아홉 명", "10"], ["９０%", "90"], ["⑨", "9"], ["3만 명", "30000"], ["5\u200B3", "53"]]) {
+  assert.ok(deck.unsupportedNumbers(planted, "다음 버튼을 52px로 키운다").includes(value), `planted number ${planted} → ${value}`);
+}
+assert.deepEqual(deck.unsupportedNumbers("구십 퍼센트 만족", "만족 90%"), [], "a Korean number word equal to an evidence number passes");
+assert.deepEqual(deck.unsupportedNumbers("한 번에 보이게, 한 단계씩, 이번 주, 세 분석", "x"), [], "idioms and words that only contain number syllables are not numbers");
+// Fix 2: no new quantity words in deck generation either (same lexicon as the slide suggestion gate).
+for (const planted of ["절반이 만족", "반이 혼자 감", "반수", "과반", "삼분의 이", "삼분의 일", "구할 만족", "열에 아홉", "열에 일곱", "열 중 아홉", "십중팔구", "십 중 팔구", "오십삼", "다섯", "스물", "이십", "하나 둘 셋", "오십삼 픽셀", "아홉 명꼴", "첫째 시험", "셋째", "첫 번째", "한두 명", "두어 명", "서너 명", "삼사 명", "몇십 명", "수백 명", "five users", "nine of ten", "ninety percent", "fifty-three", "twice as fast", "half of users", "four fifths", "a dozen"]) {
+  assert.ok(deck.unsupportedQuantityWords(planted, "다음 버튼을 52px로 키운다").length, `planted quantity word: ${planted}`);
+  assert.deepEqual(deck.applyDeckProposal(s1, template, [2], { slides: [{ no: 2, headline: "h", support: [planted], refs: ["E-1"] }] }, 2).written, [], `planted: deck generation refuses ${planted}`);
+}
+for (const planted of ["세 어르신이 만족", "첫번째 시험", "% 기준"]) assert.ok(deck.unsupportedQuantityWords(planted, "다음 버튼").length, `planted quantity word: ${planted}`);
+assert.deepEqual(deck.unsupportedQuantityWords("열에 아홉이 만족", "열에 아홉 명이 혼자 감"), [], "positive control: the same quantity words in the evidence");
+assert.deepEqual(deck.unsupportedQuantityWords("버튼을 더 크게, 한 번에 보이게, 한 단계씩, 반영, 구조, 이 버튼, 열심히, someone, often", "x"), [], "positive control: everyday words are not quantity words");
+for (const planted of ["٩٠٪ 만족", "九十 퍼센트", "열 명 중 아홉 명", "Ⅻ명"]) {
+  assert.deepEqual(deck.applyDeckProposal(s1, template, [2], { slides: [{ no: 2, headline: "h", support: [planted], refs: ["E-1"] }] }, 2).written, [], `planted: deck generation refuses ${planted}`);
+}
 assert.deepEqual(deck.applyDeckProposal(s1, template, [2], { slides: [{ no: 2, headline: "h", visual: { type: "quote", value: "말", label: "70대 사용자" }, refs: ["E-1"] }] }, 2).written, [], "planted: an age in a label that the evidence does not state is a made-up number");
 assert.match(deck.deckPrompt(s1, template, [1], PLAN), /이 장의 역할: 당사자의 어려움만/, "the plan's slide role reaches the prompt");
 assert.match(prompt, /"no": 2[\s\S]*"no": 3/, "the JSON skeleton lists every requested slide");

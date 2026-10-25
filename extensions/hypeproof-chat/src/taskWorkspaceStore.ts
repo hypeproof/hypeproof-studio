@@ -1,6 +1,7 @@
 import { ATTEMPT_KEYS, validAttemptMeta } from './answerAttempts.ts';
 import { shellLabel } from "./shellDisplay.ts";
 import { storedDenialNotice } from "./denialNotice.ts";
+import { isDownloadNoticeLabel } from "./browserDownloadNotice.ts";
 import { createHash, randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
@@ -11,7 +12,10 @@ import { suggestTaskTitle } from './taskTitle.ts';
 import type { RenameUndo } from './removalUndo.ts';
 import { emptyVersions, joinVersions, splitVersions, validEditOf, type StoredVersions } from './editResend.ts';
 import { appendVerdict, latestVerdicts, validVerdictEvent, type VerdictEvent, type VerdictMap } from './answerVerdict.ts';
+import { validTaskAppearance, type TaskAppearance } from './taskAppearance.ts';
+import { validTaskActivity } from './taskActivity.ts';
 import type { ActivityDraft } from './activityDraft';
+import { searchTasks, type TaskSearchResult } from './taskSearch.ts';
 import type { ChatMessage } from './protocol';
 import type {
   ArchivedTaskSummary, TaskDocument, TaskSummary, TaskSurfaceSelection, TaskWorkspaceErrorCode, TaskWorkspaceExpected, TaskWorkspaceView,
@@ -44,6 +48,15 @@ interface VerdictsData { version: 1; scope: string; tasks: Record<string, Verdic
  * loses nothing.
  */
 interface ArchiveData { version: 1; scope: string; tasks: Record<string, number> }
+
+/**
+ * CGP-KNOW-R-008 — the task appearance sidecar, `<scope>.appearance.json`: per task, the emoji and
+ * colour ids the learner picked. Earlier builds never read it and the task file is not touched, so
+ * a downgrade only loses the drawn marks; the strict task-file schema stays readable by them.
+ */
+interface AppearanceData { version: 1; scope: string; tasks: Record<string, TaskAppearance> }
+/** CGP-KNOW-R-009 — one task as it moves between two personal activities' scopes. */
+export interface MovedTask { task: TaskDocument; versions: StoredVersions | null; verdicts: VerdictEvent[] }
 
 interface LockOwner { version: 1; host: string; pid: number; nonce: string; createdAt: number }
 interface LockRecord { owner: LockOwner; dev: number; ino: number }
@@ -93,10 +106,12 @@ const sameLock = (a: LockRecord | undefined, b: LockRecord) => !!a &&
  * on lines handed to the store and on the versions sidecar, never in the task file.
  */
 function validMessage(value: unknown, allowEditOf = false): value is ChatMessage {
-  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', ...(allowEditOf ? ['editOf', ...ATTEMPT_KEYS] : [])])) return false;
+  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', 'activity', ...(allowEditOf ? ['editOf', ...ATTEMPT_KEYS] : [])])) return false;
   if (!nonempty(value.id, 256) || typeof value.role !== 'string' || !['user', 'assistant', 'system', 'tool'].includes(value.role) ||
       typeof value.content !== 'string' || !timestamp(value.createdAt)) return false;
   if (value.assistantName !== undefined && typeof value.assistantName !== 'string') return false;
+  // CGP-ART-R-020 — "AI가 한 일" entries: bounded, exact shape, no control or bidi characters.
+  if (value.activity !== undefined && !validTaskActivity(value.activity)) return false;
   if (value.toolMode !== undefined && (value.role !== 'user' || !['auto', 'web-search'].includes(value.toolMode as string))) return false;
   // CGP-CHAT-R-002 — an edited resend names its group root; only a user line can be one.
   if (value.editOf !== undefined && (value.role !== 'user' || !validEditOf(value.editOf))) return false;
@@ -162,6 +177,17 @@ function decodeArchive(text: string, scope: string): ArchiveData {
 
 const archivedIn = (archive: ArchiveData, taskId: string) => Object.prototype.hasOwnProperty.call(archive.tasks, taskId);
 
+function decodeAppearance(text: string, scope: string): AppearanceData {
+  let envelope: unknown;
+  try { envelope = JSON.parse(text); } catch { return fail('corrupt', '작업 아이콘 기록을 읽을 수 없습니다.'); }
+  if (!isRecord(envelope) || !exactKeys(envelope, ['checksum', 'data']) || !isRecord(envelope.data) ||
+      typeof envelope.checksum !== 'string' || envelope.checksum !== hash(JSON.stringify(envelope.data))) return fail('corrupt', '작업 아이콘 기록의 무결성을 확인할 수 없습니다.');
+  const data = envelope.data;
+  if (!exactKeys(data, ['version', 'scope', 'tasks']) || data.version !== 1 || data.scope !== scope || !isRecord(data.tasks) ||
+      !Object.entries(data.tasks).every(([id, appearance]) => nonempty(id, 256) && validTaskAppearance(appearance))) return fail('corrupt', '작업 아이콘 기록의 형식이 일치하지 않습니다.');
+  return data as unknown as AppearanceData;
+}
+
 function validDraft(value: unknown): value is ActivityDraft {
   return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused', 'recovered', 'inlineEdit']) && validActivityDraft(value);
 }
@@ -220,8 +246,11 @@ export class TaskWorkspaceStore {
   readonly versionsPath: string;
   readonly verdictsPath: string;
   readonly archivePath: string;
+  readonly appearancePath: string;
   private readonly directory: string;
   private readonly rootPath: string;
+  /** The scope as given (before hashing), so a fresh read of the same store can be made. */
+  private readonly scopeInput: string;
   private data?: WorkspaceData;
   /** Versions sidecar as last read or written. A missing or unreadable sidecar reads as no versions. */
   private versions: VersionsData;
@@ -229,12 +258,15 @@ export class TaskWorkspaceStore {
   private verdicts: VerdictsData;
   /** Archive sidecar as last read or written. A missing or unreadable one reads as nothing archived. */
   private archive: ArchiveData;
+  /** Appearance sidecar as last read or written. A missing or unreadable one reads as no marks. */
+  private appearance: AppearanceData;
   private loadError?: TaskWorkspaceStoreError;
   private queue: Promise<void> = Promise.resolve();
 
   constructor(rootPath: string, scope: string) {
     if (!nonempty(rootPath, 4096) || !nonempty(scope, 16384)) fail('invalid', '작업 저장 범위가 필요합니다.');
     this.scope = hash(scope);
+    this.scopeInput = scope;
     this.rootPath = rootPath;
     this.directory = join(rootPath, 'task-workspaces');
     this.filePath = join(this.directory, `${this.scope}.json`);
@@ -244,6 +276,8 @@ export class TaskWorkspaceStore {
     this.verdicts = { version: 1, scope: this.scope, tasks: {} };
     this.archivePath = join(this.directory, `${this.scope}.archive.json`);
     this.archive = { version: 1, scope: this.scope, tasks: {} };
+    this.appearancePath = join(this.directory, `${this.scope}.appearance.json`);
+    this.appearance = { version: 1, scope: this.scope, tasks: {} };
     this.load();
   }
 
@@ -259,6 +293,7 @@ export class TaskWorkspaceStore {
       this.versions = this.readVersionsSync();
       this.verdicts = this.readVerdictsSync();
       this.archive = this.readArchiveSync();
+      this.appearance = this.readAppearanceSync();
     } catch (error) {
       if (codeOf(error) === 'ENOENT') return;
       this.loadError = error instanceof TaskWorkspaceStoreError ? error :
@@ -293,10 +328,22 @@ export class TaskWorkspaceStore {
     return { version: 1, scope: this.scope, tasks: {} };
   }
 
+  /** A lost appearance sidecar costs only the emoji and colour marks; titles and turns are in the task file. */
+  private readAppearanceSync(): AppearanceData {
+    try {
+      const stat = lstatSync(this.appearancePath);
+      if (stat.isFile() && !stat.isSymbolicLink()) return decodeAppearance(readFileSync(this.appearancePath, 'utf8'), this.scope);
+    } catch { /* missing or unreadable: no marks */ }
+    return { version: 1, scope: this.scope, tasks: {} };
+  }
+
   getView(): TaskWorkspaceView {
     const activeTaskId = this.data?.activeTaskId ?? null;
-    const summaries: TaskSummary[] = (this.data?.tasks ?? []).map(({ id, title, createdAt, updatedAt, messageCount }) =>
-      ({ id, title, createdAt, updatedAt, messageCount })).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+    const summaries: TaskSummary[] = (this.data?.tasks ?? []).map(({ id, title, createdAt, updatedAt, messageCount }) => {
+      // CGP-KNOW-R-008 — the learner's emoji and colour, if any, from the appearance sidecar.
+      const appearance = this.loadError ? undefined : this.appearance.tasks[id];
+      return { id, title, createdAt, updatedAt, messageCount, ...(appearance ? { appearance: clone(appearance) } : {}) };
+    }).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     // CGP-CHAT-R-025 — the open task always stays in the list (an interrupted archive leaves it
     // open and visible); every other archived task is listed only in 보관함, newest archive first.
     const hidden = (task: TaskSummary) => task.id !== activeTaskId && archivedIn(this.archive, task.id);
@@ -311,6 +358,15 @@ export class TaskWorkspaceStore {
       sourceSelection: clone(this.data?.tasks.find(task => task.id === this.data?.activeTaskId)?.sourceSelection ?? null),
       ...(this.loadError ? { error: { code: this.loadError.code, message: this.loadError.message } } : {}),
     };
+  }
+
+  /**
+   * CGP-CHAT-R-026 — local search over this scope's tasks (visible conversation only); never touches disk or
+   * network. null when the task file could not be read: "no match" would be a false answer.
+   */
+  search(query: string): TaskSearchResult[] | null {
+    if (this.loadError || !this.data) return null;
+    return searchTasks(this.data.tasks, query);
   }
 
   getActiveTask(): TaskDocument | undefined { return this.getTask(this.data?.activeTaskId); }
@@ -454,7 +510,17 @@ export class TaskWorkspaceStore {
   appendDenial(taskId: string, message: ChatMessage): Promise<TaskWorkspaceView> {
     if (!validIncoming(message) || message.role !== 'tool' || message.content !== '' || message.tool?.state !== 'error' || !storedDenialNotice(message.tool.label))
       return Promise.reject(new TaskWorkspaceStoreError('invalid', '차단 안내 형식이 올바르지 않습니다.'));
-    const safe: ChatMessage = { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '🔒', label: message.tool.label, state: 'error' } };
+    return this.appendSystemLine(taskId, { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '🔒', label: message.tool.label, state: 'error' } });
+  }
+
+  /** CGP-KNOW-R-021 — a browser download line, written outside any turn like a denial notice. */
+  appendDownloadNotice(taskId: string, message: ChatMessage): Promise<TaskWorkspaceView> {
+    if (!validIncoming(message) || message.role !== 'tool' || message.content !== '' || !message.tool || !isDownloadNoticeLabel(message.tool.label, message.tool.state))
+      return Promise.reject(new TaskWorkspaceStoreError('invalid', '다운로드 안내 형식이 올바르지 않습니다.'));
+    return this.appendSystemLine(taskId, { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '📄', label: message.tool.label, state: message.tool.state } });
+  }
+
+  private appendSystemLine(taskId: string, safe: ChatMessage): Promise<TaskWorkspaceView> {
     return this.mutate((data, versions) => {
       const current = this.requireData(data);
       const task = this.requireTask(current, taskId);
@@ -522,11 +588,210 @@ export class TaskWorkspaceStore {
     if (!validVerdictEvent(event)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 답변 선택 형식이 올바르지 않습니다.'));
     return this.mutateVerdicts(taskId, history => appendVerdict(history, clone(event)));
   }
+  /**
+   * CGP-KNOW-R-008 — set (or, with null, clear) the ACTIVE task's emoji/colour under the task lock,
+   * writing only the appearance sidecar. Neither the title nor `updatedAt` changes, so the task does
+   * not jump to the top of the list for a cosmetic choice.
+   */
+  setAppearance(taskId: string, appearance: TaskAppearance | null): Promise<TaskWorkspaceView> {
+    if (appearance !== null && !validTaskAppearance(appearance)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '고를 수 있는 아이콘과 색이 아닙니다.'));
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      const current = this.requireData(this.data);
+      if (taskId !== current.activeTaskId) fail('stale', '다른 작업의 저장 요청입니다. 현재 작업에서 다시 시도해 주세요.');
+      this.requireTask(current, taskId);
+      try {
+        await this.prepareDirectory();
+        const lock = await this.acquireLock();
+        try {
+          const disk = await this.readAppearanceLocked(lock.owner.nonce);
+          const next = clone(disk);
+          if (appearance) next.tasks[taskId] = { ...(appearance.emoji ? { emoji: appearance.emoji } : {}), ...(appearance.colour ? { colour: appearance.colour } : {}) };
+          else delete next.tasks[taskId];
+          if (JSON.stringify(next) !== JSON.stringify(disk)) {
+            const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+            decodeAppearance(content, this.scope);
+            await this.writeAtomic(this.appearancePath, content, lock.owner.nonce);
+          }
+          this.appearance = next;
+          return this.getView();
+        } finally {
+          await this.releaseLock(lock);
+        }
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '아이콘과 색을 저장하지 못했습니다. 다시 시도해 주세요.');
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
   saveSurface(taskId: string, selection: TaskSurfaceSelection | null): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => {
       if (!validSurface(selection)) fail('invalid', '저장할 출처 주소가 올바르지 않습니다.');
       task.sourceSelection = clone(selection);
     });
+  }
+
+  /** CGP-KNOW-R-009 — the same scope read again from disk now, independent of this instance's memory. */
+  reread(): TaskWorkspaceStore { return new TaskWorkspaceStore(this.rootPath, this.scopeInput); }
+
+  /**
+   * CGP-KNOW-R-009 — one task exactly as this scope stores it (task document with its draft, the
+   * versions sidecar entry and the verdict events), for a move to another personal activity.
+   */
+  exportTask(taskId: string): MovedTask {
+    const task = this.getTask(taskId) ?? fail('not_found', '이 작업을 찾을 수 없습니다. 작업 목록을 다시 열어 주세요.');
+    return { task, versions: this.versions.tasks[taskId] ? clone(this.versions.tasks[taskId]) : null, verdicts: clone(this.verdicts.tasks[taskId] ?? []) };
+  }
+
+  /**
+   * CGP-KNOW-R-009 — receive a task moved from another scope. The moved task joins the list as it
+   * is (same id, title, transcript, draft, versions and verdicts); this scope's active task does not
+   * change. Only a scope that already has a task file receives: one that was never opened would
+   * otherwise skip its first-open import of older history. A task id this scope already holds is
+   * accepted only when it is the identical task (a retry after a half-done move); anything else is
+   * refused and nothing is written. Order: versions, verdicts, then the task file (the commit point),
+   * so a task that is present always has its sidecar entries; an interrupted receive leaves at most
+   * sidecar entries for a task id the list does not hold, which the next receive overwrites.
+   */
+  receiveTask(moved: MovedTask): Promise<TaskWorkspaceView> {
+    if (!isRecord(moved) || !validTask(moved.task) || (moved.versions !== null && !validVersions(moved.versions)) ||
+        !Array.isArray(moved.verdicts) || !moved.verdicts.every(validVerdictEvent)) {
+      return Promise.reject(new TaskWorkspaceStoreError('invalid', '옮길 작업의 형식을 확인할 수 없습니다.'));
+    }
+    const incoming = clone(moved);
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      try {
+        await this.prepareDirectory();
+        const lock = await this.acquireLock();
+        try {
+          let disk: WorkspaceData;
+          try {
+            const stat = await lstat(this.filePath);
+            if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 기록 파일의 위치를 확인해야 합니다.');
+            disk = decode(await readFile(this.filePath, 'utf8'), this.scope);
+          } catch (error) {
+            if (codeOf(error) === 'ENOENT') fail('not_initialized', '옮길 활동을 한 번 연 뒤에 다시 시도해 주세요.');
+            throw error;
+          }
+          const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
+          const diskVerdicts = await this.readVerdictsLocked(lock.owner.nonce);
+          const existing = disk.tasks.find(task => task.id === incoming.task.id);
+          if (existing) {
+            const same = JSON.stringify(existing) === JSON.stringify(incoming.task) &&
+              JSON.stringify(diskVersions.tasks[existing.id] ?? null) === JSON.stringify(incoming.versions) &&
+              JSON.stringify(diskVerdicts.tasks[existing.id] ?? []) === JSON.stringify(incoming.verdicts);
+            if (!same) fail('invalid', '옮길 활동에 같은 작업이 이미 있어요. 작업 목록을 확인해 주세요.');
+            this.data = disk; this.versions = diskVersions; this.verdicts = diskVerdicts;
+            return this.getView();
+          }
+          // A sidecar entry for an id the list does not hold is left over (an interrupted receive or
+          // release); the incoming task replaces it, and an incoming task without one clears it.
+          const versions = clone(diskVersions);
+          if (incoming.versions) versions.tasks[incoming.task.id] = incoming.versions;
+          else delete versions.tasks[incoming.task.id];
+          const verdicts = clone(diskVerdicts);
+          if (incoming.verdicts.length) verdicts.tasks[incoming.task.id] = incoming.verdicts;
+          else delete verdicts.tasks[incoming.task.id];
+          const next: WorkspaceData = { ...disk, revision: disk.revision + 1, tasks: [...disk.tasks, incoming.task] };
+          if (JSON.stringify(versions) !== JSON.stringify(diskVersions)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(versions)), data: versions });
+            decodeVersions(sidecar, this.scope);
+            await this.writeAtomic(this.versionsPath, sidecar, lock.owner.nonce);
+          }
+          this.versions = versions;
+          if (JSON.stringify(verdicts) !== JSON.stringify(diskVerdicts)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(verdicts)), data: verdicts });
+            decodeVerdicts(sidecar, this.scope);
+            await this.writeAtomic(this.verdictsPath, sidecar, lock.owner.nonce);
+          }
+          this.verdicts = verdicts;
+          const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+          decode(content, this.scope);
+          await this.writeAtomic(this.filePath, content, lock.owner.nonce);
+          this.data = next;
+          return this.getView();
+        } finally {
+          await this.releaseLock(lock);
+        }
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '작업을 옮기지 못했습니다. 원래 기록은 그대로 있어요.');
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
+
+  /**
+   * CGP-KNOW-R-009 — undo a receive when the move cannot finish (the copy did not read back, or the
+   * source could not let go). Only the exact task that was received is removed, and only while it is
+   * not the open task here; anything else is left alone and reported as not withdrawn.
+   */
+  async withdrawTask(moved: MovedTask): Promise<boolean> {
+    const current = this.data;
+    const task = current?.tasks.find(value => value.id === moved?.task?.id);
+    if (!current || !task || current.activeTaskId === task.id || current.tasks.length < 2 || JSON.stringify(task) !== JSON.stringify(moved.task)) return false;
+    await this.mutate(data => {
+      const latest = this.requireData(data);
+      latest.tasks = latest.tasks.filter(value => value.id !== task.id);
+      return latest;
+    });
+    await this.dropSidecarEntries(task.id);
+    return true;
+  }
+
+  /**
+   * CGP-KNOW-R-009 — take a task out of this scope after another scope received it. Refused when
+   * the list changed since the learner chose (expected). Moving the open task opens the most
+   * recently changed remaining one; moving the only task leaves a new empty one. Order: the task
+   * file first (the commit point), then the task's versions entry, then its verdict events. A
+   * failed task-file write leaves the task with all its earlier versions; a failure after it only
+   * leaves unreachable sidecar entries behind, which a later receive of the same id overwrites.
+   */
+  async releaseTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    const view = await this.mutate(data => {
+      const current = this.requireData(data);
+      this.checkExpected(current, expected);
+      this.requireTask(current, taskId);
+      current.tasks = current.tasks.filter(task => task.id !== taskId);
+      if (!current.tasks.length) current.tasks.push(this.newTask('새 작업', Date.now()));
+      if (current.activeTaskId === taskId) {
+        current.activeTaskId = [...current.tasks].sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))[0].id;
+      }
+      return current;
+    });
+    await this.dropSidecarEntries(taskId);
+    return view;
+  }
+
+  /** CGP-KNOW-R-009 — after a task left the task file: drop its versions, then its verdicts (best effort). */
+  private async dropSidecarEntries(taskId: string): Promise<void> {
+    await this.mutate((data, versions) => { delete versions.tasks[taskId]; return this.requireData(data); }).catch(() => {});
+    await this.dropVerdicts(taskId).catch(() => {});
+  }
+
+  private dropVerdicts(taskId: string): Promise<void> {
+    const operation = this.queue.then(async () => {
+      await this.prepareDirectory();
+      const lock = await this.acquireLock();
+      try {
+        const disk = await this.readVerdictsLocked(lock.owner.nonce);
+        if (!disk.tasks[taskId]) { this.verdicts = disk; return; }
+        const next = clone(disk);
+        delete next.tasks[taskId];
+        const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+        decodeVerdicts(content, this.scope);
+        await this.writeAtomic(this.verdictsPath, content, lock.owner.nonce);
+        this.verdicts = next;
+      } finally {
+        await this.releaseLock(lock);
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
   }
 
   /**
@@ -549,6 +814,7 @@ export class TaskWorkspaceStore {
     const fromVersions = clone(source.versions.tasks);
     const fromVerdicts = clone(source.verdicts.tasks);
     const fromArchive = clone(source.archive.tasks);
+    const fromAppearance = clone(source.appearance.tasks);
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
@@ -565,6 +831,8 @@ export class TaskWorkspaceStore {
           const diskVerdicts = await this.readVerdictsLocked(lock.owner.nonce);
           const diskArchive = await this.readArchiveLocked(lock.owner.nonce);
           const archive = clone(diskArchive);
+          const diskAppearance = await this.readAppearanceLocked(lock.owner.nonce);
+          const appearance = clone(diskAppearance);
           const tasks = clone(disk?.tasks ?? []);
           const versions = clone(diskVersions);
           const verdicts = clone(diskVerdicts);
@@ -582,6 +850,7 @@ export class TaskWorkspaceStore {
                 tasks.push(kept);
                 if (diskVersions.tasks[old.id]) versions.tasks[kept.id] = clone(diskVersions.tasks[old.id]);
                 if (diskVerdicts.tasks[old.id]?.length) verdicts.tasks[kept.id] = clone(diskVerdicts.tasks[old.id]);
+                if (diskAppearance.tasks[old.id]) appearance.tasks[kept.id] = clone(diskAppearance.tasks[old.id]);
               }
               tasks[at] = task;
             } else tasks.push(task);
@@ -589,6 +858,7 @@ export class TaskWorkspaceStore {
             if (fromVerdicts[task.id]?.length) verdicts.tasks[task.id] = fromVerdicts[task.id]; else delete verdicts.tasks[task.id];
             // CGP-CHAT-R-025 — an archived task stays archived in the new folder, a listed one stays listed.
             if (Object.prototype.hasOwnProperty.call(fromArchive, task.id)) archive.tasks[task.id] = fromArchive[task.id]; else delete archive.tasks[task.id];
+            if (fromAppearance[task.id]) appearance.tasks[task.id] = fromAppearance[task.id]; else delete appearance.tasks[task.id];
           }
           const next: WorkspaceData = { version: 1, scope: this.scope, revision: (disk?.revision ?? 0) + 1, activeTaskId: from.activeTaskId, tasks };
           if (JSON.stringify(versions) !== JSON.stringify(diskVersions)) {
@@ -609,6 +879,13 @@ export class TaskWorkspaceStore {
             await this.writeAtomic(this.verdictsPath, sidecar, lock.owner.nonce);
           }
           this.verdicts = verdicts;
+          // After the commit point, like the verdicts: a failed carry never changes the target's marks.
+          if (JSON.stringify(appearance) !== JSON.stringify(diskAppearance)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(appearance)), data: appearance });
+            decodeAppearance(sidecar, this.scope);
+            await this.writeAtomic(this.appearancePath, sidecar, lock.owner.nonce);
+          }
+          this.appearance = appearance;
           return this.getView();
         } finally {
           await this.releaseLock(lock);
@@ -827,6 +1104,19 @@ export class TaskWorkspaceStore {
     const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
     decodeArchive(sidecar, this.scope);
     await this.writeAtomic(this.archivePath, sidecar, nonce);
+  }
+
+  /** The appearance sidecar on disk, read under the lock. An unreadable one is set aside (kept, never overwritten). */
+  private async readAppearanceLocked(nonce: string): Promise<AppearanceData> {
+    const empty: AppearanceData = { version: 1, scope: this.scope, tasks: {} };
+    let text: string;
+    try {
+      const stat = await lstat(this.appearancePath);
+      if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 아이콘 기록 파일의 위치를 확인해야 합니다.');
+      text = await readFile(this.appearancePath, 'utf8');
+    } catch (error) { if (codeOf(error) === 'ENOENT') return empty; throw error; }
+    try { return decodeAppearance(text, this.scope); }
+    catch { await rename(this.appearancePath, `${this.appearancePath}.unreadable-${nonce}`); return empty; }
   }
 
   /**

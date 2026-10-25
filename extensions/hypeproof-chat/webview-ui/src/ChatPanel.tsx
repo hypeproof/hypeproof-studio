@@ -16,6 +16,7 @@ import './answerAttempts.css';
 import { visibleAttempts, ATTEMPT_HISTORY_NOTE } from '../../src/answerAttempts';
 import { AttemptPager } from './AttemptPager';
 import { AnnotationTray } from "./AnnotationTray";
+import { StyleTweakPanel } from "./StyleTweakPanel";
 import { storedShell } from "../../src/shellDisplay";
 import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
@@ -35,11 +36,13 @@ import { ComposerTools, SelectedTool } from './ComposerTools';
 import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
+import { LowDiskBar } from './LowDiskBar';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
+import { TASK_APPEARANCE_LABEL, useTaskAppearance } from './TaskAppearance';
 import { COPY_CONVERSATION_LABEL } from '../../src/conversationCopy';
 import { glyphIconKind, splitLeadingGlyph, stripLeadingGlyph } from './glyphIcon';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
@@ -60,6 +63,8 @@ import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
+import { ShortcutSheet, useShortcutSheetKey } from './ShortcutSheet';
+import { NicknameSetting } from './NicknameSetting';
 import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
 import { SafetyNotice } from './SafetyNotice';
@@ -117,6 +122,8 @@ import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/c
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
 import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
+import { TaskActivity } from "./TaskActivity";
+import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
   RUNNER_PHRASE_MS,
   isRunnerCohort,
@@ -143,6 +150,8 @@ interface Props {
   onAnnotationAction?: (action: 'element' | 'rectangle' | 'remove' | 'comment', number?: number, comment?: string) => void;
   elementPreview?: import("../../src/protocol").ElementPreview | null;
   onRemoveElement?: () => void;
+  /** CGP-ART-R-006 — preview one offered style value on the picked element (null resets it). */
+  onStyleTweakSet?: (id: string, prop: string, value: string | null) => void;
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
   pageAttachment?: import("../../src/pageContext").PageAttachmentPreview | null;
   /** CGP-CHAT-R-029 — `undoId`: the host keeps the removed page under it for 되돌리기. */
@@ -249,6 +258,9 @@ function extractRenderableHtml(text: string): string | null {
   }
   return null;
 }
+
+/** REQ-KNOW-35 — how often a visible panel asks the host to measure free space again. */
+const LOW_DISK_POLL_MS = 60_000;
 
 // Pasted-image context (website-copyclone). Bounds match the worker's
 // translate.ts caps so a paste that the webview accepts is one the worker
@@ -423,6 +435,12 @@ export function ChatPanel(props: Props) {
   // CGP-SHELL-D-028: the classroom detail dialog mounts only while open, so its close button's
   // autoFocus runs before the focus hook could see the opener; remember the opener here instead.
   const preferencesOpener = useRef<HTMLElement | null>(null);
+  // CGP-CHAT-R-030 — 키보드 단축키: opened by `?` outside a text field, or from the settings dialog.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutsOpener = useRef<HTMLElement | null>(null);
+  useShortcutSheetKey(!shortcutsOpen, () => { shortcutsOpener.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null; setShortcutsOpen(true); });
+  // From settings: the settings dialog closes first, so focus later returns to what opened settings.
+  const openShortcutsFromPreferences = () => { shortcutsOpener.current = preferencesOpener.current; setPreferencesOpen(false); setPreferencesUsage(false); setShortcutsOpen(true); };
   const lastReplyChoice = useRef<{ messageId: string; answer: string } | null>(null);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
@@ -684,6 +702,16 @@ export function ChatPanel(props: Props) {
     postToHost({ type: "turnReviewRequest" });
     return off;
   }, []);
+  // CGP-ART-R-020 — entries of a running turn, shown before the turn's history is saved. The host binds
+  // each to the task it started in (onHostMessage drops another task's); a history load or a scope change
+  // replaces them with what was persisted.
+  const [liveActivity, setLiveActivity] = useState<TaskActivityFact[]>([]);
+  useEffect(() => onHostMessage((msg) => {
+    if (msg.type === "history") setLiveActivity([]);
+    else if (msg.type === "taskActivityFact" && validTaskActivityFact(msg.fact)) setLiveActivity((list) => list.some((f) => f.id === msg.fact.id) ? list : [...list, msg.fact]);
+  }), []);
+  useEffect(() => { setLiveActivity([]); }, [activityId, taskId]);
+  const [reviewFocus, setReviewFocus] = useState<{ path: string; seq: number; turnId: string } | null>(null);
   // REQ-STUDIO-PAGE-CARD — page cards of this task's coach turns, keyed by the chat row each sits under.
   const [pageCards, setPageCards] = useState<Map<string, import("../../src/pageCard").PageCardView>>(() => new Map());
   useEffect(() => {
@@ -700,6 +728,20 @@ export function ChatPanel(props: Props) {
     const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "missingTaskFolderRequest" }); };
     ask(); document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
     const stop = () => { off(); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
+    return stop;
+  }, []);
+  // REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume. The host also measures as every turn
+  // starts and ends; the panel asks on mount, when it comes back into view, on focus and once a minute while visible.
+  const [lowDisk, setLowDisk] = useState<import("../../src/lowDisk").LowDiskNotice | null>(null);
+  useEffect(() => {
+    const off = onHostMessage((msg) => { if (msg.type === "lowDisk") setLowDisk(msg.notice); });
+    const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "lowDiskRequest" }); };
+    postToHost({ type: "lowDiskRequest", mount: true });
+    document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
+    const timer = setInterval(ask, LOW_DISK_POLL_MS);
+    // Render tests run this panel in Node: an always-on poll must not keep their process alive.
+    (timer as unknown as { unref?: () => void }).unref?.();
+    const stop = () => { off(); clearInterval(timer); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
     return stop;
   }, []);
   // REQ-STUDIO-PREVIEW-RECOVERY — the host measures the learner's preview tab (server state, HTTP status) and pushes it when a
@@ -921,6 +963,8 @@ export function ChatPanel(props: Props) {
   // CGP-CHAT-R-024 — the personal task's own conversation, copied as Markdown from the task menu.
   // Exactly the conversation as drawn: one version per prompt (the one on screen), never hidden attempts.
   const drawnConversation = useMemo(() => visibleVersions(visibleAttempts(messages).items, versionChoice).items, [messages, versionChoice]);
+  const taskAppearance = useTaskAppearance();
+  const taskActivity = useMemo(() => summarizeTaskActivity(drawnConversation, liveActivity), [drawnConversation, liveActivity]);
   const conversationCopy = useConversationCopy(JSON.stringify([activityId ?? null, taskId ?? null]), {
     messages: drawnConversation,
     title: config?.taskWorkspace?.tasks.find(task => task.id === taskId)?.title,
@@ -1412,6 +1456,18 @@ export function ChatPanel(props: Props) {
     setRollExpand(null);
   };
 
+  /**
+   * CGP-ART-R-006 — "{n}개 바꿔 달라고 하기" sends the learner's chosen values as their own message,
+   * verbatim, like a friend button: the draft is left alone. The host adds the element block and
+   * the structured request (property, old value, new value) that the chip already showed.
+   */
+  const handleStyleTweakSend = (text: string) => {
+    if (busy || props.sendLocked || !text) return;
+    if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; }
+    if (!reserveRecovery(text, [], 'auto')) return;
+    sendWhenOnline(() => props.onSend(text), 'press');
+  };
+
   const handleRollClick = () => {
     // Capture the current draft as the "first thought" and prompt expansion.
     setRollExpand({ original: draft.trim() });
@@ -1620,6 +1676,7 @@ export function ChatPanel(props: Props) {
           <button onClick={props.onSetToken} data-hp-tooltip="연결된 활동 확인 및 변경">
             활동 변경
           </button>
+          {personalWorkspace && !props.instructor && taskAppearance.open && <button type="button" className="tw-task-appearance" onClick={taskAppearance.open} data-hp-tooltip="목록에서 이 작업을 찾기 쉽게 표시를 붙여요">{TASK_APPEARANCE_LABEL}</button>}
           {personalWorkspace && !props.instructor && <button type="button" className="tw-copy-conversation" onClick={() => { void conversationCopy.copy(); }} disabled={props.streaming || !conversationCopy.available} data-hp-tooltip="이 작업의 대화를 글로 복사해요">{COPY_CONVERSATION_LABEL}</button>}
           <button onClick={props.onClear} disabled={props.streaming} data-hp-tooltip="대화 기록 지우기">대화 지우기</button>
           {/* CGP-CHAT-R-025 — hide this task from the list; its conversation, draft and records stay. Personal tasks only. */}
@@ -1822,7 +1879,7 @@ export function ChatPanel(props: Props) {
         {shown.items.map((m, i) => <TurnBoundary key={`${activityId ?? ""}/${taskId ?? ""}/${m.id}`} messageId={m.id} rawText={m.content}>{() => <Fragment>
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
           {dividers.has(m.id) && <StepDivider id={m.id} label={stepDividerLabel(dividers.get(m.id)!)} />}
-          {m.elapsedTurn && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
+          {(m.elapsedTurn || m.activity) && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
             <ToolLine message={m} onReport={props.onReportProblem} />
           ) : delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
             <ContextNote text={CONTEXT_COMPACT_NOTE} />
@@ -1944,6 +2001,15 @@ export function ChatPanel(props: Props) {
                 <summary>코치에게 보낼 내용 보기</summary>
                 <pre data-testid="element-context-sent">{props.elementPreview.sentText}</pre>
               </details>
+              {props.elementPreview.styleTweak && props.onStyleTweakSet && (
+                <StyleTweakPanel
+                  key={props.elementPreview.styleTweak.id}
+                  view={props.elementPreview.styleTweak}
+                  disabled={busy || !!props.sendLocked}
+                  onSet={(prop, value) => props.onStyleTweakSet!(props.elementPreview!.styleTweak!.id, prop, value)}
+                  onSend={handleStyleTweakSend}
+                />
+              )}
             </div>
             <button type="button" className="hps-element-remove" aria-label="이 요소 빼기" onClick={props.onRemoveElement}>
               <ChatIcon kind="close" size={16} />
@@ -1969,13 +2035,22 @@ export function ChatPanel(props: Props) {
           <PanelBoundary panel="capability-change"><CapabilityChangeCard change={config.capabilityChange} onDismiss={(id) => postToHost({ type: "dismissCapabilityChange", id })} /></PanelBoundary>
         )}
 
+        {/* CGP-ART-R-020 — what the AI did in this task, from its tool events only. */}
+        <PanelBoundary panel="task-activity"><TaskActivity
+          summary={taskActivity}
+          reviewPaths={new Set(!props.instructor && turnReview?.state === "open" ? [...turnReview.added, ...turnReview.changed] : [])}
+          onShowReview={(path) => { if (turnReview) setReviewFocus((f) => ({ path, seq: (f?.seq ?? 0) + 1, turnId: turnReview.turnId })); }}
+        /></PanelBoundary>
+
         {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
         {!props.instructor && turnReview && (
           <PanelBoundary panel="turn-review"><TurnReviewBar
             view={turnReview}
+            focus={reviewFocus?.turnId === turnReview.turnId ? reviewFocus : null}
             onRevert={(path) => postToHost({ type: "turnRevert", turnId: turnReview.turnId, ...(path === undefined ? {} : { path }) })}
             onKeep={() => postToHost({ type: "turnKeep", turnId: turnReview.turnId })}
             onClose={() => postToHost({ type: "turnReviewClose", turnId: turnReview.turnId })}
+            onCheckpointSave={(message) => postToHost({ type: "checkpointSave", turnId: turnReview.turnId, message })}
           /></PanelBoundary>
         )}
 
@@ -2029,6 +2104,7 @@ export function ChatPanel(props: Props) {
           config={config} view={goalOfLesson(studentGoal, config.profile!.lesson)}
           pending={goalPending} note={goalNote} onSave={sendGoalSave} />}</PanelBoundary>}
 
+        {lowDisk && <LowDiskBar notice={lowDisk} />}
         {props.refusal && <RefusalBanner onDismiss={() => {
           props.onDismissRefusal?.();
           textareaRef.current?.focus({ preventScroll: true });
@@ -2349,6 +2425,7 @@ export function ChatPanel(props: Props) {
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
       </ChatPreferences>}
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
         {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}
@@ -2366,11 +2443,14 @@ export function ChatPanel(props: Props) {
             <span>{TEXT_SIZE_LABELS[size]}</span>
           </label>)}
         </fieldset>
+        {config.learnerNickname && <NicknameSetting key={config.activity?.id ?? ''} saved={config.learnerNickname.value} post={postToHost} />}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
+        <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
         </>}</PanelBoundary>
       </ChatPreferences>}
+      <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} opener={() => shortcutsOpener.current} />
     </div></CopyFeedbackRegion>
   );
 }
@@ -2950,7 +3030,8 @@ function MessageItem({
   const retryPrompt = canRetry ? userPromptBefore(messages, message.id) : null;
 
   return (
-    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`} {...(quotable ? { [QUOTE_ROW_ATTR]: message.id } : {})} {...(message.role === 'user' ? { [MY_QUESTION_ATTR]: message.id } : {})}>
+    // CGP-CHAT-R-026 — data-message-id is the task-search jump target.
+    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`} data-message-id={message.id} {...(quotable ? { [QUOTE_ROW_ATTR]: message.id } : {})} {...(message.role === 'user' ? { [MY_QUESTION_ATTR]: message.id } : {})}>
       <div className={personal ? "hps-msg-role hps-sr-only" : "hps-msg-role"}>
         {/*
           * #747 (AE-08) — if a stored name exists, use **that**. If not (rows from

@@ -46,14 +46,20 @@ const { resolveWithinRoot, injectLiveReload, contentTypeFor, serveStatic, LIVERE
   const withBody = "<html><body><h1>hi</h1></body></html>";
   const out = injectLiveReload(withBody);
   assert.ok(out.includes(LIVERELOAD_PATH), "snippet references the live-reload endpoint");
-  assert.ok(out.includes("location.reload"), "snippet reloads on message");
-  assert.ok(out.indexOf(LIVERELOAD_PATH) < out.indexOf("</body>"), "injected before </body>");
+  assert.ok(out.includes("loc.reload()"), "snippet reloads on message");
+  // CGP-ART-R-017: first in the document, so it runs before any page script.
+  assert.ok(out.startsWith("<script>"), "injected before any page markup");
+  const withDoctype = "<!DOCTYPE html>\n<html><head><script>window.x=1</script></head><body></body></html>";
+  const outD = injectLiveReload(withDoctype);
+  assert.ok(outD.startsWith("<!DOCTYPE html><script>"), "right after the doctype (standards mode kept)");
+  assert.ok(outD.indexOf(LIVERELOAD_PATH) < outD.indexOf("window.x=1"), "before the page's own scripts");
 
-  // No </body> → appended at end (still present).
+  // A fragment: still present, first.
   const noBody = "<h1>fragment</h1>";
   assert.ok(injectLiveReload(noBody).includes(LIVERELOAD_PATH));
+  assert.ok(injectLiveReload(noBody).endsWith("<h1>fragment</h1>"));
 
-  console.log("✓ injectLiveReload: SSE client injected before </body>, appended when absent");
+  console.log("✓ injectLiveReload: SSE client injected first (after the doctype), before page scripts");
 }
 
 // ─── contentTypeFor ─────────────────────────────────────────────────
@@ -226,6 +232,81 @@ const { resolveWithinRoot, injectLiveReload, contentTypeFor, serveStatic, LIVERE
     server.dispose();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+}
+
+// ─── CGP-ART-R-017: only this server's own loopback Host is served (DNS rebinding) ──
+// A rebinding page (evil.example resolved to 127.0.0.1) is same-origin to itself: without a Host
+// check it could read every file under the served root and the 따라 보기 token, then post the
+// learner's choice. Every path refuses a Host other than 127.0.0.1:<port> / localhost:<port>;
+// the choice endpoint also refuses a foreign Origin. All checks are collected, then asserted.
+{
+  const { LiveServer } = await import("../src/liveServer.ts");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hp-live-host-"));
+  fs.writeFileSync(path.join(dir, "index.html"), "<!doctype html><html><body><p>내 페이지</p></body></html>");
+  fs.writeFileSync(path.join(dir, "secret.txt"), "learner notes");
+  const server = new LiveServer();
+  const failures = [];
+  const expect = (what, ok, detail) => { if (!ok) failures.push(`${what}: ${detail}`); };
+  const send = (port, { method = "GET", urlPath = "/", host, origin, body } = {}) => new Promise((resolve, reject) => {
+    const headers = { host };
+    if (origin !== undefined) headers.origin = origin;
+    if (body !== undefined) { headers["content-type"] = "text/plain;charset=UTF-8"; headers["content-length"] = Buffer.byteLength(body); }
+    const req = http.request({ host: "127.0.0.1", port, path: urlPath, method, headers, agent: false }, (res) => {
+      if (res.headers["content-type"] === "text/event-stream") { const status = res.statusCode; req.destroy(); resolve({ status, body: "" }); return; }
+      let text = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => { text += c; });
+      res.on("end", () => resolve({ status: res.statusCode, body: text }));
+    });
+    req.on("error", reject);
+    if (body !== undefined) req.write(body);
+    req.end();
+  });
+  try {
+    const base = await server.ensure(dir);
+    const port = Number(new URL(base).port);
+    const own = `127.0.0.1:${port}`;
+
+    // The correct Host passes, in both loopback spellings.
+    const home = await send(port, { host: own });
+    expect("GET / with Host 127.0.0.1:<port>", home.status === 200, `status ${home.status}`);
+    expect("GET / with Host localhost:<port>", (await send(port, { host: `localhost:${port}` })).status === 200, "not 200");
+    const token = /"\/__hp_follow","([^"]+)"/.exec(home.body)?.[1];
+    assert.ok(token, "the served page carries the follow token");
+
+    // A foreign Host is refused on every path (GET).
+    for (const host of ["evil.example", `evil.example:${port}`, `127.0.0.1:${port + 1}`, `localhost:${port + 1}`, `127.0.0.1.nip.io:${port}`]) {
+      for (const urlPath of ["/", "/index.html", "/secret.txt", "/__hp_viewport?path=%2Findex.html", "/__hp_livereload"]) {
+        const r = await send(port, { host, urlPath });
+        expect(`GET ${urlPath} with Host ${host}`, r.status === 403 && !r.body.includes(token) && !r.body.includes("learner notes"), `status ${r.status}`);
+      }
+    }
+
+    const choice = () => server.followState().on;
+    const post = (on, extra = {}) => send(port, { method: "POST", urlPath: "/__hp_follow", host: own, body: JSON.stringify({ on, t: token }), ...extra });
+    // A foreign Host is refused on POST, with a valid token; the choice is unchanged.
+    let r = await post(false, { host: `evil.example:${port}`, origin: `http://evil.example:${port}` });
+    expect("POST with Host evil.example:<port>", r.status === 403 && choice() === true, `status ${r.status}, on=${choice()}`);
+    r = await post(false, { host: `evil.example:${port}` });
+    expect("POST with Host evil.example:<port>, no Origin", r.status === 403 && choice() === true, `status ${r.status}, on=${choice()}`);
+    // A foreign Origin is refused on POST, with a valid token and the right Host.
+    for (const origin of ["http://evil.example", `http://127.0.0.1:${port + 1}`, `https://127.0.0.1:${port}`, "null"]) {
+      r = await post(false, { origin });
+      expect(`POST with Origin ${origin}`, r.status === 403 && choice() === true, `status ${r.status}, on=${choice()}`);
+    }
+    // The server's own origin passes (both spellings, each with its own Host); no Origin passes (the token still gates it).
+    r = await post(false, { origin: `http://${own}` });
+    expect("POST with the server's own Origin", r.status === 204 && choice() === false, `status ${r.status}, on=${choice()}`);
+    r = await post(true, { host: `localhost:${port}`, origin: `http://localhost:${port}` });
+    expect("POST via localhost with its own Origin", r.status === 204 && choice() === true, `status ${r.status}, on=${choice()}`);
+    r = await post(false);
+    expect("POST without Origin", r.status === 204 && choice() === false, `status ${r.status}, on=${choice()}`);
+  } finally {
+    server.dispose();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert.deepEqual(failures, [], `Host/Origin checks failed:\n  - ${failures.join("\n  - ")}`);
+  console.log("✓ LiveServer: a foreign Host gets 403 on every path (GET and POST), a foreign Origin gets 403 on POST, the server's own Host and Origin pass");
 }
 
 console.log("All live-server smoke tests passed.");

@@ -175,16 +175,48 @@ try {
     // A workbench presentation default this branch adds (e.g. #2787 secondary side bar) is not a relabel either;
     // every default main already has must still match, and a new non-workbench default (security.*, chat.*) still fails.
     const baseDefaults=new Set(Object.keys(baseManifest.contributes?.configurationDefaults??{}));
+    // A command this branch adds (CGP-ART-R-016 덱 장 다듬기, CGP-AGENT-R-030 느려요 기록) is not a relabel either, and every
+    // command main already has must still match (ids, order, enablement, icon, every menu entry). A new command may only reuse
+    // a FUNCTION gate main already uses: a clause that is the enablement or palette `when` of a main command and is made of
+    // feature switches only (hypeproof-chat.* context keys or config.hypeproofChat.* settings). A visibility clause
+    // (view == …, resourceScheme == …, !explorerResourceIsFolder …) is not a function gate. The new command needs that
+    // enablement, a palette entry, and every menu entry naming it (commandPalette, view/title, editor/title,
+    // explorer/context, any menu) must carry such a gate as its `when`.
+    const baseCommands=new Set((baseManifest.contributes?.commands??[]).map(x=>x.command));
+    const baseMenuKeys=new Set(Object.keys(baseManifest.contributes?.menus??{}));
     const onlyBaseSettings=m=>{const c=structuredClone(m),p=c.contributes?.configuration?.properties,d=c.contributes?.configurationDefaults;
       if(p)for(const k of Object.keys(p))if(!baseKeys.has(k))delete p[k];
-      if(d)for(const k of Object.keys(d))if(!baseDefaults.has(k)&&k.startsWith('workbench.'))delete d[k];return c;};
+      if(d)for(const k of Object.keys(d))if(!baseDefaults.has(k)&&k.startsWith('workbench.'))delete d[k];
+      if(Array.isArray(c.contributes?.commands))c.contributes.commands=c.contributes.commands.filter(x=>baseCommands.has(x.command));
+      for(const [k,list] of Object.entries(c.contributes?.menus??{}))if(Array.isArray(list)){
+        c.contributes.menus[k]=list.filter(x=>!x.command||baseCommands.has(x.command));
+        if(!c.contributes.menus[k].length&&!baseMenuKeys.has(k))delete c.contributes.menus[k];}
+      return c;};
+    const featureClause=w=>typeof w==='string'&&/^!?(hypeproof-chat\.[A-Za-z0-9_.]+|config\.hypeproofChat\.[A-Za-z0-9_.]+)(\s*&&\s*!?(hypeproof-chat\.[A-Za-z0-9_.]+|config\.hypeproofChat\.[A-Za-z0-9_.]+))*$/.test(w.trim());
+    const basePalette=baseManifest.contributes?.menus?.commandPalette??[];
+    const functionGates=new Set([...(baseManifest.contributes?.commands??[]).map(x=>x.enablement),...basePalette.filter(x=>baseCommands.has(x.command)).map(x=>x.when)].filter(featureClause));
+    // A brand-new default-off boolean switch this branch adds (e.g. CGP-AGENT-R-030 hypeproofChat.performanceTraceEnabled)
+    // is reviewed with the branch and may gate its own new command: config.hypeproofChat.<key> with type boolean, default false.
+    for(const [key,prop] of Object.entries(manifest.contributes.configuration?.properties??{}))
+      if(!baseKeys.has(key)&&key.startsWith('hypeproofChat.')&&prop?.type==='boolean'&&prop?.default===false)functionGates.add(`config.${key}`);
+    for(const c of manifest.contributes.commands.filter(x=>!baseCommands.has(x.command))){
+      const entries=Object.entries(manifest.contributes.menus??{}).flatMap(([menu,list])=>(Array.isArray(list)?list:[]).filter(x=>x.command===c.command||x.alt===c.command).map(x=>[menu,x]));
+      assert.ok(entries.some(([menu])=>menu==='commandPalette'),`new command ${c.command}: has a palette entry`);
+      // An ungated new command is allowed only when it is hidden from every menu (when: "false"), e.g. a status-bar-only stop.
+      if(c.enablement===undefined){
+        for(const [menu,x] of entries)assert.equal(x.when,'false',`new ungated command ${c.command} in ${menu}: hidden (when "false")`);
+        continue;
+      }
+      assert.ok(functionGates.has(c.enablement),`new command ${c.command}: enablement ${c.enablement} reuses a function gate of a main command or is its own new default-off switch`);
+      for(const [menu,x] of entries)assert.ok(functionGates.has(x.when),`new command ${c.command} in ${menu}: when ${x.when} reuses a function gate of a main command or is its own new default-off switch`);
+    }
     const only=m=>JSON.stringify(strip(onlyBaseSettings(m)));
     assert.equal(only(manifest),only(baseManifest),'package.json differs from main beyond title/category/description/name/enumItemLabels');
     // Defaults, scopes, enums and ids come through stripping untouched; spot-check the security-relevant ones too.
     const props=manifest.contributes.configuration.properties,baseProps=baseManifest.contributes.configuration.properties;
     for(const key of Object.keys(baseProps)){assert.deepEqual({...props[key],description:0,enumItemLabels:0},{...baseProps[key],description:0,enumItemLabels:0},`setting ${key}: default/scope/enum unchanged`);}
     assert.deepEqual(manifest.contributes.keybindings,baseManifest.contributes.keybindings,'keybindings unchanged');
-    assert.deepEqual(manifest.contributes.commands.map(c=>[c.command,c.enablement,c.icon]),baseManifest.contributes.commands.map(c=>[c.command,c.enablement,c.icon]),'command ids/enablement unchanged');
+    assert.deepEqual(manifest.contributes.commands.filter(c=>baseCommands.has(c.command)).map(c=>[c.command,c.enablement,c.icon]),baseManifest.contributes.commands.map(c=>[c.command,c.enablement,c.icon]),'command ids/enablement unchanged');
   } else console.log('NOT RUN: merge-base with origin/main (identity and manifest diff vs main)');
   // Learner-visible manifest titles are Korean and enums carry labels one-to-one.
   for(const c of manifest.contributes.commands)assert.match(c.title,/[가-힣]/,`command title Korean: ${c.command}`);

@@ -272,6 +272,8 @@ const PANELS: Row[] = [
   } },
   { panel: "page-card", key: "PageCard.tsx:PageCard", mode: "personal", msgs: () => [{ type: "pageCardsState", cards: [{ turnId: "s1", anchorId: "a1", pages: [] }] }] },
   { panel: "delegation", key: "DelegationGroup.tsx:DelegationGroup", mode: "personal", history: DELEGATED },
+  // CGP-ART-R-020: the "AI가 한 일" row draws only when the task's history carries an entry.
+  { panel: "task-activity", key: "TaskActivity.tsx:TaskActivity", mode: "personal", history: [...CITED.slice(0, 1), { ...CITED[1], activity: [{ id: "toolu_R", verb: "read", target: "index.html", inside: true }] }] },
   { panel: "turn-review", key: "TurnReviewBar.tsx:TurnReviewBar", mode: "personal", msgs: () => [{ type: "turnReviewState", view: { turnId: "s1" } }] },
   { panel: "missing-folder", key: "MissingFolderNotice.tsx:MissingFolderNotice", mode: "personal", blocking: true, readOnlyDraft: true, msgs: () => [{ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") }] },
   { panel: "preview-recovery", key: "PreviewRecoveryNotice.tsx:PreviewRecoveryNotice", mode: "personal", msgs: () => [{ type: "previewRecovery", signals: { server: "stopped", status: null, path: "/", needsNetwork: false } }] },

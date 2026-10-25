@@ -97,7 +97,8 @@ const GEOMETRY_CUES = [
 // the picture once forced colors drops the dark disc.
 const OVER_IMAGE = [".hps-attachment-remove", ".hps-edit-image button"];
 // The only places allowed to opt out of forced colors.
-const ADJUST_NONE_OK = [".hps-publish-link img", ".studio-guardian-pay img"];
+// CGP-ART-R-006: a style-tweak swatch IS the colour the learner picks; repainting it would erase the choice.
+const ADJUST_NONE_OK = [".hps-publish-link img", ".studio-guardian-pay img", ".hps-style-tweak-chip"];
 // The only outline removals: a programmatic focus target, and a field whose wrapper draws the ring.
 const OUTLINE_NONE_OK = [".cp-preview h3:focus", '.hps-shell[data-chat-detail="personal"] .hps-input textarea'];
 const COMPOSER_RING = '.hps-shell[data-chat-detail="personal"] .hps-input:focus-within';
