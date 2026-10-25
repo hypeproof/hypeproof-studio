@@ -485,6 +485,19 @@
   .hps-shell[data-chat-detail="personal"] .hps-preview-recovery { margin-inline: var(--ds-c-studio-chatdetails-space-18); }
 }
 
+/* CGP-CHAT-R-024 — the task menu closes on press, so the "대화 내용 복사" result shows under the header,
+   in the same 740px reading column as the messages and the composer. Empty, it takes no space. */
+.tw-copy-conversation-status { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.tw-copy-conversation-status[data-shown="true"] {
+  margin: var(--ds-c-studio-chatdetails-space-1) max(var(--ds-c-studio-chatdetails-space-5), calc((100% - var(--chat-column)) / 2)) 0;
+  padding: var(--ds-c-studio-chatdetails-space-15) var(--ds-c-studio-chatdetails-space-7); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-6);
+  background: var(--tw-panel); animation: chat-feedback var(--hp-dur-confirm) var(--hp-ease);
+}
+@container studio-chat (width < 448px) {
+  .tw-copy-conversation-status[data-shown="true"] { margin-inline: var(--ds-c-studio-chatdetails-space-18); }
+}
+@media (forced-colors: active) { .tw-copy-conversation-status[data-shown="true"] { border-color: CanvasText; } }
+
 /* CGP-SHELL-R-013 (REQ-STUDIO-PANEL-BOUNDARY) — a panel that failed to render: one calm line and one
    44px 다시 불러오기, in place of only that panel. Unscoped: classroom chat, the personal chat and the
    task rail and sources (outside the chat shell) all draw it. Text sits on the type scale (>= 14px). */

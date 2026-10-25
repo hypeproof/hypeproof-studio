@@ -5651,3 +5651,39 @@ The list does not enumerate arbitrary operating-system processes. If an SDK quer
 terminal task evidence, its remaining entries say 실행 상태 확인 불가; Studio does not claim they
 exited or send a stop to a reused process identifier. Proxy and local subscription runtimes do
 not expose shell execution. Live-server controls are shared across these runtime choices.
+
+## Copy the task conversation (CGP-CHAT-R-024)
+
+REQ-STUDIO-COPY-CONVERSATION. CGP-CHAT-R62 / CGP-CHAT-062 / PI#2 (Ownership), AE-39 exclusions:
+the personal task menu (대화 메뉴) has 대화 내용 복사. It copies the open task's visible
+conversation as simple Markdown: `# <task title>`, then `## 나` for each learner message and
+`## <coach name as stored on the answer>` for each answer, in transcript order. The text is built
+at the press from the transcript as drawn: one answer attempt per prompt (the one on screen) and
+one version of an edited prompt (the one the pager shows); earlier attempts and versions are not
+copied. Headings inside a message move down two levels (`#` to `###`), outside fenced code, so no
+message line can read as a new speaker.
+
+Excluded: tool lines (raw tool payloads and the hidden-reasoning think lines are both tool rows),
+system and notice lines, citation records, image bytes (an attached image is named by count only),
+blank answers, credentials (the host's `scrubSecrets` patterns plus the measurement connection
+token, bare bearer headers, Stripe/Toss payment keys, Slack tokens and Google API keys, replaced by
+a named placeholder), and C0/C1 control, bidi embedding/override/isolate/mark, zero-width space,
+zero-width non-joiner, word joiner, soft hyphen and BOM characters (removed before scrubbing, so
+they cannot hide a token; the emoji joiner U+200D stays); U+2028/2029 become newlines. Credential
+detection is pattern based: a secret in an unknown format is not recognised. Titles and names
+are flattened to one line without Markdown heading or emphasis characters.
+
+The item is disabled while an answer streams and when nothing can be copied. It is shown only on
+the personal learner task (not classroom, lesson or instructor seats, which have no task menu;
+classroom copy is a follow-up). 대화 내용을 복사했습니다 appears in a role=status line under the
+header, inside the 740px reading column, only after the clipboard write resolves, and stays 4 s.
+A failed write shows 대화 내용을 복사하지 못했습니다. 다시 시도해 주세요. as role=alert until the next
+press or a task change. Each press is an attempt: a stale write never overrides a newer result,
+and a write started in another task never confirms in the current one. Nothing leaves the device;
+no host message, file or network request is added.
+
+Tests: `test/conversation-copy.smoke.mjs` (order, headings, exclusions, scrub, control
+characters, empty conversation, positive control) and `test/conversation-copy-browser.smoke.mjs`
+(real App bundle in headless Chromium, both seats, dark/light, 320/800/1420 px, forced colours,
+44px menu item, >=14px status, success only after the write, failure alert, double press, task
+switch, streaming, retried answers, edited prompts and the version pager). Native clipboard behaviour in the packaged app is owner-verified (NOT RUN here).

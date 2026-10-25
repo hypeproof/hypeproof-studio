@@ -291,6 +291,10 @@ via shipped theme tokens. All below must hold at 320px width and with Korean IME
    Jay can still move it to DEFER.
 9. The 901 `localConversation.mcpToolActivity.*` strings were sampled only. They describe
    per-connector verbs (Figma, Drive, …) that the plugins domain should inventory.
+10. **Conversation copy scope (R62, decided 2026-10-25, agent choice).** 대화 내용 복사 ships in
+    the personal task menu only; classroom, lesson and instructor seats have no task menu, so
+    their copy is a follow-up. It copies visible learner/coach text only and applies the AE-39
+    exclusions. See decisions.md "CGP-CHAT-R-024".
 
 ## Implementation notes
 

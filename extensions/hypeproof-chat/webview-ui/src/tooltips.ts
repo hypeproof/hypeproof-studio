@@ -33,9 +33,22 @@ export function installTooltips(doc: Document): () => void {
     // Fixed positioning escapes scroll containers; clamp to the viewport on both axes.
     const rect = el.getBoundingClientRect();
     const box = tip.getBoundingClientRect();
-    const x = Math.max(8, Math.min(rect.left, win.innerWidth - box.width - 8));
+    let x = Math.max(8, Math.min(rect.left, win.innerWidth - box.width - 8));
     const below = rect.bottom + 4;
-    const y = below + box.height <= win.innerHeight - 8 ? below : Math.max(8, rect.top - box.height - 4);
+    let y = below + box.height <= win.innerHeight - 8 ? below : Math.max(8, rect.top - box.height - 4);
+    // A menu item's hint goes beside the menu, never over the next item; when neither side has
+    // room (a narrow panel), it goes below or above the whole menu.
+    const menu = el.getAttribute('role') === 'menuitem' ? el.closest('[role="menu"]') : null;
+    if (menu) {
+      const m = menu.getBoundingClientRect();
+      const side = m.left - box.width - 4 >= 8 ? m.left - box.width - 4 : m.right + 4 + box.width <= win.innerWidth - 8 ? m.right + 4 : null;
+      if (side !== null) {
+        x = side;
+        y = Math.max(8, Math.min(rect.top + (rect.height - box.height) / 2, win.innerHeight - box.height - 8));
+      } else {
+        y = m.bottom + 4 + box.height <= win.innerHeight - 8 ? m.bottom + 4 : Math.max(8, m.top - box.height - 4);
+      }
+    }
     tip.style.left = `${x}px`;
     tip.style.top = `${y}px`;
   };

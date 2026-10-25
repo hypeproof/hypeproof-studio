@@ -35,6 +35,8 @@ import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
+import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
+import { COPY_CONVERSATION_LABEL } from '../../src/conversationCopy';
 import { glyphIconKind, splitLeadingGlyph, stripLeadingGlyph } from './glyphIcon';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
 import { VerdictButtons, VerdictReasons } from './AnswerVerdict';
@@ -889,6 +891,14 @@ export function ChatPanel(props: Props) {
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
   // a fixed cohort or lesson name wins over any stored student name.
   const coachName = resolveCoachIdentity(config?.coach, { ux }).name;
+  // CGP-CHAT-R-024 — the personal task's own conversation, copied as Markdown from the task menu.
+  // Exactly the conversation as drawn: one version per prompt (the one on screen), never hidden attempts.
+  const drawnConversation = useMemo(() => visibleVersions(visibleAttempts(messages).items, versionChoice).items, [messages, versionChoice]);
+  const conversationCopy = useConversationCopy(JSON.stringify([activityId ?? null, taskId ?? null]), {
+    messages: drawnConversation,
+    title: config?.taskWorkspace?.tasks.find(task => task.id === taskId)?.title,
+    coachName,
+  });
 
   // Tone for hard-coded chat-panel labels — game (kids) vs search-webapp
   // (예시치과 teaser) vs website (치과 원장 copyclone) vs world
@@ -1491,6 +1501,7 @@ export function ChatPanel(props: Props) {
           <button onClick={props.onSetToken} data-hp-tooltip="연결된 활동 확인 및 변경">
             활동 변경
           </button>
+          {personalWorkspace && !props.instructor && <button type="button" className="tw-copy-conversation" onClick={() => { void conversationCopy.copy(); }} disabled={props.streaming || !conversationCopy.available} data-hp-tooltip="이 작업의 대화를 글로 복사해요">{COPY_CONVERSATION_LABEL}</button>}
           <button onClick={props.onClear} disabled={props.streaming} data-hp-tooltip="대화 기록 지우기">대화 지우기</button>
           {/* Personal chat: usage opens the settings dialog on its usage section (the remaining line
               already shows the count). */}
@@ -1499,6 +1510,7 @@ export function ChatPanel(props: Props) {
         </HeaderActions>
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
+      {personalWorkspace && !props.instructor && <ConversationCopyStatus state={conversationCopy.state} />}
       {!props.instructor && <ClassWindowNotice window={config.classWindow} />}
 
       {entryOpen && entry && config?.aiCapabilities && <PanelBoundary panel="lesson-capability-entry">
