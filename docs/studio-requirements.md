@@ -5799,3 +5799,26 @@ text at the 14px floor. Tests: `extensions/hypeproof-chat/test/chat-find.smoke.m
 Chromium: personal and classroom, dark/light, 320/800/1420 px, forced colours; fails
 under `FOCUS_REQUIRE_BROWSER=1` without a browser). This supports PI#1: the learner can
 re-read and check what was said, without asking the coach to repeat it.
+
+## Task rail search (CGP-KNOW-R-001)
+
+REQ-STUDIO-TASK-RAIL-SEARCH. CGP-KNOW-R-001 / REQ-KNOW-01 / CGP-KNOW-001 / PI#1 (useful work
+first): the personal task rail lists only the tasks of the current activity (the activity is the
+"project"; the host's task view is per activity), and its 작업 찾기 field filters that list by title
+text. A task is shown when its title contains the query as one substring, compared in Unicode NFC
+with case folded and the query's outer whitespace ignored, so a title stored in decomposed jamo
+matches the composed syllables a Korean IME commits. While an IME composition is open the list
+does not change (a lone ㄱ or a half-built syllable never filters); the committed text filters.
+Clearing the field, or a blank query, restores the full list. Switching to another activity shows
+that activity's tasks with an empty search; a task of another activity never appears. Filtering
+happens in the webview only: no host message, file read, network or model request is made.
+찾는 이름이 없습니다. 다른 이름으로 찾아보세요. appears only when a non-blank query matches no
+title, not for an activity that has no tasks, and it sits under the list heading next to the
+field (the list grows to fill the rail). The field keeps the 44px target and 14px text floor
+and accepts at most 160 characters (the longest stored title). Titles only: full-text search over
+transcripts stays out of scope (`docs/design/task-workspace.md`).
+
+Tests: `extensions/hypeproof-chat/test/task-rail-search.smoke.mjs` (pure controls, then the real
+App bundle in headless Chromium: IME composition through CDP, NFD title, clear, blank and
+non-matching queries, activity switch, zero host posts, field geometry in dark/light at 1420 and
+800 px; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).

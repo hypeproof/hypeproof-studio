@@ -701,3 +701,11 @@ These are conservative implementation choices, not new human agreements.
 - Painting: CSS Custom Highlight API, so no DOM is changed and streaming re-renders are untouched; the current match is also underlined (not colour-only); forced colours use Mark/Highlight. Without the API the count and navigation still work.
 - Shortcut: Cmd+F (macOS) / Ctrl+F (others), handled on the document before the VS Code webview host sees it; not while a modal dialog is open or during IME composition. No other keys are bound (CGP-CHAT-R86 lists Cmd/Ctrl+F only).
 - Seats: every seat that draws the transcript, including the instructor's nested panel. Default state: on (local display only; nothing leaves the device, no permission change).
+
+## CGP-KNOW-R-001: task rail search (2026-10-25, agent choice)
+
+- Found on main: a title filter already existed in the rail but filtered on every keystroke, including an open IME composition, compared raw code points (a decomposed-jamo title never matched), kept a stale query across activities and showed the "not found" line for an empty activity. The row is built by fixing those four, not by a new surface.
+- IME: the committed query filters; composing text is shown in the field but does not filter. Chromium sends the commit's last `input` with `isComposing` true and then `compositionend`, so the commit is taken from `compositionend`.
+- Matching: one substring of the title in NFC, case folded, query trimmed. No word splitting, no fuzzy or initial-consonant (초성) search; both would need their own acceptance.
+- Scope: the search belongs to one activity and resets when the activity changes. The heading count (최근 작업 N) keeps the activity total.
+- Default state: on for personal tasks; no new data flow (webview only, nothing posted to the host).
