@@ -4,9 +4,10 @@
 //
 // The real webview entry (main.tsx) is bundled and gets a host config with the `materials` flag and the shell's
 // photo drop on. Dark and light, forced colours off and on:
-//   - while a file is over the open card, the card's outline is 2px solid in the focus-ring colour (Highlight in
-//     forced colours), inset by the shared focus inset, and the shell's own drop overlay is not shown
-//   - when the file leaves the card the outline goes
+//   - while a file is over the open card, the card's own border is 2px solid in the focus-ring colour (Highlight in
+//     forced colours), its padding gives the extra 1px back so the card does not move or resize, and the shell's
+//     own drop overlay is not shown
+//   - when the file leaves the card the border is back to its resting 1px divider
 //   - a drop sends exactly one materialAddDrop with the file's bytes, and nothing is staged on the composer
 // Self-test: the same matrix is rerun with injected later stylesheets; each must be caught. Without a headless
 // Chromium this prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 (set by CI) makes that a failure.
@@ -58,7 +59,8 @@ const page = `window.__drop = {
   card: () => document.querySelector('.hp-materials'),
   file: () => { const dt = new DataTransfer(); dt.items.add(new File(['# 메모\\n'], '메모.md', { type: 'text/markdown' })); return dt; },
   fire: (type, extra = {}) => __drop.card().dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: __drop.file(), ...extra })),
-  style: () => { const s = getComputedStyle(__drop.card()); return { width: s.outlineWidth, style: s.outlineStyle, color: s.outlineColor, offset: s.outlineOffset }; },
+  style: () => { const c = __drop.card(), s = getComputedStyle(c), b = c.getBoundingClientRect();
+    return { width: s.borderTopWidth, style: s.borderTopStyle, color: s.borderTopColor, box: [b.left, b.top, b.width, b.height].map(Math.round).join(',') }; },
   colour: (value) => { const e = document.createElement('span'); e.style.color = value; document.body.append(e); const c = getComputedStyle(e).color; e.remove(); return c; },
 }`;
 async function until(b, expression, tries = 40) {
@@ -67,8 +69,7 @@ async function until(b, expression, tries = 40) {
 }
 async function probe(b) {
   await b.evaluate(page);
-  const out = await b.evaluate(`({ ring: __drop.colour('var(--hp-ring-focus-default)'), highlight: __drop.colour('Highlight'),
-    inset: getComputedStyle(__drop.card()).getPropertyValue('--ds-c-focus-inset').trim(), before: __drop.style() })`);
+  const out = await b.evaluate(`({ ring: __drop.colour('var(--hp-ring-focus-default)'), highlight: __drop.colour('Highlight'), before: __drop.style() })`);
   await b.evaluate(`__drop.fire('dragover')`);
   out.marked = await until(b, `__drop.card().hasAttribute('data-drop-active')`);
   Object.assign(out, await b.evaluate(`({ over: __drop.style(), shellDrag: document.querySelector('.hps-shell').classList.contains('hps-shell-drag') })`));
@@ -115,10 +116,10 @@ function check(results) {
   for (const r of results) {
     const want = r.forced ? r.highlight : r.ring;
     expect(r.marked && !r.shellDrag, `${r.where}: over the card the card is marked (${r.marked}) and the shell overlay is off (${!r.shellDrag})`);
-    expect(r.over.style === 'solid' && r.over.width === '2px', `${r.where}: the drop outline is ${r.over.style} ${r.over.width}, not 2px solid`);
-    expect(r.over.color === want, `${r.where}: the drop outline colour ${r.over.color} is not ${r.forced ? 'Highlight' : 'the ring token'} ${want}`);
-    expect(parseFloat(r.over.offset) === parseFloat(r.inset) && parseFloat(r.inset) < 0, `${r.where}: the outline offset ${r.over.offset} is not the shared inset ${r.inset}`);
-    expect(r.before.style === 'none' && r.left.style === 'none', `${r.where}: an outline outside the drag (before ${r.before.style}, after leaving ${r.left.style})`);
+    expect(r.over.style === 'solid' && r.over.width === '2px', `${r.where}: the drop border is ${r.over.style} ${r.over.width}, not 2px solid`);
+    expect(r.over.color === want, `${r.where}: the drop border colour ${r.over.color} is not ${r.forced ? 'Highlight' : 'the ring token'} ${want}`);
+    expect(r.over.box === r.before.box, `${r.where}: the card moved or resized while a file was over it (${r.before.box} -> ${r.over.box})`);
+    for (const [when, st] of [['before', r.before], ['after leaving', r.left]]) expect(st.width === '1px' && st.color !== want, `${r.where}: ${when} the drag the border is ${st.width} ${st.color}, not the resting 1px divider`);
     expect(JSON.stringify(r.sent) === JSON.stringify([{ type: 'materialAddDrop', name: '메모.md', size: 9, text: '# 메모\n' }]), `${r.where}: the drop sent ${JSON.stringify(r.sent)}`);
   }
   expect(results.length === 4, `ran ${results.length} of 4 combinations`);
@@ -126,17 +127,17 @@ function check(results) {
 }
 
 const MUTANTS = {
-  'outline: none !important removes the drop outline': '.hp-materials[data-drop-active] { outline: none !important; }',
-  'a later rule paints the outline another colour': '.hp-materials[data-drop-active] { outline-color: rgb(255, 0, 255) !important; }',
-  'forced colours lose Highlight': '@media (forced-colors: active) { .hp-materials[data-drop-active] { outline-color: CanvasText !important; } }',
-  'the outline sits outside the card': '.hp-materials[data-drop-active] { outline-offset: 2px !important; }',
+  'the border keeps the resting divider colour': '.hp-materials[data-drop-active] { border-color: var(--hp-border-divider-default) !important; }',
+  'a later rule paints the border another colour': '.hp-materials[data-drop-active] { border-color: rgb(255, 0, 255) !important; }',
+  'forced colours lose Highlight': '@media (forced-colors: active) { .hp-materials[data-drop-active] { border-color: CanvasText !important; } }',
+  'the padding is not given back, so the card grows': '.hp-materials[data-drop-active] { padding: var(--ds-c-studio-styles-space-1) !important; }',
 };
 
 const b = await launch(bin);
 let failures = [];
 try {
   const results = await runMatrix(b, '');
-  for (const r of results) console.log(r.where, JSON.stringify({ over: r.over, inset: r.inset, sent: r.sent.length }));
+  for (const r of results) console.log(r.where, JSON.stringify({ over: r.over, before: r.before.width, sent: r.sent.length }));
   failures = check(results);
   for (const [label, css] of Object.entries(MUTANTS)) {
     const caught = check(await runMatrix(b, css));
@@ -145,4 +146,4 @@ try {
   }
 } finally { await b.close(); server.close(); rmSync(temp, { recursive: true, force: true }); }
 if (failures.length) { console.error(failures.map((f) => '  FAIL ' + f).join('\n')); console.error(`materials-drop-computed: ${failures.length} failed`); process.exit(1); }
-console.log('PASS materials drop computed: 2px ring outline inset on the open card while a file is over it (Highlight in forced colours), gone when it leaves, one materialAddDrop with the bytes, no composer photo; dark and light; four injected overrides caught');
+console.log('PASS materials drop computed: the open card border is the 2px ring while a file is over it (Highlight in forced colours) and the card does not move, back to the 1px divider when it leaves, one materialAddDrop with the bytes, no composer photo; dark and light; four injected overrides caught');

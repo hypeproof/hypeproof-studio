@@ -331,14 +331,14 @@ const cssChecks: Record<string, (css: string) => string[]> = {
     const want: Record<string, string> = { "background-color": "Canvas !important", color: "CanvasText !important", "border-color": "Highlight !important" };
     return Object.entries(want).filter(([k, v]) => forcedDecl(css, s, k) !== v).map(([k]) => `${k} ${forcedDecl(css, s, k)}`);
   },
-  "#2641: while a file is over the open card, its outline is the 2px focus ring, inset": (css) => {
+  "#2641: while a file is over the open card, its border is the 2px focus ring and nothing moves": (css) => {
     const s = ".hp-materials[data-drop-active]";
-    const [width, style, ...colour] = (decl(css, s, "outline") ?? "").split(/\s+/);
     const bad: string[] = [];
-    if (px(width) !== 2) bad.push(`outline width ${width}`);
-    if (style !== "solid") bad.push(`outline style ${style}`);
-    if (colour.join(" ") !== "var(--hp-ring-focus-default)") bad.push(`outline colour ${colour.join(" ")}`);
-    if (!(px(decl(css, s, "outline-offset") ?? "") < 0)) bad.push(`offset ${decl(css, s, "outline-offset")} is not inset`);
+    if (px(decl(css, s, "border-width") ?? "") !== 2) bad.push(`border-width ${decl(css, s, "border-width")}`);
+    if (decl(css, s, "border-color") !== "var(--hp-ring-focus-default)") bad.push(`border-color ${decl(css, s, "border-color")}`);
+    const resting = px(decl(css, ".hp-rail-lesson", "padding") ?? "") + px((decl(css, ".hp-rail-lesson", "border") ?? "").split(" ")[0]);
+    if (px(decl(css, s, "padding") ?? "") + 2 !== resting) bad.push(`padding ${decl(css, s, "padding")} does not give the extra border back (resting ${resting}px)`);
+    for (const k of ["outline", "outline-offset"]) if (decl(css, s, k) !== undefined) bad.push(`${k} is reserved for focus rings`);
     return bad;
   },
   "a title ellipsizes while the containing row stays unconstrained": (css) => {
@@ -351,7 +351,7 @@ const cssChecks: Record<string, (css: string) => string[]> = {
   },
 };
 const MUTANTS: Record<string, (css: string) => string> = {
-  "#2641: while a file is over the open card, its outline is the 2px focus ring, inset": (css) => css.replace(/(\.hp-materials\[data-drop-active\] \{ outline: )[^;]+;/, "$11px dashed var(--hp-ring-focus-default);"),
+  "#2641: while a file is over the open card, its border is the 2px focus ring and nothing moves": (css) => css.replace(/(\.hp-materials\[data-drop-active\] \{ border-width: )[^;]+;/, "$11px;"),
   "forced colours: the pressed 넣음 keeps its word (CanvasText on Canvas, Highlight border)": (css) => css.replace('{ background-color: Canvas !important; color: CanvasText !important;', '{ color: CanvasText !important;'),
   "a title ellipsizes while the containing row stays unconstrained": (css) => css.replace(/(\.hp-materials-title \{[^}]*)white-space: nowrap;/, "$1white-space: normal;"),
 };

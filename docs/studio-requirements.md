@@ -1814,8 +1814,9 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   is the next bullet (#2641).
 - **Dropping a file (#2641).** The open card also takes one dropped file, the same file "파일
   넣기" takes; the closed summary row is not a drop target. While a file is dragged over the
-  open card it shows the 2px focus-ring outline, inset by the shared focus inset so the rail
-  never clips it (Highlight in forced colours). A webview `File` has no path, so the webview
+  open card its own border becomes 2px in the focus-ring colour (Highlight in forced colours),
+  and its padding gives back the extra 1px so nothing moves; outline stays reserved for focus
+  rings. A webview `File` has no path, so the webview
   sends the name, the size and the bytes as base64; over 100 KB it sends no bytes and is never
   read. The host applies the picker's gates (seat, "AI 안 씀", an open workspace) and its rules
   to the bytes: the `materialFileName` name rules (and no `/` or `\`), 100 KB, valid UTF-8,
