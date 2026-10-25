@@ -2002,6 +2002,9 @@ html, body, #root {
    caption step or larger (14px floor), every control a 44px target, titles ellipsize with full accessible names, and who
    added an item is said in words, never colour. */
 .hp-materials-note, .hp-materials-meta, .hp-materials-detail, .hp-materials-error, .hp-materials-notice, .hp-materials-url label { font-size: var(--hp-font-caption); }
+/* #2641 — while a file is dragged over the open card: the 2px focus-ring outline, inset like a ring inside the rail's
+   scroll scope, so the rail never clips it. In forced colours the ring token is Highlight (tokens.css). */
+.hp-materials[data-drop-active] { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-inset); }
 .hp-materials-note, .hp-materials-meta, .hp-materials-detail { color: var(--hp-text-muted-default); }
 .hp-materials-note { margin: var(--hp-space-2) var(--hp-space-1); }
 .hp-materials-list { list-style: none; margin: var(--hp-space-2) 0 0; padding: 0; display: grid; gap: var(--hp-space-2); }
