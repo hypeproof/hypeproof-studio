@@ -175,7 +175,10 @@ try {
     // A workbench presentation default this branch adds (e.g. #2787 secondary side bar) is not a relabel either;
     // every default main already has must still match, and a new non-workbench default (security.*, chat.*) still fails.
     const baseDefaults=new Set(Object.keys(baseManifest.contributes?.configurationDefaults??{}));
+    // A command this branch adds (e.g. CGP-AGENT-R-030 느려요 기록) is not a relabel either; every command main has must still match.
+    const baseCommands=new Set((baseManifest.contributes?.commands??[]).map(x=>x.command));
     const onlyBaseSettings=m=>{const c=structuredClone(m),p=c.contributes?.configuration?.properties,d=c.contributes?.configurationDefaults;
+      if(Array.isArray(c.contributes?.commands))c.contributes.commands=c.contributes.commands.filter(x=>baseCommands.has(x.command));
       if(p)for(const k of Object.keys(p))if(!baseKeys.has(k))delete p[k];
       if(d)for(const k of Object.keys(d))if(!baseDefaults.has(k)&&k.startsWith('workbench.'))delete d[k];return c;};
     const only=m=>JSON.stringify(strip(onlyBaseSettings(m)));
@@ -184,7 +187,7 @@ try {
     const props=manifest.contributes.configuration.properties,baseProps=baseManifest.contributes.configuration.properties;
     for(const key of Object.keys(baseProps)){assert.deepEqual({...props[key],description:0,enumItemLabels:0},{...baseProps[key],description:0,enumItemLabels:0},`setting ${key}: default/scope/enum unchanged`);}
     assert.deepEqual(manifest.contributes.keybindings,baseManifest.contributes.keybindings,'keybindings unchanged');
-    assert.deepEqual(manifest.contributes.commands.map(c=>[c.command,c.enablement,c.icon]),baseManifest.contributes.commands.map(c=>[c.command,c.enablement,c.icon]),'command ids/enablement unchanged');
+    assert.deepEqual(manifest.contributes.commands.filter(c=>baseCommands.has(c.command)).map(c=>[c.command,c.enablement,c.icon]),baseManifest.contributes.commands.map(c=>[c.command,c.enablement,c.icon]),'command ids/enablement unchanged');
   } else console.log('NOT RUN: merge-base with origin/main (identity and manifest diff vs main)');
   // Learner-visible manifest titles are Korean and enums carry labels one-to-one.
   for(const c of manifest.contributes.commands)assert.match(c.title,/[가-힣]/,`command title Korean: ${c.command}`);

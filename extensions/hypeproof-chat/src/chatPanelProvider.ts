@@ -316,6 +316,7 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
+import { perfTraceSeatAllowed } from "./perfTrace";
 import type { QuitGuardActivity } from "./quitGuardHelpers";
 import { FunnelReporter, entryOutcome, funnelOs, funnelProfileStep, funnelToolKind, isTrialGrantToken, parseTrialEventsProbe, trialEventsUrl, usesTraceRoute, type ToolResultKind } from "./funnelEvents";
 import {
@@ -2776,6 +2777,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   getSeatAudience(): SeatAudience {
     return profileAudience(this.cachedProfile);
   }
+
+  /** REQ-STUDIO-PERF-TRACE: instructor, or a resolved non-minor profile (isMinorProfile fails closed on an unknown tier). */
+  perfTraceSeatAllowed(): boolean {
+    return perfTraceSeatAllowed({ instructor: this._instructorMode.isInstructor, hasProfile: !!this.cachedProfile, minor: !!this.cachedProfile && isMinorProfile(this.cachedProfile) });
+  }
+
+  /** REQ-STUDIO-PERF-TRACE: sees every host message before it is posted; set only while extension.ts owns a trace controller. */
+  perfTraceObserver: ((msg: HostMessage) => void) | undefined;
 
   /** #278 — is "페이지를 코치에게" allowed for this cohort? Default off (minor-safe). */
   isPageContextEnabled(): boolean {
@@ -9535,6 +9544,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
+    try { this.perfTraceObserver?.(msg); } catch { /* a trace never blocks the chat */ }
     if(msg.type!=='folderConsentPrompt')this.folderConsentRequest?.invalidateIfScopeChanged();
     if(msg.type!=='browserApprovalPrompt')this.browserApprovalRequest?.invalidate();
     if(msg.type!=='commandApprovalPrompt')this.commandApprovalRequest?.invalidate();

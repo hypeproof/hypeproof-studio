@@ -5965,3 +5965,47 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## Performance trace recording (CGP-AGENT-R-030)
+
+REQ-STUDIO-PERF-TRACE (CGP-AGENT-R-030 / REQ-CGP-AGENT-64 / CGP-AGENT-064, PI#5). Adult and
+instructor seats can record a "느려요 기록" performance trace that stays on the machine until the
+learner presses 보내기. Seat rule: an instructor, or a resolved profile that is not a minor
+(`isMinorProfile`, which counts an unknown workshop tier as a minor); no profile, a minor cohort or
+an unknown seat is refused with a sentence that names who can use it. The command 느려요 기록
+시작 exists only when the machine setting `hypeproofChat.performanceTraceEnabled` is on (default
+off). It opens a modal with the consent text of `docs/session-log-consent.ko.md` §8 (three steps,
+what is and is not recorded, how a sent copy is used) and one 기록 시작 button; closing the dialog
+or any other answer starts nothing, and the seat is checked again after the click.
+
+While recording, a red status bar item "기록 중 · 멈추기" (error background, accessible role
+button) stops it; the 느려요 기록 멈추기 command does the same. The trace holds numbers only: per
+turn, bound to the turn's stream id, the start offset, time to the first chunk, total time, chunk
+count and outcome (end, failed, stopped, error, open), and once a second the extension-host memory
+(RSS, heap) and event-loop lag. No prompt, answer, error text, file name, path or stream id is
+written. Recording stops by itself after ten minutes, when the seat stops qualifying or the setting
+is turned off (both checked every second), and at most 200 turns are kept (the rest are counted). A
+reload ends a recording without a file. A second start while recording, or while the previous
+recording's note and review are still open, does nothing; a second stop does nothing. If the file
+cannot be written, a warning says so and nothing is sent.
+
+On stop the trace is written to the extension's global storage as
+`perf-traces/trace-<start time>.json` (mode 0600), an optional note is asked (empty or closed means
+no note; control, bidi, zero-width and line-separator characters are dropped, 1,000 characters),
+and a review modal shows the stop reason and the file's size with 내 컴퓨터에만 두기 (first,
+default) and 보내기; when the seat or setting no longer allows sending, only 내 컴퓨터에만 두기 is
+offered. Keep or a closed dialog sends nothing. 보내기 re-checks the setting and seat,
+then shows the shared outbound confirmation (REQ-KNOW-09) with the recipient, the note, the
+summary and the app information with their sizes; only its approval POSTs, once, through the
+existing problem-report route (`/report`): the note (or 느려요 기록 (메모 없음)) as the
+description, `include_recent_turns: false`, and `attachments` with `kind: "perf_trace"`, version,
+OS, client time and a summary (aggregates plus the newest turns, at most 6,000 characters, under
+the Service's 8,192-character attachments cap). The local file stays after sending. No Service
+change: the summary rides in the schemaless `attachments` the route already accepts.
+
+Not built: the in-panel pill and start dialog of DES-CGP-AGENT-64 (CGP-AGENT-D-026; the status bar
+item is VS Code chrome and does not meet its 44px target), a viewer for kept files, and automatic
+deletion of kept files. Tests: `extensions/hypeproof-chat/test/perf-trace.smoke.mjs` (recorder,
+seat rule, summary cap, note cleaning, consent-text equality with the doc, the host controller with
+a fake VS Code, and the real provider's seat rule and post() hook). PI#5: the learner owns what
+leaves the machine (OWNERSHIP); recording and sending are two separate explicit acts.

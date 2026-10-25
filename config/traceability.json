@@ -13226,6 +13226,63 @@
           "path": "extensions/hypeproof-chat/test/task-archive-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-CGP-AGENT-64",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Performance trace recording (CGP-AGENT-R-030)"
+        },
+        {
+          "path": "docs/session-log-consent.ko.md",
+          "section": "## 8. 느려요 기록 (성능 기록) 고지문"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CGP-AGENT-64",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-AGENT-64"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/perfTrace.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/perfTraceHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CGP-AGENT-64",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-AGENT-64",
+        "ST-IMP-CGP-AGENT-64"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/perf-trace.smoke.mjs"
+        }
+      ]
     }
   ]
 }
