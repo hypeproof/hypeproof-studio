@@ -13280,6 +13280,68 @@
           "path": "extensions/hypeproof-chat/test/my-questions-browser.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-DECK-SLIDE-SUGGEST",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Deck slide suggestion chips (CGP-ART-R-016)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-DECK-SLIDE-SUGGEST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-SLIDE-SUGGEST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/slideSuggestion.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/deckGenerator.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/numerals.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-DECK-SLIDE-SUGGEST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-SLIDE-SUGGEST",
+        "ST-IMP-DECK-SLIDE-SUGGEST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/slide-suggestion.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/learning-wiki.smoke.mjs"
+        }
+      ]
     }
   ]
 }

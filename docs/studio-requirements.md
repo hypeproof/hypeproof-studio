@@ -6009,3 +6009,21 @@ button and rows at the 14px floor, 10 visible rows, viewport containment, keyboa
 focus return, keyboard jump that scrolls and focuses the bubble with an inset ring, temporary tab
 stop removed, forced colours, and the editor, fallback-box and missing-target jumps; fails under
 `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Deck slide suggestion chips (CGP-ART-R-016)
+
+REQ-STUDIO-DECK-SLIDE-SUGGEST extends REQ-STUDIO-DECK-GENERATOR; it traces to CGP-ART-017 /
+REQ-ART-16 and Product Intent principles 2 (the student's judgment decides every change) and 5
+(evidence over claims: a patch can only use what the slide already cites). It exposes the student's
+accept or reject choice, not a score.
+
+The command "HypeProof: 덱 장 다듬기" (same `learning_wiki.enabled` switch and folder-write gate as the
+deck draft) lists the drafted slides; the student picks one, and that slide offers at most three
+suggestion chips: 쉽게 줄이기, 그림으로 보이기, 핵심 강조. An undrafted slide offers none. One chip is one
+non-streaming coach-route request for a patch to that slide only. The proposal is shown as 지금 /
+바꾼 안 with the slide's evidence basis label, and 반영 / 그대로 buttons. Nothing is stored on the
+Service: the wiki-folder deck has no `cr-deck` store, so the proposal is held for that one run only.
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| REQ-STUDIO-DECK-SLIDE-SUGGEST | A patch is refused before it is shown when the answer names any other slide (or more than one entry), when any number on the new slide face has no equal value in the entries the slide already cites (the shared numbers rule in `numerals.ts`, also used by deck generation: every Unicode decimal digit, number forms such as Roman and circled numerals read before NFKC, Hanja numerals and Korean number words joined to a counter or %, compared as exact values, so "52" never supports "2" and "구십 퍼센트" equals "90%"), when the face holds a quantity word (number words in Korean or English with or without a counter, fractions and parts such as 절반/과반/삼분의 이/구할, N 중 M and 십중팔구, ordinals such as 첫째/첫 번째, approximations such as 한두/서너/수백, percent and %) that neither the slide's current face nor its cited entries contain (the "no new quantity words" rule in `numerals.ts`, also used by deck generation against the cited entries; the lexicon is best-effort, so a quantity said with a word outside it can still pass), when a quote is neither the slide's own quote nor verbatim in those entries, when a quote's speaker label is neither the slide's own label for its own quote nor present in those entries, when a source phrase (조사, 통계, 발표, 보고서, 장관, 연구, …) or the word before it is absent from those entries, when a wiki id (E-2, D-1, …) appears on the face, when the headline is empty, or when nothing changed. A patch changes only the slide face (headline, visual, support); citations, notes, gaps and session stay as they were, so it can never cite a new entry. Model text is cleaned (NFKC, controls, U+2028/2029 and bidi controls removed, 80-character cap). 그대로, or closing the proposal, writes nothing: the wiki folder stays byte-identical. 반영 re-checks the switch and the folder gate, re-reads the wiki state and applies the patch only while that slide is still exactly the proposal's "before"; then only that slide changes and the deck is re-rendered (other slides' pages byte-identical). One run at a time. | `extensions/hypeproof-chat/src/slideSuggestion.ts`, `src/numerals.ts`, `chatPanelProvider.deckSlideSuggest`; `test/learning-wiki.smoke.mjs` (numbers rule in deck generation); `test/slide-suggestion.smoke.mjs`; CGP-ART-017 / REQ-ART-16; Product Intent 2 and 5. The before/after appears in VS Code's native modal (NOT RUN by hand); the in-webview chips under a slide thumbnail are DES-ART-16 (CGP-ART-D-016). |

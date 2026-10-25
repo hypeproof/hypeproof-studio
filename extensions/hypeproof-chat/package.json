@@ -236,6 +236,12 @@
         "enablement": "hypeproof-chat.learningWikiEnabled"
       },
       {
+        "command": "hypeproof-chat.deckSlideSuggest",
+        "title": "HypeProof: 덱 장 다듬기",
+        "icon": "$(sparkle)",
+        "enablement": "hypeproof-chat.learningWikiEnabled"
+      },
+      {
         "command": "hypeproof-chat.curriculumSkills",
         "title": "HypeProof: 커리큘럼 스킬",
         "icon": "$(lightbulb)",
@@ -442,6 +448,10 @@
         },
         {
           "command": "hypeproof-chat.deckDraft",
+          "when": "hypeproof-chat.learningWikiEnabled"
+        },
+        {
+          "command": "hypeproof-chat.deckSlideSuggest",
           "when": "hypeproof-chat.learningWikiEnabled"
         },
         {
