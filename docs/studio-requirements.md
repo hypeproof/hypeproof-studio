@@ -1780,7 +1780,9 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
 
 - **Where.** A closed-by-default "자료 N개" card in the coach rail (no Primary, outside the
   message stream), on every learner seat that has the file-attach gate. The host's `materials`
-  config flag draws it; the host re-checks on every press.
+  config flag draws it; the host re-checks on every press. On a task workspace seat (personal,
+  trial) the same list is the activity home's 자료 view in the task rail instead
+  (REQ-STUDIO-ACTIVITY-HOME, CGP-KNOW-R-002); the chat column then has no card of its own.
 - **Adding a file.** "파일 넣기" opens the system picker; the host copies the pick into
   `<work folder>/자료/` (created if missing) with identical bytes and lists it with origin 나
   (a pick already in `자료/` keeps its own Unicode spelling, so an NFD name is still found). At
@@ -1898,6 +1900,50 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   the card or `clientWidth`, and the shared focus ring forced over CDP; it reruns with a more
   specific rule, an `@media` rule, `outline: none !important` and a non-wrapping title injected and
   must catch each; NOT RUN without a browser, a failure under `FOCUS_REQUIRE_BROWSER=1`).
+
+## Activity home views (CGP-KNOW-R-002)
+
+`REQ-STUDIO-ACTIVITY-HOME` (CGP-KNOW-R-002 / REQ-KNOW-02, CGP-KNOW-002, P2, PI#1; depends on
+REQ-STUDIO-TASK-WORKSPACE and REQ-STUDIO-ACTIVITY-MATERIALS; built 2026-10-25): the activity home
+offers two views, 작업 (tasks) and 자료 (materials), and switching between them never loses the
+composer draft. Decisions: DEC-KNOW-R-002 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+- **Where.** The task workspace rail (personal and trial seats), under the brand: a tablist
+  "활동 보기" with two equal tabs, 작업 and 자료. 작업 holds what the rail had before (새 작업, the
+  title search and the task list); 자료 holds the activity's 자료 list of
+  REQ-STUDIO-ACTIVITY-MATERIALS, open, with a "자료 N개" heading. The chat column leaves out its
+  own 자료 card there, so the list has one place; the "함께 보낼 자료" line above the composer stays.
+- **Which seats.** Only where the host's `materials` flag is set and the seat is not an
+  instructor's. A seat without the list has no tabs and keeps today's rail. Classroom and lesson
+  seats have no task workspace, so their layout does not change (REQ-STUDIO-TASK-WORKSPACE scope).
+- **Draft.** Switching is local presentation: it posts nothing to the host (no task, draft or send
+  message; opening 자료 asks for the list once) and never remounts the conversation, so the
+  composer keeps the same element and a byte-identical draft through any number of switches.
+- **Reopen.** The chosen view is remembered per seat in the webview state, keyed by the host's
+  scope digest (never an account id), at most 50 seats, oldest dropped first. Missing or corrupt
+  state, or a seat that no longer has the list, opens on 작업.
+- **States.** Before the host answers, the 자료 view says "자료 목록을 불러오는 중이에요."; when the host
+  has no list for this work folder (R-003's gate or folder consent), it says "이 작업 폴더에서는 지금 자료
+  목록을 쓸 수 없어요." It is never an empty panel.
+- **Keyboard and presentation.** `role=tablist`/`tab`/`tabpanel`, `aria-selected`, one tab stop;
+  Left/Right move and select (wrapping), Home/End jump; modifier keys and IME composition are
+  ignored. Each tab is a 44px target with 14px text. The chosen tab is marked by weight (600) and a
+  2px underline in its text colour, never by colour alone; in forced colours it keeps
+  Canvas/CanvasText with a 2px Highlight underline (the system selection fill would sit under
+  Chrome's text backplate and hide the label). The 자료 panel scrolls as one scope with the shared
+  inset focus ring (CGP-DS-D-014).
+- **Not built.** The activity title above the tabs (DES-KNOW-02's "under the activity title"
+  belongs to CGP-KNOW-D-002) and a per-activity composer placeholder.
+- **Tests.** `test/activity-home.test.tsx` (the real App: 20 switches by click and arrow keys keep
+  the composer node and a byte-identical draft with Hangul NFD, a ZWJ emoji, a tab and CRLF, and post
+  nothing but the list request; reopen per seat, another seat, corrupt state, the 50-seat cap;
+  no tabs without the flag or for an instructor; one 자료 list; tab semantics and keys; loading and
+  unavailable states) and `test/activity-home-computed.smoke.mjs` (headless Chromium on the real
+  stylesheet: 44px tabs, 14px text, weight plus 2px underline, 4.5:1 contrast including forced
+  colours, the shared focus ring, the task list shown under 작업 and hidden under 자료, the draft
+  kept; dark and light at 1420, 800 and 320 px, forced colours on and off; classroom has no tabs;
+  four injected overrides caught). `test/panel-boundary.test.tsx` covers the 자료 view's boundary;
+  `test/activity-materials-computed.smoke.mjs` measures the list in its rail place.
 
 ## Class join link (CGP-SHELL-R-005)
 

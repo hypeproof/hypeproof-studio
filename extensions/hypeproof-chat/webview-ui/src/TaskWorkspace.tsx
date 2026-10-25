@@ -20,6 +20,8 @@ import { loadPanelSizes, PANEL_LIMITS, savePanelSizes, type PanelName } from './
 import { PanelBoundary } from './PanelBoundary';
 import { filterTasksByTitle, TASK_SEARCH_MAX } from './taskTitleFilter';
 import { offerUndo } from './UndoToast';
+import { MaterialsPanel } from './MaterialsPanel';
+import { ActivityHomeContext, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
 
 interface Props {
   view: TaskWorkspaceView;
@@ -33,6 +35,8 @@ interface Props {
   onDismissError: () => void;
   /** CGP-KNOW-R-015 — set only where the seat may attach work-folder files: 이 파일에 대해 묻기 per listed file. */
   onAskAboutFile?: (path: string) => void;
+  /** CGP-KNOW-R-002 — set where the seat has the activity's 자료 list (R-003's gate, never the instructor): the rail offers 작업/자료. */
+  materials?: boolean;
   children: ReactNode;
 }
 
@@ -60,6 +64,9 @@ function sourceRequestId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Stable context values: a new object each render would re-render every consumer in the conversation.
+const HOME_WITH_MATERIALS = { materialsHome: true }, HOME_WITHOUT_MATERIALS = { materialsHome: false };
+
 interface ReadingPosition {
   scroller: HTMLElement;
   anchor?: HTMLElement;
@@ -70,12 +77,22 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, children }: Props) {
   // REQ-STUDIO-TASK-RAIL-SEARCH: `text` is what the field shows, `applied` the committed query the list
   // filters by. An open IME composition (a half-built Hangul syllable) never filters; the commit does.
   // Both belong to one activity: a different scope starts with an empty search.
   const [search, setSearch] = useState({ scope: view.scope, text: '', applied: '' });
   const railSearch = search.scope === view.scope ? search : { scope: view.scope, text: '', applied: '' };
+  // CGP-KNOW-R-002: the activity home's view, remembered per seat. Switching posts nothing and leaves the
+  // conversation (and so the composer draft) mounted. A seat without the 자료 list always shows 작업.
+  const [homeChoice, setHomeChoice] = useState(() => ({ scope: view.scope, value: loadHomeView(view.scope) }));
+  const homeView: HomeView = !materials ? 'tasks' : homeChoice.scope === view.scope ? homeChoice.value : loadHomeView(view.scope);
+  const homeTabs = useRef<HTMLDivElement>(null);
+  const chooseHome = (next: HomeView, focus = false) => {
+    setHomeChoice({ scope: view.scope, value: next });
+    saveHomeView(view.scope, next);
+    if (focus) homeTabs.current?.querySelector<HTMLElement>(`#tw-home-tab-${next}`)?.focus();
+  };
   // CGP-SHELL-R-012: a size is the user's own choice, remembered per seat; until then the design-token width applies.
   const workspaceEl = useRef<HTMLDivElement>(null);
   const [panelSizes, setPanelSizes] = useState(() => ({ scope: view.scope, sizes: loadPanelSizes(view.scope) }));
@@ -418,6 +435,17 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     <nav id="task-rail" ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
+      {/* CGP-KNOW-R-002 — 작업/자료: one tab stop, arrow keys move between the two views (automatic activation). */}
+      {materials && <div ref={homeTabs} className="tw-home-tabs" role="tablist" aria-label="활동 보기" onKeyDown={event => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented || imeComposing(event)) return;
+        const next = nextHomeView(homeView, event.key);
+        if (!next) return;
+        event.preventDefault();
+        chooseHome(next, true);
+      }}>
+        {HOME_VIEWS.map(option => <button key={option} type="button" role="tab" id={`tw-home-tab-${option}`} className="tw-home-tab" aria-selected={homeView === option} aria-controls={`tw-home-${option}`} tabIndex={homeView === option ? 0 : -1} onClick={() => chooseHome(option)}>{HOME_VIEW_LABEL[option]}</button>)}
+      </div>}
+      <div id="tw-home-tasks" className="tw-home-panel" role={materials ? 'tabpanel' : undefined} aria-labelledby={materials ? 'tw-home-tab-tasks' : undefined} hidden={homeView !== 'tasks'}>
       <button className="tw-new" disabled={blocked} onClick={() => { setRailOpen(false); postToHost({ type: 'taskCreate' }); }}><span aria-hidden="true">＋</span> 새 작업</button>
       <label className="tw-search"><span>작업 찾기</span><input name="task-search" autoComplete="off" type="search" maxLength={TASK_SEARCH_MAX} value={railSearch.text} onChange={event => {
         const text = event.target.value;
@@ -445,6 +473,11 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         })}
       </ul>
       </>}</PanelBoundary>
+      </div>
+      {materials && <div id="tw-home-materials" className="tw-home-panel tw-home-materials" role="tabpanel" aria-labelledby="tw-home-tab-materials" hidden={homeView !== 'materials'}>
+        {/* Mounted only while chosen: the list asks the host once per opening. */}
+        {homeView === 'materials' && <PanelBoundary panel="activity-home-materials"><MaterialsPanel home /></PanelBoundary>}
+      </div>}
       <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
     {viewport > 700 && <KeyboardSplitter panel="rail" label="작업 목록 너비 조절" controls="task-rail" value={sizes.rail ?? tokenWidths.rail ?? PANEL_LIMITS.rail.min} onChange={value => resizePanel('rail', value)} />}
@@ -478,7 +511,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         ? <button className="tw-quiet" disabled={blocked} onClick={() => postToHost({ type: 'taskRecoverDraft' })}>새 작업에 보관</button>
         : <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>)}</div>}
       {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
-      <div ref={conversation} id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}>{children}</HeadingSlotContext.Provider></div>
+      <div ref={conversation} id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}><ActivityHomeContext.Provider value={materials ? HOME_WITH_MATERIALS : HOME_WITHOUT_MATERIALS}>{children}</ActivityHomeContext.Provider></HeadingSlotContext.Provider></div>
     </section>
     {sourcesOpen && !sourceDialog && <KeyboardSplitter panel="sources" label="자료 패널 너비 조절" controls="task-sources" value={sizes.sources ?? tokenWidths.sources ?? PANEL_LIMITS.sources.min} onChange={value => resizePanel('sources', value)} />}
     {sourceDialog && <div className="tw-source-backdrop" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={() => closeSources()} />}

@@ -80,6 +80,7 @@ import type { StepWork } from '../../src/lessonFocus';
 import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
 import { MaterialsChips, MaterialsPanel } from './MaterialsPanel';
+import { ActivityHomeContext } from './activityHome';
 import { HelpRequest } from './HelpRequest';
 import { acceptHelp } from '../../src/classroomHelp';
 import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type ImportRef, type LastImport } from './draftImport';
@@ -897,6 +898,8 @@ export function ChatPanel(props: Props) {
       !!config?.profile?.model_selection?.choices.some(model => model.alias === config.model && !fundingChoice.allowed.models.includes(model.id)))));
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages, normalizeTextSize(config?.textSize));
   const headingSlot = useContext(HeadingSlotContext);
+  // CGP-KNOW-R-002: inside a task workspace whose rail has the 자료 view, the list lives there, not here.
+  const { materialsHome } = useContext(ActivityHomeContext);
   const setVisibleDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => editVisible(previous, typeof value === 'function' ? value(visibleDraft(previous)) : value)), []);
   const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
@@ -1720,8 +1723,9 @@ export function ChatPanel(props: Props) {
       {/* CGP-AGENT-R-003 — what the AI can do on this seat. Same rail, closed by default, no Primary. */}
       {!props.instructor && !entryOpen && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
       <PanelBoundary panel="instructor-inbox"><InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} /></PanelBoundary>
-      {/* CGP-KNOW-R-003 — the activity's 자료 list. Same rail, closed by default, no Primary; only with the file-attach gate. */}
-      {!props.instructor && config?.materials && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
+      {/* CGP-KNOW-R-003 — the activity's 자료 list. Same rail, closed by default, no Primary; only with the file-attach gate.
+          CGP-KNOW-R-002: a task workspace draws it as the activity home's 자료 view instead (classroom seats keep it here). */}
+      {!props.instructor && config?.materials && !materialsHome && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
       {!props.instructor && classroomPanels.help && <PanelBoundary panel="help-request"><HelpRequest view={help} post={postToHost} /></PanelBoundary>}

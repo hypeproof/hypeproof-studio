@@ -2024,6 +2024,9 @@ html, body, #root {
 .hp-materials button, .hp-materials-chips button, .hp-materials-url input { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
 .hp-materials-url input { box-sizing: border-box; width: 100%; }
 .hp-materials-chips { margin: 0 0 var(--hp-space-2); }
+/* CGP-KNOW-R-002 — the same list as the activity home's 자료 view in the task rail: open, a heading in place of the summary. */
+.hp-materials-home-count { margin: 0 var(--hp-space-1); font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); line-height: var(--hp-control-min); }
+.hp-materials-home-state { margin: var(--hp-space-2) var(--hp-space-1); }
 .hp-materials-chip { overflow-wrap: anywhere; font-size: var(--hp-font-caption); }
 /* The focus ring is the shared focus geometry's (focusGeometry.css, CGP-DS-D-014): no ring of this card's own. */
 /* Forced colours: under the global pressed rule (tokens.css: Highlight fill, HighlightText word) Chromium's text
