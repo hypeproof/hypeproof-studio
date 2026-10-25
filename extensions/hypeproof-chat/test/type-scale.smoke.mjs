@@ -88,7 +88,7 @@ function parseCompound(s) {
       i = end + 1; continue;
     }
     if (ch === ":") {
-      if (s[i + 1] === ":") { i += 2; c.element = ident(); continue; }
+      if (s[i + 1] === ":") { i += 2; c.element = ident(); if (s[i] === "(") group(); continue; } // ::highlight(name) and other functional pseudo-elements
       i++; const name = ident().toLowerCase();
       const arg = s[i] === "(" ? group() : null;
       c.pseudos.push({ name, arg, list: arg !== null && /^(not|is|where|has)$/.test(name) ? splitTop(arg, ",").map(parseSelector) : null });

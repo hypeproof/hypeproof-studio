@@ -260,11 +260,16 @@ const DELEGATED = [
   { id: "a1", role: "assistant", content: "맡겨 볼게요", createdAt: 2 },
   { id: delegationRowId("toolu_T", "s0"), role: "tool", content: "", createdAt: 3, tool: { icon: "🤝", label: "코드리뷰어: 살펴봐 줘", state: "done" } },
 ];
-type Row = { panel: string; key: string | null; mode: "personal" | "classroom"; config?: Record<string, unknown>; history?: unknown[]; msgs?: () => Record<string, unknown>[]; blocking?: boolean; readOnlyDraft?: boolean };
+type Row = { panel: string; key: string | null; mode: "personal" | "classroom"; config?: Record<string, unknown>; history?: unknown[]; msgs?: () => Record<string, unknown>[]; after?: () => Promise<void>; blocking?: boolean; readOnlyDraft?: boolean };
 const PANELS: Row[] = [
   { panel: "task-sources", key: "CitationPreview.tsx:CitationPreview", mode: "personal", history: CITED },
   { panel: "citations", key: "CitationPreview.tsx:CitationRack", mode: "personal", history: CITED },
   { panel: "citations", key: "ChatPanel.tsx:CitationRack", mode: "classroom", history: CITED },
+  // CGP-CHAT-R-027: the find bar draws only after Cmd+F (Ctrl+F off macOS) reaches the document.
+  { panel: "chat-find", key: "ChatFindBar.tsx:ChatFindBar", mode: "personal", after: async () => {
+    const mac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? "");
+    await act(async () => { (globalThis as unknown as { document: { dispatchEvent(e: unknown): boolean } }).document.dispatchEvent(ev("keydown", { key: "f", code: "KeyF", metaKey: mac, ctrlKey: !mac, altKey: false, shiftKey: false, isComposing: false })); });
+  } },
   { panel: "page-card", key: "PageCard.tsx:PageCard", mode: "personal", msgs: () => [{ type: "pageCardsState", cards: [{ turnId: "s1", anchorId: "a1", pages: [] }] }] },
   { panel: "delegation", key: "DelegationGroup.tsx:DelegationGroup", mode: "personal", history: DELEGATED },
   { panel: "turn-review", key: "TurnReviewBar.tsx:TurnReviewBar", mode: "personal", msgs: () => [{ type: "turnReviewState", view: { turnId: "s1" } }] },
@@ -315,6 +320,7 @@ async function scenario(row: Row) {
   await hostMsg({ type: "history", messages: row.history ?? HISTORY, ...ctx });
   if (row.mode === "personal") await hostMsg({ type: "taskWorkspaceState", view: view(5), ...ctx });
   for (const msg of row.msgs?.() ?? []) await hostMsg({ ...ctx, ...msg });
+  await row.after?.();
   return { ...probe(m.host), host: m.host };
 }
 

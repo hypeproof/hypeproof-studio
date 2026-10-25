@@ -303,3 +303,4 @@ lesson tip is the step's Chalk-authored `hint`, and its action prefills that hin
 ## Implementation notes
 
 - **CGP-CHAT-R56 (CGP-CHAT-R-023), 2026-10-25.** Implemented in Studio as REQ-STUDIO-LESSON-STEP-DIVIDER (`docs/studio-requirements.md`). Owner-delegated choices (served step = turn-start capture, divider on the first served step, marks stored beside the transcript, jump target = latest divider of the rail's step, learner lesson seats only) are recorded in `../decisions.md`.
+- **CGP-CHAT-R80 (CGP-CHAT-R-027), 2026-10-25.** Implemented in Studio as REQ-STUDIO-CHAT-FIND (`docs/studio-requirements.md`), with CGP-CHAT-D80 and the downstream CGP-AGENT-R-025. Owner-delegated choices (bar in the column above the transcript with scroll compensation, Esc returns focus to the previously focused element per D80, message bodies only, collapsed code counted and opened on arrival, Highlight API painting) are recorded in `../decisions.md`.

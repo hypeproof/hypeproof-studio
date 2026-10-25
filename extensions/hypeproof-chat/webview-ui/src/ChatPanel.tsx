@@ -7,6 +7,8 @@ import { fullDraft, visibleDraft, editVisible, replaceVisible, changePaste, long
 import { TurnBoundary } from './TurnBoundary';
 import { SketchDialog } from './SketchDialog';
 import { CopyFeedbackRegion, CopyFeedbackOutlet } from './CopyFeedback';
+import { ChatFindBar } from './ChatFindBar';
+import { registerClosedText } from './chatFind';
 import { ClassWindowNotice } from "./ClassWindowNotice";
 import { SteerDelivery, type SteerDeliverySnapshot } from './SteerDelivery';
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
@@ -1673,6 +1675,8 @@ export function ChatPanel(props: Props) {
       {/* CGP-CHAT-D-001: stable, invisible response announcements live outside the scrolling message list. */}
       <div className="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer">{liveAnnouncement}</div>
 
+      {/* CGP-CHAT-R-027: Cmd/Ctrl+F find bar, right above the conversation. */}
+      <PanelBoundary panel="chat-find">{() => <ChatFindBar scrollRef={scrollRef} scope={`${activityId ?? ""}/${taskId ?? ""}`} onReading={viewport.pauseFollowing} />}</PanelBoundary>
       <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
         {props.aiNotice && (
           // #320 — AI disclosure (Anthropic Usage Policy / ToS §D.3). Compact
@@ -3053,8 +3057,11 @@ function AssistantContent({
 function CodePill({ code, personal = false, blockKey }: { code: string; personal?: boolean; blockKey?: string }) {
   const [open, setOpen] = useState(false);
   const lines = code.split("\n").length;
+  // CGP-CHAT-R-027: while collapsed, find-in-chat still counts this code and can open it.
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => (!open && root.current ? registerClosedText(root.current, code, () => setOpen(true)) : undefined), [open, code]);
   return (
-    <div className="hps-codepill">
+    <div className="hps-codepill" ref={root}>
       {/* Personal chat: a quiet disclosure in the answer's own type size, with a line icon from the
           chat's icon set instead of a colour emoji (UI audit P0-2). */}
       {personal ? <button className="hps-codepill-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>

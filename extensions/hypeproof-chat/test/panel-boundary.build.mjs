@@ -13,6 +13,7 @@ const ROOT = new URL("..", import.meta.url).pathname;
 export const PANEL_COMPONENTS = {
   "AccessControl.tsx": ["AccessControl"],
   "ChatPanel.tsx": ["AiCanDo", "CapabilityChangeCard", "LongStepHintLine", "CitationRack"],
+  "ChatFindBar.tsx": ["ChatFindBar"],
   "CitationPreview.tsx": ["CitationPreview", "CitationRack"],
   "CompletionGate.tsx": ["CompletionGate"],
   "DelegationRow.tsx": ["DelegationRow"],

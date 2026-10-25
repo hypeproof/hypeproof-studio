@@ -5752,3 +5752,50 @@ Validation: `lesson-tip.test.tsx` (source, hygiene, keys, dismiss bound, prefill
 `lesson-tip-layout.smoke.mjs` (actual App in headless Chromium; fails under
 `FOCUS_REQUIRE_BROWSER=1` without a browser). The instructor-console and disabled-seat branches
 are code-level guards without a dedicated test.
+
+## Find in chat (CGP-CHAT-R-027)
+
+REQ-STUDIO-CHAT-FIND (CGP-CHAT-R80 / CGP-CHAT-080, design CGP-CHAT-D-027, PI#1; also
+covers CGP-AGENT-R-025 / REQ-CGP-AGENT-48). Cmd+F on macOS, Ctrl+F elsewhere, anywhere in
+the chat webview opens a find bar at the top of the open transcript, right-aligned in the
+chat column, and focuses its input (대화에서 찾기). The physical F key counts too, so a
+Korean input source opens it. Pressing it again refocuses and selects the query; a query
+kept from an earlier search is repainted on reopening without scrolling. It does not open while a modal dialog (`aria-modal="true"` or an open `<dialog>`)
+owns the keyboard, nor during IME composition. Every seat that draws the transcript gets it
+(personal, classroom, lesson, trial, pass and the instructor's nested panel); it reads only
+the local DOM and sends nothing to the host or the network.
+
+Matching is plain text and case-insensitive (no regular expressions; `.` is a dot).
+C0/C1 controls, bidi marks/embeddings/isolates, U+2028/2029 and the BOM are dropped
+from the query, which is capped at 200 UTF-16 code units without splitting a surrogate
+pair. The search covers the message bodies of user and coach turns in reading order,
+including text split by inline formatting (bold, code spans) but never across blocks,
+line breaks or skipped chrome.
+Interface chrome inside a body (buttons, status lines, hidden or screen-reader-only text)
+is not searched. A collapsed code pill's code is counted; moving to such a match opens
+that pill and shows the match inside it. Retry versions that are not on screen and
+tool lines are not part of the open transcript and are not searched.
+
+The count reads `n/m` (`0/0` with no match, empty with no query). Enter and the
+다음 결과 button move to the next match, Shift+Enter and 이전 결과 to the previous one,
+both wrapping; with no match they are disabled. Enter during IME composition does not move. Typing selects the first match at or
+below the top of what is on screen. Matches are painted with the CSS Custom Highlight
+API (the current match is also underlined, so it differs without colour; forced colours
+use Mark and Highlight), so no transcript node is added, removed or re-rendered. New
+text that streams in while the bar is open is counted without scrolling.
+
+Scroll anchoring: opening and closing the bar shift the transcript's scroll position
+by exactly the bar's height, so the text on screen stays put and the distance to the
+bottom is unchanged; a reader following the live answer keeps following and a reader
+higher up is not pulled down. The one exception is a reader within the bar's height
+of the transcript's very top, where there is no room to compensate on close. Moving to
+a match scrolls the transcript like any reader scroll (and opens a closed `<details>`
+around it), so the existing follow-the-bottom rule decides what the next answer does.
+Esc (in the bar) and the 찾기 닫기 button close it, clear the highlights and return focus,
+without scrolling, to the element focused before it opened, or to the composer when that
+element is gone. A task or activity switch closes it. Controls are 44px targets with
+text at the 14px floor. Tests: `extensions/hypeproof-chat/test/chat-find.smoke.mjs`
+(query rules) and `chat-find-browser.smoke.mjs` (the real ChatPanel in headless
+Chromium: personal and classroom, dark/light, 320/800/1420 px, forced colours; fails
+under `FOCUS_REQUIRE_BROWSER=1` without a browser). This supports PI#1: the learner can
+re-read and check what was said, without asking the coach to repeat it.
