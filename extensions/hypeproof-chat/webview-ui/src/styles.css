@@ -74,7 +74,21 @@ html, body, #root {
   padding: var(--ds-c-studio-styles-space-1);
   display: flex;
   flex-direction: column;
-  gap: var(--ds-c-studio-styles-space-19);
+  /* #2788 — the list gap is a property so the compact turn rules below can measure against it. */
+  --hps-list-gap: var(--ds-c-studio-styles-space-19);
+  gap: var(--hps-list-gap);
+}
+
+/* #2788 / REQ-STUDIO-TOOL-LINE-LABELS — one turn reads as one group: adjacent tool rows sit 4px apart,
+   an answer (paragraph + copy row) and the tool row beside it 8px. Only the list gap is pulled in, so
+   every other neighbour keeps it and nothing overlaps (test/turn-compact-layout-browser.smoke.mjs). */
+.hps-messages > :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row) { margin-block: 0; }
+.hps-messages > :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row) + :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row) {
+  margin-top: calc(var(--ds-c-studio-styles-space-13) - var(--hps-list-gap));
+}
+.hps-messages > .hps-msg-assistant + :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row),
+.hps-messages > :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row) + .hps-msg-assistant {
+  margin-top: calc(var(--ds-c-studio-styles-space-2) - var(--hps-list-gap));
 }
 
 .hps-msg { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); }

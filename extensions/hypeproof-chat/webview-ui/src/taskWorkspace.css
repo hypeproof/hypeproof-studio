@@ -85,7 +85,7 @@
 .tw-conversation { flex: 1; min-height: 0; min-width: 0; }
 .tw-conversation .hps-shell { background: var(--tw-canvas); }
 .tw-conversation .hps-header { border-bottom: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-5); }
-.tw-conversation .hps-messages { padding: var(--ds-c-studio-taskworkspace-space-5) max(var(--ds-c-studio-taskworkspace-space-5), calc((100% - var(--ds-c-studio-taskworkspace-space-54)) / 2)); gap: var(--ds-c-studio-taskworkspace-space-32); }
+.tw-conversation .hps-messages { padding: var(--ds-c-studio-taskworkspace-space-5) max(var(--ds-c-studio-taskworkspace-space-5), calc((100% - var(--ds-c-studio-taskworkspace-space-54)) / 2)); --hps-list-gap: var(--ds-c-studio-taskworkspace-space-32); gap: var(--hps-list-gap); }
 .tw-conversation .hps-msg-body { font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); }
 .tw-conversation .hps-msg-assistant .hps-msg-body { background: transparent; border: 0; padding: 0; max-width: 100%; }
 .tw-conversation .hps-msg-assistant .hps-msg-role > span::before { content: none; }

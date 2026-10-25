@@ -13226,6 +13226,64 @@
           "path": "extensions/hypeproof-chat/test/task-archive-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TOOL-LINE-LABELS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Learner tool lines and a compact turn layout (#2788)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TOOL-LINE-LABELS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TOOL-LINE-LABELS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/toolLineLabel.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TOOL-LINE-LABELS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TOOL-LINE-LABELS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/tool-line-label.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-compact-layout-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }

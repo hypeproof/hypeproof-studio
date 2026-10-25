@@ -220,6 +220,7 @@ import { LiveServer } from "./liveServer";
 import { PreviewSurfaceRequests } from "./previewSurfaceRequests";
 import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { browserRememberLabel, browserTarget, cleanName } from "./browserTargetHost";
+import { learnerToolLine, UNKNOWN_TOOL_LINE } from "./toolLineLabel";
 import { WriteApprovalRequest } from "./writeApprovalPrompt";
 import { writePathLine, writePathEntries, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
@@ -7542,6 +7543,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // The webview replaces an entry wholesale by id, so a tool_result has to
       // re-send the label the tool_use showed — keep it per stream.
       const toolLabels = new Map<string, string>();
+      // #2788 — what the learner reads for each call (learnerToolLine); toolLabels stays the raw record.
+      const shownLabels = new Map<string, { icon: string; label: string }>();
       const shellRows = new Map<string, import("./shellPresentation").ShellPresentation>();
       const toolLineIds = new Map<string, string>();
       // .html paths Written/Edited during an SDK turn (tool_use id → absolute path) — previewed when the tool_result succeeds.
@@ -7675,8 +7678,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             if (shell) shellRows.set(line.lineId, shell);
             // A helper's call lands inside its row, so the main flow's notice line stays as it is.
             if (!work && line.kind !== "child") clearPending();
-            const label = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd(), { urlHostOnly: true })})`;
-            toolLabels.set(a.id, label);
+            // The raw `name(summary)` stays the observation record; the learner reads plain Korean (#2788).
+            const rawLabel = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd(), { urlHostOnly: true })})`;
+            toolLabels.set(a.id, rawLabel);
+            const shown = learnerToolLine(a.name, a.input, this.resolveCoachCwd());
+            shownLabels.set(a.id, shown);
+            const label = shown.label;
             // 2026-08-19 — when the SDK coach saves a .html with Write/Edit, that
             // result has to appear on screen. Before, only the chat's ```html fence
             // opened the preview, so on a turn where the coach fixed the file with a
@@ -7704,19 +7711,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
             } else if (work && shell) {
               // REQ-CGP-AGENT-60 — a summary seat still shows each shell row (collapsed), with its purpose.
-              log(line.lineId, "🔧", label, "running");
-              const started = stepLines.begin(a.id, { lineId: line.lineId, icon: "🔧", label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
+              log(line.lineId, shown.icon, label, "running");
+              const started = stepLines.begin(a.id, { lineId: line.lineId, icon: shown.icon, label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, shell });
             } else if (work) {
               pendingShown = true;
               work.show(workPhrase(a.name, a.input));
             } else if (line.kind === "child") {
               // A helper's own call sits inside its row; the row is the step the hint times.
-              log(line.lineId, "🔧", label, "running");
+              log(line.lineId, shown.icon, label, "running");
             } else {
-              log(line.lineId, "🔧", label, "running");
+              log(line.lineId, shown.icon, label, "running");
               // The words come from the tool name (workPhrase), never from `label`.
-              const started = stepLines.begin(a.id, { lineId: line.lineId, icon: "🔧", label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
+              const started = stepLines.begin(a.id, { lineId: line.lineId, icon: shown.icon, label, ...(a.at ? { at: a.at } : {}) }, workPhrase(a.name, a.input).label);
               if (started) this.postToolLog(streamId, { ...started, ...(shellRows.has(started.id) ? { shell: shellRows.get(started.id) } : {}) });
             }
             break;
@@ -7777,14 +7784,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // retries on its own, and the turn's own text has to say what did not work (R0).
             else if (!work) log(
               line.lineId,
-              "🔧",
+              shownLabels.get(a.id)?.icon ?? UNKNOWN_TOOL_LINE.icon,
               a.isError
-                ? `${toolLabels.get(a.id) ?? ""} — 실패${a.reason ? `: ${a.reason}` : ""}`
-                : (toolLabels.get(a.id) ?? ""),
+                ? `${shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label} — 실패${a.reason ? `: ${a.reason}` : ""}`
+                : (shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label),
               a.isError ? "error" : "done",
             );
             // REQ-CGP-AGENT-60 — a summary seat's shell row still settles (errors were settled above).
-            else if (shellRows.has(line.lineId)) log(line.lineId, "🔧", toolLabels.get(a.id) ?? "", "done");
+            else if (shellRows.has(line.lineId)) log(line.lineId, shownLabels.get(a.id)?.icon ?? UNKNOWN_TOOL_LINE.icon, shownLabels.get(a.id)?.label ?? UNKNOWN_TOOL_LINE.label, "done");
             // Only a **successful** write tool establishes the evidence for "it was
             // fixed". On a failure, or when it was never a write in the first place,
             // the notice line closes with "생각했어요".

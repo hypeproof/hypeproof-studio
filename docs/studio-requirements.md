@@ -5965,3 +5965,43 @@ either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
 forced colours in headless Chromium).
+
+## Learner tool lines and a compact turn layout (#2788)
+
+REQ-STUDIO-TOOL-LINE-LABELS. PI#4 (Minimum necessary intervention) and PI#2 (Human judgment stays
+visible): the learner sees what the AI is doing in plain words, without developer identifiers that
+interrupt reading, and the answer stays readable to its last line. Found in the RC1 test (personal
+seat, agent-sdk runtime), where tool lines read `mcp__hypeproof__browser_open(search.naver.com · 인터넷)`
+and `mcp__hypeproof__browser_read({})`.
+
+Tool line presentation. Every detailed tool line the SDK and local runtimes draw comes from one
+function, `learnerToolLine` (`src/toolLineLabel.ts`):
+
+- The `mcp__hypeproof__` prefix is stripped and browser and preview tools go through
+  `browserToolLogLine`, the mapping the proxy browser loop already uses, so both runtimes say the same
+  words. `browser_open` reads `<host> 열기 · <place>` with the REQ-E3 host-only form and its place tag
+  (인터넷 · 내 미리보기 · 내 컴퓨터 파일; `about:blank` is 빈 브라우저 열기), `live_preview_start` reads
+  미리보기 열기 and `browser_screenshot` 화면 캡처.
+- Read is 파일 읽기 <name>, Write/Edit/MultiEdit/NotebookEdit 파일 고치기 <name>, Glob/Grep/LS 파일 찾기,
+  WebSearch 웹 검색: <query>, WebFetch <host> 읽기. A name inside the work folder is its relative path;
+  outside it is `작업 폴더 밖 · <file name>`, never the full path. Bash keeps its shell row (purpose and
+  `$ command`, REQ-CGP-AGENT-60).
+- Any other tool, another MCP server's included, is the neutral 도구 사용 중. A learner line never shows a
+  tool identifier, `({})` or JSON; model-supplied detail loses control, bidi and line-separator
+  characters and is clipped at 40 characters.
+- The observation record (`observation.toolRequest`) and the raw `name(summary)` kept for the
+  observation's tool result are unchanged: they are the developer and research record.
+
+Compact turn layout (all seats). In the transcript, adjacent tool rows sit at most 4px apart and an
+answer (paragraph and its copy row) and the tool row beside it at most 8px; every other neighbour keeps
+the list gap. The copy button keeps its 44px target. The "최신 메시지" pill takes its own row between the
+transcript and the composer instead of floating over it, so no transcript text is ever under it, and it
+is a 44px target. The pass-status strip ("이용권 상태를 확인해 주세요") keeps its message and when it
+appears (Service/pass logic unchanged); scrolled to the end, the last line of the answer sits fully
+above the strip, the pill and the composer.
+
+Tests: `test/tool-line-label.smoke.mjs` (prefix strip, browser_open with every place tag, the SDK tool
+words, unknown tools, hostile input, the observation wiring) and `test/turn-compact-layout-browser.smoke.mjs`
+(the real App bundle in headless Chromium, personal and classroom, dark and light, 800 and 1420 px:
+measured gaps, 44px targets, the last line against strip, pill and composer, and no text line under the
+pill at two scroll positions).
