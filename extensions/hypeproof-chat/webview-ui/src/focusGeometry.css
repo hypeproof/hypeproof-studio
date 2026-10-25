@@ -23,7 +23,7 @@ html body :is(.hp-cta-primary, .hps-btn-send, .hps-edit-save, .hps-msg-run, .hps
 /* Scroll scopes: the focusable viewport itself and every control inside it. */
 html body :is(
   .tw-task-list, .tw-source-list, .tw-sources, .tw-trash-dialog,
-  .hps-messages, .hps-markdown-table, .hps-codepill-body, .hps-fatal-detail, .hps-file-mentions, .hps-pasted-list, .hps-pasted-editor, .hps-turn-raw,
+  .hps-messages, .hps-markdown-table, .hps-codepill-body, .hps-fatal-detail, .hps-file-mentions, .hps-pasted-list, .hps-pasted-editor, .hps-turn-raw, .hps-math-block,
   .hps-update-banner-notes, .hps-element-meta pre, .hp-rail-lesson, .hp-rail-goal,
   .hps-native-observation, .hps-effort details[open], .hps-access[open],
   .hps-voice-body, .hp-evidence, .hp-evidence-compare pre, .hps-carryover-list,

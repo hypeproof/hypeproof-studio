@@ -5545,3 +5545,68 @@ when it throws again); opening raw view focuses the readable text. This supports
 uninterrupted learner agency (PI#1), not an automatic resend or capability change.
 React event-handler errors and failures before row rendering remain under their
 existing guards; this boundary covers row render/descendant lifecycle failures.
+
+## Math in answers (CGP-CHAT-R-022)
+
+`REQ-STUDIO-ANSWER-MATH` (REQ-CGP-CHAT-R40 / CGP-CHAT-R-022 / CGP-CHAT-040 / PI#1, 2026-10-25,
+DEC-32 interim): math the coach writes in an answer renders as math, in personal and classroom
+chat alike, wherever answer prose is rendered (`MarkdownText`: the answer body and the text around
+a reply-choice question). The learner's own messages are never typeset. Product Intent #1 (useful
+work first): a formula a learner has to read, check and reuse is legible instead of a wall of
+backslashes. It may expose JUDGMENT/VERIFY (reading a result before reusing it); it adds no score,
+label or new data flow.
+
+- `$…$` renders inline and `$$…$$` renders as math: on its own lines, or alone on one line, as a
+  centred display block; inside a sentence, inline. Typesetting is bundled KaTeX that never grants
+  trust (`\href`, `\url`, `\includegraphics` and `\html*` cannot link, load or inject) and
+  bounded input (4,000 characters per formula, `maxExpand` 500, `maxSize` 20). KaTeX output becomes React
+  elements through hast; nothing is written with innerHTML. KaTeX also emits MathML, so a screen
+  reader reads the formula.
+- Invalid TeX, a formula that uses a command asking for trust (KaTeX would draw the command name
+  in red and drop its argument), an oversized formula and an unclosed `$$` while the answer
+  streams fall back to the exact raw source of that formula as plain text, never a KaTeX error. Dollar signs that read as money
+  stay text under Pandoc's single-dollar rule: no space just inside either `$`, and no digit right
+  after the closing one (`가격은 $5이고 $10이에요` stays as written). `\$` and code spans are never
+  math.
+- Cost: KaTeX and its HTML parser are a separate chunk (`mathTypeset.ts`) loaded by dynamic
+  import on the first math span, so an answer without math loads neither (until it loads, math
+  shows as its raw source). Typeset formulas are cached per source (LRU, 256 entries) as React
+  elements in a memoised component, so while an answer streams a finished formula is neither
+  typeset nor re-rendered again. One rendered text typesets at most 200 formulas and 8,000
+  characters of TeX in total; formulas beyond either cap stay raw. Measured: the verifier's
+  hostile input (40 display blocks of ~3.6k characters) went from 4.6 s per render to ~180 ms.
+- Bundle (measured from `vite build`, origin/main → this change): `index.js` 771,113 →
+  782,099 bytes (229,369 → 232,741 gzip); the lazy `mathTypeset.js` chunk is 432,879 bytes
+  (127,772 gzip); `index.css` 430,567 → 453,084 bytes; fonts are woff2 only (20 files, 259,792
+  bytes, down from 60 files and ~1.1 MB: the woff and ttf copies are dropped from the CSS and the
+  build because the Chromium webview always takes woff2).
+- Fonts: the KaTeX fonts ship inside the webview build (`webview-ui/styles/katex.css`, linked
+  from `index.html`) and load from the webview's own `cspSource`. Rendering fetches nothing from
+  the network, no font is inlined as `data:` (`font-src` stays `cspSource` only, REQ-L1), and
+  `buildChatPanelCsp` is unchanged.
+- Copy returns the TeX source. `답변 복사` already copies the answer's raw text. Copying a
+  selection that covers rendered math puts `$TeX$` (inline) or `$$TeX$$` (display) on the clipboard
+  as plain text; a selection that starts or ends inside a formula grows to the whole formula, and a
+  selection with no math copies as usual.
+- Layout (CGP-CHAT-D-022 basis): a display block is a `role="region"` named `수식` with
+  `tabindex="0"`, scrolls horizontally inside the answer column (no page overflow), is a
+  registered scroll scope in `focusGeometry.css` (inset focus ring), and centres a short formula.
+  Its bottom padding keeps the horizontal scrollbar (an overlay bar is drawn over the box's bottom
+  edge) clear of the subscripts.
+  Math inherits the prose text colour and is at least the prose size, so dark, light and forced
+  colours follow the answer text.
+
+Not built: graphing (CGP-CHAT-040's graph half stays DEFER), `\(…\)` / `\[…\]` delimiters, math in
+the learner's own messages, and math typesetting fonts beyond KaTeX's own (CGP-DS-040, DEFER).
+Tests: `test/answer-math.test.tsx` (static markup through `MarkdownText` and `ChatPanel` in both
+seats: inline, display, one-line display, raw fallback for invalid/oversized/streaming TeX, money,
+escapes and code spans, trust commands shown as their exact raw source, raw text before KaTeX
+loads, the cache and the per-text budget on 100 formulas and on hostile input),
+`test/answer-math-stream.test.tsx` (live DOM: streaming 100 formulas typesets and renders each
+finished formula once) and `test/answer-math.smoke.mjs` (headless Chromium on
+the real Vite build under the real chat CSP from one local origin: bundled fonts load with no CSP
+violation, no `data:` or remote font URL, centring, scroll inside the block, focus ring, prose
+colour and size, raw text, selection copy and `답변 복사`, personal and classroom, dark and light,
+800 and 1420 px, forced colours; the built CSS lists woff2 only; KaTeX is a separate chunk that a
+page without math never requests; `\href` shows its raw source with no link; the wide block's
+scrollbar does not cover its subscripts).

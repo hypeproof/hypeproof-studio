@@ -210,7 +210,7 @@ Product Intent principle numbers as listed above.
 | CGP-CHAT-R12 | Dictation fills the composer with editable text. (CGP-CHAT-12) | Mic button labelled "말로 쓰기", distinct from VO-36 voice chat. Transcript is inserted at the caret and never auto-sent. States: starting / listening / transcribing / error with reason (permission, unsupported, too short). Gated by cohort audio entitlement and metered. | P2 | #1 |
 | CGP-CHAT-R14 | The learner can draw a sketch and attach it. (CGP-CHAT-14) | "그려서 보여주기" opens a canvas with pen, 6 colors, eraser, undo, clear. Attaching saves a PNG under the task's assets folder (REQ-C18 naming) and stages it like a pasted image. Closing with strokes asks to discard. | P2 | #3 |
 | CGP-CHAT-R19 | At most one lesson-authored tip appears above the composer. (CGP-CHAT-19) | Tip text comes only from the served lesson step (Chalk-authored). Dismiss hides it for that step. Its action prefills, never sends. No product-promotion tips. | P2 | #4 |
-| CGP-CHAT-R40 | Math in answers renders as math. (CGP-CHAT-40) | `$…$` and `$$…$$` render. Invalid TeX falls back to the raw source. Rendering does not fetch fonts from the network (CSP REQ-L1). Copy returns the TeX source. | P2 | #1 |
+| CGP-CHAT-R40 | Math in answers renders as math. (CGP-CHAT-40) | `$…$` and `$$…$$` render. Invalid TeX falls back to the raw source. Rendering does not fetch fonts from the network (CSP REQ-L1). Copy returns the TeX source. Built as REQ-STUDIO-ANSWER-MATH (2026-10-25) under DEC-32 interim (decisions.md): bundled KaTeX, both seats, money-like dollars stay text. | P2 | #1 |
 | CGP-CHAT-R56 | Lesson step boundaries appear in the transcript. (CGP-CHAT-56) | When the served step changes, a divider "2단계: {name}" is inserted at that point. "지금 단계로" scrolls to the current divider. Dividers are read-only and do not change the rail. | P2 | #3, AE-01 |
 | CGP-CHAT-R62 | The learner can copy their whole task conversation as text. (CGP-CHAT-62) | "대화 내용 복사" in the task menu copies user/assistant text in order with simple Markdown. It excludes credentials, hidden reasoning, other learners' data and tool raw payloads (AE-39 exclusions). Success is confirmed only after the clipboard write. | P2 | #2 (Ownership) |
 | CGP-CHAT-R77 | A task can be archived and restored. (CGP-CHAT-77) | "보관하기" hides the task from the list and keeps transcript, draft and evidence. "보관함" lists archived tasks with "다시 열기". A running task must be stopped first. There is no permanent delete in class profiles. | P2 | #2 |
@@ -287,7 +287,8 @@ via shipped theme tokens. All below must hold at 320px width and with Korean IME
    instructor in Chalk, or a learner toggle? The current draft says the cohort profile decides
    availability and the learner toggles it.
 8. **Math rendering (R40).** Is there any curriculum need beyond adult courses? If not,
-   move it to DEFER.
+   move it to DEFER. Interim (2026-10-25, DEC-32 in decisions.md): built for every seat as display only;
+   Jay can still move it to DEFER.
 9. The 901 `localConversation.mcpToolActivity.*` strings were sampled only. They describe
    per-connector verbs (Figma, Drive, …) that the plugins domain should inventory.
 
