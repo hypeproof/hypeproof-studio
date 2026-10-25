@@ -14383,6 +14383,61 @@
           "path": "extensions/hypeproof-chat/test/style-tweak-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-CGP-LEARN-15",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-INT-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/chalk-authoring.md",
+          "section": "### 완료 조건 도우미 — 무엇을 만들면 끝인가 (CGP-LEARN-R-015) · 2026-10-26"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-COMPLETION-CHECKLIST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-LEARN-15",
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/lib/completion-checklist.ts"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-COMPLETION-CHECKLIST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-LEARN-15",
+        "ST-IMP-CHALK-COMPLETION-CHECKLIST"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/completion-checklist.test.mjs"
+        },
+        {
+          "path": "docs/testing/chalk-authoring.md"
+        }
+      ]
     }
   ]
 }
