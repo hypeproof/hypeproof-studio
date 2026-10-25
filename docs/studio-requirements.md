@@ -5640,3 +5640,14 @@ keeps the drawing available to retry. Preparation does not send to a model; the
 normal send path reuses the cached successful file and rechecks current permission.
 Removing the pending attachment excludes it from the next send and does not erase
 the saved learner asset. Unattached canvas marks are local to the open dialog.
+
+## Shell execution visibility (CGP-AGENT-R-029)
+
+| ID | Requirement | Acceptance | Intent |
+|---|---|---|---|
+| REQ-CGP-AGENT-60 | Show the tool-call purpose before `$ command`, a workspace-relative folder only where the host knows it, and owned background processes in 실행 중인 것 with stop. | SDK Bash/PowerShell description is preserved in the timeline and task history; absent descriptions are explicitly unknown. The SDK shell input has no working directory and the shell keeps `cd` between calls, so shell rows and SDK background tasks show no folder; the live server shows its served root relative to the workspace. Purpose and command text neutralise control, bidi, zero-width, BOM, tag and filler characters (purpose 500, command 2000 characters); a line break the shell acts on (LF, CR, CRLF, NEL, U+2028/2029) is shown as ` ⏎ `, never a plain space, so a `#` comment or a heredoc cannot make the next command read as harmless text, and a trailing break is dropped; longer text keeps its start and its end around a visible `… (가운데 N자 생략) …` marker, so a padded command never hides its tail. Summary seats collapse command details and still settle each row from its tool result. Settled entries leave the list after a short final state; SDK `ambient` tasks are excluded. SDK background shell tasks and the Studio live server have owned stop handles; 멈추는 중 lasts until authoritative task exit or HTTP server close, never merely request acknowledgement. Activity changes isolate lists and stop handles; a stop message only looks in the current activity. | PI#2, PI#5; exposes VERIFY and OWNERSHIP through inspectable action and explicit stop, without capability labels. |
+
+The list does not enumerate arbitrary operating-system processes. If an SDK query ends without
+terminal task evidence, its remaining entries say 실행 상태 확인 불가; Studio does not claim they
+exited or send a stop to a reused process identifier. Proxy and local subscription runtimes do
+not expose shell execution. Live-server controls are shared across these runtime choices.

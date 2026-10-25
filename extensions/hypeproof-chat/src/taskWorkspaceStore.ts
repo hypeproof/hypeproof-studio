@@ -1,4 +1,5 @@
 import { ATTEMPT_KEYS, validAttemptMeta } from './answerAttempts.ts';
+import { shellLabel } from "./shellDisplay.ts";
 import { storedDenialNotice } from "./denialNotice.ts";
 import { createHash, randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
@@ -90,8 +91,16 @@ function validMessage(value: unknown, allowEditOf = false): value is ChatMessage
   if (value.editOf !== undefined && (value.role !== 'user' || !validEditOf(value.editOf))) return false;
   if (ATTEMPT_KEYS.some(key => value[key] !== undefined) && (value.role !== 'user' || !validAttemptMeta(Object.fromEntries(ATTEMPT_KEYS.filter(key => value[key] !== undefined).map(key => [key, value[key]]))))) return false;
   if (value.images !== undefined && (!Array.isArray(value.images) || !value.images.every(image => typeof image === 'string' && image.startsWith('data:image/')))) return false;
-  if (value.tool !== undefined && (!isRecord(value.tool) || !exactKeys(value.tool, ['icon', 'label', 'state']) ||
+  if (value.tool !== undefined && (!isRecord(value.tool) || !exactKeys(value.tool, ['icon', 'label', 'state', ...(allowEditOf ? ['shell', 'step', 'since'] : [])]) ||
       typeof value.tool.icon !== 'string' || typeof value.tool.label !== 'string' || typeof value.tool.state !== 'string' || !['running', 'done', 'error'].includes(value.tool.state))) return false;
+  if (isRecord(value.tool) && value.tool.shell !== undefined) {
+    const shell = value.tool.shell;
+    if (!isRecord(shell) || !exactKeys(shell, ['purpose', 'command', 'folder', 'collapsed']) ||
+      typeof shell.purpose !== 'string' || shell.purpose.length > 500 || typeof shell.command !== 'string' || shell.command.length > 2000 ||
+      (shell.folder !== undefined && (typeof shell.folder !== 'string' || shell.folder.length > 2000)) || typeof shell.collapsed !== 'boolean') return false;
+  }
+  if (isRecord(value.tool) && ((value.tool.step !== undefined && typeof value.tool.step !== 'string') ||
+    (value.tool.since !== undefined && !timestamp(value.tool.since)))) return false;
   if (value.citations !== undefined && (!Array.isArray(value.citations) || !value.citations.every(citation =>
     isRecord(citation) && exactKeys(citation, ['url', 'title', 'domain', 'tier', 'kind']) &&
     (citation.kind === undefined || typeof citation.kind === 'string' && citation.kind.length <= 64) &&
@@ -348,7 +357,9 @@ export class TaskWorkspaceStore {
       if (!Array.isArray(messages) || !messages.every(validIncoming)) fail('invalid', '저장할 대화 형식이 올바르지 않습니다.');
       // CGP-CHAT-R-002 — merge into the full conversation, then store the visible part in the task
       // file and the superseded turns in the sidecar.
-      const split = splitVersions(this.mergeMessages(joinVersions(task.messages, versions.tasks[taskId]), messages));
+      const split = splitVersions(this.mergeMessages(joinVersions(task.messages, versions.tasks[taskId]), messages.map(message => message.tool?.shell ? {
+        ...message, tool: { icon: message.tool.icon, label: shellLabel(message.tool.shell), state: message.tool.state },
+      } : message)));
       task.messages = split.visible;
       if (split.versions.transcript?.length || split.versions.hidden.length || Object.keys(split.versions.groups).length || Object.keys(split.versions.attempts ?? {}).length) versions.tasks[taskId] = split.versions;
       else delete versions.tasks[taskId];

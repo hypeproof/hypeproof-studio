@@ -1,4 +1,5 @@
 import {DelegationStop, type DelegationStopState} from "./delegationStop";
+import { SdkProcesses } from "./runningProcesses";
 // #282 — ORCHESTRATION: run the coach on the Claude Agent SDK instead of the
 // single-turn proxy. Drop-in with proxyChat's callback contract so
 // chatPanelProvider can route to it behind the `hypeproofChat.coachRuntime`
@@ -190,6 +191,7 @@ export interface SdkCoachArgs {
   onActivity?: (activity: SdkActivity) => void;
   onDelegationControl?: (stop: (() => void) | null) => void;
   onDelegationStop?: (state: DelegationStopState) => void;
+  processes?: { registry: import("./runningProcesses").RunningProcesses; prefix: string };
   /**
    * #580 — 토큰 usage 탭 (요청 단위 assistant usage / result 턴 합계).
    * Optional: 스풀을 안 쓰는 호출자·테스트는 그대로 동작한다.
@@ -859,14 +861,16 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // A4 — on an orchestrator turn the stream is read for failure events (F3–F5, spec §7)
   // and passed through unchanged; return() and throw() reach the CLI's iterator as before.
   const tapped = orchestratorTurn ? orchestratorTurn.tap(stream) : stream;
+  const processes = args.processes ? new SdkProcesses(args.processes.registry, args.processes.prefix, stream.stopTask?.bind(stream)) : undefined;
   const observed = (async function* () {
-    for await (const event of tapped) {
+    try { for await (const event of tapped) {
+      processes?.observe(event);
       for(const a of extractSdkActivity(event as unknown as Record<string,unknown>)){if(a.kind==="tool_use")delegationStop?.tool(a.id,a.name);else if(a.kind==="tool_result"&&!a.launched)delegationStop?.result(a.id);}
       delegationStop?.observe(event);
       const citations = args.signal.aborted ? [] : webCitations.observe(event);
       if (citations.length) args.onCitations?.(citations);
       yield event;
-    }
+    } } finally { processes?.close(); }
   })();
   // A2/A4 — one busy notice per turn and a bounded busy wait. An orchestrator turn posts
   // the notice as its timeline line. A native-trial seat (REQ-STUDIO-TRIAL-BUSY) gets the

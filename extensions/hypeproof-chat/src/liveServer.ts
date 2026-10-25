@@ -41,6 +41,9 @@ function loopbackOrigin(url: string | undefined): string | undefined {
 }
 
 export class LiveServer {
+  private readonly listeners = new Set<() => void>();
+  onChange(listener: () => void): { dispose(): void } { this.listeners.add(listener); return { dispose: () => { this.listeners.delete(listener); } }; }
+  private changed(): void { for (const listener of this.listeners) listener(); }
   private server: http.Server | undefined;
   private root: string | undefined;
   private baseUrl: string | undefined;
@@ -183,10 +186,11 @@ export class LiveServer {
       if (this.served) this.served.set([{ o: origin, t: this.now() }, ...this.remembered().filter((e) => e.o !== origin)].slice(0, SERVED_ORIGINS_KEPT));
     }
     this.startWatching(root);
+    this.changed();
     return this.baseUrl;
   }
 
-  private async stop(): Promise<void> {
+  async stop(): Promise<void> {
     if (this.reloadTimer) {
       clearTimeout(this.reloadTimer);
       this.reloadTimer = undefined;
@@ -206,7 +210,8 @@ export class LiveServer {
     this.baseUrl = undefined;
     this.root = undefined;
     if (server) {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+      this.changed();
     }
   }
 

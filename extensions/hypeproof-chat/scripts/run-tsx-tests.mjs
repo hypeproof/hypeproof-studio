@@ -58,6 +58,7 @@ const OVERRIDES = {
   "quit-guard-queue": { banner: BANNER_POSTED },
   "publish-sharing-app": { banner: BANNER_POSTED },
   "turn-idle-progress-app": { banner: BANNER_POSTED },
+  "shell-processes-app": { banner: BANNER_POSTED },
 };
 
 // Tests in test/ that this runner must skip, because they have their own build step

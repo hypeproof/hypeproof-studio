@@ -32,6 +32,7 @@ export interface ChatMessage {
    * running → done update happens in place.
    */
   tool?: {
+    shell?: import("./shellPresentation").ShellPresentation;
     icon: string; label: string; state: "running" | "done" | "error";
     /** REQ-STUDIO-LONG-STEP-HINT — a running tool step in learner words, and when it began (ms). */
     step?: string; since?: number;
@@ -535,6 +536,7 @@ export type WebviewMessage = (
   | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
   | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
   | {type:'annotationLeaveAnswer';id:string;discard:boolean}
+  | { type: "stopRunningProcess"; id: string }
   | {type:'writeApprovalAnswer';id:string;approved:boolean}
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
@@ -800,6 +802,7 @@ export type HostMessage = (
   | {type:'browserApprovalPrompt';prompt:import('./browserApprovalPrompt').BrowserApprovalPrompt|null}
   | {type:'commandApprovalPrompt';prompt:import('./commandApprovalPrompt').CommandApprovalPrompt|null}
   | {type:'annotationLeavePrompt';prompt:import('./annotationLeavePrompt').AnnotationLeavePrompt|null}
+  | { type: "runningProcesses"; entries: import("./runningProcesses").RunningProcess[] }
   | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
   | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
@@ -895,7 +898,7 @@ export type HostMessage = (
   // splices this line into the **same array** as `streamChunk` to build
   // [bubble] → [tool] → [bubble]. `at` is the SDK's own timestamp as it sent it (ms;
   // the host clock when absent) — the createdAt of the persisted line.
-  | { type: "toolLog"; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number; step?: string; since?: number }
+  | { type: "toolLog"; shell?: import("./shellPresentation").ShellPresentation; streamId: string; id: string; icon: string; label: string; state: "running" | "done" | "error"; at?: number; step?: string; since?: number }
   // #308 — the "페이지를 코치에게" completion notice. Raising a VS Code notification
   // toast stops the integrated browser with "Paused due to Notification" (core
   // behaviour), so this is announced on the chat panel's inline status line instead

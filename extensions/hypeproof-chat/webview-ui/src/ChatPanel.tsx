@@ -13,6 +13,7 @@ import './answerAttempts.css';
 import { visibleAttempts, ATTEMPT_HISTORY_NOTE } from '../../src/answerAttempts';
 import { AttemptPager } from './AttemptPager';
 import { AnnotationTray } from "./AnnotationTray";
+import { storedShell } from "../../src/shellDisplay";
 import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
 import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
@@ -2647,7 +2648,7 @@ function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
 }
 
-function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () => void }) {
+export function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () => void }) {
   const t = message.tool;
   if (!t) return null;
   const denial = t.state === "error" ? storedDenialNotice(t.label) : null;
@@ -2662,6 +2663,13 @@ function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () =>
   // This row is a waiting indicator, never evidence that a file was changed.
   // Hide completed waits from old histories too; retain the stored timeline.
   if (message.id.startsWith('pending-') && t.state === 'done') return null;
+  const shell = t.shell ?? storedShell(t.label);
+  if (shell) return <div className={`hps-shell-row hps-tool-${t.state}`}>
+    <p className="hps-shell-purpose">{shell.purpose}</p>
+    <details open={!shell.collapsed}><summary>실행 명령 · {t.state === 'running' ? '처리 중' : t.state === 'error' ? '실패' : '완료'}</summary>
+      <pre><code>{`$ ${shell.command}`}</code></pre>{shell.folder !== undefined && <p className="hps-shell-folder">폴더: {shell.folder}</p>}
+    </details>
+  </div>;
   const thinking = /^think-\d+$/.test(message.id);
   if (thinking && t.state === 'done') {
     return (

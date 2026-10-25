@@ -9,6 +9,7 @@ import {AnnotationLeaveDialog} from './AnnotationLeaveDialog';
 import type {AnnotationLeavePrompt} from '../../src/annotationLeavePrompt';
 import { retainElapsedReceipts } from '../../src/turnElapsed';
 import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
+import { RunningProcessesPanel } from "./RunningProcesses";
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
 import {OutboundDialog, PublicAudienceDialog} from "./OutboundDialog";
@@ -376,6 +377,7 @@ export { reducer as chatPanelReducer, initialState as chatPanelInitialState };
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [runningProcesses, setRunningProcesses] = useState<import("../../src/runningProcesses").RunningProcess[]>([]);
   const [refusal, setRefusal] = useState(false);
   const [delegationStops,setDelegationStops]=useState<Record<string,DelegationStopState>>({});
   const delegationStreams=useRef(new Set<string>());
@@ -443,7 +445,7 @@ export function App() {
           activeStream.current = null;
           setRefusal(false);
           setDelegationStops({});delegationStreams.current.clear();
-          setApprovalPending(false); setWriteApproval(null); setOutbound(null); setFolderConsent(null);
+          setApprovalPending(false); setWriteApproval(null); setOutbound(null); setFolderConsent(null); setRunningProcesses([]);
         }
         scope.current = msg.config.activity?.id;
         taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
@@ -504,6 +506,7 @@ export function App() {
           });
           break;
         }
+        case "runningProcesses": setRunningProcesses(msg.entries); break;
         case "config":      dispatch({ type: "config", config: msg.config }); break;
         case "answerAttemptSelected": dispatch({type: "answerAttemptSelected", root: msg.root}); break;
         case "history":     dispatch({ type: "history", messages: msg.messages }); setTrimBoundaryId(null); break;
@@ -529,7 +532,7 @@ export function App() {
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
-        case "toolLog": dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}), ...(msg.step !== undefined && msg.since !== undefined ? { step: msg.step, since: msg.since } : {}) } }); break;
+        case "toolLog": dispatch({ type: "toolLog", entry: { ...(msg.shell ? { shell: msg.shell } : {}), id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}), ...(msg.step !== undefined && msg.since !== undefined ? { step: msg.step, since: msg.since } : {}) } }); break;
         case "denialNotice":
           if (storedDenialNotice(msg.label)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: '', label: msg.label, state: 'error', at: msg.at } });
           break;
@@ -827,7 +830,7 @@ export function App() {
           onInstallUpdate={() => postToHost({ type: "installUpdate" })}
           onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
           // cr-review — a director signed in with an issuer token opens the Weekly Review here.
-          verifyPanel={reviewPanel}
+          verifyPanel={<><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{reviewPanel}</>}
         />
       ) : (
       <ChatPanel
@@ -852,7 +855,7 @@ export function App() {
           dispatch({ type: "fileAttachment", attachment: null });
           postToHost({ type: "removeFileContext" });
         }}
-        verifyPanel={carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
+        verifyPanel={runningProcesses.length || carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         sendLocked={!!state.verify?.running || !!workspace?.error}
         annotationsEnabled={state.annotationsEnabled}
         annotations={state.annotations}
