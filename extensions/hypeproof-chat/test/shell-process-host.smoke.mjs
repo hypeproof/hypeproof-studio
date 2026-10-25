@@ -85,6 +85,18 @@ try {
     assert.equal(lists().at(-1).entries.find(e => e.id === 'a-run')?.state, 'running', 'back in A, its running entry is shown again');
     f.h.runningProcesses.finish('a-run', 'stopped');
   }
+  // A reloaded webview's `ready` lists a server that started without a change event reaching the
+  // provider (verify R2): only the ready refresh can add it.
+  {
+    const lists = () => f.posts.filter(m => m.type === 'runningProcesses');
+    f.connections.active = f.activity;
+    f.h.liveServer = { currentUrl: () => 'http://127.0.0.1:43299/', currentRoot: () => root, isListening: () => true, stop: async () => {} };
+    const before = lists().length;
+    await f.handle(f.scoped({ type: 'ready' }));
+    assert.ok(lists().slice(before).some(m => m.entries.some(e => e.purpose === '라이브 서버' && e.state === 'running')), 'ready lists the running live server');
+    f.h.liveServer = { currentUrl: () => undefined, currentRoot: () => root, isListening: () => false, stop: async () => {} };
+    f.h.observeLiveProcess();
+  }
   // The provider built by its real constructor follows the real LiveServer's own change events
   // (verify3 blocker 2): the entry appears when the server starts and settles when it stops, with
   // no observeLiveProcess or ready call. Kills a missing constructor subscription (V7) and an
