@@ -66,6 +66,10 @@ test('lost completion reply survives host restart with the exact frozen mutation
   await restarted.open(); await restarted.open('rec_fixture'); await restarted.download('file_fixture');
   assert.deepEqual(restarted.view().selected.manifest.messages, syntheticRecord(true).manifest.messages);
   assert.equal(recordHash(f.state.downloads[0].bytes), syntheticRecord(true).manifest.artifacts[0].sha256);
+  f.options.download = async () => { throw Object.assign(Error('destination exists'), { code: 'EEXIST' }); };
+  await restarted.download('file_fixture');
+  assert.match(restarted.view().message, /같은 이름의 파일이 이미 있어요.*원본은 그대로.*다른 이름이나 위치/);
+  assert.equal(restarted.view().selected.id, 'rec_fixture', 'destination refusal keeps the verified record available');
 }));
 
 test('account, destination and response fences clear private views; revoked download never reaches the picker', async () => temporary(async directory => {

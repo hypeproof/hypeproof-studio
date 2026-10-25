@@ -21,6 +21,7 @@ const exact = (v: Record<string, unknown>, keys: string[]) => Object.keys(v).sor
 class RecordClientError extends Error { constructor(readonly code: string) { super(code); } }
 const authError = (error: unknown) => error instanceof RecordClientError && /^(http_401|unauthorized|session_revoked|authentication_required|invalid_token|account_deleted|account_suspended)$/.test(error.code);
 const errorMessage = (error: unknown): string => authError(error) ? '로그인을 확인하지 못했어요. 계정을 새로고침한 뒤 기록을 다시 열어 주세요.'
+  : object(error) && error.code === 'EEXIST' ? '같은 이름의 파일이 이미 있어요. 원본은 그대로예요. 다른 이름이나 위치를 골라 다시 저장해 주세요.'
   : error instanceof Error && error.message === 'outbox_corrupt' ? '저장 대기 사본을 확인할 수 없어요. 이 기기의 사본은 보존했어요. 테스트 담당자에게 복구를 요청해 주세요.'
   : error instanceof RecordClientError && error.code === 'record_consent_mismatch' ? '테스트 서비스의 저장 안내 버전이 맞지 않아요. 테스트 설정을 확인한 뒤 기록을 다시 열어 주세요. 저장 대기 사본은 보존했어요.'
   : error instanceof Error && error.message === 'pending_exists' ? '이 프로젝트에 저장 대기 사본이 있어요. 같은 사본의 저장을 마친 뒤 새 기록을 검토해 주세요.'
