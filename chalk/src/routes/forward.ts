@@ -19,6 +19,7 @@
 import type { Context } from "hono";
 import { resolveChalkVersion, resolveLabOrigin, resolveServiceOrigin, type ChalkEnv } from "../env.ts";
 import { isIssuerAllowedEndpoint } from "../shared.ts";
+import { completionProblems } from "../lib/completion-checklist.ts";
 
 type Ctx = Context<{ Bindings: ChalkEnv; Variables: { requestId: string } }>;
 
@@ -60,6 +61,22 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   if (method !== "GET" && method !== "HEAD") {
     const buf = await c.req.arrayBuffer();
     if (buf.byteLength > 0) body = buf;
+  }
+
+  // CGP-LEARN-R-015: a lesson draft's completion checklist carries no points or grade levels (OUT-05, SX-35). The page
+  // refuses them before sending; this is the same kit on the server, so a direct API call cannot store them either.
+  // A body that is not JSON is passed on unchanged: the Service validator answers it.
+  if (method === "PUT" && body && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+$/.test(url.pathname)) {
+    let draft: unknown = null;
+    try { draft = JSON.parse(new TextDecoder().decode(body)); } catch { draft = null; }
+    const problems = completionProblems((draft as { content?: unknown } | null)?.content);
+    if (problems.length) {
+      const [index, message] = problems[0]!;
+      return c.json(
+        { error: { type: "validation", field: `content.learning.completion[${index}].text`, message, request_id: rid } },
+        422,
+      );
+    }
   }
 
   let upstream: Response;
