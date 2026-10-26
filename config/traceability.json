@@ -14383,6 +14383,110 @@
           "path": "extensions/hypeproof-chat/test/style-tweak-layout.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-CGP-LEARN-15",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-INT-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/chalk-authoring.md",
+          "section": "### 완료 조건 도우미 — 무엇을 만들면 끝인가 (CGP-LEARN-R-015) · 2026-10-26"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-COMPLETION-CHECKLIST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-LEARN-15",
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/lib/completion-checklist.ts"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-COMPLETION-CHECKLIST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-LEARN-15",
+        "ST-IMP-CHALK-COMPLETION-CHECKLIST"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/completion-checklist.test.mjs"
+        },
+        {
+          "path": "docs/testing/chalk-authoring.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHALK-HELP-TRIAGE",
+      "stage": "requirement",
+      "label": "REQ-CGP-LEARN-17: Chalk help-request queue keyboard triage (next, previous, open, answer-and-advance)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-REQ-CLASSROOM-DESIGN"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/classroom-admin.md",
+          "section": "### 도움 요청 키보드 분류 · 2026-10-26 (ADM-05 · DES-06 · CGP-LEARN-R-017)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-HELP-TRIAGE",
+      "stage": "implementation",
+      "label": "Chalk /manage help queue keys, shortcut sheet and answer-and-next action",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-HELP-TRIAGE",
+        "ST-DES-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/manage.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-HELP-TRIAGE",
+      "stage": "test",
+      "label": "Headless Chromium keyboard triage, IME and text-field guards, ring and 44px geometry",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-HELP-TRIAGE",
+        "ST-IMP-CHALK-HELP-TRIAGE"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/help-triage.browser.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md"
+        }
+      ]
     }
   ]
 }

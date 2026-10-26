@@ -241,6 +241,8 @@ ChatGPT's.
 | REQ-CGP-LEARN-16 | The Studio header shows one coach run state from a fixed set: 준비됨 / 생각 중 / 찾는 중 / 만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요. | (a) Exactly one state visible at a time, derived from the existing timeline (REQ-C17) and approval state (REQ-E1). (b) "확인이 필요해요" appears whenever an approval is pending. (c) No character or animation is required to convey state. | P2 | 2 |
 | REQ-CGP-LEARN-17 | Chalk help-request queue supports keyboard triage: next, previous, open, resolve-and-advance. | (a) J/K (or ↓/↑) moves selection; Enter opens; a documented key resolves and advances. (b) "?" shows the shortcut list. (c) Shortcuts never fire inside text inputs (Korean IME composition safe). | P2 | 1 (one-instructor intent, ADM-05, DES-06) |
 
+REQ-CGP-LEARN-15 status (2026-10-26, CGP-LEARN-R-015): implemented in Chalk `/authoring` as the completion-condition helper. Requirement: `docs/requirements/chalk-authoring.md` "완료 조건 도우미". Test: T-49. Owner choices are in `decisions.md`: bare 점 is allowed, the check runs on the page and in the Chalk forwarder, and there is no Service text check.
+
 ## 3. Design requirements (same rows)
 
 | DES ID | Visual/interaction requirement | Acceptance (measurable) |
@@ -306,3 +308,7 @@ REQ/DES-CGP-LEARN-14 as built (2026-10-26, DEC-LEARN-14): Chalk `/authoring` ask
 - DEFER 10: 07, 14, 17, 18, 19, 20, 23, 24, 26, 34.
 - REJECT 12: 08, 16, 22, 30, 31, 33, 38, 39, 40, 41, 42, 43.
 - 43 inventory rows, 17 requirements, 17 design requirements.
+
+## Implementation notes
+
+- **REQ-CGP-LEARN-17 (CGP-LEARN-R-017), 2026-10-26.** Implemented in Chalk `/manage` as REQ-CHALK-HELP-TRIAGE (`docs/requirements/classroom-admin.md#help-queue-keyboard-triage`), with DES-CGP-LEARN-17. Agent choices under the owner rules (recorded in `decisions.md`): "resolve" for the instructor is 답변 완료 · 학생 확인 대기, because only the learner marks a request resolved (ADM-05); the documented key is `E`; selection is keyboard focus on the row's own button; keys listen only in the help region and the open record.
