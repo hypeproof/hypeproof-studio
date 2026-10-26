@@ -5902,6 +5902,31 @@ Only a successful, current attachment acknowledgement removes the exact unchange
 `@query`; a refusal or stale reply preserves the text. Email-like inline `@` does
 not trigger the picker. Profiles without this affordance retain ordinary typing.
 
+## Workspace file mention popover (CGP-CHAT-D-018)
+
+CGP-CHAT-D08 / PI#2 (the learner owns what goes to the AI: they see and choose the exact file):
+the list from CGP-CHAT-R-018 is a popover that floats above the composer card. It does not push
+the composer or the transcript. Its inline start is the drawn position of the `@` that opened it,
+measured from the textarea's own text metrics and wrapping (re-measured when the card or
+textarea resizes or the draft changes), and it is clamped so the popover
+stays inside the composer card (at most 320px wide, the full card at narrow widths). Its bottom
+edge is above the card, so it never covers the caret or the draft.
+
+The list shows at most 6 rows; each row is exactly 44px tall (the shared menu item height) and
+the rest scroll inside the list, never the transcript. A row shows the file name in strong
+weight, its folder in muted text (each bidi-isolated and ellipsized), and the size; the accessible
+name and hover tooltip carry the full relative path. The chosen row has the shared check icon
+and a pressed fill; in forced colours it keeps Canvas/CanvasText (Chromium's text backplate
+would hide words on a Highlight fill) and is marked by a 2px Highlight border. Text is the caption size (14px base).
+
+Keys stay in the composer: Up/Down move and wrap, Enter attaches the chosen row, Escape closes
+without changing the draft. Focus leaving the composer closes the popover unless a pick is in
+flight; a refused pick returns focus to the composer. A press on the popover's own surface keeps
+focus in the composer. Hovering the chosen row keeps its fill, and rows never lift on hover. An `@` typed during IME composition never opens it, and composing keys never move the
+choice. The surface uses the menu tokens of REQ-CGP-DS-24 and the shared focus geometry scroll
+scope. `file-mentions-popover-browser.smoke.mjs` measures all of this on the real ChatPanel in
+both seats, dark and light, 320/800/1420px and forced colours.
+
 ## Lesson step dividers (CGP-CHAT-R-023)
 
 REQ-STUDIO-LESSON-STEP-DIVIDER / CGP-CHAT-R56 (CGP-CHAT-056) / PI#3 (learning is embedded in
@@ -5918,7 +5943,9 @@ short-circuit answer or an instructor-mode re-send therefore leaves that message
 boundary rather than a stale one.
 
 The chat draws a read-only divider "n단계: {name}" (a full-width hairline with the label centred,
-14px floor, not focusable, `role="separator"`) before the first prompt served under a step and
+14px floor, not focusable, `role="separator"`; CGP-CHAT-D-023: at least 24px of line stays on each
+side of the label, so a title at the 60-character cap wraps in a narrow chat column instead of
+squeezing the hairline away) before the first prompt served under a step and
 wherever the served step differs from the previous marked prompt. Unmarked lines (older history,
 app-answered shortcuts, tool lines) neither start nor break a run. Region A's footer shows a quiet
 44px "지금 단계로" button only when the step on screen in the rail has a divider; it scrolls the
@@ -5932,7 +5959,7 @@ Evidence: `extensions/hypeproof-chat/test/lesson-step-divider.smoke.mjs` (pure r
 controls; real agent-sdk and proxy provider turns including reload, retry, a re-send after a
 step change ending in the model path, an app short-circuit or instructor mode, instructor and
 lesson-less seats; the rendered ChatPanel) and `lesson-step-divider-layout.smoke.mjs` (computed
-layout and the real jump in headless Chromium, dark/light, 800/1420 px, forced colours; fails
+layout and the real jump in headless Chromium, dark/light, 360/800/1420 px with a 60-character title, forced colours; fails
 under `FOCUS_REQUIRE_BROWSER=1` without a browser).
 
 ### Collapsible pasted text (CGP-CHAT-R-017)
@@ -6136,18 +6163,22 @@ are flattened to one line without Markdown heading or emphasis characters.
 
 The item is disabled while an answer streams and when nothing can be copied. It is shown only on
 the personal learner task (not classroom, lesson or instructor seats, which have no task menu;
-classroom copy is a follow-up). 대화 내용을 복사했습니다 appears in a role=status line under the
-header, inside the 740px reading column, only after the clipboard write resolves, and stays 4 s.
-A failed write shows 대화 내용을 복사하지 못했습니다. 다시 시도해 주세요. as role=alert until the next
-press or a task change. Each press is an attempt: a stale write never overrides a newer result,
+classroom copy is a follow-up). The result uses the answer-copy toast (CGP-CHAT-D-024 /
+CGP-CHAT-D62): the same `CopyFeedback` outlet above the composer, check or alert icon, computed
+chrome (border, radius, padding, 14px text, 360px cap) and 160 ms entry as 답변 복사, announced
+through the same always-mounted live regions. 대화 내용을 복사했습니다 appears only after the
+clipboard write resolves and stays 4 s (polite). A failed write shows 대화 내용을 복사하지
+못했습니다. 다시 시도해 주세요. (assertive, like answer copy) until the next press or a task change. Each press is an attempt: a stale write never overrides a newer result,
 and a write started in another task never confirms in the current one. Nothing leaves the device;
 no host message, file or network request is added.
 
 Tests: `test/conversation-copy.smoke.mjs` (order, headings, exclusions, scrub, control
 characters, empty conversation, positive control) and `test/conversation-copy-browser.smoke.mjs`
 (real App bundle in headless Chromium, both seats, dark/light, 320/800/1420 px, forced colours,
-44px menu item, >=14px status, success only after the write, failure alert, double press, task
-switch, streaming, retried answers, edited prompts and the version pager). Native clipboard behaviour in the packaged app is owner-verified (NOT RUN here).
+44px menu item, >=14px status, the answer-copy toast measured against a real 답변 복사 toast on
+the same page (computed chrome, icon, live region, 160 ms entry), success only after the write,
+failure alert, double press, task switch, streaming, retried answers, edited prompts and the
+version pager). Native clipboard behaviour in the packaged app is owner-verified (NOT RUN here).
 
 ## Lesson tip above the composer (CGP-CHAT-R-021)
 
@@ -6343,7 +6374,9 @@ tasks. Class, lesson and instructor seats have no 보관하기 (class profiles k
 either; archive deletes nothing on any seat). Tests: `test/task-archive.test.mjs` (store and the real
 host), `test/task-archive-ui.test.tsx` (mounted rail and menu per seat),
 `test/task-archive-layout.smoke.mjs` (computed 44px, 14px, overflow, neutral colour, focus ring and
-forced colours in headless Chromium).
+forced colours in headless Chromium); `test/task-archive-menu-browser.smoke.mjs` (CGP-CHAT-D-025: the task menu's
+보관하기 in the real App bundle, a 44px menu item at 14px drawn like the neutral 설정 item and never in
+the error colour, one taskArchive per press, disabled while an answer streams, absent on class seats).
 
 ## My-questions jump list (CGP-CHAT-R-028)
 
@@ -6522,7 +6555,7 @@ result per task, at its latest matching message, newest first, at most 50. Tasks
 message text are shown as a separate group, `찾은 대화`, under the filtered title list; a task that
 already matched by title is not listed twice, and a name-only answer from the host is not shown again.
 A result shows the task name, a plain-text snippet around the match and the matched message's date;
-the match is bold, never colour alone, and everything is rendered as text. When neither a title nor
+the match is bold, never colour alone, and everything is rendered as text. The same holds in the title-filtered list (CGP-CHAT-D-026): while a query is applied, the part of each listed title that matched is bold with the filter's own key (NFC, case folded), mapped back to the title as stored (decomposed jamo included, never splitting a grapheme cluster); the row's accessible name and text stay the whole title, and with no query nothing is bold. When neither a title nor
 message text matches, the group says `찾는 대화가 없어요` under the title filter's no-match line; when
 the host cannot read the task file it says `작업 기록을 읽지 못해 지금은 찾을 수 없어요` instead of
 claiming no match. The previous answer stays on screen until the next one arrives. Opening a result
@@ -6536,7 +6569,7 @@ search. Evidence: `extensions/hypeproof-chat/test/task-search.smoke.mjs` (pure s
 host routing, no network) and `extensions/hypeproof-chat/test/task-search-browser.smoke.mjs`
 (mounted rail and transcript in headless Chromium, dark/light, 800/1420 px, forced colours, 44px
 targets, 14px text, no task listed twice; fails under `FOCUS_REQUIRE_BROWSER=1` without a
-browser); `task-rail-search.smoke.mjs` proves no post while composing or for a blank query. This
+browser); `task-rail-search.smoke.mjs` proves no post while composing or for a blank query, and measures the bold title match (computed weight above the rest of the title, >=14px) on the real App bundle. This
 supports PI#1 learner agency: the learner finds and reopens their own earlier work without asking
 the AI.
 

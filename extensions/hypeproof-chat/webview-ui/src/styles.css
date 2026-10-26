@@ -1244,10 +1244,12 @@ html, body, #root {
   line-height: var(--ds-c-studio-styles-typography-5);
   color: var(--hp-text-muted-default);
 }
+/* CGP-CHAT-D-023 — each side keeps at least 24px of line: a long title (60 characters) wraps in a narrow chat column
+   instead of squeezing the hairline to nothing. */
 .hps-step-divider::before,
 .hps-step-divider::after {
   content: "";
-  flex: 1 1 0;
+  flex: 1 0 var(--ds-c-studio-styles-space-4);
   border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default);
 }
 .hps-step-divider-label { flex: 0 1 auto; min-width: 0; text-align: center; overflow-wrap: anywhere; }

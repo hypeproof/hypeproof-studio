@@ -1,10 +1,12 @@
 // CGP-CHAT-R-024 (REQ-STUDIO-COPY-CONVERSATION) — "대화 내용 복사" in the personal task menu.
 // The text is built from the visible transcript at the press (src/conversationCopy.ts) and the
 // result is shown only after the clipboard write settles, bound to the attempt and the task.
+// CGP-CHAT-D-024: the result uses the answer-copy toast (CopyFeedback), not a line of its own.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage } from '../../src/protocol';
 import { COPY_CONVERSATION_CONFIRM_MS, COPY_CONVERSATION_DONE, COPY_CONVERSATION_FAILED, conversationMarkdown, copyableMessages } from '../../src/conversationCopy';
-import { writeClipboard, type CopyState } from './ChatDetails';
+import { ChatIcon, writeClipboard, type CopyState } from './ChatDetails';
+import { CopyFeedback } from './CopyFeedback';
 
 interface Feedback { state: CopyState; attempt: number }
 
@@ -38,8 +40,7 @@ export function useConversationCopy(scope: string, input: { messages: readonly C
   return { state: feedback.state, available, copy };
 }
 
-/** Always mounted, so the live region exists before the message arrives. Failure is an alert. */
+/** The same toast, icon and live regions as answer copy: success is polite, a failure assertive and kept. */
 export function ConversationCopyStatus({ state }: { state: CopyState }) {
-  const text = state === 'copied' ? COPY_CONVERSATION_DONE : state === 'failed' ? COPY_CONVERSATION_FAILED : '';
-  return <div className="tw-copy-conversation-status" role={state === 'failed' ? 'alert' : 'status'} aria-atomic="true" data-shown={text ? 'true' : 'false'}>{text}</div>;
+  return <CopyFeedback failed={state === 'failed'} className="hps-conversation-copy-status">{state !== 'idle' && <><ChatIcon kind={state === 'failed' ? 'alert' : 'check'} size={16} /><span>{state === 'copied' ? COPY_CONVERSATION_DONE : COPY_CONVERSATION_FAILED}</span></>}</CopyFeedback>;
 }

@@ -6,6 +6,8 @@
 // blank query. Owner reconciliation with CGP-CHAT-R-026: each committed, non-blank query posts exactly one
 // `taskSearch` (message-text search, debounced) and nothing else, so no model request. Computed
 // geometry: the field is a 44px target with >=14px text inside the rail, dark and light, 1420 and 800 px.
+// CGP-CHAT-D-026: the matched part of a filtered title is a <strong> with a computed weight above the
+// rest of the title (not colour only), mapped back to the stored characters, decomposed jamo included.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +15,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { THEMES } from './lib/vscode-default-themes.mjs';
 import { chatConfig } from './sx-screen-fixtures.mjs';
 import { findChromium, launch } from './lib/headless-chromium.mjs';
-import { filterTasksByTitle } from '../webview-ui/src/taskTitleFilter.ts';
+import { filterTasksByTitle, markTitleMatches } from '../webview-ui/src/taskTitleFilter.ts';
 
 // Pure controls first (no browser): positive and negative.
 const sample = [{ title: '고양이 페이지' }, { title: '강아지 그림'.normalize('NFD') }, { title: 'Cat Notes' }];
@@ -22,6 +24,16 @@ assert.deepEqual(filterTasksByTitle(sample, 'cAT').map(t => t.title), ['Cat Note
 assert.equal(filterTasksByTitle(sample, '  ').length, 3, 'a blank query shows every task');
 assert.equal(filterTasksByTitle(sample, '토끼').length, 0, 'a non-matching query shows none (negative control)');
 assert.equal(filterTasksByTitle(sample, '페이지 그림').length, 0, 'the query is one substring, not a word search');
+// CGP-CHAT-D-026: the matched part of a filtered title is marked (rendered bold), with the filter's own key.
+const marked = (title, query) => markTitleMatches(title, query).map(p => (p.match ? `[${p.text}]` : p.text)).join('');
+assert.equal(marked('고양이 페이지', '고양'), '[고양]이 페이지', 'the matched part is marked');
+assert.equal(marked('Cat Notes', 'cAT'), '[Cat] Notes', 'case folded; the stored case is kept');
+assert.equal(marked('강아지 그림'.normalize('NFD'), '아지'), `강${'[아지]'.normalize('NFD')} 그림`.normalize('NFD'), 'a decomposed title marks its own characters');
+assert.equal(markTitleMatches('강아지 그림'.normalize('NFD'), '강아지').map(p => p.text).join(''), '강아지 그림'.normalize('NFD'), 'parts join back to the exact stored title');
+assert.equal(marked('cat cat', ' cat '), '[cat] [cat]', 'every occurrence; outer whitespace ignored');
+assert.equal(marked('👩‍👩‍👧 cat', 'cat'), '👩‍👩‍👧 [cat]', 'an emoji cluster is never split');
+assert.equal(marked('고양이 페이지', '  '), '고양이 페이지', 'a blank query marks nothing');
+assert.equal(marked('날씨 앱', '토끼'), '날씨 앱', 'no match marks nothing (negative control)');
 
 const bin = findChromium();
 if (!bin) { if (process.env.FOCUS_REQUIRE_BROWSER === '1') throw Error('Chromium required'); console.log('NOT RUN task rail search App: no Chromium'); process.exit(0); }
@@ -50,7 +62,8 @@ const taskA = [
   { id: 'a4', title: '날씨 앱', createdAt: 1, updatedAt: 1, messageCount: 1 },
 ];
 const allA = taskA.map(t => t.title);
-const workspaceA = { scope: 'activity-a', revision: 1, activeTaskId: 'a1', tasks: taskA, sourceSelection: null };
+const archivedA = [{ id: 'z1', title: '옛 고양이 숙제', createdAt: 1, updatedAt: 1, messageCount: 0, archivedAt: 1792700000000 }];
+const workspaceA = { scope: 'activity-a', revision: 1, activeTaskId: 'a1', tasks: taskA, archived: archivedA, sourceSelection: null };
 const workspaceB = { scope: 'activity-b', revision: 1, activeTaskId: 'b1', tasks: [{ id: 'b1', title: '고양이 퀴즈', createdAt: 1, updatedAt: 2, messageCount: 0 }, { id: 'b2', title: '우주 이야기', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null };
 const configFor = (workspace, id) => chatConfig(3, { activity: { ...chatConfig().activity, id, kind: 'personal' }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: workspace });
 let states = 0;
@@ -81,6 +94,12 @@ try {
     assert.deepEqual(await postsSince(posted), [], 'nothing is posted to the host while an IME composition is open');
     await b.send('Input.insertText', { text: '고양' }); await settle();
     assert.deepEqual(await titles(), ['고양이 페이지'], 'after the IME commit only matching titles remain');
+    // CGP-CHAT-D-026: the match in the filtered title is bold on the real markup, not colour only; the row's name is unchanged.
+    const bold = await b.evaluate(`(()=>{const t=document.querySelector('.tw-task-list .tw-task-title'),s=t.querySelector('strong'),p=t.querySelector('span:not(.tw-task-mark)');return {strong:[...t.querySelectorAll('strong')].map(e=>e.textContent),weight:s&&Number(getComputedStyle(s).fontWeight),plain:p&&Number(getComputedStyle(p).fontWeight),font:s&&parseFloat(getComputedStyle(s).fontSize),name:t.closest('button').getAttribute('aria-label')??t.textContent}})()`);
+    assert.deepEqual(bold.strong, ['고양'], `the matched part of the title is marked: ${JSON.stringify(bold)}`);
+    assert.ok(bold.weight >= 600 && bold.plain < bold.weight, `the title match is bold, not colour only: ${JSON.stringify(bold)}`);
+    assert.ok(bold.font >= 14, `bold match text >= 14px: ${JSON.stringify(bold)}`);
+    assert.ok(bold.name.startsWith('고양이 페이지'), `the accessible name keeps the whole title: ${bold.name}`);
     await pause();
     const afterCommit = await postsSince(posted);
     assert.deepEqual(afterCommit.map(m => [m.type, m.query]), [['taskSearch', '고양']], `a committed query posts exactly one taskSearch: ${JSON.stringify(afterCommit)}`);
@@ -90,6 +109,18 @@ try {
     await clearField();
     assert.equal(await b.evaluate(`(${field}).value`), '');
     assert.deepEqual(await titles(), allA, 'clearing restores the full list');
+    assert.equal(await b.evaluate(`document.querySelectorAll('.tw-task-list .tw-task-title strong').length`), 0, 'no bold title part without a query');
+
+    // CGP-CHAT-D-026: the archive list marks the match the same way (bold, whole title kept), and clearing unmarks it.
+    await typeCommitted('고양');
+    await b.evaluate(`document.querySelector('.tw-archive-open').click()`); await settle(150);
+    const arch = await b.evaluate(`(()=>{const t=document.querySelector('.tw-archive-list .tw-task-title'),s=t&&t.querySelector('strong');return {text:t&&t.textContent,strong:t?[...t.querySelectorAll('strong')].map(e=>e.textContent):null,weight:s&&Number(getComputedStyle(s).fontWeight)}})()`);
+    assert.deepEqual(arch.strong, ['고양'], `the matched part of an archived title is marked: ${JSON.stringify(arch)}`);
+    assert.equal(arch.text, '옛 고양이 숙제', 'the archived title keeps its whole text');
+    assert.ok(arch.weight >= 600, `the archive match is bold: ${JSON.stringify(arch)}`);
+    await b.evaluate(`document.querySelector('.tw-archive-back').click()`); await settle(150);
+    await pause(); await clearField();
+    assert.deepEqual(await titles(), allA, 'back from the archive with the query cleared lists every task');
 
     // A title stored decomposed matches the composed syllables an IME commits.
     await compose('강아지'); await b.send('Input.insertText', { text: '강아지' }); await settle();
@@ -121,7 +152,7 @@ try {
     // non-blank query (CGP-CHAT-R-026), none for composing, clearing or the blank query.
     await pause();
     const sent = await postsSince(posted);
-    assert.deepEqual(sent.map(m => [m.type, m.query]), [['taskSearch', '고양'], ['taskSearch', '강아지'], ['taskSearch', 'cat'], ['taskSearch', '토끼']], `only committed queries reach the host: ${JSON.stringify(sent)}`);
+    assert.deepEqual(sent.map(m => [m.type, m.query]), [['taskSearch', '고양'], ['taskSearch', '고양'], ['taskSearch', '강아지'], ['taskSearch', 'cat'], ['taskSearch', '토끼']], `only committed queries reach the host: ${JSON.stringify(sent)}`);
 
     // Another activity: only its own tasks, and the search starts empty (a stale query would hide them).
     await typeCommitted(''); await clearField(); await typeCommitted('고양');

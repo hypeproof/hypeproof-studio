@@ -2,6 +2,8 @@
 // menu, writes the visible conversation as Markdown, and confirms only after the clipboard write
 // settles. The clipboard is a controllable stub, so success, failure and a write still in flight
 // are each observed. Computed geometry: 44px item target, >=14px status text inside the column.
+// CGP-CHAT-D-024: the result is the answer-copy toast (same outlet, icon, live regions, 160ms entry,
+// computed chrome), measured against a real 답변 복사 toast on the same page.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +25,20 @@ const send = async (data) => { await b.evaluate(`window.dispatchEvent(new Messag
 const clipboardStub = `window.__writes=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:(text)=>new Promise((resolve,reject)=>window.__writes.push({text,resolve,reject}))}});`;
 const item = `[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='대화 내용 복사')`;
 const openMenu = async () => { await b.evaluate(`(()=>{const t=document.querySelector('.tw-chat-menu-toggle');if(t&&t.getAttribute('aria-expanded')!=='true')t.click();})()`); await settle(); };
-const status = () => b.evaluate(`(()=>{const e=document.querySelector('.tw-copy-conversation-status');return e?{text:e.textContent,role:e.getAttribute('role')}:null})()`);
+const DONE = '대화 내용을 복사했습니다', FAILED = '대화 내용을 복사하지 못했습니다. 다시 시도해 주세요.';
+// The visible toast (hidden from AT) plus the two always-mounted live regions answer copy announces through.
+const status = () => b.evaluate(`(()=>{const t=document.querySelector('.hps-copy-toasts .hps-conversation-copy-status');const live=s=>document.querySelector(s)?.textContent??null;return {text:t?t.textContent:'',icon:t?.querySelector('[data-icon]')?.getAttribute('data-icon')??null,polite:live('.hps-copy-live[role=status]'),assertive:live('.hps-copy-live[aria-live=assertive]')}})()`);
+const expectStatus = async (want, message) => {
+  const s = await status();
+  if (want === null) { assert.equal(s.text, '', message); for (const t of [DONE, FAILED]) assert.ok(!(s.polite ?? '').includes(t) && !(s.assertive ?? '').includes(t), `${message}: nothing announced`); return s; }
+  const text = want === 'copied' ? DONE : FAILED;
+  assert.equal(s.text, text, message); assert.equal(s.icon, want === 'copied' ? 'check' : 'alert', `${message}: same icon as answer copy`);
+  assert.ok((want === 'copied' ? s.polite : s.assertive)?.includes(text), `${message}: announced ${want === 'copied' ? 'politely' : 'assertively'} like answer copy`);
+  assert.ok(!(want === 'copied' ? s.assertive : s.polite)?.includes(text), `${message}: announced once`);
+  return s;
+};
+// Computed chrome compared between the conversation toast and a real answer-copy toast.
+const chrome = (sel) => `(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)return null;const c=getComputedStyle(e);return ['animationName','animationDuration','fontSize','lineHeight','borderTopStyle','borderTopWidth','borderTopColor','borderTopLeftRadius','backgroundColor','color','paddingTop','paddingLeft','maxWidth'].map(k=>k+'='+c[k]).join(';')})()`;
 const history = [
   { id: 'u1', role: 'user', content: '고양이 소개 페이지를 만들고 싶어요', createdAt: 1 },
   { id: 'think-1', role: 'tool', content: '', createdAt: 2, tool: { icon: 'think', label: '숨은 생각 줄', state: 'done' } },
@@ -46,7 +61,7 @@ try {
     if (seat === 'classroom') {
       await send({ type: 'history', messages: history });
       assert.equal(await b.evaluate(`!!(${item})`), false, 'classroom and lesson seats have no task menu item (personal task only)');
-      assert.equal(await status(), null, 'no copy status region outside the personal task');
+      await expectStatus(null, 'no conversation copy result outside the personal task');
       states++; continue;
     }
     await openMenu();
@@ -68,29 +83,41 @@ try {
     await b.evaluate(`(${item}).click()`); await settle();
     assert.equal(await b.evaluate(`window.__writes.length`), 1, 'one clipboard write per press');
     assert.equal(await b.evaluate(`window.__writes[0].text`), expected, 'visible user/assistant text in order, tool and think lines excluded, credential scrubbed');
-    assert.deepEqual(await status(), { text: '', role: 'status' }, 'no success before the clipboard write settles');
+    await expectStatus(null, 'no success before the clipboard write settles');
     assert.equal(await b.evaluate(`document.activeElement?.classList.contains('tw-chat-menu-toggle')`), true, 'focus returns to the menu toggle');
     await b.evaluate(`window.__writes[0].resolve()`); await settle();
-    assert.deepEqual(await status(), { text: '대화 내용을 복사했습니다', role: 'status' });
-    const shown = await b.evaluate(`(()=>{const e=document.querySelector('.tw-copy-conversation-status');const r=e.getBoundingClientRect();const col=document.querySelector('.hps-shell').getBoundingClientRect();return {font:parseFloat(getComputedStyle(e).fontSize),visible:r.width>0&&r.height>0,inside:r.left>=col.left-0.5&&r.right<=col.right+0.5,border:getComputedStyle(e).borderTopStyle,width:r.width}})()`);
-    assert.ok(shown.width <= 741, `status keeps the 740px reading column: ${shown.width}`);
-    assert.ok(shown.font >= 14, `status text >= 14px: ${shown.font}`); assert.equal(shown.visible, true); assert.equal(shown.inside, true, 'status stays inside the chat column'); assert.equal(shown.border, 'solid');
+    await expectStatus('copied', 'success after the write resolves');
+    const shown = await b.evaluate(`(()=>{const e=document.querySelector('.hps-copy-toasts .hps-conversation-copy-status');const r=e.getBoundingClientRect();const col=document.querySelector('.hps-shell').getBoundingClientRect();const footer=e.closest('footer');const c=getComputedStyle(e);return {font:parseFloat(c.fontSize),visible:r.width>0&&r.height>0,inside:r.left>=col.left-0.5&&r.right<=col.right+0.5,inFooter:!!footer&&r.bottom<=footer.getBoundingClientRect().bottom+0.5,hidden:!!e.closest('[aria-hidden=true]'),border:c.borderTopStyle,width:r.width,animation:c.animationName,duration:c.animationDuration,inView:r.top>=0&&r.bottom<=innerHeight}})()`);
+    assert.ok(shown.width <= 360.1, `toast keeps the answer-copy toast cap: ${shown.width}`);
+    assert.ok(shown.font >= 14, `status text >= 14px: ${shown.font}`); assert.equal(shown.visible, true); assert.equal(shown.inside, true, 'toast stays inside the chat column'); assert.equal(shown.border, 'solid');
+    assert.equal(shown.inFooter, true, 'toast sits in the composer footer outlet with answer copy'); assert.equal(shown.inView, true); assert.equal(shown.hidden, true, 'the visual copy is not announced twice');
+    assert.equal(shown.animation, 'chat-feedback'); assert.equal(shown.duration, '0.16s', 'D62: the 160ms answer-copy entry');
+    // Same chrome as answer copy, computed on the real markup (not two declarations that happen to match).
+    const conversationChrome = await b.evaluate(chrome('.hps-copy-toasts .hps-conversation-copy-status'));
+    await b.evaluate(`document.querySelector('[aria-label="답변 복사"]').click()`); await settle();
+    await b.evaluate(`window.__writes.at(-1).resolve()`); await settle();
+    const answerToast = '.hps-copy-toasts .hps-copy-toast:not(.hps-conversation-copy-status)';
+    assert.equal(await b.evaluate(`document.querySelector(${JSON.stringify(answerToast)})?.textContent`), '답변을 복사했습니다', 'answer copy toast shown for the comparison');
+    assert.equal(conversationChrome, await b.evaluate(chrome(answerToast)), 'conversation copy toast computes the same chrome as the answer copy toast');
+    await expectStatus('copied', 'both toasts can show together');
+    // The answer copy took write 1 (settled); drop it so the indexes below stay the menu presses.
+    assert.equal(await b.evaluate(`window.__writes.splice(1).length`), 1);
     if (evidence) { const shot = await b.send('Page.captureScreenshot', { format: 'png' }); writeFileSync(`${evidence}/personal-${width}-${dark ? 'dark' : 'light'}.png`, Buffer.from(shot.data, 'base64')); }
     // Failure: an alert that stays.
     await openMenu(); await b.evaluate(`(${item}).click()`); await settle();
-    assert.deepEqual(await status(), { text: '', role: 'status' }, 'a new press clears the previous result');
+    await expectStatus(null, 'a new press clears the previous result');
     await b.evaluate(`window.__writes[1].reject(new Error('denied'))`); await settle(5000);
-    assert.deepEqual(await status(), { text: '대화 내용을 복사하지 못했습니다. 다시 시도해 주세요.', role: 'alert' }, 'failure is an alert and does not time out');
+    await expectStatus('failed', 'failure is assertive and does not time out');
     // A double press: only the latest write reports.
     await openMenu(); await b.evaluate(`(${item}).click()`); await openMenu(); await b.evaluate(`(${item}).click()`); await settle();
     await b.evaluate(`window.__writes[3].resolve()`); await settle(); await b.evaluate(`window.__writes[2].reject(new Error('late'))`); await settle();
-    assert.equal((await status()).text, '대화 내용을 복사했습니다', 'a stale write never overrides the latest result');
+    assert.equal((await status()).text, DONE, 'a stale write never overrides the latest result');
     // Task switch while a write is in flight: its result is not shown in the other task.
     await openMenu(); await b.evaluate(`(${item}).click()`); await settle();
     await send({ type: 'config', config: { ...base, taskWorkspace: { ...workspace, revision: 2, activeTaskId: 'other' } } });
     await send({ type: 'history', messages: [] });
     await b.evaluate(`window.__writes[4].resolve()`); await settle();
-    assert.deepEqual(await status(), { text: '', role: 'status' }, 'a write from the previous task does not confirm in this one');
+    await expectStatus(null, 'a write from the previous task does not confirm in this one');
     // Versions: the copy is the transcript as drawn. A retried answer keeps only the attempt on
     // screen; an edited prompt keeps only the version on screen, and paging changes what is copied.
     const versions = [...history,
@@ -121,7 +148,7 @@ try {
   const fcBase = chatConfig(3, { activity: { ...chatConfig().activity, kind: 'personal' }, profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: { scope: 'fc', revision: 1, activeTaskId: 'task', tasks: [{ id: 'task', title: '고양이 페이지', createdAt: 1, updatedAt: 1, messageCount: 4 }], sourceSelection: null } });
   await send({ type: 'config', config: fcBase }); await send({ type: 'history', messages: history });
   await openMenu(); await b.evaluate(`(${item}).click()`); await settle(); await b.evaluate(`window.__writes[0].resolve()`); await settle();
-  const fc = await b.evaluate(`(()=>{const e=document.querySelector('.tw-copy-conversation-status');const s=getComputedStyle(e);return {style:s.borderTopStyle,width:parseFloat(s.borderTopWidth),color:s.borderTopColor}})()`);
+  const fc = await b.evaluate(`(()=>{const e=document.querySelector('.hps-copy-toasts .hps-conversation-copy-status');const s=getComputedStyle(e);return {style:s.borderTopStyle,width:parseFloat(s.borderTopWidth),color:s.borderTopColor}})()`);
   assert.equal(fc.style, 'solid'); assert.ok(fc.width >= 1, `forced-colors border: ${JSON.stringify(fc)}`);
-  console.log(`PASS actual App conversation copy in ${states} seat/theme/width states + forced colours: menu item, confirmed-after-write, failure alert, stale and cross-task writes, streaming, classroom exclusion`);
+  console.log(`PASS actual App conversation copy in ${states} seat/theme/width states + forced colours: menu item, answer-copy toast (160ms, same computed chrome), confirmed-after-write, failure alert, stale and cross-task writes, streaming, classroom exclusion`);
 } finally { await b.close(); }
