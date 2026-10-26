@@ -298,11 +298,17 @@ body.vscode-high-contrast :is(.hps-tools-menu, .hps-shell .hps-tools-menu, .hps-
 /* CGP-SHELL-R-028: 내 작업 내보내기 shares the entry style (44px, caption >=14px) and keeps a border in forced colours. */
 .hps-preferences .hps-open-shortcuts, .hps-preferences .hps-export-work { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
 @media (forced-colors: active) { .hps-preferences .hps-export-work { border: var(--ds-c-studio-chatdetails-size-3) solid ButtonText; } }
-.hps-shortcut-list { margin: 0; padding: 0; display: grid; gap: var(--ds-c-studio-chatdetails-space-2); }
-.hps-shortcut-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-5); padding: var(--ds-c-studio-chatdetails-space-2) 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); }
-.hps-shortcut-row dt { flex: 0 0 auto; margin: 0; white-space: nowrap; }
-.hps-shortcut-row dd { flex: 1 1 auto; margin: 0; color: var(--vscode-foreground, inherit); }
-.hps-shortcut-row dd small { display: block; font-size: var(--hp-font-caption); }
+.hps-shortcut-list { inline-size: 100%; margin: 0; border-collapse: collapse; }
+/* CGP-CHAT-D-030: two columns (key, action). The key cell stays on one line; in a narrow window it
+   wraps between key caps, never inside one, so the table stays two columns down to 320px. */
+.hps-shortcut-list th, .hps-shortcut-list td { padding-block: var(--ds-c-studio-chatdetails-space-2); padding-inline: 0 var(--ds-c-studio-chatdetails-space-5); text-align: start; vertical-align: baseline; border-block-end: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); }
+.hps-shortcut-list th:last-child, .hps-shortcut-list td:last-child { padding-inline-end: 0; }
+.hps-shortcut-list thead th { font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.hps-shortcut-list .hps-shortcut-keys { font-weight: var(--hp-weight-regular); white-space: nowrap; }
+@media (max-width: 480px) { .hps-shortcut-list .hps-shortcut-keys { white-space: normal; } }
+.hps-shortcut-keys > span { white-space: nowrap; }
+.hps-shortcut-list td { color: var(--vscode-foreground, inherit); }
+.hps-shortcut-list td small { display: block; font-size: var(--hp-font-caption); }
 .hps-shortcut-row kbd { font: inherit; font-size: var(--hp-font-caption); padding: 0 var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); border-radius: var(--ds-c-studio-chatdetails-radius-10); }
 /* REQ-STUDIO-UI-POLISH-1: the access line is an inline notice (.hps-notice-caution, the offline
    banner's surface in styles.css) inside the composer's column, not loose text above it. Its one

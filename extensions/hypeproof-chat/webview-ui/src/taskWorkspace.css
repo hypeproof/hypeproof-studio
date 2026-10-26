@@ -53,6 +53,8 @@
 .tw-home-panel[hidden] { display: none; }
 .tw-home-materials { overflow: auto; overscroll-behavior: contain; }
 .tw-search { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-12); margin: var(--ds-c-studio-taskworkspace-space-34) var(--ds-c-studio-taskworkspace-space-13) var(--ds-c-studio-taskworkspace-space-18); color: var(--tw-muted); font-size: var(--hp-font-caption); }
+/* CGP-KNOW-D-001: the folded field on windows under 360px is one 44px icon button in the field's place. */
+.tw-workspace .tw-search-toggle { align-self: flex-start; display: inline-flex; align-items: center; justify-content: center; width: var(--hp-control-min); padding: 0; margin: var(--ds-c-studio-taskworkspace-space-34) var(--ds-c-studio-taskworkspace-space-13) var(--ds-c-studio-taskworkspace-space-18); color: var(--tw-muted); }
 .tw-search input { width: 100%; box-sizing: border-box; min-height: var(--hp-control-min); padding: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); }
 .tw-rail-heading { color: var(--tw-muted); display: flex; justify-content: space-between; margin: 0 var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-12); font-size: var(--hp-font-caption); }
 .tw-task-list, .tw-source-list { list-style: none; padding: 0; margin: 0; overflow: auto; min-height: 0; overscroll-behavior: contain; }

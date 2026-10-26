@@ -4,7 +4,8 @@
 // queued message and renaming the task each show one toast; 되돌리기 restores the exact prior state;
 // a recovery item (보내지 못한 메시지) keeps its confirm and shows no toast. Geometry (computed, real markup):
 // centred above the composer, ≤360px wide, 44px 되돌리기, ≥14px text on the personal seat, role=status,
-// no page overflow at 320px, a visible border in forced colours. Timing: gone after 6 s, held by hover.
+// no page overflow at 320px, a visible border in forced colours, inside the chat panel box (CGP-CHAT-D-029).
+// Timing: gone after 6 s, held by hover and by focus, running again once either ends.
 // Throws under FOCUS_REQUIRE_BROWSER=1 without Chromium; prints NOT RUN otherwise.
 // Run: FOCUS_REQUIRE_BROWSER=1 node test/removal-undo-browser.smoke.mjs   (PNGs: UNDO_TOAST_EVIDENCE=<dir>)
 import assert from 'node:assert/strict';
@@ -82,6 +83,9 @@ try {
     const g = await ev(`(()=>{const t=document.querySelector('[data-testid="undo-toast"]'),input=document.querySelector('.hps-input'),btn=t.querySelector('.hps-undo-toast-action'),txt=t.querySelector('.hps-undo-toast-text');const r=t.getBoundingClientRect(),i=input.getBoundingClientRect(),c=btn.getBoundingClientRect(),p=t.parentElement.getBoundingClientRect();const s=getComputedStyle(t);return {bottom:r.bottom,inputTop:i.top,center:(r.left+r.right)/2,colCenter:(p.left+p.right)/2,width:r.width,left:r.left,right:r.right,pl:p.left,pr:p.right,bw:c.width,bh:c.height,font:parseFloat(getComputedStyle(txt).fontSize),btnFont:parseFloat(getComputedStyle(btn).fontSize),border:s.borderTopStyle,borderW:parseFloat(s.borderTopWidth),borderColor:s.borderTopColor,bg:s.backgroundColor,color:s.color,page:document.documentElement.scrollWidth}})()`);
     assert.ok(g.bottom <= g.inputTop + 0.5 && g.inputTop - g.bottom <= 24, `${tag}: directly above the composer (gap ${g.inputTop - g.bottom})`);
     assert.ok(Math.abs(g.center - g.colCenter) <= 1, `${tag}: centred in the chat column (${g.center} vs ${g.colCenter})`);
+    // CGP-CHAT-D-029 / D85 "inside the chat panel": the toast is drawn by the panel itself and stays inside its box.
+    const inPanel = await ev(`(()=>{const t=document.querySelector('[data-testid="undo-toast"]'),shell=t.closest('.hps-shell');if(!shell)return null;const r=t.getBoundingClientRect(),s=shell.getBoundingClientRect();return r.left>=s.left-0.5&&r.right<=s.right+0.5&&r.top>=s.top-0.5&&r.bottom<=s.bottom+0.5})()`);
+    assert.equal(inPanel, true, `${tag}: the toast sits inside the chat panel box`);
     assert.ok(g.width <= 360.5 && g.left >= g.pl - 0.5 && g.right <= g.pr + 0.5, `${tag}: content width ≤360px inside the column (${g.width})`);
     assert.ok(g.bw >= 44 && g.bh >= 44, `${tag}: 되돌리기 is a 44px target (${g.bw}×${g.bh})`);
     if (seat === 'personal') assert.ok(g.font >= 14 && g.btnFont >= 14, `${tag}: ≥14px text (${g.font}/${g.btnFont})`);
@@ -313,5 +317,11 @@ try {
   await ev(`document.querySelector('.hps-undo-toast-action').focus()`);
   await pause(6800);
   assert.equal((await toast()).shown, 'true', 'focus holds the toast');
+  // CGP-CHAT-D-029: the focus hold ends with the focus; the time then runs again (never shorter than 6 s).
+  await ev(`document.querySelector('.hps-input textarea').focus()`);
+  await pause(5500);
+  assert.equal((await toast()).shown, 'true', 'after focus leaves, still offered before 6 s');
+  await pause(900);
+  assert.equal((await toast()).shown, 'false', 'a full 6 s after focus leaves, it goes');
   console.log(`PASS removal undo toast: geometry, behaviour per removal kind, timing${evidence ? ` (${shots} PNGs in ${evidence})` : ''}`);
 } finally { await b.close(); }

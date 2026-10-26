@@ -6288,11 +6288,26 @@ field (the list grows to fill the rail). The field keeps the 44px target and 14p
 and accepts at most 160 characters (the longest stored title). This filter matches titles only;
 search over message text is the committed-query addition of CGP-CHAT-R-026, not part of this filter.
 
+Field placement and narrow windows (CGP-KNOW-D-001 / DES-KNOW-01 / PI#1): the field sits at the
+top of the task list, after 새 작업 and before the 최근 작업 heading, and its input is 44px tall with
+the theme's input colours in dark and light. In a window narrower than 360px an empty field folds
+into one 44px search icon named 작업 찾기 (the shared search icon, no text glyph). Pressing it opens
+the field and moves focus into it; the field folds again when it is empty and loses focus, or when
+the narrow task list closes. A typed or still-composing query never folds, so an active filter is
+never hidden. Escape keeps its one meaning on the narrow list (close it). At 320px neither the page,
+the rail nor the task panel scrolls sideways, folded or open. With 200 tasks the list changes within
+100ms of the committed input event. The no-match line stays the owner-reconciled
+찾는 이름이 없습니다. 다른 이름으로 찾아보세요. (decisions.md "CGP-KNOW-D-001").
+
 Tests: `extensions/hypeproof-chat/test/task-rail-search.smoke.mjs` (pure controls, then the real
 App bundle in headless Chromium: IME composition through CDP, NFD title, clear, blank and
 non-matching queries, activity switch, zero host posts while composing and for a blank query and
 exactly one `taskSearch` per committed query, field geometry in dark/light at 1420 and 800 px;
-fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+fails under `FOCUS_REQUIRE_BROWSER=1` without a browser) and
+`extensions/hypeproof-chat/test/task-rail-search-compact.smoke.mjs` (CGP-KNOW-D-001: placement, the
+folded icon at 359 and 320 px, open by keyboard, no fold while a query is typed or composing, fold on
+blur and on closing the narrow list, no sideways scroll at 320px, theme input colours, 200-task
+latency, dark and light at 1420, 800, 359 and 320 px).
 
 ## Low-stakes removal undo (CGP-CHAT-R-029)
 
@@ -6343,6 +6358,13 @@ Undo restores the exact prior state or nothing:
   ends the offer.
 - Focus that was on 되돌리기 lands on the composer (the task title for a rename), never `<body>`.
 
+CGP-CHAT-D-029 / CGP-CHAT-D85 (toast shape, measured 2026-10-26): the toast is drawn by the chat
+panel itself and stays inside the panel's box, centred in the chat column directly above the
+composer. "Paused on hover/focus" means no time runs while the pointer is over it or focus is in it,
+and a full 6 s starts again once both end (never less than 6 s after the learner leaves it).
+Measured in headless Chromium for personal and classroom seats, dark and light, 320/800/1420px and
+forced colours.
+
 Recovery items (보내지 못한 메시지, UX38) are not low-stakes: their 삭제 keeps the inline confirm with
 취소 and offers no undo. The element chip (curriculum runtime only), annotation marks and the quote
 chip are outside this row.
@@ -6390,7 +6412,10 @@ on screen. Tool, system and assistant lines never count.
 
 The button opens a popover (`role="dialog"`, labelled "내 질문") under it with a numbered list:
 one 44px row per prompt in transcript order, at most 10 rows visible before the list scrolls,
-inside the viewport, focus moving to the first row. Each row shows the prompt's first non-empty
+inside the viewport, focus moving to the first row. The popover hangs from the button, aligned to
+its end edge. When the window is too short for 10 rows below the header, the list shows only the
+whole rows that fit (at least one) so the popover never runs past the window's bottom edge, and it
+gives rows back when the window grows (CGP-CHAT-D-028). Each row shows the prompt's first non-empty
 line of the learner's own words: a leading `> ` quote block (CGP-CHAT-R-007) is skipped when the
 learner wrote something after it, C0/C1 controls other than whitespace, bidi embeddings,
 overrides, isolates and marks, the zero-width space and the BOM are removed (ZWJ/ZWNJ stay; tab,
@@ -6399,7 +6424,7 @@ joiners, Hangul fillers or soft hyphens) is skipped, and the line is cut at 60 g
 or 240 UTF-16 code units, whichever comes first, with "…"; a prompt with no visible text reads
 "이미지만 보낸 질문" or "내용 없는 질문". Text is rendered as text, never as markup.
 
-Choosing a row closes the list, stops following the live answer (personal chat), scrolls the
+Choosing a row, by keyboard or pointer, closes the list, stops following the live answer (personal chat), scrolls the
 transcript so that prompt sits at its top (instantly under reduced motion) and moves keyboard
 focus onto that prompt's bubble, whose focus ring sits inside the scrolling transcript. A prompt
 being edited in place focuses its editor; a prompt whose row failed to render (CGP-CHAT-R50) jumps
@@ -6511,19 +6536,25 @@ two ways:
   list, with no Ctrl/Cmd/Alt, no key repeat and no IME composition. Typing `?` in the composer
   stays text. Focus returns to the element that had it.
 
-It lists only keys this webview binds today, each named for the platform (`⌥ Option` and
-`⇧ Shift` on macOS, `Alt` and `Shift` elsewhere, from `navigator.platform`):
+It lists only keys this webview binds today, each named for the platform (`⌘ Cmd`, `⌥ Option`
+and `⇧ Shift` on macOS, `Ctrl`, `Alt` and `Shift` elsewhere, from `navigator.platform`).
+CGP-CHAT-D-030 (CGP-CHAT-D86): the list is a two-column table with column headers 키 and 하는 일,
+one row per shortcut with the keys as the row header. The key cell stays on one line and wraps
+between key caps only in a window 480px wide or narrower, so the table keeps two columns at
+320px. Tab and Shift+Tab stay inside the sheet (the modal focus trap) and Esc closes it.
 
 | Keys | Row | Bound by |
 |---|---|---|
 | Enter | 메시지 보내기 (답하는 중에 누르면 끝나고 보내도록 예약해요) | composer key handler, #416 queue; nothing while the composer is read-only |
 | Shift + Enter | 줄 바꾸기 | the textarea's own newline |
 | Esc | 열린 창·메뉴 닫기 | dialog, menu and panel focus contract |
+| Cmd + F (macOS) / Ctrl + F | 대화에서 찾기 (찾기 칸에서 Enter는 다음, Shift + Enter는 이전 결과) | ChatFindBar (CGP-CHAT-R-027), every ChatPanel seat |
 | Alt + Shift + J | 대화로 바로 가기 (작업 화면 안에서 눌러요; listed only while the personal task layout is shown) | TaskWorkspace (CGP-AGENT-D-019), focus inside the task layout |
 | ? | 이 단축키 목록 열기 (입력창 밖에서) | this sheet |
 
-Not listed because nothing binds them yet: Esc to stop an answer (Stop stays the button),
-Cmd/Ctrl+F (no find in the chat webview), and a focus-the-composer key. A row is added in
+Not listed because nothing binds them yet: Esc to stop an answer (Stop stays the button) and a
+focus-the-composer key. Cmd/Ctrl+Z in the sketch dialog is that dialog's own key and is not
+listed in the chat sheet. A row is added in
 `webview-ui/src/chatShortcuts.ts` in the same change that binds its key. The sheet does not
 read the VS Code keybinding editor and does not reflect user rebinding (REQ-CGPV-29 asks for
 that later). The classroom settings dialog now draws on the theme surface outside the task
@@ -6534,7 +6565,10 @@ and classroom, dark and light, 320/800/1420 px, macOS and Windows platform names
 colours; opens from settings and from `?`, not from the composer or with a modifier, repeat or
 composition; the listed rows equal the bound set and each listed key is pressed on the real
 panel with real key input: Enter sends, Shift+Enter inserts a line break without sending, Esc
-closes, Alt+Shift+J focuses the conversation, `?` opens; 44px entry and close, >=14px text,
+closes, Cmd+F (macOS) or Ctrl+F (Windows) opens find and the other platform's modifier does not,
+Alt+Shift+J focuses the conversation, `?` opens; the computed table has two columns side by side
+in every row at every width, key caps on one line at 800px and wider, Tab and Shift+Tab stay in
+the sheet; 44px entry and close, >=14px text,
 opaque surface inside the viewport, outlined key caps). It fails under
 `FOCUS_REQUIRE_BROWSER=1` without a browser.
 

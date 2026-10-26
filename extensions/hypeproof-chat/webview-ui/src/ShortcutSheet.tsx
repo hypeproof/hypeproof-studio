@@ -4,8 +4,8 @@ import { chatShortcuts, opensShortcutSheet, shortcutPlatform } from './chatShort
 
 /**
  * CGP-CHAT-R-030 — 키보드 단축키: a modal that lists the chat keys this webview binds, with the
- * platform's modifier names. It reuses the settings dialog surface and its focus contract
- * (REQ-STUDIO-FOCUS-RESTORE): Escape, × and the backdrop close it and focus goes back to the
+ * platform's modifier names (⌘ on macOS, Ctrl elsewhere), as a key / action table (CGP-CHAT-D-030).
+ * It reuses the settings dialog surface and its focus contract (REQ-STUDIO-FOCUS-RESTORE): Escape, × and the backdrop close it and focus goes back to the
  * opener, else the composer.
  */
 export function ShortcutSheet({ open, onClose, opener }: { open: boolean; onClose: () => void; opener?: () => HTMLElement | null }) {
@@ -15,12 +15,16 @@ export function ShortcutSheet({ open, onClose, opener }: { open: boolean; onClos
   const taskWorkspace = typeof document !== 'undefined' && !!document.querySelector('.tw-workspace');
   const rows = chatShortcuts(platform, { taskWorkspace });
   return <ChatPreferences open={open} onClose={onClose} title="키보드 단축키" closeLabel="키보드 단축키 닫기" className="hps-shortcuts" {...(opener ? { opener } : {})}>
-    <dl className="hps-shortcut-list">
-      {rows.map(row => <div key={row.id} className="hps-shortcut-row" data-shortcut={row.id}>
-        <dt>{row.keys.map((key, index) => <span key={index}>{index > 0 && <span className="hps-shortcut-plus" aria-hidden="true"> + </span>}<kbd>{key}</kbd></span>)}</dt>
-        <dd>{row.label}{row.note && <small>{row.note}</small>}</dd>
-      </div>)}
-    </dl>
+    {/* CGP-CHAT-D-030: a two-column table, keys then what they do. */}
+    <table className="hps-shortcut-list">
+      <thead><tr><th scope="col">키</th><th scope="col">하는 일</th></tr></thead>
+      <tbody>
+        {rows.map(row => <tr key={row.id} className="hps-shortcut-row" data-shortcut={row.id}>
+          <th scope="row" className="hps-shortcut-keys">{row.keys.map((key, index) => <span key={index}>{index > 0 && <span className="hps-shortcut-plus" aria-hidden="true"> + </span>}<kbd>{key}</kbd></span>)}</th>
+          <td>{row.label}{row.note && <small>{row.note}</small>}</td>
+        </tr>)}
+      </tbody>
+    </table>
   </ChatPreferences>;
 }
 

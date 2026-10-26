@@ -747,6 +747,15 @@ These are conservative implementation choices, not new human agreements.
 - Scope: the search belongs to one activity and resets when the activity changes. The heading count (최근 작업 N) keeps the activity total.
 - Default state: on for personal tasks; no new data flow (webview only, nothing posted to the host for the title filter or while composing). A committed query's message-text search is CGP-CHAT-R-026; see the reconciliation below.
 
+## CGP-KNOW-D-001: rail search field placement and folding (2026-10-26, agent choice)
+
+- Found on main: the field already sat at the top of the task list (after 새 작업, before 최근 작업) with a 44px input, theme input colours and commit-only IME filtering (CGP-KNOW-R-001). The row adds the fold below 360px and the measured checks.
+- What "below 360px" measures: the window (webview) width. The rail is resizable only between 200 and 320px, so a rail-width rule would fold it always. Below 700px the rail is already the narrow task-list dialog, so the fold applies inside that dialog.
+- Fold rule: only an empty field that the learner has not opened folds. A typed or composing query never folds, so an active filter is never hidden. Opened state belongs to the activity, like the query, and ends on blur of an empty field or when the narrow list closes.
+- Escape: not given a second meaning. On the narrow list it still closes the list (the dialog's existing rule); reopening shows the folded icon.
+- Empty-result copy: the register's "찾는 작업이 없어요" is not adopted. The owner reconciliation of CHAT-R-026 × KNOW-R-001 (2026-10-25) kept "찾는 이름이 없습니다. 다른 이름으로 찾아보세요." for the title filter and uses "찾는 대화가 없어요" for the message group; a third wording would make the two lines disagree.
+- Seats: personal and trial task workspaces (the only seats with a task rail). Default state: on; display only, no host message, nothing stored.
+
 ## CGP-CHAT-R-029: low-stakes removal undo (2026-10-25, agent-selected conservative implementation)
 
 - Scope of "attachment chip": every chip the composer draws with a remove control that sends nothing yet: pasted/dropped/sketched images, staged photos, folded long pastes, the work-folder file chip and the page chip. Out of scope: the element chip (curriculum runtime only, its message inventory is fixed by CR-T02), annotation marks (removal also clears the numbered marker in the preview, which is not a composer state), and the quote chip (a reference to visible text the learner can quote again).
@@ -757,6 +766,14 @@ These are conservative implementation choices, not new human agreements.
 - Rename: undo restores the title and its origin; it is refused if the title changed since. The task list order is not rewound (the draft flush around a rename and its undo is activity, and rewinding `updatedAt` would misreport it).
 - Lifetime 6 s per CGP-CHAT-D85 (longer than the 4 s floor of CGP-DS-R-025), held while hovered or focused; "되돌렸어요" uses the same lifetime; a refused undo persists with 닫기 (DS-R-025: errors persist).
 - Seats: every seat whose composer draws the chip or queue (personal, trial, pass, classroom/lesson); rename only where the task header exists (personal, trial). Instructor mode draws no file or sketch controls. Default state: on (no new data flow; a removed host chip is held in memory only and never sent).
+
+## CGP-CHAT-D-029: undo toast shape (2026-10-26, agent-selected: already met on main)
+
+- The CGP-CHAT-R-029 toast (`UndoToast.tsx`, REQ-STUDIO-REMOVAL-UNDO) already draws the D85 shape; no product code changed. The row is closed by proof, not by new UI.
+- "Bottom-center inside the chat panel, above the composer" = rendered by the chat panel itself, centred in the chat column, directly above the composer card (gap ≤24px), inside the panel's own box; content width ≤360px.
+- "Paused on hover/focus": while the pointer is over the toast or focus is inside it, no timer runs; when both end, a full 6 s starts again. Resuming the remainder could leave a learner who just moved away a fraction of a second, so the hold never shortens the offer.
+- Proof: `removal-undo-browser.smoke.mjs` measures, on personal and classroom seats, dark and light, 320/800/1420px and forced colours: centring, the gap to the composer, containment in the panel, a 44px 되돌리기, ≥14px text on the personal seat, `role="status"`; and in time: still offered at 5.5 s, gone after 6 s, held by a real pointer hover and by focus, gone a full 6 s after focus leaves. Mutations (no focus hold, focus never released, 3 s lifetime, no 44px floor, no centring, no role) each fail it.
+- Default state: unchanged (on, every seat that draws the composer; no new data flow).
 
 ## DEC-KNOW-R-002: activity home views (CGP-KNOW-R-002, 2026-10-25; agent choice, not a new human agreement)
 
@@ -795,6 +812,14 @@ These are conservative implementation choices, not new human agreements.
 - Seats: every seat whose chat panel draws the task header, including instructor mode (the label still names that user's own prompts). The classroom transcript keeps its scroll-to-latest on a new message, so a reply arriving after a jump scrolls back down there; pinning a jump in the classroom seat would change that seat's scroll rule and is left out.
 - Default state: on (display only; no host message, no stored state, nothing leaves the device).
 
+## CGP-CHAT-D-028: my-questions popover (2026-10-26, agent-selected: met on main, one gap fixed)
+
+- The CGP-CHAT-R-028 build already draws D81: a header button, a numbered list of 44px rows, 10 rows visible before the list scrolls, focus moving to the chosen bubble. No new UI.
+- Gap fixed: the list's 440px cap was fixed, so in a short window (800x480) the popover ran 30px past the bottom edge. "Max 10 rows visible" is read as a ceiling: when fewer fit below the header, the list shows the whole rows that fit (at least one, never a half row) and the rest scroll. It is re-measured on window resize while open.
+- Pointer: choosing a row with the pointer also moves focus to the bubble (same as the keyboard); no focus ring shows, because the browser shows rings only for keyboard focus.
+- Proof: `my-questions-browser.smoke.mjs` measures the popover hanging from the button (aligned to its end edge, under it), a real CDP pointer choice, and 1280x720 and 800x480 windows in both seats.
+- Default state: unchanged (on, display only, no new data flow).
+
 ## CGP-ART-R-015: deck present mode (2026-10-25, agent-selected conservative implementation)
 
 - Where: inside `deck.html` itself (a constant inline script), so it works in the Studio preview and any browser without a new host message, permission or iframe attribute. The preview iframe sandbox is unchanged (no `allowfullscreen`, no popups).
@@ -810,6 +835,15 @@ These are conservative implementation choices, not new human agreements.
 - Where: the personal 대화 설정 dialog and the classroom detail dialog (opened from the access chip) get a 키보드 단축키 button; `?` opens it in every ChatPanel seat (instructor mode included) when focus is outside text fields, dialogs, menus and lists; a seat without the settings dialog has only `?`.
 - Rebinding: the sheet does not read VS Code keybindings (REQ-CGPV-29's "reflects user rebinding" is not claimed).
 - Side fix: the classroom settings dialog had no surface colour outside `.tw-workspace`; it now falls back to the theme sidebar/editor colour so the page no longer shows through.
+- Default state: on; display only, no host message, file or network request.
+
+## CGP-CHAT-D-030: shortcut sheet table and Cmd/Ctrl glyph (2026-10-26, agent choice)
+
+- Gap on main: the CGP-CHAT-R-030 sheet was a definition list in flex rows (key and action wrapped onto separate lines in narrow windows) and listed no Cmd/Ctrl key, because none was bound when it shipped. The find bar (CGP-CHAT-R-027) has since bound Cmd+F on macOS and Ctrl+F elsewhere in every ChatPanel seat, and the sheet did not list it; the requirement text still said "no find in the chat webview".
+- Built: the sheet is a `<table>` with column headers 키 and 하는 일, keys as the row header. A 대화에서 찾기 row shows `⌘ Cmd + F` on macOS and `Ctrl + F` elsewhere, with a note for Enter / Shift+Enter inside the find field (bound by the same bar). The R-030 rule stands: a row is listed only while its key is bound.
+- Not listed: the sketch dialog's Cmd/Ctrl+Z (CGP-CHAT-D-020). It works only inside that dialog, which shows its own hint, and only in seats where the sketch tool is offered.
+- Narrow windows: key caps stay on one line; at 480px and below they wrap between caps (never inside one), so the table keeps two columns at 320px. 44px close target and >=14px text are unchanged.
+- Focus trap and Esc: unchanged code (the settings dialog's modal focus contract); now measured with real Tab / Shift+Tab input.
 - Default state: on; display only, no host message, file or network request.
 
 ## CGP-CHAT-R-026: task search (2026-10-25, agent-selected conservative implementation)
@@ -1159,3 +1193,11 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Closing: Escape (unchanged) and focus leaving the composer, except while a pick is in flight so its acknowledgement still lands. A refused pick refocuses the composer so the keys work again. No new keys, host messages, seats or file capability; the R-018 gate is unchanged.
 - Forced colours: the chosen row keeps Canvas/CanvasText with a 2px Highlight border (the home-tab pattern). The Highlight fill showed the words as black boxes under Chromium's Canvas text backplate, and `forced-color-adjust: none` is reserved for QR codes (CGP-DS-R-016).
 - Default state: on wherever R-018 already offers the list (personal or adult profile with the read grant); no new data flow.
+
+## CGP-CHAT-D-027: find bar shape (2026-10-26, agent-selected: already met on main)
+
+- The CGP-CHAT-R-027 find bar already draws D80; no product code changed. The row is closed by proof plus one missing guard.
+- "Sticky at the top of the transcript" keeps the R-027 reading: a row in the chat column directly above the scroller (not an overlay, not a sticky row inside it), so it is always at the transcript's top edge and never covers a match. Measured: its bottom edge within 12px of the scroller's top, inside the column, at 320/800/1420px.
+- 44px controls and `n/m`: the input and the three buttons measure >= 44px with >= 14px text (learner minimum); the count reads `n/m` and `0/0`.
+- Esc: the existing test only returned focus to the composer, which is also the fallback, so "always focus the composer" passed it. `chat-find-browser.smoke.mjs` now opens the bar from a focused transcript button and requires Esc to return there, and falls back to the composer when that element is removed while the bar is open.
+- Default state: unchanged (on in every seat that draws the transcript; no new data flow).

@@ -13098,6 +13098,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/task-rail-search.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-rail-search-compact.smoke.mjs"
         }
       ]
     },
