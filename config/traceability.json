@@ -13686,6 +13686,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/low-disk-bar.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/low-disk-bar-persist-browser.smoke.mjs"
         }
       ]
     },
