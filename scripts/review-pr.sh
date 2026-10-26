@@ -253,6 +253,10 @@ echo "=== [3/6] Local server (port $WRANGLER_PORT) ==="
 # .dev.vars: always generate a fresh local-only signing secret
 (cd "$WORKTREE_DIR" && npm ci --prefer-offline --silent)
 WORKER_DIR="$(node "$WORKTREE_DIR/scripts/service-tooling.mjs")"
+if [[ -z "$WORKER_DIR" || ! -d "$WORKER_DIR" ]]; then
+  echo "ERROR: service-tooling.mjs returned no Service package directory (got '$WORKER_DIR'). Check that @hypeproof/service-testkit is installed." >&2
+  exit 1
+fi
 DEV_VARS="$WORKER_DIR/.dev.vars"
 
 # Generate a random 20-char hex secret (never production value).
