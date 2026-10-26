@@ -10,6 +10,7 @@ import * as path from "node:path";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import * as m from "../src/activityMaterials.ts";
 import { FILE_ATTACH_MAX_BYTES, FILE_REFUSAL_COPY } from "../src/fileAttachment.ts";
+import { MATERIALS_DROP_MAX_BYTES } from "../src/activityMaterialsView.ts";
 
 let passed = 0;
 const failures = [];
@@ -254,6 +255,61 @@ t("a source swapped for another file between the check and the open (inode chang
   // Control: without the swap the same file is added.
   fs.writeFileSync(src, "원래 내용\n");
   assert.equal(m.addMaterialFile(work, src).ok, true);
+});
+
+// ── #2641: a file dropped on the open card (bytes from the webview, the picker's rules) ──
+const drop = (name, data, size) => { const b = Buffer.from(data); return { name, size: size ?? b.length, base64: b.toString("base64") }; };
+t("a dropped text file is written into 자료/ with its bytes, never over an existing file", () => {
+  const work = fs.mkdtempSync(path.join(tmp, "drop-"));
+  const r = m.addMaterialDrop(work, drop("메모.md", "# 메모\n"));
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(r.rel, "자료/메모.md"); assert.equal(r.copied, true);
+  assert.equal(fs.readFileSync(path.join(work, "자료", "메모.md"), "utf8"), "# 메모\n");
+  const again = m.addMaterialDrop(work, drop("메모.md", "다른 내용\n"));
+  assert.equal(again.rel, "자료/메모 (2).md");
+  assert.equal(fs.readFileSync(path.join(work, "자료", "메모.md"), "utf8"), "# 메모\n", "the first copy is unchanged");
+});
+t("drop refusals: every cause on the byte path, with the picker's copy, nothing written", () => {
+  const work = fs.mkdtempSync(path.join(tmp, "drop-refuse-"));
+  const cases = [
+    [drop(".env", "TOKEN=x"), "name"],
+    [drop("a\u0007.md", "x"), "name"],
+    [drop("가".repeat(201), "x"), "name"],
+    [drop("../up.md", "x"), "name"],
+    [drop("sub\\up.md", "x"), "name"],
+    [drop("empty.md", ""), "empty"],
+    [{ name: "unread.md", size: 12, base64: "" }, "unreadable"],
+    [{ name: "big.md", size: FILE_ATTACH_MAX_BYTES + 1, base64: "" }, "too-large"],
+    [drop("big2.md", "a".repeat(FILE_ATTACH_MAX_BYTES + 1), 10), "too-large"],
+    [drop("pic.md", Buffer.from([137, 80, 78, 71, 0, 0])), "binary"],
+    [drop("blank.md", " \n\t\n"), "empty-text"],
+    [drop("long.md", "가".repeat(20_001)), "too-many-chars"],
+    [drop("mismatch.md", "abc", 4), "changed"],
+  ];
+  for (const [d, cause] of cases) {
+    const r = m.addMaterialDrop(work, d);
+    assert.equal(r.ok, false, d.name.slice(0, 20));
+    assert.equal(r.cause, cause, d.name.slice(0, 20));
+    if (FILE_REFUSAL_COPY[cause]) assert.equal(r.reason, FILE_REFUSAL_COPY[cause]);
+    assert.match(r.reason, /[가-힣]/, "learner Korean");
+  }
+  assert.equal(fs.existsSync(path.join(work, "자료")) ? fs.readdirSync(path.join(work, "자료")).length : 0, 0, "nothing written");
+  assert.equal(MATERIALS_DROP_MAX_BYTES, FILE_ATTACH_MAX_BYTES, "the webview's read cap is the host's cap");
+});
+t("a dropped file into a 자료 that is a link (or a file) is refused; nothing is written through it", () => {
+  const other = fs.mkdtempSync(path.join(tmp, "drop-link-"));
+  fs.mkdirSync(path.join(other, "w")); fs.mkdirSync(path.join(other, "target"));
+  fs.symlinkSync(path.join(other, "target"), path.join(other, "w", "자료"));
+  assert.equal(m.addMaterialDrop(path.join(other, "w"), drop("a.md", "a")).cause, "materials-folder");
+  assert.deepEqual(fs.readdirSync(path.join(other, "target")), [], "the link's target is untouched");
+  fs.mkdirSync(path.join(other, "w2")); fs.writeFileSync(path.join(other, "w2", "자료"), "not a folder");
+  assert.equal(m.addMaterialDrop(path.join(other, "w2"), drop("a.md", "a")).cause, "materials-folder");
+});
+t("a 자료 with 100 copies of the name refuses the drop as full", () => {
+  const work = fs.mkdtempSync(path.join(tmp, "drop-full-"));
+  fs.mkdirSync(path.join(work, "자료"));
+  for (let n = 1; n <= 100; n++) fs.writeFileSync(path.join(work, "자료", n === 1 ? "a.md" : `a (${n}).md`), "x");
+  assert.equal(m.addMaterialDrop(work, drop("a.md", "a")).cause, "full");
 });
 
 t("model text: a card title with line breaks stays on the opening tag's line; a forged non-https address in the view is not sent", () => {

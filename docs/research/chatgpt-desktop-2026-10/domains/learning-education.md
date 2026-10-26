@@ -241,6 +241,8 @@ ChatGPT's.
 | REQ-CGP-LEARN-16 | The Studio header shows one coach run state from a fixed set: 준비됨 / 생각 중 / 찾는 중 / 만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요. | (a) Exactly one state visible at a time, derived from the existing timeline (REQ-C17) and approval state (REQ-E1). (b) "확인이 필요해요" appears whenever an approval is pending. (c) No character or animation is required to convey state. | P2 | 2 |
 | REQ-CGP-LEARN-17 | Chalk help-request queue supports keyboard triage: next, previous, open, resolve-and-advance. | (a) J/K (or ↓/↑) moves selection; Enter opens; a documented key resolves and advances. (b) "?" shows the shortcut list. (c) Shortcuts never fire inside text inputs (Korean IME composition safe). | P2 | 1 (one-instructor intent, ADM-05, DES-06) |
 
+REQ-CGP-LEARN-15 status (2026-10-26, CGP-LEARN-R-015): implemented in Chalk `/authoring` as the completion-condition helper. Requirement: `docs/requirements/chalk-authoring.md` "완료 조건 도우미". Test: T-49. Owner choices are in `decisions.md`: bare 점 is allowed, the check runs on the page and in the Chalk forwarder, and there is no Service text check.
+
 ## 3. Design requirements (same rows)
 
 | DES ID | Visual/interaction requirement | Acceptance (measurable) |
@@ -266,6 +268,10 @@ ChatGPT's.
 Layout rule applied to all blocks (DES from CGP-LEARN-11): container ≥ 448 px (28 rem) → diagram 50 % beside
 text; < 448 px (VS Code side rail is usually below this) → stacked, diagram full width then caption; at 320 px
 width nothing scrolls horizontally and captions use the short variant.
+
+REQ/DES-CGP-LEARN-14 as built (2026-10-26, DEC-LEARN-14): Chalk `/authoring` asks once per browser
+(`localStorage`, no Service store), pre-fills only lessons made with 새 강의 만들기, maps 초 1–6 → lv1, 중/고 → lv2,
+성인 → adult and 유아 → no tier, and adds a per-lesson 대상 단계 select. Owning requirement: chalk-authoring CH-01.
 
 ## 4. Open questions / unknowns
 
@@ -302,3 +308,8 @@ width nothing scrolls horizontally and captions use the short variant.
 - DEFER 10: 07, 14, 17, 18, 19, 20, 23, 24, 26, 34.
 - REJECT 12: 08, 16, 22, 30, 31, 33, 38, 39, 40, 41, 42, 43.
 - 43 inventory rows, 17 requirements, 17 design requirements.
+
+## Implementation notes
+
+- **REQ-CGP-LEARN-17 (CGP-LEARN-R-017), 2026-10-26.** Implemented in Chalk `/manage` as REQ-CHALK-HELP-TRIAGE (`docs/requirements/classroom-admin.md#help-queue-keyboard-triage`), with DES-CGP-LEARN-17. Agent choices under the owner rules (recorded in `decisions.md`): "resolve" for the instructor is 답변 완료 · 학생 확인 대기, because only the learner marks a request resolved (ADM-05); the documented key is `E`; selection is keyboard focus on the row's own button; keys listen only in the help region and the open record.
+- **CGP-LEARN-R-016 (REQ-CGP-LEARN-16), 2026-10-26.** Implemented in Studio as REQ-STUDIO-COACH-RUN-STATE (`docs/studio-requirements.md`), with DES-CGP-LEARN-16. Owner-delegated choices (precedence, icon-based activity classifier with unknown → 생각 중, which dialogs count as approval, the personal heading's run note leaving the row, every seat) are recorded in `../decisions.md`.

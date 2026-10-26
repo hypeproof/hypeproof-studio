@@ -1,0 +1,12 @@
+/* CGP-CHAT-R-022 (REQ-STUDIO-ANSWER-MATH): math in answers.
+   A display formula (KaTeX centres it) sits in its own keyboard-scrollable region (like a table), so a wide
+   formula scrolls inside the answer column instead of widening it. Math inherits the prose text
+   colour, so both themes and forced colours follow the surrounding answer. */
+/* padding-bottom keeps the horizontal scrollbar (an overlay bar is drawn over the box's bottom edge)
+   clear of the formula's subscripts. */
+.hps-math-block { box-sizing: border-box; max-width: 100%; overflow-x: auto; overflow-y: hidden; margin: var(--ds-c-studio-styles-space-43) 0; padding-bottom: var(--ds-c-studio-styles-space-44); }
+.hps-math-block > .katex-display { margin: 0; }
+.hps-math-block .katex, .hps-math-inline .katex { color: inherit; }
+/* Raw fallback: invalid or refused TeX is shown exactly as written, never as a red error. */
+.hps-math-raw { overflow-wrap: anywhere; }
+.hps-math-block-raw { white-space: pre-wrap; }

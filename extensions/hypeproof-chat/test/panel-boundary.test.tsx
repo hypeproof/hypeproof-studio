@@ -260,15 +260,27 @@ const DELEGATED = [
   { id: "a1", role: "assistant", content: "맡겨 볼게요", createdAt: 2 },
   { id: delegationRowId("toolu_T", "s0"), role: "tool", content: "", createdAt: 3, tool: { icon: "🤝", label: "코드리뷰어: 살펴봐 줘", state: "done" } },
 ];
-type Row = { panel: string; key: string | null; mode: "personal" | "classroom"; config?: Record<string, unknown>; history?: unknown[]; msgs?: () => Record<string, unknown>[]; blocking?: boolean };
+type Row = { panel: string; key: string | null; mode: "personal" | "classroom"; config?: Record<string, unknown>; history?: unknown[]; msgs?: () => Record<string, unknown>[]; after?: () => Promise<void>; blocking?: boolean; readOnlyDraft?: boolean; tab?: string };
 const PANELS: Row[] = [
   { panel: "task-sources", key: "CitationPreview.tsx:CitationPreview", mode: "personal", history: CITED },
   { panel: "citations", key: "CitationPreview.tsx:CitationRack", mode: "personal", history: CITED },
   { panel: "citations", key: "ChatPanel.tsx:CitationRack", mode: "classroom", history: CITED },
+  // CGP-CHAT-R-027: the find bar draws only after Cmd+F (Ctrl+F off macOS) reaches the document.
+  { panel: "chat-find", key: "ChatFindBar.tsx:ChatFindBar", mode: "personal", after: async () => {
+    const mac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? "");
+    await act(async () => { (globalThis as unknown as { document: { dispatchEvent(e: unknown): boolean } }).document.dispatchEvent(ev("keydown", { key: "f", code: "KeyF", metaKey: mac, ctrlKey: !mac, altKey: false, shiftKey: false, isComposing: false })); });
+  } },
   { panel: "page-card", key: "PageCard.tsx:PageCard", mode: "personal", msgs: () => [{ type: "pageCardsState", cards: [{ turnId: "s1", anchorId: "a1", pages: [] }] }] },
-  { panel: "delegation", key: "DelegationRow.tsx:DelegationRow", mode: "personal", history: DELEGATED },
+  { panel: "project-ideas", key: "ProjectIdeas.tsx:ProjectIdeas", mode: "personal", history: [
+    { id: "a0", role: "assistant", content: "어떤 걸 만들어 보고 싶어요?", createdAt: 1 },
+    { id: "u1", role: "user", content: "잘 모르겠어요", createdAt: 2 },
+    { id: "a1", role: "assistant", content: "같이 찾아봐요.", createdAt: 3 },
+  ] },
+  { panel: "delegation", key: "DelegationGroup.tsx:DelegationGroup", mode: "personal", history: DELEGATED },
+  // CGP-ART-R-020: the "AI가 한 일" row draws only when the task's history carries an entry.
+  { panel: "task-activity", key: "TaskActivity.tsx:TaskActivity", mode: "personal", history: [...CITED.slice(0, 1), { ...CITED[1], activity: [{ id: "toolu_R", verb: "read", target: "index.html", inside: true }] }] },
   { panel: "turn-review", key: "TurnReviewBar.tsx:TurnReviewBar", mode: "personal", msgs: () => [{ type: "turnReviewState", view: { turnId: "s1" } }] },
-  { panel: "missing-folder", key: "MissingFolderNotice.tsx:MissingFolderNotice", mode: "personal", blocking: true, msgs: () => [{ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") }] },
+  { panel: "missing-folder", key: "MissingFolderNotice.tsx:MissingFolderNotice", mode: "personal", blocking: true, readOnlyDraft: true, msgs: () => [{ type: "missingTaskFolder", notice: missingTaskFolderNotice("/gone") }] },
   { panel: "preview-recovery", key: "PreviewRecoveryNotice.tsx:PreviewRecoveryNotice", mode: "personal", msgs: () => [{ type: "previewRecovery", signals: { server: "stopped", status: null, path: "/", needsNetwork: false } }] },
   { panel: "long-step", key: "ChatPanel.tsx:LongStepHintLine", mode: "personal", msgs: () => [
     { type: "userSent", text: "빌드해 줘", id: "u9" }, { type: "streamStart", streamId: "s1", messageId: "a9" },
@@ -292,8 +304,11 @@ const PANELS: Row[] = [
   { panel: "student-goal", key: "StudentGoal.tsx:StudentGoal", mode: "classroom" },
   { panel: "goal-status", key: "GoalStatusBar.tsx:GoalStatusBar", mode: "classroom" },
   { panel: "lesson", key: "LessonStepPanel.tsx:LessonStepPanel", mode: "classroom" },
+  { panel: "lesson-tip", key: "LessonTip.tsx:LessonTip", mode: "classroom" },
   { panel: "instructor-inbox", key: "InstructorInbox.tsx:InstructorInbox", mode: "classroom" },
   { panel: "materials", key: "MaterialsPanel.tsx:MaterialsPanel", mode: "classroom", config: { materials: true } },
+  // CGP-KNOW-R-002: the same list as the activity home's 자료 view in the task workspace rail.
+  { panel: "activity-home-materials", key: "MaterialsPanel.tsx:MaterialsPanel", mode: "personal", config: { materials: true }, tab: "자료" },
   { panel: "help-request", key: "HelpRequest.tsx:HelpRequest", mode: "classroom" },
   { panel: "evidence", key: "CompletionGate.tsx:CompletionGate", mode: "classroom", msgs: () => [{ type: "learningState", state: learningState({ task: "t", events: [] }) }] },
   { panel: "observation", key: "NativeObservationPanel.tsx:NativeObservationPanel", mode: "classroom", config: { profile: { ...(classroomApp as unknown as { profile: object }).profile, observation: { format: "hps-observation/1", scope: "s", assess: true, record: true } } } },
@@ -314,6 +329,12 @@ async function scenario(row: Row) {
   await hostMsg({ type: "history", messages: row.history ?? HISTORY, ...ctx });
   if (row.mode === "personal") await hostMsg({ type: "taskWorkspaceState", view: view(5), ...ctx });
   for (const msg of row.msgs?.() ?? []) await hostMsg({ ...ctx, ...msg });
+  await row.after?.();
+  if (row.tab) {
+    const tab = m.host.findAll((e) => e.getAttribute("role") === "tab" && e.textContent === row.tab)[0];
+    ok(tab, `the ${row.tab} tab is drawn`);
+    await act(async () => { click(tab); });
+  }
   return { ...probe(m.host), host: m.host };
 }
 
@@ -346,8 +367,17 @@ for (const row of PANELS) {
     for (const f of fb) eq(f.getAttribute("data-panel-fallback"), row.panel, "only this panel falls back");
     ok(fb[0].textContent.includes(row.blocking ? PANEL_BLOCKED_TEXT : PANEL_FALLBACK_TEXT), row.blocking ? "a send-holding notice says sending is held" : "calm sentence");
     ok(h.textarea(), "the composer is still there");
-    await h.type("계속 쓸 수 있어요");
-    eq(h.textarea().value, "계속 쓸 수 있어요", "the composer still takes input");
+    if (row.readOnlyDraft) {
+      // CGP-AGENT-D-024: while the task folder is missing the composer keeps the draft read-only by design.
+      const ta = h.textarea() as El & { readOnly?: boolean };
+      ok(ta.getAttribute("readonly") !== null || ta.readOnly === true, "the composer holds the draft read-only");
+      const before = ta.value;
+      await h.type("계속 쓸 수 있어요");
+      eq(h.textarea().value, before, "the read-only draft is not changed by input");
+    } else {
+      await h.type("계속 쓸 수 있어요");
+      eq(h.textarea().value, "계속 쓸 수 있어요", "the composer still takes input");
+    }
     eq(reports().filter((r) => /panel render error/.test(r.message ?? "")).length, 1, "one report");
     g.__hpsPanelThrow = undefined; g.__hpsStub = undefined;
   });

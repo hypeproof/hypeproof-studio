@@ -193,12 +193,13 @@ test('rename acknowledges the matching request only after persistence and report
     f = await createTaskHarness(root, message => {
       if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft: { text: '보존할 초안', images: [], queued: null } }));
     });
-    const original = f.store.rename.bind(f.store), id = f.store.getView().activeTaskId;
-    f.store.rename = async () => { throw new Error('Synthetic write failure'); };
+    // CGP-CHAT-R-029: the host renames through renameWithUndo (the rename plus what it replaced).
+    const original = f.store.renameWithUndo.bind(f.store), id = f.store.getView().activeTaskId;
+    f.store.renameWithUndo = async () => { throw new Error('Synthetic write failure'); };
     await f.handle(f.scoped({ type: 'taskRename', title: '새 이름', requestId: 'rename-failure' }));
     assert.deepEqual(f.posts.findLast(p => p.type === 'taskRenameResult'), { type: 'taskRenameResult', requestId: 'rename-failure', taskId: id, saved: false, activityId: f.activity.id });
     assert.equal(f.store.getActiveTask().title, '새 작업');
-    f.store.rename = original;
+    f.store.renameWithUndo = original;
     await f.handle(f.scoped({ type: 'taskRename', title: '새 이름', requestId: 'rename-retry' }));
     assert.equal(f.posts.findLast(p => p.type === 'taskRenameResult').saved, true);
     assert.equal(f.posts.findLast(p => p.type === 'taskRenameResult').requestId, 'rename-retry');
@@ -309,3 +310,343 @@ test('a delayed keep clears its own review but preserves a newer measured review
     await rm(root, { recursive: true, force: true });
   }
 });
+
+// CGP-KNOW-R-009 (REQ-KNOW-14) — the real host moves a personal task to another personal activity:
+// the open task's draft is flushed first, the copy is read back byte-identical before the source
+// lets go, and class destinations, class seats and a running turn move nothing.
+test('actual host moves a personal task to another personal activity only, byte-identical', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-host-'));
+  try {
+    let f;
+    f = await createTaskHarness(root, message => {
+      if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft: { text: '옮기기 직전 입력', images: [], queued: null } }));
+    });
+    const { TaskWorkspaceStore } = f.internals;
+    const otherFolder = join(root, 'other');
+    await mkdir(join(root, 'task-workspaces'), { recursive: true });
+    const destinationScope = JSON.stringify(['synthetic-personal-b', otherFolder]);
+    const destination = new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope);
+    await destination.initialize();
+    f.connections.list = async () => [
+      { ref: 'ref-b', id: 'synthetic-personal-b', name: '그림 연습', kind: 'personal', workspace: otherFolder },
+      { ref: 'ref-class', id: 'synthetic-class', name: '3반 수업', kind: 'classroom', workspace: join(root, 'class') },
+    ];
+    const first = f.store.getView().activeTaskId;
+    await f.store.append(first, [{ id: 'q', role: 'user', content: '질문', createdAt: 1 }, { id: 'a', role: 'assistant', content: '답', createdAt: 2 }]);
+    // No loaded profile: the lesson state is unknown, so nothing is offered and nothing moves.
+    assert.match((await f.h.taskMoveState()).reason, /활동 정보를 아직 확인하지 못해/);
+    await f.handle(f.scoped({ type: 'taskMove', id: first, destination: 'ref-b', requestId: 'r-noprofile' }));
+    assert.ok(f.store.getTask(first));
+    f.h.cachedProfile = { activity_kind: 'personal', lesson: null };
+    assert.deepEqual(JSON.parse(JSON.stringify(await f.h.taskMoveState())), { allowed: true, destinations: [{ ref: 'ref-b', name: '그림 연습' }] });
+
+    // A class destination is refused even when the webview names it.
+    // The open task stays, so a file or page chip attached to it stays too (CGP-CHAT-R-011, CGP-ART-R-007).
+    const fileChip = { preview: { path: 'notes.txt', text: '메모', bytes: 6 }, modelText: '메모', root };
+    const pageChip = { label: 'index.html' };
+    f.h.pendingFileAttachment = fileChip;
+    f.h.pendingPageAttachment = pageChip;
+    await f.handle(f.scoped({ type: 'taskMove', id: first, destination: 'ref-class', requestId: 'r-class' }));
+    assert.ok(f.store.getTask(first));
+    assert.equal(f.h.pendingFileAttachment, fileChip, 'a refused move keeps the attached file');
+    assert.equal(f.h.pendingPageAttachment, pageChip, 'a refused move keeps the attached page');
+    assert.deepEqual((({ activityId, taskId, ...rest }) => rest)(f.posts.findLast(message => message.type === 'taskMoveResult')), { type: 'taskMoveResult', requestId: 'r-class', moved: false });
+
+    // A running turn moves nothing.
+    f.h.pendingSends = 1;
+    await f.handle(f.scoped({ type: 'taskMove', id: first, destination: 'ref-b', requestId: 'r-busy' }));
+    assert.ok(f.store.getTask(first));
+    assert.match(f.posts.findLast(message => message.type === 'taskWorkspaceError').error, /멈춘/);
+    f.h.pendingSends = 0;
+
+    // A copy that does not read back identical is withdrawn; the task stays here.
+    const proto = TaskWorkspaceStore.prototype, exportTask = proto.exportTask;
+    proto.exportTask = function (id) { const out = exportTask.call(this, id); if (this.scope !== f.store.scope) out.task.title += ' (변형)'; return out; };
+    try { await f.handle(f.scoped({ type: 'taskMove', id: first, destination: 'ref-b', requestId: 'r-readback' })); }
+    finally { proto.exportTask = exportTask; }
+    assert.ok(f.store.getTask(first));
+    assert.equal(new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope).getTask(first), undefined, 'the unconfirmed copy was withdrawn');
+    assert.match(f.posts.findLast(message => message.type === 'taskWorkspaceError').error, /확인하지 못해 옮기지 않았어요/);
+
+    // The source cannot let go (another window changed the list): the copy is withdrawn too.
+    const release = f.store.releaseTask;
+    f.store.releaseTask = async () => { throw new Error('stale'); };
+    try { await f.handle(f.scoped({ type: 'taskMove', id: first, destination: 'ref-b', requestId: 'r-release' })); }
+    finally { f.store.releaseTask = release; }
+    assert.ok(f.store.getTask(first));
+    assert.equal(new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope).getTask(first), undefined);
+    assert.match(f.posts.findLast(message => message.type === 'taskWorkspaceError').error, /목록이 바뀌어 옮기지 않았어요/);
+
+    // A malformed request id is not echoed.
+    const results = f.posts.filter(message => message.type === 'taskMoveResult').length;
+    await f.handle(f.scoped({ type: 'taskMove', id: first, destination: 'ref-class', requestId: '<img>' }));
+    assert.equal(f.posts.filter(message => message.type === 'taskMoveResult').length, results);
+
+    // The open task moves with the draft that was on screen.
+    f.h.renameUndo = { id: 'u-open', store: f.store, undo: { taskId: first } };
+    const beforeMove = f.posts.length;
+    await f.handle(f.scoped({ type: 'taskMove', id: first, destination: 'ref-b', requestId: 'r-ok' }));
+    assert.equal(f.h.renameUndo, null, 'moving the open task away ends its rename 되돌리기, like a switch');
+    // CGP-CHAT-R-011 / CGP-ART-R-007 — the attached file and page belonged to the task that left: both chips drop.
+    assert.equal(f.h.pendingFileAttachment, null, 'moving the open task away drops the attached file');
+    assert.equal(f.h.pendingPageAttachment, null, 'moving the open task away drops the attached page');
+    assert.ok(f.posts.slice(beforeMove).some(message => message.type === 'fileAttachment' && message.attachment === null), 'the file chip is cleared in the webview');
+    assert.ok(f.posts.slice(beforeMove).some(message => message.type === 'pageAttachment' && message.attachment === null), 'the page chip is cleared in the webview');
+    assert.equal(f.store.getTask(first), undefined, 'the source no longer lists the task');
+    assert.notEqual(f.store.getView().activeTaskId, first);
+    const arrived = new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope).getTask(first);
+    assert.equal(arrived.draft.text, '옮기기 직전 입력');
+    assert.deepEqual(JSON.parse(JSON.stringify(arrived.messages.map(message => message.content))), ['질문', '답']);
+    assert.deepEqual((({ activityId, taskId, ...rest }) => rest)(f.posts.findLast(message => message.type === 'taskMoveResult')), { type: 'taskMoveResult', requestId: 'r-ok', moved: true, title: arrived.title, destination: '그림 연습' });
+
+    // A class seat (served lesson) offers nothing and refuses a move.
+    const second = f.store.getView().activeTaskId;
+    f.h.cachedProfile = { activity_kind: 'personal', lesson: { content: { title: '레슨' } } };
+    const state = await f.h.taskMoveState();
+    assert.equal(state.allowed, false);
+    assert.match(state.reason, /수업 작업은 이 수업 활동 안에만/);
+    await f.handle(f.scoped({ type: 'taskMove', id: second, destination: 'ref-b', requestId: 'r-lesson' }));
+    assert.ok(f.store.getTask(second));
+    assert.equal(f.posts.findLast(message => message.type === 'taskMoveResult').moved, false);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+// CGP-KNOW-R-009 (verifier S7, S1, S8) — when the source's release reports a failure, the host asks
+// the disk before it undoes the copy: a task the source no longer lists has moved (withdrawing the
+// copy would leave it nowhere); a task the source still holds intact is withdrawn from the
+// destination; anything else keeps both copies and says so. No path loses the task or its versions.
+test('actual host never loses a moved task when the source release fails part-way', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-host-'));
+  try {
+    let f;
+    f = await createTaskHarness(root, message => {
+      if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft: { text: '', images: [], queued: null } }));
+    });
+    const { TaskWorkspaceStore } = f.internals;
+    const otherFolder = join(root, 'other');
+    await mkdir(join(root, 'task-workspaces'), { recursive: true });
+    const destinationScope = JSON.stringify(['synthetic-personal-b', otherFolder]);
+    await new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope).initialize();
+    const destination = () => new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope);
+    const source = () => new TaskWorkspaceStore(root, 'synthetic-personal-a'); // the harness's store, read again from disk
+    f.connections.list = async () => [{ ref: 'ref-b', id: 'synthetic-personal-b', name: '그림 연습', kind: 'personal', workspace: otherFolder }];
+    f.h.cachedProfile = { activity_kind: 'personal', lesson: null };
+    const seed = async title => {
+      const id = f.store.getView().activeTaskId;
+      await f.store.rename(id, title);
+      await f.store.append(id, [{ id: `${id}-q`, role: 'user', content: '질문', createdAt: 1 }, { id: `${id}-a`, role: 'assistant', content: '답', createdAt: 2 }]);
+      // An edited resend keeps an earlier version in the versions sidecar.
+      await f.store.append(id, [{ id: `${id}-q2`, role: 'user', content: '고친 질문', createdAt: 3, editOf: `${id}-q` }, { id: `${id}-a2`, role: 'assistant', content: '새 답', createdAt: 4 }]);
+      await f.store.create('다음 작업', { taskId: id, revision: f.store.getView().revision });
+      assert.ok(f.store.exportTask(id).versions, 'the seeded task has earlier versions');
+      return { id, bytes: JSON.stringify(f.store.exportTask(id)) };
+    };
+    const move = requestId => f.handle(f.scoped({ type: 'taskMove', id: current.id, destination: 'ref-b', requestId }));
+    const result = () => f.posts.findLast(message => message.type === 'taskMoveResult');
+    let current;
+
+    // S7: the task file is saved without the task, then the lock release fails. The move is done.
+    current = await seed('잠금에서 실패');
+    // Faults are armed only inside releaseTask, so the draft flush before it saves normally.
+    const write = f.store.writeAtomic, releaseLock = f.store.releaseLock, releaseTask = f.store.releaseTask;
+    let releasing = false, saved = false;
+    f.store.releaseTask = function (...args) { releasing = true; return releaseTask.apply(this, args).finally(() => { releasing = false; }); };
+    f.store.writeAtomic = async function (target, ...rest) { await write.call(this, target, ...rest); if (releasing && target === this.filePath) saved = true; };
+    f.store.releaseLock = async function (lease) { await releaseLock.call(this, lease); if (saved) { saved = false; throw Object.assign(new Error('synthetic EPERM'), { code: 'EPERM' }); } };
+    try { await move('r-s7'); } finally { f.store.writeAtomic = write; f.store.releaseLock = releaseLock; f.store.releaseTask = releaseTask; }
+    assert.equal(JSON.stringify(destination().exportTask(current.id)), current.bytes, 'the destination keeps the whole task');
+    assert.equal(source().getTask(current.id), undefined, 'the source no longer lists it');
+    assert.equal(result().requestId, 'r-s7');
+    assert.equal(result().moved, true);
+
+    // S1: the source's task-file write fails. The task stays here whole and the copy is withdrawn.
+    current = await seed('저장에서 실패');
+    f.store.releaseTask = function (...args) { releasing = true; return releaseTask.apply(this, args).finally(() => { releasing = false; }); };
+    f.store.writeAtomic = async function (target, ...rest) { if (releasing && target === this.filePath) throw new Error('synthetic EIO'); return write.call(this, target, ...rest); };
+    try { await move('r-s1'); } finally { f.store.writeAtomic = write; f.store.releaseTask = releaseTask; }
+    assert.equal(JSON.stringify(source().exportTask(current.id)), current.bytes, 'the source keeps the task with its earlier versions');
+    assert.equal(destination().getTask(current.id), undefined, 'the copy was withdrawn');
+    assert.equal(result().moved, false);
+    assert.match(f.posts.findLast(message => message.type === 'taskWorkspaceError').error, /목록이 바뀌어 옮기지 않았어요/);
+
+    // S8: release fails with the source intact and the withdraw fails too: both stay, said plainly.
+    current = await seed('둘 다 실패');
+    const withdraw = TaskWorkspaceStore.prototype.withdrawTask;
+    f.store.releaseTask = async () => { throw new Error('stale'); };
+    TaskWorkspaceStore.prototype.withdrawTask = async () => { throw new Error('synthetic EIO'); };
+    try { await move('r-s8'); } finally { f.store.releaseTask = releaseTask; TaskWorkspaceStore.prototype.withdrawTask = withdraw; }
+    assert.equal(JSON.stringify(source().exportTask(current.id)), current.bytes);
+    assert.equal(JSON.stringify(destination().exportTask(current.id)), current.bytes);
+    assert.match(f.posts.findLast(message => message.type === 'taskWorkspaceError').error, /두 곳에 같은 작업이 있으니/);
+
+    // The source still lists the task but not as it was copied (another window edited it): both stay.
+    // Last, because this store's memory is behind the disk afterwards.
+    current = await seed('다른 창에서 고침');
+    f.store.releaseTask = async id => {
+      const other = source();
+      await other.select(id, { taskId: other.getView().activeTaskId, revision: other.getView().revision });
+      await other.rename(id, '다른 창에서 바꾼 이름');
+      throw new Error('stale');
+    };
+    try { await move('r-changed'); } finally { f.store.releaseTask = releaseTask; }
+    assert.equal(source().getTask(current.id).title, '다른 창에서 바꾼 이름');
+    assert.equal(JSON.stringify(destination().exportTask(current.id)), current.bytes, 'the copy is not withdrawn');
+    assert.match(f.posts.findLast(message => message.type === 'taskWorkspaceError').error, /두 곳에 같은 작업이 있으니/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+// CGP-KNOW-R-009 (re-verify fault matrix) — one fault at each write, lock and cleanup step of
+// receive, read-back, release and withdraw during a real host move. Afterwards the disk decides:
+// the task is whole somewhere; two copies are always told; "두 곳에" is never said for one copy;
+// a task only at the destination is reported moved, and one only here is not.
+const MOVE_FAULTS = [
+  ['receive', 'acquire'], ['receive', 'versions'], ['receive', 'verdicts'], ['receive', 'file'], ['receive', 'file-cleanup'], ['receive', 'lock-after-file'],
+  ['readback', 'throw'],
+  ['release', 'acquire'], ['release', 'file'], ['release', 'file-cleanup'], ['release', 'lock-after-file'], ['release', 'versions'], ['release', 'verdicts'],
+  ['withdraw', 'versions'], ['withdraw', 'lock-after-file'], ['withdraw', 'file'], ['withdraw', 'file-cleanup'], ['withdraw', 'acquire'], ['withdraw', 'verdicts'],
+  ['none', 'none'],
+];
+for (const [phase, step] of MOVE_FAULTS) {
+  test(`actual host move under fault ${phase}/${step} keeps the task whole and tells the truth`, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'task-fault-'));
+    try {
+      let f;
+      f = await createTaskHarness(root, message => {
+        if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft: { text: '', images: [], queued: null } }));
+      });
+      const { TaskWorkspaceStore } = f.internals;
+      const P = TaskWorkspaceStore.prototype;
+      const otherFolder = join(root, 'other');
+      await mkdir(join(root, 'task-workspaces'), { recursive: true });
+      const destinationScope = JSON.stringify(['synthetic-personal-b', otherFolder]);
+      await new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope).initialize();
+      f.connections.list = async () => [{ ref: 'ref-b', id: 'synthetic-personal-b', name: '그림 연습', kind: 'personal', workspace: otherFolder }];
+      f.h.cachedProfile = { activity_kind: 'personal', lesson: null };
+      const id = f.store.getView().activeTaskId;
+      await f.store.rename(id, '옮길 작업');
+      await f.store.append(id, [{ id: 'q', role: 'user', content: '질문', createdAt: 1 }, { id: 'a', role: 'assistant', content: '답', createdAt: 2 }]);
+      await f.store.append(id, [{ id: 'q2', role: 'user', content: '고친 질문', createdAt: 3, editOf: 'q' }, { id: 'a2', role: 'assistant', content: '새 답', createdAt: 4 }]);
+      await f.store.recordVerdict(id, { messageId: 'a2', verdict: 'right', at: 2000 });
+      await f.store.create('다음 작업', { taskId: id, revision: f.store.getView().revision });
+      const bytes = JSON.stringify(f.store.exportTask(id));
+
+      // Each fault fires once, only inside the named store method.
+      const orig = { receiveTask: P.receiveTask, releaseTask: P.releaseTask, withdrawTask: P.withdrawTask, writeAtomic: P.writeAtomic, releaseLock: P.releaseLock, acquireLock: P.acquireLock, exportTask: P.exportTask };
+      let running = null, fired = false, armedLock = false;
+      const wrap = name => function (...args) { const prev = running; running = name; return Promise.resolve(orig[name].apply(this, args)).finally(() => { running = prev; }); };
+      P.receiveTask = wrap('receiveTask'); P.releaseTask = wrap('releaseTask'); P.withdrawTask = wrap('withdrawTask');
+      const method = { receive: 'receiveTask', release: 'releaseTask', withdraw: 'withdrawTask' }[phase];
+      const hit = () => !fired && running === method;
+      const fault = (code, text) => Object.assign(new Error(text), { code });
+      P.writeAtomic = async function (target, ...rest) {
+        const kind = target === this.filePath ? 'file' : target === this.versionsPath ? 'versions' : target === this.verdictsPath ? 'verdicts' : '?';
+        if (hit() && step === kind) { fired = true; throw fault('EIO', 'synthetic EIO'); }
+        await orig.writeAtomic.call(this, target, ...rest);
+        if (hit() && kind === 'file' && step === 'file-cleanup') { fired = true; throw fault('EIO', 'synthetic cleanup'); }
+        if (hit() && kind === 'file' && step === 'lock-after-file') armedLock = true;
+      };
+      P.releaseLock = async function (lease) { await orig.releaseLock.call(this, lease); if (armedLock && !fired) { fired = true; armedLock = false; throw fault('EPERM', 'synthetic EPERM'); } };
+      P.acquireLock = async function () { if (hit() && step === 'acquire') { fired = true; throw fault('EBUSY', 'synthetic locked'); } return orig.acquireLock.call(this); };
+      if (phase === 'readback') P.exportTask = function (taskId) { if (this.scope !== f.store.scope && !fired) { fired = true; throw new Error('synthetic read-back'); } return orig.exportTask.call(this, taskId); };
+      // withdraw: the release is refused (the list changed), then the fault fires in the withdraw.
+      if (phase === 'withdraw') f.store.releaseTask = async () => { throw new Error('stale'); };
+      try { await f.handle(f.scoped({ type: 'taskMove', id, destination: 'ref-b', requestId: 'r-fault' })); }
+      finally { Object.assign(P, orig); delete f.store.releaseTask; }
+      assert.ok(fired || phase === 'none', 'the fault fired');
+
+      const s = new TaskWorkspaceStore(root, 'synthetic-personal-a');
+      const d = new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope);
+      const inS = !!s.getTask(id), inD = !!d.getTask(id);
+      const wholeS = inS && JSON.stringify(s.exportTask(id)) === bytes, wholeD = inD && JSON.stringify(d.exportTask(id)) === bytes;
+      const result = f.posts.findLast(message => message.type === 'taskMoveResult');
+      const error = f.posts.findLast(message => message.type === 'taskWorkspaceError')?.error ?? '';
+      const row = JSON.stringify({ inS, inD, moved: result?.moved, error });
+      assert.equal(result?.requestId, 'r-fault', `the request is answered ${row}`);
+      assert.ok(wholeS || wholeD, `the task survives whole somewhere ${row}`);
+      if (inS && inD) assert.match(error, /두 곳에/, `two copies are told ${row}`);
+      if (/두 곳에/.test(error)) assert.ok(inS && inD, `"두 곳에" only for two copies ${row}`);
+      if (!inS && inD) assert.equal(result.moved, true, `moved is reported ${row}`);
+      if (inS && !inD) assert.equal(result.moved, false, `not moved is reported ${row}`);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+}
+
+// A move that reaches an early host return (the open task changed, another task change running)
+// is still answered, so the menu does not wait out its 20 s guard.
+test('actual host answers a move request it refuses before starting', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-host-'));
+  try {
+    const f = await createTaskHarness(root);
+    f.h.cachedProfile = { activity_kind: 'personal', lesson: null };
+    const id = f.store.getView().activeTaskId;
+    const answered = requestId => f.posts.findLast(message => message.type === 'taskMoveResult' && message.requestId === requestId);
+    f.h.taskChanging = true;
+    await f.handle(f.scoped({ type: 'taskMove', id, destination: 'ref-b', requestId: 'r-changing' }));
+    f.h.taskChanging = false;
+    assert.equal(answered('r-changing')?.moved, false);
+    assert.match(f.posts.findLast(message => message.type === 'taskWorkspaceError').error, /다른 작업 변경이 끝난 뒤/);
+    await f.handle({ ...f.scoped({ type: 'taskMove', id, destination: 'ref-b', requestId: 'r-stale-task' }), taskId: 'another-task' });
+    assert.equal(answered('r-stale-task')?.moved, false);
+    await f.handle({ ...f.scoped({ type: 'taskMove', id, destination: 'ref-b', requestId: 'r-other-activity' }), activityId: 'another-activity' });
+    assert.equal(answered('r-other-activity')?.moved, false);
+    assert.ok(f.store.getTask(id));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+// CGP-KNOW-R-009 (re-verify 3) — when the disk cannot be read back after a half-done step, the
+// host cannot know whether the task is in one place or two, so it says it may be in both.
+// Two chains: the receive saved its task file and then failed, and the destination re-read fails;
+// the release failed, and the source re-read fails. Both copies stay whole and the move is not reported.
+for (const chain of ['receive-then-destination-unreadable', 'release-then-source-unreadable']) {
+  test(`actual host move hedges when ${chain}`, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'task-fault-'));
+    try {
+      let f;
+      f = await createTaskHarness(root, message => {
+        if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft: { text: '', images: [], queued: null } }));
+      });
+      const { TaskWorkspaceStore } = f.internals;
+      const P = TaskWorkspaceStore.prototype;
+      const otherFolder = join(root, 'other');
+      await mkdir(join(root, 'task-workspaces'), { recursive: true });
+      const destinationScope = JSON.stringify(['synthetic-personal-b', otherFolder]);
+      await new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope).initialize();
+      f.connections.list = async () => [{ ref: 'ref-b', id: 'synthetic-personal-b', name: '그림 연습', kind: 'personal', workspace: otherFolder }];
+      f.h.cachedProfile = { activity_kind: 'personal', lesson: null };
+      const id = f.store.getView().activeTaskId;
+      await f.store.rename(id, '옮길 작업');
+      await f.store.append(id, [{ id: 'q', role: 'user', content: '질문', createdAt: 1 }, { id: 'a', role: 'assistant', content: '답', createdAt: 2 }]);
+      await f.store.recordVerdict(id, { messageId: 'a', verdict: 'right', at: 2000 });
+      await f.store.create('다음 작업', { taskId: id, revision: f.store.getView().revision });
+      const bytes = JSON.stringify(f.store.exportTask(id));
+      const sourceScope = f.store.scope;
+
+      const orig = { receiveTask: P.receiveTask, writeAtomic: P.writeAtomic, getTask: P.getTask };
+      let receiving = false, receiveFailed = false, readFailed = false, releaseFailed = false;
+      if (chain.startsWith('release')) f.store.releaseTask = async () => { releaseFailed = true; throw new Error('stale'); };
+      P.receiveTask = function (...args) { receiving = true; return Promise.resolve(orig.receiveTask.apply(this, args)).finally(() => { receiving = false; }); };
+      P.writeAtomic = async function (target, ...rest) {
+        await orig.writeAtomic.call(this, target, ...rest);
+        if (chain.startsWith('receive') && receiving && target === this.filePath && !receiveFailed) { receiveFailed = true; throw Object.assign(new Error('synthetic cleanup'), { code: 'EIO' }); }
+      };
+      // The first re-read of the named scope after the failure throws (a store outside any store method).
+      P.getTask = function (taskId) {
+        const wanted = chain.startsWith('receive') ? receiveFailed && this.scope !== sourceScope : this.scope === sourceScope && this !== f.store && releaseFailed;
+        if (wanted && !receiving && !readFailed) { readFailed = true; throw new Error('synthetic unreadable'); }
+        return orig.getTask.call(this, taskId);
+      };
+      try { await f.handle(f.scoped({ type: 'taskMove', id, destination: 'ref-b', requestId: 'r-hedge' })); }
+      finally { Object.assign(P, orig); delete f.store.releaseTask; }
+      assert.ok(readFailed, 'the re-read fault fired');
+
+      const s = new TaskWorkspaceStore(root, 'synthetic-personal-a');
+      const d = new TaskWorkspaceStore(join(root, 'task-workspaces'), destinationScope);
+      assert.equal(JSON.stringify(s.exportTask(id)), bytes, 'the source keeps the whole task');
+      assert.equal(JSON.stringify(d.exportTask(id)), bytes, 'the copy is kept');
+      const result = f.posts.findLast(message => message.type === 'taskMoveResult');
+      assert.equal(result?.requestId, 'r-hedge');
+      assert.equal(result.moved, false);
+      assert.match(f.posts.findLast(message => message.type === 'taskWorkspaceError').error, /‘그림 연습’에도 남았을 수 있어요\. 두 활동의 작업 목록을 확인해 주세요\./);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+}

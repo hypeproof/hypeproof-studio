@@ -24,6 +24,7 @@ import budgetsHtml from './ui/budgets.html';
 // outside the instructor surface.
 
 import { Hono } from "hono";
+import { withCopyFeedback } from "./lib/copy-feedback.ts";
 import { withListRows } from "./lib/list-rows.ts";
 import { withTooltips } from "./lib/tooltips.ts";
 import { withDesignTokens } from "./lib/design-tokens.ts";
@@ -43,6 +44,7 @@ import boardHtml from "./ui/board.html";
 // @ts-ignore — bundled as text by wrangler rules.
 import authoringHtml from "./ui/authoring.html";
 import { INSTRUCTION_DIFF_SCRIPT } from "./lib/instruction-diff.ts";
+import { COMPLETION_CHECKLIST_SCRIPT } from "./lib/completion-checklist.ts";
 import { ROSTER_CSV_SCRIPT } from "./lib/roster-csv.ts";
 // @ts-ignore — bundled as text by wrangler rules.
 import manageHtml from "./ui/manage.html";
@@ -67,7 +69,7 @@ app.get("/health", (c) =>
 );
 
 const page = (html: unknown) =>
-  new Response(withTooltips(withDesignTokens(withListRows(html as string))), { headers: { "content-type": "text/html; charset=utf-8" } });
+  new Response(withCopyFeedback(withTooltips(withDesignTokens(withListRows(html as string)))), { headers: { "content-type": "text/html; charset=utf-8" } });
 
 app.get("/", (c) => c.redirect("/console", 302));
 // Pages are public; every API call they make carries the instructor's Bearer
@@ -80,7 +82,8 @@ app.get("/start", () => page(startHtml));
 app.get("/issuer", () => page(issuerHtml));
 app.get("/board", () => page(renderBoardStatusPage(boardHtml)));
 // The confirm step's instruction diff is a pure helper shared with the tests; it is inlined in place of its marker.
-const authoringPage = (authoringHtml as unknown as string).replace("/*@instruction-diff*/", () => INSTRUCTION_DIFF_SCRIPT);
+// The completion checklist kit (CGP-LEARN-R-015) is inlined the same way; the forwarder runs the same kit server-side.
+const authoringPage = (authoringHtml as unknown as string).replace("/*@instruction-diff*/", () => INSTRUCTION_DIFF_SCRIPT).replace("/*@completion-checklist*/", () => COMPLETION_CHECKLIST_SCRIPT);
 app.get("/authoring", () => page(authoringPage));
 app.get("/manage", () => page(renderSafetySignal(renderBoardStatusPage(manageHtml))));
 app.get("/budgets", () => page(budgetsHtml));

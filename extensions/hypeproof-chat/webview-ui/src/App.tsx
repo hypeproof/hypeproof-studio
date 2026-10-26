@@ -1,10 +1,22 @@
+import { FolderConsentDialog } from './FolderConsentDialog';
+import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
+import {BrowserApprovalDialog} from './BrowserApprovalDialog';
+import type {BrowserApprovalPrompt} from '../../src/browserApprovalPrompt';
+import type {DelegationStopState} from "../../src/delegationStop";
+import {CommandApprovalDialog} from './CommandApprovalDialog';
+import type {CommandApprovalPrompt} from '../../src/commandApprovalPrompt';
+import {AnnotationLeaveDialog} from './AnnotationLeaveDialog';
+import type {AnnotationLeavePrompt} from '../../src/annotationLeavePrompt';
+import { retainElapsedReceipts } from '../../src/turnElapsed';
 import { attemptGroups, applyAttemptSelection } from '../../src/answerAttempts';
+import { RunningProcessesPanel } from "./RunningProcesses";
 import { applyMotionPreference } from "./motion";
 import {WriteApprovalDialog} from "./WriteApprovalDialog";
 import {OutboundDialog, PublicAudienceDialog} from "./OutboundDialog";
 import {isPublicAudiencePrompt, type AnyOutboundPrompt} from "../../src/outboundApproval";
 import type {WriteApprovalPrompt} from "../../src/writeApprovalPrompt";
 import { storedDenialNotice } from "../../src/denialNotice";
+import { isDownloadNoticeLabel } from "../../src/browserDownloadNotice";
 import type { TurnToolMode } from '../../src/turnTools';
 import { useEffect, useReducer, useState, useRef } from "react";
 import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage, TrialEndCardView } from "../../src/protocol";
@@ -44,7 +56,9 @@ import type { PublishView } from "../../src/publishView";
 import type { VerifyView } from "../../src/verifyView";
 import { deriveTaskRunState, type TaskTurnOutcome } from "../../src/taskRunState";
 import { useOnline, guardSend } from "./connectivity";
+import { settleUndo } from "./UndoToast";
 import { verifyPressAction, verifyNote } from "./verifyOffline";
+import { acceptStepMarks, nextStepMarks, rememberStepMark, validStepMark, type LessonStepMarks } from "../../src/lessonStepMarks";
 
 interface State {
   config: ChatConfig | null;
@@ -54,6 +68,8 @@ interface State {
    */
   timeline: TimelineState;
   streamId: string | null;
+  /** Last accepted visible event in the active turn, using this webview clock. */
+  progressSince?: number;
   error: string | null;
   errorRetryable: boolean;
   activityUnavailable?: import("../../src/activityAvailability").ActivityUnavailable;
@@ -109,6 +125,7 @@ interface State {
 }
 
 type Action =
+  | { type: "visibleProgress" }
   | { type: "config"; config: ChatConfig }
   | { type: "history"; messages: ChatMessage[] }
   | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
@@ -194,11 +211,12 @@ function reducer(state: State, action: Action): State {
       // 대화·툴·에러가 한 번에 갈린다. Clear 를 눌러도 직전 턴의 툴 호출 목록이
       // 화면에 남아 있었다(2026-07-27 실사용) — 이제 툴이 타임라인의 일부라
       // 배열 하나를 갈아끼우면 끝이다.
-      return { ...state, timeline: timelineReset(action.messages), error: null };
+      return { ...state, timeline: timelineReset(retainElapsedReceipts(action.messages, state.timeline.items)), error: null };
     case "streamStart":
       return {
         ...state,
         streamId: action.streamId,
+        progressSince: Date.now(),
         streamFor: action.userMessageId ?? null,
         error: null,
         stopNotice: null,   // #497 — 새 턴이 시작되면 이전 중지 안내는 사라진다
@@ -206,15 +224,17 @@ function reducer(state: State, action: Action): State {
         // #503 — 직전 턴의 툴 줄을 **비우지 않는다**. 예전에는 여기서 toolLog 를
         // [] 로 밀어서, 다음 턴이 시작되는 순간 이전 턴이 무슨 도구를 썼는지가
         // 통째로 증발했다(스크롤을 올려도 말풍선만 남았다).
-        timeline: timelineStart(state.timeline, action.messageId, Date.now()),
+        timeline: timelineStart(state.timeline, action.messageId, Date.now(), performance.now()),
       };
+    case "visibleProgress":
+      return state.streamId ? { ...state, progressSince: Date.now() } : state;
     case "streamChunk":
-      return { ...state, timeline: timelineDelta(state.timeline, action.delta, Date.now()) };
+      return { ...state, ...(action.delta ? { progressSince: Date.now() } : {}), timeline: timelineDelta(state.timeline, action.delta, Date.now()) };
     case "streamCitations":
       return { ...state, timeline: timelineCitations(state.timeline, action.citations) };
     case "toolLog":
       // 같은 id 는 제자리 갱신(running → done/error), 새 id 는 지금 이 자리에 삽입.
-      return { ...state, timeline: timelineTool(state.timeline, action.entry, Date.now()) };
+      return { ...state, progressSince: Date.now(), timeline: timelineTool(state.timeline, action.entry, Date.now()) };
     case "pageAttached":
       // #308 — inline notice; cleared on the next send (userSent) only.
       return { ...state, pageNotice: action.label };
@@ -273,7 +293,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         streamId: null,
-        timeline: timelineEnd(state.timeline, Date.now()),
+        timeline: timelineEnd(state.timeline, Date.now(), action.failed || action.dismissed ? undefined : "done", performance.now()),
         error: null,
         errorRequestId: null,
         errorRunbookUrl: null,
@@ -291,7 +311,7 @@ function reducer(state: State, action: Action): State {
         streamId: null,
         // #503 — 끊긴 턴도 타임라인은 닫는다: 보류된 툴 줄이 남아 있으면
         // 흘려 넣고 말풍선을 닫는다. 스트리밍된 부분 답변은 그대로 둔다.
-        timeline: timelineEnd(state.timeline, Date.now()),
+        timeline: timelineEnd(state.timeline, Date.now(), "stopped", performance.now()),
         error: null,
         errorRequestId: null,
         errorRunbookUrl: null,
@@ -359,7 +379,10 @@ export { reducer as chatPanelReducer, initialState as chatPanelInitialState };
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [runningProcesses, setRunningProcesses] = useState<import("../../src/runningProcesses").RunningProcess[]>([]);
   const [refusal, setRefusal] = useState(false);
+  const [delegationStops,setDelegationStops]=useState<Record<string,DelegationStopState>>({});
+  const delegationStreams=useRef(new Set<string>());
   const scope = useRef<string | undefined>();
   const taskScope = useRef<string | undefined>();
   // The bridge can deliver an old turn after Stop. Update this synchronously,
@@ -379,6 +402,8 @@ export function App() {
   const [verdicts, setVerdicts] = useState<VerdictMap>({});
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — computed by the host from the saved history it sends.
   const [trimBoundaryId, setTrimBoundaryId] = useState<string | null>(null);
+  // CGP-CHAT-R-023 — served lesson step per user message id (host-owned), for the transcript's step dividers.
+  const [stepMarks, setStepMarks] = useState<LessonStepMarks>(() => acceptStepMarks(null));
   const pendingVerdicts = useRef(new Map<string, { requestId: string; value: VerdictState | null }>());
   const latestVerdictRequests = useRef(new Map<string, string>());
   const ownVerdictRequests = useRef(new Set<string>());
@@ -389,7 +414,11 @@ export function App() {
   const [historySaveError, setHistorySaveError] = useState<string | null>(null);
   // REQ-STUDIO-TASK-RUN-STATE — the host raised a tool approval modal and it is still open.
   const [approvalPending, setApprovalPending] = useState(false);
+  const [browserApproval,setBrowserApproval]=useState<BrowserApprovalPrompt|null>(null);
+  const [commandApproval,setCommandApproval]=useState<CommandApprovalPrompt|null>(null);
+  const [annotationLeave,setAnnotationLeave]=useState<AnnotationLeavePrompt|null>(null);
   const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
+  const [folderConsent,setFolderConsent]=useState<FolderConsentPrompt|null>(null);
   const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
@@ -417,16 +446,22 @@ export function App() {
           ownVerdictRequests.current.clear();
           activeStream.current = null;
           setRefusal(false);
-          setApprovalPending(false); setWriteApproval(null); setOutbound(null);
+          setDelegationStops({});delegationStreams.current.clear();
+          setApprovalPending(false); setWriteApproval(null); setOutbound(null); setFolderConsent(null); setRunningProcesses([]);
         }
         scope.current = msg.config.activity?.id;
         taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
       } else if (msg.activityId && msg.activityId !== scope.current) return;
+      if(msg.type==='delegationStopState'){
+        if(delegationStreams.current.has(msg.streamId))setDelegationStops(old=>({...old,[msg.streamId]:msg.state}));
+        return;
+      }
       if ("streamId" in msg) {
         if (msg.type === "streamStart") {
           // One turn owns this view; a repeated start must not clear its text.
           if (activeStream.current !== null) return;
           activeStream.current = msg.streamId;
+          delegationStreams.current.add(msg.streamId);
           setRefusal(false);
         } else if (msg.streamId !== activeStream.current) {
           // These host refusal codes are emitted before streamStart. They still
@@ -445,9 +480,13 @@ export function App() {
       switch (msg.type) {
         case "streamRefusal": setRefusal(true); return;
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
+        case 'browserApprovalPrompt': setBrowserApproval(msg.prompt); return;
+        case 'commandApprovalPrompt': setCommandApproval(msg.prompt); return;
+        case 'annotationLeavePrompt': setAnnotationLeave(msg.prompt); return;
         case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
+        case 'folderConsentPrompt': setFolderConsent(msg.prompt); return;
         case 'outboundPrompt': setOutbound(msg.prompt); return;
-        case 'approvalWait': setApprovalPending(msg.waiting === true); return;
+        case 'approvalWait': setApprovalPending(msg.waiting === true); if (!msg.waiting) dispatch({ type: 'visibleProgress' }); return;
         case 'taskWorkspaceError':
           if (msg.verdictMessageId && msg.verdictRequestId && ownVerdictRequests.current.has(msg.verdictRequestId) && latestVerdictRequests.current.has(msg.verdictMessageId) && latestVerdictRequests.current.get(msg.verdictMessageId) !== msg.verdictRequestId) return;
           setWorkspaceError(msg.error);
@@ -469,6 +508,7 @@ export function App() {
           });
           break;
         }
+        case "runningProcesses": setRunningProcesses(msg.entries); break;
         case "config":      dispatch({ type: "config", config: msg.config }); break;
         case "answerAttemptSelected": dispatch({type: "answerAttemptSelected", root: msg.root}); break;
         case "history":     dispatch({ type: "history", messages: msg.messages }); setTrimBoundaryId(null); break;
@@ -486,13 +526,20 @@ export function App() {
           setVerdicts(next);
           break;
         }
-        case "streamStart": dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId, userMessageId: msg.userMessageId }); break;
+        case "streamStart":
+          dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId, userMessageId: msg.userMessageId });
+          if (msg.userMessageId && validStepMark(msg.lessonStep)) { const id = msg.userMessageId, mark = msg.lessonStep; setStepMarks(prev => rememberStepMark(prev, id, mark)); }
+          break;
+        case "lessonStepMarks": { const post = { marks: msg.marks, forget: msg.forget }; setStepMarks(prev => nextStepMarks(prev, post)); break; }
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
-        case "toolLog": dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}), ...(msg.step !== undefined && msg.since !== undefined ? { step: msg.step, since: msg.since } : {}) } }); break;
+        case "toolLog": dispatch({ type: "toolLog", entry: { ...(msg.shell ? { shell: msg.shell } : {}), id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}), ...(msg.step !== undefined && msg.since !== undefined ? { step: msg.step, since: msg.since } : {}) } }); break;
         case "denialNotice":
           if (storedDenialNotice(msg.label)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: '', label: msg.label, state: 'error', at: msg.at } });
+          break;
+        case "downloadNotice":
+          if (isDownloadNoticeLabel(msg.label, msg.state)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, at: msg.at } });
           break;
         case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
         case "annotations": dispatch({ type: "annotations", enabled: msg.enabled, annotations: msg.annotations }); break;
@@ -548,6 +595,7 @@ export function App() {
     // images (a retry would send those to the model); the host answers with the saved paths,
     // which are appended to this message (attachedImagesSaved).
     const userMessageId = `local-${crypto.randomUUID()}`;
+    settleUndo(); // CGP-CHAT-R-029 — a send makes every earlier removal final.
     dispatch({ type: "userSent", text: trimmed, images, toolMode, id: userMessageId });
     postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
   };
@@ -660,6 +708,7 @@ export function App() {
     const toolMode = source?.toolMode ?? 'auto';
     const userMessageId = `local-${crypto.randomUUID()}`;
     const root = attemptGroups(messages).find(group => group.attempts.some(attempt => attempt.user.id === source?.id))?.root;
+    settleUndo();
     dispatch({ type: "userSent", text: prompt, toolMode, id: userMessageId, images: source?.images, retryOf: root?.id, editOf: root?.editOf });
     postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt, history: messages, toolMode, sourceMessageId: source?.id, userMessageId, images: source?.images });
   };
@@ -673,6 +722,7 @@ export function App() {
     const toolMode = original.toolMode ?? 'auto';
     const userMessageId = `local-${crypto.randomUUID()}`;
     const kept = images.length > 0 ? images : undefined;
+    settleUndo();
     dispatch({ type: "userSent", text: trimmed, images: kept, toolMode, id: userMessageId, editOf });
     postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images: kept, editOf });
     return true;
@@ -706,6 +756,7 @@ export function App() {
         const userMessageId = `local-${crypto.randomUUID()}`;
         const root = attemptGroups(messages).find(group => group.attempts.some(attempt => attempt.user.id === m.id))?.root;
         if (!beginRequest()) return;
+        settleUndo();
         dispatch({ type: "userSent", text: m.content, toolMode, id: userMessageId, images: m.images, retryOf: root?.id, editOf: root?.editOf });
         postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt: m.content, history: messages, toolMode, sourceMessageId: m.id, userMessageId, images: m.images });
         return;
@@ -722,21 +773,28 @@ export function App() {
   // streamEnd dispatches don't carry error info; clear-on-end is fine because
   // the existing reducer only sets error on streamError, never on streamEnd.
   const hasLastUserPrompt = messages.some((m) => m.role === "user");
+  // REQ-STUDIO-COACH-RUN-STATE: one approval flag for every prompt that waits on the learner, so the
+  // header's run state, the task rail's chip and the idle hint never disagree about it.
+  const anyApprovalPending = approvalPending || !!writeApproval || !!outbound || !!browserApproval || !!folderConsent || !!commandApproval;
   const runState = deriveTaskRunState({
     preparing: sendPending,
     running: !!state.streamId || !!state.verify?.running,
-    approvalPending,
+    approvalPending: anyApprovalPending,
     lastOutcome: state.lastOutcome,
   });
 
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
+      {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
       {outbound && (isPublicAudiencePrompt(outbound)
-        ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>
-        : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);}}/>)}
-      {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);}}/>}
-      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined}>
+        ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>
+        : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>)}
+      {browserApproval && <BrowserApprovalDialog key={browserApproval.id} prompt={browserApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'browserApprovalAnswer',id,choice});setBrowserApproval(null);dispatch({type:"visibleProgress"});}}/>}
+      {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
+      {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
+      {writeApproval && <WriteApprovalDialog key={writeApproval.id} prompt={writeApproval} textSize={state.config?.textSize} onAnswer={(id,approved)=>{postToHost({type:'writeApprovalAnswer',id,approved});setWriteApproval(null);dispatch({type:"visibleProgress"});}}/>}
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} taskMove={state.config?.taskMove} onDismissError={() => setWorkspaceError(null)} onAskAboutFile={askAboutFileAllowed(state.config) ? (path: string) => postToHost({ type: "askAboutFile", path }) : undefined} materials={!!state.config?.materials && !state.config?.isInstructor}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel
@@ -757,6 +815,10 @@ export function App() {
           streaming={!!state.streamId}
           streamingId={state.timeline.openId}
           runningStreamId={state.streamId}
+          progressSince={state.progressSince}
+          progressApprovalPending={anyApprovalPending}
+          lastOutcome={state.lastOutcome}
+          verifyRunning={!!state.verify?.running}
           refusal={refusal}
           onDismissRefusal={() => setRefusal(false)}
           error={state.error}
@@ -764,6 +826,7 @@ export function App() {
           errorRequestId={state.errorRequestId}
           errorRunbookUrl={state.errorRunbookUrl}
           canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId && state.errorRetry}
+          streamFor={state.streamFor}
           onSend={send}
           onRetry={retry}
           onRetryLast={retryLast}
@@ -781,10 +844,12 @@ export function App() {
           onInstallUpdate={() => postToHost({ type: "installUpdate" })}
           onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
           // cr-review — a director signed in with an issuer token opens the Weekly Review here.
-          verifyPanel={reviewPanel}
+          verifyPanel={<><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{reviewPanel}</>}
         />
       ) : (
       <ChatPanel
+        delegationStops={delegationStops}
+        onStopDelegations={streamId=>postToHost({type:"stopDelegations",streamId})}
         key={`${state.config?.activity?.id ?? 'disconnected'}:${state.config?.taskWorkspace?.activeTaskId ?? ''}`}
         incomingImage={incomingImage}
         config={state.config}
@@ -792,19 +857,19 @@ export function App() {
         pageNotice={state.pageNotice}
         elementPreview={state.elementPreview}
         pageAttachment={state.pageAttachment}
-        onRemovePageAttachment={() => {
+        onRemovePageAttachment={(undoId) => {
           dispatch({ type: "pageAttachment", attachment: null });
-          postToHost({ type: "removePageContext" });
+          postToHost({ type: "removePageContext", ...(undoId ? { undoId } : {}) });
         }}
         fileAttachment={state.fileAttachment}
         fileAttachError={state.fileAttachError}
         fileAttachNotice={state.fileAttachNotice}
         onAttachFile={() => postToHost({ type: "attachWorkspaceFile" })}
-        onRemoveFileAttachment={() => {
+        onRemoveFileAttachment={(undoId) => {
           dispatch({ type: "fileAttachment", attachment: null });
-          postToHost({ type: "removeFileContext" });
+          postToHost({ type: "removeFileContext", ...(undoId ? { undoId } : {}) });
         }}
-        verifyPanel={carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
+        verifyPanel={runningProcesses.length || carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <><RunningProcessesPanel entries={runningProcesses} onStop={id => postToHost({ type: "stopRunningProcess", id })} />{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         sendLocked={!!state.verify?.running || !!workspace?.error}
         annotationsEnabled={state.annotationsEnabled}
         annotations={state.annotations}
@@ -813,6 +878,7 @@ export function App() {
           dispatch({ type: "elementAttached", element: null });
           postToHost({ type: "removeElementContext" });
         }}
+        onStyleTweakSet={(id, prop, value) => postToHost({ type: "styleTweakSet", id, prop, value })}
         aiNotice={state.aiNotice}
         stopNotice={state.stopNotice}
         streamFor={state.streamFor}
@@ -829,6 +895,10 @@ export function App() {
         streaming={!!state.streamId}
         streamingId={state.timeline.openId}
         runningStreamId={state.streamId}
+          progressSince={state.progressSince}
+          progressApprovalPending={anyApprovalPending}
+          lastOutcome={state.lastOutcome}
+          verifyRunning={!!state.verify?.running}
         refusal={refusal}
         onDismissRefusal={() => setRefusal(false)}
         error={state.error}
@@ -851,6 +921,7 @@ export function App() {
         onEditResend={editResend}
         verdicts={verdicts}
         trimBoundaryId={trimBoundaryId}
+        stepMarks={stepMarks}
         onVerdict={judgeAnswer}
         onAnswerToWiki={(messageId) => postToHost({ type: "answerToWiki", messageId })}
         onDismissError={dismissError}

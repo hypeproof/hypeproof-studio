@@ -224,7 +224,8 @@ export function provenanceView(ledger: ProvenanceLedger): ArtifactProvenanceView
       continue;
     }
     const kind = latest.kind as ProvenanceLabelKind;
-    entries.push({ path: p, kind, ...PROVENANCE_LABELS[kind], history: foldHistory(list), at: latest.at });
+    const created = list.find(event => event.kind === "ai_created");
+    entries.push({ path: p, kind, ...PROVENANCE_LABELS[kind], history: foldHistory(list), at: latest.at, ...(created ? { createdAt: created.at } : {}) });
   }
   entries.sort((a, b) => (b.at ?? -1) - (a.at ?? -1) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { entries: entries.slice(0, PROVENANCE_VIEW_CAP), more: Math.max(0, entries.length - PROVENANCE_VIEW_CAP), unobserved: false, unconfirmed };

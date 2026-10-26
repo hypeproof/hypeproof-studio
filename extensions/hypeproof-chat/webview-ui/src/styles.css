@@ -1,6 +1,7 @@
 :root {
   color-scheme: light dark;
-  font-family: var(--vscode-font-family, var(--ds-c-studio-styles-font-3));
+  /* CGP-DS-R-033: emoji in text draw from the OS colour emoji face, after the host or UI font. */
+  font-family: var(--vscode-font-family, var(--ds-c-typography-ui)), var(--ds-c-typography-emoji);
   font-size: var(--vscode-font-size, var(--ds-c-studio-styles-type-9));
 }
 
@@ -13,6 +14,9 @@ html, body, #root {
 }
 
 .hps-shell {
+  /* REQ-CGP-DS-14: the chat pane, including an instructor-nested pane, owns width. */
+  container: studio-chat / inline-size;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   /* #1298 — 100vh breaks when ChatPanel is nested inside InstructorChatPanel's flex column;
@@ -45,7 +49,10 @@ html, body, #root {
   white-space: nowrap;
 }
 .hps-coach-name:hover { border-bottom-color: var(--vscode-foreground, var(--ds-c-studio-styles-boundary-11)); }
-.hps-actions { flex: 0 0 auto; }
+/* The header's buttons are centred as flex items, not baseline-aligned inline boxes: an icon-only
+   button and a text button would otherwise sit at different heights, by an amount that depends on the
+   font's ascent (CGP-LEARN-R-016: one row of controls on any platform font). */
+.hps-actions { flex: 0 0 auto; display: flex; align-items: center; }
 
 .hps-header button {
   background: transparent;
@@ -71,7 +78,21 @@ html, body, #root {
   padding: var(--ds-c-studio-styles-space-1);
   display: flex;
   flex-direction: column;
-  gap: var(--ds-c-studio-styles-space-19);
+  /* #2788 — the list gap is a property so the compact turn rules below can measure against it. */
+  --hps-list-gap: var(--ds-c-studio-styles-space-19);
+  gap: var(--hps-list-gap);
+}
+
+/* #2788 / REQ-STUDIO-TOOL-LINE-LABELS — one turn reads as one group: adjacent tool rows sit 4px apart,
+   an answer (paragraph + copy row) and the tool row beside it 8px. Only the list gap is pulled in, so
+   every other neighbour keeps it and nothing overlaps (test/turn-compact-layout-browser.smoke.mjs). */
+.hps-messages > :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row) { margin-block: 0; }
+.hps-messages > :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row) + :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row) {
+  margin-top: calc(var(--ds-c-studio-styles-space-13) - var(--hps-list-gap));
+}
+.hps-messages > .hps-msg-assistant + :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row),
+.hps-messages > :is(.hps-tool-log-line, .hps-thinking-details, .hps-shell-row) + .hps-msg-assistant {
+  margin-top: calc(var(--ds-c-studio-styles-space-2) - var(--hps-list-gap));
 }
 
 .hps-msg { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); }
@@ -124,7 +145,7 @@ html, body, #root {
 .hps-msg-user .hps-msg-body {
   background: var(--vscode-button-background, var(--ds-c-studio-styles-surface-23));
   color: var(--vscode-button-foreground, var(--ds-c-studio-styles-ink-2));
-  border-radius: var(--ds-c-studio-styles-radius-14) var(--ds-c-studio-styles-radius-14) var(--ds-c-studio-styles-radius-13) var(--ds-c-studio-styles-radius-14);
+  border-radius: var(--hp-radius-16) var(--hp-radius-16) var(--hp-radius-4) var(--hp-radius-16); /* CGP-DS-R-011: 14px moved onto the 16px step */
   padding: var(--ds-c-studio-styles-space-24) var(--ds-c-studio-styles-space-35);
   max-width: 88%;
   align-self: flex-end;
@@ -171,7 +192,7 @@ html, body, #root {
   align-items: center;
   gap: var(--ds-c-studio-styles-space-15);
   padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-7);
-  border-radius: var(--ds-c-studio-styles-radius-15);
+  border-radius: var(--hp-radius-full);
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
   background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-7));
   color: var(--vscode-foreground, var(--ds-c-studio-styles-ink-17));
@@ -196,6 +217,16 @@ html, body, #root {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: var(--ds-c-studio-styles-size-27);
+}
+/* CGP-CHAT-D-014 (DES CGP-CHAT-D45): the source kind is a text label placed before the source title
+   on every sources surface, never a colour alone. It takes the title line's own size and leading, so
+   the row keeps the height it had when the kind sat on the domain line (computed in
+   test/citation-kinds.smoke.mjs). Muted ink and the strong weight set it apart from the title. */
+.hps-source-kind {
+  flex: none;
+  color: var(--tw-muted, var(--hp-text-muted-default));
+  font-weight: var(--hp-weight-strong);
+  white-space: nowrap;
 }
 .hps-cit-domain {
   color: var(--hp-text-muted-default);
@@ -318,7 +349,7 @@ html, body, #root {
 .hps-prose li + li { margin-top: var(--ds-c-studio-styles-space-46); }
 .hps-prose li > p { margin-bottom: var(--ds-c-studio-styles-space-46); }
 .hps-prose a { color: var(--vscode-textLink-foreground); text-decoration: underline; }
-.hps-prose code { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-5)); background: var(--vscode-textCodeBlock-background); padding: var(--ds-c-studio-styles-space-47) var(--ds-c-studio-styles-space-46); border-radius: var(--ds-c-studio-styles-radius-16); }
+.hps-prose code { font-family: var(--vscode-editor-font-family, var(--ds-c-typography-code)); background: var(--vscode-textCodeBlock-background); padding: var(--ds-c-studio-styles-space-47) var(--ds-c-studio-styles-space-46); border-radius: var(--ds-c-studio-styles-radius-16); }
 .hps-prose pre { white-space: pre-wrap; }
 .hps-prose blockquote { margin: var(--ds-c-studio-styles-space-43) 0; padding-left: var(--ds-c-studio-styles-space-43); border-left: var(--ds-c-studio-styles-size-7) solid var(--vscode-textBlockQuote-border, var(--ds-c-studio-styles-boundary-21)); }
 .hps-markdown-table { max-width: 100%; overflow-x: auto; margin: var(--ds-c-studio-styles-space-43) 0; }
@@ -400,7 +431,7 @@ html, body, #root {
   background: var(--vscode-textCodeBlock-background, var(--ds-c-studio-styles-surface-35));
   border: var(--ds-c-studio-styles-size-3) solid var(--vscode-panel-border, var(--ds-c-studio-styles-boundary-10));
   border-radius: var(--ds-c-studio-styles-radius-3);
-  font-family: var(--ds-c-studio-styles-font-6);
+  font-family: var(--vscode-editor-font-family, var(--ds-c-typography-code));
   font-size: var(--ds-c-studio-styles-type-3);
   line-height: var(--ds-c-studio-styles-typography-20);
   overflow-x: auto;
@@ -446,7 +477,7 @@ html, body, #root {
   text-align: left;
   background: transparent;
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
-  border-radius: var(--ds-c-studio-styles-radius-10);
+  border-radius: var(--hp-radius-8);
   padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7);
   cursor: pointer;
   color: inherit;
@@ -777,7 +808,7 @@ html, body, #root {
   background: var(--vscode-input-background, var(--ds-c-studio-styles-surface-21));
   color: var(--vscode-input-foreground, inherit);
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
-  border-radius: var(--ds-c-studio-styles-radius-13);
+  border-radius: var(--hp-radius-composer-control);
   padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2);
   font-family: inherit;
   font-size: inherit;
@@ -795,7 +826,7 @@ html, body, #root {
 }
 .hps-input button {
   border: none;
-  border-radius: var(--ds-c-studio-styles-radius-13);
+  border-radius: var(--hp-radius-composer-control); /* CGP-DS-R-011: nested in the composer card */
   padding: var(--ds-c-studio-styles-space-16) var(--ds-c-studio-styles-space-1);
   cursor: pointer;
   font-weight: var(--ds-c-studio-styles-typography-7);
@@ -1202,6 +1233,27 @@ html, body, #root {
   color: var(--hp-text-muted-default);
 }
 
+/* CGP-CHAT-R-023 (CGP-CHAT-D56) — a lesson step boundary: full-width hairline, the served step centred, muted
+   caption text (14px floor, DEC-29), no icon, no motion, not focusable. */
+.hps-step-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-c-studio-styles-space-2);
+  margin: var(--ds-c-studio-styles-space-1) 0;
+  font-size: var(--hp-font-caption);
+  line-height: var(--ds-c-studio-styles-typography-5);
+  color: var(--hp-text-muted-default);
+}
+/* CGP-CHAT-D-023 — each side keeps at least 24px of line: a long title (60 characters) wraps in a narrow chat column
+   instead of squeezing the hairline to nothing. */
+.hps-step-divider::before,
+.hps-step-divider::after {
+  content: "";
+  flex: 1 0 var(--ds-c-studio-styles-space-4);
+  border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default);
+}
+.hps-step-divider-label { flex: 0 1 auto; min-width: 0; text-align: center; overflow-wrap: anywhere; }
+
 .hps-page-notice {
   margin: var(--ds-c-studio-styles-space-15) 0 var(--ds-c-studio-styles-space-7);
   padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7);
@@ -1350,6 +1402,17 @@ html, body, #root {
   outline-offset: var(--ds-c-studio-styles-size-7);
 }
 .hps-turn-review-actions button:disabled { opacity: 0.55; cursor: default; }
+/* CGP-AGENT-R-027 / DES-CGP-AGENT-53 — checkpoint form and history inside the 바뀐 것 panel. */
+.hps-checkpoint { margin-top: var(--ds-c-studio-styles-space-15); padding-top: var(--ds-c-studio-styles-space-15); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); min-width: 0; }
+.hps-checkpoint-title { display: block; }
+.hps-checkpoint-form { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); margin-top: var(--ds-c-studio-styles-space-13); min-width: 0; }
+.hps-checkpoint-field { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: var(--ds-c-studio-styles-size-8); resize: vertical; padding: var(--ds-c-studio-styles-space-24) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-9); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); background: var(--vscode-input-background, var(--ds-c-studio-styles-surface-7)); color: var(--vscode-input-foreground, inherit); font: inherit; }
+.hps-checkpoint-field:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-turn-review .hps-checkpoint-history { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-13); }
+.hps-checkpoint-history li { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.hps-checkpoint-message { white-space: pre-wrap; }
+.hps-checkpoint-history .hps-turn-review-note { margin: 0; }
+@media (forced-colors: active) { .hps-checkpoint-field { border-color: CanvasText; } .hps-checkpoint { border-top-color: CanvasText; } }
 
 /* REQ-STUDIO-PAGE-CARD / CGP-ART-R-010 — pages a coach turn built or changed, under that turn. Same neutral
    surface as the review bar; every action is a 44px target. */
@@ -1384,6 +1447,21 @@ html, body, #root {
 .hps-page-card-actions button:hover { background-color: var(--hp-bg-control-hover); }
 .hps-page-card-actions button:active { background-color: var(--hp-bg-control-pressed); }
 .hps-page-card-actions button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+
+.hps-page-card { font-size: var(--hp-font-caption); box-sizing: border-box; width: 100%; max-width: var(--ds-c-studio-styles-size-106); }
+.hps-page-card-row { display: block; }
+.hps-page-card-name { display: block; margin: var(--ds-c-studio-styles-space-15) 0; }
+.hps-page-result-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hps-page-result-thumbnail { width: 100%; aspect-ratio: 16 / 10; overflow: hidden; display: grid; place-items: center; background: var(--hp-bg-control-hover); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); box-sizing: border-box; border-radius: var(--ds-c-studio-styles-radius-10); }
+.hps-page-result-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.hps-page-result-icon { font-size: var(--hp-font-lead); }
+.hps-page-result-shimmer { width: 100%; height: 100%; background: linear-gradient(90deg,transparent,var(--hp-border-control-default),transparent); animation: page-result-shimmer var(--hp-dur-page-result-shimmer) ease-in-out infinite; }
+.hps-page-result-meta { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-15); margin-bottom: var(--ds-c-studio-styles-space-15); }
+.hps-page-result-badge { color: inherit; }
+@keyframes page-result-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+:where(:root[data-reduced-motion="true"]) .hps-page-result-shimmer { animation: none; }
+@media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-page-result-shimmer { animation: none; } }
+@media (forced-colors: active) { .hps-page-result-thumbnail { border: var(--ds-c-studio-styles-size-3) solid CanvasText; } }
 
 /*
  * #503 — tool rows now sit one per line on the same timeline as the bubbles (the old
@@ -1576,6 +1654,7 @@ html, body, #root {
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-acceptance { order:9; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-activity { order:10; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-growth { order:11; flex:0 0 auto; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-jump { order:11; flex:0 0 auto; }
 }
 .hp-mission-week { margin: 0 0 var(--ds-c-studio-styles-space-14); font-size: var(--ds-c-studio-styles-type-1); letter-spacing: var(--ds-c-studio-styles-size-3); color: var(--hp-text-muted-default); }
 .hp-mission-sentence { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-15); line-height: var(--ds-c-studio-styles-typography-16); font-weight: var(--ds-c-studio-styles-typography-17); overflow-wrap: anywhere; }
@@ -1657,6 +1736,8 @@ html, body, #root {
   font: inherit; font-size: var(--ds-c-studio-styles-type-1); padding: var(--ds-c-studio-styles-space-15) 0; cursor: pointer; min-height: var(--hp-control-min); /* CGP-DS-R-010 */
   color: var(--hp-text-muted-default); background: none; border: 0; text-decoration: underline;
 }
+/* CGP-CHAT-R-023 — "지금 단계로": a quiet 44px button (hp-cta-quiet) at the 14px caption floor, not the foot's 12px. */
+.hp-mission-jump { font-size: var(--hp-font-caption); }
 .hp-mission :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
 /* ── Region B's learning information — inside the coach rail, outside the message stream (SX-05) ──
@@ -1796,31 +1877,59 @@ html, body, #root {
 .hps-voice-final, .hps-voice-partial { margin: 0; overflow-wrap: anywhere; }
 .hps-voice-partial { color: var(--hp-text-muted-default); }
 .hps-voice-partial-tag { font-size: var(--ds-c-studio-styles-type-1); }
-.hps-voice-reference { margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
+.hps-voice-reference { margin: 0; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 
 /* Status · mute · end never scroll out of view (VO-40/47). */
 .hps-voice-actions {
   display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2);
   padding-top: var(--ds-c-studio-styles-space-2); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-7));
 }
-.hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry {
+.hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry, .hps-voice-show button {
   font: inherit; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-8); cursor: pointer;
   color: var(--vscode-button-secondaryForeground, var(--ds-c-studio-styles-ink-1));
   background: var(--vscode-button-secondaryBackground, var(--ds-c-studio-styles-surface-21));
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
 }
 .hps-voice-actions button:disabled { opacity: .5; cursor: default; }
+/* CGP-VOICE-R-009 — "보여주기": two Studio-owned targets only. The reason for a disabled item is
+   always written next to it (DES-CGPV-14), at the learner text floor, never only in a tooltip. */
+.hps-voice-show { flex-shrink: 0; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); font-size: var(--hp-font-caption); }
+.hps-voice-show-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
+.hps-voice-show-menu { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-2); padding: var(--ds-c-studio-styles-space-2); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-styles-boundary-14)); border-radius: var(--ds-c-studio-styles-radius-8); }
+.hps-voice-show-item { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
+.hps-voice-show-item button { text-align: start; }
+.hps-voice-show button:disabled { cursor: default; color: var(--hp-text-muted-default); }
+.hps-voice-show-reason, .hps-voice-show-notice { margin: 0; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .hps-voice-to-text { color: var(--vscode-button-foreground, var(--ds-c-studio-styles-ink-2)) !important; background: var(--vscode-button-background, var(--ds-c-studio-styles-surface-23)) !important; }
 .hps-voice-info { margin: 0; padding-left: var(--ds-c-studio-styles-space-18); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
 .hps-voice-est { font-style: italic; }
 
-/* The compact control — folds into one row so it does not cover the area where the artifact is read. */
+/* The compact control — one wrapping row that floats in a viewport corner (below), so it does not take room from the artifact being read. */
 .hps-voice-compact {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-2);
-  margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-2);
+  padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-2);
   background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-7));
   border: var(--ds-c-studio-styles-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-styles-boundary-14));
-  font-size: var(--ds-c-studio-styles-type-9);
+  /* Learner text floor 14px (CGP decision: 14px wins over register sizes). */
+  font-size: var(--hp-font-caption);
+}
+/* CGP-VOICE-R-008 (REQ-CGPV-12 / DES-CGPV-12): the compact control floats in one of four
+   viewport corners, 16px in. Each corner is a length plus a translate, never `auto`, so a
+   move can ease between corners; the width cap and wrapping keep it inside the viewport at
+   any width. Only corners exist: no free position, no drag. */
+.hps-voice-compact {
+  position: fixed; z-index: 10; box-sizing: border-box;
+  max-inline-size: calc(100% - 2 * var(--ds-c-studio-styles-space-20));
+  --hps-voice-x: 0; --hps-voice-y: 0;
+  left: var(--ds-c-studio-styles-space-20); top: var(--ds-c-studio-styles-space-20); /* logical-css: physical screen corner paired with translate, which does not flip in RTL */
+  translate: var(--hps-voice-x) var(--hps-voice-y);
+}
+.hps-voice-compact[data-corner$="right"] { left: calc(100% - var(--ds-c-studio-styles-space-20)); --hps-voice-x: -100%; } /* logical-css: physical screen corner (CGP-VOICE-R-008), not reading direction */
+.hps-voice-compact[data-corner^="bottom"] { top: calc(100% - var(--ds-c-studio-styles-space-20)); --hps-voice-y: -100%; }
+/* Movement only when motion is allowed, the same switch as the meter above (no new reduce block). */
+:where(:root[data-reduced-motion="false"]) .hps-voice-compact { transition: left var(--hp-dur-press) var(--hp-ease), top var(--hp-dur-press) var(--hp-ease), translate var(--hp-dur-press) var(--hp-ease); }
+@media (prefers-reduced-motion: no-preference) {
+  :where(:root:not([data-reduced-motion])) .hps-voice-compact { transition: left var(--hp-dur-press) var(--hp-ease), top var(--hp-dur-press) var(--hp-ease), translate var(--hp-dur-press) var(--hp-ease); }
 }
 .hps-voice-compact-status { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
 .hps-voice-dot { width: var(--ds-c-studio-styles-size-63); height: var(--ds-c-studio-styles-size-63); border-radius: 50%; background: var(--vscode-descriptionForeground, var(--ds-c-studio-styles-surface-38)); }
@@ -1893,7 +2002,7 @@ html, body, #root {
 .hp-evidence-diff-note { margin: 0; font-size: var(--ds-c-studio-styles-type-9); color: var(--hp-text-muted-default); }
 /* At narrow widths they stack vertically — at sidebar width neither of the two columns is readable. */
 .hp-evidence-compare { display: grid; grid-template-columns: 1fr; gap: var(--ds-c-studio-styles-space-7); }
-@media (min-width: 720px) { .hp-evidence-compare { grid-template-columns: 1fr 1fr; } }
+@container studio-chat (min-width: 688px) { .hp-evidence-compare { grid-template-columns: 1fr 1fr; } }
 .hp-evidence-compare h5 { margin: 0 0 var(--ds-c-studio-styles-space-13); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); font-weight: var(--ds-c-studio-styles-typography-7); }
 .hp-evidence-compare pre {
   margin: 0; padding: var(--ds-c-studio-styles-space-2); max-height: var(--ds-c-studio-styles-size-25); overflow: auto;
@@ -1923,7 +2032,7 @@ html, body, #root {
 .hp-status-chip {
   display: inline-flex; align-items: center; gap: var(--ds-c-status-chip-gap); min-width: 0; max-width: 100%;
   padding-block: var(--ds-c-status-chip-pad-block); padding-inline: var(--ds-c-status-chip-pad-inline);
-  border: var(--ds-c-status-chip-edge) solid transparent; border-radius: var(--ds-c-status-chip-radius);
+  border: var(--ds-c-status-chip-edge) solid transparent; border-radius: var(--hp-radius-status-chip);
   color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);
   white-space: normal; word-break: keep-all; overflow-wrap: anywhere;
 }
@@ -1955,26 +2064,38 @@ html, body, #root {
 .hp-inbox-body { white-space: pre-wrap; overflow-wrap: anywhere; margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-13); }
 .hp-inbox-links { list-style: none; margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-13); padding: 0; display: grid; gap: var(--ds-c-studio-styles-space-2); }
 .hp-inbox-links li { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2); align-items: center; min-width: 0; }
-.hp-inbox-link-url { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-8)); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; min-width: 0; }
+.hp-inbox-link-url { font-family: var(--ds-c-studio-styles-font-8); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; min-width: 0; }
 .hp-inbox :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
 /* CGP-KNOW-R-003 — the activity's 자료 list and the "함께 보낼 자료" line above the composer. Learner text at the
-   caption step or larger (14px floor), every control a 44px target, titles wrap instead of truncating, and who
+   caption step or larger (14px floor), every control a 44px target, titles ellipsize with full accessible names, and who
    added an item is said in words, never colour. */
 .hp-materials-note, .hp-materials-meta, .hp-materials-detail, .hp-materials-error, .hp-materials-notice, .hp-materials-url label { font-size: var(--hp-font-caption); }
+/* #2641 — while a file is dragged over the open card, its own border becomes 2px in the focus-ring colour (Highlight
+   in forced colours, tokens.css) and the padding gives back the extra 1px, so nothing moves. Not an outline: outline
+   is reserved for focus rings (test/focus-placeholder.smoke.mjs), and the card is a scroll container, so an overlay
+   would scroll away with its content. */
+.hp-materials[data-drop-active] { border-width: var(--ds-c-studio-styles-size-7); border-color: var(--hp-ring-focus-default); padding: calc(var(--ds-c-studio-styles-space-1) - var(--ds-c-studio-styles-size-7) + var(--ds-c-studio-styles-size-3)); }
 .hp-materials-note, .hp-materials-meta, .hp-materials-detail { color: var(--hp-text-muted-default); }
 .hp-materials-note { margin: var(--hp-space-2) var(--hp-space-1); }
 .hp-materials-list { list-style: none; margin: var(--hp-space-2) 0 0; padding: 0; display: grid; gap: var(--hp-space-2); }
 .hp-materials-item { display: grid; gap: var(--hp-space-1); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-divider-default); padding: var(--hp-space-2) var(--hp-space-1) 0; min-width: 0; }
-.hp-materials-title { font-weight: var(--ds-c-studio-styles-typography-7); overflow-wrap: anywhere; word-break: keep-all; white-space: normal; }
+.hp-materials-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--hp-space-2); min-height: var(--hp-control-min); min-width: 0; }
+.hp-materials-heading > svg { flex-shrink: 0; }
+.hp-materials-title { font-weight: var(--ds-c-studio-styles-typography-7); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: var(--hp-control-min); }
+.hp-materials-origin { font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); white-space: nowrap; }
+@media (max-width: 360px) { .hp-materials-heading { grid-template-columns: auto minmax(0, 1fr); } .hp-materials-origin { grid-column: 2; } }
 .hp-materials-meta, .hp-materials-detail { overflow-wrap: anywhere; min-width: 0; }
-.hp-materials-detail { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-8)); }
+.hp-materials-detail { font-family: var(--ds-c-studio-styles-font-8); }
 .hp-materials-actions, .hp-materials-add, .hp-materials-url, .hp-materials-chips, .hp-materials-chip { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); align-items: center; min-width: 0; }
 .hp-materials-add { margin: var(--hp-space-2) var(--hp-space-1); }
 .hp-materials-url label { display: grid; gap: var(--hp-space-1); flex: 1 1 auto; min-width: 0; }
 .hp-materials button, .hp-materials-chips button, .hp-materials-url input { min-height: var(--hp-control-min); min-width: var(--hp-control-min); font-size: var(--hp-font-caption); }
 .hp-materials-url input { box-sizing: border-box; width: 100%; }
 .hp-materials-chips { margin: 0 0 var(--hp-space-2); }
+/* CGP-KNOW-R-002 — the same list as the activity home's 자료 view in the task rail: open, a heading in place of the summary. */
+.hp-materials-home-count { margin: 0 var(--hp-space-1); font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); line-height: var(--hp-control-min); }
+.hp-materials-home-state { margin: var(--hp-space-2) var(--hp-space-1); }
 .hp-materials-chip { overflow-wrap: anywhere; font-size: var(--hp-font-caption); }
 /* The focus ring is the shared focus geometry's (focusGeometry.css, CGP-DS-D-014): no ring of this card's own. */
 /* Forced colours: under the global pressed rule (tokens.css: Highlight fill, HighlightText word) Chromium's text
@@ -2120,10 +2241,12 @@ html, body, #root {
 }
 .hps-trial-end-card-primary:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
 .hps-trial-end-card-primary:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+.hps-trial-end-card-personal,
 .hps-trial-end-card-escape {
   border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-2); background: transparent; font-size: var(--ds-c-studio-styles-type-9);
   color: var(--hp-text-accent-default);
 }
+.hps-trial-end-card-personal:hover,
 .hps-trial-end-card-escape:hover { text-decoration: underline; }
 /* TUX-COND-08 — optional email section: secondary, below the pass offer, smaller and quieter
    than the Primary (CU-13). A plain secondary button, never the theme's primary colour. */
@@ -2192,6 +2315,21 @@ html, body, #root {
 .hps-queued-send:disabled { opacity: .5; cursor: default; }
 .hps-queued-send:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-recovered { font-size: var(--ds-c-studio-styles-type-1); }
+
+/* CGP-CHAT-R-029 (CGP-CHAT-D85): the 되돌리기 toast, centred at the bottom of the chat pane right above the
+   composer, content-width up to 360px, 14px text, a 44px 되돌리기. Empty, it is an invisible live region. */
+.hps-undo-toast { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--ds-c-studio-undotoast-space-15) var(--ds-c-studio-undotoast-space-2); box-sizing: border-box; width: fit-content; max-width: min(100%, var(--ds-c-studio-undotoast-size-106)); margin-inline: auto; font-size: var(--hp-font-caption); color: var(--hp-text-primary-default); }
+.hps-undo-toast[data-shown="true"] { margin-block: var(--ds-c-studio-undotoast-space-15); padding: var(--ds-c-studio-undotoast-space-15) var(--ds-c-studio-undotoast-space-2); background: var(--hp-bg-panel-default); border: var(--ds-c-studio-undotoast-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-undotoast-radius-8); }
+.hps-undo-toast-text { display: inline-flex; align-items: center; gap: var(--ds-c-studio-undotoast-space-15); min-width: 0; overflow-wrap: anywhere; }
+.hps-undo-toast-text > .hps-icon { flex: 0 0 auto; }
+.hps-undo-toast-action { flex: 0 0 auto; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0 var(--ds-c-studio-undotoast-space-2); font: inherit; color: inherit; background: transparent; border: var(--ds-c-studio-undotoast-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-undotoast-radius-8); cursor: pointer; }
+.hps-undo-toast-action:hover { background-color: var(--hp-bg-control-hover); }
+.hps-undo-toast-action:active { background-color: var(--hp-bg-control-pressed); }
+.hps-undo-toast-action[aria-disabled="true"] { cursor: default; }
+@media (forced-colors: active) {
+  .hps-undo-toast[data-shown="true"] { border-color: CanvasText; }
+  .hps-undo-toast-action { border-color: ButtonText; }
+}
 /* CGP-CHAT-R-012 — "지금 방향 바꾸기": a secondary action on the parked message, 44px target. */
 .hps-queued-steer { min-width: var(--ds-c-studio-styles-size-8); min-height: var(--ds-c-studio-styles-size-8); }
 .hps-queued-steer[aria-disabled="true"] { opacity: .6; cursor: default; }
@@ -2263,6 +2401,10 @@ html, body, #root {
    REQ-STUDIO-UI-POLISH-1: `.hps-notice-caution` is the same surface under a name that is not about
    the network, for any other "please check this" line (the personal access line). */
 .hps-offline-banner, .hps-notice-caution { margin: var(--ds-c-studio-styles-space-15) 0; padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); border-left: var(--ds-c-studio-styles-size-13) solid var(--hp-border-warn-default); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); font-size: var(--ds-c-studio-styles-type-9); line-height: var(--ds-c-studio-styles-typography-5); word-break: keep-all; overflow-wrap: anywhere; }
+/* DES-SHELL-10: a normal-flow top status; large text may grow rather than clip. */
+.hps-shell .hps-offline-banner { box-sizing: border-box; display: flex; align-items: center; flex: 0 0 auto; gap: var(--ds-c-studio-styles-space-15); margin: 0; padding-block: var(--ds-c-studio-styles-space-14); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-offline-banner > svg { flex: 0 0 auto; }
+.hps-offline-banner > span { min-width: 0; }
 /* REQ-STUDIO-PREVIEW-RECOVERY (CGP-ART-R-009, DES-ART-09): the preview cannot show a page. One cause line at
    body size, one 44px action, the technical code folded under 자세히. Personal and classroom chat share it, so
    every size is a type-scale token (14px floor). The edge is the offline banner's amber; text keeps the foreground. */
@@ -2276,6 +2418,19 @@ html, body, #root {
 .hps-preview-recovery-detail code { font-size: var(--hp-font-caption); }
 .hps-preview-recovery-note { margin: 0; flex: 1 1 100%; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
 .hps-preview-recovery-solo { display: block; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+/* REQ-KNOW-35 / DES-KNOW-35 (CGP-KNOW-R-019): low free space, a persistent bar above the composer in every seat.
+   Same calm surface as the preview recovery line (amber is only the edge; text keeps the foreground). The one
+   control is the "공간 확보 방법" disclosure: a 44px target, text at the caption step or larger (14px floor). */
+.hps-low-disk { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); margin: 0; padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); border-left: var(--ds-c-studio-styles-size-13) solid var(--hp-border-warn-default); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); word-break: keep-all; overflow-wrap: anywhere; min-width: 0; }
+.hps-low-disk-text { margin: 0; flex: 1 1 var(--ds-c-studio-styles-size-27); min-width: 0; font-size: var(--hp-font-body); line-height: var(--hp-leading-label); }
+.hps-low-disk-help { flex: 0 0 auto; min-height: var(--ds-c-studio-styles-size-8); min-width: var(--ds-c-studio-styles-size-8); padding: 0 var(--ds-c-studio-styles-space-2); border: var(--ds-c-studio-styles-size-3) solid transparent; border-radius: var(--ds-c-studio-styles-radius-10); background: transparent; color: var(--vscode-textLink-foreground, inherit); font: inherit; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); text-decoration: underline; text-underline-offset: var(--ds-c-studio-styles-size-7); cursor: pointer; }
+.hps-low-disk-help:hover { background-color: var(--hp-bg-control-hover); }
+.hps-low-disk-help:active { background-color: var(--hp-bg-control-pressed); }
+.hps-low-disk-help:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-low-disk-detail { flex: 1 1 100%; min-width: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-low-disk-detail[hidden] { display: none; }
+.hps-low-disk-amounts, .hps-low-disk-keep { margin: 0; }
+.hps-low-disk-steps { margin: var(--ds-c-studio-styles-space-13) 0; padding-inline-start: var(--ds-c-studio-styles-space-20); }
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Marks drawn only in colour, or only as a
    background (which forced colors repaints as Canvas), get a line or a shape. Normal mode is unchanged. */
 @media (forced-colors: active) {
@@ -2309,6 +2464,9 @@ html, body, #root {
   .hps-msg-assistant .hps-msg-role > span::before { background-color: CanvasText; }
   /* REQ-STUDIO-PREVIEW-RECOVERY: the edge becomes a text line; the action keeps a button outline. */
   .hps-preview-recovery { border-left-color: CanvasText; }
+  /* REQ-KNOW-35: the amber edge becomes a text line; the disclosure keeps a link colour and an outline on focus. */
+  .hps-low-disk { border-left-color: CanvasText; }
+  .hps-low-disk-help { color: LinkText; }
   .hps-preview-recovery-action { border: var(--ds-c-studio-styles-size-3) solid ButtonText; background: ButtonFace; color: ButtonText; }
 }
 
@@ -2331,6 +2489,8 @@ html, body, #root {
   .tw-heading:has(.hps-access-header) { flex-wrap: wrap; row-gap: 0; }
   .tw-heading:has(.hps-access-header) .hps-access-header { order: 3; flex: 1 1 100%; padding-bottom: var(--ds-c-studio-styles-space-2); }
   .tw-heading:has(.hps-access-header) .hps-activity-now { flex: 1 1000 0; }
+}
+@container studio-chat (max-width: 640px) {
   /* Classroom header (no task heading; DEC-35 class seats): the same own row under the coach name
      and actions, so the coach name is not squeezed to one letter. */
   .hps-header:has(> .hps-access-header) { flex-wrap: wrap; row-gap: var(--ds-c-studio-styles-space-14); }
@@ -2342,7 +2502,7 @@ html, body, #root {
 .hps-page-context-panel { max-height: 40vh; overflow: auto; }
 .hps-page-context-panel[hidden] { display: none; }
 .hps-page-context-panel h3 { margin: var(--ds-c-studio-styles-space-2) 0; font-size: var(--ds-c-studio-styles-type-22); }
-.hps-page-context-origin { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-5)); overflow-wrap: anywhere; }
+.hps-page-context-origin { font-family: var(--ds-c-studio-styles-font-5); overflow-wrap: anywhere; }
 .hps-page-context-quote { margin: var(--ds-c-studio-styles-space-2) 0; padding: 0 0 0 var(--ds-c-studio-styles-space-1); border-left: var(--ds-c-studio-styles-size-15) solid var(--hp-border-muted-default); }
 .hps-page-context-quote pre { max-height: none; overflow: visible; }
 .hps-page-context-toggle:focus-visible, .hps-page-context-quote pre:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
@@ -2373,12 +2533,16 @@ html, body, #root {
 .hps-turn-file > p { margin-block: var(--ds-c-studio-styles-space-13); }
 .hps-turn-diff { margin-block: var(--ds-c-studio-styles-space-2); min-width: 0; }
 .hps-turn-diff-line { display: grid; grid-template-columns: var(--ds-c-studio-styles-size-141) minmax(0, 1fr); white-space: pre-wrap; overflow-wrap: anywhere; }
-.hps-turn-diff-line[data-kind="added"] { background: var(--vscode-diffEditor-insertedTextBackground, var(--ds-c-studio-styles-surface-121)); }
-.hps-turn-diff-line[data-kind="removed"] { background: var(--vscode-diffEditor-removedTextBackground, var(--ds-c-studio-styles-surface-122)); }
+.hps-turn-diff-line[data-kind="added"] { background: color-mix(in srgb, var(--vscode-diffEditor-insertedTextBackground, var(--ds-c-studio-styles-surface-121)) 15%, transparent); }
+.hps-turn-diff-line[data-kind="removed"] { background: color-mix(in srgb, var(--vscode-diffEditor-removedTextBackground, var(--ds-c-studio-styles-surface-122)) 15%, transparent); }
+.hps-shell .hps-turn-diff-line code { font-size: var(--hp-font-caption); }
+.hps-turn-diff-line del { text-decoration: line-through; }
+.hps-diff-marker { unicode-bidi: isolate; direction: ltr; }
+.hp-evidence-compare > section { min-width: 0; }
 .hps-turn-split { display: none; }
 .hps-turn-review summary { min-height: var(--ds-c-studio-styles-size-8); padding-block: var(--ds-c-studio-styles-space-7); box-sizing: border-box; cursor: pointer; }
 .hps-turn-review summary:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
-@media (min-width: 1024px) {
+@container studio-chat (min-width: 1024px) {
   .hps-turn-split { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--ds-c-studio-styles-space-2); }
   .hps-turn-unified { display: none; }
 }
@@ -2415,7 +2579,7 @@ html, body, #root {
 .hps-attachment-failure button { grid-row: 1 / span 2; margin-inline-end: 0; }
 .hps-attachment-failure button:first-of-type { grid-column: 2; }
 .hps-attachment-failure button:last-of-type { grid-column: 3; }
-@media (max-width: 520px) { .hps-attachment-failure { grid-template-columns: minmax(0, 1fr) auto; } .hps-attachment-failure button { grid-row: auto; grid-column: 1 / -1; } }
+@container studio-chat (width < 448px) { .hps-attachment-failure { grid-template-columns: minmax(0, 1fr) auto; } .hps-attachment-failure button { grid-row: auto; grid-column: 1 / -1; } }
 /* A classroom lesson makes the shell the scroller: keep the footer (composer and failure rows) at the bottom edge. */
 .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hps-input-area { position: sticky; bottom: 0; z-index: 2; background: var(--vscode-editor-background, var(--ds-c-studio-styles-surface-123)); }
 @media (forced-colors: active) { .hps-attachment-failure, .hps-photo-failure { border-color: CanvasText; } }
@@ -2436,7 +2600,7 @@ html, body, #root {
    and keeps a gap after the coach name. */
 .hps-header > .hps-access-header { flex-shrink: 1000; margin-inline-start: var(--ds-c-studio-styles-space-2); }
 .hps-access-model { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hps-header .hps-access-header .hps-access-chip { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: var(--hp-control-min); max-width: 100%; min-height: var(--hp-control-min); box-sizing: border-box; margin: 0; padding: 0 var(--ds-c-studio-styles-space-2); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-styles-typography-5); white-space: nowrap; text-align: start; color: var(--vscode-foreground); background: var(--vscode-editor-background); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-12); }
+.hps-header .hps-access-header .hps-access-chip { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: var(--hp-control-min); max-width: 100%; min-height: var(--hp-control-min); box-sizing: border-box; margin: 0; padding: 0 var(--ds-c-studio-styles-space-2); font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-styles-typography-5); white-space: nowrap; text-align: start; color: var(--vscode-foreground); background: var(--vscode-editor-background); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-4); }
 /* The chip text is a paragraph: the spaces between parts are the only places it wraps, and every
    part (and the count's "남은 요청 N회") is a whole unit. A unit wider than the whole chip (an extreme
    ledger value) wraps inside itself instead of being cut. */
@@ -2465,7 +2629,7 @@ html, body, #root {
   cursor: pointer;
 }
 
-@media (max-width: 800px) {
+@container studio-chat (width < 688px) {
   .hps-header:has(.hp-capability-reopen) { flex-wrap: wrap; }
   .hps-header .hp-capability-reopen { flex-basis: 100%; margin-left: 0; }
   .hps-header:has(.hp-capability-reopen) .hps-coach-name { flex-shrink: 0; }
@@ -2482,3 +2646,117 @@ html, body, #root {
   .hps-model-selection select:disabled[aria-disabled="true"], .hps-effort select:disabled[aria-disabled="true"] { color:GrayText; border-color:GrayText; border-style:dashed !important; }
   .hps-managed-reason { color:CanvasText; }
 }
+
+/* CGP-SHELL-R-025: passive class-time line, within the existing chat rail. */
+.hps-class-window {
+  display: flex; align-items: center; gap: var(--hp-space-2); flex: 0 0 auto;
+  font-size: var(--ds-c-studio-styles-type-17);
+  line-height: var(--hp-leading-label);
+  margin: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-1);
+  color: var(--vscode-foreground, var(--ds-c-studio-styles-ink-1));
+  overflow-wrap: anywhere;
+}
+ .hps-class-window > svg { flex: none; color: var(--hp-text-warn-default); }
+.hps-class-window > span { min-width: 0; flex: 1; }
+.hps-class-window > button { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0; color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-space-2); }
+.hps-class-window > button:hover { background: var(--hp-bg-control-hover); }
+.hps-class-window > button:active { background: var(--hp-bg-control-pressed); }
+@media (forced-colors: active) {
+  .hps-class-window { color: CanvasText; }
+}
+/* CGP-DS-R-007: nested controls keep their UI font when answer prose changes. */
+.hps-prose, .hps-msg-body { font-family: var(--ds-c-typography-content), var(--ds-c-typography-emoji); }
+.hps-shell :is(button, input, select, textarea), .hps-codeblock-tools {
+  font-family: var(--vscode-font-family, var(--ds-c-typography-ui)), var(--ds-c-typography-emoji);
+}
+
+/* DES-CGP-AGENT-12: one turn summary and a responsive helper results panel. */
+.hps-delegation-group { min-width: 0; margin-block: var(--hp-space-2); }
+.hps-delegation-toggle, .hps-delegation-panel button { min-width: var(--ds-c-inline-hit-target); min-height: var(--ds-c-inline-hit-target); padding: var(--hp-space-2); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-10); background: transparent; color: inherit; font: inherit; font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
+.hps-delegation-panel { border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); font: inherit; font-size: var(--hp-font-caption); }
+.hps-delegation-panel header { display: flex; align-items: center; gap: var(--hp-space-2); justify-content: space-between; }
+.hps-delegation-panel h2 { font: inherit; font-weight: var(--hp-weight-strong); }
+.hps-delegation-panel .hps-delegation-summary { flex-wrap: wrap; font-size: var(--hp-font-caption); }
+.hps-delegation-panel .hps-delegation-task { flex-basis: 100%; white-space: normal; overflow-wrap: anywhere; }
+.hps-delegation-result-link { text-decoration: underline; }
+.hps-delegation-panel .hps-delegation-body { padding: var(--hp-space-2); font-size: var(--hp-font-caption); }
+.hps-delegation-panel :focus-visible, .hps-delegation-toggle:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-delegation-panel button:disabled { cursor: default; }
+.hps-delegation-toggle:hover:not(:disabled), .hps-delegation-panel button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-delegation-toggle:active:not(:disabled), .hps-delegation-panel button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+/* CGP-ART-D-011: compact state beside publish; detailed link settings stay explicit. */
+.hps-publish-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
+.hps-sharing-pill, .hps-sharing-refresh { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-c-studio-styles-space-15); min-height: var(--ds-c-studio-tokens-control-md); min-width: var(--ds-c-studio-tokens-control-md); max-width: 100%; padding: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-7); font: inherit; font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-full); cursor: pointer; }
+.hps-sharing-pill svg { flex-shrink: 0; }
+.hps-sharing-pill:hover, .hps-sharing-refresh:hover, .hps-share-settings > summary:hover { background-color: var(--hp-bg-control-hover); }
+.hps-sharing-pill:active, .hps-sharing-refresh:active, .hps-share-settings > summary:active { background-color: var(--hp-bg-control-pressed); }
+.hps-sharing-pill:focus-visible, .hps-sharing-refresh:focus-visible, .hps-share-settings > summary:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-width); }
+.hps-share-settings > summary { min-height: var(--ds-c-studio-tokens-control-md); font-size: var(--hp-font-caption); cursor: pointer; }
+.hps-share-settings { overflow-wrap: anywhere; }
+/* CGP-ART-D-019: keep visible activity without motion when reduced motion is selected. */
+.hps-idle-progress-motion { position: relative; overflow: hidden; display: inline-grid; place-items: center; width: var(--hp-font-caption); height: var(--hp-font-caption); flex-shrink: 0; }
+.hps-idle-progress-motion::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent, currentColor, transparent); transform: translateX(-100%); animation: hps-shimmer var(--hp-dur-shimmer) linear infinite; }
+.hps-long-step-text { flex: 1; min-width: 0; }
+.hps-idle-progress-dot { opacity: 0; }
+:where(:root[data-reduced-motion="true"]) .hps-idle-progress-dot { opacity: 1; }
+:where(:root[data-reduced-motion="true"]) .hps-idle-progress-motion::after { animation: none; opacity: 0; }
+@media (prefers-reduced-motion: reduce) { :where(:root:not([data-reduced-motion])) .hps-idle-progress-dot { opacity: 1; } :where(:root:not([data-reduced-motion])) .hps-idle-progress-motion::after { animation: none; opacity: 0; } }
+/* DES-ART-03: keep is the first/default action; both actions fit a 320px pane. */
+.hps-annotation-leave { color: var(--hp-text-primary-default); background: var(--vscode-editor-background); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); }
+.hps-annotation-leave h2 { font-size: var(--hp-font-body); line-height: var(--hp-leading-label); margin: 0 0 var(--ds-c-modal-padding); font-weight: var(--hp-weight-strong); }
+.hps-annotation-leave-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-c-studio-styles-space-2); }
+.hps-annotation-leave button { font: inherit; font-size: var(--hp-font-caption); min-height: var(--hp-control-min); min-width: var(--hp-control-min); color: inherit; background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-3); cursor: pointer; }
+.hps-annotation-leave button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-annotation-leave button:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
+@media (forced-colors: active) { .hps-annotation-leave { color: CanvasText; background: Canvas; border-color: CanvasText; } .hps-annotation-leave button { color: ButtonText; background: ButtonFace; border-color: ButtonText; } }
+/* CGP-SHELL-D-029: text remains the state cue; a border groups the request receipt. */
+.hps-budget-request-state { display: inline-block; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-12); padding: var(--ds-c-studio-styles-space-2); }
+/* CGP-SHELL-D-029: the reason field stays inside the panel, the counter is a learner-scale hint under it, and both controls are 44px targets. */
+.hps-access input { box-sizing: border-box; }
+.hps-budget-request-notice form { display: flex; flex-direction: column; align-items: flex-start; gap: var(--ds-c-studio-styles-space-2); min-width: 0; }
+.hps-budget-request-notice form label { align-self: stretch; min-width: 0; }
+.hps-budget-request-notice input { min-height: var(--hp-control-min); }
+.hps-budget-request-notice form small { display: block; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); }
+.hps-budget-request-notice form button { min-height: var(--hp-control-min); margin: 0; }
+.hps-budget-request-notice input { font-size: var(--hp-font-caption); }
+/* REQ-CGP-AGENT-60: purpose and folder remain readable beside long commands.
+ * Keyboard focus uses the shared ring in focusGeometry.css; the scrolling <pre> is one of its
+ * scroll scopes, so controls are never given a component-level focus rule here. */
+.hps-shell-row, .hps-running-processes {
+  min-width: 0;
+  font-size: var(--hp-font-caption);
+  overflow-wrap: anywhere;
+  color: inherit;
+}
+.hps-shell-row p, .hps-running-processes p { margin: var(--ds-c-studio-styles-space-13) 0; }
+.hps-shell-purpose { font-weight: var(--hp-weight-strong); color: var(--hp-text-primary-default); }
+.hps-shell-folder { color: var(--hp-text-muted-default); }
+.hps-shell-row details > p { margin-top: var(--ds-c-studio-styles-space-13); }
+.hps-shell-row pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: var(--ds-c-studio-styles-size-64);
+  overflow: auto;
+}
+.hps-shell-row summary {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-c-studio-styles-space-13);
+  min-height: var(--hp-control-min);
+  cursor: pointer;
+}
+.hps-shell-row summary::before { content: "\25B8"; }
+.hps-shell-row details[open] > summary::before { content: "\25BE"; }
+.hps-running-processes h2 { margin: 0; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.hps-running-processes ul { margin: 0; padding: 0; list-style: none; }
+.hps-running-processes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-c-studio-styles-space-2);
+}
+.hps-process-text { min-width: 0; flex: 1 1 auto; }
+.hps-process-actions { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); }
+.hps-running-processes button { min-height: var(--hp-control-min); font: inherit; }

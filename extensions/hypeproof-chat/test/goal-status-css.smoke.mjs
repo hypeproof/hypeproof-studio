@@ -46,13 +46,13 @@ const css = { 'goalStatusBar.css': readDesignFile(new URL('../webview-ui/src/goa
 const expected = [
  ['.hps-goal-status button', 'background', 'transparent'],
  ['.hps-goal-status button', 'border', '1px solid var(--hp-border-control-default)'],
- ['.hps-goal-status button', 'border-radius', '4px'],
+ ['.hps-goal-status button', 'border-radius', 'var(--hp-radius-status-chip)'], // CGP-DS-R-011: 4px on the radius scale (radius-scale-computed measures it)
  ['.hps-goal-status button', 'padding-inline', '8px'],
  ['.hps-goal-status button:hover:not(:disabled)', 'background', 'var(--hp-bg-control-hover)'],
  ['.hps-goal-status button:active:not(:disabled)', 'background', 'var(--hp-bg-control-pressed)'],
  ['.hps-goal-status', 'min-width', '0'],
  ['.hps-goal-status', 'max-width', '100%'],
- ['.hps-goal-status', 'font-size', '14px'],
+ ['.hps-goal-status', 'font-size', 'var(--hp-font-caption, 14px)'],
  ['.hps-goal-status', 'color', 'var(--hp-text-primary-default)'],
  ['.hps-goal-status', 'overflow-wrap', 'anywhere'],
  ['.hps-goal-status div', 'display', 'flex'],

@@ -4,7 +4,7 @@
 .studio-start,.studio-disconnected {
   color:var(--hp-text-primary-default);
   background:var(--hp-bg-app-default);
-  font-family:var(--ds-c-studio-start-font-1);
+  font-family:var(--ds-c-studio-start-font-1), var(--ds-c-typography-emoji);
   box-sizing:border-box;
   line-height:var(--ds-c-studio-start-typography-4)}
 
@@ -106,7 +106,10 @@
   border:var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-4);
   border-radius:var(--ds-c-studio-start-radius-8);
   padding:var(--ds-c-studio-start-space-3);
-  box-shadow:0 var(--ds-c-studio-start-shadow-10) var(--ds-c-studio-start-shadow-11) var(--ds-c-studio-start-shadow-5)}
+  box-shadow:var(--hp-elevation-raised)}
+/* CGP-DS-R-012 (DES-CGP-DS-13): high contrast has no elevation shadow. The start screen stays forest in every
+   theme, where the light contrastBorder would be dim, so the card's 1px border takes its own text colour. */
+body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 .studio-card-top {
   display:flex;
   justify-content:space-between;
@@ -441,8 +444,16 @@
 .studio-repo-one { cursor: default; }
 .studio-github .studio-help { margin: 0; }
 
-.studio-saved-activities button { display: block; text-align: left; max-width: 100%; overflow-wrap: anywhere; }
-.studio-saved-activities small { display: block; font-size: var(--ds-c-studio-start-type-18); color: var(--hp-text-muted-default); }
+/* #2646: saved activities share one left edge, span the card and read as choices. A block-level
+   .studio-text-button shrinks to its content and centres itself with margin auto, which staggered the rows. */
+.studio-saved-activities { display: flex; flex-direction: column; gap: var(--ds-c-studio-start-space-2); }
+.studio-saved-activities .studio-saved-activity { display: flex; flex-direction: column; align-items: flex-start; box-sizing: border-box; width: 100%; max-width: 100%; min-height: var(--hp-control-min); margin: 0; text-align: left; border-radius: var(--ds-c-studio-start-radius-1); }
+.studio-saved-activities .studio-saved-activity:hover:enabled { background: var(--hp-bg-control-hover); }
+.studio-saved-activities .studio-saved-activity:active:enabled { background: var(--hp-bg-control-pressed); }
+.studio-saved-activity-name { max-width: 100%; overflow-wrap: anywhere; }
+/* width 0 + min-width 100%: the one-line workspace must not set the card's minimum width (the card is a grid item
+   with min-width auto), or a long folder name widens the page at 320 px instead of ending in an ellipsis. */
+.studio-saved-activities small { display: block; width: 0; min-width: 100%; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-c-studio-start-type-18); color: var(--hp-text-muted-default); }
 .hps-activity-header { padding: var(--ds-c-studio-start-space-2) var(--ds-c-studio-start-space-20); font-size: var(--ds-c-studio-start-type-19); overflow-wrap: anywhere; }
 
 /* #751 U2 — the same inbox on the entry card: a quiet text line under the one Primary, never a second emphasised button. */
@@ -512,3 +523,20 @@
 .studio-join-class { margin:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-7); font-size:var(--ds-c-studio-start-type-17); color:var(--hp-text-muted-default); }
 .studio-join-class strong { color:var(--hp-text-primary-default); font-size:var(--ds-c-studio-start-type-13); font-weight:var(--ds-c-studio-start-typography-7); overflow-wrap:anywhere; }
 .studio-join-help { margin:var(--ds-c-studio-start-space-15) 0 0; font-size:var(--ds-c-studio-start-type-17); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-muted-default); word-break:keep-all; overflow-wrap:anywhere; }
+
+/* CGP-SHELL-R-014 — the learner settings sheet behind the start page "설정". It reuses the chat's
+ * settings dialog (ChatPreferences); the start page has no task workspace, so the three task
+ * workspace roles that dialog reads are given here from the start page's own semantic tokens. */
+.studio-start .studio-settings {
+  --tw-line:var(--hp-border-divider-default);
+  --tw-muted:var(--hp-text-muted-default);
+  --tw-panel:var(--hp-bg-panel-default);
+  color:var(--hp-text-primary-default)}
+.studio-start .studio-settings .studio-settings-hint {
+  flex-basis:100%;
+  margin:0;
+  font-size:var(--hp-font-caption)}
+.studio-start .studio-settings .studio-settings-advanced {
+  display:block;
+  font-size:var(--hp-font-caption);
+  text-decoration:underline}

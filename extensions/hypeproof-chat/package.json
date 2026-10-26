@@ -37,7 +37,7 @@
       "activitybar": [
         {
           "id": "hypeproof-chat",
-          "title": "HypeProof Chat",
+          "title": "대화",
           "icon": "media/chat.svg"
         }
       ]
@@ -46,19 +46,22 @@
       "hypeproof-chat": [
         {
           "id": "hypeproof-chat.panel",
-          "name": "Chat",
+          "name": "대화",
           "type": "webview"
         }
       ]
     },
     "commands": [
+      { "command": "hypeproof-chat.exportMyWork", "title": "내 작업 내보내기", "category": "HypeProof" },
       { "command": "hypeproof-chat.takeMyWork", "title": "내 작업 가져가기", "enablement": "config.hypeproofChat.workTakeawayEnabled" },
       { "command": "hypeproof-chat.artifactHistory", "title": "이 파일의 이전 버전", "category": "HypeProof" },
       { "command": "hypeproof-chat.trashFile", "title": "파일을 활동 휴지통으로 이동", "enablement": "config.hypeproofChat.activityTrashEnabled" },
       { "command": "hypeproof-chat.activityTrash", "title": "활동 휴지통 열기", "enablement": "config.hypeproofChat.activityTrashEnabled" },
+      { "command": "hypeproof-chat.recordPerformanceTrace", "title": "느려요 기록 시작", "category": "HypeProof", "enablement": "config.hypeproofChat.performanceTraceEnabled" },
+      { "command": "hypeproof-chat.stopPerformanceTrace", "title": "느려요 기록 멈추기", "category": "HypeProof" },
       {
         "command": "hypeproof-chat.focus",
-        "title": "HypeProof Chat: Focus"
+        "title": "대화로 이동"
       },
       {
         "command": "hypeproof-chat.openBrowser",
@@ -72,15 +75,15 @@
       },
       {
         "command": "hypeproof-chat.clearHistory",
-        "title": "HypeProof Chat: Clear Conversation"
+        "title": "대화 지우기"
       },
       {
         "command": "hypeproof-chat.setToken",
-        "title": "HypeProof Chat: Set Workshop Token"
+        "title": "참여 코드 입력"
       },
       {
         "command": "hypeproof-chat.runLastCode",
-        "title": "HypeProof Chat: Run Last Code in Preview"
+        "title": "마지막 코드를 미리보기에서 실행"
       },
       {
         "command": "hypeproof-chat.renameCoach",
@@ -233,6 +236,18 @@
         "command": "hypeproof-chat.deckDraft",
         "title": "HypeProof: 팀 브레인으로 덱 만들기",
         "icon": "$(preview)",
+        "enablement": "hypeproof-chat.learningWikiEnabled"
+      },
+      {
+        "command": "hypeproof-chat.deckSlideSuggest",
+        "title": "HypeProof: 덱 장 다듬기",
+        "icon": "$(sparkle)",
+        "enablement": "hypeproof-chat.learningWikiEnabled"
+      },
+      {
+        "command": "hypeproof-chat.deckPdf",
+        "title": "HypeProof: 덱 PDF로 저장",
+        "icon": "$(file-pdf)",
         "enablement": "hypeproof-chat.learningWikiEnabled"
       },
       {
@@ -397,6 +412,18 @@
           "when": "false"
         },
         {
+          "command": "hypeproof-chat.exportMyWork",
+          "when": "false"
+        },
+        {
+          "command": "hypeproof-chat.recordPerformanceTrace",
+          "when": "config.hypeproofChat.performanceTraceEnabled"
+        },
+        {
+          "command": "hypeproof-chat.stopPerformanceTrace",
+          "when": "false"
+        },
+        {
           "command": "hypeproof-chat.diagnoseVoiceCapability",
           "when": "false"
         },
@@ -445,6 +472,14 @@
           "when": "hypeproof-chat.learningWikiEnabled"
         },
         {
+          "command": "hypeproof-chat.deckSlideSuggest",
+            "when": "hypeproof-chat.learningWikiEnabled"
+          },
+          {
+          "command": "hypeproof-chat.deckPdf",
+          "when": "hypeproof-chat.learningWikiEnabled"
+        },
+        {
           "command": "hypeproof-chat.curriculumSkills",
           "when": "hypeproof-chat.curriculumRuntimeEnabled"
         },
@@ -463,8 +498,16 @@
       ]
     },
     "configuration": {
-      "title": "HypeProof Chat",
+      "title": "대화 설정",
       "properties": {
+        "hypeproofChat.lowDiskWarningMB": {
+          "type": "number", "default": 500, "minimum": 0, "maximum": 1048576, "scope": "machine",
+          "description": "작업 폴더가 있는 디스크의 남은 공간이 이 값(MB)보다 적으면 입력창 위에 안내를 띄웁니다. 0이면 끕니다. 보내기와 파일 열기는 막지 않습니다."
+        },
+        "hypeproofChat.osTaskNotices": {
+          "type": "boolean", "default": false,
+          "description": "창을 보고 있지 않을 때 코치의 완료·승인 대기 알림을 운영체제에 표시합니다. 답변 내용은 보내지 않습니다."
+        },
         "hypeproofChat.artifactHistoryEnabled": {
           "type": "boolean",
           "default": false,
@@ -473,33 +516,38 @@
         },
         "hypeproofChat.annotationBatchEnabled": {
           "type": "boolean", "default": false, "scope": "machine",
-          "description": "Enable learner preview annotation batches. Requires the served curriculum-runtime and image permissions."
+          "description": "미리보기 화면에 표시를 남겨 한꺼번에 보낼 수 있게 합니다. 수업에서 제공하는 실행 환경과 이미지 권한이 있어야 합니다. 기본은 꺼짐입니다."
         },
         "hypeproofChat.workTakeawayEnabled": {
           "type": "boolean", "default": false, "scope": "machine",
-          "description": "Enable explicit local copies of learner work at activity transitions. Off by default for every seat; does not transfer credentials or AI access."
+          "description": "활동이 바뀔 때 내 작업을 이 기기에 따로 저장해 둘 수 있게 합니다. 모든 이용 방식에서 기본은 꺼짐이며, 참여 코드나 AI 사용 권한은 옮기지 않습니다."
         },
         "hypeproofChat.activityTrashEnabled": {
           "type": "boolean", "default": false, "scope": "machine",
-          "description": "Enable local activity trash for learner deletion gestures, including Explorer. Copies are kept encrypted in Studio's own storage, outside the work folder, with the key in the OS keychain, until the activity folder is removed. Off by default for every seat; turning it on for any seat is the owner's decision (DEC-12, not yet confirmed)."
+          "description": "활동 파일을 지울 때 암호화된 활동 휴지통에 보관합니다. 모든 이용 방식에서 기본은 꺼짐입니다. 키는 운영체제의 키 저장소에 보관하며 활동 폴더를 제거할 때 사본도 제거합니다. 사용 여부는 소유자가 결정합니다."
+        },
+        "hypeproofChat.performanceTraceEnabled": {
+          "type": "boolean", "default": false, "scope": "machine",
+          "description": "느려요 기록(성능 기록)을 쓸 수 있게 합니다. 성인 이용자와 강사만 쓸 수 있고, 기록은 이 기기에만 저장되며 ‘보내기’를 직접 누를 때만 요약이 전송됩니다. 기본은 꺼짐입니다."
         },
         "hypeproofChat.proxyUrl": {
           "type": "string",
           "default": "https://api.hypeproof-ai.xyz/v1",
           "scope": "machine",
-          "description": "Base URL for the HypeProof Proxy (OpenAI-compatible). Override for local dev (e.g. http://localhost:8787/v1). Machine-scoped: a workspace cannot repoint the coach at an untrusted gateway."
+          "description": "코치가 연결할 서비스 주소입니다. 이 기기에만 적용하며 작업 폴더에서 바꿀 수 없습니다. 개발 환경에서만 변경하세요."
         },
         "hypeproofChat.freeStart": {
           "type": "string",
           "enum": ["service", "off"],
+          "enumItemLabels": ["서비스 안내 따르기", "참여 코드로 시작"],
           "default": "service",
           "scope": "machine",
-          "description": "Free start (no code on first open). \"service\": follow what the Service advertises at /v1/trial/offer (entry \"open\" with a claim route). \"off\": always show the code-based start page."
+          "description": "처음 열 때 코드 없이 시작할지 정합니다. service는 서비스의 체험 안내를 따르고, off는 참여 코드 입력 화면을 표시합니다."
         },
         "hypeproofChat.model": {
           "type": "string",
           "default": "hypeproof-default",
-          "description": "Requested model alias. The Service resolves it using the cohort policy. The Agent SDK route also permits the fast model; other unrecognized values use the default."
+          "description": "요청할 모델 이름입니다. 실제 모델은 수업 정책에 따라 서비스가 정합니다."
         },
         "hypeproofChat.instructorRuntime": {
           "type": "string",
@@ -507,9 +555,13 @@
             "legacy",
             "chalk-extension"
           ],
+          "enumItemLabels": [
+            "Studio 안 (기본)",
+            "Chalk 확장"
+          ],
           "default": "legacy",
           "scope": "machine",
-          "description": "Instructor surface. 'legacy' = the instructor mode inside HypeProof Studio (default, current behavior). 'chalk-extension' = the instructor surface is the Chalk extension (hypeproof.hypeproof-chalk) through the Chalk command contract; without that extension installed, Studio shows no instructor surface. Machine-scoped."
+          "description": "강사 화면을 어디서 띄울지 정합니다. 'legacy'(기본값): 지금처럼 Studio 안에서 강사 모드를 씁니다. 'chalk-extension': Chalk 확장(hypeproof.hypeproof-chalk)이 강사 화면을 맡습니다. 이 확장이 없으면 강사 화면이 보이지 않습니다. 기기마다 적용됩니다."
         },
         "hypeproofChat.coachRuntime": {
           "type": "string",
@@ -517,28 +569,29 @@
             "proxy",
             "agent-sdk"
           ],
+          "enumItemLabels": ["서비스 연결", "기기 에이전트"],
           "default": "proxy",
           "scope": "machine",
-          "description": "Coach runtime. 'proxy' = the current single-turn provider proxy (default). 'agent-sdk' = the Claude Agent SDK coach (epic #282). Until the SDK is bundled (Phase 1), selecting 'agent-sdk' transparently falls back to the proxy runtime for each turn (a dev warning is logged); it never interrupts the student. Machine-scoped: a workspace cannot flip the runtime to the SDK executable path."
+          "description": "코치 실행 방식입니다. proxy는 서비스 연결, agent-sdk는 이 기기의 에이전트 실행을 사용합니다. 이 기기에만 적용하며 작업 폴더에서 바꿀 수 없습니다."
         },
         "hypeproofChat.sdkBinaryPath": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Absolute path to a claude CLI binary for the agent-sdk coach runtime (epic #282). Highest-priority override; when empty, resolution falls through HPS_SDK_BINARY (env) → the seeded per-user location (scripts/seed-sdk-binary.sh) → node_modules (dev). If nothing resolves, the coach falls back to the proxy runtime. Machine-scoped: this selects an executable, so a workspace must not be able to set it."
+          "description": "이 기기에서 사용할 에이전트 실행 파일의 전체 경로입니다. 비워 두면 환경 변수, 설치된 위치, 개발용 패키지 순으로 찾습니다. 작업 폴더에서 바꿀 수 없습니다."
         },
         "hypeproofChat.sdkSeedOnDemand": {
           "type": "boolean",
           "default": false,
           "scope": "machine",
-          "description": "studio-sdk-seed-on-demand (REQ-M46). When no claude CLI binary resolves before an agent-sdk turn, ask the user to download the native SDK seed from this App's own public release into the seeded per-user location; it is installed only if its sha256 matches the release and its sha512 matches the value pinned in this App. Default off. Machine-scoped: it fetches an executable, so a workspace must not be able to turn it on."
+          "description": "에이전트 실행 파일이 없으면 다운로드 여부를 물어봅니다. 이 앱에 고정된 검증값과 일치할 때만 설치합니다. 기본은 꺼짐이며 작업 폴더에서 바꿀 수 없습니다."
         },
         "hypeproofChat.sdkStallTimeoutMs": {
           "type": "number",
           "default": 240000,
           "minimum": 0,
           "scope": "machine",
-          "description": "How long (ms) the agent-sdk coach may go without progress before the turn is aborted with a friendly retry message (#403). Guards the cases the 401/400 fast-fail does not cover — gateway 429/529/5xx retry storms, or a first turn that never produces a token — which otherwise leave the student on \"생각하는 중…\" forever. 0 disables the watchdog."
+          "description": "코치 응답을 기다릴 최대 시간(밀리초)입니다. 시간이 지나면 멈추고 다시 시도할 수 있게 안내합니다. 0은 대기 제한을 끕니다."
         },
         "hypeproofChat.requireApprovalFor": {
           "type": "array",
@@ -560,31 +613,31 @@
             "browserType"
           ],
           "scope": "machine",
-          "description": "Actions that require explicit user approval before execution. 이 배열이 승인 정책의 단일 소스다 — 코드의 getConfiguration 폴백은 매니페스트 default 가 있는 한 절대 쓰이지 않는다(#499). writeFile 은 기본에서 제외(#464): 워크스페이스 밖 경로는 모달 없이 이미 거부되고, 실측에서 이 모달이 세션을 멈추거나 반사 승인을 훈련시켰다. 되돌리려면 \"writeFile\" 을 추가한다. consultHelper (the coach consulting a roster helper, ADR 0011) is offered but not in the default: helpers have no tools, see only declared workspace excerpts, and appear in the timeline. Add \"consultHelper\" to require a modal. Machine-scoped: a workspace cannot weaken the approval gate (e.g. clear it to auto-run shell/file writes)."
+          "description": "실행 전에 확인을 받을 동작입니다. 이 기기에만 적용하며 작업 폴더에서 확인 절차를 약하게 바꿀 수 없습니다. 파일 쓰기는 기본 확인 목록에서 제외되지만 작업 폴더 밖 쓰기는 거부합니다. 도우미 상담을 추가하면 상담 전에도 확인합니다."
         },
         "hypeproofChat.siteBase": {
           "type": "string",
           "default": "https://hypeproof-ai.xyz",
-          "description": "HypeProof Lab 사이트 주소. '갤러리에 올리기'가 여기로 보냅니다. 로컬 개발 서버에 붙여 볼 때만 바꾸세요 (예: http://localhost:3000). 아이 작품이 실제로 올라가는 목적지이므로 워크스페이스 설정이 아니라 머신 설정입니다 — proxyUrl 과 같은 범위입니다 (#748).",
+          "description": "사이트 주소입니다. '갤러리에 올리기'가 여기로 보냅니다. 로컬 개발 서버에 붙여 볼 때만 바꾸세요 (예: http://localhost:3000). 아이 작품이 실제로 올라가는 목적지이므로 워크스페이스 설정이 아니라 머신 설정입니다 — proxyUrl 과 같은 범위입니다 (#748).",
           "scope": "machine"
         },
         "hypeproofChat.accountsEnabled": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
-          "description": "Enable personal accounts (Google sign-in at purchase). Takes effect only on the canonical HypeProof HTTPS Service and account site; any other Service or site has no accounts. Local preview is a separate setting."
+          "description": "개인 계정으로 로그인할 수 있게 합니다. 공식 서비스와 계정 사이트에서만 적용합니다. 로컬 미리보기는 별도 설정입니다."
         },
         "hypeproofChat.publicUpdates": {
           "type": "boolean",
           "default": false,
           "scope": "machine",
-          "description": "Without member access to the private release mirror, check for updates against the public HypeProof Studio release that the Lab download serves (read anonymously). Members are unchanged. Off by default."
+          "description": "회원용 비공개 배포에 접근할 수 없을 때 공개 배포에서 업데이트를 확인합니다. 기본은 꺼짐이며 기존 회원 동작은 바뀌지 않습니다."
         },
         "hypeproofChat.accountsPreview": {
           "type": "boolean",
           "default": false,
           "scope": "machine",
-          "description": "Enable the isolated personal account preview. Both proxyUrl and siteBase must point to loopback HTTP servers. Production account launch remains disabled."
+          "description": "이 기기의 개인 계정 미리보기를 켭니다. 서비스와 계정 사이트가 모두 로컬 주소일 때만 사용할 수 있습니다."
         }
       }
     },
@@ -602,6 +655,7 @@
       "window.commandCenter": false,
       "workbench.layoutControl.enabled": false,
       "workbench.statusBar.visible": false,
+      "workbench.secondarySideBar.defaultVisibility": "hidden",
       "workbench.editor.showIcons": false,
       "workbench.editor.editorActionsLocation": "hidden",
       "workbench.tips.enabled": false,
@@ -622,7 +676,7 @@
     "build:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js",
     "build:webview": "cd webview-ui && npm install && npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs",
+    "test": "node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:deck-pdf-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs",
     "test:activity-resume": "node --experimental-strip-types test/activity-resume.test.mjs",
     "test:instructor-render": "node scripts/run-tsx-tests.mjs instructor-render",
     "test:signin-copy-link": "node scripts/run-tsx-tests.mjs signin-copy-link",
@@ -641,7 +695,8 @@
     "test:page-attachment": "node scripts/run-tsx-tests.mjs page-attachment",
     "test:file-attachment": "node scripts/run-tsx-tests.mjs file-attachment",
     "test:page-card": "node scripts/run-tsx-tests.mjs page-card",
-    "test:page-card-host": "node --experimental-strip-types --test test/page-card-host.test.mjs",
+    "test:page-card-host": "node --experimental-strip-types --test test/page-card-host.test.mjs test/page-card-result-host.test.mjs",
+    "test:deck-pdf-host": "node --experimental-strip-types --test test/deck-pdf-host.test.mjs",
     "test:long-step-hint": "node scripts/run-tsx-tests.mjs long-step-hint",
     "test:browser-target-host": "node --experimental-strip-types --test test/browser-target-host.test.mjs",
     "test:write-approval-paths": "node --experimental-strip-types --test test/write-approval-paths.test.mjs",
@@ -668,7 +723,7 @@
     "test:reference-transport": "node --experimental-strip-types --test test/reference-transport.test.mjs",
     "test:trial-end-notice": "node --test test/sdk-trial-end-notice.test.mjs",
     "test:sdk-required": "node --experimental-strip-types --test test/sdk-required.test.mjs",
-    "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs"
+    "test:task-workspace": "node --experimental-strip-types --test test/task-workspace-store.test.mjs test/task-move.test.mjs test/task-workspace-host.test.mjs test/activity-status-host.test.mjs test/task-source-flow.test.mjs test/turn-tools.test.mjs test/task-archive.test.mjs"
   },
   "devDependencies": {
     "postcss": "^8.5.6",

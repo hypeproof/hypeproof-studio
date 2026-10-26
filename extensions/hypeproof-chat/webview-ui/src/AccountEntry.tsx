@@ -17,7 +17,7 @@ export function AccountEntry({ account, checking, post, productId }: { account: 
         {/* REQ-L13 ⑧: the host copies the URL; the webview holds it only after a refused copy. */}
         <button className="studio-choice studio-signin-copy" aria-describedby="studio-signin-copy-hint" onClick={() => post({type:'accountCopyLink'})}>{SIGN_IN_LINK_COPY.label} <ChatIcon kind={account.link === 'copied' ? 'check' : 'copy'} size={16} /></button>
         <p id="studio-signin-copy-hint" className="studio-signin-copy-hint">{SIGN_IN_LINK_COPY.hint}</p>
-        <p className="studio-signin-copy-status" role="status">{account.link === 'copied' ? SIGN_IN_LINK_COPY.copied : account.link === 'failed' ? SIGN_IN_LINK_COPY.failed : ''}</p>
+        <p className="studio-signin-copy-status" role={account.link === 'failed' ? 'alert' : 'status'}>{account.link === 'copied' ? SIGN_IN_LINK_COPY.copied : account.link === 'failed' ? SIGN_IN_LINK_COPY.failed : ''}</p>
         {account.link === 'failed' && account.linkText && <p className="studio-signin-copy-link"><code>{account.linkText}</code></p>}
       </div>}
       <button className="studio-text-button" onClick={() => post({type:'accountCancel'})}>로그인 취소</button>

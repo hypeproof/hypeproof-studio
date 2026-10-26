@@ -28,6 +28,9 @@ const BANNER_POSTED =
 // Window stub whose setState/getState keep a webview state in globalThis.__vsState (panel sizes survive a re-mount).
 const BANNER_STATE =
   "globalThis.__vsState = undefined; globalThis.window = globalThis.window ?? {}; globalThis.window.acquireVsCodeApi = () => ({ postMessage() {}, getState: () => globalThis.__vsState, setState: (s) => { globalThis.__vsState = s; } });";
+// Window stub that records postMessage calls and keeps a real webview state (CGP-KNOW-R-002: the view survives a re-mount).
+const BANNER_POSTED_STATE =
+  "globalThis.__posted = []; globalThis.__vsState = undefined; globalThis.window = globalThis.window ?? {}; globalThis.window.acquireVsCodeApi = () => ({ postMessage: (m) => globalThis.__posted.push(m), getState: () => globalThis.__vsState, setState: (s) => { globalThis.__vsState = s; } });";
 const BANNER_POSTED_ARROW =
   "globalThis.__posted = []; globalThis.window = globalThis.window ?? {}; globalThis.window.acquireVsCodeApi = () => ({ postMessage: (m) => globalThis.__posted.push(m), getState: () => undefined, setState: () => {} });";
 
@@ -38,10 +41,14 @@ const BANNER_POSTED_ARROW =
 const OVERRIDES = {
   "goal-status": { banner: BANNER_POSTED },
   "keyboard-navigation": { banner: BANNER_STATE },
+  "task-archive-ui": { banner: BANNER_POSTED },
   "lesson-capability-entry": { banner: BANNER_POSTED_ARROW },
   "accuracy-education": { banner: BANNER_POSTED },
   "activity-trash": { banner: BANNER_POSTED },
+  "task-menu": { banner: BANNER_POSTED },
   "write-approval-dialog": { banner: BANNER_POSTED },
+  "browser-approval": { banner: BANNER_POSTED },
+  "command-approval": { banner: BANNER_POSTED },
   "outbound-dialog-app": { banner: BANNER_POSTED },
   "refusal-banner": { banner: BANNER_POSTED },
   "attachment-error-design": { banner: BANNER_POSTED },
@@ -50,11 +57,15 @@ const OVERRIDES = {
   "preview-recovery": { banner: BANNER_POSTED },
   "ask-about-file": { banner: BANNER_POSTED_ARROW },
   "activity-materials": { banner: BANNER_POSTED_ARROW },
+  "activity-home": { banner: BANNER_POSTED_STATE },
   "attachment-failure-ui": { banner: BANNER_POSTED_ARROW },
   "trial-end-card-dismiss": { banner: BANNER_POSTED },
   "activity-status-chatpanel": { banner: BANNER_POSTED },
   "quit-guard-queue": { banner: BANNER_POSTED },
   "publish-sharing-app": { banner: BANNER_POSTED },
+  "turn-idle-progress-app": { banner: BANNER_POSTED },
+  "shell-processes-app": { banner: BANNER_POSTED },
+  "checkpoint": { banner: BANNER_POSTED },
 };
 
 // Tests in test/ that this runner must skip, because they have their own build step

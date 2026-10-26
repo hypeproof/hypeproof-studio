@@ -8,17 +8,29 @@
 // 이 파일이 **주장하지 않는 것**: 음성이 동작한다. 여기에는 `getUserMedia` 도
 // 오디오 재생도 없다 — 실제 연결은 UI-2(#898 V0 전송 ADR · #901 V4 예산) 이후다.
 // 그때까지 `voiceStartGate` 가 시작을 막으므로 학생에게 이 패널은 열리지 않는다.
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ChatIcon } from "./ChatDetails";
 
 import {
   COMPACT_CONTROLS,
+  COMPACT_CORNER_STORAGE_KEY,
+  COMPACT_MOVE_HELP,
+  COMPACT_MOVE_LABEL,
+  type CompactCorner,
+  compactCornerAnnouncement,
+  compactCornerForKey,
+  nextCompactCorner,
+  parseCompactCorner,
   type DismissKind,
   type FailureView,
   type MeterView,
   type PopupState,
   type ReferenceTarget,
   type SessionInfoLine,
+  type ShowThisItem,
+  type ShowThisTarget,
+  SHOW_THIS_BUTTON,
+  showThisMenuView,
   voicePanelTitle,
 } from "../../src/voicePopupHelpers";
 import type { VoiceSession } from "../../src/voiceSessionHelpers";
@@ -44,6 +56,95 @@ export interface VoicePanelProps {
   onStopSpeaking(): void;
   onDismiss(kind: DismissKind): void;
   onRetry(): void;
+  /**
+   * Where the compact control's corner is remembered (CGP-VOICE-R-008). Defaults to this
+   * window's webview sessionStorage; tests inject their own. Read and write may throw.
+   */
+  cornerStore?: CornerStore;
+  /**
+   * CGP-VOICE-R-009 — "보여주기". Absent = no menu. `items` is what the host last answered for this
+   * open (null while it is being checked); it is re-read on every open. Each click on an enabled
+   * item calls `onAttach` once and closes the menu, so a second attach needs a second click.
+   */
+  showThis?: {
+    items: readonly ShowThisItem[] | null;
+    /** The target whose attach is in flight, if any: every item waits until it answers. */
+    pending: ShowThisTarget | null;
+    /** The last attach result, said in words (role=status). */
+    notice: string | null;
+    onOpen(): void;
+    onAttach(target: ShowThisTarget): void;
+  };
+}
+
+export interface CornerStore {
+  read(): string | null;
+  write(value: string): void;
+}
+
+const sessionCornerStore: CornerStore = {
+  read: () => sessionStorage.getItem(COMPACT_CORNER_STORAGE_KEY),
+  write: (value) => sessionStorage.setItem(COMPACT_CORNER_STORAGE_KEY, value),
+};
+
+function readCorner(store: CornerStore): CompactCorner {
+  try { return parseCompactCorner(store.read()); } catch { return parseCompactCorner(null); }
+}
+
+function ShowThisMenu({ showThis }: { showThis: NonNullable<VoicePanelProps["showThis"]> }) {
+  const [open, setOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement | null>(null);
+  const id = useId();
+  // Exactly the two Studio-owned targets with Studio's own labels, whatever the payload held.
+  const items = showThis.items ? showThisMenuView(showThis.items) : null;
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next) showThis.onOpen();
+  };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Escape" || !open) return;
+    // Escape closes the menu first; a second Escape ends the session as before (VO-41).
+    e.stopPropagation();
+    setOpen(false);
+    toggleRef.current?.focus();
+  };
+  return (
+    <div className="hps-voice-show" onKeyDown={onKeyDown}>
+      <button type="button" ref={toggleRef} className="hps-voice-show-toggle" aria-expanded={open} aria-controls={`${id}-menu`} onClick={toggle}>
+        <ChatIcon kind="eye" size={16} /> {SHOW_THIS_BUTTON}
+      </button>
+      {open && (
+        <div id={`${id}-menu`} className="hps-voice-show-menu" role="group" aria-label="보여줄 것 고르기">
+          {!items && <p className="hps-voice-show-reason" role="status">보여 줄 수 있는지 확인하는 중이에요</p>}
+          {items?.map((item) => {
+            const reasonId = `${id}-${item.target}-reason`;
+            const disabled = !item.enabled || showThis.pending !== null;
+            return (
+              <div key={item.target} className="hps-voice-show-item">
+                <button
+                  type="button"
+                  data-target={item.target}
+                  disabled={disabled}
+                  aria-describedby={item.reason ? reasonId : undefined}
+                  onClick={() => {
+                    if (disabled) return;
+                    setOpen(false);
+                    toggleRef.current?.focus();
+                    showThis.onAttach(item.target);
+                  }}
+                >
+                  {item.label}
+                </button>
+                {item.reason && <p id={reasonId} className="hps-voice-show-reason">{item.reason}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="hps-voice-show-notice" role="status">{showThis.pending ? "보여 줄 것을 붙이는 중이에요" : showThis.notice ?? ""}</p>
+    </div>
+  );
 }
 
 /** 미터 막대. 관측이 없으면(`level === null`) **정지한 모양**을 그린다 (VO-38). */
@@ -83,12 +184,37 @@ function StatusBlock({ meter, failure }: { meter: MeterView; failure: FailureVie
 export function VoicePanel(props: VoicePanelProps) {
   const { popup, session, meter } = props;
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const store = props.cornerStore ?? sessionCornerStore;
+  const [corner, setCorner] = useState<CompactCorner>(() => readCorner(store));
+  const [moved, setMoved] = useState<string>("");
+  const helpId = useId();
+
+  const moveTo = (next: CompactCorner) => {
+    if (next === corner) return;
+    setCorner(next);
+    setMoved(compactCornerAnnouncement(next));
+    // Remembering is a convenience: a blocked storage keeps the move for this mount only.
+    try { store.write(next); } catch { /* storage unavailable */ }
+  };
 
   // 패널이 열리면 포커스를 안으로 옮긴다. Escape 를 받으려면 포커스가 여기 있어야
   // 하고(VO-41), 키보드 사용자가 패널을 찾지 못하면 종료도 못 한다(VO-47).
   useEffect(() => {
     if (popup.presentation !== "hidden") panelRef.current?.focus();
   }, [popup.presentation]);
+
+  const onCompactKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // Arrow keys and Home move the control between the four corners (REQ-CGPV-12). Focus
+    // stays on whatever had it, so the learner can keep moving or press a control.
+    const next = compactCornerForKey(corner, { key: e.key, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing });
+    if (next) {
+      e.preventDefault();
+      e.stopPropagation();
+      moveTo(next);
+      return;
+    }
+    onPanelKeyDown(e);
+  };
 
   const onPanelKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Escape") return;
@@ -104,7 +230,7 @@ export function VoicePanel(props: VoicePanelProps) {
 
   if (popup.presentation === "compact") {
     return (
-      <div ref={panelRef} tabIndex={-1} onKeyDown={onPanelKeyDown} className="hps-voice-compact" role="region" aria-label={voicePanelTitle(props.coachName)}>
+      <div ref={panelRef} tabIndex={-1} onKeyDown={onCompactKeyDown} className="hps-voice-compact" data-corner={corner} role="region" aria-label={voicePanelTitle(props.coachName)} aria-describedby={helpId}>
         <span className="hps-voice-compact-status">
           {/* 작은 컨트롤에서도 **캡처 상태**를 숨기지 않는다 (VO-40). */}
           <span className={`hps-voice-dot${session.captureOpen ? " hps-voice-dot-on" : ""}`} aria-hidden="true" />
@@ -124,6 +250,12 @@ export function VoicePanel(props: VoicePanelProps) {
         {controls.has("expand") && (
           <button type="button" onClick={props.onExpand}>펼치기</button>
         )}
+        {/* A press steps clockwise; the arrow keys pick a corner. There is no drag. */}
+        <button type="button" className="hps-voice-move" title={COMPACT_MOVE_HELP} aria-describedby={helpId} onClick={() => moveTo(nextCompactCorner(corner))}>
+          {COMPACT_MOVE_LABEL}
+        </button>
+        <span id={helpId} className="hps-sr-only">{COMPACT_MOVE_HELP}</span>
+        <span className="hps-sr-only" role="status">{moved}</span>
       </div>
     );
   }
@@ -190,6 +322,8 @@ export function VoicePanel(props: VoicePanelProps) {
           ))}
         </ul>
       </div>
+
+      {props.showThis && <ShowThisMenu showThis={props.showThis} />}
 
       <div className="hps-voice-actions">
         <button type="button" onClick={props.onToggleMute} aria-pressed={muted}>

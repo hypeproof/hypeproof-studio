@@ -249,9 +249,14 @@ try {
       await expect(page.locator('.tw-run-note')).toContainText('작업 중');
       const busyTop = await transcript.evaluate(node => node.getBoundingClientRect().top);
       expect(Math.abs(busyTop - idleTop)).toBeLessThanOrEqual(2);
-      expect(await page.locator('.tw-run-note').evaluate(node => {
+      // CGP-LEARN-R-016: the visible state is the header's coach run state (the run note keeps only its
+      // screen-reader sentence). Exactly one is drawn, with its words, inside the viewport.
+      await expect(page.locator('.hps-run-state')).toHaveCount(1);
+      await expect(page.locator('.hps-run-state')).toHaveAttribute('data-run-state', 'thinking');
+      await expect(page.locator('.hps-run-state')).toContainText('생각 중');
+      expect(await page.locator('.hps-run-state').evaluate(node => {
         const bounds = node.getBoundingClientRect();
-        return bounds.left >= 0 && bounds.right <= innerWidth && bounds.height > 0;
+        return bounds.left >= 0 && bounds.right <= innerWidth && bounds.height >= 20;
       })).toBe(true);
       await page.screenshot({ path: resolve(output, `${theme}-${width}-busy.png`) });
       await fixture('stop');

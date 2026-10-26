@@ -302,20 +302,28 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   /* 포커스 링 하나(CGP-DS-R-017). 웹뷰 바탕은 VS Code 테마를 따르므로 테마의 focusBorder를 쓴다.
      fallback은 HypeProof Studio 테마의 focusBorder와 같은 lime */
   --hp-ring-focus-default: var(--vscode-focusBorder, #D5F279);
+  /* 높이 단계(CGP-DS-R-012, DES-CGP-DS-13): flat(그림자 없음) · raised(카드, 입력창) · overlay(메뉴, 팝오버,
+     대화상자, 서랍) 셋뿐이다. 어두운 테마 .30, 밝은 테마 .10(body.vscode-light), 고대비·강제 색상은 그림자 없이 1px 테두리 */
+  --hp-elevation-raised: 0 1px 2px rgb(0 0 0 / 30%);
+  --hp-elevation-overlay: 0 4px 8px -2px rgb(0 0 0 / 30%);
   /* 움직임 토큰(CGP-DS-R-014, DES-CGP-DS-15). 웹뷰 CSS의 transition/animation 시간은 전부 여기서 온다.
      컴포넌트 CSS에는 시간 리터럴이 없다. 줄인 움직임 규칙(!important 0.01ms)이 여전히 이긴다 */
   --hp-ease: cubic-bezier(.19, 1, .22, 1);   /* UI 곡선 하나: 빨리 나가고 부드럽게 멈춘다 */
   --hp-dur-press: 140ms;     /* 컨트롤 hover/press (기존 100~150ms 리터럴) */
   --hp-dur-content: 160ms;   /* 제자리에 나타나는 작은 내용: 복사 확인, 아래로 가기 */
+  --hp-dur-confirm: var(--hp-dur-content);   /* --hp-dur-content(160ms)의 다른 이름, 값은 하나: 확인 표시 (CGP-DS-D-011) */
   --hp-dur-enter: 180ms;     /* 들어오는 면·메시지: 새 메시지, 도구 메뉴, 러너 바 */
   --hp-dur-modal-enter: 180ms; /* 대화상자가 들어오는 시간 (CGP-DS-D-020) */
   --hp-dur-modal-exit: 120ms;  /* 대화상자가 나가는 시간, 들어올 때보다 짧다 */
+  --hp-dur-move: 240ms;      /* 제자리에서 움직이는 이동 (CGP-DS-D-011); 지금 쓰는 곳은 없다 */
+  --hp-ease-exit: cubic-bezier(.4, 0, 1, 1);   /* 나가는 곡선: 대화상자·팝오버 퇴장 (CGP-DS-D-011) */
   --hp-dur-meter: 100ms;     /* 실시간 수준 표시(음성 막대)가 신호를 따라간다 */
   --hp-dur-stagger: 100ms;   /* 한 표시 안의 점 사이 시차 */
   /* 상태 반복: 면이 쉬면 멈추고, 줄인 움직임에서는 꺼진다 */
   --hp-dur-pending: 1.2s;    /* 응답 점, 3회 = 3.6s (CP-R1 상한 3.8s) */
   --hp-dur-pulse: 1s;        /* 수업 채팅 생각 점 */
   --hp-dur-shimmer: 1.8s;    /* 코드 진행 줄 빛 */
+  --hp-dur-page-result-shimmer: 1.2s; /* 페이지 결과 카드 미리보기 자리 빛 (CGP-ART-D-010) */
   --hp-dur-breathe: 2.4s;    /* 코드 진행 테두리 */
   --hp-dur-runner-run: 2.4s;
   --hp-dur-runner-hop: .42s;
@@ -341,6 +349,11 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-space-6: calc(var(--hp-space) * 6);   /* 24px */
   --hp-space-8: calc(var(--hp-space) * 8);   /* 32px */
   --hp-control-cta: var(--hp-control-lg);   /* 48px · 주 행동 */
+  /* 모서리 반경 척도(CGP-DS-R-011, REQ-CGP-DS-12). 반경은 radiusScale.css의 한 척도(4 / 6 / 8 / 12 / 16 / 18 / 20 / 24px,
+     full)에 전역 배율 하나를 곱해 쓴다. 둥근 상자 안에 다시 둥근 것을 그리면 바깥 반경에서 그 사이 여백을 뺀다 */
+  --hp-radius-composer: var(--hp-radius-20);   /* 20px · 입력 카드(DES-CGP-DS-21) */
+  --hp-composer-inset: calc(var(--hp-space) * 3);   /* 12px · 입력 카드 안쪽 여백 */
+  --hp-radius-composer-control: calc(var(--hp-radius-composer) - var(--hp-composer-inset));   /* 8px · 카드 안 컨트롤 */
 }
 /* 의미 글자 크기(CGP-DS-R-008, DES-CGP-DS-09, DEC-29로 DES-02를 개인 대화에 확장). 학생이 읽는 글은 이 단계만 쓰고
    가장 작은 단계가 14px이다. custom property는 선언한 요소에서 값이 정해져 그 값으로 상속되므로 .hps-shell에서도
@@ -393,6 +406,9 @@ body.vscode-light, body.vscode-high-contrast-light {
   --hp-border-warn-default: #E6A373;
   --hp-border-accent-default: #D5F279;
   --hp-ring-focus-default: #D5F279;
+  /* CGP-DS-R-012: 숲 화면은 어느 테마에서도 어두우므로 어두운 테마의 그림자 */
+  --hp-elevation-raised: 0 1px 2px rgb(0 0 0 / 30%);
+  --hp-elevation-overlay: 0 4px 8px -2px rgb(0 0 0 / 30%);
 }
 /* 자기 바탕을 칠한 입력란은 보조 글자색 */
 .hp-surface, .hp-evidence-form, .hps-instructor-model-input { --hp-text-placeholder-default: var(--hp-text-muted-default); }
@@ -475,8 +491,9 @@ body.vscode-light, body.vscode-high-contrast-light {
 | 실제/AI 예시 라벨·색 분리(SX-12) | 외부 반응 인용은 `--hp-text-primary-default` + "실제 반응", AI 예시는 `--hp-text-muted-default` + "AI 예시". 색이 같아도 라벨이 갈린다 |
 | 포커스 링 하나(CGP-DS-R-017, DES-06/11) | 포커스를 받는 모든 컨트롤은 `outline: 2px solid var(--hp-ring-focus-default); outline-offset: 2px`. 스크롤 목록 안의 촘촘한 행(`.tw-task-list`, `.tw-source-list`)만 `-2px` 안쪽 링. `outline: none`은 같은 요소의 `:focus-visible` 규칙이나 조상의 `:focus-within` 링이 있을 때만 쓴다. 예외는 프로그램으로 포커스를 옮기는 제목(`.cp-preview h3`, `tabIndex=-1`) 하나 |
 | placeholder 4.5:1(CGP-DS-R-019, DES-11) | `tokens.css`의 `::placeholder` 기본값이 모든 입력란에 `color: var(--hp-text-placeholder-default)`를 준다. 브라우저 기본 placeholder와 opacity 조절은 쓰지 않는다. placeholder는 바탕과 4.5:1, 입력한 글자와 1.5:1 이상 떨어진다. Light+만 예외: 입력 글자(#616161)가 흰 바탕에 6.2:1이라 4.5:1을 지키면 최대 1.38:1까지만 벌어진다(실측 #767676: 1.36:1). 링은 컨트롤 밖 2px 틈 너머 바탕 위에 그려지므로 링 대비는 그 바탕과 잰다 |
-| 움직임은 토큰으로(CGP-DS-R-014, DES-CGP-DS-15) | 웹뷰 CSS의 transition/animation 시간은 `--hp-dur-*`만 쓴다. 컨트롤 hover/press `--hp-dur-press` 140ms, 제자리 확인 `--hp-dur-content` 160ms, 들어오는 면 `--hp-dur-enter` 180ms, 곡선은 `--hp-ease` 하나. 상태 반복(응답 점 1.2s×3, 진행 표시, 러너)은 기존 시간을 토큰으로 옮겼다. 줄인 움직임 규칙이 늘 이긴다 |
+| 움직임은 토큰으로(CGP-DS-R-014, DES-CGP-DS-15) | 웹뷰 CSS의 transition/animation 시간은 `--hp-dur-*`만 쓴다. 컨트롤 hover/press `--hp-dur-press` 140ms, 제자리 확인 `--hp-dur-content` 160ms, 들어오는 면 `--hp-dur-enter` 180ms, 곡선은 `--hp-ease` 하나. 제자리 이동 `--hp-dur-move` 240ms(쓰는 곳 아직 없음), 나가는 곡선 `--hp-ease-exit`(대화상자 퇴장), 제자리 확인의 다른 이름 `--hp-dur-confirm`(=content 160ms). 용수철·튕김 곡선 없음. 상태 반복(응답 점 1.2s×3, 진행 표시, 러너)은 기존 시간을 토큰으로 옮겼다. 줄인 움직임 규칙이 늘 이긴다 |
 | 본문 한 줄 길이(CGP-DS-R-020, DES-CGP-DS-22) | 개인 대화의 AI 본문(`.hps-prose`)은 `max-inline-size: 40em`, 한 줄에 한글 약 40자. 상한일 뿐이라 좁은 창에서는 창에 맞춰 줄바꿈하고, 표와 코드는 그 안에서 자기 스크롤을 가진다 |
+| 말풍선 모양(CGP-DS-D-017, DES-CGP-DS-22) | 내 말풍선은 대화 폭의 85% 이하(안쪽 여백 포함), 모서리 18/18/6/18px(오른쪽 아래 꼬리 6px), 배경은 VS Code 테마 색(`--vscode-list-inactiveSelectionBackground`)이라 테마를 따라가고 글자 대비 4.5:1 이상. AI 답변은 상자 없이 본문만, 아이콘 표식은 두지 않는다 |
 | 스크롤 막대 자리(CGP-DS-R-031, DES-CGP-DS-36) | 개인 대화 대화 목록(`.hps-messages`)은 `scrollbar-gutter: stable`. 답이 길어져 스크롤 막대가 생겨도 본문이 옆으로 밀리지 않는다 |
 | 의미 글자 크기와 14px 바닥(CGP-DS-R-008, DES-CGP-DS-09, DEC-29) | 개인 작업 화면(작업 목록, 작업 제목 줄, 대화 셸, 자료 패널, 대화 설정)에서 학생이 읽는 글은 `--hp-font-caption` 14px, `--hp-font-body` 16px, `--hp-font-lead` 18px 셋 중 하나다. 메타 정보도 예외가 아니다: 역할 줄, 도구 줄, 인용 칩, 시간·대화 수, 출처 주소가 10~13px에서 14px이 된다. 줄 높이는 라벨 1.5, 한글 본문 1.65. 글자 크기 선택(기본 · 크게 · 아주 크게)은 셸의 `--hp-font-step` 하나(0 · 2 · 4px)라서 셸 안의 모든 단계가 같이 커지고, 44px 대상과 컨트롤 높이는 그대로다(min-height만 있다). 14px 아래로 남는 것: 화면에 보이지 않는 키보드 안내, 장식 글리프, 접근 이름이 있는 글리프 버튼(×). 수업 채팅은 이번에 바꾸지 않는다(같은 클래스는 개인 셸 아래에서만 올린다) |
 | 학습자 글자 단계 전체(CGP-DS-D-005, DES-CGP-DS-09) | 크기는 14 · 16 · 18 · 22 · 28px 다섯 단계다(`--hp-font-caption` · `body` · `lead` · `title` · `display`). 개인 대화의 답 마크다운은 h1 22px, h2·h3 18px, h4~h6 16px이고, 이전의 1.15em(18.4px)은 쓰지 않는다. 굵기는 400과 600 둘뿐이다: 550 · 650 · 700과 브라우저 기본 굵게(제목, `strong`, `b`, `th`)는 모두 600이 된다. 작업 화면 전체가 라벨 줄 높이 1.5를 기본으로 가져서 `normal`(약 1.2)로 남는 글이 없다. 파일 바꾸기·보내기 확인 창은 작업 화면 밖에 그려져서 스스로 1.5와 600을 가진다(수업 좌석도 같이 바뀐다). 한글 자간은 0이다: 답 제목의 -0.2px, 대화 칩 제목의 0.2px, 주차 표시의 1px가 개인 화면에서 0이 된다. 줄 높이는 라벨 1.5(1.2~1.45였던 인용 칩, 첨부 이름, 업데이트 노트, 답 버튼, 진행 줄이 1.5로), 한글 본문 1.65(답 문단·목록·인용·표, 학생 말풍선, 빈 대화 인사말, 자료 설명)로 기본 · 크게 · 아주 크게 모두 1.65~1.75 안이다. 입력창은 48px 입력창 모양(DES-CGP-DS-21)을 지키려고 라벨 줄 높이 1.5를 유지한다. 브랜드 글자 "HypeProof"(라틴 로고)와 장식 글리프는 제외. 수업 채팅은 이번에 바꾸지 않는다(DEC-DS-D-005) |
@@ -611,3 +628,24 @@ After editing canonical values, run `node scripts/sync-design-tokens.mjs` to ref
 Chalk TS transport. Run extension `test/design-tokens.smoke.mjs` and Chalk
 `test/design-tokens.test.mjs`; Chalk builds reject stale transport. Existing accessibility
 probes resolve only static `--ds-*` aliases before evaluating their original assertions.
+
+
+## Independent typography families (CGP-DS-R-007)
+
+UI and prose default to the existing system sans primitive (`--ds-p-136`);
+code defaults to the existing UI monospace/Menlo primitive (`--ds-p-184`).
+Separate semantic/component roles make changing prose independent from controls
+and code. Studio bridges UI to `--vscode-font-family` and code to
+`--vscode-editor-font-family`; technical URLs/identifiers remain fixed-width
+without borrowing the editor preference. Chalk has the same three roles through
+the canonical generated transport. Font sizes and line spacing are unchanged.
+
+## Shared learner menus (CGP-DS-R-022)
+
+Tools and personal conversation menus use `--ds-c-menu-*` geometry aliases over the
+canonical semantic/primitive tiers:12px panel radius,4px gutter,44px minimum item height,
+6px item radius and8px/12px block/inline item padding. `--hp-font-caption` sets learner
+labels and tool descriptions to at least14px. `--hp-bg-panel-default` and
+`--hp-border-control-default` are the shared surface roles. Popover placement remains local.
+Use arrows/Home/End to navigate and Escape to restore the opener; IME owns composition keys.
+See REQ-STUDIO-MENU-TOKENS for scope and computed-test evidence boundaries.

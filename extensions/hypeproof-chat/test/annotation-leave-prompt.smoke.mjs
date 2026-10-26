@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {AnnotationLeaveRequest} from '../src/annotationLeavePrompt.ts';
+let scope='task:revision',seq=0,shown=true,posts=[];
+const request=new AnnotationLeaveRequest({scope:()=>scope,id:()=>String(++seq),present:async p=>{posts.push(p);return shown;}},30);
+for(const count of [0,11,1.5])assert.equal(await request.confirm(count),false);
+let pending=request.confirm(2),id=posts.at(-1).id;
+request.respond('other',true);assert.equal(await request.confirm(1),false,'concurrent request refuses');
+request.respond(id,false);assert.equal(await pending,false);assert.equal(posts.at(-1),null);
+pending=request.confirm(1);id=posts.at(-1).id;scope='new-task';request.respond(id,true);assert.equal(await pending,false,'stale scope refuses discard');
+pending=request.confirm(1);id=posts.at(-1).id;request.respond(id,'true');assert.equal(await pending,false,'literal boolean required');
+pending=request.confirm(10);id=posts.at(-1).id;request.respond(id,true);assert.equal(await pending,true);
+pending=request.confirm(1);request.cancel();assert.equal(await pending,false);
+shown=false;assert.equal(await request.confirm(1),false,'undelivered prompt keeps draft');
+shown=true;assert.equal(await request.confirm(1),false,'timeout keeps draft');
+console.log('PASS annotation leave request: IDs, concurrency, scope, explicit discard, cancel, delivery failure, timeout');

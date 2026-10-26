@@ -1,0 +1,22 @@
+{
+  "hypeproofChat.artifactHistoryEnabled": "파일 이전 버전 보관",
+  "hypeproofChat.activityTrashEnabled": "활동 휴지통",
+  "hypeproofChat.proxyUrl": "서비스 주소",
+  "hypeproofChat.freeStart": "코드 없이 시작",
+  "hypeproofChat.model": "사용할 모델",
+  "hypeproofChat.coachRuntime": "코치 실행 방식",
+  "hypeproofChat.instructorRuntime": "강사 화면 방식",
+  "hypeproofChat.sdkBinaryPath": "에이전트 실행 파일 위치",
+  "hypeproofChat.sdkSeedOnDemand": "에이전트 다운로드 안내",
+  "hypeproofChat.sdkStallTimeoutMs": "응답 대기 제한 시간",
+  "hypeproofChat.requireApprovalFor": "실행 전 확인할 동작",
+  "hypeproofChat.siteBase": "사이트 주소",
+  "hypeproofChat.accountsEnabled": "개인 계정 사용",
+  "hypeproofChat.publicUpdates": "공개 업데이트 확인",
+  "hypeproofChat.accountsPreview": "개인 계정 미리보기",
+  "hypeproofChat.annotationBatchEnabled": "미리보기 표시 모아 보내기",
+  "hypeproofChat.workTakeawayEnabled": "내 작업 따로 저장",
+  "hypeproofChat.osTaskNotices": "운영체제 알림 받기",
+  "hypeproofChat.lowDiskWarningMB": "저장 공간 부족 안내 기준(MB)",
+  "hypeproofChat.performanceTraceEnabled": "느려요 기록"
+}

@@ -1,3 +1,4 @@
+import { citationKindLabel } from './citationKind';
 import { createContext, useContext } from 'react';
 import { ChatIcon, type IconSize } from './ChatDetails';
 import type { Citation } from '../../src/protocol';
@@ -40,7 +41,7 @@ export function CitationRack({ citations, messageId }: { citations: Citation[]; 
         type="button"
         className="cp-citation"
         disabled={!address}
-        aria-label={`${citation.title || address?.hostname || '출처'}${address ? `, ${address.hostname}, ${workspace ? '출처 미리보기' : '출처 열기'}` : ', 열 수 없는 주소'}`}
+        aria-label={`${citationKindLabel(citation.kind)}, ${citation.title || address?.hostname || '출처'}${address ? `, ${address.hostname}, ${workspace ? '출처 미리보기' : '출처 열기'}` : ', 열 수 없는 주소'}`}
         aria-expanded={workspace ? expanded : undefined}
         aria-controls={workspace ? 'task-sources' : undefined}
         data-hp-tooltip={address ? citation.url : '이 출처의 주소를 열 수 없습니다.'}
@@ -51,7 +52,7 @@ export function CitationRack({ citations, messageId }: { citations: Citation[]; 
         }}
       >
         <span className="cp-citation-number" aria-hidden="true">{index + 1}</span>
-        <span className="cp-citation-copy"><span className="cp-citation-title">{citation.title || address?.hostname || '출처'}</span><span className="cp-citation-domain">{address?.hostname || '주소 확인 필요'}</span></span>
+        <span className="cp-citation-copy"><span className="cp-citation-title"><span className="hps-source-kind">{citationKindLabel(citation.kind)}</span><span className="cp-citation-title-text">{citation.title || address?.hostname || '출처'}</span></span><span className="cp-citation-domain">{address?.hostname || '주소 확인 필요'}</span></span>
         <SourceIcon kind="source" size={16} />
       </button></span>;
     })}
@@ -77,7 +78,7 @@ interface PreviewProps {
 export function CitationPreview({ citation, pinned, otherPinned, ephemeral, opening, blocked, opened, returning, error, onOpen, onPin, onReturn }: PreviewProps) {
   const address = citationAddress(citation.url);
   return <div className="tw-source-detail cp-preview">
-    <div className="tw-source-domain cp-preview-domain"><SourceIcon kind="source" /><span>{address?.hostname || '주소 확인 필요'}</span></div>
+    <div className="tw-source-domain cp-preview-domain"><SourceIcon kind="source" /><span><span className="hps-source-kind">{citationKindLabel(citation.kind)}</span> · {address?.hostname || '주소 확인 필요'}</span></div>
     <h3 id="task-source-title" tabIndex={-1}>{citation.title || address?.hostname || '출처'}</h3>
     <p className="cp-source-context">이 답변에 포함된 출처입니다.</p>
     <p className="cp-source-url" dir="ltr" aria-label="출처 주소">{citation.url}</p>

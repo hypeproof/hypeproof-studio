@@ -1,5 +1,5 @@
 /* CGP-KNOW-D-006 — outbound confirmation dialog. */
-.hps-outbound { box-sizing: border-box; width: min(var(--ds-c-studio-outbounddialog-size-108), calc(100vw - var(--ds-c-studio-outbounddialog-size-17))); max-height: calc(100vh - var(--ds-c-studio-outbounddialog-size-17)); overflow: auto; margin: auto; padding: var(--ds-c-studio-outbounddialog-space-5); border: var(--ds-c-studio-outbounddialog-size-7) solid currentColor; border-radius: var(--ds-c-studio-outbounddialog-radius-6); color: var(--vscode-editor-foreground, var(--ds-c-studio-outbounddialog-ink-1)); background: var(--vscode-editor-background, var(--ds-c-studio-outbounddialog-surface-24)); font: inherit; font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-outbounddialog-typography-4); overflow-wrap: anywhere; }
+.hps-outbound { box-sizing: border-box; width: min(var(--ds-c-studio-outbounddialog-size-108), calc(100vw - var(--ds-c-studio-outbounddialog-size-17))); max-height: calc(100vh - var(--ds-c-studio-outbounddialog-size-17)); overflow: auto; margin: auto; padding: var(--ds-c-studio-outbounddialog-space-5); border: var(--ds-c-studio-outbounddialog-size-7) solid currentColor; border-radius: var(--hp-radius-dialog); color: var(--vscode-editor-foreground, var(--ds-c-studio-outbounddialog-ink-1)); background: var(--vscode-editor-background, var(--ds-c-studio-outbounddialog-surface-24)); font: inherit; font-size: var(--hp-font-caption); line-height: var(--ds-c-studio-outbounddialog-typography-4); overflow-wrap: anywhere; }
 .hps-outbound::backdrop { background: var(--ds-c-studio-outbounddialog-surface-124); }
 /* CGP-DS-D-005: the recipient name is 600, not the user agent's bold. */
 .hps-outbound strong { font-weight: var(--hp-weight-strong); }
@@ -20,5 +20,7 @@
 .hps-outbound-memory { margin-top: var(--ds-c-studio-outbounddialog-space-2); border-top: var(--ds-c-studio-outbounddialog-size-3) solid currentColor; }
 .hps-outbound-memory summary { box-sizing: border-box; min-height: var(--ds-c-studio-outbounddialog-size-8); padding: var(--ds-c-studio-outbounddialog-space-2) 0; cursor: pointer; }
 /* CGP-KNOW-R-007 / DES-KNOW-10 — the public step names its destination in selectable monospace that wraps at 320px. */
-.hps-outbound-destination { font-family: var(--vscode-editor-font-family, var(--ds-c-studio-styles-font-5)); user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
+.hps-outbound-destination { font-family: var(--ds-c-studio-styles-font-5); user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
+/* CGP-KNOW-D-007 — the public step's heading is a header: the learner scale's lead step, not body size. */
+.hps-outbound-public h2 { font-size: var(--hp-font-lead); line-height: var(--hp-leading-label); }
 @media (forced-colors: active) { .hps-outbound, .hps-outbound-excluded { border-color: CanvasText; } }

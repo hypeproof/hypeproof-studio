@@ -81,7 +81,7 @@ const TIERS = [1, 2, 3, 4].map((n) => `.hps-cit-chip.hps-cit-tier-${n}`);
 const TEXT_CUES = [
   // REQ-STUDIO-STROKE-ICONS: the marks are stroke icons now (currentColor); the shape still differs per state.
   { file: "ChatPanel.tsx", what: "tool row marks", re: /t\.state === "running" \? <ChatIcon kind="dots"[^>]*\/> : t\.state === "error" \? <ChatIcon kind="alert"[^>]*\/> : <ChatIcon kind="check"/ },
-  { file: "AnswerVerdict.tsx", what: "pressed verdict and reason check mark", re: /=== (?:verdict|reason) && <ChatIcon kind="check"/g, count: 2 },
+  { file: "AnswerVerdict.tsx", what: "pressed verdict and reason check mark", re: /=== reason && <ChatIcon kind="check"|kind=\{state\?\.verdict === verdict \? "check"/g, count: 2 },
   { file: "TurnReviewBar.tsx", what: "failed review is an alert with a title", re: /data-state="failed" role="alert"/ },
   { file: "VerifyPanel.tsx", what: "verify state chip has its words", re: /<IntentChip chip=\{verifyChip\(view\.verification\.state\)\}/ },
   { file: "../../src/evidenceView.ts", what: "unresolved evidence source reads 확인 필요", re: /label: "확인 필요"/ },
@@ -97,7 +97,8 @@ const GEOMETRY_CUES = [
 // the picture once forced colors drops the dark disc.
 const OVER_IMAGE = [".hps-attachment-remove", ".hps-edit-image button"];
 // The only places allowed to opt out of forced colors.
-const ADJUST_NONE_OK = [".hps-publish-link img", ".studio-guardian-pay img"];
+// CGP-ART-R-006: a style-tweak swatch IS the colour the learner picks; repainting it would erase the choice.
+const ADJUST_NONE_OK = [".hps-publish-link img", ".studio-guardian-pay img", ".hps-style-tweak-chip"];
 // The only outline removals: a programmatic focus target, and a field whose wrapper draws the ring.
 const OUTLINE_NONE_OK = [".cp-preview h3:focus", '.hps-shell[data-chat-detail="personal"] .hps-input textarea'];
 const COMPOSER_RING = '.hps-shell[data-chat-detail="personal"] .hps-input:focus-within';

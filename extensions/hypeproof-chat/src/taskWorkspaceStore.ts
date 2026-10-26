@@ -1,5 +1,7 @@
 import { ATTEMPT_KEYS, validAttemptMeta } from './answerAttempts.ts';
+import { shellLabel } from "./shellDisplay.ts";
 import { storedDenialNotice } from "./denialNotice.ts";
+import { isDownloadNoticeLabel } from "./browserDownloadNotice.ts";
 import { createHash, randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
@@ -7,13 +9,19 @@ import { basename, join } from 'node:path';
 import { hostname } from 'node:os';
 import { emptyActivityDraft, validActivityDraft } from './activityDraft.ts';
 import { suggestTaskTitle } from './taskTitle.ts';
+import type { RenameUndo } from './removalUndo.ts';
 import { emptyVersions, joinVersions, splitVersions, validEditOf, type StoredVersions } from './editResend.ts';
 import { appendVerdict, latestVerdicts, validVerdictEvent, type VerdictEvent, type VerdictMap } from './answerVerdict.ts';
+import { validTaskAppearance, type TaskAppearance } from './taskAppearance.ts';
+import { validTaskActivity } from './taskActivity.ts';
 import type { ActivityDraft } from './activityDraft';
+import { searchTasks, type TaskSearchResult } from './taskSearch.ts';
 import type { ChatMessage } from './protocol';
 import type {
-  TaskDocument, TaskSurfaceSelection, TaskWorkspaceErrorCode, TaskWorkspaceExpected, TaskWorkspaceView,
+  ArchivedTaskSummary, TaskDocument, TaskSummary, TaskSurfaceSelection, TaskWorkspaceErrorCode, TaskWorkspaceExpected, TaskWorkspaceView,
 } from './taskWorkspaceContract';
+
+type TitleOrigin = NonNullable<TaskDocument['titleOrigin']>;
 
 interface WorkspaceData {
   version: 1;
@@ -32,6 +40,23 @@ interface VersionsData { version: 1; scope: string; tasks: Record<string, Stored
  * file is not touched by a verdict, so a downgrade only loses the drawn verdicts.
  */
 interface VerdictsData { version: 1; scope: string; tasks: Record<string, VerdictEvent[]> }
+
+/**
+ * CGP-CHAT-R-025 — the archive sidecar, `<scope>.archive.json`: task id → the time it was archived.
+ * Archiving never touches the task's transcript, draft, versions or verdicts; it only hides the task
+ * from the list. Earlier builds never read this file, so a downgrade lists archived tasks again and
+ * loses nothing.
+ */
+interface ArchiveData { version: 1; scope: string; tasks: Record<string, number> }
+
+/**
+ * CGP-KNOW-R-008 — the task appearance sidecar, `<scope>.appearance.json`: per task, the emoji and
+ * colour ids the learner picked. Earlier builds never read it and the task file is not touched, so
+ * a downgrade only loses the drawn marks; the strict task-file schema stays readable by them.
+ */
+interface AppearanceData { version: 1; scope: string; tasks: Record<string, TaskAppearance> }
+/** CGP-KNOW-R-009 — one task as it moves between two personal activities' scopes. */
+export interface MovedTask { task: TaskDocument; versions: StoredVersions | null; verdicts: VerdictEvent[] }
 
 interface LockOwner { version: 1; host: string; pid: number; nonce: string; createdAt: number }
 interface LockRecord { owner: LockOwner; dev: number; ino: number }
@@ -81,19 +106,30 @@ const sameLock = (a: LockRecord | undefined, b: LockRecord) => !!a &&
  * on lines handed to the store and on the versions sidecar, never in the task file.
  */
 function validMessage(value: unknown, allowEditOf = false): value is ChatMessage {
-  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', ...(allowEditOf ? ['editOf', ...ATTEMPT_KEYS] : [])])) return false;
+  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', 'activity', ...(allowEditOf ? ['editOf', ...ATTEMPT_KEYS] : [])])) return false;
   if (!nonempty(value.id, 256) || typeof value.role !== 'string' || !['user', 'assistant', 'system', 'tool'].includes(value.role) ||
       typeof value.content !== 'string' || !timestamp(value.createdAt)) return false;
   if (value.assistantName !== undefined && typeof value.assistantName !== 'string') return false;
+  // CGP-ART-R-020 — "AI가 한 일" entries: bounded, exact shape, no control or bidi characters.
+  if (value.activity !== undefined && !validTaskActivity(value.activity)) return false;
   if (value.toolMode !== undefined && (value.role !== 'user' || !['auto', 'web-search'].includes(value.toolMode as string))) return false;
   // CGP-CHAT-R-002 — an edited resend names its group root; only a user line can be one.
   if (value.editOf !== undefined && (value.role !== 'user' || !validEditOf(value.editOf))) return false;
   if (ATTEMPT_KEYS.some(key => value[key] !== undefined) && (value.role !== 'user' || !validAttemptMeta(Object.fromEntries(ATTEMPT_KEYS.filter(key => value[key] !== undefined).map(key => [key, value[key]]))))) return false;
   if (value.images !== undefined && (!Array.isArray(value.images) || !value.images.every(image => typeof image === 'string' && image.startsWith('data:image/')))) return false;
-  if (value.tool !== undefined && (!isRecord(value.tool) || !exactKeys(value.tool, ['icon', 'label', 'state']) ||
+  if (value.tool !== undefined && (!isRecord(value.tool) || !exactKeys(value.tool, ['icon', 'label', 'state', ...(allowEditOf ? ['shell', 'step', 'since'] : [])]) ||
       typeof value.tool.icon !== 'string' || typeof value.tool.label !== 'string' || typeof value.tool.state !== 'string' || !['running', 'done', 'error'].includes(value.tool.state))) return false;
+  if (isRecord(value.tool) && value.tool.shell !== undefined) {
+    const shell = value.tool.shell;
+    if (!isRecord(shell) || !exactKeys(shell, ['purpose', 'command', 'folder', 'collapsed']) ||
+      typeof shell.purpose !== 'string' || shell.purpose.length > 500 || typeof shell.command !== 'string' || shell.command.length > 2000 ||
+      (shell.folder !== undefined && (typeof shell.folder !== 'string' || shell.folder.length > 2000)) || typeof shell.collapsed !== 'boolean') return false;
+  }
+  if (isRecord(value.tool) && ((value.tool.step !== undefined && typeof value.tool.step !== 'string') ||
+    (value.tool.since !== undefined && !timestamp(value.tool.since)))) return false;
   if (value.citations !== undefined && (!Array.isArray(value.citations) || !value.citations.every(citation =>
-    isRecord(citation) && exactKeys(citation, ['url', 'title', 'domain', 'tier']) &&
+    isRecord(citation) && exactKeys(citation, ['url', 'title', 'domain', 'tier', 'kind']) &&
+    (citation.kind === undefined || typeof citation.kind === 'string' && citation.kind.length <= 64) &&
     typeof citation.url === 'string' && typeof citation.title === 'string' && typeof citation.domain === 'string' &&
     typeof citation.tier === 'number' && [1, 2, 3, 4].includes(citation.tier)))) return false;
   return true;
@@ -126,6 +162,30 @@ function decodeVerdicts(text: string, scope: string): VerdictsData {
   if (!exactKeys(data, ['version', 'scope', 'tasks']) || data.version !== 1 || data.scope !== scope || !isRecord(data.tasks) ||
       !Object.entries(data.tasks).every(([id, events]) => nonempty(id, 256) && Array.isArray(events) && events.every(validVerdictEvent))) return fail('corrupt', '답변 선택 기록의 형식이 일치하지 않습니다.');
   return data as unknown as VerdictsData;
+}
+
+function decodeArchive(text: string, scope: string): ArchiveData {
+  let envelope: unknown;
+  try { envelope = JSON.parse(text); } catch { return fail('corrupt', '보관함 기록을 읽을 수 없습니다.'); }
+  if (!isRecord(envelope) || !exactKeys(envelope, ['checksum', 'data']) || !isRecord(envelope.data) ||
+      typeof envelope.checksum !== 'string' || envelope.checksum !== hash(JSON.stringify(envelope.data))) return fail('corrupt', '보관함 기록의 무결성을 확인할 수 없습니다.');
+  const data = envelope.data;
+  if (!exactKeys(data, ['version', 'scope', 'tasks']) || data.version !== 1 || data.scope !== scope || !isRecord(data.tasks) ||
+      !Object.entries(data.tasks).every(([id, at]) => nonempty(id, 256) && timestamp(at))) return fail('corrupt', '보관함 기록의 형식이 일치하지 않습니다.');
+  return data as unknown as ArchiveData;
+}
+
+const archivedIn = (archive: ArchiveData, taskId: string) => Object.prototype.hasOwnProperty.call(archive.tasks, taskId);
+
+function decodeAppearance(text: string, scope: string): AppearanceData {
+  let envelope: unknown;
+  try { envelope = JSON.parse(text); } catch { return fail('corrupt', '작업 아이콘 기록을 읽을 수 없습니다.'); }
+  if (!isRecord(envelope) || !exactKeys(envelope, ['checksum', 'data']) || !isRecord(envelope.data) ||
+      typeof envelope.checksum !== 'string' || envelope.checksum !== hash(JSON.stringify(envelope.data))) return fail('corrupt', '작업 아이콘 기록의 무결성을 확인할 수 없습니다.');
+  const data = envelope.data;
+  if (!exactKeys(data, ['version', 'scope', 'tasks']) || data.version !== 1 || data.scope !== scope || !isRecord(data.tasks) ||
+      !Object.entries(data.tasks).every(([id, appearance]) => nonempty(id, 256) && validTaskAppearance(appearance))) return fail('corrupt', '작업 아이콘 기록의 형식이 일치하지 않습니다.');
+  return data as unknown as AppearanceData;
 }
 
 function validDraft(value: unknown): value is ActivityDraft {
@@ -185,19 +245,28 @@ export class TaskWorkspaceStore {
   readonly filePath: string;
   readonly versionsPath: string;
   readonly verdictsPath: string;
+  readonly archivePath: string;
+  readonly appearancePath: string;
   private readonly directory: string;
   private readonly rootPath: string;
+  /** The scope as given (before hashing), so a fresh read of the same store can be made. */
+  private readonly scopeInput: string;
   private data?: WorkspaceData;
   /** Versions sidecar as last read or written. A missing or unreadable sidecar reads as no versions. */
   private versions: VersionsData;
   /** Answer-verdict sidecar as last read or written. A missing or unreadable one reads as no verdicts. */
   private verdicts: VerdictsData;
+  /** Archive sidecar as last read or written. A missing or unreadable one reads as nothing archived. */
+  private archive: ArchiveData;
+  /** Appearance sidecar as last read or written. A missing or unreadable one reads as no marks. */
+  private appearance: AppearanceData;
   private loadError?: TaskWorkspaceStoreError;
   private queue: Promise<void> = Promise.resolve();
 
   constructor(rootPath: string, scope: string) {
     if (!nonempty(rootPath, 4096) || !nonempty(scope, 16384)) fail('invalid', '작업 저장 범위가 필요합니다.');
     this.scope = hash(scope);
+    this.scopeInput = scope;
     this.rootPath = rootPath;
     this.directory = join(rootPath, 'task-workspaces');
     this.filePath = join(this.directory, `${this.scope}.json`);
@@ -205,6 +274,10 @@ export class TaskWorkspaceStore {
     this.versions = { version: 1, scope: this.scope, tasks: {} };
     this.verdictsPath = join(this.directory, `${this.scope}.verdicts.json`);
     this.verdicts = { version: 1, scope: this.scope, tasks: {} };
+    this.archivePath = join(this.directory, `${this.scope}.archive.json`);
+    this.archive = { version: 1, scope: this.scope, tasks: {} };
+    this.appearancePath = join(this.directory, `${this.scope}.appearance.json`);
+    this.appearance = { version: 1, scope: this.scope, tasks: {} };
     this.load();
   }
 
@@ -219,6 +292,8 @@ export class TaskWorkspaceStore {
       this.data = decode(readFileSync(this.filePath, 'utf8'), this.scope);
       this.versions = this.readVersionsSync();
       this.verdicts = this.readVerdictsSync();
+      this.archive = this.readArchiveSync();
+      this.appearance = this.readAppearanceSync();
     } catch (error) {
       if (codeOf(error) === 'ENOENT') return;
       this.loadError = error instanceof TaskWorkspaceStoreError ? error :
@@ -244,16 +319,54 @@ export class TaskWorkspaceStore {
     return { version: 1, scope: this.scope, tasks: {} };
   }
 
+  /** A lost archive sidecar only shows the archived tasks in the list again; their content is in the task file. */
+  private readArchiveSync(): ArchiveData {
+    try {
+      const stat = lstatSync(this.archivePath);
+      if (stat.isFile() && !stat.isSymbolicLink()) return decodeArchive(readFileSync(this.archivePath, 'utf8'), this.scope);
+    } catch { /* missing or unreadable: nothing archived */ }
+    return { version: 1, scope: this.scope, tasks: {} };
+  }
+
+  /** A lost appearance sidecar costs only the emoji and colour marks; titles and turns are in the task file. */
+  private readAppearanceSync(): AppearanceData {
+    try {
+      const stat = lstatSync(this.appearancePath);
+      if (stat.isFile() && !stat.isSymbolicLink()) return decodeAppearance(readFileSync(this.appearancePath, 'utf8'), this.scope);
+    } catch { /* missing or unreadable: no marks */ }
+    return { version: 1, scope: this.scope, tasks: {} };
+  }
+
   getView(): TaskWorkspaceView {
+    const activeTaskId = this.data?.activeTaskId ?? null;
+    const summaries: TaskSummary[] = (this.data?.tasks ?? []).map(({ id, title, createdAt, updatedAt, messageCount }) => {
+      // CGP-KNOW-R-008 — the learner's emoji and colour, if any, from the appearance sidecar.
+      const appearance = this.loadError ? undefined : this.appearance.tasks[id];
+      return { id, title, createdAt, updatedAt, messageCount, ...(appearance ? { appearance: clone(appearance) } : {}) };
+    }).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+    // CGP-CHAT-R-025 — the open task always stays in the list (an interrupted archive leaves it
+    // open and visible); every other archived task is listed only in 보관함, newest archive first.
+    const hidden = (task: TaskSummary) => task.id !== activeTaskId && archivedIn(this.archive, task.id);
+    const archived: ArchivedTaskSummary[] = summaries.filter(hidden).map(task => ({ ...task, archivedAt: this.archive.tasks[task.id] }))
+      .sort((a, b) => b.archivedAt - a.archivedAt || a.id.localeCompare(b.id));
     return {
       scope: this.scope,
       revision: this.data?.revision ?? 0,
-      activeTaskId: this.data?.activeTaskId ?? null,
-      tasks: (this.data?.tasks ?? []).map(({ id, title, createdAt, updatedAt, messageCount }) =>
-        ({ id, title, createdAt, updatedAt, messageCount })).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id)),
+      activeTaskId,
+      tasks: summaries.filter(task => !hidden(task)),
+      archived,
       sourceSelection: clone(this.data?.tasks.find(task => task.id === this.data?.activeTaskId)?.sourceSelection ?? null),
       ...(this.loadError ? { error: { code: this.loadError.code, message: this.loadError.message } } : {}),
     };
+  }
+
+  /**
+   * CGP-CHAT-R-026 — local search over this scope's tasks (visible conversation only); never touches disk or
+   * network. null when the task file could not be read: "no match" would be a false answer.
+   */
+  search(query: string): TaskSearchResult[] | null {
+    if (this.loadError || !this.data) return null;
+    return searchTasks(this.data.tasks, query);
   }
 
   getActiveTask(): TaskDocument | undefined { return this.getTask(this.data?.activeTaskId); }
@@ -313,23 +426,101 @@ export class TaskWorkspaceStore {
   }
 
   select(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
-    return this.mutate(data => {
+    return this.mutate((data, _versions, archive) => {
       const current = this.requireData(data);
       this.checkExpected(current, expected);
       this.requireTask(current, taskId);
+      // CGP-CHAT-R-025 — an archived task opens only through 보관함's 다시 열기.
+      if (taskId !== current.activeTaskId && archivedIn(archive, taskId)) fail('not_found', '보관한 작업입니다. 보관함에서 다시 열어 주세요.');
+      current.activeTaskId = taskId;
+      return current;
+    });
+  }
+
+  /**
+   * CGP-CHAT-R-025 — hide the open task from the list. Only the archive sidecar records it: the
+   * transcript, draft, earlier versions and verdicts stay exactly as they are. The most recently
+   * updated listed task opens next; with none left, a new empty task does.
+   */
+  archiveTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    return this.mutate((data, _versions, archive) => {
+      const current = this.requireData(data);
+      this.checkExpected(current, expected);
+      if (taskId !== current.activeTaskId) fail('stale', '열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
+      this.requireTask(current, taskId);
+      archive.tasks[taskId] = Date.now();
+      const next = current.tasks.filter(task => !archivedIn(archive, task.id))
+        .sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))[0];
+      if (next) current.activeTaskId = next.id;
+      else {
+        const task = this.newTask('새 작업', Date.now());
+        current.tasks.push(task);
+        current.activeTaskId = task.id;
+      }
+      return current;
+    });
+  }
+
+  /** CGP-CHAT-R-025 — 다시 열기: back in the list, and open. The task's content was never changed. */
+  restoreTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    return this.mutate((data, _versions, archive) => {
+      const current = this.requireData(data);
+      this.checkExpected(current, expected);
+      this.requireTask(current, taskId);
+      if (!archivedIn(archive, taskId)) fail('not_found', '보관함에서 이 작업을 찾을 수 없습니다. 보관함을 다시 열어 주세요.');
+      delete archive.tasks[taskId];
       current.activeTaskId = taskId;
       return current;
     });
   }
 
   rename(taskId: string, title: string): Promise<TaskWorkspaceView> {
-    return this.updateTask(taskId, task => { task.title = normalizedTitle(title); task.titleOrigin = 'manual'; });
+    return this.renameWithUndo(taskId, title).then(result => result.view);
+  }
+  /**
+   * CGP-CHAT-R-029 — rename and keep what it replaced, so 되돌리기 can put the exact prior title and its
+   * origin back (an automatic or default title then keeps following the conversation). The list keeps
+   * ordering by last activity: the draft flush around a rename and its undo is activity too.
+   * `undo` is null when nothing changed.
+   */
+  async renameWithUndo(taskId: string, title: string): Promise<{ view: TaskWorkspaceView; undo: RenameUndo<TitleOrigin> | null }> {
+    let undo: RenameUndo<TitleOrigin> | null = null;
+    const view = await this.updateTask(taskId, task => {
+      const before = { title: task.title, titleOrigin: task.titleOrigin };
+      task.title = normalizedTitle(title); task.titleOrigin = 'manual';
+      if (before.title !== task.title || before.titleOrigin !== 'manual')
+        undo = { taskId, renamedTo: task.title, title: before.title, titleOrigin: before.titleOrigin };
+    });
+    return { view, undo };
+  }
+  /** Put a rename back, only while the task still carries exactly that rename (nothing renamed it since). */
+  undoRename(undo: RenameUndo<TitleOrigin>): Promise<TaskWorkspaceView> {
+    return this.mutate(data => {
+      const current = this.requireData(data);
+      if (undo.taskId !== current.activeTaskId) fail('stale', '다른 작업의 이름은 되돌릴 수 없어요.');
+      const task = this.requireTask(current, undo.taskId);
+      if (task.title !== undo.renamedTo || task.titleOrigin !== 'manual') fail('stale', '이름이 이미 바뀌어서 되돌리지 못했어요.');
+      task.title = undo.title;
+      if (undo.titleOrigin === undefined) delete task.titleOrigin; else task.titleOrigin = undo.titleOrigin;
+      task.updatedAt = Math.max(Date.now(), task.updatedAt);
+      return current;
+    });
   }
   /** A captured system notice may finish after selection changes; it never edits another task's content. */
   appendDenial(taskId: string, message: ChatMessage): Promise<TaskWorkspaceView> {
     if (!validIncoming(message) || message.role !== 'tool' || message.content !== '' || message.tool?.state !== 'error' || !storedDenialNotice(message.tool.label))
       return Promise.reject(new TaskWorkspaceStoreError('invalid', '차단 안내 형식이 올바르지 않습니다.'));
-    const safe: ChatMessage = { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '🔒', label: message.tool.label, state: 'error' } };
+    return this.appendSystemLine(taskId, { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '🔒', label: message.tool.label, state: 'error' } });
+  }
+
+  /** CGP-KNOW-R-021 — a browser download line, written outside any turn like a denial notice. */
+  appendDownloadNotice(taskId: string, message: ChatMessage): Promise<TaskWorkspaceView> {
+    if (!validIncoming(message) || message.role !== 'tool' || message.content !== '' || !message.tool || !isDownloadNoticeLabel(message.tool.label, message.tool.state))
+      return Promise.reject(new TaskWorkspaceStoreError('invalid', '다운로드 안내 형식이 올바르지 않습니다.'));
+    return this.appendSystemLine(taskId, { id: message.id, role: 'tool', content: '', createdAt: message.createdAt, tool: { icon: '📄', label: message.tool.label, state: message.tool.state } });
+  }
+
+  private appendSystemLine(taskId: string, safe: ChatMessage): Promise<TaskWorkspaceView> {
     return this.mutate((data, versions) => {
       const current = this.requireData(data);
       const task = this.requireTask(current, taskId);
@@ -347,7 +538,9 @@ export class TaskWorkspaceStore {
       if (!Array.isArray(messages) || !messages.every(validIncoming)) fail('invalid', '저장할 대화 형식이 올바르지 않습니다.');
       // CGP-CHAT-R-002 — merge into the full conversation, then store the visible part in the task
       // file and the superseded turns in the sidecar.
-      const split = splitVersions(this.mergeMessages(joinVersions(task.messages, versions.tasks[taskId]), messages));
+      const split = splitVersions(this.mergeMessages(joinVersions(task.messages, versions.tasks[taskId]), messages.map(message => message.tool?.shell ? {
+        ...message, tool: { icon: message.tool.icon, label: shellLabel(message.tool.shell), state: message.tool.state },
+      } : message)));
       task.messages = split.visible;
       if (split.versions.transcript?.length || split.versions.hidden.length || Object.keys(split.versions.groups).length || Object.keys(split.versions.attempts ?? {}).length) versions.tasks[taskId] = split.versions;
       else delete versions.tasks[taskId];
@@ -395,11 +588,210 @@ export class TaskWorkspaceStore {
     if (!validVerdictEvent(event)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 답변 선택 형식이 올바르지 않습니다.'));
     return this.mutateVerdicts(taskId, history => appendVerdict(history, clone(event)));
   }
+  /**
+   * CGP-KNOW-R-008 — set (or, with null, clear) the ACTIVE task's emoji/colour under the task lock,
+   * writing only the appearance sidecar. Neither the title nor `updatedAt` changes, so the task does
+   * not jump to the top of the list for a cosmetic choice.
+   */
+  setAppearance(taskId: string, appearance: TaskAppearance | null): Promise<TaskWorkspaceView> {
+    if (appearance !== null && !validTaskAppearance(appearance)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '고를 수 있는 아이콘과 색이 아닙니다.'));
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      const current = this.requireData(this.data);
+      if (taskId !== current.activeTaskId) fail('stale', '다른 작업의 저장 요청입니다. 현재 작업에서 다시 시도해 주세요.');
+      this.requireTask(current, taskId);
+      try {
+        await this.prepareDirectory();
+        const lock = await this.acquireLock();
+        try {
+          const disk = await this.readAppearanceLocked(lock.owner.nonce);
+          const next = clone(disk);
+          if (appearance) next.tasks[taskId] = { ...(appearance.emoji ? { emoji: appearance.emoji } : {}), ...(appearance.colour ? { colour: appearance.colour } : {}) };
+          else delete next.tasks[taskId];
+          if (JSON.stringify(next) !== JSON.stringify(disk)) {
+            const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+            decodeAppearance(content, this.scope);
+            await this.writeAtomic(this.appearancePath, content, lock.owner.nonce);
+          }
+          this.appearance = next;
+          return this.getView();
+        } finally {
+          await this.releaseLock(lock);
+        }
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '아이콘과 색을 저장하지 못했습니다. 다시 시도해 주세요.');
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
   saveSurface(taskId: string, selection: TaskSurfaceSelection | null): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => {
       if (!validSurface(selection)) fail('invalid', '저장할 출처 주소가 올바르지 않습니다.');
       task.sourceSelection = clone(selection);
     });
+  }
+
+  /** CGP-KNOW-R-009 — the same scope read again from disk now, independent of this instance's memory. */
+  reread(): TaskWorkspaceStore { return new TaskWorkspaceStore(this.rootPath, this.scopeInput); }
+
+  /**
+   * CGP-KNOW-R-009 — one task exactly as this scope stores it (task document with its draft, the
+   * versions sidecar entry and the verdict events), for a move to another personal activity.
+   */
+  exportTask(taskId: string): MovedTask {
+    const task = this.getTask(taskId) ?? fail('not_found', '이 작업을 찾을 수 없습니다. 작업 목록을 다시 열어 주세요.');
+    return { task, versions: this.versions.tasks[taskId] ? clone(this.versions.tasks[taskId]) : null, verdicts: clone(this.verdicts.tasks[taskId] ?? []) };
+  }
+
+  /**
+   * CGP-KNOW-R-009 — receive a task moved from another scope. The moved task joins the list as it
+   * is (same id, title, transcript, draft, versions and verdicts); this scope's active task does not
+   * change. Only a scope that already has a task file receives: one that was never opened would
+   * otherwise skip its first-open import of older history. A task id this scope already holds is
+   * accepted only when it is the identical task (a retry after a half-done move); anything else is
+   * refused and nothing is written. Order: versions, verdicts, then the task file (the commit point),
+   * so a task that is present always has its sidecar entries; an interrupted receive leaves at most
+   * sidecar entries for a task id the list does not hold, which the next receive overwrites.
+   */
+  receiveTask(moved: MovedTask): Promise<TaskWorkspaceView> {
+    if (!isRecord(moved) || !validTask(moved.task) || (moved.versions !== null && !validVersions(moved.versions)) ||
+        !Array.isArray(moved.verdicts) || !moved.verdicts.every(validVerdictEvent)) {
+      return Promise.reject(new TaskWorkspaceStoreError('invalid', '옮길 작업의 형식을 확인할 수 없습니다.'));
+    }
+    const incoming = clone(moved);
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      try {
+        await this.prepareDirectory();
+        const lock = await this.acquireLock();
+        try {
+          let disk: WorkspaceData;
+          try {
+            const stat = await lstat(this.filePath);
+            if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 기록 파일의 위치를 확인해야 합니다.');
+            disk = decode(await readFile(this.filePath, 'utf8'), this.scope);
+          } catch (error) {
+            if (codeOf(error) === 'ENOENT') fail('not_initialized', '옮길 활동을 한 번 연 뒤에 다시 시도해 주세요.');
+            throw error;
+          }
+          const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
+          const diskVerdicts = await this.readVerdictsLocked(lock.owner.nonce);
+          const existing = disk.tasks.find(task => task.id === incoming.task.id);
+          if (existing) {
+            const same = JSON.stringify(existing) === JSON.stringify(incoming.task) &&
+              JSON.stringify(diskVersions.tasks[existing.id] ?? null) === JSON.stringify(incoming.versions) &&
+              JSON.stringify(diskVerdicts.tasks[existing.id] ?? []) === JSON.stringify(incoming.verdicts);
+            if (!same) fail('invalid', '옮길 활동에 같은 작업이 이미 있어요. 작업 목록을 확인해 주세요.');
+            this.data = disk; this.versions = diskVersions; this.verdicts = diskVerdicts;
+            return this.getView();
+          }
+          // A sidecar entry for an id the list does not hold is left over (an interrupted receive or
+          // release); the incoming task replaces it, and an incoming task without one clears it.
+          const versions = clone(diskVersions);
+          if (incoming.versions) versions.tasks[incoming.task.id] = incoming.versions;
+          else delete versions.tasks[incoming.task.id];
+          const verdicts = clone(diskVerdicts);
+          if (incoming.verdicts.length) verdicts.tasks[incoming.task.id] = incoming.verdicts;
+          else delete verdicts.tasks[incoming.task.id];
+          const next: WorkspaceData = { ...disk, revision: disk.revision + 1, tasks: [...disk.tasks, incoming.task] };
+          if (JSON.stringify(versions) !== JSON.stringify(diskVersions)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(versions)), data: versions });
+            decodeVersions(sidecar, this.scope);
+            await this.writeAtomic(this.versionsPath, sidecar, lock.owner.nonce);
+          }
+          this.versions = versions;
+          if (JSON.stringify(verdicts) !== JSON.stringify(diskVerdicts)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(verdicts)), data: verdicts });
+            decodeVerdicts(sidecar, this.scope);
+            await this.writeAtomic(this.verdictsPath, sidecar, lock.owner.nonce);
+          }
+          this.verdicts = verdicts;
+          const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+          decode(content, this.scope);
+          await this.writeAtomic(this.filePath, content, lock.owner.nonce);
+          this.data = next;
+          return this.getView();
+        } finally {
+          await this.releaseLock(lock);
+        }
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '작업을 옮기지 못했습니다. 원래 기록은 그대로 있어요.');
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
+
+  /**
+   * CGP-KNOW-R-009 — undo a receive when the move cannot finish (the copy did not read back, or the
+   * source could not let go). Only the exact task that was received is removed, and only while it is
+   * not the open task here; anything else is left alone and reported as not withdrawn.
+   */
+  async withdrawTask(moved: MovedTask): Promise<boolean> {
+    const current = this.data;
+    const task = current?.tasks.find(value => value.id === moved?.task?.id);
+    if (!current || !task || current.activeTaskId === task.id || current.tasks.length < 2 || JSON.stringify(task) !== JSON.stringify(moved.task)) return false;
+    await this.mutate(data => {
+      const latest = this.requireData(data);
+      latest.tasks = latest.tasks.filter(value => value.id !== task.id);
+      return latest;
+    });
+    await this.dropSidecarEntries(task.id);
+    return true;
+  }
+
+  /**
+   * CGP-KNOW-R-009 — take a task out of this scope after another scope received it. Refused when
+   * the list changed since the learner chose (expected). Moving the open task opens the most
+   * recently changed remaining one; moving the only task leaves a new empty one. Order: the task
+   * file first (the commit point), then the task's versions entry, then its verdict events. A
+   * failed task-file write leaves the task with all its earlier versions; a failure after it only
+   * leaves unreachable sidecar entries behind, which a later receive of the same id overwrites.
+   */
+  async releaseTask(taskId: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
+    const view = await this.mutate(data => {
+      const current = this.requireData(data);
+      this.checkExpected(current, expected);
+      this.requireTask(current, taskId);
+      current.tasks = current.tasks.filter(task => task.id !== taskId);
+      if (!current.tasks.length) current.tasks.push(this.newTask('새 작업', Date.now()));
+      if (current.activeTaskId === taskId) {
+        current.activeTaskId = [...current.tasks].sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))[0].id;
+      }
+      return current;
+    });
+    await this.dropSidecarEntries(taskId);
+    return view;
+  }
+
+  /** CGP-KNOW-R-009 — after a task left the task file: drop its versions, then its verdicts (best effort). */
+  private async dropSidecarEntries(taskId: string): Promise<void> {
+    await this.mutate((data, versions) => { delete versions.tasks[taskId]; return this.requireData(data); }).catch(() => {});
+    await this.dropVerdicts(taskId).catch(() => {});
+  }
+
+  private dropVerdicts(taskId: string): Promise<void> {
+    const operation = this.queue.then(async () => {
+      await this.prepareDirectory();
+      const lock = await this.acquireLock();
+      try {
+        const disk = await this.readVerdictsLocked(lock.owner.nonce);
+        if (!disk.tasks[taskId]) { this.verdicts = disk; return; }
+        const next = clone(disk);
+        delete next.tasks[taskId];
+        const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+        decodeVerdicts(content, this.scope);
+        await this.writeAtomic(this.verdictsPath, content, lock.owner.nonce);
+        this.verdicts = next;
+      } finally {
+        await this.releaseLock(lock);
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
   }
 
   /**
@@ -421,6 +813,8 @@ export class TaskWorkspaceStore {
     const from = clone(source.requireData(source.data));
     const fromVersions = clone(source.versions.tasks);
     const fromVerdicts = clone(source.verdicts.tasks);
+    const fromArchive = clone(source.archive.tasks);
+    const fromAppearance = clone(source.appearance.tasks);
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
@@ -435,6 +829,10 @@ export class TaskWorkspaceStore {
           } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
           const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
           const diskVerdicts = await this.readVerdictsLocked(lock.owner.nonce);
+          const diskArchive = await this.readArchiveLocked(lock.owner.nonce);
+          const archive = clone(diskArchive);
+          const diskAppearance = await this.readAppearanceLocked(lock.owner.nonce);
+          const appearance = clone(diskAppearance);
           const tasks = clone(disk?.tasks ?? []);
           const versions = clone(diskVersions);
           const verdicts = clone(diskVerdicts);
@@ -452,11 +850,15 @@ export class TaskWorkspaceStore {
                 tasks.push(kept);
                 if (diskVersions.tasks[old.id]) versions.tasks[kept.id] = clone(diskVersions.tasks[old.id]);
                 if (diskVerdicts.tasks[old.id]?.length) verdicts.tasks[kept.id] = clone(diskVerdicts.tasks[old.id]);
+                if (diskAppearance.tasks[old.id]) appearance.tasks[kept.id] = clone(diskAppearance.tasks[old.id]);
               }
               tasks[at] = task;
             } else tasks.push(task);
             if (fromVersions[task.id]) versions.tasks[task.id] = fromVersions[task.id]; else delete versions.tasks[task.id];
             if (fromVerdicts[task.id]?.length) verdicts.tasks[task.id] = fromVerdicts[task.id]; else delete verdicts.tasks[task.id];
+            // CGP-CHAT-R-025 — an archived task stays archived in the new folder, a listed one stays listed.
+            if (Object.prototype.hasOwnProperty.call(fromArchive, task.id)) archive.tasks[task.id] = fromArchive[task.id]; else delete archive.tasks[task.id];
+            if (fromAppearance[task.id]) appearance.tasks[task.id] = fromAppearance[task.id]; else delete appearance.tasks[task.id];
           }
           const next: WorkspaceData = { version: 1, scope: this.scope, revision: (disk?.revision ?? 0) + 1, activeTaskId: from.activeTaskId, tasks };
           if (JSON.stringify(versions) !== JSON.stringify(diskVersions)) {
@@ -464,6 +866,8 @@ export class TaskWorkspaceStore {
             decodeVersions(sidecar, this.scope);
             await this.writeAtomic(this.versionsPath, sidecar, lock.owner.nonce);
           }
+          await this.writeArchive(archive, diskArchive, lock.owner.nonce);
+          this.archive = archive;
           const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
           decode(content, this.scope);
           await this.writeAtomic(this.filePath, content, lock.owner.nonce);
@@ -475,6 +879,13 @@ export class TaskWorkspaceStore {
             await this.writeAtomic(this.verdictsPath, sidecar, lock.owner.nonce);
           }
           this.verdicts = verdicts;
+          // After the commit point, like the verdicts: a failed carry never changes the target's marks.
+          if (JSON.stringify(appearance) !== JSON.stringify(diskAppearance)) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(appearance)), data: appearance });
+            decodeAppearance(sidecar, this.scope);
+            await this.writeAtomic(this.appearancePath, sidecar, lock.owner.nonce);
+          }
+          this.appearance = appearance;
           return this.getView();
         } finally {
           await this.releaseLock(lock);
@@ -585,6 +996,7 @@ export class TaskWorkspaceStore {
       await unlink(`${this.filePath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
       await unlink(`${this.versionsPath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
       await unlink(`${this.verdictsPath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
+      await unlink(`${this.archivePath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
     } finally {
       if (removed) await unlink(claimPath);
       else await rename(claimPath, lease.path);
@@ -673,6 +1085,40 @@ export class TaskWorkspaceStore {
     catch { await rename(this.verdictsPath, `${this.verdictsPath}.unreadable-${nonce}`); return empty; }
   }
 
+  /** The archive sidecar on disk, read under the lock. An unreadable one is set aside (kept, never overwritten). */
+  private async readArchiveLocked(nonce: string): Promise<ArchiveData> {
+    const empty: ArchiveData = { version: 1, scope: this.scope, tasks: {} };
+    let text: string;
+    try {
+      const stat = await lstat(this.archivePath);
+      if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '보관함 기록 파일의 위치를 확인해야 합니다.');
+      text = await readFile(this.archivePath, 'utf8');
+    } catch (error) { if (codeOf(error) === 'ENOENT') return empty; throw error; }
+    try { return decodeArchive(text, this.scope); }
+    catch { await rename(this.archivePath, `${this.archivePath}.unreadable-${nonce}`); return empty; }
+  }
+
+  /** Writes the archive sidecar when it changed (validated before the atomic replace). */
+  private async writeArchive(next: ArchiveData, disk: ArchiveData, nonce: string): Promise<void> {
+    if (JSON.stringify(next) === JSON.stringify(disk)) return;
+    const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+    decodeArchive(sidecar, this.scope);
+    await this.writeAtomic(this.archivePath, sidecar, nonce);
+  }
+
+  /** The appearance sidecar on disk, read under the lock. An unreadable one is set aside (kept, never overwritten). */
+  private async readAppearanceLocked(nonce: string): Promise<AppearanceData> {
+    const empty: AppearanceData = { version: 1, scope: this.scope, tasks: {} };
+    let text: string;
+    try {
+      const stat = await lstat(this.appearancePath);
+      if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 아이콘 기록 파일의 위치를 확인해야 합니다.');
+      text = await readFile(this.appearancePath, 'utf8');
+    } catch (error) { if (codeOf(error) === 'ENOENT') return empty; throw error; }
+    try { return decodeAppearance(text, this.scope); }
+    catch { await rename(this.appearancePath, `${this.appearancePath}.unreadable-${nonce}`); return empty; }
+  }
+
   /**
    * Read-modify-write of one task's verdict events. Only the active task of a loaded store may be
    * changed; `null` from `change` removes the task's entry. The task file itself is never written.
@@ -711,7 +1157,7 @@ export class TaskWorkspaceStore {
     return operation;
   }
 
-  private mutate(change: (data: WorkspaceData | undefined, versions: VersionsData) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
+  private mutate(change: (data: WorkspaceData | undefined, versions: VersionsData, archive: ArchiveData) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
@@ -728,8 +1174,14 @@ export class TaskWorkspaceStore {
           const base = recoverFromDisk ? disk : this.data;
           const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
           const versions = clone(diskVersions);
-          const next = change(base ? clone(base) : undefined, versions);
+          const diskArchive = await this.readArchiveLocked(lock.owner.nonce);
+          const archive = clone(diskArchive);
+          const next = change(base ? clone(base) : undefined, versions, archive);
           const versionsChanged = JSON.stringify(versions) !== JSON.stringify(diskVersions);
+          // CGP-CHAT-R-025 — the archive sidecar is written before the task file: a crash between them
+          // leaves the archived task open, and the open task always stays in the list.
+          await this.writeArchive(archive, diskArchive, lock.owner.nonce);
+          this.archive = archive;
           if (this.data && JSON.stringify(next) === JSON.stringify(this.data) && !versionsChanged) { this.versions = diskVersions; return this.getView(); }
           // The sidecar is written first: a crash between the two writes leaves the earlier version
           // visible in the task file and a duplicate in the sidecar, which joinVersions ignores.

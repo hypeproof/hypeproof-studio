@@ -1,3 +1,4 @@
+import { CopyFeedback } from './CopyFeedback';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { ChatIcon, useConfirmedCopy } from './ChatDetails';
 import './codeBlock.css';
@@ -58,14 +59,16 @@ export function CodeBlockTools({ code, wrap, onToggleWrap }: { code: string; wra
   const empty = code.trim() === '';
   // CGP-CHAT-R-007: the tool row is UI, never part of a quoted answer.
   return <div className="hps-codeblock-tools" data-quote-skip="">
-    <button type="button" className="hps-codeblock-tool" onClick={copy} disabled={empty} aria-label={CODE_COPY_LABEL} data-hp-tooltip={CODE_COPY_LABEL}>
+    <div className="hps-codeblock-controls">
+    <button type="button" className="hps-codeblock-tool" data-copy-state={state} onClick={copy} disabled={empty} aria-label={CODE_COPY_LABEL} data-hp-tooltip={CODE_COPY_LABEL}>
       <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} size={16} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
     </button>
     {/* A toggle keeps one fixed name; aria-pressed carries the state (WAI-ARIA APG). */}
     <button type="button" className="hps-codeblock-tool" onClick={onToggleWrap} aria-label={WRAP_LABEL} aria-pressed={wrap} data-hp-tooltip={WRAP_LABEL}>
       <span>{WRAP_LABEL}</span>
     </button>
-    <span role="status" className="hps-copy-status hps-codeblock-status">{state === 'copied' ? COPY_DONE_STATUS : state === 'failed' ? COPY_FAILED_STATUS : ''}</span>
+    </div>
+    <CopyFeedback failed={state === 'failed'} className="hps-codeblock-status">{state !== 'idle' && <><ChatIcon kind={state === 'failed' ? 'alert' : 'check'} size={16} /><span>{state === 'copied' ? COPY_DONE_STATUS : COPY_FAILED_STATUS}</span></>}</CopyFeedback>
   </div>;
 }
 

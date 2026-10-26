@@ -14,7 +14,7 @@
   color: inherit;
   background: transparent;
   border: var(--ds-c-status-chip-edge) solid var(--hp-border-control-default);
-  border-radius: var(--ds-c-status-chip-radius);
+  border-radius: var(--hp-radius-status-chip);
   padding-inline: var(--ds-c-status-chip-pad-inline);
 }
 .hps-goal-status button:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }
@@ -29,10 +29,20 @@
   height: var(--ds-c-status-chip-pad-inline);
   margin-inline-end: var(--ds-c-status-chip-pad-inline);
   background: currentColor;
-  border-radius: var(--ds-c-status-chip-radius);
+  border-radius: var(--hp-radius-status-chip);
 }
 @media (forced-colors: active) {
   .hps-goal-status { color: CanvasText; }
   .hps-goal-status button { border-color: ButtonText; }
   .hps-goal-status button[aria-pressed="true"] { border-color: Highlight; }
 }
+
+/* DES-CGP-AGENT-13: compact summary; 44px interactive target retained (40px design conflict). */
+.hps-goal-status { font-size: var(--hp-font-caption, var(--ds-c-status-chip-label)); }
+.hps-goal-status .hps-goal-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--ds-c-status-chip-gap); width: 100%; padding-block: 0; text-align: left; box-sizing: border-box; }
+.hps-goal-strip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hps-goal-meter { display: flex; flex-direction: column; min-width: 0; white-space: nowrap; }
+.hps-goal-meter meter { display: block; width: 100%; height: var(--ds-c-status-chip-pad-inline); }
+.hps-goal-status .hps-goal-expanded { display: block; }
+.hps-goal-expanded label { display: block; }
+.hps-goal-expanded textarea { box-sizing: border-box; width: 100%; max-width: 100%; font: inherit; color: inherit; }

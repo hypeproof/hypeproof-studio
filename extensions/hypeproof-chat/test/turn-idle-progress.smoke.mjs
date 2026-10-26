@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {idleTurnHint,runningProgressStep} from '../src/longStepHint.ts';
+const base={since:1000,now:20999,streaming:true,stalled:false,approvalPending:false};
+assert.equal(idleTurnHint(base),null);
+const wait=idleTurnHint({...base,now:21000});
+assert.equal(wait.text,'평소보다 오래 걸리고 있어요');assert.equal(wait.offerStop,true);
+assert.equal(idleTurnHint({...base,now:60000}).announce,wait.announce,'ticks do not repeat announcements');
+const later=idleTurnHint({...base,now:61000,step:'명령을 실행하는 중'});
+assert.match(later.text,/명령을 실행하는 중/);assert.equal(later.offerStop,true);
+assert.match(idleTurnHint({...base,now:61000}).text,/아직 답변을 기다리고 있어요/);
+assert.equal(idleTurnHint({...base,since:61000,now:61001}),null,'visible progress restarts the quiet interval');
+for(const gate of [{streaming:false},{stalled:true},{approvalPending:true}])assert.equal(idleTurnHint({...base,now:90000,...gate}),null);
+assert.doesNotMatch(idleTurnHint({...base,now:61000,step:'Bash(secret command)'}).text,/secret|Bash/);
+const tool={id:'tool',role:'tool',content:'',tool:{state:'running',step:'파일을 살펴보는 중',since:1000}};
+assert.equal(runningProgressStep([{id:'u',role:'user',content:'go'},tool,{id:'a',role:'assistant',content:'진행 중'}]).id,'tool');
+assert.equal(runningProgressStep([tool,{id:'u',role:'user',content:'next'}]),null,'previous-turn tools excluded');
+assert.equal(runningProgressStep([{...tool,tool:{...tool.tool,state:'done'}}]),null);
+console.log('PASS idle progress boundaries, immediate Stop, stable phase announcements, reset, gates, safe step and current-turn selection');

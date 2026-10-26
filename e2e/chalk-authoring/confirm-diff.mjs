@@ -58,8 +58,8 @@ const origin = 'http://127.0.0.1:' + server.address().port;
 let browser, n = 0;
 const ok = (name) => { n++; console.log('PASS ' + name); };
 // Brings the confirm step to a passed candidate v2 through the page's own readiness button.
-async function open(width = 1280) {
-  const page = await browser.newPage({ viewport: { width, height: 900 } });
+async function open(width = 1280, colorScheme = 'light') {
+  const page = await browser.newPage({ viewport: { width, height: 900 }, colorScheme });
   const errors = []; page.on('pageerror', (e) => errors.push(e.message)); page.on('dialog', (d) => d.accept());
   await page.goto(origin + '/authoring');
   await page.locator('details').evaluateAll((es) => es.forEach((e) => (e.open = true)));
@@ -76,8 +76,29 @@ try {
   browser = await chromium.launch(process.env.HPS_BROWSER_CHANNEL ? { channel: process.env.HPS_BROWSER_CHANNEL } : {});
 
   reset();
-  for (const width of [1280, 800]) {
-    const { page, errors } = await open(width);
+  for (const scheme of ['light','dark']) for (const width of [375,800,1420]) {
+    const { page, errors } = await open(width,scheme);
+    assert.equal(await page.locator('#confirm-groups').count(),1,'grouped candidate comparison exists');
+    assert.match(await page.locator('#confirm-groups-status').textContent(),/확정 버전 v1 → 후보 v2/);
+    assert.deepEqual(await page.locator('#confirm-groups-list h4').allTextContents(),['지시문']);
+    const rects=await page.evaluate(()=>{const a=document.querySelector('#confirm-groups').getBoundingClientRect(),b=document.querySelector('#confirm-diff').getBoundingClientRect();return {al:a.left,ar:a.right,at:a.top,ab:a.bottom,bl:b.left,bt:b.top};});
+    if(width>=768){assert.ok(rects.ar<=rects.bl&&Math.abs(rects.at-rects.bt)<1,'groups left, instructions right');}else assert.ok(rects.ab<=rects.bt,'mobile stacks groups before instruction diff');
+    await page.locator('#confirm-groups-list summary').first().click();
+    assert.ok((await page.locator('#confirm-groups-list pre').allTextContents()).some(t=>t.includes(XSS)),'full candidate is available as literal text');
+    assert.equal(await page.locator('#confirm-groups-list img').count(),0);
+    const colors=await page.locator('#confirm-diff-lines ins, #confirm-diff-lines del, #confirm-diff-lines .diff-glyph, #confirm-groups-list summary, #confirm-groups-list pre').evaluateAll(es=>es.map(e=>{const chain=[];for(let p=e;p;p=p.parentElement)chain.push(getComputedStyle(p).backgroundColor);let bg=[255,255,255];for(const color of chain.reverse()){const v=color.match(/[\d.]+/g).map(Number),alpha=v.length===4?v[3]:1;bg=bg.map((b,i)=>v[i]*alpha+b*(1-alpha));}return {fg:getComputedStyle(e).color,bg:'rgb('+bg.join(',')+')'};}));
+    const lum=c=>{const v=c.match(/[\d.]+/g).slice(0,3).map(Number).map(x=>{x/=255;return x<=.04045?x/12.92:((x+.055)/1.055)**2.4});return .2126*v[0]+.7152*v[1]+.0722*v[2];};
+    for(const c of colors){const a=lum(c.fg),b=lum(c.bg);assert.ok((Math.max(a,b)+.05)/(Math.min(a,b)+.05)>=4.5,'diff contrast in '+scheme+' '+JSON.stringify(c));}
+    const targets=await page.locator('#confirm-groups-list summary').evaluateAll(es=>es.map(e=>({h:e.getBoundingClientRect().height,font:parseFloat(getComputedStyle(e).fontSize)})));
+    for(const t of targets){assert.ok(t.h>=44);assert.ok(t.font>=14);}
+    const valueFonts=await page.locator('#confirm-groups-list pre').evaluateAll(es=>es.map(e=>parseFloat(getComputedStyle(e).fontSize)));
+    assert.ok(valueFonts.length>=2&&valueFonts.every(f=>f>=14),'previous/new value text is >=14px at '+width+': '+valueFonts);
+    await page.keyboard.press('Tab');await page.locator('#confirm-groups-list').focus();
+    assert.equal(await page.locator('#confirm-groups-list').evaluate(e=>getComputedStyle(e).outlineStyle),'solid','keyboard focus ring');
+    assert.equal(await page.locator('#confirm-groups-list').evaluate(e=>getComputedStyle(e).outlineOffset),'-2px','scroll container uses inset ring');
+    await page.keyboard.press('End');await page.waitForTimeout(100);
+    assert.ok(await page.locator('#confirm-groups-list').evaluate(e=>e.scrollTop>0),'keyboard reaches lower changed values');
+    await page.locator('#confirm-groups-list').evaluate(e=>e.scrollTop=0);
     const rows = await page.locator('#confirm-diff-lines > li').evaluateAll((els) => els.map((e) => ({ cls: e.className, text: e.textContent, sr: e.querySelector('.sr-only')?.textContent ?? null })));
     const adds = rows.filter((r) => r.cls === 'diff-add'), dels = rows.filter((r) => r.cls === 'diff-del');
     assert.ok(adds.length >= 2 && dels.length >= 1, JSON.stringify(rows));
@@ -104,21 +125,41 @@ try {
     assert.match(await fold.textContent(), /^변경 없음 \d+줄 · 펼치기$/);
     assert.equal(await page.locator('#confirm-go').isDisabled(), false, 'a loaded diff allows confirm');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, 'no horizontal overflow');
-    await page.locator('#confirm').screenshot({ path: `${out}/confirm-diff-${width}.png` });
+    await page.locator('#confirm').screenshot({ path: `${out}/confirm-diff-${scheme}-${width}.png` });
     await fold.focus(); await page.keyboard.press('Enter');
     assert.equal(await page.locator('#confirm-diff-lines > li.diff-fold').count(), 0, 'Enter expands the fold');
     assert.ok((await page.locator('#confirm-diff-lines > li.diff-same').count()) >= 9, 'the folded lines are back');
-    await page.locator('#confirm').screenshot({ path: `${out}/confirm-diff-${width}-expanded.png` });
+    await page.locator('#confirm').screenshot({ path: `${out}/confirm-diff-${scheme}-${width}-expanded.png` });
     assert.deepEqual(errors, []);
     await page.close();
   }
-  ok('diff rows: spoken 추가/삭제 + glyph, literal text (no markup), underline/strike, whitespace label, fold row that expands — 1280 and 800px');
+  ok('diff rows: spoken 추가/삭제 + glyph, literal text (no markup), underline/strike, whitespace label, fold row that expands — light/dark preference at 375, 800 and 1420px');
+
+  reset();
+  { const {page}=await open(375);await page.emulateMedia({forcedColors:'active'});
+    const styles=await page.evaluate(()=>({add:getComputedStyle(document.querySelector('#confirm-diff-lines ins')).textDecorationLine,del:getComputedStyle(document.querySelector('#confirm-diff-lines del')).textDecorationLine}));
+    assert.match(styles.add,/underline/);assert.match(styles.del,/line-through/);
+    await page.keyboard.press('Tab');await page.locator('#confirm-groups-list').focus();
+    assert.equal(await page.locator('#confirm-groups-list').evaluate(e=>getComputedStyle(e).outlineStyle),'solid');await page.close(); }
+  ok('forced colours retain additions/deletions and keyboard focus');
+
+  // A re-read that fails must not leave the previous grouped values on screen (they belong to a base that is no longer proven).
+  reset();
+  { const { page } = await open();
+    assert.ok(await page.locator('#confirm-groups-list section').count() > 0, 'groups are shown after a good read');
+    S.baseStatus = 502; await page.locator('#readiness-load').click();
+    await page.locator('#confirm-diff-summary').filter({ hasText: '비교를 불러오지 못했습니다' }).waitFor();
+    assert.equal(await page.locator('#confirm-groups-list section').count(), 0, 'failed re-read clears the old grouped values');
+    assert.match(await page.locator('#confirm-groups-status').textContent(), /불러오지 못했습니다/);
+    await page.close(); }
+  ok('a failed re-read clears the previously shown grouped values');
 
   // Confirm enabled after a failed diff.
   reset({ baseStatus: 502 });
   { const { page } = await open();
     assert.match(await summary(page), /비교를 불러오지 못했습니다/);
     assert.equal(await page.locator('#confirm-go').isDisabled(), true, 'a failed diff keeps confirm locked');
+    assert.equal(await page.locator('#confirm-groups-list section').count(),0,'failed reads cannot retain old grouped values');
     const look = await page.locator('#confirm-go').evaluate((b) => { const s = getComputedStyle(b); return { bg: s.backgroundColor, border: s.borderStyle, cursor: s.cursor }; });
     assert.equal(look.border, 'dashed', 'the locked button looks locked'); assert.equal(look.bg, 'rgba(0, 0, 0, 0)');
     await page.locator('#confirm').screenshot({ path: `${out}/confirm-diff-load-failed.png` });
@@ -146,6 +187,7 @@ try {
     await page.locator('#confirm-status').filter({ hasText: '확정하지 않았습니다' }).waitFor();
     assert.equal(S.posts.length, 0, 'no confirmation was sent against a stale base');
     assert.match(await summary(page), /확정 버전 v3 → 이 후보 v2/, 'the diff was redone against the new base');
+    assert.match(await page.locator('#confirm-groups-status').textContent(),/확정 버전 v3 → 후보 v2/,'both columns use new base');
     await page.locator('#confirm-go').click();
     await page.locator('#confirm-status').filter({ hasText: '확정했습니다' }).waitFor();
     assert.equal(S.posts.length, 1); assert.equal(S.posts[0].compared_with, 'v3', 'the request names the reviewed base');

@@ -211,7 +211,9 @@ try {
     await startState(p, { profile: course }); await btn(p, '연결 해제').click(); await request(p, { type: 'disconnectCourse' });
     await startState(p, {}); await expect(btn(p, 'AI 체험하기')).toBeVisible(); await expect(p.getByText(course.name, { exact: true })).toHaveCount(0);
   }, { surface: 'start' });
-  for (const [id, label, type] of [['07', '파일', 'openStudioFiles'], ['08', '설정', 'openStudioSettings'], ['09', '작업 폴더 열기', 'openLocalFolder']]) {
+  // CGP-SHELL-R-014 — 설정 opens the learner settings sheet in the page instead of a host request.
+  await test('TUX-SP-08', '설정: keyboard action opens the learner settings sheet', async p => { await btn(p, '설정').focus(); await expect(btn(p, '설정')).toBeFocused(); await btn(p, '설정').press('Enter'); await expect(p.getByRole('dialog', { name: '설정' })).toBeVisible(); assert.ok(!(await p.evaluate(() => window.sent.map(m => m.type))).includes('openAdvancedSettings')); await p.keyboard.press('Escape'); await expect(p.getByRole('dialog', { name: '설정' })).toHaveCount(0); await expect(btn(p, '설정')).toBeFocused(); }, { surface: 'start' });
+  for (const [id, label, type] of [['07', '파일', 'openStudioFiles'], ['09', '작업 폴더 열기', 'openLocalFolder']]) {
     await test(`TUX-SP-${id}`, `${label}: keyboard action emits correct host request`, async p => { await btn(p, label).focus(); await expect(btn(p, label)).toBeFocused(); await btn(p, label).press('Enter'); await request(p, { type }); }, { surface: 'start' });
   }
   await test('TUX-SP-10', 'Disconnected coach has start-page CTA', async p => { await btn(p, '시작 화면 열기').click(); await request(p, { type: 'setToken' }); await expect(draft(p)).toHaveCount(0); }, { profile: null });
@@ -418,7 +420,6 @@ try {
     // Work surface: no model, effort or usage controls.
     await expect(p.getByRole('combobox', { name: '대화 모델' })).toHaveCount(0);
     await expect(p.getByRole('combobox', { name: '생각 깊이' })).toHaveCount(0);
-    await expect(p.getByRole('combobox', { name: 'Effort', exact: true })).toHaveCount(0);
     await expect(p.locator('.hps-access')).toBeHidden();
     const dialog = p.getByRole('dialog', { name: '대화 설정', exact: true });
     // 설정 → the dialog, focus on its close button; model and 생각 깊이 under 응답 고급 설정.
@@ -429,7 +430,8 @@ try {
     await dialog.getByText('응답 고급 설정', { exact: true }).click();
     await expect(dialog.getByRole('combobox', { name: '대화 모델' })).toHaveCount(native.model_selection ? 1 : 0);
     await expect(dialog.getByRole('combobox', { name: '생각 깊이' })).toBeVisible();
-    await expect(dialog.getByRole('combobox', { name: 'Effort', exact: true })).toHaveCount(0);
+    // Exactly one effort control in the dialog: the classroom control now has the same Korean name.
+    await expect(dialog.getByRole('combobox', { name: '생각 깊이', exact: true })).toHaveCount(1);
     await expect(dialog.locator('.hps-access')).not.toHaveAttribute('open', '');
     await p.keyboard.press('Escape'); await expect(dialog).toBeHidden();
     // 이용권 · 사용량 → the same dialog, usage open and focused.
@@ -452,7 +454,8 @@ try {
     // Control: classroom chat keeps the in-shell header and the separate Effort control.
     await host(p, { type: 'config', config: config(native, { effort: { value: 'medium', allowed: ['low', 'medium'] }, access: { status: 'ready', view: { schema: 'hps-access-view/1', configured: false, required: false, as_of: new Date().toISOString(), choices: [] } } }) });
     await expect(p.locator('.hps-shell > .hps-header')).toHaveCount(1);
-    await expect(p.getByRole('combobox', { name: 'Effort', exact: true })).toBeVisible();
+    // The classroom control carries the same Korean name as the personal one (CGP-SHELL-R-006); the personal chat has it only inside the dialog.
+    await expect(p.getByRole('combobox', { name: '생각 깊이', exact: true })).toBeVisible();
     await expect(p.locator('.hps-access')).toHaveCount(1);
     await expect(p.locator('dialog.hps-preferences')).toHaveCount(0);
   }, { cfg: { taskWorkspace, activity: trialActivity(fresh), effort: { value: 'medium', allowed: ['low', 'medium'] }, access: { status: 'ready', view: { schema: 'hps-access-view/1', configured: false, required: false, as_of: new Date().toISOString(), choices: [] } } } });

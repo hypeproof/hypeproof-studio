@@ -10,46 +10,15 @@ const SRC = new URL("../webview-ui/src/", import.meta.url);
 const read = (f) => readFileSync(new URL(f, SRC), "utf8");
 const real = { "styles.css": read("styles.css"), "chatDetails.css": read("chatDetails.css"), "tokens.css": read("tokens.css") };
 
-function splitTop(list) {
-  const out = []; let depth = 0, cur = "";
-  for (const ch of list) {
-    if (ch === "(") depth++;
-    if (ch === ")") depth--;
-    if (ch === "," && depth === 0) { out.push(cur); cur = ""; continue; }
-    cur += ch;
-  }
-  return [...out, cur].map((x) => x.trim()).filter(Boolean);
-}
-function rules(raw) {
-  const css = raw.replace(/\/\*[\s\S]*?\*\//g, "");
-  const out = [];
-  const walk = (from, to, media) => {
-    let i = from;
-    while (i < to) {
-      const open = css.indexOf("{", i);
-      if (open < 0 || open >= to) return;
-      const head = css.slice(i, open).trim();
-      let depth = 1, j = open + 1;
-      for (; j < to && depth; j++) depth += css[j] === "{" ? 1 : css[j] === "}" ? -1 : 0;
-      if (/^@media\b/.test(head)) walk(open + 1, j - 1, head.replace(/^@media\s*/, ""));
-      else if (!head.startsWith("@")) {
-        const decls = {};
-        for (const d of css.slice(open + 1, j - 1).split(";")) { const k = d.indexOf(":"); if (k > 0) decls[d.slice(0, k).trim()] = d.slice(k + 1).trim(); }
-        out.push({ selectors: splitTop(head).map((s) => s.replace(/\s+/g, " ").trim()), decls, media });
-      }
-      i = j;
-    }
-  };
-  walk(0, css.length, "");
-  return out;
-}
+import { rules } from './fixtures/stylesheet-rules.mjs';
+
 const all = (css) => Object.entries(css).flatMap(([file, text]) => rules(text).map((r) => ({ ...r, file })));
 const value = (css, selector, prop, media = "") => {
   let v;
   for (const r of all(css)) if (r.media === media && r.selectors.includes(selector) && r.decls[prop] !== undefined) v = r.decls[prop];
   return v;
 };
-const WIDE = "(min-width: 1024px)";
+const WIDE = "@container studio-chat (min-width: 1024px)";
 const FORCED = "(forced-colors: active)";
 const PERSONAL = '.hps-shell[data-chat-detail="personal"]';
 
@@ -109,12 +78,12 @@ for (const label of Object.keys(checks)) {
 // Negative controls: each mutated stylesheet must trip the named check.
 const mutate = (file, from, to) => { assert.ok(real[file].includes(from), `mutation target present: ${from}`); return { ...real, [file]: real[file].replace(from, to) }; };
 const NEGATIVE = [
-  ["unified below 1024px, split from 1024px", "breakpoint 1024px -> 768px", mutate("styles.css", "@media (min-width: 1024px)", "@media (min-width: 768px)")],
+  ["unified below 1024px, split from 1024px", "breakpoint 1024px -> 768px", mutate("styles.css", "@container studio-chat (min-width: 1024px)", "@container studio-chat (min-width: 768px)")],
   ["unified below 1024px, split from 1024px", "split view always shown", mutate("styles.css", ".hps-turn-split { display: none; }", ".hps-turn-split { display: grid; }")],
   ["summary is a 44px target with a visible focus ring", "summary 44px -> 30px", mutate("styles.css", ".hps-turn-review summary { min-height: 44px;", ".hps-turn-review summary { min-height: 30px;")],
   ["summary is a 44px target with a visible focus ring", "focus ring removed", mutate("styles.css", ".hps-turn-review summary:focus-visible { outline: 2px solid var(--hp-ring-focus-default); outline-offset: 2px; }", ".hps-turn-review summary:focus-visible { outline: none; }")],
   ["text follows the 14px caption token in every seat", "base font 10px", mutate("styles.css", ".hps-turn-review { min-width: 0; font-size: var(--hp-font-caption); }", ".hps-turn-review { min-width: 0; font-size: 10px; }")],
-  ["added and removed lines are tinted, and still bordered in forced colours", "added background transparent", mutate("styles.css", '[data-kind="added"] { background: var(--vscode-diffEditor-insertedTextBackground, rgba(0,128,0,.12)); }', '[data-kind="added"] { background: transparent; }')],
+  ["added and removed lines are tinted, and still bordered in forced colours", "added background transparent", mutate("styles.css", '[data-kind="added"] { background: color-mix(in srgb, var(--vscode-diffEditor-insertedTextBackground, rgba(0,128,0,.12)) 15%, transparent); }', '[data-kind="added"] { background: transparent; }')],
   ["added and removed lines are tinted, and still bordered in forced colours", "forced-colours border removed", mutate("styles.css", "{ border-inline-start: 1px solid CanvasText; }", "{ }")],
   ["long diff lines wrap inside the column", "wrapping removed", mutate("styles.css", "white-space: pre-wrap; overflow-wrap: anywhere; }\n.hps-turn-diff-line[data-kind=\"added\"]", "white-space: pre; }\n.hps-turn-diff-line[data-kind=\"added\"]")],
 ];

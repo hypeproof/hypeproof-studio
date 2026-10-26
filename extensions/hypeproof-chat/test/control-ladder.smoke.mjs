@@ -250,7 +250,7 @@ const FLOOR_MUTATIONS = [
   ["start page nav", "start.css", "padding: 7px 14px; min-height: var(--hp-control-min); cursor: pointer; }", "padding: 7px 14px; cursor: pointer; }"],
   ["start page bottom", "start.css", "  padding:0;\n  min-height:var(--hp-control-min);\n", "  padding:0;\n"],
   ["start page text buttons", "start.css", "  min-height:var(--hp-control-min);\n  font-size:12px!important}", "  font-size:12px!important}"],
-  ["composer buttons", "chatDetails.css", "  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: 50%;", "  width: 36px; height: 36px; padding: 0; border-radius: 50%;"],
+  ["composer buttons", "chatDetails.css", "  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: var(--hp-radius-full);", "  width: 36px; height: 36px; padding: 0; border-radius: var(--hp-radius-full);"],
   ["image remove ×", "styles.css", "  width: var(--hp-control-min);\n  height: var(--hp-control-min);\n  padding: 0;\n  line-height:", "  width: 18px;\n  height: 18px;\n  padding: 0;\n  line-height:"],
   ["citation chips", "styles.css", "  min-height: var(--hp-control-min); /* CGP-DS-R-010 */\n  text-align: left;", "  text-align: left;"],
   ["trial end card escape", "styles.css", "border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: 6px 8px; background: transparent;", "border: 0; cursor: pointer; padding: 6px 8px; background: transparent;"],
@@ -314,7 +314,7 @@ check("composer: a disabled textarea is not focused", () => assert.deepEqual(pre
 check("composer: a read-only textarea (the seat is unavailable) is not focused", () => assert.deepEqual(press(card, { input: { readOnly: true } }), { prevented: false, focused: false }));
 check("composer: only the primary button forwards", () => assert.deepEqual(press(card, { button: 2 }), { prevented: false, focused: false }));
 check("composer: no textarea, no action", () => assert.deepEqual(press(card, { noInput: true }), { prevented: false, focused: false }));
-check("composer: wired on the composer card in ChatPanel", () => assert.match(readFileSync(new URL("ChatPanel.tsx", SRC), "utf8"), /className=\{`hps-input\$\{dragActive \? " hps-input-drag" : ""\}`\}\s+data-expanded=\{[^}]+\}\s+onMouseDown=\{event => composerSurfacePress\(event, textareaRef\.current\)\}/));
+check("composer: wired on the composer card in ChatPanel", () => assert.match(readFileSync(new URL("ChatPanel.tsx", SRC), "utf8"), /className=\{`hps-input\$\{dragActive \? " hps-input-drag" : ""\}`\}\s+data-expanded=\{[^}]+\}\s+data-file-context=\{[^}]+\}\s+data-folder-missing=\{[^}]+\}\s+onMouseDown=\{event => composerSurfacePress\(event, textareaRef\.current\)\}/));
 
 // ─── The × is a 44px target with a small visible dot: hover/pressed paint the dot, never the 44px box ───────
 // #2377's hover layer is a full-box linear-gradient. Applied to the 44px button it replaces the dark dot with a faint 44px

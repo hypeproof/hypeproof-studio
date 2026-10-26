@@ -7,6 +7,9 @@ import {execFileSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {catalogLabels,catalogMessage,detectShellLocale} from '../fixtures/shell-labels.mjs';
+// The shipped shell is Korean (CGP-SHELL-R-006): the URI-permission prompt text comes from the bundled pack.
+const URL_HANDLER='vs/workbench/services/extensions/browser/extensionUrlHandler';
 assert.equal(process.platform,'darwin','This acceptance requires macOS');
 const state=process.env.HPS_ACCOUNT_DEV_STATE,out=process.env.HPS_ACCOUNT_EVIDENCE,configPath=process.env.HPS_ACCOUNT_CONFIG;
 assert(state&&out&&configPath,'Explicit owned app, evidence and local synthetic config paths required');
@@ -50,10 +53,11 @@ try{
   if(mode==='browser-protocol-return')execFileSync('/usr/bin/open',[approval.return_uri]);
   await driver.wait(()=>frame.evaluate("document.body.textContent.includes('내 이용권')"),'signed in account',30000);
   if(mode==='explicit-uri-permission'){
+   await detectShellLocale(first);
    const prompt=first.locator('.monaco-dialog-box');await prompt.waitFor({state:'visible',timeout:15000});
-   const content=await prompt.innerText();assert(content.includes("Allow 'HypeProof Chat' extension")&&content.includes('hypeproof-studio-dev-'),'Only the owned account URI prompt may be approved');
+   const content=await prompt.innerText();assert(content.includes(catalogMessage(URL_HANDLER,'confirmUrl','HypeProof Chat'))&&content.includes('hypeproof-studio-dev-'),'Only the owned account URI prompt may be approved');
    await first.screenshot({path:path.join(out,'02-explicit-uri-permission.png')});
-   await prompt.getByRole('checkbox').check();await prompt.getByRole('button',{name:'Open',exact:true}).click();
+   await prompt.getByRole('checkbox').check();await prompt.getByRole('button',{name:new RegExp('^('+catalogLabels(URL_HANDLER,'open').join('|')+')$')}).click();
   }
   await driver.wait(async()=>await focused()===firstId,'original Studio window foreground',30000);
   await first.screenshot({path:path.join(out,mode+'.png')});

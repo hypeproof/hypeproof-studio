@@ -77,7 +77,7 @@ function fixture({ profile, instructor = false } = {}) {
   let task = "task-a";
   Object.assign(h, {
     context: { globalStorageUri: { fsPath: storage }, workspaceState: { get: (k, f) => state.get(k) ?? f, update: async (k, v) => state.set(k, v) }, globalState: { get: (k) => global.get(k), update: async (k, v) => global.set(k, v) }, secrets: { get: async () => "synthetic-token" }, subscriptions: [] },
-    nativeHistoryScope: "task-a", pendingSends: 0, activeStreams: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
+    nativeHistoryScope: "task-a", pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
     _instructorMode: { isInstructor: instructor, onTurnSuccess() {}, async revertModelOnTurnError() {} }, cachedProfile: seat, accessState: null, servedWorkspaceRoot: null,
     getHistory: () => history, appendHistory: async (items) => { for (const it of items) history.push(copy(it)); },
     post: async (e) => { posts.push(copy(e)); }, postConfig: async () => {}, getCoach: () => ({ name: "코치", personality: "", configured: true }),
@@ -114,6 +114,8 @@ await t("adding a file copies it into <work folder>/자료/ and lists it with or
   assert.ok(mine, "listed");
   assert.equal(mine.originLabel, "나");
   assert.equal(mine.origin, "learner");
+  assert.ok(Number.isSafeInteger(mine.addedAt) && mine.addedAt > 0, "host exposes recorded learner add time");
+  assert.equal(item(s, i => i.origin === "instructor").addedAt, CARD.received_at, "host exposes receipt time");
   assert.equal(mine.selected, false, "never pre-selected");
   assert.match(s.notice, /자료에 넣었어요: 계획\.md/);
   assert.deepEqual(copy(f.hostWrites), [{ paths: [path.join(f.root, "자료", "계획.md")], actor: "learner_upload" }], "the copy is recorded as the learner's upload (내가 올림)");
@@ -208,7 +210,7 @@ await t("folder consent changed to \"AI 안 씀\" after selecting: the folder-co
 });
 
 // A ledger that records one AI write, 자료/요약.md; every other recorder call is a no-op.
-const aiRecorder = () => new Proxy({ view: async () => ({ entries: [{ path: "자료/요약.md", kind: "ai_created" }] }) }, { get: (o, k) => o[k] ?? (() => undefined) });
+const aiRecorder = () => new Proxy({ view: async () => ({ entries: [{ path: "자료/요약.md", kind: "ai_created", createdAt: 1700000000000, at: 1700000060000 }] }) }, { get: (o, k) => o[k] ?? (() => undefined) });
 const HELD = (f, titles) => f.posts.filter((e) => e.type === "streamError").some((e) => e.error === f.mat.MATERIALS_COPY.held(titles));
 const rejected = (f, text) => f.posts.some((e) => e.type === "inputRejected" && e.text === text);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -352,6 +354,7 @@ await t("folder binding: a selection made in folder A is never sent from folder 
   f.h.provenanceRecorder = aiRecorder;
   let s = await f.req("materialsRequest");
   const ai = item(s, (i) => i.origin === "ai");
+  assert.equal(ai.addedAt, 1700000000000, "host uses creation rather than latest edit time");
   assert.equal(ai.id, "ai:자료/요약.md", "control: an AI file, whose id is the same in both folders");
   s = await f.req("materialSelect", { scope: s.view.scope, id: ai.id, selected: true });
   f.h.resolveCoachCwd = () => other; // the coach folder changes; the task scope does not
@@ -444,6 +447,62 @@ await t("folder consent \"AI 안 씀\" (personal activity): adding and selecting
   assert.ok(s.view.items.every((i) => !i.selected));
 });
 
+// #2641: a dropped file goes through the same gates and the same list as a pick.
+const dropped = (name, text) => ({ name, size: Buffer.byteLength(text), base64: Buffer.from(text).toString("base64") });
+const materialsDir = (f) => path.join(f.root, "자료");
+await t("#2641: a dropped file is copied into 자료/, listed with origin 나 and recorded as the learner's upload", async () => {
+  const f = fixture();
+  const s = await f.req("materialAddDrop", dropped("메모.md", "# 메모\n"));
+  assert.equal(s.error, undefined, s.error);
+  assert.equal(fs.readFileSync(path.join(materialsDir(f), "메모.md"), "utf8"), "# 메모\n");
+  assert.equal(item(s, (i) => i.detail === "자료/메모.md")?.originLabel, "나");
+  assert.match(s.notice, /자료에 넣었어요: 메모\.md/);
+  assert.deepEqual(copy(f.hostWrites), [{ paths: [path.join(materialsDir(f), "메모.md")], actor: "learner_upload" }], "the copy is the learner's upload (내가 올림)");
+});
+await t("#2641: a refused drop answers with the picker's reason for the same bytes; nothing is written or recorded", async () => {
+  const f = fixture();
+  const bytes = Buffer.from([137, 80, 0, 1]);
+  const s = await f.req("materialAddDrop", { name: "drop-pic.md", size: bytes.length, base64: bytes.toString("base64") });
+  f.setPick(put(outside, "drop-pic.md", bytes));
+  const picked = await f.req("materialAddFile");
+  assert.ok(s.error && s.error === picked.error, `${s.error} / ${picked.error}`);
+  assert.equal(fs.existsSync(materialsDir(f)) ? fs.readdirSync(materialsDir(f)).length : 0, 0, "nothing written");
+  assert.deepEqual(f.hostWrites, [], "nothing recorded");
+});
+await t("#2641: the gates hold for a drop: no sdk_tools.read, the instructor surface, \"AI 안 씀\"", async () => {
+  const seat = fixture({ profile: { profile_id: "p", activity_kind: "classroom", sdk_tools: { read: false } } });
+  const instructor = fixture({ instructor: true });
+  const personal = fixture({ profile: { profile_id: "p", activity_kind: "personal", activity_id: "act-1", sdk_tools: { read: true } } });
+  personal.global.set(personal.FOLDER_CONSENT_KEY, { "act-1": { [personal.root]: { level: "none", at: 1 } } });
+  for (const [f, want] of [[seat, /자료/], [instructor, /자료/], [personal, personal.folderNoAiCopy()]]) {
+    const s = await f.req("materialAddDrop", dropped("a.md", "a\n"));
+    if (typeof want === "string") assert.equal(s.error, want); else assert.match(s.error ?? "", want);
+    assert.equal(fs.existsSync(materialsDir(f)), false, "nothing written");
+    assert.deepEqual(f.hostWrites, [], "nothing recorded");
+  }
+});
+await t("#2641: a read-only 자료 refuses a drop with the permission reason", async () => {
+  const f = fixture();
+  fs.mkdirSync(materialsDir(f)); fs.chmodSync(materialsDir(f), 0o555);
+  try {
+    const s = await f.req("materialAddDrop", dropped("a.md", "a\n"));
+    assert.equal(s.error, f.mat.addMaterialDrop(f.root, dropped("a.md", "a\n")).reason);
+    assert.equal(f.mat.addMaterialDrop(f.root, dropped("a.md", "a\n")).cause, "permission");
+  } finally { fs.chmodSync(materialsDir(f), 0o755); }
+});
+
+await t("#2641: a full list refuses a drop or a pick before anything is copied into 자료/", async () => {
+  const f = fixture();
+  let manifest = f.mat.emptyManifest();
+  for (let n = 0; n < f.mat.MATERIALS_MAX_ITEMS; n++) manifest = f.mat.withLearnerItem(manifest, { kind: "url", ref: `https://example.com/${n}` }, 1).manifest;
+  f.mat.saveManifest(f.mat.materialsManifestFile(storage, f.root), manifest);
+  const s = await f.req("materialAddDrop", dropped("가득.md", "a\n"));
+  assert.equal(s.error, f.mat.MATERIALS_COPY.tooManyItems);
+  f.setPick(put(outside, "가득.md", "a\n"));
+  assert.equal((await f.req("materialAddFile")).error, f.mat.MATERIALS_COPY.tooManyItems);
+  assert.equal(fs.existsSync(materialsDir(f)) ? fs.readdirSync(materialsDir(f)).length : 0, 0, "no unlisted copy is left");
+  assert.deepEqual(f.hostWrites, [], "nothing recorded");
+});
 await t("wiring: the config flag follows the file-attach gate", async () => {
   const src = fs.readFileSync(path.join(extension, "src/chatPanelProvider.ts"), "utf8");
   assert.ok(src.includes("...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),"));

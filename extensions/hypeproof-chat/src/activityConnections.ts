@@ -155,6 +155,10 @@ export class ActivityConnections {
     r.workspace = upperDrive(r.workspace);
     return r;
   }
+  /** CGP-SHELL-R-028: the unscoped SecretStorage, read only, so a work export can redact every value it holds. */
+  heldSecrets(): { get(key: string): Thenable<string | undefined>; keys(): Thenable<string[]> } {
+    return { get: key => this.raw.secrets.get(key), keys: () => this.raw.secrets.keys() };
+  }
   async hasLegacyConnection():Promise<boolean> { return (await this.raw.secrets.keys()).includes(ACTIVITY_TOKEN_KEY); }
   async list(): Promise<ActivitySummary[]> {
     const found = new Map<string, ActivityRecord>();
@@ -164,7 +168,7 @@ export class ActivityConnections {
       if (r?.service !== activityService(this.service())) continue;
       if (!found.has(r.id) || found.get(r.id)!.savedAt < r.savedAt) found.set(r.id, r);
     }
-    return [...found.values()].map(({ref,id,name,kind,pass,free,workspace}) => ({ref,id,name,kind,...(pass?{pass:true}:{}),...(free&&!pass?{free:true}:{}),workspace}));
+    return [...found.values()].map(({ref,id,name,kind,pass,free,lesson,workspace}) => ({ref,id,name,kind,...(pass?{pass:true}:{}),...(free&&!pass?{free:true}:{}),...(lesson?{lesson:true}:{}),workspace}));
   }
   async candidate(ref: string): Promise<ActivityRecord> {
     const r = await this.read(ref);
@@ -310,7 +314,7 @@ export class ActivityConnections {
     const sameWindowRoot = (() => { const open = this.root(); if (!open) return false; try { return canonical(open) === workspace; } catch { return false; } })();
     const ref = PREFIX + crypto.randomUUID();
     const next: ActivityRecord = {version:1,ref,id,service,serverId:p.activity_id!,workspace,token,...(accountPass ? {accountPass} : {}),
-      name:p.lesson?.content.title ?? p.display_name,kind:p.activity_kind,...(p.pass?{pass:true}:{}),...(isFreeSeat(p)?{free:true}:{}),savedAt:Date.now()};
+      name:p.lesson?.content.title ?? p.display_name,kind:p.activity_kind,...(p.pass?{pass:true}:{}),...(p.lesson?{lesson:true}:{}),...(isFreeSeat(p)?{free:true}:{}),savedAt:Date.now()};
     const restore = () => {
       if (!fs.existsSync(bindingFile)) return;
       const bound=JSON.parse(fs.readFileSync(bindingFile,'utf8'));

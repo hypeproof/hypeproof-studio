@@ -8,6 +8,8 @@ export interface ActivitySummary {
   pass?: boolean;
   /** Free start (SPEC iteration 4 §2.4) — the free allowance; labelled 무료 사용, never 체험. */
   free?: boolean;
+  /** CGP-KNOW-R-009 — entered with a served lesson (a class activity). Absent on records saved before. */
+  lesson?: boolean;
   workspace: string;
 }
 export interface StartState {
@@ -44,6 +46,8 @@ export interface StartState {
    * webview reopens and refocuses the empty code field.
    */
   joinLink?: { classId: string; seq: number };
+  /** CGP-SHELL-R-014 — the learner settings sheet behind the start page "설정". */
+  settings?: import("./startSettings").StartSettingsView;
   /**
    * "GitHub에서 이어하기" while a code is being confirmed (candidate): what this seat's GitHub
    * holds. Absent when the cohort does not publish to GitHub.
@@ -93,7 +97,8 @@ export type StartRequest =
   | { type: "chooseActivityFolder" }
   | { type: "openLocalReview" }
   | { type: "openStudioFiles" }
-  | { type: "openStudioSettings" }
+  | { type: "openAdvancedSettings" }
+  | { type: "startSetting"; key: "textSize" | "reduceMotion" | "notices"; value: string | boolean }
   /** `joinClass`: sent only by the join form that shows a join link's class (REQ-STUDIO-JOIN-LINK). */
   | { type: "connectCourse"; token: string; joinClass?: string }
   | { type: "beginCourse" }

@@ -178,12 +178,26 @@ const WORLDS = [
     "높이 전환이 없으면 작성란이 40px 튄다",
   );
   // prefers-reduced-motion: 이동은 끄고 깜빡임만 남긴다.
-  const reduced = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)"));
+  // The runner's OS block is the reduced-motion @media block that names the runner, not
+  // necessarily the last one in the file (later features append their own blocks).
+  const mediaBlocks = [];
+  for (let at = css.indexOf("@media (prefers-reduced-motion: reduce)"); at >= 0; at = css.indexOf("@media (prefers-reduced-motion: reduce)", at + 1)) {
+    let depth = 0, end = css.indexOf("{", at);
+    for (; end < css.length; end++) { if (css[end] === "{") depth++; else if (css[end] === "}" && --depth === 0) break; }
+    mediaBlocks.push(css.slice(at, end + 1));
+  }
+  const reduced = mediaBlocks.find((block) => block.includes(".hps-runner-go")) ?? "";
   assert.ok(reduced.includes(".hps-runner-go"), "reduced-motion 에서 달리기를 끄지 않는다");
   assert.ok(reduced.includes("hps-runner-blink"), "reduced-motion 에서 점 깜빡임이 없다");
   assert.ok(
     /\.hps-runner-face\s*\{\s*animation:\s*none/.test(reduced),
     "reduced-motion 에서 얼굴이 계속 뛴다",
+  );
+  // The Studio setting (data-reduced-motion="true") stops the same movement without the OS query.
+  assert.ok(
+    /:where\(:root\[data-reduced-motion="true"\]\) \.hps-runner-go\s*\{\s*animation:\s*none/.test(css) &&
+      /:where\(:root\[data-reduced-motion="true"\]\) \.hps-runner-face\s*\{\s*animation:\s*none/.test(css),
+    "Studio 움직임 줄이기 설정에서 달리기를 끄지 않는다",
   );
   // 어두운 배경에 어두운 글자가 되지 않도록 색은 토큰에서만 온다.
   assert.ok(

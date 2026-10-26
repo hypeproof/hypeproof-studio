@@ -1,5 +1,6 @@
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
+import type { TaskAppearance } from './taskAppearance';
 
 /** Persisted task data belongs to the host; this contract is also safe for the webview. */
 export interface TaskSummary {
@@ -8,7 +9,12 @@ export interface TaskSummary {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
+  /** CGP-KNOW-R-008 — set only in a view; it lives in the appearance sidecar, never in the task file. */
+  appearance?: TaskAppearance;
 }
+
+/** CGP-CHAT-R-025 — a task listed only in 보관함. */
+export interface ArchivedTaskSummary extends TaskSummary { archivedAt: number }
 
 export interface TaskSurfaceSelection { url: string; pinned: boolean }
 
@@ -29,7 +35,10 @@ export interface TaskWorkspaceView {
   scope: string;
   revision: number;
   activeTaskId: string | null;
+  /** Listed tasks. The open task is always among them, even when it is archived. */
   tasks: TaskSummary[];
+  /** CGP-CHAT-R-025 — archived tasks other than the open one, newest archive first. Absent on older views. */
+  archived?: ArchivedTaskSummary[];
   sourceSelection: TaskSurfaceSelection | null;
   error?: TaskWorkspaceError;
 }

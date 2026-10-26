@@ -58,8 +58,8 @@ t("asks the host for the list and draws nothing until it answers", async () => {
 t("every item says who added it in words: 나, 강사, AI; never pre-selected", async () => {
   const root = await mountPanel();
   await hostSays({ type: "materialsState", view: VIEW });
-  const metas = all((e) => e.localName === "span" && (e.getAttribute("class") ?? "") === "hp-materials-meta" && e.textContent.startsWith("추가:")).map((e) => e.textContent);
-  eq(metas, ["추가: 강사 · 강사가 보낸 글", "추가: 나 · 파일", "추가: 나 · 주소", "추가: AI · 파일"], "origin words");
+  const metas = all((e) => e.localName === "span" && (e.getAttribute("class") ?? "") === "hp-materials-origin" && e.textContent.startsWith("추가:")).map((e) => e.textContent);
+  eq(metas, ["추가: 강사", "추가: 나", "추가: 나", "추가: AI"], "origin words");
   eq(all((e) => e.localName === "li" && e.hasAttribute("data-material-origin")).map((e) => e.getAttribute("data-material-origin")), ["instructor", "learner", "learner", "ai"], "origin per row");
   ok(byText("span", VIEW.items[1].title).length === 1, "the long Korean title is drawn whole");
   ok(all((e) => e.localName === "button" && e.getAttribute("aria-pressed") === "true").length === 0, "nothing pre-selected");
@@ -148,6 +148,99 @@ t("adding: 파일 넣기 asks the host's picker; an address is posted as typed; 
   await act(async () => { root.unmount(); });
 });
 
+// ── #2641: one file dropped on the open card goes to the host as bytes, the way 파일 넣기 sends a pick. ──
+type FakeFile = { name: string; size: number; type: string; arrayBuffer(): Promise<ArrayBuffer> };
+type Drag = ReturnType<typeof ev> & { _stopped: boolean; relatedTarget: unknown; dataTransfer: { items: { kind: string }[]; files: FakeFile[] } };
+const textFile = (name: string, text: string): FakeFile => {
+  const bytes = new TextEncoder().encode(text);
+  return { name, size: bytes.length, type: "text/markdown", arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+};
+const drag = (type: string, files: FakeFile[], kind = "file"): Drag => ({
+  ...ev(type), _stopped: false, stopPropagation() { this._stopped = true; }, relatedTarget: null,
+  dataTransfer: { items: files.length ? files.map(() => ({ kind })) : [{ kind: "string" }], files },
+});
+type Card = El & { open: boolean; dispatchEvent(e: unknown): boolean };
+const card = () => all((e) => e.getAttribute("data-testid") === "materials")[0] as unknown as Card;
+const settle = () => new Promise((r) => setTimeout(r, 0));
+const drops = () => posted.filter((m) => m.type === "materialAddDrop") as { name: string; size: number; base64: string; requestId: string }[];
+
+t("#2641: a file dropped on the open card goes to the host once, as its bytes, and stops at the card", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const c = card(); c.open = true;
+  const over = drag("dragover", [textFile("메모.md", "# 메모\n")]);
+  await act(async () => { c.dispatchEvent(over); });
+  ok(over.defaultPrevented && over._stopped, "a file over the open card is taken, not passed on");
+  ok(c.hasAttribute("data-drop-active"), "the card is marked for its outline while a file is over it");
+  const drop = drag("drop", [textFile("메모.md", "# 메모\n")]);
+  await act(async () => { c.dispatchEvent(drop); await settle(); });
+  ok(drop.defaultPrevented && drop._stopped, "the drop stops at the card");
+  ok(!c.hasAttribute("data-drop-active"), "the outline goes with the drop");
+  eq(drops().map((m) => [m.name, m.size, Buffer.from(m.base64, "base64").toString("utf8")]), [["메모.md", 9, "# 메모\n"]], "one message with the file's bytes");
+  await act(async () => { root.unmount(); });
+});
+
+t("#2641: several files in one drop are refused with one message, and nothing goes to the host", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const c = card(); c.open = true;
+  const drop = drag("drop", [textFile("a.md", "a"), textFile("b.md", "b")]);
+  await act(async () => { c.dispatchEvent(drop); await settle(); });
+  ok(drop.defaultPrevented && drop._stopped, "still taken, so the shell does not attach them");
+  eq(drops().length, 0, "nothing sent to the host");
+  ok(all((e) => e.getAttribute("role") === "alert" && e.textContent === MATERIALS_COPY.dropOne).length === 1, "one refusal, in words");
+  await act(async () => { root.unmount(); });
+});
+
+t("#2641: the closed card is not a drop target, and a text drag over the open card is not taken", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const c = card(); c.open = false;
+  for (const type of ["dragover", "drop"]) {
+    const e = drag(type, [textFile("a.md", "a")]);
+    await act(async () => { c.dispatchEvent(e); await settle(); });
+    ok(!e.defaultPrevented && !e._stopped, `closed card: ${type} passes on to the shell`);
+  }
+  c.open = true;
+  const text = drag("dragover", []);
+  await act(async () => { c.dispatchEvent(text); });
+  ok(!text.defaultPrevented && !c.hasAttribute("data-drop-active"), "a text drag is not a file drop");
+  eq(drops().length, 0, "nothing sent");
+  await act(async () => { root.unmount(); });
+});
+
+t("#2641: a file over the cap is never read; the host gets only its name and size", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const c = card(); c.open = true;
+  const big: FakeFile = { name: "큰 파일.md", size: 100 * 1024 + 1, type: "text/markdown", arrayBuffer: () => { throw new Error("the bytes were read"); } };
+  await act(async () => { c.dispatchEvent(drag("drop", [big])); await settle(); });
+  eq(drops().map((m) => [m.name, m.size, m.base64]), [["큰 파일.md", 100 * 1024 + 1, ""]], "name and size only");
+  await act(async () => { root.unmount(); });
+});
+
+t("#2641: a file whose read fails still gets an answer: the host gets its name and size, no bytes", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const c = card(); c.open = true;
+  // A folder dragged from the file manager is a File whose bytes cannot be read.
+  const folder: FakeFile = { name: "폴더", size: 96, type: "", arrayBuffer: () => Promise.reject(new Error("NotReadableError")) };
+  await act(async () => { c.dispatchEvent(drag("drop", [folder])); await settle(); await settle(); });
+  eq(drops().map((m) => [m.name, m.size, m.base64]), [["폴더", 96, ""]], "sent with no bytes, so the host answers unreadable");
+  await act(async () => { root.unmount(); });
+});
+
+t("#2641: a drop while another 자료 request is pending sends nothing", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const c = card(); c.open = true;
+  await act(async () => { c.dispatchEvent(drag("drop", [textFile("a.md", "a")])); await settle(); });
+  await act(async () => { c.dispatchEvent(drag("drop", [textFile("b.md", "b")])); await settle(); });
+  eq(drops().map((m) => m.name), ["a.md"], "only the first drop went to the host");
+  await act(async () => { root.unmount(); });
+});
+
+
 t("ChatPanel draws the list only with the host's materials flag, never for an instructor", async () => {
   const UX = { coach: { naming_mode: "fixed" as const, fallback_name: "HypeProof", naming_prompt_md: "", personality_prompt_md: "" }, suggestions: { initial: [], follow_up: [] }, hints: { short_input: { enabled: false, min_chars: 0, message_md: "" }, roll_input_button: { enabled: false, label: "", probe_md: "" } }, retry_button: { enabled: false, show_counter: false } };
   const base = { model: "m", hasToken: true, proxyUrl: "http://localhost:8787", fileAttach: true, coach: { name: "HypeProof", personality: "", configured: true },
@@ -164,6 +257,32 @@ t("ChatPanel draws the list only with the host's materials flag, never for an in
     eq(posted.some((m) => m.type === "materialsRequest"), want === 1, `${label}: asks only when drawn`);
     await act(async () => { root.unmount(); });
   }
+});
+
+t("#2641: in the chat panel a drop on the open card never reaches the shell's photo drop (shell control first)", async () => {
+  const UX = { coach: { naming_mode: "fixed" as const, fallback_name: "HypeProof", naming_prompt_md: "", personality_prompt_md: "" }, suggestions: { initial: [], follow_up: [] }, hints: { short_input: { enabled: false, min_chars: 0, message_md: "" }, roll_input_button: { enabled: false, label: "", probe_md: "" } }, retry_button: { enabled: false, show_counter: false } };
+  const config = { model: "m", hasToken: true, proxyUrl: "http://localhost:8787", fileAttach: true, materials: true, coach: { name: "HypeProof", personality: "", configured: true },
+    profile: { profile_id: "p", activity_kind: "classroom", observation: null, lesson: null, rehearsal: null, welcome: { greeting_md: "안녕하세요" }, model_selection: null, ux: UX, input: { image_paste: true, image_files: true } } };
+  const noop = () => {};
+  const props = { messages: [], streaming: false, streamingId: null, error: null, errorRequestId: null, errorRunbookUrl: null, canRetryLast: false, pageNotice: null, aiNotice: null, stopNotice: null, openWorldId: null, publish: null, incomingImage: null,
+    onSend: noop, onRetry: noop, onRetryLast: noop, onDismissError: noop, onCancel: noop, onClear: noop, onSetToken: noop, onSettings: noop, onRunCode: noop, onNamingRitual: noop, onSaveCoach: noop, onReportProblem: noop, onInstallUpdate: noop, onDismissUpdate: noop, onPublish: noop };
+  posted.length = 0;
+  const root = createRoot(mountPoint() as never);
+  await act(async () => { root.render(<ChatPanel {...(props as never)} config={config as unknown as ChatConfig} instructor={false} />); });
+  await hostSays({ type: "materialsState", view: VIEW });
+  const shell = all((e) => (e.getAttribute("class") ?? "").split(" ").includes("hps-shell"))[0] as unknown as Card;
+  const dragging = () => (shell.getAttribute("class") ?? "").split(" ").includes("hps-shell-drag");
+  // Control: outside the card, the shell takes the file (its photo drop is on in this config).
+  await act(async () => { shell.dispatchEvent(drag("dragover", [textFile("사진.png", "x")])); });
+  ok(dragging(), "control: a file over the shell shows the shell's drop overlay");
+  await act(async () => { shell.dispatchEvent(drag("dragleave", [])); });
+  const c = card(); c.open = true;
+  await act(async () => { c.dispatchEvent(drag("dragover", [textFile("메모.md", "메모")])); });
+  ok(!dragging() && c.hasAttribute("data-drop-active"), "over the card only the card is marked");
+  await act(async () => { c.dispatchEvent(drag("drop", [textFile("메모.md", "메모")])); await settle(); });
+  ok(!posted.some((m) => m.type === "stageImage"), "nothing was attached to the composer");
+  eq(drops().map((m) => m.name), ["메모.md"], "the card sent it to the host");
+  await act(async () => { root.unmount(); });
 });
 
 // ── CSS: committed rule guards, each with a mutated copy that must fail. Sizes, text and the focus ring are
@@ -212,17 +331,29 @@ const cssChecks: Record<string, (css: string) => string[]> = {
     const want: Record<string, string> = { "background-color": "Canvas !important", color: "CanvasText !important", "border-color": "Highlight !important" };
     return Object.entries(want).filter(([k, v]) => forcedDecl(css, s, k) !== v).map(([k]) => `${k} ${forcedDecl(css, s, k)}`);
   },
-  "a title wraps, never truncates": (css) => {
+  "#2641: while a file is over the open card, its border is the 2px focus ring and nothing moves": (css) => {
+    const s = ".hp-materials[data-drop-active]";
     const bad: string[] = [];
-    if (decl(css, ".hp-materials-title", "overflow-wrap") !== "anywhere") bad.push("title does not wrap");
-    if (decl(css, ".hp-materials-title", "white-space") !== "normal") bad.push("title white-space is not normal");
-    for (const s of [".hp-materials-title", ".hp-materials-item", ".hp-materials-chip"]) if (decl(css, s, "text-overflow") || decl(css, s, "white-space") === "nowrap") bad.push(`${s} truncates`);
+    if (px(decl(css, s, "border-width") ?? "") !== 2) bad.push(`border-width ${decl(css, s, "border-width")}`);
+    if (decl(css, s, "border-color") !== "var(--hp-ring-focus-default)") bad.push(`border-color ${decl(css, s, "border-color")}`);
+    const resting = px(decl(css, ".hp-rail-lesson", "padding") ?? "") + px((decl(css, ".hp-rail-lesson", "border") ?? "").split(" ")[0]);
+    if (px(decl(css, s, "padding") ?? "") + 2 !== resting) bad.push(`padding ${decl(css, s, "padding")} does not give the extra border back (resting ${resting}px)`);
+    for (const k of ["outline", "outline-offset"]) if (decl(css, s, k) !== undefined) bad.push(`${k} is reserved for focus rings`);
+    return bad;
+  },
+  "a title ellipsizes while the containing row stays unconstrained": (css) => {
+    const bad: string[] = [];
+    if (decl(css, ".hp-materials-title", "text-overflow") !== "ellipsis") bad.push("title lacks ellipsis");
+    if (decl(css, ".hp-materials-title", "overflow") !== "hidden") bad.push("title overflows");
+    if (decl(css, ".hp-materials-title", "white-space") !== "nowrap") bad.push("title is not one line");
+    for (const s of [".hp-materials-item", ".hp-materials-chip"]) if (decl(css, s, "text-overflow") || decl(css, s, "white-space") === "nowrap") bad.push(`${s} truncates`);
     return bad;
   },
 };
 const MUTANTS: Record<string, (css: string) => string> = {
+  "#2641: while a file is over the open card, its border is the 2px focus ring and nothing moves": (css) => css.replace(/(\.hp-materials\[data-drop-active\] \{ border-width: )[^;]+;/, "$11px;"),
   "forced colours: the pressed 넣음 keeps its word (CanvasText on Canvas, Highlight border)": (css) => css.replace('{ background-color: Canvas !important; color: CanvasText !important;', '{ color: CanvasText !important;'),
-  "a title wraps, never truncates": (css) => css.replace(/(\.hp-materials-title \{[^}]*)white-space: normal;/, "$1white-space: nowrap; text-overflow: ellipsis;"),
+  "a title ellipsizes while the containing row stays unconstrained": (css) => css.replace(/(\.hp-materials-title \{[^}]*)white-space: nowrap;/, "$1white-space: normal;"),
 };
 for (const [label, check] of Object.entries(cssChecks)) {
   t(`css: ${label} (and its mutated copy fails)`, () => {

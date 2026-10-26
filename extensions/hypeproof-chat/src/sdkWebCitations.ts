@@ -10,7 +10,7 @@ function citation(url: unknown, title?: unknown): Citation | null {
     const parsed = new URL(url);
     if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return null;
     // No Service tier classification accompanies SDK results; 4 is the unclassified/other tier.
-    return { url: parsed.href, title: shortString(title) ? title : parsed.hostname, domain: parsed.hostname, tier: 4 };
+    return { url: parsed.href, title: shortString(title) ? title : parsed.hostname, domain: parsed.hostname, tier: 4, kind: 'web' };
   } catch { return null; }
 }
 

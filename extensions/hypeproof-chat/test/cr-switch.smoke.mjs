@@ -264,6 +264,9 @@ for (const t of CR_SURFACES.webviewMessages) {
   } else if (t === "removeElementContext") {
     const handler = new RegExp(`case "${t}":[\\s\\S]{0,200}?this\\.clearElementContext\\(\\)`);
     assert.match(providerSrc, handler, `${t} only removes CR state; it has nothing to reach with the switch off`);
+  } else if (t === "styleTweakSet") {
+    // CGP-ART-R-006 — the tweak message goes to one handler that checks the switch before anything else.
+    assert.match(providerSrc, /case "styleTweakSet":[\s\S]{0,200}?await this\.handleStyleTweakMessage\(msg\)/, `${t} is handled by handleStyleTweakMessage`);
   } else if (t === "reviewOpen" || t === "reviewPrepare") {
     // cr-review — the student's review messages go to one handler that checks the switch before anything else.
     assert.match(providerSrc, new RegExp(`case "${t}":[\\s\\S]{0,200}?await this\\.handleReviewMessage\\(msg\\)`), `${t} is handled by handleReviewMessage`);
@@ -294,10 +297,11 @@ assert.match(providerSrc, /private async handleReviewMessage\([\s\S]{0,300}?\): 
 assert.match(providerSrc, /private async handleReviewDirectorMessage\([\s\S]{0,500}?\): Promise<void> \{\s*if \(!\(await this\.refreshCrDirectorContext\(\)\)\) \{\s*await this\.post\(\{ type: "reviewState", view: null/, "the director's review handler re-checks the switch through the Service first");
 assert.match(providerSrc, /private async handleMemoryMessage\([\s\S]{0,400}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*await this\.post\(\{ type: "memoryState", view: null/, "the memory handler re-checks the switch first");
 assert.match(providerSrc, /private async handleEvidenceMessage\([\s\S]{0,900}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*await this\.post\(\{ type: "evidenceState", view: null/, "the evidence handler re-checks the switch first");
+assert.match(providerSrc, /private async handleStyleTweakMessage\([^)]*\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.postDenialNotice\("lesson"\);\s*this\.clearElementContext\(\);/, "the style tweak handler re-checks the switch first");
 // The queue's behaviour is test/cr-host.smoke.mjs; here, that the provider uses it: one
 // writer (attachElementContext), and the turn takes it through the switch.
 assert.equal((providerSrc.match(/this\.elementQueue\.attach\(/g) ?? []).length, 1, "one writer of the element queue");
-assert.match(providerSrc, /const element = this\.elementQueue\.take\(this\.isCurriculumRuntimeEnabled\(\)\);/, "a queued element is not sent after the switch turns off");
+assert.match(providerSrc, /const element = this\.elementQueue\.take\(this\.isCurriculumRuntimeEnabled\(\), text\);/, "a queued element is not sent after the switch turns off");
 ok("webview: CR messages are declared, handled, and nothing CR is sent with the switch off");
 
 console.log(`\n${passed} cr-switch checks passed`);

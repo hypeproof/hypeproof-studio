@@ -1,3 +1,4 @@
+import type { VisitorPreview } from "./visitorPreview.ts";
 import { contentBytes, type OutboundConfirmation, type OutboundItem } from "./outboundConsent.ts";
 // 갤러리 발행 — "갤러리에 올리기" 의 네트워크 절반.
 //
@@ -19,6 +20,8 @@ import { denialCopy } from "./denialSource.ts";
 export const SITE_BASE_PROD = "https://hypeproof-ai.xyz";
 
 export interface PublishInput {
+  // Required key (REQ-KNOW-63): a caller that forgets the wiring fails to compile, not closed at run time.
+  previewVisitor: VisitorPreview;
   siteBase: string;
   /** 학생 워크숍 토큰. 이것이 신원의 유일한 출처다. */
   token: string;
@@ -132,9 +135,12 @@ export interface GalleryRecord { recipient: string; items: readonly OutboundItem
 export async function publishWorldConfirmed(input: PublishInput, confirm: OutboundConfirmation, current: () => Promise<boolean>, record: GalleryRecord | null = null): Promise<PublishResult> {
   const frozen = { ...input };
   if (!await current()) return { ok: false, status: 0, message: "활동이 바뀌어서 보내지 않았어요." };
+  // REQ-KNOW-63: one recipient string feeds the preview audience and the send consent.
+  const recipient = `갤러리 · ${new URL(frozen.siteBase).host}`;
+  if (!await frozen.previewVisitor?.({ entry: "index.html", audience: `${recipient} · 인터넷의 누구나`, files: [{ path: "index.html", data: Buffer.from(frozen.html) }] }) || !await current()) return { ok: false, status: 0, message: "미리보기를 확인하지 않아 보내지 않았어요." };
   const metadata = { worldId: frozen.worldId, title: frozen.title, ...(frozen.sessionId ? { sessionId: frozen.sessionId } : {}) };
   const also = record ? [{ recipient: record.recipient, items: record.items }] : undefined;
-  if (!await confirm({ recipient: `갤러리 · ${new URL(frozen.siteBase).host}`, public: true, notes: [GALLERY_NAME_NOTE], items: [{ name: "index.html (화면과 실행 코드)", bytes: contentBytes(frozen.html) }, { name: "작품 제목·종류·세션 연결 정보", bytes: contentBytes(JSON.stringify(metadata)) }], ...(also ? { also } : {}) }) || !await current()) return { ok: false, status: 0, message: "보내지 않았어요." };
+  if (!await confirm({ recipient, public: true, notes: [GALLERY_NAME_NOTE], items: [{ name: "index.html (화면과 실행 코드)", bytes: contentBytes(frozen.html) }, { name: "작품 제목·종류·세션 연결 정보", bytes: contentBytes(JSON.stringify(metadata)) }], ...(also ? { also } : {}) }) || !await current()) return { ok: false, status: 0, message: "보내지 않았어요." };
   const result = await publishWorld(frozen);
   // Fire-and-forget, as before: the page is already up; a record failure is not put on the learner's screen.
   if (result.ok && record) void record.send().catch(() => undefined);

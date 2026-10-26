@@ -1,4 +1,4 @@
-// Parse stylesheet rules with their media contexts (shared UI guard instrument).
+// Parse stylesheet rules with their conditional contexts (container contexts keep an explicit prefix) (shared UI guard instrument).
 function splitTop(list) {
   const out = []; let depth = 0, cur = "";
   for (const ch of list) {
@@ -21,6 +21,7 @@ export function rules(raw) {
       let depth = 1, j = open + 1;
       for (; j < to && depth; j++) depth += css[j] === "{" ? 1 : css[j] === "}" ? -1 : 0;
       if (/^@media\b/.test(head)) walk(open + 1, j - 1, head.replace(/^@media\s*/, "").replace(/\s+/g, " ").replace(/:\s*/g, ": "));
+      else if (/^@container\b/.test(head)) walk(open + 1, j - 1, head.replace(/\s+/g, " ").replace(/:\s*/g, ": "));
       else if (!head.startsWith("@")) {
         const decls = {};
         for (const d of css.slice(open + 1, j - 1).split(";")) { const k = d.indexOf(":"); if (k > 0) decls[d.slice(0, k).trim()] = d.slice(k + 1).trim().replace(/\s+/g, " "); }

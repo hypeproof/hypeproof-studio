@@ -2,15 +2,20 @@
 // Drawn only from what the host measured (turnReviewView.ts); it never auto-dismisses: the next turn
 // replaces it, or the learner closes it after a decision.
 
-import { useEffect, useRef, useState } from "react";
-import type { TurnReviewView, TurnFileReview } from "../../src/turnReviewView";
-import { turnReviewCount } from "../../src/turnReviewView";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { TurnReviewView, TurnFileReview, CheckpointView } from "../../src/turnReviewView";
+import { DiffLines } from "./DiffLines";
+import { turnReviewCount, CHECKPOINT_MESSAGE_MAX } from "../../src/turnReviewView";
 
 export interface TurnReviewBarProps {
   view: TurnReviewView;
   onRevert: (path?: string) => void;
   onKeep: () => void;
   onClose: () => void;
+  /** CGP-AGENT-R-027 — save the work folder as a checkpoint with the reviewed message (adult website tracks). */
+  onCheckpointSave?: (message: string) => void;
+  /** CGP-ART-R-020 — "바뀐 곳 보기" from the task's activity row: open this file's comparison. */
+  focus?: { path: string; seq: number } | null;
 }
 
 const EXTERNAL_NOTE = "웹에 올린 사이트, 브라우저, 명령 실행으로 작업 폴더 밖에서 바뀐 것은 되돌리지 않아요.";
@@ -19,11 +24,18 @@ function displayPath(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
-function FileReview({ file, busy, onRevert }: { file: TurnFileReview; busy: boolean; onRevert: (path: string) => void }) {
+function FileReview({ file, busy, onRevert, focus }: { file: TurnFileReview; busy: boolean; onRevert: (path: string) => void; focus?: { path: string; seq: number } | null }) {
   const [expanded, setExpanded] = useState(false);
-  const rows = (side?: "before" | "after") => file.lines?.filter(line => side === "before" ? line.kind !== "added" : side === "after" ? line.kind !== "removed" : true).map((line, i) =>
-    <div key={i} className="hps-turn-diff-line" data-kind={line.kind}><span aria-hidden="true">{line.kind === "added" ? "+" : line.kind === "removed" ? "−" : " "}</span><code>{line.text}</code></div>);
-  return <li className="hps-turn-file">
+  const itemRef = useRef<HTMLLIElement>(null);
+  const seq = focus?.path === file.path ? focus.seq : 0;
+  useEffect(() => {
+    if (!seq) return;
+    if (file.lines) setExpanded(true);
+    itemRef.current?.scrollIntoView({ block: "nearest" });
+    itemRef.current?.querySelector<HTMLElement>("button")?.focus();
+  }, [seq]);
+  const rows = (side?: "before" | "after") => file.lines && <DiffLines lines={file.lines} side={side} />;
+  return <li className="hps-turn-file" ref={itemRef}>
     <code>{displayPath(file.path)}</code>
     <p>{file.lines ? `+${file.added}줄 추가 · −${file.removed}줄 삭제` : file.unavailable ?? "줄 수와 비교를 확인할 수 없어요."}</p>
     <div className="hps-turn-review-actions">
@@ -37,11 +49,11 @@ function FileReview({ file, busy, onRevert }: { file: TurnFileReview; busy: bool
   </li>;
 }
 
-function Group({ title, kind, items, files, busy, onRevert }: { title: string; kind: string; items: string[]; files?: TurnFileReview[]; busy: boolean; onRevert: (path: string) => void }) {
+function Group({ title, kind, items, files, busy, onRevert, focus }: { title: string; kind: string; items: string[]; files?: TurnFileReview[]; busy: boolean; onRevert: (path: string) => void; focus?: { path: string; seq: number } | null }) {
   if (!items.length) return null;
   return <div className="hps-turn-review-group" data-kind={kind}>
     <strong>{title} {items.length}개</strong>
-    <ul>{items.map(p => <FileReview key={p} file={files?.find(f => f.path === p) ?? { path: p }} busy={busy} onRevert={onRevert} />)}</ul>
+    <ul>{items.map(p => <FileReview key={p} file={files?.find(f => f.path === p) ?? { path: p }} busy={busy} onRevert={onRevert} focus={focus} />)}</ul>
   </div>;
 }
 
@@ -59,7 +71,87 @@ function failedTitle(view: TurnReviewView): string {
   return "되돌리지 못했어요";
 }
 
-export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBarProps) {
+function checkpointTime(at: number): string {
+  const d = new Date(at);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${two(d.getHours())}:${two(d.getMinutes())}`;
+}
+
+// CGP-AGENT-R-027 / REQ-CGP-AGENT-53 / DES-CGP-AGENT-53 — "저장 지점 남기기". The form opens with the
+// suggested message in a textarea that has focus and the whole text selected, so typing replaces it
+// and reading it is the default. Enter is a newline (IME-safe); Cmd/Ctrl+Enter saves. There is no
+// push, publish or upload control: a checkpoint stays on this computer.
+export function CheckpointSection({ checkpoint, busy, onSave }: { checkpoint: CheckpointView; busy: boolean; onSave: (message: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(checkpoint.suggestion);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const openRef = useRef<HTMLButtonElement>(null);
+  const seenSaved = useRef(checkpoint.savedId);
+  useEffect(() => {
+    if (!open) return;
+    const field = fieldRef.current;
+    if (!field) return;
+    field.focus();
+    field.setSelectionRange(0, field.value.length);
+  }, [open]);
+  useEffect(() => {
+    if (checkpoint.savedId === seenSaved.current) return;
+    seenSaved.current = checkpoint.savedId;
+    if (!open) return;
+    setOpen(false);
+    const restore = fieldRef.current && document.activeElement === fieldRef.current;
+    if (restore || document.activeElement === document.body) queueMicrotask(() => openRef.current?.focus());
+  }, [checkpoint.savedId, open]);
+  const saving = !!checkpoint.saving;
+  const empty = !draft.trim();
+  const submit = () => { if (!saving && !busy && !empty) onSave(draft); };
+  const sourceNote = checkpoint.source === "ai"
+    ? "AI가 이번 답의 첫 줄로 메시지를 제안했어요. 읽어 보고 맞게 고쳐서 남겨 주세요."
+    : "AI 답에서 쓸 문장이 없어서 바뀐 파일 이름으로 채웠어요. 읽어 보고 맞게 고쳐서 남겨 주세요.";
+  return <div className="hps-checkpoint" data-testid="checkpoint">
+    <strong className="hps-checkpoint-title">저장 지점</strong>
+    {!open && <div className="hps-turn-review-actions">
+      <button ref={openRef} type="button" disabled={busy} onClick={() => { setDraft(checkpoint.suggestion); setOpen(true); }}>저장 지점 남기기</button>
+    </div>}
+    {open && <div className="hps-checkpoint-form" role="group" aria-label="저장 지점 남기기">
+      <label htmlFor="hps-checkpoint-message">저장 지점 메시지</label>
+      <p className="hps-turn-review-note" id="hps-checkpoint-source">{sourceNote} 이 컴퓨터에만 보관하고 웹에는 올리지 않아요.</p>
+      <textarea
+        ref={fieldRef}
+        id="hps-checkpoint-message"
+        className="hps-checkpoint-field"
+        aria-describedby="hps-checkpoint-source"
+        rows={3}
+        maxLength={CHECKPOINT_MESSAGE_MAX}
+        value={draft}
+        readOnly={saving}
+        aria-busy={saving}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          const native = event.nativeEvent as KeyboardEvent & { isComposing?: boolean; keyCode?: number };
+          if (event.key !== "Enter" || native.isComposing || native.keyCode === 229) return;
+          if (event.metaKey || event.ctrlKey) { event.preventDefault(); submit(); }
+        }}
+      />
+      <div className="hps-turn-review-actions">
+        <button type="button" className="hps-checkpoint-save" disabled={saving || busy || empty} onClick={submit}>{saving ? "남기는 중…" : "저장 지점 남기기"}</button>
+        <button type="button" disabled={saving} onClick={() => { setOpen(false); queueMicrotask(() => openRef.current?.focus()); }}>취소</button>
+      </div>
+    </div>}
+    {checkpoint.notice && <p className="hps-turn-review-note" role="status">{checkpoint.notice}</p>}
+    {checkpoint.history.length > 0 && <ol className="hps-checkpoint-history" aria-label="저장 지점 기록">
+      {checkpoint.history.map((entry) => <li key={entry.id} data-checkpoint-id={entry.id}>
+        <span className="hps-checkpoint-message">{displayPath(entry.message)}</span>
+        <span className="hps-turn-review-note">{checkpointTime(entry.createdAt)} · 파일 {entry.fileCount}개</span>
+      </li>)}
+    </ol>}
+  </div>;
+}
+
+export function TurnReviewBar({ view, onRevert, onKeep, onClose, onCheckpointSave, focus }: TurnReviewBarProps) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  // Open the file list before the file's own effect scrolls and focuses it (layout effects run first).
+  useLayoutEffect(() => { if (focus?.seq && detailsRef.current) detailsRef.current.open = true; }, [focus?.seq]);
   const sectionRef = useRef<HTMLElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<string | null>(null);
@@ -113,11 +205,11 @@ export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBar
   const busy = view.state === "restoring";
   return <section ref={sectionRef} className="hps-turn-review" data-testid="turn-review" data-state={view.state} aria-label="바뀐 것 · 이번 요청">
     <p className="hps-turn-review-title">이번 요청 동안 바뀐 파일 {n}개</p>
-    <details key={view.turnId}>
+    <details key={view.turnId} ref={detailsRef}>
       <summary>바뀐 파일 보기</summary>
-      <Group title="새로 만듦" kind="added" items={view.added} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} />
-      <Group title="바뀜" kind="changed" items={view.changed} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} />
-      <Group title="지움" kind="deleted" items={view.deleted} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} />
+      <Group title="새로 만듦" kind="added" items={view.added} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} focus={focus} />
+      <Group title="바뀜" kind="changed" items={view.changed} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} focus={focus} />
+      <Group title="지움" kind="deleted" items={view.deleted} files={view.files} busy={busy} onRevert={(path) => { pendingFocus.current = view.turnId; onRevert(path); }} focus={focus} />
     </details>
     <p className="hps-turn-review-note">AI가 일하는 동안 내가 직접 고친 파일도 함께 셌어요.</p>
     <NotCovered items={view.notCovered} />
@@ -130,5 +222,6 @@ export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBar
       }} disabled={busy}>{busy ? "되돌리는 중…" : "모두 되돌리기"}</button>
       <button type="button" onClick={onKeep} disabled={busy}>이대로 둘게요</button>
     </div>
+    {view.checkpoint && onCheckpointSave && <CheckpointSection key={`checkpoint-${view.turnId}`} checkpoint={view.checkpoint} busy={busy} onSave={onCheckpointSave} />}
   </section>;
 }

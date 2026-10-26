@@ -1,11 +1,11 @@
-.hps-write-approval { box-sizing: border-box; width: min(var(--ds-c-studio-writeapprovaldialog-size-108), calc(100vw - var(--ds-c-studio-writeapprovaldialog-size-17))); max-height: calc(100vh - var(--ds-c-studio-writeapprovaldialog-size-17)); overflow: auto; margin: auto; padding: var(--ds-c-studio-writeapprovaldialog-space-5); border: var(--ds-c-studio-writeapprovaldialog-size-7) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-6); background: var(--vscode-editor-background, var(--ds-c-studio-writeapprovaldialog-surface-24)); color: var(--vscode-editor-foreground, var(--ds-c-studio-writeapprovaldialog-ink-1)); font: inherit; font-size: var(--hp-font-caption, var(--ds-c-studio-writeapprovaldialog-type-17)); overflow-wrap: anywhere; }
+.hps-write-approval { box-sizing: border-box; width: min(var(--ds-c-studio-writeapprovaldialog-size-108), calc(100vw - var(--ds-c-studio-writeapprovaldialog-size-17))); max-height: calc(100vh - var(--ds-c-studio-writeapprovaldialog-size-17)); overflow: auto; margin: auto; padding: var(--ds-c-studio-writeapprovaldialog-space-5); border: var(--ds-c-studio-writeapprovaldialog-size-7) solid currentColor; border-radius: var(--hp-radius-dialog); background: var(--vscode-editor-background, var(--ds-c-studio-writeapprovaldialog-surface-24)); color: var(--vscode-editor-foreground, var(--ds-c-studio-writeapprovaldialog-ink-1)); font: inherit; font-size: var(--hp-font-caption, var(--ds-c-studio-writeapprovaldialog-type-17)); overflow-wrap: anywhere; }
 /* CGP-DS-D-005: the dialog is drawn outside the task workspace, so it carries the label leading itself. */
 .hps-write-approval { line-height: var(--hp-leading-label); }
 .hps-write-approval::backdrop { background: var(--ds-c-studio-writeapprovaldialog-surface-124); }
 .hps-write-approval h2 { font: inherit; font-weight: var(--ds-c-studio-writeapprovaldialog-typography-7); }
 .hps-write-files { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-writeapprovaldialog-space-2); }
 .hps-write-files li { min-width: 0; max-width: 100%; }
-.hps-write-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--ds-c-studio-writeapprovaldialog-space-2); min-height: var(--ds-c-studio-writeapprovaldialog-size-8); max-width: 100%; padding: var(--ds-c-studio-writeapprovaldialog-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-3); background: var(--vscode-badge-background, var(--ds-c-studio-writeapprovaldialog-surface-125)); color: var(--vscode-badge-foreground, var(--ds-c-studio-writeapprovaldialog-ink-2)); }
+.hps-write-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--ds-c-studio-writeapprovaldialog-space-2); min-height: var(--ds-c-studio-writeapprovaldialog-size-8); max-width: 100%; padding: var(--ds-c-studio-writeapprovaldialog-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--hp-radius-6); background: var(--vscode-badge-background, var(--ds-c-studio-writeapprovaldialog-surface-125)); color: var(--vscode-badge-foreground, var(--ds-c-studio-writeapprovaldialog-ink-2)); }
 .hps-write-chip svg { flex: 0 0 var(--ds-c-studio-writeapprovaldialog-size-30); }
 .hps-write-chip span { min-width: 0; overflow-wrap: anywhere; }
 .hps-write-full-name { display: block; padding: var(--ds-c-studio-writeapprovaldialog-space-2) 0; overflow-wrap: anywhere; }
@@ -13,3 +13,27 @@
 .hps-write-actions { display: flex; gap: var(--ds-c-studio-writeapprovaldialog-space-2); justify-content: flex-end; margin-top: var(--ds-c-studio-writeapprovaldialog-space-20); }
 .hps-write-approval :focus-visible { outline: var(--ds-c-studio-writeapprovaldialog-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-writeapprovaldialog-size-7); }
 @media (forced-colors: active) { .hps-write-chip { color: CanvasText; background: Canvas; } }
+/* DES-CGP-AGENT-06: full normalized host and a text + shape destination badge. */
+.hps-browser-host { display: block; font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; unicode-bidi: isolate; }
+.hps-browser-badge { display: inline-flex; align-items: center; gap: var(--hp-space-2); padding: var(--hp-space-1) var(--hp-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-3); }
+.hps-browser-badge svg { width: var(--ds-c-studio-writeapprovaldialog-size-30); height: var(--ds-c-studio-writeapprovaldialog-size-30); flex-shrink: 0; }
+.hps-browser-approval .hps-write-actions { flex-wrap: wrap; }
+.hps-browser-approval button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+@media (forced-colors: active) { .hps-browser-badge { border-color: CanvasText; color: CanvasText; } }
+/* DES-CGP-AGENT-04: purpose before the complete, horizontally scrollable command. */
+.hps-command-approval h2 { font-size: var(--hp-font-body); word-break: keep-all; }
+/* A tall command scrolls inside its own block, so focus on the bottom buttons never scrolls its first line away at 320px. */
+.hps-write-approval .hps-command-code { max-width: 100%; max-height: 40dvh; overflow: auto; white-space: pre; overflow-wrap: normal; font-family: var(--vscode-editor-font-family, monospace); font-size: var(--hp-font-caption); }
+.hps-command-approval code { font: inherit; }
+.hps-command-approval .hps-write-actions { flex-wrap: wrap; }
+.hps-command-approval[data-destructive="true"] { border-color: var(--vscode-errorForeground, currentColor); }
+.hps-command-warning { color: var(--vscode-errorForeground, currentColor); }
+@media (forced-colors: active) { .hps-command-approval[data-destructive="true"] { border-color: CanvasText; } .hps-command-warning { color: CanvasText; } }
+/* REQ-STUDIO-WRITE-APPROVAL-CHANGE (CGP-ART-R-021): how much of each existing file changes, before the answer. */
+.hps-write-change { display: flex; flex-direction: column; gap: var(--ds-c-studio-writeapprovaldialog-space-2); margin-top: var(--ds-c-studio-writeapprovaldialog-space-2); padding: var(--ds-c-studio-writeapprovaldialog-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-3); min-width: 0; }
+.hps-write-change-file { overflow-wrap: anywhere; }
+.hps-write-change-amount { font-weight: var(--hp-weight-strong); }
+.hps-write-change-warning { display: inline-flex; align-items: center; gap: var(--ds-c-studio-writeapprovaldialog-space-2); font-weight: var(--hp-weight-strong); color: var(--hp-text-warn-default); }
+.hps-write-change-warning > .hps-icon { flex-shrink: 0; }
+.hps-write-change[data-change="rewrite"], .hps-write-change[data-change="unknown"] { border-color: var(--hp-border-warn-default); }
+/* Forced colours: Chromium maps the edge and the warning to CanvasText itself (measured in write-approval-change-layout.smoke.mjs). */

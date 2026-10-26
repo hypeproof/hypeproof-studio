@@ -4,7 +4,7 @@ import { confirmOutbound } from "./outboundConsentHost.ts";
 import { restoreInitialSurface } from "./initialSurface";
 export { resolveActivateBranch } from "./initialSurface";
 import { registerExternalSkillCommands } from './externalSkillCommands';
-import { initializeFilesLayout, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
+import { initializeFilesLayout, closeNativeChatBarOnce, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
@@ -38,6 +38,7 @@ import {
 import { PreviewProvider } from "./previewProvider";
 import { ChalkContractHost } from "./chalkContract";
 import { runReportProblemCommand } from "./reportProblem";
+import { PerfTraceController } from "./perfTraceHost";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
 import { localRuntimeConfig } from "./localRuntime";
@@ -54,7 +55,9 @@ import {
 } from "./updateChecker";
 import { INSTALL_STAGED_UPDATE_COMMAND, updateInstallAllowed } from "./stagedUpdate";
 import { CLASS_UPDATE_HOLD_COPY } from "./updateCheckerHelpers";
-import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
+import { learnerNotes, recordWhatsNewBaseline } from "./whatsNew";
+import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
+import { openBrowser, sendActivePageToCoach, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
 import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
@@ -74,9 +77,16 @@ let spoolRef: SessionSpool | null = null;
 let uploadInFlight = false;
 
 export async function activate(context: vscode.ExtensionContext) {
+  // CGP-SHELL-R-035: first, while globalState still tells a fresh install from an updated profile.
+  try { await recordWhatsNewBaseline(context.globalState, learnerNotes(LEARNER_RELEASE_NOTES)); }
+  catch { console.warn('HypeProof: could not record the what\'s-new baseline.'); }
   // Reset a folder's restored sidebar before network-dependent activity restoration.
   // The explicit file-view actions can open Explorer once the learner asks for it.
   await initializeFilesLayout(command => vscode.commands.executeCommand(command));
+  // #2787: a profile that persisted the empty native Chat side bar as open gets it closed once.
+  await closeNativeChatBarOnce(context.globalState,
+    () => vscode.workspace.getConfiguration('chat').get<boolean>('disableAIFeatures') === true,
+    command => vscode.commands.executeCommand(command));
   await closeRestoredBrowserTabs(vscode.window.browserTabs ?? []);
   const connections = new ActivityConnections(context,
     () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),
@@ -216,6 +226,8 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(...chalkContract.register());
   provider.attachChalkContract(chalkContract);
+  const perfTrace = new PerfTraceController({ context, seatAllowed: () => provider.perfTraceSeatAllowed(), getProfileId: () => provider.getProfileId() });
+  provider.perfTraceObserver = (msg) => perfTrace.observe(msg);
   providerRef = provider;
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.editImage", () => provider.editImage()));
   // One-click publish endpoints, decided once: GitHub itself, unless this is a test/dev run
@@ -332,6 +344,7 @@ export async function activate(context: vscode.ExtensionContext) {
     if (target?.scheme === "file") await provider.openArtifactHistoryPanel(target.fsPath);
   }));
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.takeMyWork", () => provider.takeMyWork()));
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.exportMyWork", () => provider.exportMyWork()));
   provider.setActivityTrashPanel(registerActivityTrash(context, {
     active: () => !!provider.activityTrashBinding,
     binding: () => provider.activityTrashBinding,
@@ -362,6 +375,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }, (line) => console.log(line));
   provider.opsObserver = classroomOps;
   provider.inboxSource = classroomOps;
+  provider.classWindowSource = () => classroomOps.helpConnection();
   // #1298 — when the background refresh path sees a rejected issuer token, delete it and surface the student start page.
   provider.onIssuerAutoRejected = () => {
     void context.secrets.delete(ISSUER_TOKEN_KEY).then(() => startPage.show());
@@ -558,6 +572,11 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.renameCoach", async () => {
       await provider.runCoachNamingRitual({ force: true });
     }),
+
+    // REQ-STUDIO-PERF-TRACE (CGP-AGENT-R-030): 느려요 기록, adult and instructor seats, default off.
+    vscode.commands.registerCommand("hypeproof-chat.recordPerformanceTrace", async () => { await perfTrace.start(); }),
+    vscode.commands.registerCommand("hypeproof-chat.stopPerformanceTrace", async () => { await perfTrace.stop("learner"); }),
+    { dispose: () => { provider.perfTraceObserver = undefined; perfTrace.dispose(); } },
 
     vscode.commands.registerCommand("hypeproof-chat.reportProblem", async () => {
       await runReportProblemCommand({
@@ -783,35 +802,8 @@ export async function activate(context: vscode.ExtensionContext) {
       openBrowser(typeof url === "string" ? url : undefined),
     ),
 
-    vscode.commands.registerCommand("hypeproof-chat.sendPageToCoach", async () => {
-      // Per-cohort gate (default off → minor-safe). Worker emits input.page_context
-      // via /v1/profile; the host enforces it here for the text-injection path.
-      if (!provider.isPageContextEnabled()) {
-        // #308 — inline notice, not a toast: same trigger path, same freeze
-        // mechanism (any visible toast pauses the integrated browser). Focus
-        // the panel so the notice is actually visible; if the webview isn't
-        // mounted yet, the pending-notice flush on "ready" delivers it.
-        provider.postPageNotice(
-          "이 코호트에서는 '페이지를 코치에게' 기능이 꺼져 있어요.",
-        );
-        await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
-        return;
-      }
-      const ctx = await captureActivePage();
-      if (!ctx) return;
-      // #278 Phase 2 — attach the screenshot too (image_paste-gated inside).
-      provider.attachPageContext({
-        url: ctx.url,
-        title: ctx.title,
-        text: ctx.text,
-        imageBase64: ctx.imageBase64,
-      });
-      await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
-      // #308 — the "붙였어요" confirmation is shown inline in the chat panel by
-      // attachPageContext (pageAttached message). A VS Code toast is NOT used
-      // here: a visible toast pauses the integrated browser ("Paused due to
-      // Notification"), which broke every capture in the workshop.
-    }),
+    // CGP-VOICE-R-010: the own-preview owner is Studio's own preview server.
+    vscode.commands.registerCommand("hypeproof-chat.sendPageToCoach", () => sendActivePageToCoach(provider, liveServer)),
 
     // CR-09 (cr-browser) — pick an element in the Experiment Browser and ask the coach
     // about it. Gated by the CR switch in package.json AND re-checked inside
@@ -832,6 +824,8 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => provider.ventureMemory()),
     vscode.commands.registerCommand("hypeproof-chat.wikiIngest", () => provider.wikiIngest()),
     vscode.commands.registerCommand("hypeproof-chat.deckDraft", () => provider.deckDraft()),
+    vscode.commands.registerCommand("hypeproof-chat.deckSlideSuggest", () => provider.deckSlideSuggest()),
+    vscode.commands.registerCommand("hypeproof-chat.deckPdf", () => provider.deckPdf()),
     vscode.commands.registerCommand("hypeproof-chat.curriculumSkills", () => provider.curriculumSkills()),
     vscode.commands.registerCommand("hypeproof-chat.weeklyReview", () => provider.weeklyReview()),
     vscode.commands.registerCommand("hypeproof-chat.weeklyReviewDirector", () => provider.weeklyReviewDirector()),

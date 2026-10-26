@@ -51,11 +51,20 @@ export async function launch(bin, attempt = 1) {
   await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
   let id = 0;
   const pending = new Map();
+  const listeners = new Set();
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
+    if (m.method) for (const fn of [...listeners]) fn(m);
     if (m.id && pending.has(m.id)) { const [res, rej] = pending.get(m.id); pending.delete(m.id); m.error ? rej(new Error(m.error.message)) : res(m.result); }
   };
-  const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, [res, rej]); ws.send(JSON.stringify({ id: i, method, params })); });
+  // `sessionId` addresses an attached target (an out-of-process iframe); omit it for the page itself.
+  const send = (method, params = {}, sessionId) => new Promise((res, rej) => { const i = ++id; pending.set(i, [res, rej]); ws.send(JSON.stringify({ id: i, method, params, ...(sessionId ? { sessionId } : {}) })); });
+  // Resolves with the first protocol event for which `match` is true; rejects after `ms`.
+  const waitForEvent = (match, what, ms = 15000) => new Promise((res, rej) => {
+    const t = setTimeout(() => { listeners.delete(fn); rej(new Error(`timed out after ${ms} ms waiting for ${what}`)); }, ms);
+    const fn = (m) => { if (match(m)) { clearTimeout(t); listeners.delete(fn); res(m); } };
+    listeners.add(fn);
+  });
   await send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
   await send('Page.enable'); await send('DOM.enable'); await send('CSS.enable'); await send('Runtime.enable');
   const evaluate = async (expression) => {
@@ -64,7 +73,7 @@ export async function launch(bin, attempt = 1) {
     return r.result.value;
   };
   return {
-    send, evaluate,
+    send, evaluate, waitForEvent,
     // One document at a time. `forcedColors` and `dark` are media emulation, not class names.
     async load(html, { width = 1420, height = 800, forcedColors = false, dark = true } = {}) {
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });

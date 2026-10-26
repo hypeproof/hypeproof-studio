@@ -135,14 +135,16 @@ Product Intent principle numbers (`docs/PRODUCT-INTENT.md`): 1 Useful work first
 | REQ-ART-13 (CGP-ART-14) | For each test version, the learner sees counts of opened sessions and completed tasks for the last 7 days, compared with the previous 7 days. Each count opens its source sessions (CR-27). | (1) Counts come from CR-23 participant events only. (2) A version with no traffic shows "아직 연 사람이 없어요", not zero-filled charts. (3) No per-participant identity appears (CR-65). Negative: a count that cannot be traced to stored events. | P1 | 5 |
 | REQ-ART-14 (CGP-ART-15) | When the learner asks for a page or deck "style" without naming one, the coach may offer up to 6 instructor-provided starter styles as a visual picker with preview images. The learner may pick one, upload their own reference image or file, or skip. | (1) It is offered only on request or ambiguity, never as the first screen (Product Intent "결과물 종류를 제품이 먼저 확정하지 않는다"). (2) Styles come from Chalk per lesson. (3) Skip proceeds with no style. (4) The choice is recorded as the learner's. Negative: the picker appears unprompted at session start. | P2 | 4, 6, 2 |
 | REQ-ART-15 (CGP-ART-16) | The learner can present the deck full-screen from the deck view with next and previous slide (keys and buttons), a position indicator, and exit. Speaker notes stay hidden from the audience. | (1) Right arrow, Space and PageDown advance; left arrow and PageUp go back; Esc exits. (2) "{n} / {total}". (3) Notes are visible only in a separate presenter window, if one is opened. Negative: notes or citation layer visible in present mode. | P2 | 1 |
-| REQ-ART-16 (CGP-ART-17) | A slide offers up to 3 suggestion chips (쉽게 줄이기, 그림으로 보이기, 핵심 강조). Each produces a CR-56 patch proposal for that slide only, which the student accepts or rejects. | (1) A patch never adds a number or claim absent from cited entries (the deckGenerator numbers rule). (2) A rejected patch leaves the slide byte-identical. Negative: a chip that rewrites another slide or applies without acceptance. | P2 | 2, 5 |
-| REQ-ART-17 (CGP-ART-18) | While the coach is editing the learner's page, a **따라 보기** toggle (on by default) scrolls the preview to the most recently changed element after each live reload. | (1) It turns off when the learner scrolls manually, and the toggle reflects that. (2) It works with the CR-68 indicator. Negative: the preview jumps while the toggle is off. | P2 | 1 |
+| REQ-ART-16 (CGP-ART-17) | A slide offers up to 3 suggestion chips (쉽게 줄이기, 그림으로 보이기, 핵심 강조). Each produces a CR-56 patch proposal for that slide only, which the student accepts or rejects. | (1) A patch never adds a number or claim absent from cited entries (the deckGenerator numbers rule). (2) A rejected patch leaves the slide byte-identical. Negative: a chip that rewrites another slide or applies without acceptance. Studio (2026-10-25): REQ-STUDIO-DECK-SLIDE-SUGGEST, command "덱 장 다듬기" on the wiki-folder deck; a patch keeps the slide's citations; proposals are not stored (no `cr-deck`); see decisions.md CGP-ART-R-016. | P2 | 2, 5 |
+| REQ-ART-17 (CGP-ART-18) | While the coach is editing the learner's page, a **따라 보기** toggle (on by default) scrolls the preview to the most recently changed element after each live reload. | (1) It turns off when the learner scrolls manually, and the toggle reflects that. (2) It works with the CR-68 indicator. Negative: the preview jumps while the toggle is off. Built as REQ-STUDIO-PREVIEW-FOLLOW (2026-10-26, agent choice in decisions.md "CGP-ART-R-017"): the toggle is drawn on the live-server page (no Studio-owned preview toolbar exists), coach turns only, paused while CR-68 automation acts. | P2 | 1 |
 | REQ-ART-18 (CGP-ART-19) | In image edit (REQ-STUDIO-IMAGE-EDIT), the learner can mark one or more regions on the image (rectangle or brush) and attach a comment to each. They are sent as region masks with the edit request. | (1) The mask is the same pixel size as the original. (2) Region count ≤5. (3) The result compare view outlines the regions. (4) All existing gates still apply (profile grant, PNG only, new file). Negative: a region request that bypasses `image_edit.enabled`. | P2 | 2 |
 | REQ-ART-19 (CGP-ART-20) | When a coach turn has produced no new visible progress for 20 s, the progress line adds "평소보다 오래 걸리고 있어요" and a **멈추기** action. After 60 s it adds what is still running (tool name). | (1) The timers reset on any streamed text or tool event. (2) Stop uses the existing learner Stop (REQ-C16). Negative: a static spinner for more than 20 s with no change. | P1 | 1, 2 |
 | REQ-ART-20 (CGP-ART-21) | Each task shows a "AI가 한 일" summary: files read, created and changed, web pages opened, and searches, each expandable to the list. | (1) Counts derive from tool events of that task only. (2) Changed files link to the REQ-ART-02 review. Negative: a count with no matching event. | P2 | 2, 5 |
 | REQ-ART-21 (CGP-ART-22) | When the coach asks approval to overwrite an existing workspace file, the approval modal shows a before and after summary (units changed and share changed, from `diffGuard`) before the learner approves. | (1) The summary is computed before the write. (2) A rewrite (high `changed_ratio`) is labeled "거의 전부 바뀌어요". Negative: approval of an overwrite with no summary shown. | P2 | 2 |
 | REQ-ART-22 (CGP-ART-23) | Chalk shows a class-results view: one card per learner with the latest approved artifact version, thumbnail, approval time, and open. It has grid and list layouts and a filter for "승인 없음". | (1) Only versions marked through U1b appear. (2) Opening serves the approved bytes, not the learner's current file. Negative: an unapproved version visible. | P2 | 5, 2 |
 | REQ-ART-23 (CGP-ART-24) | The learner can export the deck as a single PDF and open their page's folder from the result card. | (1) The PDF has one page per slide, without notes. (2) **폴더에서 보기** reveals the served root. Negative: the PDF includes the notes layer. | P2 | 1 |
+
+REQ-ART-20 status (2026-10-26): implemented as REQ-STUDIO-TASK-ACTIVITY (`docs/studio-requirements.md`, "Task activity summary (CGP-ART-R-020)"). The verb mapping, distinct-target counts, review-link scope and exclusions are recorded in `decisions.md` ("CGP-ART-R-020: task activity summary").
 
 Top P0s: **REQ-ART-02** (revert or keep the coach's last change), **REQ-ART-07** (show exact page text before it reaches the
 model), and **REQ-ART-08** (minor-cohort links never escape the safe browser).
@@ -199,3 +201,50 @@ Common constraints for all rows below:
 8. **Office formats (ART-35, 36).** If a non-web track (dental admin, founder decks as PPTX) appears, revisit spreadsheet and presentation editing. Today CR-42 fixes HTML as the entry format.
 9. **Plugins, skills and auth rows (ART-56, 57, 58)** are inventoried here because their namespaces start with `browser*`. Parity decisions belong to the plugins, skills and account domain files. Check for duplicate IDs at merge.
 10. **Not verified at runtime.** All Studio coverage claims come from source and docs in the snapshot, not from running Studio. "No coverage found" means bounded searches of `extensions/hypeproof-chat/src`, `chalk/src/ui` and `docs/requirements`.
+
+### REQ-ART-03 implementation contract (CGP-ART-R-003)
+
+When unsent annotation drafts exist, leaving an activity or selecting/creating a
+task asks `보내지 않은 표시가 {n}개 있어요`. The first/default action and close
+affordance is `계속 고치기`; only explicit `버리기` permits deletion. Esc/dismiss
+keeps the draft. "프로젝트 변경" (command and chat sentence) and the missing-folder
+re-pick reload the window, so they ask first, before any clone or pull; keep moves nothing. A changed revision or activity while the dialog is open invalidates
+the answer. Renaming/recovering a draft and remote input freezing do not count as
+leaving. Unexpected task binding changes park drafts separately in memory, never
+attach them to the new activity, and restore them when returning in this window.
+
+Closing a browser preview invokes the same prompt for annotations captured from
+that tab. The BrowserTab API provides an after-close event, not a veto; closing
+the tab itself cannot be prevented. Drafts are retained until explicit discard.
+Returning to a reopened page still requires the existing generation/version checks
+before sending. Window/process termination persistence is outside this slice.
+PI #2: the learner owns the decision to keep or discard their unsent judgment.
+
+### REQ-ART-23 implementation choices (CGP-ART-R-023)
+
+"PDF로 저장" is the command "HypeProof: 덱 PDF로 저장" beside the deck skill's command (no button in
+`deck.html`). It writes `deck.pdf` next to `deck.html`: one image page per drafted slide at 16:9, the
+notes layer removed before capture, nothing written unless every slide was captured from an unchanged
+deck. 폴더에서 보기 stays the page card's action (CGP-ART-R-010). Contract:
+`docs/studio-requirements.md` "Deck PDF export (CGP-ART-R-023)"; choices: `decisions.md`.
+PI #1: the learner can hand the deck to others in a form that works outside Studio.
+
+### REQ-ART-21 implementation contract (CGP-ART-R-021)
+
+Studio requirement: `REQ-STUDIO-WRITE-APPROVAL-CHANGE` in `docs/studio-requirements.md` (PI#2). Implementation choices (agent-selected 2026-10-26, recorded in `decisions.md`):
+
+- Surface: the existing optional write approval dialog (REQ-E1 / DES-CGP-AGENT-05). `writeFile` stays out of the default `requireApprovalFor`, so the summary appears only where a machine opted into write approval. No new approval is added.
+- Source: `diffGuard` run in the host before the dialog opens, on the file as it is now and on the text the call leaves behind (Write `content`; Edit/MultiEdit replacements with the CLI's rules). Share changed = `changed_ratio`; units = lines changed and new lines. A rewrite is `changed_ratio > REWRITE_RATIO` (0.5) and is warned with an icon: "거의 전부 바뀌어요" at 80% or more, "절반 넘게 바뀌어요" between, so the label never overstates the percentage beside it.
+- Fail closed on the negative clause: an existing file whose change cannot be computed (larger than 2 MB, not UTF-8 text, unreadable, NotebookEdit, a replacement the CLI would refuse: not found, ambiguous, or a no-op, a webview-origin request, or several targets for one call) shows "얼마나 바뀌는지 미리 알 수 없어요 · {reason}" in the same warning style. A file created, changed or removed while the dialog is open is refused after the answer (sha256 fingerprint; size and mtime above 64 MB), so no overwrite is approved against a summary of other bytes.
+- Not built here: DES-ART-21's 4-step bar and "바뀐 곳 보기" diff link (CGP-ART-D-021 owns them). The gap between approval and the CLI's write is the one REQ-E1 already records.
+
+### REQ-ART-06 implementation contract (CGP-ART-R-006)
+
+Built in the single-pick element chip, not as a popover in the page (no trusted in-tab surface;
+see decisions.md CGP-ART-R-006). Five rows (색, 배경, 글자 크기, 간격, 모서리); colour swatches are
+the page's own computed colours (max 8), sizes step through fixed px sets, and the host refuses
+any other value. The preview is an inline style on the picked node only, restored exactly on
+reset, removal, a new pick, any send, switch off or a tab switch; no file is written. Only the
+panel's send carries one `{property, old, new}` line per change after the element block, and its
+message lists the chosen values (their own choice on the record). 44px targets and 14px text
+override the 32px stepper. Requirement: REQ-STUDIO-STYLE-TWEAK in docs/studio-requirements.md.

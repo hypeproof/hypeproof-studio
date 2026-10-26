@@ -28,3 +28,19 @@
   .hps-annotations input { border-color: CanvasText; }
   .hps-annotations button:disabled { color: GrayText; border-color: GrayText; }
 }
+
+/* DES-ART-01: two chip rows remain visible; more annotations scroll inside the tray. */
+.hps-annotations-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-height: calc(2 * (var(--hp-control-min) + 2 * var(--ds-c-studio-styles-space-15) + 2 * var(--ds-c-studio-styles-size-3)) + var(--ds-c-studio-styles-space-2));
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.hps-annotation {
+  grid-template-columns: var(--hp-control-min) minmax(var(--hp-control-min), 1fr) var(--hp-control-min);
+  align-items: center;
+  padding: var(--ds-c-studio-styles-space-15);
+}
+.hps-annotation button { padding: 0; }
+.hps-annotation-payload h4 { font-size: inherit; margin-block: var(--ds-c-studio-styles-space-2); }
+@container studio-chat (width < 448px) { .hps-annotations-list { grid-template-columns: minmax(0, 1fr); } }

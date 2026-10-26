@@ -36,7 +36,7 @@ for (const file of ['tokens', 'styles', 'start', 'chatDetails', 'taskWorkspace',
       }
     });
   });
-  assert.equal(count, { tokens: 1, styles: 12, start: 1, chatDetails: 2, taskWorkspace: 1, citationPreview: 1 }[file], `${file}: every OS fallback rule remains`);
+  assert.equal(count, { tokens: 1, styles: 16, start: 1, chatDetails: 3, taskWorkspace: 1, citationPreview: 1 }[file], `${file}: every OS fallback rule remains`);
   if (file === 'tokens') {
     const rule = css.nodes.find(n => n.type === 'rule' && n.selectors.includes(':root[data-reduced-motion="true"] *'));
     assert.ok(rule);

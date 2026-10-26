@@ -1,3 +1,5 @@
+import { AnswerWikiReview } from './AnswerWikiReview';
+import { CopyFeedback } from './CopyFeedback';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 /**
@@ -13,7 +15,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefO
 export type IconKind =
   | 'send' | 'stop' | 'copy' | 'check' | 'down' | 'plus' | 'globe' | 'image' | 'retry' | 'code' | 'play' | 'chevron' | 'file'
   | 'info' | 'alert' | 'close' | 'search' | 'pencil' | 'terminal' | 'tool' | 'link' | 'external' | 'eye' | 'pointer'
-  | 'back' | 'forward' | 'message' | 'chevron-down' | 'scroll' | 'flask' | 'bulb' | 'clock' | 'lock' | 'book' | 'package'
+  | 'back' | 'forward' | 'message' | 'chevron-down' | 'chevron-up' | 'scroll' | 'flask' | 'bulb' | 'clock' | 'lock' | 'book' | 'package'
   | 'folder' | 'ruler' | 'dots' | 'sparkle' | 'square' | 'check-square' | 'help' | 'upload' | 'plug' | 'ticket' | 'moon'
   | 'flag' | 'people' | 'camera' | 'keyboard' | 'thought' | 'dot' | 'open-window' | 'pin' | 'source' | 'return'
   | 'minus' | 'menu' | 'settings' | 'hand' | 'game' | 'ban';
@@ -50,6 +52,7 @@ export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: Ic
     {kind === 'forward' && <path d="M5 12h14m-6-6 6 6-6 6" />}
     {kind === 'message' && <path d="M4 5h16v11H9l-5 4V5Z" />}
     {kind === 'chevron-down' && <path d="m6 9 6 6 6-6" />}
+    {kind === 'chevron-up' && <path d="m6 15 6-6 6 6" />}
     {kind === 'scroll' && <path d="M12 3v18m-4-14 4-4 4 4m-8 10 4 4 4-4" />}
     {kind === 'flask' && <><path d="M9.5 3h5M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3" /><path d="M7 15h10" /></>}
     {kind === 'bulb' && <><path d="M9 18h6M10 21h4" /><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3Z" /></>}
@@ -59,7 +62,7 @@ export function ChatIcon({ kind, size = 20, label }: { kind: IconKind; size?: Ic
     {kind === 'package' && <><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" /><path d="m4 7.5 8 4.5 8-4.5M12 12v9" /></>}
     {kind === 'folder' && <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />}
     {kind === 'ruler' && <><rect x="2.5" y="8" width="19" height="8" rx="1.5" /><path d="M6.5 8v3M10.5 8v4M14.5 8v3M18.5 8v4" /></>}
-    {kind === 'dots' && <path d="M6 12h.01M12 12h.01M18 12h.01" strokeWidth="2.6" />}
+    {kind === 'dots' && <g fill="currentColor" stroke="none"><circle cx="6" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="18" cy="12" r="1.5" /></g>}
     {kind === 'sparkle' && <path d="M12 3.5c.6 4.3 2.2 5.9 6.5 6.5-4.3.6-5.9 2.2-6.5 6.5-.6-4.3-2.2-5.9-6.5-6.5 4.3-.6 5.9-2.2 6.5-6.5ZM18.5 16v4M16.5 18h4" />}
     {kind === 'square' && <rect x="4" y="4" width="16" height="16" rx="3" />}
     {kind === 'check-square' && <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8 12 3 3 5-6" /></>}
@@ -104,37 +107,47 @@ export async function writeClipboard(text: string, clipboard: Pick<Clipboard, 'w
   } catch { return 'failed'; }
 }
 
-/**
- * Confirmed copy feedback shared by the answer copy and every code block (CP-R1, CGP-CHAT-R-008):
- * the confirmation appears only after the clipboard write succeeds, a failure is stated, and the
- * state returns to idle after 2.4s.
- */
+/** Confirmed feedback: successful copies stay four seconds; failures stay until another action.
+ * Attempt identity makes repeated success restart its timer and ignores stale completions. */
 export function useConfirmedCopy(text: string): [CopyState, () => Promise<void>] {
-  const [state, setState] = useState<CopyState>('idle');
+  const [feedback, setFeedback] = useState<{ state: CopyState; attempt: number }>({ state: 'idle', attempt: 0 });
   const mounted = useRef(true);
   const copyAttempt = useRef(0);
+  const currentText = useRef(text);
+  currentText.current = text;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    if (state === 'idle') return;
-    const timer = setTimeout(() => setState('idle'), 2400);
+    const attempt = ++copyAttempt.current;
+    setFeedback({ state: 'idle', attempt });
+  }, [text]);
+  useEffect(() => {
+    if (feedback.state !== 'copied') return;
+    const timer = setTimeout(() => setFeedback(current => current.attempt === feedback.attempt
+      ? { state: 'idle', attempt: current.attempt } : current), 4000);
     return () => clearTimeout(timer);
-  }, [state]);
+  }, [feedback]);
   const copy = async () => {
     const attempt = ++copyAttempt.current;
-    setState('idle');
-    // Older clipboard completions must not replace the latest attempt's feedback.
-    const result = await writeClipboard(text);
-    if (mounted.current && attempt === copyAttempt.current) setState(result);
+    const copiedText = text;
+    setFeedback({ state: 'idle', attempt });
+    const result = await writeClipboard(copiedText);
+    if (mounted.current && attempt === copyAttempt.current && currentText.current === copiedText) {
+      setFeedback({ state: result, attempt });
+    }
   };
-  return [state, copy];
+  return [feedback.state, copy];
 }
 
 /** CGP-KNOW-R-004 — the answer action's label (the session command's name, package.json wikiIngest). */
 export const ANSWER_TO_WIKI_LABEL = '팀 브레인에 정리하기';
 
-export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki }: { content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
+export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTurnId, wikiScope, status }: { /** CGP-CHAT-D-015 — trailing secondary status text (elapsed receipt), after every control. */ status?: ReactNode; wikiScope?: string; wikiTurnId?: string; content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
   const [state, copy] = useConfirmedCopy(content);
-  return <div className="hps-answer-actions">
+  const [wikiOpen, setWikiOpen] = useState(false);
+  const wikiAction = useRef<HTMLButtonElement>(null);
+  useEffect(() => { setWikiOpen(false); }, [content, wikiTurnId, wikiScope, !!onToWiki]);
+  const closeWiki = () => { setWikiOpen(false); wikiAction.current?.focus({ preventScroll: true }); };
+  return <><div className="hps-answer-actions">
     <button type="button" className="hps-copy-answer hps-answer-action" onClick={copy} aria-label="답변 복사" data-hp-tooltip="답변 복사">
       <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} size={16} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
     </button>
@@ -144,12 +157,15 @@ export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki }: { con
     {onRetry && <button type="button" className="hps-msg-retry hps-answer-action" onClick={onRetry} aria-label="답변 다시 받기" data-hp-tooltip="같은 요청으로 답변을 한 번 더 받아요">
       <ChatIcon kind="retry" size={16} /><span>다시 받기</span>
     </button>}
-    {onToWiki && <button type="button" className="hps-answer-wiki hps-answer-action" onClick={onToWiki} data-hp-tooltip="이 답과 질문을 팀 브레인에 정리해요. 쓰기 전에 한 번 더 물어봐요.">
-      <span>{ANSWER_TO_WIKI_LABEL}</span>
+    {onToWiki && wikiTurnId && <button ref={wikiAction} type="button" className="hps-answer-wiki hps-answer-action" aria-label={ANSWER_TO_WIKI_LABEL} aria-expanded={wikiOpen} onClick={() => setWikiOpen(true)} data-hp-tooltip={ANSWER_TO_WIKI_LABEL}>
+      <ChatIcon kind="book" size={16} />
     </button>}
     {verdict}
-    <span role="status" className="hps-copy-status">{state === 'copied' ? '답변을 복사했습니다' : state === 'failed' ? '복사하지 못했습니다. 답변을 선택해 복사해 주세요.' : ''}</span>
-  </div>;
+    {status}
+    <CopyFeedback failed={state === 'failed'}>{state !== 'idle' && <><ChatIcon kind={state === 'failed' ? 'alert' : 'check'} size={16} /><span>{state === 'copied' ? '답변을 복사했습니다' : '복사하지 못했습니다. 답변을 선택해 복사해 주세요.'}</span></>}</CopyFeedback>
+  </div>
+    {wikiOpen && onToWiki && wikiTurnId && <AnswerWikiReview key={wikiTurnId} content={content} turnId={wikiTurnId} onCancel={closeWiki} onContinue={() => { closeWiki(); onToWiki(); }} />}
+  </>;
 }
 
 export function ResponsePending({ hasContent = false }: { hasContent?: boolean }) {
@@ -164,6 +180,12 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
   const follow = useRef(true);
   const readingAnchor = useRef<{ element: HTMLElement; offset: number } | null>(null);
   const [away, setAway] = useState(false);
+  // Explicit history navigation is reading, not a new live answer to follow.
+  const pauseFollowing = () => {
+    if (!enabled) return;
+    follow.current = false;
+    readingAnchor.current = null;
+  };
   const captureReadingPosition = () => {
     readingAnchor.current = null;
     const node = ref.current;
@@ -194,7 +216,10 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
     setAway(!follow.current);
   };
   useLayoutEffect(() => {
-    if (enabled && follow.current && ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+    if (enabled && ref.current) {
+      if (follow.current) ref.current.scrollTop = ref.current.scrollHeight;
+      else setAway(ref.current.scrollHeight - ref.current.scrollTop - ref.current.clientHeight > 48);
+    }
   }, [enabled, revision, ref, textSize]);
   useLayoutEffect(() => {
     const anchor = readingAnchor.current;
@@ -213,7 +238,7 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
     for (const child of node.children) resize.observe(child);
     return () => resize.disconnect();
   }, [enabled, revision, ref]);
-  return { away, onScroll, toLatest, captureReadingPosition };
+  return { away, onScroll, toLatest, captureReadingPosition, pauseFollowing };
 }
 
 /** Measure the active selection edge with the editor's actual wrapping and font. */
@@ -242,8 +267,9 @@ function composerCaretLine(node: HTMLTextAreaElement) {
 export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled: boolean, draft: string, hasContext = false) {
   const [expanded, setExpanded] = useState(false);
   useLayoutEffect(() => {
-    if (!enabled || !ref.current) return;
+    if (!ref.current) return;
     const node = ref.current;
+    if (!enabled) { node.style.height = ''; node.style.maxHeight = ''; return; }
     const shell = node.closest<HTMLElement>('.hps-shell');
     const footer = node.closest<HTMLElement>('.hps-input-area');
     const card = node.closest<HTMLElement>('.hps-input');
@@ -282,7 +308,9 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       const chrome = shell ? Array.from(shell.children).reduce((height, child) =>
         height + (child === footer || child.classList.contains('hps-messages') ? 0 : (child as HTMLElement).offsetHeight), 0) : 0;
       const fixedFooter = (footer?.offsetHeight ?? node.offsetHeight) - node.offsetHeight;
-      const cap = Math.max(24, Math.min(192, (shell?.clientHeight ?? 600) - fixedFooter - chrome - 96));
+      // File chips share the field's 192px budget, including its controls and inset.
+      const fileChrome = card?.querySelector('.hps-file-context') ? card.offsetHeight - node.offsetHeight : 0;
+      const cap = Math.max(24, Math.min(192 - fileChrome, (shell?.clientHeight ?? 600) - fixedFooter - chrome - 96));
       node.style.maxHeight = `${cap}px`;
       node.style.height = '0px';
       node.style.height = `${Math.min(cap, Math.max(24, node.scrollHeight))}px`;

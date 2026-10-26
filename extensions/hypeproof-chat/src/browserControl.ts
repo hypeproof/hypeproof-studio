@@ -1,4 +1,4 @@
-import { dragRectangle, intersects, marker } from "./annotationCapture";
+import { dragRectangle, intersects, marker, markerComment, isAnnotationOverlayNode, type MarkerOptions } from "./annotationCapture";
 import { captureReferenceScreenshot, referenceCaptureText } from "./referenceDesign.ts";
 import * as vscode from "vscode";
 import { denialCopy, denialToolText, lessonFeatureOff } from "./denialSource.ts";
@@ -6,6 +6,7 @@ import { CdpSession } from "./cdpSession";
 import { safeNavigateUrl, quadCenter, buildAxSnapshot } from "./browserControlHelpers";
 import { CrExecutor, checkAgentOrigin, type CrHooks, type Observation } from "./experimentBrowser";
 import { buildElementContext, waitForPick, type ElementContext } from "./elementPick";
+import { STYLE_TWEAK_APPLY, STYLE_TWEAK_CALL_MS, STYLE_TWEAK_PROPS, STYLE_TWEAK_READ, type StyleTweakFacts } from "./styleTweak";
 
 // #278 Phase 3 — the coach's browser control executor. Runs one tool call
 // (from the agentic loop) against the integrated browser via CDP and returns a
@@ -58,7 +59,9 @@ export class BrowserControl {
   private targetTab: vscode.BrowserTab | undefined;
   private refs = new Map<string, number>();
   private cr: CrExecutor | undefined;
-  private annotationMarkers = new Map<number, import("./experimentBrowser").CdpLike>();
+  private annotationMarkers = new Map<number, { cdp: import("./experimentBrowser").CdpLike; version: number; revision: number }>();
+  private annotationMarkerVersion = 0;
+  private annotationMarkerEpoch = 0;
 
   private readonly crOptions: CrBrowserOptions | undefined;
 
@@ -114,7 +117,9 @@ export class BrowserControl {
     if (this.targetTab === tab) return;
     this.targetTab = tab;
     // 대상이 바뀌면 이전 탭에 붙어 있던 세션·ref 는 무효다.
-    void this.session?.close().catch(() => {});
+    // CGP-ART-R-006: a style preview on the old tab is taken off it before its session closes.
+    const old = this.session;
+    if (old) void this.restoreTweakOn(old).finally(() => old.close().catch(() => {}));
     this.session = undefined;
     this.tabForSession = undefined;
     this.refs.clear();
@@ -154,6 +159,7 @@ export class BrowserControl {
     const s = await this.cdp();
     const log = await cr.logFor(s);
     const picked = await waitForPick(s, opts.timeoutMs);
+    if (await isAnnotationOverlayNode(s, picked)) throw new Error("표시 대신 페이지의 요소를 골라 주세요.");
     const hooks = this.crOptions;
     return buildElementContext(s, log, picked, {
       root: opts.root,
@@ -161,6 +167,78 @@ export class BrowserControl {
       refFor: (id) => cr.refFor(id),
       adopt: (refs, generation) => cr.adoptRefs(refs, generation),
     });
+  }
+
+  /**
+   * CGP-ART-R-006 — the style preview this control left on a page, so it can be taken off that
+   * page before the session to it is closed (a tab switch, a target change). Null when none.
+   */
+  private tweakOnPage: { session: CdpSession; backendNodeId: number; generation: string; styleAttr: string | null } | null = null;
+
+  /**
+   * The picked node in the document it was picked in, resolved in a Studio-owned isolated world
+   * (the page's own scripts cannot override the DOM methods the tweak calls), or a refusal. The
+   * tab must still be the student's preview (CR-11) and its current document the same generation.
+   * `restore` (an empty preview) is allowed with the CR switch off, so turning the lesson setting
+   * off still takes a preview off the page.
+   */
+  private async styleTweakNode(cdp: CdpSession, backendNodeId: number, generation: string): Promise<string> {
+    if (!this.crOptions) throw new Error(lessonFeatureOff("스타일 바꿔 보기", "neutral"));
+    const tree = await cdp.send("Page.getFrameTree", {});
+    const frame = tree?.frameTree?.frame;
+    if (!generation || frame?.loaderId !== generation) throw new Error("화면이 바뀌었어요. 요소를 다시 골라 주세요.");
+    const scope = checkAgentOrigin(String(frame?.url ?? ""), this.crOptions.allowedOrigins());
+    if (!scope.ok) throw new Error(scope.reason);
+    const world = await cdp.send("Page.createIsolatedWorld", { frameId: frame.id, worldName: "hps-style-tweak" });
+    const resolved = await cdp.send("DOM.resolveNode", { backendNodeId, executionContextId: world?.executionContextId }).catch(() => null);
+    const objectId = resolved?.object?.objectId;
+    if (!objectId) throw new Error("화면이 바뀌었어요. 요소를 다시 골라 주세요.");
+    return objectId;
+  }
+
+  /** One page call, bounded: a page that never answers cannot stall the next restore. */
+  private styleTweakCall(cdp: CdpSession, params: Record<string, unknown>): Promise<any> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("미리보기가 응답하지 않아요.")), STYLE_TWEAK_CALL_MS); });
+    return Promise.race([cdp.send("Runtime.callFunctionOn", params), limit]).finally(() => clearTimeout(timer));
+  }
+
+  /** Read the picked node's current values, its style attribute and the page's colours. Reads only. */
+  async styleTweakRead(backendNodeId: number, generation: string): Promise<StyleTweakFacts> {
+    if (!this.crExecutor()) throw new Error(lessonFeatureOff("스타일 바꿔 보기", "neutral"));
+    const cdp = await this.cdp();
+    const objectId = await this.styleTweakNode(cdp, backendNodeId, generation);
+    const r = await this.styleTweakCall(cdp, { objectId, functionDeclaration: STYLE_TWEAK_READ, arguments: [{ value: [...STYLE_TWEAK_PROPS] }], returnByValue: true });
+    const v = r?.result?.value;
+    if (!v || typeof v !== "object") throw new Error("요소의 모습을 읽지 못했어요.");
+    return v as StyleTweakFacts;
+  }
+
+  /**
+   * Show `values` on the picked node in this tab only: the original style attribute is restored
+   * exactly, then each value is set inline. No file is touched; a reload drops it. An empty
+   * `values` is a restore and is allowed with the switch off.
+   */
+  async styleTweakApply(backendNodeId: number, generation: string, styleAttr: string | null, values: Record<string, string>): Promise<void> {
+    const restore = Object.keys(values).length === 0;
+    if (!restore && !this.crExecutor()) throw new Error(lessonFeatureOff("스타일 바꿔 보기", "neutral"));
+    const cdp = await this.cdp();
+    const objectId = await this.styleTweakNode(cdp, backendNodeId, generation);
+    await this.styleTweakCall(cdp, { objectId, functionDeclaration: STYLE_TWEAK_APPLY, arguments: [{ value: styleAttr }, { value: values }], returnByValue: true });
+    this.tweakOnPage = restore ? null : { session: cdp, backendNodeId, generation, styleAttr };
+  }
+
+  /** Before a session closes: take this control's preview off that page (best effort, bounded). */
+  private async restoreTweakOn(session: CdpSession): Promise<void> {
+    const t = this.tweakOnPage;
+    if (!t || t.session !== session) return;
+    this.tweakOnPage = null;
+    try {
+      const objectId = await this.styleTweakNode(session, t.backendNodeId, t.generation);
+      await this.styleTweakCall(session, { objectId, functionDeclaration: STYLE_TWEAK_APPLY, arguments: [{ value: t.styleAttr }, { value: {} }], returnByValue: true });
+    } catch {
+      /* the page changed or went away: the preview went with it */
+    }
   }
 
   async annotationIdentity(): Promise<{ generation: string; artifactId: string }> {
@@ -176,16 +254,36 @@ export class BrowserControl {
     return { generation: frame.loaderId, artifactId: artifact.id };
   }
 
-  async annotationMarker(number: number, rect: import('./annotationCapture').Rectangle | null): Promise<void> {
-    const cdp = rect ? await this.cdp() : this.annotationMarkers.get(number);
-    if (!cdp) return;
-    await marker(cdp, number, rect);
-    if (rect) this.annotationMarkers.set(number, cdp); else this.annotationMarkers.delete(number);
+  async annotationMarker(number: number, rect: import('./annotationCapture').Rectangle | null, options: MarkerOptions = {}): Promise<void> {
+    if (!rect) {
+      const record = this.annotationMarkers.get(number);
+      if (!record) return;
+      this.annotationMarkers.delete(number);
+      await marker(record.cdp, number, null, { version: record.version });
+      return;
+    }
+    const epoch = this.annotationMarkerEpoch;
+    const cdp = await this.cdp();
+    if (epoch !== this.annotationMarkerEpoch) return;
+    const version = ++this.annotationMarkerVersion;
+    await marker(cdp, number, rect, { ...options, version });
+    if (epoch !== this.annotationMarkerEpoch) {
+      await marker(cdp, number, null, { version }).catch(() => {});
+      return;
+    }
+    this.annotationMarkers.set(number, { cdp, version, revision: 0 });
+  }
+
+  async annotationComment(number: number, comment: string): Promise<void> {
+    const record = this.annotationMarkers.get(number);
+    if (record) await markerComment(record.cdp, number, comment, record.version, ++record.revision);
   }
 
   async clearAnnotationMarkers(): Promise<void> {
-    for (const [number, cdp] of this.annotationMarkers) await marker(cdp, number, null).catch(() => {});
+    this.annotationMarkerEpoch++;
+    const previous = [...this.annotationMarkers];
     this.annotationMarkers.clear();
+    for (const [number, record] of previous) await marker(record.cdp, number, null, { version: record.version }).catch(() => {});
   }
   annotationRefsValid(contexts: ElementContext[]): boolean {
     return contexts.every(c => !c.ref || this.crExecutor()?.refFor(c.backendNodeId) === c.ref);
@@ -209,6 +307,7 @@ export class BrowserControl {
     const viewport = metrics.cssLayoutViewport ?? metrics.layoutViewport;
     const ids: number[] = [];
     for (const id of new Set(refs.values())) {
+      if (await isAnnotationOverlayNode(cdp, id)) continue;
       const model = await cdp.send('DOM.getBoxModel', { backendNodeId: id }).catch(() => null);
       const q = model?.model?.border;
       if (!q) continue;
@@ -429,7 +528,10 @@ export class BrowserControl {
     const tab = this.currentTab();
     if (!tab) throw new Error("열린 브라우저 탭이 없어요. 먼저 browser_navigate로 페이지를 여세요.");
     if (this.session && this.tabForSession === tab) return this.session;
-    if (this.session) await this.session.close().catch(() => {});
+    if (this.session) {
+      await this.restoreTweakOn(this.session); // CGP-ART-R-006
+      await this.session.close().catch(() => {});
+    }
     this.session = await CdpSession.attach(tab);
     this.tabForSession = tab;
     return this.session;

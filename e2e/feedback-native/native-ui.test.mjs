@@ -2,6 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+import {coreCommandLabel,menuLabels,openFolderDialogTitles,catalogLabels,catalogMessage,setShellLocale,shellLocale,localeFromProbe,detectShellLocale} from '../fixtures/shell-labels.mjs';
 import {NativeUI,sessionRefusalObserved,assertOwnedPreviewClose} from './native-ui.mjs';
 function fixture(outerVisible){const ui=new NativeUI('http://127.0.0.1:9777');const iframe={name:'visible-webview',getBoundingClientRect:()=>({width:outerVisible?800:0,height:600})};const control={getBoundingClientRect:()=>({width:700,height:60})};const host={evaluate:expression=>vm.runInNewContext(expression,{document:{querySelectorAll:()=>[iframe]},getComputedStyle:()=>({display:'inline',visibility:'visible'})})};const target={info:{id:'target'},send:async method=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'frame'}}}:{executionContextId:1},evaluate:expression=>vm.runInNewContext(expression,{document:{visibilityState:'hidden',querySelector:()=>control}})};ui.list=async()=>[{id:'target',type:'iframe',url:'vscode-webview://test/index.html?id=visible-webview&extensionId=hypeproof.hypeproof-chat'}];ui.workbench=async()=>host;ui.target=async()=>target;return {ui,target};}
 test('visible workbench iframe and control geometry work despite Electron Page Visibility false negative',async()=>{const {ui,target}=fixture(true);assert.equal(await ui.frame('textarea',500),target);});
@@ -10,11 +12,12 @@ test('command input retains palette mode prefix instead of switching to file qui
 
 test('palette chooses the exact visible command even when another row extends its name',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777'),pressed=[];
- const rows=['HypeProof Chat: Focus on Chat View','HypeProof Chat: Focus'].map(text=>({querySelector:selector=>selector==='.label-name'?{textContent:text}:null,getBoundingClientRect:()=>({height:22})}));
+ const focusTitle=JSON.parse(readFileSync(new URL('../../extensions/hypeproof-chat/package.json',import.meta.url),'utf8')).contributes.commands.find(c=>c.command==='hypeproof-chat.focus').title;
+ const rows=[focusTitle+' 보기',focusTitle].map(text=>({querySelector:selector=>selector==='.label-name'?{textContent:text}:null,getBoundingClientRect:()=>({height:22})}));
  for(const row of rows)row.parentElement={children:rows};
  const target={evaluate:async expression=>expression.includes("querySelectorAll('.quick-input-list")?vm.runInNewContext(expression,{document:{querySelectorAll:()=>rows}}):true};
  ui.workbench=async()=>target;ui.focusWorkbench=async()=>{};let state={visible:false};ui.quickState=async()=>state;ui.key=async()=>{state={visible:true,ready:true,mode:'command',value:'>'};};ui.input=async(_target,_selector,text)=>{state.value=text;};ui.press=async(_target,selector)=>{pressed.push(selector);state={visible:false};};
- await ui.palette('HypeProof Chat: Focus');
+ await ui.palette(focusTitle);
  assert.deepEqual(pressed,['.quick-input-list .monaco-list-row:nth-child(2)']);
 });
 test('custom dialog messages are observed through their actual IDs alongside notifications',async()=>{
@@ -151,7 +154,7 @@ test('Open Folder allows observed OK only with its declared visible dialog title
  const ui=new NativeUI('http://127.0.0.1:9777');let title='Save As';const calls=[];
  ui.workbench=async()=>({evaluate:expression=>vm.runInNewContext(expression,{document:{querySelector:()=>({getBoundingClientRect:()=>({height:200}),querySelector:()=>({textContent:title})})}})});
  ui.pathDialog=async(directory,labels)=>calls.push({directory,labels});
- await assert.rejects(ui.ownedOpenFolder('/owned/a/',1),/Timed out/);assert.equal(calls.length,0);title='Open Folder';await ui.ownedOpenFolder('/owned/a/');assert.deepEqual(calls,[{directory:'/owned/a/',labels:['Open','열기','OK','확인']}]);
+ await assert.rejects(ui.ownedOpenFolder('/owned/a/',1),/Timed out/);assert.equal(calls.length,0);for(const accepted of openFolderDialogTitles()){title=accepted;await ui.ownedOpenFolder('/owned/a/');}title=openFolderDialogTitles().at(-1);calls.length=0;await ui.ownedOpenFolder('/owned/a/');assert.deepEqual(calls,[{directory:'/owned/a/',labels:['Open','열기','OK','확인']}]);
 });
 test('failed owned Open Folder cleanup uses Escape and observes closure; unrelated picker is untouched',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777'),events=[];let owned=false,visible=true;
@@ -189,15 +192,15 @@ test('owned quit uses Mac CmdQ and actual Windows File Exit after observed focus
   ui.clickText=async(t,label,css)=>{assert.equal(t,target);events.push(['native-click',label,css]);};
   await ui.quitOwned(platform);assert.equal(events[0][0],'focused');
   if(platform==='darwin'){assert.equal(events[1][0],'Input.dispatchKeyEvent');assert.equal(events[1][1].key,'q');assert.equal(events[1][1].modifiers,4);assert.equal(events[1][1].type,'rawKeyDown');assert.equal('nativeVirtualKeyCode' in events[1][1],false);assert.equal(events[2][1].type,'keyUp');}
-  else assert.deepEqual(events,[['focused'],['native-click','File','.menubar-menu-button'],['native-click','Exit','.monaco-menu .action-label']]);
+  else assert.deepEqual(events,[['focused'],['native-click',menuLabels('file'),'.menubar-menu-button'],['native-click',menuLabels('exit'),'.monaco-menu .action-label']]);
  }
 });
 test('visible menu choice matches exact mnemonic label, refusing hidden or neighboring exit labels',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777'),parent={children:[]};
- const nodes=[['Exit Other',20],['Exit',0],['Exit',20]].map(([text,width])=>({tagName:'SPAN',textContent:text,parentElement:parent,getBoundingClientRect:()=>({width})}));parent.children=nodes;
+ const [exit]=menuLabels('exit'),nodes=[[exit+' Other',20],[exit,0],[exit,20]].map(([text,width])=>({tagName:'SPAN',textContent:text,parentElement:parent,getBoundingClientRect:()=>({width})}));parent.children=nodes;
  const document={documentElement:parent,querySelectorAll:selector=>{assert.equal(selector,'.monaco-menu .action-label');return nodes;}};
  const view={evaluate:expression=>vm.runInNewContext(expression,{document})};
- assert.equal(await ui.textSelector(view,'Exit','.monaco-menu .action-label'),'html>span:nth-child(3)');
+ assert.equal(await ui.textSelector(view,menuLabels('exit'),'.monaco-menu .action-label'),'html>span:nth-child(3)');
 });
 test('CDP down requires connection refusal, not HTTP error or timeout',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777'),original=globalThis.fetch;
@@ -293,10 +296,10 @@ test('secondary close requires exact scope, actual focus and public Close Window
  const unbound=new NativeUI('http://127.0.0.1:9777');await assert.rejects(unbound.closeOwnedWindow(),/explicitly bound/);
  const ui=new NativeUI('http://127.0.0.1:9777','B'),events=[];let alive=true,focused=false;
  const w={evaluate:async expression=>{assert.equal(expression,'document.hasFocus()');return focused;}};ui.workbench=async()=>w;
- ui.palette=async(title,options)=>{assert.equal(title,'Close Window');assert.deepEqual(options,{expectReload:true});events.push(title);alive=false;};
+ ui.palette=async(title,options)=>{assert.equal(title,coreCommandLabel('workbench.action.closeWindow'));assert.deepEqual(options,{expectReload:true});events.push(title);alive=false;};
  ui.key=()=>assert.fail('No guessed shortcut');ui.list=async()=>[{id:'A'},...(alive?[{id:'B'}]:[])];
  await assert.rejects(ui.closeOwnedWindow(),/actually focused/);assert.deepEqual(events,[]);
- focused=true;await ui.closeOwnedWindow();assert.deepEqual(events,['Close Window']);
+ focused=true;await ui.closeOwnedWindow();assert.deepEqual(events,[coreCommandLabel('workbench.action.closeWindow')]);
 });
 test('retained background frame keeps identity and owner without visibility or focus repair',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777','C');
@@ -327,7 +330,7 @@ test('only a newly observed unchanged preview is reverted and closed via its pub
  const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777'),calls=[];let state=preview;
  ui.editorState=async()=>state;ui.palette=async title=>{calls.push(title);state=before;};
  const proof=await ui.closeOwnedPreview({},before,preview);
- assert.deepEqual(calls,['View: Revert and Close Editor']);assert(proof.other_editors_preserved);assert.equal(proof.resource,'Untitled-2');
+ assert.deepEqual(calls,[coreCommandLabel('workbench.action.revertAndCloseActiveEditor')]);assert(proof.other_editors_preserved);assert.equal(proof.resource,'Untitled-2');
 });
 test('foreign dirty, preexisting, changed, duplicate or unfocused editors cause zero discard actions',async()=>{
  const {before,preview}=previewCloseFixture();
@@ -557,4 +560,40 @@ test('actual recycled quick-list row refuses changed semantic command without cl
  const target={send:async(method,params)=>{calls.push(method);const result=await cdp.send(method,params);if(method==='Runtime.callFunctionOn'&&!sampled){sampled=true;await page.locator('.label-name').evaluate(e=>{e.textContent='Other private command';});}return result;}};
  await assert.rejects(ui.press(target,'.quick-input-list .monaco-list-row:nth-child(1)','Expected command',1000),/Not a usable/);assert.equal(calls.filter(x=>x==='Runtime.evaluate').length,1);assert.equal(calls.filter(x=>x==='Input.dispatchMouseEvent').length,0);assert.equal(ui.phases.at(-1).state.semantic_match,false);assert(!JSON.stringify(ui.phases).includes('Other private command'));
  }finally{await browser.close();}
+});
+
+test('shell labels follow the running app locale: English exactly as main used, Korean from the catalog',async()=>{
+ const before=shellLocale();
+ try{
+  setShellLocale('en');
+  assert.equal(coreCommandLabel('workbench.action.files.openFolder'),'File: Open Folder...');
+  assert.equal(coreCommandLabel('workbench.action.toggleSidebarVisibility'),'View: Toggle Primary Side Bar Visibility');
+  assert.equal(coreCommandLabel('workbench.action.reloadWindow'),'Developer: Reload Window');
+  assert.equal(coreCommandLabel('workbench.action.revertAndCloseActiveEditor'),'View: Revert and Close Editor');
+  assert.equal(coreCommandLabel('workbench.action.closeWindow'),'Close Window');
+  assert.deepEqual(menuLabels('file'),['File']);assert.deepEqual(menuLabels('exit'),['Exit']);
+  assert.ok(openFolderDialogTitles().includes('Open Folder'));
+  assert.deepEqual(catalogLabels('vs/workbench/services/extensions/browser/extensionUrlHandler','open'),['Open']);
+  assert.equal(catalogMessage('vs/workbench/services/extensions/browser/extensionUrlHandler','confirmUrl','HypeProof Chat'),"Allow 'HypeProof Chat' extension");
+  setShellLocale('ko');
+  assert.equal(coreCommandLabel('workbench.action.files.openFolder'),'파일: 폴더 열기...');
+  assert.equal(coreCommandLabel('workbench.action.toggleSidebarVisibility'),'보기: 기본 사이드 바 가시성 전환');
+  assert.ok(menuLabels('file').includes('파일'));
+  assert.notDeepEqual(menuLabels('exit'),['Exit']);
+ }finally{setShellLocale(before);}
+});
+test('locale detection: html lang wins, the pack file only decides when lang is empty, and detect sets the active locale',async()=>{
+ const before=shellLocale();
+ try{
+  assert.equal(localeFromProbe({lang:'en',packPresent:true}),'en');
+  assert.equal(localeFromProbe({lang:'ko',packPresent:false}),'ko');
+  assert.equal(localeFromProbe({lang:'ko-KR'}),'ko');
+  assert.equal(localeFromProbe({lang:'',packPresent:true}),'ko');
+  assert.equal(localeFromProbe({lang:'',packPresent:false}),'en');
+  assert.equal(await detectShellLocale({evaluate:async expr=>{assert.match(expr,/documentElement\.lang/);return 'en';}}),'en');
+  assert.equal(coreCommandLabel('workbench.action.closeWindow'),'Close Window');
+  assert.equal(await detectShellLocale({evaluate:async()=>'ko'}),'ko');
+  assert.equal(coreCommandLabel('workbench.action.closeWindow'),'창 닫기');
+  assert.equal(await detectShellLocale({evaluate:async()=>{throw Error('cdp down');}}),'en');
+ }finally{setShellLocale(before);}
 });

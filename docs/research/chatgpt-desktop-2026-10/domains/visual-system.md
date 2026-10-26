@@ -231,7 +231,7 @@ Product Intent principles (docs/PRODUCT-INTENT.md): 1 Useful work first, 2 Human
 | REQ-CGP-DS-09 | Learner text uses a semantic scale whose smallest step is 14px | Computed styles: no visible text <14px on learner surfaces. Body 16px. Metadata rises from 11px (CC-R1) to 14px | P0 | DES-02 |
 | REQ-CGP-DS-10 | Learner can choose a chat text size (기본 / 크게 / 아주 크게) | Setting persists across restart. 16/18/20px body. No horizontal overflow at 320px with the largest size | P1 | 1, 4 |
 | REQ-CGP-DS-11 | Spacing uses a 4px unit; interactive control heights come from a ladder whose learner minimum is 44px | Token file defines `--hp-space` = 4px and control sizes. Audit finds no hit target <44×44 on learner surfaces | P0 | DES-06 |
-| REQ-CGP-DS-12 | Radii come from one scale; nested radii are computed (outer − inset) | Composer, bubble, menu, dialog and chip radii reference scale tokens. Nested items use `calc()` | P2 | none |
+| REQ-CGP-DS-12 | Radii come from one scale; nested radii are computed (outer − inset) | Composer, bubble, menu, dialog and chip radii reference scale tokens. Nested items use `calc()`. Agent decisions 2026-10-26 (CGP-DS-R-011, decisions.md DEC-DS-R-011): scale 4/6/8/12/16/18/20/24px + full × `--ds-p-radius-scale`; personal bubble 18/18/6/18 kept (D-017), classroom bubble 14→16, menu items 6→8 (12 − 4 gutter), composer controls 8 (20 − 12), round controls on full, off-scale chips moved to the nearest step; other radii unchanged | P2 | none |
 | REQ-CGP-DS-13 | Elevation uses ≤3 named levels with theme-specific alpha | Dark theme shadows are visibly present (alpha ≥ 0.2). HC themes replace shadows with 1px borders | P2 | none |
 | REQ-CGP-DS-14 | Chat layout responds to pane width via container queries | Resizing the side panel 280→720px with a fixed window switches compact/regular layout at the documented thresholds | P1 | 1 |
 | REQ-CGP-DS-15 | Motion durations and easings are tokens | CP-R1 durations (140/160/180ms, ≤3.8s) are expressed as tokens. 0 raw durations in component CSS | P1 | 4 |
@@ -246,7 +246,7 @@ Product Intent principles (docs/PRODUCT-INTENT.md): 1 Useful work first, 2 Human
 | REQ-CGP-DS-25 | Dialogs are reserved for destructive or settings flows; any dialog traps focus and restores it to its opener | Escape closes. Focus returns to the opener. Inline progression for everything else (SX-52) | P0 | SX-52 |
 | REQ-CGP-DS-26 | Tooltips never carry the only label of a control | Every icon button has a visible label or an `aria-label` plus visible text in learner mode. Tooltip appears on focus as well as hover | P0 | DES-06 |
 | REQ-CGP-DS-27 | Transient confirmations use a live region and persist ≥4s or until dismissed | Copy confirmation announced via `role=status`. Errors use `role=alert` and do not auto-dismiss | P1 | 5 |
-| REQ-CGP-DS-29 | New CSS uses logical properties | Lint: 0 new `margin-left/right`, `padding-left/right`, `left/right` in component CSS | P2 | none |
+| REQ-CGP-DS-29 | New CSS uses logical properties | Lint: 0 new `margin-left/right`, `padding-left/right`, `left/right` in component CSS. Owner decision 2026-10-26 (CGP-DS-R-026, DEC-DS-R-026): a ratchet lint (`scripts/logical-css-lint.mjs`, `REQ-STUDIO-LOGICAL-CSS`) grandfathers the declarations on main per file and value; stale entries fail; `logical-css: physical <reason>` exempts one line. | P2 | none |
 | REQ-CGP-DS-30 | IME composition never triggers Enter-send, Escape-close or any single-key shortcut | During Korean composition, Enter, Escape, and Cmd+Enter do nothing beyond committing the syllable (synthetic `isComposing`/229 plus physical macOS 2-set test) | P0 | SX-19, TUX-CHAT-03 |
 | REQ-CGP-DS-31 | Korean prose wraps at word (eojeol) boundaries; long tokens still wrap | `word-break: keep-all; overflow-wrap: anywhere` on prose, labels and buttons. Headings use `text-wrap: balance` | P0 | DES-03 |
 | REQ-CGP-DS-34 | Before/after and diff views show symbols as well as color | Added/removed lines carry `+`/`−` (or 추가/삭제) markers by default | P1 | SX-16, SX-50 |
@@ -270,15 +270,15 @@ Product Intent principles (docs/PRODUCT-INTENT.md): 1 Useful work first, 2 Human
 | DES-CGP-DS-10 | Text size: 16 / 18 / 20px body; controls scale proportionally; 44px targets unchanged | 320px width at 20px body: 0 horizontal overflow, composer send button visible |
 | DES-CGP-DS-11 | Spacing ladder 4, 8, 12, 16, 20, 24, 32px; control heights 32 (non-learner dense), 44 (learner default), 48 (primary CTA) | Hit-target audit report from automated DOM measure |
 | DES-CGP-DS-12 | Radii 4 / 8 / 12 / 16 / 24 / full; composer 16–24px; user bubble 16–20px; dialog 12px | Values reference tokens. Inner radius = outer − padding |
-| DES-CGP-DS-13 | Elevation: none (inline), 1 (cards: `0 1px 2px`), 2 (menus/popovers: `0 4px 8px -2px`, alpha .10 light / .30 dark) | HC: shadow none plus 1px `--vscode-contrastBorder` |
+| DES-CGP-DS-13 | Elevation: none (inline), 1 (cards: `0 1px 2px`), 2 (menus/popovers: `0 4px 8px -2px`, alpha .10 light / .30 dark) | HC: shadow none plus 1px `--vscode-contrastBorder`. Built 2026-10-26 (CGP-DS-R-012, decisions.md): levels are named flat / raised / overlay; dialogs and drawers use overlay; both levels .10 light / .30 dark; controls (composer, catch-up button) keep their fixed control boundary as the HC edge; the forest-only start card keeps the dark alpha and uses its text colour as the HC edge |
 | DES-CGP-DS-14 | Container thresholds: compact <28rem (448px), regular ≥28rem, wide ≥43rem | Panel width sweep 280/360/448/600/720px captured |
-| DES-CGP-DS-15 | `--hp-dur-press 140ms`, `--hp-dur-enter 180ms`, `--hp-dur-confirm 160ms`, `--hp-dur-move 240ms`; enter `cubic-bezier(.19,1,.22,1)`, exit `cubic-bezier(.4,0,1,1)`; no springs or bounces on learner surfaces | 0 animations >300ms except the bounded pending indicator (≤3.8s total) |
+| DES-CGP-DS-15 | `--hp-dur-press 140ms`, `--hp-dur-enter 180ms`, `--hp-dur-confirm 160ms`, `--hp-dur-move 240ms`; enter `cubic-bezier(.19,1,.22,1)`, exit `cubic-bezier(.4,0,1,1)`; no springs or bounces on learner surfaces | 0 animations >300ms except the bounded pending indicator (≤3.8s total). Owner decisions 2026-10-24 (CGP-DS-D-011, decisions.md): `--hp-dur-confirm` is a second name for `--hp-dur-content` (160ms); `--hp-dur-move` 240ms exists with no in-place movement transition using it yet; `--hp-ease-exit` is used by the dialog exit; looping pending indicators (runner, shimmer, breathe, dots) are the bounded-pending exception and stop under reduced motion |
 | DES-CGP-DS-16 | Reduced-motion state is on `<html data-reduced-motion=true|false>` set by the host; CSS gates with `:not([data-reduced-motion])` plus the media query | Three-way test: system / on / off × OS reduce on/off = 6 captures |
 | DES-CGP-DS-17 | Forced colors: buttons `border:1px solid ButtonText`, bubbles `border:1px solid CanvasText`, focus `outline-color: Highlight` | Windows HC and VS Code HC captures show every control boundary |
 | DES-CGP-DS-18 | Focus: `outline: 2px solid var(--hp-ring); outline-offset: 2px`; inset −2px inside scroll containers | Ring ≥3:1 against both the control and the surrounding surface in 4 theme kinds |
 | DES-CGP-DS-19 | Icon sizes 16 (inline), 20 (toolbar), 24 (empty states); 1.5–2px stroke; `currentColor`; status glyphs move from Unicode to icons with the same labels | Icon inventory table with source and license. Visual diff before and after |
 | DES-CGP-DS-21 | Composer: radius 20px, min-height 48px, padding 12px, send button 44×44 inside; placeholder uses `--hp-text-muted` (≥4.5:1), not opacity | Measured placeholder contrast is listed per theme |
-| DES-CGP-DS-22 | Prose max-width 40em; user bubble radius 18px, background = text at 6–8%, max-width 85%; assistant unboxed with an 18px identity mark | 390px and 1280px captures with a 300-character Korean paragraph |
+| DES-CGP-DS-22 | Prose max-width 40em; user bubble radius 18px, background = text at 6–8%, max-width 85%; assistant unboxed with an 18px identity mark | 390px and 1280px captures with a 300-character Korean paragraphOwner decisions 2026-10-25 (CGP-DS-D-017, decisions.md): no identity mark in personal chat; background stays the host token (`--vscode-list-inactiveSelectionBackground`); radius stays 18/18/6/18 (tail corner). |
 | DES-CGP-DS-23 | Chalk list rows ≥44px; actions are persistent icon+label buttons; scroll fade mask 16px top, 32px bottom | Keyboard-only run reaches every row action |
 | DES-CGP-DS-24 | Menu: radius 12px, 4px gutter, items 44px (learner) / 32px (Chalk dense), 14px text, separator 1px border token | Arrow/Home/End/Escape/type-ahead tested. Escape during IME composition does not close |
 | DES-CGP-DS-25 | Dialog 320–480px, radius 12px, padding 20–24px, backdrop dim 40% dark / 30% light, enter 180ms, exit 120ms; ≤390px becomes a bottom sheet | Focus trap and return tested. No dialog for non-destructive learning steps |
@@ -347,3 +347,59 @@ The editor monospace (`--vscode-editor-font-family`) should drive code blocks.
 6. ChatGPT's 22px user bubble and 640px column suit adult reading. The best measure for elementary Korean readers (35 versus 40 syllables per line) should be tested with real learners, not assumed.
 7. Which ChatGPT window type (`electron`, `browser`, `extension`) a given user sees depends on flags. The extension-mode token bridge is observed in CSS, but whether a VS Code extension build of this renderer ships publicly is not confirmed by these files.
 8. CC-R1 "metadata 11px" contradicts DES-02 (labels ≥14px). The question is whether DES-02 applies to the personal chat surface or only to Chalk.
+
+
+## Font role implementation decision (CGP-DS-R-007)
+
+REQ-CGP-DS-08 uses independent named UI/content/code roles over the shared
+primitive-semantic-component tiers. Host editor font changes apply to code only;
+prose cannot change nested action controls. Chalk's generated transport includes
+its typography consumer rules; explicit technical identifiers remain fixed-width.
+No proprietary font, network font load or new learner setting is introduced.
+
+## Studio pane-width adoption (CGP-DS-R-013)
+
+REQ-CGP-DS-14 / DES-CGP-DS-14 are implemented by the named `studio-chat` container.
+See `REQ-STUDIO-CHAT-CONTAINER` in studio-requirements.md for the exact 448/688 CSS-pixel
+boundaries, the separate 1024px code-diff threshold, and the outer-workspace scope boundary.
+Local computed evidence is `test/chat-container-layout.smoke.mjs`; native acceptance is not
+implied by that headless result.
+
+## Studio learner menus (CGP-DS-R-022)
+
+REQ-CGP-DS-24 uses the shared learner-menu tokens and computed browser guard described in
+REQ-STUDIO-MENU-TOKENS. The tools and personal header menus retain their own placement
+and actions. DES-CGP-DS-24 type-ahead and Chalk dense-menu work remain separate; local
+computed evidence does not imply installed-app or owner acceptance.
+
+## Confirmed copy feedback (CGP-DS-R-025)
+
+REQ-CGP-DS-27 is adopted for Studio and Chalk copy outcomes in
+REQ-STUDIO-COPY-FEEDBACK. Studio success lasts at least4s; Chalk success persists; copy
+errors are alert regions without automatic dismissal. Existing trash/online timers meet
+the floor. Native announcements and DES-CGP-DS-27 toast geometry remain separate evidence.
+
+## Tabular figures in Chalk (CGP-DS-R-030)
+
+REQ-CGP-DS-35 is adopted for Chalk in REQ-CHALK-TABULAR-FIGURES: the /manage seat table, roster
+counters and help-queue ages, the shared state-filter counts, and the /budgets usage figures and limit
+fields compute `tabular-nums`. The /board table and /console countdown already did. Studio is out of
+scope for this row.
+
+## Startup and empty-state marks (CGP-DS-R-032)
+
+REQ-CGP-DS-38 is met on `main` and now guarded by REQ-STUDIO-BRAND-MARKS. Studio's boot and
+start screens show only the HP mark, the empty editor shows the HP watermark (#725), and the
+empty chat is text only. Studio has no startup animation (0ms, nothing loops), which meets the
+200ms fade limit; the ChatGPT 56px mark with 2.2s shimmer is not adopted. Evidence is a packaged
+asset audit and a headless computed probe of the rendered surfaces; installed-app platform icons
+and the native splash are not covered.
+
+## Colour emoji font stack (CGP-DS-R-033)
+
+REQ-CGP-DS-41 is adopted for Studio and Chalk in REQ-STUDIO-EMOJI-STACK: the UI and content roles
+end with `"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"`, always after the text faces;
+code keeps its own faces. Timeline and status icons stay stroke icons (CGP-DS-R-018 wins over the
+CGP-DS-41 "Studio today" note about `🖼️`); this row covers emoji that remain text in those lines,
+task marks, messages and answers. Owner decision recorded as DEC-DS-R-033 in decisions.md. Windows
+rendering is listed by the stack but not captured on a Windows machine.

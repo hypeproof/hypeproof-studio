@@ -14,12 +14,12 @@ assert.equal(contentBytes('한😀'),7);
 // The fixed copy, literally (REQ-KNOW-09 acceptance) — never compared with the constant itself.
 assert.equal(OUTBOUND_EXCLUDED,'포함하지 않는 것: AI 기억, 개인 메모');
 assert.equal(outboundDetails({recipient:'갤러리 · site.invalid',public:true,items:[{name:'index.html',bytes:1234},{name:'제목',bytes:7}]}),
- ['받는 곳: 갤러리 · site.invalid','누구나 볼 수 있어요','보낼 항목:','• index.html (1,234 바이트)','• 제목 (7 바이트)','받는 사람의 AI 기억: 확인 안 됨','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'recipient line, public line, one size line per item, exclusion line');
+ ['받는 곳: 갤러리 · site.invalid','누구나 볼 수 있어요','보낼 항목:','• index.html (1,234 바이트)','• 제목 (7 바이트)','ⓘ 받는 사람의 AI 기억: 확인 안 됨','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'recipient line, public line, one size line per item, exclusion line');
 assert.equal(outboundDetails({recipient:'갤러리 · site.invalid',public:true,items:[{name:'index.html',bytes:3}],also:[{recipient:'수업 기록 운영자 · api.invalid',items:[{name:'events.jsonl',bytes:2048}]}]}),
- ['받는 곳: 갤러리 · site.invalid','누구나 볼 수 있어요','보낼 항목:','• index.html (3 바이트)','받는 사람의 AI 기억: 확인 안 됨','','함께 보내는 것 — 받는 곳: 수업 기록 운영자 · api.invalid','받는 사람의 AI 기억: 확인 안 됨','• events.jsonl (2,048 바이트)','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'a second recipient is its own block with its own sizes');
+ ['받는 곳: 갤러리 · site.invalid','누구나 볼 수 있어요','보낼 항목:','• index.html (3 바이트)','ⓘ 받는 사람의 AI 기억: 확인 안 됨','','함께 보내는 것 — 받는 곳: 수업 기록 운영자 · api.invalid','ⓘ 받는 사람의 AI 기억: 확인 안 됨','• events.jsonl (2,048 바이트)','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'a second recipient is its own block with its own sizes');
 assert.equal(outboundDetails({recipient:'x',items:[{name:'a',bytes:1}],also:[{recipient:'',items:[{name:'b',bytes:1}]}]}),null,'an unnamed second recipient refuses the whole dialog');
 assert.equal(outboundDetails({recipient:'x',items:[]}),null);
-assert.equal(outboundDetails({recipient:'갤러리 · s',public:true,notes:['이름이 보여요'],items:[{name:'a',bytes:1}]}),['받는 곳: 갤러리 · s','누구나 볼 수 있어요','이름이 보여요','보낼 항목:','• a (1 바이트)','받는 사람의 AI 기억: 확인 안 됨','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'a note line follows the public line');
+assert.equal(outboundDetails({recipient:'갤러리 · s',public:true,notes:['이름이 보여요'],items:[{name:'a',bytes:1}]}),['받는 곳: 갤러리 · s','누구나 볼 수 있어요','이름이 보여요','보낼 항목:','• a (1 바이트)','ⓘ 받는 사람의 AI 기억: 확인 안 됨','','포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),'a note line follows the public line');
 assert.ok(outboundDetails({recipient:'teacher',items:[{name:'<b>가</b>',bytes:3}]}).includes(OUTBOUND_EXCLUDED));
 assert.ok(!outboundDetails({recipient:'teacher\u202eevil',items:[{name:'a',bytes:1}]}).includes('\u202e'));
 assert.equal(outboundDetails({recipient:'',items:[{name:'a',bytes:1}]}),null);
@@ -27,13 +27,13 @@ assert.equal(outboundDetails({recipient:'x',items:[{name:'a',bytes:NaN}]}),null)
 for(const file of ['wiki/a.md','NOTES/a.md','ｎｏｔｅｓ/a.md','.memory/a','memory\\a'])assert.ok(privateOutboundPath(file));
 assert.ok(privateOutboundPath('learning/journal/a.md','learning/journal'));assert.ok(!privateOutboundPath('index.html'));
 let calls=[],shown;
-const input={siteBase:'https://gallery.invalid',token:'synthetic',worldId:'world',title:'작품',html:'<p>한😀</p>',fetchImpl:async(u,i)=>{calls.push(JSON.parse(i.body));return Response.json({ok:true,url:'/w/1'});}};
+const input={previewVisitor:async()=>true,siteBase:'https://gallery.invalid',token:'synthetic',worldId:'world',title:'작품',html:'<p>한😀</p>',fetchImpl:async(u,i)=>{calls.push(JSON.parse(i.body));return Response.json({ok:true,url:'/w/1'});}};
 assert.equal((await publishWorldConfirmed(input,async m=>(shown=m,false),async()=>true)).ok,false);assert.equal(calls.length,0);
 assert.equal(shown.items[0].bytes,Buffer.byteLength(input.html));
 assert.equal((await publishWorldConfirmed(input,async()=>true,async()=>false)).ok,false);assert.equal(calls.length,0);
 { // The account or activity can change while the dialog is open: the approval was for the old one, so nothing is sent.
  let open=false,n=0;const r=await publishWorldConfirmed(input,async()=>{open=true;return true;},async()=>{n++;return !open;});
- assert.equal(r.ok,false);assert.equal(calls.length,0,'identity/activity changed during the dialog: zero publish POSTs');assert.equal(n,2,'checked before and again after the dialog'); }
+ assert.equal(r.ok,false);assert.equal(calls.length,0,'identity/activity changed during the dialog: zero publish POSTs');assert.equal(n,3,'checked before preview, after preview, and after the dialog'); }
 { let sent=0;const record={recipient:'수업 기록 운영자 · api.invalid',items:[{name:'events.jsonl',bytes:9}],send:async()=>{sent++;}};
  calls=[];assert.equal((await publishWorldConfirmed(input,async m=>(shown=m,false),async()=>true,record)).ok,false);assert.equal(calls.length,0);assert.equal(sent,0,'Cancel: no page and no session record');
  assert.deepEqual(shown.also,[{recipient:record.recipient,items:record.items}],'the session record is its own block in the gallery dialog');
@@ -68,7 +68,7 @@ try {
  const project={id:'prj-synthetic',title:'project',members:['synthetic']};
  const state={project,test_origin:null,versions:[{id:'v',files:[{path:'approved.html',bytes:7,sha256:'a'}]}],hypotheses:[],experiments:[{id:'exp-synthetic',product_version_id:'v'}],links:[]};
  let generation='one',confirm=async m=>(shown=m,false);calls=[];
- const ports={switchOn:()=>true,scopeKey:()=>generation,confirmOutbound:m=>confirm(m),token:async()=> 't',base:()=> 'https://service.invalid/v1/curriculum',root:()=>root,entry:()=>'/index.html',events:async()=>[],projectId:()=>project.id,setProjectId:async()=>{},week:()=>1,defaultTitle:()=> 'title',qr:u=>u,fetchImpl:async(u,i)=>{calls.push([u,i]);if((i?.method??'GET')!=='GET')return Response.json(new URL(u).pathname.endsWith('/experiments')?{experiment:{id:'exp-synthetic'}}:{share_url:'https://test.invalid/l/1'});return Response.json(new URL(u).pathname.endsWith('/projects')?{projects:[project]}:state);}};
+ const ports={previewVisitor:async()=>true,switchOn:()=>true,scopeKey:()=>generation,confirmOutbound:m=>confirm(m),token:async()=> 't',base:()=> 'https://service.invalid/v1/curriculum',root:()=>root,entry:()=>'/index.html',events:async()=>[],projectId:()=>project.id,setProjectId:async()=>{},week:()=>1,defaultTitle:()=> 'title',qr:u=>u,fetchImpl:async(u,i)=>{calls.push([u,i]);if((i?.method??'GET')!=='GET')return Response.json(new URL(u).pathname.endsWith('/experiments')?{experiment:{id:'exp-synthetic'}}:{share_url:'https://test.invalid/l/1'});return Response.json(new URL(u).pathname.endsWith('/projects')?{projects:[project]}:state);}};
  const pub=new PublishSession(ports);
  assert.equal((await pub.submit(form)).ok,false);assert.ok(!calls.some(([,i])=>/^(POST|PUT|PATCH|DELETE)$/.test(i?.method??'GET')));
  calls=[];assert.equal((await pub.link('exp-synthetic',{expires_in_days:1})).ok,false);assert.equal(shown.items[0].name,'approved.html');assert.ok(!calls.some(([,i])=>/^(POST|PUT|PATCH|DELETE)$/.test(i?.method??'GET')));

@@ -33,6 +33,7 @@ export function DelegationRow({ view, renderChild, onStopAll }: {
           <strong className="hps-delegation-helper">{view.helper}</strong>
           <span className="hps-delegation-task">{view.task}</span>
           <IntentChip chip={DELEGATION_CHIPS[view.status]} status={view.status} className="hps-delegation-status" attrs={{ role: "status" }} />
+          <span className="hps-delegation-result-link">결과 보기</span>
         </summary>
         <div className="hps-delegation-body">
           <p className="hps-delegation-heading">{RESULT_HEADING}</p>

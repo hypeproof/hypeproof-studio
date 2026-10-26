@@ -71,6 +71,7 @@ async function harness(trialEndCard: TrialEndCardView | null, config: ChatConfig
     card: () => byClass("hps-trial-end-card")[0],
     primary: () => byClass("hps-trial-end-card-primary")[0],
     escape: () => byClass("hps-trial-end-card-escape")[0],
+    personalClaude: () => byClass("hps-trial-end-card-personal")[0],
     headerLink: () => host.findAll((e) => (e.getAttribute("class") ?? "").split(/\s+/).includes("hps-header-passes")),
     endedNote: () => byClass("hps-free-ended-note")[0],
     // The personal header's activity line: proves the header is drawn, so an absent link is not vacuous.
@@ -183,6 +184,23 @@ t("negative control: a code-issued trial (not free) that ended has no link", asy
   ok(h.activityNow()?.startsWith("AI 체험"), "the header is drawn as a code-issued trial");
   eq(h.headerLink().length, 0, "code-issued trial keeps today's header");
   eq(h.endedNote(), undefined, "no note");
+});
+
+t("personal Claude is explicit, keeps the end card, and excludes minor and code-issued seats", async () => {
+  posted.length = 0;
+  const cfg = seat({ free: true, trial: exhausted });
+  const h = await harness(card, cfg);
+  ok(h.personalClaude(), "personal free seat offers the choice");
+  eq(posted.filter(m => m.type === "trialEndCardClaude").length, 0, "never starts itself");
+  await h.press(h.personalClaude());
+  eq(posted.filter(m => m.type === "trialEndCardClaude").length, 1, "one explicit request");
+  eq(h.calls.passes, 0, "does not buy a pass");
+  eq(h.calls.dismissError, 0, "original work stays on screen");
+  ok(h.card(), "card remains");
+  const minor = await harness(card, { ...cfg, profile: { ...cfg.profile!, minor_cohort: true } } as ChatConfig);
+  eq(minor.personalClaude(), undefined, "minor has no personal provider path");
+  const code = await harness(card, { ...cfg, profile: { ...cfg.profile!, profile_id: "studio-native-trial" } } as ChatConfig);
+  eq(code.personalClaude(), undefined, "code-issued seat is unchanged");
 });
 
 (async () => {

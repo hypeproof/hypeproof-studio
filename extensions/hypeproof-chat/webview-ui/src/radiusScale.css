@@ -1,0 +1,28 @@
+/* CGP-DS-R-011 (REQ-CGP-DS-12, REQ-STUDIO-RADIUS-SCALE): radii come from one scale; nested radii are computed.
+ *
+ * The scale is 4 / 6 / 8 / 12 / 16 / 18 / 20 / 24px and full, times one global multiplier
+ * (--ds-p-radius-scale, 1). designTokens.css holds the values; the token tiers there cannot carry calc(),
+ * so the multiplier is applied here, in the first consumer. Studio imports this file from tokens.css and
+ * Chalk receives it in the same token transport (scripts/sync-design-tokens.mjs), so both apps read the
+ * same steps. A radius on a composer, bubble, menu, dialog or chip names a step or a named radius below,
+ * never a literal or a spacing token. A rounded item drawn inside a rounded container takes the
+ * container's radius minus the inset between them (calc), so the two curves stay concentric.
+ * Declared on body as well, so a component token redeclared on body resolves there.
+ * Guard: extensions/hypeproof-chat/test/radius-scale-computed.smoke.mjs (headless, computed). */
+:root, body {
+  --hp-radius-scale: var(--ds-c-radius-scale);
+  --hp-radius-4: calc(var(--ds-c-radius-4) * var(--hp-radius-scale));
+  --hp-radius-6: calc(var(--ds-c-radius-6) * var(--hp-radius-scale));
+  --hp-radius-8: calc(var(--ds-c-radius-8) * var(--hp-radius-scale));
+  --hp-radius-12: calc(var(--ds-c-radius-12) * var(--hp-radius-scale));
+  --hp-radius-16: calc(var(--ds-c-radius-16) * var(--hp-radius-scale));
+  --hp-radius-18: calc(var(--ds-c-radius-18) * var(--hp-radius-scale));
+  --hp-radius-20: calc(var(--ds-c-radius-20) * var(--hp-radius-scale));
+  --hp-radius-24: calc(var(--ds-c-radius-24) * var(--hp-radius-scale));
+  --hp-radius-full: var(--ds-c-radius-full); /* a pill or a circle; not multiplied */
+  /* Named radii: the component tokens already shared by Studio and Chalk, on the scale. */
+  --hp-radius-dialog: calc(var(--ds-c-modal-radius) * var(--hp-radius-scale));        /* 12px */
+  --hp-radius-menu: calc(var(--ds-c-menu-radius) * var(--hp-radius-scale));           /* 12px */
+  --hp-radius-menu-item: calc(var(--hp-radius-menu) - var(--ds-c-menu-gutter));       /* nested: 12 - 4 = 8px */
+  --hp-radius-status-chip: calc(var(--ds-c-status-chip-radius) * var(--hp-radius-scale)); /* 4px */
+}

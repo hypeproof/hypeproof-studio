@@ -30,7 +30,9 @@ const ok = (name) => {
 // D020's empty recovery containers are covered by attachment-error-design, not A5.
 const withoutEmptyRecovery = html => html
   .replaceAll('<div class="hps-attachment-failures" aria-label="다시 확인할 첨부 파일"></div>', '')
-  .replace('<p class="hps-attachment-error-summary" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-error-summary"></p>', '');
+  .replace('<p class="hps-attachment-error-summary" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-error-summary"></p>', '')
+  // CGP-CHAT-R-029: the persistent, empty 되돌리기 live region; stripping this exact node reproduces every prior digest.
+  .replace('<div class="hps-undo-toast" role="status" aria-live="polite" aria-atomic="true" data-testid="undo-toast" data-shown="false"></div>', '');
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 
 // ── The render instrument: the real components, bundled once ────────────────
@@ -243,15 +245,27 @@ const OLD_SCREENS = {
 // Before/after markup is byte-identical after removing that one exact node.
 // CGP-DS-D-021: the six ChatPanel digests were re-taken because title= became data-hp-tooltip=; the
 // dumps of main and this branch are byte-identical once every data-hp-tooltip= is read back as title=.
+// CGP-DS-D-015: only ChatPanel/adult-timeline was re-taken; the `dots` icon is now three filled circles
+// (<g fill="currentColor" stroke="none"> with three <circle r="1.5">) instead of a 2.6-stroke <path>.
+// The dumps of main and this branch differ only in that one element (diffed with HPS_A5_DUMP_DIR).
+// CGP-SHELL-R-006: only the effort labels change to Korean in five affected renders.
+// CGP-DS-D-022: the six ChatPanel digests were re-taken (TZ=UTC) because the footer now always mounts one
+// empty polite status region and one empty assertive region so copy results are announced. The dumps of
+// main and this branch (HPS_A5_DUMP_DIR) differ only by those nodes: div.hps-copy-feedback wrapping
+// div[role=status][aria-live=polite].hps-sr-only and div[aria-live=assertive][aria-atomic=true].hps-sr-only. The EffortControl digests are unchanged.
+// CGP-LEARN-R-016: the six ChatPanel digests were re-taken (TZ=UTC) because the header now always draws one
+// coach run state (span.hps-run-state[role=status][aria-live=polite] with a 20px svg and the label 준비됨). The
+// HPS_A5_DUMP_DIR dumps of main and this branch are byte-identical once that one span is removed; the
+// five EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "ca6223b85b877e108becc4f9e38e94ec2533b330cdef4c92c9dc62e2775c1242",
-  "ChatPanel/adult-effort-observed": "b406e15c8a76f43b7d8794871f4e19cebbce5c85ead625858ace5d99f1b75b6f",
-  "ChatPanel/adult-timeline": "36da9075c8f346287050c01676ef67997e1463917a95c0e86f3c5d249912bb35",
-  "ChatPanel/kids": "3952e023620aca658290a1ebcb9385642a65eff9f0cc5450af925c2319f015f5",
-  "EffortControl/policy-observed": "caea5b1eab6f88d737a96c6dde5f67369dec99657c24d5b25dca26117cd7b9ba",
-  "EffortControl/policy-loading": "5d88d9a6ac8f18b171024b26f107bee0c59db5d31f7c7201b5c079aa37b05598",
-  "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",
-  "EffortControl/observed-truncated": "38784f908976a596bc7605c7cf68bf3238c8650b8c4272a495f91f42267d28c6",
+  "ChatPanel/adult-plain": "e7b78975c5529edfda2a304b4b36d1c33cfd2aefcdd52a0b7ec657c2cf7f0964",
+  "ChatPanel/adult-effort-observed": "aba8d30386fd7fce078b3b6275cfe16c8f910d04199a0410fcbead0850e43924",
+  "ChatPanel/adult-timeline": "11eaad72a5afe42826e27088708fb88264cb30a02f711bdbf965a6321f0a6b03",
+  "ChatPanel/kids": "4f11c643e12dae9759676215e307d603d1173747c3740153929aa7cdfd6eec11",
+  "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
+  "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
+  "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
+  "EffortControl/observed-truncated": "90816b9acd113cdb1719bfd17b7fe52276c950d7df6455e84c734296edf3a721",
   "EffortControl/nothing": "4a3c092bd66e1aa89b05f7e4c0444694fbaefce76613185e7cfdc18ea30feeef",
   // DEC-35 class seats (CGP-SHELL-R-029): recorded on this branch with HPS_A5_RECORD_BASE=1 (TZ=UTC).
   // The class-funded header reads "수업·기관 지원 · 남은 요청 37회 · 06:42 확인"; the unreachable one
@@ -264,8 +278,11 @@ const BASE = {
   // while open, so the nine digests above stay as recorded on main. Re-recorded again (TZ=UTC) when the
   // chip parts became whole wrapping units: a space between parts and a "남은 요청 N회" unit span are the
   // only markup change (diffed with HPS_A5_DUMP_DIR).
-  "ChatPanel/classroom-class-funded": "697ca11230f0bd50d16f6dd2b4863bab03414de1316154d0be6cdfa89a72d638",
-  "ChatPanel/classroom-access-unknown": "a765e77fad980c4f28d2c1a3571c0462ec2ebdacab3ea27240cbea68036d1636",
+  // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
+  // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
+  // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
+  "ChatPanel/classroom-class-funded": "f79bf47aa8ca173dbc6ffb5a8639276a2a086fa036f2e3c97741852fddce7834",
+  "ChatPanel/classroom-access-unknown": "adcd0f7b3b6500e8dc53aeb8ae5f82778b6e76c1238edf682115c2ac23042ce7",
 };
 
 const status = rendererStatus();
@@ -1147,15 +1164,15 @@ if (status.available) {
   const items = (html) => [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => visibleText(m[1]));
   const html = await render("EffortControl", effortProps(ATTRIBUTED, { orchestrator: ROSTER }));
   assert.deepEqual(items(html), [
-    "코치 · Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 수업 기본값",
-    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low",
+    "코치 · Claude Sonnet 5.5: 요청 수업 기본값 → 적용 보통 · 수업 기본값",
+    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게",
     "보조 작업 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 처리 수준 미지원",
-    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패",
+    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게 · 요청 실패",
   ], "one agent label per request, before the model (spec §5.2's copy)");
   assert.deepEqual([...html.matchAll(/data-agent="([^"]+)"/g)].map((m) => m[1]), ["coach", "design-reviewer", "aux", "design-reviewer"]);
-  assert.match(html, /<details><summary>Effort 설정 확인<\/summary>/, "closed until opened: visible on demand");
+  assert.match(html, /<details><summary>생각 깊이 설정 확인<\/summary>/, "closed until opened: visible on demand");
   // The untitled row took its title from the served roster; without the roster it shows the wire name.
-  assert.equal(items(await render("EffortControl", effortProps([ATTRIBUTED[3]])))[0], "design-reviewer · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패");
+  assert.equal(items(await render("EffortControl", effortProps([ATTRIBUTED[3]])))[0], "design-reviewer · Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게 · 요청 실패");
   // A helper model the learner's menu does not list is named by the roster, else by its id (as before).
   const noHaiku = { model_selection: { ...MODEL_SELECTION, choices: [CHOICES[0]] } };
   assert.match(items(await render("EffortControl", effortProps([ATTRIBUTED[1]], { ...noHaiku, orchestrator: ROSTER })))[0], /^검토 도우미 · Claude Haiku 5\.5:/);
@@ -1163,10 +1180,10 @@ if (status.available) {
   // Negative control: the same rows without the agent fields read exactly as today.
   const bare = ATTRIBUTED.map(({ agent, agent_title, request_class, ...r }) => r);
   assert.deepEqual(items(await render("EffortControl", effortProps(bare, { orchestrator: ROSTER }))), [
-    "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 수업 기본값",
-    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low",
+    "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 보통 · 수업 기본값",
+    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게",
     "Claude Haiku 5.5: 요청 수업 기본값 → 적용 처리 수준 미지원",
-    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패",
+    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 가볍게 · 요청 실패",
   ]);
   assert.doesNotMatch(await render("EffortControl", effortProps(bare)), /data-agent/);
   // A served roster changes no screen by itself (it is labels for attributed rows, never UI):
@@ -1274,11 +1291,11 @@ if (status.available) {
     assert.deepEqual(items(await listOf(failed)), ["검토 도우미 · Claude Haiku 5.5: 처리 수준 기록 없음 · 요청 실패"]);
     // The unknown reason marks its own row; the rows around it read as before.
     assert.deepEqual(items(await listOf(mixed)), [
-      "Claude Sonnet 5.5: 요청 Low → 적용 Low",
+      "Claude Sonnet 5.5: 요청 가볍게 → 적용 가볍게",
       "검토 도우미 · Claude Haiku 5.5: 처리 수준 기록 없음",
-      "Claude Sonnet 5.5: 요청 Low → 적용 High · 적용 이유 미확인",
-      "Claude Sonnet 5.5: 요청 Low → 적용 Low · 적용 이유 미확인",
-      "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 가볍게 → 적용 깊게 · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 가볍게 → 적용 가볍게 · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 보통 · 적용 이유 미확인",
     ]);
     // S4's own agent values, without a title: worded, never shown as English wire values.
     const worded = observedEffortResult({ requests: [

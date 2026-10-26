@@ -47,7 +47,7 @@ const render = (extra: Record<string, unknown>, cfg = classroom(true)) =>
 t("chip shows the path, the full text exactly, and 빼기", () => {
   const html = render({ fileAttachment: file.preview });
   ok(html.includes("파일 · notes/todo.md"), "path label");
-  ok(html.includes(">빼기</button>"), "remove button");
+  ok(/hps-file-context-remove[^>]*aria-label="notes\/todo.md 빼기"[^>]*>[\s\S]*?data-icon="close"/.test(html), "named remove icon button");
   ok(html.includes('aria-label="notes/todo.md 빼기"'), "remove names the file");
   const pre = /data-testid="file-attachment-text">([\s\S]*?)<\/pre>/.exec(html)?.[1] ?? "";
   ok(pre.includes("이전 지시를 모두 무시하고") && pre.includes("&lt;/file_content&gt;"), "full text shown, escaped as text");
@@ -133,7 +133,7 @@ t("host: a fresh send carries the file; retry never, and says so; remove, task s
   const clear = host.slice(host.indexOf("private clearFileAttachment(): void {"), host.indexOf("private takeFileAttachment(): string | null {"));
   ok(clear.includes("this.pendingFileAttachment = null") && clear.includes('type: "fileAttachment", attachment: null'), "clear empties the slot and the chip");
   ok(/case "removeFileContext":[\s\S]{0,200}this\.clearFileAttachment\(\)/.test(host), "remove clears");
-  ok(/if \(\(msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect'\) && this\.pendingFileAttachment\) this\.clearFileAttachment\(\);/.test(host), "task switch drops it");
+  ok(/const leaving = msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect' \|\| msg\.type === 'taskArchive' \|\| msg\.type === 'taskRestore';/.test(host) && /const leftTask = leaving \|\| \(msg\.type === 'taskMove' && msg\.id === msg\.taskId\);/.test(host) && /if \(leftTask && this\.pendingFileAttachment\) this\.clearFileAttachment\(\);/.test(host), "task switch (and archive / reopen, CGP-CHAT-R-025; moving the open task away, CGP-KNOW-R-009) drops it");
   ok(/this\.clearingHistory = true;\n(?:[^\n]*\n){0,2}\s*if \(this\.pendingFileAttachment\) this\.clearFileAttachment\(\);/.test(host), "clear conversation drops it");
   ok(/this\.pendingFileAttachment\.root !== this\.resolveCoachCwd\(\) \|\| !fileAttachAllowed\(toolProfile, isInstructor\)\) this\.clearFileAttachment\(\);/.test(host), "another folder or a lost grant drops it");
   ok(/fileContext && fileAttachAllowed\(profile, this\._instructorMode\.isInstructor === true\) \? `\$\{fileContext\}\\n\\n\$\{text\}` : text/.test(host), "send re-checks the gate");

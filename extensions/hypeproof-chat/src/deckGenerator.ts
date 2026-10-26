@@ -11,6 +11,7 @@
 
 import type { LearningWikiPlan, WikiState } from "./learningWiki.ts";
 import { sessionFocus, sessionLabel } from "./learningWiki.ts";
+import { unsupportedNumbers, unsupportedQuantityWords } from "./numerals.ts";
 
 export type DeckTemplate = NonNullable<LearningWikiPlan["deck"]>;
 export type VisualType = "number" | "quote" | "product" | "steps" | "compare" | "statement";
@@ -29,7 +30,7 @@ export function citableIds(s: WikiState): Set<string> {
 }
 
 /** The text of the wiki entries a slide cites (what its numbers may come from). */
-function citedText(s: WikiState, refs: string[]): string {
+export function citedText(s: WikiState, refs: string[]): string {
   const parts: string[] = [];
   for (const r of refs) {
     if (r === "P" && s.problem) parts.push(s.problem.text);
@@ -43,11 +44,11 @@ function citedText(s: WikiState, refs: string[]): string {
   return parts.join(" ");
 }
 
-/** Numbers on a slide (digits, with "명", "%", "번" and the like stripped) that its cited entries do not contain. */
-export function unsupportedNumbers(slideText: string, cited: string): string[] {
-  const nums = slideText.match(/\d+(?:[.,]\d+)?/g) ?? [];
-  return [...new Set(nums)].filter((n) => !cited.includes(n));
-}
+/**
+ * Numbers on a slide whose exact value its cited entries do not contain, in any script (numerals.ts: Unicode
+ * digits, number forms, Hanja numerals and Korean number words, read the same way on both sides).
+ */
+export { unsupportedNumbers, unsupportedQuantityWords };
 
 export function deckPrompt(s: WikiState, template: DeckTemplate, slides: number[], plan?: LearningWikiPlan): string {
   const want = template.slides.filter((x) => slides.includes(x.no));
@@ -184,7 +185,7 @@ export function applyDeckProposal(prev: WikiState, template: DeckTemplate, slide
       continue;
     }
     const onScreen = [headline, visual.value, visual.label, ...(visual.items ?? []), visual.left, visual.right, ...support].join(" ");
-    const bad = unsupportedNumbers(onScreen, citedText(s, refs));
+    const bad = [...unsupportedNumbers(onScreen, citedText(s, refs)), ...unsupportedQuantityWords(onScreen, citedText(s, refs))];
     if (bad.length) {
       dropped.push(`덱 ${nn}: "${headline.slice(0, 30)}…" (근거에 없는 숫자 ${bad.join(", ")})`);
       continue;
@@ -245,6 +246,8 @@ function visualHtml(v: Visual, productSrc: string): string {
 /**
  * deck/NN.md per template slide and deck.html: drafted slides as 16:9 pitch slides in template order;
  * a "발표자 노트" switch shows the notes, citations, gaps and the slides not drafted yet.
+ * 발표하기 (CGP-ART-R-015) presents the drafted slides one at a time, letterboxed and scaled to fit;
+ * the notes layer stays hidden there even when the switch is on (PRESENT_SCRIPT).
  * `productSrc` is the student's product page relative to the wiki folder (the product visual embeds it).
  */
 export function renderDeck(s: WikiState, template: DeckTemplate, plan?: LearningWikiPlan, productSrc = "../index.html"): Record<string, string> {
@@ -274,13 +277,47 @@ export function renderDeck(s: WikiState, template: DeckTemplate, plan?: Learning
   const checks = [...lintDeck(s), ...s.dropped.filter((x) => x.split(" ")[1] === "덱").map((x) => `${x.split(" ").slice(1).join(" ")} → 화면에 올리지 않았어요`)];
   files["deck.html"] = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(template.title || "피칭 덱")} · ${esc(s.team)}</title><style>${CSS}</style></head>
 <body><header class="bar"><div><b>${esc(s.team)}</b> · ${esc(template.title || "피칭 덱")} · ${drafted.length} / ${template.slides.length}장 · ${last}${label}</div>
-<label class="toggle"><input type="checkbox" onchange="document.body.classList.toggle('show-notes', this.checked)"> 발표자 노트·근거</label></header>
+<div class="tools">${drafted.length ? `<button type="button" class="present-open" id="present-open">발표하기</button>` : ""}<label class="toggle"><input type="checkbox" onchange="document.body.classList.toggle('show-notes', this.checked)"> 발표자 노트·근거</label></div></header>
 <main>${checks.length ? `<ul class="checks notes-only">${checks.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
-${drafted.length ? "" : `<p class="empty">아직 만든 장이 없어요.</p>`}${slidesHtml}</main></body></html>`;
+${drafted.length ? "" : `<p class="empty">아직 만든 장이 없어요.</p>`}${slidesHtml}</main>${drafted.length ? `${PRESENT_UI}<script>${PRESENT_SCRIPT}</script>` : ""}</body></html>`;
   return files;
 }
 
-const CSS = `:root{--bg:#eef1ea;--paper:#fbfcf8;--ink:#13221c;--ink-2:#3d4b44;--ink-3:#5f6c65;--brand:#153c32;--brand-2:#2c6b55;--line:#d8e1d1;--soft:#e8efe0;--warm:#fbf2e4;--warn:#7a4f0e}
+/**
+ * Present mode (CGP-ART-R-015, DES-ART-15). Constant markup and script: no slide data is interpolated, so a deck
+ * cannot change what runs. It reads the slides from the DOM, never touches the network, storage or other windows,
+ * and keeps the notes layer (notes, citations, gaps, not-yet-drafted slides, checks) out of the presented view.
+ * Keys: → Space PageDown next, ← PageUp previous, Esc exit. Fullscreen is asked for; where it is refused (the
+ * Studio preview iframe does not allow it) a status line says so and the slide fills the window instead.
+ */
+export const PRESENT_UI = `<div class="present-ui" id="present-ui" hidden><div class="present-ctl" role="group" aria-label="발표 조작"><button type="button" data-act="prev">이전</button><span class="present-pos" id="present-pos" aria-live="polite"></span><button type="button" data-act="next">다음</button><button type="button" data-act="exit">발표 끝내기</button></div><p class="present-toast" id="present-toast" role="status"></p></div>`;
+export const PRESENT_IDLE_MS = 2000;
+export const PRESENT_SCRIPT = `(function(){
+var d=document,b=d.body,ui=d.getElementById("present-ui"),pos=d.getElementById("present-pos"),toast=d.getElementById("present-toast"),open=d.getElementById("present-open");
+if(!ui||!open)return;
+var slides=[].slice.call(d.querySelectorAll("main > article.slide")),i=0,on=false,full=false,timer=0;
+function fit(){var k=Math.min(innerWidth/1280,innerHeight/720);b.style.setProperty("--present-k",String(k));}
+function idle(){clearTimeout(timer);ui.classList.remove("idle");timer=setTimeout(function(){var a=d.activeElement;if(!(a&&a.tagName==="BUTTON"&&ui.contains(a)&&a.matches(":focus-visible")))ui.classList.add("idle");},${PRESENT_IDLE_MS});}
+function show(n){if(!slides.length)return;i=Math.max(0,Math.min(slides.length-1,n));slides.forEach(function(s,j){s.classList.toggle("on",j===i);});pos.textContent=(i+1)+" / "+slides.length;}
+function enter(){if(on||!slides.length)return;on=true;full=false;toast.textContent="";b.classList.add("presenting");ui.hidden=false;fit();show(0);idle();
+var el=d.documentElement,req=el.requestFullscreen;var fail=function(){if(on)toast.textContent="전체 화면을 열 수 없어 이 창을 가득 채워 발표해요.";};
+try{var p=req&&req.call(el);if(p&&p.then)p.then(function(){full=true;if(!on&&d.fullscreenElement&&d.exitFullscreen)d.exitFullscreen();},fail);else fail();}catch(e){fail();}
+if(d.activeElement&&d.activeElement.blur)d.activeElement.blur();}
+function exit(){if(!on)return;on=false;clearTimeout(timer);b.classList.remove("presenting");ui.hidden=true;ui.classList.remove("idle");slides.forEach(function(s){s.classList.remove("on");});
+if(d.fullscreenElement&&d.exitFullscreen)d.exitFullscreen().catch(function(){});full=false;var cur=slides[i];open.focus({preventScroll:true});if(cur&&cur.scrollIntoView)cur.scrollIntoView({block:"center"});}
+open.addEventListener("click",enter);
+ui.addEventListener("click",function(e){var t=e.target.closest&&e.target.closest("button[data-act]");if(!t)return;var a=t.getAttribute("data-act");if(a==="next")show(i+1);else if(a==="prev")show(i-1);else exit();idle();});
+d.addEventListener("keydown",function(e){if(!on||e.altKey||e.ctrlKey||e.metaKey||e.isComposing)return;var k=e.key;
+if(k==="ArrowRight"||k===" "||k==="Spacebar"||k==="PageDown"){e.preventDefault();show(i+1);idle();}
+else if(k==="ArrowLeft"||k==="PageUp"){e.preventDefault();show(i-1);idle();}
+else if(k==="Escape"||k==="Esc"){e.preventDefault();exit();}},true);
+d.addEventListener("keyup",function(e){if(on&&e.key===" ")e.preventDefault();},true);
+d.addEventListener("fullscreenchange",function(){if(full&&!d.fullscreenElement)exit();});
+["mousemove","pointerdown","focusin"].forEach(function(t){d.addEventListener(t,function(){if(on)idle();},true);});
+addEventListener("resize",function(){if(on)fit();});
+})();`;
+
+const BASE_CSS = `:root{--bg:#eef1ea;--paper:#fbfcf8;--ink:#13221c;--ink-2:#3d4b44;--ink-3:#5f6c65;--brand:#153c32;--brand-2:#2c6b55;--line:#d8e1d1;--soft:#e8efe0;--warm:#fbf2e4;--warn:#7a4f0e}
 @media (prefers-color-scheme:dark){:root{--bg:#0f1512;--paper:#16201b;--ink:#e8eee9;--ink-2:#bcc8c0;--ink-3:#93a199;--brand:#9fd8bd;--brand-2:#74c49a;--line:#2a3830;--soft:#1d2a23;--warm:#2b2416;--warn:#e2b76a}}
 *{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--ink);font-family:"Apple SD Gothic Neo","Pretendard","Noto Sans KR",system-ui,sans-serif;word-break:keep-all;overflow-wrap:anywhere}
 .bar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 20px;background:var(--bg);border-bottom:1px solid var(--line);font-size:14px;color:var(--ink-2)}
@@ -307,3 +344,28 @@ main{max-width:1180px;margin:0 auto;padding:24px 20px 80px;display:flex;flex-dir
 .empty{color:var(--ink-3)}
 @media (max-width:720px){.slide .frame{aspect-ratio:auto;min-height:340px}.v-steps{grid-auto-flow:row}.v-compare{grid-template-columns:1fr}.v-compare .arrow{transform:rotate(90deg);justify-self:center}}
 @media print{.bar,.notes-only{display:none!important}main{padding:0;gap:0}.slide{break-after:page}.slide .frame{box-shadow:none;border-radius:0}}`;
+
+/**
+ * Slide sizes scale with `--vw` (1vw on the scrolling deck). Present mode pins it to a 1280 px design width and
+ * scales the whole 1280x720 frame with `--present-k`, so the slide keeps its proportions on any window.
+ */
+const PRESENT_CSS = `.tools{display:flex;gap:12px;align-items:center}
+.present-open,.present-ctl button{min-height:44px;min-width:44px;padding:0 16px;border-radius:10px;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.present-open{border:1px solid var(--brand);background:var(--brand);color:var(--paper)}
+.present-open:focus-visible,.present-ctl button:focus-visible{outline-width:3px;outline-style:solid;outline-color:var(--brand-2);outline-offset:2px}
+.present-ui[hidden]{display:none}
+body.presenting{background:#000;overflow:hidden}
+body.presenting .bar,body.presenting .checks,body.presenting .empty,body.presenting .notes-only,body.presenting.show-notes .notes-only,body.presenting .slide:not(.on){display:none!important}
+body.presenting main{max-width:none;margin:0;padding:0;display:block}
+body.presenting .slide.on{position:fixed;inset:0;background:#000;z-index:3}
+body.presenting .slide.on .frame{--vw:12.8px;position:absolute;left:50%;top:50%;width:1280px;height:720px;min-height:0;aspect-ratio:16/9;margin:0;border-radius:0;box-shadow:none;outline-style:none;transform:translate(-50%,-50%) scale(var(--present-k,1))}
+body.presenting .v-steps{grid-auto-flow:column}body.presenting .v-compare{grid-template-columns:1fr auto 1fr}body.presenting .v-compare .arrow{transform:none;justify-self:auto}
+.present-ui{position:fixed;right:16px;bottom:16px;z-index:4;display:flex;flex-direction:column;align-items:flex-end;gap:8px;max-width:calc(100vw - 32px)}
+.present-ctl{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;background:rgba(0,0,0,.72);border-radius:12px;padding:6px}
+.present-ctl button{border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff}
+.present-pos{color:#fff;font-size:16px;font-weight:700;min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+.present-toast{margin:0;background:rgba(0,0,0,.72);color:#fff;border-radius:10px;padding:8px 14px;font-size:14px}.present-toast:empty{display:none}
+.present-ui.idle .present-ctl,.present-ui.idle .present-toast{opacity:0}
+@media (forced-colors:active){.present-ctl,.present-toast{background:Canvas;color:CanvasText;border:1px solid CanvasText}.present-ctl button,.present-open{border-color:ButtonText;color:ButtonText;background:ButtonFace}.present-pos{color:CanvasText}}`;
+
+const CSS = BASE_CSS.replace(/(\d+(?:\.\d+)?)vw\b/g, "calc($1*var(--vw,1vw))") + "\n" + PRESENT_CSS;

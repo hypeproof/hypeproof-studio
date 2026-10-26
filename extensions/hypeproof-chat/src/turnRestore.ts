@@ -66,9 +66,14 @@ export interface NotCovered { path: string; reason: NotCoveredReason; size?: num
 export interface RestoreManifest {
   version: 1;
   id: string;
-  /** `turn`: taken before a coach turn. `before_restore`: the state just before a revert (AE-15). */
-  kind: "turn" | "before_restore";
+  /**
+   * `turn`: taken before a coach turn. `before_restore`: the state just before a revert (AE-15).
+   * `checkpoint`: a learner-named save point (CGP-AGENT-R-027), kept in its own store (checkpoint.ts).
+   */
+  kind: "turn" | "before_restore" | "checkpoint";
   turnId: string;
+  /** `checkpoint` only: the message the learner reviewed and saved (cleaned, bounded; checkpoint.ts). */
+  message?: string;
   createdAt: number;
   /** Every recorded file, sorted by path, posix separators. */
   files: ManifestFile[];
@@ -199,6 +204,8 @@ export interface TakeRestorePointRequest {
   id: string;
   turnId: string;
   kind: RestoreManifest["kind"];
+  /** `checkpoint` only. */
+  message?: string;
   now?: number;
   keep?: number;
   /** Points pruning must never remove (besides the new one). */
@@ -225,6 +232,7 @@ export async function takeRestorePoint(req: TakeRestorePointRequest): Promise<Ta
   const point: RestoreManifest = {
     version: 1, id: req.id, kind: req.kind, turnId: req.turnId, createdAt: req.now ?? Date.now(),
     files: scan.files, dirs: scan.dirs, notCovered: scan.notCovered, complete: scan.complete, digest: scan.digest,
+    ...(req.kind === "checkpoint" && typeof req.message === "string" ? { message: req.message } : {}),
   };
   await writeAtomic(pointPath(req.store, req.id), JSON.stringify(point));
   const pruned = await pruneRestorePoints(req.store, req.keep ?? TURN_RESTORE_KEEP, [req.id, ...(req.protect ?? [])]);
@@ -233,7 +241,8 @@ export async function takeRestorePoint(req: TakeRestorePointRequest): Promise<Ta
 
 function validManifest(value: unknown): value is RestoreManifest {
   const m = value as RestoreManifest;
-  return !!m && m.version === 1 && validRestoreId(m.id) && (m.kind === "turn" || m.kind === "before_restore") &&
+  return !!m && m.version === 1 && validRestoreId(m.id) && (m.kind === "turn" || m.kind === "before_restore" || m.kind === "checkpoint") &&
+    (m.message === undefined || (m.kind === "checkpoint" && typeof m.message === "string" && m.message.length <= 4096)) &&
     typeof m.createdAt === "number" && Array.isArray(m.files) && Array.isArray(m.dirs) && Array.isArray(m.notCovered) &&
     m.files.every((f) => f && typeof f.path === "string" && safeRel(f.path) && typeof f.size === "number" && SHA.test(f.sha256)) &&
     m.dirs.every((d) => typeof d === "string" && safeRel(d));

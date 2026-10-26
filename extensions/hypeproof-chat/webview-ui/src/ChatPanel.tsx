@@ -1,10 +1,26 @@
+import { useMenuTypeahead } from './menuTypeahead';
+import { citationKindLabel } from './citationKind';
+import { elapsedWorkLabel } from '../../src/turnElapsed';
+import { useFileMentions } from './FileMentions';
+import { PastedDraft } from './PasteChip';
+import { fullDraft, visibleDraft, editVisible, replaceVisible, changePaste, longPaste, type DraftPart } from './pastedDraft';
+import { TurnBoundary } from './TurnBoundary';
+import { SketchDialog } from './SketchDialog';
+import { CopyFeedbackRegion, CopyFeedbackOutlet } from './CopyFeedback';
+import { ChatFindBar } from './ChatFindBar';
+import { registerClosedText } from './chatFind';
+import { ClassWindowNotice } from "./ClassWindowNotice";
+import { SteerDelivery, type SteerDeliverySnapshot } from './SteerDelivery';
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
 import { visibleAttempts, ATTEMPT_HISTORY_NOTE } from '../../src/answerAttempts';
 import { AttemptPager } from './AttemptPager';
 import { AnnotationTray } from "./AnnotationTray";
+import { StyleTweakPanel } from "./StyleTweakPanel";
+import { storedShell } from "../../src/shellDisplay";
 import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
+import { UndoToast, newUndoId, offerUndo, settleUndo } from './UndoToast';
 import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
 import { ActivityStatus } from "./ActivityStatus";
 import { accessFailure, type ActivityUnavailable } from "../../src/activityAvailability";
@@ -15,14 +31,19 @@ import { CitationRack as PersonalCitationRack } from './CitationPreview';
 import type { RecoveredRequest, InlineEditDraft } from '../../src/activityDraft';
 import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
 import type { TurnToolMode } from '../../src/turnTools';
+import { FileContextChip } from "./FileContextChip";
 import { ComposerTools, SelectedTool } from './ComposerTools';
 import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
+import { LowDiskBar } from './LowDiskBar';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
+import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
+import { TASK_APPEARANCE_LABEL, useTaskAppearance } from './TaskAppearance';
+import { COPY_CONVERSATION_LABEL } from '../../src/conversationCopy';
 import { glyphIconKind, splitLeadingGlyph, stripLeadingGlyph } from './glyphIcon';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
 import { VerdictButtons, VerdictReasons } from './AnswerVerdict';
@@ -42,6 +63,8 @@ import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
+import { ShortcutSheet, useShortcutSheetKey } from './ShortcutSheet';
+import { NicknameSetting } from './NicknameSetting';
 import { useDialogFocus } from './dialogFocus';
 import { ReplyChoices } from './ReplyChoices';
 import { SafetyNotice } from './SafetyNotice';
@@ -62,6 +85,7 @@ import type { StepWork } from '../../src/lessonFocus';
 import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
 import { MaterialsChips, MaterialsPanel } from './MaterialsPanel';
+import { ActivityHomeContext } from './activityHome';
 import { HelpRequest } from './HelpRequest';
 import { acceptHelp } from '../../src/classroomHelp';
 import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type ImportRef, type LastImport } from './draftImport';
@@ -69,9 +93,12 @@ import { isObservationFormat, showsObservationResults } from '../../src/nativeOb
 import { CodeBlock, CodeBlockScope } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { Children, cloneElement, Fragment, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useContext, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
+import { MyQuestions } from "./MyQuestions";
+import { CoachRunState } from "./CoachRunState";
+import { myQuestions, MY_QUESTION_ATTR } from "../../src/myQuestions";
 import type {
   ChatConfig,
   ChatMessage,
@@ -82,17 +109,25 @@ import type {
   UxConfig,
 } from "../../src/protocol";
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
-import { onHostMessage, postToHost } from "./vscode";
+import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
+import { LessonTip } from "./LessonTip";
+import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
+import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
+import { ProjectIdeas } from "./ProjectIdeas";
+import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
-import { groupDelegations } from "../../src/delegationRow";
-import { activeLongStep, longStepHint, type ActiveLongStep } from "../../src/longStepHint";
-import { DelegationRow } from "./DelegationRow";
+import { groupDelegations, delegationGroups, parseDelegationId } from "../../src/delegationRow";
+import { idleTurnHint, runningProgressStep } from "../../src/longStepHint";
+import { DelegationGroup } from "./DelegationGroup";
 import { guardHostPayload, PanelBoundary } from "./PanelBoundary";
 import { CONTEXT_COMPACT_NOTE, CONTEXT_TRIM_NOTE, isCompactionLine, trimMarkerIndex } from "../../src/contextTrim";
+import { currentDividerId, stepDividerLabel, stepDividers, type LessonStepMarks } from "../../src/lessonStepMarks";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
 import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
+import { TaskActivity } from "./TaskActivity";
+import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
   RUNNER_PHRASE_MS,
   isRunnerCohort,
@@ -119,9 +154,12 @@ interface Props {
   onAnnotationAction?: (action: 'element' | 'rectangle' | 'remove' | 'comment', number?: number, comment?: string) => void;
   elementPreview?: import("../../src/protocol").ElementPreview | null;
   onRemoveElement?: () => void;
+  /** CGP-ART-R-006 — preview one offered style value on the picked element (null resets it). */
+  onStyleTweakSet?: (id: string, prop: string, value: string | null) => void;
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
   pageAttachment?: import("../../src/pageContext").PageAttachmentPreview | null;
-  onRemovePageAttachment?: () => void;
+  /** CGP-CHAT-R-029 — `undoId`: the host keeps the removed page under it for 되돌리기. */
+  onRemovePageAttachment?: (undoId?: string) => void;
   /** CGP-CHAT-R-011 — the work-folder file queued for the next turn, shown in full and removable. */
   fileAttachment?: import("../../src/protocol").FileAttachmentPreview | null;
   /** CGP-CHAT-R-011 — why the last picked file was refused (Korean, one per cause). */
@@ -129,7 +167,8 @@ interface Props {
   /** CGP-CHAT-R-011 — a one-line notice (a retry did not resend the file). */
   fileAttachNotice?: string | null;
   onAttachFile?: () => void;
-  onRemoveFileAttachment?: () => void;
+  /** CGP-CHAT-R-029 — `undoId`: the host keeps the removed file under it for 되돌리기. */
+  onRemoveFileAttachment?: (undoId?: string) => void;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
   verifyPanel?: import("react").ReactNode;
   /** cr-verify — a product test is driving the browser: nothing is sent until it ends. */
@@ -185,8 +224,18 @@ interface Props {
   verdicts?: VerdictMap;
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the host's clamp boundary id (null: nothing is left out). */
   trimBoundaryId?: string | null;
+  /** CGP-CHAT-R-023 — the host's served-step mark per user message id. Absent: no step dividers. */
+  stepMarks?: LessonStepMarks;
   /** REQ-STUDIO-DELEGATION-ROW — the stream running now; a delegation row is live only for it. */
   runningStreamId?: string | null;
+  delegationStops?: Record<string, import("../../src/delegationStop").DelegationStopState>;
+  onStopDelegations?: (streamId:string)=>void;
+  progressSince?: number;
+  progressApprovalPending?: boolean;
+  /** REQ-STUDIO-COACH-RUN-STATE: how this view's last turn ended (App's lastOutcome); absent = none yet. */
+  lastOutcome?: import("../../src/taskRunState").TaskTurnOutcome;
+  /** REQ-STUDIO-COACH-RUN-STATE: the product test run (내 제품 테스트) is running. */
+  verifyRunning?: boolean;
   onVerdict?: (messageId: string, next: VerdictState | null) => void;
   /** CGP-KNOW-R-004 — "팀 브레인에 정리하기" on one finished answer. Absent: no action. */
   onAnswerToWiki?: (messageId: string) => void;
@@ -217,6 +266,9 @@ function extractRenderableHtml(text: string): string | null {
   }
   return null;
 }
+
+/** REQ-KNOW-35 — how often a visible panel asks the host to measure free space again. */
+const LOW_DISK_POLL_MS = 60_000;
 
 // Pasted-image context (website-copyclone). Bounds match the worker's
 // translate.ts caps so a paste that the webview accepts is one the worker
@@ -362,7 +414,14 @@ export function ChatPanel(props: Props) {
   const entryOpen = !!entry && (!entry.seen || reopenedCapabilities === entry.id);
   const saved = config?.activityDraft;
   const separateQueue = !!saved?.queued && (saved.queuedPaused === true || (saved.queuedToolMode ?? 'auto') !== (saved.toolMode ?? 'auto'));
-  const [draft, setDraft] = useState(() => separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null));
+  const [draftParts, setDraftParts] = useState<DraftPart[]>(() => [{ text: separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null) }]);
+  const draft = fullDraft(draftParts), composerText = visibleDraft(draftParts);
+  const pasteId = useRef(0);
+  // External replacements/imports operate on the complete draft and restore it inline.
+  const setDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => {
+    const before = fullDraft(previous), next = typeof value === 'function' ? value(before) : value;
+    return next === before ? previous : [{ text: next }];
+  }), []);
   const [toolMode, setToolMode] = useState<TurnToolMode>(saved?.toolMode ?? 'auto');
   const [queuedToolMode, setQueuedToolMode] = useState<TurnToolMode>(saved?.queuedToolMode ?? saved?.toolMode ?? 'auto');
   const [queuedPaused, setQueuedPaused] = useState(separateQueue);
@@ -376,6 +435,7 @@ export function ChatPanel(props: Props) {
   const editFocusScope = useRef('');
   const [composing, setComposing] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [sketchOpen, setSketchOpen] = useState(false);
   // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
   // section opens with focus on it (the #1814 menu shortcut, kept inside the #1763 dialog).
   const [preferencesUsage, setPreferencesUsage] = useState(false);
@@ -383,6 +443,16 @@ export function ChatPanel(props: Props) {
   // CGP-SHELL-D-028: the classroom detail dialog mounts only while open, so its close button's
   // autoFocus runs before the focus hook could see the opener; remember the opener here instead.
   const preferencesOpener = useRef<HTMLElement | null>(null);
+  // CGP-CHAT-R-030 — 키보드 단축키: opened by `?` outside a text field, or from the settings dialog.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutsOpener = useRef<HTMLElement | null>(null);
+  useShortcutSheetKey(!shortcutsOpen, () => { shortcutsOpener.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null; setShortcutsOpen(true); });
+  // From settings: the settings dialog closes first, so focus later returns to what opened settings.
+  const openShortcutsFromPreferences = () => { shortcutsOpener.current = preferencesOpener.current; setPreferencesOpen(false); setPreferencesUsage(false); setShortcutsOpen(true); };
+  // CGP-SHELL-R-035 — "새로운 기능": once after an update above the composer, and later from settings.
+  const [whatsNew, dismissWhatsNew] = useWhatsNew(props.config, props.instructor === true);
+  const [whatsNewSheetOpen, setWhatsNewSheetOpen] = useState(false);
+  const openWhatsNewFromPreferences = () => { shortcutsOpener.current = preferencesOpener.current; setPreferencesOpen(false); setPreferencesUsage(false); setWhatsNewSheetOpen(true); };
   const lastReplyChoice = useRef<{ messageId: string; answer: string } | null>(null);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
@@ -425,6 +495,10 @@ export function ChatPanel(props: Props) {
   const [draftError, setDraftError] = useState<string | null>(null);
   // SX-01/SX-02 — the step currently being viewed. A **view state**. Not a completion judgment.
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
+  // CGP-CHAT-R-021 — lesson tips the learner closed, per served step; kept in this panel's webview state.
+  const [dismissedTips, setDismissedTips] = useState<string[]>(() => readDismissed(readWebviewState<Record<string, unknown>>()));
+  // CGP-SHELL-R-020 — idea lists the learner closed with "내가 정할래요", per task and answer.
+  const [dismissedIdeas, setDismissedIdeas] = useState<string[]>(() => readIdeaDismissals(readWebviewState<Record<string, unknown>>()));
   // #751 F4 — local display state for the learner's step self-report; it is separate from task completion.
   const [lessonSteps, setLessonSteps] = useState<Record<string, 'in_progress' | 'submitted'>>({});
   // #751 G2 — the learner's saved work-surface entries for the current lesson digest, and the rehearsal send result.
@@ -523,6 +597,10 @@ export function ChatPanel(props: Props) {
   const composerIdentity = [activityId,taskId,draft,pendingImages,stagedPhotos.map(p=>p.id).join("|"),imports,toolMode,queued,streaming,frozen,config?.activity?.verified,props.sendLocked,props.sendPending];
   const composerIdentityRef = useRef(composerIdentity); composerIdentityRef.current=composerIdentity;
   const photoSources = useRef(new Map<string, File>());
+  // CGP-CHAT-R-029 — the state an undo offer was made against; an offer is valid only while it is unchanged.
+  const undoScope = { activityId: activityId ?? null, taskId: taskId ?? null };
+  const undoSubject = useRef({ pendingImages, stagedPhotos, draftParts, queued, streaming, file: props.fileAttachment, page: props.pageAttachment });
+  undoSubject.current = { pendingImages, stagedPhotos, draftParts, queued, streaming, file: props.fileAttachment, page: props.pageAttachment };
   const photoReading = useRef(new Set<string>());
   const imageCount = useRef(pendingImages.length); imageCount.current = pendingImages.length;
   useEffect(() => () => {
@@ -547,6 +625,7 @@ export function ChatPanel(props: Props) {
       if (msg.type === "inputRejected") {
         if(msg.photos?.length) setStagedPhotos(old=>[...old,...msg.photos!.filter(p=>!old.some(own=>own.id===p.id)).map(p=>({id:p.id,name:attachmentDisplayName(p.name),thumb:null,ready:true}))]);
         setSteerMarks(steerMarksRefuse);
+        setSteerDelivery(null);
         const rejectedMode = msg.toolMode ?? 'auto';
         const current = snapshot.current;
         if (current.queued !== null || current.text.trim() || current.recovered?.length || composerHasAttachments.current || preparingImagesRef.current) {
@@ -637,6 +716,16 @@ export function ChatPanel(props: Props) {
     postToHost({ type: "turnReviewRequest" });
     return off;
   }, []);
+  // CGP-ART-R-020 — entries of a running turn, shown before the turn's history is saved. The host binds
+  // each to the task it started in (onHostMessage drops another task's); a history load or a scope change
+  // replaces them with what was persisted.
+  const [liveActivity, setLiveActivity] = useState<TaskActivityFact[]>([]);
+  useEffect(() => onHostMessage((msg) => {
+    if (msg.type === "history") setLiveActivity([]);
+    else if (msg.type === "taskActivityFact" && validTaskActivityFact(msg.fact)) setLiveActivity((list) => list.some((f) => f.id === msg.fact.id) ? list : [...list, msg.fact]);
+  }), []);
+  useEffect(() => { setLiveActivity([]); }, [activityId, taskId]);
+  const [reviewFocus, setReviewFocus] = useState<{ path: string; seq: number; turnId: string } | null>(null);
   // REQ-STUDIO-PAGE-CARD — page cards of this task's coach turns, keyed by the chat row each sits under.
   const [pageCards, setPageCards] = useState<Map<string, import("../../src/pageCard").PageCardView>>(() => new Map());
   useEffect(() => {
@@ -653,6 +742,20 @@ export function ChatPanel(props: Props) {
     const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "missingTaskFolderRequest" }); };
     ask(); document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
     const stop = () => { off(); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
+    return stop;
+  }, []);
+  // REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume. The host also measures as every turn
+  // starts and ends; the panel asks on mount, when it comes back into view, on focus and once a minute while visible.
+  const [lowDisk, setLowDisk] = useState<import("../../src/lowDisk").LowDiskNotice | null>(null);
+  useEffect(() => {
+    const off = onHostMessage((msg) => { if (msg.type === "lowDisk") setLowDisk(msg.notice); });
+    const ask = () => { if (document.visibilityState !== "hidden") postToHost({ type: "lowDiskRequest" }); };
+    postToHost({ type: "lowDiskRequest", mount: true });
+    document.addEventListener("visibilitychange", ask); window.addEventListener("focus", ask);
+    const timer = setInterval(ask, LOW_DISK_POLL_MS);
+    // Render tests run this panel in Node: an always-on poll must not keep their process alive.
+    (timer as unknown as { unref?: () => void }).unref?.();
+    const stop = () => { off(); clearInterval(timer); document.removeEventListener("visibilitychange", ask); window.removeEventListener("focus", ask); };
     return stop;
   }, []);
   // REQ-STUDIO-PREVIEW-RECOVERY — the host measures the learner's preview tab (server state, HTTP status) and pushes it when a
@@ -756,6 +859,8 @@ export function ChatPanel(props: Props) {
   // gate server-side, this just keeps the UI honest (no thumbnail, plain text
   // paste). Absent on older cached /v1/profile responses → treated as off.
   const imagePasteEnabled = config?.profile?.input?.image_paste === true;
+  const sketchAllowed = imagePasteEnabled && !props.instructor && !unavailable && pendingImages.length < MAX_IMAGES;
+  const sketchAllowedRef = useRef(sketchAllowed);sketchAllowedRef.current = sketchAllowed;
   // D-028 — photos as files, paths only to the model. Takes over drop and paste where on.
   const imageFilesEnabled = config?.profile?.input?.image_files === true;
   // #649 — switching worlds is **click-only**. Only for cohorts whose profile carries
@@ -788,7 +893,8 @@ export function ChatPanel(props: Props) {
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
   // Sending is held (the draft stays) while the task's folder is missing.
   const folderMissing = personalWorkspace && !props.instructor && !!missingFolder;
-  const recheckSend = useRef(false);
+  // CGP-CHAT-R-021 — the step the rail shows (the first before any is picked); no tip for the instructor console.
+  const lessonTip = props.instructor ? null : lessonTipFor(config?.profile?.lesson, currentStepId);
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
   const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error, scope: `${activityId ?? ""}/${taskId ?? ""}` });
@@ -801,16 +907,29 @@ export function ChatPanel(props: Props) {
   const [longStepAnnouncement, setLongStepAnnouncement] = useState('');
   const liveAnnouncement = useLiveRegion([responseAnnouncementText, longStepAnnouncement, connectivity.announcement]);
   /** The one gate for every learner send: offline it sends nothing, keeps the draft or choice, and says where it is. */
-  const sendWhenOnline = (send: () => unknown, held: HeldNoteKind) => guardSend(connectivity.online, send, () => setImgNote(OFFLINE_HELD_NOTES[held]));
+  // CGP-CHAT-R-029 — every send path goes through here (send, resend of an unsent message, roll, world chip,
+  // retry, edit): a send that went out makes every earlier removal final, so the 되돌리기 offer ends.
+  const sendWhenOnline = (send: () => unknown, held: HeldNoteKind) => {
+    const sent = guardSend(connectivity.online, send, () => setImgNote(OFFLINE_HELD_NOTES[held]));
+    if (sent) settleUndo();
+    return sent;
+  };
   // CGP-CHAT-R-012 — "지금 방향 바꾸기": stop through the Stop path; the parked text goes on the end edge (steerNow.ts).
   const steerRef = useRef<true | null>(null);
+  const steerFocus = useRef<Element | null>(null);
   const [steerPending, setSteerPending] = useState(false);
+  const [steerDelivery, setSteerDelivery] = useState<SteerDeliverySnapshot | null>(null);
+  const steerScope = JSON.stringify([activityId, taskId]);
+  const clearSteerDelivery = useCallback(() => setSteerDelivery(null), []);
+  useEffect(() => { setSteerDelivery(null); }, [steerScope]);
+  useEffect(() => { if (error && !streaming) setSteerDelivery(null); }, [error, streaming]);
   const [steerMarks, setSteerMarks] = useState<SteerMark[]>([]);
   const steerShown = steerOffered({ streaming, queued, queuedPaused, sendLocked: props.sendLocked, unavailable });
   const steerNow = () => {
     const press = steerPress({ offered: steerShown, online: connectivity.online, pending: steerRef.current !== null });
     if (press === 'ignore') return;
     if (press === 'hold') { setImgNote(STEER_OFFLINE_NOTE); return; }
+    steerFocus.current = document.activeElement?.classList?.contains('hps-queued-steer') ? document.activeElement : null;
     steerRef.current = true; setSteerPending(true); setImgNote(null);
     props.onCancel();
   };
@@ -837,7 +956,11 @@ export function ChatPanel(props: Props) {
       !!config?.profile?.model_selection?.choices.some(model => model.alias === config.model && !fundingChoice.allowed.models.includes(model.id)))));
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages, normalizeTextSize(config?.textSize));
   const headingSlot = useContext(HeadingSlotContext);
-  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
+  // CGP-KNOW-R-002: inside a task workspace whose rail has the 자료 view, the list lives there, not here.
+  const { materialsHome } = useContext(ActivityHomeContext);
+  const setVisibleDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => editVisible(previous, typeof value === 'function' ? value(visibleDraft(previous)) : value)), []);
+  const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
+  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
@@ -851,6 +974,16 @@ export function ChatPanel(props: Props) {
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
   // a fixed cohort or lesson name wins over any stored student name.
   const coachName = resolveCoachIdentity(config?.coach, { ux }).name;
+  // CGP-CHAT-R-024 — the personal task's own conversation, copied as Markdown from the task menu.
+  // Exactly the conversation as drawn: one version per prompt (the one on screen), never hidden attempts.
+  const drawnConversation = useMemo(() => visibleVersions(visibleAttempts(messages).items, versionChoice).items, [messages, versionChoice]);
+  const taskAppearance = useTaskAppearance();
+  const taskActivity = useMemo(() => summarizeTaskActivity(drawnConversation, liveActivity), [drawnConversation, liveActivity]);
+  const conversationCopy = useConversationCopy(JSON.stringify([activityId ?? null, taskId ?? null]), {
+    messages: drawnConversation,
+    title: config?.taskWorkspace?.tasks.find(task => task.id === taskId)?.title,
+    coachName,
+  });
 
   // Tone for hard-coded chat-panel labels — game (kids) vs search-webapp
   // (예시치과 teaser) vs website (치과 원장 copyclone) vs world
@@ -913,9 +1046,9 @@ export function ChatPanel(props: Props) {
     if (attachmentFailures.items.length) return false; // The persistent error summary owns this diagnosis.
     if (imagePreparationBlocksSend()) return false;
     // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays. A press
-    // asks the host to look again: a folder that is back clears the notice and this draft goes out then.
+    // asks the host to look again. Recovery never sends a draft without a fresh send action.
     if (folderMissing) {
-      if (text === undefined) { recheckSend.current = true; postToHost({ type: "missingTaskFolderRequest" }); }
+      if (text === undefined) postToHost({ type: "missingTaskFolderRequest" });
       return false;
     }
     const value = (text ?? draft).trim();
@@ -954,14 +1087,6 @@ export function ChatPanel(props: Props) {
     }
     return sendPrepared();
   };
-
-  // The host answered the re-check of a held send: folder back → the held draft goes out once;
-  // still missing → the press is answered and nothing is sent later on its behalf.
-  useEffect(() => {
-    if (!recheckSend.current) return;
-    recheckSend.current = false;
-    if (!missingFolder) submit();
-  }, [missingFolder]);
 
   const retryRecovered = (request: RecoveredRequest) => {
     if (streaming || frozen || unavailable || props.sendLocked || props.sendPending) return;
@@ -1004,7 +1129,7 @@ export function ChatPanel(props: Props) {
     // its mode until acceptance; a paused item gives it an explicit retry path
     // instead of silently losing it or sending later on an unrelated render.
     const stoppedAt = steer?.stoppedHere ? steerMarkTarget(messages) : undefined;
-    if (submit(text, queuedToolMode)) { setQueued(null); if (stoppedAt) setSteerMarks((marks) => [...marks, { id: stoppedAt, sent: false, from: messages.length }]); }
+    if (submit(text, queuedToolMode)) { setQueued(null); if (steer) { setSteerDelivery({ text, from: messages.length, scope: steerScope }); if (steerFocus.current && (document.activeElement === steerFocus.current || document.activeElement === document.body)) textareaRef.current?.focus({ preventScroll: true }); steerFocus.current = null; } if (stoppedAt) setSteerMarks((marks) => [...marks, { id: stoppedAt, sent: false, from: messages.length }]); }
     else {
       setQueuedPaused(true);
       setImgNote(note => note ?? '메시지를 보내지 못해 보관했습니다. 준비가 끝나면 보관한 메시지의 보내기를 눌러 주세요.');
@@ -1032,6 +1157,32 @@ export function ChatPanel(props: Props) {
     const last = lastImport; if (!last) return;
     setDraft((d) => (canUndoImport(d, last) ? last.before : d));
     if (canUndoImport(snapshot.current.text, last)) { setImports((refs) => dropImportRef(refs, last)); setLastImport(null); }
+  };
+
+  /**
+   * CGP-CHAT-R-029 — the queued item's ×: as before, its text goes back to the draft (never away), and
+   * 되돌리기 queues it again exactly as it was, while the draft is untouched and the turn it waits for is
+   * still running (a paused item waits for nothing). A mismatched tool mode only pauses: nothing is removed.
+   */
+  const cancelQueued = () => {
+    if (queued === null) return;
+    if (draft.trim() && toolMode !== queuedToolMode) { restoreQueuedToDraft(); return; }
+    const before = { parts: draftParts, queued, queuedToolMode, toolMode, paused: queuedPaused };
+    const text = draftAfterStop(draft, queued);
+    const after: DraftPart[] = text === draft ? draftParts : [{ text }];
+    setDraftParts(after);
+    setToolMode(queuedToolMode);
+    setQueued(null); setQueuedPaused(false);
+    const valid = () => undoSubject.current.draftParts === after && undoSubject.current.queued === null && (before.paused || undoSubject.current.streaming);
+    offerUndo({
+      kind: 'queued', scope: undoScope,
+      undo: () => {
+        if (!valid()) return;
+        setDraftParts(before.parts); setToolMode(before.toolMode);
+        setQueued(before.queued); setQueuedToolMode(before.queuedToolMode); setQueuedPaused(before.paused);
+      },
+      stillValid: valid,
+    });
   };
 
   /** Stop / cancel-reservation: the parked text goes back to the draft, never away. */
@@ -1114,21 +1265,25 @@ export function ChatPanel(props: Props) {
   // next turn instead of pasting raw text. A normal text paste falls through
   // to the textarea default (we only preventDefault when we found image data).
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (!imagePasteEnabled && !imageFilesEnabled) return;          // text-only cohort — let default text paste happen
-    const items = e.clipboardData?.items;
-    if (!items) return;
+    if (folderMissing) { e.preventDefault(); return; }
+    if (unavailable || composing) return;
     const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      if (it.kind === "file" && it.type.startsWith("image/")) {
-        const f = it.getAsFile();
-        if (f) imageFiles.push(f);
-      }
+    if (imagePasteEnabled || imageFilesEnabled) for (const item of Array.from(e.clipboardData?.items ?? [])) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) { const file = item.getAsFile();if (file) imageFiles.push(file); }
     }
-    if (imageFiles.length === 0) return;     // plain text paste — let default happen
+    if (imageFiles.length) {
+      e.preventDefault();
+      if (imageFilesEnabled) stagePhotoFiles(imageFiles);else attachImageFiles(imageFiles);
+      return;
+    }
+    const text = e.clipboardData.getData('text/plain');
+    if (!longPaste(text)) return;
     e.preventDefault();
-    if (imageFilesEnabled) stagePhotoFiles(imageFiles);
-    else attachImageFiles(imageFiles);
+    const start = e.currentTarget.selectionStart, end = e.currentTarget.selectionEnd;
+    const next = replaceVisible(draftParts, start, end, { id: ++pasteId.current, text });
+    if (fullDraft(next).length > 200000) { setImgNote('입력할 수 있는 글의 길이를 넘었어요. 글을 나누어 붙여넣어 주세요.');return; }
+    lastReplyChoice.current = null;setDraftParts(next);
+    requestAnimationFrame(() => { textareaRef.current?.focus();textareaRef.current?.setSelectionRange(start, start); });
   };
 
   // #384 — drag a screenshot file from Finder/desktop straight onto the input.
@@ -1183,6 +1338,7 @@ export function ChatPanel(props: Props) {
     );
   }
   const handleDragOver = (e: React.DragEvent<HTMLElement>) => {
+    if (folderMissing) { e.preventDefault(); return; }
     if (!imagePasteEnabled && !imageFilesEnabled) return;
     if (!Array.from(e.dataTransfer.items ?? []).some((it) => it.kind === "file")) return;
     e.preventDefault();
@@ -1190,6 +1346,7 @@ export function ChatPanel(props: Props) {
   };
   const handleDragLeave = () => setDragActive(false);
   const handleDrop = (e: React.DragEvent<HTMLElement>) => {
+    if (folderMissing) { e.preventDefault(); setDragActive(false); return; }
     if (!imagePasteEnabled && !imageFilesEnabled) return;
     const files = Array.from(e.dataTransfer.files ?? []).filter(imageFilesEnabled ? () => true : (f) => f.type.startsWith("image/"));
     if (files.length === 0) { setDragActive(false); return; }
@@ -1199,20 +1356,83 @@ export function ChatPanel(props: Props) {
     else attachImageFiles(files);
   };
 
-  /** D-028 — the × on a staged photo: it was never sent, so the host deletes the file. */
+  /**
+   * D-028 — the × on a staged photo: it was never sent, so the host deletes the file. CGP-CHAT-R-029: a
+   * staged (ready) photo is deleted only when its 되돌리기 offer ends; 되돌리기 puts the same chip back.
+   * A photo still being prepared or refused is deleted at once (there is no settled state to restore).
+   */
   const removeStagedPhoto = (id: string) => {
+    const before = stagedPhotos, photo = before.find(p => p.id === id);
+    const source = photoSources.current.get(id);
     photoSources.current.delete(id);
     discardedPhotos.current.add(id);
-    postToHost({ type: "discardStagedImage", stageId: id });
-    setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
+    const after = before.filter((p) => p.id !== id);
+    const undoable = !!photo && photo.ready && !photo.error && !photo.repick;
+    if (!undoable) postToHost({ type: "discardStagedImage", stageId: id });
+    setStagedPhotos(after);
     setImgNote(null);
+    if (undoable) offerUndo({
+      kind: 'photo', scope: undoScope,
+      undo: () => {
+        if (undoSubject.current.stagedPhotos !== after) return;
+        discardedPhotos.current.delete(id);
+        if (source) photoSources.current.set(id, source);
+        setStagedPhotos(before);
+      },
+      stillValid: () => undoSubject.current.stagedPhotos === after,
+      onExpire: () => postToHost({ type: "discardStagedImage", stageId: id }),
+    });
     if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
   };
 
   const removePendingImage = (idx: number) => {
-    setPendingImages((prev) => prev.filter((_, i) => i !== idx));
+    const before = pendingImages;
+    if (idx < 0 || idx >= before.length) return;
+    const after = before.filter((_, i) => i !== idx);
+    setPendingImages(after);
     setImgNote(null);
+    // CGP-CHAT-R-029 — the same image back at the same place, while nothing else changed the list.
+    offerUndo({
+      kind: 'image', scope: undoScope,
+      undo: () => { if (undoSubject.current.pendingImages === after) setPendingImages(before); },
+      stillValid: () => undoSubject.current.pendingImages === after,
+    });
     if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
+  };
+
+  /** CGP-CHAT-R-029 — a host-held chip (work-folder file, page): the host keeps it under `undoId`, unsent. */
+  const removeFileAttachment = () => {
+    const file = props.fileAttachment, remove = props.onRemoveFileAttachment;
+    if (!file || !remove) return;
+    const undoId = newUndoId();
+    remove(undoId);
+    offerUndo({
+      kind: 'file', scope: undoScope, hostUndoId: undoId,
+      undo: () => postToHost({ type: 'restoreFileContext', undoId }),
+      stillValid: () => !undoSubject.current.file || undoSubject.current.file === file,
+    });
+  };
+  const removePageAttachment = () => {
+    const page = props.pageAttachment, remove = props.onRemovePageAttachment;
+    if (!page || !remove) return;
+    const undoId = newUndoId();
+    remove(undoId);
+    offerUndo({
+      kind: 'page', scope: undoScope, hostUndoId: undoId,
+      undo: () => postToHost({ type: 'restorePageContext', undoId }),
+      stillValid: () => !undoSubject.current.page || undoSubject.current.page === page,
+    });
+  };
+  const removePaste = (id: number) => {
+    const before = draftParts, after = changePaste(before, id, null);
+    setDraftParts(after);
+    // CGP-CHAT-R-029 — the folded paste back in its place, until the draft is edited.
+    offerUndo({
+      kind: 'paste', scope: undoScope,
+      undo: () => { if (undoSubject.current.draftParts === after) setDraftParts(before); },
+      stillValid: () => undoSubject.current.draftParts === after,
+    });
+    requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
   const handleReplyChoice = (answer: string, focusComposer = true) => {
@@ -1248,6 +1468,18 @@ export function ChatPanel(props: Props) {
     if (!reserveRecovery(chip, [], 'auto')) return;
     if (!sendWhenOnline(() => { setWorldPending(true); props.onSend(chip); }, 'press')) return;
     setRollExpand(null);
+  };
+
+  /**
+   * CGP-ART-R-006 — "{n}개 바꿔 달라고 하기" sends the learner's chosen values as their own message,
+   * verbatim, like a friend button: the draft is left alone. The host adds the element block and
+   * the structured request (property, old value, new value) that the chip already showed.
+   */
+  const handleStyleTweakSend = (text: string) => {
+    if (busy || props.sendLocked || !text) return;
+    if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; }
+    if (!reserveRecovery(text, [], 'auto')) return;
+    sendWhenOnline(() => props.onSend(text), 'press');
   };
 
   const handleRollClick = () => {
@@ -1302,17 +1534,41 @@ export function ChatPanel(props: Props) {
     ux.suggestions.follow_up.length > 0;
   // #414 — if a real activity log showed up this turn, the spinner does not invent fake stages.
   const turnHasActivity = hasActivityThisTurn(messages);
-  const longStep = streaming ? activeLongStep(messages) : null;
+  const longStep = streaming ? runningProgressStep(messages) : null;
   // Personal chat offers retry on the latest coach answer only.
   const latestAssistantId = [...visibleAttempts(messages).items].reverse().find(m => m.role === 'assistant')?.id;
   // CGP-CHAT-R-002 — one version per prompt is drawn; "수정" sits on the latest prompt only, and
   // never while a turn runs, a message waits in the queue or recovery list, or in instructor mode.
   const attempts = visibleAttempts(messages);
   const shown = visibleVersions(attempts.items, versionChoice);
+  // CGP-SHELL-R-020 — example ideas only after a no-idea answer to a goal question, never on the first
+  // screen (that needs a learner message), never in a lesson or the instructor console, never mid-turn,
+  // and never mid-work (the task must be at its start: no tool work, no artifact, an early conversation).
+  const ideaOffer = personalWorkspace && !props.instructor && !streaming
+    ? ideaOfferFor(shown.items, config?.profile?.welcome?.greeting_md ?? "", (text) => replyChoices(text) !== null,
+      // Ideas are for starting a project: a picked surface, an open world or a publish means work exists.
+      !!config?.taskWorkspace?.sourceSelection || props.openWorldId !== null || props.publish !== null) : null;
+  const ideaKey = ideaOffer ? ideaOfferKey(activityId, taskId, ideaOffer.messageId) : null;
+  const showIdeas = !!ideaKey && !dismissedIdeas.includes(ideaKey);
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — derived from the conversation each render; -1 when nothing is left out.
   const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
+  // CGP-CHAT-R-023 — read-only step dividers where the served step changes, and the "지금 단계로" target: the
+  // divider of the step on screen (the rail's step, the first step when none is picked). Learner seats only.
+  const servedLesson = props.instructor ? null : config?.profile?.lesson ?? null;
+  const dividers = stepDividers(shown.items, servedLesson ? props.stepMarks : null);
+  const stepOnScreen = servedLesson ? (servedLesson.content.steps.find(s => s.id === currentStepId) ?? servedLesson.content.steps[0])?.id ?? null : null;
+  // CGP-CHAT-R-028 — the "내 질문" list: the drawn prompts (one version each), offered from 4 on.
+  const questionList = myQuestions(shown.items);
+  const jumpTarget = currentDividerId(dividers, servedLesson?.sha256, stepOnScreen);
+  const jumpToStep = jumpTarget ? () => {
+    const box = scrollRef.current;
+    const divider = box ? [...box.querySelectorAll<HTMLElement>("[data-step-divider]")].find(el => el.dataset.stepDivider === jumpTarget) : undefined;
+    if (!box || !divider) return;
+    box.scrollTo({ top: divider.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop, behavior: scrollBehavior() });
+  } : null;
   // REQ-STUDIO-DELEGATION-ROW — a delegation is one row; its helper's tool lines are drawn inside it.
   const delegations = groupDelegations(shown.items, streaming ? props.runningStreamId ?? null : null);
+  const helperGroups = delegationGroups(delegations.rows);
   const editableId = props.onEditResend ? editableUserId(attempts.items, {
     streaming, sendPending: props.sendPending, parked: queued !== null || recovered.length > 0,
     instructor: props.instructor, locked: unavailable || !!props.sendLocked,
@@ -1359,7 +1615,7 @@ export function ChatPanel(props: Props) {
   const runnerWho = runnerFace(worlds, props.openWorldId);
 
   return (
-    <div
+    <CopyFeedbackRegion><div
       className={`hps-shell${dragActive ? " hps-shell-drag" : ""}`}
       data-chat-detail={personalWorkspace ? 'personal' : undefined}
       data-text-size={normalizeTextSize(config?.textSize) === 'base' ? undefined : normalizeTextSize(config?.textSize)}
@@ -1370,12 +1626,17 @@ export function ChatPanel(props: Props) {
       {dragActive && (
         <div className="hps-shell-drop-overlay">여기에 놓으면 이미지가 첨부돼요 <ChatIcon kind="image" size={20} /></div>
       )}
+      {!connectivity.online && <div className="hps-offline-banner" role="status" data-testid="offline-banner" aria-atomic="true"><ChatIcon kind="plug" size={16} /><span>{OFFLINE_BANNER_TEXT}</span></div>}
       {(() => { const header = <header className="hps-header">
+        {personalWorkspace && config?.folderRestricted && <span className="hps-folder-restricted" role="note" data-hp-tooltip="이 폴더에서는 AI가 읽기만 할 수 있어요. 파일 고치기와 명령 실행은 꺼져 있어요. ‘이 폴더의 AI 권한 바꾸기’에서 다시 고를 수 있어요." aria-label="제한 모드: AI 파일 고치기와 명령 실행 꺼짐">제한 모드</span>}
         {ux.coach.naming_mode === "fixed"
           // Personal chat: a fixed name is not a control, and the one header row has no room for a
           // label that names nothing the learner can act on. It stays readable to screen readers.
           ? <strong data-hp-tooltip={`이 수업의 AI 이름: ${coachName}`} className={personalWorkspace ? "hps-coach-name hps-sr-only" : "hps-coach-name"}>{coachName}</strong>
           : <button data-hp-tooltip="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
+        {/* CGP-LEARN-R-016: the one coach run state, derived from the timeline and the approval prompts. */}
+        <CoachRunState preparing={!!props.sendPending} running={streaming || !!props.verifyRunning} approvalPending={!!props.progressApprovalPending}
+          error={!!error} unavailable={unavailable || !connectivity.online} lastOutcome={props.lastOutcome ?? null} messages={messages} />
         {/* US-05 (P0): the work screen's top names the current activity and whether it is a trial or a
             class. Personal chat has no mission header (#1760), so the line that header carried moves
             into this row with the same `현재 활동` label (the a11y contract in MissionHeader.tsx). The
@@ -1392,6 +1653,7 @@ export function ChatPanel(props: Props) {
             end_card and opens the pass list). A link, not a Primary: no count, no pressure (CU-13). */}
         {freeEnded && props.onTrialEndCardPasses && <button type="button" className="hps-header-passes" onClick={props.onTrialEndCardPasses}>이용권 살펴보기</button>}
         {entry && <button className="hp-capability-reopen" type="button" aria-expanded={entryOpen} onClick={() => setReopenedCapabilities(entry.id)}>AI 안내</button>}
+        <MyQuestions items={questionList} scrollRoot={scrollRef} scope={JSON.stringify([activityId, taskId])} onBeforeJump={viewport.pauseFollowing} />
         <AccessHeader config={config} onOpenDetail={() => openPreferences(true)} />
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
@@ -1440,7 +1702,11 @@ export function ChatPanel(props: Props) {
           <button onClick={props.onSetToken} data-hp-tooltip="연결된 활동 확인 및 변경">
             활동 변경
           </button>
+          {personalWorkspace && !props.instructor && taskAppearance.open && <button type="button" className="tw-task-appearance" onClick={taskAppearance.open} data-hp-tooltip="목록에서 이 작업을 찾기 쉽게 표시를 붙여요">{TASK_APPEARANCE_LABEL}</button>}
+          {personalWorkspace && !props.instructor && <button type="button" className="tw-copy-conversation" onClick={() => { void conversationCopy.copy(); }} disabled={props.streaming || !conversationCopy.available} data-hp-tooltip="이 작업의 대화를 글로 복사해요">{COPY_CONVERSATION_LABEL}</button>}
           <button onClick={props.onClear} disabled={props.streaming} data-hp-tooltip="대화 기록 지우기">대화 지우기</button>
+          {/* CGP-CHAT-R-025 — hide this task from the list; its conversation, draft and records stay. Personal tasks only. */}
+          {personalWorkspace && !props.instructor && <button type="button" className="tw-archive-task" onClick={() => postToHost({ type: 'taskArchive' })} disabled={props.streaming} data-hp-tooltip="목록에서 숨기고 대화는 그대로 둬요">보관하기</button>}
           {/* Personal chat: usage opens the settings dialog on its usage section (the remaining line
               already shows the count). */}
           {personalWorkspace && config?.access && <button onClick={() => openPreferences(true)} data-hp-tooltip="이용권과 사용량 확인">이용권 · 사용량</button>}
@@ -1448,12 +1714,13 @@ export function ChatPanel(props: Props) {
         </HeaderActions>
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
+      {personalWorkspace && !props.instructor && <ConversationCopyStatus state={conversationCopy.state} />}
+      {!props.instructor && <ClassWindowNotice window={config.classWindow} />}
 
       {entryOpen && entry && config?.aiCapabilities && <PanelBoundary panel="lesson-capability-entry">
-        <AiCanDo key={entry.id} items={config.aiCapabilities} solo={audience === 'solo'} expanded onNext={() => {
+        <LessonCapabilitySheet key={entry.id} items={config.aiCapabilities} solo={audience === 'solo'} onAcknowledge={() => {
           setReopenedCapabilities(null);
           postToHost({ type: "acknowledgeLessonCapabilities", id: entry.id });
-          textareaRef.current?.focus();
         }} />
       </PanelBoundary>}
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
@@ -1471,6 +1738,7 @@ export function ChatPanel(props: Props) {
         goal={goalOfLesson(studentGoal, config?.profile?.lesson)?.goal || null}
         currentStepId={currentStepId}
         onSelectStep={pickStep}
+        onJumpToStep={jumpToStep}
         onStartStep={(step) => {
           pickStep(step.id);
           const lesson = config?.profile?.lesson;
@@ -1545,8 +1813,9 @@ export function ChatPanel(props: Props) {
       {/* CGP-AGENT-R-003 — what the AI can do on this seat. Same rail, closed by default, no Primary. */}
       {!props.instructor && !entryOpen && config?.aiCapabilities && <PanelBoundary panel="ai-can-do"><AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} /></PanelBoundary>}
       <PanelBoundary panel="instructor-inbox"><InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} /></PanelBoundary>
-      {/* CGP-KNOW-R-003 — the activity's 자료 list. Same rail, closed by default, no Primary; only with the file-attach gate. */}
-      {!props.instructor && config?.materials && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
+      {/* CGP-KNOW-R-003 — the activity's 자료 list. Same rail, closed by default, no Primary; only with the file-attach gate.
+          CGP-KNOW-R-002: a task workspace draws it as the activity home's 자료 view instead (classroom seats keep it here). */}
+      {!props.instructor && config?.materials && !materialsHome && <PanelBoundary panel="materials"><MaterialsPanel /></PanelBoundary>}
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
       {!props.instructor && classroomPanels.help && <PanelBoundary panel="help-request"><HelpRequest view={help} post={postToHost} /></PanelBoundary>}
@@ -1594,7 +1863,6 @@ export function ChatPanel(props: Props) {
       {!personalWorkspace && showsObservationResults(config?.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
-      {!connectivity.online && <div className="hps-offline-banner" role="status" data-testid="offline-banner">{OFFLINE_BANNER_TEXT}</div>}
       {(previewView || previewNote) && <PanelBoundary panel="preview-recovery"><PreviewRecoveryNotice view={previewView} note={previewNote} busy={previewBusy} onAction={(action) => {
         setPreviewBusy(true); setPreviewNote(null);
         let sent = false;
@@ -1603,6 +1871,8 @@ export function ChatPanel(props: Props) {
       {/* CGP-CHAT-D-001: stable, invisible response announcements live outside the scrolling message list. */}
       <div className="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer">{liveAnnouncement}</div>
 
+      {/* CGP-CHAT-R-027: Cmd/Ctrl+F find bar, right above the conversation. */}
+      <PanelBoundary panel="chat-find">{() => <ChatFindBar scrollRef={scrollRef} scope={`${activityId ?? ""}/${taskId ?? ""}`} onReading={viewport.pauseFollowing} />}</PanelBoundary>
       <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
         {props.aiNotice && (
           // #320 — AI disclosure (Anthropic Usage Policy / ToS §D.3). Compact
@@ -1632,19 +1902,21 @@ export function ChatPanel(props: Props) {
 
         {/* CGP-CHAT-R-008: code-block wrap choices are scoped to this conversation. */}
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
-        {shown.items.map((m, i) => <Fragment key={m.id}>
+        {shown.items.map((m, i) => <TurnBoundary key={`${activityId ?? ""}/${taskId ?? ""}/${m.id}`} messageId={m.id} rawText={m.content}>{() => <Fragment>
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
-          {m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
+          {dividers.has(m.id) && <StepDivider id={m.id} label={stepDividerLabel(dividers.get(m.id)!)} />}
+          {(m.elapsedTurn || m.activity) && m.role === "system" && !m.content ? null : m.role === "tool" && m.tool?.state === "error" && storedDenialNotice(m.tool.label) ? (
             <ToolLine message={m} onReport={props.onReportProblem} />
           ) : delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
             <ContextNote text={CONTEXT_COMPACT_NOTE} />
           ) : m.role === "tool" && delegations.rows.has(m.id) ? (
-            <PanelBoundary panel="delegation"><DelegationRow
-              view={delegations.rows.get(m.id)!}
+            helperGroups.has(m.id) ? <PanelBoundary panel="delegation"><DelegationGroup
+              views={helperGroups.get(m.id)!}
+              textSize={config?.textSize}
               renderChild={(child) => child.tool?.state === "error" && storedDenialNotice(child.tool.label) ? null : <ToolLine message={child} onReport={props.onReportProblem} />}
-              // The same path as the Stop button: aborting the turn ends its helpers too.
-              onStopAll={() => { restoreQueuedToDraft(); props.onCancel(); }}
-            /></PanelBoundary>
+              stopState={props.delegationStops?.[parseDelegationId(m.id)?.stream ?? '']}
+              onStopAll={() => { const stream=parseDelegationId(m.id)?.stream;if(!stream||stream!==props.runningStreamId)return;if(props.onStopDelegations)props.onStopDelegations(stream);else {restoreQueuedToDraft();props.onCancel();} }}
+            /></PanelBoundary> : null
           ) : m.role === "tool" ? (
             <ToolLine key={m.id} message={m} onReport={props.onReportProblem} />
           ) : (
@@ -1685,11 +1957,14 @@ export function ChatPanel(props: Props) {
               onSaveEdit={(text, images) => saveEdit(m, text, images)}
               verdict={judgeable?.has(m.id) ? props.verdicts?.[m.id] ?? null : undefined}
               onVerdict={judgeable?.has(m.id) && props.onVerdict ? (next) => props.onVerdict?.(m.id, next) : undefined}
+              wikiScope={JSON.stringify([activityId, taskId])}
               onToWiki={wikiTargets?.has(m.id) && props.onAnswerToWiki ? () => props.onAnswerToWiki?.(m.id) : undefined}
               quotable={m.role === 'assistant' && !(streaming && m.id === streamingId)}
               quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
+              elapsed={m.elapsedTurn ? <ElapsedReceipt message={m} inline /> : undefined}
             />
           )}
+          {m.elapsedTurn && !answerActionRowShown(m, personalWorkspace, streaming && m.id === streamingId) && <ElapsedReceipt message={m} />}
           {!streaming && accuracyOffer?.messageId === m.id && m.role === 'assistant' && <AccuracyEducation key={`accuracy-${m.id}`} answer={m.content}
             onDismiss={() => postToHost({ type: 'accuracyEducationDismiss', messageId: m.id })} />}
           {steerMarkAfter(m.id)}
@@ -1703,20 +1978,22 @@ export function ChatPanel(props: Props) {
             const locked = streaming || !!props.sendPending || !!props.sendLocked || unavailable;
             const selected = group.attempts[group.index].user.id;
             return <div className="hps-answer-attempts">
-              <AttemptPager index={group.index} count={group.attempts.length} title={ATTEMPT_HISTORY_NOTE}
-                disabled={locked} onPage={index => props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false)} />
+              {group.root.chosenAttemptId === selected && <span className="hps-attempt-chosen">이 답변을 골랐어요</span>}
               <button type="button" className="hps-attempt-choose" disabled={locked || !group.attempts[group.index].lines.some(line => line.role === "assistant" && line.content.trim())}
                 aria-pressed={group.root.chosenAttemptId === selected}
-                onClick={() => props.onSelectAttempt?.(group.root.id, selected, true)}>이걸 쓸래요</button>
+                onClick={() => { viewport.pauseFollowing(); props.onSelectAttempt?.(group.root.id, selected, true); }}>이걸 쓸래요</button>
+              <AttemptPager index={group.index} count={group.attempts.length} title={ATTEMPT_HISTORY_NOTE}
+                disabled={locked} onPage={index => { viewport.pauseFollowing(); props.onSelectAttempt?.(group.root.id, group.attempts[index].user.id, false); }} />
             </div>;
           })()}
-          </Fragment>)}
+          </Fragment>}</TurnBoundary>)}
         </CodeBlockScope>
 
-        {/* REQ-STUDIO-LONG-STEP-HINT (CGP-ART-R-019) — one calm hint under a tool step running 20 s+. */}
-        {longStep && <PanelBoundary key={`${longStep.id}@${longStep.since}`} panel="long-step"><LongStepHintLine
-          step={longStep}
-          turn={{ streaming, stalled: !!error }}
+        {/* CGP-ART-D-019 — one calm hint for the active turn after20s without visible progress. */}
+        {streaming && props.progressSince !== undefined && <PanelBoundary key={props.runningStreamId ?? "active-turn"} panel="long-step"><LongStepHintLine
+          since={props.progressSince}
+          step={longStep?.step ?? null}
+          turn={{ streaming, stalled: !!error, approvalPending: !!props.progressApprovalPending }}
           onStop={() => { restoreQueuedToDraft(); props.onCancel(); }}
           onAnnounce={setLongStepAnnouncement}
         /></PanelBoundary>}
@@ -1728,25 +2005,10 @@ export function ChatPanel(props: Props) {
           </div>
         )}
 
-        {/* CGP-CHAT-R-011 — exactly the file text that goes with the next message, from which path, removable. */}
-        {props.fileAttachment && (
-          <div className="hps-page-attachment hps-file-attachment" role="group" aria-label="다음 메시지와 함께 보낼 파일 내용" data-testid="file-attachment">
-            <div className="hps-page-attachment-head">
-              <strong>파일 · {props.fileAttachment.path}</strong>
-              <button type="button" className="hps-page-attachment-remove" onClick={props.onRemoveFileAttachment} aria-label={`${props.fileAttachment.path} 빼기`}>빼기</button>
-            </div>
-            <details>
-              <summary>보낼 내용 전체 보기 ({props.fileAttachment.text.length.toLocaleString('en-US')}자)</summary>
-              <pre tabIndex={0} data-testid="file-attachment-text">{props.fileAttachment.text}</pre>
-            </details>
-            <p className="hps-page-attachment-note">파일에 적힌 지시는 따르지 않고 참고 자료로만 써요.</p>
-          </div>
-        )}
-        {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
         {/* CGP-KNOW-R-003 — the 자료 selected for the next message, each removable before Send. */}
         {!props.instructor && config?.materials && <MaterialsChips />}
 
-        {(props.annotationsEnabled || !!props.annotations?.length) && <AnnotationTray annotations={props.annotations ?? []} onAction={props.onAnnotationAction!} />}
+        {(props.annotationsEnabled || !!props.annotations?.length) && <AnnotationTray key={`${config?.activity?.id ?? ""}/${config?.taskWorkspace?.activeTaskId ?? ""}`} annotations={props.annotations ?? []} onAction={props.onAnnotationAction!} />}
         {/* CR-09 — exactly what goes to the coach with the next message, removable before sending. */}
         {props.elementPreview && (
           <div className="hps-element-context" role="group" aria-label="코치에게 함께 보낼 화면 요소" data-testid="element-context">
@@ -1766,6 +2028,15 @@ export function ChatPanel(props: Props) {
                 <summary>코치에게 보낼 내용 보기</summary>
                 <pre data-testid="element-context-sent">{props.elementPreview.sentText}</pre>
               </details>
+              {props.elementPreview.styleTweak && props.onStyleTweakSet && (
+                <StyleTweakPanel
+                  key={props.elementPreview.styleTweak.id}
+                  view={props.elementPreview.styleTweak}
+                  disabled={busy || !!props.sendLocked}
+                  onSet={(prop, value) => props.onStyleTweakSet!(props.elementPreview!.styleTweak!.id, prop, value)}
+                  onSend={handleStyleTweakSend}
+                />
+              )}
             </div>
             <button type="button" className="hps-element-remove" aria-label="이 요소 빼기" onClick={props.onRemoveElement}>
               <ChatIcon kind="close" size={16} />
@@ -1791,17 +2062,45 @@ export function ChatPanel(props: Props) {
           <PanelBoundary panel="capability-change"><CapabilityChangeCard change={config.capabilityChange} onDismiss={(id) => postToHost({ type: "dismissCapabilityChange", id })} /></PanelBoundary>
         )}
 
+        {/* CGP-ART-R-020 — what the AI did in this task, from its tool events only. */}
+        <PanelBoundary panel="task-activity"><TaskActivity
+          summary={taskActivity}
+          reviewPaths={new Set(!props.instructor && turnReview?.state === "open" ? [...turnReview.added, ...turnReview.changed] : [])}
+          onShowReview={(path) => { if (turnReview) setReviewFocus((f) => ({ path, seq: (f?.seq ?? 0) + 1, turnId: turnReview.turnId })); }}
+        /></PanelBoundary>
+
         {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
         {!props.instructor && turnReview && (
           <PanelBoundary panel="turn-review"><TurnReviewBar
             view={turnReview}
+            focus={reviewFocus?.turnId === turnReview.turnId ? reviewFocus : null}
             onRevert={(path) => postToHost({ type: "turnRevert", turnId: turnReview.turnId, ...(path === undefined ? {} : { path }) })}
             onKeep={() => postToHost({ type: "turnKeep", turnId: turnReview.turnId })}
             onClose={() => postToHost({ type: "turnReviewClose", turnId: turnReview.turnId })}
+            onCheckpointSave={(message) => postToHost({ type: "checkpointSave", turnId: turnReview.turnId, message })}
           /></PanelBoundary>
         )}
 
-        {showFollowUpChips && (
+        {showIdeas && ideaKey && <PanelBoundary panel="project-ideas">{() => <ProjectIdeas
+          ideas={PROJECT_IDEAS.slice(0, PROJECT_IDEAS_MAX)}
+          // Shown as chosen only while its sentence is still in the composer (the learner may have edited it away).
+          picked={PROJECT_IDEAS.find((idea) => draft.includes(idea.prompt))?.id ?? null}
+          // Mid-IME composition, a read-only (missing folder) draft, or a seat that cannot send: picks are inert.
+          disabled={frozen || unavailable || folderMissing || composing || !!props.sendLocked || !!props.sendPending}
+          onPick={(idea) => {
+            if (composing || folderMissing) return;
+            // Same ownership rule as reply choices: prepares an editable draft, keeps manual text, never sends.
+            handleReplyChoice(idea.prompt);
+          }}
+          onOwn={() => {
+            const next = withIdeaDismissal(dismissedIdeas, ideaKey);
+            setDismissedIdeas(next);
+            patchWebviewState({ [PROJECT_IDEAS_STATE_KEY]: next });
+            textareaRef.current?.focus({ preventScroll: true });
+          }}
+        />}</PanelBoundary>}
+
+        {showFollowUpChips && !showIdeas && (
           <ChipRack
             chips={ux.suggestions.follow_up}
             onPick={handleChip}
@@ -1817,9 +2116,9 @@ export function ChatPanel(props: Props) {
           onTakeaway={props.config?.workTakeawayEnabled ? () => postToHost({type:'workTakeaway'}) : undefined}
           onRecover={() => { props.onDismissError(); postToHost({type:'refreshAccess'}); }}
           onSupport={props.onReportProblem} onToken={() => postToHost({type:'setToken'})}>
-          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
+          {audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses && <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} />}
         </ActivityStatus> : error && audience === 'solo' && props.trialEndCard && props.onTrialEndCardPasses ? (
-          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
+          <PanelBoundary panel="trial-end" blocking><TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} continuationDraft={draft} allowPersonalClaude={personalWorkspace && config?.profile?.profile_id === "studio-open-trial" && config?.profile?.minor_cohort !== true} onDismiss={() => { postToHost({ type: "trialEndCardDismiss" }); props.onDismissError(); }} /></PanelBoundary>
         ) : error && (
           <ErrorBanner
             message={error}
@@ -1849,13 +2148,14 @@ export function ChatPanel(props: Props) {
       <footer className="hps-input-area">
         {!props.instructor && config?.profile?.lesson && <PanelBoundary panel="goal-status">{() => <GoalStatusBar
           config={config} view={goalOfLesson(studentGoal, config.profile!.lesson)}
-          pending={goalPending} onSave={sendGoalSave} />}</PanelBoundary>}
+          pending={goalPending} note={goalNote} onSave={sendGoalSave} />}</PanelBoundary>}
 
+        {lowDisk && <LowDiskBar notice={lowDisk} />}
         {props.refusal && <RefusalBanner onDismiss={() => {
           props.onDismissRefusal?.();
           textareaRef.current?.focus({ preventScroll: true });
         }} />}
-        {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment} />}
+        {props.pageAttachment && <PageAttachment attachment={props.pageAttachment} onRemove={props.onRemovePageAttachment ? removePageAttachment : undefined} />}
         {/* CGP-KNOW-R-020: failure rows live in the footer (never inside the shrinking message list), so the reason stays readable. */}
         <AttachmentFailures items={attachmentSend.failures} retry={attachmentSend.retry} remove={id=>{
           const file=attachmentSend.remove(id);
@@ -1871,7 +2171,6 @@ export function ChatPanel(props: Props) {
         {personalWorkspace && accessNeedsAttention && <div className="hps-notice-caution hps-access-attention" role="status">
           <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
-        {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} /></PanelBoundary>}
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read
@@ -1918,6 +2217,7 @@ export function ChatPanel(props: Props) {
             </span> : <button type="button" className="hps-queued-send" onClick={() => setDiscardRequest(request)}>삭제</button>}
           </div>)}
         </div>}
+        {steerDelivery?.scope === steerScope && <SteerDelivery key={`${steerDelivery.scope}:${steerDelivery.from}`} delivery={steerDelivery} messages={messages} streamFor={props.streamFor} streaming={streaming} sendPending={props.sendPending} onDone={clearSteerDelivery} />}
         {queued !== null && (
           // #416 — what is parked, and how to take it back. Cancel returns it to
           // the draft (see restoreQueuedToDraft): the × must not mean "delete".
@@ -1938,7 +2238,7 @@ export function ChatPanel(props: Props) {
             <button
               type="button"
               className="hps-queued-cancel"
-              onClick={restoreQueuedToDraft}
+              onClick={cancelQueued}
               data-hp-tooltip="예약 취소 — 입력창으로 되돌려요"
               aria-label={queuedPaused ? "보관한 메시지 입력창으로 가져오기" : "예약 취소"}
             >
@@ -1946,6 +2246,27 @@ export function ChatPanel(props: Props) {
             </button>
           </div>
         )}
+        {/* CGP-SHELL-R-035 — never drawn while a turn runs or a send (chat or rehearsal) is pending; drawing it is the "seen" record. */}
+        {whatsNew.show && whatsNew.notes && !streaming && !props.sendPending && rehearsalResult?.state !== 'sending' && <WhatsNewPanel notes={whatsNew.notes} onDismiss={() => {
+          dismissWhatsNew();
+          requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+        }} />}
+        {/* CGP-CHAT-R-021 — at most one tip, from the served step's Chalk-authored hint only. Hidden while a turn runs. */}
+        {lessonTip && !streaming && !props.sendPending && !dismissedTips.includes(lessonTip.key) && <PanelBoundary panel="lesson-tip">{() => <LessonTip
+          tip={lessonTip}
+          disabled={frozen || unavailable || !!props.sendLocked || folderMissing}
+          onUse={() => {
+            if (streaming || frozen || unavailable || props.sendLocked || props.sendPending || folderMissing) return;
+            setDraft(current => prefillWithTip(current, lessonTip.text));
+            requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+          }}
+          onDismiss={() => {
+            const next = withDismissed(dismissedTips, lessonTip.key);
+            setDismissedTips(next);
+            patchWebviewState({ [LESSON_TIP_STATE_KEY]: next });
+            requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+          }}
+        />}</PanelBoundary>}
         {preparingImages > 0 && (
           <div className="hps-image-preparing" role="status">이미지 {preparingImages}장을 준비하고 있어요. 준비가 끝나면 보낼 수 있어요.</div>
         )}
@@ -1989,39 +2310,77 @@ export function ChatPanel(props: Props) {
             <div className="hps-img-note">보내면 작업 폴더의 images 폴더에 저장돼요.</div>
           </>
         )}
+        {draftParts.some(part => part.id !== undefined) && <div className="hps-pasted-list" aria-label="붙여넣은 글 목록">
+          {draftParts.filter(part => part.id !== undefined).map(part => <PastedDraft key={part.id} part={part} disabled={unavailable || folderMissing}
+            onChange={text => {
+              if (draft.length - part.text.length + text.length > 200000) { setImgNote('입력할 수 있는 글의 길이를 넘었어요.');return; }
+              setDraftParts(previous => changePaste(previous, part.id!, text));
+            }}
+            onRemove={() => removePaste(part.id!)}
+            onInline={() => { setDraftParts(previous => changePaste(previous, part.id!, part.text, true));requestAnimationFrame(() => textareaRef.current?.focus()); }} />)}
+        </div>}
+        {/* CGP-CHAT-D85 — bottom of the chat pane, directly above the composer. */}
+        <UndoToast scope={undoScope} composer={() => textareaRef.current} />
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
-          data-expanded={personalWorkspace ? composerExpanded : undefined}
+          data-expanded={personalWorkspace ? composerExpanded && !folderMissing : undefined}
+          data-file-context={!folderMissing && (props.fileAttachment || props.fileAttachNotice) ? "true" : undefined}
+          data-folder-missing={folderMissing || undefined}
           onMouseDown={event => composerSurfacePress(event, textareaRef.current)}
         >
-          {personalWorkspace && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} />}
+          {folderMissing && missingFolder && <PanelBoundary panel="missing-folder" blocking><MissingFolderNotice notice={missingFolder} onRepick={() => postToHost({ type: "missingTaskFolderRepick" })} onRecheck={() => postToHost({ type: "missingTaskFolderRequest" })} /></PanelBoundary>}
+          {folderMissing && <span id="missing-folder-draft-label" className="hps-missing-folder-draft-label">작성 중인 내용 · 읽기 전용</span>}
+          {/* CGP-CHAT-D06: the refusal text sits directly under the chip row, inside the composer card.
+              CGP-AGENT-D-024: in read-only folder recovery nothing can be sent, so pending file chips are not shown. */}
+          {!folderMissing && (props.fileAttachment || props.fileAttachNotice) && <div className="hps-file-context-stack">
+            {props.fileAttachment && <FileContextChip file={props.fileAttachment} onRemove={props.onRemoveFileAttachment ? removeFileAttachment : undefined} />}
+            {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
+          </div>}
+          {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
-          {!personalWorkspace && fileAttachShown && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={props.onAttachFile} webSearchItem={false} />}
+          {!personalWorkspace && (fileAttachShown || sketchAllowed) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} />}
+          {/* CGP-CHAT-D-018: the @ file list floats above the composer card, anchored at the @ that opened it. */}
+          {fileMentions.view}
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
           <textarea
             ref={textareaRef}
             autoFocus
-            readOnly={unavailable}
-            aria-label={composerLabel(coachName)}
-            aria-describedby={[freeEnded ? "hps-free-ended-note" : '', personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
-            value={draft}
+            readOnly={unavailable || folderMissing}
+            aria-label={folderMissing ? "보관한 초안 (읽기 전용)" : composerLabel(coachName)}
+            aria-describedby={[freeEnded ? "hps-free-ended-note" : '', folderMissing ? "missing-folder-draft-label" : personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
+            aria-autocomplete={config?.fileMentions ? "list" : undefined}
+            aria-controls={fileMentions.open ? fileMentions.listId : undefined}
+            aria-activedescendant={fileMentions.activeId}
+            onSelect={event => fileMentions.setCaret(event.currentTarget.selectionStart)}
+            onBlur={fileMentions.blur}
+            value={composerText}
             onChange={(e) => {
+              if (folderMissing) return;
               // Manual edits own the entire draft, even if it ends with an old choice.
               lastReplyChoice.current = null;
-              setDraft(e.target.value);
+              const value = e.target.value;setDraftParts(previous => editVisible(previous, value));fileMentions.setCaret(e.target.selectionStart);
             }}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
             onKeyDown={(e) => {
               const isComposing = imeComposing(e, composing);
+              if (!isComposing && fileMentions.keyDown(e)) return;
               // CGP-DS-R-027: composition keys stay with the IME and never reach the panel,
               // workspace or menu handlers above (Escape would close the sources panel).
               if (isComposing) { e.stopPropagation(); return; }
+              // Remove only the queued file at the caret's start; preserve the draft and selection edits.
+              if (e.key === "Backspace" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
+                && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0
+                && props.fileAttachment && props.onRemoveFileAttachment) {
+                e.preventDefault();
+                removeFileAttachment();
+                return;
+              }
               // Composing Hangul: Enter commits the syllable, it must never
               // send. Unchanged from before — typing mid-turn does not make the
               // IME any less load-bearing.
-              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable) return;
+              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable || folderMissing) return;
               e.preventDefault();
               if (imagePreparationBlocksSend()) return;
               // Roll-expand owns Enter while it is open (idle-only flow).
@@ -2059,10 +2418,10 @@ export function ChatPanel(props: Props) {
             }
             rows={personalWorkspace ? 1 : 3}
           />
-          {personalWorkspace && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
-          <div className="hps-input-buttons">
-            {personalWorkspace && <span id="personal-composer-hint" className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
-            {!streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
+          {personalWorkspace && !folderMissing && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
+          {(!folderMissing || streaming) && <div className="hps-input-buttons">
+            {personalWorkspace && !folderMissing && <span id="personal-composer-hint" className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
+            {!folderMissing && !streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
               <button
                 onClick={handleRollClick}
                 disabled={!draft.trim()}
@@ -2107,13 +2466,22 @@ export function ChatPanel(props: Props) {
                 {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             )}
-          </div>
+          </div>}
         </div>
         <AttachmentFailureNotice items={composerFailures} fallback={props.fileAttachError}/>
+        <CopyFeedbackOutlet />
       </footer>
+      {sketchOpen && <SketchDialog scope={JSON.stringify([activityId,taskId])} allowed={sketchAllowed} onClose={() => setSketchOpen(false)} onAttach={png => {
+        if (!sketchAllowedRef.current || imageCount.current >= MAX_IMAGES) return false;
+        imageCount.current++;setPendingImages(previous => [...previous,png]);setImgNote('그림을 작업 폴더의 assets에 저장하고 붙였어요. 보내기를 누르면 함께 보내요.');return true;
+      }} />}
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
+        <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
+        <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
+        <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
       </ChatPreferences>}
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
         {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}
@@ -2131,12 +2499,19 @@ export function ChatPanel(props: Props) {
             <span>{TEXT_SIZE_LABELS[size]}</span>
           </label>)}
         </fieldset>
+        {config.learnerNickname && <NicknameSetting key={config.activity?.id ?? ''} saved={config.learnerNickname.value} post={postToHost} />}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
+        {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
+        <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
+        <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
+        <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
         </>}</PanelBoundary>
       </ChatPreferences>}
-    </div>
+      <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} opener={() => shortcutsOpener.current} />
+      <WhatsNewSheet open={whatsNewSheetOpen} notes={whatsNew.notes} loaded={whatsNew.loaded} onClose={() => setWhatsNewSheetOpen(false)} opener={() => shortcutsOpener.current} />
+    </div></CopyFeedbackRegion>
   );
 }
 
@@ -2149,6 +2524,26 @@ export function ChatPanel(props: Props) {
  * REQ-STUDIO-UI-POLISH-1: closed by default (R-032 opens the first lesson entry), with a one-line summary that already says how many of the
  * listed things the AI does here ("6가지 중 4가지", so the count matches the rows that open); each row is a mark, the label and one state word in the same quiet style.
  */
+function LessonCapabilitySheet({ items, solo, onAcknowledge }: { items: NonNullable<ChatConfig['aiCapabilities']>; solo: boolean; onAcknowledge: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const entryComposing = useRef(false);
+  // No opener return: this disclosure always hands focus to the preserved composer.
+  useDialogFocus(dialog, { open: true, kind: 'modal', initialFocus: '.hp-capability-next', opener: () => null,
+    fallback: () => document.querySelector<HTMLTextAreaElement>('.hps-input textarea') });
+  useEffect(() => {
+    const node = dialog.current;
+    node?.showModal();
+    node?.querySelector<HTMLButtonElement>('.hp-capability-next')?.focus();
+    return () => node?.close();
+  }, []);
+  return <dialog ref={dialog} className="hp-capability-sheet" aria-label="AI 안내"
+    onCompositionStart={() => { entryComposing.current = true; }} onCompositionEnd={() => { entryComposing.current = false; }}
+    onKeyDownCapture={event => { if (imeComposing(event, entryComposing.current)) { event.preventDefault(); event.stopPropagation(); } }}
+    onCancel={event => { event.preventDefault(); if (!entryComposing.current) onAcknowledge(); }}>
+    <AiCanDo items={items} solo={solo} expanded onNext={onAcknowledge} />
+  </dialog>;
+}
+
 function AiCanDo({ items, solo, expanded, onNext }: { items: NonNullable<ChatConfig['aiCapabilities']>; solo: boolean; expanded?: boolean; onNext?: () => void }) {
   const onCount = items.filter(item => item.on).length;
   // Trial diagnosis D3: a solo seat (trial, pass, personal) has no lesson and no teacher.
@@ -2165,7 +2560,7 @@ function AiCanDo({ items, solo, expanded, onNext }: { items: NonNullable<ChatCon
       </li>)}
     </ul>
     {items.some(item => item.on && item.asks === true) && <p className="hp-rail-lesson-note">물어봐요: 확인이 필요한 동작을 하기 전에 허락을 받아요. 이미 허락했거나 확인이 필요 없는 동작은 바로 할 수 있어요.</p>}
-    {onNext && <button className="hp-capability-next" type="button" onClick={onNext}>다음</button>}
+    {onNext && <button className="hp-capability-next" type="button" onClick={onNext}>알겠어요</button>}
     <p className="hp-rail-lesson-note">{solo ? '지금 쓰는 체험·이용권에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
   </details>;
 }
@@ -2311,22 +2706,17 @@ function WorldStrip({
  * seconds through a live region is noise. The accessible route to progress is the tool
  * log in the timeline ("✍️ 고치는 중…"); this bar is a visual device laid on top of it.
  */
-/**
- * REQ-STUDIO-LONG-STEP-HINT — the hint for the one tool step that has run long. All decisions are
- * in src/longStepHint.ts; this only re-reads the clock once a second while the step runs (the host
- * sends nothing during a silent tool run, so without this ticker the hint never appears), and the
- * same element updates in place. The announcement goes to the panel's response announcer, a live
- * region mounted all along, and changes only at 20 s and 60 s; the ticking counter is not announced.
- * 멈추기 is the Stop button's path.
+/** One quiet-period hint; event receipts reset since, timer ticks never change announcements.
+ * The existing response live region speaks phase changes and the learner Stop path is reused.
  */
-function LongStepHintLine({ step, turn, onStop, onAnnounce }: { step: ActiveLongStep; turn: { streaming: boolean; stalled: boolean }; onStop: () => void; onAnnounce: (text: string) => void }) {
+function LongStepHintLine({ since, step, turn, onStop, onAnnounce }: { since: number; step: string | null; turn: { streaming: boolean; stalled: boolean; approvalPending: boolean }; onStop: () => void; onAnnounce: (text: string) => void }) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setTick((n) => n + 1), 1000);
     const stop = () => clearInterval(timer);
     return stop;
-  }, [step.id, step.since]);
-  const hint = longStepHint({ step: step.step, since: step.since, now: Date.now(), ...turn });
+  }, [since]);
+  const hint = idleTurnHint({ step, since, now: Date.now(), ...turn });
   const announce = hint?.announce ?? '';
   useEffect(() => { onAnnounce(announce); }, [announce, onAnnounce]);
   useEffect(() => {
@@ -2336,6 +2726,7 @@ function LongStepHintLine({ step, turn, onStop, onAnnounce }: { step: ActiveLong
   if (!hint) return null;
   return (
     <section className="hps-long-step" data-phase={hint.phase}>
+      <span className="hps-idle-progress-motion" aria-hidden="true"><span className="hps-idle-progress-dot">●</span></span>
       <span className="hps-long-step-text" aria-hidden="true">{hint.text}</span>
       {hint.offerStop && <span className="hps-long-step-offer">
         <span className="hps-long-step-choice" aria-hidden="true">{hint.choice}</span>
@@ -2543,11 +2934,16 @@ function ChipRack({
  * the observer (e2e/observe/watch.mjs) read activity through these selectors.
  */
 /** REQ-STUDIO-CONTEXT-TRIM-MARKER — one quiet line in the conversation (CGP-CHAT-D16): not a bubble, not a toast. */
+/** CGP-CHAT-R-023 (CGP-CHAT-D56) — a full-width hairline with the served step centred. Read-only: not focusable, no action. */
+function StepDivider({ id, label }: { id: string; label: string }) {
+  return <div className="hps-step-divider" role="separator" aria-label={label} data-step-divider={id}><span className="hps-step-divider-label" aria-hidden="true">{label}</span></div>;
+}
+
 function ContextNote({ text }: { text: string }) {
   return <div className="hps-context-note" role="note">{text}</div>;
 }
 
-function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () => void }) {
+export function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () => void }) {
   const t = message.tool;
   if (!t) return null;
   const denial = t.state === "error" ? storedDenialNotice(t.label) : null;
@@ -2562,6 +2958,13 @@ function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () =>
   // This row is a waiting indicator, never evidence that a file was changed.
   // Hide completed waits from old histories too; retain the stored timeline.
   if (message.id.startsWith('pending-') && t.state === 'done') return null;
+  const shell = t.shell ?? storedShell(t.label);
+  if (shell) return <div className={`hps-shell-row hps-tool-${t.state}`}>
+    <p className="hps-shell-purpose">{shell.purpose}</p>
+    <details open={!shell.collapsed}><summary>실행 명령 · {t.state === 'running' ? '처리 중' : t.state === 'error' ? '실패' : '완료'}</summary>
+      <pre><code>{`$ ${shell.command}`}</code></pre>{shell.folder !== undefined && <p className="hps-shell-folder">폴더: {shell.folder}</p>}
+    </details>
+  </div>;
   const thinking = /^think-\d+$/.test(message.id);
   if (thinking && t.state === 'done') {
     return (
@@ -2587,6 +2990,23 @@ function ToolLine({ message, onReport }: { message: ChatMessage; onReport: () =>
       </span>
     </div>
   );
+}
+
+/** CGP-CHAT-D-015: a personal answer's action row is that turn's status line. One predicate decides
+ * both where the row renders and where the elapsed receipt goes, so the receipt is never shown twice
+ * or dropped. */
+function answerActionRowShown(message: ChatMessage, personal: boolean, isStreamingThis: boolean): boolean {
+  return personal && message.role === 'assistant' && !isStreamingThis && !!message.content.trim();
+}
+
+/** CGP-CHAT-R-015 / CGP-CHAT-D-015: observed terminal time, secondary text. `inline` = trailing item
+ * of the answer action row; otherwise the receipt is the turn's own status line. */
+function ElapsedReceipt({ message, inline = false }: { message: ChatMessage; inline?: boolean }) {
+  const receipt = message.elapsedTurn;
+  if (!receipt) return null;
+  const text = `${elapsedWorkLabel(receipt.ms, receipt.outcome) ?? ''}${message.role === 'system' && !message.content ? ' · 답변 없음' : ''}`;
+  if (!text) return null;
+  return inline ? <span className="hps-turn-elapsed hps-turn-elapsed-inline" role="status">{text}</span> : <p className="hps-turn-elapsed" role="status">{text}</p>;
 }
 
 function MessageItem({
@@ -2621,8 +3041,10 @@ function MessageItem({
   verdict,
   onVerdict,
   onToWiki,
+  wikiScope,
   quotable = false,
   quoteAction,
+  elapsed,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -2667,9 +3089,12 @@ function MessageItem({
   onVerdict?: (next: VerdictState | null) => void;
   /** CGP-KNOW-R-004 — present on an answer that may be filed to the team brain. */
   onToWiki?: () => void;
+  wikiScope?: string;
   /** CGP-CHAT-R-007 — a finished answer whose text may be quoted, and its 인용하기 button. */
   quotable?: boolean;
   quoteAction?: ReactNode;
+  /** CGP-CHAT-D-015: the observed elapsed receipt, placed at the end of the answer action row. */
+  elapsed?: ReactNode;
 }) {
   const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
@@ -2685,7 +3110,8 @@ function MessageItem({
   const retryPrompt = canRetry ? userPromptBefore(messages, message.id) : null;
 
   return (
-    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`} {...(quotable ? { [QUOTE_ROW_ATTR]: message.id } : {})}>
+    // CGP-CHAT-R-026 — data-message-id is the task-search jump target.
+    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`} data-message-id={message.id} {...(quotable ? { [QUOTE_ROW_ATTR]: message.id } : {})} {...(message.role === 'user' ? { [MY_QUESTION_ATTR]: message.id } : {})}>
       <div className={personal ? "hps-msg-role hps-sr-only" : "hps-msg-role"}>
         {/*
           * #747 (AE-08) — if a stored name exists, use **that**. If not (rows from
@@ -2756,12 +3182,13 @@ function MessageItem({
       )}
       {/* Merge of #1814 polish and #1763: one ghost row (copy · preview · ask again), retry on the
           latest answer only and never on a free seat. */}
-      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer
+      {answerActionRowShown(message, personal, isStreamingThis) && <CopyAnswer
         content={message.content}
+        status={elapsed}
         onRun={renderable ? () => onRunCode(renderable) : undefined}
         onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined}
         verdict={onVerdict ? <VerdictButtons state={verdict ?? undefined} onChange={onVerdict} /> : undefined}
-        onToWiki={onToWiki} />}
+        onToWiki={onToWiki} wikiTurnId={message.id} wikiScope={wikiScope} />}
       {personal && onVerdict && verdict?.verdict === 'fix' && !isStreamingThis && <VerdictReasons state={verdict} onChange={onVerdict} />}
     </div>
   );
@@ -2784,6 +3211,7 @@ function CitationRack({ citations }: { citations: Citation[] }) {
           data-hp-tooltip={c.url}
         >
           <span className="hps-cit-index">[{i + 1}]</span>
+          <span className="hps-source-kind">{citationKindLabel(c.kind)}</span>
           <span className="hps-cit-title">{c.title || c.domain}</span>
           <span className="hps-cit-domain">{c.domain}</span>
         </button></span>
@@ -2907,8 +3335,11 @@ function AssistantContent({
 function CodePill({ code, personal = false, blockKey }: { code: string; personal?: boolean; blockKey?: string }) {
   const [open, setOpen] = useState(false);
   const lines = code.split("\n").length;
+  // CGP-CHAT-R-027: while collapsed, find-in-chat still counts this code and can open it.
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => (!open && root.current ? registerClosedText(root.current, code, () => setOpen(true)) : undefined), [open, code]);
   return (
-    <div className="hps-codepill">
+    <div className="hps-codepill" ref={root}>
       {/* Personal chat: a quiet disclosure in the answer's own type size, with a line icon from the
           chat's icon set instead of a colour emoji (UI audit P0-2). */}
       {personal ? <button className="hps-codepill-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
@@ -3159,6 +3590,7 @@ function UpdateBanner({
 /** Personal secondary actions share a full-size target; classroom controls keep their existing layout. */
 export function HeaderActions({ personal, taskId, children }: { personal: boolean; taskId?: string; children: import('react').ReactNode }) {
   const [open, setOpen] = useState(false);
+  const typeahead = useMenuTypeahead(open);
   const root = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -3176,18 +3608,19 @@ export function HeaderActions({ personal, taskId, children }: { personal: boolea
     (firstFocus.current === 'last' ? choices.at(-1) : choices[0])?.focus({ preventScroll: true });
   }, [personal, open]);
   if (!personal) return <div className="hps-actions">{children}</div>;
-  return <div className="hps-actions tw-chat-menu" ref={root} onBlur={event => {
+  return <div className="hps-actions tw-chat-menu" ref={root} onCompositionStart={typeahead.onCompositionStart} onCompositionEnd={event => typeahead.onCompositionEnd(event, items())} onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }} onKeyDown={event => {
-    if (!open || event.defaultPrevented || imeComposing(event)) return;
+    if (!open || event.defaultPrevented || imeComposing(event, typeahead.composing.current)) return;
     if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      typeahead.reset();
       const choices = items();
       if (!choices.length) return;
       event.preventDefault();
       const at = choices.indexOf(document.activeElement as HTMLButtonElement);
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (at + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
       choices[next].focus({ preventScroll: true });
-    }
+    } else typeahead.search(event, items());
   }}>
     <button ref={toggle} type="button" className="tw-chat-menu-toggle" aria-label="대화 메뉴" data-hp-tooltip="대화 메뉴" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} onClick={() => { firstFocus.current = 'first'; setOpen(!open); }} onKeyDown={event => {
       if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {

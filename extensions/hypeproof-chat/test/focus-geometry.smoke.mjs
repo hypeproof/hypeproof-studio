@@ -241,7 +241,8 @@ check('stylesheet order: the geometry follows the role tokens, Chalk serves the 
   assert.ok(main.indexOf('import "./tokens.css"') >= 0 && main.indexOf('import "./focusGeometry.css"') > main.indexOf('import "./tokens.css"'), 'main.tsx imports focusGeometry.css after tokens.css');
   const designTokens = readFileSync(resolve(SRC, 'designTokens.css'), 'utf8');
   const focus = readFileSync(resolve(SRC, 'focusGeometry.css'), 'utf8');
-  assert.equal(chalkTokens, designTokens + focus, 'Chalk transport = designTokens.css + focusGeometry.css');
+  const radius = readFileSync(resolve(SRC, 'radiusScale.css'), 'utf8'); // CGP-DS-R-011: the radius scale rides in the same transport
+  assert.equal(chalkTokens, designTokens + radius + focus, 'Chalk transport = designTokens.css + radiusScale.css + focusGeometry.css');
 });
 check('every overflow:auto|scroll selector in Studio and Chalk CSS sits under a scroll scope', () => {
   const geometry = postcss.parse(readFileSync(resolve(SRC, 'focusGeometry.css'), 'utf8'));

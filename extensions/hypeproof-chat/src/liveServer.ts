@@ -1,7 +1,9 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import * as http from "node:http";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { LIVERELOAD_PATH, serveStatic, staticResponseHeaders } from "./liveServerHelpers";
+import { FOLLOW_CHOICE_PATH, SSE_RELOAD, SSE_RELOAD_FOLLOW, stateMessage, type FollowState } from "./liveFollow.ts";
 
 // #278 Phase 1 — in-process live server for the "live_server" preview path.
 //
@@ -20,6 +22,10 @@ import { LIVERELOAD_PATH, serveStatic, staticResponseHeaders } from "./liveServe
 // Security: binds 127.0.0.1 only; path traversal is rejected in serveStatic;
 // every static response carries a Permissions-Policy denying camera, microphone,
 // geolocation and display capture (#1403, staticResponseHeaders).
+// Every request whose Host is not 127.0.0.1:<port> or localhost:<port> for this server's own port
+// gets 403 (DNS rebinding). The only state a page can write is the learner's 따라 보기 choice
+// (POST /__hp_follow, a boolean, at most 256 bytes, refused without this server's random token or
+// with a foreign Origin; CGP-ART-R-017).
 // Lifecycle is owned by the extension — dispose() on deactivate closes the
 // server + watcher + open SSE streams.
 
@@ -41,6 +47,9 @@ function loopbackOrigin(url: string | undefined): string | undefined {
 }
 
 export class LiveServer {
+  private readonly listeners = new Set<() => void>();
+  onChange(listener: () => void): { dispose(): void } { this.listeners.add(listener); return { dispose: () => { this.listeners.delete(listener); } }; }
+  private changed(): void { for (const listener of this.listeners) listener(); }
   private server: http.Server | undefined;
   private root: string | undefined;
   private baseUrl: string | undefined;
@@ -48,6 +57,18 @@ export class LiveServer {
   private readonly sseClients = new Set<http.ServerResponse>();
   private watcher: vscode.FileSystemWatcher | undefined;
   private reloadTimer: ReturnType<typeof setTimeout> | undefined;
+  /** CGP-ART-R-017 — a coach turn is running: file changes in the root are followed (따라 보기). */
+  private coachEditing = false;
+  /** CR-68 — sources whose browser automation is acting on the page right now. */
+  private readonly automation = new Set<string>();
+  /** A change seen while the coach was editing is waiting in the debounce. */
+  private followPending = false;
+  /**
+   * The learner's 따라 보기 choice, kept here rather than in the page's storage so page script
+   * cannot overwrite it; the page posts it with `followToken`, which only served HTML carries.
+   */
+  private learnerFollow = true;
+  private readonly followToken = randomBytes(18).toString("base64url");
 
   /**
    * REQ-STUDIO-PREVIEW-RECOVERY — addresses this Studio's preview server has served. `served` is kept across restarts
@@ -148,11 +169,38 @@ export class LiveServer {
     server.closeAllConnections();
   }
 
-  /** Push a reload to all connected browser pages. */
-  reload(): void {
+  /**
+   * Push a reload to all connected browser pages. `follow` asks the page to scroll to what
+   * changed (CGP-ART-R-017); only a file change made while a coach turn runs passes it.
+   */
+  reload(follow = false): void {
+    this.broadcast(follow ? SSE_RELOAD_FOLLOW : SSE_RELOAD);
+  }
+
+  /** The state a served page needs for 따라 보기 (embedded at serve time, then pushed on change). */
+  followState(): FollowState {
+    return { coach: this.coachEditing, automation: this.automation.size > 0, on: this.learnerFollow };
+  }
+
+  /** CGP-ART-R-017 — the host says whether a coach turn is running. */
+  setCoachEditing(on: boolean): void {
+    if (this.coachEditing === on) return;
+    this.coachEditing = on;
+    this.broadcast(stateMessage(this.followState()));
+  }
+
+  /** CR-68 — automation from `source` started or stopped acting on the page. */
+  setAutomation(source: string, on: boolean): void {
+    const before = this.automation.size > 0;
+    if (on) this.automation.add(source);
+    else this.automation.delete(source);
+    if (before !== this.automation.size > 0) this.broadcast(stateMessage(this.followState()));
+  }
+
+  private broadcast(data: string): void {
     for (const res of this.sseClients) {
       try {
-        res.write("data: reload\n\n");
+        res.write(`data: ${data}\n\n`);
       } catch {
         /* client gone; the 'close' handler removes it */
       }
@@ -183,10 +231,11 @@ export class LiveServer {
       if (this.served) this.served.set([{ o: origin, t: this.now() }, ...this.remembered().filter((e) => e.o !== origin)].slice(0, SERVED_ORIGINS_KEPT));
     }
     this.startWatching(root);
+    this.changed();
     return this.baseUrl;
   }
 
-  private async stop(): Promise<void> {
+  async stop(): Promise<void> {
     if (this.reloadTimer) {
       clearTimeout(this.reloadTimer);
       this.reloadTimer = undefined;
@@ -199,6 +248,7 @@ export class LiveServer {
       }
     }
     this.sseClients.clear();
+    this.followPending = false;
     this.watcher?.dispose();
     this.watcher = undefined;
     const server = this.server;
@@ -206,7 +256,8 @@ export class LiveServer {
     this.baseUrl = undefined;
     this.root = undefined;
     if (server) {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+      this.changed();
     }
   }
 
@@ -216,8 +267,15 @@ export class LiveServer {
       new vscode.RelativePattern(vscode.Uri.file(root), "**/*"),
     );
     const bump = () => {
+      // Decided when the change happens, not when the debounce fires: the turn's last write may
+      // land just before the turn ends.
+      if (this.coachEditing) this.followPending = true;
       if (this.reloadTimer) clearTimeout(this.reloadTimer);
-      this.reloadTimer = setTimeout(() => this.reload(), 150);
+      this.reloadTimer = setTimeout(() => {
+        const follow = this.followPending;
+        this.followPending = false;
+        this.reload(follow);
+      }, 150);
     };
     watcher.onDidChange(bump);
     watcher.onDidCreate(bump);
@@ -232,14 +290,55 @@ export class LiveServer {
       res.end("live server not ready");
       return;
     }
+    // DNS rebinding: a page on evil.example resolved to 127.0.0.1 is same-origin to itself and could
+    // read the served folder and the follow token. Only this server's own loopback Host is served.
+    const port = req.socket.localPort;
+    const host = req.headers.host;
+    if (!port || (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)) {
+      res.writeHead(403, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+      res.end("forbidden");
+      return;
+    }
     const urlPath = (req.url ?? "/").split("?")[0];
     if (urlPath === LIVERELOAD_PATH) {
       this.handleSse(res);
       return;
     }
-    const result = serveStatic(root, req.url ?? "/");
+    if (urlPath === FOLLOW_CHOICE_PATH) {
+      this.handleFollowChoice(req, res);
+      return;
+    }
+    const result = serveStatic(root, req.url ?? "/", this.followState(), this.followToken);
     res.writeHead(result.status, staticResponseHeaders(result.contentType));
     res.end(result.body);
+  }
+
+  /** CGP-ART-R-017 — the page client reports the learner's choice: `{on: boolean, t: token}`, POST only. */
+  private handleFollowChoice(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const reply = (status: number) => { res.writeHead(status, { "cache-control": "no-store" }); res.end(); };
+    if (req.method !== "POST") { reply(405); return; }
+    // The Host was checked in handle(); a present Origin must be that same origin (a missing one stays
+    // allowed: the token still gates it, and a same-origin fetch POST sends one anyway).
+    const origin = req.headers.origin;
+    if (origin !== undefined && origin !== `http://${req.headers.host}`) { reply(403); return; }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > 256) { if (!res.headersSent) reply(413); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      if (size > 256) return;
+      let body: unknown;
+      try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { reply(400); return; }
+      const { on, t } = (body ?? {}) as { on?: unknown; t?: unknown };
+      const want = Buffer.from(this.followToken);
+      const got = Buffer.from(typeof t === "string" ? t : "");
+      if (typeof on !== "boolean" || got.length !== want.length || !timingSafeEqual(got, want)) { reply(403); return; }
+      this.learnerFollow = on;
+      reply(204);
+    });
   }
 
   private handleSse(res: http.ServerResponse): void {
@@ -249,6 +348,8 @@ export class LiveServer {
       connection: "keep-alive",
     });
     res.write(": connected\n\n");
+    // The state may have changed between serving the page and its stream connecting.
+    res.write(`data: ${stateMessage(this.followState())}\n\n`);
     this.sseClients.add(res);
     res.on("close", () => this.sseClients.delete(res));
   }

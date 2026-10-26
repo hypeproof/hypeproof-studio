@@ -141,7 +141,7 @@ IDs `REQ-KNOW-NN` match the inventory row number.
 
 | REQ ID | Requirement (testable, one behavior) | Acceptance criteria | Priority | Traces to |
 |---|---|---|---|---|
-| REQ-KNOW-01 | The task rail groups tasks under the current activity and filters them by title text. | Typing in the rail search shows only tasks whose title contains the text (Korean jamo-complete match after IME commit); clearing restores the full list; tasks of another activity never appear; no model request is made. | P2 | #1 |
+| REQ-KNOW-01 | The task rail groups tasks under the current activity and filters them by title text. | Typing in the rail search shows only tasks whose title contains the text (Korean jamo-complete match after IME commit); clearing restores the full list; tasks of another activity never appear; no model request is made. Built as REQ-STUDIO-TASK-RAIL-SEARCH (2026-10-25, agent choice in decisions.md "CGP-KNOW-R-001"): committed IME text filters, NFC substring match, search resets per activity. | P2 | #1 |
 | REQ-KNOW-02 | The activity home offers two views, 작업 (tasks) and 자료 (materials), switching without losing the composer draft. | Switching views 20 times keeps the draft byte-identical; the selected view survives reopen; classroom layouts unchanged (REQ-STUDIO-TASK-WORKSPACE scope). | P2 | #1 |
 | REQ-KNOW-04 | A learner can add a file or https URL to the activity's 자료 list; each item records who added it (나/강사/AI) and is sent to the model only when the learner selects it for a turn. | Adding a file copies it into `<workspace>/자료/` (or the existing materials path) and lists it with origin; an unselected item is absent from the request payload (verified by host request log); instructor-distributed items show origin 강사 and cannot be deleted by the learner; http (non-TLS), userinfo, IP-literal and localhost URLs are refused with a reason (same rule as classroom links). | P1 | #2, #5 |
 | REQ-KNOW-06 | "팀 브레인에 남기기" on one completed assistant turn creates a team-brain proposal citing that turn id; nothing is filed until the learner confirms. | Proposal shows the cited text and turn id; Cancel leaves `<wiki>/` byte-identical; Confirm appends exactly one entry with the citation; the action is hidden when `learning_wiki.enabled` is false. | P1 | #2, #3, #5 |
@@ -172,12 +172,14 @@ IDs `REQ-KNOW-NN` match the inventory row number.
 | REQ-KNOW-47 | In personal adult activities, "기록 없이 묻기" creates a task that is not persisted, not remembered and not spooled; it is unavailable in class activities with a reason. | After closing, no snapshot, spool event or memory write exists for that task; in class activity the control is disabled with "수업에서는 기록이 남아요" on focus. | P2 | #4, consent |
 | REQ-KNOW-48 | Memory is stored as readable files inside the activity (`.hypeproof/memory/` or the team-brain folder) and the learner can open, read and delete them in Studio. | Each memory item maps to a file entry; deleting a file entry removes it from future context; Studio never reads memory from outside the activity; files are append-only except explicit learner delete. | P1 | #2, #5 |
 | REQ-KNOW-49 | First enablement of memory shows once what is stored, where, who can read it and how to delete it; for minors the enablement happens in Chalk, not in a learner pop-up. | Adult: dialog with 켜기/나중에, no pre-checked option, shown once per activity; Minor: no dialog in Studio; Chalk shows the consent text to the instructor with cohort scope. | P0 | #2, REQ-O |
-| REQ-KNOW-50 | The learner can set a nickname the AI uses; no occupation or free "about me" field is collected for minor cohorts. | Nickname ≤ 20 chars, passes REQ-O2 PII screen (no phone/address/RRN); appears in the next request; minor cohorts show only nickname. | P2 | #1, REQ-O |
+| REQ-KNOW-50 | The learner can set a nickname the AI uses; no occupation or free "about me" field is collected for minor cohorts. | Nickname ≤ 20 chars, passes REQ-O2 PII screen (no phone/address/RRN); appears in the next request; minor cohorts show only nickname. Built as REQ-STUDIO-LEARNER-NICKNAME (2026-10-25, agent choice in decisions.md "CGP-KNOW-R-032"): personal and trial seats only, model-only line per request, an allowlist of scripts (Hangul, Latin, space, - and _; no digits) plus refusals of phone numbers spelled in words, addresses, e-mail and web-address shapes, blank names, and school and grade identifiers (owner decisions 2026-10-25). The filter is best-effort. | P2 | #1, REQ-O |
 | REQ-KNOW-51 | Help, collect, gallery and publish payloads exclude memory files unless the learner explicitly selects one. | Payload manifest diff shows no memory path by default; selecting one lists it in the REQ-KNOW-09 confirmation. | P0 | #2 |
 | REQ-KNOW-63 | Before gallery or site publish, Studio shows a visitor preview of exactly the published files and the audience. | Preview renders the publish set (`publishSet.ts`) only; files not in the set do not load; audience label matches the publish destination. | P1 | #2, #5 |
 | REQ-KNOW-67 | At class end or trial→class transition, "내 작업 가져가기" lists what moves (files, tasks, team brain) and what does not (class materials, instructor notes, class memory), then reports per-item results. | Each item ends as 옮김/실패/제외 with reason; failure keeps the original; nothing is deleted from the source; credentials are not copied across activities (US-13). | P1 | #1, AB, BASE-05 |
 | REQ-KNOW-68 | When an activity can no longer run AI (class ended, token expired, cohort paused, budget exhausted), one status screen states the cause, what still works and who can fix it. | Cause matches structured transport or access evidence (401/403/exhausted/outage per US-12), with unknown causes left unknown and task-scoped remount recovery; "열기·내보내기" for own files remains enabled; contact line names instructor or HypeProof support; no payment button for class seats. | P0 | #1, AB, US-12 |
 | REQ-KNOW-70 | Chalk lessons can carry up to 4 conversation starters shown to learners as editable suggestions, and authoring shows that learners may elicit lesson material. | Starters render on the start page/empty task; picking inserts editable text, never auto-sends; the authoring screen shows the disclosure next to the material upload; frozen versions keep starters byte-identical (VER-01). | P1 | #4, #6 |
+
+REQ-KNOW-14 is built as REQ-STUDIO-TASK-MOVE (`docs/studio-requirements.md`, CGP-KNOW-R-009): "personal" means kind `personal` or a pass with no served lesson, and a trial keeps its REQ-L12 carryover (DEC-KNOW-R009).
 
 ---
 
@@ -194,7 +196,7 @@ Chalk: DES-01–11 (`requirements/classroom-design.md`).
 |---|---|---|
 | DES-KNOW-01 | Rail search field at the top of the task list, collapses to an icon below 360px. | 44px tall; filters on `compositionend` and input (no mid-jamo filtering); results update ≤100ms for 200 tasks; empty result "찾는 작업이 없어요"; light/dark via theme variables; 320px width no horizontal scroll. |
 | DES-KNOW-02 | 작업/자료 as a two-item segmented control under the activity title. | Arrow-key navigation, `role=tablist`; selected state uses text weight + underline, not colour only; contrast ≥4.5:1 both themes; 320px: full-width segments. |
-| DES-KNOW-04 | 자료 rows: icon, name, origin badge (나/강사/AI), added time; per-row "이번 질문에 넣기" toggle. | Row ≥44px; origin readable as text; long Korean/URL names ellipsize in one line with full name in tooltip and accessible name; drop zone outline 2px focus colour; 320px stacks badge under name. |
+| DES-KNOW-04 | 자료 rows: icon, name, origin badge (나/강사/AI), added time; per-row "이번 질문에 넣기" toggle. | Row ≥44px; origin readable as text; long Korean/URL names ellipsize in one line with full name in tooltip and accessible name; drop zone outline 2px focus colour (split out to hypeproof-studio#2641: the panel has no drop input yet, and adding one is a separate input path); 320px stacks badge under name. |
 | DES-KNOW-06 | "팀 브레인에 남기기" lives in the answer action row as a borderless 16px glyph with label on hover/focus and in accessible name; confirmation is an inline card under the answer. | 44px target; card shows quoted excerpt (max 3 lines, expandable) and turn id in 11px metadata; Escape cancels and returns focus to the action; reduced motion: no slide. |
 | DES-KNOW-07 | Memory scope line in the activity header: "AI 기억: 이 수업 안에서만" / "이 작업 공간 안에서만". | 11–13px secondary text; tooltip/disclosure explains scope in one sentence; never colour-only; present in both themes and at 320px (wraps, no truncation of the scope word). |
 | DES-KNOW-09 | Outbound confirmation is a native dialog: recipient, item checklist (unchecked by default except the action's own item), fixed "포함하지 않는 것" box, primary 보내기 / secondary 취소. | Focus trapped, Escape = cancel, focus returns to opener; primary disabled until required selection exists; "포함하지 않는 것" box has 3:1 border; 200% zoom no overlap; Korean IME in any text field does not submit on Enter during composition. |
@@ -301,3 +303,102 @@ The in-panel outbound dialog (CGP-KNOW-D-006) shows memory items in their own gr
 - The summary is a 44px keyboard target inside the dialog's focus trap (Enter and Space toggle natively). Reopening a prompt starts collapsed again.
 - Presentation only: which files are memory, and when one may be listed, stays CGP-KNOW-R-033's host rule. The VS Code modal fallback is unchanged.
 - Evidence: `test/outbound-dialog.test.tsx`, `test/outbound-dialog-styles.smoke.mjs` and a headless Chromium render of both seats, both themes, at 1420 and 800 px. No installed-app run.
+
+### REQ-KNOW-63 implementation contract (CGP-KNOW-R-034)
+
+Before gallery, user-test version, or site publication, an in-App visitor preview
+shows the immutable outbound file snapshot and the destination audience. Test
+versions use `buildPublishSet`; gallery uses its single inlined `index.html`; site
+publication uses the same frozen site files and generated files that it uploads.
+An isolated loopback server serves only that snapshot, never the workspace.
+Closing or cancelling preview, missing preview support, an unknown or foreign
+preview origin (a message that is not this panel host's nonce-bound signal), or an
+activity/account change refuses publication. Existing content and public-audience
+consent follow the preview. Saving to GitHub without site deployment retains its
+content consent.
+
+Load-timeout fallback (owner decision, 2026-10-23). If the frame has not loaded and
+the host has not reported the served entry within `VISITOR_FALLBACK_MS` (15 s), the
+panel says the screen could not be shown, opens the exact file list and audience,
+and relabels the button `화면 없이 목록 확인 · 다음`. This is kept, not failed closed,
+because the existing send consent still follows with the same recipient and the
+same bytes: a load timeout only skips the visual view, it never authorizes a send
+and is not an unknown preview. An unknown or foreign preview origin still fails
+closed.
+
+The preview deliberately blocks external connections, frames, forms, workers and
+device permissions. It is a local view of the selected files, not proof of the
+remote site's login, network integrations, or deployed browser behavior.
+
+Fix round 1 (2026-10-23):
+- The site preview and the send consent are built from one recipient string and one
+  file list, and that same list is pushed: the preview audience is the consent
+  recipient (repository and site host) plus `인터넷의 누구나`, and its files equal the
+  pushed tree, generated files included.
+- 미리보기 확인 · 다음 unlocks only after the frame fires `load` and the host reports,
+  with the panel nonce, that the snapshot server served the entry page; a message from
+  the framed page is ignored. If that has not happened within 15 s, the panel says
+  `이 창에서 미리보기 화면을 열지 못했어요.`, opens the file list and relabels the
+  button `화면 없이 목록 확인 · 다음`; the send consent still follows.
+- The file-list summary, 취소 and 다음 are 44px targets with a 2px focus ring, also in
+  forced colours. The panel may frame only the snapshot origin.
+- The snapshot server names common static-site types (`.mjs` as `text/javascript`,
+  images, fonts, audio, video); unknown types are `text/plain`.
+- The preview hook is a required dependency of all three publish paths, so a caller
+  that drops the wiring fails to compile.
+
+Fix round 2 (2026-10-23):
+- Gallery builds one recipient for the preview and the consent; tests assert the
+  preview audience is exactly that recipient plus `인터넷의 누구나` and that the
+  previewed bytes equal the sent `index.html`.
+- Isolation is tested in headless Chromium: the frame sandbox is exactly
+  `allow-scripts allow-same-origin`, a nested outside frame, a popup and a fetch
+  from the framed page reach nothing, and both the snapshot CSP and the panel CSP
+  are asserted directive by directive (`frame-src 'none'` for the snapshot, the
+  snapshot origin only for the panel, no wildcard).
+- The 15 s delay is pinned: the shipped panel script schedules exactly one 15 s
+  timer, and Next stays disabled with the default delay when the frame never loads.
+- A multi-file user-test version checks that the previewed paths and bytes equal the
+  consented files and the uploaded version files.
+PI #2 and #5: the learner inspects the chosen audience and the exact work they
+are about to share (JUDGMENT and OWNERSHIP; no capability labels in the UI).
+
+### REQ-KNOW-02 implementation contract (CGP-KNOW-R-002)
+
+Built 2026-10-25 as `REQ-STUDIO-ACTIVITY-HOME` in `docs/studio-requirements.md`. The task
+workspace rail (personal and trial seats) is the activity home: a 작업/자료 tablist under the
+brand. 작업 is the existing task rail; 자료 is the CGP-KNOW-R-003 list, moved out of the chat
+column on those seats so it has one place. Switching posts nothing to the host and never remounts
+the conversation, so the draft stays byte-identical; the chosen view is remembered per seat in the
+webview state. Seats without the 자료 list, instructors and classroom/lesson seats keep today's
+layout. The activity title above the tabs is left to CGP-KNOW-D-002. Decisions: DEC-KNOW-R-002.
+PI #1: the learner moves between their work and its materials without losing what they were
+writing (no capability labels).
+
+### REQ-KNOW-13 implementation contract (CGP-KNOW-R-008)
+
+- Entry: the personal task menu (대화 메뉴) item 아이콘과 색 정하기 (DES-KNOW-13 says "task
+  context menu"; the task list has no per-row menu, so the open task's menu is that menu).
+  Classroom, lesson and instructor seats have no task menu and are unchanged.
+- Choices are fixed lists stored as ids (12 emoji, eight named colours, or none). No free emoji
+  or text is accepted, so no title-like string enters the accessible name or the store.
+- Storage is a sidecar (`<scope>.appearance.json`), not a task-file field: the task file's
+  strict schema would make earlier builds read a new key as corruption.
+- The emoji and colour are `aria-hidden` decoration next to the always-visible title; colours
+  are 3:1 against the task list in both themes and the dot keeps an outline in forced colours.
+- Contract text: `docs/studio-requirements.md` "Task emoji and colour (CGP-KNOW-R-008)". See
+  decisions.md "CGP-KNOW-R-008".
+
+Implementation note (2026-10-25, CGP-KNOW-R-019): REQ-KNOW-35 ships as a non-blocking bar in
+every seat; owner choices are recorded as DEC-KNOW-35 in `../decisions.md` and the behaviour in
+`docs/studio-requirements.md` "## Low disk space warning (CGP-KNOW-R-019)".
+
+### REQ-KNOW-38 implementation contract (CGP-KNOW-R-021)
+
+Implemented in Studio as REQ-STUDIO-BROWSER-DOWNLOADS (`docs/studio-requirements.md`,
+2026-10-25). Each integrated browser tab gets a CDP session that points downloads at the
+activity's `downloads/` folder or denies them (safe-session cohort, no workspace, a
+`downloads` entry that is a symlink or file). Every download gives one timeline line in the
+task where it began: done only after the file is found as a regular file inside
+`downloads/`; failure and blocked lines name the file and the cause. Nothing is opened or
+run. Owner-delegated choices are in `decisions.md` (CGP-KNOW-R-021).

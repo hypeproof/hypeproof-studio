@@ -31,14 +31,14 @@ const VIEW = provenanceView(ledger);
 t("each file: path, symbol (decorative) and label in words", () => {
   const html = list(VIEW);
   has(html, "작업 폴더의 파일");
-  has(html, '<span>index.html</span><small><span aria-hidden="true" data-provenance-symbol="true">○</span> <strong>기록 없음</strong> · 지금까지: AI가 만듦 → 기록 없음</small>');
-  has(html, '<span>images/외관.jpg</span><small><span aria-hidden="true" data-provenance-symbol="true">⇡</span> <strong>내가 올림</strong></small>');
-  has(html, '<span>notes.md</span><small><span aria-hidden="true" data-provenance-symbol="true">○</span> <strong>기록 없음</strong></small>');
+  has(html, '<span>index.html</span><small><span class="tw-provenance-chip"><span aria-hidden="true" data-provenance-symbol="true">○</span><strong>기록 없음</strong></span> · 지금까지: AI가 만듦 → 기록 없음</small>');
+  has(html, '<span>images/외관.jpg</span><small><span class="tw-provenance-chip"><span aria-hidden="true" data-provenance-symbol="true">⇡</span><strong>내가 올림</strong></span></small>');
+  has(html, '<span>notes.md</span><small><span class="tw-provenance-chip"><span aria-hidden="true" data-provenance-symbol="true">○</span><strong>기록 없음</strong></span></small>');
   has(html, "기록에 남은 일로만 표시해요.");
 });
 t("a Studio write reads as Studio's, with its own symbol", () => {
   const studio = provenanceView(recordHostWrite(ledger, [{ path: "engine.js", sha256: h("e") }], { at: 5, actor: "studio" }));
-  has(list(studio), '<span>engine.js</span><small><span aria-hidden="true" data-provenance-symbol="true">▣</span> <strong>Studio가 만듦</strong></small>');
+  has(list(studio), '<span>engine.js</span><small><span class="tw-provenance-chip"><span aria-hidden="true" data-provenance-symbol="true">▣</span><strong>Studio가 만듦</strong></span></small>');
 });
 t("newest recorded event first, 기록 없음 last", () => {
   const html = list(VIEW);

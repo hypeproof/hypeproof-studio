@@ -1,3 +1,4 @@
+import type { VisitorPreview } from "./visitorPreview.ts";
 import { activePublishLink, publishSharing } from "./publishSharing.ts";
 import { memoryOutboundPath, privateOutboundPath, contentBytes, type OutboundConfirmation } from "./outboundConsent.ts";
 /** REQ-KNOW-51 / DEC-KNOW-51: a stored version with a memory file gets no new link; the learner publishes again and confirms. */
@@ -24,6 +25,8 @@ import { curriculumRequest, publishTestVersion, type CurriculumResult } from "./
 import { SHARING_UNKNOWN, type PublishExperimentView, type PublishForm, type PublishLinkView, type PublishView } from "./publishView.ts";
 
 export interface PublishPorts {
+  // Required key (REQ-KNOW-63): a caller that forgets the wiring fails to compile, not closed at run time.
+  previewVisitor: VisitorPreview;
   confirmOutbound?: OutboundConfirmation;
   scopeKey?(): string;
   privateDirectories?(): string[];
@@ -385,7 +388,9 @@ export class PublishSession {
     const linkSettings = { expires_at: expiresAt, ...(form.channel?.trim() ? { channel: form.channel.trim() } : {}) };
     const verification = productVerification(await this.ports.events(), pre.set.id);
     if (!await current()) return { ok: false, message: "활동이 바뀌어서 보내지 않았어요." };
-    if (!await this.ports.confirmOutbound?.({ recipient: `사용자 테스트 · ${new URL(client.base).host} · 프로젝트 구성원 ${(resolved.state?.project.members ?? []).join(", ") || "나"} · 링크를 받은 사람`, public: true, items: [...pre.set.files.map(f => ({ name: f.path, bytes: f.bytes, ...(pre.set.memory.includes(f.path) ? { memory: true as const } : {}) })), { name: "프로젝트 제목", bytes: contentBytes(form.title!) }, { name: "테스트 설명", bytes: contentBytes(JSON.stringify(experimentMetadata)) }, { name: "링크 설정", bytes: contentBytes(JSON.stringify(linkSettings)) }, ...(verification.state === "verified" ? [{ name: "검증 기록 참조", bytes: contentBytes(verification.run_id!) }] : [])] }) || !await current()) return { ok: false, message: "보내지 않았어요." };
+    const recipient = `사용자 테스트 · ${new URL(client.base).host} · 프로젝트 구성원 ${(resolved.state?.project.members ?? []).join(", ") || "나"} · 링크를 받은 사람 (다시 공유 가능)`;
+    if (!await this.ports.previewVisitor?.({ entry: pre.set.entry, audience: recipient, files: pre.set.files }) || !await current()) return { ok: false, message: "미리보기를 확인하지 않아 보내지 않았어요." };
+    if (!await this.ports.confirmOutbound?.({ recipient, public: true, items: [...pre.set.files.map(f => ({ name: f.path, bytes: f.bytes, ...(pre.set.memory.includes(f.path) ? { memory: true as const } : {}) })), { name: "프로젝트 제목", bytes: contentBytes(form.title!) }, { name: "테스트 설명", bytes: contentBytes(JSON.stringify(experimentMetadata)) }, { name: "링크 설정", bytes: contentBytes(JSON.stringify(linkSettings)) }, ...(verification.state === "verified" ? [{ name: "검증 기록 참조", bytes: contentBytes(verification.run_id!) }] : [])] }) || !await current()) return { ok: false, message: "보내지 않았어요." };
     let projectId = resolved.state?.project.id;
     if (!projectId) {
       const made = await phase("project", () => curriculumRequest<{ project: { id: string } }>(client, "POST", "/projects", { title: form.title?.trim() || this.ports.defaultTitle() }));

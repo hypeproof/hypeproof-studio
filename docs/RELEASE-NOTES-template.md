@@ -67,3 +67,15 @@ irm https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/in
 - PR / issue links:
 - Full changelog:
 ```
+
+## Learner lines (in-app "새로운 기능")
+
+The release page above is for staff. Learners see a separate, shorter set inside Studio after they
+update (REQ-STUDIO-WHATS-NEW, CGP-SHELL-R-035). Before the release cut, edit
+`extensions/hypeproof-chat/src/learnerReleaseNotes.ts`:
+
+- At most 3 lines, at most 40 characters each, in Korean a learner can read.
+- Only features every learner seat has in this build; no capability or score labels.
+- Change `id` when the lines change. An unchanged `id` shows nothing new; a new `id` shows the
+  panel once to every learner who updates. `test/whats-new.test.tsx` fails on a line that breaks
+  these caps.

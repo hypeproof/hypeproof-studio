@@ -432,3 +432,17 @@ test('inline prompt edits remain task-scoped on disk without replacing the compo
   await reopened.saveDraft(a, draft('Separate composer'));
   assert.deepEqual(new TaskWorkspaceStore(root, 'inline-edit').getDraft(a), draft('Separate composer'));
 });
+
+test('citation event kinds survive restart while legacy and future kinds stay intact', async t => {
+  const root = temporary(t), store = new TaskWorkspaceStore(root, 'citation-kinds');
+  await store.initialize();
+  const id = store.getView().activeTaskId;
+  const citations = [undefined, 'web', 'lesson', 'file', 'future-source'].map((kind, i) => ({url:`https://same.test/${i}`,title:'Same domain',domain:'same.test',tier:4,...(kind === undefined ? {} : {kind})}));
+  await store.append(id, [{...message('kinds', 'Sources', 'assistant'),citations}]);
+  const reopened = new TaskWorkspaceStore(root, 'citation-kinds');
+  assert.deepEqual(reopened.getActiveTask().messages[0].citations, citations);
+  await assert.rejects(store.append(id, [{...message('bad-kind', 'Sources', 'assistant'),citations:[{...citations[0],kind:42}]}]), hasCode('invalid'));
+  await assert.rejects(store.append(id, [{...message('long-kind', 'Sources', 'assistant'),citations:[{...citations[0],kind:'k'.repeat(65)}]}]), hasCode('invalid'));
+  await store.append(id, [{...message('max-kind', 'Sources', 'assistant'),citations:[{...citations[0],kind:'k'.repeat(64)}]}]);
+  assert.deepEqual(new TaskWorkspaceStore(root, 'citation-kinds').getActiveTask().messages[0].citations, citations);
+});

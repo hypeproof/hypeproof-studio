@@ -352,6 +352,8 @@ function makeHost(context, profile, provider = proto) {
     sitePublisher: () => ({ available: () => false }),
     // CGP-ART-R-001 — postConfig re-posts the annotation tray state (off and never shown here: no message).
     postAnnotations: () => {},
+    // CGP-KNOW-D-015 — postConfig narrows the preview header's file grant.
+    preview: { setAskAboutFileEnabled() {} },
     post: async (msg) => { posts.push(msg); return true; },
     handleSend: (...args) => effects.push(["runtime-send", ...args]),
     // Everything a completion, a step move or a record would go through. A goal save must reach none of them.
@@ -717,8 +719,8 @@ await test("screen: the open editor holds the stored goal and saves only a chang
     return m ? !!m[1] : null;
   };
   const same = await render(fields);
-  assert.match(same, new RegExp(`<textarea maxLength="${G.GOAL_TEXT_MAX}" rows="2">${GOAL}</textarea>`), "the goal field does not hold the stored goal");
-  assert.ok(same.includes(`<textarea rows="3">${CRITERIA.join("\n")}</textarea>`), "the criteria field does not hold the stored criteria");
+  assert.match(same, new RegExp(`<textarea name="goal" maxLength="${G.GOAL_TEXT_MAX}" rows="2">${GOAL}</textarea>`), "the goal field does not hold the stored goal");
+  assert.ok(same.includes(`<textarea name="criteria" rows="3">${CRITERIA.join("\n")}</textarea>`), "the criteria field does not hold the stored criteria");
   assert.equal(disabled(same), true, "nothing changed, yet the save button can be pressed");
   assert.equal(disabled(await render({ ...fields, goal: "새 목표" })), false, "a change cannot be saved");
   assert.equal(disabled(await render({ ...fields, goal: "새 목표" }, true)), true, "a second save while the first is unanswered");

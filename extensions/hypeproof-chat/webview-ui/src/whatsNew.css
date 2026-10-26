@@ -1,0 +1,50 @@
+/* CGP-SHELL-R-035 / CGP-SHELL-D-034 — "새로운 기능": a short, non-modal row above the composer (in flow, never over it). */
+.hps-whats-new {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hp-space-2);
+  margin-block-end: var(--hp-space-2);
+  padding-inline-start: var(--hp-space-3);
+  padding-block: var(--hp-space-1);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+  color: var(--vscode-foreground, var(--hp-text-primary-default));
+  background: var(--vscode-editorWidget-background, color-mix(in srgb, var(--vscode-foreground, var(--hp-text-primary-default)) 8%, transparent));
+  border: var(--ds-c-focus-width) solid var(--hp-border-control-default);
+  border-inline-start: var(--hp-space-1) solid var(--hp-border-accent-default);
+  border-radius: var(--hp-space-3);
+  font-size: var(--hp-font-body);
+  overflow-wrap: anywhere;
+}
+.hps-whats-new-body { flex: 1 1 auto; min-inline-size: 0; padding-block: var(--hp-space-1); }
+.hps-whats-new-title {
+  margin: 0;
+  font-size: var(--hp-font-body);
+  font-weight: var(--hp-weight-strong);
+  color: var(--hp-text-primary-default);
+}
+.hps-whats-new-list { margin: var(--hp-space-1) 0 0; padding-inline-start: var(--hp-space-5); }
+.hps-whats-new-list li + li { margin-block-start: var(--hp-space-1); }
+.hps-whats-new-sheet .hps-whats-new-list { font-size: var(--hp-font-body); }
+.hps-whats-new-dismiss {
+  flex: 0 0 auto;
+  min-width: var(--hp-control-md);
+  min-height: var(--hp-control-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--hp-space-3);
+  cursor: pointer;
+}
+.hps-whats-new-dismiss:hover { background-color: var(--hp-bg-control-hover); }
+.hps-whats-new-dismiss:active { background-color: var(--hp-bg-control-pressed); }
+.hps-whats-new-dismiss:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }
+@media (forced-colors: active) {
+  .hps-whats-new { border-color: CanvasText; }
+  .hps-whats-new-dismiss { color: ButtonText; }
+}

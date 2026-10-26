@@ -127,7 +127,9 @@ fi
 # -----------------------------------------------------------------------------
 
 if [[ -n "$LOGFILE" ]]; then
-  exec bash build.sh > "$LOGFILE" 2>&1
+  bash build.sh > "$LOGFILE" 2>&1 || exit $?
 else
-  exec bash build.sh
+  bash build.sh || exit $?
 fi
+
+node "$REPO_ROOT/scripts/patches/core/korean/install.mjs" "$REPO_ROOT/vscodium-base/VSCode-darwin-${VSCODE_ARCH}/$APP_NAME.app/Contents/Resources/app"

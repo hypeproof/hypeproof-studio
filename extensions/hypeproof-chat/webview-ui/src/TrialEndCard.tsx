@@ -8,13 +8,14 @@ import { postToHost } from "./vscode";
  * It does nothing by itself: the purchase view opens only when the Primary is pressed, and the
  * escape only closes the card. No countdown, no scarcity, no pre-selected upsell.
  */
-export function TrialEndCard({ card, onPasses, onDismiss }: { card: TrialEndCardView; onPasses: () => void; onDismiss: () => void }) {
+export function TrialEndCard({ card, onPasses, onDismiss, continuationDraft = "", allowPersonalClaude = false }: { card: TrialEndCardView; onPasses: () => void; onDismiss: () => void; continuationDraft?: string; allowPersonalClaude?: boolean }) {
   return (
     <section className="hps-trial-end-card" role="status" aria-live="polite" aria-labelledby="hps-trial-end-card-title">
       <h3 id="hps-trial-end-card-title" className="hps-trial-end-card-title">{card.title}</h3>
       {card.facts.map((fact, i) => <p key={i} className="hps-trial-end-card-fact">{fact}</p>)}
       <div className="hps-trial-end-card-actions">
         <button type="button" className="hps-trial-end-card-primary" onClick={onPasses}>{card.primary}</button>
+        {allowPersonalClaude && <button type="button" className="hps-trial-end-card-personal" onClick={() => postToHost({ type: "trialEndCardClaude", draft: continuationDraft })}>개인 Claude Code로 이어하기</button>}
         <button type="button" className="hps-trial-end-card-escape" onClick={onDismiss}>{card.escape}</button>
       </div>
       {card.notify ? <NotifyOptin notify={card.notify} /> : null}

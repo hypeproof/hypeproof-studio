@@ -5,7 +5,7 @@
 // The real webview entry (main.tsx: the real stylesheet order and the real ChatPanel markup) is bundled, gets a
 // host config with the `materials` flag and a 자료 list (a 190-character unbroken file name, an address, an
 // instructor card, two selected items and one selected item that is gone). Personal and classroom seat, dark
-// and light, 1420 and 800 px. On the open card and the composer line:
+// and light, 1420 and 800 px (personal: the 자료 view of the task rail, CGP-KNOW-R-002). On the open card and the composer line:
 //   - every button, input and the card's summary is a 44px target (width and height of its real box)
 //   - every element that draws text has a computed font-size of at least 14px
 //   - nothing is wider than its card or the viewport (measured against documentElement.clientWidth); no page scroll
@@ -121,6 +121,11 @@ async function runMatrix(b, extraCss) {
       await b.send('Page.navigate', { url: base });
       for (let i = 0; i < 100 && !(await b.evaluate(`!!window.sent && window.sent.some((m) => m.type === 'ready')`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
       await b.evaluate(`window.dispatchEvent(new MessageEvent('message', { data: { type: 'config', config: ${JSON.stringify(config(surface))} } }))`);
+      // CGP-KNOW-R-002: on a task workspace seat the list is the activity home's 자료 view in the task rail.
+      if (surface === 'personal') {
+        for (let i = 0; i < 50 && !(await b.evaluate(`!!document.querySelector('#tw-home-tab-materials')`)); i++) await new Promise((r) => setTimeout(r, 100));
+        await b.evaluate(`document.querySelector('#tw-home-tab-materials').click()`);
+      }
       for (let i = 0; i < 50 && !(await b.evaluate(`window.sent.some((m) => m.type === 'materialsRequest')`)); i++) await new Promise((r) => setTimeout(r, 100));
       await b.evaluate(`window.dispatchEvent(new MessageEvent('message', { data: { type: 'materialsState', view: ${JSON.stringify(VIEW)} } }))`);
       for (let i = 0; i < 50 && !(await b.evaluate(`!!document.querySelector('.hp-materials') && !!document.querySelector('.hp-materials-chips')`)); i++) await new Promise((r) => setTimeout(r, 100));

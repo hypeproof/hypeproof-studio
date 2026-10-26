@@ -42,7 +42,7 @@ assert.equal(outboundDetails({ recipient: 'x', items: [{ name: 'index.html', byt
 assert.equal(outboundDetails({ recipient: 'x', items: [{ name: 'index.html', bytes: 1 }], also: [{ recipient: 'y', items: [{ name: 'memory/a.json', bytes: 2 }] }] }), null, 'also in a second block');
 assert.equal(MEMORY_SELECTED_LABEL, 'AI 기억 파일 · 내가 직접 고름');
 assert.equal(outboundDetails({ recipient: '사용자 테스트 · s', public: true, items: [{ name: 'index.html', bytes: 3 }, { name: 'wiki/a.md', bytes: 1234, memory: true }] }),
-  ['받는 곳: 사용자 테스트 · s', '누구나 볼 수 있어요', '보낼 항목:', '• index.html (3 바이트)', '• wiki/a.md (1,234 바이트) · AI 기억 파일 · 내가 직접 고름', '받는 사람의 AI 기억: 확인 안 됨', '', '포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),
+  ['받는 곳: 사용자 테스트 · s', '누구나 볼 수 있어요', '보낼 항목:', '• index.html (3 바이트)', '• wiki/a.md (1,234 바이트) · AI 기억 파일 · 내가 직접 고름', 'ⓘ 받는 사람의 AI 기억: 확인 안 됨', '', '포함하지 않는 것: AI 기억, 개인 메모'].join('\n'),
   'a selected memory file is listed with its size and the selection label');
 ok('confirmation: unselected memory item → no dialog; selected one → labelled line');
 
@@ -137,7 +137,7 @@ try {
   const project = { id: 'prj-synthetic', title: 'project', members: ['synthetic'] };
   const state = { project, test_origin: null, versions: [], hypotheses: [], experiments: [], links: [] };
   let shown = [], calls = [], answer = true;
-  const ports = { switchOn: () => true, scopeKey: () => 'one', confirmOutbound: async m => { shown.push(m); return answer; }, token: async () => 't', base: () => 'https://service.invalid/v1/curriculum', root: () => root, entry: () => '/index.html', events: async () => [], projectId: () => project.id, setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'title', qr: u => u, privateDirectories: () => ['journal'],
+  const ports = { previewVisitor:async()=>true, switchOn: () => true, scopeKey: () => 'one', confirmOutbound: async m => { shown.push(m); return answer; }, token: async () => 't', base: () => 'https://service.invalid/v1/curriculum', root: () => root, entry: () => '/index.html', events: async () => [], projectId: () => project.id, setProjectId: async () => {}, week: () => 1, defaultTitle: () => 'title', qr: u => u, privateDirectories: () => ['journal'],
     fetchImpl: async (u, i) => { calls.push([u, i]); if ((i?.method ?? 'GET') !== 'GET') return Response.json(new URL(u).pathname.endsWith('/experiments') ? { experiment: { id: 'exp-synthetic' } } : new URL(u).pathname.includes('/versions/') ? { version: { id: 'v' }, created: true } : { share_url: 'https://test.invalid/l/1' }); return Response.json(new URL(u).pathname.endsWith('/projects') ? { projects: [project] } : state); } };
   const form = { question: 'q', method: 'task_test', success_criteria: ['c'], hypothesis: 'h', expires_in_days: 1 };
   const putFiles = () => JSON.parse(calls.find(([u, i]) => i?.method === 'PUT' && u.includes('/versions/'))[1].body).files.map(f => f.path);
@@ -199,7 +199,7 @@ try {
 
   // ── gallery, collect, help: fixed payloads, never a memory path ─────────────
   let galleryShown;
-  await publishWorldConfirmed({ siteBase: 'https://gallery.invalid', token: 't', worldId: 'w', title: '작품', html: '<p>x</p>', fetchImpl: async () => Response.json({ ok: true, url: '/w/1' }) }, async m => (galleryShown = m, false), async () => true,
+  await publishWorldConfirmed({ previewVisitor:async()=>true, siteBase: 'https://gallery.invalid', token: 't', worldId: 'w', title: '작품', html: '<p>x</p>', fetchImpl: async () => Response.json({ ok: true, url: '/w/1' }) }, async m => (galleryShown = m, false), async () => true,
     { recipient: '수업 기록 운영자 · api.invalid', items: [{ name: '이번 활동 기록 events.jsonl', bytes: 1 }], send: async () => {} });
   for (const i of [...galleryShown.items, ...galleryShown.also.flatMap(s => s.items)]) assert.equal(memoryOutboundPath(i.name), false, `gallery item ${i.name}`);
   assert.ok(outboundDetails(galleryShown));

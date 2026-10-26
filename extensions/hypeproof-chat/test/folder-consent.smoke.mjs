@@ -359,6 +359,44 @@ try {
     await assert.rejects(run(passOnFree), (e) => e instanceof host.FolderConsentRefusal);
     assert.equal(ui.modal.length, 3, "a bought pass is not a free seat: <home>-2 asks");
     ui.modal.length = 0;
+    // The in-panel presenter uses the same store/narrowing, and never falls through after cancellation.
+    ws.folder = outside; let notices = 0;
+    const notification = host.onFolderConsentChanged(() => { notices++; });
+    const panelProfile = { ...personal, activity_id: 'panel-first' };
+    let registration = host.setFolderConsentPresenter(async folder => { assert.equal(folder, outside); return 'read'; });
+    const narrowed = await run(panelProfile);
+    assert.equal(narrowed.sdk_tools.write, false); assert.equal(narrowed.sdk_tools.shell, false);
+    assert.equal(host.folderConsentState(context, panelProfile, opts).tag, 'read');
+    assert.equal(notices, 1); assert.equal(ui.modal.length, 0);
+    registration.dispose();
+    registration = host.setFolderConsentPresenter(async () => undefined);
+    await assert.rejects(run({ ...personal, activity_id: 'panel-closed' }), e => e instanceof host.FolderConsentRefusal);
+    assert.equal(ui.modal.length, 0, 'closed/hidden panel does not fall through to a native grant'); registration.dispose();
+    registration = host.setFolderConsentPresenter(async () => { ws.folder = home; return 'full'; });
+    await assert.rejects(run({ ...personal, activity_id: 'panel-switched' }), e => e instanceof host.FolderConsentRefusal);
+    assert.equal(FC.readFolderConsent(state.get(FC.FOLDER_CONSENT_KEY), 'panel-switched', outside), undefined);
+    registration.dispose(); ws.folder = outside;
+    const concurrent = { ...personal, activity_id: 'panel-concurrent' };
+    registration = host.setFolderConsentPresenter(async () => {
+      state.set(FC.FOLDER_CONSENT_KEY, FC.writeFolderConsent(state.get(FC.FOLDER_CONSENT_KEY), concurrent.activity_id, outside, 'read'));
+      return 'full';
+    });
+    await assert.rejects(run(concurrent), e => e instanceof host.FolderConsentRefusal);
+    assert.equal(FC.readFolderConsent(state.get(FC.FOLDER_CONSENT_KEY), concurrent.activity_id, outside), 'read', 'another window choice is not overwritten');
+    // folderConsentForFolder (a task moving to another folder): the same stale-answer recheck.
+    const mover = { ...personal, activity_id: 'panel-move' };
+    const moveTo = fs.mkdtempSync(path.join(tmp, 'move-to-'));
+    registration = host.setFolderConsentPresenter(async folder => { assert.equal(folder, FC.canonicalFolder(moveTo)); state.set(FC.FOLDER_CONSENT_KEY, FC.writeFolderConsent(state.get(FC.FOLDER_CONSENT_KEY), mover.activity_id, FC.canonicalFolder(moveTo), 'read')); return 'full'; });
+    assert.equal(await host.folderConsentForFolder(context, mover, opts, moveTo), undefined, 'a store change during the question drops the stale answer');
+    assert.equal(FC.readFolderConsent(state.get(FC.FOLDER_CONSENT_KEY), mover.activity_id, FC.canonicalFolder(moveTo)), 'read', 'the other window choice is not overwritten by the move');
+    registration.dispose();
+    const mover2 = { ...personal, activity_id: 'panel-move-2' };
+    registration = host.setFolderConsentPresenter(async () => 'read');
+    assert.equal(await host.folderConsentForFolder(context, mover2, opts, moveTo), 'read', 'control: an unchanged scope keeps the answer');
+    assert.equal(FC.readFolderConsent(state.get(FC.FOLDER_CONSENT_KEY), mover2.activity_id, FC.canonicalFolder(moveTo)), 'read');
+    registration.dispose();
+    registration.dispose(); notification.dispose();
+    ok('panel presenter: stored read-only narrows tools and notifies; hidden/cancel refuses without native fallback; folder/store changes reject stale full consent');
     // The refusal class is the send path's keep-input error.
     const { TurnToolModeError } = await import("../src/turnTools.ts");
     assert.equal(Object.getPrototypeOf(host.FolderConsentRefusal.prototype).constructor.name, TurnToolModeError.name);
@@ -426,7 +464,7 @@ try {
       Object.assign(h, {
         context: { globalState: { get: (k) => state.get(k), update: async (k, v) => { state.set(k, v); } }, workspaceState: { get: () => undefined, update: async () => {} }, secrets: { get: async () => "tok" } },
         cachedProfile: personal, servedWorkspaceRoot: home, _instructorMode: { isInstructor: false },
-        folderWriteNoted: new Set(), pendingSends: 0, activeStreams: new Map(),
+        folderWriteNoted: new Set(), pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(),
         postPageNotice: (t) => notices.push(t), postToolLog: (_sid, e) => logs.push(e.label),
         crProjectMemory: { refresh: async () => { calls.skillRequest++; return null; } },
         hasActiveStream: () => false, ensureProfile: async () => personal, proxyUrl: () => "http://127.0.0.1/v1",
@@ -435,6 +473,21 @@ try {
       });
       return { h, notices, logs, discarded, calls };
     };
+    const { FolderConsentRequest } = await import('../src/folderConsentPrompt.ts');
+    const dispatch = make().h;
+    let pendingPrompt; let consentScope = 'one';
+    dispatch.view = { visible: true };
+    dispatch.folderConsentRequest = new FolderConsentRequest({id: () => 'dispatch-id', scope: () => consentScope, present: async prompt => { pendingPrompt = prompt; return true; }});
+    let response = dispatch.folderConsentRequest.ask(outside);
+    await dispatch.handleMessage({type:'folderConsentAnswer',id:'dispatch-id',level:'read'});
+    assert.equal(await response,'read');
+    response = dispatch.folderConsentRequest.ask(outside); dispatch.view.visible = false;
+    await dispatch.handleMessage({type:'folderConsentAnswer',id:'dispatch-id',level:'full'});
+    assert.equal(await response,undefined,'hidden surface rejects even a matching full answer');
+    dispatch.view.visible = true; response = dispatch.folderConsentRequest.ask(outside); consentScope = 'two';
+    await dispatch.handleMessage({type:'folderConsentAnswer',id:'dispatch-id',level:'full'});
+    assert.equal(await response,undefined,'provider response still checks the original scope');
+    assert.equal(pendingPrompt,null);
     const choose = (level) => state.set(FC.FOLDER_CONSENT_KEY, FC.writeFolderConsent(state.get(FC.FOLDER_CONSENT_KEY), personal.activity_id, FC.canonicalFolder(outside), level));
     const files = (dir) => fs.readdirSync(dir).sort();
     const J = (x) => JSON.parse(JSON.stringify(x)); // values from the vm realm

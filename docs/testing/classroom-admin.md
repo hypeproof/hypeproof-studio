@@ -1486,5 +1486,18 @@ collection contract.
 | `e2e/classroom/roster-csv.mjs` (`npm run test:classroom-roster-csv`) | 실제 Chalk `/console`·전달 경로·Service 라우터(roster append·issuer 검증·KV 명단), Chromium 1280·800px. 통제: 페이지가 여는 Lab 배부 조회(빈 목록)와 첫 append 하나를 브라우저 route에서 끊음 | PASS (두 폭). 파일 → 표·“정상 4 · 확인 필요 3”, 이때 요청 0건 · 확인 전 버튼 꺼짐 · Space/Tab/Enter로 보냄 · 본문 `{users:[4개]}`에 이름 없음 · 끊긴 응답 → 실패 4줄과 사유 · ‘실패한 줄만 다시’ → 같은 4개만 보내 “추가됨 2 · 이미 있음 2”(Service 명단에 새 handle 한 번씩) · 다시 보내기 버튼 사라짐 · 201줄 붙여넣기 거부와 요청 0건 · 가로 넘침 없음 · 페이지 오류 없음. `origin/main`의 `console.html`로 돌리면 실패(red) |
 | 검증 후속 (M1·M2·L1–L4) | 단위: 보이지 않는/전각 접두어 수식 6종 거부와 대조군(가운데 문자·전각 글자 이름은 통과), 이름의 bidi·zero-width 제거, 본문 함수가 행 객체·이름 문자열을 예외로 거부, 서빙된 페이지의 가져오기 단계에 요청 1개·본문 1개(`rosterCsv.requestBody(handles)`), 예시 `s01`·완화한 문구. 브라우저: 결과 줄 이름이 `<bdi>` 안, 보내는 동안 파일 입력·붙여넣기 잠금(입력 무시), 보낸 뒤 같은 CSV는 ‘추가’ 꺼짐(다시 미리 보기해도), 결과 유지, 바꾼 CSV는 다시 켜짐. CI: `classroom-ops.yml` `classroom / browser`가 `test:classroom-roster-csv`를 돌리고 스크린샷을 올린다 | PASS 15/15 · 두 폭 PASS. 변이 8종(각 수정을 하나씩 되돌림) 모두 해당 시험이 실패: M1 이름 정리→단위 12, M1 `<bdi>`→브라우저, M2 본문 함수 검사→단위 13, M2 페이지 본문에 이름 추가→단위 14, L1 잠금→브라우저, L2 보낸 뒤 잠금→브라우저, L3→단위 11, L4→단위 15 |
 | 화면 확인 | 스크린샷 미리 보기·실패·결과 × 1280·800 | 눈으로 확인: handle 한 줄, 확인 필요 줄 주황 띠 + ! + 사유, 결과 줄 아이콘 + 글 |
+| 검증 후속 (CGP-SHELL-D-031) | 브라우저: s02의 이름이 마크업(`<img … onerror=…>이서준`)이어도 미리 보기 표와 결과 줄에 글자 그대로 보이고, `img` 요소가 생기지 않으며 스크립트가 돌지 않는다. 본문에 이름·마크업 없음 | PASS (두 폭). 변이: 표 칸·결과 줄 이름을 `innerHTML`로 바꾸면 실패 |
 
 **NOT RUN**: 실제 강사·운영 Service·hosted KV(같은 키 쓰기 속도 제한 포함), Windows 브라우저, 화면 읽기 프로그램 실기, 운영 배포.
+
+<a id="help-queue-keyboard-triage-run"></a>
+
+## 도움 요청 키보드 분류 · 2026-10-26 (ADM-05 · DES-06 · CGP-LEARN-R-017)
+
+요구: [도움 요청 키보드 분류](../requirements/classroom-admin.md#help-queue-keyboard-triage).
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/help-triage.browser.mjs` (`chalk` `npm test`에 포함, `FOCUS_REQUIRE_BROWSER=1`이면 브라우저 없을 때 실패) | 실제로 서빙한 `/manage`를 headless Chromium에 올리고 CDP 키 입력으로: J·↓·K·↑·ㅓ 이동과 끝에서 멈춤, keyCode 229·`isComposing`·Ctrl+J 무시, 10초 갱신 재그리기 뒤 초점 유지, 열린 요청 없이 E, Enter로 열기, 다음 조치 없이 E, 글상자 안의 J·E·?와 CDP 한글 조합 입력, E로 `answered` 저장(revision 포함)과 다음 요청 열기, 저장 중 두 번 누르기, 저장 중 다른 기록을 연 경우, 마지막 요청, `?` 목록 열고 닫기·버튼으로 열기, 선택 행 2px·3:1, 44px·12px 이상, 가로 넘침 없음(1420·800·강제 색상) | PASS (102개 확인). 대조군 10종: 키 처리기 연결·조합 검사·글상자 검사·행 테두리·다음 요청 열기·늦은 저장 검사·두 번 누르기 검사·재그리기 초점 유지·다음 조치 검사·`?` 목록을 하나씩 되돌리면 각각 실패 |
+
+**NOT RUN**: 실제 강사·운영 Service, Windows 브라우저, 화면 읽기 프로그램 실기, 실제 macOS 한글 입력기(조합은 CDP `imeSetComposition`으로만), 밝은 테마(Chalk는 어두운 화면만 제공).

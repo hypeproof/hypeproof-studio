@@ -17,7 +17,7 @@ import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 import assert from "node:assert/strict";
 
 const SRC = new URL("../webview-ui/src/", import.meta.url);
-const FILES = ["tokens.css", "styles.css"];
+const FILES = ["tokens.css", "radiusScale.css", "styles.css"];
 const real = Object.fromEntries(FILES.map((f) => [f, readFileSync(new URL(f, SRC), "utf8")]));
 let passed = 0;
 const failures = [];
@@ -73,6 +73,15 @@ const lengthPx = (v) => {
   return total;
 };
 const px = (v) => { assert.match(v ?? "", /^\d+px$/, `a px length: ${v}`); return parseInt(v, 10); };
+/** CGP-DS-R-011: a radius names the scale (radiusScale.css); resolve its --hp-radius-* alias and evaluate the px calc(). */
+const radiusPx = (css, v) => {
+  const scale = rules(css["radiusScale.css"]).reduce((a, r) => ({ ...a, ...r.decls }), {});
+  let out = v ?? "";
+  for (let n = 0; n < 8; n++) out = out.replace(/var\((--hp-radius-[\w-]+)\)/g, (m, name) => scale[name] ?? m);
+  const arith = out.replace(/calc\(/g, "(").replace(/(\d+(?:\.\d+)?)px/g, "$1");
+  assert.match(arith, /^[\d.\s()*+-]+$/, `a radius on the scale: ${v} -> ${out}`);
+  return Function(`return (${arith});`)();
+};
 
 // ─── contrast ───────────────────────────────────────────────────────────────────────────────────
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -103,7 +112,7 @@ const MIX = /^color-mix\(in srgb, (.+) (\d+(?:\.\d+)?)%, transparent\)$/;
 const checks = {
   "1 geometry: 16px icon, 14px label, 4px radius, 8px inline padding": (css) => {
     const chip = decls(css, CHIP), icon = decls(css, ICON);
-    assert.equal(px(chip["border-radius"]), 4, "radius");
+    assert.equal(radiusPx(css, chip["border-radius"]), 4, "radius");
     assert.equal(px(chip["padding-inline"]), 8, "inline padding");
     assert.ok(px(chip["padding-block"]) <= 4, "block padding stays small");
     assert.equal(px(icon["inline-size"]), 16, "icon inline size");
@@ -211,7 +220,7 @@ const negatives = [
   ["1 geometry", "12px icon", mutate("styles.css", ".hp-status-chip .hps-icon { flex: none; inline-size: 16px; block-size: 16px; }", ".hp-status-chip .hps-icon { flex: none; inline-size: 12px; block-size: 12px; }")],
   ["1 geometry", "icon may shrink", mutate("styles.css", ".hp-status-chip .hps-icon { flex: none;", ".hp-status-chip .hps-icon {")],
   ["1 geometry", "12px label", mutate("styles.css", "color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label);\n  white-space: normal;", "color: var(--hp-text-primary-default); font-size: 12px; line-height: var(--hp-leading-label);\n  white-space: normal;")],
-  ["1 geometry", "pill radius", mutate("styles.css", "border: 1px solid transparent; border-radius: 4px;", "border: 1px solid transparent; border-radius: 999px;")],
+  ["1 geometry", "pill radius", mutate("styles.css", "border: 1px solid transparent; border-radius: var(--hp-radius-status-chip);", "border: 1px solid transparent; border-radius: 999px;")],
   ["1 geometry", "6px inline padding", mutate("styles.css", "padding-inline: 8px;\n  border: 1px solid transparent", "padding-inline: 6px;\n  border: 1px solid transparent")],
   ["2 soft fill", "danger fill solid", mutate("styles.css", "var(--vscode-errorForeground, #f48771) 14%, transparent", "var(--vscode-errorForeground, #f48771) 100%, transparent")],
   ["2 soft fill", "caution fill removed", mutate("styles.css", '.hp-status-chip[data-intent="caution"] { background-color: color-mix(in srgb, var(--hp-text-warn-default) 14%, transparent); border-style', '.hp-status-chip[data-intent="caution"] { border-style')],

@@ -22,6 +22,9 @@ export interface PassProduct {
   durationDays: number;
   requestLimit: number;
 }
+/** SecretStorage key of the order being paid for (its `secret` claims the pass). */
+export const PENDING_PURCHASE_KEY = "hypeproofChat.pendingPurchase";
+
 export interface PendingOrder {
   id: string;
   secret: string;

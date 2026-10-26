@@ -92,7 +92,7 @@ t("the steer stops through the existing Stop path (App.cancel â†’ cancelStream â
   const host = readFileSync("src/chatPanelProvider.ts", "utf8");
   ok(/postToHost\(\{ type: "cancelStream", streamId: state\.streamId \}\)/.test(app), "App.cancel posts cancelStream");
   ok(/case "cancelStream":\s*this\.activeStreams\.get\(msg\.streamId\)\?\.abort\(\);/.test(host), "host aborts the stream");
-  ok(/const finalSpoolStatus = ctrl\.signal\.aborted \? "aborted" : spoolStatus;\s*this\.finishNotifier\.turnEnded\(\{ status: finalSpoolStatus/.test(host), "finish notice reads the abort");
+  ok(/const finalSpoolStatus = ctrl\.signal\.aborted \? "aborted" : spoolStatus;\s*this\.finishNotifier\.turnEnded\(\{[^}]*?\bstatus: finalSpoolStatus/.test(host), "finish notice reads the abort");
   const panel = readFileSync("webview-ui/src/ChatPanel.tsx", "utf8");
   ok(/steerPress\(/.test(panel) && /props\.onCancel\(\)/.test(panel.slice(panel.indexOf("steerPress("), panel.indexOf("steerPress(") + 900)), "the steer press calls the panel's onCancel");
   ok(!/postToHost\(\{\s*type:\s*["']sendMessage/.test(panel), "ChatPanel never posts a turn itself");

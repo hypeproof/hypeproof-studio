@@ -5,7 +5,8 @@ import { readDesignFile as readFileSync } from "./lib/design-token-values.mjs";
 //      foreground (currentColor) mixed into transparent; hover 8%, pressed 12–20%; no --hp-border-*
 //      role is a color-mix;
 //   2. every :hover/:active fill in the webview CSS is one of those four layers (or transparent):
-//      no host hover colour, no literal, no opacity or filter change;
+//      no host hover colour, no literal, no opacity or filter change; DES-CGP-DS-36
+//      transcript scrollbar thumbs explicitly use the host scrollbar palette instead;
 //   3. every painted hover has a pressed rule of the same shape, later in the same file;
 //   4. every field and secondary-button boundary is the fixed control token (never color-mix,
 //      never the divider, never the host's input/panel border);
@@ -121,6 +122,16 @@ const stateOf = (r) => {
  * fill), "clear" (transparent / none), or null when it paints nothing. Throws a reason otherwise. */
 function paintOf(r, state) {
   const d = r.decls, kinds = [];
+  // DES-CGP-DS-36 is a browser scrollbar contract, not a button-fill exception.
+  // Only the exact transcript thumb selector and prescribed state palette are admitted.
+  if (r.file === "chatDetails.css" && r.selectors.length === 1 &&
+      r.selectors[0] === `.hps-shell .hps-messages::-webkit-scrollbar-thumb:${state}`) {
+    const expected = state === "hover"
+      ? "var(--vscode-scrollbarSlider-hoverBackground, var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default)))"
+      : "var(--vscode-scrollbarSlider-activeBackground, var(--vscode-scrollbarSlider-hoverBackground, var(--hp-text-muted-default)))";
+    if (d.background !== expected || d["background-color"] != null || d["background-image"] != null) throw new Error("scrollbar must use its host state palette");
+    return "scrollbar";
+  }
   for (const k of ["background", "background-color"]) {
     if (d[k] == null) continue;
     const v = noImportant(d[k]);
@@ -156,7 +167,7 @@ const fillChecks = {
       if (stateOf(r) !== "hover") continue;
       let kind;
       try { kind = paintOf(r, "hover"); } catch { continue; } // check 2 reports it
-      if (kind !== "control" && kind !== "image") continue;
+      if (kind !== "control" && kind !== "image" && kind !== "scrollbar") continue;
       for (const s of r.selectors.filter((x) => /:hover\b/.test(x))) {
         const want = s.replace(/:hover\b/g, ":active");
         const ok = list.some((a) => a.file === r.file && a.index > r.index && a.media === r.media && a.selectors.includes(want) && (() => { try { return paintOf(a, "active") === kind; } catch { return false; } })());
@@ -250,7 +261,7 @@ const MUST = ['.hps-shell[data-chat-detail="personal"] .hps-input', ".hps-input 
   ".hp-cta-quiet", ".tw-quiet", ".tw-new", ".hps-queued-send", ".hps-msg-retry", ".hps-naming-btn-ghost", ".hps-codepill-toggle", ".hps-chip", ".hps-btn-roll", ".hps-cit-chip",
   ".hps-error-banner-dismiss", ".hps-error-banner-report", ".hps-fatal-btn-ghost", ".hps-update-banner-dismiss", ".hps-safety-dismiss", ".hps-delegation-stop", ".hps-notify-optin-submit",
   ".hps-turn-review-actions button", ".hps-page-card-actions button", ".hps-edit-actions button", ".hps-panel-fallback-retry", ".hps-catchup button",
-  '.hps-shell[data-chat-detail="personal"] .hps-reply-choices button', '.hps-shell[data-chat-detail="personal"] .hps-chip', ".hps-voice-actions button", ".hps-voice-retry", ".hps-world", ".hps-native-observation textarea", ".hps-publish-form input", ".hps-evidence-note textarea", '.hps-shell[data-chat-detail="personal"] .hps-cit-chip',
+  '.hps-shell[data-chat-detail="personal"] .hps-reply-choices button', '.hps-shell[data-chat-detail="personal"] .hps-chip', ".hps-voice-actions button", ".hps-voice-retry", ".hps-voice-show button", ".hps-world", ".hps-native-observation textarea", ".hps-publish-form input", ".hps-evidence-note textarea", '.hps-shell[data-chat-detail="personal"] .hps-cit-chip',
   ".tw-trash button", '.tw-source-list button[aria-pressed="true"]', ".hps-native-observation button", ".studio-secondary", ".studio-choice", ".studio-nav button", ".studio-connect input"];
 const boundaryChecks = {
   "4 every field and secondary-button boundary is the fixed control token, and no control boundary is a color-mix": (css) => {
@@ -342,6 +353,8 @@ const negatives = [
   ["1 ", "own-foreground layer replaced by a fixed surface", mutate("tokens.css", "  --hp-bg-layer-hover: color-mix(in srgb, currentColor 8%, transparent);\n  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);\n  --hp-bg-control-selected: var(--vscode-editor", "  --hp-bg-layer-hover: var(--vscode-list-hoverBackground, #253526);\n  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);\n  --hp-bg-control-selected: var(--vscode-editor")],
   ["1 ", "pressed own-foreground layer at 30%", mutate("tokens.css", "  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 14%, transparent);\n  --hp-bg-control-selected: var(--vscode-editor", "  --hp-bg-layer-pressed: color-mix(in srgb, currentColor 30%, transparent);\n  --hp-bg-control-selected: var(--vscode-editor")],
   ["1 ", "control boundary derived from the text colour", (() => { const t = real["tokens.css"]; const i = t.indexOf("--hp-border-control-default:"); const j = t.indexOf(";", i); return { ...real, "tokens.css": t.slice(0, i) + "--hp-border-control-default: color-mix(in srgb, var(--hp-text-primary-default) 45%, transparent)" + t.slice(j) }; })()],
+  ["2 ", "scrollbar hover replaced with the host button color", mutateRule("chatDetails.css", ".hps-shell .hps-messages::-webkit-scrollbar-thumb:hover", "var(--vscode-scrollbarSlider-hoverBackground, var(--vscode-scrollbarSlider-background, var(--hp-text-muted-default)))", "var(--vscode-button-hoverBackground)")],
+  ["3 ", "scrollbar pressed rule removed", mutate("chatDetails.css", "  .hps-shell .hps-messages::-webkit-scrollbar-thumb:active { background: var(--vscode-scrollbarSlider-activeBackground, var(--vscode-scrollbarSlider-hoverBackground, var(--hp-text-muted-default))); }", "")],
   ["2 ", "copy answer back to the host list hover", mutate("chatDetails.css", ".hps-copy-answer:hover { background-color: var(--hp-bg-control-hover); }", ".hps-copy-answer:hover { background: var(--vscode-list-hoverBackground, #2b3037); }")],
   ["2 ", "fatal retry back to the host button hover", mutate("styles.css", ".hps-fatal-btn:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }", ".hps-fatal-btn:hover { background: var(--vscode-button-hoverBackground, #1177bb); }")],
   ["2 ", "naming button back to an opacity hover", mutate("styles.css", ".hps-naming-btn:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }", ".hps-naming-btn:hover { opacity: 0.88; }")],
@@ -361,14 +374,14 @@ const negatives = [
   ["3c", "personal reply choices lose their restated hover", mutate("chatDetails.css", '.hps-shell[data-chat-detail="personal"] .hps-reply-choices button:hover { background-color: var(--hp-bg-control-hover); }\n', "")],
   ["4 ", "world chips back on the panel border", mutateRule("styles.css", ".hps-world", "solid var(--hp-border-control-default)", "solid var(--vscode-panel-border, #444)")],
   ["4 ", "publish form fields lose their boundary", mutate("styles.css", ".hps-publish-form input, .hps-publish-form textarea, .hps-publish-form select { width: 100%; box-sizing: border-box; border: 1px solid var(--hp-border-control-default); }", ".hps-publish-form input, .hps-publish-form textarea, .hps-publish-form select { width: 100%; box-sizing: border-box; }")],
-  ["3b", "lesson-mode quiet hover back to background-color only", mutate("styles.css", "{ background: var(--hp-bg-control-hover); }", "{ background-color: var(--hp-bg-control-hover); }")],
+  ["3b", "lesson-mode quiet hover back to background-color only", mutateRule("styles.css", ".hps-shell:has(.hp-mission .hp-cta-primary) .hps-edit-actions .hps-edit-save:hover:not(:disabled)", "background: var(--hp-bg-control-hover);", "background-color: var(--hp-bg-control-hover);")],
   ["4 ", "selected source back on the panel border", mutateRule("taskWorkspace.css", '.tw-source-list button[aria-pressed="true"]', "border-color: var(--hp-border-control-default)", "border-color: var(--tw-line)")],
-  ["4 ", "personal composer back on the panel border", mutate("chatDetails.css", "gap: 4px; padding: 8px; border: 1px solid var(--hp-border-control-default); border-radius: 22px;", "gap: 4px; padding: 8px; border: 1px solid var(--tw-line); border-radius: 22px;")],
+  ["4 ", "personal composer back on the panel border", mutate("chatDetails.css", "gap: 4px; padding: 8px; border: 1px solid var(--hp-border-control-default); border-radius: var(--hp-radius-composer);", "gap: 4px; padding: 8px; border: 1px solid var(--tw-line); border-radius: var(--hp-radius-composer);")],
   ["4 ", "classroom composer back on the host input border", mutateRule("styles.css", ".hps-input textarea", "solid var(--hp-border-control-default)", "solid var(--vscode-input-border, transparent)")],
   ["4 ", "quiet task button back on the panel border", mutateRule("taskWorkspace.css", ".tw-quiet", "solid var(--hp-border-control-default)", "solid var(--tw-line)")],
   ["4 ", "a secondary button boundary derived via color-mix", mutate("styles.css", ".hps-delegation-stop:hover {", ".hps-delegation-stop { border-color: color-mix(in srgb, currentColor 40%, transparent); }\n.hps-delegation-stop:hover {")],
   ["4 ", "error dismiss back on its white 15% line", mutateRule("styles.css", ".hps-error-banner-dismiss", "solid var(--hp-border-control-default)", "solid rgba(255,255,255,0.15)")],
-  ["4 ", "voice buttons back to a secondary fill with no boundary", mutateRule("styles.css", ".hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry", "solid var(--hp-border-control-default)", "solid var(--vscode-button-border, transparent)")],
+  ["4 ", "voice buttons back to a secondary fill with no boundary", mutateRule("styles.css", ".hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry, .hps-voice-show button", "solid var(--hp-border-control-default)", "solid var(--vscode-button-border, transparent)")],
   ["5 ", "light host themes lose the Paper control boundary", mutateRule("tokens.css", "body.vscode-light, body.vscode-high-contrast-light", "--hp-border-control-default:", "--hp-unused-control-default:")],
   ["5 ", "control boundary back to the #35483A divider", (() => { const t = real["tokens.css"]; const i = t.indexOf("--hp-border-control-default:"); const j = t.indexOf(";", i); return { ...real, "tokens.css": t.slice(0, i) + "--hp-border-control-default: #35483A" + t.slice(j) }; })()],
 ];

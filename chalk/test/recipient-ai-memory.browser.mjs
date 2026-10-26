@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { recipientMemoryProbe } from '../../extensions/hypeproof-chat/test/lib/recipient-memory-probe.mjs';
 // REQ-KNOW-33 / CGP-KNOW-R-018 — Chalk side, computed in headless Chromium (CDP) on the REAL pages served by the app.
 // Every send-to-others step states the receiver AI's storage policy, and the line is SEEN, not only present:
 //   C1 learner share confirmation (sharing.html, the page's own confirmOutbound)
@@ -36,7 +38,7 @@ const SCENES = {
       v('recipient', 'synthetic-teacher'); v('prompt', '버튼 고쳐 줘'); document.getElementById('consent').checked = true;
       window.__send = confirmOutbound('synthetic-teacher', { prompt: '버튼 고쳐 줘' }, document.getElementById('submit')); return 0; })()`);
     await wait(100);
-    return { line: '#outbound-items', exact: false, order: null };
+    return { line: '#outbound-ai-memory', exact: true, order: ['#outbound-ai-memory', '#outbound-send'] };
   },
   async distribution(b) {
     await b.evaluate(`(() => {
@@ -105,6 +107,12 @@ for (const [name, scene] of Object.entries(SCENES)) {
         for (const s of SAFE) assert.ok(!text.includes(s), `${id}: safe wording never shown`);
         assert.deepEqual(found[0].problems, [], `${id}: disclosure must be visible — ${found[0].problems.join('; ')}`);
         if (order) assert.equal(await b.evaluate(`!!(document.querySelector(${JSON.stringify(order[0])}).compareDocumentPosition(document.querySelector(${JSON.stringify(order[1])})) & Node.DOCUMENT_POSITION_FOLLOWING)`), true, `${id}: line comes before the send button`);
+        assert.deepEqual(await b.evaluate(recipientMemoryProbe(line)), [[]], `${id}: visible neutral information icon`);
+        if(process.env.RECIPIENT_MEMORY_ARTIFACT_DIR) {
+          mkdirSync(process.env.RECIPIENT_MEMORY_ARTIFACT_DIR,{recursive:true});
+          const shot=await b.send('Page.captureScreenshot',{format:'png'});
+          writeFileSync(`${process.env.RECIPIENT_MEMORY_ARTIFACT_DIR}/chalk-${name}-${mode.forcedColors?'forced':mode.dark?'dark':'light'}-${width}.png`,Buffer.from(shot.data,'base64'));
+        }
         checked++;
       }
       if (!mode.forcedColors && mode.dark) {

@@ -36,6 +36,22 @@
 .tw-new span { margin-right: var(--ds-c-studio-taskworkspace-space-12); }
 .tw-quiet:hover:not(:disabled), .tw-task:hover:not(:disabled), .tw-title-button:hover:not(:disabled), .tw-source-list button:hover { background-color: var(--hp-bg-control-hover); }
 .tw-quiet:active:not(:disabled), .tw-task:active:not(:disabled), .tw-title-button:active:not(:disabled), .tw-source-list button:active { background-color: var(--hp-bg-control-pressed); }
+/* CGP-KNOW-R-002 — the activity home's 작업/자료 views: two equal tabs under the brand. The chosen tab is
+   marked by weight and an underline, never by colour alone; each tab is a 44px target. A panel is a flex
+   column so the task list keeps its own scroll; the 자료 panel scrolls as a whole. */
+.tw-home-tabs { display: flex; gap: var(--ds-c-studio-taskworkspace-space-12); margin: 0 0 var(--ds-c-studio-taskworkspace-space-18); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
+.tw-workspace .tw-home-tab { flex: 1 1 0; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0 var(--ds-c-studio-taskworkspace-space-2); color: inherit; background: transparent; border: 0; border-bottom: var(--ds-c-studio-taskworkspace-size-7) solid transparent; border-radius: 0; font-size: var(--hp-font-caption); }
+.tw-workspace .tw-home-tab[aria-selected="true"] { font-weight: var(--hp-weight-strong); border-bottom-color: currentColor; }
+.tw-workspace .tw-home-tab:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.tw-workspace .tw-home-tab:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+/* Forced colours: the system selection fill would sit under Chrome's Canvas text backplate and hide the label,
+   so the chosen tab keeps Canvas/CanvasText and shows its state as a 2px Highlight underline plus the weight. */
+@media (forced-colors: active) {
+  .tw-workspace .tw-home-tabs .tw-home-tab[aria-selected="true"] { background-color: Canvas !important; color: CanvasText !important; border-bottom: var(--ds-c-studio-taskworkspace-size-7) solid Highlight !important; }
+}
+.tw-home-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tw-home-panel[hidden] { display: none; }
+.tw-home-materials { overflow: auto; overscroll-behavior: contain; }
 .tw-search { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-12); margin: var(--ds-c-studio-taskworkspace-space-34) var(--ds-c-studio-taskworkspace-space-13) var(--ds-c-studio-taskworkspace-space-18); color: var(--tw-muted); font-size: var(--hp-font-caption); }
 .tw-search input { width: 100%; box-sizing: border-box; min-height: var(--hp-control-min); padding: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); }
 .tw-rail-heading { color: var(--tw-muted); display: flex; justify-content: space-between; margin: 0 var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-12); font-size: var(--hp-font-caption); }
@@ -48,6 +64,21 @@
 .tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-font-caption); }
 .tw-task-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); margin-top: var(--ds-c-studio-taskworkspace-space-12); color: var(--tw-muted); font-variant-numeric: tabular-nums; }
 .tw-local-note { color: var(--tw-muted); margin: var(--ds-c-studio-taskworkspace-space-18) var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-13); font-size: var(--hp-font-caption); }
+/* CGP-CHAT-R-025 — 보관함: same quiet rail rows, no destructive colour (nothing is deleted). */
+.tw-archive-heading h2 { font: inherit; color: inherit; margin: 0; }
+.tw-archive-back, .tw-archive-open { margin: 0 var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-12); text-align: left; font-size: var(--hp-font-caption); }
+.tw-archive-open { display: flex; justify-content: space-between; gap: var(--ds-c-studio-taskworkspace-space-2); margin-top: var(--ds-c-studio-taskworkspace-space-12); }
+.tw-archived { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-12) var(--ds-c-studio-taskworkspace-space-2); padding: var(--ds-c-studio-taskworkspace-space-53) var(--ds-c-studio-taskworkspace-space-24); margin: var(--ds-c-studio-taskworkspace-space-14) 0; }
+.tw-archived .tw-task-meta { grid-column: 1 / -1; grid-row: 2; margin-top: 0; flex-wrap: wrap; }
+.tw-archived .tw-task-meta > * { white-space: nowrap; }
+.tw-archived .tw-reopen { grid-column: 2; grid-row: 1; font-size: var(--hp-font-caption); }
+.tw-archive-note { margin: var(--ds-c-studio-taskworkspace-space-12) var(--ds-c-studio-taskworkspace-space-5) 0; color: var(--tw-muted); font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); }
+/* CGP-CHAT-R-026: a search result's matched passage, two lines at most; the match itself is <strong>. */
+.tw-task-snippet { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); margin-top: var(--ds-c-studio-taskworkspace-space-12); }
+/* KNOW-R-001 x CHAT-R-026: while message matches are shown, the title list keeps its own height so the
+   찾은 대화 group sits right under it instead of at the rail's foot; both lists scroll on their own. */
+.tw-rail:has(.tw-search-group) .tw-task-list:not(.tw-search-results) { flex: 0 1 auto; }
+.tw-search-group { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin-top: var(--ds-c-studio-taskworkspace-space-18); }
 .tw-empty-search { font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); padding: 0 var(--ds-c-studio-taskworkspace-space-2); color: var(--tw-muted); }
 .tw-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .tw-heading { display: flex; align-items: center; gap: var(--ds-c-studio-taskworkspace-space-1); min-height: var(--ds-c-studio-taskworkspace-size-72); padding: 0 var(--ds-c-studio-taskworkspace-space-5); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
@@ -60,11 +91,11 @@
 .tw-conversation { flex: 1; min-height: 0; min-width: 0; }
 .tw-conversation .hps-shell { background: var(--tw-canvas); }
 .tw-conversation .hps-header { border-bottom: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-5); }
-.tw-conversation .hps-messages { padding: var(--ds-c-studio-taskworkspace-space-5) max(var(--ds-c-studio-taskworkspace-space-5), calc((100% - var(--ds-c-studio-taskworkspace-space-54)) / 2)); gap: var(--ds-c-studio-taskworkspace-space-32); }
+.tw-conversation .hps-messages { padding: var(--ds-c-studio-taskworkspace-space-5) max(var(--ds-c-studio-taskworkspace-space-5), calc((100% - var(--ds-c-studio-taskworkspace-space-54)) / 2)); --hps-list-gap: var(--ds-c-studio-taskworkspace-space-32); gap: var(--hps-list-gap); }
 .tw-conversation .hps-msg-body { font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); }
 .tw-conversation .hps-msg-assistant .hps-msg-body { background: transparent; border: 0; padding: 0; max-width: 100%; }
 .tw-conversation .hps-msg-assistant .hps-msg-role > span::before { content: none; }
-.tw-conversation .hps-msg-user .hps-msg-body { background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-taskworkspace-surface-65)); color: inherit; border-radius: var(--ds-c-studio-taskworkspace-radius-14); }
+.tw-conversation .hps-msg-user .hps-msg-body { background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-taskworkspace-surface-65)); color: inherit; border-radius: var(--hp-radius-18) var(--hp-radius-18) var(--hp-radius-6) var(--hp-radius-18); }
 .tw-error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--ds-c-studio-taskworkspace-space-1); margin: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-5); padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--vscode-inputValidation-errorBorder, var(--ds-c-studio-taskworkspace-boundary-49)); border-radius: var(--ds-c-studio-taskworkspace-radius-3); line-height: var(--hp-leading-prose); }
 /* CGP-DS-R-008: at 14px the busy line must not crowd the trial count out of a 390px heading, so it
    may shrink and wrap between words (its title keeps the full sentence). */
@@ -97,7 +128,7 @@
 .tw-rail-close { margin-bottom: var(--ds-c-studio-taskworkspace-space-18); align-self: flex-end; }
 @media (max-width: 1050px) {
   .tw-workspace[data-sources-open="true"] { grid-template-columns: var(--tw-rail-width) minmax(0, 1fr); }
-  .tw-sources { position: absolute; z-index: 3; right: 0; top: var(--ds-c-studio-taskworkspace-size-73); bottom: 0; width: min(var(--ds-c-studio-taskworkspace-size-33), 100%); box-sizing: border-box; box-shadow: var(--ds-c-studio-taskworkspace-shadow-15) 0 var(--ds-c-studio-taskworkspace-shadow-10) var(--ds-c-studio-taskworkspace-shadow-5); }
+  .tw-sources { position: absolute; z-index: 3; right: 0; top: var(--ds-c-studio-taskworkspace-size-73); bottom: 0; width: min(var(--ds-c-studio-taskworkspace-size-33), 100%); box-sizing: border-box; box-shadow: var(--hp-elevation-overlay); }
 }
 @media (max-width: 700px) {
   .tw-workspace, .tw-workspace[data-sources-open="true"] { grid-template-columns: minmax(0, 1fr); }
@@ -133,8 +164,10 @@
 .tw-workspace .hps-shell[data-chat-detail="personal"] .hps-header > button.hps-coach-name { min-height: var(--ds-c-studio-taskworkspace-size-8); min-width: var(--ds-c-studio-taskworkspace-size-8); margin-left: 0; }
 .tw-chat-menu { position: relative; }
 .tw-workspace .hps-header .tw-chat-menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: var(--ds-c-studio-taskworkspace-size-8); min-width: var(--ds-c-studio-taskworkspace-size-8); min-height: var(--ds-c-studio-taskworkspace-size-8); padding: 0; margin: 0; border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
-.tw-chat-menu-panel { position: absolute; z-index: 5; top: calc(100% + var(--ds-c-studio-taskworkspace-size-37)); right: 0; width: min(var(--ds-c-studio-taskworkspace-size-76), calc(100vw - var(--ds-c-studio-taskworkspace-size-23))); padding: var(--ds-c-studio-taskworkspace-space-15); box-sizing: border-box; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-4); background: var(--tw-panel); color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1)); box-shadow: 0 var(--ds-c-studio-taskworkspace-shadow-16) var(--ds-c-studio-taskworkspace-shadow-17) var(--ds-c-studio-taskworkspace-shadow-18); }
-.tw-workspace .hps-header .tw-chat-menu-panel > button { display: block; width: 100%; min-width: var(--ds-c-studio-taskworkspace-size-8); min-height: var(--ds-c-studio-taskworkspace-size-8); box-sizing: border-box; margin: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); border-radius: var(--ds-c-studio-taskworkspace-radius-12); }
+.tw-chat-menu-panel { position: absolute; z-index: 5; top: calc(100% + var(--ds-c-studio-taskworkspace-size-37)); right: 0; width: min(var(--ds-c-studio-taskworkspace-size-76), calc(100vw - var(--ds-c-studio-taskworkspace-size-23))); padding: var(--ds-c-studio-taskworkspace-space-15); box-sizing: border-box; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--hp-radius-menu); background: var(--tw-panel); color: var(--vscode-foreground, var(--ds-c-studio-taskworkspace-ink-1)); box-shadow: var(--hp-elevation-overlay); }
+/* CGP-DS-R-012 (DES-CGP-DS-13): high contrast has no elevation shadow; the 1px border takes the theme's contrastBorder. */
+body.vscode-high-contrast :is(.tw-sources, .tw-chat-menu-panel) { border-color: var(--vscode-contrastBorder, currentColor); }
+.tw-workspace .hps-header .tw-chat-menu-panel > button { display: block; width: 100%; min-width: var(--ds-c-studio-taskworkspace-size-8); min-height: var(--ds-c-studio-taskworkspace-size-8); box-sizing: border-box; margin: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); border-radius: var(--hp-radius-menu-item); }
 
 /* Personal menu contrast follows the active theme, including hover and focus. */
 .tw-workspace .hps-header .tw-chat-menu-toggle,
@@ -197,6 +230,9 @@
 /* CGP-DS-R-006: the run state is a status chip (.tw-run-chip, styles.css .hp-status-chip) with its
    intent's icon, colour and edge; the live-region wrapper only places it. */
 .tw-heading .tw-run-note:not(:empty) { display: inline-flex; align-items: center; min-width: 0; }
+/* CGP-LEARN-R-016: the chat header drawn into this heading carries the coach run state, the one state
+   the heading shows. The run note then stays only as its screen-reader sentence, out of the row. */
+.tw-heading:has(.hps-run-state) .tw-run-note { position: absolute; width: var(--ds-c-studio-taskworkspace-size-3); height: var(--ds-c-studio-taskworkspace-size-3); margin: var(--ds-c-studio-taskworkspace-space-22); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .tw-workspace .tw-heading .tw-sources-toggle { position: relative; font-weight: var(--hp-weight-strong); }
 /* The divider separates the actions from something: only when the activity, the remaining line or the
    run pill precedes 자료. The classroom heading has none of them while idle, so it draws no stray line. */
@@ -244,7 +280,7 @@
 .tw-trash-toast[data-shown="true"] { padding: var(--ds-c-studio-taskworkspace-space-15) var(--ds-c-studio-taskworkspace-space-1); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-4); background: var(--tw-panel); }
 .tw-trash-toast .tw-trash-undo { min-height: var(--ds-c-studio-taskworkspace-size-8); min-width: var(--ds-c-studio-taskworkspace-size-8); padding: 0 var(--ds-c-studio-taskworkspace-space-1); font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-1); text-decoration: underline; }
 .tw-trash-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: var(--ds-c-studio-taskworkspace-space-20); background: var(--ds-c-studio-taskworkspace-surface-126); }
-.tw-trash-dialog { box-sizing: border-box; width: 100%; max-width: var(--ds-c-studio-taskworkspace-size-101); max-height: 90vh; overflow: auto; padding: var(--ds-c-studio-taskworkspace-space-5); color: inherit; background: var(--tw-panel); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-6); font-size: var(--hp-font-caption); }
+.tw-trash-dialog { box-sizing: border-box; width: 100%; max-width: var(--ds-c-studio-taskworkspace-size-101); max-height: 90vh; overflow: auto; padding: var(--ds-c-studio-taskworkspace-space-5); color: inherit; background: var(--tw-panel); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--hp-radius-dialog); font-size: var(--hp-font-caption); }
 .tw-trash-dialog h3 { margin: 0 0 var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-body); }
 .tw-trash-danger { font-weight: var(--hp-weight-strong); }
 @media (forced-colors: active) {
@@ -257,3 +293,22 @@
    the rail's surface. Dark themes keep the host value, and #a4aab3 (6.8:1 on #202226) without one. */
 body.vscode-light .tw-workspace, body.vscode-high-contrast-light .tw-workspace { --tw-muted: var(--hp-text-muted-default); }
 
+
+/* CGP-KNOW-D-012: recorded provenance uses words and glyph shape, never a score or hue-only cue. */
+.tw-provenance-chip { display: inline-flex; align-items: center; gap: var(--hp-space-1); max-width: 100%; box-sizing: border-box; padding: var(--hp-space-1) var(--hp-space-2); border: var(--ds-c-studio-taskworkspace-size-3) solid currentColor; border-radius: var(--hp-radius-8); font-size: var(--hp-font-caption); color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default); vertical-align: middle; }
+.tw-provenance-chip [data-provenance-symbol] { flex: 0 0 auto; }
+.tw-provenance-chip strong { font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; }
+@media (forced-colors: active) { .tw-provenance-chip { color: CanvasText; background: Canvas; border-color: CanvasText; } }
+/* CGP-KNOW-R-009 / DES-KNOW-14 — a 44px task-menu toggle beside each rail row. The menu opens in
+   flow under its row, because the task list scrolls and would clip a popover. */
+.tw-task-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--ds-c-studio-taskworkspace-space-2); }
+.tw-task-menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: var(--hp-control-min); min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0; margin: 0; border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-task-menu-panel { grid-column: 1 / -1; margin: 0 0 var(--ds-c-studio-taskworkspace-space-14); padding: var(--ds-c-studio-taskworkspace-space-15); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--hp-radius-menu); background: var(--tw-panel); }
+.tw-task-menu-heading, .tw-task-menu-reason { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); color: var(--tw-muted); overflow-wrap: anywhere; }
+.tw-task-menu-heading { margin-bottom: var(--ds-c-studio-taskworkspace-space-12); }
+.tw-task-menu-reason { margin-top: var(--ds-c-studio-taskworkspace-space-12); }
+.tw-task-menu-panel button[role="menuitem"] { display: block; width: 100%; min-height: var(--hp-control-min); box-sizing: border-box; margin: 0; padding: var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: calc(var(--hp-radius-menu) - var(--ds-c-studio-taskworkspace-space-15)); background: transparent; color: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.tw-task-menu-panel button[role="menuitem"]:hover:not([aria-disabled="true"]) { background-color: var(--hp-bg-control-hover); }
+.tw-task-menu-panel button[role="menuitem"]:active:not([aria-disabled="true"]) { background-color: var(--hp-bg-control-pressed); }
+.tw-task-menu-panel button[role="menuitem"][aria-disabled="true"] { color: var(--tw-muted); cursor: not-allowed; }
+.tw-move-status { margin: 0; font-size: var(--hp-font-caption); color: var(--tw-muted); overflow-wrap: anywhere; }

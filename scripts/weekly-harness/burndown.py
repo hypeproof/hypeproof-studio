@@ -21,6 +21,13 @@ USAGE:
 "owner/name" to a list of gh-shaped issue dicts (number, title, body, state,
 assignees, url).
 
+Below the cycle tables comes the board, the work record (hypeproof-harness#397):
+Command Center #4's Done since the cycle date, In Progress and Blocked for the same
+repos, from the Harness `scripts/board/board.py report`. board.py is looked up in
+$HYPEPROOF_HARNESS, in this repo and in a sibling `hypeproof-harness` checkout. A
+missing board.py or a failed read is printed in place of that section (and on stderr)
+and the exit code stays 0. An offline run (`--issues-json`) has no board section.
+
 EXIT CODES:
     0  report generated (open issues are the meeting's business, not a failure)
     2  config error / bad cycle label / gh failure
@@ -29,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -113,6 +121,24 @@ def render(cycle: str, repos: list[str], issues_by_repo: dict[str, list[dict]]) 
     return "\n".join(lines)
 
 
+def board_section(cycle: str, repos: list[str]) -> str:
+    """Command Center #4 since the cycle date, from the Harness board.py report."""
+    here, env = Path(__file__).resolve().parents[2], os.environ.get("HYPEPROOF_HARNESS")
+    roots = ([Path(env).expanduser()] if env else []) + [here, here.parent / "hypeproof-harness"]
+    script = next((r / "scripts/board/board.py" for r in roots if (r / "scripts/board/board.py").is_file()), None)
+    if script is None:
+        note = "no Harness checkout with scripts/board/board.py (set HYPEPROOF_HARNESS)"
+    else:
+        cmd = [sys.executable, str(script), "report", "--since", cycle[len("weekly-"):], "--markdown"]
+        proc = subprocess.run(cmd + [arg for repo in repos for arg in ("--repo", repo)],
+                              text=True, capture_output=True, check=False)
+        if proc.returncode == 0:
+            return proc.stdout.strip()
+        note = f"board.py report failed: {(proc.stdout or proc.stderr).strip()[:300]}"
+    print(f"WARN   board section: {note}", file=sys.stderr)
+    return f"_Board section unavailable: {note}_"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Markdown burndown report for a weekly cycle label, per product repo."
@@ -160,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     print(render(args.cycle, repos, issues_by_repo))
+    if fixture is None:  # an offline run reads nothing from GitHub, the board included
+        print("\n" + board_section(args.cycle, repos))
     return 0
 
 

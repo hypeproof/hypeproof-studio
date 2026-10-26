@@ -13,7 +13,6 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "noEmit": true,
     "allowImportingTsExtensions": true
   },
   "include": ["src", "../src/protocol.ts"]

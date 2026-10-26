@@ -3,9 +3,11 @@ import type { TurnToolMode } from '../../src/turnTools';
 import { denialCopy } from '../../src/denialSource';
 import { ChatIcon } from './ChatDetails';
 import { useDialogFocus } from './dialogFocus';
+import { imeComposing } from './imeGuard';
+import { useMenuTypeahead } from './menuTypeahead';
 
 /** Selection belongs to the next draft. Execution status comes from host tool events. */
-export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAttachFile, webSearchItem = true }: {
+export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAttachFile, onSketch, webSearchItem = true }: {
   mode: TurnToolMode;
   onMode: (mode: TurnToolMode) => void;
   webSearch?: { available: boolean; reason?: string };
@@ -13,10 +15,12 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
   onAttach?: () => void;
   /** CGP-CHAT-R-011 — attach a work-folder text file to the next message. */
   onAttachFile?: () => void;
+  onSketch?: () => void;
   /** False on a classroom seat, whose menu carries only the file item. */
   webSearchItem?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const typeahead = useMenuTypeahead(open);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -27,8 +31,10 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
   const reason = locked ? '예약한 메시지를 보내거나 입력창으로 가져온 뒤 변경할 수 있습니다.' : webSearch?.reason || denialCopy({ source: 'unknown', feature: '웹 검색' }, 'neutral');
   return <div ref={root} className="hps-composer-tools">
     <button ref={trigger} type="button" className="hps-tool-trigger" aria-label="도구 열기" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}><ChatIcon kind="plus" /></button>
-    {open && <div ref={menu} className="hps-tools-menu" role="menu" aria-label="메시지 도구" onKeyDown={event => {
-      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    {open && <div ref={menu} className="hps-tools-menu" role="menu" aria-label="메시지 도구" onCompositionStart={typeahead.onCompositionStart} onCompositionEnd={event => typeahead.onCompositionEnd(event, [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])])} onKeyDown={event => {
+      if (event.defaultPrevented || imeComposing(event, typeahead.composing.current)) return;
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { typeahead.search(event, [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])]); return; }
+      typeahead.reset();
       event.preventDefault();
       const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
       const at = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -36,6 +42,7 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach, onAtt
       items[next]?.focus();
     }}>
       {onAttach && <button type="button" role="menuitem" onClick={() => { close(); onAttach(); }}><ChatIcon kind="image" /><span>이미지 첨부<small>이 메시지에 사진이나 화면 추가</small></span></button>}
+      {onSketch && <button type="button" role="menuitem" onClick={() => { close(); onSketch(); }}><ChatIcon kind="image" /><span>그려서 보여주기<small>그림을 그려 이 메시지에 붙여요</small></span></button>}
       {onAttachFile && <button type="button" role="menuitem" onClick={() => { close(); onAttachFile(); }}><ChatIcon kind="file" /><span>작업 폴더 파일 붙이기<small>글로 된 파일 내용을 다음 메시지에 함께 보내요</small></span></button>}
       {webSearchItem && <button type="button" role="menuitemcheckbox" aria-checked={mode === 'web-search'} aria-disabled={locked || !webSearch?.available} onClick={() => {
         if (locked || !webSearch?.available) return;

@@ -448,17 +448,10 @@ function renderMinter(scope, state) {
         ? '<button class="ghost" id="copyall-' + esc(scope.cohort) + '">명단용 전체 복사 (이름: 토큰 — 앱에 그대로 붙이면 안 됩니다)</button>'
         : "");
     out.querySelectorAll(".tok-copy").forEach((b) => {
-      b.onclick = () => {
-        navigator.clipboard.writeText(results[Number(b.dataset.idx)].token);
-        b.textContent = "복사됨 ✓";
-        setTimeout(() => { b.textContent = "이 토큰만 복사"; }, 1500);
-      };
+      b.onclick = () => window.chalkCopyFeedback(b, () => results[Number(b.dataset.idx)].token);
     });
     const copyBtn = document.getElementById("copyall-" + scope.cohort);
-    if (copyBtn) copyBtn.onclick = () => {
-      navigator.clipboard.writeText(results.filter((r) => r.token).map((r) => r.u + ": " + r.token).join("\n\n"));
-      copyBtn.textContent = "복사됨 ✓";
-    };
+    if (copyBtn) copyBtn.onclick = () => window.chalkCopyFeedback(copyBtn, () => results.filter((r) => r.token).map((r) => r.u + ": " + r.token).join("\n\n"));
   };
 }
 
@@ -621,10 +614,7 @@ function renderLabTokens(scope) {
         '<div class="token">' + esc(student.token) + '</div>' +
         '<button type="button" data-copy-lab="' + i + '">이 토큰만 복사</button></div>').join('') : '발급된 학생 토큰이 없습니다.';
       out.querySelectorAll('[data-copy-lab]').forEach(button => {
-        button.onclick = async () => {
-          try { await navigator.clipboard.writeText(students[Number(button.dataset.copyLab)].token); button.textContent = '복사됨 ✓'; }
-          catch { button.textContent = '직접 선택해 복사해주세요'; }
-        };
+        button.onclick = () => window.chalkCopyFeedback(button, () => students[Number(button.dataset.copyLab)].token);
       });
     } catch (error) {
       out.innerHTML = '<div class="banner err">' + esc(error.message || '조회하지 못했습니다.') + '</div>';

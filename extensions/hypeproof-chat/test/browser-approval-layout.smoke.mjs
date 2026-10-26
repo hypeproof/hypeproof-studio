@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {findChromium,launch} from './lib/headless-chromium.mjs';
+import {THEMES,KIND_CLASS} from './lib/vscode-default-themes.mjs';
+const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER==='1')throw Error('Browser required');console.log('NOT RUN browser approval layout');process.exit(0);}
+const built=await build({entryPoints:['webview-ui/src/main.tsx'],bundle:true,write:false,outdir:'out',format:'iife',platform:'browser',loader:{'.svg':'dataurl','.png':'dataurl'}});
+const css=built.outputFiles.find(f=>f.path.endsWith('.css')).text,js=built.outputFiles.find(f=>f.path.endsWith('.js')).text;
+const browser=await launch(bin);let cases=0;
+try{
+ for(const seat of ['personal','classroom'])for(const themeName of ['Dark+','Light+'])for(const width of [320,800,1420])for(const preview of [false,true]){
+  const theme=THEMES[themeName],dark=theme.kind==='dark';const vars=Object.entries(theme).filter(([k,v])=>!['kind','file'].includes(k)&&v!==null).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
+  await browser.send('Page.navigate',{url:'about:blank'});
+  await browser.load(`<!doctype html><html class="${KIND_CLASS[theme.kind]}" style="${vars};--vscode-editor-foreground:${theme.foreground};--vscode-errorForeground:${dark?'#f48771':'#a1260d'};--vscode-editor-font-family:monospace"><head><style>${css}</style></head><body class="${KIND_CLASS[theme.kind]}"><div id="root"></div><script>window.errors=[];window.addEventListener("error",e=>errors.push(e.message));window.messages=[];window.acquireVsCodeApi=()=>({postMessage:m=>messages.push(m),getState(){},setState(){}});${js.replaceAll('</script','<\\/script')}</script></body></html>`,{width,height:900,dark});
+  const config={proxyUrl:'http://controlled.invalid/v1',model:'sonnet',hasToken:true,coach:{name:'코치',personality:'',configured:true},activity:{id:'activity',name:'작업',kind:seat,workspace:'/synthetic',verified:true},taskWorkspace:seat==='personal'?{scope:'s',revision:1,tasks:[{id:'task',title:'작업',createdAt:1,updatedAt:1,messageCount:0}],activeTaskId:'task',sourceSelection:null}:undefined,profile:{profile_id:'synthetic',activity_kind:seat,observation:null,lesson:null,rehearsal:null,welcome:{greeting_md:'안녕하세요'},model_selection:null,ux:{coach:{naming_mode:'fixed',fallback_name:'코치'},suggestions:{initial:[],follow_up:[]},hints:{short_input:{enabled:false},roll_input_button:{enabled:false}},retry_button:{enabled:false}}},textSize:'base'};
+  await browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'config',config:${JSON.stringify(config)}}}))`);
+  const host=preview?'localhost':'a-very-long-host-name-with-more-than-twenty-four-characters.example';
+  const prompt={id:'request',title:'브라우저를 열까요?',host,label:preview?'내 미리보기':'인터넷',place:preview?'preview':'internet',rememberLabel:'이 사이트는 항상 허용 ('+host+')'};
+  await browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'browserApprovalPrompt',prompt:${JSON.stringify(prompt)}}}))`);
+  await new Promise(r=>setTimeout(r,200));
+  const m=await browser.evaluate(`(()=>{const d=document.querySelector('.hps-browser-approval');if(!d)return null;const r=d.getBoundingClientRect(),h=d.querySelector('strong'),b=d.querySelector('.hps-browser-badge');return {open:d.open,left:r.left,right:r.right,host:h.textContent,weight:getComputedStyle(h).fontWeight,clipped:h.scrollWidth>h.clientWidth,ellipsis:getComputedStyle(h).textOverflow,label:b.textContent,shape:!!b.querySelector('svg path'),icon:(()=>{const g=b.querySelector('svg');if(!g)return null;const q=g.getBoundingClientRect(),c=getComputedStyle(g);return {w:q.width,h:q.height,visible:c.display!=='none'&&c.visibility==='visible'&&Number(c.opacity)>0&&g.checkVisibility()}})(),edge:(()=>{const c=getComputedStyle(b);return {width:parseFloat(c.borderTopWidth),style:c.borderTopStyle}})(),focused:document.activeElement?.textContent,buttons:[...d.querySelectorAll('button')].map(b=>({height:b.getBoundingClientRect().height,width:b.getBoundingClientRect().width})),foreground:getComputedStyle(h).color,background:getComputedStyle(d).backgroundColor,pageOverflow:document.documentElement.scrollWidth>innerWidth}})()`);
+  assert.ok(m?.open,`${seat}/${themeName}/${width}: actual App opens modal`);assert.equal(m.host,host);assert.ok(Number(m.weight)>=600);assert.equal(m.clipped,false);assert.notEqual(m.ellipsis,'ellipsis');assert.equal(m.label,prompt.label);assert.equal(m.shape,true);assert.ok(m.icon?.visible&&m.icon.w>=12&&m.icon.h>=12,`${seat}/${themeName}/${width}: badge shape icon renders (${JSON.stringify(m.icon)})`);assert.ok(m.edge.width>=1&&m.edge.style==='solid',`${seat}/${themeName}/${width}: badge has a visible outline shape (${JSON.stringify(m.edge)})`);assert.ok(m.left>=0&&m.right<=width+.5);assert.equal(m.pageOverflow,false);assert.equal(m.focused,'거절');assert.equal(m.buttons.length,3);for(const b of m.buttons)assert.ok(b.height>=44&&b.width>=44,JSON.stringify(b));
+  const luminance=color=>{const rgb=color.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722};
+  const luminances=[luminance(m.foreground),luminance(m.background)].sort((a,b)=>b-a);assert.ok((luminances[0]+.05)/(luminances[1]+.05)>=4.5,'purpose text contrast >=4.5:1');
+  const ring=await browser.focusVisibleStyle('[data-browser-deny]');assert.equal(ring['outline-width'],'2px');
+  if(process.env.BROWSER_SCREENSHOTS){mkdirSync(process.env.BROWSER_SCREENSHOTS,{recursive:true});const png=await browser.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${process.env.BROWSER_SCREENSHOTS}/${seat}-${theme.kind}-${width}-${preview?'preview':'internet'}.png`,Buffer.from(png.data,'base64'));}
+  if(width===800&&preview){
+   await browser.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:{type:'config',config:${JSON.stringify({...config,textSize:'xlarge'})}}}))`);await new Promise(r=>setTimeout(r,50));
+   assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('.hps-browser-host')).fontSize"),'18px');
+   await browser.send('Emulation.setEmulatedMedia',{features:[{name:'forced-colors',value:'active'}]});
+   const fc=await browser.evaluate("(()=>{const e=document.createElement('i');e.style.color='CanvasText';document.body.append(e);const color=getComputedStyle(e).color;e.remove();return {color,border:getComputedStyle(document.querySelector('.hps-browser-badge')).borderTopColor}})()");assert.equal(fc.border,fc.color);
+  }
+  await browser.evaluate(`document.querySelector('.hps-browser-approval').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);await new Promise(r=>setTimeout(r,220));assert.deepEqual(await browser.evaluate("messages.filter(m=>m.type==='browserApprovalAnswer').map(m=>({id:m.id,choice:m.choice}))"),[{id:'request',choice:'deny'}]);cases++;
+ }
+ console.log(`PASS browser approval actual App: ${cases} seat/theme/width/target cases; full bold host, text/shape badge, default refusal, Esc, 44px buttons, contrast, 320px containment, xlarge and forced colours`);
+}finally{await browser.close();}

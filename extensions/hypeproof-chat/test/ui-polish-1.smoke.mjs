@@ -32,40 +32,8 @@ const check = async (label, fn) => { try { await fn(); ok(label); } catch (e) { 
 
 // ─── CSS: rules with their media context ────────────────────────────────────────────────────────
 /** Split a selector list on commas outside parentheses (":has(a, b)" stays one selector). */
-function splitTop(list) {
-  const out = []; let depth = 0, cur = "";
-  for (const ch of list) {
-    if (ch === "(") depth++;
-    if (ch === ")") depth--;
-    if (ch === "," && depth === 0) { out.push(cur); cur = ""; continue; }
-    cur += ch;
-  }
-  return [...out, cur].map((x) => x.trim()).filter(Boolean);
-}
-function rules(raw) {
-  const css = raw.replace(/\/\*[\s\S]*?\*\//g, "");
-  const out = [];
-  const walk = (from, to, media) => {
-    let i = from;
-    while (i < to) {
-      const open = css.indexOf("{", i);
-      if (open < 0 || open >= to) return;
-      const head = css.slice(i, open).trim();
-      let depth = 1, j = open + 1;
-      for (; j < to && depth; j++) depth += css[j] === "{" ? 1 : css[j] === "}" ? -1 : 0;
-      if (/^@media\b/.test(head)) walk(open + 1, j - 1, head.replace(/^@media\s*/, ""));
-      else if (!head.startsWith("@")) {
-        const body = css.slice(open + 1, j - 1);
-        const decls = {};
-        for (const d of body.split(";")) { const k = d.indexOf(":"); if (k > 0) decls[d.slice(0, k).trim()] = d.slice(k + 1).trim(); }
-        out.push({ selectors: splitTop(head).map((s) => s.replace(/\s+/g, " ").trim()), decls, media });
-      }
-      i = j;
-    }
-  };
-  walk(0, css.length, "");
-  return out;
-}
+import { rules } from './fixtures/stylesheet-rules.mjs';
+
 const all = (css) => Object.entries(css).flatMap(([file, text]) => rules(text).map((r) => ({ ...r, file })));
 /** Every declaration of `prop` on an exact selector (later wins), within one media context. */
 const value = (css, selector, prop, media = "") => {
@@ -99,8 +67,8 @@ const checks = {
     if (inline(margin) !== COLUMN_GUTTER) bad.push(`card margin-inline is not the column gutter: ${margin}`);
     if (value(css, CARD, "box-sizing") !== "border-box") bad.push("card is not border-box (its border would widen it past the column)");
     // Narrow panes: the messages' own 18px gutter.
-    const narrowMessages = inline(value(css, `${PERSONAL} .hps-messages`, "padding", "(max-width: 700px)"));
-    const narrowCard = value(css, CARD, "margin-inline", "(max-width: 700px)");
+    const narrowMessages = inline(value(css, `${PERSONAL} .hps-messages`, "padding", "@container studio-chat (width < 448px)"));
+    const narrowCard = value(css, CARD, "margin-inline", "@container studio-chat (width < 448px)");
     if (narrowCard !== narrowMessages) bad.push(`narrow card ${narrowCard} != messages ${narrowMessages}`);
     return bad;
   },

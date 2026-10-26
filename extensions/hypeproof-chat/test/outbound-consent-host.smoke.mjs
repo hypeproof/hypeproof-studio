@@ -68,7 +68,7 @@ const ok = (label) => { pass++; console.log("  ok   " + label); };
   assert.equal(v.dialogs.length, 1); const d = v.dialogs[0];
   assert.equal(d.options.modal, true, "the dialog is modal");
   assert.equal(d.message, "보내기 전에 확인해 주세요");
-  assert.equal(d.options.detail, ["받는 곳: 수업 기록 운영자 · service.invalid", "보낼 항목:", "• events.jsonl (2,048 바이트)", "받는 사람의 AI 기억: 확인 안 됨", "", EXCLUDED].join("\n"));
+  assert.equal(d.options.detail, ["받는 곳: 수업 기록 운영자 · service.invalid", "보낼 항목:", "• events.jsonl (2,048 바이트)", "ⓘ 받는 사람의 AI 기억: 확인 안 됨", "", EXCLUDED].join("\n"));
   assert.deepEqual(d.actions, ["확인하고 보내기"], "one send action; Cancel is the dialog's own");
   v.answer = "취소"; assert.equal(await confirmOutbound(manifest), false, "any other answer is not consent");
   v.answer = "확인하고 보내기"; assert.equal(await confirmOutbound(manifest), true);
@@ -112,7 +112,7 @@ const ok = (label) => { pass++; console.log("  ok   " + label); };
 }
 
 // ── H3/H4 the real provider ─────────────────────────────────────────────────────────────────────────────────────────────
-const makeProvider = await load('export { ChatPanelProvider } from "./src/chatPanelProvider.ts"; export { setOutboundPresenter } from "./src/outboundConsentHost.ts"; export { outboundDetails } from "./src/outboundConsent.ts";');
+const makeProvider = await load('export { ChatPanelProvider } from "./src/chatPanelProvider.ts"; export { setOutboundPresenter } from "./src/outboundConsentHost.ts"; export { outboundDetails } from "./src/outboundConsent.ts";', { 'visitorPreviewHost$': 'import * as vscode from "vscode"; export const showVisitorPreview = async snapshot => { vscode.window.previewSnapshot = snapshot; return vscode.window.previewAnswer !== false; };' });
 const root = mkdtempSync(path.join(os.tmpdir(), "hps-outbound-host-"));
 try {
   const work = path.join(root, "work"), sessionDir = path.join(root, "spool", "2026-10-20", "session-synthetic");
@@ -136,7 +136,7 @@ try {
       cachedProfile: { publishing: { enabled: true, strategy: "hypeproof_gallery" }, analytics: { upload_session_logs: true } },
       profileGeneration: 1, resolveCoachCwd: () => work, inlineEngineIfNeeded: async (html) => html,
       spool: { currentSessionDir: () => sessionDir }, post: async (m) => { posts.push(m); return true; },
-      activeStreams: new Map(), pendingSends: 0, draftWrites: Promise.resolve(), postConfig: async () => {}, loadAccess: async () => {},
+      activeStreams: new Map(), delegationControls: new Map(), pendingSends: 0, draftWrites: Promise.resolve(), postConfig: async () => {}, loadAccess: async () => {},
     });
     // CGP-KNOW-R-007: public sends are only ever asked in the panel. `panel` answers each step like the in-panel dialogs:
     // `panel.content` / `panel.public` (true, false or null = no visible panel); `panel.asked` records [step, details].
@@ -148,6 +148,13 @@ try {
 
   // H3 gallery
   {
+    const previewCancel = provider("확인하고 보내기"); previewCancel.v.window.previewAnswer = false;
+    await previewCancel.h.publishToGallery(); await settle();
+    assert.equal(previewCancel.panel.asked.length, 0, "cancel preview never reaches send consent");
+    assert.deepEqual(previewCancel.calls.filter(x => x.method !== "GET"), [], "cancel preview sends neither page nor record");
+    assert.equal(previewCancel.v.window.previewSnapshot.entry, "index.html");
+    assert.match(previewCancel.v.window.previewSnapshot.audience, /site.invalid.*인터넷의 누구나/);
+    assert.ok(previewCancel.v.window.previewSnapshot.files[0].data.toString().includes("내 세상"));
     const c = provider(undefined); await c.h.publishToGallery(); await settle();
     assert.deepEqual(c.panel.asked.map(x => x[0]), ["content"], "one checklist for the whole action; Cancel ends it");
     assert.equal(c.v.dialogs.length, 0, "a public send never opens a native modal");
@@ -156,7 +163,7 @@ try {
     assert.equal(lines[0], "받는 곳: 갤러리 · site.invalid"); assert.equal(lines[1], "누구나 볼 수 있어요");
     assert.equal(lines[2], "공개 페이지에 내 이름이 함께 보여요 (수업 명단에 적힌 이름을 갤러리가 붙여요)", "F7: the name on the public page is said");
     const at = lines.indexOf("함께 보내는 것 — 받는 곳: 수업 기록 운영자 · service.invalid");
-    assert.equal(lines[at + 1], "받는 사람의 AI 기억: 확인 안 됨", "secondary recipient has its own unknown policy");
+    assert.equal(lines[at + 1], "ⓘ 받는 사람의 AI 기억: 확인 안 됨", "secondary recipient has its own unknown policy");
     assert.ok(at > 0, "the session record is its own block with its own recipient: " + lines.join(" | "));
     assert.deepEqual(lines.slice(at + 2, at + 4), ["• 이번 활동 기록 session.meta.json (2 바이트)", `• 이번 활동 기록 events.jsonl (${Buffer.byteLength('{"text":"PRIVATE-EVENT"}\n')} 바이트)`]);
     assert.equal(lines.at(-1), EXCLUDED);

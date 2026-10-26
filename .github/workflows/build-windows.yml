@@ -282,6 +282,7 @@ jobs:
           else
             echo "::warning::skipped Windows version stamp (HPS_VER='$HPS_VER', product='$PKG_PRODUCT')"
           fi
+          node ../scripts/patches/core/korean/install.mjs "VSCode-win32-${VSCODE_ARCH}/resources/app"
           bash prepare_assets.sh
 
       - name: Locate artifacts

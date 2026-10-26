@@ -291,7 +291,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "7689ce2a793937f3aa7e597df16b8f743f576b8600dab05d9e4db22adc1ddffd",
+      "sha256": "3a10c5be6cb3fbe98a8844e2614f21bd4067074431a2c5ac168ffef4dc512bef",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -385,7 +385,7 @@
         "ADM-14"
       ],
       "inline_prefixes": [],
-      "sha256": "30d0c4b3f01695c4ca5ee055235a71f6371d9ad53a4a192c3dce9df7d7171d35",
+      "sha256": "5f749b949f74b428fb730b974391d5f25e6010b2bc2d2c9b735fc239b88ed6b5",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
@@ -804,6 +804,25 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
       "test": "docs/requirements/private-release-access.md"
+    },
+    {
+      "path": "docs/requirements/personal-claude-continuation.md",
+      "ids": [
+        "PCC-01",
+        "PCC-02",
+        "PCC-03",
+        "PCC-04",
+        "PCC-05",
+        "PCC-06",
+        "PCC-07",
+        "PCC-08"
+      ],
+      "inline_prefixes": [],
+      "sha256": "7b6c93345c77a55770c2224d371f6cc43ce3847d9961dd0e188572df2d80aa65",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/personal-claude-continuation.md",
+      "test": "docs/testing/personal-claude-continuation.md"
     }
   ],
   "work_items": [
@@ -4123,6 +4142,49 @@
         "extensions/hypeproof-chat/test/join-link.smoke.mjs",
         "chalk/test/join-link.test.mjs",
         "e2e/start-page/join-link.mjs"
+      ]
+    },
+    {
+      "id": "personal-claude-customer-continuation",
+      "title": "Preserve personal work through reviewed official Claude Code handoff",
+      "issue": 2485,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/personal-claude-continuation.md",
+          "ids": [
+            "PCC-01",
+            "PCC-02",
+            "PCC-03",
+            "PCC-04",
+            "PCC-05",
+            "PCC-06",
+            "PCC-07",
+            "PCC-08"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Integrate the reviewed public manual handoff, then verify its clipboard and same-task import in an isolated installed Studio. Keep automatic subscription inference Dev-only until provider distribution eligibility is confirmed. Do not record native/customer acceptance from synthetic checks.",
+      "design_delta": "After an eligible personal free end card, review selected text and explicitly copy it to the clipboard; independently use the official client and explicitly import a reply. Automated text-only calls require exact Dev identity plus opt-in, with account/payload consent and no tools or fallback.",
+      "positive_control": "Eligible personal free task copies exactly the reviewed selected payload once and explicitly imports one reply into that same task; Dev identity plus opt-in activates the isolated experimental adapter.",
+      "negative_control": "Minor/class/paid or stale seats, changed task or credential, unchecked/expired/reused consent, wrong nonce and cancelled callbacks cannot transfer or append; public Studio never inspects or invokes the CLI, even with the experiment environment flag.",
+      "evidence_required": "Exact source, focused host/CLI/entry controls and headless browser evidence; separately record installed-app clipboard and task persistence. Real provider use and automated distribution approval are separate, currently blocked/unrun boundaries.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/personalContinuation",
+        "extensions/hypeproof-chat/src/personalContinuationHost.ts",
+        "extensions/hypeproof-chat/src/personalContinuationView.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/webview-ui/src/TrialEndCard.tsx"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/personal-continuation-core.smoke.mjs",
+        "extensions/hypeproof-chat/test/personal-continuation-cli.smoke.mjs",
+        "extensions/hypeproof-chat/test/customer-claude-host.smoke.mjs",
+        "extensions/hypeproof-chat/test/trial-end-card-host.smoke.mjs",
+        "extensions/hypeproof-chat/test/trial-end-card-dismiss.test.tsx",
+        "e2e/customer-claude/run.mjs"
       ]
     }
   ]

@@ -1,6 +1,8 @@
+import { citationKindLabel } from './citationKind';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import type { ChatMessage, Citation } from '../../src/protocol';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
+import type { TaskSearchPart, TaskSearchResult } from '../../src/taskSearch';
 import { taskCountLine, taskRunAccessibleName, type TaskRunState } from '../../src/taskRunState';
 import { onHostMessage, postToHost } from './vscode';
 import { CitationPreview, CitationPreviewContext, SourceIcon, citationAddress } from './CitationPreview';
@@ -17,6 +19,13 @@ import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { KeyboardSplitter, SkipToInput } from './KeyboardNavigation';
 import { loadPanelSizes, PANEL_LIMITS, savePanelSizes, type PanelName } from './panelSizes';
 import { PanelBoundary } from './PanelBoundary';
+import { filterTasksByTitle, markTitleMatches, TASK_SEARCH_MAX } from './taskTitleFilter';
+import { offerUndo } from './UndoToast';
+import { MaterialsPanel } from './MaterialsPanel';
+import { ActivityHomeContext, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
+import { TaskAppearanceContext, TaskAppearanceDialog, TaskMark } from './TaskAppearance';
+import { TaskMenu } from './TaskMenu';
+import type { TaskMoveView } from '../../src/taskMove';
 
 interface Props {
   view: TaskWorkspaceView;
@@ -30,6 +39,10 @@ interface Props {
   onDismissError: () => void;
   /** CGP-KNOW-R-015 — set only where the seat may attach work-folder files: 이 파일에 대해 묻기 per listed file. */
   onAskAboutFile?: (path: string) => void;
+  /** CGP-KNOW-R-002 — set where the seat has the activity's 자료 list (R-003's gate, never the instructor): the rail offers 작업/자료. */
+  materials?: boolean;
+  /** CGP-KNOW-R-009 — the host's move rule for this activity's tasks; absent → no task menu. */
+  taskMove?: TaskMoveView;
   children: ReactNode;
 }
 
@@ -57,6 +70,18 @@ function sourceRequestId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Stable context values: a new object each render would re-render every consumer in the conversation.
+const HOME_WITH_MATERIALS = { materialsHome: true }, HOME_WITHOUT_MATERIALS = { materialsHome: false };
+
+/** CGP-CHAT-R-026 / D-026 — the matched text is bold (a <strong>), never colour alone; title-filtered rows use it too. */
+function SearchParts({ parts }: { parts: readonly TaskSearchPart[] }) {
+  return <>{parts.map((part, index) => part.match ? <strong key={index}>{part.text}</strong> : <span key={index}>{part.text}</span>)}</>;
+}
+
+const SEARCH_PAUSE_MS = 150;
+
+interface PendingReveal { taskId: string; messageId?: string; from: string | null }
+
 interface ReadingPosition {
   scroller: HTMLElement;
   anchor?: HTMLElement;
@@ -67,8 +92,32 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, children }: Props) {
-  const [filter, setFilter] = useState('');
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, taskMove, children }: Props) {
+  // REQ-STUDIO-TASK-RAIL-SEARCH: `text` is what the field shows, `applied` the committed query the list
+  // filters by. An open IME composition (a half-built Hangul syllable) never filters; the commit does.
+  // Both belong to one activity: a different scope starts with an empty search.
+  const [search, setSearch] = useState({ scope: view.scope, text: '', applied: '' });
+  const railSearch = search.scope === view.scope ? search : { scope: view.scope, text: '', applied: '' };
+  // CGP-KNOW-R-002: the activity home's view, remembered per seat. Switching posts nothing and leaves the
+  // conversation (and so the composer draft) mounted. A seat without the 자료 list always shows 작업.
+  const [homeChoice, setHomeChoice] = useState(() => ({ scope: view.scope, value: loadHomeView(view.scope) }));
+  const homeView: HomeView = !materials ? 'tasks' : homeChoice.scope === view.scope ? homeChoice.value : loadHomeView(view.scope);
+  const homeTabs = useRef<HTMLDivElement>(null);
+  const chooseHome = (next: HomeView, focus = false) => {
+    setHomeChoice({ scope: view.scope, value: next });
+    saveHomeView(view.scope, next);
+    if (focus) homeTabs.current?.querySelector<HTMLElement>(`#tw-home-tab-${next}`)?.focus();
+  };
+  // CGP-CHAT-R-026 — on top of the local title filter, a committed query also asks the host to search
+  // message text in the task files on this device. `results` null = the host could not read the task file.
+  const [hostSearch, setHostSearch] = useState<{ scope: string; results: TaskSearchResult[] | null } | null>(null);
+  const searchRequest = useRef<{ requestId: string; scope: string } | null>(null);
+  const pendingReveal = useRef<PendingReveal | null>(null);
+  const [revealTick, setRevealTick] = useState(0);
+  // CGP-KNOW-R-009 — at most one task menu is open; a move is bound to its request id.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [moveStatus, setMoveStatus] = useState('');
+  const moveRequest = useRef<string | null>(null);
   // CGP-SHELL-R-012: a size is the user's own choice, remembered per seat; until then the design-token width applies.
   const workspaceEl = useRef<HTMLDivElement>(null);
   const [panelSizes, setPanelSizes] = useState(() => ({ scope: view.scope, sizes: loadPanelSizes(view.scope) }));
@@ -80,6 +129,13 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     savePanelSizes(view.scope, next);
   };
   const [railOpen, setRailOpen] = useState(false);
+  // CGP-CHAT-R-025 — 보관함 is a separate view of the task list, inside the same rail.
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const archiveToggle = useRef<HTMLButtonElement>(null);
+  const archiveHeading = useRef<HTMLHeadingElement>(null);
+  const archiveFocus = useRef<'heading' | 'toggle' | null>(null);
+  /** The task 다시 열기 asked for; focus follows it only if that task really opened. */
+  const reopenPending = useRef<string | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   // REQ-STUDIO-ARTIFACT-PROVENANCE — undefined until the host answers for this scope.
   const [artifacts, setArtifacts] = useState<ArtifactProvenanceView | null | undefined>(undefined);
@@ -87,13 +143,16 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const [headingSlot, setHeadingSlot] = useState<HTMLDivElement | null>(null);
   const [sourceRequest, setSourceRequest] = useState<SourceRequest | null>(null);
   const [renaming, setRenaming] = useState(false);
+  // CGP-KNOW-R-008 — the scope the appearance picker was opened in; a task switch closes it.
+  const [appearanceScope, setAppearanceScope] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [renamePending, setRenamePending] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
-  const renameRequest = useRef<{ id: string; scopeKey: string } | null>(null);
+  const renameRequest = useRef<{ id: string; scopeKey: string; taskId: string | null; title: string } | null>(null);
   const renameForm = useRef<HTMLFormElement>(null);
   const renameButton = useRef<HTMLButtonElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
+  const currentTitle = useRef<string | undefined>(undefined);
   const main = useRef<HTMLElement>(null);
   const conversation = useRef<HTMLDivElement>(null);
   const rail = useRef<HTMLElement>(null);
@@ -111,6 +170,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const railDialog = railOpen && viewport <= 700;
   const scopeKey = JSON.stringify([view.scope, view.activeTaskId]);
   const active = view.tasks.find(task => task.id === view.activeTaskId);
+  currentTitle.current = active?.title;
   const sources = useMemo(() => {
     const byUrl = new Map<string, Citation>();
     for (const message of messages) for (const source of message.citations ?? []) {
@@ -131,7 +191,45 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const sourceDisplay = useRef({ open: sourcesOpen, url: selected?.url });
   sourceDisplay.current = { open: sourcesOpen, url: selected?.url };
   const blocked = busy || !!view.error;
-  const visibleTasks = view.tasks.filter(task => task.title.toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
+  const visibleTasks = useMemo(() => filterTasksByTitle(view.tasks, railSearch.applied), [view.tasks, railSearch.applied]);
+  const searching = railSearch.applied.trim() !== '';
+  const archivedTasks = view.archived ?? [];
+  const visibleArchived = useMemo(() => filterTasksByTitle(archivedTasks, railSearch.applied), [archivedTasks, railSearch.applied]);
+  // CGP-CHAT-R-025 — say where the task went when 보관하기 replaced it with another one. Bound to the
+  // scope it was archived from and cleared by the next task change.
+  const [archiveNote, setArchiveNote] = useState<{ title: string; scopeKey: string } | null>(null);
+  const lastOpen = useRef({ scope: view.scope, taskId: view.activeTaskId });
+  useEffect(() => {
+    const before = lastOpen.current;
+    lastOpen.current = { scope: view.scope, taskId: view.activeTaskId };
+    if (before.scope !== view.scope || before.taskId === view.activeTaskId) return;
+    const moved = before.taskId ? view.archived?.find(task => task.id === before.taskId) : undefined;
+    setArchiveNote(moved ? { title: moved.title, scopeKey } : null);
+  }, [view, scopeKey]);
+  const openArchive = (open: boolean) => {
+    archiveFocus.current = open ? 'heading' : 'toggle';
+    setArchiveOpen(open);
+  };
+  useLayoutEffect(() => {
+    const target = archiveFocus.current === 'heading' ? archiveHeading.current : archiveFocus.current === 'toggle' ? archiveToggle.current : null;
+    archiveFocus.current = null;
+    target?.focus({ preventScroll: true });
+  }, [archiveOpen]);
+  useLayoutEffect(() => {
+    if (!reopenPending.current || reopenPending.current !== view.activeTaskId || archiveOpen) return;
+    reopenPending.current = null;
+    // REQ-STUDIO-FOCUS-RESTORE: the reopened task's row, else the composer, never <body>.
+    returnFocus(() => rail.current?.querySelector<HTMLElement>('.tw-task[aria-current="page"]') ?? null);
+  }, [view.activeTaskId, archiveOpen]);
+  // The last answer stays on screen while a newer query or a saved turn is asked again, so the list does not blink.
+  const answered = searching && hostSearch?.scope === view.scope ? hostSearch : null;
+  // Owner reconciliation (KNOW-R-001 x CHAT-R-026): a task already listed by title is never listed again,
+  // and a host answer that matched only the name adds nothing to the title list.
+  const messageResults = useMemo(() => {
+    if (!answered?.results) return [];
+    const byTitle = new Set(visibleTasks.map(task => task.id));
+    return answered.results.filter(result => result.messageId && !byTitle.has(result.taskId));
+  }, [answered, visibleTasks]);
   const date = useMemo(() => new Intl.DateTimeFormat('ko', { month: 'short', day: 'numeric' }), []);
 
   const updateRequest = useCallback((next: SourceRequest | null) => {
@@ -231,9 +329,51 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     setRenamePending(null);
     setRenameError(null);
     setRailOpen(false);
+    setArchiveOpen(false);
+    setAppearanceScope(null);
+    setMenuFor(null);
   }, [scopeKey, clearRequestTimer, updateRequest]);
   useEffect(() => clearRequestTimer, [clearRequestTimer]);
   useEffect(() => onHostMessage(message => { if (message.type === 'artifactProvenance') setArtifacts(message.view); }), []);
+  // A newer query, task change or saved turn asks again; only the latest request's answer is shown.
+  useEffect(() => {
+    // Only the committed query asks (an open IME composition never changes `applied`), and a blank one never does.
+    const query = railSearch.applied;
+    if (!query.trim()) { searchRequest.current = null; setHostSearch(null); return; }
+    const request = { requestId: sourceRequestId(), scope: view.scope };
+    searchRequest.current = request;
+    // Typing asks once it pauses; the host scans every task, and it also runs the live turn.
+    const timer = setTimeout(() => postToHost({ type: 'taskSearch', query, requestId: request.requestId }), SEARCH_PAUSE_MS);
+    return () => clearTimeout(timer);
+  }, [railSearch.applied, view.scope, view.revision]);
+  useEffect(() => onHostMessage(message => {
+    if (message.type !== 'taskSearchResult') return;
+    const waiting = searchRequest.current;
+    if (!waiting || message.requestId !== waiting.requestId || message.scope !== waiting.scope || (message.results !== null && !Array.isArray(message.results))) return;
+    setHostSearch({ scope: waiting.scope, results: message.results });
+  }), []);
+  // A refused or failed switch leaves the learner where they were: drop the jump so a later, unrelated
+  // opening of that task does not scroll.
+  useEffect(() => onHostMessage(message => { if (message.type === 'taskWorkspaceError' && message.error) pendingReveal.current = null; }), []);
+  // CGP-CHAT-R-026 — opening a result scrolls the transcript to the matched message once it is on screen.
+  useLayoutEffect(() => {
+    const pending = pendingReveal.current;
+    if (!pending) return;
+    if (view.activeTaskId !== pending.taskId) {
+      // The switch failed or another task was chosen: never jump later in an unrelated view.
+      if (view.activeTaskId !== pending.from) pendingReveal.current = null;
+      return;
+    }
+    if (!pending.messageId) { pendingReveal.current = null; return; }
+    if (!messages.some(message => message.id === pending.messageId)) return;
+    pendingReveal.current = null;
+    const row = conversation.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(pending.messageId)}"]`);
+    const scroller = row?.closest<HTMLElement>('.hps-messages');
+    if (!row || !scroller) return;
+    scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    // Tell the transcript the reader moved now, so following the latest message cannot pull it back.
+    scroller.dispatchEvent(new Event('scroll'));
+  }, [messages, view.activeTaskId, revealTick]);
   useEffect(() => { setArtifacts(undefined); }, [scopeKey]);
   // Each opening asks again: the host rescans the folder when no turn runs.
   useEffect(() => { if (sourcesOpen) postToHost({ type: 'artifactProvenanceRequest' }); }, [sourcesOpen, scopeKey]);
@@ -328,12 +468,40 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     setRenaming(false);
   };
   useEffect(() => onHostMessage(message => {
+    if (message.type !== 'taskMoveResult' || message.requestId !== moveRequest.current) return;
+    moveRequest.current = null;
+    setMoveStatus(message.moved && message.title && message.destination ? `‘${message.title}’ 작업을 ‘${message.destination}’ 활동으로 옮겼어요. 그 활동을 열면 이어서 할 수 있어요.` : '');
+    // The moved row is gone (or, on failure, focus would otherwise stay on <body>): land on the open task.
+    const target = rail.current?.querySelector<HTMLElement>('.tw-task[aria-current="page"]') ?? rail.current;
+    requestAnimationFrame(() => { if (!document.activeElement || document.activeElement === document.body) target?.focus({ preventScroll: true }); });
+  }), []);
+  useEffect(() => { if (blocked) setMenuFor(null); }, [blocked]);
+  const moveTask = (taskId: string, destination: string) => {
+    if (blocked || moveRequest.current) return;
+    const requestId = sourceRequestId();
+    moveRequest.current = requestId;
+    setMoveStatus('');
+    postToHost({ type: 'taskMove', id: taskId, destination, requestId });
+    // A lost reply must not block later moves; the host answers well within this.
+    setTimeout(() => { if (moveRequest.current === requestId) moveRequest.current = null; }, 20000);
+  };
+  useEffect(() => onHostMessage(message => {
     if (message.type !== 'taskRenameResult') return;
     const pending = renameRequest.current;
     if (!pending || pending.id !== message.requestId || pending.scopeKey !== current.current.scopeKey) return;
     renameRequest.current = null;
     setRenamePending(null);
-    if (message.saved) finishRename();
+    if (message.saved) {
+      finishRename();
+      // CGP-CHAT-R-029 — a rename offers 되돌리기; the host puts back the exact prior title it kept.
+      const undoId = message.undoId;
+      if (undoId) offerUndo({
+        kind: 'rename', scope: { taskId: pending.taskId }, hostUndoId: undoId,
+        undo: () => postToHost({ type: 'taskRenameUndo', undoId }),
+        stillValid: () => current.current.taskId === pending.taskId && currentTitle.current === pending.title,
+        focusAfter: () => renameButton.current,
+      });
+    }
     else {
       setRenameError('이름을 저장하지 못했습니다. 입력한 이름으로 다시 시도해 주세요.');
       restoreRenameFocus(() => titleInput.current);
@@ -352,7 +520,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const submitRename = () => {
     if (!title.trim() || blocked || renameRequest.current) return;
     const id = sourceRequestId();
-    renameRequest.current = { id, scopeKey };
+    renameRequest.current = { id, scopeKey, taskId: view.activeTaskId, title: title.trim() };
     setRenamePending(id);
     setRenameError(null);
     onDismissError();
@@ -398,27 +566,86 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     <nav id="task-rail" ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
+      {/* CGP-KNOW-R-002 — 작업/자료: one tab stop, arrow keys move between the two views (automatic activation). */}
+      {materials && <div ref={homeTabs} className="tw-home-tabs" role="tablist" aria-label="활동 보기" onKeyDown={event => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented || imeComposing(event)) return;
+        const next = nextHomeView(homeView, event.key);
+        if (!next) return;
+        event.preventDefault();
+        chooseHome(next, true);
+      }}>
+        {HOME_VIEWS.map(option => <button key={option} type="button" role="tab" id={`tw-home-tab-${option}`} className="tw-home-tab" aria-selected={homeView === option} aria-controls={`tw-home-${option}`} tabIndex={homeView === option ? 0 : -1} onClick={() => chooseHome(option)}>{HOME_VIEW_LABEL[option]}</button>)}
+      </div>}
+      <div id="tw-home-tasks" className="tw-home-panel" role={materials ? 'tabpanel' : undefined} aria-labelledby={materials ? 'tw-home-tab-tasks' : undefined} hidden={homeView !== 'tasks'}>
       <button className="tw-new" disabled={blocked} onClick={() => { setRailOpen(false); postToHost({ type: 'taskCreate' }); }}><span aria-hidden="true">＋</span> 새 작업</button>
-      <label className="tw-search"><span>작업 찾기</span><input name="task-search" autoComplete="off" type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="작업 이름으로 찾기…" /></label>
+      <label className="tw-search"><span>작업 찾기</span><input name="task-search" autoComplete="off" type="search" maxLength={TASK_SEARCH_MAX} value={railSearch.text} onChange={event => {
+        const text = event.target.value;
+        const composing = (event.nativeEvent as InputEvent).isComposing === true;
+        setSearch({ scope: view.scope, text, applied: composing ? railSearch.applied : text });
+      }} onCompositionEnd={event => { const text = event.currentTarget.value; setSearch({ scope: view.scope, text, applied: text }); }} placeholder="작업 이름이나 대화 내용으로 찾기…" /></label>
       {/* CGP-SHELL-R-013 — the task list fails alone; 새 작업, search and the chat keep working. */}
-      <PanelBoundary panel="task-rail">{() => <>
+      <PanelBoundary panel="task-rail">{() => archiveOpen ? <>
+      {/* CGP-CHAT-R-025 — archived tasks keep their whole conversation; 다시 열기 lists and opens one. Nothing here deletes. */}
+      <div className="tw-rail-heading tw-archive-heading"><h2 ref={archiveHeading} tabIndex={-1}>보관함</h2><span>{archivedTasks.length}</span></div>
+      <button type="button" className="tw-quiet tw-archive-back" onClick={() => openArchive(false)}>최근 작업으로 돌아가기</button>
+      <ul className="tw-task-list tw-archive-list" aria-label="보관한 작업">
+        {visibleArchived.map(task => <li key={task.id} className="tw-archived">
+          <span className="tw-task-title"><TaskMark appearance={task.appearance} />{searching ? <SearchParts parts={markTitleMatches(task.title, railSearch.applied)} /> : task.title}</span>
+          <span className="tw-task-meta"><span>{taskCountLine(task.messageCount, null)}</span><time dateTime={new Date(task.archivedAt).toISOString()}>{date.format(task.archivedAt)} 보관</time></span>
+          <button type="button" className="tw-quiet tw-reopen" aria-label={`다시 열기: ${task.title}`} disabled={blocked} onClick={() => { reopenPending.current = task.id; setRailOpen(false); postToHost({ type: 'taskRestore', id: task.id }); }}>다시 열기</button>
+        </li>)}
+      </ul>
+      {!visibleArchived.length && <p className="tw-empty-search">{archivedTasks.length ? '찾는 이름이 없습니다. 다른 이름으로 찾아보세요.' : '보관한 작업이 없어요.'}</p>}
+      </> : <>
       <div className="tw-rail-heading">최근 작업 <span>{view.tasks.length}</span></div>
+      {/* The list grows to fill the rail, so the no-match line sits above it, next to the field. */}
+      {/* The polite live region stays mounted so a screen reader announces the line when it appears. */}
+      <div role="status" aria-live="polite">{searching && !visibleTasks.length && <p className="tw-empty-search">찾는 이름이 없습니다. 다른 이름으로 찾아보세요.</p>}</div>
       <ul className="tw-task-list">
         {visibleTasks.map(task => {
           // Only the active task has a run state: tasks never run concurrently, and a stored transcript cannot tell how it ended.
           const state = task.id === view.activeTaskId ? runState : null;
           const metaId = `tw-task-meta-${task.id}`;
-          return <li key={task.id}>
+          return <li key={task.id} className={taskMove ? 'tw-task-row' : undefined}>
           <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={taskRunAccessibleName(task.title, state)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
-            <span className="tw-task-title">{task.title}</span>
+            <span className="tw-task-title"><TaskMark appearance={task.appearance} />{searching ? <SearchParts parts={markTitleMatches(task.title, railSearch.applied)} /> : task.title}</span>
             {state && <IntentChip chip={TASK_RUN_CHIPS[state]} status={state} className="tw-task-state" attrs={{ 'data-run-state': state }} />}
             <span id={metaId} className="tw-task-meta"><span>{taskCountLine(task.messageCount, state)}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
+          {taskMove && <TaskMenu title={task.title} move={taskMove} open={menuFor === task.id} disabled={blocked} onOpenChange={open => setMenuFor(open ? task.id : null)} onMove={destination => moveTask(task.id, destination)} />}
         </li>;
         })}
       </ul>
-      {!visibleTasks.length && <p className="tw-empty-search">찾는 이름이 없습니다. 다른 이름으로 찾아보세요.</p>}
+      {archivedTasks.length > 0 && <button ref={archiveToggle} type="button" className="tw-quiet tw-archive-open" onClick={() => openArchive(true)}>보관함 <span>{archivedTasks.length}</span></button>}
+      {/* CGP-CHAT-R-026 — tasks that match only in message text, under the filtered title list. */}
+      {answered && (answered.results === null || messageResults.length > 0 || !visibleTasks.length) && <div className="tw-search-group">
+      <div className="tw-rail-heading">찾은 대화 <span>{answered.results ? messageResults.length : ''}</span></div>
+      {answered.results === null && <p className="tw-empty-search" role="status">작업 기록을 읽지 못해 지금은 찾을 수 없어요</p>}
+      {messageResults.length > 0 && <ul className="tw-task-list tw-search-results" aria-label="찾은 대화">
+        {messageResults.map(result => <li key={result.taskId}>
+          <button className="tw-task tw-search-result" aria-current={result.taskId === view.activeTaskId ? 'page' : undefined}
+            disabled={blocked && result.taskId !== view.activeTaskId} data-task-id={result.taskId}
+            onClick={() => {
+              setRailOpen(false);
+              pendingReveal.current = { taskId: result.taskId, messageId: result.messageId, from: view.activeTaskId };
+              if (result.taskId !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: result.taskId });
+              setRevealTick(tick => tick + 1);
+            }}>
+            <span className="tw-task-title"><SearchParts parts={result.title} /></span>
+            {result.snippet.length > 0 && <span className="tw-task-snippet"><SearchParts parts={result.snippet} /></span>}
+            <span className="tw-task-meta"><span>대화에서 찾음</span><time dateTime={new Date(result.at).toISOString()}>{date.format(result.at)}</time></span>
+          </button>
+        </li>)}
+      </ul>}
+      {answered.results !== null && !messageResults.length && <p className="tw-empty-search" role="status">찾는 대화가 없어요</p>}
+      </div>}
       </>}</PanelBoundary>
+      </div>
+      {materials && <div id="tw-home-materials" className="tw-home-panel tw-home-materials" role="tabpanel" aria-labelledby="tw-home-tab-materials" hidden={homeView !== 'materials'}>
+        {/* Mounted only while chosen: the list asks the host once per opening. */}
+        {homeView === 'materials' && <PanelBoundary panel="activity-home-materials"><MaterialsPanel home /></PanelBoundary>}
+      </div>}
+      {taskMove && <p className="tw-move-status" role="status" aria-live="polite">{moveStatus}</p>}
       <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
     {viewport > 700 && <KeyboardSplitter panel="rail" label="작업 목록 너비 조절" controls="task-rail" value={sizes.rail ?? tokenWidths.rail ?? PANEL_LIMITS.rail.min} onChange={value => resizePanel('rail', value)} />}
@@ -451,8 +678,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         : unsavedDraft
         ? <button className="tw-quiet" disabled={blocked} onClick={() => postToHost({ type: 'taskRecoverDraft' })}>새 작업에 보관</button>
         : <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>)}</div>}
+      {archiveNote?.scopeKey === scopeKey && <p className="tw-archive-note" role="status">‘{archiveNote.title}’ 작업을 보관함에 넣었어요. 대화는 그대로 있고, 작업 목록의 보관함에서 다시 열 수 있어요.</p>}
       {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
-      <div ref={conversation} id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}>{children}</HeadingSlotContext.Provider></div>
+      <div ref={conversation} id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}><ActivityHomeContext.Provider value={materials ? HOME_WITH_MATERIALS : HOME_WITHOUT_MATERIALS}><TaskAppearanceContext.Provider value={{ open: active && !view.error ? () => setAppearanceScope(scopeKey) : null }}>{children}</TaskAppearanceContext.Provider></ActivityHomeContext.Provider></HeadingSlotContext.Provider></div>
     </section>
     {sourcesOpen && !sourceDialog && <KeyboardSplitter panel="sources" label="자료 패널 너비 조절" controls="task-sources" value={sizes.sources ?? tokenWidths.sources ?? PANEL_LIMITS.sources.min} onChange={value => resizePanel('sources', value)} />}
     {sourceDialog && <div className="tw-source-backdrop" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={() => closeSources()} />}
@@ -467,7 +695,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           onOpen={() => openSource(selected.url)} onReturn={returnFromSource}
           onPin={() => postToHost({ type: 'taskSourceSelection', selection: { url: selected.url, pinned: !pinned } })} />
         <h3 className="tw-source-list-title">이 작업의 출처</h3>
-        <ul className="tw-source-list">{sources.map(source => <li key={source.url}><button type="button" aria-pressed={selected.url === source.url} onClick={() => { setPreview({ url: source.url, scopeKey }); pendingFocus.current = 'source-title'; }}><span>{source.title || citationAddress(source.url)?.hostname}</span><small>{citationAddress(source.url)?.hostname}{pinnedSource?.url === source.url ? ' · 고정됨' : ''}</small></button></li>)}</ul>
+        <ul className="tw-source-list">{sources.map(source => <li key={source.url}><button type="button" aria-pressed={selected.url === source.url} onClick={() => { setPreview({ url: source.url, scopeKey }); pendingFocus.current = 'source-title'; }}><span className="tw-source-name"><span className="hps-source-kind">{citationKindLabel(source.kind)}</span> {source.title || citationAddress(source.url)?.hostname}</span><small>{citationAddress(source.url)?.hostname}{pinnedSource?.url === source.url ? ' · 고정됨' : ''}</small></button></li>)}</ul>
       </> : <div className="tw-source-empty"><span aria-hidden="true"><SourceIcon kind="source" size={24} /></span><h3>출처를 모아 둘 자리</h3><p>대화에서 웹 자료를 찾으면 여기에서 다시 열 수 있습니다.</p></div>}
       {sourcesOpen && <ActivityTrashPanel scopeKey={scopeKey} files={artifacts} onAsk={onAskAboutFile && (filePath => {
         // The narrow layout is a modal dialog: close it without restoring focus, so the host's
@@ -477,5 +705,6 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       })} />}
       </>}</PanelBoundary>
     </aside>
+    {active && appearanceScope === scopeKey && <TaskAppearanceDialog key={scopeKey} task={active} onClose={() => setAppearanceScope(null)} />}
   </div></CitationPreviewContext.Provider>;
 }

@@ -18,12 +18,12 @@ const read = (f) => readDesignFile(new URL(f, SRC), "utf8");
 // Stylesheet order in the built bundle (vite build, checked in dist/assets/index.css): main.tsx
 // imports tokens.css first, then modules pull in localReview/start/citationPreview/quoteAction/codeBlock/
 // quoteAction/taskWorkspace before the explicit styles.css and chatDetails.css imports.
-const ORDER = ["tokens.css", "focusGeometry.css", "localReview.css", "start.css", "writeApprovalDialog.css", "outboundDialog.css", "modalSurface.css", "answerAttempts.css", "accuracyEducation.css", "annotationTray.css", "citationPreview.css", "quoteAction.css", "codeBlock.css", "refusalBanner.css", "goalStatusBar.css", "taskWorkspace.css", "keyboardNavigation.css", "styles.css", "chatDetails.css", "tooltips.css", "koreanProse.css"];
+const ORDER = ["tokens.css", "radiusScale.css", "focusGeometry.css", "localReview.css", "start.css", "writeApprovalDialog.css", "recipientMemory.css", "outboundDialog.css", "modalSurface.css", "answerAttempts.css", "accuracyEducation.css", "annotationTray.css", "styleTweak.css", "citationPreview.css", "taskAppearance.css", "quoteAction.css", "taskActivity.css", "mathRender.css", "codeBlock.css", "refusalBanner.css", "goalStatusBar.css", "myQuestions.css", "coachRunState.css", "lessonTip.css", "whatsNew.css", "projectIdeas.css", "taskWorkspace.css", "keyboardNavigation.css", "styles.css", "chatDetails.css", "tooltips.css", "koreanProse.css"];
 // The DEC-29 scope: files that style only the personal task workspace and its chat.
-const PERSONAL_FILES = ["chatDetails.css", "taskWorkspace.css", "citationPreview.css", "codeBlock.css"];
+const PERSONAL_FILES = ["chatDetails.css", "taskWorkspace.css", "citationPreview.css", "codeBlock.css", "taskAppearance.css"];
 const FLOOR = 14;
 // Files whose rules also style other surfaces (classroom chat, start page).
-const SHARED_FILES = ["refusalBanner.css", "styles.css", "start.css", "quoteAction.css", "writeApprovalDialog.css", "outboundDialog.css"];
+const SHARED_FILES = ["refusalBanner.css", "styles.css", "start.css", "quoteAction.css", "myQuestions.css", "coachRunState.css", "writeApprovalDialog.css", "recipientMemory.css", "outboundDialog.css"];
 const STEPS = { base: 0, large: 2, xlarge: 4 };
 
 // ─── CSS parsing ───────────────────────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ function parseCompound(s) {
       i = end + 1; continue;
     }
     if (ch === ":") {
-      if (s[i + 1] === ":") { i += 2; c.element = ident(); continue; }
+      if (s[i + 1] === ":") { i += 2; c.element = ident(); if (s[i] === "(") group(); continue; } // ::highlight(name) and other functional pseudo-elements
       i++; const name = ident().toLowerCase();
       const arg = s[i] === "(" ? group() : null;
       c.pseudos.push({ name, arg, list: arg !== null && /^(not|is|where|has)$/.test(name) ? splitTop(arg, ",").map(parseSelector) : null });
@@ -447,7 +447,7 @@ const SHARED_LEARNER = [
   ".hps-update-banner-sub", ".hps-update-banner-notes", ".hps-update-banner-toggle", ".hps-update-banner-install, .hps-update-banner-dismiss",
   ".hps-ai-disclosure", ".hps-page-notice", ".hps-element-context", ".hps-stop-notice", ".hps-turn-review", ".hps-tool-log-line", ".hps-effort",
   ".hps-access", ".hps-verify", ".hps-verify-ai", ".hps-publish", ".hps-publish-note, .hps-publish-timing", ".hps-publish-declare legend",
-  ".hps-evidence", ".hps-evidence-meta", ".hps-trial-end-card-fact", ".hps-trial-end-card-primary", ".hps-trial-end-card-escape",
+  ".hps-evidence", ".hps-evidence-meta", ".hps-trial-end-card-fact", ".hps-trial-end-card-primary", ".hps-trial-end-card-personal, .hps-trial-end-card-escape",
   ".hps-notify-optin", ".hps-notify-optin-input", ".hps-notify-optin-submit", ".hps-notify-optin-consent", ".hps-notify-optin-withdraw",
   ".hps-recovery-notice", ".hps-recovered", ".hps-page-attachment", ".hps-page-attachment-note", ".hps-file-attach-notice", ".hps-file-attach-error",
   ".hps-input:not([data-expanded]) .hps-tools-menu button",
@@ -866,7 +866,7 @@ const NEGATIVE = [
   ["a size token that is not defined", mutate("chatDetails.css", (s) => `${s}\n.hps-shell[data-chat-detail="personal"] .hps-cit-chip { font-size: var(--hp-font-small); }\n`), /undefined custom property --hp-font-small/],
   ["an !important base rule outranks the personal override", mutate("styles.css", (s) => s.replace(".hps-edit-note { margin: 0; font-size: 12px;", ".hps-edit-note { margin: 0; font-size: 12px !important;")), /hps-edit-note computes to 12px/],
   ["a shared class left without its personal override", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-effort,/, "\n")), /hps-effort computes to 12px/],
-  ["the composer's tool buttons left at the compact-menu 13px", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input button,/, "\n").replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input:not\(\[data-expanded\]\) \.hps-tools-menu button,/, "\n")), /tools-menu button computes to 13px/],
+  ["the composer's tool buttons left at the compact-menu 13px", mutate("chatDetails.css", (s) => s.replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input button,/, "\n").replace(/\n\.hps-shell\[data-chat-detail="personal"\] \.hps-input:not\(\[data-expanded\]\) \.hps-tools-menu button,/, "\n").replace(/\n\.hps-shell \.hps-input \.hps-tools-menu > button,/, "\n")), /tools-menu button computes to 13px/],
   ["an unclassified new shared rule below 14px", mutate("styles.css", (s) => `${s}\n.hps-new-meta { font-size: 12px; }\n`), /hps-new-meta sets 12px and is not classified/],
   ["the text-size step rule removed", mutate("chatDetails.css", (s) => s.replace('.hps-shell[data-chat-detail="personal"][data-text-size="large"] { --hp-font-step: 2px; }', "")), /data-text-size="large"\] \{ --hp-font-step: 2px \} missing/],
   ["a rail metadata line back at 10px", mutate("taskWorkspace.css", (s) => s.replace(/\.tw-task-meta \{([^}]*)font-size: var\(--hp-font-caption\)/, ".tw-task-meta {$1font-size: 10px")), /tw-task-meta.*(without a --hp-font|computes to 10px)/],
