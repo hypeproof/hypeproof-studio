@@ -22,7 +22,7 @@ import { PanelBoundary } from './PanelBoundary';
 import { filterTasksByTitle, markTitleMatches, railSearchFolded, TASK_SEARCH_MAX } from './taskTitleFilter';
 import { offerUndo } from './UndoToast';
 import { MaterialsPanel } from './MaterialsPanel';
-import { ActivityHomeContext, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
+import { ActivityHomeContext, activityTitleText, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
 import { TaskAppearanceContext, TaskAppearanceDialog, TaskMark } from './TaskAppearance';
 import { TaskMenu } from './TaskMenu';
 import type { TaskMoveView } from '../../src/taskMove';
@@ -41,6 +41,8 @@ interface Props {
   onAskAboutFile?: (path: string) => void;
   /** CGP-KNOW-R-002 — set where the seat has the activity's 자료 list (R-003's gate, never the instructor): the rail offers 작업/자료. */
   materials?: boolean;
+  /** CGP-KNOW-D-002 — the activity's name, drawn as the title above the 작업/자료 tabs (only where the tabs are). */
+  activityTitle?: string;
   /** CGP-KNOW-R-009 — the host's move rule for this activity's tasks; absent → no task menu. */
   taskMove?: TaskMoveView;
   children: ReactNode;
@@ -92,7 +94,7 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, taskMove, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, activityTitle, taskMove, children }: Props) {
   // REQ-STUDIO-TASK-RAIL-SEARCH: `text` is what the field shows, `applied` the committed query the list
   // filters by. An open IME composition (a half-built Hangul syllable) never filters; the commit does.
   // Both belong to one activity: a different scope starts with an empty search.
@@ -109,6 +111,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const [homeChoice, setHomeChoice] = useState(() => ({ scope: view.scope, value: loadHomeView(view.scope) }));
   const homeView: HomeView = !materials ? 'tasks' : homeChoice.scope === view.scope ? homeChoice.value : loadHomeView(view.scope);
   const homeTabs = useRef<HTMLDivElement>(null);
+  const homeTitle = activityTitleText(activityTitle);
   const chooseHome = (next: HomeView, focus = false) => {
     setHomeChoice({ scope: view.scope, value: next });
     saveHomeView(view.scope, next);
@@ -576,6 +579,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     <nav id="task-rail" ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
+      {/* CGP-KNOW-D-002 — the segmented control sits under the activity title; one line, the full name in the tooltip. */}
+      {materials && homeTitle && <h2 id="tw-activity-title" className="tw-activity-title" dir="auto" data-hp-tooltip={homeTitle}>{homeTitle}</h2>}
       {/* CGP-KNOW-R-002 — 작업/자료: one tab stop, arrow keys move between the two views (automatic activation). */}
       {materials && <div ref={homeTabs} className="tw-home-tabs" role="tablist" aria-label="활동 보기" onKeyDown={event => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented || imeComposing(event)) return;

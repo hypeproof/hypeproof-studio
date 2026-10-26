@@ -371,9 +371,19 @@ brand. 작업 is the existing task rail; 자료 is the CGP-KNOW-R-003 list, move
 column on those seats so it has one place. Switching posts nothing to the host and never remounts
 the conversation, so the draft stays byte-identical; the chosen view is remembered per seat in the
 webview state. Seats without the 자료 list, instructors and classroom/lesson seats keep today's
-layout. The activity title above the tabs is left to CGP-KNOW-D-002. Decisions: DEC-KNOW-R-002.
+layout. The activity title above the tabs is CGP-KNOW-D-002 (below). Decisions: DEC-KNOW-R-002.
 PI #1: the learner moves between their work and its materials without losing what they were
 writing (no capability labels).
+
+### DES-KNOW-02 implementation contract (CGP-KNOW-D-002)
+
+Built 2026-10-26 in `REQ-STUDIO-ACTIVITY-HOME` ("Activity title"): an `<h2>` with the activity's
+name sits directly above the 작업/자료 tablist, only where the tabs are. The host name is cleaned
+(controls, bidi and invisible characters dropped, 80 grapheme clusters at most) and falls back to the
+activity kind when blank; one ellipsized 16px line, full name as text and tooltip. "320px: full-width
+segments" is read as the two segments filling the rail's row edge to edge at every width (at 320px the
+rail is the full-width drawer). Arrow keys, `role=tablist`, weight + underline and 4.5:1 were built by
+CGP-KNOW-R-002 and are measured again by the same smoke. Decisions: DEC-KNOW-D-002. PI #1.
 
 ### REQ-KNOW-13 implementation contract (CGP-KNOW-R-008)
 
@@ -388,6 +398,11 @@ writing (no capability labels).
   are 3:1 against the task list in both themes and the dot keeps an outline in forced colours.
 - Contract text: `docs/studio-requirements.md` "Task emoji and colour (CGP-KNOW-R-008)". See
   decisions.md "CGP-KNOW-R-008".
+- DES-KNOW-13 (CGP-KNOW-D-008, 2026-10-26): already met by the R-008 picker. The browser test
+  now measures what the design row names: the selected colour's ring is 2px (also in forced
+  colours) with a visible check, and every swatch is 3:1 against the picker's own panel as
+  well as the list (lowest: dark red 6.77:1 on #121212, light yellow 4.92:1 on #ffffff).
+  See decisions.md "CGP-KNOW-D-008".
 
 Implementation note (2026-10-25, CGP-KNOW-R-019): REQ-KNOW-35 ships as a non-blocking bar in
 every seat; owner choices are recorded as DEC-KNOW-35 in `../decisions.md` and the behaviour in

@@ -39,6 +39,9 @@
 /* CGP-KNOW-R-002 — the activity home's 작업/자료 views: two equal tabs under the brand. The chosen tab is
    marked by weight and an underline, never by colour alone; each tab is a 44px target. A panel is a flex
    column so the task list keeps its own scroll; the 자료 panel scrolls as a whole. */
+/* CGP-KNOW-D-002 — the activity title the segmented control sits under: one line at body size, a long name
+   ellipsizes (its full text is the accessible name and the tooltip); bidi-isolated so a name cannot reorder the rail. */
+.tw-workspace .tw-activity-title { margin: 0 var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; font-size: var(--hp-font-body); color: inherit; }
 .tw-home-tabs { display: flex; gap: var(--ds-c-studio-taskworkspace-space-12); margin: 0 0 var(--ds-c-studio-taskworkspace-space-18); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
 .tw-workspace .tw-home-tab { flex: 1 1 0; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0 var(--ds-c-studio-taskworkspace-space-2); color: inherit; background: transparent; border: 0; border-bottom: var(--ds-c-studio-taskworkspace-size-7) solid transparent; border-radius: 0; font-size: var(--hp-font-caption); }
 .tw-workspace .tw-home-tab[aria-selected="true"] { font-weight: var(--hp-weight-strong); border-bottom-color: currentColor; }
