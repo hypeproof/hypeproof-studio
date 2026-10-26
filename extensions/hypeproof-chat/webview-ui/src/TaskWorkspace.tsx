@@ -14,6 +14,7 @@ export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
 import { imeComposing } from './imeGuard';
 import { ActivityTrashPanel } from './ActivityTrashPanel';
+import { MyWorksDrawer } from './MyWorksDrawer';
 import { actionable, returnFocus, returnFocusSoon, returnTarget, trapTab } from './dialogFocus';
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { KeyboardSplitter, SkipToInput } from './KeyboardNavigation';
@@ -138,6 +139,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     savePanelSizes(view.scope, next);
   };
   const [railOpen, setRailOpen] = useState(false);
+  // CGP-KNOW-D-011 — the 내 작품 drawer, opened from the rail; a task or activity change closes it.
+  const [worksOpen, setWorksOpen] = useState(false);
+  const worksButton = useRef<HTMLButtonElement>(null);
   // CGP-CHAT-R-025 — 보관함 is a separate view of the task list, inside the same rail.
   const [archiveOpen, setArchiveOpen] = useState(false);
   const archiveToggle = useRef<HTMLButtonElement>(null);
@@ -342,6 +346,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     setRenamePending(null);
     setRenameError(null);
     setRailOpen(false);
+    setWorksOpen(false);
     setArchiveOpen(false);
     setAppearanceScope(null);
     setMenuFor(null);
@@ -390,6 +395,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   useEffect(() => { setArtifacts(undefined); }, [scopeKey]);
   // Each opening asks again: the host rescans the folder when no turn runs.
   useEffect(() => { if (sourcesOpen) postToHost({ type: 'artifactProvenanceRequest' }); }, [sourcesOpen, scopeKey]);
+  useEffect(() => { if (worksOpen) postToHost({ type: 'artifactProvenanceRequest' }); }, [worksOpen, scopeKey]);
   useEffect(() => {
     if (preview && !previewSourceValue) setPreview(null);
     if (request && !sources.some(source => source.url === request.url)) { clearRequestTimer(); updateRequest(null); }
@@ -663,6 +669,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         {/* Mounted only while chosen: the list asks the host once per opening. */}
         {homeView === 'materials' && <PanelBoundary panel="activity-home-materials"><MaterialsPanel home /></PanelBoundary>}
       </div>}
+      {/* CGP-KNOW-D-011 — 내 작품 opens as a drawer over the rail; on the narrow rail the rail closes first. */}
+      <button ref={worksButton} type="button" className="tw-quiet tw-works-open" aria-haspopup="dialog" aria-expanded={worksOpen} onClick={() => { setRailOpen(false); setWorksOpen(true); }}><ChatIcon kind="folder" size={20} /><span>내 작품</span></button>
       {taskMove && <p className="tw-move-status" role="status" aria-live="polite">{moveStatus}</p>}
       <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
@@ -723,6 +731,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       })} />}
       </>}</PanelBoundary>
     </aside>
+    {worksOpen && <MyWorksDrawer key={scopeKey} files={artifacts} viewport={viewport} opener={() => worksButton.current} fallback={() => railToggle.current} onClose={() => setWorksOpen(false)} />}
     {active && appearanceScope === scopeKey && <TaskAppearanceDialog key={scopeKey} task={active} onClose={() => setAppearanceScope(null)} />}
   </div></CitationPreviewContext.Provider>;
 }

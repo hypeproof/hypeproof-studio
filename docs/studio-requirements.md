@@ -3225,7 +3225,7 @@ Not built: **the `내가 고침` label (CGP-KNOW-R-012 / REQ-KNOW-21, follow-up)
 learner authorship that survives VS Code's measured event order: for example a Studio-owned editor
 command, or a diff against the last AI or Studio hash at a point where no participant can run. The
 probe logs and the six verification rounds' repros are kept for that follow-up. Also not built: the
-"내 작품" drawer (DES-KNOW-20) and grid view; labels in the classroom chat (it has no task
+grid view in the 작업 자료 panel (the "내 작품" drawer, REQ-STUDIO-MY-WORKS-DRAWER, has one); labels in the classroom chat (it has no task
 workspace), on the turn review bar or in the editor's file explorer; the research doc's wording
 `확인 안 됨` (this slice uses `기록 없음` as requested in CGP-KNOW-R-012); attributing changes to shell
 or subagent tools; times of edits (none is shown); links to the creating turn (REQ-KNOW-29); 만듦 vs
@@ -4038,7 +4038,8 @@ Product Intent #1 (recoverable deliberate removal); may expose OWNERSHIP. Same s
 same default-off setting and same gates as the commands above; the webview only asks.
 
 - **Where.** The task workspace's file list (`작업 폴더의 파일`, the provenance inventory)
-  stands in for `내 작품`, which has no drawer yet (DES-KNOW-20); the panel is named
+  stands in for `내 작품` (the drawer, REQ-STUDIO-MY-WORKS-DRAWER, lists without
+  trash actions); the panel is named
   `내 작품` for assistive technology. So the panel exists only on a learner seat with a
   task workspace (personal, trial); classroom and lesson seats keep the commands only.
   While the trash is available each file row offers `휴지통으로 옮기기` and the last item
@@ -4066,6 +4067,45 @@ same default-off setting and same gates as the commands above; the webview only 
 - Tests: `activity-trash-panel.smoke.mjs` (real provider and store),
   `activity-trash.test.tsx` (real component), `activity-trash-css.smoke.mjs` (44px,
   type step, focus ring, forced colours, with negative controls).
+
+### REQ-STUDIO-MY-WORKS-DRAWER (CGP-KNOW-D-011 / DES-KNOW-20)
+
+Product Intent #1 (the learner can find and recognise what they made) and #2 (the label
+says who made it, from records only); may expose OWNERSHIP. No capability name, score or
+percentage appears. Builds on REQ-STUDIO-ARTIFACT-PROVENANCE: same list, same seats.
+
+- **Where.** A `내 작품` button (44px, folder glyph) in the task rail opens the drawer. It
+  exists only on a task workspace (personal, trial); a classroom or lesson seat has no rail and
+  no drawer. On the narrow rail (window 700px or less) the rail closes as the drawer opens.
+- **What.** One row per work-folder file from the provenance inventory, newest recorded
+  event first (at most 100, with the existing "파일 N개는 더 있어서…" line): a thumbnail
+  for a small raster image or a type glyph (image, page, code, other file; shape, not colour),
+  the file name (folder on its own line), the provenance chip, and `마지막 기록 <time>` from
+  the latest recorded event, or `바뀐 때 기록 없음` when there is none. List by default;
+  `목록`/`격자` (aria-pressed, weight plus underline) switches to a grid; a window of 360px
+  or less shows the list only and offers no switch. Opening asks the host for a fresh list.
+- **Keyboard and focus.** A native modal dialog on the rail's side, full height, at most
+  360px wide: focus moves in on open, Tab stays inside (the page behind is inert), Escape
+  or `내 작품 닫기` closes it, and focus returns to the opener, else the rail toggle. A task
+  or activity change closes it. Rows and every control are at least 44px; text at least 14px;
+  forced colours keep borders; no motion under reduced motion.
+- **Thumbnails.** Asked for only when the row scrolls into view (IntersectionObserver), one
+  request per file state, bound to its request id. The host (`artifactThumbnail.ts`) answers
+  with a `data:` image only for a PNG, JPEG, GIF or WebP of at most 512 KB whose own bytes
+  match, read inside the canonical work folder: no absolute path, `..`, empty or dot
+  segment, control or separator character, backslash, link on the way, non-file, or file
+  that changed during the read. The webview renders only a `data:image/(png|jpeg|gif|webp)`
+  answer; anything else (a URL, SVG, HTML) keeps the glyph. Nothing is loaded from the network
+  or from outside the work folder.
+- Not built: HTML page thumbnails (rendering the page would run it and could load network
+  resources; the page glyph is shown instead); opening a file from a row (REQ-KNOW-20's
+  "opening an item reveals it"); trash actions in the drawer (they stay in the 작업 자료
+  panel, CGP-KNOW-D-013); remembering the grid choice across openings.
+- Tests: `artifact-thumbnail.smoke.mjs` (real temp folders: 5 images read, 24 refusals),
+  `my-works-drawer.smoke.mjs` (the real App bundle in headless Chromium: dark/light,
+  1420/800/320, forced colours, keyboard open/close, Tab containment, focus return, lazy
+  requests, a URL answer dropped, 44px rows, 14px text, list-only at 320px, task switch,
+  classroom seat).
 
 ### REQ-STUDIO-WRITE-APPROVAL-CHIPS (CGP-AGENT-D-004 / DES-CGP-AGENT-05)
 

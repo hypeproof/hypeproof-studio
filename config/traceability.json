@@ -15329,6 +15329,78 @@
           "path": "extensions/hypeproof-chat/test/workspace-file-mentions-browser.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-MY-WORKS-DRAWER",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-MY-WORKS-DRAWER (CGP-KNOW-D-011 / DES-KNOW-20)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MY-WORKS-DRAWER",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MY-WORKS-DRAWER",
+        "ST-IMP-ARTIFACT-PROVENANCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/artifactThumbnail.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MyWorksDrawer.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/myWorks.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/focusGeometry.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MY-WORKS-DRAWER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MY-WORKS-DRAWER",
+        "ST-IMP-MY-WORKS-DRAWER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/artifact-thumbnail.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/my-works-drawer.smoke.mjs"
+        }
+      ]
     }
   ]
 }
