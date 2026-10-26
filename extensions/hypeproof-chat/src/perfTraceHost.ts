@@ -1,8 +1,8 @@
 // CGP-AGENT-R-030 / REQ-STUDIO-PERF-TRACE: host side of the "느려요 기록" performance trace.
 //
 // Flow: a modal with the consent text and one "기록 시작" button (the only way to start) → a red
-// status bar pill "기록 중 · 멈추기" while recording → stop (pill, command, ten-minute limit, or the
-// seat stops qualifying) → the trace is written to this machine's extension storage → optional note →
+// "기록 중 · 멈추기" pill while recording, in the chat panel (CGP-AGENT-D-026, a 44px target) and in the
+// status bar → stop (either pill, command, ten-minute limit, or the seat stops qualifying) → the trace is written to this machine's extension storage → optional note →
 // review modal with the file size and two buttons, "내 컴퓨터에만 두기" (first, default) and "보내기".
 // Only 보내기, then the shared outbound confirmation, sends anything: a summary through the existing
 // problem-report route (POST {proxy}/report, `attachments.perf_trace`), the note as its description.
@@ -37,16 +37,30 @@ export interface PerfTraceDeps {
   setTimer?: (fn: () => void, ms: number) => { dispose(): void };
   confirm?: OutboundConfirmation;
   fetchImpl?: typeof fetch;
+  /** CGP-AGENT-D-026: told when a recording starts (with its id) and the moment it stops (id null), so the chat panel can show its pill. */
+  onState?: (state: PerfTraceState) => void;
 }
 
-interface Active { recorder: PerfTraceRecorder; startedAt: number; lastTick: number; timer: { dispose(): void }; pill: vscode.StatusBarItem }
+/** What the chat panel's pill shows. `id` names one recording; a pill press carries it back, so it can only stop that recording. */
+export interface PerfTraceState { recording: boolean; id: string | null }
+
+interface Active { id: string; recorder: PerfTraceRecorder; startedAt: number; lastTick: number; timer: { dispose(): void }; pill: vscode.StatusBarItem }
 
 export class PerfTraceController {
   private active: Active | undefined;
   private busy = false;
+  private seq = 0;
   constructor(private readonly deps: PerfTraceDeps) {}
 
   get recording(): boolean { return !!this.active; }
+  get state(): PerfTraceState { return { recording: !!this.active, id: this.active?.id ?? null }; }
+  private emit(): void { try { this.deps.onState?.(this.state); } catch { /* the panel pill never blocks a trace */ } }
+
+  /** CGP-AGENT-D-026: the chat panel's pill. Stops only the recording the pill was drawn for; a stale or forged id does nothing. */
+  async stopFromPanel(id: unknown): Promise<string | undefined> {
+    if (typeof id !== "string" || !this.active || id !== this.active.id) return undefined;
+    return this.stop("learner");
+  }
   private now(): number { return (this.deps.now ?? Date.now)(); }
   private enabled(): boolean { return vscode.workspace.getConfiguration("hypeproofChat").get<boolean>(PERF_TRACE_SETTING, false) === true; }
 
@@ -74,7 +88,8 @@ export class PerfTraceController {
       pill.show();
       const recorder = new PerfTraceRecorder(startedAt);
       const timer = (this.deps.setTimer ?? defaultTimer)(() => this.tick(), PERF_TRACE_SAMPLE_MS);
-      this.active = { recorder, startedAt, lastTick: startedAt, timer, pill };
+      this.active = { id: `perf-${startedAt}-${++this.seq}`, recorder, startedAt, lastTick: startedAt, timer, pill };
+      this.emit();
       this.tick();
       return true;
     } finally {
@@ -101,6 +116,7 @@ export class PerfTraceController {
     if (!a) return undefined;
     this.active = undefined;
     a.timer.dispose(); a.pill.hide(); a.pill.dispose();
+    this.emit();
     // A new start waits until this file is written and the learner has chosen keep or send.
     this.busy = true;
     try { return await this.finishStop(a, by); }
@@ -159,7 +175,7 @@ export class PerfTraceController {
   dispose(): void {
     const a = this.active;
     this.active = undefined;
-    if (a) { a.timer.dispose(); a.pill.dispose(); }
+    if (a) { a.timer.dispose(); a.pill.dispose(); this.emit(); }
   }
 }
 

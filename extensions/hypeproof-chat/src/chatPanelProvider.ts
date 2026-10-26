@@ -3148,6 +3148,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** REQ-STUDIO-PERF-TRACE: sees every host message before it is posted; set only while extension.ts owns a trace controller. */
   perfTraceObserver: ((msg: HostMessage) => void) | undefined;
 
+  /** CGP-AGENT-D-026: the trace controller's state and its id-bound stop, for the chat panel's pill; set by extension.ts. */
+  perfTracePanel: { state: () => { recording: boolean; id: string | null }; stop: (id: unknown) => unknown } | undefined;
+
+  /** CGP-AGENT-D-026: show or hide the panel pill; the controller calls this on every start and stop. */
+  postPerfTraceState(state: { recording: boolean; id: string | null }): void {
+    // Straight to every chat view, not through post(): no activity or task stamp (the webview would drop it on a
+    // task switch), and it is not a turn message, so it must not touch open prompts.
+    const msg: HostMessage = { type: "perfTraceState", recording: state.recording === true, id: state.recording === true && typeof state.id === "string" ? state.id : null };
+    for (const view of [this.editorChat?.webview, this.view?.webview]) if (view) void Promise.resolve(view.postMessage(msg)).catch(() => undefined);
+  }
+
   /** #278 — is "페이지를 코치에게" allowed for this cohort? Default off (minor-safe). */
   isPageContextEnabled(): boolean {
     return this.cachedProfile?.input?.page_context === true;
@@ -6922,6 +6933,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // task-less report with a task error. It only records the flag for this surface.
     if (msg.type === 'queueState') {
       if (source) { if (msg.queued === true) this.queuedSources.add(source); else this.queuedSources.delete(source); }
+      return;
+    }
+    // CGP-AGENT-D-026 — the 느려요 기록 pill. A recording belongs to the machine, not to an activity or task,
+    // so it is answered before those gates (a press from a panel on another task still stops it).
+    if (msg.type === 'perfTraceStateRequest') { this.postPerfTraceState(this.perfTracePanel?.state() ?? { recording: false, id: null }); return; }
+    if (msg.type === 'perfTraceStop') {
+      // The state is re-sent after the press settles, so a pill drawn for a stale id is corrected rather than left waiting.
+      const panel = this.perfTracePanel;
+      void Promise.resolve().then(() => panel?.stop(msg.id)).catch(() => undefined).finally(() => this.postPerfTraceState(this.perfTracePanel?.state() ?? { recording: false, id: null }));
       return;
     }
     const connections=activityConnections(this.context);

@@ -1,6 +1,9 @@
 // CGP-ART-R-006 / DES-ART-06: the style tweak rows inside the real ChatPanel element chip,
 // measured in headless Chromium: 44px targets, 14px text, inside the chat column at 320/800/1420,
 // personal and classroom, dark/light, forced colours, and a 2px focus ring.
+// CGP-ART-D-006: the rows are a compact popover (<= 280px, inside the column at 320px) anchored
+// under the chip's toggle, the selected swatch has a 2px ring (kept in forced colours), and every
+// row has a labelled reset.
 // FOCUS_REQUIRE_BROWSER=1 fails without a browser; STYLE_TWEAK_PNG_DIR=<dir> saves screenshots.
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -53,7 +56,14 @@ try {
     const contrast = (el) => { const a = lum(toRgba(getComputedStyle(el).color)), b = lum(bgOf(el)); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
     const chipBg = lum(bgOf(panel));
     const minContrast = Math.min(...[...panel.querySelectorAll('button:not(:disabled), .hps-style-tweak-label, .hps-style-tweak-value')].map(contrast));
-    return { chipBg, minContrast, right: r.right, viewport: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth, panelScroll: panel.scrollWidth, panelClient: panel.clientWidth, columnRight: column.right, scrollerRight: scroller.right, rows: panel.querySelectorAll('[data-prop]').length, swatches, buttons, texts, chip: { w: chip.width, h: chip.height } };
+    const pop = panel.querySelector('.hps-style-tweak-body'); const p = pop.getBoundingClientRect(); const ps = getComputedStyle(pop);
+    const toggle = panel.querySelector('.hps-style-tweak-toggle').getBoundingClientRect();
+    const ring = (b) => { const s = getComputedStyle(b); return { w: parseFloat(s.borderTopWidth), style: s.borderTopStyle, color: s.borderTopColor, bg: s.backgroundColor }; };
+    const selected = [...panel.querySelectorAll('[data-prop="color"] .hps-style-tweak-swatch[aria-checked="true"]')].map(ring);
+    const unselected = ring(panel.querySelector('[data-prop="color"] .hps-style-tweak-swatch[aria-checked="false"]'));
+    const resets = [...panel.querySelectorAll('[data-prop]')].map(r => { const x = r.querySelector('.hps-style-tweak-reset'), q = x.getBoundingClientRect(), l = r.querySelector('.hps-style-tweak-label').getBoundingClientRect(), c = r.querySelector('.hps-style-tweak-swatches, .hps-style-tweak-stepper').getBoundingClientRect(); return { prop: r.dataset.prop, label: x.getAttribute('aria-label'), sameLine: q.top < l.bottom && l.top < q.bottom, controlsBelow: c.top >= q.bottom - 1, insideRight: q.right <= p.right }; });
+    const popover = { w: p.width, left: p.left, right: p.right, top: p.top, toggleLeft: toggle.left, toggleBottom: toggle.bottom, border: parseFloat(ps.borderTopWidth), scroll: pop.scrollWidth, client: pop.clientWidth };
+    return { popover, selected, unselected, resets, chipBg, minContrast, right: r.right, viewport: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth, panelScroll: panel.scrollWidth, panelClient: panel.clientWidth, columnRight: column.right, scrollerRight: scroller.right, rows: panel.querySelectorAll('[data-prop]').length, swatches, buttons, texts, chip: { w: chip.width, h: chip.height } };
   })()`;
   const pngDir = process.env.STYLE_TWEAK_PNG_DIR;
   if (pngDir) mkdirSync(pngDir, { recursive: true });
@@ -80,6 +90,22 @@ try {
     for (const t of m.texts) assert.ok(t.visible && t.font >= 14, `14px text "${t.text}": ${ctx}`);
     for (const w of m.swatches) assert.ok(w.label.includes(w.bg), `swatch shows its own colour ${w.label} -> ${w.bg}: ${ctx}`);
     assert.equal(m.swatches.length, 8, ctx);
+    // DES-ART-06 popover: <= 280px, inside the chip column (fits at 320px), anchored under its toggle.
+    const pop = m.popover;
+    assert.ok(pop.w <= 280.5, `popover <= 280px wide: ${ctx} ${pop.w}`);
+    assert.ok(pop.right <= m.columnRight + 1 && pop.scroll <= pop.client + 1, `popover inside the column, no inner scroll: ${ctx}`);
+    assert.ok(Math.abs(pop.left - pop.toggleLeft) <= 1 && pop.top >= pop.toggleBottom - 1 && pop.top - pop.toggleBottom <= 12, `popover anchored under its toggle: ${ctx} ${JSON.stringify(pop)}`);
+    assert.ok(pop.border >= 1, `popover has its own edge: ${ctx}`);
+    if (width >= 800) assert.ok(pop.w >= 279.5, `popover is compact, not column wide, when there is room: ${ctx} ${pop.w}`);
+    // 2px selected ring; unselected swatches keep the thin control border. Forced colours use the
+    // system selection pair instead (tokens.css: every [aria-checked="true"] fills with Highlight).
+    assert.equal(m.selected.length, 1, ctx);
+    if (!forcedColors) {
+      assert.ok(m.selected[0].w === 2 && m.selected[0].style === "solid", `2px selected ring: ${ctx} ${JSON.stringify(m.selected[0])}`);
+      assert.ok(m.unselected.w < 2 && m.unselected.color !== m.selected[0].color, `the ring differs from an unselected swatch: ${ctx} ${JSON.stringify(m.selected[0])} ${JSON.stringify(m.unselected)}`);
+    } else assert.ok(m.selected[0].bg !== m.unselected.bg, `forced colours: the selected swatch takes the selection fill: ${ctx} ${JSON.stringify(m.selected[0])} ${JSON.stringify(m.unselected)}`);
+    assert.deepEqual(m.resets.map((r) => r.label), ["색 되돌리기", "배경 되돌리기", "글자 크기 되돌리기", "간격 되돌리기", "모서리 되돌리기"], `each row has a labelled reset: ${ctx}`);
+    for (const r of m.resets) assert.ok(r.sameLine && r.controlsBelow && r.insideRight, `reset on the label line, controls below: ${r.prop} ${ctx} ${JSON.stringify(r)}`);
     assert.ok(m.chip.w >= 23 && m.chip.w <= 25 && m.chip.h >= 23 && m.chip.h <= 25, `24px swatch: ${ctx} ${JSON.stringify(m.chip)}`);
     for (const sel of [".hps-style-tweak-send", ".hps-style-tweak-swatch", ".hps-style-tweak-reset:not(:disabled)"]) {
       const f = await browser.focusVisibleStyle(sel);

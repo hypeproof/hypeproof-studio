@@ -216,8 +216,9 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: () => clearTimeout(pendingTimer) });
   }
   const provider = new ChatPanelProvider(context, preview, liveServer, spool);
-  const perfTrace = new PerfTraceController({ context, seatAllowed: () => provider.perfTraceSeatAllowed(), getProfileId: () => provider.getProfileId() });
+  const perfTrace = new PerfTraceController({ context, seatAllowed: () => provider.perfTraceSeatAllowed(), getProfileId: () => provider.getProfileId(), onState: (state) => provider.postPerfTraceState(state) });
   provider.perfTraceObserver = (msg) => perfTrace.observe(msg);
+  provider.perfTracePanel = { state: () => perfTrace.state, stop: (id) => perfTrace.stopFromPanel(id) };
   providerRef = provider;
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.editImage", () => provider.editImage()));
   // One-click publish endpoints, decided once: GitHub itself, unless this is a test/dev run
@@ -566,7 +567,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // REQ-STUDIO-PERF-TRACE (CGP-AGENT-R-030): 느려요 기록, adult and instructor seats, default off.
     vscode.commands.registerCommand("hypeproof-chat.recordPerformanceTrace", async () => { await perfTrace.start(); }),
     vscode.commands.registerCommand("hypeproof-chat.stopPerformanceTrace", async () => { await perfTrace.stop("learner"); }),
-    { dispose: () => { provider.perfTraceObserver = undefined; perfTrace.dispose(); } },
+    { dispose: () => { provider.perfTraceObserver = undefined; provider.perfTracePanel = undefined; perfTrace.dispose(); } },
 
     vscode.commands.registerCommand("hypeproof-chat.reportProblem", async () => {
       await runReportProblemCommand({

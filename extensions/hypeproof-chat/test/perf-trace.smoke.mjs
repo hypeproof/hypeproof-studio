@@ -12,6 +12,10 @@
 //   H3  보내기: the outbound confirmation lists the frozen body's items; cancel sends nothing; approve POSTs it once.
 //   H4  the recording stops by itself at ten minutes and when the seat stops qualifying; a double stop is harmless.
 //   H5  the real provider: perfTraceSeatAllowed() and the post() hook that feeds the recorder.
+//   H7  CGP-AGENT-D-026: the controller reports {recording, id} on start, stop and dispose; the panel pill's stop
+//       stops only the recording its id names (stale, forged or non-string ids stop nothing).
+//   H8  CGP-AGENT-D-026: the real provider answers the pill before the activity/task gates, posts the state to every
+//       chat view without an activity or task stamp, and re-sends the state after a press settles.
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { mkdtempSync, readFileSync, readdirSync, statSync, rmSync } from "node:fs";
@@ -152,7 +156,7 @@ const makeHost = await load("src/perfTraceHost.ts", { "^\\./extension$": 'export
 const root = mkdtempSync(path.join(os.tmpdir(), "hps-perf-trace-"));
 try {
   const harness = ({ seat = () => true, confirm = async () => false } = {}) => {
-    const v = fakeVscode(), posts = [], timers = [], clock = { t: 1_700_000_000_000 }, confirms = [];
+    const v = fakeVscode(), posts = [], timers = [], clock = { t: 1_700_000_000_000 }, confirms = [], states = [];
     const storage = mkdtempSync(path.join(root, "store-"));
     const { PerfTraceController, PERF_TRACE_DIR } = makeHost(v, async (url, init) => { posts.push({ url, body: init.body }); return Response.json({ report_id: "R-9" }); });
     const c = new PerfTraceController({
@@ -162,10 +166,11 @@ try {
       setTimer: (fn) => { const t = { fn, disposed: false, dispose() { t.disposed = true; } }; timers.push(t); return t; },
       confirm: async (m) => { confirms.push(m); return confirm(m); },
       fetchImpl: async (url, init) => { posts.push({ url, body: init.body }); return Response.json({ report_id: "R-9" }); },
+      onState: (s) => states.push(J(s)),
     });
     const files = () => { try { return readdirSync(path.join(storage, PERF_TRACE_DIR)).map((f) => path.join(storage, PERF_TRACE_DIR, f)); } catch { return []; } };
     const tick = (ms) => { clock.t += ms; timers.filter((t) => !t.disposed).forEach((t) => t.fn()); };
-    return { v, c, posts, timers, clock, confirms, files, tick };
+    return { v, c, posts, timers, clock, confirms, files, tick, states };
   };
 
   // H1
@@ -291,6 +296,78 @@ try {
     assert.match(broken.v.warnings[0] ?? "", /^느려요 기록을 저장하지 못했어요: .*아무것도 보내지 않았어요\.$/);
     assert.equal(broken.posts.length, 0); assert.equal(broken.c.recording, false);
     ok("H6 no 보내기 for a seat that cannot send; setting off stops; no start during a review; write failure warns and sends nothing");
+  }
+
+  // H7 the panel pill's state and id-bound stop
+  {
+    const h = harness();
+    deq(h.c.state, { recording: false, id: null }); deq(h.states, [], "nothing reported before a start");
+    h.v.answers = [undefined]; await h.c.start(); deq(h.states, [], "a closed start dialog reports nothing");
+    h.v.answers = ["기록 시작"]; await h.c.start();
+    const first = h.c.state.id;
+    assert.equal(typeof first, "string"); deq(h.states, [{ recording: true, id: first }], "start reports the recording and its id");
+    for (const forged of ["perf-other", "", 42, null, undefined, { id: first }, [first]]) assert.equal(await h.c.stopFromPanel(forged), undefined, `id ${JSON.stringify(forged)} stops nothing`);
+    assert.equal(h.c.recording, true, "still recording after forged ids"); assert.equal(h.files().length, 0);
+    h.v.inputs = [undefined]; h.v.answers = [undefined];
+    const file = await h.c.stopFromPanel(first);
+    assert.ok(file && h.files().length === 1, "the pill's own id stops it and writes the file");
+    // A pill stop leads to the same review: keep is first (default), and a closed review sends nothing.
+    deq(h.v.modals.at(-1).actions, ["내 컴퓨터에만 두기", "보내기"], "pill stop: keep first, then send");
+    assert.equal(h.posts.length, 0, "pill stop: nothing sent"); assert.equal(h.confirms.length, 0, "pill stop: no outbound confirmation");
+    assert.ok(h.v.infos.includes("기록을 이 컴퓨터에만 두었어요. 아무것도 보내지 않았어요."), "pill stop: told the file stayed here");
+    const modalsAfterStop = h.v.modals.length;
+    assert.equal(await h.c.stopFromPanel(first), undefined, "a second press after the stop does nothing");
+    assert.equal(h.v.modals.length, modalsAfterStop, "a press with no recording opens no dialog (it cannot start one)"); assert.equal(h.c.recording, false);
+    deq(h.states.at(-1), { recording: false, id: null }, "stop reports no recording");
+    h.v.answers = ["기록 시작"]; await h.c.start();
+    const second = h.c.state.id;
+    assert.notEqual(second, first, "a new recording gets a new id");
+    assert.equal(await h.c.stopFromPanel(first), undefined, "a stale pill cannot stop a later recording"); assert.equal(h.c.recording, true);
+    h.c.dispose(); deq(h.states.at(-1), { recording: false, id: null }, "dispose reports no recording");
+    // The pill hides the moment the stop begins, before the note and review are answered.
+    const r = harness(); r.v.answers = ["기록 시작"]; await r.c.start();
+    let releaseNote; r.v.window.showInputBox = () => new Promise((res) => { releaseNote = res; });
+    const stopping = r.c.stopFromPanel(r.c.state.id); await new Promise((res) => setTimeout(res, 20));
+    deq(r.states.at(-1), { recording: false, id: null }, "reported stopped while the note is still open");
+    r.v.answers = [undefined]; releaseNote(undefined); await stopping;
+    // A thrown listener never breaks a recording.
+    const t = harness(); t.c.deps.onState = () => { throw Error("boom"); }; t.v.answers = ["기록 시작"];
+    assert.equal(await t.c.start(), true, "a throwing listener does not block the start"); t.c.dispose();
+    ok("H7 state reported on start/stop/dispose; the panel stop is bound to the recording id");
+  }
+
+  // H8 the real provider's pill messages
+  {
+    const makeProvider = await load('export { ChatPanelProvider } from "./src/chatPanelProvider.ts";');
+    const v = fakeVscode(); v.window.createWebviewPanel = () => ({});
+    const { ChatPanelProvider } = makeProvider(v);
+    const p = Object.create(ChatPanelProvider.prototype);
+    const sidebar = [], editor = [], stops = [];
+    let current = { recording: true, id: "perf-1" };
+    // A task store is open, so anything sent through post() would carry its task id; the pill state must not.
+    Object.assign(p, { _instructorMode: { isInstructor: null }, cachedProfile: undefined, context: {}, attemptWrite: undefined,
+      currentTaskStore: () => ({ getView: () => ({ activeTaskId: "task-A" }) }),
+      view: { webview: { postMessage: async (m) => { sidebar.push(J(m)); return true; } } },
+      editorChat: { webview: { postMessage: async (m) => { editor.push(J(m)); return true; } } },
+      perfTracePanel: { state: () => current, stop: async (id) => { stops.push(id); if (id === current.id) current = { recording: false, id: null }; } } });
+    // A panel on another activity and task still gets an answer (the gates come after).
+    await p.handleMessage({ type: "perfTraceStateRequest", activityId: "other-activity", taskId: "other-task" });
+    deq(sidebar, [{ type: "perfTraceState", recording: true, id: "perf-1" }], "state answered with no activity or task stamp");
+    deq(editor, sidebar, "every chat view gets the state");
+    await p.handleMessage({ type: "perfTraceStop", id: "perf-stale", activityId: "other-activity" });
+    await new Promise((r) => setTimeout(r, 20));
+    deq(stops, ["perf-stale"], "the id goes to the controller as sent");
+    deq(sidebar.at(-1), { type: "perfTraceState", recording: true, id: "perf-1" }, "a stale press is answered with the current state");
+    await p.handleMessage({ type: "perfTraceStop", id: "perf-1" });
+    await new Promise((r) => setTimeout(r, 20));
+    deq(sidebar.at(-1), { type: "perfTraceState", recording: false, id: null }, "after the stop the pill is told to hide");
+    p.postPerfTraceState({ recording: false, id: "perf-9" });
+    deq(sidebar.at(-1), { type: "perfTraceState", recording: false, id: null }, "no id is posted without a recording");
+    p.perfTracePanel = undefined; sidebar.length = 0;
+    await p.handleMessage({ type: "perfTraceStateRequest" });
+    deq(sidebar, [{ type: "perfTraceState", recording: false, id: null }], "no controller: no recording");
+    await p.handleMessage({ type: "perfTraceStop", id: "perf-1" });
+    ok("H8 provider answers the pill before the gates, unstamped, to every view; a press re-sends the state");
   }
 
   // H5 the real provider

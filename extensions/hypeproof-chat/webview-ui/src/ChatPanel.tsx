@@ -39,6 +39,7 @@ import { TurnReviewBar } from './TurnReviewBar';
 import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
 import { LowDiskBar } from './LowDiskBar';
+import { PerfTracePill } from './PerfTracePill';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
@@ -2152,6 +2153,8 @@ export function ChatPanel(props: Props) {
           config={config} view={goalOfLesson(studentGoal, config.profile!.lesson)}
           pending={goalPending} note={goalNote} onSave={sendGoalSave} />}</PanelBoundary>}
 
+        {/* CGP-AGENT-D-026: the 느려요 기록 pill; renders nothing unless the host says a recording runs. */}
+        <PerfTracePill />
         {lowDisk && <LowDiskBar notice={lowDisk} />}
         {props.refusal && <RefusalBanner onDismiss={() => {
           props.onDismissRefusal?.();

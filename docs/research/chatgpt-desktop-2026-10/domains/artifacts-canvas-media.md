@@ -177,7 +177,7 @@ Common constraints for all rows below:
 | DES-ART-12 (REQ-ART-12) | A notice sheet with 3 bullet lines and **알겠어요**. The minor path adds a waiting state with a spinner-free "기다리는 중" label and a time-since counter. | Bullets ≤ 2 lines each at 320 px. The waiting state refreshes without reload. Chalk lists pending confirmations as a count badge on `/manage`. |
 | DES-ART-13 (REQ-ART-13) | Two stat tiles (연 사람, 끝까지 한 사람) with "지난주보다 +{n}", plus an expandable session list. | Numbers use tabular figures. Change uses ▲ or ▼ plus text, not color only. An empty state replaces the tiles. No charts below 3 data points. |
 | DES-ART-14 (REQ-ART-14) | A picker grid of 2 columns at 320 px and 3 at ≥640 px. Each tile has a preview image (4:3), title, and a radio. Last tile: "내 참고 자료 올리기". Footer: **건너뛰기**. | Arrow keys move between tiles and Enter selects. Previews load lazily. Total payload ≤ 6 previews. Radio semantics are announced. |
-| DES-ART-15 (REQ-ART-15) | Full-screen black letterbox with the slide scaled to fit, and a bottom-right position text that auto-hides after 2 s idle. | Keys per REQ. Controls reappear on mouse move. A fullscreen failure shows a toast and falls back to a maximized panel. |
+| DES-ART-15 (REQ-ART-15) | Full-screen black letterbox with the slide scaled to fit, and a bottom-right position text that auto-hides after 2 s idle. | Keys per REQ. Controls reappear on mouse move. A fullscreen failure shows a toast and falls back to a maximized panel. Built in REQ-ART-15 (CGP-ART-R-015); confirmed by CGP-ART-D-015 (2026-10-27) with rendered-pixel letterbox, corner placement, 2 s idle timing and top-level fullscreen refusal checks (decisions.md "CGP-ART-D-015"). |
 | DES-ART-16 (REQ-ART-16) | Chips under the selected slide thumbnail. The proposal opens as a side-by-side before and after with **반영** and **그대로**. | Chips are ≤ 3 and wrap at 320 px. The before and after view stacks vertically under 640 px. A changed claim is highlighted with the evidence label (observed, interpreted, assumed) visible. |
 | DES-ART-17 (REQ-ART-17) | A toggle in the preview toolbar with an eye icon and a "따라 보기" label. | Smooth scroll ≤ 300 ms, and an instant jump with reduced motion. The changed element flashes a 2 px outline for 1 s. The toggle state is announced. |
 | DES-ART-18 (REQ-ART-18) | Region tools: rectangle and brush (3 sizes: 8, 16 and 32 px). Numbered region badges with comment fields. Undo and redo. | Works with mouse and trackpad. Badge numbers match comment order. The compare view draws region outlines at 50% opacity toggleable. |
@@ -248,3 +248,10 @@ reset, removal, a new pick, any send, switch off or a tab switch; no file is wri
 panel's send carries one `{property, old, new}` line per change after the element block, and its
 message lists the chosen values (their own choice on the record). 44px targets and 14px text
 override the 32px stepper. Requirement: REQ-STUDIO-STYLE-TWEAK in docs/studio-requirements.md.
+
+DES-ART-06 (CGP-ART-D-006): the rows are a compact popover (≤ 280 px, fits 320 px) anchored under the
+chip's toggle, not over the element in the page (same trusted-surface gap; decisions.md
+CGP-ART-D-006). Measured in `style-tweak-layout.smoke.mjs`: width, anchor, 24 px swatch with a 2 px
+selected ring, a labelled reset per row, 44 px targets (the 32 px stepper stays overridden). The
+100 ms live preview is measured in `style-tweak-page.smoke.mjs`; the send label is `{n}개 바꿔 달라고
+하기`. Escape closes the popover and returns focus to the toggle.

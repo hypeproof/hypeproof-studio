@@ -1051,6 +1051,15 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Sizes: 44px targets and 14px text win over the design row's 32px stepper (owner rule); swatches draw 24px inside a 44px button.
 - Default state: on wherever element pick is on (CR switch); no new recipient or data flow beyond the element text the pick already sends.
 
+## CGP-ART-D-006: style tweak popover (2026-10-27, agent-selected implementation)
+
+- Anchor: under the element chip's `스타일 바꿔 보기` toggle in the chat panel, not over the picked element in the preview tab. The native BrowserTab contract has no trusted in-tab surface (as for CGP-ART-R-006, D-002 and D-008); a page-injected popover would put the send under page control. The in-page anchor is the one part of DES-ART-06 not built; it needs a shell-owned overlay with tab identity.
+- Form: a compact card (≤ 280 px, the column width below that) that stays in the message flow, so the scroller never clips it; a floating overlay would cover messages and could be cut at the scroller edge.
+- Sizes: 44 px targets and 14 px text keep winning over the 32 px stepper (owner rule). Swatches stay 24 px inside a 44 px button; the selected ring is a 2 px border so it survives forced colours, where the system selection fill marks the state.
+- Order: label and reset share the first line, so the reset comes before the controls on screen and in focus order.
+- Escape closes the popover and returns focus to the toggle; it stops there so it never closes the sources panel or another handler above, and is ignored during IME composition.
+- Default state: unchanged (on wherever element pick is on); no new data flow.
+
 ## CGP-LEARN-R-015: completion checklist helper in Chalk authoring (2026-10-26, agent-selected conservative implementation)
 
 - "Helper" = the existing completion-condition rows in `/authoring` (이번 주 미션 · 완료 조건). No model call: the row asks "무엇을 만들면 끝인가요?", and a per-row button turns "what to make" into "…을/를 만들면 끝" only when pressed. A full clause is refused, never glued.
@@ -1269,3 +1278,39 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - "≤2 lines at 320px" counts the text node's own line boxes (Range client rects) instead of height / line-height, and any clipping (ellipsis, line clamp, hidden overflow, text outside the bar) fails, so the rule cannot be met by hiding words.
 - Mutations run on a scratch copy, each caught: an Escape listener that hides the bar, a 닫기 button, a double-click hide, clearing on config, a 용량 추가 link, a 9em text column (4 lines), ellipsis, a 2-line clamp.
 - Default state: unchanged (on in every seat, local measurement only).
+
+## CGP-KNOW-D-032: nickname field design (2026-10-27, agent-selected: already met on main)
+
+- The CGP-KNOW-R-032 build (`NicknameSetting.tsx`, REQ-STUDIO-LEARNER-NICKNAME) already draws DES-KNOW-50; no product code changed. The row is closed by proof, not by new UI.
+- Field: the legend "뭐라고 불러 줄까요?" in 대화 설정 on personal and trial seats, one text input and nothing else about the learner (seat scope as decided for CGP-KNOW-R-032).
+- "20-char counter as text": a visible `n/20자` line tied to the input by `aria-describedby`, not a bar or colour; an over-long value reads `21/20자` and is refused with "20자까지 쓸 수 있어요.".
+- "PII rejection message inline": the host's screen runs in the webview first; a refusal shows its reason under the field (`role="alert"`, `aria-invalid`) and posts nothing.
+- "IME-safe counter": an open composition does not move the counter; `compositionend` (or a non-composing input event) does.
+- Proof: `learner-nickname-browser.smoke.mjs` drives the real App bundle in headless Chromium (dark and light, 1420 and 800 px, adult and minor cohort, forced colours) with CDP `Input.imeSetComposition`/`insertText`. Mutations (IME guard removed, counter text removed, inline reason removed, client screen skipped) each fail it.
+- Text stays at 14px (the learner floor), the input and buttons at 44px. Default state: unchanged (empty, nothing sent).
+
+## CGP-AGENT-D-023: checkpoint dialog (DES-CGP-AGENT-53, 2026-10-27, agent choice)
+
+- Prefill, focus with the whole text selected, Enter newline, IME-safe Cmd/Ctrl+Enter and no push control were already built by CGP-AGENT-R-027 (`TurnReviewBar.tsx` `CheckpointSection`).
+- Gap closed: "primary 저장 지점 남기기" was drawn exactly like 취소. It now takes the theme's button fill, the same treatment as the edit form's Save (`.hps-edit-save`), with fill-ink hover/pressed layers, a ring outside the fill in the transcript scroll scope, and the SX-04 step-down beside a lesson mission's Primary.
+- Proof in a real browser: `test/checkpoint-keyboard-browser.smoke.mjs` sends key, IME composition and text events through the DevTools protocol (never the OS). keyCode 229 is tested apart from `isComposing`, because the commit keystroke can carry 229 after the composition ended.
+- Equivalent change, not a gap: dropping `preventDefault` on Cmd/Ctrl+Enter adds no newline in Chromium (the browser inserts no text for a modified Enter); the mini-dom test still requires the event to be handled.
+- Default state: unchanged (adult website-track seats only; local display change, no new data flow).
+
+## CGP-AGENT-D-026: trace recording pill (DES-CGP-AGENT-64, 2026-10-27, agent choice)
+
+- Parent CGP-AGENT-R-030 (REQ-STUDIO-PERF-TRACE) already had the 3-step start dialog and the review (file size, 내 컴퓨터에만 두기 first, 보내기) as native VS Code modals, and a red status bar item that does not meet the 44px target. This slice adds the missing piece: a red "기록 중 · 멈추기" pill above the chat composer in every ChatPanel seat (personal, trial, pass, classroom, lesson, instructor). The status bar item stays as a second stop.
+- Start and review stay native: the design asks for their content (three steps; size and two buttons with keep as default), which the modals already show; a webview copy would duplicate the consent text and the keep/send decision in a second place. Step 2 of the consent text (and §8 of `docs/session-log-consent.ko.md`) now names the chat-panel pill.
+- Colour: own primitives (`--ds-p-rec-pill-*`), dark #ff6b6b fill with #1a1a1a ink, light and high-contrast light #c62828 with white ink; text ≥4.5:1 on the fill and fill ≥3:1 against the panel in Dark+/Light+ (measured), an ink-coloured border. Forced colours: no opt-out (the forced-colors gate refuses one); the pill becomes a system button and keeps its border and focus ring. Learner floors: 44px target, body-size text (≥14px).
+- State: the host is the only source. The controller emits `{recording, id}` on start and stop; the panel asks on mount. A press carries the recording's id and the host stops only that recording, then re-sends the current state, so a stale pill is corrected and can never stop a later recording. A second press while the stop is pending does nothing.
+- Default state: unchanged from R-030 (setting `hypeproofChat.performanceTraceEnabled` off; adult and instructor seats only). With no recording the pill renders nothing, so no seat sees a change by default.
+
+## CGP-ART-D-015: deck present-mode look (DES-ART-15, 2026-10-27, agent choice)
+
+- Already met on main by CGP-ART-R-015 (`deckGenerator.ts` present mode, #2823); no product code changed. The row is closed by proof: `test/deck-present-letterbox-browser.smoke.mjs` measures what the R-015 smoke left unmeasured.
+- "Black letterbox" is read from screenshot pixels, not CSS: bands above/below (1000x900, 800x800) and left/right (1600x600), light and dark scheme, every sample rgb <= 2, with the slide face itself painted so a black sample cannot be a blank page.
+- "Bottom-right position text": the control group's right and bottom edges sit 16 px from the window edges and the `{n} / {total}` text lies in the right half and bottom quarter. The text is part of the control group (이전, n / total, 다음, 발표 끝내기), so it hides and returns with it.
+- "Auto-hides after 2 s idle": shown at 300, 1000 and 1600 ms and hidden by 2350 ms after entering, a mouse move, a key and a pointer press; a keyboard-focused control (Tab, :focus-visible) is never hidden.
+- "Toast and maximized-panel fallback": a top-level window whose fullscreen request rejects, throws or is missing shows the status line and fills the window, centred; the status line idles away with the controls and returns on mouse move. The preview-iframe refusal stays covered by the R-015 smoke.
+- Accepted as is: while shown, the control group overlays the slide's bottom-right footer when the slide fills the window width; it hides after 2 s, which is the design's answer to the overlap.
+- Default state: unchanged (on wherever the deck skill writes a deck; display only, no new data flow).

@@ -143,6 +143,22 @@ const btn = (label: RegExp) => host.querySelectorAll('button').find((b: any) => 
   await click(btn(/바꿔 달라고 하기/));
   assert.deepEqual(sends, [styleTweakSendText(st)]);
   console.log('✓ panel: swatches, stepper and reset ask the host; send carries the chosen values once the host view is current');
+
+  // CGP-ART-D-006: Escape closes the popover and returns focus to its toggle; the key stops here so
+  // the panel and workspace handlers above never see it. During IME composition it is left alone.
+  const keys: string[] = [];
+  host.parentNode.addEventListener('keydown', (e: any) => keys.push(e.key));
+  const key = (el: any, k: string, extra = {}) => act(() => el.dispatchEvent({ type: 'keydown', bubbles: true, cancelable: true, key: k, keyCode: 0, ...extra, preventDefault() {}, stopPropagation() { this._stopped = true; } }));
+  const group = () => host.querySelector('[role="group"]');
+  await key(btn(/^색 rgb\(200, 30, 30\)$/), 'Escape', { isComposing: true });
+  assert.ok(group(), 'Escape while composing leaves the popover open');
+  await key(btn(/^색 rgb\(200, 30, 30\)$/), 'Escape');
+  assert.equal(group(), null, 'Escape closes the popover');
+  const toggle = btn(/스타일 바꿔 보기/);
+  assert.equal(host.ownerDocument.activeElement, toggle, 'focus returns to the toggle');
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.deepEqual(keys, ['Escape'], 'only the composing Escape reached the handlers above');
+  console.log('✓ popover: Escape closes it, focus returns to the toggle, the key stops at the popover');
   await act(() => root.unmount());
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });
