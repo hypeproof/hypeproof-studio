@@ -53,7 +53,7 @@ assert.doesNotMatch(authoring, /feature-allowed'\)\.innerHTML/, 'the feature lis
 // are carried inside learning exactly as loaded (carriedLearning), the same preservation rule one level down.
 assert.match(
   authoring,
-  /const formKeys=\['schema',\.\.\.fields,'steps','assistant','model','features','learning'\];/,
+  /const formKeys=\['schema',\.\.\.fields,'audience_tier','steps','assistant','model','features','learning'\];/,
   'the form declares which top-level keys it owns, so everything else is an unknown key to preserve',
 );
 assert.match(authoring, /carriedLearning=l\?Object\.fromEntries\(Object\.entries\(l\)\.filter\(\(\[k\]\)=>!\['week','mission','completion'\]\.includes\(k\)\)\):\{\};/,

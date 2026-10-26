@@ -41,12 +41,18 @@ label{color:var(--hp-text-2);font-size:var(--ds-c-chalk-authoring-type-26)}
 label small{color:var(--hp-mute)}
 </style><div class="hp-flowbar"><a class="hp-home" href="/manage">HypeProof Chalk · 강사</a><nav aria-label="강사 도구"><a href="/manage">수업 운영</a><a href="/authoring" aria-current="page">강의 작성</a><a href="/issuer">학생 초대</a><a href="/console">수업 시작·종료</a><a href="/budgets">AI 예산</a><details><summary>더보기</summary><div class="more-links"><a href="/authoring#rehearsal">리허설·확정</a><a href="/manage#ops-help-title">도움 요청</a><a href="/manage#shares-title">공유 기록</a><a href="/manage#ops-finish-title">기록 회수·보고서</a></div></details></nav></div><details class="page-help"><summary>작성 단계·도움말</summary><nav aria-label="이 화면"><a href="#review">바뀌는 내용</a><a href="#rehearsal">리허설</a><a href="#confirm">확정</a><a href="#send">보내기</a><a href="#retro">돌아보기</a><a href="#support">기능·지원 요청</a></nav></details>
 <header><small>CHALK / 강의 설계</small><h1>강의 작성</h1><p>수업 설정을 선택한 뒤 강의를 작성하세요.</p></header>
+<section id="first-run" aria-labelledby="first-run-title" hidden><h2 id="first-run-title">주로 가르치는 대상 — 처음 한 번만 묻습니다</h2>
+<p class="muted">고른 값은 이 브라우저에만 저장되고, 새 강의를 만들 때 ‘대상’과 ‘대상 단계’를 미리 채웁니다. 강의마다 고칠 수 있습니다. ‘나중에’를 누르면 아무것도 채우지 않습니다.</p>
+<fieldset id="fr-grade" class="fr-chips"><legend>학년대</legend></fieldset>
+<fieldset id="fr-subject-box"><legend>과목 — 여러 개 고를 수 있습니다</legend><div id="fr-subjects" class="fr-chips"></div>
+<div class="fr-add"><label>목록에 없는 과목<input id="fr-subject-new" maxlength="20" autocomplete="off"></label><button id="fr-subject-add" type="button" class="ghost">과목 목록에 추가</button></div><small>직접 추가한 과목은 ‘빼기’로 목록에서 지울 수 있습니다.</small></fieldset>
+<div class="fr-actions"><button id="fr-save" type="button">저장</button><button id="fr-later" type="button" class="ghost">나중에</button></div><p id="fr-status" role="status"></p></section>
 <fieldset><legend>01 · 강사 연결</legend>
 <label>강사 연결 코드<input id="token" type="password" autocomplete="off"></label><small>이 화면 메모리에서만 사용합니다. URL이나 수업 파일에는 포함하지 않습니다.</small>
 <button id="connect">수업 설정 불러오기</button><p id="connection-status" role="status">강사 토큰을 연결하면 선택 가능한 수업 설정이 나옵니다.</p><label id="setting-label" hidden>수업 설정<select id="setting"><option value="">선택하세요</option></select></label><details><summary>연결 정보 직접 입력</summary><div class="row"><label>코호트 ID<input id="cohort" autocomplete="off"></label><label>프로필 ID<input id="profile" autocomplete="off"></label></div>
 </details><button id="forget">연결 해제</button>
 </fieldset>
-<section class="draft-actions"><button id="new">새 강의 만들기</button><small>기존 수업에는 영향을 주지 않습니다.</small></section>
+<section class="draft-actions"><button id="new">새 강의 만들기</button><small>기존 수업에는 영향을 주지 않습니다.</small><small id="fr-summary"></small><button id="fr-open" type="button" class="ghost">기본 대상 바꾸기</button></section>
 <details class="tools"><summary>저장한 강의 열기 · 파일 가져오기</summary><fieldset><legend>기존 강의</legend>
 <label>강의 초안 파일 가져오기<input id="import" type="file" accept=".json,application/json"></label>
 <label>가져온 강의<select id="courses"><option value="">강의 파일을 선택하세요</option></select></label>
@@ -56,6 +62,7 @@ label small{color:var(--hp-mute)}
 <form id="editor"><fieldset><legend>02 · 커리큘럼</legend>
 <label>제목<input id="title" maxlength="200" required></label>
 <label>대상<textarea id="audience"></textarea></label>
+<label>대상 단계<select id="audience_tier"><option value="">정하지 않음</option><option value="lv1">초등 (lv1)</option><option value="lv2">중·고 (lv2)</option><option value="adult">성인 (adult)</option></select></label><small>수업 검사가 이 단계 기준으로 강의를 봅니다. 기본 대상에서 미리 채워져도 강의마다 바꿀 수 있습니다. 유아는 맞는 단계가 없어 비워 둡니다.</small>
 <label>시간(분)<input id="duration_minutes" type="number" min="1" max="480" value="120"></label>
 <label>목표<textarea id="objective"></textarea></label>
 <label>시작 예제·자료<textarea id="starter" placeholder="학생이 처음 열어볼 예제나 사용할 자료를 적어주세요."></textarea></label>
@@ -161,7 +168,7 @@ const fields=['title','audience','duration_minutes','objective','prerequisites',
 // 여기 없는 키(steps[].help, learning, 앞으로 생길 칸)는 다음 저장에서 조용히 사라진다.
 // 그래서 render() 가 연 초안의 미확인 키를 들고 있다가 content() 에서 되돌려 깐다.
 // 보존만 한다 — 편집 UI 는 이 변경의 범위가 아니다.
-const formKeys=['schema',...fields,'steps','assistant','model','features','learning'];
+const formKeys=['schema',...fields,'audience_tier','steps','assistant','model','features','learning'];
 const stepFormKeys=['id','title','instructions','hint','acceptance','help','ui'];
 let carriedTop={},carriedStep=new Map(),carriedLearning={};
 let revision=null,bound=null,dirty=false,busy=false,pending=null,batch=[];
@@ -177,9 +184,9 @@ function changed(){dirty=true;$('completion').textContent='';controls();}
 function discard(){return !dirty||confirm('저장하지 않은 편집을 바꿀까요? 필요한 내용은 먼저 내보내세요.');}
 function scope(){for(const k of ['cohort','profile','course'])if(!/^[a-zA-Z0-9_-]{1,128}$/.test($(k).value.trim()))throw Error('코호트·프로필·수업 ID를 확인하세요.');if(!$('token').value.trim())throw Error('강사 토큰을 입력하세요.');return '/admin/cohorts/'+encodeURIComponent($('cohort').value.trim())+'/authoring/'+encodeURIComponent($('course').value.trim());}
 function step(data={id:'step-'+crypto.randomUUID().slice(0,8),title:'',instructions:'',hint:'',acceptance:''}){const f=document.createElement('fieldset');f.className='step';for(const [key,label] of Object.entries({id:'단계 ID',title:'단계 제목',instructions:'안내·실습',hint:'힌트',acceptance:'완료 기준'})){const l=document.createElement('label');l.textContent=label;const e=document.createElement(key==='id'||key==='title'?'input':'textarea');e.dataset.field=key;e.value=data[key]??'';l.append(e);if(key==='id')l.hidden=true;f.append(l);}stepTeaching(f,data);for(const [label,action] of [['위로',()=>f.previousElementSibling?.before(f)],['아래로',()=>f.nextElementSibling?.after(f)],['삭제',()=>f.remove()]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{action();changed();};f.append(b);}$('steps').append(f);}
-function content(){const name=$('assistant_name').value.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();return {...carriedTop,schema:'hps-session-design/1',...Object.fromEntries(fields.map(k=>[k,k==='duration_minutes'?Number($(k).value):$(k).value])),steps:[...document.querySelectorAll('.step')].map(f=>{const own=Object.fromEntries([...f.querySelectorAll('[data-field]')].map(e=>[e.dataset.field,e.value]));return {...carriedStep.get(own.id),...own,...stepTeachingValue(f)};}),...(name?{assistant:{display_name:name}}:{}),...(lessonModel?{model:lessonModel}:{}),...(lessonFeatures?{features:lessonFeatures}:{}),...learningValue()};}
+function content(){const name=$('assistant_name').value.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();return {...carriedTop,schema:'hps-session-design/1',...Object.fromEntries(fields.map(k=>[k,k==='duration_minutes'?Number($(k).value):$(k).value])),...($('audience_tier').value?{audience_tier:$('audience_tier').value}:{}),steps:[...document.querySelectorAll('.step')].map(f=>{const own=Object.fromEntries([...f.querySelectorAll('[data-field]')].map(e=>[e.dataset.field,e.value]));return {...carriedStep.get(own.id),...own,...stepTeachingValue(f)};}),...(name?{assistant:{display_name:name}}:{}),...(lessonModel?{model:lessonModel}:{}),...(lessonFeatures?{features:lessonFeatures}:{}),...learningValue()};}
 function carry(c){carriedTop=Object.fromEntries(Object.entries(c).filter(([k])=>!formKeys.includes(k)));carriedStep=new Map((c.steps||[]).map(s=>[s.id,Object.fromEntries(Object.entries(s).filter(([k])=>!stepFormKeys.includes(k)))]));}
-function render(c){carry(c);lessonModel=c.model?{default:c.model.default,allowed:[...c.model.allowed],...(c.model.effort?{effort:structuredClone(c.model.effort)}:{})}:undefined;renderModels();lessonFeatures=c.features?{allowed:[...c.features.allowed]}:undefined;renderFeatures();for(const k of fields)$(k).value=c[k]??(k==='duration_minutes'?120:'');$('assistant_name').value=c.assistant?.display_name??'';renderLearning(c.learning);$('steps').replaceChildren();for(const s of c.steps||[])step(s);}
+function render(c){carry(c);lessonModel=c.model?{default:c.model.default,allowed:[...c.model.allowed],...(c.model.effort?{effort:structuredClone(c.model.effort)}:{})}:undefined;renderModels();lessonFeatures=c.features?{allowed:[...c.features.allowed]}:undefined;renderFeatures();for(const k of fields)$(k).value=c[k]??(k==='duration_minutes'?120:'');setTier(c.audience_tier);$('assistant_name').value=c.assistant?.display_name??'';renderLearning(c.learning);$('steps').replaceChildren();for(const s of c.steps||[])step(s);}
 async function call(path,method='GET',body){const r=await fetch(path,{method,redirect:'error',headers:{authorization:'Bearer '+$('token').value.trim(),'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const j=await r.json();if(!r.ok){const detail=typeof j.error==='string'?j.error:JSON.stringify(j.error||j);const learningHint=r.status===400&&/learning/.test(detail)?' — 미션·주차·완료 조건을 확인하세요(점수·등급은 넣을 수 없습니다). 편집은 보존됐습니다.':'';const nameHint=r.status===400&&detail==='invalid session-design fields'&&$('assistant_name').value.trim()?' — 이 Service 버전은 수업별 AI 이름을 아직 받지 않습니다. 이름을 비우고 저장하거나 Service 배포 후 다시 시도하세요. 편집은 보존됐습니다.':'';throw Error(`HTTP ${r.status}: ${detail}`+(r.status===409?' — 편집은 보존됐습니다. 내보낸 뒤 저장본을 다시 열어 비교하세요.':'')+learningHint+nameHint);}return j;}
 // The page lock disables the editor, which drops focus; a check that names a field hands it back once the lock is released.
 const fix=(el,msg)=>Object.assign(Error(msg),{field:el});
@@ -191,7 +198,7 @@ $('token').oninput=()=>{clearConnection();};
 $('editor').oninput=changed;
 for(const k of ['cohort','profile','course'])$(k).oninput=()=>{$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';controls();status('대상이 바뀌었습니다. 새 초안 또는 저장된 초안을 선택하세요. 현재 편집은 보존됩니다.');};
 $('forget').onclick=()=>{$('token').value='';clearConnection();status('연결을 해제했습니다. 편집 내용은 남아 있습니다.');};
-$('new').onclick=()=>run(async()=>{if(!$('cohort').value||!$('profile').value)throw Error('먼저 수업 설정을 선택하세요.');if(!discard())return;$('course').value='course-'+crypto.randomUUID();$('version').value='';clearReadiness();$('completion').textContent='';scope();render({steps:[]});step();revision=0;bound=identity();pending=null;dirty=true;status('새 강의 — 커리큘럼을 작성하고 저장하세요.');$('title').focus();});
+$('new').onclick=()=>run(async()=>{if(!$('cohort').value||!$('profile').value)throw Error('먼저 수업 설정을 선택하세요.');if(!discard())return;$('course').value='course-'+crypto.randomUUID();$('version').value='';clearReadiness();$('completion').textContent='';scope();render({steps:[]});const filled=frPrefill();step();revision=0;bound=identity();pending=null;dirty=true;status(filled?'새 강의 — 기본 대상으로 ‘대상’과 ‘대상 단계’를 채웠습니다. 이 강의에 맞게 고치고 저장하세요.':'새 강의 — 커리큘럼을 작성하고 저장하세요.');$('title').focus();});
 $('import').onchange=()=>run(async()=>{const f=$('import').files[0];if(!f)return;if(f.size>1024*1024)throw Error('파일은 1 MiB 이하여야 합니다.');const j=JSON.parse(await f.text());const items=j.schema==='hps-authoring-batch/1'?j.courses:[j];if(!Array.isArray(items)||!items.length||items.some(x=>!x.course_id||x.content?.schema!=='hps-session-design/1'||!Array.isArray(x.content.steps)))throw Error('지원하는 강의 초안 파일이 아닙니다.');batch=items;$('courses').replaceChildren(new Option('가져올 강의를 선택하세요',''),...items.map((c,i)=>new Option(c.content.title,String(i))));status('강의를 선택한 뒤 편집하고 저장하세요.');});
 $('courses').onchange=()=>{if($('courses').value===''||!discard())return;const c=batch[Number($('courses').value)];$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';$('course').value=c.course_id;render(c.content);revision=0;bound=identity();pending=null;dirty=true;status('가져온 초안 — 새 수업으로만 저장합니다. 기존 ID가 있으면 충돌로 보호합니다.');controls();};
 $('load').onclick=()=>run(async()=>{const path=scope();if(!discard())return;const d=await call(path);if(d.profile_id!==$('profile').value.trim())throw Error('저장본의 프로필이 선택한 프로필과 다릅니다.');render(d.content);revision=d.revision;bound=identity();dirty=false;pending=null;$('version').value='';clearReadiness();$('completion').textContent='';window.chalkClearCopyFeedback($('copy-student'));$('student-token').value='';status('저장본을 열었습니다. revision '+revision);});
@@ -268,6 +275,38 @@ $('freeze').onclick=()=>run(async()=>{if(dirty||revision<1||bound!==identity())t
 $('version-load').onclick=()=>run(async()=>{$('version-view').textContent=JSON.stringify(await call(scope()+'/versions/'+encodeURIComponent($('version').value.trim())),null,2);status('저장된 불변 버전을 확인했습니다. 초안 편집은 유지됩니다.');});
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify({course_id:$('course').value.trim(),content:content()},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='course-draft.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
 $('request').onclick=()=>{const url=new URL('https://github.com/hypeproof/hypeproof-studio/issues/new');url.searchParams.set('title','[강의 지원] '+$('course').value.trim());url.searchParams.set('body',`강의 ID: ${$('course').value.trim()}\n목적: ${$('need').value}\n필요 날짜: ${$('needed').value||'미정'}\n참고: ${$('reference').value}\n재현·오류·대안: ${$('repro').value}\n\n담당자: 미정 (접수 후 지정)\n다음 조치: 재현 확인 및 분류\n예상 일정: 미정 (범위 검토 필요)`);$('request-link').href=url.href;$('request-link').hidden=false;$('request-status').textContent='초안 준비됨 · 아직 미접수. GitHub에서 내용을 확인하고 제출한 뒤 해당 이슈에서 상태를 확인하세요.';};
+
+// CH-01 first-run audience (CGP-LEARN-R-014) — the instructor's default audience, asked once on this browser. It is only a starting value
+// for a NEW lesson: opened, imported and reused drafts keep what they have. Skipping fills nothing (no default grade,
+// no default tier). Stored per browser (Chalk has no instructor-preference store in the Service and writes no KV).
+const FR_KEY='chalk.instructor-defaults/1';
+const FR_GRADES=[['유아',''],['초 1–2','lv1'],['초 3–4','lv1'],['초 5–6','lv1'],['중','lv2'],['고','lv2'],['성인','adult']];
+const FR_SUBJECTS=['국어','수학','사회','과학','영어','정보','미술','음악','체육'];
+let frMemory=null,frCustom=[];
+function frClean(v){return String(v).normalize('NFKC').replace(/[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u200B-\u200F\u2028-\u202E\u2060-\u206F\uFEFF]/g,'').replace(/\s+/g,' ').trim().slice(0,20);}
+function frList(a,max){const out=[];if(!Array.isArray(a))return out;for(const x of a){if(typeof x!=='string')continue;const v=frClean(x);if(v&&!out.some(o=>o.toLowerCase()===v.toLowerCase())&&out.length<max)out.push(v);}return out;}
+function frParse(raw){try{const j=JSON.parse(raw);if(!j||typeof j!=='object'||j.v!==1)return null;const custom=frList(j.custom,12),known=[...FR_SUBJECTS,...custom];return {v:1,skipped:j.skipped===true,grade:FR_GRADES.some(g=>g[0]===j.grade)?j.grade:'',subjects:frList(j.subjects,21).filter(x=>known.includes(x)),custom};}catch{return null;}}
+function frRead(){let raw=null;try{raw=localStorage.getItem(FR_KEY);}catch{return frMemory;}return raw===null?frMemory:frParse(raw);}
+function frWrite(p){frMemory=p;try{localStorage.setItem(FR_KEY,JSON.stringify(p));}catch{}}
+function frTier(grade){return FR_GRADES.find(g=>g[0]===grade)?.[1]||'';}
+function setTier(v){const sel=$('audience_tier');for(const o of [...sel.options])if(o.dataset.kept!==undefined)o.remove();const t=typeof v==='string'?v:'';if(t&&![...sel.options].some(o=>o.value===t)){const o=new Option('지원 전 값 유지: '+t,t);o.dataset.kept='';sel.append(o);}sel.value=t;}
+function frPrefill(){const p=frRead();if(!p||p.skipped)return false;const text=[p.grade,p.subjects.join(', ')].filter(Boolean).join(' · '),tier=frTier(p.grade);if(text)$('audience').value=text;setTier(tier);return !!(text||tier);}
+function frChip(type,name,value,checked){const l=document.createElement('label'),i=document.createElement('input');i.type=type;i.name=name;i.value=value;i.checked=checked;l.append(i,document.createTextNode(value));return l;}
+function frRender(p){
+ $('fr-grade').replaceChildren($('fr-grade').querySelector('legend'),...FR_GRADES.map(([g])=>frChip('radio','fr-grade',g,p?.grade===g)));
+ const chosen=p?.subjects||[];
+ $('fr-subjects').replaceChildren(...FR_SUBJECTS.map(s=>frChip('checkbox','fr-subject',s,chosen.includes(s))),...frCustom.map(s=>{const w=document.createElement('span');w.className='fr-custom';const b=document.createElement('button');b.type='button';b.className='ghost';b.textContent='빼기';b.setAttribute('aria-label','과목 빼기: '+s);b.onclick=()=>{const keep=frChecked();frCustom=frCustom.filter(x=>x!==s);frRender({grade:frGrade(),subjects:keep.filter(x=>x!==s)});$('fr-subject-new').focus();};w.append(frChip('checkbox','fr-subject',s,chosen.includes(s)),b);return w;}));
+}
+function frGrade(){return $('fr-grade').querySelector('input:checked')?.value||'';}
+function frChecked(){return [...$('fr-subjects').querySelectorAll('input:checked')].map(i=>i.value);}
+function frSummary(){const p=frRead(),text=p&&!p.skipped?[p.grade,p.subjects.join(', ')].filter(Boolean).join(' · '):'';$('fr-summary').textContent=text?'기본 대상: '+text:'기본 대상 없음 — 새 강의의 대상은 비어 있습니다.';}
+function frShow(){const p=frRead();frCustom=p?.custom?[...p.custom]:[];frRender(p);$('fr-status').textContent='';$('first-run').hidden=false;}
+$('fr-subject-add').onclick=()=>{const v=frClean($('fr-subject-new').value);if(!v){$('fr-status').textContent='추가할 과목 이름을 적으세요.';$('fr-subject-new').focus();return;}const keep=frChecked(),all=[...FR_SUBJECTS,...frCustom],same=all.find(x=>x.toLowerCase()===v.toLowerCase());if(!same&&frCustom.length>=12){$('fr-status').textContent='직접 추가한 과목은 12개까지입니다.';return;}if(!same)frCustom.push(v);frRender({grade:frGrade(),subjects:[...keep,same||v]});$('fr-subject-new').value='';$('fr-status').textContent=same?same+'은(는) 이미 목록에 있어 골라 두었습니다.':v+'을(를) 목록에 추가하고 골라 두었습니다.';$('fr-subject-new').focus();};
+$('fr-subject-new').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();$('fr-subject-add').click();}};
+$('fr-save').onclick=()=>{const p={v:1,skipped:false,grade:frGrade(),subjects:frChecked(),custom:frCustom};frWrite(p);$('first-run').hidden=true;frSummary();status(p.grade||p.subjects.length?'기본 대상을 저장했습니다. 새 강의를 만들 때 미리 채웁니다.':'고른 값이 없어 새 강의의 대상은 비어 있습니다.');$('new').focus();};
+$('fr-later').onclick=()=>{if(!frRead())frWrite({v:1,skipped:true,grade:'',subjects:[],custom:frCustom});$('first-run').hidden=true;frSummary();status('기본 대상 없이 진행합니다. ‘기본 대상 바꾸기’에서 언제든 정할 수 있습니다.');$('new').focus();};
+$('fr-open').onclick=()=>{frShow();$('fr-grade').querySelector('input')?.focus();};
+frSummary();if(!frRead())frShow();
 
 // #751 G2 — per-step teaching controls. Help modes are a teaching strategy (never a grant); the work surface is one of the
 // kinds this Studio draws. An existing value the form does not offer is kept as it is and named, never dropped or faked.
@@ -555,4 +594,16 @@ body{max-width:var(--ds-c-chalk-authoring-size-97);margin:0 auto!important;paddi
 #confirm-groups-list pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font:inherit}
 #confirm-groups-list summary{min-height:var(--ds-c-chalk-authoring-size-8);box-sizing:border-box;cursor:pointer}
 @media(max-width:767px){#confirm-comparison{grid-template-columns:minmax(0,1fr)}}
+
+/* CH-01 first-run audience / DES-CGP-LEARN-14: first-run audience — one screen, two questions, 44px chips, a quiet "나중에". State is the native radio/checkbox, not colour alone. */
+#first-run .fr-chips{display:flex;flex-wrap:wrap;gap:var(--ds-c-chalk-authoring-space-2);align-items:center}
+#first-run .fr-chips>legend{flex:0 0 100%}
+#first-run .fr-chips label{display:inline-flex;align-items:center;gap:var(--ds-c-chalk-authoring-space-2);box-sizing:border-box;min-height:var(--ds-c-chalk-authoring-size-8);margin:0;padding:0 var(--ds-c-chalk-authoring-space-1);border:var(--ds-c-chalk-authoring-size-3) solid var(--hp-control-line);border-radius:var(--ds-c-chalk-authoring-radius-10);font-size:var(--ds-c-chalk-authoring-type-17);color:var(--hp-text);cursor:pointer;white-space:nowrap}
+#first-run .fr-chips label:has(input:checked){border-color:var(--hp-accent);background-image:linear-gradient(var(--hp-layer-pressed),var(--hp-layer-pressed))}
+#first-run .fr-chips input{width:auto;margin:0}
+#first-run .fr-custom{display:inline-flex;align-items:center;gap:var(--ds-c-chalk-authoring-space-13)}
+#first-run .fr-add{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--ds-c-chalk-authoring-space-2)}
+#first-run .fr-add label{flex:1 1 auto;min-width:0}
+#first-run .fr-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ds-c-chalk-authoring-space-2)}
+#first-run button,#fr-open{min-height:var(--ds-c-chalk-authoring-size-8)}
 </style></html>

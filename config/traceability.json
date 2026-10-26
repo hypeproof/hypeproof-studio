@@ -7712,6 +7712,52 @@
       ]
     },
     {
+      "id": "ST-DES-CHALK-FIRST-RUN-AUDIENCE",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/chalk-authoring.md",
+          "section": "### CH-01 첫 실행 기본 대상 · 2026-10-26"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-FIRST-RUN-AUDIENCE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-DES-CHALK-FIRST-RUN-AUDIENCE"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/authoring.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-FIRST-RUN-AUDIENCE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-TEST-CHALK-AUTHORING",
+        "ST-IMP-CHALK-FIRST-RUN-AUDIENCE"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/first-run-audience.browser.mjs"
+        },
+        {
+          "path": "docs/testing/chalk-authoring.md"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-CHALK-ATTENTION-COPY",
       "stage": "implementation",
       "owner": "jayleekr",
