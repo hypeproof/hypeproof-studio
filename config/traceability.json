@@ -14438,6 +14438,59 @@
           "path": "docs/testing/chalk-authoring.md"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-PROJECT-IDEAS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Example project ideas after a no-idea answer (CGP-SHELL-R-020)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PROJECT-IDEAS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PROJECT-IDEAS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/projectIdeasModel.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ProjectIdeas.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/projectIdeas.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PROJECT-IDEAS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PROJECT-IDEAS",
+        "ST-IMP-PROJECT-IDEAS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/project-ideas.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/project-ideas-layout.smoke.mjs"
+        }
+      ]
     }
   ]
 }

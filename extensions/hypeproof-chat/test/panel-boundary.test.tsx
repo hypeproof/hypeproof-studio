@@ -271,6 +271,11 @@ const PANELS: Row[] = [
     await act(async () => { (globalThis as unknown as { document: { dispatchEvent(e: unknown): boolean } }).document.dispatchEvent(ev("keydown", { key: "f", code: "KeyF", metaKey: mac, ctrlKey: !mac, altKey: false, shiftKey: false, isComposing: false })); });
   } },
   { panel: "page-card", key: "PageCard.tsx:PageCard", mode: "personal", msgs: () => [{ type: "pageCardsState", cards: [{ turnId: "s1", anchorId: "a1", pages: [] }] }] },
+  { panel: "project-ideas", key: "ProjectIdeas.tsx:ProjectIdeas", mode: "personal", history: [
+    { id: "a0", role: "assistant", content: "어떤 걸 만들어 보고 싶어요?", createdAt: 1 },
+    { id: "u1", role: "user", content: "잘 모르겠어요", createdAt: 2 },
+    { id: "a1", role: "assistant", content: "같이 찾아봐요.", createdAt: 3 },
+  ] },
   { panel: "delegation", key: "DelegationGroup.tsx:DelegationGroup", mode: "personal", history: DELEGATED },
   // CGP-ART-R-020: the "AI가 한 일" row draws only when the task's history carries an entry.
   { panel: "task-activity", key: "TaskActivity.tsx:TaskActivity", mode: "personal", history: [...CITED.slice(0, 1), { ...CITED[1], activity: [{ id: "toolu_R", verb: "read", target: "index.html", inside: true }] }] },

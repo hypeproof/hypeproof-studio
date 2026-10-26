@@ -323,3 +323,11 @@ cohort and profile. Unknown and unpaired seats remain silent (DEC-25); token/gra
 expiry is not a class end. The passive line counts down only within the final ten
 minutes and disappears at the end without changing Service admission. Connection
 snapshot freshness is explicit: schedule changes require a refreshed connection.
+
+## Example project ideas (CGP-SHELL-R-020)
+
+Built 2026-10-26 as `REQ-STUDIO-PROJECT-IDEAS` (`docs/studio-requirements.md`). Owner-delegated
+choices: personal seats only; a narrow, fail-closed no-idea and goal-question check in the
+webview; six Studio-owned ideas (no Service profile key exists for them); no list when the coach's
+reply already carries reply choices; columns follow the chat pane width (DES-SHELL-19). See
+`decisions.md` "CGP-SHELL-R-020".

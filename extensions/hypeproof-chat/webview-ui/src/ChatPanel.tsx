@@ -111,6 +111,8 @@ import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
 import { LessonTip } from "./LessonTip";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
+import { ProjectIdeas } from "./ProjectIdeas";
+import { PROJECT_IDEAS, PROJECT_IDEAS_MAX, PROJECT_IDEAS_STATE_KEY, ideaOfferFor, ideaOfferKey, readIdeaDismissals, withIdeaDismissal } from "./projectIdeasModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { groupDelegations, delegationGroups, parseDelegationId } from "../../src/delegationRow";
 import { idleTurnHint, runningProgressStep } from "../../src/longStepHint";
@@ -485,6 +487,8 @@ export function ChatPanel(props: Props) {
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   // CGP-CHAT-R-021 — lesson tips the learner closed, per served step; kept in this panel's webview state.
   const [dismissedTips, setDismissedTips] = useState<string[]>(() => readDismissed(readWebviewState<Record<string, unknown>>()));
+  // CGP-SHELL-R-020 — idea lists the learner closed with "내가 정할래요", per task and answer.
+  const [dismissedIdeas, setDismissedIdeas] = useState<string[]>(() => readIdeaDismissals(readWebviewState<Record<string, unknown>>()));
   // #751 F4 — local display state for the learner's step self-report; it is separate from task completion.
   const [lessonSteps, setLessonSteps] = useState<Record<string, 'in_progress' | 'submitted'>>({});
   // #751 G2 — the learner's saved work-surface entries for the current lesson digest, and the rehearsal send result.
@@ -1527,6 +1531,15 @@ export function ChatPanel(props: Props) {
   // never while a turn runs, a message waits in the queue or recovery list, or in instructor mode.
   const attempts = visibleAttempts(messages);
   const shown = visibleVersions(attempts.items, versionChoice);
+  // CGP-SHELL-R-020 — example ideas only after a no-idea answer to a goal question, never on the first
+  // screen (that needs a learner message), never in a lesson or the instructor console, never mid-turn,
+  // and never mid-work (the task must be at its start: no tool work, no artifact, an early conversation).
+  const ideaOffer = personalWorkspace && !props.instructor && !streaming
+    ? ideaOfferFor(shown.items, config?.profile?.welcome?.greeting_md ?? "", (text) => replyChoices(text) !== null,
+      // Ideas are for starting a project: a picked surface, an open world or a publish means work exists.
+      !!config?.taskWorkspace?.sourceSelection || props.openWorldId !== null || props.publish !== null) : null;
+  const ideaKey = ideaOffer ? ideaOfferKey(activityId, taskId, ideaOffer.messageId) : null;
+  const showIdeas = !!ideaKey && !dismissedIdeas.includes(ideaKey);
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — derived from the conversation each render; -1 when nothing is left out.
   const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
   // CGP-CHAT-R-023 — read-only step dividers where the served step changes, and the "지금 단계로" target: the
@@ -2054,7 +2067,26 @@ export function ChatPanel(props: Props) {
           /></PanelBoundary>
         )}
 
-        {showFollowUpChips && (
+        {showIdeas && ideaKey && <PanelBoundary panel="project-ideas">{() => <ProjectIdeas
+          ideas={PROJECT_IDEAS.slice(0, PROJECT_IDEAS_MAX)}
+          // Shown as chosen only while its sentence is still in the composer (the learner may have edited it away).
+          picked={PROJECT_IDEAS.find((idea) => draft.includes(idea.prompt))?.id ?? null}
+          // Mid-IME composition, a read-only (missing folder) draft, or a seat that cannot send: picks are inert.
+          disabled={frozen || unavailable || folderMissing || composing || !!props.sendLocked || !!props.sendPending}
+          onPick={(idea) => {
+            if (composing || folderMissing) return;
+            // Same ownership rule as reply choices: prepares an editable draft, keeps manual text, never sends.
+            handleReplyChoice(idea.prompt);
+          }}
+          onOwn={() => {
+            const next = withIdeaDismissal(dismissedIdeas, ideaKey);
+            setDismissedIdeas(next);
+            patchWebviewState({ [PROJECT_IDEAS_STATE_KEY]: next });
+            textareaRef.current?.focus({ preventScroll: true });
+          }}
+        />}</PanelBoundary>}
+
+        {showFollowUpChips && !showIdeas && (
           <ChipRack
             chips={ux.suggestions.follow_up}
             onPick={handleChip}

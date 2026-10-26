@@ -33,6 +33,7 @@ export const PANEL_COMPONENTS = {
   "NativeObservationPanel.tsx": ["NativeObservationPanel"],
   "PageCard.tsx": ["PageCard"],
   "PreviewRecoveryNotice.tsx": ["PreviewRecoveryNotice"],
+  "ProjectIdeas.tsx": ["ProjectIdeas"],
   "PublishPanel.tsx": ["PublishPanel"],
   "ReviewPanel.tsx": ["ReviewPanel"],
   "SkillsPanel.tsx": ["SkillsPanel"],

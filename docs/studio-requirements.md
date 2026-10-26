@@ -6772,3 +6772,54 @@ file byte-identical) and `test/style-tweak-layout.smoke.mjs`
 (computed 44px targets, 14px text, 24px swatches, focus ring, inside the chip at 320/800/1420,
 personal and classroom, dark/light/forced colours). The browser smokes fail under
 `FOCUS_REQUIRE_BROWSER=1` without a browser.
+
+## Example project ideas after a no-idea answer (CGP-SHELL-R-020)
+
+`REQ-STUDIO-PROJECT-IDEAS` (CGP-SHELL-R-020 / REQ-SHELL-20, DES-SHELL-19, P2; traces to
+CGP-SHELL-042, PI#2 Human judgment stays visible, PI#6 Adapt, do not script, NAT-03 and the
+first-trial intent in `docs/PRODUCT-INTENT.md` that the first experience is not a catalog).
+Example project ideas are offered only after the learner says they have no idea of what to make.
+The first screen never shows idea cards: an offer needs a learner message. In a personal seat
+(personal, trial, free and pass; a task workspace without a lesson), when the learner's latest
+message is a short no-idea answer (at most 30 characters, ending in a phrase such as `몰라요`,
+`모르겠어요`, `생각이 안 나요`, `아이디어가 없어요`, `못 정했어요` or `추천해 주세요`, but not
+`시간이 없어요`, after NFKC and removal of
+control, bidi and invisible characters) to a goal question (the coach message right before it, or
+the greeting for the first message, ends in a question that asks what to make or do, such as
+`무엇을 만들어 보고 싶어요?`; trailing emoji or emphasis do not count), up to six
+Studio-owned ideas appear below the coach's reply once the turn has ended. Each idea is a 44px
+button with its title (at most two lines) and `이걸로 시작`; `내가 정할래요` sits right after the
+list, at the newest end of the conversation, so it is in view without scrolling even in a short
+pane.
+Picking an idea puts its sentence in the composer for editing, with the reply-choice ownership
+rule (text the learner typed is kept, a second pick replaces the first) and never sends. An idea
+is marked chosen only while its sentence is still in the composer. Picks are inert while the
+composer is in Korean IME composition (so a composition is never overwritten) and while a missing
+task folder makes the draft read-only.
+`내가 정할래요` closes the list for that answer (remembered per task and answer in the panel's
+webview state, so a reload keeps it closed) and returns focus to the composer. A later no-idea
+answer is a new offer. Nothing is offered while a turn runs, after the learner has sent another
+message, when the coach's reply already carries reply choices (one picker at a time; profile
+follow-up chips give way while the list is shown), in a lesson
+or classroom seat, or in the instructor console. A seat that cannot send keeps the list with its
+picks disabled. Detection fails closed: an uncertain goal question or answer shows nothing and the
+conversation follows NAT-03 as before. The list is one column, and two when the chat pane is at
+least 640px wide. No message, recipient, data flow or capability claim is added; the coach still
+receives the learner's answer unchanged.
+The ideas are for starting a project, never mid-work. The offer needs a task at its start: no
+assistant turn has written or edited a file (any tool row other than thinking, reading or
+searching hides it), no fenced page and no artifact exists in the task (a picked surface, an open
+world or a publish), and the no-idea answer is among the learner's first three messages. Detail
+and choice questions never count as goal questions: `...으로/로 만들까요`, `어떤 색/이름/파일/모양`,
+`더`, `부터`, `다음에`, `어느 쪽`, or any question that names a part of an existing thing. When in
+doubt, nothing is shown.
+
+Tests: `extensions/hypeproof-chat/test/project-ideas.test.tsx` (no-idea and goal-question
+classifiers with positive and negative controls, hostile characters, offer binding, keys and the
+bounded dismissal list) and `test/project-ideas-layout.smoke.mjs` (real App in headless Chromium:
+first screen, offer, pick never sends, draft kept, hidden during a turn, dismissal across a
+reload, moved on, named goal, lesson seat, instructor console, unavailable seat; computed 44px
+targets, 14px text, columns by chat-pane width, two-line titles, `내가 정할래요` in view, focus
+ring, dark/light/forced colours at 320/800/1420 and a 320x500 pane; IME composition, missing
+folder and follow-up chips). The browser smoke fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser.
