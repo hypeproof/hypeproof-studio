@@ -39,6 +39,16 @@ const colour = (v) => {
   return '#' + rgb(m[1]).map((t, i) => Math.round(t * a + rgb(m[3])[i] * (1 - a)).toString(16).padStart(2, '0')).join('');
 };
 const px = (v) => { assert.match(v ?? '', /^\d+px$/, 'a px length: ' + v); return parseInt(v, 10); };
+// CGP-DS-R-011: a radius names the shared scale (radiusScale.css, served in the same token transport);
+// resolve its --hp-radius-* alias, expand the --ds-* tokens and evaluate the px calc().
+const scaleDecls = Object.fromEntries([...readFileSync(new URL('../../extensions/hypeproof-chat/webview-ui/src/radiusScale.css', import.meta.url), 'utf8').matchAll(/(--hp-radius-[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+const radiusPx = (v) => {
+  let out = v ?? '';
+  for (let n = 0; n < 8; n++) out = out.replace(/var\((--hp-radius-[\w-]+)\)/g, (m, name) => scaleDecls[name] ?? m);
+  const arith = expand(out).replace(/calc\(/g, '(').replace(/(\d+(?:\.\d+)?)px/g, '$1');
+  assert.match(arith, /^[\d.\s()*+-]+$/, 'a radius on the scale: ' + v + ' -> ' + arith);
+  return Function('return (' + arith + ');')();
+};
 
 // Page backgrounds the chips sit on (board.html --bg, manage.html --ink-bg / --ink-panel).
 const pages = ['#0f1115', '#0f1418', '#151c22'];
@@ -86,7 +96,7 @@ const checks = {
   // CGP-DS-D-004 geometry.
   'geometry': (css) => {
     const rule = parse(css), base = rule('.cgp-state'), icon = rule('.cgp-state-icon');
-    assert.equal(px(base['border-radius']), 4, 'chip radius');
+    assert.equal(radiusPx(base['border-radius']), 4, 'chip radius');
     const [block, inline] = (base.padding ?? '').split(/\s+/);
     assert.equal(px(inline), 8, 'chip inline padding');
     assert.ok(px(block) <= 4, 'chip block padding stays small');
@@ -166,7 +176,7 @@ const mutate = (from, to) => {
   return expand(boardStatusCss.split(from).join(to));
 };
 const negatives = [
-  ['geometry', 'radius back to 6px', mutate('border-radius:var(--ds-c-status-chip-radius)', 'border-radius:var(--ds-c-chalk-board-status-radius-3)')],
+  ['geometry', 'radius back to 6px', mutate('border-radius:var(--hp-radius-status-chip)', 'border-radius:var(--ds-c-chalk-board-status-radius-3)')],
   ['geometry', 'inline padding back to 7px', mutate('var(--ds-c-chalk-board-status-space-11) var(--ds-c-status-chip-pad-inline)', 'var(--ds-c-chalk-board-status-space-11) var(--ds-c-chalk-board-status-space-12)')],
   ['geometry', '13px label', mutate('font-size:var(--ds-c-status-chip-label)', 'font-size:var(--ds-c-studio-styles-type-9)')],
   ['geometry', '14px icon', mutate('width:var(--ds-c-status-chip-icon);height:var(--ds-c-status-chip-icon)', 'width:var(--ds-c-status-chip-label);height:var(--ds-c-status-chip-label)')],

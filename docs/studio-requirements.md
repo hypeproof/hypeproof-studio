@@ -1310,6 +1310,60 @@ run against the unchanged sources fails all 16 first-round checks, and the secon
 N1, N2, N3, N5 and the count copy) adds 8 checks that each fail on the first-round commit; screenshots before and after at 1420×874 and
 800×874 are in the slice report, not in the repository.
 
+### Radius scale (CGP-DS-R-011)
+
+`REQ-STUDIO-RADIUS-SCALE` (CGP-DS-R-011, 2026-10-26; REQ-CGP-DS-12, traces CGP-DS-012, P2; Both surfaces;
+PI#1 through CGP-DS-R-001, whose token source it extends; the register row names no PI of its own). Radii
+come from one scale: 4 / 6 / 8 / 12 / 16 / 18 / 20 / 24px and full (999px), times one global multiplier
+`--ds-p-radius-scale` (1). The values are primitives in `designTokens.css`; because the token tiers there
+carry no `calc()`, `radiusScale.css` (the first consumer, imported by `tokens.css` and served to Chalk in the
+same token transport by `scripts/sync-design-tokens.mjs`) applies the multiplier and names the steps
+`--hp-radius-4` ... `--hp-radius-24` and `--hp-radius-full` (not multiplied), plus the named radii of the
+shared component tokens: `--hp-radius-dialog` (`--ds-c-modal-radius`, 12px), `--hp-radius-menu`
+(`--ds-c-menu-radius`, 12px) and `--hp-radius-status-chip` (`--ds-c-status-chip-radius`, 4px). A rounded
+item drawn inside a rounded container takes the container's radius minus the inset between them, as
+`calc()`: a menu item is `--hp-radius-menu - --ds-c-menu-gutter` (12 - 4 = 8px; the 6px item radius of
+`REQ-STUDIO-MENU-TOKENS` becomes this computed 8px), a task menu item is the menu radius minus that panel's
+6px padding (6px; the "내 질문" popover is drawn the same way and takes the same two radii), and a control
+or field inside the composer card is `--hp-radius-composer-control` = `--hp-radius-composer` (the 20px step,
+DES-CGP-DS-21) minus `--hp-composer-inset` (12px, which is now also the card's padding) = 8px: every composer
+button that sets no radius of its own (classroom Send/Stop and 다시 굴리기, 4px before) and the classroom
+composer field (4px before). A round control (the personal Send/Stop and tools buttons, 50% before) takes
+`--hp-radius-full`, as do the classroom citation pills and the publish sharing pill (999px before, from a
+non-scale token); a circle is not a nested radius.
+On the scale, by surface: the composer card in both seats, expanded or not (20px); the user bubble,
+personal 18/18/6/18 (owner decision CGP-DS-D-017 kept) and classroom 16/16/4/16 (14px moved to the 16px
+step, DES-CGP-DS-12 "user bubble 16-20px"); the tools menu, the personal chat menu and the task menu (12px)
+(the task menu panel 9px before) and their items (nested); every dialog on the shared modal surface, the outbound, write approval, trash
+purge and settings cards and Chalk's sharing dialog (12px); the status chip in Studio and on Chalk's board
+(4px), the suggestion chips (personal 10px moved to 8px), citation chips (9px moved to 8px), the write
+approval file chip (6px), the access chip (5px moved to 4px), the provenance chip (8px, from a spacing
+token), the style tweak swatch (6px), the task activity chips (8px), and in Chalk the board's state filter
+chips (8px), the manage page's menu, selection-tools and first-run audience chips (8px) and its simple
+disclosure chips (6px). Overridden rules on the same surfaces (the personal composer's 22px and 28px, the
+personal bubble's 20px, the personal citation chip's 9px) name the same tokens so no literal is left behind.
+Not covered: the other radii in the webview and Chalk keep their shipped values until a design review
+moves them (as DEC-DS-R-010 did for spacing); DES-CGP-DS-12's narrower step list (CGP-DS-D-008) and
+`corner-shape: superellipse` are not adopted here; a capture in the built app.
+Test: `test/radius-scale-computed.smoke.mjs` (headless Chromium; `FOCUS_REQUIRE_BROWSER=1` makes a
+missing browser a failure) renders the real App from `main.tsx` driven by host messages (personal and
+classroom, dark and light, 1420 and 800 px: composer, Send, the classroom composer field, tools trigger,
+user bubble, suggestion chips, personal citation chips and classroom citation pills, the tools, chat and
+task menus and the "내 질문" popover with their items), the real WriteApprovalDialog (also as the 390px
+bottom sheet), OutboundDialog, ActivityTrashPanel purge dialog, StatusChip, the personal CitationRack and
+the ComposerTools menu under both seat shells and themes, and Chalk's `sharing.html` dialog and
+`manage.html` menu with the transport Chalk serves. Changed but measured only by the declaration and
+layout smokes, not by this test: the expanded composer (same rule as the card), the access, provenance,
+task activity and goal bar chips, the style tweak swatch, the settings card and other modal-surface
+dialogs, and Chalk's board and first-run chips. It reads computed radii at multiplier 1 and again at 1.5: a scale radius must move by
+exactly 1.5x (a literal, a spacing token or another token fails), a nested radius must equal the outer
+radius minus the measured inset at both multipliers, and a round control must stay on the full step. On
+origin/main it fails with more than 100 findings (no radius follows the multiplier; menu items 6px, round
+controls on 50%, classroom Send 4px, classroom bubble 14px, suggestion chip 10px, citation chip 9px). Negative controls: a later literal on
+the composer, a hard-coded step on the menu items, the bubble on a spacing token and a Chalk dialog
+literal. The declaration smokes that pinned the old literals (`modal-surface`, `goal-status-css`,
+`status-chip`, `control-ladder`) now expect the scale names or resolve them through `radiusScale.css`.
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop
@@ -5476,7 +5530,7 @@ acceptance still require a newly packaged app; no installed-device result is cla
 `REQ-STUDIO-MENU-TOKENS` adopts REQ-CGP-DS-24 (DES-06, PI#1: predictable controls
 that let learners inspect available actions). ComposerTools in personal/classroom chat and
 the personal HeaderActions popover share menu geometry tokens:12px panel radius,4px gutter,
-minimum44px items,6px item radius and8px/12px block/inline padding. Labels and tool descriptions
+minimum44px items,an item radius computed as the panel radius minus the gutter (8px, `REQ-STUDIO-RADIUS-SCALE`; 6px before CGP-DS-R-011) and8px/12px block/inline padding. Labels and tool descriptions
 use the semantic caption font (base14px; personal text-size preferences still apply).
 Both read the panel/background and control-boundary semantic color roles. Placement and
 openers remain component-owned; classroom HeaderActions remains an inline toolbar.
@@ -5556,6 +5610,72 @@ classroom branches, light/dark themes, 800/1420 windows, grayscale screenshots,
 forced colors, computed deletion/tint/font styles, escaping and updated,
 missing or oversized history. Headless evidence does not establish native
 editor or screen-reader acceptance.
+
+## Logical CSS properties (CGP-DS-R-026)
+
+`REQ-STUDIO-LOGICAL-CSS` (CGP-DS-R-026 / REQ-CGP-DS-29, traces CGP-DS-029, P2, Studio and Chalk,
+2026-10-26; PI#1, indirectly: shared layout that does not assume a writing direction keeps later
+locale work from redrawing learner surfaces. It trains or exposes no asset). New component CSS uses
+logical inline-axis properties (`margin-inline-start/end`, `padding-inline-start/end`,
+`inset-inline-start/end`, or the `margin-inline`/`padding-inline` shorthands) instead of
+`margin-left`, `margin-right`, `padding-left`, `padding-right`, `left` and `right`.
+`scripts/logical-css-lint.mjs` is the lint. It reads every component CSS carrier: the webview's
+`webview-ui/src/**/*.css` and React inline `style={{…}}` objects in `*.tsx`, and Chalk's
+`src/**/*.css`, `<style>` blocks and `style="…"` attributes in `src/ui/*.html`, and the exported
+`…Css` template literals in `src/**/*.ts`. Only declarations count: a physical word in a selector
+(`.left:hover`), an `@page :left` prelude, a comment, a custom property (`--gap-left`) or another
+property (`border-left-color`, `scroll-margin-top`) is not a finding. The 102 physical declarations
+that shipped before the rule are grandfathered in `config/logical-css-baseline.json`, counted per file
+by property and normalised value (DEC-DS-R-026). The lint fails on a declaration the baseline does not
+allow, including a copy of a grandfathered value beyond its count or one in a new file, and on a
+baseline entry the tree no longer has (stale slack); `--update` rewrites the baseline only to shrink
+it. A declaration that must stay physical carries `logical-css: physical <reason>` in a comment on
+the same line; the reason is required. Existing declarations keep their values and geometry
+(DEC-27); converting them is not part of this requirement.
+Not covered: `text-align: left/right`, `float`, `border-left/right`, physical `inset` shorthands with
+four values and asymmetric `margin`/`padding` shorthands (DES-CGP-DS-29 / CGP-DS-D-023 owns the
+wider list); JS that positions an element from measured viewport rects (`tooltip.style.left`, the
+composer's off-screen measuring mirror), which is geometry rather than authored CSS; vendored KaTeX
+CSS; the generated Chalk token transport (`chalk/src/lib/design-tokens.ts`, a copy of webview
+sources the lint already reads); `[dir=rtl]` support (CGP-DS-29 DEFER, Korean and English only).
+Test: `test/logical-css.smoke.mjs` (in `npm test`) runs the lint CLI on the tree, checks that each
+carrier is scanned and that the baseline equals the tree, and plants samples: positive controls
+(logical properties, physical words in selectors, comments and `@page`, custom and other
+properties, an exempt line with a reason, a grandfathered declaration kept or moved to another
+selector, JS geometry and a non-CSS literal in a Chalk TS file) must pass; negative controls (each
+of the six properties, upper case, a nested rule, an `@media` rule, a Chalk `<style>` block, a style
+attribute, a Chalk `…Css` literal, TSX camelCase, quoted and `left` keys, a copied or swapped
+grandfathered value, a grandfathered value in a new file, a marker without a reason or on another
+line, a stale baseline entry) must fail, and the CLI must exit 1 on a planted tree and refuse to
+grow the baseline.
+
+## Startup and empty-state brand marks (CGP-DS-R-032)
+
+REQ-STUDIO-BRAND-MARKS adopts REQ-CGP-DS-38 / CGP-DS-038 (PI#4: minimum necessary
+intervention; the first frame shows Studio's own mark and the learner's next step, not a
+vendor's logo or a decorative loader). Studio's startup surfaces are the chat view before the
+host config arrives (`DisconnectedChat`), the start page before and after its state, the empty
+chat (personal and classroom) and the empty editor watermark. They draw only HypeProof marks:
+the lime HP mark (`assets/brand/hypeproof-mark.svg`) on the boot and start screens, the HP
+watermark on the empty editor, and text or generic stroke icons elsewhere. No packaged image,
+inline `data:` image, webview image import or contributed codicon is a third-party brand mark;
+a raster image cannot be read for a mark and is refused unless a person has listed it.
+
+Startup motion is at most one opacity fade of 200ms or less and never loops. On `main` the
+startup surfaces have no startup animation at all (0ms, nothing running), which meets the
+limit; the ChatGPT-style 2.2s startup shimmer is not adopted. Under reduced motion
+(`data-reduced-motion="true"` from `workbench.reduceMotion`, or the OS preference when Studio
+has none) nothing on these surfaces loops. Text mentions of a provider (for example a sign-in
+button that names GitHub) are copy, not marks, and are out of scope.
+
+Validation: `test/brand-marks.smoke.mjs` audits the packaged files (assets, extension media,
+webview sources and styles, host sources), webview image imports, codicons and the shell icon
+and watermark installers, with positive and negative controls. `test/startup-brand-computed.smoke.mjs`
+mounts the real webview bundle and the real ChatPanel empty state in headless Chromium
+(dark/light, 800/1420px, motion allowed, attribute and OS reduced motion), reads every image,
+inline SVG, CSS image and running or cascaded animation, and requires the HP mark on the boot
+and start screens. The installed app's platform icons (`.icns`/`.ico`, generated in the
+VSCodium fork) and the native splash are not covered by these headless checks.
 
 ## Answer verdict presentation (CGP-CHAT-D-005)
 
@@ -5694,6 +5814,23 @@ and preserves bounded optional kind strings across restart, including unknown
 future values (which remain labelled 출처), without changing source identity.
 Preview/open/pin/unpin continue using the existing URL and scope semantics.
 
+### Source kind label before the title (CGP-CHAT-D-014)
+
+DES CGP-CHAT-D45 / CGP-CHAT-045 / PI#5: on the answer citation rack (personal and
+classroom) and the workspace source list, the kind label (웹 / 수업 자료 / 내 파일 /
+출처) is a text label placed before the source title, on the title's own line; the
+domain line below keeps only the hostname (and 고정됨 in the list). The label is
+text in muted ink at the strong weight, never a colour alone. It takes the title
+line's size and leading (at least 14px on the personal chat surface, DEC-29), so
+each row is exactly as tall as it is without the label: the row height of today's
+citation list is unchanged. A long title truncates or wraps after the label; the
+label itself never truncates. The source preview keeps its kind line above the
+preview heading. Evidence: `citation-kinds.smoke.mjs` measures, in headless
+Chromium on the real ChatPanel/TaskWorkspace markup for both seats, both themes
+and 320/800/1420px, that the label sits left of the title on the same line, is not
+on the domain line, is not smaller than the title, and that hiding it leaves the
+row height unchanged; it fails under `FOCUS_REQUIRE_BROWSER=1` without a browser.
+
 ## Observed elapsed work time (CGP-CHAT-R-015)
 
 CGP-CHAT-R46 / CGP-CHAT-046 / PI#5: a mounted conversation measures the interval
@@ -5720,6 +5857,17 @@ terminal idempotence and model exclusion. Actual App bridge tests cover both sea
 themes and320/800/1420px panes, including lifecycle and scope/history transitions.
 Native desktop timing, background/suspended-view delivery and speech need owner
 verification before acceptance.
+
+CGP-CHAT-D-015 / CGP-CHAT-D46 (placement): the receipt is secondary text at the end of the
+turn's status line. In personal chat the answer action row (복사 · 미리보기 · 다시 받기 · verdict)
+is that line, and the receipt is its last item, after every control, in the muted text colour
+at the 14px caption size, not bold and not a control. A turn with no action row (classroom seat,
+a turn ending on a tool row, a no-answer stop) keeps the receipt as its own one-line status
+under the turn. One predicate decides both the row and the receipt's place, so a turn never
+shows two receipts or loses one. No live ticking counter appears during the run: advancing the
+clock mid-run changes no visible text, and the personal pending dots still end within 3.8s.
+The actual App bridge test measures the placement in both seats, both themes and at 320, 800
+and 1420px.
 
 ## Workspace file mentions (CGP-CHAT-R-018)
 
@@ -5790,7 +5938,7 @@ under `FOCUS_REQUIRE_BROWSER=1` without a browser).
 ### Collapsible pasted text (CGP-CHAT-R-017)
 
 A plain-text paste longer than 2,000 Unicode code points or 40 lines becomes a
-`붙여넣은 글 (N줄)` chip. CRLF is one line break. Expanding exposes an editable
+`붙여넣은 글 · N줄` chip. CRLF is one line break. Expanding exposes an editable
 plain-text area; explicit removal deletes only that paste, while `입력창에 펼치기`
 returns it to inline input. Consecutive pastes retain their order at the caret.
 Image paste retains its existing profile-gated path; text paste works in text-only
@@ -5804,6 +5952,17 @@ External draft replacements/imports restore the resulting complete text inline.
 The existing host draft length bound is honored when adding/editing a chip. No
 paste sends automatically or changes tool grants. This supports PI#1 learner
 agency by keeping long source text inspectable and editable before the send.
+
+CGP-CHAT-D-017 (design CGP-CHAT-D07, PI#1): the paste chip belongs to the CGP-CHAT-D06
+file-chip family. It reuses the file chip's chip class, label-button and × styling: a decorative
+icon, the label `붙여넣은 글 · N줄` (the line count is never ellipsized; a narrow column wraps the
+row instead), `입력창에 펼치기`, and a 44px icon-only × named `붙여넣은 글 빼기`. Expanding
+opens an inline plain-text editor inside the chip that grows to at most 240px and then scrolls on
+its own. The chip list stays directly above the composer card, so an expanded 240px editor never
+counts toward the card's 192px growth cap. Learner text is at least 14px and every control is a
+44px target in both seats, dark and light, at 320, 800 and 1420px and in forced colours
+(`paste-chip-computed.smoke.mjs`, headless Chromium, fails under `FOCUS_REQUIRE_BROWSER=1`
+without a browser).
 
 ## Response render isolation (CGP-CHAT-R-016)
 
@@ -5824,6 +5983,17 @@ when it throws again); opening raw view focuses the readable text. This supports
 uninterrupted learner agency (PI#1), not an automatic resend or capability change.
 React event-handler errors and failures before row rendering remain under their
 existing guards; this boundary covers row render/descendant lifecycle failures.
+
+CGP-CHAT-D-016 / CGP-CHAT-D50 (fallback shape): the fallback is one bordered box
+(solid border on all four sides, CanvasText under forced colours) in the failing
+row's own slot, between its neighbours and inside the transcript column, holding
+exactly two 44px buttons (다시 보기, 원문 보기/원문 닫기) with text of at least
+14px. The rest of the transcript is unaffected: a real keyboard Tab enters the box
+from the previous stop, passes its two buttons and leaves forward into the next
+row (the following answer's own controls stay keyboard-operable) or, when no row
+control follows, on to the composer; Shift+Tab leaves it backwards. No focus trap,
+no inert or hidden siblings. Measured in headless Chromium for personal and
+classroom seats, dark/light, 320/800/1420 px and forced colours.
 
 ## Math in answers (CGP-CHAT-R-022)
 
@@ -5874,6 +6044,13 @@ label or new data flow.
   edge) clear of the subscripts.
   Math inherits the prose text colour and is at least the prose size, so dark, light and forced
   colours follow the answer text.
+- Layout acceptance (CGP-CHAT-D-022 / CGP-CHAT-D40, measured 2026-10-26): display math is centred
+  in its own horizontal scroller; inline math is baseline-aligned with its sentence (each KaTeX
+  base sits on the line's baseline within 0.5px, including a fraction and a sub/superscript);
+  only the bundled KaTeX fonts load; and in dark, light and forced colours math uses the text
+  token colour (`--vscode-foreground`, falling back to `--hp-text-primary-default`), the same
+  colour as the answer prose. All four clauses were already met by REQ-STUDIO-ANSWER-MATH; the
+  row adds the baseline and text-token measurements to `test/answer-math.smoke.mjs`.
 
 Not built: graphing (CGP-CHAT-040's graph half stays DEFER), `\(…\)` / `\[…\]` delimiters, math in
 the learner's own messages, and math typesetting fonts beyond KaTeX's own (CGP-DS-040, DEFER).
@@ -5904,6 +6081,16 @@ discard; continuing retains the pixels and restores canvas focus. Tool and color
 choices carry text/check markers and pressed state. The modal uses the shared
 focus trap, scrolling and theme geometry; the white drawing surface and ink colors
 are image data rather than application theme colors.
+
+Design (CGP-CHAT-D-020): the modal is at least 320px wide when the viewport has room and, at a
+320px viewport, its content keeps 16px gutters with no horizontal overflow. Every tool is a 44px
+target with 14px text. Cmd+Z (macOS) or Ctrl+Z (elsewhere) undoes the last stroke from anywhere in
+the dialog, also with a Korean input source, never with Shift or Alt, and never while a stroke is
+down, a save runs, IME composition is active or the discard question is open; the key never
+reaches the host editor. The canvas is named exactly `그림판` and the visible drawing hint is its
+description. The discard question focuses "계속 그리기". `test/sketch-browser.smoke.mjs` measures
+these on the real ChatPanel in headless Chromium (personal and classroom, dark and light, 320,
+800 and 1420 px).
 
 Attaching requests host preparation with `sketch: true`. The host requires one
 bounded PNG, the current image permission and a real current workspace, then uses
@@ -5988,10 +6175,18 @@ seat cannot accept input. Targets are 44px, text follows the caption scale (at l
 the row stays in flow inside the composer column at 320-1420px.
 The tip may expose FRAMING and JUDGMENT behaviour (whether a learner uses or edits the lesson's
 help); showing, using or dismissing it is not recorded as evidence and is not a learning outcome.
+Presentation (design CGP-CHAT-D-021 / CGP-CHAT-D19): the tip is one row element in the
+composer column's flow, never positioned over the composer; at chat-column widths (800px and
+up) the 도움말 badge, the text and both buttons share one line, and a narrow panel (320px) may
+wrap the two buttons under the text inside the same row (44px targets win over a single visual
+line). However long the hint is, the text is clamped to two lines, so the row stays above the
+composer and the composer stays on screen at every text size. Under forced colours the row keeps
+a CanvasText border and the buttons use ButtonText/GrayText.
 Validation: `lesson-tip.test.tsx` (source, hygiene, keys, dismiss bound, prefill) and
 `lesson-tip-layout.smoke.mjs` (actual App in headless Chromium; fails under
-`FOCUS_REQUIRE_BROWSER=1` without a browser). The instructor-console and disabled-seat branches
-are code-level guards without a dedicated test.
+`FOCUS_REQUIRE_BROWSER=1` without a browser), which also covers the instructor console, an
+unavailable seat, a rehearsal, a pending send (posted, not yet started, then rejected), a
+twelve-line hint at 320/800/1420px with base and xlarge text, and forced colours.
 
 ## Find in chat (CGP-CHAT-R-027)
 
@@ -6967,3 +7162,149 @@ and `test/whats-new-layout.smoke.mjs` (the real App in headless Chromium: due-on
 turn and not recorded until drawn, close and focus, late answer, instructor, Help sheet, text-only
 lines, computed geometry in both seats, themes and widths, forced colours; fails under
 `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Elevation levels (CGP-DS-R-012)
+
+`REQ-STUDIO-ELEVATION` adopts REQ-CGP-DS-13 / DES-CGP-DS-13 (PI#1: what floats over the work, a menu,
+a popover, a drawer, reads as on top of it in every theme; no scored outcome). Studio and Chalk use at
+most three named elevation levels: `flat` (no shadow), `raised` (`0 1px 2px`, cards and the composer)
+and `overlay` (`0 4px 8px -2px`, menus, popovers, dialogs and drawers). Each level has a light alpha
+(.10) and a dark alpha (.30, so dark-theme shadows stay visible at >= .2). Components ask for a level
+by name only (`var(--hp-elevation-raised|overlay)` in Studio, the `-dark` component tokens in the
+dark-only Chalk); `tokens.css` binds the alpha to the host theme. In VS Code high contrast (dark and
+light) and under forced colors there is no shadow: each elevated surface draws a 1px solid border,
+in the theme's `contrastBorder` for menus, popovers, the dialog and the drawer, the fixed control
+boundary for the composer and the catch-up button, and the text colour for the forest-only start
+card. Inset selection bars and the pending glow are not elevation. Decisions: decisions.md
+CGP-DS-R-012.
+
+Validation: `test/elevation-levels.smoke.mjs` (every Studio and Chalk stylesheet: the three levels,
+the per-theme binding, no outer shadow outside a named level, an HC border rule per elevated
+surface, with negative controls) and `test/elevation-computed.smoke.mjs` (headless Chromium over the
+bundled webview CSS: eight surfaces in Dark+, Light+, HC Dark, HC Light, a user HC theme and forced
+colors; dark alpha >= .2, at most two shadow geometries, lighter light alpha, HC flat with a 1px
+>= 3:1 contrastBorder edge). `chalk/test/elevation.browser.mjs` measures the real `/manage` page's
+three drawers and menu. The browser tests fail under `FOCUS_REQUIRE_BROWSER=1` without a browser.
+
+## Tabular figures in Chalk numeric columns and counters (CGP-DS-R-030)
+
+`REQ-CHALK-TABULAR-FIGURES` adopts REQ-CGP-DS-35 (P2, Chalk; traces to CGP-DS-035 and classroom-design
+DES-11). Product Intent PI#1 (useful work first): an instructor scanning a live roster reads a count or an
+age at a glance, and a ticking number does not shift the text around it.
+
+- These Chalk surfaces compute `font-variant-numeric: tabular-nums` on every element that carries a
+  number, including buttons and inputs (the UA `font` reset on controls does not inherit it, so they are
+  named with their descendants):
+  - `/manage`: the seat table (`#ops-table`), the roster counters (`#ops-summary`, `#ops-shown`,
+    `#ops-state`, `#class-state`), the help badge and help-queue ages (`#nav-help`, `#ops-help-list`,
+    `#ops-help-state`) and the legacy activity list (`#seats`);
+  - the shared activity-state filters on `/manage` and `/board` (`.cgp-state-filter`, `board-status.ts`);
+  - `/budgets`: the usage figures, per-student allocations and requests (`#overview`) and the limit and
+    concurrency fields (`#editor input`);
+  - already met on main and now guarded: the `/board` seat table and the `/console` session countdown.
+- Prose, labels and identifiers outside these surfaces keep proportional figures.
+- Evidence: `chalk/test/tabular-figures.browser.mjs` renders each served page through its own render
+  functions with synthetic data and measures the computed value at 1420, 800 and 390px. It fails under
+  `FOCUS_REQUIRE_BROWSER=1` without a browser and prints NOT RUN otherwise. Glyph widths depend on the
+  instructor's installed font; a font without a `tnum` feature is not corrected by this rule.
+- Default state: on (styling only; no data flow).
+
+## Colour emoji font stack (CGP-DS-R-033)
+
+REQ-STUDIO-EMOJI-STACK. CGP-DS-R-033 / REQ-CGP-DS-41 / CGP-DS-041 / PI#1 (useful work first: the
+picture a learner chose, or an emoji in their own words or the coach's answer, reads as the same
+picture on every OS). Emoji that Studio and Chalk draw as text use the OS colour emoji faces. One
+primitive, `--ds-p-emoji` (`"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"`), reaches
+consumers as `--ds-c-typography-emoji` and is appended after the text faces of the UI and content
+roles: the Studio webview root (after the host `--vscode-font-family` or the UI role), answer prose
+and message bodies, Studio controls, the start page, and Chalk's shared `html body`, prose and
+control rules. The emoji faces always come last: Apple Color Emoji also has glyphs for the digits,
+`#` and `*`, so a stack that put it first would draw numbers as emoji. Code and fixed-width
+technical text (code role, editor font, URLs, request ids) keep their own faces without it. A
+monochrome symbol face (Segoe UI Symbol) is deliberately not in the stack.
+
+Scope against REQ-STUDIO-STROKE-ICONS (CGP-DS-R-018): status and timeline icons stay stroke icons
+and are never drawn as emoji. What this row covers is emoji that remain text: the learner-chosen
+task mark (CGP-KNOW-R-008), cohort world faces, emoji in timeline and status line labels, the
+learner's messages and the coach's answers. Not covered: Chalk's page-local instructor flow bar
+(fixed copy with no emoji, its own `font` shorthand), VS Code native UI, and a capture on a real
+Windows machine (the stack lists Segoe UI Emoji; Windows rendering is NOT RUN locally).
+
+Test: `extensions/hypeproof-chat/test/emoji-font-stack-computed.smoke.mjs` (headless Chromium;
+`FOCUS_REQUIRE_BROWSER=1` fails without a browser) renders the real ChatPanel, personal and
+classroom, dark and light, 800 and 1420 px, with no host font and with the macOS and Windows VS Code
+host font values. Every text-bearing element outside technical text must compute a font-family
+that ends with the emoji faces after a text face; the root and prose stacks are pinned exactly;
+CDP `CSS.getPlatformFontsForNode` must report that an emoji run is drawn by Apple Color Emoji on
+macOS (Segoe UI Emoji on Windows) and that digits, `#` and `*` are never drawn by an emoji face.
+The same checks run on all nine Chalk pages through `withDesignTokens`. `test/font-roles-computed.smoke.mjs`
+pins the role isolation with the emoji suffix. Mutations that fail it: the suffix removed from the
+webview root, from prose, from Chalk's typography, and the emoji faces moved before the text faces.
+
+## Work export zip (CGP-SHELL-R-028)
+
+`REQ-STUDIO-WORK-EXPORT` implements REQ-SHELL-28 / CGP-SHELL-062, PI#1 (the learner owns what they
+made) and AB-13 (work stays reachable after AI access ends). "내 작업 내보내기" is a button in the chat
+settings dialog in every seat (personal, trial, pass, classroom, lesson, instructor; the classroom dialog
+opens from the access chip, also while access is unavailable) and the `hypeproof-chat.exportMyWork`
+command (kept out of the palette, like the other learner commands). It writes one zip to a folder the learner picks in the native folder dialog.
+
+1. The zip holds `작업 폴더/<relative path>` for every regular file of the current work folder,
+   `대화/transcript.json` and `대화/transcript.md` (every task of the activity, archived ones too, or the
+   classroom conversation), and `내보내기-안내.txt`, which lists what was left out and why.
+2. Left out: `.git`, `node_modules` (at any depth) and Studio's own `.hypeproof` records; symlinks
+   (never followed) and special files; hard links unless every name of the file is inside the work
+   folder; names with control or bidi characters (counted, not echoed); names with `\` or `:`, which a
+   Windows extractor reads as a path or drive (listed); files over 50 MB; credential files by name
+   (`.env*`, `*.env`, `*.env.*`, `.npmrc`, `.netrc`, `credentials` such as `.aws/credentials`, keys,
+   certificates); and any file or folder whose name or bytes carry a secret Studio holds or a credential
+   shape. The scan is broad and fails closed (owner decision, fix 2): every file is searched, binaries
+   included, and each left-out file is listed in `내보내기-안내.txt`. A file or folder left out for its
+   name is listed without the name, and a work-folder name that carries a secret is not used in the zip's
+   file name.
+   - Secrets Studio holds: every SecretStorage value of the extension (the current and every saved
+     activity's token, the personal account session `hypeproofChat.personalAccount.v1`, classroom-ops
+     credentials, the issuer and instructor tokens, a pending order, and any other key it lists). A JSON
+     record contributes its credential-like fields, not names, paths or service addresses. A value is
+     matched as UTF-8, UTF-16LE, UTF-16BE, base64 (each alignment, standard and URL-safe), hex (either case,
+     whitespace allowed), split by whitespace or line breaks, and with any character percent-encoded.
+   - Text views: UTF-8 for text files; for any file with a NUL byte (SQLite, images, archives), latin1
+     (ASCII runs, as `strings` reads them) and UTF-16 in both byte orders. Percent-encoded, hex and base64
+     runs are also decoded and searched.
+   - Credential shapes: `sk-ant-…`, `sk-…`/`sk-proj-…`, `ghp_`/`gho_`/`ghs_`/`github_pat_…`, `AKIA`/`ASIA…`,
+     `xox[abp]-…`, `AIza…`, `Bearer <token>`, JWTs, Studio token shapes (`hps_…` with a digit), PEM
+     private-key blocks, URL credentials (`scheme://user:pass@`), `Authorization:` with any scheme (Basic,
+     Bearer, Token, Digest …), `Basic <base64>`, and `Cookie:`/`Set-Cookie:` values.
+   - Key/value pairs (env, JSON, YAML, INI, headers) whose key contains secret, token, pass, api_key/apikey/
+     api-key, `_key`/`-key`, credential, cookie, session, auth or private (any case), ends in a camel-case
+     `…Key`, or is `key`: `AWS_SECRET_ACCESS_KEY=…`, `aws_secret_access_key = …`, `{"OPENAI_KEY": "…"}`,
+     `X-Api-Key: …`, `"sessionId": "…"`.
+   - Positive controls that stay: `max_tokens: 1024` and `"maxTokens": 100000` (a number under a count key),
+     `type="password"`, `let password: string`, `password = input.value`, `token = getToken(1)`, `apiKey = null`,
+     `const KEY_CODES = …`, `"author": "…"`, prose such as "Basic examples", an ordinary PNG or SQLite file.
+   - Accepted false positives (left out and listed, never dropped silently): any file named `*.env`; a
+     learner value under a key such as `session`, `auth`, `pass…` or `…_key` (`"session": "morning"`,
+     `auth: AuthConfig`, `public_key: …`); a binary file whose bytes happen to contain such a pair.
+   - Every zip entry name is checked again when the zip is written: relative, `/`-separated, no `.` or
+     `..` segment, no `\`, drive letter or leading `/`; otherwise the export stops with nothing written.
+3. The transcript keeps only the learner's and the AI's messages, never system, tool or SDK state, so tool
+   inputs and outputs are not exported. The same rules apply to the titles and messages it keeps: held
+   secrets in every spelling above and credential shapes (also inside percent, hex or base64 runs) are
+   replaced by `[가림]`; for a key/value pair the key stays and only the value is replaced.
+4. Local only: no network, Service or token check, so it works offline and after a pass ends.
+5. It never replaces a file: the zip is `내-작업-<folder>-<YYYYMMDD-HHmmss>.zip`, created exclusively,
+   then `-2`, `-3` …. A destination inside the work folder (also through a link) is refused. Over
+   300 MB or 20,000 files the export is refused as a whole, nothing is written, and the message says so.
+6. Refused while a turn runs. The folder and turn scope are bound when the button is pressed; a turn
+   that starts, or a task or activity switch, before writing stops the export with nothing written.
+   A second press while one runs does nothing.
+7. Progress shows as a notification ("내 작업을 내보내는 중이에요"); the result is one line
+   "저장했어요: <폴더> · <파일 이름> · 작업 파일 n개 · 대화 m개" with "폴더 열기", which reveals the zip.
+   The entry is a 44px target with ≥14px text, a focus ring and a forced-colours border (DES-SHELL-27).
+
+Evidence: `extensions/hypeproof-chat/test/work-export.smoke.mjs` (real disk fixtures, the zip read back
+by an independent reader with CRC checks, a grep over every inflated byte for secrets, the host flow
+with stubbed dialogs, and the real provider in personal, trial, classroom and instructor seats) and
+`test/work-export-entry-browser.smoke.mjs` (computed geometry in personal and classroom, dark/light,
+320/800/1420 and forced colours; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). The native
+folder dialog and notification are owner-run checks.

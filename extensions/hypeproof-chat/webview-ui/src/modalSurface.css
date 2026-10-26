@@ -7,7 +7,7 @@
   max-height: calc(100dvh - var(--ds-c-modal-gutter));
   margin: auto;
   padding: var(--ds-c-modal-padding);
-  border-radius: var(--ds-c-modal-radius);
+  border-radius: var(--hp-radius-dialog);
   overflow: auto;
   overflow-wrap: anywhere;
   animation: hp-modal-enter var(--hp-dur-modal-enter) ease-out both;
@@ -21,7 +21,7 @@ body.vscode-light .hp-modal-backdrop, body.vscode-high-contrast-light .hp-modal-
 @keyframes hp-modal-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes hp-modal-exit { from { opacity: 1; } to { opacity: 0; } }
 @media (max-width: 390px) {
-  .hp-modal.hp-modal { position: fixed; inset: auto 0 0; width: 100%; min-width: 0; max-width: none; max-height: 90dvh; margin: 0; border-radius: var(--ds-c-modal-radius) var(--ds-c-modal-radius) 0 0; }
+  .hp-modal.hp-modal { position: fixed; inset: auto 0 0; width: 100%; min-width: 0; max-width: none; max-height: 90dvh; margin: 0; border-radius: var(--hp-radius-dialog) var(--hp-radius-dialog) 0 0; }
   .hp-modal-backdrop.hp-modal-backdrop { padding: 0; }
 }
 @media (prefers-reduced-motion: reduce) {

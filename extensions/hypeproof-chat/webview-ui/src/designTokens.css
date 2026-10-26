@@ -13,6 +13,15 @@
   --ds-p-motion-ease-exit: cubic-bezier(.4, 0, 1, 1);
   --ds-p-dialog-dim-dark: rgb(0 0 0 / 40%);
   --ds-p-dialog-dim-light: rgb(0 0 0 / 30%);
+  /* CGP-DS-R-012 (DES-CGP-DS-13): three named elevation levels. flat = inline, raised = cards and the
+   * composer, overlay = menus, popovers, dialogs and drawers. Geometry is shared; each level has a dark
+   * and a light alpha (dark >= .2, so the shadow stays visible on dark panels). The theme picks one in
+   * tokens.css (--hp-elevation-*); high contrast and forced colors pick flat and draw a 1px border. */
+  --ds-p-elevation-flat: none;
+  --ds-p-elevation-raised-dark: 0 1px 2px rgb(0 0 0 / 30%);
+  --ds-p-elevation-raised-light: 0 1px 2px rgb(0 0 0 / 10%);
+  --ds-p-elevation-overlay-dark: 0 4px 8px -2px rgb(0 0 0 / 30%);
+  --ds-p-elevation-overlay-light: 0 4px 8px -2px rgb(0 0 0 / 10%);
   --ds-p-assistant-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5c.6 4.3 2.2 5.9 6.5 6.5-4.3.6-5.9 2.2-6.5 6.5-.6-4.3-2.2-5.9-6.5-6.5 4.3-.6 5.9-2.2 6.5-6.5ZM18.5 16v4M16.5 18h4'/%3E%3C/svg%3E");
   --ds-p-inline-hit-target: 44px;
   --ds-p-inline-row-gap: 5px;
@@ -162,6 +171,8 @@
   --ds-p-134: #f8faff;
   --ds-p-135: -4px;
   --ds-p-136: -apple-system, system-ui, sans-serif;
+  /* CGP-DS-R-033: OS colour emoji faces, appended after the text faces (never before: Apple Color Emoji also maps digits, # and *). */
+  --ds-p-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
   --ds-p-137: #333;
   --ds-p-138: #888;
   --ds-p-139: #2a2d2e;
@@ -574,6 +585,18 @@
   --ds-p-control-sm: 32px;
   --ds-p-control-md: 44px;
   --ds-p-control-lg: 48px;
+  /* CGP-DS-R-011 (REQ-CGP-DS-12): the one radius scale and its global multiplier. Consumers scale a step
+   * with calc() in radiusScale.css; nested radii subtract their inset there too. */
+  --ds-p-radius-scale: 1;
+  --ds-p-radius-4: 4px;
+  --ds-p-radius-6: 6px;
+  --ds-p-radius-8: 8px;
+  --ds-p-radius-12: 12px;
+  --ds-p-radius-16: 16px;
+  --ds-p-radius-18: 18px;
+  --ds-p-radius-20: 20px;
+  --ds-p-radius-24: 24px;
+  --ds-p-radius-full: 999px;
   /* CGP-KNOW-R-008 / DES-KNOW-13: task mark colours, at least 3:1 against the task list in each theme. */
   --ds-p-task-mark-red-dark: #f87171;
   --ds-p-task-mark-red-light: #b91c1c;
@@ -596,19 +619,25 @@
   --ds-s-typography-ui: var(--ds-p-136);
   --ds-s-typography-content: var(--ds-p-136);
   --ds-s-typography-code: var(--ds-p-184);
+  --ds-s-typography-emoji: var(--ds-p-emoji);
 
   --ds-s-modal-max: var(--ds-p-60);
   --ds-s-modal-gutter: var(--ds-p-5);
   --ds-s-modal-min: var(--ds-p-51);
   --ds-s-modal-padding: var(--ds-p-6);
-  --ds-s-modal-radius: var(--ds-p-2);
-  --ds-s-menu-radius: var(--ds-p-2);
+  --ds-s-modal-radius: var(--ds-p-radius-12);
+  --ds-s-menu-radius: var(--ds-p-radius-12);
   --ds-s-modal-enter: var(--ds-p-dialog-enter);
   --ds-s-modal-exit: var(--ds-p-dialog-exit);
   --ds-s-motion-move: var(--ds-p-motion-move);
   --ds-s-motion-ease-exit: var(--ds-p-motion-ease-exit);
   --ds-s-modal-dim-dark: var(--ds-p-dialog-dim-dark);
   --ds-s-modal-dim-light: var(--ds-p-dialog-dim-light);
+  --ds-s-elevation-flat: var(--ds-p-elevation-flat);
+  --ds-s-elevation-raised-dark: var(--ds-p-elevation-raised-dark);
+  --ds-s-elevation-raised-light: var(--ds-p-elevation-raised-light);
+  --ds-s-elevation-overlay-dark: var(--ds-p-elevation-overlay-dark);
+  --ds-s-elevation-overlay-light: var(--ds-p-elevation-overlay-light);
 
   --ds-s-assistant-mark: var(--ds-p-assistant-mask);
   --ds-s-chalk-list-action-icon: var(--ds-p-chalk-list-action-icon);
@@ -1295,6 +1324,16 @@
   --ds-s-control-sm: var(--ds-p-control-sm);
   --ds-s-control-md: var(--ds-p-control-md);
   --ds-s-control-lg: var(--ds-p-control-lg);
+  --ds-s-radius-scale: var(--ds-p-radius-scale);
+  --ds-s-radius-step-4: var(--ds-p-radius-4);
+  --ds-s-radius-step-6: var(--ds-p-radius-6);
+  --ds-s-radius-step-8: var(--ds-p-radius-8);
+  --ds-s-radius-step-12: var(--ds-p-radius-12);
+  --ds-s-radius-step-16: var(--ds-p-radius-16);
+  --ds-s-radius-step-18: var(--ds-p-radius-18);
+  --ds-s-radius-step-20: var(--ds-p-radius-20);
+  --ds-s-radius-step-24: var(--ds-p-radius-24);
+  --ds-s-radius-step-full: var(--ds-p-radius-full);
   --ds-s-task-mark-red-dark: var(--ds-p-task-mark-red-dark);
   --ds-s-task-mark-red-light: var(--ds-p-task-mark-red-light);
   --ds-s-task-mark-orange-dark: var(--ds-p-task-mark-orange-dark);
@@ -1316,19 +1355,25 @@
   --ds-s-typography-ui: var(--ds-p-136);
   --ds-s-typography-content: var(--ds-p-136);
   --ds-s-typography-code: var(--ds-p-184);
+  --ds-s-typography-emoji: var(--ds-p-emoji);
 
   --ds-s-modal-max: var(--ds-p-60);
   --ds-s-modal-gutter: var(--ds-p-5);
   --ds-s-modal-min: var(--ds-p-51);
   --ds-s-modal-padding: var(--ds-p-6);
-  --ds-s-modal-radius: var(--ds-p-2);
-  --ds-s-menu-radius: var(--ds-p-2);
+  --ds-s-modal-radius: var(--ds-p-radius-12);
+  --ds-s-menu-radius: var(--ds-p-radius-12);
   --ds-s-modal-enter: var(--ds-p-dialog-enter);
   --ds-s-modal-exit: var(--ds-p-dialog-exit);
   --ds-s-motion-move: var(--ds-p-motion-move);
   --ds-s-motion-ease-exit: var(--ds-p-motion-ease-exit);
   --ds-s-modal-dim-dark: var(--ds-p-dialog-dim-dark);
   --ds-s-modal-dim-light: var(--ds-p-dialog-dim-light);
+  --ds-s-elevation-flat: var(--ds-p-elevation-flat);
+  --ds-s-elevation-raised-dark: var(--ds-p-elevation-raised-dark);
+  --ds-s-elevation-raised-light: var(--ds-p-elevation-raised-light);
+  --ds-s-elevation-overlay-dark: var(--ds-p-elevation-overlay-dark);
+  --ds-s-elevation-overlay-light: var(--ds-p-elevation-overlay-light);
 
   --ds-s-assistant-mark: var(--ds-p-assistant-mask);
   --ds-s-chalk-list-action-icon: var(--ds-p-chalk-list-action-icon);
@@ -2015,6 +2060,16 @@
   --ds-s-control-sm: var(--ds-p-control-sm);
   --ds-s-control-md: var(--ds-p-control-md);
   --ds-s-control-lg: var(--ds-p-control-lg);
+  --ds-s-radius-scale: var(--ds-p-radius-scale);
+  --ds-s-radius-step-4: var(--ds-p-radius-4);
+  --ds-s-radius-step-6: var(--ds-p-radius-6);
+  --ds-s-radius-step-8: var(--ds-p-radius-8);
+  --ds-s-radius-step-12: var(--ds-p-radius-12);
+  --ds-s-radius-step-16: var(--ds-p-radius-16);
+  --ds-s-radius-step-18: var(--ds-p-radius-18);
+  --ds-s-radius-step-20: var(--ds-p-radius-20);
+  --ds-s-radius-step-24: var(--ds-p-radius-24);
+  --ds-s-radius-step-full: var(--ds-p-radius-full);
   --ds-s-task-mark-red-dark: var(--ds-p-task-mark-red-dark);
   --ds-s-task-mark-red-light: var(--ds-p-task-mark-red-light);
   --ds-s-task-mark-orange-dark: var(--ds-p-task-mark-orange-dark);
@@ -2034,9 +2089,11 @@
 }
 :root, body {
   --ds-c-studio-copy-toast-max: var(--ds-s-size-106);
+  --ds-c-studio-paste-editor-max: var(--ds-s-size-64); /* CGP-CHAT-D-017: 240px inline paste editor cap */
   --ds-c-typography-ui: var(--ds-s-typography-ui);
   --ds-c-typography-content: var(--ds-s-typography-content);
   --ds-c-typography-code: var(--ds-s-typography-code);
+  --ds-c-typography-emoji: var(--ds-s-typography-emoji);
   --ds-c-chalk-list-row: var(--ds-s-control-md);
   --ds-c-chalk-list-icon-size: var(--ds-s-size-30);
   --ds-c-chalk-list-fade-bottom: var(--ds-s-size-23);
@@ -2059,6 +2116,11 @@
   --ds-c-motion-ease-exit: var(--ds-s-motion-ease-exit);
   --ds-c-modal-dim-dark: var(--ds-s-modal-dim-dark);
   --ds-c-modal-dim-light: var(--ds-s-modal-dim-light);
+  --ds-c-elevation-flat: var(--ds-s-elevation-flat);
+  --ds-c-elevation-raised-dark: var(--ds-s-elevation-raised-dark);
+  --ds-c-elevation-raised-light: var(--ds-s-elevation-raised-light);
+  --ds-c-elevation-overlay-dark: var(--ds-s-elevation-overlay-dark);
+  --ds-c-elevation-overlay-light: var(--ds-s-elevation-overlay-light);
 
   --ds-c-tooltip-font: var(--ds-s-shadow-2);
   --ds-c-tooltip-leading: var(--ds-s-typography-5);
@@ -3620,7 +3682,7 @@
      8px inline padding. The soft fill is the intent colour mixed in by the consumer. */
   --ds-c-status-chip-icon: var(--ds-s-size-30);
   --ds-c-status-chip-label: var(--ds-s-type-17);
-  --ds-c-status-chip-radius: var(--ds-s-radius-13);
+  --ds-c-status-chip-radius: var(--ds-s-radius-step-4);
   --ds-c-status-chip-pad-inline: var(--ds-s-space-2);
   --ds-c-status-chip-pad-block: var(--ds-s-size-7);
   --ds-c-status-chip-gap: var(--ds-s-space-13);
@@ -3633,11 +3695,21 @@
   --ds-c-studio-tokens-control-sm: var(--ds-s-control-sm);
   --ds-c-studio-tokens-control-md: var(--ds-s-control-md);
   --ds-c-studio-tokens-control-lg: var(--ds-s-control-lg);
+  /* CGP-DS-R-011: the radius scale, read through radiusScale.css (Studio and Chalk). */
+  --ds-c-radius-scale: var(--ds-s-radius-scale);
+  --ds-c-radius-4: var(--ds-s-radius-step-4);
+  --ds-c-radius-6: var(--ds-s-radius-step-6);
+  --ds-c-radius-8: var(--ds-s-radius-step-8);
+  --ds-c-radius-12: var(--ds-s-radius-step-12);
+  --ds-c-radius-16: var(--ds-s-radius-step-16);
+  --ds-c-radius-18: var(--ds-s-radius-step-18);
+  --ds-c-radius-20: var(--ds-s-radius-step-20);
+  --ds-c-radius-24: var(--ds-s-radius-step-24);
+  --ds-c-radius-full: var(--ds-s-radius-step-full);
   /* CGP-DS-R-022: shared learner-menu geometry. */
   --ds-c-menu-radius: var(--ds-s-menu-radius);
   --ds-c-menu-gutter: var(--ds-s-space-13);
   --ds-c-menu-item-height: var(--ds-s-size-8);
-  --ds-c-menu-item-radius: var(--ds-s-radius-3);
   --ds-c-menu-item-pad-block: var(--ds-s-space-2);
   --ds-c-menu-item-pad-inline: var(--ds-s-space-1);
   /* CGP-KNOW-R-008: task mark colours (DES-KNOW-13). */

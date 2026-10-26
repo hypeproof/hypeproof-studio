@@ -52,7 +52,7 @@ export function CitationRack({ citations, messageId }: { citations: Citation[]; 
         }}
       >
         <span className="cp-citation-number" aria-hidden="true">{index + 1}</span>
-        <span className="cp-citation-copy"><span className="cp-citation-title">{citation.title || address?.hostname || '출처'}</span><span className="cp-citation-domain"><span className="hps-source-kind">{citationKindLabel(citation.kind)}</span> · {address?.hostname || '주소 확인 필요'}</span></span>
+        <span className="cp-citation-copy"><span className="cp-citation-title"><span className="hps-source-kind">{citationKindLabel(citation.kind)}</span><span className="cp-citation-title-text">{citation.title || address?.hostname || '출처'}</span></span><span className="cp-citation-domain">{address?.hostname || '주소 확인 필요'}</span></span>
         <SourceIcon kind="source" size={16} />
       </button></span>;
     })}

@@ -55,6 +55,7 @@ a new human agreement or a claim that every write needs approval by default.
 | DEC-D022 (changed-file panel) | Extend the existing last-request restore point with bounded physical-line comparisons and exact selected-file/all restore, one count-bearing native confirmation and stale-context refusal. | Preserve the existing scope and recovery format; task-start checkpoints are not synthesized from a last-turn snapshot. Binary/large comparisons say unavailable. Direct edits during a turn are disclosed, not attributed to AI. | Existing learner restore permission; no new network access | no |
 
 | DEC-KNOW-09 (interim) | Require fresh per-copy confirmation for every content export, including resumed collections and help-request retries; Cancel ends that collection batch. Name existing recipient roles and actual endpoint hosts, never invent personal identities. Exclude app-owned private stores and configured wiki paths; user-selected page/help prose is disclosed content. Gallery publication keeps the 2026-08-21 post-publish session-record upload, listed as its own block in the same confirmation (recipient `수업 기록 운영자 · <proxy host>`, each spool file with its byte size); exactly the listed bytes go up after the page is published, and Cancel sends neither. The problem report (`문제 신고하기`), the budget-request note and the observation assessment are confirmed the same way | Existing broad collection consent and repository registration cannot describe the bytes of a later export. Conservative choice uses existing authorized recipients and no remembered send approval. Keeping the gallery session record preserves the 2026-08-21 operations decision (guardian pre-survey consent; report material survives a missed "기록 보내기") while still disclosing it | On as a restrictive gate; existing feature/profile opt-ins remain unchanged | no |
+| CGP-CHAT-D-014 (label size) | The source kind label before the title takes the title line's own size and leading and is set apart by muted ink and the strong weight, not by a smaller font. It moves off the domain line on the personal rack, the classroom chips and the workspace source list; the preview keeps its kind line above the heading | DEC-29 puts a 14px floor on every visible word of the personal chat, and the personal title line is already 14px, so a smaller label would break the floor; at the title's size the row keeps the height it has today, which D45 asks for. The classroom chip uses the same rule so one label style serves both seats | On; display only, no data change | no (agent-selected 2026-10-26) |
 
 ## Attachment recovery (CGP-KNOW-R-020)
 
@@ -216,6 +217,18 @@ No new palette, authorization, Service change or publication is implied.
 | How a CTA reaches 48px | `min-height: var(--hp-control-cta)`; padding and font unchanged | The start page's button already drew 49px; the other two grow 4px, and the Google account override grows from 40px to 48px | On | no |
 | 32px step | Defined, not applied; no Studio instructor row moves onto it in this row | The row is about learner surfaces; restyling instructor rows is a separate visual change | n/a | no |
 | Audit report location | `HPS_AUDIT_REPORT`, default `<tmpdir>/hps-hit-target-audit/report.md` (+ `.json`), never inside the repo | Generated output in a working tree has leaked into main before | On | no |
+
+## DEC-DS-R-011: one radius scale, nested radii computed (CGP-DS-R-011, 2026-10-26; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| Scale steps | 4 / 6 / 8 / 12 / 16 / 18 / 20 / 24px and full (999px), primitives in `designTokens.css` | DES-CGP-DS-12's 4/8/12/16/24 plus the three values shipped designs already fix: the 20px composer (DES-CGP-DS-21, D-016), the 18px bubble and its 6px tail (owner decision D-017). Dropping them would overrule a design row and an owner decision | On | no |
+| Global multiplier | `--ds-p-radius-scale` (1), applied with `calc()` in `radiusScale.css`; full is not multiplied | The token tiers only alias (design-tokens smoke), so the first consumer multiplies. One file serves Studio (via `tokens.css`) and Chalk (in the token transport), so there is one scale, not two copies | On | no |
+| Nested radii | Outer radius minus the inset between the two edges: menu items 12 − 4 = 8px (were 6px, REQ-STUDIO-MENU-TOKENS), task menu and "내 질문" items 12 − 6 = 6px (were 5px; their panels 9 → 12px, the menu radius), controls and the field in the composer card 20 − 12 = 8px (every composer button without its own radius, classroom Send/Stop and 다시 굴리기, and the classroom field were 4px) | That is the acceptance's rule; a step that happens to match would drift when either value moves | On | no |
+| Round controls | The personal Send/Stop and tools buttons keep their circle, on `--hp-radius-full` instead of 50% | A circle is a shape, not a concentric corner; turning the Send circle into an 8px square is a visual change the row does not ask for | On | no |
+| Off-scale values on the named surfaces | Classroom bubble 14 → 16px (tail 4px kept; the classroom assistant bubble keeps its 14px, it is not a named surface), personal suggestion chip 10 → 8px, citation chip 9 → 8px, access chip 5 → 4px; pills already at 999px move onto the full step. Overridden rules (composer 22/28px, personal bubble 20px, personal citation 9px, settings card 16px) name the radius that already won | Nearest step inside the design range (DES-CGP-DS-12: bubble 16–20px); a 1–2px change on each | On | no |
+| Scope | Composer, bubble, menus, dialogs and chips in Studio and Chalk. Every other radius keeps its shipped value | As DEC-DS-R-010 kept off-ladder spacing: moving all ~250 radii redraws every surface and needs a design review | On | needed for a full migration |
+| `corner-shape: superellipse` | Not adopted | Chromium-only today and not in the acceptance | n/a | no |
 
 ## DEC-DS-D-012: explicit reduced-motion off (2026-10-22; agent implementation choice)
 
@@ -665,6 +678,13 @@ The parent REQ-SHELL-30 asks for an optional reason, approval/refusal states and
 |---|---|---|---|---|
 | DEC-32 (interim) | Build R40 instead of moving it to DEFER: `$…$` / `$$…$$` in coach answers render with bundled KaTeX (trust off, bounded input) in every seat, personal and classroom, adult and minor alike. Invalid TeX and money-like dollars stay raw text; copy returns TeX. No graphing, no `\(…\)` / `\[…\]`, no math in learner messages | The open question was whether any curriculum needs math beyond adult courses. Rendering is display only: no new data flow, permission, recipient or network request (fonts are bundled, CSP unchanged), and the raw-source fallback means an answer never reads worse than today. Classroom answers that mention a formula (ratios, area, budgets) read better, and money text is protected by the Pandoc dollar rule. Reversal is in `extensions/hypeproof-chat/webview-ui/src/MarkdownText.tsx`: delete `remarkMath` from `remarkPlugins` (line 55) and the `rehypePlugins={[rehypeAnswerMath]}` line (56), then the now-unused `remarkMath` import (line 4) and `rehypeAnswerMath` from the `./mathRender` import (line 8), which `noUnusedLocals` requires. Without remark-math no math node is produced, so KaTeX never loads and the copy listener returns early (no `.katex-mathml`). Deleting only the rehype line is not a revert: remark-math would still turn `$x$` into code spans | On, display only | no (agent-selected 2026-10-25) |
 
+## CGP-CHAT-D-022: math layout (2026-10-26, agent choice)
+
+- Found met on main: REQ-STUDIO-ANSWER-MATH (CGP-CHAT-R-022) already centres display math in its own scroller, loads only bundled KaTeX fonts and lets math inherit the prose colour. No product code changes.
+- "Baseline-aligned" is measured, not assumed: a zero-size inline-block before each inline formula marks the sentence baseline and one at the end of each KaTeX base marks the formula's; they must agree within 0.5px for a plain term, a fraction and a sub/superscript, in both seats, both themes, both widths and forced colours.
+- "Text token colour" is `--vscode-foreground` with the `--hp-text-primary-default` fallback, the token answer controls use. Math must equal it, not only the surrounding prose, so a later prose override that drifts off the token is caught.
+- Default state: unchanged (display only).
+
 ## CGP-AGENT-R-029 implementation choices
 
 These are conservative implementation choices, not new human agreements.
@@ -692,6 +712,14 @@ These are conservative implementation choices, not new human agreements.
 - Dismiss: per course, version, sha256 and step id, kept in the panel's webview state (newest 200). It is not per task: closing it on a step hides it for that step in every task of that lesson in this panel. A new lesson version shows its tip again. Two windows each keep their own dismissals.
 - Duplication: the rail's 힌트 보기 disclosure keeps the same hint. The tip surfaces it once above the composer; authors who want a hint kept behind a disclosure leave `hint` blank and put it in `instructions`.
 - Presentation (CGP-CHAT-D-021): one row above the composer, `도움말` text badge, two-line clamp, 44px targets including the close button, hidden while a turn runs or a send is pending.
+
+## CGP-CHAT-D-021: lesson tip presentation (2026-10-26, agent choice)
+
+- Found on main: the presentation shipped with CGP-CHAT-R-021 (#2767). This row adds no product code; it proves the D19 clauses on the real App in headless Chromium and fills the test gaps (a pending send, a long hint, forced colours, one line at column widths).
+- "Single row": one row element in the composer column's flow. At 800px and wider the badge, text and both buttons share one line. At 320px the two buttons wrap under the text inside the same row; 44px targets and the 14px text minimum win over a single visual line.
+- "Never overlaps the composer": the row is in flow (never absolutely positioned) and the text is clamped to two lines, so a long hint cannot push the composer off screen at base or xlarge text.
+- "Hidden while a turn is running": also hidden while a send is pending (posted, before the host starts the turn), and back if the host rejects the send.
+- Default state: unchanged (on wherever a served lesson step has a hint); no new data flow.
 
 ## CGP-CHAT-R-027: find in chat (2026-10-25, agent-selected conservative implementation)
 
@@ -1010,3 +1038,94 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - "Reachable later from Help": Studio has no Help menu of its own (the native Help menu is upstream workbench chrome and extensions cannot add to it without a patch). The help entries live in the settings dialog next to `키보드 단축키` (CGP-CHAT-R-030), so `새로운 기능` goes there in both seats.
 - Initial lines name three features on main in every learner seat: find in chat (CGP-CHAT-R-027), the `?` shortcut sheet (CGP-CHAT-R-030) and math rendering (CGP-CHAT-R-022).
 - Seats: every learner seat (personal, trial, pass, classroom, lesson, unknown); the instructor console gets no panel (unknown instructor state counts as learner, as for CGP-SHELL-R-023). Default state: on (local display only, no event, nothing leaves the device).
+
+## CGP-DS-R-012: three named elevation levels (2026-10-26, agent decision within DES-CGP-DS-13)
+
+- Levels: `flat` (none), `raised` (`0 1px 2px`: the composer, the catch-up button, the start card) and `overlay` (`0 4px 8px -2px`: menus, popovers, the preferences dialog, the sources drawer, Chalk's side menu, seat detail drawer and pick-by menu). DES-CGP-DS-13 names no dialog level; dialogs and drawers share `overlay` so the count stays at three.
+- Alpha: both levels are .10 on light themes and .30 on dark ones (DES-CGP-DS-13's menu value; REQ-CGP-DS-13 needs dark >= .2).
+- Tokens: the static token expander refuses a semantic token with different light and dark values, so each level is a `-dark` and a `-light` token (the `modal-dim` pattern). `tokens.css` picks one per host theme through `--hp-elevation-raised` / `--hp-elevation-overlay`: dark on `:root`, light on `body.vscode-light`, dark on the forest-only start and disconnected screens in every theme, flat under `body.vscode-high-contrast` (the HC Light body carries that class too) and under forced colors.
+- High contrast: menus, popovers, the dialog and the drawer draw their 1px border in `--vscode-contrastBorder`. The composer and the catch-up button are controls and keep the fixed control boundary (CGP-DS-R-005); it measures >= 3:1 there. The start card stays forest in HC Light, where the contrastBorder would be 1.75:1, so it uses its own text colour.
+- Chalk is dark only and reads the `-dark` tokens directly; forced colors drops the shadow and the existing 1px edge borders stay.
+- Not elevation, left as they are: inset selection and status bars (`box-shadow: inset ...`), the `hps-breathe` pending glow (a looping status animation, CGP-DS-D-011), the learner deck document (`deckGenerator.ts`, an exported artifact) and the live-follow control injected into preview pages (`liveFollow.ts`, outside the token source).
+- Visible change: the composer shadow in dark themes goes from alpha .05 to .30; menus and the dialog lose their large soft shadows (12-50px blur) for the 8px overlay.
+
+## DEC-DS-R-026: logical CSS ratchet (CGP-DS-R-026, 2026-10-26; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| What "new" means | A ratchet: the 102 physical declarations on main are grandfathered in `config/logical-css-baseline.json`, counted per file by property and normalised value | The acceptance asks for 0 new ones. Converting the shipped ones would move nothing in LTR but touches 15 files of geometry that DEC-27 keeps; a per-value count still catches a copied or swapped declaration while a selector rename does not fail | On | no |
+| Stale baseline entries | Fail until the baseline is shrunk with `--update`; `--update` refuses to grow it | Slack left by a removed declaration could otherwise be reused by a new one in the same file | On | no |
+| Carriers | Webview `.css` and TSX `style={{}}`; Chalk `.css`, HTML `<style>` and `style=""`, exported `…Css` template literals | These are every place component CSS is authored today; JS positioning from measured rects and the generated token transport are not authored CSS | On | no |
+| Properties | Exactly the acceptance list: margin-left/right, padding-left/right, left, right | text-align, float, borders and shorthands belong to the design row CGP-DS-D-023 and would grow the baseline | On | no |
+| Escape hatch | `logical-css: physical <reason>` on the same line | Some placements are physical on purpose (e.g. centring with translateX, which does not flip in RTL) | On | no |
+| Tooling | A repo script plus a static smoke, not Stylelint | The repo has no Stylelint; Chalk's CSS lives in HTML and TS strings that Stylelint would not read without custom syntaxes | On | no |
+
+## CGP-DS-R-030: tabular figures in Chalk (2026-10-26, agent choice under the owner rules)
+
+- Scope is the row's three nouns read literally on the pages that have them: seat tables (/manage, /board), usage (/budgets) and timers (/console countdown, /manage help-queue ages and "N분 전"). Counters next to them (roster summary, state filters, help badge) are included because they change while the instructor watches.
+- Scoped by container, not set on `body`: prose and identifiers elsewhere keep proportional figures, which read better in Korean running text.
+- Controls inside the scope are named with `*` because Chromium's UA `font` reset on buttons and inputs drops an inherited numeric variant (the computed test caught this).
+- /board and /console were already met; the computed test now guards them.
+- Default state: on (styling only).
+
+## CGP-DS-R-032: startup and empty states use only HP marks (2026-10-26, agent-selected: already met, guard added)
+
+- Finding: on `main` every Studio startup and empty surface already draws only HP marks (boot `DisconnectedChat` and start page: `hypeproof-mark.svg`; empty editor: HP watermark; empty chat: text only). The six packaged images are the five HP brand SVGs and a generic chat bubble; no contributed codicon is a vendor glyph.
+- Motion: Studio has no startup animation. 0ms with nothing running meets "≤200ms fade with no loop under reduced motion". No fade is added: it would delay the first readable frame for no learner benefit and push every start-page screenshot test into a timing race. The global reduced-motion override in `tokens.css` is the guard that keeps any future animation on these surfaces to one iteration.
+- Scope rule: a provider named in copy (a GitHub sign-in button, a model name) is text, not a mark. Rasters cannot be read for a mark, so a new packaged raster fails the audit until a person lists it.
+- Not covered: installed-app platform icons (`.icns`/`.ico`, committed in the VSCodium fork) and the native Electron splash; both need an installed-build check.
+- Default state: n/a (no behaviour change).
+
+## DEC-DS-R-033: colour emoji font stack (CGP-DS-R-033, 2026-10-26; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| What "timeline and status lines" means after CGP-DS-R-018 | Icons in those lines stay stroke icons; emoji that remain text (labels, task marks, world faces, messages, answers) use the colour emoji stack | CGP-DS-R-018 already replaced status glyphs with the stroke set and is merged; redrawing them as emoji would undo it | On | no |
+| Where the faces go | Appended at the consumer after the host or role font (`var(--vscode-font-family, var(--ds-c-typography-ui)), var(--ds-c-typography-emoji)`), not folded into the role primitives | In the app `--vscode-font-family` is always set and would bypass a role-only change; the token tier rule keeps semantic tokens one primitive each | On | no |
+| Order | Emoji faces last | Apple Color Emoji maps 0-9, `#` and `*`; first in the stack it would draw numbers as emoji (the test checks the platform face of digits) | On | no |
+| Faces | Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji; no Segoe UI Symbol | The row asks for colour glyphs; Segoe UI Symbol is monochrome | On | no |
+| Code and technical text | Unchanged | Code follows the editor font (CGP-DS-R-007); URLs and ids are fixed-width on purpose | n/a | no |
+
+## DEC-SHELL-R028: work export zip (CGP-SHELL-R-028, 2026-10-26; agent choice, not a new human agreement)
+
+- On in every seat, no setting: it copies the learner's own folder to the learner's own disk, sends nothing, and the requirement asks for it to stay available after a pass ends. Instructor and unknown seats get it too; there is no recipient to protect.
+- Whole folder, unlike the R-035 takeaway: the row asks for the workspace minus `.git` and `node_modules`. `.hypeproof` is also left out (Studio's own history/memory records; the transcript already carries the conversation).
+- Conservative on secrets: a file that contains a token Studio holds or a credential pattern is left out whole and named in `내보내기-안내.txt`; in the transcript only the matching text is replaced by `[가림]`. A false positive costs one listed file, a miss would ship a token.
+- Fix 1 after the FAIL verify: "a token Studio holds" means every value in the extension's SecretStorage (listed with `keys()`, JSON records reduced to credential-like fields), matched in UTF-8, UTF-16LE/BE and base64; the generic shapes cover the common provider key prefixes, JWTs, Studio token shapes and key/value pairs named token/secret/password/api_key/authorization/private_key/credential. Names with `\` or `:` and hard links with a name outside the folder are left out and listed, and the zip writer re-checks every entry name. Unquoted values need a digit, or 8+ characters without a dot, and are not calls, so ordinary learner code (`password = input.value`) stays in.
+- Fix 2 after the second FAIL verify, owner decision (2026-10-26): scan broadly and fail closed. Every file is searched (binaries through a latin1 view and UTF-16), key names match by contains (secret, token, pass, api_key, `_key`, credential, cookie, session, auth, private), URL credentials, `Authorization:` with any scheme and cookie headers are shapes, file and folder names are scanned, and held values are also matched split by whitespace, percent-encoded and as hex. More false positives are accepted; they are listed in `내보내기-안내.txt`, never dropped silently. The plain-code positive controls stay (`max_tokens`, `type="password"`).
+- Refuse, never truncate: over 300 MB / 20,000 files nothing is written. A partial zip presented as "my work" would be dishonest.
+- Native folder dialog, progress notification and result message instead of an in-panel panel: the action starts from a modal settings dialog that closes first; the notification is the only surface that exists while the dialog is gone.
+
+## CGP-CHAT-D-015: elapsed time placement (2026-10-26, agent-selected conservative implementation)
+
+- "The turn's status line" = the personal answer action row (복사 · 미리보기 · 다시 받기 · verdict). Studio has no other per-turn status line, and the action row is where a finished answer's state lives. The receipt is the row's last item, after every control, so it never sits between controls.
+- Where a turn has no action row (classroom seat, a turn ending on a tool row, a no-answer stop), the receipt stays its own one-line status under the turn (unchanged from CGP-CHAT-R-015).
+- Secondary text = the muted text token at the 14px caption size, normal weight, not a control (no button, no 44px target needed). It wraps under the controls in a narrow pane; it is not pushed to the far edge, so it reads with its row.
+- No live counter: nothing time-shaped is shown during the run; the pending dots rule (end within 3.8s) is unchanged and now measured in the same test.
+- Default state: on, both seats; no new data flow.
+
+## CGP-CHAT-D-016: turn render fallback shape (2026-10-26, agent-selected: already met on main)
+
+- The CGP-CHAT-R-016 TurnBoundary already draws the D50 shape; no product code changed. The row is closed by proof, not by new UI.
+- "Inside the turn" = in the failing row's own slot, between its neighbouring rows and within the transcript column. The box does not repeat the coach label: the row's message could not be rendered, so its speaker header is not claimed.
+- Proof: `turn-boundary.smoke.mjs` measures solid borders on all four sides (CanvasText under forced colours), exactly two 44px buttons, raw text >= 14px (learner minimum), and walks real keyboard Tab/Shift+Tab across the box to the following answer (personal: Enter on its copy button works) or the composer (classroom).
+- Default state: unchanged (on, both seats; no new data flow).
+
+## CGP-CHAT-D-017: paste chip in the D06 chip family (2026-10-26, agent choice under the owner rules)
+
+- Label: D07's `붙여넣은 글 · N줄` replaces R07's `붙여넣은 글 (N줄)`; the design row owns the visual wording and the requirement text is updated to match. The line count uses grouping (`1,234줄`).
+- Family: the chip carries the D06 chip class and reuses its name-button and × styling (font, border, colours, 44px icon-only ×). The test compares computed styles against a real D06 file chip rendered beside it, so the two cannot drift apart silently.
+- Placement: the paste list stays directly above the composer card, not inside it. D06 counts chips toward the card's 192px growth cap, and an expanded 240px editor cannot fit inside that cap. The list itself scrolls at 40vh.
+- Narrow columns: the line count is the point of the label, so the row wraps (`입력창에 펼치기` and × move to the next line) instead of ellipsizing the label at 320px.
+- Kept from R-017: `입력창에 펼치기` stays a text button (R07 requires converting back to inline). The × now has the accessible name `붙여넣은 글 빼기` instead of the visible word `삭제`; removal undo (CGP-CHAT-R-029) is unchanged.
+- Editor: plain textarea, `field-sizing: content` with a 240px max (`--ds-c-studio-paste-editor-max`), then its own vertical scroll. 14px text minimum and 44px targets hold in both seats.
+- Default state: on (display only; no new data flow).
+
+## CGP-CHAT-D-020: sketch canvas design (2026-10-26, agent choice under the owner rules)
+
+- Width: the sketch keeps the shared `hp-modal` geometry (CGP-DS-D-020): at least 320px wide whenever the viewport has room (≥352px), and at ≤390px the shared bottom sheet spans the viewport. "Fits 320px with 16px gutters" is read as the sheet's content (title, tools, hint, canvas, buttons) staying ≥16px from both viewport edges with no horizontal overflow; the sheet's 20px padding gives that. No sketch-only override of the shared sheet.
+- Undo shortcut: Cmd+Z on macOS, Ctrl+Z elsewhere (same platform rule as the find bar), matched on the physical key too so a Korean input source works. Shift (redo) and Alt are not undo; there is no redo. It is handled anywhere in the dialog and stopped there, so it never reaches the host editor's undo. It does nothing while a stroke is down, while the PNG is being saved, during IME composition, or while the discard question is open.
+- Canvas name: exactly `그림판`; the drawing and undo instructions moved to `aria-describedby` on the visible hint.
+- Already met on main and now measured: tools ≥44px with ≥14px text, discard confirm focusing "계속 그리기".
+- Default state: on (local drawing only; no new data flow).
+

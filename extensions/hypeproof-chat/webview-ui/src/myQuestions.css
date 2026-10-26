@@ -7,10 +7,12 @@
   width: min(var(--ds-c-studio-myquestions-size-21), calc(100vw - var(--ds-c-studio-myquestions-size-23)));
   box-sizing: border-box; padding: var(--ds-c-studio-myquestions-space-15);
   border: var(--ds-c-studio-myquestions-size-3) solid var(--hp-border-control-default);
-  border-radius: var(--ds-c-studio-myquestions-radius-4);
+  border-radius: var(--hp-radius-menu);
   background: var(--hp-bg-panel-default); color: var(--vscode-foreground);
-  box-shadow: 0 var(--ds-c-studio-myquestions-shadow-16) var(--ds-c-studio-myquestions-shadow-17) var(--ds-c-studio-myquestions-shadow-18);
+  box-shadow: var(--hp-elevation-overlay);
 }
+/* CGP-DS-R-012 (DES-CGP-DS-13): high contrast has no elevation shadow; the 1px border takes the theme's contrastBorder. */
+body.vscode-high-contrast .hps-myq-panel { border-color: var(--vscode-contrastBorder, currentColor); }
 .hps-myq-list {
   list-style: none; margin: 0; padding: 0;
   max-height: calc(var(--ds-c-studio-myquestions-size-8) * 10); overflow-y: auto; overscroll-behavior: contain;
@@ -19,7 +21,7 @@
   display: flex; align-items: center; gap: var(--ds-c-studio-myquestions-space-2);
   box-sizing: border-box; width: 100%; min-width: 0; min-height: var(--ds-c-studio-myquestions-size-8); height: var(--ds-c-studio-myquestions-size-8);
   margin: 0; padding: 0 var(--ds-c-studio-myquestions-space-1);
-  border: 0; border-radius: var(--ds-c-studio-myquestions-radius-12);
+  border: 0; border-radius: calc(var(--hp-radius-menu) - var(--ds-c-studio-myquestions-space-15));
   background: transparent; color: inherit; text-align: start;
   font: inherit; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); cursor: pointer;
 }

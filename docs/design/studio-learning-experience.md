@@ -302,6 +302,10 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   /* 포커스 링 하나(CGP-DS-R-017). 웹뷰 바탕은 VS Code 테마를 따르므로 테마의 focusBorder를 쓴다.
      fallback은 HypeProof Studio 테마의 focusBorder와 같은 lime */
   --hp-ring-focus-default: var(--vscode-focusBorder, #D5F279);
+  /* 높이 단계(CGP-DS-R-012, DES-CGP-DS-13): flat(그림자 없음) · raised(카드, 입력창) · overlay(메뉴, 팝오버,
+     대화상자, 서랍) 셋뿐이다. 어두운 테마 .30, 밝은 테마 .10(body.vscode-light), 고대비·강제 색상은 그림자 없이 1px 테두리 */
+  --hp-elevation-raised: 0 1px 2px rgb(0 0 0 / 30%);
+  --hp-elevation-overlay: 0 4px 8px -2px rgb(0 0 0 / 30%);
   /* 움직임 토큰(CGP-DS-R-014, DES-CGP-DS-15). 웹뷰 CSS의 transition/animation 시간은 전부 여기서 온다.
      컴포넌트 CSS에는 시간 리터럴이 없다. 줄인 움직임 규칙(!important 0.01ms)이 여전히 이긴다 */
   --hp-ease: cubic-bezier(.19, 1, .22, 1);   /* UI 곡선 하나: 빨리 나가고 부드럽게 멈춘다 */
@@ -345,6 +349,11 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-space-6: calc(var(--hp-space) * 6);   /* 24px */
   --hp-space-8: calc(var(--hp-space) * 8);   /* 32px */
   --hp-control-cta: var(--hp-control-lg);   /* 48px · 주 행동 */
+  /* 모서리 반경 척도(CGP-DS-R-011, REQ-CGP-DS-12). 반경은 radiusScale.css의 한 척도(4 / 6 / 8 / 12 / 16 / 18 / 20 / 24px,
+     full)에 전역 배율 하나를 곱해 쓴다. 둥근 상자 안에 다시 둥근 것을 그리면 바깥 반경에서 그 사이 여백을 뺀다 */
+  --hp-radius-composer: var(--hp-radius-20);   /* 20px · 입력 카드(DES-CGP-DS-21) */
+  --hp-composer-inset: calc(var(--hp-space) * 3);   /* 12px · 입력 카드 안쪽 여백 */
+  --hp-radius-composer-control: calc(var(--hp-radius-composer) - var(--hp-composer-inset));   /* 8px · 카드 안 컨트롤 */
 }
 /* 의미 글자 크기(CGP-DS-R-008, DES-CGP-DS-09, DEC-29로 DES-02를 개인 대화에 확장). 학생이 읽는 글은 이 단계만 쓰고
    가장 작은 단계가 14px이다. custom property는 선언한 요소에서 값이 정해져 그 값으로 상속되므로 .hps-shell에서도
@@ -397,6 +406,9 @@ body.vscode-light, body.vscode-high-contrast-light {
   --hp-border-warn-default: #E6A373;
   --hp-border-accent-default: #D5F279;
   --hp-ring-focus-default: #D5F279;
+  /* CGP-DS-R-012: 숲 화면은 어느 테마에서도 어두우므로 어두운 테마의 그림자 */
+  --hp-elevation-raised: 0 1px 2px rgb(0 0 0 / 30%);
+  --hp-elevation-overlay: 0 4px 8px -2px rgb(0 0 0 / 30%);
 }
 /* 자기 바탕을 칠한 입력란은 보조 글자색 */
 .hp-surface, .hp-evidence-form, .hps-instructor-model-input { --hp-text-placeholder-default: var(--hp-text-muted-default); }

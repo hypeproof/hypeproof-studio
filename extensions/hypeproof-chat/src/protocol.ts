@@ -579,6 +579,8 @@ export type WebviewMessage = (
   | { type: 'voiceCapabilityProbeResult'; probeId: string;
       observations: import('./voiceCapabilityHelpers').VoiceProbeObservations }
   | {type:'workTakeaway'}
+  /** CGP-SHELL-R-028 — 내 작업 내보내기 from the settings dialog. */
+  | {type:'exportMyWork'}
   | {type:'activityLocalFile'; action:'open'|'export'}
   | {type:'refreshAccess'}
   | {type:'selectFunding';id:string}

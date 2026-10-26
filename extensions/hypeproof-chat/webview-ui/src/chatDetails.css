@@ -28,7 +28,7 @@
   border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-1); color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-1)); font-size: var(--ds-c-studio-chatdetails-type-2); margin: 0;
 }
 .hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body {
-  box-sizing: border-box; padding: var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-8); max-width: min(85%, var(--ds-c-studio-chatdetails-size-4)); border-radius: var(--ds-c-studio-chatdetails-radius-2) var(--ds-c-studio-chatdetails-radius-2) var(--ds-c-studio-chatdetails-radius-3) var(--ds-c-studio-chatdetails-radius-2);
+  box-sizing: border-box; padding: var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-8); max-width: min(85%, var(--ds-c-studio-chatdetails-size-4)); border-radius: var(--hp-radius-18) var(--hp-radius-18) var(--hp-radius-6) var(--hp-radius-18);
   background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-chatdetails-surface-1));
 }
 .hps-shell[data-chat-detail="personal"] .hps-prose p { margin-bottom: var(--ds-c-studio-chatdetails-space-9); }
@@ -68,7 +68,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-cit-rack { margin-top: var(--ds-c-studio-chatdetails-space-11); max-width: 100%; gap: var(--ds-c-studio-chatdetails-space-12); }
 .hps-shell[data-chat-detail="personal"] .hps-cit-chip {
   border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); background: var(--tw-panel); color: inherit;
-  border-radius: var(--ds-c-studio-chatdetails-radius-4); padding: var(--ds-c-studio-chatdetails-space-12) var(--ds-c-studio-chatdetails-space-7); max-width: 100%; font-size: var(--hp-font-caption);
+  border-radius: var(--hp-radius-8); padding: var(--ds-c-studio-chatdetails-space-12) var(--ds-c-studio-chatdetails-space-7); max-width: 100%; font-size: var(--hp-font-caption);
 }
 .hps-shell[data-chat-detail="personal"] .hps-cit-index { font-variant-numeric: tabular-nums; color: var(--tw-muted); }
 .hps-shell[data-chat-detail="personal"] .hps-cit-domain { color: var(--tw-muted); opacity: 1; }
@@ -79,8 +79,8 @@
   padding: var(--ds-c-studio-chatdetails-space-1) max(var(--ds-c-studio-chatdetails-space-5), calc((100% - var(--chat-column)) / 2)) var(--ds-c-studio-chatdetails-space-5);
 }
 .hps-shell[data-chat-detail="personal"] .hps-input {
-  gap: var(--ds-c-studio-chatdetails-space-13); padding: var(--ds-c-studio-chatdetails-space-2); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-5);
-  background: var(--vscode-input-background, var(--ds-c-studio-chatdetails-surface-3)); box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-1) var(--ds-c-studio-chatdetails-shadow-2) var(--ds-c-studio-chatdetails-shadow-3);
+  gap: var(--ds-c-studio-chatdetails-space-13); padding: var(--ds-c-studio-chatdetails-space-2); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-composer);
+  background: var(--vscode-input-background, var(--ds-c-studio-chatdetails-surface-3)); box-shadow: var(--hp-elevation-raised);
 }
 .hps-shell[data-chat-detail="personal"] .hps-input:focus-within { outline: var(--ds-c-studio-chatdetails-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-chatdetails-size-7); }
 .hps-shell[data-chat-detail="personal"] .hps-input textarea {
@@ -93,7 +93,7 @@
 .hps-composer-hint { margin-right: auto; font-size: var(--ds-c-studio-chatdetails-type-3); line-height: var(--hp-leading-label); color: var(--tw-muted); }
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send,
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-stop {
-  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: var(--hp-radius-full); flex-shrink: 0; display: grid; place-items: center;
   transition: transform var(--hp-dur-press) var(--hp-ease), opacity var(--hp-dur-press) var(--hp-ease);
   background: var(--vscode-button-background, var(--ds-c-studio-chatdetails-surface-4)); color: var(--vscode-button-foreground, var(--ds-c-studio-chatdetails-ink-2));
 }
@@ -117,7 +117,7 @@
 /* #2788 — the pill takes its own row between the transcript and the composer instead of floating over
    the last lines: while it shows, the list is that much shorter, so no transcript text sits under it. */
 .hps-catchup { flex-shrink: 0; display: flex; justify-content: center; padding-block: var(--ds-c-studio-chatdetails-space-13); }
-.hps-catchup button { min-height: var(--ds-c-studio-chatdetails-size-8); display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); padding: var(--ds-c-studio-chatdetails-space-12) var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-2); background: var(--tw-panel); color: inherit; box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-1) var(--ds-c-studio-chatdetails-shadow-4) var(--ds-c-studio-chatdetails-shadow-5); animation: chat-feedback var(--hp-dur-content) var(--hp-ease); }
+.hps-catchup button { min-height: var(--ds-c-studio-chatdetails-size-8); display: inline-flex; align-items: center; gap: var(--ds-c-studio-chatdetails-space-15); padding: var(--ds-c-studio-chatdetails-space-12) var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-2); background: var(--tw-panel); color: inherit; box-shadow: var(--hp-elevation-raised); animation: chat-feedback var(--hp-dur-content) var(--hp-ease); }
 .tw-workspace .hps-catchup button { font-size: var(--hp-font-caption); }
 @keyframes chat-feedback { from { opacity: 0; transform: translateY(var(--ds-c-studio-chatdetails-size-15)); } to { opacity: 1; transform: translateY(0); } }
 @keyframes chat-pending { 0%, 70%, 100% { opacity: .45; transform: translateY(0); } 35% { opacity: 1; transform: translateY(var(--ds-c-studio-chatdetails-size-16)); } }
@@ -142,7 +142,7 @@
 /* CG-R1: a compact editing row expands without remounting the textarea. */
 .hps-shell[data-chat-detail="personal"] .hps-input {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
-  column-gap: var(--ds-c-studio-chatdetails-space-2); row-gap: var(--ds-c-studio-chatdetails-space-2); padding: var(--ds-c-studio-chatdetails-space-16) var(--ds-c-studio-chatdetails-space-2); border-radius: var(--ds-c-studio-chatdetails-radius-7);
+  column-gap: var(--ds-c-studio-chatdetails-space-2); row-gap: var(--ds-c-studio-chatdetails-space-2); padding: var(--ds-c-studio-chatdetails-space-16) var(--ds-c-studio-chatdetails-space-2); border-radius: var(--hp-radius-composer);
 }
 .hps-shell[data-chat-detail="personal"] .hps-input textarea {
   min-height: var(--ds-c-studio-chatdetails-size-17); padding: 0 var(--ds-c-studio-chatdetails-space-2); font-size: var(--hp-font-body); line-height: var(--hp-leading-label); resize: none;
@@ -151,7 +151,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-input-buttons { padding: 0; justify-self: end; gap: var(--ds-c-studio-chatdetails-space-13); }
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send,
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-stop { width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); }
-.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] { padding-top: var(--ds-c-studio-chatdetails-space-20); border-radius: var(--ds-c-studio-chatdetails-radius-5); }
+.hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] { padding-top: var(--ds-c-studio-chatdetails-space-20); border-radius: var(--hp-radius-composer); }
 .hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] textarea { grid-column: 1 / -1; }
 .hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] .hps-input-buttons { grid-column: 2; }
 .hps-composer-hint { position: absolute; width: var(--ds-c-studio-chatdetails-size-3); height: var(--ds-c-studio-chatdetails-size-3); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -163,11 +163,11 @@
 .hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] .hps-composer-tools { grid-column: 1; grid-row: 2; }
 .hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] .hps-input-buttons { grid-column: 3; grid-row: 2; }
 .hps-composer-tools { position: relative; min-width: 0; }
-.tw-workspace .hps-tool-trigger { width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); padding: 0; display: grid; place-items: center; background: transparent; color: inherit; border: 0; border-radius: 50%; }
+.tw-workspace .hps-tool-trigger { width: var(--ds-c-studio-chatdetails-size-8); height: var(--ds-c-studio-chatdetails-size-8); padding: 0; display: grid; place-items: center; background: transparent; color: inherit; border: 0; border-radius: var(--hp-radius-full); }
 .hps-tool-trigger:hover { background-color: var(--hp-bg-control-hover); }
 .hps-tool-trigger:active { background-color: var(--hp-bg-control-pressed); }
-.hps-tools-menu { position: absolute; bottom: calc(100% + var(--ds-c-studio-chatdetails-size-18)); left: 0; width: min(var(--ds-c-studio-chatdetails-size-19), calc(100vw - var(--ds-c-studio-chatdetails-size-20))); max-height: min(var(--ds-c-studio-chatdetails-size-21), 50vh); overflow-y: auto; padding: var(--ds-c-studio-chatdetails-space-15); z-index: 20; border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-chatdetails-radius-8); background: var(--tw-panel); color: var(--vscode-foreground); box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-6) var(--ds-c-studio-chatdetails-shadow-7) var(--ds-c-studio-chatdetails-shadow-5); animation: chat-feedback var(--hp-dur-enter) var(--hp-ease); }
-.tw-workspace .hps-tools-menu button { display: flex; align-items: flex-start; gap: var(--ds-c-studio-chatdetails-space-7); width: 100%; min-height: var(--ds-c-studio-chatdetails-size-22); padding: var(--ds-c-studio-chatdetails-space-1); border: 0; border-radius: var(--ds-c-studio-chatdetails-radius-9); background: transparent; color: inherit; text-align: left; font-size: var(--hp-font-caption); }
+.hps-tools-menu { position: absolute; bottom: calc(100% + var(--ds-c-studio-chatdetails-size-18)); left: 0; width: min(var(--ds-c-studio-chatdetails-size-19), calc(100vw - var(--ds-c-studio-chatdetails-size-20))); max-height: min(var(--ds-c-studio-chatdetails-size-21), 50vh); overflow-y: auto; padding: var(--ds-c-studio-chatdetails-space-15); z-index: 20; border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); border-radius: var(--hp-radius-menu); background: var(--tw-panel); color: var(--vscode-foreground); box-shadow: var(--hp-elevation-overlay); animation: chat-feedback var(--hp-dur-enter) var(--hp-ease); }
+.tw-workspace .hps-tools-menu button { display: flex; align-items: flex-start; gap: var(--ds-c-studio-chatdetails-space-7); width: 100%; min-height: var(--ds-c-studio-chatdetails-size-22); padding: var(--ds-c-studio-chatdetails-space-1); border: 0; border-radius: var(--hp-radius-menu-item); background: transparent; color: inherit; text-align: left; font-size: var(--hp-font-caption); }
 .hps-tools-menu button > svg { flex-shrink: 0; margin-top: var(--ds-c-studio-chatdetails-space-21); }
 .hps-tools-menu button > span { flex: 1; min-width: 0; }
 .hps-tools-menu button small { display: block; margin-top: var(--ds-c-studio-chatdetails-space-13); font-size: var(--ds-c-studio-chatdetails-type-1); color: var(--tw-muted); line-height: var(--hp-leading-label); }
@@ -209,7 +209,7 @@
 .hps-shell[data-chat-detail="personal"] .hps-msg { gap: var(--ds-c-studio-chatdetails-space-2); }
 .hps-shell[data-chat-detail="personal"] .hps-msg-user + .hps-msg-assistant,
 .hps-shell[data-chat-detail="personal"] .hps-msg-assistant + .hps-msg-user { margin-top: 0; }
-.hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body { padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-20); border-radius: var(--ds-c-studio-chatdetails-radius-11) var(--ds-c-studio-chatdetails-radius-11) var(--ds-c-studio-chatdetails-radius-3) var(--ds-c-studio-chatdetails-radius-11); }
+.hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body { padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-20); border-radius: var(--hp-radius-18) var(--hp-radius-18) var(--hp-radius-6) var(--hp-radius-18); }
 
 /* Actions under an answer: copy · preview · ask again — same size, same ghost style, the first
    icon on the answer text's left edge. 44px hit area (REQ-STUDIO-CHAT-DETAIL, #1763) without a box. */
@@ -269,13 +269,17 @@
 .hps-shell[data-chat-detail="personal"] .hps-chips-rack { margin: 0; padding: 0; gap: var(--ds-c-studio-chatdetails-space-7); }
 .hps-shell[data-chat-detail="personal"] .hps-chips-label { font-size: var(--hp-font-caption); color: var(--tw-muted); opacity: 1; }
 .hps-shell[data-chat-detail="personal"] .hps-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(var(--ds-c-studio-chatdetails-size-25), 100%), 1fr)); gap: var(--ds-c-studio-chatdetails-space-2); }
-.hps-shell[data-chat-detail="personal"] .hps-chip { padding: var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-9); text-align: left; background: transparent; min-height: var(--ds-c-studio-chatdetails-size-8); }
+.hps-shell[data-chat-detail="personal"] .hps-chip { padding: var(--ds-c-studio-chatdetails-space-1); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-8); text-align: left; background: transparent; min-height: var(--ds-c-studio-chatdetails-size-8); }
 /* CGP-DS-R-005: the personal resting rule outranks the shared .hps-chip:hover, so the states are restated here. */
 .hps-shell[data-chat-detail="personal"] .hps-chip:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
 .hps-shell[data-chat-detail="personal"] .hps-chip:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
 .hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
 .hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: var(--ds-c-studio-chatdetails-space-16); }
-.hps-preferences { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); max-height: calc(100vh - var(--ds-c-studio-chatdetails-size-23)); padding: 0; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-4)); background: var(--tw-panel, var(--vscode-sideBar-background, var(--vscode-editor-background))); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); border-radius: var(--ds-c-studio-chatdetails-radius-8); box-shadow: 0 var(--ds-c-studio-chatdetails-shadow-4) var(--ds-c-studio-chatdetails-shadow-8) var(--ds-c-studio-chatdetails-shadow-9); overflow: auto; }
+.hps-preferences { box-sizing: border-box; width: min(var(--ds-c-studio-chatdetails-size-26), calc(100vw - var(--ds-c-studio-chatdetails-size-23))); max-height: calc(100vh - var(--ds-c-studio-chatdetails-size-23)); padding: 0; color: var(--vscode-foreground, var(--ds-c-studio-chatdetails-ink-4)); background: var(--tw-panel, var(--vscode-sideBar-background, var(--vscode-editor-background))); border: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); border-radius: var(--hp-radius-dialog); box-shadow: var(--hp-elevation-overlay); overflow: auto; }
+/* CGP-DS-R-012 (DES-CGP-DS-13): high contrast has no elevation shadow; the 1px border takes the theme's contrastBorder.
+   The composer and the catch-up button are controls: their 1px border stays the fixed control boundary (CGP-DS-R-005).
+   The second tools-menu entry outranks the collapsed-composer panel colour in styles.css. */
+body.vscode-high-contrast :is(.hps-tools-menu, .hps-shell .hps-tools-menu, .hps-preferences) { border-color: var(--vscode-contrastBorder, currentColor); }
 .hps-preferences::backdrop { background: var(--ds-c-studio-chatdetails-surface-8); }
 .hps-preferences > header { display: flex; align-items: center; justify-content: space-between; padding: var(--ds-c-studio-chatdetails-space-7) var(--ds-c-studio-chatdetails-space-20); border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line); }
 .hps-preferences h2 { font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); margin: 0; }
@@ -291,7 +295,9 @@
    wraps its description under the keys when the dialog is narrow. The classroom dialog sits outside
    .tw-workspace (no --tw-* values), so its surface and lines fall back to the theme's own colours;
    before this the classroom dialog had no background and the page showed through. */
-.hps-preferences .hps-open-shortcuts { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
+/* CGP-SHELL-R-028: 내 작업 내보내기 shares the entry style (44px, caption >=14px) and keeps a border in forced colours. */
+.hps-preferences .hps-open-shortcuts, .hps-preferences .hps-export-work { display: block; font-family: inherit; font-size: var(--hp-font-caption); }
+@media (forced-colors: active) { .hps-preferences .hps-export-work { border: var(--ds-c-studio-chatdetails-size-3) solid ButtonText; } }
 .hps-shortcut-list { margin: 0; padding: 0; display: grid; gap: var(--ds-c-studio-chatdetails-space-2); }
 .hps-shortcut-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ds-c-studio-chatdetails-space-1) var(--ds-c-studio-chatdetails-space-5); padding: var(--ds-c-studio-chatdetails-space-2) 0; border-bottom: var(--ds-c-studio-chatdetails-size-3) solid var(--tw-line, var(--vscode-panel-border, currentColor)); }
 .hps-shortcut-row dt { flex: 0 0 auto; margin: 0; white-space: nowrap; }
@@ -588,10 +594,10 @@
 .hps-shell[data-chat-detail="personal"] .hps-input,
 .hps-shell[data-chat-detail="personal"] .hps-input[data-expanded="true"] {
   box-sizing: border-box;
-  border-radius: calc(var(--hp-space) * 5);
+  border-radius: var(--hp-radius-composer);
   min-height: var(--hp-control-lg);
-  padding: calc(var(--hp-space) * 3);
-  padding-top: calc(var(--hp-space) * 3);
+  padding: var(--hp-composer-inset);
+  padding-top: var(--hp-composer-inset);
 }
 .hps-input:not([data-expanded]) {
   border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
@@ -614,7 +620,7 @@
 .hps-shell .hps-input .hps-tools-menu,
 .tw-chat-menu .tw-chat-menu-panel {
   box-sizing: border-box;
-  border-radius: var(--ds-c-menu-radius);
+  border-radius: var(--hp-radius-menu);
   padding: var(--ds-c-menu-gutter);
   background: var(--hp-bg-panel-default);
   border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
@@ -629,7 +635,7 @@
   width: 100%;
   margin: 0;
   padding: var(--ds-c-menu-item-pad-block) var(--ds-c-menu-item-pad-inline);
-  border-radius: var(--ds-c-menu-item-radius);
+  border-radius: var(--hp-radius-menu-item); /* nested: menu radius - gutter */
   font-size: var(--hp-font-caption);
   line-height: var(--hp-leading-label);
   text-align: start;
@@ -705,7 +711,7 @@
   color: var(--hp-text-primary-default);
   background: var(--vscode-editor-background);
   border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
-  border-radius: var(--ds-c-modal-radius);
+  border-radius: var(--hp-radius-dialog);
   font: inherit;
 }
 .hps-shell .hp-capability-sheet::backdrop { background: var(--ds-c-modal-dim-dark); }
@@ -757,6 +763,9 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
 }
 /* CGP-CHAT-R-015: terminal evidence is separate from the coach's answer prose. */
 .hps-turn-elapsed { margin: 0; color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+/* CGP-CHAT-D-015: secondary text at the end of the turn's status line (the answer action row);
+   it wraps under the controls in a narrow pane instead of overflowing. Not a control, no target. */
+.hps-answer-actions > .hps-turn-elapsed-inline { min-width: 0; overflow-wrap: anywhere; }
 /* CGP-CHAT-R-018: locally scoped file names, with the composer retaining keyboard focus. */
 .hps-file-mentions { max-height: 30vh; overflow: auto; min-width: 0; font-size: var(--hp-font-body); }
 .hps-file-mentions p { margin: var(--ds-c-studio-chatdetails-space-2) 0; }
@@ -765,9 +774,22 @@ body.vscode-light .hp-capability-sheet::backdrop { background: var(--ds-c-modal-
 .hps-file-mentions button > svg { flex-shrink: 0; }
 .hps-file-mentions button > span { min-width: 0; }
 .hps-file-mentions [aria-selected="true"] { border-color: var(--hp-border-control-selected); background-color: var(--hp-bg-control-selected); }
-/* CGP-CHAT-R-017: view-only paste chips keep the complete draft available. */
-.hps-pasted-list { max-height: 30vh; overflow: auto; min-width: 0; }
-.hps-pasted-editor { box-sizing: border-box; flex-basis: 100%; width: 100%; min-width: 0; max-height: 20vh; overflow: auto; font: inherit; font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); color: inherit; background: var(--vscode-input-background, transparent); }
+/* CGP-CHAT-R-017: view-only paste chips keep the complete draft available.
+   CGP-CHAT-D-017: same chip family as the D06 file chip (icon, label, 44px × remove, same borders);
+   the expanded editor grows to 240px and then scrolls on its own. The list sits above the composer
+   card so an expanded 240px editor never fights the card's 192px growth cap. */
+.hps-pasted-list { display: flex; flex-direction: column; gap: var(--hp-space); max-height: 40vh; overflow: auto; min-width: 0; margin-block-end: var(--hp-space); }
+.hps-pasted-chip .hps-pasted-toggle { flex: 1 1 auto; padding-inline: var(--hp-space-2); text-align: start; cursor: pointer; }
+/* The line count is the point of the label: wrap the row instead of ellipsizing it in a narrow column. */
+.hps-pasted-chip .hps-pasted-toggle > span { overflow: visible; text-overflow: clip; }
+.hps-pasted-chip .hps-pasted-inline { flex: 0 0 auto; min-height: var(--hp-control-min); padding-inline: var(--hp-space-2); cursor: pointer; }
+.hps-pasted-chip .hps-file-context-remove { cursor: pointer; }
+.hps-shell .hps-pasted-chip button { font: inherit; color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-3); }
+.hps-shell .hps-pasted-chip button:hover:not(:disabled) { background-color: var(--hp-bg-control-hover); }
+.hps-shell .hps-pasted-chip button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-shell .hps-pasted-chip button:disabled { cursor: default; color: var(--hp-text-muted-default); }
+.hps-pasted-editor { box-sizing: border-box; flex-basis: 100%; width: 100%; min-width: 0; min-height: var(--hp-control-min); field-sizing: content; max-height: var(--ds-c-studio-paste-editor-max); overflow-y: auto; resize: none; padding: var(--hp-space-2); font: inherit; font-size: var(--hp-font-body); line-height: var(--hp-leading-prose); color: inherit; background: var(--vscode-input-background, transparent); border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-chatdetails-radius-3); }
+@media (forced-colors: active) { .hps-shell .hps-pasted-chip button, .hps-pasted-editor { border-color: CanvasText; } }
 /* CGP-CHAT-R-016: failed response only; raw text is selectable and never parsed as Markdown/HTML. */
 .hps-turn-raw { flex-basis: 100%; min-width: 0; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); margin: 0; }
 /* CGP-CHAT-D-012: only a host-accepted steered request exits; waiting has no animation. */

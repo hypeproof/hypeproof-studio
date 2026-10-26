@@ -9,6 +9,8 @@ import { chatPanelProps, chatConfig } from './sx-screen-fixtures.mjs';
 import { findChromium, launch } from './lib/headless-chromium.mjs';
 const SANS='-apple-system, system-ui, sans-serif'; // shipped ui + content role (--ds-p-136)
 const MONO='ui-monospace, Menlo, monospace'; // shipped code role (--ds-p-184)
+// CGP-DS-R-033: UI and content text end with the OS colour emoji faces (--ds-p-emoji); code does not.
+const E=f=>`${f}, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"`;
 const bin = findChromium();
 if (!bin) { if (process.env.FOCUS_REQUIRE_BROWSER === '1') throw Error('Chromium required'); console.log('NOT RUN font roles: no Chromium'); process.exit(0); }
 const src = new URL('../webview-ui/src/', import.meta.url);
@@ -30,10 +32,10 @@ try {
       const readAll=()=>browser.evaluate(`(() => {const font=s=>{const e=document.querySelector(s);return e?getComputedStyle(e).fontFamily:null};const tools=[...document.querySelectorAll('.hps-codeblock-tools *')].map(e=>getComputedStyle(e).fontFamily);return {prose:font('.hps-prose p'),inline:font('.hps-prose p code'),block:font('.hps-codeblock pre code'),toolbar:font('.hps-codeblock button'),header:font('.hps-header button'),tools};})()`);
       assert.equal(await browser.evaluate(`getComputedStyle(document.body).getPropertyValue('--vscode-font-family')+getComputedStyle(document.body).getPropertyValue('--vscode-editor-font-family')`),'','default pass needs host font variables unset');
       const defaults=await readAll(); const tag=`${seat}/${dark}/${width}`;
-      assert.equal(defaults.prose,SANS,`default content role: ${tag}`);assert.equal(defaults.header,SANS,`default UI role: ${tag}`);
-      assert.equal(defaults.toolbar,SANS,`default code toolbar is UI: ${tag}`);
+      assert.equal(defaults.prose,E(SANS),`default content role: ${tag}`);assert.equal(defaults.header,E(SANS),`default UI role: ${tag}`);
+      assert.equal(defaults.toolbar,E(SANS),`default code toolbar is UI: ${tag}`);
       assert.equal(defaults.inline,MONO,`default inline code role: ${tag}`);assert.equal(defaults.block,MONO,`default fenced code role: ${tag}`);
-      assert.ok(defaults.tools.length>0&&defaults.tools.every(f=>f===SANS),`every code toolbar child keeps the UI role: ${tag} ${JSON.stringify(defaults.tools)}`);
+      assert.ok(defaults.tools.length>0&&defaults.tools.every(f=>f===E(SANS)),`every code toolbar child keeps the UI role: ${tag} ${JSON.stringify(defaults.tools)}`);
       // Use distinct installed generic families; no external font request or invented screenshot labels.
       await browser.evaluate(`document.body.style.setProperty('--vscode-font-family','sans-serif');document.body.style.setProperty('--vscode-editor-font-family','monospace');document.body.style.setProperty('--ds-c-typography-content','serif');`);
       const read=()=>browser.evaluate(`(() => {const font=s=>{const e=document.querySelector(s);return e?getComputedStyle(e).fontFamily:null};return {prose:font('.hps-prose p'),inline:font('.hps-prose p code'),block:font('.hps-codeblock pre code'),toolbar:font('.hps-codeblock button'),header:font('.hps-header button')};})()`);
@@ -42,15 +44,15 @@ try {
       const metadata=()=>browser.evaluate(`[...document.querySelectorAll('.hp-inbox-link-url,.hp-materials-detail,.hps-page-context-origin,.hps-outbound-destination')].map(e=>getComputedStyle(e).fontFamily)`);
       const fixedMetadata=await metadata();
       const before=await read();
-      assert.equal(before.prose,'serif',`content token must govern prose: ${seat}/${dark}/${width} ${JSON.stringify(before)}`);
+      assert.equal(before.prose,E('serif'),`content token must govern prose: ${seat}/${dark}/${width} ${JSON.stringify(before)}`);
       assert.equal(before.inline,'monospace');assert.equal(before.block,'monospace');
-      assert.equal(before.toolbar,'sans-serif','nested code controls remain UI');assert.equal(before.header,'sans-serif');
-      assert.ok((await readAll()).tools.every(f=>f==='sans-serif'),'toolbar children remain UI');
+      assert.equal(before.toolbar,E('sans-serif'),'nested code controls remain UI');assert.equal(before.header,E('sans-serif'));
+      assert.ok((await readAll()).tools.every(f=>f===E('sans-serif')),'toolbar children remain UI');
       await browser.evaluate(`document.body.style.setProperty('--vscode-editor-font-family','cursive')`);
       assert.deepEqual(await metadata(),fixedMetadata,'technical metadata must ignore editor font');
       const after=await read();assert.deepEqual(after,{...before,inline:'cursive',block:'cursive'},'editor font changes only code');
       await browser.evaluate(`document.body.style.setProperty('--ds-c-typography-content','fantasy')`);
-      assert.deepEqual(await read(),{...after,prose:'fantasy'},'prose font changes only prose');
+      assert.deepEqual(await read(),{...after,prose:E('fantasy')},'prose font changes only prose');
     }
   }
   console.log('PASS actual chat font-role isolation across seats/themes/widths');
@@ -61,10 +63,10 @@ try {
   await browser.evaluate(`document.querySelector('.hps-codepill-toggle').click()`);
   await new Promise(r=>setTimeout(r,50));
   assert.equal(await browser.evaluate(`getComputedStyle(document.querySelector('.hps-codepill-body')).fontFamily`),MONO,'default mounted fenced code role');
-  assert.equal(await browser.evaluate(`getComputedStyle(document.querySelector('.hps-codepill .hps-codeblock-tool')).fontFamily`),SANS,'default mounted code controls role');
+  assert.equal(await browser.evaluate(`getComputedStyle(document.querySelector('.hps-codepill .hps-codeblock-tool')).fontFamily`),E(SANS),'default mounted code controls role');
   await browser.evaluate(`document.body.style.setProperty('--vscode-editor-font-family','cursive');document.body.style.setProperty('--ds-c-typography-content','serif');document.body.style.setProperty('--vscode-font-family','sans-serif')`);
   assert.equal(await browser.evaluate(`getComputedStyle(document.querySelector('.hps-codepill-body')).fontFamily`),'cursive');
-  assert.equal(await browser.evaluate(`getComputedStyle(document.querySelector('.hps-codepill .hps-codeblock-tool')).fontFamily`),'sans-serif');
+  assert.equal(await browser.evaluate(`getComputedStyle(document.querySelector('.hps-codepill .hps-codeblock-tool')).fontFamily`),E('sans-serif'));
   console.log('PASS mounted fenced-code disclosure follows editor font, its buttons keep UI font');
   const { withDesignTokens } = await import('../../../chalk/src/lib/design-tokens.ts');
   const ui = new URL('../../../chalk/src/ui/',import.meta.url);
@@ -76,21 +78,21 @@ try {
     await browser.evaluate(`for(const t of ['button','input','select','textarea']){const e=document.createElement(t);e.setAttribute('data-font-probe','');document.body.appendChild(e)}`);
     const probes=()=>browser.evaluate(`[...document.querySelectorAll('[data-font-probe]')].map(e=>getComputedStyle(e).fontFamily)`);
     const d=await browser.evaluate(`(() => {const f=s=>{const e=document.querySelector(s);return e?getComputedStyle(e).fontFamily:null};return {ui:f('button')??f('body'),prose:f('p'),code:f('pre,code')};})()`);
-    assert.equal(d.ui,SANS,file+' default UI role');
-    if(d.prose!==null)assert.equal(d.prose,SANS,file+' default content role');
+    assert.equal(d.ui,E(SANS),file+' default UI role');
+    if(d.prose!==null)assert.equal(d.prose,E(SANS),file+' default content role');
     if(d.code!==null)assert.equal(d.code,MONO,file+' default code role');
-    assert.deepEqual(await probes(),[SANS,SANS,SANS,SANS],file+' default UI role on controls');
+    assert.deepEqual(await probes(),Array(4).fill(E(SANS)),file+' default UI role on controls');
     await browser.evaluate(`document.body.style.setProperty('--ds-c-typography-ui','sans-serif');document.body.style.setProperty('--ds-c-typography-content','serif');document.body.style.setProperty('--ds-c-typography-code','monospace')`);
     const measure=()=>browser.evaluate(`(() => {const f=s=>{const e=document.querySelector(s);return e?getComputedStyle(e).fontFamily:null};return {ui:f('button')??f('body'),prose:f('p'),code:f('pre,code')};})()`);
     const before=await measure();
-    assert.equal(before.ui,'sans-serif',file+' UI');
-    assert.deepEqual(await probes(),Array(4).fill('sans-serif'),file+' controls follow the UI token');
-    if(before.prose!==null)assert.equal(before.prose,'serif',file+' prose');
+    assert.equal(before.ui,E('sans-serif'),file+' UI');
+    assert.deepEqual(await probes(),Array(4).fill(E('sans-serif')),file+' controls follow the UI token');
+    if(before.prose!==null)assert.equal(before.prose,E('serif'),file+' prose');
     if(before.code!==null)assert.equal(before.code,'monospace',file+' code');
     await browser.evaluate(`document.body.style.setProperty('--ds-c-typography-content','fantasy')`);
-    assert.deepEqual(await measure(),{...before,prose:before.prose===null?null:'fantasy'},file+' content isolation');
+    assert.deepEqual(await measure(),{...before,prose:before.prose===null?null:E('fantasy')},file+' content isolation');
     await browser.evaluate(`document.body.style.setProperty('--ds-c-typography-code','cursive')`);
-    assert.deepEqual(await measure(),{...before,prose:before.prose===null?null:'fantasy',code:before.code===null?null:'cursive'},file+' code isolation');
+    assert.deepEqual(await measure(),{...before,prose:before.prose===null?null:E('fantasy'),code:before.code===null?null:'cursive'},file+' code isolation');
   }
   console.log('PASS Chalk actual page UI/prose/code roles and isolated token changes (all nine pages)');
 } finally { await browser.close(); }

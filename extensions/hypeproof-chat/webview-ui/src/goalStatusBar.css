@@ -14,7 +14,7 @@
   color: inherit;
   background: transparent;
   border: var(--ds-c-status-chip-edge) solid var(--hp-border-control-default);
-  border-radius: var(--ds-c-status-chip-radius);
+  border-radius: var(--hp-radius-status-chip);
   padding-inline: var(--ds-c-status-chip-pad-inline);
 }
 .hps-goal-status button:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }
@@ -29,7 +29,7 @@
   height: var(--ds-c-status-chip-pad-inline);
   margin-inline-end: var(--ds-c-status-chip-pad-inline);
   background: currentColor;
-  border-radius: var(--ds-c-status-chip-radius);
+  border-radius: var(--hp-radius-status-chip);
 }
 @media (forced-colors: active) {
   .hps-goal-status { color: CanvasText; }
