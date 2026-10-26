@@ -6772,3 +6772,46 @@ file byte-identical) and `test/style-tweak-layout.smoke.mjs`
 (computed 44px targets, 14px text, 24px swatches, focus ring, inside the chip at 320/800/1420,
 personal and classroom, dark/light/forced colours). The browser smokes fail under
 `FOCUS_REQUIRE_BROWSER=1` without a browser.
+
+## Start page learner settings sheet (CGP-SHELL-R-014)
+
+`REQ-STUDIO-START-SETTINGS` adapts CGP-SHELL-026 / REQ-SHELL-14 and traces to PI#4
+(a learner meets only the controls the lesson needs). It may expose OWNERSHIP: the learner
+chooses how the workspace reads and notifies, without reaching runtime settings.
+
+The start page "설정" opens a learner settings sheet inside the start page; it never opens the
+VS Code settings editor directly (the former `openStudioSettings` host request is gone, and a
+stale one opens nothing). The sheet lists at most six rows, in the order REQ-SHELL-14 names them
+(글자 크기, 화면 밝기(테마), 움직임 줄이기, 알림, 팁 보기, 내 작업 내보내기), and only rows whose
+behaviour exists in the build (DEC-SHELL-R014):
+
+- 글자 크기 — 기본 / 크게 / 아주 크게, the same device preference as the personal chat settings
+  (CGP-DS-R-009, `hypeproof.textSize`); the row says it is the size of personal-activity chat text.
+  An open chat picks the change up at once.
+- 움직임 줄이기 — 기기 설정 따르기 / 줄이기 / 줄이지 않기, written to `workbench.reduceMotion`
+  (`auto` / `on` / `off`), which the chat already honours (CGP-DS-R-015).
+- 알림 — one checkbox for `hypeproofChat.osTaskNotices` (off by default), the existing opt-in for
+  native task notices while the window is unfocused; notices never carry answer text.
+
+화면 밝기(테마), 팁 보기 and 내 작업 내보내기 join when REQ-SHELL-16, REQ-SHELL-19 and
+REQ-SHELL-28 ship; until then they are not drawn, so no row is a switch that does nothing.
+
+"고급 설정" at the end of the sheet is the only start-page path to the VS Code settings editor.
+It is hidden for a minor cohort: a connected or previewed profile that `isMinorProfile` calls
+minor (it fails closed on an unknown tier) or a free start answered "under14". The host re-checks
+the same rule when the request arrives, so a forged request from a minor seat opens nothing. With
+no seat and no under-14 answer it stays (adult or staff setup, as before this row).
+
+Every write is host-validated: only the three keys with their exact values are stored; any other
+key or value stores nothing and sends nothing. A failed write says
+"설정을 저장하지 못했어요. 잠시 뒤 다시 골라 주세요." and keeps the shown value. The sheet reuses the
+chat settings dialog: Escape, × and the backdrop close it, focus returns to "설정", 44px targets,
+14px minimum text.
+
+Validation: `extensions/hypeproof-chat/test/start-settings-host.smoke.mjs` (the real StartPage in
+a vm: no direct editor path, writes land in their stores, hostile writes refused, minor tier /
+minor flag / under-14 never reach the editor) and
+`extensions/hypeproof-chat/test/start-settings-sheet.smoke.mjs` (the built start page in headless
+Chromium at 320/800/1420 px, dark/light and forced colours, adult and minor views: rows, cap,
+고급 설정 visibility, posted messages, 44px targets, 14px text, start-page text colour, Escape and
+focus return). The browser smoke fails under `FOCUS_REQUIRE_BROWSER=1` without a browser.

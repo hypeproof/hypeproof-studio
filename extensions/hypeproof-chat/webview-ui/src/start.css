@@ -520,3 +520,20 @@
 .studio-join-class { margin:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--ds-c-studio-start-space-13) var(--ds-c-studio-start-space-7); font-size:var(--ds-c-studio-start-type-17); color:var(--hp-text-muted-default); }
 .studio-join-class strong { color:var(--hp-text-primary-default); font-size:var(--ds-c-studio-start-type-13); font-weight:var(--ds-c-studio-start-typography-7); overflow-wrap:anywhere; }
 .studio-join-help { margin:var(--ds-c-studio-start-space-15) 0 0; font-size:var(--ds-c-studio-start-type-17); line-height:var(--ds-c-studio-start-typography-5); color:var(--hp-text-muted-default); word-break:keep-all; overflow-wrap:anywhere; }
+
+/* CGP-SHELL-R-014 — the learner settings sheet behind the start page "설정". It reuses the chat's
+ * settings dialog (ChatPreferences); the start page has no task workspace, so the three task
+ * workspace roles that dialog reads are given here from the start page's own semantic tokens. */
+.studio-start .studio-settings {
+  --tw-line:var(--hp-border-divider-default);
+  --tw-muted:var(--hp-text-muted-default);
+  --tw-panel:var(--hp-bg-panel-default);
+  color:var(--hp-text-primary-default)}
+.studio-start .studio-settings .studio-settings-hint {
+  flex-basis:100%;
+  margin:0;
+  font-size:var(--hp-font-caption)}
+.studio-start .studio-settings .studio-settings-advanced {
+  display:block;
+  font-size:var(--hp-font-caption);
+  text-decoration:underline}

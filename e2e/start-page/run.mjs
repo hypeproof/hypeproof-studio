@@ -14,7 +14,9 @@ try {
  await p.addInitScript(()=>{window.sent=[];window.acquireVsCodeApi=()=>({postMessage:m=>{window.sent.push(m);if(m.type==='startReady')setTimeout(()=>window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{checking:false,version:'test'}}})),0);},getState:()=>undefined,setState:()=>{throw Error('credential state persistence forbidden');}});});
  await p.goto(`http://127.0.0.1:${server.address().port}`);await p.getByRole('heading',{name:'어떻게 시작할까요?'}).waitFor();
  await p.getByRole('button',{name:'파일',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'openStudioFiles');
- await p.getByRole('button',{name:'설정',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'openStudioSettings');
+ // CGP-SHELL-R-014 — 설정 opens the learner sheet in the page; no settings-editor request is sent.
+ await p.getByRole('button',{name:'설정',exact:true}).click();await p.getByRole('dialog',{name:'설정'}).waitFor();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'openStudioFiles');
+ await p.getByRole('button',{name:'설정 닫기'}).click();await p.getByRole('dialog',{name:'설정'}).waitFor({state:'detached'});
  // TUX-SP-12 — before "AI 체험하기" is chosen, the choice says a code is needed today and the
  // allowance the Service advertises. Offer off (positive), offer with numbers, offer open: this build
  // has only the code path, so the card keeps the code line and agrees with the screen it leads to.
@@ -33,7 +35,7 @@ try {
  // The note never runs into the choice's accessible name.
  assert.equal(await trialChoice.count(),1);
  await trialChoice.click();
- assert.deepEqual(await p.evaluate(()=>window.sent.map(m=>m.type)),['startReady','openStudioFiles','openStudioSettings']);
+ assert.deepEqual(await p.evaluate(()=>window.sent.map(m=>m.type)),['startReady','openStudioFiles']);
  // The card and the screen it leads to agree: that screen asks for a code.
  await p.getByRole('heading',{name:'내 삶에 AI 더하기'}).waitFor();
  await p.getByText(/지금은 발급받은 체험 코드가 필요합니다/).waitFor();

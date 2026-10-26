@@ -20,6 +20,9 @@ import { randomUUID } from "node:crypto";
 import type { ClassRepo } from "./publish/githubContinue";
 import { JOIN_LINK_COPY, classOfCode, isClassId } from "./joinLink";
 import { passSurface, type PassSurface, type PurchasePathEvent } from "./funnelEvents";
+import { isMinorProfile } from "./sdkCoachHelpers";
+import { parseStartSettingWrite, startSettingsView, type StartSettingsView } from "./startSettings";
+import { TEXT_SIZE_KEY } from "./textSize";
 
 /**
  * "GitHub에서 이어하기" for a code being confirmed (user requirement 2026-10-13): look at the
@@ -753,6 +756,7 @@ export class StartPage {
       ...(freeStart ? { freeStart } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
       ...(this.joinLink ? { joinLink: { ...this.joinLink } } : {}),
+      settings: await this.settingsView(p),
       ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), ...(p.trial && !p.pass ? { trial: p.trial } : {}), ...(isFreeSeat(p) ? { free: true } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
@@ -767,6 +771,21 @@ export class StartPage {
     if (listShown && !this.passListShown) this.purchasePathEvent("pass_list_viewed");
     this.passListShown = listShown;
     await this.panel?.webview.postMessage({ type: "startState", state });
+  }
+
+  /**
+   * CGP-SHELL-R-014 — the learner settings sheet. `profile` is the one this refresh shows (a previewed
+   * candidate or the running seat); without it the seat is read the way refresh reads it.
+   */
+  private async settingsView(profile?: ResolvedProfile | null): Promise<StartSettingsView> {
+    const p = profile !== undefined ? profile : this.candidate?.profile ?? (this.deferProfileUntilEntry ? null : await this.chat.ensureProfile());
+    return startSettingsView({
+      textSize: this.context.globalState?.get(TEXT_SIZE_KEY),
+      reduceMotion: vscode.workspace.getConfiguration("workbench").get("reduceMotion"),
+      notices: vscode.workspace.getConfiguration("hypeproofChat").get("osTaskNotices"),
+      profileMinor: p ? isMinorProfile(p) : null,
+      age: this.context.globalState?.get<unknown>(AGE_KEY),
+    });
   }
 
   private async openUnboundFolder(folder: vscode.Uri): Promise<void> {
@@ -825,9 +844,22 @@ export class StartPage {
     if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchasePayer" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
-    if (msg.type === "openStudioFiles" || msg.type === "openStudioSettings") {
-      await vscode.commands.executeCommand(msg.type === "openStudioFiles" ? "workbench.view.explorer" : "workbench.action.openSettings");
+    if (msg.type === "openStudioFiles") { await vscode.commands.executeCommand("workbench.view.explorer"); return; }
+    // CGP-SHELL-R-014 — the start page "설정" opens the learner sheet (webview-side); the VS Code settings
+    // editor is reached only through the sheet's "고급 설정", re-checked here: a minor seat never gets it.
+    if (msg.type === "openAdvancedSettings") {
+      if ((await this.settingsView()).advanced) await vscode.commands.executeCommand("workbench.action.openSettings");
       return;
+    }
+    if (msg.type === "startSetting") {
+      const write = parseStartSettingWrite(msg);
+      if (!write) return;
+      try {
+        if (write.key === "textSize") { await this.context.globalState.update(TEXT_SIZE_KEY, write.value); void this.chat.refreshConfig(); }
+        else if (write.key === "reduceMotion") await vscode.workspace.getConfiguration("workbench").update("reduceMotion", write.value, true);
+        else await vscode.workspace.getConfiguration("hypeproofChat").update("osTaskNotices", write.value, true);
+      } catch { this.error = "설정을 저장하지 못했어요. 잠시 뒤 다시 골라 주세요."; }
+      await this.refresh(); return;
     }
     if (msg.type==='exportLegacyHistory') {
       const keys=this.context.workspaceState.keys().filter(isLegacyHistoryKey);

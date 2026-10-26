@@ -14438,6 +14438,65 @@
           "path": "docs/testing/chalk-authoring.md"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-START-SETTINGS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Start page learner settings sheet (CGP-SHELL-R-014)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-START-SETTINGS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-START-SETTINGS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/startSettings.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPageProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartSettingsSheet.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-START-SETTINGS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-START-SETTINGS",
+        "ST-IMP-START-SETTINGS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/start-settings-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/start-settings-sheet.smoke.mjs"
+        }
+      ]
     }
   ]
 }
