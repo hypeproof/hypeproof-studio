@@ -800,6 +800,8 @@ export type WebviewMessage = (
   | { type: "pageCardsRequest" }
   | { type: "pageCardOpen"; turnId: string; path: string }
   | { type: "pageCardReveal"; turnId: string; path: string }
+  // CGP-KNOW-D-021 — 열기 / 폴더에서 보기 on a stored "다운로드 완료" line of the open task; the host re-checks the file.
+  | { type: "downloadLineAction"; id: string; action: "open" | "reveal" }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
@@ -964,7 +966,9 @@ export type HostMessage = (
   // of a toast.
   | { type: "denialNotice"; id: string; label: string; at: number }
   // CGP-KNOW-R-021 — how a download from the Studio browser ended (re-checked by the webview).
-  | { type: "downloadNotice"; id: string; icon: string; label: string; state: "done" | "error"; at: number }
+  | { type: "downloadNotice"; id: string; icon: string; label: string; state: "done" | "error" | "running"; at: number }
+  // CGP-KNOW-D-021 — the outcome of a 열기 / 폴더에서 보기 press: a refusal line, or null once it went through.
+  | { type: "downloadLineNotice"; id: string; notice: string | null }
   | { type: "pageAttached"; label: string }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
   | { type: "annotations"; enabled: boolean; annotations: import("./annotationBatch").AnnotationView[] }

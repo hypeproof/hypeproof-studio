@@ -44,12 +44,20 @@ const FAIL_COPY: Record<Exclude<DownloadFailure, DownloadDenyCause>, string> = {
 const DONE_PREFIX = "다운로드 완료: downloads/";
 const FAILED_PREFIX = "다운로드 실패: ";
 const BLOCKED_PREFIX = "다운로드 막힘: ";
+const RUNNING_PREFIX = "다운로드 중: ";
+const RUNNING_MARK = " — 받는 중";
+const CAUSE_SEP = " — ";
 const LABEL_MAX = 400;
 
-/** One timeline line. `done` only after the file was found as a regular file inside `downloads/`. */
+/**
+ * One timeline line. `done` only after the file was found as a regular file inside `downloads/`.
+ * `running` (CGP-KNOW-D-021) is shown while the download runs and is never stored; `key` names
+ * one download so its running line and its final line are the same row.
+ */
 export interface DownloadNotice {
-  state: "done" | "error";
+  state: "done" | "error" | "running";
   label: string;
+  key?: string;
 }
 
 /**
@@ -67,10 +75,60 @@ export function downloadFailedNotice(name: unknown, cause: DownloadFailure): Dow
   return { state: "error", label: `${blocked ? BLOCKED_PREFIX : FAILED_PREFIX}${displayFileName(name)} — ${text}` };
 }
 
+/**
+ * CGP-KNOW-D-021 — the line while the download runs. A percentage only when Chromium reported a
+ * total and the received count fits in it; otherwise "받는 중" with what has arrived, never a
+ * guessed share.
+ */
+export function downloadProgressNotice(name: unknown, received?: unknown, total?: unknown): DownloadNotice {
+  const got = typeof received === "number" && Number.isFinite(received) && received > 0 ? Math.floor(received) : 0;
+  const all = typeof total === "number" && Number.isFinite(total) && total > 0 && got <= total ? Math.floor(total) : 0;
+  const detail = all ? ` ${formatBytes(got)} / ${formatBytes(all)} (${Math.floor((got * 100) / all)}%)` : got ? ` ${formatBytes(got)}` : "";
+  return { state: "running", label: `${RUNNING_PREFIX}${displayFileName(name)}${RUNNING_MARK}${detail}` };
+}
+
 /** Is `label` a download line this host could have written (stored history and webview posts are re-checked)? */
 export function isDownloadNoticeLabel(label: unknown, state: unknown): boolean {
   if (typeof label !== "string" || label.length > LABEL_MAX || new RegExp(UNSAFE_DISPLAY.source, "u").test(label)) return false;
   if (state === "done") return label.startsWith(DONE_PREFIX) && label.length > DONE_PREFIX.length;
-  if (state === "error") return (label.startsWith(FAILED_PREFIX) || label.startsWith(BLOCKED_PREFIX)) && label.includes(" — ");
+  if (state === "error") return (label.startsWith(FAILED_PREFIX) || label.startsWith(BLOCKED_PREFIX)) && label.includes(CAUSE_SEP);
+  if (state === "running") return label.startsWith(RUNNING_PREFIX) && label.includes(RUNNING_MARK);
   return false;
 }
+
+/** CGP-KNOW-D-021 — the parts of a download line, for the timeline row (status word, name, detail). */
+export interface DownloadLineView {
+  kind: "done" | "failed" | "blocked" | "running";
+  status: string;
+  name: string;
+  detail: string;
+}
+
+export function downloadLineView(label: unknown, state: unknown): DownloadLineView | null {
+  if (!isDownloadNoticeLabel(label, state)) return null;
+  const text = label as string;
+  if (state === "done") {
+    const m = /^(.+) \(([^()]*)\)$/su.exec(text.slice(DONE_PREFIX.length));
+    return m ? { kind: "done", status: "다운로드 완료", name: m[1], detail: m[2] } : null;
+  }
+  if (state === "running") {
+    const at = text.lastIndexOf(RUNNING_MARK);
+    if (at < RUNNING_PREFIX.length) return null;
+    const progress = text.slice(at + RUNNING_MARK.length).trim();
+    return { kind: "running", status: "다운로드 중", name: text.slice(RUNNING_PREFIX.length, at), detail: progress ? `받는 중 · ${progress}` : "받는 중" };
+  }
+  const blocked = text.startsWith(BLOCKED_PREFIX);
+  const prefix = blocked ? BLOCKED_PREFIX : FAILED_PREFIX;
+  const at = text.lastIndexOf(CAUSE_SEP);
+  if (at < prefix.length) return null;
+  return { kind: blocked ? "blocked" : "failed", status: blocked ? "다운로드 막힘" : "다운로드 실패", name: text.slice(prefix.length, at), detail: text.slice(at + CAUSE_SEP.length) };
+}
+
+
+/** CGP-KNOW-D-021 — the two buttons on a "다운로드 완료" line and what a refused press says. */
+export const DOWNLOAD_ACTION_COPY = {
+  open: "열기",
+  reveal: "폴더에서 보기",
+  missing: "downloads 폴더에서 이 파일을 찾지 못했어요. 옮겨졌거나 이름이 바뀌었을 수 있어요.",
+  denied: "지금은 이 파일을 열 수 없어요.",
+} as const;

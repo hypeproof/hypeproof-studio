@@ -231,7 +231,7 @@ import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { BrowserDownloadWatcher } from "./browserDownloadWatcher";
-import { downloadPolicy, type DownloadNotice } from "./browserDownloads";
+import { DOWNLOAD_ACTION_COPY, downloadPolicy, resolveDownloadedFile, type DownloadNotice } from "./browserDownloads";
 import { LiveServer } from "./liveServer";
 import { PreviewSurfaceRequests } from "./previewSurfaceRequests";
 import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
@@ -3790,10 +3790,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return { store, taskId: store?.getView().activeTaskId ?? undefined, activityId: activityConnections(this.context)?.scope, historyKey: this.historyKey() };
   }
 
-  /** Same delivery as a denial notice: persisted in the task where the download began, posted only if it is still open. */
+  /**
+   * Same delivery as a denial notice: persisted in the task where the download began, posted only if it is still open.
+   * CGP-KNOW-D-021: a running line is posted only (never stored) under the id its final line will take, so the
+   * webview replaces it in place; a reload or a task switch drops it until the final line arrives.
+   */
   private postDownloadNotice(notice: DownloadNotice, dest: DownloadDestination): Promise<void> {
-    const id = `download-${randomId()}`;
-    const message: ChatMessage = { id, role: 'tool', content: '', createdAt: Date.now(), tool: { icon: '📄', label: notice.label, state: notice.state } };
+    const id = this.downloadLineId(notice);
+    const createdAt = Date.now();
+    const sameView = () => this.historyKey() === dest.historyKey && activityConnections(this.context)?.scope === dest.activityId && this.currentTaskStore?.()?.getView().activeTaskId === dest.taskId;
+    if (notice.state === 'running') {
+      const show = async () => { if (sameView()) await this.post({ type: 'downloadNotice', id, icon: '📄', label: notice.label, state: 'running', at: createdAt }); };
+      this.downloadWrites = (this.downloadWrites ?? Promise.resolve()).then(show).catch(() => undefined);
+      return this.downloadWrites;
+    }
+    const message: ChatMessage = { id, role: 'tool', content: '', createdAt, tool: { icon: '📄', label: notice.label, state: notice.state } };
     const write = async () => {
       if (dest.store) {
         if (!dest.taskId) throw Error('missing task');
@@ -3802,7 +3813,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const current = this.context.workspaceState.get<ChatMessage[]>(dest.historyKey, []);
         await this.context.workspaceState.update(dest.historyKey, clampTimeline([...current, message], HISTORY_MAX));
       }
-      if (this.historyKey() !== dest.historyKey || activityConnections(this.context)?.scope !== dest.activityId || this.currentTaskStore?.()?.getView().activeTaskId !== dest.taskId) return;
+      if (!sameView()) return;
       await this.post({ type: 'downloadNotice', id, icon: '📄', label: notice.label, state: notice.state, at: message.createdAt });
     };
     const operation = (this.downloadWrites ?? Promise.resolve()).then(write);
@@ -3814,6 +3825,40 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private downloadWrites?: Promise<void>;
+  /** CGP-KNOW-D-021 — the row id of each download still running (its key from the tracker), bounded. */
+  private downloadLineIds = new Map<string, string>();
+
+  private downloadLineId(notice: DownloadNotice): string {
+    const ids = (this.downloadLineIds ??= new Map());
+    const key = notice.key;
+    const id = (key && ids.get(key)) || `download-${randomId()}`;
+    if (key && notice.state === 'running') {
+      ids.set(key, id);
+      while (ids.size > 64) ids.delete(ids.keys().next().value as string);
+    } else if (key) ids.delete(key);
+    return id;
+  }
+
+  /**
+   * CGP-KNOW-D-021 — 열기 opens the downloaded file in a Studio editor tab (never the OS default app, never run);
+   * 폴더에서 보기 shows it in the OS file manager. Only a stored "다운로드 완료" line of the open task counts, and
+   * the file is re-checked against the folder in force now (browserDownloads resolveDownloadedFile).
+   */
+  private async handleDownloadLineAction(msg: { id?: unknown; action?: unknown }): Promise<void> {
+    const id = msg.id, action = msg.action;
+    if (typeof id !== 'string' || !id.startsWith('download-') || id.length > 80 || (action !== 'open' && action !== 'reveal')) return;
+    const line = this.getHistory().find((m) => m.id === id && m.role === 'tool' && m.tool?.state === 'done');
+    if (!line?.tool) return;
+    const file = resolveDownloadedFile(this.browserDownloadPolicy(), line.tool.label);
+    if (!file.ok) {
+      await this.post({ type: 'downloadLineNotice', id, notice: file.cause === 'denied' ? DOWNLOAD_ACTION_COPY.denied : DOWNLOAD_ACTION_COPY.missing });
+      return;
+    }
+    await this.post({ type: 'downloadLineNotice', id, notice: null });
+    try {
+      await vscode.commands.executeCommand(action === 'open' ? 'vscode.open' : 'revealFileInOS', vscode.Uri.file(file.abs));
+    } catch { /* the press passed the check; a failed open adds no claim */ }
+  }
 
   // ── Curriculum Runtime (cr-browser, #1391) ────────────────────────────────
 
@@ -7101,6 +7146,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "pageCardReveal":
         await this.handlePageCardMessage(msg);
         return;
+      case "downloadLineAction": await this.handleDownloadLineAction(msg); return;
       case "turnRevert":
       case "turnKeep":
       case "turnReviewClose":

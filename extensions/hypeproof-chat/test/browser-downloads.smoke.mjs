@@ -2,12 +2,13 @@
 // what the timeline line says, against a real temp workspace (symlinks included). The browser
 // half (real Chromium writing the file) is browser-downloads-browser.smoke.mjs.
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   downloadPolicy, DownloadTracker, displayFileName, plainBaseName, isDownloadNoticeLabel,
   downloadBehaviorCommand, downloadFailedNotice, downloadDoneNotice,
+  downloadProgressNotice, downloadLineView, resolveDownloadedFile, PROGRESS_INTERVAL_MS,
 } from '../src/browserDownloads.ts';
 import { TaskWorkspaceStore } from '../src/taskWorkspaceStore.ts';
 import { BrowserDownloadWatcher } from '../src/browserDownloadWatcher.ts';
@@ -69,23 +70,30 @@ try {
   // ── tracker: one honest line per download ─────────────────────────────────
   const dir = join(root, 'downloads');
   let applied = { behavior: 'allow', dir };
-  const lines = [];
-  let dest = 'task-1';
-  const tracker = new DownloadTracker({ policy: () => applied, capture: () => dest, notify: (n, d) => lines.push({ ...n, dest: d }) });
+  const lines = [], running = [];
+  let dest = 'task-1', clock = 0;
+  // Final lines go to `lines` (key dropped: checked on its own below); running lines to `running`.
+  const tracker = new DownloadTracker({ policy: () => applied, capture: () => dest, now: () => clock,
+    notify: ({ key, ...n }, d) => { assert.equal(typeof key, 'string', 'every line names its download'); (n.state === 'running' ? running : lines).push({ ...n, dest: d, key }); } });
+  const finals = () => lines.map(({ key, ...l }) => l);
   const begin = (guid, name) => tracker.handle({ method: 'Page.downloadWillBegin', params: { guid, suggestedFilename: name, url: 'https://example.test/x' } });
   const end = (guid, state) => tracker.handle({ method: 'Page.downloadProgress', params: { guid, state, receivedBytes: 1, totalBytes: 1 } });
 
   begin('g1', 'notes.txt'); dest = 'task-2'; // the learner switches tasks mid-download
   tracker.handle({ method: 'Page.downloadProgress', params: { guid: 'g1', state: 'inProgress' } });
-  assert.equal(lines.length, 0, 'no line while in progress');
+  assert.equal(lines.length, 0, 'no final line while in progress');
+  // CGP-KNOW-D-021: a running line at once ("받는 중", no figures), bound to the task where it began.
+  assert.deepEqual(running.map(({ key, ...r }) => r), [{ state: 'running', label: '다운로드 중: notes.txt — 받는 중', dest: 'task-1' }]);
   writeFileSync(join(dir, 'notes.txt'), 'hello');
   end('g1', 'completed');
-  assert.deepEqual(lines.pop(), { state: 'done', label: '다운로드 완료: downloads/notes.txt (5B)', dest: 'task-1' }, 'the line goes to the task where it began');
+  assert.equal(lines.at(-1).key, running[0].key, 'the final line replaces the running line (same key)');
+  assert.deepEqual(finals().pop(), { state: 'done', label: '다운로드 완료: downloads/notes.txt (5B)', dest: 'task-1' }, 'the line goes to the task where it began');
+  lines.length = 0; running.length = 0;
   end('g1', 'completed');
   assert.equal(lines.length, 0, 'one line per download');
 
   begin('g2', 'big.bin'); end('g2', 'canceled');
-  assert.deepEqual(lines.pop(), { state: 'error', label: '다운로드 실패: big.bin — 받는 중에 멈췄어요(취소되었거나 연결이 끊겼어요). 다시 받아 보세요.', dest: 'task-2' });
+  assert.deepEqual((({ key, ...l }) => l)(lines.pop()), { state: 'error', label: '다운로드 실패: big.bin — 받는 중에 멈췄어요(취소되었거나 연결이 끊겼어요). 다시 받아 보세요.', dest: 'task-2' });
 
   begin('g3', 'ghost.txt'); end('g3', 'completed');
   assert.equal(lines.pop().label, '다운로드 실패: ghost.txt — 받은 파일을 downloads 폴더에서 찾지 못했어요.', 'completed but absent is not a success');
@@ -126,6 +134,73 @@ try {
   for (const params of [{}, { guid: 5 }, { guid: '' }, { guid: 'x'.repeat(200) }]) tracker.handle({ method: 'Page.downloadWillBegin', params });
   assert.equal(lines.length, 0);
 
+  // ── CGP-KNOW-D-021: the running line ─────────────────────────────────────
+  {
+    running.length = 0; lines.length = 0; clock = 10_000;
+    const prog = (guid, receivedBytes, totalBytes) => tracker.handle({ method: 'Page.downloadProgress', params: { guid, state: 'inProgress', receivedBytes, totalBytes } });
+    begin('p1', 'movie.mp4');
+    clock += PROGRESS_INTERVAL_MS - 1; prog('p1', 1024, 0);
+    assert.equal(running.length, 1, 'refreshed at most once per interval');
+    clock += 1; prog('p1', 2 * 1024 * 1024, 0);
+    assert.equal(running.at(-1).label, '다운로드 중: movie.mp4 — 받는 중 2.0MB', 'total unknown: what arrived, no percentage');
+    clock += PROGRESS_INTERVAL_MS; prog('p1', 1024 * 1024, 4 * 1024 * 1024);
+    assert.equal(running.at(-1).label, '다운로드 중: movie.mp4 — 받는 중 1.0MB / 4.0MB (25%)', 'total known: a percentage');
+    clock += PROGRESS_INTERVAL_MS; prog('p1', 9 * 1024 * 1024, 4 * 1024 * 1024);
+    assert.ok(!running.at(-1).label.includes('%'), 'received above the total: no invented share');
+    clock += PROGRESS_INTERVAL_MS; prog('p1', -5, Number.NaN);
+    assert.equal(running.at(-1).label, '다운로드 중: movie.mp4 — 받는 중', 'hostile counts: just 받는 중');
+    assert.ok(running.every((r) => r.key === running[0].key && r.dest === 'task-2'));
+    end('p1', 'canceled');
+    assert.equal(lines.at(-1).key, running[0].key, 'a failure replaces the running line');
+    assert.equal(lines.at(-1).state, 'error', 'and is a stored final line');
+    const n = running.length; clock += 10 * PROGRESS_INTERVAL_MS; prog('p1', 1, 2);
+    assert.equal(running.length, n, 'no running line after the end');
+    // Denied: no running line, only the blocked one.
+    applied = { behavior: 'deny', cause: 'safe-session' }; begin('p2', 'x.exe');
+    assert.equal(running.length, n);
+    applied = { behavior: 'allow', dir };
+    // Two downloads keep apart.
+    begin('p3', 'a.txt'); begin('p4', 'b.txt');
+    assert.notEqual(running.at(-1).key, running.at(-2).key);
+    tracker.flush();
+    running.length = 0; lines.length = 0;
+  }
+  assert.equal(downloadProgressNotice(`a${cp(0x202e)}b`).label, '다운로드 중: ab — 받는 중', 'names are cleaned');
+  assert.ok(isDownloadNoticeLabel('다운로드 중: a.txt — 받는 중', 'running'));
+  assert.ok(!isDownloadNoticeLabel('다운로드 중: a.txt — 받는 중', 'done'));
+  assert.ok(!isDownloadNoticeLabel('다운로드 중: a.txt', 'running'));
+
+  // ── CGP-KNOW-D-021: the row reads the parts back ─────────────────────────
+  assert.deepEqual(downloadLineView('다운로드 완료: downloads/a (1).txt (2.0KB)', 'done'), { kind: 'done', status: '다운로드 완료', name: 'a (1).txt', detail: '2.0KB' });
+  assert.deepEqual(downloadLineView('다운로드 중: x — 받는 중.zip — 받는 중 1.0MB / 4.0MB (25%)', 'running'), { kind: 'running', status: '다운로드 중', name: 'x — 받는 중.zip', detail: '받는 중 · 1.0MB / 4.0MB (25%)' });
+  assert.deepEqual(downloadLineView('다운로드 중: x.zip — 받는 중', 'running').detail, '받는 중');
+  assert.deepEqual(downloadLineView(downloadFailedNotice('a — b.txt', 'safe-session').label, 'error'), { kind: 'blocked', status: '다운로드 막힘', name: 'a — b.txt', detail: '수업용 안전 브라우저에서는 파일을 내려받을 수 없어요.' });
+  assert.equal(downloadLineView(downloadFailedNotice('a.txt', 'interrupted').label, 'error').kind, 'failed');
+  assert.equal(downloadLineView('파일을 열었어요', 'done'), null);
+  assert.equal(downloadLineView(downloadDoneNotice('a.txt', 1).label, 'error'), null);
+
+  // ── CGP-KNOW-D-021: the file behind 열기 / 폴더에서 보기 ────────────────────
+  {
+    const act = ws('act'); const adir = join(act, 'downloads'); mkdirSync(adir);
+    const allow = { behavior: 'allow', dir: adir };
+    writeFileSync(join(adir, 'ok.txt'), 'ok');
+    assert.deepEqual(resolveDownloadedFile(allow, downloadDoneNotice('ok.txt', 2).label), { ok: true, abs: join(adir, 'ok.txt') });
+    assert.deepEqual(resolveDownloadedFile({ behavior: 'deny', cause: 'safe-session' }, downloadDoneNotice('ok.txt', 2).label), { ok: false, cause: 'denied' }, 'denied now: never opened');
+    assert.deepEqual(resolveDownloadedFile(allow, downloadDoneNotice('gone.txt', 2).label), { ok: false, cause: 'missing' });
+    assert.deepEqual(resolveDownloadedFile(allow, downloadFailedNotice('ok.txt', 'interrupted').label), { ok: false, cause: 'missing' }, 'only a done line');
+    assert.deepEqual(resolveDownloadedFile(allow, '다운로드 완료: downloads/../outside/secret.txt (1B)'), { ok: false, cause: 'missing' }, 'no climbing');
+    writeFileSync(join(outside, 'secret.txt'), 's'); symlinkSync(join(outside, 'secret.txt'), join(adir, 'lnk.txt'));
+    assert.deepEqual(resolveDownloadedFile(allow, downloadDoneNotice('lnk.txt', 1).label), { ok: false, cause: 'missing' }, 'a link to outside is refused');
+    writeFileSync(join(outside, 'hard.txt'), 'h'); linkSync(join(outside, 'hard.txt'), join(adir, 'hard.txt'));
+    assert.deepEqual(resolveDownloadedFile(allow, downloadDoneNotice('hard.txt', 1).label), { ok: false, cause: 'missing' }, 'a hard link to a file outside is refused');
+    mkdirSync(join(adir, 'sub.txt'));
+    assert.deepEqual(resolveDownloadedFile(allow, downloadDoneNotice('sub.txt', 1).label), { ok: false, cause: 'missing' }, 'a folder is not a file');
+    assert.deepEqual(resolveDownloadedFile(allow, downloadDoneNotice('가'.repeat(120), 1).label), { ok: false, cause: 'missing' }, 'a shortened name is not guessed');
+    // downloads/ swapped for a link to outside after the line was written.
+    const act2 = ws('act2'); const adir2 = join(act2, 'downloads'); symlinkSync(outside, adir2);
+    assert.deepEqual(resolveDownloadedFile({ behavior: 'allow', dir: adir2 }, downloadDoneNotice('secret.txt', 1).label), { ok: false, cause: 'missing' }, 'a linked downloads folder is refused');
+  }
+
   // ── watcher lifecycle with a scripted session ─────────────────────────────
   const fakeSession = (log, { failApply = 0, onEnable, applyDelays = [] } = {}) => {
     let listener = () => {}, closer = () => {};
@@ -156,7 +231,7 @@ try {
     // One failed apply is retried; a session drop flushes its running downloads.
     const log = [], got = [];
     const s = fakeSession(log, { failApply: 1 });
-    const w = new BrowserDownloadWatcher({ policy: () => ({ behavior: 'allow', dir }), capture: () => 't', notify: (n) => got.push(n.label), isOpen: () => true, attach: async () => s });
+    const w = new BrowserDownloadWatcher({ policy: () => ({ behavior: 'allow', dir }), capture: () => 't', notify: (n) => { if (n.state !== 'running') got.push(n.label); }, isOpen: () => true, attach: async () => s });
     await w.watch('tab');
     assert.deepEqual(w.appliedFor('tab'), { behavior: 'allow', dir });
     assert.equal(log.filter((l) => l[0] === 'Page.setDownloadBehavior').length, 2);

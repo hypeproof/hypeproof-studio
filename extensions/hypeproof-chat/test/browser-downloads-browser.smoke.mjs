@@ -84,12 +84,13 @@ try {
   const outside = join(base, 'outside'); mkdirSync(outside); symlinkSync(outside, join(linked, 'downloads'));
 
   let state = { safeSession: false, workspaceRoot: wsA };
-  const lines = [];
+  const lines = [], runs = [];
   const open = new Set();
   const watcher = new BrowserDownloadWatcher({
     policy: () => downloadPolicy(state),
     capture: () => 'task',
-    notify: (n) => lines.push(n),
+    // CGP-KNOW-D-021: running lines (never stored) apart from the final ones; keys checked in 1.
+    notify: ({ key, ...n }) => { if (n.state === 'running') runs.push({ ...n, key }); else lines.push(n.label.startsWith('다운로드 완료: downloads/report.txt') ? { ...n, key } : n); },
     isOpen: (t) => open.has(t),
   });
   const t1 = tab(); open.add(t1);
@@ -103,7 +104,11 @@ try {
 
   // 1. Completed → file in downloads/ with its name, one done line, nothing opened.
   await go('/file?name=report.txt&body=hello');
-  assert.deepEqual(await take(), [{ state: 'done', label: '다운로드 완료: downloads/report.txt (5B)' }]);
+  const [report] = await take();
+  assert.deepEqual(runs[0] && { state: runs[0].state, label: runs[0].label }, { state: 'running', label: '다운로드 중: report.txt — 받는 중' }, 'real Chromium: a running line first');
+  assert.equal(report.key, runs[0].key, 'the done line takes the running line\'s place');
+  delete report.key;
+  assert.deepEqual([report], [{ state: 'done', label: '다운로드 완료: downloads/report.txt (5B)' }]);
   assert.equal(readFileSync(join(wsA, 'downloads', 'report.txt'), 'utf8'), 'hello');
 
   // 1b. A Korean name (RFC 5987) is found on disk as Chromium wrote it.

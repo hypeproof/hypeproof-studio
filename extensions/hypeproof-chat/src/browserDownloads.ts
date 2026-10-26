@@ -13,7 +13,7 @@
 // with a real temp folder and driven against headless Chromium in the browser smoke.
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { downloadDoneNotice, downloadFailedNotice, type DownloadDenyCause, type DownloadNotice } from "./browserDownloadNotice.ts";
+import { downloadDoneNotice, downloadFailedNotice, downloadLineView, downloadProgressNotice, type DownloadDenyCause, type DownloadNotice } from "./browserDownloadNotice.ts";
 
 export * from "./browserDownloadNotice.ts";
 
@@ -88,9 +88,15 @@ interface Pending<D> {
   name: unknown;
   policy: DownloadPolicy;
   dest: D;
+  key: string;
+  /** When the last running line went out (CGP-KNOW-D-021). */
+  shownAt: number;
 }
 
 const TRACK_MAX = 64;
+/** CGP-KNOW-D-021 — a running line is refreshed at most this often, so the timeline does not churn. */
+export const PROGRESS_INTERVAL_MS = 1000;
+let trackerSerial = 0;
 
 export interface DownloadTrackerDeps<D> {
   /** null: no behaviour is known to be in force, so the browser's own default handles it. */
@@ -98,6 +104,7 @@ export interface DownloadTrackerDeps<D> {
   capture: () => D;
   notify: (notice: DownloadNotice, dest: D) => void;
   fsx?: FsLike;
+  now?: () => number;
 }
 
 /**
@@ -107,9 +114,13 @@ export interface DownloadTrackerDeps<D> {
  * the folder Chromium was actually given, not whatever the workspace is by the time it ends.
  * `capture()` records the destination (activity/task) when the download begins; the line goes
  * there even if the learner switches tasks before it finishes.
+ *
+ * CGP-KNOW-D-021: an allowed download also gets a running line ("받는 중") at once and at most
+ * every PROGRESS_INTERVAL_MS after; every line of one download carries the same `key`.
  */
 export class DownloadTracker<D> {
   private readonly pending = new Map<string, Pending<D>>();
+  private readonly serial = ++trackerSerial;
 
   private readonly deps: DownloadTrackerDeps<D>;
 
@@ -126,26 +137,40 @@ export class DownloadTracker<D> {
       if (!policy) return;
       const dest = this.deps.capture();
       const name = event.params.suggestedFilename;
+      const key = `${this.serial}:${guid}`;
       if (policy.behavior === "deny") {
         // Chromium cancels it; the later `canceled` progress event finds no pending entry.
-        this.deps.notify(downloadFailedNotice(name, policy.cause), dest);
+        this.deps.notify({ ...downloadFailedNotice(name, policy.cause), key }, dest);
         return;
       }
-      this.pending.set(guid, { name, policy, dest });
+      const item: Pending<D> = { name, policy, dest, key, shownAt: this.now() };
+      this.pending.set(guid, item);
       while (this.pending.size > TRACK_MAX) this.pending.delete(this.pending.keys().next().value as string);
+      this.deps.notify({ ...downloadProgressNotice(name), key }, dest);
       return;
     }
     if (event.method !== "Page.downloadProgress") return;
     const state = event.params.state;
-    if (state !== "completed" && state !== "canceled") return;
     const item = this.pending.get(guid);
     if (!item) return; // began before this session attached, or already reported
-    this.pending.delete(guid);
-    if (state === "canceled") {
-      this.deps.notify(downloadFailedNotice(item.name, "interrupted"), item.dest);
+    if (state === "inProgress") {
+      const now = this.now();
+      if (now - item.shownAt < PROGRESS_INTERVAL_MS) return;
+      item.shownAt = now;
+      this.deps.notify({ ...downloadProgressNotice(item.name, event.params.receivedBytes, event.params.totalBytes), key: item.key }, item.dest);
       return;
     }
-    this.deps.notify(this.verify(item), item.dest);
+    if (state !== "completed" && state !== "canceled") return;
+    this.pending.delete(guid);
+    if (state === "canceled") {
+      this.deps.notify({ ...downloadFailedNotice(item.name, "interrupted"), key: item.key }, item.dest);
+      return;
+    }
+    this.deps.notify({ ...this.verify(item), key: item.key }, item.dest);
+  }
+
+  private now(): number {
+    return (this.deps.now ?? Date.now)();
   }
 
   /**
@@ -155,7 +180,7 @@ export class DownloadTracker<D> {
   flush(): void {
     const items = [...this.pending.values()];
     this.pending.clear();
-    for (const item of items) this.deps.notify(downloadFailedNotice(item.name, "unobserved"), item.dest);
+    for (const item of items) this.deps.notify({ ...downloadFailedNotice(item.name, "unobserved"), key: item.key }, item.dest);
   }
 
   /** The completed file must be a regular file whose real path is `<dir>/<name>`. */
@@ -174,6 +199,30 @@ export class DownloadTracker<D> {
     } catch {
       return downloadFailedNotice(item.name, "not-found");
     }
+  }
+}
+
+/**
+ * CGP-KNOW-D-021 — the file behind a stored "다운로드 완료" line, for its 열기 / 폴더에서 보기
+ * buttons. Re-checked at every press against the folder in force now: `downloads/` must be that
+ * real folder and the file a regular file whose real path is `<dir>/<name>` (a link, a moved or
+ * renamed file, or a name the line had to shorten or clean is refused, never guessed).
+ */
+export type DownloadedFile = { ok: true; abs: string } | { ok: false; cause: "denied" | "missing" };
+
+export function resolveDownloadedFile(policy: DownloadPolicy, label: unknown, fsx: FsLike = fs): DownloadedFile {
+  if (policy.behavior !== "allow") return { ok: false, cause: "denied" };
+  const view = downloadLineView(label, "done");
+  const base = view ? plainBaseName(view.name) : null;
+  if (base === null || downloadsFolderState(policy.dir, fsx) !== "ok") return { ok: false, cause: "missing" };
+  const file = path.join(policy.dir, base);
+  try {
+    const st = fsx.lstatSync(file);
+    // A hard link is a second name for a file that may live outside downloads/ (same rule as 내 작품 thumbnails).
+    if (st.isSymbolicLink() || !st.isFile() || st.nlink !== 1 || fsx.realpathSync(file) !== file) return { ok: false, cause: "missing" };
+    return { ok: true, abs: file };
+  } catch {
+    return { ok: false, cause: "missing" };
   }
 }
 

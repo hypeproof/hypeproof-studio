@@ -62,6 +62,8 @@
   border: 0; background: transparent; font-size: var(--hp-font-caption); color: var(--tw-muted); gap: var(--ds-c-studio-chatdetails-space-2);
 }
 .hps-shell[data-chat-detail="personal"] .hps-tool-label { overflow-wrap: anywhere; min-width: 0; }
+/* CGP-KNOW-D-021 — a download line follows the personal type scale (14px caption, under the answer body). */
+.hps-shell[data-chat-detail="personal"] .hps-download-line { font-size: var(--hp-font-caption); }
 /* REQ-STUDIO-LONG-STEP-HINT — the long-step hint follows the personal type scale (≥14px). */
 .hps-shell[data-chat-detail="personal"] .hps-long-step { font-size: var(--hp-font-caption); color: var(--tw-muted); border-left-color: var(--tw-line); }
 .hps-shell[data-chat-detail="personal"] .hps-tool-mark { color: inherit; }

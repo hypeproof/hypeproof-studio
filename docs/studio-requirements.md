@@ -6861,9 +6861,7 @@ that task is open):
 
 Names in lines drop C0/C1 controls, bidi marks/overrides/isolates, U+2028/2029, zero-width
 characters and the BOM, and are capped at 80 characters. The task store and the webview
-accept only labels of this shape (`isDownloadNoticeLabel`). The line reuses the existing
-tool-row presentation (file icon, 완료/실패 mark); CGP-KNOW-D-021's 열기/폴더에서 보기
-actions are a separate design row and are not built here.
+accept only labels of this shape (`isDownloadNoticeLabel`).
 
 Known limits: downloads that start in a tab before its session is attached (the first
 moment after a tab opens), a tab whose behaviour send failed twice, and tabs on a build
@@ -6879,6 +6877,48 @@ change, three denials, one of two tabs closing, another feature's session closin
 closed mid-download; fails under
 `FOCUS_REQUIRE_BROWSER=1` without a browser). This supports PI#1: what the learner takes
 from the web stays in their own activity, visibly, and nothing runs on its own.
+
+### Download line presentation (CGP-KNOW-D-021)
+
+REQ-STUDIO-BROWSER-DOWNLOAD-LINE (DES-KNOW-38 / CGP-KNOW-D-021, PI#1). A download line is a
+quiet line in the timeline, subordinate to the answers: no box, no bubble, secondary (muted)
+text, a status mark with a Korean name (완료 / 실패 / 막힘 / 받는 중), the status word, the file
+name and a detail. Personal chat draws it at the 14px learner caption, below the 16px answer
+body (the register's 13px loses to the 14px learner minimum); the classroom chat, whose
+answers are 13px, draws it at that 13px (never above the answers, never down to its 12px tool
+rows). `extensions/hypeproof-chat/webview-ui/src/DownloadLine.tsx`.
+
+- 다운로드 완료: name and size, then 열기 and 폴더에서 보기, each a 44px target with the focus
+  ring. 열기 opens the file in a Studio editor tab (`vscode.open`), never the OS default app,
+  and never runs it; 폴더에서 보기 calls `revealFileInOS`. The webview sends only the line id;
+  the host acts only for a stored done line of the open task and re-checks the file at every
+  press against the policy in force now (`resolveDownloadedFile`): `downloads/` must be the real
+  folder and the file a regular file whose real path is `downloads/<name>`. A link, a moved,
+  renamed or deleted file, or a name the line had to shorten or clean is refused with
+  "downloads 폴더에서 이 파일을 찾지 못했어요. 옮겨졌거나 이름이 바뀌었을 수 있어요." under the line;
+  a denied policy now (no profile, safe session, no workspace, bad folder) gives
+  "지금은 이 파일을 열 수 없어요." A press that goes through clears the line.
+- 다운로드 실패 / 막힘: name and cause; stored, so it persists across reloads and task switches.
+  No buttons.
+- 다운로드 중 (new): an allowed download gets a running line at once ("받는 중") and at most once
+  a second after (`PROGRESS_INTERVAL_MS`). It shows what has arrived and a percentage only when
+  Chromium reported a total and the received count fits in it; with no total it shows no
+  percentage. It is posted under the id its final line takes, so the final line replaces it in
+  place, and it is never stored: a reload or a task switch drops it until the final line
+  arrives. It is shown only while the task where the download began is open. Its figures are
+  hidden from the live region, so a screen reader hears the start and the end, not each refresh.
+  A running line does not reset the long-step hint of a running turn.
+
+Seats: every seat that shows the timeline (personal, trial, pass, classroom, lesson,
+instructor); a safe-session cohort never has an allowed download, so it sees only blocked
+lines. Tests: `test/browser-downloads.smoke.mjs` (running lines, keys, throttle, parsing,
+`resolveDownloadedFile` against links, folders and climbs), `test/download-line-actions.smoke.mjs`
+(the real provider: running lines posted not stored, final line in place, both buttons reach
+`vscode.open` / `revealFileInOS` only for the checked file, refusals) and
+`test/download-line-browser.smoke.mjs` (the built webview in headless Chromium, both seats, dark
+and light, 800 and 1420 px and forced colours: computed sizes and colours, 44px targets, focus
+ring, persistence, 받는 중 without a percentage, in-place replacement; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser).
 
 ## Learner nickname (CGP-KNOW-R-032)
 

@@ -134,6 +134,8 @@ type Action =
   | { type: "streamChunk"; delta: string }
   | { type: "streamCitations"; citations: Citation[] }
   | { type: "toolLog"; entry: ToolEntry }
+  // CGP-KNOW-D-021 — a download line lands like a tool row but is not turn progress (no long-step reset).
+  | { type: "downloadLine"; entry: ToolEntry }
   | { type: "pageAttached"; label: string }
   | { type: "annotations"; enabled: boolean; annotations: import("../../src/annotationBatch").AnnotationView[] }
   | { type: "elementAttached"; element: ElementPreview | null }
@@ -237,6 +239,8 @@ function reducer(state: State, action: Action): State {
     case "toolLog":
       // 같은 id 는 제자리 갱신(running → done/error), 새 id 는 지금 이 자리에 삽입.
       return { ...state, progressSince: Date.now(), timeline: timelineTool(state.timeline, action.entry, Date.now()) };
+    case "downloadLine":
+      return { ...state, timeline: timelineTool(state.timeline, action.entry, Date.now()) };
     case "pageAttached":
       // #308 — inline notice; cleared on the next send (userSent) only.
       return { ...state, pageNotice: action.label };
@@ -547,7 +551,7 @@ export function App() {
           if (storedDenialNotice(msg.label)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: '', label: msg.label, state: 'error', at: msg.at } });
           break;
         case "downloadNotice":
-          if (isDownloadNoticeLabel(msg.label, msg.state)) dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, at: msg.at } });
+          if (isDownloadNoticeLabel(msg.label, msg.state)) dispatch({ type: "downloadLine", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, at: msg.at } });
           break;
         case "pageAttached": dispatch({ type: "pageAttached", label: msg.label }); break;
         case "annotations": dispatch({ type: "annotations", enabled: msg.enabled, annotations: msg.annotations }); break;
