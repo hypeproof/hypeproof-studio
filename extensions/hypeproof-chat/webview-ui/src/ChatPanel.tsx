@@ -22,6 +22,8 @@ import { aiCapabilityState } from "../../src/aiCapabilities";
 import { PageAttachment } from './PageAttachment';
 import { UndoToast, newUndoId, offerUndo, settleUndo } from './UndoToast';
 import { denialNoticeView, storedDenialNotice } from "../../src/denialNotice";
+import { downloadLineView } from "../../src/browserDownloadNotice";
+import { DownloadLine } from "./DownloadLine";
 import { ActivityStatus } from "./ActivityStatus";
 import { accessFailure, type ActivityUnavailable } from "../../src/activityAvailability";
 import { useAttachmentSendPreparation } from "./AttachmentSendPreparation";
@@ -2955,6 +2957,9 @@ export function ToolLine({ message, onReport }: { message: ChatMessage; onReport
       <button type="button" onClick={onReport}>{view.action}</button>
     </div>;
   }
+  // CGP-KNOW-D-021 — a Studio-browser download is a quiet secondary line, not a tool row.
+  const download = message.id.startsWith('download-') ? downloadLineView(t.label, t.state) : null;
+  if (download) return <DownloadLine id={message.id} view={download} />;
   // This row is a waiting indicator, never evidence that a file was changed.
   // Hide completed waits from old histories too; retain the stored timeline.
   if (message.id.startsWith('pending-') && t.state === 'done') return null;

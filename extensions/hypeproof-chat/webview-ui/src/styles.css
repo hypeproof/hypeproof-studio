@@ -1448,6 +1448,37 @@ html, body, #root {
 .hps-page-card-actions button:active { background-color: var(--hp-bg-control-pressed); }
 .hps-page-card-actions button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 
+/* CGP-KNOW-D-021 (DES-KNOW-38) — a Studio-browser download line: secondary text, no box, no bubble.
+   Classroom: the chat's own 13px (its answers' size; its 12px tool rows would undercut the register).
+   Personal: the 14px learner caption
+   (chatDetails.css; 14px wins over the register's 13px), below the 16px answer body. 열기 and
+   폴더에서 보기 are 44px targets; a refusal shows under the line. */
+.hps-download-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15);
+  min-width: 0; max-width: 100%; box-sizing: border-box;
+  color: var(--hp-text-muted-default); font-size: inherit; line-height: var(--hp-leading-label);
+}
+.hps-download-text { flex: 0 1 auto; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.hps-download-mark { display: inline-flex; vertical-align: middle; margin-inline-end: var(--ds-c-studio-styles-space-15); }
+.hps-download-status { font-weight: var(--ds-c-studio-styles-typography-7); }
+.hps-download-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-15); }
+.hps-download-actions button {
+  min-height: var(--ds-c-studio-styles-size-8);
+  min-width: var(--ds-c-studio-styles-size-8);
+  padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
+  border-radius: var(--ds-c-studio-styles-radius-10);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.hps-download-actions button:hover { background-color: var(--hp-bg-control-hover); }
+.hps-download-actions button:active { background-color: var(--hp-bg-control-pressed); }
+.hps-download-actions button:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+.hps-download-notice { flex-basis: 100%; margin: 0; color: var(--hp-text-primary-default); }
+@media (forced-colors: active) { .hps-download-actions button { border-color: ButtonText; } }
+
 .hps-page-card { font-size: var(--hp-font-caption); box-sizing: border-box; width: 100%; max-width: var(--ds-c-studio-styles-size-106); }
 .hps-page-card-row { display: block; }
 .hps-page-card-name { display: block; margin: var(--ds-c-studio-styles-space-15) 0; }

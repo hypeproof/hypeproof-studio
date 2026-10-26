@@ -13703,6 +13703,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## Browser downloads (CGP-KNOW-R-021)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Download line presentation (CGP-KNOW-D-021)"
         }
       ]
     },
@@ -13734,6 +13738,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/DownloadLine.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
         }
       ]
     },
@@ -13751,6 +13767,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/browser-downloads-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/download-line-actions.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/download-line-browser.smoke.mjs"
         }
       ]
     },
