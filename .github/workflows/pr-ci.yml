@@ -11,6 +11,9 @@ on:
       - 'config/service-packages.json'
       - 'scripts/bootstrap-service-packages.mjs'
       - 'scripts/test/bootstrap-service-packages.test.mjs'
+      - 'scripts/service-tooling.mjs'
+      - 'scripts/review-pr.sh'
+      - 'scripts/test/service-tooling-symlink.test.mjs'
       - 'config/design-tokens.json'
       - 'scripts/test/design-tokens-manifest.test.mjs'
       - 'scripts/release/**'
@@ -102,6 +105,9 @@ jobs:
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
         if: ${{ !cancelled() }}
         run: bash scripts/test/review-pr-shell.test.sh
+      - name: service-tooling path under a symlinked TMPDIR (#2981)
+        if: ${{ !cancelled() }}
+        run: node --test scripts/test/service-tooling-symlink.test.mjs
       # dag.yaml task A control: the --prerelease decision used by
       # build-mac.yml / build-windows.yml must be testable without cutting a
       # real tag. Runs in milliseconds, no build/app required.
