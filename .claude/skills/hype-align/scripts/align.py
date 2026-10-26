@@ -2,7 +2,8 @@
 """hype-align: one run, one verdict over a product requirement ledger.
 
   next    rank ready work items and name the single next one
-  record  write a completion record for one work item into the ledger (never commits)
+  record  write a completion record for one work item into the ledger (never commits) and move
+          the item's issue to Done on the project boards
   check   verify each item's intent -> requirement -> design -> test -> implementation (-> Lab) chain
   drift   compare the Lab member catalog with the Studio requirement inventory
 
@@ -955,9 +956,27 @@ def cmd_record(args):
                      'or put the report under docs/evidence/')
     lines += [f"warning: {path} is also pinned by {', '.join(owners)}; an edit to it for any of them reopens this "
               'completion, so run check over the whole epic after each slice' for path, owners in shared.items()]
+    if not args.dry_run and isinstance(item.get('issue'), int):
+        payload['board'] = board_done(ledger.manifest['repository'], item['issue'])
+        if not payload['board']['ok']:
+            lines.append(f"warning: the record is written but the board was not updated: {payload['board']['detail']}")
     lines.append(f'Verdict: {verdict}')
     emit(args, payload, lines)
     return 0
+
+
+def board_done(repository, issue):
+    """Move a recorded item's issue to Done on the project boards (harness#397); report, never refuse."""
+    if not repository.startswith('hypeproof/'):
+        return {'ok': True, 'detail': f'{repository} has no HypeProof project board'}
+    for root in harness_candidates():
+        board = root / 'scripts/board/board.py'
+        if board.is_file():  # board writes carry the bot identity, like every agent write
+            proc = subprocess.run(['bash', str(root / 'scripts/agent-identity/with-agent-identity.sh'), sys.executable,
+                                   str(board), 'set', f'https://github.com/{repository}/issues/{issue}', '--state', 'done'],
+                                  capture_output=True, text=True, check=False)
+            return {'ok': proc.returncode == 0, 'detail': (proc.stdout or proc.stderr).strip()[-300:]}
+    return {'ok': False, 'detail': 'no Harness checkout with scripts/board/board.py; set HYPEPROOF_HARNESS'}
 
 
 # --- drift ----------------------------------------------------------------------------------

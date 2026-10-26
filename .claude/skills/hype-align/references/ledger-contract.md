@@ -140,6 +140,11 @@ Nothing else in the ledger changes. The file is rewritten as
 `commit`, `recorded_at` and optional `pr` are provenance for people and for `check`; discover.py
 ignores them.
 
+After writing (not with `--dry-run`), `record` moves the item's issue to Done on the project
+boards: the Harness `scripts/board/board.py set <issue URL> --state done`, run through
+`with-agent-identity.sh` (harness#397). A ledger outside the `hypeproof` org has no board and is
+skipped. A board failure is a warning in the output and the payload's `board`; the record stands.
+
 ### Row pins
 
 `rows` maps a document to `{ID: digest}` (`discover.row_digest`), so an edit to another row of the
