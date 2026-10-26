@@ -2,11 +2,13 @@
 // - The task list draws the chosen emoji and colour before the title, and the accessibility tree
 //   names each task by its title: no emoji in any accessible name (measured through CDP, not source).
 // - Colour is never the only cue: the title text is drawn next to every mark.
-// - Every swatch is at least 3:1 against the task list background, dark and light (computed).
+// - Every swatch is at least 3:1 against the task list background and, in the picker, against the
+//   dialog panel it is drawn on, dark and light (computed).
 // - The picker opens from the personal task menu, has 44px choices, a text name on every colour,
-//   a check mark plus ring on the selected one, posts only ids, closes on a saved result bound to its
+//   a visible check mark plus a measured 2px ring on the selected one, posts only ids, closes on a saved result bound to its
 //   request and task, shows an alert on failure, and closes when the open task changes.
-// - Classroom seats have no task menu item. Forced colours keep the swatch outline.
+// - Classroom seats have no task menu item. Forced colours keep the swatch outline and the selected
+//   colour's 2px ring and check.
 // Set FOCUS_REQUIRE_BROWSER=1 to fail without Chromium. APPEARANCE_EVIDENCE=<dir> saves PNGs.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -39,8 +41,9 @@ const tasks = [
   { id: 'plain', title: '표시 없는 작업', createdAt: 1, updatedAt: 1, messageCount: 0 },
 ];
 // WCAG relative luminance from a computed rgb()/rgba() string, composited on the backdrop when translucent.
-const contrastJs = `(()=>{const p=s=>{const m=s.match(/rgba?\\(([^)]+)\\)/);if(!m)return null;const v=m[1].split(/[ ,/]+/).filter(Boolean).map(Number);return {r:v[0],g:v[1],b:v[2],a:v.length>3?v[3]:1}};
-const lum=c=>{const f=x=>{x/=255;return x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4};return 0.2126*f(c.r)+0.7152*f(c.g)+0.0722*f(c.b)};
+const colourFns = `const p=s=>{const m=s.match(/rgba?\\(([^)]+)\\)/);if(!m)return null;const v=m[1].split(/[ ,/]+/).filter(Boolean).map(Number);return {r:v[0],g:v[1],b:v[2],a:v.length>3?v[3]:1}};
+const lum=c=>{const f=x=>{x/=255;return x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4};return 0.2126*f(c.r)+0.7152*f(c.g)+0.0722*f(c.b)};`;
+const contrastJs = `(()=>{${colourFns}
 const rail=p(getComputedStyle(document.querySelector('.tw-rail')).backgroundColor);
 return [...document.querySelectorAll('.tw-task .tw-task-mark[data-colour]')].map(m=>{const c=p(getComputedStyle(m.querySelector('.tw-task-swatch')).backgroundColor);const a=lum(c),z=lum(rail);return {colour:m.dataset.colour,ratio:(Math.max(a,z)+0.05)/(Math.min(a,z)+0.05),swatch:getComputedStyle(m.querySelector('.tw-task-swatch')).backgroundColor,rail:getComputedStyle(document.querySelector('.tw-rail')).backgroundColor}})})()`;
 let states = 0;
@@ -90,6 +93,17 @@ try {
     const selected = await b.evaluate(`[...document.querySelectorAll('.tw-appearance-colour')].map(l=>{const s=getComputedStyle(l);return {colour:l.dataset.colour??'none',check:!!l.querySelector('svg'),ring:s.boxShadow!=='none',border:s.borderTopColor}})`);
     assert.deepEqual(selected.filter(s => s.check).map(s => s.colour), ['blue'], 'only the selected colour shows the check');
     assert.deepEqual(selected.filter(s => s.ring).map(s => s.colour), ['blue'], 'only the selected colour has the ring');
+    // DES-KNOW-13 on the picker itself: the ring is 2px (border plus inset spread, in the ring colour) and the check is drawn.
+    const mark = await b.evaluate(`(()=>{const l=document.querySelector('.tw-appearance-colour[data-selected]');const s=getComputedStyle(l);const shadow=s.boxShadow;const px=(shadow.match(/-?[\\d.]+px/g)||[]).map(parseFloat);const svg=l.querySelector('svg');const r=svg?.getBoundingClientRect();return {border:parseFloat(s.borderTopWidth),spread:/inset/.test(shadow)?(px[3]??0):0,sameColour:shadow.startsWith(s.borderTopColor),check:!!r&&r.width>=12&&r.height>=12&&getComputedStyle(svg).visibility==='visible'}})()`);
+    assert.deepEqual(mark, { border: 1, spread: 1, sameColour: true, check: true }, `selected colour: 2px ring in one colour plus a visible check: ${JSON.stringify(mark)}`);
+    // DES-KNOW-13 "3:1 against panel": each picker swatch against the surface it is drawn on (the first opaque ancestor).
+    const panel = await b.evaluate(`(()=>{${colourFns}
+const surface=e=>{for(let n=e;n;n=n.parentElement){const c=p(getComputedStyle(n).backgroundColor);if(c&&c.a===1)return c;}return {r:255,g:255,b:255,a:1}};
+return [...document.querySelectorAll('.tw-appearance-colour[data-colour]')].map(l=>{const w=l.querySelector('.tw-task-swatch');const c=p(getComputedStyle(w).backgroundColor),z=surface(l);const a=lum(c),y=lum(z);return {colour:l.dataset.colour,ratio:(Math.max(a,y)+0.05)/(Math.min(a,y)+0.05),swatch:getComputedStyle(w).backgroundColor,panel:'rgb('+z.r+', '+z.g+', '+z.b+')',size:w.getBoundingClientRect().width}})})()`);
+    assert.deepEqual(panel.map(r => r.colour), COLOURS, 'all eight swatches in the picker');
+    for (const r of panel) { assert.ok(r.ratio >= 3, `${dark ? 'dark' : 'light'} picker ${r.colour} swatch ${r.swatch} vs panel ${r.panel}: ${r.ratio.toFixed(2)}:1 < 3:1`); assert.ok(r.size >= 8, `swatch drawn: ${JSON.stringify(r)}`); }
+    const lowest = panel.reduce((a, r) => r.ratio < a.ratio ? r : a);
+    console.log(`  ${dark ? 'dark' : 'light'} ${width}px picker panel ${lowest.panel}: lowest swatch ${lowest.colour} ${lowest.ratio.toFixed(2)}:1`);
     // Keyboard: arrows move within the group (native radio group) and the focus ring hugs the choice.
     await b.evaluate(`document.querySelector('input[name=task-colour][value=blue]').focus()`);
     await b.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39 });
@@ -145,5 +159,11 @@ try {
   const fc = await b.evaluate(`(()=>{const s=getComputedStyle(document.querySelector('.tw-task .tw-task-swatch'));return {style:s.borderTopStyle,width:parseFloat(s.borderTopWidth)}})()`);
   assert.equal(fc.style, 'solid'); assert.ok(fc.width >= 1, `forced-colours swatch outline: ${JSON.stringify(fc)}`);
   await shot('rail-forced-colours');
-  console.log(`PASS task appearance App in ${states} theme/width states + classroom + forced colours: aria-hidden marks, title-only names, 3:1 swatches, 44px picker, named colours, check+ring, ids-only save, request binding, failure alert, Escape, task switch`);
+  // Forced colours, picker: the selected colour keeps a 2px system ring and the check mark.
+  await b.evaluate(`document.querySelector('.tw-chat-menu-toggle').click()`); await settle();
+  await b.evaluate(`(${item}).click()`); await settle(150);
+  const fcSel = await b.evaluate(`(()=>{const l=document.querySelector('.tw-appearance-colour[data-selected]');const s=getComputedStyle(l);const r=l.querySelector('svg')?.getBoundingClientRect();return {colour:l.dataset.colour,style:s.borderTopStyle,width:parseFloat(s.borderTopWidth),check:!!r&&r.width>=12}})()`);
+  assert.deepEqual(fcSel, { colour: 'pink', style: 'solid', width: 2, check: true }, `forced-colours selected colour: ${JSON.stringify(fcSel)}`);
+  await shot('picker-forced-colours');
+  console.log(`PASS task appearance App in ${states} theme/width states + classroom + forced colours: aria-hidden marks, title-only names, 3:1 swatches (list and picker panel), 44px picker, named colours, check+2px ring (also forced colours), ids-only save, request binding, failure alert, Escape, task switch`);
 } finally { await b.close(); }

@@ -47,6 +47,26 @@ export function nextHomeView(current: HomeView, key: string): HomeView | null {
   return null;
 }
 
+/** Longest activity title drawn above the tabs, in grapheme clusters; the line also ellipsizes. */
+export const ACTIVITY_TITLE_MAX = 80;
+// C0/C1 controls, bidi marks, embeddings, overrides and isolates, U+2028/2029, zero-width space, soft hyphen,
+// the BOM and Hangul fillers. ZWJ and ZWNJ (U+200C/U+200D) stay so emoji and scripts are not broken.
+const TITLE_UNSAFE = /[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u2028-\u202E\u2060-\u2069\u3164\uFEFF\uFFA0]/gu;
+
+/**
+ * CGP-KNOW-D-002 — the activity's name as the title above the 작업/자료 tabs. The name comes from the host
+ * (the saved activity), so it is cleaned, not trusted: invisible and direction-changing characters are dropped,
+ * whitespace runs become one space, and a long name is cut between grapheme clusters with "…". Empty → ''.
+ */
+export function activityTitleText(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // Whitespace first (a tab or line break is a word gap, not nothing), then the invisible characters.
+  const text = raw.normalize('NFC').replace(/\s+/gu, ' ').replace(TITLE_UNSAFE, '').replace(/ {2,}/gu, ' ').trim();
+  // Grapheme clusters where the runtime has them, so a ZWJ emoji is never cut in half; code points otherwise.
+  const parts = typeof Intl.Segmenter === 'function' ? Array.from(new Intl.Segmenter('ko', { granularity: 'grapheme' }).segment(text), part => part.segment) : Array.from(text);
+  return parts.length > ACTIVITY_TITLE_MAX ? parts.slice(0, ACTIVITY_TITLE_MAX - 1).join('').trimEnd() + '…' : text;
+}
+
 /**
  * True inside a task workspace whose rail draws the 자료 view. The chat column then leaves out its
  * own 자료 card, so the list has one place in the activity home. Classroom seats have no task

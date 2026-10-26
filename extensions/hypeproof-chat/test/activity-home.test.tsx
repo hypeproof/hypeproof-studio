@@ -11,7 +11,9 @@
 //     and corrupt stored state falls back to 작업;
 //   - a seat without the 자료 list (no `materials` flag, or an instructor) has no tabs and its task list is shown;
 //   - the 자료 list has one place: the chat column leaves out its card inside the task workspace;
-//   - tab semantics: role=tablist/tab/tabpanel, aria-selected, one tab stop, Left/Right/Home/End, modifiers and IME ignored.
+//   - tab semantics: role=tablist/tab/tabpanel, aria-selected, one tab stop, Left/Right/Home/End, modifiers and IME ignored;
+//   - CGP-KNOW-D-002: the tablist sits right under an <h2> activity title (the host's name, cleaned of control
+//     and bidi characters, capped; the kind label when blank), and only where the tabs are.
 
 import { click, document as doc, mountPoint } from "./fixtures/mini-dom.mjs";
 import React from "react";
@@ -20,7 +22,7 @@ import { App } from "../webview-ui/src/App";
 import { TaskWorkspaceFrame } from "../webview-ui/src/TaskWorkspace";
 import { MaterialsPanel } from "../webview-ui/src/MaterialsPanel";
 import { MATERIALS_COPY, type MaterialsView } from "../src/activityMaterialsView";
-import { HOME_VIEW_MAX_SCOPES, loadHomeView, saveHomeView } from "../webview-ui/src/activityHome";
+import { ACTIVITY_TITLE_MAX, activityTitleText, HOME_VIEW_MAX_SCOPES, loadHomeView, saveHomeView } from "../webview-ui/src/activityHome";
 import type { ChatConfig } from "../src/protocol";
 
 for (const name of ["Node", "Element"]) (globalThis as Record<string, unknown>)[name] ??= (window as unknown as Record<string, unknown>)[name];
@@ -38,7 +40,7 @@ const eq = (a: unknown, b: unknown, m: string) => ok(JSON.stringify(a) === JSON.
 type El = {
   localName: string; textContent: string; value: string; id: string; tabIndex: number; hidden?: boolean;
   getAttribute(n: string): string | null; hasAttribute(n: string): boolean; findAll(test: (e: El) => boolean): El[];
-  dispatchEvent(e: unknown): boolean; focus(): void; querySelector(s: string): El | null; parentNode: El | null;
+  dispatchEvent(e: unknown): boolean; focus(): void; querySelector(s: string): El | null; parentNode: El | null; childNodes?: El[];
 };
 const ev = (type: string, extra: Record<string, unknown> = {}) => ({
   type, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
@@ -243,6 +245,46 @@ t("the 자료 view says when the list is loading or unavailable, never an empty 
   const section = host.findAll((e) => e.localName === "section")[0];
   ok(section.getAttribute("aria-labelledby") === heading.getAttribute("id"), "the section is named by it");
   await act(async () => { root.unmount(); });
+});
+
+t("D-002: the tabs sit right under the activity title, an h2 with the activity's name", async () => {
+  g.__vsState = undefined;
+  const app = await mountApp(config({ activity: { id: "p1", name: "2학기 과학 발표", kind: "personal", workspace: "/tmp/p", verified: true } }));
+  const titles = app.all((e) => cls(e, "tw-activity-title"));
+  eq(titles.length, 1, "one activity title");
+  const title = titles[0];
+  ok(title.localName === "h2" && title.textContent === "2학기 과학 발표", `an h2 with the name, got <${title.localName}> ${title.textContent}`);
+  eq(title.getAttribute("data-hp-tooltip"), "2학기 과학 발표", "the full name is the tooltip");
+  eq(title.getAttribute("dir"), "auto", "direction comes from the name itself");
+  const siblings = (title.parentNode?.childNodes ?? []).filter((n) => n.localName);
+  const at = siblings.indexOf(title);
+  ok(at >= 0 && siblings[at + 1] === app.tablist(), "the tablist is the element right after the title");
+  await act(async () => { click(app.tab("자료")); });
+  eq(app.all((e) => cls(e, "tw-activity-title")).length, 1, "the title stays when 자료 is chosen");
+  await app.unmount();
+  for (const [label, over] of [["no materials flag", { materials: false }], ["instructor", { isInstructor: true }]] as const) {
+    const other = await mountApp(config(over as Record<string, unknown>));
+    eq(other.all((e) => cls(e, "tw-activity-title")).length, 0, `${label}: no title without the tabs (today's rail)`);
+    await other.unmount();
+  }
+  const blank = await mountApp(config({ activity: { id: "p1", name: " \u202e\u200b\t ", kind: "trial", workspace: "/tmp/p", verified: true } }));
+  eq(blank.all((e) => cls(e, "tw-activity-title"))[0]?.textContent, "AI 체험", "a blank name falls back to the activity kind");
+  await blank.unmount();
+});
+
+t("D-002: the activity title is cleaned, not trusted", () => {
+  eq(activityTitleText("  우리 반\n\t발표  "), "우리 반 발표", "whitespace runs become one space");
+  eq(activityTitleText("abc\u202Eexe.txt"), "abcexe.txt", "an RLO override is dropped");
+  eq(activityTitleText("\u2066a\u2069\u200E\u200F\u061C\u2028\u2029b"), "a b", "isolates and marks dropped; U+2028/2029 are whitespace");
+  eq(activityTitleText("a\u0000\u0007\u001B[31mb\u007F\u0085c"), "a[31mbc", "C0/C1 controls dropped");
+  eq(activityTitleText("\u200B\uFEFF\u3164\u115F"), "", "a name of invisible characters only is empty");
+  eq(activityTitleText("발\u200D표 👩‍💻"), "발\u200D표 👩‍💻", "ZWJ stays");
+  eq(activityTitleText("\u1100\u1161"), "가", "NFD Hangul is composed");
+  for (const bad of [undefined, null, 3, {}, ["a"]]) eq(activityTitleText(bad), "", `${JSON.stringify(bad)} is not a title`);
+  const long = activityTitleText("가".repeat(ACTIVITY_TITLE_MAX - 2) + "👩‍💻".repeat(5));
+  ok(long.endsWith("…") && Array.from(new Intl.Segmenter("ko", { granularity: "grapheme" }).segment(long)).length === ACTIVITY_TITLE_MAX, `a long name is cut to ${ACTIVITY_TITLE_MAX} clusters with an ellipsis`);
+  eq(long, "가".repeat(ACTIVITY_TITLE_MAX - 2) + "👩‍💻…", "the cut keeps the last emoji whole, never a lone 👩");
+  eq(activityTitleText("가".repeat(ACTIVITY_TITLE_MAX)), "가".repeat(ACTIVITY_TITLE_MAX), "exactly the cap is kept whole");
 });
 
 t("TaskWorkspaceFrame without the prop keeps today's rail (no tabs)", async () => {

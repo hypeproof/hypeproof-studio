@@ -13,8 +13,11 @@
 //   - the shared 2px focus ring (CGP-DS-D-014) on a tab;
 //   - 작업 shows the task list with a real height; 자료 hides it and shows the 자료 list; the composer
 //     keeps a typed draft through both switches.
+// CGP-KNOW-D-002: the tabs sit under the activity title. The title is shown on one line at >= 14px with 4.5:1,
+// inside the rail and above the tablist; a long name ellipsizes (and the page still does not scroll sideways);
+// the two segments together fill the tablist, and the tablist fills the rail's row, at every width (320 included).
 // A classroom seat (no task workspace) draws no tabs. Self-test: four injected later stylesheets must each
-// be caught. Without a headless Chromium this prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 makes that a failure.
+// be caught (seven, three of them for D-002). Without a headless Chromium this prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 makes that a failure.
 import { createServer } from 'node:http';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -59,13 +62,14 @@ const UX = { coach: { naming_mode: 'fixed', fallback_name: '코치', naming_prom
 const config = (surface) => ({
   proxyUrl: 'http://controlled.invalid/v1', model: 'sonnet', hasToken: true, coach: { name: '코치', personality: '', configured: true }, fileAttach: true, materials: true,
   profile: { profile_id: 'synthetic', display_name: '확인', activity_kind: surface, observation: null, lesson: null, rehearsal: null, welcome: { greeting_md: '안녕하세요' }, model_selection: null, ux: UX },
-  activity: { id: 'a-' + surface, name: surface === 'classroom' ? '3반 웹페이지 만들기' : '내 작업', kind: surface, workspace: '/synthetic', verified: true },
+  activity: { id: 'a-' + surface, name: surface === 'classroom' ? '3반 웹페이지 만들기' : TITLE, kind: surface, workspace: '/synthetic', verified: true },
   ...(surface === 'classroom' ? {} : { taskWorkspace: { scope: 's', revision: 1, activeTaskId: 't1', tasks: [{ id: 't1', title: '반 소개 페이지', createdAt: 1, updatedAt: 1, messageCount: 0 }, { id: 't2', title: '과학 발표 자료 정리', createdAt: 1, updatedAt: 2, messageCount: 3 }], sourceSelection: null } }),
 });
 const LIST = { scope: '["a1","t1"]', maxSelected: 3, items: [
   { id: 'me:aaaaaaaaaaaa', kind: 'file', title: '발표 계획.md', detail: '자료/발표 계획.md', selected: false, removable: true, origin: 'learner', originLabel: '나' },
   { id: 'inbox:obj-12345678:1', kind: 'note', title: '강사 읽기 자료', detail: '강사가 보낸 글', selected: false, removable: false, origin: 'instructor', originLabel: '강사' },
 ] };
+const TITLE = '2학기 과학 발표 준비와 우리 반 소개 웹페이지 만들기';
 const DRAFT = '발표 자료를 같이 정리해 줘 각 👩‍💻';
 
 const measure = `(() => {
@@ -82,8 +86,16 @@ const measure = `(() => {
       underlineWidth: parseFloat(s.borderBottomWidth), underlineStyle: s.borderBottomStyle, underlineVisible: !!under && under.a > 0 && s.borderBottomStyle !== 'none' && parseFloat(s.borderBottomWidth) > 0,
       underlineIsText: s.borderBottomColor === s.color, ratio, shown: shows(e) };
   });
+  const tl = document.querySelector('.tw-home-tabs'), tlb = tl?.getBoundingClientRect(), rs = rail ? getComputedStyle(rail) : null;
+  const tablist = tlb ? { left: tlb.left, right: tlb.right, top: tlb.top, rowLeft: rb.left + parseFloat(rs.paddingLeft), rowRight: rb.right - parseFloat(rs.paddingRight) - parseFloat(rs.borderRightWidth) } : null;
+  const te = document.querySelector('.tw-activity-title');
+  const title = te ? (() => { const s = getComputedStyle(te), b = te.getBoundingClientRect(), fg = parse(s.color), bg = behind(te);
+    const lh = parseFloat(s.lineHeight) || parseFloat(s.fontSize) * 1.6;
+    return { text: te.textContent, tag: te.localName, tooltip: te.getAttribute('data-hp-tooltip'), left: b.left, right: b.right, bottom: b.bottom, h: b.height, lh, font: parseFloat(s.fontSize),
+      clipped: te.scrollWidth > te.clientWidth + 0.5, ellipsis: s.textOverflow === 'ellipsis', shown: shows(te),
+      ratio: fg ? (Math.max(lum(fg), lum(bg)) + 0.05) / (Math.min(lum(fg), lum(bg)) + 0.05) : 0 }; })() : null;
   const list = document.querySelector('.tw-task-list'), materials = document.querySelector('.tw-home-materials .hp-materials');
-  return { vw: document.documentElement.clientWidth, docScroll: document.documentElement.scrollWidth, rail: rb ? { left: rb.left, right: rb.right, shown: shows(rail) } : null, tabs,
+  return { vw: document.documentElement.clientWidth, docScroll: document.documentElement.scrollWidth, rail: rb ? { left: rb.left, right: rb.right, shown: shows(rail) } : null, tabs, tablist, title,
     taskListShown: shows(list), taskListHeight: list ? list.getBoundingClientRect().height : 0, materialsShown: shows(materials),
     draft: document.querySelector('textarea')?.value ?? null, ringColor: (() => { const p = document.createElement('span'); p.style.color = 'var(--hp-ring-focus-default)'; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; })() };
 })()`;
@@ -164,6 +176,25 @@ function check(results) {
         }
       }
       if (m.tabs.length === 2) expect(Math.abs(m.tabs[0].w - m.tabs[1].w) <= 1, `${at}: unequal tabs ${Math.round(m.tabs[0].w)} and ${Math.round(m.tabs[1].w)}`);
+      // CGP-KNOW-D-002: full-width segments — the two tabs span the tablist edge to edge, and the tablist spans the rail's row.
+      const tl = m.tablist;
+      expect(!!tl, `${at}: no tablist box`);
+      if (tl && m.tabs.length === 2) {
+        expect(Math.abs(m.tabs[0].left - tl.left) <= 1 && Math.abs(m.tabs[1].right - tl.right) <= 1, `${at}: the segments ${Math.round(m.tabs[0].left)}..${Math.round(m.tabs[1].right)} do not fill the tablist ${Math.round(tl.left)}..${Math.round(tl.right)}`);
+        expect(Math.abs(tl.left - tl.rowLeft) <= 1 && Math.abs(tl.right - tl.rowRight) <= 1, `${at}: the tablist ${Math.round(tl.left)}..${Math.round(tl.right)} does not fill the rail row ${Math.round(tl.rowLeft)}..${Math.round(tl.rowRight)}`);
+      }
+      // CGP-KNOW-D-002: the activity title above the tabs.
+      const ti = m.title;
+      expect(!!ti && ti.shown, `${at}: no activity title shown above the tabs`);
+      if (ti && tl) {
+        expect(ti.tag === 'h2' && ti.text === TITLE && ti.tooltip === TITLE, `${at}: the title is <${ti.tag}> ${JSON.stringify(ti.text)} (tooltip ${JSON.stringify(ti.tooltip)}), expected the full activity name`);
+        expect(ti.bottom <= tl.top + 0.5, `${at}: the title (bottom ${Math.round(ti.bottom)}) is not above the tabs (top ${Math.round(tl.top)})`);
+        if (m.rail) expect(ti.left >= m.rail.left - 0.5 && ti.right <= m.rail.right + 0.5, `${at}: the title ${Math.round(ti.left)}..${Math.round(ti.right)} is outside the rail`);
+        expect(ti.font >= 14, `${at}: the title text is ${ti.font}px, under 14`);
+        expect(ti.ratio >= 4.5, `${at}: the title contrast ${ti.ratio.toFixed(2)}:1, under 4.5`);
+        expect(ti.h <= ti.lh * 1.5, `${at}: the title wraps (${Math.round(ti.h)}px for a ${Math.round(ti.lh)}px line)`);
+        if (ti.clipped) expect(ti.ellipsis, `${at}: the title is cut without an ellipsis`);
+      }
     }
     expect(r.tasks.taskListShown && r.tasks.taskListHeight >= 44, `${r.where}: 작업 shows no task list (height ${Math.round(r.tasks.taskListHeight)})`);
     expect(!r.tasks.materialsShown, `${r.where}: 작업 also shows the 자료 list`);
@@ -177,6 +208,8 @@ function check(results) {
       expect(parseFloat(ring['outline-offset']) === want, `${r.where}: tab ring offset ${ring['outline-offset']} is not the shared ${want}px`);
     }
   }
+  const narrow = results.filter((r) => !r.classroom && r.where.includes('/320'));
+  expect(narrow.length > 0 && narrow.every((r) => r.tasks.title?.clipped && r.tasks.title?.ellipsis), 'at 320px the long activity name should ellipsize on one line');
   expect(results.length === 13, `ran ${results.length} of 13 combinations`);
   return failures;
 }
@@ -186,6 +219,9 @@ const MUTANTS = {
   'the chosen tab loses its weight and underline (colour only)': '.tw-workspace .tw-home-tab[aria-selected="true"] { font-weight: 400 !important; border-bottom-color: transparent !important; color: #0078d4 !important; }',
   'an @media rule hides the task list under 작업': '@media (min-width: 1px) { .tw-home-panel .tw-task-list { display: none !important; } }',
   'outline: none !important removes the ring': 'html body .tw-home-tab:focus-visible { outline: none !important; }',
+  'D-002: the title wraps onto several lines': 'html body .tw-workspace .tw-activity-title { white-space: normal !important; }',
+  'D-002: the title moves below the tabs': 'html body .tw-rail .tw-activity-title { order: 9 !important; }',
+  'D-002: the segments shrink to their labels': '.tw-workspace .tw-home-tabs .tw-home-tab { flex: 0 0 auto !important; }',
 };
 
 const b = await launch(bin);
@@ -201,4 +237,4 @@ try {
   }
 } finally { await b.close(); server.close(); rmSync(temp, { recursive: true, force: true }); }
 if (failures.length) { console.error(failures.map((f) => '  FAIL ' + f).join('\n')); console.error(`activity-home-computed: ${failures.length} failed`); process.exit(1); }
-console.log('PASS activity home computed: 작업/자료 tabs are 44px, >=14px, weight + 2px underline (not colour only), 4.5:1, the shared focus ring; 작업 shows tasks, 자료 the list, the draft kept; dark/light x 1420/800/320 x forced colours; classroom has no tabs; four overrides caught');
+console.log('PASS activity home computed: 작업/자료 tabs are 44px, >=14px, weight + 2px underline (not colour only), 4.5:1, the shared focus ring, full-width segments under a one-line activity title; 작업 shows tasks, 자료 the list, the draft kept; dark/light x 1420/800/320 x forced colours; classroom has no tabs; seven overrides caught');

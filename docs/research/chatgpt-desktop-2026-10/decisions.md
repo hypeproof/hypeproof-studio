@@ -787,6 +787,16 @@ These are conservative implementation choices, not new human agreements.
 | Selected-state presentation | Weight 600 and a 2px underline in the text colour; forced colours keep Canvas/CanvasText with a 2px Highlight underline instead of the shared selection fill | Not colour only (DES-KNOW-02). The shared `[aria-selected]` Highlight fill sits under Chrome's text backplate and hid the label (measured 1:1) | On | no |
 | Activity title | Not added above the tabs | DES-KNOW-02 ("under the activity title") is CGP-KNOW-D-002; this row ships the behaviour | n/a | no |
 
+## DEC-KNOW-D-002: activity title above the 작업/자료 tabs (CGP-KNOW-D-002, 2026-10-26; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| What the title says | The activity's name from the host; the activity kind ("개인 작업", "AI 체험", "이용권", "무료 사용") when the name is blank after cleaning | The chat header already says kind · name; the rail heading names the "project" like ChatGPT's project home | On | no |
+| Where | An `<h2>` directly above the tablist, only on seats that draw the tabs | Seats without the tabs keep today's rail (DEC-KNOW-R-002 scope) | On | no |
+| Untrusted name | Whitespace collapsed; controls, bidi marks/overrides/isolates, U+2028/2029, zero-width and filler characters dropped (ZWJ/ZWNJ kept); NFC; 80 grapheme clusters with "…"; `dir="auto"` and `unicode-bidi: isolate` | The name is host data; a bidi override must not reorder the rail, an invisible name must not draw an empty heading | On | no |
+| Size | One line at body size (16px, weight 600), ellipsized; full name as text (accessible name) and tooltip | Above the 14px learner floor; a long Korean name must not push the tabs down | On | no |
+| "320px: full-width segments" | The two segments fill the tablist and the tablist fills the rail's row at every width; at 320px the rail is the full-width drawer | The control lives in the rail, so its full width is the rail's | On | no |
+
 ## CGP-CHAT-R-025: task archive (2026-10-25, agent-selected conservative implementation)
 
 - Archive = hide, never delete. An archive sidecar beside the task file records task id and time; the task document, versions and verdicts are not touched, so older builds still read the task file and a downgrade only lists archived tasks again.
@@ -890,6 +900,17 @@ These are conservative implementation choices, not new human agreements.
   the task list in each theme (measured in the browser test).
 - Default state: available to personal and trial learner tasks; no new data flow (local file
   only, no Service call).
+
+## CGP-KNOW-D-008: emoji/colour picker design met on main (2026-10-26, agent choice)
+
+- DES-KNOW-13 was built with CGP-KNOW-R-008: the picker opens from the open task's menu, every
+  colour shows its Korean name, the selected one has a ring and a check. No product change.
+- "3:1 against panel" is read as both surfaces a swatch is drawn on: the task list (already
+  measured) and the picker dialog (not measured before). Both now pass in dark and light.
+- "2px focus ring" on the selected swatch is measured as the drawn ring width (border plus inset
+  spread in one colour), not only its presence; forced colours keep a 2px Highlight border.
+- Only the test and the contract text change; four CSS mutations that main's test let through
+  (3px ring, low-contrast picker swatch, hidden check, forced-colours ring dropped) now fail.
 
 ## DEC-KNOW-35: low disk space bar (CGP-KNOW-R-019)
 

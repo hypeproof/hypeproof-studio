@@ -2042,8 +2042,17 @@ composer draft. Decisions: DEC-KNOW-R-002 in `docs/research/chatgpt-desktop-2026
   Canvas/CanvasText with a 2px Highlight underline (the system selection fill would sit under
   Chrome's text backplate and hide the label). The 자료 panel scrolls as one scope with the shared
   inset focus ring (CGP-DS-D-014).
-- **Not built.** The activity title above the tabs (DES-KNOW-02's "under the activity title"
-  belongs to CGP-KNOW-D-002) and a per-activity composer placeholder.
+- **Activity title (CGP-KNOW-D-002 / DES-KNOW-02, PI#1; built 2026-10-26).** The tablist is a
+  two-item segmented control under the activity title: an `<h2>` with the activity's name, directly
+  above the tablist, drawn only where the tabs are (no title, no change on other seats). The name
+  comes from the host, so it is cleaned first: whitespace runs become one space; C0/C1 controls,
+  bidi marks, embeddings, overrides and isolates, U+2028/2029, zero-width and filler characters are
+  dropped (ZWJ/ZWNJ stay); NFC; at most 80 grapheme clusters with "…". A blank name falls back to
+  the activity kind (e.g. "개인 작업", "AI 체험"). It is one line at body size (16px), ellipsized,
+  bidi-isolated (`dir="auto"`, `unicode-bidi: isolate`), with the full name as its text and tooltip.
+  The two segments fill the tablist edge to edge and the tablist fills the rail's row at every width;
+  at 320px that is the rail drawer's full width. Decisions: DEC-KNOW-D-002.
+- **Not built.** A per-activity composer placeholder.
 - **Tests.** `test/activity-home.test.tsx` (the real App: 20 switches by click and arrow keys keep
   the composer node and a byte-identical draft with Hangul NFD, a ZWJ emoji, a tab and CRLF, and post
   nothing but the list request; reopen per seat, another seat, corrupt state, the 50-seat cap;
@@ -2052,7 +2061,11 @@ composer draft. Decisions: DEC-KNOW-R-002 in `docs/research/chatgpt-desktop-2026
   stylesheet: 44px tabs, 14px text, weight plus 2px underline, 4.5:1 contrast including forced
   colours, the shared focus ring, the task list shown under 작업 and hidden under 자료, the draft
   kept; dark and light at 1420, 800 and 320 px, forced colours on and off; classroom has no tabs;
-  four injected overrides caught). `test/panel-boundary.test.tsx` covers the 자료 view's boundary;
+  four injected overrides caught; for D-002 also the title above the tablist on one line, >=14px,
+  4.5:1, ellipsized at 320px, and the segments filling the tablist and the rail row, with three more
+  overrides caught: a wrapping title, a title moved below the tabs, segments shrunk to their labels).
+  `test/activity-home.test.tsx` also checks the title's element, order, seats and text cleaning.
+  `test/panel-boundary.test.tsx` covers the 자료 view's boundary;
   `test/activity-materials-computed.smoke.mjs` measures the list in its rail place.
 
 ## Class join link (CGP-SHELL-R-005)
@@ -6632,7 +6645,10 @@ no picker.
   themes; in forced colours the dot keeps an outline.
 - The picker: every choice is a 44px target with at least 14px text; every colour shows its
   name as text and every emoji choice is named in Korean for assistive technology; the selected
-  choice has a 2px ring and, for colours, a check mark; arrow keys move within each group; Save
+  choice has a 2px ring (1px border plus 1px inset ring, one colour; 2px system Highlight
+  border in forced colours) and, for colours, a visible check mark; each colour swatch in the
+  picker is at least 3:1 against the dialog panel it is drawn on, dark and light (DES-KNOW-13,
+  CGP-KNOW-D-008); arrow keys move within each group; Save
   is disabled while a save is pending. Only a saved result for its own request and task closes
   it (focus returns to the task menu); a failure keeps the choice and shows an alert; Escape or
   취소 saves nothing; switching task closes it. A request the host drops (the task changed or a
@@ -6644,7 +6660,8 @@ Tests: `test/task-appearance.smoke.mjs` (id validation, restart persistence, byt
 task file, open-task only, corrupt and forged sidecar, folder move, provider result and refusal)
 and `test/task-appearance-browser.smoke.mjs` (real App bundle in headless Chromium; dark/light,
 800/1420 px, forced colours, classroom seat; the accessibility tree has no emoji in any name;
-computed swatch contrast; 44px choices; check and ring; ids-only post; request binding; failure
+computed swatch contrast against the list and the picker panel; 44px choices; visible check and
+measured 2px ring, also in forced colours; ids-only post; request binding; failure
 alert; Escape; task switch; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). The
 installed app across a real restart is owner-verified (NOT RUN here).
 
