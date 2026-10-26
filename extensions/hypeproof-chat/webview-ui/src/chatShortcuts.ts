@@ -1,11 +1,11 @@
 // CGP-CHAT-R-030 — the learner's shortcut sheet lists only the chat keys this webview binds.
-// Every row names the handler that owns it; a key with no handler (Esc to stop an answer,
-// Cmd/Ctrl+F, a focus-the-composer key) is not listed until it is built.
+// Every row names the handler that owns it; a key with no handler (Esc to stop an answer, a
+// focus-the-composer key) is not listed until it is built.
 
 export type ShortcutPlatform = 'mac' | 'other';
 
 export interface ChatShortcut {
-  id: 'send' | 'newline' | 'close' | 'conversation' | 'help';
+  id: 'send' | 'newline' | 'close' | 'find' | 'conversation' | 'help';
   /** Key caps in press order, already in the platform's names. */
   keys: string[];
   label: string;
@@ -18,9 +18,10 @@ export function shortcutPlatform(platform: string | undefined): ShortcutPlatform
   return /mac|iphone|ipad/i.test(platform ?? '') ? 'mac' : 'other';
 }
 
-function modifier(name: 'Alt' | 'Shift', platform: ShortcutPlatform): string {
-  if (platform !== 'mac') return name;
-  return name === 'Alt' ? '⌥ Option' : '⇧ Shift';
+/** CGP-CHAT-D-030: the macOS glyph leads (⌘ ⌥ ⇧); Windows and Linux name the key (Ctrl, Alt, Shift). */
+function modifier(name: 'Command' | 'Alt' | 'Shift', platform: ShortcutPlatform): string {
+  if (platform !== 'mac') return name === 'Command' ? 'Ctrl' : name;
+  return name === 'Command' ? '⌘ Cmd' : name === 'Alt' ? '⌥ Option' : '⇧ Shift';
 }
 
 /**
@@ -36,6 +37,9 @@ export function chatShortcuts(platform: ShortcutPlatform, options: { taskWorkspa
     // useDialogFocus / menu and panel handlers: Escape closes the open dialog, menu or panel.
     // (The composer ignores Enter while it is read-only: no activity or a missing task folder.)
     { id: 'close', keys: ['Esc'], label: '열린 창·메뉴 닫기' },
+    // ChatFindBar isFindShortcut (CGP-CHAT-R-027): Cmd+F on macOS, Ctrl+F elsewhere, in every
+    // ChatPanel seat; inside the bar Enter/Shift+Enter step through matches.
+    { id: 'find', keys: [modifier('Command', platform), 'F'], label: '대화에서 찾기', note: `찾기 칸에서 Enter는 다음, ${modifier('Shift', platform)} + Enter는 이전 결과` },
   ];
   if (options.taskWorkspace) rows.push({ id: 'conversation', keys: [modifier('Alt', platform), modifier('Shift', platform), 'J'], label: '대화로 바로 가기', note: '작업 화면 안에서 눌러요' });
   // useShortcutSheetKey below.

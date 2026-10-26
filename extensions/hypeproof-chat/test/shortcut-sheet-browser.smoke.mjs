@@ -1,9 +1,11 @@
 // CGP-CHAT-R-030: the real App bundle in headless Chromium. 키보드 단축키 opens from the settings
 // dialog and from `?` outside a text field (never from the composer). Every key the sheet lists is
 // then pressed on the real panel and must do what its row says; keys that are not bound (Esc to
-// stop, Cmd/Ctrl+F, a focus-the-composer key) must not be listed. Platform modifiers follow
-// navigator.platform. Computed geometry: 44px entry and close targets, >=14px text, the dialog
-// inside the viewport, forced colours keep the key caps outlined.
+// stop, a focus-the-composer key) must not be listed. Platform modifiers follow navigator.platform
+// (⌘ on macOS, Ctrl on Windows). CGP-CHAT-D-030: the sheet is a two-column table (key, action) in
+// computed layout at every width, Tab and Shift+Tab stay inside it, Esc closes it. Computed
+// geometry: 44px entry and close targets, >=14px text, the dialog inside the viewport, forced
+// colours keep the key caps outlined.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -78,14 +80,31 @@ try {
     assert.equal(await b.evaluate(`!!${sheet}`), true, `sheet opens from settings (${label})`);
     assert.equal(await b.evaluate(`${sheet}.contains(document.activeElement)`), true, 'focus moves into the sheet');
     const listed = await rows();
-    const expected = seat === 'personal' ? ['send', 'newline', 'close', 'conversation', 'help'] : ['send', 'newline', 'close', 'help'];
+    const expected = seat === 'personal' ? ['send', 'newline', 'close', 'find', 'conversation', 'help'] : ['send', 'newline', 'close', 'find', 'help'];
     assert.deepEqual(listed.map(r => r.id), expected, `only bound keys are listed (${label})`);
     const mac = platform === 'MacIntel';
     assert.deepEqual(listed.find(r => r.id === 'newline').keys, [mac ? '⇧ Shift' : 'Shift', 'Enter'], 'platform Shift name');
     if (seat === 'personal') assert.deepEqual(listed.find(r => r.id === 'conversation').keys, [mac ? '⌥ Option' : 'Alt', mac ? '⇧ Shift' : 'Shift', 'J'], 'platform Alt name');
+    assert.deepEqual(listed.find(r => r.id === 'find').keys, [mac ? '⌘ Cmd' : 'Ctrl', 'F'], 'platform Command glyph: ⌘ on macOS, Ctrl on Windows');
     const all = listed.map(r => r.text).join('\n');
-    for (const absent of ['⌘', 'Ctrl', 'Cmd', '멈추기', '찾기', '입력창으로']) assert.ok(!all.includes(absent), `unbound key is not listed: ${absent}`);
-    const geometry = await b.evaluate(`(()=>{const d=${sheet};const r=d.getBoundingClientRect();const close=d.querySelector('header button').getBoundingClientRect();const fonts=[...d.querySelectorAll('kbd, dd, dd small, h2')].map(e=>parseFloat(getComputedStyle(e).fontSize));const k=getComputedStyle(d.querySelector('kbd'));return {inView:r.left>=0&&r.right<=innerWidth+0.5&&r.top>=0&&r.bottom<=innerHeight+0.5,close:[close.width,close.height],min:Math.min(...fonts),border:k.borderTopStyle,overflow:d.scrollWidth<=d.clientWidth+1,bg:getComputedStyle(d).backgroundColor}})()`);
+    for (const absent of ['멈추기', '입력창으로', mac ? 'Ctrl' : '⌘']) assert.ok(!all.includes(absent), `unbound key or other platform's name is not listed: ${absent}`);
+    // CGP-CHAT-D-030: a real two-column table, measured: every row has its key cell left of its
+    // action cell on the same line, at 320px too.
+    const table = await b.evaluate(`(()=>{const t=${sheet}.querySelector('table.hps-shortcut-list');if(!t)return null;const head=[...t.tHead.rows[0].cells].map(c=>c.textContent);const rows=[...t.tBodies[0].rows].map(r=>{const [k,a]=[...r.cells].map(c=>c.getBoundingClientRect());const caps=[...r.cells[0].querySelectorAll('kbd')].map(c=>c.getBoundingClientRect().top);return {cells:r.cells.length,scope:r.cells[0].getAttribute('scope'),beside:k.right<=a.left+0.5,line:Math.abs(k.top-a.top)<1,oneLine:caps.every(t=>Math.abs(t-caps[0])<1)}});return {display:getComputedStyle(t).display,head,rows}})()`);
+    assert.ok(table, `the sheet is a table (${label})`);
+    assert.equal(table.display, 'table', 'computed display is table');
+    assert.deepEqual(table.head, ['키', '하는 일'], 'column headers: key, action');
+    for (const { oneLine, ...row } of table.rows) {
+      assert.deepEqual(row, { cells: 2, scope: 'row', beside: true, line: true }, `two columns side by side (${label}): ${JSON.stringify(table.rows)}`);
+      // Key caps share one line when the window has room; only a narrow window wraps them.
+      if (width >= 800) assert.equal(oneLine, true, `key caps on one line at ${width}px (${label})`);
+    }
+    // Focus trap: Tab and Shift+Tab never leave the sheet.
+    for (const shiftKey of [false, false, false, true, true, true]) {
+      await press(null, { key: 'Tab', code: 'Tab', vk: 9, shiftKey });
+      assert.equal(await b.evaluate(`${sheet}?.contains(document.activeElement)`), true, `Tab${shiftKey ? ' with Shift' : ''} stays in the sheet (${label})`);
+    }
+    const geometry = await b.evaluate(`(()=>{const d=${sheet};const r=d.getBoundingClientRect();const close=d.querySelector('header button').getBoundingClientRect();const fonts=[...d.querySelectorAll('kbd, th, td, td small, h2')].map(e=>parseFloat(getComputedStyle(e).fontSize));const k=getComputedStyle(d.querySelector('kbd'));return {inView:r.left>=0&&r.right<=innerWidth+0.5&&r.top>=0&&r.bottom<=innerHeight+0.5,close:[close.width,close.height],min:Math.min(...fonts),border:k.borderTopStyle,overflow:d.scrollWidth<=d.clientWidth+1,bg:getComputedStyle(d).backgroundColor}})()`);
     assert.equal(geometry.inView, true, `sheet inside the viewport: ${JSON.stringify(geometry)}`);
     assert.ok(geometry.close[0] >= 44 && geometry.close[1] >= 44, `44px close: ${geometry.close}`);
     assert.ok(geometry.min >= 14, `>=14px text in the sheet: ${geometry.min}`);
@@ -110,6 +129,16 @@ try {
       await key(outside, { key: '?', shiftKey: true, ...mod }); await settle();
       assert.equal(await b.evaluate(`!!${sheet}`), false, `\`?\` with ${JSON.stringify(mod)} does not open the sheet`);
     }
+
+    // `find`: the platform's Command key + F opens the find bar from the real panel; the other
+    // platform's modifier does not. Esc closes it.
+    const findInput = `document.querySelector('.hps-find-input')`;
+    await press(outside, { key: 'f', code: 'KeyF', vk: 70, ...(mac ? { ctrlKey: true } : { metaKey: true }) });
+    assert.equal(await b.evaluate(`!!${findInput}`), false, `the other platform's modifier does not open find (${label})`);
+    await press(outside, { key: 'f', code: 'KeyF', vk: 70, ...(mac ? { metaKey: true } : { ctrlKey: true }) }); await settle(80);
+    assert.equal(await b.evaluate(`document.activeElement===${findInput}`), true, `${mac ? '⌘' : 'Ctrl'}+F opens find and focuses it (${label})`);
+    await press(null, { key: 'Escape', code: 'Escape', vk: 27 }); await settle(120);
+    assert.equal(await b.evaluate(`!!${findInput}`), false, 'Esc closes find');
 
     // `newline`: Shift+Enter is left to the textarea (not sent, not prevented).
     await typeDraft('SHORTCUT-NEWLINE');

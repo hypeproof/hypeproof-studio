@@ -5,7 +5,8 @@
 // viewport. Choosing a row by keyboard scrolls the transcript so that prompt sits at its top (instantly under
 // reduced motion), moves focus onto that prompt with a ring that hugs it, and closes the list; the prompt leaves the
 // Tab order again once focus moves on. Escape closes and returns focus to the button. Forced colours keep the
-// popover edge. Fails under FOCUS_REQUIRE_BROWSER=1 without a browser; prints NOT RUN otherwise.
+// popover edge. CGP-CHAT-D-028: the popover hangs from the header button, a pointer choice also focuses the bubble,
+// and a short window (1280x720, 800x480) shows only the whole rows that fit, up to 10. Fails under FOCUS_REQUIRE_BROWSER=1 without a browser; prints NOT RUN otherwise.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +38,12 @@ const delay = (ms = 80) => new Promise((r) => setTimeout(r, ms));
 const key = async (k, code = k, keyCode = 0) => {
   await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: keyCode, ...(k === 'Enter' ? { text: String.fromCharCode(13) } : {}) });
   await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: keyCode });
+};
+// A real pointer press at the centre of the index-th match, through CDP like the keyboard above.
+const click = async (sel, index = 0) => {
+  const at = await browser.evaluate(`(()=>{const e=document.querySelectorAll(${JSON.stringify(sel)})[${index}];e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`);
+  for (const type of ['mousePressed', 'mouseReleased']) await browser.send('Input.dispatchMouseEvent', { type, x: at.x, y: at.y, button: 'left', clickCount: 1 });
+  await delay();
 };
 const view = { scope: 's', revision: 1, activeTaskId: 't1', sourceSelection: null, tasks: [{ id: 't1', title: '내 작업', createdAt: 1, updatedAt: 1, messageCount: 24 }] };
 const seats = {
@@ -74,7 +81,9 @@ try {
         left:pr.left,right:pr.right,bottom:pr.bottom,innerWidth,innerHeight,ellipsis:getComputedStyle(rows[4].querySelector('.hps-myq-line')).textOverflow,
         lineFits:rows.every(r=>{const l=r.querySelector('.hps-myq-line');return l.getBoundingClientRect().right<=r.getBoundingClientRect().right+0.5}),
         active:document.activeElement===rows[0],ring:(()=>{const a=document.activeElement,st=getComputedStyle(a);return {fv:a.matches(':focus-visible'),w:parseFloat(st.outlineWidth),o:parseFloat(st.outlineOffset)}})(),expanded:document.querySelector('.hps-myq-toggle').getAttribute('aria-expanded'),
-        top:document.elementFromPoint((pr.left+pr.right)/2,pr.top+30)?.closest('.hps-myq-panel')===panel}})()`);
+        top:document.elementFromPoint((pr.left+pr.right)/2,pr.top+30)?.closest('.hps-myq-panel')===panel,
+        anchor:(()=>{const t=document.querySelector('.hps-myq-toggle').getBoundingClientRect(),h=document.querySelector('.hps-myq-toggle').closest('.hps-header').getBoundingClientRect();
+          return {gap:pr.top-t.bottom,end:Math.abs(pr.right-t.right),belowHeader:pr.top>=h.top}})()}})()`);
     assert.ok(p, `${tag}: Enter opens the list`);
     assert.equal(p.role, 'dialog'); assert.equal(p.label, '내 질문'); assert.equal(p.expanded, 'true');
     assert.equal(p.count, 14, `${tag}: one row per prompt`);
@@ -91,6 +100,8 @@ try {
     assert.ok(p.active, `${tag}: focus moves into the list`);
     assert.ok(p.ring.fv && p.ring.w >= 2 && p.ring.o <= 0, `${tag}: a row's focus ring sits inside the scrolling list ${JSON.stringify(p.ring)}`);
     assert.ok(p.top, `${tag}: the popover is on top of the transcript`);
+    // CGP-CHAT-D-028: the popover opens from the task header, right under its button and aligned to its end edge.
+    assert.ok(p.anchor.gap >= 0 && p.anchor.gap <= 12 && p.anchor.end <= 1 && p.anchor.belowHeader, `${tag}: the popover hangs from the header button ${JSON.stringify(p.anchor)}`);
     if (evidence) { const shot = await browser.send('Page.captureScreenshot', { format: 'png' }); writeFileSync(`${evidence}/${seat}-${dark ? 'dark' : 'light'}-${width}-open.png`, Buffer.from(shot.data, 'base64')); }
 
     // Escape closes and returns focus to the button.
@@ -120,6 +131,14 @@ try {
     assert.equal(await browser.evaluate(`document.querySelector('[data-my-question="u3"] .hps-msg-body').hasAttribute('tabindex')`), false, `${tag}: the prompt leaves the Tab order`);
     assert.equal(await browser.evaluate(`document.documentElement.scrollWidth>innerWidth`), false, `${tag}: no horizontal page scroll`);
 
+    // CGP-CHAT-D-028: choosing with the pointer also moves focus to that prompt's bubble (no ring, since it was a click).
+    await browser.evaluate(`document.querySelector('.hps-messages').scrollTop=1e9`);
+    await click('.hps-myq-toggle'); await click('.hps-myq-item', 5); await delay(150);
+    const m = await browser.evaluate(`(()=>{const box=document.querySelector('.hps-messages'),row=box.querySelector('[data-my-question="u6"]'),a=document.activeElement;
+      return {open:!!document.querySelector('.hps-myq-panel'),bubble:row.contains(a)&&a.classList.contains('hps-msg-body'),offset:Math.round(row.getBoundingClientRect().top-box.getBoundingClientRect().top)}})()`);
+    assert.ok(!m.open && m.bubble && Math.abs(m.offset) <= 2, `${tag}: a pointer choice jumps and focuses the bubble ${JSON.stringify(m)}`);
+    await browser.evaluate(`document.querySelector('.hps-myq-toggle').focus()`); await delay();
+
     // Forced colours keep the popover edge.
     if (width === 800) {
       await key('Enter', 'Enter', 13); await delay();
@@ -130,6 +149,26 @@ try {
       await key('Escape', 'Escape', 27); await delay();
     }
     cases++;
+  }
+  // CGP-CHAT-D-028: short windows (the 1280x720 layout floor and a 480px-tall pane) still show the whole popover.
+  for (const [seat, width, height] of [['personal', 1280, 720], ['classroom', 1280, 720], ['personal', 800, 480], ['classroom', 800, 480]]) {
+    const { config, view: frame } = seats[seat];
+    await browser.load(`<html lang="ko"><style>${css}</style><style>html,body,#root{height:100%}</style><body class="vscode-dark" style="margin:0"><div id="root"></div><script>window.acquireVsCodeApi=()=>({postMessage:()=>{},getState:()=>({}),setState:()=>{}});</script><script>${js}</script></body></html>`, { width, height });
+    await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await browser.evaluate(`mount(${JSON.stringify(config)},${JSON.stringify(conversation(14))},${JSON.stringify(frame)})`); await delay();
+    await click('.hps-myq-toggle');
+    const s = await browser.evaluate(`(()=>{const pr=document.querySelector('.hps-myq-panel').getBoundingClientRect(),list=document.querySelector('.hps-myq-list'),rows=[...list.querySelectorAll('.hps-myq-item')];
+      return {bottom:pr.bottom,innerHeight,visible:list.clientHeight,rowH:rows[0].getBoundingClientRect().height,scrolls:list.scrollHeight>list.clientHeight}})()`);
+    assert.ok(s.bottom <= s.innerHeight && s.visible <= 440.5 && Math.abs(s.rowH - 44) <= 0.5 && s.scrolls, `${seat} ${width}x${height}: the popover fits the window and scrolls its rows ${JSON.stringify(s)}`);
+    if (evidence) { const shot = await browser.send('Page.captureScreenshot', { format: 'png' }); writeFileSync(`${evidence}/${seat}-dark-${width}x${height}-open.png`, Buffer.from(shot.data, 'base64')); }
+    assert.ok(s.visible >= 44 && Math.abs(s.visible / 44 - Math.round(s.visible / 44)) < 0.02, `${seat} ${width}x${height}: whole rows only (${s.visible})`);
+    if (height === 720) assert.ok(Math.abs(s.visible - 440) <= 1, `${seat}: 10 rows when the window has room (${s.visible})`);
+    if (height === 480) {
+      // Growing the window while the list is open gives the rows back, up to 10.
+      await browser.send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false }); await delay(150);
+      const grown = await browser.evaluate(`document.querySelector('.hps-myq-list').clientHeight`);
+      assert.ok(Math.abs(grown - 440) <= 1, `${seat}: a taller window shows 10 rows again (${grown})`);
+    }
   }
   // Jump targets beyond a normal bubble, on a plain scroller: a prompt being edited in place focuses its editor (no
   // tab stop added), a prompt whose row failed to render jumps to its turn fallback box, a missing prompt is a no-op.
@@ -142,5 +181,5 @@ try {
     out.fb=jumpToMyQuestion(box,'f1');out.fbFocus=document.activeElement?.getAttribute('data-turn-fallback');out.fbTop=Math.round(document.querySelector('[data-turn-fallback]').getBoundingClientRect().top-box.getBoundingClientRect().top);
     out.missing=jumpToMyQuestion(box,'nope');return out})()`);
   assert.deepEqual(edge, { edit: true, editFocus: 'textarea', editTab: false, fb: true, fbFocus: 'f1', fbTop: 0, missing: false }, `edge jump targets ${JSON.stringify(edge)}`);
-  console.log(`PASS my-questions-browser: ${cases} seat/theme/width cases, hidden below 4, 44px button and rows, 10 visible, keyboard jump moves focus to the prompt, Escape returns focus, forced colours`);
+  console.log(`PASS my-questions-browser: ${cases} seat/theme/width cases, hidden below 4, 44px button and rows, 10 visible, keyboard jump moves focus to the prompt, Escape returns focus, forced colours, anchored under the header button, pointer jump, short windows fit`);
 } finally { await browser.close(); }

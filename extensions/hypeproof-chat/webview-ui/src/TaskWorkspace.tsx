@@ -19,7 +19,7 @@ import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { KeyboardSplitter, SkipToInput } from './KeyboardNavigation';
 import { loadPanelSizes, PANEL_LIMITS, savePanelSizes, type PanelName } from './panelSizes';
 import { PanelBoundary } from './PanelBoundary';
-import { filterTasksByTitle, markTitleMatches, TASK_SEARCH_MAX } from './taskTitleFilter';
+import { filterTasksByTitle, markTitleMatches, railSearchFolded, TASK_SEARCH_MAX } from './taskTitleFilter';
 import { offerUndo } from './UndoToast';
 import { MaterialsPanel } from './MaterialsPanel';
 import { ActivityHomeContext, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
@@ -98,6 +98,12 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   // Both belong to one activity: a different scope starts with an empty search.
   const [search, setSearch] = useState({ scope: view.scope, text: '', applied: '' });
   const railSearch = search.scope === view.scope ? search : { scope: view.scope, text: '', applied: '' };
+  // CGP-KNOW-D-001: below 360px the empty field is a search icon; pressing it opens and focuses the field,
+  // which folds again once it is empty and loses focus. Escape keeps closing the narrow rail (no second
+  // meaning for the key). Opened belongs to the activity, like the query.
+  const [searchOpenScope, setSearchOpenScope] = useState<string | null>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const focusSearch = useRef(false);
   // CGP-KNOW-R-002: the activity home's view, remembered per seat. Switching posts nothing and leaves the
   // conversation (and so the composer draft) mounted. A seat without the 자료 list always shows 작업.
   const [homeChoice, setHomeChoice] = useState(() => ({ scope: view.scope, value: loadHomeView(view.scope) }));
@@ -168,6 +174,10 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const [viewport, setViewport] = useState(() => window.innerWidth);
   const sourceDialog = sourcesOpen && viewport <= 1050;
   const railDialog = railOpen && viewport <= 700;
+  const searchFolded = railSearchFolded(viewport, searchOpenScope === view.scope, railSearch.text);
+  // Closing the narrow rail hides the field without a blur event; an empty one is folded again next time.
+  useEffect(() => { if (!railOpen) setSearchOpenScope(null); }, [railOpen]);
+  useEffect(() => { if (!searchFolded && focusSearch.current) { focusSearch.current = false; searchInput.current?.focus(); } }, [searchFolded]);
   const scopeKey = JSON.stringify([view.scope, view.activeTaskId]);
   const active = view.tasks.find(task => task.id === view.activeTaskId);
   currentTitle.current = active?.title;
@@ -578,11 +588,14 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       </div>}
       <div id="tw-home-tasks" className="tw-home-panel" role={materials ? 'tabpanel' : undefined} aria-labelledby={materials ? 'tw-home-tab-tasks' : undefined} hidden={homeView !== 'tasks'}>
       <button className="tw-new" disabled={blocked} onClick={() => { setRailOpen(false); postToHost({ type: 'taskCreate' }); }}><span aria-hidden="true">＋</span> 새 작업</button>
-      <label className="tw-search"><span>작업 찾기</span><input name="task-search" autoComplete="off" type="search" maxLength={TASK_SEARCH_MAX} value={railSearch.text} onChange={event => {
+      {searchFolded ? <button type="button" className="tw-quiet tw-search-toggle" aria-label="작업 찾기" aria-expanded={false} data-hp-tooltip="작업 찾기" onClick={() => { focusSearch.current = true; setSearchOpenScope(view.scope); }}><ChatIcon kind="search" size={20} /></button>
+      : <label className="tw-search"><span>작업 찾기</span><input ref={searchInput} name="task-search" autoComplete="off" type="search" maxLength={TASK_SEARCH_MAX} value={railSearch.text} onChange={event => {
         const text = event.target.value;
         const composing = (event.nativeEvent as InputEvent).isComposing === true;
         setSearch({ scope: view.scope, text, applied: composing ? railSearch.applied : text });
-      }} onCompositionEnd={event => { const text = event.currentTarget.value; setSearch({ scope: view.scope, text, applied: text }); }} placeholder="작업 이름이나 대화 내용으로 찾기…" /></label>
+      }} onCompositionEnd={event => { const text = event.currentTarget.value; setSearch({ scope: view.scope, text, applied: text }); }} onBlur={event => {
+        if (event.currentTarget.value === '' && !event.currentTarget.closest('.tw-search')?.contains(event.relatedTarget as Node | null)) setSearchOpenScope(null);
+      }} placeholder="작업 이름이나 대화 내용으로 찾기…" /></label>}
       {/* CGP-SHELL-R-013 — the task list fails alone; 새 작업, search and the chat keep working. */}
       <PanelBoundary panel="task-rail">{() => archiveOpen ? <>
       {/* CGP-CHAT-R-025 — archived tasks keep their whole conversation; 다시 열기 lists and opens one. Nothing here deletes. */}

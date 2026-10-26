@@ -137,6 +137,18 @@ for(const seat of ['personal','classroom'])for(const dark of [true,false])for(co
   assert.equal(await b.evaluate(`Math.round(__anchor.getBoundingClientRect().top)`),seen,`${label}: closing does not move the text being read`);
   assert.equal(await b.evaluate(`(()=>{const s=document.querySelector('.hps-messages');return Math.round(s.scrollHeight-s.scrollTop-s.clientHeight)})()`),toBottom,`${label}: closing keeps the distance to the bottom`);
 
+  // CGP-CHAT-D-027 (D80): Esc returns focus to whatever was focused before the bar opened, not
+  // always to the composer; the composer is only the fallback once that element is gone.
+  const prior=await b.evaluate(`(()=>{const e=[...document.querySelectorAll('.hps-messages button')].find(x=>!x.disabled&&x.getClientRects().length);if(!e)return null;e.focus({preventScroll:true});e.dataset.findPrior='1';return document.activeElement===e})()`);
+  assert.equal(prior,true,`${label}: a transcript button takes focus before find opens`);
+  await findKey();assert.equal(await b.evaluate(`document.activeElement?.className`),'hps-find-input',`${label}: find opened from a transcript button`);
+  await key('Escape','Escape',27);
+  assert.equal(await b.evaluate(`document.activeElement?.dataset?.findPrior??null`),'1',`${label}: Esc returns focus to the previously focused transcript button, not the composer`);
+  await b.evaluate(`delete document.querySelector('[data-find-prior]').dataset.findPrior`);
+  await b.evaluate(`{const t=document.createElement('button');t.id='find-gone';t.textContent='x';document.body.append(t);t.focus()}`);
+  await findKey();await b.evaluate(`document.getElementById('find-gone').remove()`);await key('Escape','Escape',27);
+  assert.equal(await b.evaluate(`document.activeElement?.matches('.hps-input textarea')`),true,`${label}: with the earlier element gone, Esc falls back to the composer`);
+
   // At the bottom, open and close: following the live answer stays on.
   await b.evaluate(`{const s=document.querySelector('.hps-messages');s.scrollTop=s.scrollHeight}`);await settle();
   await findKey();await b.evaluate(`document.querySelectorAll('.hps-find-btn')[2].click()`);await settle();
