@@ -222,6 +222,7 @@ import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
+import { readWorkspaceThumbnail } from "./artifactThumbnail";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
@@ -6358,6 +6359,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch { view = null; }
     await this.post({ type: "artifactProvenance", view });
   }
+  /** CGP-KNOW-D-011 (DES-KNOW-20) — one 내 작품 thumbnail, on the same seats as the provenance list. Never throws. */
+  private async postArtifactThumbnail(msg: Extract<WebviewMessage, { type: "artifactThumbnailRequest" }>): Promise<void> {
+    if (typeof msg.requestId !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) || typeof msg.path !== "string") return;
+    const cwd = this.currentTaskStore() && this._instructorMode?.isInstructor !== true ? this.resolveCoachCwd() : undefined;
+    const src = cwd ? readWorkspaceThumbnail(cwd, msg.path) : null;
+    await this.post({ type: "artifactThumbnail", requestId: msg.requestId, path: msg.path, src });
+  }
   // CGP-KNOW-D-013 (DES-KNOW-24) — the activity trash at the bottom of 내 작품. The store, its gates
   // and native confirms live in activityTrashCommands.ts; this only routes the panel's requests.
   private activityTrashPanel?: import("./activityTrashCommands").ActivityTrashPanelApi;
@@ -7065,6 +7073,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "activityTrashRequest": await this.postActivityTrash(); return;
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
+      case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
       case "pageCardsRequest": this.postPageCards(); return;
       case "pageCardOpen":
       case "pageCardReveal":

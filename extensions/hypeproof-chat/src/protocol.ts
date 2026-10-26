@@ -792,6 +792,8 @@ export type WebviewMessage = (
   | { type: "activityTrashRequest" }
   | { type: "activityTrashAction"; requestId: string; scope: string; action: import("./activityTrashView").ActivityTrashAction; target: string }
   | { type: "artifactProvenanceRequest" }
+  // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
+  | { type: "artifactThumbnailRequest"; requestId: string; path: string }
   // REQ-STUDIO-PAGE-CARD — a press on a page card row; the host acts only on a row of a card it issued, inside the work folder.
   | { type: "pageCardsRequest" }
   | { type: "pageCardOpen"; turnId: string; path: string }
@@ -908,6 +910,8 @@ export type HostMessage = (
   /** CGP-KNOW-D-013 — the current activity's trash; null when unavailable. `requestId`/`result` answer one press. */
   | { type: "activityTrashState"; view: import("./activityTrashView").ActivityTrashView | null; requestId?: string; result?: import("./activityTrashView").ActivityTrashResult }
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
+  /** CGP-KNOW-D-011 — an inline data: image read from inside the work folder, or null (the row keeps its type glyph). */
+  | { type: "artifactThumbnail"; requestId: string; path: string; src: string | null }
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
