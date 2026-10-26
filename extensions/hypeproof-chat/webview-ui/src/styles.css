@@ -1861,20 +1861,29 @@ html, body, #root {
 .hps-voice-final, .hps-voice-partial { margin: 0; overflow-wrap: anywhere; }
 .hps-voice-partial { color: var(--hp-text-muted-default); }
 .hps-voice-partial-tag { font-size: var(--ds-c-studio-styles-type-1); }
-.hps-voice-reference { margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
+.hps-voice-reference { margin: 0; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 
 /* Status · mute · end never scroll out of view (VO-40/47). */
 .hps-voice-actions {
   display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2);
   padding-top: var(--ds-c-studio-styles-space-2); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-7));
 }
-.hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry {
+.hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry, .hps-voice-show button {
   font: inherit; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-8); cursor: pointer;
   color: var(--vscode-button-secondaryForeground, var(--ds-c-studio-styles-ink-1));
   background: var(--vscode-button-secondaryBackground, var(--ds-c-studio-styles-surface-21));
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
 }
 .hps-voice-actions button:disabled { opacity: .5; cursor: default; }
+/* CGP-VOICE-R-009 — "보여주기": two Studio-owned targets only. The reason for a disabled item is
+   always written next to it (DES-CGPV-14), at the learner text floor, never only in a tooltip. */
+.hps-voice-show { flex-shrink: 0; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); font-size: var(--hp-font-caption); }
+.hps-voice-show-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
+.hps-voice-show-menu { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-2); padding: var(--ds-c-studio-styles-space-2); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-styles-boundary-14)); border-radius: var(--ds-c-studio-styles-radius-8); }
+.hps-voice-show-item { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
+.hps-voice-show-item button { text-align: start; }
+.hps-voice-show button:disabled { cursor: default; color: var(--hp-text-muted-default); }
+.hps-voice-show-reason, .hps-voice-show-notice { margin: 0; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .hps-voice-to-text { color: var(--vscode-button-foreground, var(--ds-c-studio-styles-ink-2)) !important; background: var(--vscode-button-background, var(--ds-c-studio-styles-surface-23)) !important; }
 .hps-voice-info { margin: 0; padding-left: var(--ds-c-studio-styles-space-18); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
 .hps-voice-est { font-style: italic; }

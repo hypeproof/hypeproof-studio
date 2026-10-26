@@ -736,3 +736,57 @@ export function failureView(kind: VoiceFailureKind): FailureView {
   const f = FAILURE_TEXT[kind];
   return { text: f.text, offersRetry: f.retry, mustReleaseCapture: f.release, offersTextFallback: true };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CGP-VOICE-R-009 (REQ-CGPV-14 / DES-CGPV-14) — "보여주기". The learner explicitly picks one
+// Studio-owned thing to show: the open editor file (with its revision) or the integrated preview
+// tab. The closed list below IS the contract: there is no whole-screen, window or OS capture
+// target, and no code path that could add one at runtime (the host refuses any other string).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SHOW_THIS_TARGETS = ['editor_file', 'preview_tab'] as const;
+export type ShowThisTarget = (typeof SHOW_THIS_TARGETS)[number];
+export const SHOW_THIS_BUTTON = '보여주기';
+/** Labels live here, never in a host payload: the menu cannot be renamed into something else. */
+export const SHOW_THIS_LABEL: Readonly<Record<ShowThisTarget, string>> = { editor_file: '열린 파일', preview_tab: '미리보기 화면' };
+export const SHOW_THIS_UNKNOWN_REASON = '지금은 확인하지 못했어요. 메뉴를 다시 열어 주세요.';
+
+export interface ShowThisItem {
+  readonly target: ShowThisTarget;
+  readonly label: string;
+  readonly enabled: boolean;
+  /** Why the item cannot be used. Always present when disabled; null when enabled. */
+  readonly reason: string | null;
+}
+
+export function isShowThisTarget(v: unknown): v is ShowThisTarget {
+  return typeof v === 'string' && (SHOW_THIS_TARGETS as readonly string[]).includes(v);
+}
+
+/** Request ids are opaque tokens from the panel; anything else is refused. */
+export function isShowThisRequestId(v: unknown): v is string {
+  return typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,100}$/.test(v);
+}
+
+/** Control, bidi and line/paragraph separators never reach learner copy from a payload. */
+function cleanReason(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  // eslint-disable-next-line no-control-regex
+  const s = v.normalize('NFC').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]/g, ' ').replace(/\s+/g, ' ').trim();
+  return s ? s.slice(0, 200) : null;
+}
+
+/**
+ * The menu the panel draws, from whatever the host sent. Always exactly the two targets in a fixed
+ * order with Studio's own labels. A missing, malformed or extra entry never adds an item: an
+ * unknown state is a disabled item with a reason, and an enabled item carries no reason.
+ */
+export function showThisMenuView(raw: unknown): readonly ShowThisItem[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return SHOW_THIS_TARGETS.map((target) => {
+    const found = list.find((e) => !!e && typeof e === 'object' && (e as { target?: unknown }).target === target) as { enabled?: unknown; reason?: unknown } | undefined;
+    const enabled = found?.enabled === true;
+    const reason = enabled ? null : cleanReason(found?.reason) ?? SHOW_THIS_UNKNOWN_REASON;
+    return { target, label: SHOW_THIS_LABEL[target], enabled, reason };
+  });
+}

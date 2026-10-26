@@ -628,6 +628,9 @@ export type WebviewMessage = (
   | { type: "fileMentionCancel"; requestId: string }
   /** CGP-KNOW-R-015 — "이 파일에 대해 묻기" from the 작업 자료 list: attach this work-folder path (relative) through the same checks, then focus the composer. */
   | { type: "askAboutFile"; path: string }
+  /** CGP-VOICE-R-009 — voice "보여주기": ask for the two-item menu, then attach one chosen target per click. */
+  | { type: "voiceShowThisMenu"; requestId: string }
+  | { type: "voiceShowThis"; requestId: string; target: string }
   /** CGP-CHAT-R-011 — the learner removed the attached file; nothing from it is sent. */
   | { type: "removeFileContext"; undoId?: string }
   /** CGP-KNOW-R-003 — the activity's 자료 list: read it, add a file (host picker) or an https address, select an item for the next message, take a learner item off the list. `scope` is the list the press was made on. */
@@ -961,6 +964,9 @@ export type HostMessage = (
   | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string; notice?: string }
   | { type: "fileMentionResults"; requestId: string; files: import("./workspaceFileMentions").MentionFile[]; limited: boolean; error?: string }
   | { type: "fileMentionPicked"; requestId: string; ok: boolean }
+  /** CGP-VOICE-R-009 — the menu state (re-read on every open) and the result of one attach click. */
+  | { type: "voiceShowThisMenu"; requestId: string; items: import("./voicePopupHelpers").ShowThisItem[] }
+  | { type: "voiceShowThisResult"; requestId: string; target: import("./voicePopupHelpers").ShowThisTarget | null; ok: boolean; reference?: import("./voicePopupHelpers").ReferenceTarget; error?: string }
   /** CGP-KNOW-R-003 — the 자료 list (null = this seat has none). `requestId` answers that press; `error`/`notice` say what happened. */
   | { type: "materialsState"; view: import("./activityMaterialsView").MaterialsView | null; requestId?: string; error?: string; notice?: string }
   // cr-verify — the "Test my product" panel (null = hidden). `sendText`: the student's own

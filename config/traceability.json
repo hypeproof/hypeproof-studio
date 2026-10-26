@@ -14438,6 +14438,64 @@
           "path": "docs/testing/chalk-authoring.md"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-VOICE-SHOW-THIS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Voice show-this attach (CGP-VOICE-R-009)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VOICE-SHOW-THIS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-SHOW-THIS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/voiceShowThis.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/voicePopupHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoicePanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VOICE-SHOW-THIS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-SHOW-THIS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/voice-show-this.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-show-this-menu.smoke.mjs"
+        }
+      ]
     }
   ]
 }

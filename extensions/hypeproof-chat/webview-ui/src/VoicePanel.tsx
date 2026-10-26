@@ -8,7 +8,7 @@
 // 이 파일이 **주장하지 않는 것**: 음성이 동작한다. 여기에는 `getUserMedia` 도
 // 오디오 재생도 없다 — 실제 연결은 UI-2(#898 V0 전송 ADR · #901 V4 예산) 이후다.
 // 그때까지 `voiceStartGate` 가 시작을 막으므로 학생에게 이 패널은 열리지 않는다.
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ChatIcon } from "./ChatDetails";
 
 import {
@@ -19,6 +19,10 @@ import {
   type PopupState,
   type ReferenceTarget,
   type SessionInfoLine,
+  type ShowThisItem,
+  type ShowThisTarget,
+  SHOW_THIS_BUTTON,
+  showThisMenuView,
   voicePanelTitle,
 } from "../../src/voicePopupHelpers";
 import type { VoiceSession } from "../../src/voiceSessionHelpers";
@@ -44,6 +48,76 @@ export interface VoicePanelProps {
   onStopSpeaking(): void;
   onDismiss(kind: DismissKind): void;
   onRetry(): void;
+  /**
+   * CGP-VOICE-R-009 — "보여주기". Absent = no menu. `items` is what the host last answered for this
+   * open (null while it is being checked); it is re-read on every open. Each click on an enabled
+   * item calls `onAttach` once and closes the menu, so a second attach needs a second click.
+   */
+  showThis?: {
+    items: readonly ShowThisItem[] | null;
+    /** The target whose attach is in flight, if any: every item waits until it answers. */
+    pending: ShowThisTarget | null;
+    /** The last attach result, said in words (role=status). */
+    notice: string | null;
+    onOpen(): void;
+    onAttach(target: ShowThisTarget): void;
+  };
+}
+
+function ShowThisMenu({ showThis }: { showThis: NonNullable<VoicePanelProps["showThis"]> }) {
+  const [open, setOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement | null>(null);
+  const id = useId();
+  // Exactly the two Studio-owned targets with Studio's own labels, whatever the payload held.
+  const items = showThis.items ? showThisMenuView(showThis.items) : null;
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next) showThis.onOpen();
+  };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Escape" || !open) return;
+    // Escape closes the menu first; a second Escape ends the session as before (VO-41).
+    e.stopPropagation();
+    setOpen(false);
+    toggleRef.current?.focus();
+  };
+  return (
+    <div className="hps-voice-show" onKeyDown={onKeyDown}>
+      <button type="button" ref={toggleRef} className="hps-voice-show-toggle" aria-expanded={open} aria-controls={`${id}-menu`} onClick={toggle}>
+        <ChatIcon kind="eye" size={16} /> {SHOW_THIS_BUTTON}
+      </button>
+      {open && (
+        <div id={`${id}-menu`} className="hps-voice-show-menu" role="group" aria-label="보여줄 것 고르기">
+          {!items && <p className="hps-voice-show-reason" role="status">보여 줄 수 있는지 확인하는 중이에요</p>}
+          {items?.map((item) => {
+            const reasonId = `${id}-${item.target}-reason`;
+            const disabled = !item.enabled || showThis.pending !== null;
+            return (
+              <div key={item.target} className="hps-voice-show-item">
+                <button
+                  type="button"
+                  data-target={item.target}
+                  disabled={disabled}
+                  aria-describedby={item.reason ? reasonId : undefined}
+                  onClick={() => {
+                    if (disabled) return;
+                    setOpen(false);
+                    toggleRef.current?.focus();
+                    showThis.onAttach(item.target);
+                  }}
+                >
+                  {item.label}
+                </button>
+                {item.reason && <p id={reasonId} className="hps-voice-show-reason">{item.reason}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="hps-voice-show-notice" role="status">{showThis.pending ? "보여 줄 것을 붙이는 중이에요" : showThis.notice ?? ""}</p>
+    </div>
+  );
 }
 
 /** 미터 막대. 관측이 없으면(`level === null`) **정지한 모양**을 그린다 (VO-38). */
@@ -190,6 +264,8 @@ export function VoicePanel(props: VoicePanelProps) {
           ))}
         </ul>
       </div>
+
+      {props.showThis && <ShowThisMenu showThis={props.showThis} />}
 
       <div className="hps-voice-actions">
         <button type="button" onClick={props.onToggleMute} aria-pressed={muted}>
