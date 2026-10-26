@@ -1222,3 +1222,11 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - 44px controls and `n/m`: the input and the three buttons measure >= 44px with >= 14px text (learner minimum); the count reads `n/m` and `0/0`.
 - Esc: the existing test only returned focus to the composer, which is also the fallback, so "always focus the composer" passed it. `chat-find-browser.smoke.mjs` now opens the bar from a focused transcript button and requires Esc to return there, and falls back to the composer when that element is removed while the bar is open.
 - Default state: unchanged (on in every seat that draws the transcript; no new data flow).
+
+## CGP-KNOW-D-009: task menu move item (DES-KNOW-14, 2026-10-27, agent choice)
+
+- Already met on main by CGP-KNOW-R-009 (`TaskMenu.tsx`); no product code changed. The row is closed by proof: `test/task-menu-keyboard-browser.smoke.mjs` sends key events through the DevTools protocol into headless Chromium (never the OS) and reads the browser's own accessibility tree.
+- "Reason announced" is read as the accessible description the browser computes for the focused item (`aria-describedby`), plus the reason being drawn while the item has focus. A hidden reason would still be in the description, so both are checked.
+- "Keyboard navigable" is the menu-button pattern already built: ArrowDown/ArrowUp or Enter opens on the first item; arrows wrap; Home/End; Escape returns focus to the toggle; Tab closes. Tab-closes is also kept by the menu's focus-out close, so removing only the Tab branch is an equivalent change, not a gap.
+- 44px rows stay guarded by `task-menu-computed.smoke.mjs` (unchanged).
+- Default state: unchanged (personal task-workspace seats; classroom seats have no task rail).
