@@ -2,7 +2,7 @@
 // ChatPanel with the shipped stylesheet in headless Chromium: the hairline spans the chat column, the label stays at
 // the 14px floor, the divider takes no focus, "지금 단계로" is a 44px header button that scrolls the transcript to the
 // current step's divider (instantly under reduced motion) without moving the rail, and forced colours keep the line.
-// Classroom lesson seat, dark and light, 800 and 1420 px wide (1600 tall: the lesson header and rail cards take
+// Classroom lesson seat, dark and light, 360, 800 and 1420 px wide (a 60-character title wraps at 360 and keeps its line) (1600 tall: the lesson header and rail cards take
 // the top 640 px, and the transcript needs room to show the jump); the personal seat (no lesson) draws none.
 // Fails under FOCUS_REQUIRE_BROWSER=1 without a browser; prints NOT RUN otherwise.
 import assert from 'node:assert/strict';
@@ -15,7 +15,9 @@ import { findChromium, launch } from './lib/headless-chromium.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const SHA = 'f'.repeat(64);
-const steps = [['expect', 1, '기대 조건'], ['build', 2, 'Build pane'], ['test', 3, 'Preview / Test']];
+// CGP-CHAT-D-023 — step 2 carries a title at the host's 60-character cap (STEP_TITLE_MAX), so a narrow column must wrap it.
+const LONG = '화면 구성 요소를 하나씩 나누어 만들고 각 부분이 어떻게 연결되는지 직접 확인해 보는 단계입니다 그리고 마지막으로'.slice(0, 59) + '…';
+const steps = [['expect', 1, '기대 조건'], ['build', 2, LONG], ['test', 3, 'Preview / Test']];
 const messages = [], stepMarks = {};
 for (const [id, n, title] of steps) for (let k = 0; k < 4; k++) {
   const u = `u-${id}-${k}`;
@@ -38,9 +40,11 @@ const classroom = chatConfig();
 const personal = chatConfig(3, { profile: { ...chatConfig().profile, lesson: null }, taskWorkspace: { scope: 's', revision: 1, activeTaskId: 't1', tasks: [{ id: 't1', title: '작업', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null } });
 let cases = 0;
 try {
-  for (const dark of [false, true]) for (const width of [800, 1420]) {
+  for (const dark of [false, true]) for (const width of [360, 800, 1420]) {
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k, v]) => typeof v === 'string' && !['kind', 'file'].includes(k)).map(([k, v]) => `--vscode-${k.replaceAll('.', '-')}:${v}`).join(';');
-    await browser.load(`<html style="${vars}"><style>${css}</style><style>html,body,#root{height:100%}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}" style="margin:0"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>({}),setState:()=>{}});</script><script>${js}</script></body></html>`, { width, height: 1600, dark });
+    // At 360px the lesson header, rail and step work wrap tall and the access header (CGP-LEARN-R-016) sits above
+    // them, so the narrow case gets a taller window to leave the transcript room for the jump.
+    await browser.load(`<html style="${vars}"><style>${css}</style><style>html,body,#root{height:100%}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}" style="margin:0"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>({}),setState:()=>{}});</script><script>${js}</script></body></html>`, { width, height: width === 360 ? 1800 : 1600, dark });
     // Reduced motion from the start, so the mount's scroll to the latest message and the jump are both instant.
     await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }, { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
     await browser.evaluate(`mount(${JSON.stringify(classroom)},${JSON.stringify(stepMarks)})`); await delay();
@@ -50,17 +54,18 @@ try {
       const user=box.querySelector('.hps-msg-user');
       return {count:ds.length,labels:ds.map(d=>d.getAttribute('aria-label')),
         lines:ds.map(d=>{const before=getComputedStyle(d,'::before'),after=getComputedStyle(d,'::after'),r=d.getBoundingClientRect(),l=d.querySelector('.hps-step-divider-label').getBoundingClientRect();
-          return {w:r.width,inner,lineTop:parseFloat(before.borderTopWidth),lineStyle:before.borderTopStyle,afterTop:parseFloat(after.borderTopWidth),centred:Math.abs((l.left+l.right)/2-(r.left+r.right)/2),font:parseFloat(getComputedStyle(d.querySelector('.hps-step-divider-label')).fontSize),tab:d.tabIndex,focusables:d.querySelectorAll('button,a,input,[tabindex]').length,inBox:r.left>=br.left-1&&r.right<=br.right+1}}),
+          return {lineL:parseFloat(before.width),lineR:parseFloat(after.width),w:r.width,inner,lineTop:parseFloat(before.borderTopWidth),lineStyle:before.borderTopStyle,afterTop:parseFloat(after.borderTopWidth),centred:Math.abs((l.left+l.right)/2-(r.left+r.right)/2),font:parseFloat(getComputedStyle(d.querySelector('.hps-step-divider-label')).fontSize),tab:d.tabIndex,focusables:d.querySelectorAll('button,a,input,[tabindex]').length,inBox:r.left>=br.left-1&&r.right<=br.right+1}}),
         jump:(()=>{const b=document.querySelector('.hp-mission-jump');if(!b)return null;const r=b.getBoundingClientRect();return {w:r.width,h:r.height,font:parseFloat(getComputedStyle(b).fontSize),inHeader:!!b.closest('header.hp-mission')}})(),
         overflow:document.documentElement.scrollWidth>innerWidth,scrolls:box.scrollHeight>box.clientHeight}})()`);
     const tag = `${dark ? 'dark' : 'light'} ${width}`;
     assert.equal(m.count, 3, `${tag}: one divider per served step`);
-    assert.deepEqual(m.labels, ['1단계: 기대 조건', '2단계: Build pane', '3단계: Preview / Test']);
+    assert.deepEqual(m.labels, ['1단계: 기대 조건', `2단계: ${LONG}`, '3단계: Preview / Test']);
     for (const l of m.lines) {
       assert.ok(l.w >= l.inner - 2, `${tag}: the hairline spans the chat column (${l.w} vs ${l.inner})`);
       assert.ok(l.inBox, `${tag}: within the transcript`);
       assert.equal(l.lineStyle, 'solid'); assert.ok(l.lineTop >= 1 && l.lineTop <= 1.5 && l.afterTop >= 1, `${tag}: a 1px hairline on both sides`);
       assert.ok(l.centred <= 2, `${tag}: label centred`);
+      assert.ok(l.lineL >= 24 && l.lineR >= 24, `${tag}: at least 24px of hairline on each side of the label (${l.lineL}/${l.lineR})`);
       assert.ok(l.font >= 14, `${tag}: label >= 14px (${l.font})`);
       assert.equal(l.tab, -1, `${tag}: the divider is not focusable`); assert.equal(l.focusables, 0);
     }

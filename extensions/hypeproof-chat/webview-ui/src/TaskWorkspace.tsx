@@ -19,7 +19,7 @@ import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { KeyboardSplitter, SkipToInput } from './KeyboardNavigation';
 import { loadPanelSizes, PANEL_LIMITS, savePanelSizes, type PanelName } from './panelSizes';
 import { PanelBoundary } from './PanelBoundary';
-import { filterTasksByTitle, TASK_SEARCH_MAX } from './taskTitleFilter';
+import { filterTasksByTitle, markTitleMatches, TASK_SEARCH_MAX } from './taskTitleFilter';
 import { offerUndo } from './UndoToast';
 import { MaterialsPanel } from './MaterialsPanel';
 import { ActivityHomeContext, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
@@ -73,8 +73,8 @@ function sourceRequestId(): string {
 // Stable context values: a new object each render would re-render every consumer in the conversation.
 const HOME_WITH_MATERIALS = { materialsHome: true }, HOME_WITHOUT_MATERIALS = { materialsHome: false };
 
-/** CGP-CHAT-R-026 — the matched text is bold (a <strong>), never colour alone. */
-function SearchParts({ parts }: { parts: TaskSearchPart[] }) {
+/** CGP-CHAT-R-026 / D-026 — the matched text is bold (a <strong>), never colour alone; title-filtered rows use it too. */
+function SearchParts({ parts }: { parts: readonly TaskSearchPart[] }) {
   return <>{parts.map((part, index) => part.match ? <strong key={index}>{part.text}</strong> : <span key={index}>{part.text}</span>)}</>;
 }
 
@@ -590,7 +590,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <button type="button" className="tw-quiet tw-archive-back" onClick={() => openArchive(false)}>최근 작업으로 돌아가기</button>
       <ul className="tw-task-list tw-archive-list" aria-label="보관한 작업">
         {visibleArchived.map(task => <li key={task.id} className="tw-archived">
-          <span className="tw-task-title"><TaskMark appearance={task.appearance} />{task.title}</span>
+          <span className="tw-task-title"><TaskMark appearance={task.appearance} />{searching ? <SearchParts parts={markTitleMatches(task.title, railSearch.applied)} /> : task.title}</span>
           <span className="tw-task-meta"><span>{taskCountLine(task.messageCount, null)}</span><time dateTime={new Date(task.archivedAt).toISOString()}>{date.format(task.archivedAt)} 보관</time></span>
           <button type="button" className="tw-quiet tw-reopen" aria-label={`다시 열기: ${task.title}`} disabled={blocked} onClick={() => { reopenPending.current = task.id; setRailOpen(false); postToHost({ type: 'taskRestore', id: task.id }); }}>다시 열기</button>
         </li>)}
@@ -608,7 +608,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           const metaId = `tw-task-meta-${task.id}`;
           return <li key={task.id} className={taskMove ? 'tw-task-row' : undefined}>
           <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={taskRunAccessibleName(task.title, state)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
-            <span className="tw-task-title"><TaskMark appearance={task.appearance} />{task.title}</span>
+            <span className="tw-task-title"><TaskMark appearance={task.appearance} />{searching ? <SearchParts parts={markTitleMatches(task.title, railSearch.applied)} /> : task.title}</span>
             {state && <IntentChip chip={TASK_RUN_CHIPS[state]} status={state} className="tw-task-state" attrs={{ 'data-run-state': state }} />}
             <span id={metaId} className="tw-task-meta"><span>{taskCountLine(task.messageCount, state)}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>

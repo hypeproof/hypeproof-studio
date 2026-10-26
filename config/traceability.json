@@ -13285,6 +13285,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/task-archive-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-archive-menu-browser.smoke.mjs"
         }
       ]
     },
@@ -15265,6 +15268,59 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Source kind label before the title (CGP-CHAT-D-014)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CGP-CHAT-D018",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-CHAT-R018"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Workspace file mention popover (CGP-CHAT-D-018)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CGP-CHAT-D018",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-CHAT-D018"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/FileMentions.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/focusGeometry.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CGP-CHAT-D018",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CGP-CHAT-D018",
+        "ST-IMP-CGP-CHAT-D018"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/file-mentions-popover-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/workspace-file-mentions-browser.smoke.mjs"
         }
       ]
     }

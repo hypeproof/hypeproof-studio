@@ -672,6 +672,13 @@ The parent REQ-SHELL-30 asks for an optional reason, approval/refusal states and
 - The button sits in region A's footer as a quiet 44px button at the 14px floor (DEC-29), next to 남은 단계, never a second Primary (SX-04).
 - Default state: on (display only; no new data leaves the device, no permission change).
 
+## CGP-CHAT-D-023: step divider design (2026-10-26, agent-selected)
+
+- D56 is met on main by the CGP-CHAT-R-023 build (full-width hairline, centred "n단계: {name}", `role="separator"` with no focus stop, a 44px "지금 단계로"); the layout smoke measures each clause in headless Chromium.
+- Gap fixed: each hairline segment keeps at least 24px (`flex: 1 0 space-4`), so a long title wraps instead of erasing the line in a narrow (360px) chat column. Measured at 360, 800 and 1420 px, dark and light.
+- "In the header" = region A's lesson header (`header.hp-mission`) footer, next to 남은 단계, not the task top bar: the button belongs to the lesson and the top bar is shared with personal seats that have no lesson.
+- Default state: on (display only).
+
 ## DEC-32 interim: math rendering (CGP-CHAT-R-022)
 
 | DEC | Choice | Why | Default state | Confirmed by Jay |
@@ -704,6 +711,7 @@ These are conservative implementation choices, not new human agreements.
 - What: the user and assistant text as drawn (the answer attempt and prompt version on screen) in transcript order, as `# title`, `## 나` and `## <stored coach name>` sections; headings inside a message nest two levels down so a message cannot forge a speaker. Tool rows (raw payloads and think lines), system/notice rows, citation records and image bytes are left out; credentials are replaced with named placeholders by the host's `scrubSecrets` patterns plus measurement, bearer, payment (Stripe, Toss), Slack and Google key forms; control, bidi override and invisible-width characters are removed first. Detection is pattern based, so an unknown secret format is not caught; that limit is stated in the requirement.
 - Confirmation: success only after `navigator.clipboard.writeText` resolves, 4 s like answer copy (CGP-DS-R-025); failure is a role=alert that stays. The item is disabled while an answer streams.
 - Default state: on for personal learner tasks; no new data flow (clipboard only, no host message, file or network request).
+- Presentation (CGP-CHAT-D-024 / D62, 2026-10-26, agent choice): the result moved from its own bordered line under the header to the answer-copy toast (the shared `CopyFeedback` outlet above the composer, same icon, chrome and 160 ms entry). The failure is announced through the outlet's assertive live region, as answer copy is, instead of a role=alert node; the lifetimes above are unchanged.
 
 ## CGP-CHAT-R-021: lesson tip source and action (2026-10-25, owner decision)
 
@@ -771,6 +779,13 @@ These are conservative implementation choices, not new human agreements.
 - Seats: personal task workspaces only (no lesson, not instructor). Class seats have no task list; nothing on any seat deletes a task permanently.
 - Default state: on (local display state only; no data leaves the device, no permission change).
 
+## CGP-CHAT-D-025: archive design (2026-10-26, agent-selected, already met on main)
+
+- D77 was built with CGP-CHAT-R-025 (REQ-STUDIO-TASK-ARCHIVE); this row adds no product change, only proof.
+- "No destructive red" is measured as: the menu's 보관하기 has the same computed colour, background and border as the neutral 설정 item (the unfocused sibling; 활동 변경 takes focus when the menu opens) and never the theme's error colour. 다시 열기 keeps the existing check against the 보관함 back button.
+- 44px and the 14px floor apply to the menu item as well as to 다시 열기 (owner rule: learner 44px targets and 14px text win over register specs).
+- Default state: unchanged (on for personal task workspaces; class seats have no 보관하기).
+
 ## CGP-CHAT-R-028: "내 질문" jump list (2026-10-25, agent-selected conservative implementation)
 
 - Count: the user turns of the transcript as drawn, one version per prompt group. An edited prompt counts once, and its row jumps to the version on screen. Tool, system and assistant lines never count. Below 4 there is no button.
@@ -817,6 +832,13 @@ These are conservative implementation choices, not new human agreements.
 - Tasks that match only in message text appear as a separate group, `찾은 대화`, under the filtered title list, with snippets. A task that already matched by title is not listed twice; a host answer that matched only the name is not shown again.
 - No-match lines: the title filter's `찾는 이름이 없습니다. 다른 이름으로 찾아보세요.` keeps its place under the list heading; the message group adds `찾는 대화가 없어요` only when nothing matched at all, and the unreadable-file line when the host cannot search.
 - Requirement text: KNOW-R-001's no-host-message rule now covers the title filter and composition, and points to CHAT-R-026 for the committed full-text query. `task-rail-search.smoke.mjs` asserts zero posts while composing and for a blank query, and exactly one `taskSearch` per committed query; `task-search-browser.smoke.mjs` asserts no task is listed twice.
+
+## CGP-CHAT-D-026: task search design (2026-10-26, agent choice)
+
+- Found on main: the field (44px, >=14px, top of the task list), bold snippet matches and the `찾는 대화가 없어요` empty state were built by CGP-CHAT-R-026; `task-search-browser.smoke.mjs` already measures them. The title-filtered list (KNOW-R-001) listed matching tasks without marking the match, so "results list with highlighted match" held for only one of the two groups.
+- Built: the matched part of each filtered title is a `<strong>` (weight 600 against the 400 title, not colour only), every occurrence, computed with the filter's own key (NFC, case folded) per grapheme cluster, so a decomposed title marks its stored characters and an emoji is never split. The parts always join back to the exact title; the accessible name is unchanged.
+- No query, no marking: the row renders the plain title exactly as before (no extra spans), so other rail styles and tests are untouched. The archive view shares the field, so its filtered titles are marked too.
+- Default state: on (display only; no host message, no stored state).
 
 ## CGP-KNOW-R-008: task emoji and colour (2026-10-25, agent choice)
 
@@ -1129,3 +1151,11 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Already met on main and now measured: tools ≥44px with ≥14px text, discard confirm focusing "계속 그리기".
 - Default state: on (local drawing only; no new data flow).
 
+## CGP-CHAT-D-018: `@` file list popover (2026-10-26, agent-selected conservative implementation)
+
+- "Above the caret": the popover's bottom edge sits above the composer card, and its inline start is the drawn position of the `@` that opened it (clamped into the card). It never sits between caret lines, so it never covers the draft being written; at narrow widths it spans the card.
+- "Max 6 rows visible": the list viewport is 6 × the shared 44px menu item height; rows are exactly 44px and single-line, so long names ellipsize (file name first in strong weight, folder muted). The full path is the row's accessible name and hover tooltip.
+- Text is the caption size (14px base), the learner floor, per the menu token contract (REQ-CGP-DS-24); the 14px minimum wins over any smaller register spec.
+- Closing: Escape (unchanged) and focus leaving the composer, except while a pick is in flight so its acknowledgement still lands. A refused pick refocuses the composer so the keys work again. No new keys, host messages, seats or file capability; the R-018 gate is unchanged.
+- Forced colours: the chosen row keeps Canvas/CanvasText with a 2px Highlight border (the home-tab pattern). The Highlight fill showed the words as black boxes under Chromium's Canvas text backplate, and `forced-color-adjust: none` is reserved for QR codes (CGP-DS-R-016).
+- Default state: on wherever R-018 already offers the list (personal or adult profile with the read grant); no new data flow.

@@ -2310,7 +2310,6 @@ export function ChatPanel(props: Props) {
             <div className="hps-img-note">보내면 작업 폴더의 images 폴더에 저장돼요.</div>
           </>
         )}
-        {fileMentions.view}
         {draftParts.some(part => part.id !== undefined) && <div className="hps-pasted-list" aria-label="붙여넣은 글 목록">
           {draftParts.filter(part => part.id !== undefined).map(part => <PastedDraft key={part.id} part={part} disabled={unavailable || folderMissing}
             onChange={text => {
@@ -2340,6 +2339,8 @@ export function ChatPanel(props: Props) {
           {personalWorkspace && !folderMissing && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} />}
           {/* CGP-CHAT-R-011 — a classroom seat has no tool menu; it gets one with the file item only. */}
           {!personalWorkspace && (fileAttachShown || sketchAllowed) && <ComposerTools mode={toolMode} onMode={setToolMode} locked={queued !== null || !!props.sendPending} onAttachFile={fileAttachShown ? props.onAttachFile : undefined} onSketch={sketchAllowed ? () => setSketchOpen(true) : undefined} webSearchItem={false} />}
+          {/* CGP-CHAT-D-018: the @ file list floats above the composer card, anchored at the @ that opened it. */}
+          {fileMentions.view}
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
           <textarea
             ref={textareaRef}
@@ -2351,6 +2352,7 @@ export function ChatPanel(props: Props) {
             aria-controls={fileMentions.open ? fileMentions.listId : undefined}
             aria-activedescendant={fileMentions.activeId}
             onSelect={event => fileMentions.setCaret(event.currentTarget.selectionStart)}
+            onBlur={fileMentions.blur}
             value={composerText}
             onChange={(e) => {
               if (folderMissing) return;
