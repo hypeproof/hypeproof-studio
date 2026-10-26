@@ -8,6 +8,8 @@ import { FolderConsentRequest } from './folderConsentPrompt';
 import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
+import { learnerNotes, markWhatsNewShown, whatsNewOffer } from "./whatsNew";
+import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { showVisitorPreview } from "./visitorPreviewHost";
 import { attemptGroups, attemptHistory, selectAttempt, visibleAttempts } from './answerAttempts';
 import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntry";
@@ -262,6 +264,8 @@ import {
 import { editResendPayload, latestUserTurn, modelConversation, validEditTarget, versionCount } from "./editResend";
 import { parseVerdictRequest, promptIdFor, verdictTargets, type VerdictEvent } from "./answerVerdict";
 import { capturePageContext } from "./nativeBrowser";
+import { runShowThis, showThisMenu, ShowThisLedger, SHOW_THIS_COPY, withRevision, isOwnPreviewTab, type ShowThisEnv } from "./voiceShowThis";
+import { isShowThisRequestId } from "./voicePopupHelpers";
 import { isGeneralBrowserOpenRequest } from "./browserIntent";
 import { validateAndRepairHtml, type HtmlStructureResult } from "./htmlStructure";
 import {
@@ -1645,6 +1649,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let offer: AccuracyOffer | null = null;
     if (!this._instructorMode.isInstructor) { try { offer = accuracyOffer(this.accuracyStore(), owner, scope); } catch { offer = null; } }
     await this.post({ type: 'accuracyEducation', requestId, offer });
+  }
+
+  // CGP-SHELL-R-035 — the notes id this window has drawn and the learner has not closed yet, so a
+  // panel remount (hide/show) keeps it; a reload or the next launch does not bring it back.
+  private whatsNewOpen: string | null = null;
+  private whatsNewClosed: string | null = null;
+  private async postWhatsNew(requestId?: string): Promise<void> {
+    if (!requestId) { await this.post({ type: 'whatsNewChanged' }); return; }
+    const notes = learnerNotes(LEARNER_RELEASE_NOTES);
+    let show = false;
+    try { show = whatsNewOffer(this.context.globalState, notes, { instructor: this._instructorMode.isInstructor === true, open: this.whatsNewOpen }); } catch { show = false; }
+    if (notes && this.whatsNewClosed === notes.id) show = false; // closed here even if the record could not be written
+    await this.post({ type: 'whatsNew', requestId, notes, show });
   }
 
   private activeCohortId: string | null = null;
@@ -3257,15 +3274,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.attachNativeImageFile(failed.file, failed.kind === 'photo', id);
     }
   }
-  private async attachWorkspaceFile(chosen?: string, retryId?: string): Promise<boolean> {
+  /**
+   * `voice` (CGP-VOICE-R-009 "보여주기"): the same path for the open editor file; `verify` runs after the
+   * read and before queueing, the model text carries the editor revision, and the outcome is reported back.
+   */
+  private async attachWorkspaceFile(chosen?: string, retryId?: string, voice?: { revision: string; verify(preview: import("./protocol").FileAttachmentPreview): string | null; error?: string; preview?: import("./protocol").FileAttachmentPreview }): Promise<boolean> {
     const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
     const refuse = (error: string) => {
+      // Voice reports its refusal in the voice panel only; the composer's file chip row stays as it is.
+      if (voice) { voice.error = error; return false; }
       if (retryId && chosen) this.failAttachmentRead(chosen, 'text', error, retryId);
       else void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, error });
       return false;
     };
     if (!fileAttachAllowed(profile, this._instructorMode.isInstructor === true)) {
-      await this.postDenialNotice("lesson");
+      if (!voice) await this.postDenialNotice("lesson");
       return refuse(denialCopy({ source: "lesson", feature: "작업 폴더 파일 붙이기" }, "neutral"));
     }
     const root = this.resolveCoachCwd();
@@ -3286,8 +3309,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       file = picked[0].fsPath;
     }
     const read = readWorkspaceTextFile(root, file);
-    if (!read.ok) { this.failAttachmentRead(file, 'text', read.reason, retryId); return refuse(read.reason); }
-    this.pendingFileAttachment = { preview: read.preview, modelText: read.modelText, root };
+    if (!read.ok) { if (!voice) this.failAttachmentRead(file, 'text', read.reason, retryId); return refuse(read.reason); }
+    const mismatch = voice?.verify(read.preview);
+    if (mismatch) return refuse(mismatch);
+    const modelText = voice ? withRevision(read.modelText, voice.revision) : read.modelText;
+    if (modelText === null) return refuse(FILE_REFUSAL_COPY.unreadable);
+    this.pendingFileAttachment = { preview: read.preview, modelText, root };
+    if (voice) voice.preview = read.preview;
     this.removedFile.forget();
     void this.post({ type: "fileAttachment", attachment: read.preview });
     return true;
@@ -3341,6 +3369,51 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   async askAboutFile(target: string): Promise<void> {
     if (await this.attachWorkspaceFile(target)) void this.post({ type: "focusInput" });
+  }
+  // ── CGP-VOICE-R-009 (REQ-CGPV-14) — voice "보여주기": one click attaches one chosen Studio artifact
+  // (the open editor file at its revision, or the integrated preview tab) through the existing file
+  // and page-context slots. There is no OS screen, window or desktop target (voiceShowThis.ts).
+  private showThisLedgerSlot?: ShowThisLedger;
+  private get showThisLedger() { return this.showThisLedgerSlot ??= new ShowThisLedger(); }
+  private showThisEnv(): ShowThisEnv {
+    const instructor = this._instructorMode?.isInstructor === true;
+    const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
+    const doc = vscode.window.activeTextEditor?.document;
+    const tab = vscode.window.activeBrowserTab;
+    return {
+      instructor,
+      fileAllowed: fileAttachAllowed(profile, instructor),
+      folderRefusal: folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts()) ?? null,
+      root: this.resolveCoachCwd(),
+      editor: doc ? { scheme: doc.uri.scheme, fsPath: doc.uri.fsPath, isUntitled: doc.isUntitled, isDirty: doc.isDirty, version: doc.version, text: doc.getText() } : null,
+      pageContext: this.isPageContextEnabled(),
+      imagePaste: this.isImagePasteEnabled(),
+      previewTab: !tab || !(vscode.window.browserTabs ?? []).includes(tab) ? "none" : isOwnPreviewTab(tab.url, this.liveServer?.currentUrl()) ? "own" : "other",
+      scope: this.turnRequestScope(),
+    };
+  }
+  private async postShowThis(source: vscode.Webview | undefined, msg: Extract<HostMessage, { type: 'voiceShowThisMenu' | 'voiceShowThisResult' }>): Promise<void> {
+    if (!source) { await this.post(msg); return; }
+    // A panel this provider does not know still gets an answer, or it would wait on "붙이는 중" forever.
+    if (source !== this.editorChat?.webview && source !== this.view?.webview) { await this.post(msg); return; }
+    try { await source.postMessage(msg); } catch { /* the panel closed */ }
+  }
+  private async voiceShowThis(requestId: unknown, target: unknown, source?: vscode.Webview): Promise<void> {
+    const result = await runShowThis({ requestId, target }, {
+      env: () => this.showThisEnv(),
+      attachFile: async (file, revision, verify) => {
+        const voice: { revision: string; verify: typeof verify; error?: string; preview?: import("./protocol").FileAttachmentPreview } = { revision, verify };
+        const ok = await this.attachWorkspaceFile(file, undefined, voice);
+        return ok && voice.preview ? { ok: true as const, preview: voice.preview } : { ok: false as const, error: voice.error ?? SHOW_THIS_COPY.changed };
+      },
+      capturePreview: async () => {
+        const tab = vscode.window.activeBrowserTab;
+        if (!tab) throw new Error("열린 미리보기가 없어요. 먼저 미리보기를 열어 주세요.");
+        return capturePageContext(tab, () => this.liveServer?.currentUrl());
+      },
+      queuePage: (ctx) => this.attachPageContext(ctx),
+    }, this.showThisLedger);
+    if (result) await this.postShowThis(source, { type: "voiceShowThisResult", ...result });
   }
   /** CGP-CHAT-R-018 — one live mention search per requesting panel (sidebar or editor chat). */
   private fileMentionSearches = new Map<vscode.Webview | undefined, { requestId: string; root: string; scope: string; generation: number; files: string[]; source?: vscode.Webview }>();
@@ -7028,6 +7101,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postAccuracyEducation();
         return;
       }
+      case "whatsNewRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postWhatsNew(msg.requestId); return;
+      case "whatsNewShown": {
+        if (this._instructorMode.isInstructor) return;
+        const notes = learnerNotes(LEARNER_RELEASE_NOTES);
+        if (!notes || msg.notesId !== notes.id || this.whatsNewClosed === notes.id) return;
+        this.whatsNewOpen = notes.id;
+        try { await markWhatsNewShown(this.context.globalState, notes, msg.notesId); } catch { /* the panel stays for this window either way */ }
+        return;
+      }
+      case "whatsNewDismiss": {
+        const notes = learnerNotes(LEARNER_RELEASE_NOTES);
+        if (!notes || msg.notesId !== notes.id) return;
+        this.whatsNewOpen = null; this.whatsNewClosed = notes.id;
+        try { await markWhatsNewShown(this.context.globalState, notes, msg.notesId); } catch { /* closed for this window */ }
+        await this.postWhatsNew();
+        return;
+      }
       case "stopRunningProcess": await this.runningProcesses.stop(msg.id); return;
       case "ready":
         this.observeLiveProcess();
@@ -7350,6 +7440,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "fileMentionCancel": if (this.fileMentionSearches.get(source)?.requestId === msg.requestId) this.fileMentionSearches.delete(source); return;
       case "attachWorkspaceFile":
         await this.attachWorkspaceFile();
+        return;
+      case "voiceShowThisMenu":
+        if (isShowThisRequestId(msg.requestId)) await this.postShowThis(source, { type: "voiceShowThisMenu", requestId: msg.requestId, items: showThisMenu(this.showThisEnv()) });
+        return;
+      case "voiceShowThis":
+        await this.voiceShowThis(msg.requestId, msg.target, source);
         return;
       case "askAboutFile":
         if (typeof msg.path === "string") await this.askAboutFile(msg.path);

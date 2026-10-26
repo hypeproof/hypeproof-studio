@@ -5277,6 +5277,12 @@ Evidence: `accuracy-education.test.tsx`, `accuracy-education-host.smoke.mjs`,
 | REQ-CGPV-15 | PI#2 / CGP-VOICE-015 / CR-11: chat/voice page attachments capture only a live Studio integrated browser tab; editor attachments continue through the existing explicit file path. No OS accessibility or screen-recording permission is requested. Off-screen body text is read only when the live document has the exact HTTP(S) origin of this window's current own preview. External, opaque, file, unknown-owner and stale-document captures contain no DOM text. Closing the tab, changing its URL or changing the preview owner during capture rejects the result and closes CDP. Existing default-off page-context and image gates remain authoritative for every seat and runtime. The own-preview owner given to the capture comes from Studio's own preview server, never from the captured tab. The inline notice and the chip name only what was attached: when no page text goes (not the own preview, ownership unknown, or no readable text) the notice says "화면 사진만" or "주소와 제목만" instead of "내용", the chip reads "페이지 정보" with the reason shown on it and no empty quote, and the model text says the page text was withheld. | `test/context-capture.smoke.mjs` (capture, text source and command wiring); `test/page-attachment.test.tsx` (notice, chip and model text per case); `test/coach-identity.smoke.mjs`; existing file-attachment tests; native owner verification separate. |
 
 
+## Voice show-this attach (CGP-VOICE-R-009)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-14 | PI#2 (human judgment stays visible) / CGP-VOICE-014 / VO-12 / VO-43: "보여주기" in the voice panel attaches one explicitly chosen Studio artifact per click, never the OS screen. The menu lists exactly "열린 파일" and "미리보기 화면" (DES-CGPV-14), with Studio's own labels whatever the host payload holds; a disabled item shows its reason as text next to it; there is no whole-screen, window or desktop item. "열린 파일" attaches the file in the active editor, inside the work folder and through the work-folder file checks (`sdk_tools.read`, folder consent, no links, hidden paths or outside files), at the revision the learner sees: editor version plus sha256 of the text, carried in the model text and the panel's reference line. An unsaved or untitled buffer, a file whose disk text differs from the editor, or a version, task or gate change during the read attaches nothing. "미리보기 화면" is the active integrated browser tab only while it shows this window's own local preview (the preview server's exact origin, and the capture's own-preview text check); an external page or another port is disabled with "지금 탭은 내 작업 미리보기가 아니에요" and attaches nothing. It uses the existing page-context primitive (REQ-CGPV-15): REQ-N3 `input.page_context` gates it for every seat, the screenshot also needs `input.image_paste`, so a minors cohort sends a preview-tab image only while REQ-N3 is on. One click is one attach: a replayed request id, a second click while one runs, and any other target string attach nothing and capture nothing. Instructors get neither. A voice refusal is reported in the voice panel only and leaves the composer's file chip row unchanged. No `desktopCapturer`, display-media or OS screen-capture code path exists in product source (grep test with a planted control). The panel is not mounted on a learner screen until voice ships (REQ-R1). | `extensions/hypeproof-chat/test/voice-show-this.smoke.mjs` (menu, attach, races, provider wiring, grep); `extensions/hypeproof-chat/test/voice-show-this-menu.smoke.mjs` (headless Chromium: items, reasons, one click per attach, Escape order, 44px/14px/ring, forced colours). |
+
 ### REQ-STUDIO-PERSONAL-CLAUDE-CONTINUATION
 
 An eligible nonminor personal free seat may explicitly continue in its own official
@@ -5338,6 +5344,12 @@ Evidence: `annotation-leave-layout.smoke.mjs` mounts the actual App and bridge;
 request lifetime and host discard guards. Headless/synthetic IME evidence is
 separate from installed Studio and native OS IME acceptance.
 
+
+## Compact voice control corners (CGP-VOICE-R-008)
+
+| ID | Requirement and acceptance | Evidence |
+|---|---|---|
+| REQ-CGPV-12 | PI#4 (minimum necessary intervention: the control moves out of the learner's way without leaving the screen) / CGP-VOICE-012 / VO-40 / VO-47: the compact voice control floats in one of four viewport corners, 16px from the edges. With focus anywhere in the control, ArrowUp/ArrowDown choose the top/bottom side and ArrowLeft/ArrowRight the left/right side; Home returns to the home corner (top right, so the composer and its send button at the bottom stay uncovered). Arrow keys or Home with Shift, Alt, Ctrl or Meta, or during an open IME composition, are not taken. Focus stays on the control that had it, and each move is announced in a status region (`음성 컨트롤을 {corner}로 옮겼어요`). A `옮기기` button (44px, tooltip and accessible description `화살표 키로 네 모서리 중 한 곳으로 옮겨요. Home 키를 누르면 처음 자리로 돌아가요.`) steps clockwise on press, so pointer users can move it too. Only the four corners exist: no free position and no drag, so the control can never be parked partly off-screen; its width is capped to the viewport minus both gaps and it wraps, so it stays fully inside the viewport at 320px. The corner is remembered per window (this webview's sessionStorage); an unknown stored value or blocked storage falls back to the home corner without an error. Moves ease over the press duration only when motion is allowed and are instant under reduced motion. Escape still ends the session (VO-41). Learner floors win over DES-CGPV-12/DES-CGPV-02: 44px targets and 14px text. Not claimed: voice works or this control is mounted on a learner screen. VoicePanel is still unmounted (REQ-R1/REQ-R6), so seats (personal, classroom) inherit this when voice ships | `voice-popup.smoke.mjs` §15 (decision table, modifiers, parse), `voice-compact-corner.smoke.mjs` (headless Chromium, computed rects in dark/light at 1420/800/320 and forced colours) |
 
 ## Class window notice (CGP-SHELL-R-025)
 
@@ -6772,3 +6784,186 @@ file byte-identical) and `test/style-tweak-layout.smoke.mjs`
 (computed 44px targets, 14px text, 24px swatches, focus ring, inside the chip at 320/800/1420,
 personal and classroom, dark/light/forced colours). The browser smokes fail under
 `FOCUS_REQUIRE_BROWSER=1` without a browser.
+
+## Coach run state (CGP-LEARN-R-016)
+
+REQ-STUDIO-COACH-RUN-STATE / REQ-CGP-LEARN-16 (CGP-LEARN-032) / DES-CGP-LEARN-16 / PI#2 (human
+judgment stays visible): the learner can tell at a glance whether the coach is working, looking
+something up, changing their work, or waiting for them, so a pending decision is never missed. The
+chat header shows exactly one coach run state from a fixed set: 준비됨 / 생각 중 / 찾는 중 /
+만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요. It is a static 20px stroke icon plus the
+words at the 14px floor (DEC-29) in a polite live region (`role="status"`, `aria-live="polite"`);
+there is no character and no animation, and colour only reinforces the words (approval and error
+draw the label in body text, others muted). In a pane 480px wide or narrower the state takes its own
+row under the header controls (the access line's ≤640px pattern), so its words are never cut, the
+controls stay on one row and the page never scrolls sideways.
+
+The state is derived in the webview (`src/coachRunState.ts`, pure) from what it already holds, with
+this precedence: any open approval → 확인이 필요해요; a streaming turn or a running product test
+(내 제품 테스트) → its current activity; a send that has not opened its stream yet → 생각 중; an
+error banner, a last turn that failed, or a coach that cannot take a request now (offline, or the
+activity unavailable, frozen or unverified) → 문제가 생겼어요, never 준비됨; a last turn the learner or instructor stopped → 멈춤; otherwise 준비됨 (no turn yet,
+or the last turn finished). "Any open approval" is the host's `approvalWait` (REQ-E1, both
+runtimes) or any in-webview approval dialog: write, outbound/publish, command, browser and folder
+consent. The same flag now feeds the idle hint's approval pause and the task rail's run chip, so
+the header, the rail and the heading's screen-reader note never disagree about an approval. The current
+activity reads the unified timeline (REQ-C17): walking back from the end until the learner's last
+message or text the coach wrote after it, the newest running tool line decides by its host icon
+(file read, file find, web, page read, page capture, opening an address, preview screen → 찾는 중;
+file write or edit, agent.md → 만드는 중). Any other running line (thinking, the next-step line, a
+command run or install, which may only read, a helper delegation, preview open, an unknown tool,
+TodoWrite's 할 일 정리) and
+a turn with no running line read 생각 중: an unknown activity is never claimed as searching or
+making. A new turn clears 멈춤 and 문제가 생겼어요; switching activity or task resets the view.
+
+Seats: every seat whose chat panel draws the header (personal, trial, pass, classroom/lesson,
+instructor mode). In the personal task workspace the header is drawn into the task heading, whose
+own run note (CGP-DS-R-006 `.tw-run-note`) then leaves the row and keeps only its screen-reader
+sentence, so one state is visible there too; the task rail's per-task chip is unchanged. Display
+only: no host message, no stored state. Owner-delegated choices are in
+`docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+Evidence: `extensions/hypeproof-chat/test/coach-run-state.smoke.mjs` (pure derivation: fixed set,
+icon classifier with negative controls, current-turn scan, precedence),
+`test/coach-run-state-app.test.tsx` (the real App driven by host messages through all seven states,
+`approvalWait` and each of the five approval dialogs, offline and back, a product test run, one state
+at a time) and
+`test/coach-run-state-browser.smoke.mjs` (the mounted ChatPanel in headless Chromium, personal inside
+the task workspace frame and classroom lesson seat, dark/light, 320/390/800/1420 px, every state: one
+state in the header and no second visible run state, header controls on one row above or beside it, 20px icon, words at ≥14px drawn in full,
+visible and not clipped, no animation or transition, no horizontal page scroll, forced colours; fails
+under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Start page learner settings sheet (CGP-SHELL-R-014)
+
+`REQ-STUDIO-START-SETTINGS` adapts CGP-SHELL-026 / REQ-SHELL-14 and traces to PI#4
+(a learner meets only the controls the lesson needs). It may expose OWNERSHIP: the learner
+chooses how the workspace reads and notifies, without reaching runtime settings.
+
+The start page "설정" opens a learner settings sheet inside the start page; it never opens the
+VS Code settings editor directly (the former `openStudioSettings` host request is gone, and a
+stale one opens nothing). The sheet lists at most six rows, in the order REQ-SHELL-14 names them
+(글자 크기, 화면 밝기(테마), 움직임 줄이기, 알림, 팁 보기, 내 작업 내보내기), and only rows whose
+behaviour exists in the build (DEC-SHELL-R014):
+
+- 글자 크기 — 기본 / 크게 / 아주 크게, the same device preference as the personal chat settings
+  (CGP-DS-R-009, `hypeproof.textSize`); the row says it is the size of personal-activity chat text.
+  An open chat picks the change up at once.
+- 움직임 줄이기 — 기기 설정 따르기 / 줄이기 / 줄이지 않기, written to `workbench.reduceMotion`
+  (`auto` / `on` / `off`), which the chat already honours (CGP-DS-R-015).
+- 알림 — one checkbox for `hypeproofChat.osTaskNotices` (off by default), the existing opt-in for
+  native task notices while the window is unfocused; notices never carry answer text.
+
+화면 밝기(테마), 팁 보기 and 내 작업 내보내기 join when REQ-SHELL-16, REQ-SHELL-19 and
+REQ-SHELL-28 ship; until then they are not drawn, so no row is a switch that does nothing.
+
+"고급 설정" at the end of the sheet is the only start-page path to the VS Code settings editor.
+It is hidden for a minor cohort: a connected or previewed profile that `isMinorProfile` calls
+minor (it fails closed on an unknown tier) or a free start answered "under14". The host re-checks
+the same rule when the request arrives, so a forged request from a minor seat opens nothing. With
+no seat and no under-14 answer it stays (adult or staff setup, as before this row).
+
+Every write is host-validated: only the three keys with their exact values are stored; any other
+key or value stores nothing and sends nothing. A failed write says
+"설정을 저장하지 못했어요. 잠시 뒤 다시 골라 주세요." and keeps the shown value. The sheet reuses the
+chat settings dialog: Escape, × and the backdrop close it, focus returns to "설정", 44px targets,
+14px minimum text.
+
+Validation: `extensions/hypeproof-chat/test/start-settings-host.smoke.mjs` (the real StartPage in
+a vm: no direct editor path, writes land in their stores, hostile writes refused, minor tier /
+minor flag / under-14 never reach the editor) and
+`extensions/hypeproof-chat/test/start-settings-sheet.smoke.mjs` (the built start page in headless
+Chromium at 320/800/1420 px, dark/light and forced colours, adult and minor views: rows, cap,
+고급 설정 visibility, posted messages, 44px targets, 14px text, start-page text colour, Escape and
+focus return). The browser smoke fails under `FOCUS_REQUIRE_BROWSER=1` without a browser.
+
+## Example project ideas after a no-idea answer (CGP-SHELL-R-020)
+
+`REQ-STUDIO-PROJECT-IDEAS` (CGP-SHELL-R-020 / REQ-SHELL-20, DES-SHELL-19, P2; traces to
+CGP-SHELL-042, PI#2 Human judgment stays visible, PI#6 Adapt, do not script, NAT-03 and the
+first-trial intent in `docs/PRODUCT-INTENT.md` that the first experience is not a catalog).
+Example project ideas are offered only after the learner says they have no idea of what to make.
+The first screen never shows idea cards: an offer needs a learner message. In a personal seat
+(personal, trial, free and pass; a task workspace without a lesson), when the learner's latest
+message is a short no-idea answer (at most 30 characters, ending in a phrase such as `몰라요`,
+`모르겠어요`, `생각이 안 나요`, `아이디어가 없어요`, `못 정했어요` or `추천해 주세요`, but not
+`시간이 없어요`, after NFKC and removal of
+control, bidi and invisible characters) to a goal question (the coach message right before it, or
+the greeting for the first message, ends in a question that asks what to make or do, such as
+`무엇을 만들어 보고 싶어요?`; trailing emoji or emphasis do not count), up to six
+Studio-owned ideas appear below the coach's reply once the turn has ended. Each idea is a 44px
+button with its title (at most two lines) and `이걸로 시작`; `내가 정할래요` sits right after the
+list, at the newest end of the conversation, so it is in view without scrolling even in a short
+pane.
+Picking an idea puts its sentence in the composer for editing, with the reply-choice ownership
+rule (text the learner typed is kept, a second pick replaces the first) and never sends. An idea
+is marked chosen only while its sentence is still in the composer. Picks are inert while the
+composer is in Korean IME composition (so a composition is never overwritten) and while a missing
+task folder makes the draft read-only.
+`내가 정할래요` closes the list for that answer (remembered per task and answer in the panel's
+webview state, so a reload keeps it closed) and returns focus to the composer. A later no-idea
+answer is a new offer. Nothing is offered while a turn runs, after the learner has sent another
+message, when the coach's reply already carries reply choices (one picker at a time; profile
+follow-up chips give way while the list is shown), in a lesson
+or classroom seat, or in the instructor console. A seat that cannot send keeps the list with its
+picks disabled. Detection fails closed: an uncertain goal question or answer shows nothing and the
+conversation follows NAT-03 as before. The list is one column, and two when the chat pane is at
+least 640px wide. No message, recipient, data flow or capability claim is added; the coach still
+receives the learner's answer unchanged.
+The ideas are for starting a project, never mid-work. The offer needs a task at its start: no
+assistant turn has written or edited a file (any tool row other than thinking, reading or
+searching hides it), no fenced page and no artifact exists in the task (a picked surface, an open
+world or a publish), and the no-idea answer is among the learner's first three messages. Detail
+and choice questions never count as goal questions: `...으로/로 만들까요`, `어떤 색/이름/파일/모양`,
+`더`, `부터`, `다음에`, `어느 쪽`, or any question that names a part of an existing thing. When in
+doubt, nothing is shown.
+
+Tests: `extensions/hypeproof-chat/test/project-ideas.test.tsx` (no-idea and goal-question
+classifiers with positive and negative controls, hostile characters, offer binding, keys and the
+bounded dismissal list) and `test/project-ideas-layout.smoke.mjs` (real App in headless Chromium:
+first screen, offer, pick never sends, draft kept, hidden during a turn, dismissal across a
+reload, moved on, named goal, lesson seat, instructor console, unavailable seat; computed 44px
+targets, 14px text, columns by chat-pane width, two-line titles, `내가 정할래요` in view, focus
+ring, dark/light/forced colours at 320/800/1420 and a 320x500 pane; IME composition, missing
+folder and follow-up chips). The browser smoke fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser.
+
+## What's new after an update (CGP-SHELL-R-035)
+
+`REQ-STUDIO-WHATS-NEW` (REQ-SHELL-35 / CGP-SHELL-R-035 / CGP-SHELL-089 / PI#3, learning is
+embedded; design CGP-SHELL-D-034): after an update, the learner sees up to three short Korean
+`새로운 기능` lines once. The lines are the learner release notes bundled with the build
+(`extensions/hypeproof-chat/src/learnerReleaseNotes.ts`, one `id` per set of lines), written for
+learners: at most 3 lines of at most 40 characters, only features every learner seat has in that
+build, no capability or score labels. Each line is cleaned (C0/C1 controls, soft hyphen,
+zero-width and joiner characters, bidi marks and controls, Hangul and braille blank fillers, tag
+characters and BOM removed; NFC; whitespace including U+2028/2029 folds to one space); a line over
+40 characters is dropped, never cut; lines render as React text.
+
+"Once" is one local globalState record `hps.whatsNew.v1 = {seen}` (no Service call, no event). It
+is written first on activation: an empty globalState is a fresh install and marks the bundled notes
+as seen (nothing is new to a new learner); an existing profile without the record (updated from a
+build before this feature) has seen nothing. The panel is due when the bundled notes `id` differs
+from `seen`. It is drawn above the composer as a non-modal row (`새로운 기능` heading, the lines as
+a list, a 44px `새로운 기능 닫기` close button with the close ChatIcon) and never takes focus. It is
+never drawn while a turn runs, a send is pending or a lesson rehearsal
+send is in flight; drawing it is what records it as seen, so a
+launch where a turn ran the whole time leaves it due. In the same window it survives a panel
+remount until closed; a reload or the next launch does not bring it back. Closing it returns focus
+to the composer, and neither a late host answer nor a late "shown" message reopens it. The
+instructor console gets no panel. A store that cannot be read or written shows no panel and never
+throws into the webview. The same lines stay reachable later from Help: the settings dialog (both
+seats) lists `새로운 기능` next to `키보드 단축키` and opens them in the shared dialog surface; with
+no valid notes it says `이번 버전에서 새로 알려 드릴 기능이 없어요.` (before the host has answered:
+`새로운 기능을 불러오고 있어요.`) Learner targets are 44px and
+text at least 14px in both seats, dark, light and forced colours, at 320-1420 px.
+The panel may expose learning about new tools (PI#3); showing or closing it is not evidence and not
+a learning outcome. Two windows launched together on the first launch may each draw it once.
+
+Tests: `extensions/hypeproof-chat/test/whats-new.test.tsx` (shipped lines, hygiene and caps,
+baseline, offer, shown record), `test/whats-new-host.smoke.mjs` (the real ChatPanelProvider:
+once per notes id, remount, reload, close, late shown, instructor, fresh install, failing store)
+and `test/whats-new-layout.smoke.mjs` (the real App in headless Chromium: due-only, hidden during a
+turn and not recorded until drawn, close and focus, late answer, instructor, Help sheet, text-only
+lines, computed geometry in both seats, themes and widths, forced colours; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser).

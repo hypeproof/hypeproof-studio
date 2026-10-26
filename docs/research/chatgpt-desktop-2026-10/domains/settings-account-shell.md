@@ -229,7 +229,7 @@ agent/coding/browser domains and get no verdict here: `browserUse` 317, `codexMi
 | REQ-SHELL-11 (CGP-22) | When the network is lost, the chat panel shows one offline banner that states what still works. | Disconnect network → within 5 s banner "인터넷이 끊겼어요. 만든 파일은 그대로 있고, 연결되면 다시 보낼 수 있어요."; send is queued (REQ-C16), not dropped; reconnect removes the banner within 5 s and sends the queue once. | P1 | #1, AB-13 |
 | REQ-SHELL-12 (CGP-24) | The chat webview provides a "skip to input" link and keyboard-resizable panels. | First Tab focuses a visible skip link that moves focus to the composer; panel splitters are focusable with Arrow keys changing size in 16 px steps and have an accessible name. | P1 | #1 |
 | REQ-SHELL-13 (CGP-25) | A render error in one panel shows a retry inside that panel and keeps the composer text and chat history. | Forced render exception in a panel → panel shows "이 부분을 보여주지 못했어요" + 다시 시도; composer draft and messages unchanged; error reported with request id (REQ-H4). | P1 | #1 |
-| REQ-SHELL-14 (CGP-26) | The start page "설정" opens a learner settings sheet with at most 6 items; the full VS Code settings editor is reachable only from it via "고급 설정". | Sheet lists: 글자 크기, 화면 밝기(테마), 움직임 줄이기, 알림, 팁 보기, 내 작업 내보내기. For minor cohorts "고급 설정" is hidden. | P2 | #4 |
+| REQ-SHELL-14 (CGP-26) | The start page "설정" opens a learner settings sheet with at most 6 items; the full VS Code settings editor is reachable only from it via "고급 설정". | Sheet lists: 글자 크기, 화면 밝기(테마), 움직임 줄이기, 알림, 팁 보기, 내 작업 내보내기. For minor cohorts "고급 설정" is hidden. Studio (2026-10-26): REQ-STUDIO-START-SETTINGS; the sheet draws 글자 크기, 움직임 줄이기 and 알림 now, the other three join with REQ-SHELL-16/19/28; see decisions.md DEC-SHELL-R014. | P2 | #4 |
 | REQ-SHELL-15 (CGP-27) | Settings fixed by the cohort profile are shown as locked with the reason. | A setting set by the profile (e.g. model, approval mode) shows a lock and "선생님이 정한 설정이에요"; the control is disabled; the learner can still read the current value. | P1 | #2, AB-03 |
 | REQ-SHELL-16 (CGP-29) | Studio offers HP Dark, HP Light and "시스템 따라가기". | Switching updates the chat webview, start page and workbench theme together without reload; choice persists across restarts; explicit user VS Code theme settings are not overwritten (#725 rule). | P2 | #1 |
 | REQ-SHELL-17 (CGP-30) | The learner can set chat text size to 보통 / 크게 / 아주 크게. | Body text 15 / 17 / 20 px; persists; applies to chat, start page and help panels; no clipped controls at 아주 크게 in a 320 px wide panel. | P1 | #1 |
@@ -250,7 +250,7 @@ agent/coding/browser domains and get no verdict here: `browserUse` 317, `codexMi
 | REQ-SHELL-32 (CGP-79) | The issuer page accepts a pasted or CSV roster and reports a result per row. | Paste or upload ≤200 rows; duplicates and invalid handles flagged before issue; after issue each row shows 발급됨 / 실패(사유); failures do not block other rows (BOA-DIST-03). | P1 | #1, ADM-01 |
 | REQ-SHELL-33 (CGP-82) | At first join, the learner acknowledges the class rules, and the time is recorded for the instructor. | Rules text from the cohort profile shown once; "알겠어요" records timestamp per seat; Chalk shows 확인함 / 미확인 per seat; changed rules require a new acknowledgement. | P2 | #2 |
 | REQ-SHELL-34 (CGP-86) | Chalk shows each seat's Studio version and flags seats below the cohort's minimum. | Manage list gets a 버전 column from the heartbeat; seats below the minimum show amber "업데이트 필요" with icon + text; unknown version shows "확인 불가". | P1 | #1, ADM-02 |
-| REQ-SHELL-35 (CGP-89) | After an update, the learner sees up to 3 short Korean "새로운 기능" lines once. | First launch on a new version shows a dismissible panel with ≤3 items from release notes written for learners; not shown during an active turn; reachable later from Help. | P2 | #3 |
+| REQ-SHELL-35 (CGP-89) | After an update, the learner sees up to 3 short Korean "새로운 기능" lines once. | First launch on a new version shows a dismissible panel with ≤3 items from release notes written for learners; not shown during an active turn; reachable later from Help. | P2 | #3 (built 2026-10-26: bundled learner lines in `learnerReleaseNotes.ts`; "Help" = the settings dialog next to 키보드 단축키; see decisions.md CGP-SHELL-R-035) |
 
 ## 3. Design requirements (same rows)
 
@@ -323,3 +323,11 @@ cohort and profile. Unknown and unpaired seats remain silent (DEC-25); token/gra
 expiry is not a class end. The passive line counts down only within the final ten
 minutes and disappears at the end without changing Service admission. Connection
 snapshot freshness is explicit: schedule changes require a refreshed connection.
+
+## Example project ideas (CGP-SHELL-R-020)
+
+Built 2026-10-26 as `REQ-STUDIO-PROJECT-IDEAS` (`docs/studio-requirements.md`). Owner-delegated
+choices: personal seats only; a narrow, fail-closed no-idea and goal-question check in the
+webview; six Studio-owned ideas (no Service profile key exists for them); no list when the coach's
+reply already carries reply choices; columns follow the chat pane width (DES-SHELL-19). See
+`decisions.md` "CGP-SHELL-R-020".

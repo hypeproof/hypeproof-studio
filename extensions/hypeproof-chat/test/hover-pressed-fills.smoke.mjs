@@ -261,7 +261,7 @@ const MUST = ['.hps-shell[data-chat-detail="personal"] .hps-input', ".hps-input 
   ".hp-cta-quiet", ".tw-quiet", ".tw-new", ".hps-queued-send", ".hps-msg-retry", ".hps-naming-btn-ghost", ".hps-codepill-toggle", ".hps-chip", ".hps-btn-roll", ".hps-cit-chip",
   ".hps-error-banner-dismiss", ".hps-error-banner-report", ".hps-fatal-btn-ghost", ".hps-update-banner-dismiss", ".hps-safety-dismiss", ".hps-delegation-stop", ".hps-notify-optin-submit",
   ".hps-turn-review-actions button", ".hps-page-card-actions button", ".hps-edit-actions button", ".hps-panel-fallback-retry", ".hps-catchup button",
-  '.hps-shell[data-chat-detail="personal"] .hps-reply-choices button', '.hps-shell[data-chat-detail="personal"] .hps-chip', ".hps-voice-actions button", ".hps-voice-retry", ".hps-world", ".hps-native-observation textarea", ".hps-publish-form input", ".hps-evidence-note textarea", '.hps-shell[data-chat-detail="personal"] .hps-cit-chip',
+  '.hps-shell[data-chat-detail="personal"] .hps-reply-choices button', '.hps-shell[data-chat-detail="personal"] .hps-chip', ".hps-voice-actions button", ".hps-voice-retry", ".hps-voice-show button", ".hps-world", ".hps-native-observation textarea", ".hps-publish-form input", ".hps-evidence-note textarea", '.hps-shell[data-chat-detail="personal"] .hps-cit-chip',
   ".tw-trash button", '.tw-source-list button[aria-pressed="true"]', ".hps-native-observation button", ".studio-secondary", ".studio-choice", ".studio-nav button", ".studio-connect input"];
 const boundaryChecks = {
   "4 every field and secondary-button boundary is the fixed control token, and no control boundary is a color-mix": (css) => {
@@ -381,7 +381,7 @@ const negatives = [
   ["4 ", "quiet task button back on the panel border", mutateRule("taskWorkspace.css", ".tw-quiet", "solid var(--hp-border-control-default)", "solid var(--tw-line)")],
   ["4 ", "a secondary button boundary derived via color-mix", mutate("styles.css", ".hps-delegation-stop:hover {", ".hps-delegation-stop { border-color: color-mix(in srgb, currentColor 40%, transparent); }\n.hps-delegation-stop:hover {")],
   ["4 ", "error dismiss back on its white 15% line", mutateRule("styles.css", ".hps-error-banner-dismiss", "solid var(--hp-border-control-default)", "solid rgba(255,255,255,0.15)")],
-  ["4 ", "voice buttons back to a secondary fill with no boundary", mutateRule("styles.css", ".hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry", "solid var(--hp-border-control-default)", "solid var(--vscode-button-border, transparent)")],
+  ["4 ", "voice buttons back to a secondary fill with no boundary", mutateRule("styles.css", ".hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry, .hps-voice-show button", "solid var(--hp-border-control-default)", "solid var(--vscode-button-border, transparent)")],
   ["5 ", "light host themes lose the Paper control boundary", mutateRule("tokens.css", "body.vscode-light, body.vscode-high-contrast-light", "--hp-border-control-default:", "--hp-unused-control-default:")],
   ["5 ", "control boundary back to the #35483A divider", (() => { const t = real["tokens.css"]; const i = t.indexOf("--hp-border-control-default:"); const j = t.indexOf(";", i); return { ...real, "tokens.css": t.slice(0, i) + "--hp-border-control-default: #35483A" + t.slice(j) }; })()],
 ];
