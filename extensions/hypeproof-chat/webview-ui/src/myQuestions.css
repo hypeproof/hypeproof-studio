@@ -15,7 +15,9 @@
 body.vscode-high-contrast .hps-myq-panel { border-color: var(--vscode-contrastBorder, currentColor); }
 .hps-myq-list {
   list-style: none; margin: 0; padding: 0;
-  max-height: calc(var(--ds-c-studio-myquestions-size-8) * 10); overflow-y: auto; overscroll-behavior: contain;
+  /* CGP-CHAT-D-028: whole rows that fit above the window's bottom edge (MyQuestions.tsx), never more than 10. */
+  max-height: min(calc(var(--ds-c-studio-myquestions-size-8) * 10), var(--hps-myq-fit, calc(var(--ds-c-studio-myquestions-size-8) * 10)));
+  overflow-y: auto; overscroll-behavior: contain;
 }
 .hps-header .hps-myq-list .hps-myq-item {
   display: flex; align-items: center; gap: var(--ds-c-studio-myquestions-space-2);

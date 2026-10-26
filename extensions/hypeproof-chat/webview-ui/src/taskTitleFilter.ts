@@ -7,6 +7,13 @@
  * query's outer whitespace is ignored; a blank query shows every task.
  */
 export const TASK_SEARCH_MAX = 160; // the longest title the store accepts (taskWorkspaceStore normalizedTitle)
+/** CGP-KNOW-D-001 (DES-KNOW-01): below this window width the empty field folds into a 44px search icon. */
+export const TASK_SEARCH_COMPACT_BELOW = 360;
+
+/** The field folds only while it is empty and not opened: a typed or composing query is never hidden. */
+export function railSearchFolded(viewport: number, opened: boolean, text: string): boolean {
+  return viewport < TASK_SEARCH_COMPACT_BELOW && !opened && text === '';
+}
 
 export function taskSearchKey(text: string): string {
   return text.normalize('NFC').toLocaleLowerCase();
