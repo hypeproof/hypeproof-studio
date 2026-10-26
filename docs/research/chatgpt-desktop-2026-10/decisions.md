@@ -946,3 +946,67 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Out of scope: per-step 완료 기준 (`steps[].acceptance`).
 - Default state: on (instructor surface only; no new data flow).
 
+## CGP-VOICE-R-008: compact voice control corners (2026-10-26, agent-selected implementation)
+
+- Not blocked: VoicePanel's compact presentation already exists (unmounted, voice is planned per REQ-R1), so the row is built on that component and needs no Service contract. It is not mounted on any learner screen by this row; seats inherit it when voice ships.
+- Home corner: top right. The composer and its send button live at the bottom of the chat webview; a bottom home corner would cover them (VO-47: the work surface stays reachable). The learner may still move it to a bottom corner.
+- Keys: ArrowUp/Down pick the vertical side, ArrowLeft/Right the horizontal side, Home resets; taken with focus anywhere in the control. Arrow keys or Home with Shift/Alt/Ctrl/Meta, or during an IME composition, are left alone (shortcuts and Korean input).
+- Pointer: no drag (REQ-CGPV-12 "no drag-to-hide"). A `옮기기` button steps clockwise so mouse users can move it without a drag.
+- Per window: this webview's sessionStorage (`hps.voice.compactCorner`), read through an exact-match parse; anything else, or blocked storage, gives the home corner without an error.
+- Motion: DES-CGPV-12 asks 150 ms ease-out. The design scale has no 150 ms step and literal durations are not allowed, so the move uses `--hp-dur-press` (140 ms) with `--hp-ease`. Under reduced motion the global reduce rule makes it instant.
+- Sizes: 44px targets and 14px text (`--hp-font-caption`) win over DES-CGPV-02's 32px and the old 13px compact text.
+- Default state: n/a (voice itself is not shipped; no data flow, nothing leaves the device).
+
+## CGP-LEARN-R-016: coach run state in the chat header (2026-10-26, agent-selected conservative implementation)
+
+- Source of truth: the webview's own state only (send pending, open stream, approval prompts, error banner, last turn outcome, timeline). No new host message, so both runtimes and the local runtime behave the same.
+- Precedence: approval > streaming turn or product test run (activity) > send pending (생각 중) > error banner, failed turn, offline or unavailable activity (문제가 생겼어요) > stopped turn (멈춤) > 준비됨. 준비됨 is never shown when the coach cannot take a request. The failed and stopped states last until the next turn (also after the banner is dismissed or the conversation cleared), like the task rail's run chip (taskRunState.ts).
+- Approval: the host's `approvalWait` plus every in-webview approval dialog (write, outbound/publish, command, browser, folder consent). The annotation-leave prompt is not an approval of coach work and does not count. One shared flag (App `anyApprovalPending`, now including the command dialog) feeds the header, the idle hint and the task rail chip, so they agree.
+- Activity: the newest running tool line of the current turn, classified by the icon the host draws for it (a closed list). Unknown icons, thinking, delegation, preview open, command runs and installs (they may only read) and TodoWrite read 생각 중, never 찾는 중 or 만드는 중 (copy is honest). Text the coach writes after a line, or a learner line (a steer), ends that line's claim until the next tool line.
+- One visible state: in the personal task workspace the heading's existing run note (CGP-DS-R-006) leaves the row and keeps only its screen-reader sentence; the rail's per-task chip stays as is because it describes a task in a list, not the coach.
+- Size: 20px icon, label at the 14px floor (DEC-29) for every seat; no 44px target because the state is not a control. At ≤480px the state wraps to its own row under the header controls instead of shrinking or ellipsizing its words.
+- Seats: every seat whose chat panel draws the header, including instructor mode. Default state: on (display only, no data flow).
+
+## DEC-VOICE-R009: voice "보여주기" (2026-10-26; agent implementation choice)
+
+- Targets: the closed list `editor_file` / `preview_tab`. The host refuses any other string before reading or capturing anything; the panel draws Studio's own labels for exactly those two, whatever the host payload holds. No whole-screen, window or desktop item; a grep test with a planted control keeps `desktopCapturer`, display-media and OS screen capture out of product source.
+- "열린 파일" = the active editor's document, through the existing work-folder file checks and gate (`sdk_tools.read`, folder consent, never instructors). Revision = editor version + first 12 hex of sha256 of the text, written into the model text (`revision="..."`) and the panel's reference line. Conservative choice: an unsaved or untitled buffer is refused with "저장한 뒤 보여 주세요" instead of sending unsaved text, because the existing file path reads the disk and the attached bytes must equal what the learner sees; the disk text is compared with the editor text, and a version, task or gate change during the read attaches nothing.
+- "미리보기 화면" = the active integrated browser tab, and only while it is the own local preview (exact origin of this window's preview server, confirmed again by the capture's own-preview text check). An external site in the active tab is refused, screenshot included: a learner asked to "show the preview" must not send a mail or other page by accident. Captured through the existing page-context primitive (DEC-VOICE-R010 text rule unchanged). REQ-N3 `input.page_context` gates it for every seat (stricter than "minors only"); the screenshot also needs `input.image_paste`. Default off stays off. A preview has no revision Studio can name, so the reference line says "버전 확인 안 됨" rather than inventing one.
+- One click = one attach: request ids are single-use; a second click while one runs is refused, not queued; the menu closes after each attach, so another attach needs another open and click. The menu state is re-read from the host on every open.
+- Where it lands: the conversation's existing pending file / page slots, so the chips show exactly what is sent and the existing remove/undo apply. A refusal is reported in the voice panel only (no composer error banner, no lesson denial notice).
+- Not mounted: VoicePanel has no learner mount until voice ships (REQ-R1); this adds the host contract, messages and component. Targets 44px and text 14px (owner rule); the reference line moved from 12px to 14px.
+- Default state: unchanged gates; no new data flow, recipient or permission.
+
+## DEC-SHELL-R014: start page learner settings sheet (CGP-SHELL-R-014, 2026-10-26, agent-selected conservative implementation)
+
+- Rows: only rows whose behaviour exists are drawn: 글자 크기 (CGP-DS-R-009 text size), 움직임 줄이기 (`workbench.reduceMotion`) and 알림 (`hypeproofChat.osTaskNotices`, default off). 화면 밝기(테마), 팁 보기 and 내 작업 내보내기 wait for REQ-SHELL-16 / 19 / 28: drawing them now would be switches that do nothing. The cap stays six and the order follows REQ-SHELL-14.
+- 고급 설정: hidden and host-refused for a minor cohort (`isMinorProfile`, which fails closed on an unknown tier, on the connected or previewed profile) and for a free start answered under14. With no seat and no under-14 answer it stays, because the start page "설정" reached the editor for adult/staff setup before this row. This is a navigation guard, not a security boundary: the editor's own menu entry and shortcut are out of scope.
+- Surface: the existing chat settings dialog (`ChatPreferences`) is reused instead of the DES-SHELL-13 right-side sheet; the sheet geometry is CGP-SHELL-D-013's row.
+- Text size row: the stored size is the personal-chat size (classroom chat keeps the base size), so the row says "혼자 하는 활동의 대화 글자 크기예요." for every seat.
+- Default state: on for every seat; no new data flow, no new permission; notices stay off until the learner turns them on.
+
+## CGP-SHELL-R-020: example project ideas after a no-idea answer (2026-10-26, agent-selected conservative implementation)
+
+- Trigger: client-side and narrow. The learner's latest message must be short (at most 30 characters) and end in a no-idea phrase, and the coach message before it (or the greeting, for the first message) must end in a question about what to make or do. Anything uncertain shows nothing, so NAT-03's one-question flow is unchanged. The answer is still sent to the coach as typed.
+- Seats: personal task workspaces only (personal, trial, free, pass). Lesson and classroom seats already have a task, and the instructor console is not a learner seat.
+- Ideas: six Studio-owned, generic sentences (no customer, cohort or capability wording). No Service profile key was added; a profile-supplied list would need a Service contract that does not exist.
+- One picker at a time: when the coach's reply already parses as reply choices, the idea list is not shown.
+- Placement: below the coach's reply after the turn ends. `내가 정할래요` sits right after the list, at the newest end of the conversation that the pane follows, so it stays in view in a 320x500 pane where a heading-row button would scroll away. Profile follow-up chips give way while the list is shown. Columns follow the chat pane (studio-chat container), not the window: one column below 640px, two at 640px and wider.
+- Pick: same ownership rule as reply choices (keeps typed text, a second pick replaces the first, never sends). Inert during Korean IME composition and while a missing folder holds the draft read-only. The chosen mark is derived from the composer text, not stored.
+- Classifier: `없어요` counts only alone or after an ideas/plans subject (`아이디어가`, `하고 싶은 게`, `딱히`…), never `시간이 없어요`; a goal question needs a what-word plus make/do (or `목표가 뭐`), so `저장하고 싶으세요?` is not one. Dismissal is remembered per task and answer in webview state (bounded to 200 keys).
+- Sizes: 44px targets and 14px text (owner rule).
+- Default state: on for personal seats (local display only; no new data flow, nothing leaves the device).
+- Fix 1 (owner decision, after a failed verification): ideas are for STARTING a project, never mid-work, and the trigger is structural, not only wording.
+  - Start of the task: no work made yet. Any tool row other than a look-only one (thinking, the pending line, read, search, web) counts as work, so a written or edited file, a preview, a command or an unknown row hides the list. An assistant message with a fenced block (the chat fence opens a preview) counts too, and so does a known artifact in the task (a picked surface, an open world, a publish).
+  - Early conversation: the no-idea answer must be among the learner's first 3 messages (`IDEA_OFFER_MAX_LEARNER_TURNS = 3`). Three is small on purpose: a goal question is asked at the start, and a late one is almost always a detail question.
+  - Detail and choice questions are never goal questions: `...으로/로 만들까요`, `더`, `부터`, `다음에`, `어느 쪽`, `어떻게`; a what-word followed by a noun other than the whole thing (`어떤 색`, `어떤 파일 이름`, `어떤 모양`); and any question that points at an existing thing (`이/그/저/이번/방금/위/아래/여기`, `...의`, `...에서`, `안에`, `부분`). If either of the closing two questions is such a question, nothing is offered.
+  - When in doubt, show nothing (unchanged).
+
+## CGP-SHELL-R-035: "새로운 기능" after an update (2026-10-26, agent choice)
+
+- Source of the lines: no learner-facing release notes existed (the GitHub release body is staff-facing). The build carries its own learner lines in `extensions/hypeproof-chat/src/learnerReleaseNotes.ts` (≤3 lines, ≤40 characters, DES-SHELL-34), and `docs/RELEASE-NOTES-template.md` tells the release manager to edit them before the cut. No Service field: the lines are bundled, so offline learners get them and no new data flow exists.
+- "After an update" vs a fresh install: one globalState record written first on activation. An empty globalState is a fresh install and marks the bundled notes as seen; an existing profile without the record (updated from an older build) has seen nothing. Keyed by the notes `id`, not the version string, so a version with no new lines shows nothing.
+- "Once": the record is written when the panel is actually drawn, not when it is offered. A launch where a turn ran the whole time leaves it due. In the same window it stays through panel remounts until closed. Two windows launched together on the first launch may each draw it once (accepted; globalState has no cross-window lock).
+- "Reachable later from Help": Studio has no Help menu of its own (the native Help menu is upstream workbench chrome and extensions cannot add to it without a patch). The help entries live in the settings dialog next to `키보드 단축키` (CGP-CHAT-R-030), so `새로운 기능` goes there in both seats.
+- Initial lines name three features on main in every learner seat: find in chat (CGP-CHAT-R-027), the `?` shortcut sheet (CGP-CHAT-R-030) and math rendering (CGP-CHAT-R-022).
+- Seats: every learner seat (personal, trial, pass, classroom, lesson, unknown); the instructor console gets no panel (unknown instructor state counts as learner, as for CGP-SHELL-R-023). Default state: on (local display only, no event, nothing leaves the device).

@@ -228,6 +228,9 @@
 /* CGP-DS-R-006: the run state is a status chip (.tw-run-chip, styles.css .hp-status-chip) with its
    intent's icon, colour and edge; the live-region wrapper only places it. */
 .tw-heading .tw-run-note:not(:empty) { display: inline-flex; align-items: center; min-width: 0; }
+/* CGP-LEARN-R-016: the chat header drawn into this heading carries the coach run state, the one state
+   the heading shows. The run note then stays only as its screen-reader sentence, out of the row. */
+.tw-heading:has(.hps-run-state) .tw-run-note { position: absolute; width: var(--ds-c-studio-taskworkspace-size-3); height: var(--ds-c-studio-taskworkspace-size-3); margin: var(--ds-c-studio-taskworkspace-space-22); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .tw-workspace .tw-heading .tw-sources-toggle { position: relative; font-weight: var(--hp-weight-strong); }
 /* The divider separates the actions from something: only when the activity, the remaining line or the
    run pill precedes 자료. The classroom heading has none of them while idle, so it draws no stray line. */

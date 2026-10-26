@@ -9,6 +9,7 @@ import "./start.css";
 import { AccountEntry } from "./AccountEntry";
 import { chosenPass } from "./purchaseChoice";
 import { InstructorInbox } from "./InstructorInbox";
+import { StartSettingsSheet } from "./StartSettingsSheet";
 import { activityLabel, passSummary, trialAllowance, trialEndedFacts, trialSummary } from "./activityLabel";
 import { trialEntryNote } from "../../src/trialOffer";
 import { FREE_START_COPY, freeCalmNotice } from "../../src/freeStart";
@@ -28,6 +29,9 @@ export function StartPage() {
   const [entry, setEntry] = useState<"trial" | "classroom" | "purchase" | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  // CGP-SHELL-R-014 — "설정" opens the learner sheet here; the VS Code editor only via its "고급 설정".
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpener = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const off = onHostMessage(msg => {
       if (msg.type !== "startState") return;
@@ -117,7 +121,8 @@ export function StartPage() {
     : state.checking ? "연결 정보를 확인하고 있습니다." : "";
 
   return <main className="studio-start">
-    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.account?.status === "signedIn" && <button onClick={() => postToHost({type:"accountManage"})}>{state.account.account?.display_name} · 내 계정 <ChatIcon kind="external" size={16} /></button>}<button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "openStudioSettings" })}>설정</button></nav></header>
+    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.account?.status === "signedIn" && <button onClick={() => postToHost({type:"accountManage"})}>{state.account.account?.display_name} · 내 계정 <ChatIcon kind="external" size={16} /></button>}<button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
+    <StartSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} opener={() => settingsOpener.current} view={state.settings} />
     <div className="studio-main">
       <section className="studio-intro" aria-labelledby="start-title">
         <p className="studio-eyebrow"><span/> 생각에서, 나의 결과물로</p>

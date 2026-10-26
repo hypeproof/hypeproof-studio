@@ -55,6 +55,8 @@ const ALLOW = [
   ...["🔍", "🔎", "✍", "📝", "✏", "⌨", "🖥", "🌐", "🔧", "🛠", "🤖", "💭", "🖼", "📸", "🔗", "↗", "👀", "👆", "🖱", "◀", "▶", "💬", "🔽", "↕", "🔄", "🧪", "💡", "⏳", "🔒", "📖", "📄", "📦", "🗂", "📏", "🤝", "⚠", "✓", "✅", "🌙", "🎟", "🧰", "🔌", "✨", "🎮"]
     .map((glyph) => ({ file: "glyphIcon.ts", glyph, why: "icon key table" })),
   ...["🌙", "🎟", "⏳", "🧰", "🔒", "🔌", "⚠"].map((glyph) => ({ file: "errorBannerPresentation.ts", glyph, count: glyph === "⏳" ? 4 : 1, why: "banner icon key, drawn through glyphIconKind" })),
+  // Keys, not drawn: CGP-SHELL-R-020 matches tool rows by their host icon key to tell look-only rows from work.
+  ...["💭", "📖", "🔍", "🌐"].map((glyph) => ({ file: "projectIdeasModel.ts", glyph, why: "tool-row icon keys matched, never rendered" })),
   // Learner content: cohort world faces and the model's markdown task-list boxes.
   { file: "runner.ts", glyph: "✨", why: "runner face before a world opens (cohort content)" },
   { file: "MarkdownText.tsx", glyph: "☑", why: "model answer task list, content" },

@@ -253,11 +253,15 @@ const OLD_SCREENS = {
 // empty polite status region and one empty assertive region so copy results are announced. The dumps of
 // main and this branch (HPS_A5_DUMP_DIR) differ only by those nodes: div.hps-copy-feedback wrapping
 // div[role=status][aria-live=polite].hps-sr-only and div[aria-live=assertive][aria-atomic=true].hps-sr-only. The EffortControl digests are unchanged.
+// CGP-LEARN-R-016: the six ChatPanel digests were re-taken (TZ=UTC) because the header now always draws one
+// coach run state (span.hps-run-state[role=status][aria-live=polite] with a 20px svg and the label 준비됨). The
+// HPS_A5_DUMP_DIR dumps of main and this branch are byte-identical once that one span is removed; the
+// five EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "efcacd7dd5bdb7e6dab6ac545fdc0b03fd6c0a60ada22ec2a736e8bf4f0ecff0",
-  "ChatPanel/adult-effort-observed": "edd1924b26b70409d665b17a76d879b59950518bd53aa77a9ff6d728f7f52274",
-  "ChatPanel/adult-timeline": "0a6651b2f451436f0d249f2817756cd1773b167a6a109d09a8fd908d6d2f8249",
-  "ChatPanel/kids": "5594fbf2d514b4e1ada65ef7b3c50cff5a8915c08b683f3e63ab9c3940fbd38f",
+  "ChatPanel/adult-plain": "e7b78975c5529edfda2a304b4b36d1c33cfd2aefcdd52a0b7ec657c2cf7f0964",
+  "ChatPanel/adult-effort-observed": "aba8d30386fd7fce078b3b6275cfe16c8f910d04199a0410fcbead0850e43924",
+  "ChatPanel/adult-timeline": "11eaad72a5afe42826e27088708fb88264cb30a02f711bdbf965a6321f0a6b03",
+  "ChatPanel/kids": "4f11c643e12dae9759676215e307d603d1173747c3740153929aa7cdfd6eec11",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -277,8 +281,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "496c9e1e16ab4f3cf377d9466a08209351385cb498b4ad22b6ae6a2a648da1e4",
-  "ChatPanel/classroom-access-unknown": "454d91b88284fed18c839170409cdac60aa32b20bbcbfff79259e268d8f779e1",
+  "ChatPanel/classroom-class-funded": "f79bf47aa8ca173dbc6ffb5a8639276a2a086fa036f2e3c97741852fddce7834",
+  "ChatPanel/classroom-access-unknown": "adcd0f7b3b6500e8dc53aeb8ae5f82778b6e76c1238edf682115c2ac23042ce7",
 };
 
 const status = rendererStatus();

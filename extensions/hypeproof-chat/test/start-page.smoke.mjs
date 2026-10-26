@@ -49,7 +49,7 @@ failResolved=false;response='invalid';
 await page.handle({type:'beginCourse'});assert.equal(stored,'valid-old');assert.equal(starts,0,'expired preview cannot start');
 response='valid';await page.handle({type:'beginCourse'});assert.equal(stored,'valid-new');assert.equal(starts,1);assert.equal(page.panel,undefined);assert.equal(page.candidate,undefined);assert.equal(page.started,true);
 attach();await page.handle({type:'disconnectCourse'});assert.equal(stored,undefined);assert.equal(states.at(-1).state.profile,undefined);
-await page.handle({type:'openStudioFiles'});await page.handle({type:'openStudioSettings'});assert.deepEqual(commands,['workbench.view.explorer','workbench.action.openSettings']);
+await page.handle({type:'openStudioFiles'});await page.handle({type:'openStudioSettings'});assert.deepEqual(commands,['workbench.view.explorer'],'CGP-SHELL-R-014: 설정 opens the learner sheet, never the settings editor directly');
 console.log('PASS host candidate transaction: 401/403/network/malformed, active-stream exclusion, preview/cancel, workspace/storage/revalidation rollback, committed entry, disconnect and navigation');
 
 response='waiting';stored='valid-old';const pending=page.handle({type:'connectCourse',token:'valid-first'});

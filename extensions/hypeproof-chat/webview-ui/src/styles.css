@@ -48,7 +48,10 @@ html, body, #root {
   white-space: nowrap;
 }
 .hps-coach-name:hover { border-bottom-color: var(--vscode-foreground, var(--ds-c-studio-styles-boundary-11)); }
-.hps-actions { flex: 0 0 auto; }
+/* The header's buttons are centred as flex items, not baseline-aligned inline boxes: an icon-only
+   button and a text button would otherwise sit at different heights, by an amount that depends on the
+   font's ascent (CGP-LEARN-R-016: one row of controls on any platform font). */
+.hps-actions { flex: 0 0 auto; display: flex; align-items: center; }
 
 .hps-header button {
   background: transparent;
@@ -1861,31 +1864,59 @@ html, body, #root {
 .hps-voice-final, .hps-voice-partial { margin: 0; overflow-wrap: anywhere; }
 .hps-voice-partial { color: var(--hp-text-muted-default); }
 .hps-voice-partial-tag { font-size: var(--ds-c-studio-styles-type-1); }
-.hps-voice-reference { margin: 0; font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
+.hps-voice-reference { margin: 0; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 
 /* Status · mute · end never scroll out of view (VO-40/47). */
 .hps-voice-actions {
   display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-styles-space-2);
   padding-top: var(--ds-c-studio-styles-space-2); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-7));
 }
-.hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry {
+.hps-voice-actions button, .hps-voice-compact button, .hps-voice-head-buttons button, .hps-voice-resume button, .hps-voice-retry, .hps-voice-show button {
   font: inherit; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-8); cursor: pointer;
   color: var(--vscode-button-secondaryForeground, var(--ds-c-studio-styles-ink-1));
   background: var(--vscode-button-secondaryBackground, var(--ds-c-studio-styles-surface-21));
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
 }
 .hps-voice-actions button:disabled { opacity: .5; cursor: default; }
+/* CGP-VOICE-R-009 — "보여주기": two Studio-owned targets only. The reason for a disabled item is
+   always written next to it (DES-CGPV-14), at the learner text floor, never only in a tooltip. */
+.hps-voice-show { flex-shrink: 0; display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); font-size: var(--hp-font-caption); }
+.hps-voice-show-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
+.hps-voice-show-menu { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-2); padding: var(--ds-c-studio-styles-space-2); border: var(--ds-c-studio-styles-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-styles-boundary-14)); border-radius: var(--ds-c-studio-styles-radius-8); }
+.hps-voice-show-item { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
+.hps-voice-show-item button { text-align: start; }
+.hps-voice-show button:disabled { cursor: default; color: var(--hp-text-muted-default); }
+.hps-voice-show-reason, .hps-voice-show-notice { margin: 0; font-size: var(--hp-font-caption); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .hps-voice-to-text { color: var(--vscode-button-foreground, var(--ds-c-studio-styles-ink-2)) !important; background: var(--vscode-button-background, var(--ds-c-studio-styles-surface-23)) !important; }
 .hps-voice-info { margin: 0; padding-left: var(--ds-c-studio-styles-space-18); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
 .hps-voice-est { font-style: italic; }
 
-/* The compact control — folds into one row so it does not cover the area where the artifact is read. */
+/* The compact control — one wrapping row that floats in a viewport corner (below), so it does not take room from the artifact being read. */
 .hps-voice-compact {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-2);
-  margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-2);
+  padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-2);
   background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-7));
   border: var(--ds-c-studio-styles-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-styles-boundary-14));
-  font-size: var(--ds-c-studio-styles-type-9);
+  /* Learner text floor 14px (CGP decision: 14px wins over register sizes). */
+  font-size: var(--hp-font-caption);
+}
+/* CGP-VOICE-R-008 (REQ-CGPV-12 / DES-CGPV-12): the compact control floats in one of four
+   viewport corners, 16px in. Each corner is a length plus a translate, never `auto`, so a
+   move can ease between corners; the width cap and wrapping keep it inside the viewport at
+   any width. Only corners exist: no free position, no drag. */
+.hps-voice-compact {
+  position: fixed; z-index: 10; box-sizing: border-box;
+  max-inline-size: calc(100% - 2 * var(--ds-c-studio-styles-space-20));
+  --hps-voice-x: 0; --hps-voice-y: 0;
+  left: var(--ds-c-studio-styles-space-20); top: var(--ds-c-studio-styles-space-20);
+  translate: var(--hps-voice-x) var(--hps-voice-y);
+}
+.hps-voice-compact[data-corner$="right"] { left: calc(100% - var(--ds-c-studio-styles-space-20)); --hps-voice-x: -100%; }
+.hps-voice-compact[data-corner^="bottom"] { top: calc(100% - var(--ds-c-studio-styles-space-20)); --hps-voice-y: -100%; }
+/* Movement only when motion is allowed, the same switch as the meter above (no new reduce block). */
+:where(:root[data-reduced-motion="false"]) .hps-voice-compact { transition: left var(--hp-dur-press) var(--hp-ease), top var(--hp-dur-press) var(--hp-ease), translate var(--hp-dur-press) var(--hp-ease); }
+@media (prefers-reduced-motion: no-preference) {
+  :where(:root:not([data-reduced-motion])) .hps-voice-compact { transition: left var(--hp-dur-press) var(--hp-ease), top var(--hp-dur-press) var(--hp-ease), translate var(--hp-dur-press) var(--hp-ease); }
 }
 .hps-voice-compact-status { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
 .hps-voice-dot { width: var(--ds-c-studio-styles-size-63); height: var(--ds-c-studio-styles-size-63); border-radius: 50%; background: var(--vscode-descriptionForeground, var(--ds-c-studio-styles-surface-38)); }
