@@ -8,6 +8,8 @@ import { FolderConsentRequest } from './folderConsentPrompt';
 import { classWindowNoticeId, classWindowReceiptKey } from "./classWindowReceipt";
 import { AccuracyEducationStore } from "./accuracyEducationStore";
 import { accuracyOffer, offerAccuracy, dismissAccuracy, type AccuracyOffer } from "./accuracyEducation";
+import { learnerNotes, markWhatsNewShown, whatsNewOffer } from "./whatsNew";
+import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { showVisitorPreview } from "./visitorPreviewHost";
 import { attemptGroups, attemptHistory, selectAttempt, visibleAttempts } from './answerAttempts';
 import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntry";
@@ -1645,6 +1647,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let offer: AccuracyOffer | null = null;
     if (!this._instructorMode.isInstructor) { try { offer = accuracyOffer(this.accuracyStore(), owner, scope); } catch { offer = null; } }
     await this.post({ type: 'accuracyEducation', requestId, offer });
+  }
+
+  // CGP-SHELL-R-035 — the notes id this window has drawn and the learner has not closed yet, so a
+  // panel remount (hide/show) keeps it; a reload or the next launch does not bring it back.
+  private whatsNewOpen: string | null = null;
+  private whatsNewClosed: string | null = null;
+  private async postWhatsNew(requestId?: string): Promise<void> {
+    if (!requestId) { await this.post({ type: 'whatsNewChanged' }); return; }
+    const notes = learnerNotes(LEARNER_RELEASE_NOTES);
+    let show = false;
+    try { show = whatsNewOffer(this.context.globalState, notes, { instructor: this._instructorMode.isInstructor === true, open: this.whatsNewOpen }); } catch { show = false; }
+    if (notes && this.whatsNewClosed === notes.id) show = false; // closed here even if the record could not be written
+    await this.post({ type: 'whatsNew', requestId, notes, show });
   }
 
   private activeCohortId: string | null = null;
@@ -7026,6 +7041,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (scope !== this.turnRequestScope() || this._instructorMode.isInstructor) return;
         try { await dismissAccuracy(this.accuracyStore(), owner, scope, msg.messageId); } catch { /* best effort; the card stays until a dismissal can be stored */ }
         await this.postAccuracyEducation();
+        return;
+      }
+      case "whatsNewRequest": if (typeof msg.requestId === "string" && msg.requestId.length <= 100) await this.postWhatsNew(msg.requestId); return;
+      case "whatsNewShown": {
+        if (this._instructorMode.isInstructor) return;
+        const notes = learnerNotes(LEARNER_RELEASE_NOTES);
+        if (!notes || msg.notesId !== notes.id || this.whatsNewClosed === notes.id) return;
+        this.whatsNewOpen = notes.id;
+        try { await markWhatsNewShown(this.context.globalState, notes, msg.notesId); } catch { /* the panel stays for this window either way */ }
+        return;
+      }
+      case "whatsNewDismiss": {
+        const notes = learnerNotes(LEARNER_RELEASE_NOTES);
+        if (!notes || msg.notesId !== notes.id) return;
+        this.whatsNewOpen = null; this.whatsNewClosed = notes.id;
+        try { await markWhatsNewShown(this.context.globalState, notes, msg.notesId); } catch { /* closed for this window */ }
+        await this.postWhatsNew();
         return;
       }
       case "stopRunningProcess": await this.runningProcesses.stop(msg.id); return;

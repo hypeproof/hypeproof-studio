@@ -696,6 +696,10 @@ export type WebviewMessage = (
   /** CGP-SHELL-R-023 — local first-result education; no verdict or telemetry. */
   | { type: "accuracyEducationRequest"; requestId: string }
   | { type: "accuracyEducationDismiss"; messageId: string }
+  /** CGP-SHELL-R-035 — "새로운 기능" after an update; local record only, no telemetry. */
+  | { type: "whatsNewRequest"; requestId: string }
+  | { type: "whatsNewShown"; notesId: string }
+  | { type: "whatsNewDismiss"; notesId: string }
   /**
    * CGP-CHAT-R-005 (REQ-STUDIO-ANSWER-VERDICT) — the learner's verdict on one finished answer in a
    * personal task; `verdict: null` removes it. Stored locally and recorded in the spool (DEC-09).
@@ -986,6 +990,8 @@ export type HostMessage = (
   | { type: "aiDisclosure"; text: string }
   | { type: "accuracyEducationChanged" }
   | { type: "accuracyEducation"; requestId: string; offer: import("./accuracyEducation").AccuracyOffer | null }
+  | { type: "whatsNewChanged" }
+  | { type: "whatsNew"; requestId: string; notes: import("./whatsNew").LearnerNotes | null; show: boolean }
   // #384 — an image opened in an editor tab (VS Code intercepts file drops onto
   // the editor and opens them). The host reads the bytes and hands the webview
   // a data URL to attach to the next turn — making "drag a screenshot in" work

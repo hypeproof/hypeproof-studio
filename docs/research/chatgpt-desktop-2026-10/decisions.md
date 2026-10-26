@@ -935,3 +935,11 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Out of scope: per-step 완료 기준 (`steps[].acceptance`).
 - Default state: on (instructor surface only; no new data flow).
 
+## CGP-SHELL-R-035: "새로운 기능" after an update (2026-10-26, agent choice)
+
+- Source of the lines: no learner-facing release notes existed (the GitHub release body is staff-facing). The build carries its own learner lines in `extensions/hypeproof-chat/src/learnerReleaseNotes.ts` (≤3 lines, ≤40 characters, DES-SHELL-34), and `docs/RELEASE-NOTES-template.md` tells the release manager to edit them before the cut. No Service field: the lines are bundled, so offline learners get them and no new data flow exists.
+- "After an update" vs a fresh install: one globalState record written first on activation. An empty globalState is a fresh install and marks the bundled notes as seen; an existing profile without the record (updated from an older build) has seen nothing. Keyed by the notes `id`, not the version string, so a version with no new lines shows nothing.
+- "Once": the record is written when the panel is actually drawn, not when it is offered. A launch where a turn ran the whole time leaves it due. In the same window it stays through panel remounts until closed. Two windows launched together on the first launch may each draw it once (accepted; globalState has no cross-window lock).
+- "Reachable later from Help": Studio has no Help menu of its own (the native Help menu is upstream workbench chrome and extensions cannot add to it without a patch). The help entries live in the settings dialog next to `키보드 단축키` (CGP-CHAT-R-030), so `새로운 기능` goes there in both seats.
+- Initial lines name three features on main in every learner seat: find in chat (CGP-CHAT-R-027), the `?` shortcut sheet (CGP-CHAT-R-030) and math rendering (CGP-CHAT-R-022).
+- Seats: every learner seat (personal, trial, pass, classroom, lesson, unknown); the instructor console gets no panel (unknown instructor state counts as learner, as for CGP-SHELL-R-023). Default state: on (local display only, no event, nothing leaves the device).

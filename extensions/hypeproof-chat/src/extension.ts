@@ -54,6 +54,8 @@ import {
 } from "./updateChecker";
 import { INSTALL_STAGED_UPDATE_COMMAND, updateInstallAllowed } from "./stagedUpdate";
 import { CLASS_UPDATE_HOLD_COPY } from "./updateCheckerHelpers";
+import { learnerNotes, recordWhatsNewBaseline } from "./whatsNew";
+import { LEARNER_RELEASE_NOTES } from "./learnerReleaseNotes";
 import { openBrowser, sendActivePageToCoach, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
 import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
@@ -74,6 +76,9 @@ let spoolRef: SessionSpool | null = null;
 let uploadInFlight = false;
 
 export async function activate(context: vscode.ExtensionContext) {
+  // CGP-SHELL-R-035: first, while globalState still tells a fresh install from an updated profile.
+  try { await recordWhatsNewBaseline(context.globalState, learnerNotes(LEARNER_RELEASE_NOTES)); }
+  catch { console.warn('HypeProof: could not record the what\'s-new baseline.'); }
   // Reset a folder's restored sidebar before network-dependent activity restoration.
   // The explicit file-view actions can open Explorer once the learner asks for it.
   await initializeFilesLayout(command => vscode.commands.executeCommand(command));

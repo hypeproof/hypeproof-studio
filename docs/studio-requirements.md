@@ -6772,3 +6772,43 @@ file byte-identical) and `test/style-tweak-layout.smoke.mjs`
 (computed 44px targets, 14px text, 24px swatches, focus ring, inside the chip at 320/800/1420,
 personal and classroom, dark/light/forced colours). The browser smokes fail under
 `FOCUS_REQUIRE_BROWSER=1` without a browser.
+
+## What's new after an update (CGP-SHELL-R-035)
+
+`REQ-STUDIO-WHATS-NEW` (REQ-SHELL-35 / CGP-SHELL-R-035 / CGP-SHELL-089 / PI#3, learning is
+embedded; design CGP-SHELL-D-034): after an update, the learner sees up to three short Korean
+`새로운 기능` lines once. The lines are the learner release notes bundled with the build
+(`extensions/hypeproof-chat/src/learnerReleaseNotes.ts`, one `id` per set of lines), written for
+learners: at most 3 lines of at most 40 characters, only features every learner seat has in that
+build, no capability or score labels. Each line is cleaned (C0/C1 controls, soft hyphen,
+zero-width and joiner characters, bidi marks and controls, Hangul and braille blank fillers, tag
+characters and BOM removed; NFC; whitespace including U+2028/2029 folds to one space); a line over
+40 characters is dropped, never cut; lines render as React text.
+
+"Once" is one local globalState record `hps.whatsNew.v1 = {seen}` (no Service call, no event). It
+is written first on activation: an empty globalState is a fresh install and marks the bundled notes
+as seen (nothing is new to a new learner); an existing profile without the record (updated from a
+build before this feature) has seen nothing. The panel is due when the bundled notes `id` differs
+from `seen`. It is drawn above the composer as a non-modal row (`새로운 기능` heading, the lines as
+a list, a 44px `새로운 기능 닫기` close button with the close ChatIcon) and never takes focus. It is
+never drawn while a turn runs, a send is pending or a lesson rehearsal
+send is in flight; drawing it is what records it as seen, so a
+launch where a turn ran the whole time leaves it due. In the same window it survives a panel
+remount until closed; a reload or the next launch does not bring it back. Closing it returns focus
+to the composer, and neither a late host answer nor a late "shown" message reopens it. The
+instructor console gets no panel. A store that cannot be read or written shows no panel and never
+throws into the webview. The same lines stay reachable later from Help: the settings dialog (both
+seats) lists `새로운 기능` next to `키보드 단축키` and opens them in the shared dialog surface; with
+no valid notes it says `이번 버전에서 새로 알려 드릴 기능이 없어요.` (before the host has answered:
+`새로운 기능을 불러오고 있어요.`) Learner targets are 44px and
+text at least 14px in both seats, dark, light and forced colours, at 320-1420 px.
+The panel may expose learning about new tools (PI#3); showing or closing it is not evidence and not
+a learning outcome. Two windows launched together on the first launch may each draw it once.
+
+Tests: `extensions/hypeproof-chat/test/whats-new.test.tsx` (shipped lines, hygiene and caps,
+baseline, offer, shown record), `test/whats-new-host.smoke.mjs` (the real ChatPanelProvider:
+once per notes id, remount, reload, close, late shown, instructor, fresh install, failing store)
+and `test/whats-new-layout.smoke.mjs` (the real App in headless Chromium: due-only, hidden during a
+turn and not recorded until drawn, close and focus, late answer, instructor, Help sheet, text-only
+lines, computed geometry in both seats, themes and widths, forced colours; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser).

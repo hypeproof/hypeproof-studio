@@ -250,7 +250,7 @@ agent/coding/browser domains and get no verdict here: `browserUse` 317, `codexMi
 | REQ-SHELL-32 (CGP-79) | The issuer page accepts a pasted or CSV roster and reports a result per row. | Paste or upload ≤200 rows; duplicates and invalid handles flagged before issue; after issue each row shows 발급됨 / 실패(사유); failures do not block other rows (BOA-DIST-03). | P1 | #1, ADM-01 |
 | REQ-SHELL-33 (CGP-82) | At first join, the learner acknowledges the class rules, and the time is recorded for the instructor. | Rules text from the cohort profile shown once; "알겠어요" records timestamp per seat; Chalk shows 확인함 / 미확인 per seat; changed rules require a new acknowledgement. | P2 | #2 |
 | REQ-SHELL-34 (CGP-86) | Chalk shows each seat's Studio version and flags seats below the cohort's minimum. | Manage list gets a 버전 column from the heartbeat; seats below the minimum show amber "업데이트 필요" with icon + text; unknown version shows "확인 불가". | P1 | #1, ADM-02 |
-| REQ-SHELL-35 (CGP-89) | After an update, the learner sees up to 3 short Korean "새로운 기능" lines once. | First launch on a new version shows a dismissible panel with ≤3 items from release notes written for learners; not shown during an active turn; reachable later from Help. | P2 | #3 |
+| REQ-SHELL-35 (CGP-89) | After an update, the learner sees up to 3 short Korean "새로운 기능" lines once. | First launch on a new version shows a dismissible panel with ≤3 items from release notes written for learners; not shown during an active turn; reachable later from Help. | P2 | #3 (built 2026-10-26: bundled learner lines in `learnerReleaseNotes.ts`; "Help" = the settings dialog next to 키보드 단축키; see decisions.md CGP-SHELL-R-035) |
 
 ## 3. Design requirements (same rows)
 

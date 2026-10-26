@@ -110,6 +110,7 @@ import type {
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, patchWebviewState, postToHost, readWebviewState } from "./vscode";
 import { LessonTip } from "./LessonTip";
+import { WhatsNewPanel, WhatsNewSheet, useWhatsNew } from "./WhatsNew";
 import { LESSON_TIP_STATE_KEY, lessonTipFor, prefillWithTip, readDismissed, withDismissed } from "./lessonTipModel";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { groupDelegations, delegationGroups, parseDelegationId } from "../../src/delegationRow";
@@ -441,6 +442,10 @@ export function ChatPanel(props: Props) {
   useShortcutSheetKey(!shortcutsOpen, () => { shortcutsOpener.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null; setShortcutsOpen(true); });
   // From settings: the settings dialog closes first, so focus later returns to what opened settings.
   const openShortcutsFromPreferences = () => { shortcutsOpener.current = preferencesOpener.current; setPreferencesOpen(false); setPreferencesUsage(false); setShortcutsOpen(true); };
+  // CGP-SHELL-R-035 — "새로운 기능": once after an update above the composer, and later from settings.
+  const [whatsNew, dismissWhatsNew] = useWhatsNew(props.config, props.instructor === true);
+  const [whatsNewSheetOpen, setWhatsNewSheetOpen] = useState(false);
+  const openWhatsNewFromPreferences = () => { shortcutsOpener.current = preferencesOpener.current; setPreferencesOpen(false); setPreferencesUsage(false); setWhatsNewSheetOpen(true); };
   const lastReplyChoice = useRef<{ messageId: string; answer: string } | null>(null);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
@@ -2200,6 +2205,11 @@ export function ChatPanel(props: Props) {
             </button>
           </div>
         )}
+        {/* CGP-SHELL-R-035 — never drawn while a turn runs or a send (chat or rehearsal) is pending; drawing it is the "seen" record. */}
+        {whatsNew.show && whatsNew.notes && !streaming && !props.sendPending && rehearsalResult?.state !== 'sending' && <WhatsNewPanel notes={whatsNew.notes} onDismiss={() => {
+          dismissWhatsNew();
+          requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+        }} />}
         {/* CGP-CHAT-R-021 — at most one tip, from the served step's Chalk-authored hint only. Hidden while a turn runs. */}
         {lessonTip && !streaming && !props.sendPending && !dismissedTips.includes(lessonTip.key) && <PanelBoundary panel="lesson-tip">{() => <LessonTip
           tip={lessonTip}
@@ -2426,6 +2436,7 @@ export function ChatPanel(props: Props) {
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
+        <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
       </ChatPreferences>}
       {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
         {/* CGP-SHELL-R-013 — the dialog (and its close button) stays; only its content falls back. */}
@@ -2447,10 +2458,12 @@ export function ChatPanel(props: Props) {
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
+        <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
         </>}</PanelBoundary>
       </ChatPreferences>}
       <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} opener={() => shortcutsOpener.current} />
+      <WhatsNewSheet open={whatsNewSheetOpen} notes={whatsNew.notes} loaded={whatsNew.loaded} onClose={() => setWhatsNewSheetOpen(false)} opener={() => shortcutsOpener.current} />
     </div></CopyFeedbackRegion>
   );
 }
