@@ -728,7 +728,14 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         // focus request after the attach reaches the composer.
         if (sourceDialog) closeSources(null, false);
         onAskAboutFile(filePath);
-      })} />}
+      })} onOpenTurn={(taskId, messageId) => {
+        // CGP-KNOW-D-016 — the same jump as a search result: open the task, then scroll to the turn once it is drawn.
+        // While a turn runs the host refuses the switch with its own error line, which also drops the jump.
+        if (sourceDialog) closeSources(null, false);
+        pendingReveal.current = { taskId, messageId, from: view.activeTaskId };
+        if (taskId !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: taskId });
+        setRevealTick(tick => tick + 1);
+      }} />}
       </>}</PanelBoundary>
     </aside>
     {worksOpen && <MyWorksDrawer key={scopeKey} files={artifacts} viewport={viewport} opener={() => worksButton.current} fallback={() => railToggle.current} onClose={() => setWorksOpen(false)} />}

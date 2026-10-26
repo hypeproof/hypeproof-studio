@@ -3262,6 +3262,66 @@ panel draws no list.)
 
 Native app run: NOT RUN.
 
+## Artifact info popover (CGP-KNOW-D-016)
+
+`REQ-STUDIO-ARTIFACT-INFO` (CGP-KNOW-D-016 / DES-KNOW-29 of the ChatGPT desktop study, P2, traces to
+CGP-KNOW-R-016 / REQ-KNOW-29; builds on `REQ-STUDIO-ARTIFACT-PROVENANCE`). Product Intent: PI#2 and
+PI#5 as the register row cites them: the learner can see where a file came from and go back to the
+conversation that made it, without a score (OWNERSHIP and VERIFY may be exposed; nothing is measured).
+
+- **Where.** Each row of "작업 폴더의 파일" in the personal/trial task workspace's 작업 자료 panel has
+  a **정보** button (44px, `aria-haspopup="dialog"`, `aria-expanded`, accessible name "정보: <path>").
+  It opens one non-modal popover under the row (`role="dialog"`, "파일 정보: <path>"), in flow, so it
+  adds no overlay and no scroller; at most one is open, and a new list (task switch, a turn's end, the
+  panel reopened) closes it.
+- **Rows.** 종류, 크기, 만든 대화, 마지막으로 바꾼 대화, in that order (`ArtifactInfoPopover.tsx`).
+  종류 comes from the file name only (`artifactTypeLabel`: a known extension in words, otherwise
+  "<EXT> 파일", otherwise "파일"); 크기 is the file's own byte count (`lstat`; a link or a path outside
+  the work folder is not measured and reads "알 수 없어요").
+- **Turn links come only from recorded events.** At a coach turn's end the provider records, on each
+  `ai_created` / `ai_changed` event, the task the turn ran in and its assistant row id
+  (`recordCoachTurn` `place`; `endTurnRestore` passes `turnRestoreTaskKey()` and the turn's
+  `messageId`). 만든 대화 is the event that began the file's current lifetime; 마지막으로 바꾼 대화 is
+  the event that left the current bytes. The host resolves each one against the task store **when
+  the popover asks** (`artifactInfoRequest` → `artifactInfo`, bound to a request id; an answer for
+  another request or path is not shown), using `TaskWorkspaceStore.findTurnRow`: the turn's first
+  visible row (`<id>` or a later segment `<id>#N`).
+- **Never a dead link.** A link (an underlined button, 44px) only when that row is in a listed task.
+  Otherwise plain text that says why: "대화를 찾을 수 없어요. 대화 기록이 지워졌거나 다른 곳으로
+  옮겨졌을 수 있어요." (cleared, edited away, moved to another activity, unreadable); "대화가 보관한
+  작업 ‘…’에 있어요. 보관함에서 다시 열면 볼 수 있어요." (archived); "대화를 찾을 수 없어요. 이 기록에는
+  대화 위치가 남아 있지 않아요." (an AI event recorded without a place: before this change, or a
+  host write); "기록된 대화가 없어요 (내가 올림 / Studio가 만듦 / …)" for a non-AI event; and
+  "기록 없음" for every 기록 없음 row and for a file that was there before the first observation.
+- **Opening a turn.** The link closes the popover and uses the task-search jump (CGP-CHAT-R-026):
+  `taskSelect` when the turn is in another task, then the transcript scrolls to that row once it is
+  drawn. In the narrow layout the 작업 자료 dialog closes so the transcript shows. While a turn runs
+  the host refuses the switch with its existing error line, which also drops the jump.
+- **Keyboard.** Opening moves focus into the popover. Escape (handled by a native listener on the
+  list, so the narrow 작업 자료 dialog around it stays open) and 닫기 close it and return focus to 정보.
+- **Ledger.** `taskId` / `messageId` are optional event fields, each a non-empty string of at most 200
+  characters; a saved ledger with any other value is damaged (stale), like any other bad field. Paths
+  and ids only; still local, never uploaded.
+
+Not built: links for AI-attributed host writes (a revealed page, agent.md, an image-edit result: they
+carry no turn place and read the "위치가 남아 있지 않아요" text); links for events recorded before this
+change; the popover on any surface other than the 작업 자료 file list (classroom chat has no task
+workspace; no 내 작품 drawer exists, DES-KNOW-20). Verification: U
+(`extensions/hypeproof-chat/test/artifact-info.smoke.mjs` — 종류/크기 labels, the place recorded per
+AI event and refused when malformed, origin and last per file lifetime, every row value with planted
+answers (link, gone, archived, no place, outside a conversation, 기록 없음), a real
+`TaskWorkspaceStore` finding a `<id>#2` row and reporting archived and cleared turns, and the recorder
+over a real temp folder through `takeRestorePoint`/`diffRestorePoint`: real size, a stale link after
+the row is gone, no info for unlisted or outside paths, a forged place damaging the ledger, a link not
+measured through; `extensions/hypeproof-chat/test/artifact-info.test.tsx` — the real `TaskWorkspace`
+on the minimal DOM: one request per opening, foreign answers ignored, four rows, link vs text, Escape
+and 닫기 returning focus while the narrow dialog stays open, one popover at a time, a refreshed list
+closing it, the link selecting the other task (and not the open one) and closing the narrow dialog;
+`extensions/hypeproof-chat/test/artifact-info-computed.smoke.mjs` — headless Chromium on the built CSS:
+personal and classroom-style shells, dark/light, 320/800/1420 px, normal/forced colours: underline,
+44px targets, ≥14px text, 4.5:1 contrast, no horizontal overflow, a popover focus ring and a real
+Escape key returning focus). Native app run: NOT RUN.
+
 ## Page card after a coach turn (CGP-ART-R-010)
 
 `REQ-STUDIO-PAGE-CARD` (CGP-ART-R-010 / REQ-ART-10 of the ChatGPT desktop study, P1, 2026-10-20,

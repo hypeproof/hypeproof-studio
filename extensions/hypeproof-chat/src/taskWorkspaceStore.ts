@@ -369,6 +369,18 @@ export class TaskWorkspaceStore {
     return searchTasks(this.data.tasks, query);
   }
 
+  /**
+   * CGP-KNOW-D-016 — where a coach turn's row is now: the task's title, the first visible row of that
+   * turn (its assistant message, or a later segment `<id>#N` when the first was empty) and whether the
+   * task is archived. Null when the task or the row is gone (cleared, edited away, moved, unreadable).
+   */
+  findTurnRow(taskId: string, messageId: string): { taskTitle: string; messageId: string; archived: boolean } | null {
+    if (this.loadError || !this.data) return null;
+    const task = this.data.tasks.find(value => value.id === taskId);
+    const row = task?.messages.find(message => message.id === messageId || message.id.startsWith(`${messageId}#`));
+    if (!task || !row) return null;
+    return { taskTitle: task.title, messageId: row.id, archived: task.id !== this.data.activeTaskId && archivedIn(this.archive, task.id) };
+  }
   getActiveTask(): TaskDocument | undefined { return this.getTask(this.data?.activeTaskId); }
   getTask(taskId: string | undefined): TaskDocument | undefined {
     if (this.loadError) throw this.loadError;

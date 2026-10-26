@@ -794,6 +794,8 @@ export type WebviewMessage = (
   | { type: "artifactProvenanceRequest" }
   // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
   | { type: "artifactThumbnailRequest"; requestId: string; path: string }
+  /** CGP-KNOW-D-016 — the info popover of one listed work-folder file; answered once per request id. */
+  | { type: "artifactInfoRequest"; requestId: string; path: string }
   // REQ-STUDIO-PAGE-CARD — a press on a page card row; the host acts only on a row of a card it issued, inside the work folder.
   | { type: "pageCardsRequest" }
   | { type: "pageCardOpen"; turnId: string; path: string }
@@ -912,6 +914,7 @@ export type HostMessage = (
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   /** CGP-KNOW-D-011 — an inline data: image read from inside the work folder, or null (the row keeps its type glyph). */
   | { type: "artifactThumbnail"; requestId: string; path: string; src: string | null }
+  | { type: "artifactInfo"; requestId: string; info: import("./artifactProvenanceView").ArtifactInfo | null }
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
