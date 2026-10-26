@@ -1489,3 +1489,15 @@ collection contract.
 | 검증 후속 (CGP-SHELL-D-031) | 브라우저: s02의 이름이 마크업(`<img … onerror=…>이서준`)이어도 미리 보기 표와 결과 줄에 글자 그대로 보이고, `img` 요소가 생기지 않으며 스크립트가 돌지 않는다. 본문에 이름·마크업 없음 | PASS (두 폭). 변이: 표 칸·결과 줄 이름을 `innerHTML`로 바꾸면 실패 |
 
 **NOT RUN**: 실제 강사·운영 Service·hosted KV(같은 키 쓰기 속도 제한 포함), Windows 브라우저, 화면 읽기 프로그램 실기, 운영 배포.
+
+<a id="help-queue-keyboard-triage-run"></a>
+
+## 도움 요청 키보드 분류 · 2026-10-26 (ADM-05 · DES-06 · CGP-LEARN-R-017)
+
+요구: [도움 요청 키보드 분류](../requirements/classroom-admin.md#help-queue-keyboard-triage).
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/help-triage.browser.mjs` (`chalk` `npm test`에 포함, `FOCUS_REQUIRE_BROWSER=1`이면 브라우저 없을 때 실패) | 실제로 서빙한 `/manage`를 headless Chromium에 올리고 CDP 키 입력으로: J·↓·K·↑·ㅓ 이동과 끝에서 멈춤, keyCode 229·`isComposing`·Ctrl+J 무시, 10초 갱신 재그리기 뒤 초점 유지, 열린 요청 없이 E, Enter로 열기, 다음 조치 없이 E, 글상자 안의 J·E·?와 CDP 한글 조합 입력, E로 `answered` 저장(revision 포함)과 다음 요청 열기, 저장 중 두 번 누르기, 저장 중 다른 기록을 연 경우, 마지막 요청, `?` 목록 열고 닫기·버튼으로 열기, 선택 행 2px·3:1, 44px·12px 이상, 가로 넘침 없음(1420·800·강제 색상) | PASS (102개 확인). 대조군 10종: 키 처리기 연결·조합 검사·글상자 검사·행 테두리·다음 요청 열기·늦은 저장 검사·두 번 누르기 검사·재그리기 초점 유지·다음 조치 검사·`?` 목록을 하나씩 되돌리면 각각 실패 |
+
+**NOT RUN**: 실제 강사·운영 Service, Windows 브라우저, 화면 읽기 프로그램 실기, 실제 macOS 한글 입력기(조합은 CDP `imeSetComposition`으로만), 밝은 테마(Chalk는 어두운 화면만 제공).
