@@ -6772,3 +6772,52 @@ file byte-identical) and `test/style-tweak-layout.smoke.mjs`
 (computed 44px targets, 14px text, 24px swatches, focus ring, inside the chip at 320/800/1420,
 personal and classroom, dark/light/forced colours). The browser smokes fail under
 `FOCUS_REQUIRE_BROWSER=1` without a browser.
+
+## Coach run state (CGP-LEARN-R-016)
+
+REQ-STUDIO-COACH-RUN-STATE / REQ-CGP-LEARN-16 (CGP-LEARN-032) / DES-CGP-LEARN-16 / PI#2 (human
+judgment stays visible): the learner can tell at a glance whether the coach is working, looking
+something up, changing their work, or waiting for them, so a pending decision is never missed. The
+chat header shows exactly one coach run state from a fixed set: 준비됨 / 생각 중 / 찾는 중 /
+만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요. It is a static 20px stroke icon plus the
+words at the 14px floor (DEC-29) in a polite live region (`role="status"`, `aria-live="polite"`);
+there is no character and no animation, and colour only reinforces the words (approval and error
+draw the label in body text, others muted). In a pane 480px wide or narrower the state takes its own
+row under the header controls (the access line's ≤640px pattern), so its words are never cut, the
+controls stay on one row and the page never scrolls sideways.
+
+The state is derived in the webview (`src/coachRunState.ts`, pure) from what it already holds, with
+this precedence: any open approval → 확인이 필요해요; a streaming turn or a running product test
+(내 제품 테스트) → its current activity; a send that has not opened its stream yet → 생각 중; an
+error banner, a last turn that failed, or a coach that cannot take a request now (offline, or the
+activity unavailable, frozen or unverified) → 문제가 생겼어요, never 준비됨; a last turn the learner or instructor stopped → 멈춤; otherwise 준비됨 (no turn yet,
+or the last turn finished). "Any open approval" is the host's `approvalWait` (REQ-E1, both
+runtimes) or any in-webview approval dialog: write, outbound/publish, command, browser and folder
+consent. The same flag now feeds the idle hint's approval pause and the task rail's run chip, so
+the header, the rail and the heading's screen-reader note never disagree about an approval. The current
+activity reads the unified timeline (REQ-C17): walking back from the end until the learner's last
+message or text the coach wrote after it, the newest running tool line decides by its host icon
+(file read, file find, web, page read, page capture, opening an address, preview screen → 찾는 중;
+file write or edit, agent.md → 만드는 중). Any other running line (thinking, the next-step line, a
+command run or install, which may only read, a helper delegation, preview open, an unknown tool,
+TodoWrite's 할 일 정리) and
+a turn with no running line read 생각 중: an unknown activity is never claimed as searching or
+making. A new turn clears 멈춤 and 문제가 생겼어요; switching activity or task resets the view.
+
+Seats: every seat whose chat panel draws the header (personal, trial, pass, classroom/lesson,
+instructor mode). In the personal task workspace the header is drawn into the task heading, whose
+own run note (CGP-DS-R-006 `.tw-run-note`) then leaves the row and keeps only its screen-reader
+sentence, so one state is visible there too; the task rail's per-task chip is unchanged. Display
+only: no host message, no stored state. Owner-delegated choices are in
+`docs/research/chatgpt-desktop-2026-10/decisions.md`.
+
+Evidence: `extensions/hypeproof-chat/test/coach-run-state.smoke.mjs` (pure derivation: fixed set,
+icon classifier with negative controls, current-turn scan, precedence),
+`test/coach-run-state-app.test.tsx` (the real App driven by host messages through all seven states,
+`approvalWait` and each of the five approval dialogs, offline and back, a product test run, one state
+at a time) and
+`test/coach-run-state-browser.smoke.mjs` (the mounted ChatPanel in headless Chromium, personal inside
+the task workspace frame and classroom lesson seat, dark/light, 320/390/800/1420 px, every state: one
+state in the header and no second visible run state, header controls on one row above or beside it, 20px icon, words at ≥14px drawn in full,
+visible and not clipped, no animation or transition, no horizontal page scroll, forced colours; fails
+under `FOCUS_REQUIRE_BROWSER=1` without a browser).

@@ -155,7 +155,8 @@ try {
       if (m[1]) { depth--; if (depth === 0) return -1; continue; }
       depth++;
       if (new RegExp(`class="[^"]*\\b${cls}\\b`).test(m[3])) return depth - 1;
-      if (m[4] || /^(input|img|br|hr|meta|link|source|path|circle|rect|line|polyline)$/.test(m[2])) depth--;
+      // HTML void elements only: React's static markup closes SVG children (`<path …></path>`), so they count both ways.
+      if (m[4] || /^(input|img|br|hr|meta|link|source)$/.test(m[2])) depth--;
     }
     return -1;
   };

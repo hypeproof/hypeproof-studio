@@ -773,10 +773,13 @@ export function App() {
   // streamEnd dispatches don't carry error info; clear-on-end is fine because
   // the existing reducer only sets error on streamError, never on streamEnd.
   const hasLastUserPrompt = messages.some((m) => m.role === "user");
+  // REQ-STUDIO-COACH-RUN-STATE: one approval flag for every prompt that waits on the learner, so the
+  // header's run state, the task rail's chip and the idle hint never disagree about it.
+  const anyApprovalPending = approvalPending || !!writeApproval || !!outbound || !!browserApproval || !!folderConsent || !!commandApproval;
   const runState = deriveTaskRunState({
     preparing: sendPending,
     running: !!state.streamId || !!state.verify?.running,
-    approvalPending,
+    approvalPending: anyApprovalPending,
     lastOutcome: state.lastOutcome,
   });
 
@@ -813,7 +816,9 @@ export function App() {
           streamingId={state.timeline.openId}
           runningStreamId={state.streamId}
           progressSince={state.progressSince}
-          progressApprovalPending={approvalPending || !!writeApproval || !!outbound || !!browserApproval || !!folderConsent}
+          progressApprovalPending={anyApprovalPending}
+          lastOutcome={state.lastOutcome}
+          verifyRunning={!!state.verify?.running}
           refusal={refusal}
           onDismissRefusal={() => setRefusal(false)}
           error={state.error}
@@ -891,7 +896,9 @@ export function App() {
         streamingId={state.timeline.openId}
         runningStreamId={state.streamId}
           progressSince={state.progressSince}
-          progressApprovalPending={approvalPending || !!writeApproval || !!outbound || !!browserApproval || !!folderConsent}
+          progressApprovalPending={anyApprovalPending}
+          lastOutcome={state.lastOutcome}
+          verifyRunning={!!state.verify?.running}
         refusal={refusal}
         onDismissRefusal={() => setRefusal(false)}
         error={state.error}

@@ -935,3 +935,12 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Out of scope: per-step 완료 기준 (`steps[].acceptance`).
 - Default state: on (instructor surface only; no new data flow).
 
+## CGP-LEARN-R-016: coach run state in the chat header (2026-10-26, agent-selected conservative implementation)
+
+- Source of truth: the webview's own state only (send pending, open stream, approval prompts, error banner, last turn outcome, timeline). No new host message, so both runtimes and the local runtime behave the same.
+- Precedence: approval > streaming turn or product test run (activity) > send pending (생각 중) > error banner, failed turn, offline or unavailable activity (문제가 생겼어요) > stopped turn (멈춤) > 준비됨. 준비됨 is never shown when the coach cannot take a request. The failed and stopped states last until the next turn (also after the banner is dismissed or the conversation cleared), like the task rail's run chip (taskRunState.ts).
+- Approval: the host's `approvalWait` plus every in-webview approval dialog (write, outbound/publish, command, browser, folder consent). The annotation-leave prompt is not an approval of coach work and does not count. One shared flag (App `anyApprovalPending`, now including the command dialog) feeds the header, the idle hint and the task rail chip, so they agree.
+- Activity: the newest running tool line of the current turn, classified by the icon the host draws for it (a closed list). Unknown icons, thinking, delegation, preview open, command runs and installs (they may only read) and TodoWrite read 생각 중, never 찾는 중 or 만드는 중 (copy is honest). Text the coach writes after a line, or a learner line (a steer), ends that line's claim until the next tool line.
+- One visible state: in the personal task workspace the heading's existing run note (CGP-DS-R-006) leaves the row and keeps only its screen-reader sentence; the rail's per-task chip stays as is because it describes a task in a list, not the coach.
+- Size: 20px icon, label at the 14px floor (DEC-29) for every seat; no 44px target because the state is not a control. At ≤480px the state wraps to its own row under the header controls instead of shrinking or ellipsizing its words.
+- Seats: every seat whose chat panel draws the header, including instructor mode. Default state: on (display only, no data flow).

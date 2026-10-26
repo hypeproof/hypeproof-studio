@@ -14438,6 +14438,69 @@
           "path": "docs/testing/chalk-authoring.md"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-COACH-RUN-STATE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-INT-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Coach run state (CGP-LEARN-R-016)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COACH-RUN-STATE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUN-STATE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/coachRunState.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CoachRunState.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/coachRunState.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COACH-RUN-STATE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUN-STATE",
+        "ST-IMP-COACH-RUN-STATE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/coach-run-state.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/coach-run-state-app.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/coach-run-state-browser.smoke.mjs"
+        }
+      ]
     }
   ]
 }

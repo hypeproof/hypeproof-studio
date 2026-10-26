@@ -308,3 +308,7 @@ REQ/DES-CGP-LEARN-14 as built (2026-10-26, DEC-LEARN-14): Chalk `/authoring` ask
 - DEFER 10: 07, 14, 17, 18, 19, 20, 23, 24, 26, 34.
 - REJECT 12: 08, 16, 22, 30, 31, 33, 38, 39, 40, 41, 42, 43.
 - 43 inventory rows, 17 requirements, 17 design requirements.
+
+## Implementation notes
+
+- **CGP-LEARN-R-016 (REQ-CGP-LEARN-16), 2026-10-26.** Implemented in Studio as REQ-STUDIO-COACH-RUN-STATE (`docs/studio-requirements.md`), with DES-CGP-LEARN-16. Owner-delegated choices (precedence, icon-based activity classifier with unknown → 생각 중, which dialogs count as approval, the personal heading's run note leaving the row, every seat) are recorded in `../decisions.md`.

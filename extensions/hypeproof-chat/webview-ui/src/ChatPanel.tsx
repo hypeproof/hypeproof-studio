@@ -97,6 +97,7 @@ import { Children, cloneElement, Fragment, isValidElement, useContext, useCallba
 import { createPortal } from "react-dom";
 import { HeadingSlotContext } from "./headingSlot";
 import { MyQuestions } from "./MyQuestions";
+import { CoachRunState } from "./CoachRunState";
 import { myQuestions, MY_QUESTION_ATTR } from "../../src/myQuestions";
 import type {
   ChatConfig,
@@ -228,6 +229,10 @@ interface Props {
   onStopDelegations?: (streamId:string)=>void;
   progressSince?: number;
   progressApprovalPending?: boolean;
+  /** REQ-STUDIO-COACH-RUN-STATE: how this view's last turn ended (App's lastOutcome); absent = none yet. */
+  lastOutcome?: import("../../src/taskRunState").TaskTurnOutcome;
+  /** REQ-STUDIO-COACH-RUN-STATE: the product test run (내 제품 테스트) is running. */
+  verifyRunning?: boolean;
   onVerdict?: (messageId: string, next: VerdictState | null) => void;
   /** CGP-KNOW-R-004 — "팀 브레인에 정리하기" on one finished answer. Absent: no action. */
   onAnswerToWiki?: (messageId: string) => void;
@@ -1611,6 +1616,9 @@ export function ChatPanel(props: Props) {
           // label that names nothing the learner can act on. It stays readable to screen readers.
           ? <strong data-hp-tooltip={`이 수업의 AI 이름: ${coachName}`} className={personalWorkspace ? "hps-coach-name hps-sr-only" : "hps-coach-name"}>{coachName}</strong>
           : <button data-hp-tooltip="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
+        {/* CGP-LEARN-R-016: the one coach run state, derived from the timeline and the approval prompts. */}
+        <CoachRunState preparing={!!props.sendPending} running={streaming || !!props.verifyRunning} approvalPending={!!props.progressApprovalPending}
+          error={!!error} unavailable={unavailable || !connectivity.online} lastOutcome={props.lastOutcome ?? null} messages={messages} />
         {/* US-05 (P0): the work screen's top names the current activity and whether it is a trial or a
             class. Personal chat has no mission header (#1760), so the line that header carried moves
             into this row with the same `현재 활동` label (the a11y contract in MissionHeader.tsx). The

@@ -48,7 +48,10 @@ html, body, #root {
   white-space: nowrap;
 }
 .hps-coach-name:hover { border-bottom-color: var(--vscode-foreground, var(--ds-c-studio-styles-boundary-11)); }
-.hps-actions { flex: 0 0 auto; }
+/* The header's buttons are centred as flex items, not baseline-aligned inline boxes: an icon-only
+   button and a text button would otherwise sit at different heights, by an amount that depends on the
+   font's ascent (CGP-LEARN-R-016: one row of controls on any platform font). */
+.hps-actions { flex: 0 0 auto; display: flex; align-items: center; }
 
 .hps-header button {
   background: transparent;

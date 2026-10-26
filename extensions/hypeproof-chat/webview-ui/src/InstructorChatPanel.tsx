@@ -29,6 +29,10 @@ interface Props {
   runningStreamId?: string | null;
   progressSince?: number;
   progressApprovalPending?: boolean;
+  /** REQ-STUDIO-COACH-RUN-STATE — passed through to ChatPanel. */
+  lastOutcome?: import("../../src/taskRunState").TaskTurnOutcome;
+  /** REQ-STUDIO-COACH-RUN-STATE: the product test run (내 제품 테스트) is running. */
+  verifyRunning?: boolean;
   refusal?: boolean;
   onDismissRefusal?: () => void;
   error: string | null;
