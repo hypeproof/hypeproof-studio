@@ -6806,13 +6806,24 @@ before a turn writes files.
 - Design (DES-KNOW-35): bar text at most two lines at 320 px, text and control at least
   14px, the disclosure is a 44px target with the shared focus ring, forced colours keep
   the edge and the ring.
+- Not dismissible (DES-KNOW-35, CGP-KNOW-D-019, 2026-10-27): while the host's last
+  measurement is below the threshold the bar stays through Escape (on its control, in the
+  composer, on the page), clicks and a double click on it, Delete or Backspace on its
+  control, a task switch or config re-post, the panel coming back into view, and a new
+  measurement that is still low. Only the host's "enough space" answer removes it. Inside
+  the bar the browser's accessibility tree holds exactly one control, the 공간 확보 방법
+  button, and no link, close or purchase node. The two-line rule is counted from the
+  text's own line boxes, and clipping (ellipsis, line clamp, hidden overflow) fails it.
 
 Evidence: `extensions/hypeproof-chat/test/low-disk.smoke.mjs` (pure rules; the real
 `ChatPanelProvider` for every seat, dedupe, remount, the setting, concurrency and a folder
 change; the real `handleSend` posts the bar before its model request and still sends) and
 `low-disk-bar.smoke.mjs` (the real ChatPanel in headless Chromium: personal and classroom,
 dark/light, 320/800/1420 px, forced colours; fails under `FOCUS_REQUIRE_BROWSER=1` without
-a browser). This serves PI#1 (useful work first: the learner learns why a save may fail
+a browser). The design row CGP-KNOW-D-019 adds
+`low-disk-bar-persist-browser.smoke.mjs` (the dismiss gestures above sent as DevTools key
+and mouse events, the accessibility tree inside the bar, line boxes and clipping at 320 px;
+personal and classroom, dark/light, 320/1420 px). This serves PI#1 (useful work first: the learner learns why a save may fail
 before losing work) and the access principle that limits never hide or take away the
 learner's own files; no capability labels appear. See DEC-KNOW-35 in the parity decisions.
 
