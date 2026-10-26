@@ -13866,6 +13866,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/task-menu-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-menu-keyboard-browser.smoke.mjs"
         }
       ]
     },

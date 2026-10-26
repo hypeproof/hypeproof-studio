@@ -1879,6 +1879,15 @@ DEC-KNOW-R009 in `docs/research/chatgpt-desktop-2026-10/decisions.md`.
   and refused requests that are still answered), `test/task-menu.test.tsx` (menu) and
   `test/task-menu-computed.smoke.mjs` (44px targets, 14px text and focus ring measured in headless
   Chromium).
+- **Menu keyboard and announcement (DES-KNOW-14, CGP-KNOW-D-009, 2026-10-27).** ArrowDown or ArrowUp
+  on a closed toggle, or Enter, opens the menu on its first item. Inside the menu ArrowDown and
+  ArrowUp move and wrap, Home and End jump to the first and last item, Escape closes and returns
+  focus to the toggle, and Tab closes. Enter on a listed activity moves the task once. The class,
+  trial and no-destination item is exposed by the browser as a focusable, disabled menuitem whose
+  accessible description is the reason; the reason is on screen while it has focus, and Enter or
+  Space on it sends nothing. The design row was already met by the CGP-KNOW-R-009 build; the
+  CGP-KNOW-D-009 pass adds `test/task-menu-keyboard-browser.smoke.mjs`, which drives real key events
+  in headless Chromium and reads the browser's accessibility tree.
 
 ## Activity materials (CGP-KNOW-R-003)
 
