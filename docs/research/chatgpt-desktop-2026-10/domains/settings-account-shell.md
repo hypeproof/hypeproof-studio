@@ -331,3 +331,11 @@ choices: personal seats only; a narrow, fail-closed no-idea and goal-question ch
 webview; six Studio-owned ideas (no Service profile key exists for them); no list when the coach's
 reply already carries reply choices; columns follow the chat pane width (DES-SHELL-19). See
 `decisions.md` "CGP-SHELL-R-020".
+
+## Work export decision (CGP-SHELL-R-028)
+
+"내 작업 내보내기" in the chat settings dialog (every seat) writes one zip of the work folder (minus
+`.git`, `node_modules`, `.hypeproof`, links and credential-bearing files) plus the transcript as JSON
+and Markdown to a folder the learner picks. Local only, so it works offline and after a pass ends;
+it never replaces a file and refuses rather than truncates past 300 MB / 20,000 files. Contract:
+`docs/studio-requirements.md` "Work export zip (CGP-SHELL-R-028)"; choices in DEC-SHELL-R028.

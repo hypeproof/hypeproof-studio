@@ -26,7 +26,7 @@ import { build } from "esbuild";
 const require = createRequire(new URL("../webview-ui/package.json", import.meta.url));
 const postcss = require("postcss");
 const SRC = fileURLToPath(new URL("../webview-ui/src/", import.meta.url));
-const TOKEN_FILES = ["tokens.css", "designTokens.css"];
+const TOKEN_FILES = ["tokens.css", "designTokens.css", "radiusScale.css"]; // radiusScale.css: the CGP-DS-R-011 radius tier, imported by tokens.css
 const COMPONENT_CSS = readdirSync(SRC).filter((f) => f.endsWith(".css") && !TOKEN_FILES.includes(f)).sort();
 const TSX = readdirSync(SRC).filter((f) => f.endsWith(".tsx")).sort();
 const real = Object.fromEntries([...TOKEN_FILES, ...COMPONENT_CSS, ...TSX, "main.tsx"].map((f) => [f, readFileSync(join(SRC, f), "utf8")]));
@@ -101,7 +101,7 @@ function resolver(env) {
 /** :root and Paper custom properties as computed, plus the raw Paper rule. */
 function snapshot(files) {
   const root = new Map();
-  for (const f of ["designTokens.css", "tokens.css"]) for (const r of topRules(files[f])) if (r.selectors.includes(":root")) for (const [k, v] of r.decls) if (k.startsWith("--")) root.set(k, v);
+  for (const f of ["designTokens.css", "radiusScale.css", "tokens.css"]) for (const r of topRules(files[f])) if (r.selectors.includes(":root")) for (const [k, v] of r.decls) if (k.startsWith("--")) root.set(k, v);
   const paperDecls = new Map();
   for (const r of topRules(files["tokens.css"])) if (r.selectors.includes(PAPER)) for (const [k, v] of r.decls) paperDecls.set(k, v);
   // A custom property declared on the Paper element is computed there; the rest inherit computed :root values.
@@ -227,7 +227,7 @@ async function bundledOrder(mainText) {
     const firstRole = rules.findIndex((r) => r.nodes.some((d) => d.prop === "--hp-text-primary-default"));
     if (firstRole < 0) bad.push("no role rule in the bundled stylesheet");
     if (rules[0] && !rules[0].nodes.every((d) => d.type !== "decl" || d.prop.startsWith("--ds-p-"))) bad.push(`the bundle opens with ${rules[0].selector}, not the primitive tokens`);
-    for (const r of rules.slice(0, Math.max(firstRole, 0))) if (r.nodes.some((d) => d.type === "decl" && !d.prop.startsWith("--ds-"))) bad.push(`${r.selector.slice(0, 60)} comes before the role tokens`);
+    for (const r of rules.slice(0, Math.max(firstRole, 0))) if (r.nodes.some((d) => d.type === "decl" && !d.prop.startsWith("--ds-") && !d.prop.startsWith("--hp-radius-"))) bad.push(`${r.selector.slice(0, 60)} comes before the role tokens`);
     return { bad, rules: rules.length };
   }
 }

@@ -250,7 +250,7 @@ const FLOOR_MUTATIONS = [
   ["start page nav", "start.css", "padding: 7px 14px; min-height: var(--hp-control-min); cursor: pointer; }", "padding: 7px 14px; cursor: pointer; }"],
   ["start page bottom", "start.css", "  padding:0;\n  min-height:var(--hp-control-min);\n", "  padding:0;\n"],
   ["start page text buttons", "start.css", "  min-height:var(--hp-control-min);\n  font-size:12px!important}", "  font-size:12px!important}"],
-  ["composer buttons", "chatDetails.css", "  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: 50%;", "  width: 36px; height: 36px; padding: 0; border-radius: 50%;"],
+  ["composer buttons", "chatDetails.css", "  width: var(--hp-control-min); height: var(--hp-control-min); padding: 0; border-radius: var(--hp-radius-full);", "  width: 36px; height: 36px; padding: 0; border-radius: var(--hp-radius-full);"],
   ["image remove ×", "styles.css", "  width: var(--hp-control-min);\n  height: var(--hp-control-min);\n  padding: 0;\n  line-height:", "  width: 18px;\n  height: 18px;\n  padding: 0;\n  line-height:"],
   ["citation chips", "styles.css", "  min-height: var(--hp-control-min); /* CGP-DS-R-010 */\n  text-align: left;", "  text-align: left;"],
   ["trial end card escape", "styles.css", "border: 0; cursor: pointer; min-height: var(--hp-control-min); padding: 6px 8px; background: transparent;", "border: 0; cursor: pointer; padding: 6px 8px; background: transparent;"],

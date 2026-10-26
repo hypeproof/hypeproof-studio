@@ -6,5 +6,5 @@ import { staticTokens } from "./expand-design-tokens.mjs";
 export { staticTokens };
 export function readDesignFile(file, encoding = 'utf8') {
   const text = readFileSync(file, encoding);
-  return /\.css$/.test(String(file)) ? staticTokens(readFileSync(tokenURL, 'utf8'))(text).replace(/^@import "\.\/designTokens\.css";\n\n/, '') : text;
+  return /\.css$/.test(String(file)) ? staticTokens(readFileSync(tokenURL, 'utf8'))(text).replace(/^@import "\.\/designTokens\.css";\n(?:@import "\.\/radiusScale\.css";\n)?\n/, '') : text;
 }

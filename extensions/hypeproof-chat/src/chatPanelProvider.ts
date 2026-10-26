@@ -16,6 +16,10 @@ import { lessonCapabilityEntryId, entryReceiptKey } from "./lessonCapabilityEntr
 import { PublishReadGate } from "./publishReadGate";
 import { AnnotationBatch, AnnotationRefusal, ANNOTATION_LIMIT, ANNOTATION_REFUSAL, ANNOTATION_RETRY_DROPPED, recordAnnotations, withAnnotations } from "./annotationBatch";
 import { runWorkTakeaway } from "./workTakeawayHost";
+import { runWorkExport } from "./workExportHost";
+import { heldSecretValues } from "./workExport";
+import { ACCOUNT_SECRET_KEY } from "./accountSession";
+import { CREDENTIAL_KEY as CLASSROOM_OPS_CREDENTIAL_KEY } from "./classroomOpsHost";
 import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
 import { takeawayTask, takeawayOwnedFiles } from "./workTakeaway";
 import { workPower } from "./workPower";
@@ -33,7 +37,7 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
-import { FREE_DAILY_CAP_NOTICE, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
+import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
@@ -7164,6 +7168,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         return;
       case 'workTakeaway': await this.takeMyWork(); return;
+      case 'exportMyWork': await this.exportMyWork(); return;
       case 'activityLocalFile': {
         if (msg.action !== 'open' && msg.action !== 'export') return;
         if (this.localFileBusy) return;
@@ -10249,6 +10254,38 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return await runWorkTakeaway({ root, secrets, tasks, owned, wikiDirectory: path.basename(wikiDir(root, this.cachedProfile?.learning_wiki?.plan)), current });
     } catch { await vscode.window.showWarningMessage('내 작업 가져가기를 완료하지 못했어요. 원본은 그대로 있어요. 위치와 권한을 확인해 주세요.'); return false; }
     finally { this.takeawayBusy = false; }
+  }
+
+  private exportBusy = false;
+  /**
+   * CGP-SHELL-R-028 — "내 작업 내보내기": a zip of the work folder and the local transcript.
+   * Every seat with a work folder; no Service or token check, so it works offline and after a pass ends.
+   * Refused while a turn runs; the turn scope and folder are bound before the picker opens.
+   */
+  async exportMyWork(): Promise<string | undefined> {
+    if (this.exportBusy) return undefined;
+    const root = this.resolveCoachCwd();
+    if (!root) { void vscode.window.showInformationMessage('내보낼 작업 폴더가 아직 없어요. 작업 폴더를 연 뒤 다시 눌러 주세요.'); return undefined; }
+    if (this.hasActiveStream()) { void vscode.window.showInformationMessage('AI가 작업하는 중이에요. 답변이 끝난 뒤 다시 눌러 주세요.'); return undefined; }
+    const scope = this.turnRequestScope();
+    const current = () => !this.hasActiveStream() && this.turnRequestScope() === scope && this.resolveCoachCwd() === root;
+    this.exportBusy = true;
+    try {
+      // Every credential the extension holds is redacted: the current and every saved activity's token, the
+      // personal account session, classroom-ops credentials, pending orders and any other SecretStorage value.
+      const connections = activityConnections(this.context), activity = connections?.current;
+      const held = await heldSecretValues([this.context.secrets, ...(connections ? [connections.heldSecrets()] : [])],
+        [TOKEN_KEY, ISSUER_TOKEN_KEY, ACCOUNT_SECRET_KEY, CLASSROOM_OPS_CREDENTIAL_KEY, PENDING_PURCHASE_KEY]);
+      const secrets = [activity?.token, ...held, await resolveInstructorTokenFromSecrets(this.context.secrets)]
+        .filter((value): value is string => typeof value === 'string' && !!value);
+      const store = this.currentTaskStore();
+      const view = store?.getView();
+      const tasks = store && view && !view.error ? [...view.tasks, ...view.archived ?? []].map(task => ({ title: task.title, messages: store.getHistory(task.id) }))
+        : [{ title: '이 활동의 대화', messages: this.getHistory() }];
+      if (!current()) return undefined;
+      return await runWorkExport({ root, secrets, tasks, current });
+    } catch { void vscode.window.showWarningMessage('내 작업을 내보내지 못했어요. 원본은 그대로 있어요. 저장할 폴더와 권한을 확인해 주세요.'); return undefined; }
+    finally { this.exportBusy = false; }
   }
 
   private getHistory(): ChatMessage[] {

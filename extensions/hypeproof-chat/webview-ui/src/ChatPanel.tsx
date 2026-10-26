@@ -1961,9 +1961,10 @@ export function ChatPanel(props: Props) {
               onToWiki={wikiTargets?.has(m.id) && props.onAnswerToWiki ? () => props.onAnswerToWiki?.(m.id) : undefined}
               quotable={m.role === 'assistant' && !(streaming && m.id === streamingId)}
               quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
+              elapsed={m.elapsedTurn ? <ElapsedReceipt message={m} inline /> : undefined}
             />
           )}
-          {m.elapsedTurn && <p className="hps-turn-elapsed" role="status">{elapsedWorkLabel(m.elapsedTurn.ms, m.elapsedTurn.outcome)}{m.role === 'system' && !m.content ? ' · 답변 없음' : ''}</p>}
+          {m.elapsedTurn && !answerActionRowShown(m, personalWorkspace, streaming && m.id === streamingId) && <ElapsedReceipt message={m} />}
           {!streaming && accuracyOffer?.messageId === m.id && m.role === 'assistant' && <AccuracyEducation key={`accuracy-${m.id}`} answer={m.content}
             onDismiss={() => postToHost({ type: 'accuracyEducationDismiss', messageId: m.id })} />}
           {steerMarkAfter(m.id)}
@@ -2475,6 +2476,8 @@ export function ChatPanel(props: Props) {
       {/* CGP-SHELL-D-028: in the DOM only while the chip has it open (A5 old-profile identity). */}
       {!personalWorkspace && preferencesOpen && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus=".hps-access > summary" opener={() => preferencesOpener.current}>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
+        <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
       </ChatPreferences>}
@@ -2497,6 +2500,8 @@ export function ChatPanel(props: Props) {
         {config.learnerNickname && <NicknameSetting key={config.activity?.id ?? ''} saved={config.learnerNickname.value} post={postToHost} />}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}
+        {/* CGP-SHELL-R-028 — local zip of the work folder and the conversation record; no Service call, so it stays after a pass ends. */}
+        <button type="button" className="hps-all-settings hps-export-work" onClick={() => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'exportMyWork' }); }}>내 작업 내보내기</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts" onClick={openShortcutsFromPreferences}>키보드 단축키</button>
         <button type="button" className="hps-all-settings hps-open-shortcuts hps-open-whats-new" onClick={openWhatsNewFromPreferences}>새로운 기능</button>
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
@@ -2985,6 +2990,23 @@ export function ToolLine({ message, onReport }: { message: ChatMessage; onReport
   );
 }
 
+/** CGP-CHAT-D-015: a personal answer's action row is that turn's status line. One predicate decides
+ * both where the row renders and where the elapsed receipt goes, so the receipt is never shown twice
+ * or dropped. */
+function answerActionRowShown(message: ChatMessage, personal: boolean, isStreamingThis: boolean): boolean {
+  return personal && message.role === 'assistant' && !isStreamingThis && !!message.content.trim();
+}
+
+/** CGP-CHAT-R-015 / CGP-CHAT-D-015: observed terminal time, secondary text. `inline` = trailing item
+ * of the answer action row; otherwise the receipt is the turn's own status line. */
+function ElapsedReceipt({ message, inline = false }: { message: ChatMessage; inline?: boolean }) {
+  const receipt = message.elapsedTurn;
+  if (!receipt) return null;
+  const text = `${elapsedWorkLabel(receipt.ms, receipt.outcome) ?? ''}${message.role === 'system' && !message.content ? ' · 답변 없음' : ''}`;
+  if (!text) return null;
+  return inline ? <span className="hps-turn-elapsed hps-turn-elapsed-inline" role="status">{text}</span> : <p className="hps-turn-elapsed" role="status">{text}</p>;
+}
+
 function MessageItem({
   message,
   streaming,
@@ -3020,6 +3042,7 @@ function MessageItem({
   wikiScope,
   quotable = false,
   quoteAction,
+  elapsed,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -3068,6 +3091,8 @@ function MessageItem({
   /** CGP-CHAT-R-007 — a finished answer whose text may be quoted, and its 인용하기 button. */
   quotable?: boolean;
   quoteAction?: ReactNode;
+  /** CGP-CHAT-D-015: the observed elapsed receipt, placed at the end of the answer action row. */
+  elapsed?: ReactNode;
 }) {
   const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
@@ -3155,8 +3180,9 @@ function MessageItem({
       )}
       {/* Merge of #1814 polish and #1763: one ghost row (copy · preview · ask again), retry on the
           latest answer only and never on a free seat. */}
-      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer
+      {answerActionRowShown(message, personal, isStreamingThis) && <CopyAnswer
         content={message.content}
+        status={elapsed}
         onRun={renderable ? () => onRunCode(renderable) : undefined}
         onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined}
         verdict={onVerdict ? <VerdictButtons state={verdict ?? undefined} onChange={onVerdict} /> : undefined}
@@ -3183,8 +3209,9 @@ function CitationRack({ citations }: { citations: Citation[] }) {
           data-hp-tooltip={c.url}
         >
           <span className="hps-cit-index">[{i + 1}]</span>
+          <span className="hps-source-kind">{citationKindLabel(c.kind)}</span>
           <span className="hps-cit-title">{c.title || c.domain}</span>
-          <span className="hps-cit-domain"><span className="hps-source-kind">{citationKindLabel(c.kind)}</span> · {c.domain}</span>
+          <span className="hps-cit-domain">{c.domain}</span>
         </button></span>
       ))}
     </div>

@@ -8,7 +8,7 @@ import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace
 import * as path from "node:path";
 import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
-import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
+import { PENDING_PURCHASE_KEY, PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
 import { isPurchaseReturnOrderId } from "./purchaseReturnHelpers";
 import type { ClassReposOutcome } from "./publish/publishHost";
 import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
@@ -47,7 +47,6 @@ const entryError = (error:unknown) => error instanceof ActivityConnectionError |
   ? error.message : "활동을 열지 못했습니다. 다시 시도해 주세요. 기존 연결과 작업 파일은 보존됩니다.";
 const TOKEN_KEY = "hypeproofChat.workshopToken";
 /** REQ-L12 — the order a buyer is in the middle of paying. Kept until the seat is claimed, so a restart cannot lose a paid order. */
-const PENDING_PURCHASE_KEY = "hypeproofChat.pendingPurchase";
 const DEFAULT_PROXY_URL = "https://api.hypeproof-ai.xyz/v1";
 const DEFAULT_SITE_BASE = "https://hypeproof-ai.xyz";
 

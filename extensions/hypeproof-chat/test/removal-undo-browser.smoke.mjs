@@ -132,11 +132,11 @@ try {
   await load({ seat: 'personal', dark: true, width: 800 });
   await ev(`(()=>{const t=document.querySelector('.hps-input textarea');t.focus();const d=new DataTransfer();d.setData('text/plain',${JSON.stringify(LONG)});t.dispatchEvent(new ClipboardEvent('paste',{clipboardData:d,bubbles:true,cancelable:true}))})()`); await pause();
   assert.equal(await ev(`document.querySelectorAll('.hps-pasted-chip').length`), 1);
-  await ev(`[...document.querySelectorAll('.hps-pasted-chip button')].find(x=>x.textContent==='삭제').click()`); await pause();
+  await ev(`document.querySelector('.hps-pasted-chip button[aria-label="붙여넣은 글 빼기"]').click()`); await pause();
   assert.equal((await toast()).kind, 'paste');
   await press();
-  assert.equal(await ev(`document.querySelector('.hps-pasted-chip button').textContent`), '붙여넣은 글 (45줄)', 'the same paste is back');
-  await ev(`[...document.querySelectorAll('.hps-pasted-chip button')].find(x=>x.textContent==='삭제').click()`); await pause();
+  assert.equal(await ev(`document.querySelector('.hps-pasted-chip button').textContent`), '붙여넣은 글 · 45줄', 'the same paste is back');
+  await ev(`document.querySelector('.hps-pasted-chip button[aria-label="붙여넣은 글 빼기"]').click()`); await pause();
   await ev(`document.querySelector('.hps-input textarea').focus()`); await b.send('Input.insertText', { text: '가' }); await pause();
   assert.equal((await toast()).shown, 'false', 'a draft edit ends the paste offer (undo could not restore it exactly)');
 

@@ -155,6 +155,10 @@ export class ActivityConnections {
     r.workspace = upperDrive(r.workspace);
     return r;
   }
+  /** CGP-SHELL-R-028: the unscoped SecretStorage, read only, so a work export can redact every value it holds. */
+  heldSecrets(): { get(key: string): Thenable<string | undefined>; keys(): Thenable<string[]> } {
+    return { get: key => this.raw.secrets.get(key), keys: () => this.raw.secrets.keys() };
+  }
   async hasLegacyConnection():Promise<boolean> { return (await this.raw.secrets.keys()).includes(ACTIVITY_TOKEN_KEY); }
   async list(): Promise<ActivitySummary[]> {
     const found = new Map<string, ActivityRecord>();

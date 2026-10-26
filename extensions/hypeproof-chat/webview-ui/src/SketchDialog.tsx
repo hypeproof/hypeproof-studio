@@ -8,13 +8,20 @@ export const SKETCH_COLORS = [{name:'검정',value:'#202020'},{name:'빨강',val
 type Point = {x:number;y:number};
 type Stroke = {color:string;erase:boolean;points:Point[]};
 const SIZE = 768;
+const isMac = () => /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || globalThis.navigator?.userAgent || '');
+/** CGP-CHAT-D-020: Cmd+Z on macOS, Ctrl+Z elsewhere, no Shift (redo) or Alt. The physical key also
+ * counts, so a Korean input source (where `key` is 'ㅋ') still undoes. */
+export function isSketchUndoShortcut(e: Pick<KeyboardEvent,'key'|'code'|'altKey'|'shiftKey'|'ctrlKey'|'metaKey'|'isComposing'>, mac = isMac()) {
+  if ((e.key.toLowerCase() !== 'z' && e.code !== 'KeyZ') || e.altKey || e.shiftKey || e.isComposing) return false;
+  return mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+}
 /** Local learner marks only; attaching saves through the same host preparation as pasted images. */
 export function SketchDialog({scope,allowed,onClose,onAttach}: {scope:string;allowed:boolean;onClose:()=>void;onAttach:(png:string)=>boolean}) {
   const dialog=useRef<HTMLDialogElement>(null),canvas=useRef<HTMLCanvasElement>(null),title=useId();
   const [strokes,setStrokes]=useState<Stroke[]>([]),[color,setColor]=useState<string>(SKETCH_COLORS[0].value),[erase,setErase]=useState(false);
   const [discard,setDiscard]=useState(false),[note,setNote]=useState('');
   const active=useRef<Stroke|null>(null),cursor=useRef<Point>({x:SIZE/2,y:SIZE/2});
-  const preparation=useAttachmentSendPreparation(scope,true),alive=useRef(true),composing=useRef(false),keepDrawing=useRef<HTMLButtonElement>(null);
+  const preparation=useAttachmentSendPreparation(scope,true),alive=useRef(true),composing=useRef(false),keepDrawing=useRef<HTMLButtonElement>(null),hint=useId();
   useLayoutEffect(()=>{if(discard)keepDrawing.current?.focus();},[discard]);
   useLayoutEffect(()=>{alive.current=true;const element=dialog.current!;element.showModal();return()=>{alive.current=false;element.close();};},[]);
   const close=()=>{if(preparation.busy)return;if(strokes.length||active.current)setDiscard(true);else onClose();};
@@ -38,7 +45,9 @@ export function SketchDialog({scope,allowed,onClose,onAttach}: {scope:string;all
       if(onAttach(png))onClose();else setNote('이미지 첨부 수를 확인해 주세요. 그림은 그대로 남아 있어요.');
     }
   };
-  return <dialog ref={dialog} className="hp-modal hps-sketch" aria-labelledby={title} onKeyDown={event=>{composing.current=imeComposing(event);if(composing.current&&event.key==='Escape')event.preventDefault();}} onCancel={event=>{event.preventDefault();if(!composing.current)close();}}>
+  return <dialog ref={dialog} className="hp-modal hps-sketch" aria-labelledby={title} onKeyDown={event=>{composing.current=imeComposing(event);if(composing.current&&event.key==='Escape')event.preventDefault();
+      // Undo stays inside the sketch: it never reaches the host editor's undo, and it waits while a stroke is down, a save runs or the discard question is open.
+      if(!composing.current&&isSketchUndoShortcut(event.nativeEvent)){event.preventDefault();event.stopPropagation();if(!discard&&!preparation.busy&&!active.current)setStrokes(previous=>previous.slice(0,-1));}}} onCancel={event=>{event.preventDefault();if(!composing.current)close();}}>
     <h2 id={title}>그려서 보여주기</h2>
     <div className="hps-sketch-tools" role="group" aria-label="그리기 도구">
       <button type="button" className="hps-panel-fallback-retry" aria-pressed={!erase} disabled={preparation.busy} aria-label="펜" onClick={()=>setErase(false)}>{!erase&&<ChatIcon kind="check" />}펜</button>
@@ -47,8 +56,8 @@ export function SketchDialog({scope,allowed,onClose,onAttach}: {scope:string;all
       <button type="button" className="hps-panel-fallback-retry" disabled={!strokes.length||preparation.busy} onClick={()=>setStrokes(previous=>previous.slice(0,-1))}>실행 취소</button>
       <button type="button" className="hps-panel-fallback-retry" disabled={!strokes.length||preparation.busy} onClick={()=>setStrokes([])}>모두 지우기</button>
     </div>
-    <p>드래그해서 그려 주세요. 키보드는 방향키로 이동하고 Shift와 방향키로 그릴 수 있어요.</p>
-    <canvas ref={canvas} width={SIZE} height={SIZE} className="hps-sketch-canvas" tabIndex={0} role="img" aria-label="그림판: 방향키 이동, Shift와 방향키로 그리기"
+    <p id={hint}>드래그해서 그려 주세요. 키보드는 방향키로 이동하고 Shift와 방향키로 그릴 수 있어요. {isMac()?'Cmd':'Ctrl'}+Z로 실행 취소할 수 있어요.</p>
+    <canvas ref={canvas} width={SIZE} height={SIZE} className="hps-sketch-canvas" tabIndex={0} role="img" aria-label="그림판" aria-describedby={hint}
       onPointerDown={event=>{if(preparation.busy||!allowed||event.button!==0||active.current)return;event.preventDefault();event.currentTarget.focus();event.currentTarget.setPointerCapture(event.pointerId);active.current={color,erase,points:[point(event)]};paint([...strokes,active.current]);}}
       onPointerMove={event=>{if(!active.current)return;if(active.current.points.length>=5000)return;active.current.points.push(point(event));paint([...strokes,active.current]);}}
       onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish}

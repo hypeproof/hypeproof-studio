@@ -52,6 +52,7 @@
       ]
     },
     "commands": [
+      { "command": "hypeproof-chat.exportMyWork", "title": "내 작업 내보내기", "category": "HypeProof" },
       { "command": "hypeproof-chat.takeMyWork", "title": "내 작업 가져가기", "enablement": "config.hypeproofChat.workTakeawayEnabled" },
       { "command": "hypeproof-chat.artifactHistory", "title": "이 파일의 이전 버전", "category": "HypeProof" },
       { "command": "hypeproof-chat.trashFile", "title": "파일을 활동 휴지통으로 이동", "enablement": "config.hypeproofChat.activityTrashEnabled" },
@@ -408,6 +409,10 @@
       "commandPalette": [
         {
           "command": "hypeproof-chat.askAboutFile",
+          "when": "false"
+        },
+        {
+          "command": "hypeproof-chat.exportMyWork",
           "when": "false"
         },
         {

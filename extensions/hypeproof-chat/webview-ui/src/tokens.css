@@ -1,4 +1,5 @@
 @import "./designTokens.css";
+@import "./radiusScale.css";
 
 /* HypeProof Studio design tokens — learning experience first (SX-49 ~ SX-54)
  *
@@ -75,6 +76,11 @@
   /* CGP-DS-R-017 — the one focus-ring colour. The webview body follows the VS Code theme, so the
    * ring is the theme's own focusBorder; the fallback is the HypeProof Studio theme's value. */
   --hp-ring-focus-default: var(--vscode-focusBorder, var(--ds-c-studio-tokens-ink-12));
+  /* CGP-DS-R-012 (DES-CGP-DS-13) — the elevation level a component asks for. Components read only these
+   * two names (box-shadow: var(--hp-elevation-raised|overlay)) or box-shadow: none; the body theme picks
+   * the dark or light alpha below, high contrast and forced colors pick flat. */
+  --hp-elevation-raised: var(--ds-c-elevation-raised-dark);
+  --hp-elevation-overlay: var(--ds-c-elevation-overlay-dark);
   /* CGP-DS-R-014 — motion tokens (DES-CGP-DS-15). Every transition/animation time in webview CSS
    * comes from here; component CSS holds no literal durations (test/motion-measure-gutter.smoke.mjs).
    * The reduced-motion override at the end of this file still wins (!important). */
@@ -124,6 +130,12 @@
   --hp-space-6: calc(var(--hp-space) * 6);                 /* 24px */
   --hp-space-8: calc(var(--hp-space) * 8);                 /* 32px */
   --hp-control-cta: var(--hp-control-lg);                  /* 48px · the primary call to action */
+  /* CGP-DS-R-011 (REQ-CGP-DS-12) — the composer card on the radius scale (radiusScale.css) and the
+   * radius of a control drawn inside it: the card's radius minus the card's inset, so the curves stay
+   * concentric when either moves. A round control (personal Send/Stop, tools) takes --hp-radius-full. */
+  --hp-radius-composer: var(--hp-radius-20);               /* 20px (DES-CGP-DS-21) */
+  --hp-composer-inset: calc(var(--hp-space) * 3);          /* 12px */
+  --hp-radius-composer-control: calc(var(--hp-radius-composer) - var(--hp-composer-inset)); /* 8px */
 }
 /* CGP-DS-R-008 — semantic type scale (REQ-STUDIO-TYPE-SCALE, DES-CGP-DS-09, DES-02 via DEC-29).
  * Learner-read text takes one of these sizes; the smallest step is 14px. A custom property is
@@ -161,6 +173,13 @@ body.vscode-light, body.vscode-high-contrast-light {
   --hp-text-muted-default: color-mix(in srgb, var(--vscode-descriptionForeground, var(--ds-c-studio-tokens-ink-42)) 80%, var(--vscode-foreground, var(--ds-c-studio-tokens-surface-68)));
 }
 
+/* CGP-DS-R-012 — elevation per host theme. Light themes take the light alpha; the forest-only branded
+ * screens keep the dark one in every theme (bound in their block below). VS Code high contrast (its light
+ * variant carries both classes) has no shadows: each elevated surface draws a 1px border instead, in the
+ * rule next to the surface. */
+body.vscode-light { --hp-elevation-raised: var(--ds-c-elevation-raised-light); --hp-elevation-overlay: var(--ds-c-elevation-overlay-light); }
+body.vscode-high-contrast, body.vscode-high-contrast .studio-start, body.vscode-high-contrast .studio-disconnected { --hp-elevation-raised: var(--ds-c-elevation-flat); --hp-elevation-overlay: var(--ds-c-elevation-flat); }
+
 /* CGP-DS-D-002 — branded screens. The start and disconnected screens are drawn in the forest palette
  * in every theme (their artwork and cards are forest-only), so every role is bound back to the
  * fixed forest value here, the way Paper binds it below. Their ring stays lime (13.8:1 on bg,
@@ -190,6 +209,9 @@ body.vscode-light, body.vscode-high-contrast-light {
   --hp-border-warn-default: var(--ds-c-studio-tokens-ink-39);
   --hp-border-accent-default: var(--ds-c-studio-tokens-ink-12);
   --hp-ring-focus-default: var(--ds-c-studio-tokens-ink-12);
+  /* CGP-DS-R-012: forest panels in every theme, so the dark elevation alpha. */
+  --hp-elevation-raised: var(--ds-c-elevation-raised-dark);
+  --hp-elevation-overlay: var(--ds-c-elevation-overlay-dark);
 }
 /* Fields that paint their own HP background use the muted text role. */
 .hp-surface, .hp-evidence-form, .hps-instructor-model-input { --hp-text-placeholder-default: var(--hp-text-muted-default); }
@@ -278,6 +300,8 @@ body.vscode-light, body.vscode-high-contrast-light {
   /* Focus: the one ring token becomes Highlight in every scope that sets it, so every existing
    * `outline: 2px solid var(--hp-ring-focus-default)` rule draws in Highlight. The ring is always an outline. */
   :root, .studio-start, .studio-disconnected, .hp-mission, [data-surface="growth"], .hp-reflection { --hp-ring-focus-default: Highlight; }
+  /* CGP-DS-R-012: no elevation shadows (the system drops them too); the surfaces keep their 1px borders. */
+  :root, body, .studio-start, .studio-disconnected { --hp-elevation-raised: var(--ds-c-elevation-flat); --hp-elevation-overlay: var(--ds-c-elevation-flat); }
   :focus-visible { outline: var(--ds-c-studio-tokens-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-tokens-size-7); }
   /* Every control keeps a visible boundary, including the borderless ghost buttons. */
   button, select, textarea, summary,

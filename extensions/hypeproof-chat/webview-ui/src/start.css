@@ -4,7 +4,7 @@
 .studio-start,.studio-disconnected {
   color:var(--hp-text-primary-default);
   background:var(--hp-bg-app-default);
-  font-family:var(--ds-c-studio-start-font-1);
+  font-family:var(--ds-c-studio-start-font-1), var(--ds-c-typography-emoji);
   box-sizing:border-box;
   line-height:var(--ds-c-studio-start-typography-4)}
 
@@ -106,7 +106,10 @@
   border:var(--ds-c-studio-start-size-3) solid var(--ds-c-studio-start-boundary-4);
   border-radius:var(--ds-c-studio-start-radius-8);
   padding:var(--ds-c-studio-start-space-3);
-  box-shadow:0 var(--ds-c-studio-start-shadow-10) var(--ds-c-studio-start-shadow-11) var(--ds-c-studio-start-shadow-5)}
+  box-shadow:var(--hp-elevation-raised)}
+/* CGP-DS-R-012 (DES-CGP-DS-13): high contrast has no elevation shadow. The start screen stays forest in every
+   theme, where the light contrastBorder would be dim, so the card's 1px border takes its own text colour. */
+body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 .studio-card-top {
   display:flex;
   justify-content:space-between;

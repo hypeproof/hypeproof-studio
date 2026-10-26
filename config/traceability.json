@@ -6152,7 +6152,8 @@
         "ST-REQ-TASK-WORKSPACE",
         "ST-IMP-TASK-WORKSPACE",
         "ST-REQ-CHAT-DETAIL",
-        "ST-REQ-CHAT-REFERENCE"
+        "ST-REQ-CHAT-REFERENCE",
+        "ST-REQ-SOURCE-KIND-LABEL"
       ],
       "sources": [
         {
@@ -6235,6 +6236,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Compact personal conversation (CC-R1, #1762)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Collapsible pasted text (CGP-CHAT-R-017)"
         }
       ]
     },
@@ -12478,6 +12483,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
         }
       ]
@@ -12638,6 +12646,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/pasted-draft-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/paste-chip-computed.smoke.mjs"
         }
       ]
     },
@@ -14839,6 +14850,421 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/whats-new-layout.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-RADIUS-SCALE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Radius scale (CGP-DS-R-011)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-RADIUS-SCALE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-RADIUS-SCALE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/radiusScale.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "scripts/sync-design-tokens.mjs"
+        },
+        {
+          "path": "chalk/src/lib/design-tokens.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-RADIUS-SCALE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-RADIUS-SCALE",
+        "ST-IMP-RADIUS-SCALE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/radius-scale-computed.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-ELEVATION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Elevation levels (CGP-DS-R-012)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ELEVATION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ELEVATION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/myQuestions.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/lib/design-tokens.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ELEVATION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ELEVATION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/elevation-levels.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/elevation-computed.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/elevation.browser.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-LOGICAL-CSS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Logical CSS properties (CGP-DS-R-026)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LOGICAL-CSS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LOGICAL-CSS"
+      ],
+      "sources": [
+        {
+          "path": "scripts/logical-css-lint.mjs"
+        },
+        {
+          "path": "config/logical-css-baseline.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LOGICAL-CSS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LOGICAL-CSS",
+        "ST-IMP-LOGICAL-CSS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/logical-css.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHALK-TABULAR-FIGURES",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-DESIGN",
+        "ST-INT-CHALK-MVP"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Tabular figures in Chalk numeric columns and counters (CGP-DS-R-030)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-TABULAR-FIGURES",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-TABULAR-FIGURES"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/ui/budgets.html"
+        },
+        {
+          "path": "chalk/src/lib/board-status.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-TABULAR-FIGURES",
+      "stage": "test",
+      "label": "Headless Chromium computed font-variant-numeric on rendered Chalk numeric surfaces",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHALK-TABULAR-FIGURES",
+        "ST-IMP-CHALK-TABULAR-FIGURES"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/tabular-figures.browser.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-BRAND-MARKS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Startup and empty-state brand marks (CGP-DS-R-032)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-BRAND-MARKS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BRAND-MARKS"
+      ],
+      "sources": [
+        {
+          "path": "assets/brand/hypeproof-mark.svg"
+        },
+        {
+          "path": "assets/brand/hypeproof-watermark.svg"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/Brand.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StartPage.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "scripts/install-shell-brand.mjs"
+        },
+        {
+          "path": "scripts/install-brand-assets.sh"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-BRAND-MARKS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-BRAND-MARKS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/brand-marks.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/startup-brand-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lib/brand-marks.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-EMOJI-STACK",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Colour emoji font stack (CGP-DS-R-033)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-EMOJI-STACK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-EMOJI-STACK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        },
+        {
+          "path": "chalk/src/lib/typography.css"
+        },
+        {
+          "path": "chalk/src/lib/design-tokens.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-EMOJI-STACK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-EMOJI-STACK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/emoji-font-stack-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/font-roles-computed.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-WORK-EXPORT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Work export zip (CGP-SHELL-R-028)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/settings-account-shell.md",
+          "section": "## Work export decision (CGP-SHELL-R-028)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-WORK-EXPORT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WORK-EXPORT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/workExport.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/workExportHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-WORK-EXPORT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WORK-EXPORT",
+        "ST-IMP-WORK-EXPORT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/work-export.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/work-export-entry-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lib/headless-chromium.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-SOURCE-KIND-LABEL",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Source kind label before the title (CGP-CHAT-D-014)"
         }
       ]
     }

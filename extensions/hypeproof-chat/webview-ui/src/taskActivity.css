@@ -18,7 +18,7 @@
   min-height: var(--hp-control-min); min-width: var(--hp-control-min); box-sizing: border-box;
   padding: 0 var(--hp-space-3);
   border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
-  border-radius: var(--ds-c-studio-styles-radius-10);
+  border-radius: var(--hp-radius-8);
   background: transparent; color: inherit;
   font: inherit; font-size: var(--hp-font-caption); cursor: pointer;
   transition: background-color var(--hp-dur-press) var(--hp-ease);

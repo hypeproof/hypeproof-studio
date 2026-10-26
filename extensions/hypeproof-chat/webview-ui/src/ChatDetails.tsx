@@ -141,7 +141,7 @@ export function useConfirmedCopy(text: string): [CopyState, () => Promise<void>]
 /** CGP-KNOW-R-004 — the answer action's label (the session command's name, package.json wikiIngest). */
 export const ANSWER_TO_WIKI_LABEL = '팀 브레인에 정리하기';
 
-export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTurnId, wikiScope }: { wikiScope?: string; wikiTurnId?: string; content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
+export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTurnId, wikiScope, status }: { /** CGP-CHAT-D-015 — trailing secondary status text (elapsed receipt), after every control. */ status?: ReactNode; wikiScope?: string; wikiTurnId?: string; content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode; /** CGP-KNOW-R-004 — file this answer to the team brain (the host asks before writing). */ onToWiki?: () => void }) {
   const [state, copy] = useConfirmedCopy(content);
   const [wikiOpen, setWikiOpen] = useState(false);
   const wikiAction = useRef<HTMLButtonElement>(null);
@@ -161,6 +161,7 @@ export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki, wikiTur
       <ChatIcon kind="book" size={16} />
     </button>}
     {verdict}
+    {status}
     <CopyFeedback failed={state === 'failed'}>{state !== 'idle' && <><ChatIcon kind={state === 'failed' ? 'alert' : 'check'} size={16} /><span>{state === 'copied' ? '답변을 복사했습니다' : '복사하지 못했습니다. 답변을 선택해 복사해 주세요.'}</span></>}</CopyFeedback>
   </div>
     {wikiOpen && onToWiki && wikiTurnId && <AnswerWikiReview key={wikiTurnId} content={content} turnId={wikiTurnId} onCancel={closeWiki} onContinue={() => { closeWiki(); onToWiki(); }} />}

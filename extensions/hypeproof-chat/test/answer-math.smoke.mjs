@@ -8,6 +8,8 @@
 // KaTeX is a lazy chunk: the test app is built with code splitting, so the chunk is a real separate
 // request under the CSP, and a page without math must never request it. A command that asks for
 // trust (\href) shows its exact source. A wide block's scrollbar never covers its subscripts.
+// CGP-CHAT-D-022 (layout): inline math is baseline-aligned with its sentence and math colour is
+// the text token colour in every theme.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -68,6 +70,8 @@ const ANSWER = [
   '틀린 식 $\\frac{1}{$ 은 그대로 보여요. 가격은 $5이고 $10이에요.',
   '',
   '링크 시도 $\\href{https://evil.example}{click}$ 도 그대로예요.',
+  '',
+  '비율은 $\\frac{a}{b}$ 와 $x_{i}^{2}$ 예요.',
 ].join('\n');
 const NO_MATH = '수식이 없는 답변이에요. 가격은 $5이고 $10이에요.';
 const requests = [];
@@ -85,7 +89,7 @@ const server = createServer((req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const origin = `http://127.0.0.1:${server.address().port}`;
 
-const evidence = process.env.ANSWER_MATH_EVIDENCE ?? join(homedir(), '.hypeproof/loop/cgp-chatr022-math-in-answers-renders');
+const evidence = process.env.ANSWER_MATH_EVIDENCE ?? join(homedir(), '.hypeproof/loop/cgp-chat-d-022-math-rendering');
 if (process.env.ANSWER_MATH_EVIDENCE !== '') mkdirSync(evidence, { recursive: true });
 const pause = (ms = 80) => new Promise(r => setTimeout(r, ms));
 const b = await launch(bin);
@@ -142,6 +146,12 @@ try {
         inlineSize:parseFloat(getComputedStyle(inline).fontSize), proseSize:parseFloat(getComputedStyle(p).fontSize),
         inlineColor:getComputedStyle(inline.querySelector('.katex-html')).color, proseColor:getComputedStyle(p).color,
         inlineBox:box(inline), lineBox:box(p),
+        // CGP-CHAT-D-022: inline math sits on the sentence baseline. A zero-size inline-block sits on
+        // the baseline of the line it is in: one right before the formula marks the sentence baseline,
+        // one at the end of each KaTeX base (.katex-base) marks the formula's own baseline.
+        baselines:[...prose.querySelectorAll('.hps-math-inline')].map(m=>{const mk=()=>{const s=document.createElement('span');s.style.cssText='display:inline-block;width:0;height:0;vertical-align:baseline';return s};const a=mk();m.before(a);const bs=[...m.querySelectorAll('.katex-html > .katex-base')].map(base=>{const z=mk();base.appendChild(z);const y=z.getBoundingClientRect().bottom;z.remove();return y});const y=a.getBoundingClientRect().bottom;a.remove();return {text:y,math:bs,src:m.textContent.slice(0,20)}}),
+        // CGP-CHAT-D-022: math takes the text token colour (the colour every answer control uses).
+        tokenColor:(()=>{const t=document.createElement('span');t.style.color='var(--vscode-foreground, var(--hp-text-primary-default))';prose.appendChild(t);const c=getComputedStyle(t).color;t.remove();return c})(),
         blocks:blocks.map(b=>{const k=b.querySelector('.katex-display > .katex');b.scrollLeft=60;const scrolled=b.scrollLeft;b.scrollLeft=0;const rb=b.getBoundingClientRect();let glyphBottom=0;const w=document.createTreeWalker(b.querySelector('.katex-html'),NodeFilter.SHOW_TEXT);for(let n=w.nextNode();n;n=w.nextNode()){if(!n.textContent.trim())continue;const g=document.createRange();g.selectNodeContents(n);for(const q of g.getClientRects())if(q.height)glyphBottom=Math.max(glyphBottom,q.bottom);}return {glyphBottom,clientBottom:rb.top+b.clientTop+b.clientHeight,bar:b.offsetHeight-b.clientHeight-b.clientTop*2,scrolled,overflowX:getComputedStyle(b).overflowX,tab:b.tabIndex,label:b.getAttribute('aria-label'),client:b.clientWidth,scroll:b.scrollWidth,box:box(b),k:box(k),color:getComputedStyle(b.querySelector('.katex-html')).color}}),
         column:{right:Math.min(col.right,document.documentElement.clientWidth)},
         page:{scroll:document.documentElement.scrollWidth,width:document.documentElement.clientWidth},
@@ -157,11 +167,18 @@ try {
     assert.ok(r.inlineSize >= r.proseSize && r.inlineSize >= 14, `${tag}: inline math is at least prose size (${r.inlineSize} vs ${r.proseSize})`);
     assert.equal(r.inlineColor, r.proseColor, `${tag}: inline math takes the prose text colour`);
     assert.ok(r.inlineBox.top >= r.lineBox.top - 4 && r.inlineBox.bottom <= r.lineBox.bottom + 4, `${tag}: inline math sits in its line`);
+    assert.equal(r.baselines.length, 3, `${tag}: three inline formulas typeset`);
+    for (const bl of r.baselines) {
+      assert.ok(bl.math.length > 0, `${tag}: ${bl.src} has a KaTeX base`);
+      for (const y of bl.math) assert.ok(Math.abs(y - bl.text) <= 0.5, `${tag}: inline math ${bl.src} is baseline-aligned with its sentence (${y} vs ${bl.text})`);
+    }
+    assert.equal(r.inlineColor, r.tokenColor, `${tag}: inline math uses the text token colour`);
     assert.equal(r.blocks.length, 2, `${tag}: two display blocks`);
     for (const blk of r.blocks) {
       assert.equal(blk.tab, 0, `${tag}: display block is keyboard focusable`);
       assert.equal(blk.label, '수식', `${tag}: display block is labelled`);
       assert.equal(blk.color, r.proseColor, `${tag}: display math takes the prose text colour`);
+      assert.equal(blk.color, r.tokenColor, `${tag}: display math uses the text token colour`);
       assert.ok(blk.box.right <= r.column.right + 1, `${tag}: display block stays inside the answer column`);
     }
     const [small, wide] = r.blocks;
