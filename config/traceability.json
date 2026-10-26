@@ -14438,6 +14438,56 @@
           "path": "docs/testing/chalk-authoring.md"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-VOICE-COMPACT-CORNER",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Compact voice control corners (CGP-VOICE-R-008)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-VOICE-COMPACT-CORNER",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-COMPACT-CORNER",
+        "ST-TEST-VOICE-COMPACT-CORNER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/voicePopupHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/VoicePanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-VOICE-COMPACT-CORNER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-VOICE-COMPACT-CORNER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/voice-compact-corner.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/voice-popup.smoke.mjs"
+        }
+      ]
     }
   ]
 }

@@ -8,11 +8,19 @@
 // 이 파일이 **주장하지 않는 것**: 음성이 동작한다. 여기에는 `getUserMedia` 도
 // 오디오 재생도 없다 — 실제 연결은 UI-2(#898 V0 전송 ADR · #901 V4 예산) 이후다.
 // 그때까지 `voiceStartGate` 가 시작을 막으므로 학생에게 이 패널은 열리지 않는다.
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ChatIcon } from "./ChatDetails";
 
 import {
   COMPACT_CONTROLS,
+  COMPACT_CORNER_STORAGE_KEY,
+  COMPACT_MOVE_HELP,
+  COMPACT_MOVE_LABEL,
+  type CompactCorner,
+  compactCornerAnnouncement,
+  compactCornerForKey,
+  nextCompactCorner,
+  parseCompactCorner,
   type DismissKind,
   type FailureView,
   type MeterView,
@@ -44,6 +52,25 @@ export interface VoicePanelProps {
   onStopSpeaking(): void;
   onDismiss(kind: DismissKind): void;
   onRetry(): void;
+  /**
+   * Where the compact control's corner is remembered (CGP-VOICE-R-008). Defaults to this
+   * window's webview sessionStorage; tests inject their own. Read and write may throw.
+   */
+  cornerStore?: CornerStore;
+}
+
+export interface CornerStore {
+  read(): string | null;
+  write(value: string): void;
+}
+
+const sessionCornerStore: CornerStore = {
+  read: () => sessionStorage.getItem(COMPACT_CORNER_STORAGE_KEY),
+  write: (value) => sessionStorage.setItem(COMPACT_CORNER_STORAGE_KEY, value),
+};
+
+function readCorner(store: CornerStore): CompactCorner {
+  try { return parseCompactCorner(store.read()); } catch { return parseCompactCorner(null); }
 }
 
 /** 미터 막대. 관측이 없으면(`level === null`) **정지한 모양**을 그린다 (VO-38). */
@@ -83,12 +110,37 @@ function StatusBlock({ meter, failure }: { meter: MeterView; failure: FailureVie
 export function VoicePanel(props: VoicePanelProps) {
   const { popup, session, meter } = props;
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const store = props.cornerStore ?? sessionCornerStore;
+  const [corner, setCorner] = useState<CompactCorner>(() => readCorner(store));
+  const [moved, setMoved] = useState<string>("");
+  const helpId = useId();
+
+  const moveTo = (next: CompactCorner) => {
+    if (next === corner) return;
+    setCorner(next);
+    setMoved(compactCornerAnnouncement(next));
+    // Remembering is a convenience: a blocked storage keeps the move for this mount only.
+    try { store.write(next); } catch { /* storage unavailable */ }
+  };
 
   // 패널이 열리면 포커스를 안으로 옮긴다. Escape 를 받으려면 포커스가 여기 있어야
   // 하고(VO-41), 키보드 사용자가 패널을 찾지 못하면 종료도 못 한다(VO-47).
   useEffect(() => {
     if (popup.presentation !== "hidden") panelRef.current?.focus();
   }, [popup.presentation]);
+
+  const onCompactKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // Arrow keys and Home move the control between the four corners (REQ-CGPV-12). Focus
+    // stays on whatever had it, so the learner can keep moving or press a control.
+    const next = compactCornerForKey(corner, { key: e.key, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing });
+    if (next) {
+      e.preventDefault();
+      e.stopPropagation();
+      moveTo(next);
+      return;
+    }
+    onPanelKeyDown(e);
+  };
 
   const onPanelKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Escape") return;
@@ -104,7 +156,7 @@ export function VoicePanel(props: VoicePanelProps) {
 
   if (popup.presentation === "compact") {
     return (
-      <div ref={panelRef} tabIndex={-1} onKeyDown={onPanelKeyDown} className="hps-voice-compact" role="region" aria-label={voicePanelTitle(props.coachName)}>
+      <div ref={panelRef} tabIndex={-1} onKeyDown={onCompactKeyDown} className="hps-voice-compact" data-corner={corner} role="region" aria-label={voicePanelTitle(props.coachName)} aria-describedby={helpId}>
         <span className="hps-voice-compact-status">
           {/* 작은 컨트롤에서도 **캡처 상태**를 숨기지 않는다 (VO-40). */}
           <span className={`hps-voice-dot${session.captureOpen ? " hps-voice-dot-on" : ""}`} aria-hidden="true" />
@@ -124,6 +176,12 @@ export function VoicePanel(props: VoicePanelProps) {
         {controls.has("expand") && (
           <button type="button" onClick={props.onExpand}>펼치기</button>
         )}
+        {/* A press steps clockwise; the arrow keys pick a corner. There is no drag. */}
+        <button type="button" className="hps-voice-move" title={COMPACT_MOVE_HELP} aria-describedby={helpId} onClick={() => moveTo(nextCompactCorner(corner))}>
+          {COMPACT_MOVE_LABEL}
+        </button>
+        <span id={helpId} className="hps-sr-only">{COMPACT_MOVE_HELP}</span>
+        <span className="hps-sr-only" role="status">{moved}</span>
       </div>
     );
   }

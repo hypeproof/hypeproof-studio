@@ -1879,13 +1879,32 @@ html, body, #root {
 .hps-voice-info { margin: 0; padding-left: var(--ds-c-studio-styles-space-18); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); }
 .hps-voice-est { font-style: italic; }
 
-/* The compact control — folds into one row so it does not cover the area where the artifact is read. */
+/* The compact control — one wrapping row that floats in a viewport corner (below), so it does not take room from the artifact being read. */
 .hps-voice-compact {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-2);
-  margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-2);
+  padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1); border-radius: var(--ds-c-studio-styles-radius-2);
   background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-7));
   border: var(--ds-c-studio-styles-size-3) solid var(--vscode-widget-border, var(--ds-c-studio-styles-boundary-14));
-  font-size: var(--ds-c-studio-styles-type-9);
+  /* Learner text floor 14px (CGP decision: 14px wins over register sizes). */
+  font-size: var(--hp-font-caption);
+}
+/* CGP-VOICE-R-008 (REQ-CGPV-12 / DES-CGPV-12): the compact control floats in one of four
+   viewport corners, 16px in. Each corner is a length plus a translate, never `auto`, so a
+   move can ease between corners; the width cap and wrapping keep it inside the viewport at
+   any width. Only corners exist: no free position, no drag. */
+.hps-voice-compact {
+  position: fixed; z-index: 10; box-sizing: border-box;
+  max-inline-size: calc(100% - 2 * var(--ds-c-studio-styles-space-20));
+  --hps-voice-x: 0; --hps-voice-y: 0;
+  left: var(--ds-c-studio-styles-space-20); top: var(--ds-c-studio-styles-space-20);
+  translate: var(--hps-voice-x) var(--hps-voice-y);
+}
+.hps-voice-compact[data-corner$="right"] { left: calc(100% - var(--ds-c-studio-styles-space-20)); --hps-voice-x: -100%; }
+.hps-voice-compact[data-corner^="bottom"] { top: calc(100% - var(--ds-c-studio-styles-space-20)); --hps-voice-y: -100%; }
+/* Movement only when motion is allowed, the same switch as the meter above (no new reduce block). */
+:where(:root[data-reduced-motion="false"]) .hps-voice-compact { transition: left var(--hp-dur-press) var(--hp-ease), top var(--hp-dur-press) var(--hp-ease), translate var(--hp-dur-press) var(--hp-ease); }
+@media (prefers-reduced-motion: no-preference) {
+  :where(:root:not([data-reduced-motion])) .hps-voice-compact { transition: left var(--hp-dur-press) var(--hp-ease), top var(--hp-dur-press) var(--hp-ease), translate var(--hp-dur-press) var(--hp-ease); }
 }
 .hps-voice-compact-status { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-15); }
 .hps-voice-dot { width: var(--ds-c-studio-styles-size-63); height: var(--ds-c-studio-styles-size-63); border-radius: 50%; background: var(--vscode-descriptionForeground, var(--ds-c-studio-styles-surface-38)); }
