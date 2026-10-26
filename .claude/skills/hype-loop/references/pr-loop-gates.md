@@ -70,3 +70,24 @@ verdicts with the key. A catch rate below 100% or any good change marked FAIL
 exits 12, which trips the breaker: write STOP and tell Jay. `canary.py mech`
 checks the library itself. Two of the defects (a deleted guard and an inverted
 condition) are clean to the scripts on purpose, so only a reader can catch them.
+
+## Exact-head watchers (loops whose charter merges outside merge.py)
+
+Some loops (the CGP parity loop) merge green PRs at an exact head without the
+gate records. Start those watchers with
+`skills/hype-loop/scripts/merge_when_green.py start --repo hypeproof/<r> --pr N --head <sha>`,
+never with `nohup ... &` from a background shell: `start` gives the watcher its own
+session, and the watcher logs start, polls and exit to
+`$HYPE_LOOP_HOME/merge-watch/`. Every tick runs
+`merge_when_green.py audit --repo hypeproof/<r> --rearm`: dead watchers at an
+unchanged head are restarted; unarmed and silent agent PRs are reported (#399).
+
+## Resolving a conflict
+
+Mechanical hunks first: `resolve_reqdocs.py --repo <wt> <files>` for requirement tables and
+`requirement-work.json` digests, `resolve_chains.py` for `&&` script chains in a
+`package.json`, `resolve_additive.py` for CSS custom properties and one-line `const X = [...]`
+lists, `keep_both.py` for other insertions at one place.
+After resolving a conflict and `git add`, run `resolve_check.py continue --repo <wt>`
+(same identity wrapper), never `git <op> --continue`. Exit 1 names file, line and hunk
+(marker, CSS brace, JSON, Markdown fence); exit 3 means git stopped at the next conflict.

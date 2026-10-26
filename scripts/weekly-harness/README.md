@@ -100,6 +100,11 @@ refused bypass, or fewer issues examined than `--min-issues`.
 Per repo: closed vs open counts for the cycle label plus a table of every
 issue (number, title, owner, state). Markdown on stdout — paste it at the
 top of the weekly agenda or pipe it into `scripts/notify/notify.py`.
+Below it comes the board, the work record: Command Center #4's Done since the
+cycle date, In Progress and Blocked for the same repos, from the Harness
+`scripts/board/board.py report` (found through `$HYPEPROOF_HARNESS`, this repo or
+a sibling `hypeproof-harness` checkout). If that read fails, a note takes the
+section's place and the exit code stays 0; `--issues-json` runs skip it.
 
 ```bash
 python3 scripts/weekly-harness/burndown.py --cycle weekly-2026-07-21
