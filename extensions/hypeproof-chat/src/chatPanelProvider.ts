@@ -6366,6 +6366,26 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const src = cwd ? readWorkspaceThumbnail(cwd, msg.path) : null;
     await this.post({ type: "artifactThumbnail", requestId: msg.requestId, path: msg.path, src });
   }
+
+  /**
+   * CGP-KNOW-D-016 (DES-KNOW-29) — 종류, 크기, 만든 대화, 마지막으로 바꾼 대화 for one listed file, read
+   * from the saved ledger. The turn links are resolved against the task store now, so a cleared,
+   * edited-away, moved or archived turn comes back as plain text instead of a dead link. Never throws.
+   */
+  private async postArtifactInfo(requestId: unknown, filePath: unknown): Promise<void> {
+    if (typeof requestId !== "string" || !requestId || requestId.length > 100 || typeof filePath !== "string" || !filePath || filePath.length > 4096) return;
+    const recorder = this.provenanceRecorder();
+    const store = this.currentTaskStore();
+    const cwd = store && this._instructorMode?.isInstructor !== true ? this.resolveCoachCwd() : undefined;
+    let info: import("./artifactProvenanceView").ArtifactInfo | null = null;
+    try {
+      if (recorder && store && cwd) {
+        const root = await fs.promises.realpath(cwd);
+        info = await recorder.info(root, filePath, (ref) => store.findTurnRow(ref.taskId, ref.messageId));
+      }
+    } catch { info = null; }
+    await this.post({ type: "artifactInfo", requestId, info });
+  }
   // CGP-KNOW-D-013 (DES-KNOW-24) — the activity trash at the bottom of 내 작품. The store, its gates
   // and native confirms live in activityTrashCommands.ts; this only routes the panel's requests.
   private activityTrashPanel?: import("./activityTrashCommands").ActivityTrashPanelApi;
@@ -6575,7 +6595,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       const changes = diffRestorePoint(handle.point, now);
-      await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now);
+      // CGP-KNOW-D-016 — the turn's task and assistant row, so the file's info popover can open this turn.
+      await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now, { taskId: handle.taskKey, messageId });
       void this.postArtifactProvenance(false);
       if (changeCount(changes) === 0) { await dropRestorePoint(handle.store, handle.point.id); return; }
       // REQ-STUDIO-PAGE-CARD — the same diff (a stopped turn included) names the pages; the card sits under the
@@ -7074,6 +7095,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
+      case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
       case "pageCardsRequest": this.postPageCards(); return;
       case "pageCardOpen":
       case "pageCardReveal":

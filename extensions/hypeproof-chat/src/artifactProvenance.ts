@@ -30,7 +30,7 @@ import { artifactHistoryStore, captureArtifactVersion } from "./turnRestore.ts";
 import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { PROVENANCE_LABELS, type ArtifactProvenanceEntry, type ArtifactProvenanceView, type ProvenanceEventKind, type ProvenanceLabelKind } from "./artifactProvenanceView.ts";
+import { PROVENANCE_LABELS, artifactInfo, type ArtifactInfo, type ArtifactProvenanceEntry, type ArtifactProvenanceView, type ProvenanceEventKind, type ProvenanceLabelKind, type ProvenanceStep, type ProvenanceTurnRef, type TurnLookup } from "./artifactProvenanceView.ts";
 
 export { PROVENANCE_LABELS, provenanceHistoryText } from "./artifactProvenanceView.ts";
 export type { ArtifactProvenanceEntry, ArtifactProvenanceView, ProvenanceEventKind, ProvenanceLabelKind } from "./artifactProvenanceView.ts";
@@ -44,6 +44,9 @@ export interface ProvenanceEvent {
   sha256?: string;
   /** The coach turn that made the change (turn-diff `ai_*` only). */
   turnId?: string;
+  /** CGP-KNOW-D-016 — that turn's task and first transcript row, so the info popover can open it. */
+  taskId?: string;
+  messageId?: string;
 }
 
 export interface ProvenanceLedger {
@@ -160,7 +163,7 @@ export function recordHostWrite(ledger: ProvenanceLedger, writes: readonly FileH
  * observation (`observeOutsideTurn` with the restore point); otherwise the ledger is stale and the
  * diff is not trusted.
  */
-export function recordCoachTurn(ledger: ProvenanceLedger, turn: { turnId: string; at: number; startedAt: number; added: readonly string[]; changed: readonly string[]; deleted: readonly string[] }, after: ScanLike): ProvenanceLedger {
+export function recordCoachTurn(ledger: ProvenanceLedger, turn: { turnId: string; at: number; startedAt: number; added: readonly string[]; changed: readonly string[]; deleted: readonly string[]; place?: ProvenanceTurnRef }, after: ScanLike): ProvenanceLedger {
   const files = filesOf(after);
   const uncovered = uncoveredOf(after);
   if (ledger.stale || !ledger.baseline) return markUnobserved({ ...ledger, baseline: ledger.baseline ?? toMap(files), stalePaths: nextStalePaths(ledger.stalePaths, files, uncovered) });
@@ -171,7 +174,7 @@ export function recordCoachTurn(ledger: ProvenanceLedger, turn: { turnId: string
     const latest = latestLive(events, p);
     // Studio recorded these exact bytes during this turn (a host write): that record names its writer.
     if (latest && latest.sha256 === hash[p] && latest.at >= turn.startedAt) return;
-    events.push({ path: p, kind, at: turn.at, sha256: hash[p], turnId: turn.turnId });
+    events.push({ path: p, kind, at: turn.at, sha256: hash[p], turnId: turn.turnId, ...(validRef(turn.place) ? { taskId: turn.place.taskId, messageId: turn.place.messageId } : {}) });
   };
   for (const p of turn.added) record(p, "ai_created");
   for (const p of turn.changed) record(p, "ai_changed");
@@ -225,10 +228,25 @@ export function provenanceView(ledger: ProvenanceLedger): ArtifactProvenanceView
     }
     const kind = latest.kind as ProvenanceLabelKind;
     const created = list.find(event => event.kind === "ai_created");
-    entries.push({ path: p, kind, ...PROVENANCE_LABELS[kind], history: foldHistory(list), at: latest.at, ...(created ? { createdAt: created.at } : {}) });
+    // CGP-KNOW-D-016 — a lifetime that does not begin with a creation (the file was there before the
+    // first observation) has no known origin.
+    const first = list[0];
+    const origin: ProvenanceStep = ORIGIN_KINDS.has(first.kind) ? stepOf(first) : { kind: "none" };
+    entries.push({ path: p, kind, ...PROVENANCE_LABELS[kind], history: foldHistory(list), at: latest.at, ...(created ? { createdAt: created.at } : {}), origin, last: stepOf(latest) });
   }
   entries.sort((a, b) => (b.at ?? -1) - (a.at ?? -1) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { entries: entries.slice(0, PROVENANCE_VIEW_CAP), more: Math.max(0, entries.length - PROVENANCE_VIEW_CAP), unobserved: false, unconfirmed };
+}
+
+const ORIGIN_KINDS = new Set<ProvenanceEventKind>(["ai_created", "studio_created", "learner_uploaded"]);
+const REF_MAX = 200;
+function validRef(ref: Partial<ProvenanceTurnRef> | undefined): ref is ProvenanceTurnRef {
+  return !!ref && typeof ref.taskId === "string" && typeof ref.messageId === "string" && ref.taskId.length > 0 && ref.messageId.length > 0 && ref.taskId.length <= REF_MAX && ref.messageId.length <= REF_MAX;
+}
+function stepOf(e: ProvenanceEvent): ProvenanceStep {
+  const kind = e.kind as ProvenanceLabelKind;
+  const turn = { taskId: e.taskId, messageId: e.messageId };
+  return (kind === "ai_created" || kind === "ai_changed") && validRef(turn) ? { kind, turn } : { kind };
 }
 
 function foldHistory(list: readonly ProvenanceEvent[]): string[] {
@@ -256,7 +274,8 @@ function validLedger(v: unknown): v is ProvenanceLedger {
   if (!l || l.version !== 1 || typeof l.stale !== "boolean" || !Array.isArray(l.events)) return false;
   if (l.stalePaths !== undefined && (!Array.isArray(l.stalePaths) || l.stalePaths.some((p) => typeof p !== "string"))) return false;
   if (l.baseline !== null && (typeof l.baseline !== "object" || Object.values(l.baseline).some((s) => typeof s !== "string" || !SHA.test(s)))) return false;
-  return l.events.every((e) => e && typeof e.path === "string" && KINDS.has(e.kind) && typeof e.at === "number" && (e.sha256 === undefined || SHA.test(e.sha256)));
+  return l.events.every((e) => e && typeof e.path === "string" && KINDS.has(e.kind) && typeof e.at === "number" && (e.sha256 === undefined || SHA.test(e.sha256))
+    && (e.taskId === undefined && e.messageId === undefined || validRef(e)));
 }
 
 /** A missing file is an empty ledger; a damaged one is an empty, stale ledger (nothing it said is trusted). */
@@ -404,7 +423,7 @@ export class ArtifactProvenanceRecorder {
   }
 
   /** After a coach turn whose start was observed; `after` is the scan the diff came from. */
-  turnEnd(root: string, point: PointLike, diff: TurnDiff, after: ScanLike): Promise<ProvenanceLedger | null> {
+  turnEnd(root: string, point: PointLike, diff: TurnDiff, after: ScanLike, place?: ProvenanceTurnRef): Promise<ProvenanceLedger | null> {
     this.bump();
     const at = Math.max(this.now(), point.createdAt + 1);
     return this.run(async () => {
@@ -418,7 +437,7 @@ export class ArtifactProvenanceRecorder {
         files++; bytes += size;
         await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "ai", f.sha256, this.historyEnabled).catch(() => null);
       }
-      return this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff }, after));
+      return this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff, ...(place ? { place } : {}) }, after));
     });
   }
 
@@ -461,6 +480,22 @@ export class ArtifactProvenanceRecorder {
       const ledger = incomplete ? await this.apply(root, markUnobserved)
         : usable ? await this.observe(root, usable, this.now()) : await loadLedger(this.file(root));
       return ledger ? provenanceView(ledger) : null;
+    });
+  }
+
+  /**
+   * CGP-KNOW-D-016 — the info popover of one listed file, from the saved ledger (no rescan). Null when
+   * the file is not in the list. The size is the file's own (a link or anything outside `root` is not
+   * measured); `lookup` says where the turn's row is now, at the moment of asking.
+   */
+  info(root: string, filePath: string, lookup: (ref: ProvenanceTurnRef) => TurnLookup): Promise<ArtifactInfo | null> {
+    return this.run(async () => {
+      const entry = provenanceView(await loadLedger(this.file(root))).entries.find((e) => e.path === filePath);
+      if (!entry) return null;
+      const abs = path.resolve(root, ...filePath.split("/"));
+      const inside = abs.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
+      const size = inside ? await fs.lstat(abs).then((st) => (st.isFile() ? st.size : null), () => null) : null;
+      return artifactInfo(entry, size, lookup);
     });
   }
 }
