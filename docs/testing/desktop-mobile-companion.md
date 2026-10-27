@@ -28,6 +28,35 @@ real learner data and production activation are separately evidenced. Record
 exact source, OS/device, fixture and adapter versions; do not inflate one layer
 into another. Child learning outcomes require a separate research protocol.
 
+### Local dispatcher seam
+
+`extensions/hypeproof-chat/test/companion-host-dispatch.smoke.mjs` exercises
+DMC-T04/05/06/12 against real synthetic local files and the existing command
+receipt journal interface: exact-byte request/result persistence, duplicate and
+restart behavior, outcome-unknown recovery, offline waiting, continuation-only
+handoff, revoked or changed runtime context, ungranted profile, changed consent,
+path/symlink escape, unsupported tool/model/write payloads and storage failure.
+Pairing preview `execution_authorized:false` is a mandatory denial control.
+These checks do not establish the Service transport or device acceptance rows.
+The review regressions instrument real selected-file fd reads: failed acceptance
+persistence must perform zero content reads; a successful request performs one
+read only after durable running and retries perform none. Recovery must reject
+any continuation output and malformed or unselected preview output, preserving
+normal continuation without an artifact.
+
+Independent repair verification is bound to
+`1b91a03b310e9b8e9ef55cc99591a94136c89a43`: the original focused dispatcher,
+classroom runner, attachment and routing group passed 15/15 tests. Separate
+controls confirmed zero content reads on failed acceptance, one read after
+durable running, rejection of injected continuation output, current scope and
+capability checks during journal/read boundaries, and duplicate/recovery paths
+without another read. The previous `eeb2536f` FAIL and the two resolved findings
+are retained in the [evidence record](../evidence/desktop-mobile-companion-routing.md).
+These observations are source/fixture evidence only. Real authenticated runtime
+integration, Service transport, installed host/mobile and complete DMC-T04/05/06/
+07/12/14 acceptance remain **NOT RUN / NOT COMPLETE**. Mapping-only follow-up
+commits preserve the verified implementation bytes; they are not new transport
+or native acceptance runs.
 ## Local workspace preparation observations — 2026-10-27
 
 [Preparation evidence](../evidence/desktop-companion-workspace-20261027.md)

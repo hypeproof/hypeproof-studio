@@ -65,6 +65,16 @@ tests cannot satisfy DMC-01/02/03/06 or installed-device acceptance. The next sl
 must integrate workspace selection, actual pairing and a bounded host dispatcher
 before claiming a connected product.
 
+The subsequent [local dispatcher seam](../evidence/desktop-mobile-companion-routing.md#local-dispatcher-seam-dmc-3-partial-2026-10-27)
+provides source/fixture evidence for the selected-artifact portion of
+DMC-04/05/06/07/12/14. It reuses the existing classroom receipt journal and file
+attachment gates. A normalized current runtime authority permits only the exact
+selected `preview.read` or output-free `desktop.continue` operation; pairing
+preview metadata supplies no execution authority. Durable accepted/running state
+precedes content reads; retries and interrupted recovery do not rerun the request.
+This is an unintegrated local adapter, not actual authenticated host/mobile
+dispatch. Studio #3072, the complete DMC-3 outcome and full test-contract
+acceptance remain open. No requirement or acceptance row is replaced here.
 The subsequent [local preparation implementation](../evidence/desktop-companion-workspace-20261027.md)
 adds selection of the current existing trusted workspace, explicit review/save
 and persisted preparation with an unpaired status. It reuses the existing activity

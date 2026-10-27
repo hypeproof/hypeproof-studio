@@ -7656,6 +7656,14 @@ The first source slice is an advisory route planner with synthetic tests; it doe
 not connect a phone, authorize tools or satisfy installed-device acceptance.
 [Product tests](testing/desktop-mobile-companion.md) remain separately tracked.
 
+The bounded local dispatcher seam adds source-level enforcement for
+DMC-04/06/12/14 through the existing command receipt journal and selected-file
+read gates. Pairing preview remains metadata-only: a separate current runtime
+authority and permitted resolved profile are both required, with scope, source
+version, epoch and consent rechecked before results leave the adapter. Only
+selected `preview.read` and a continuation instruction are implemented; no
+mobile quiz write, model execution or connected device acceptance is claimed.
+See [dispatcher evidence](evidence/desktop-mobile-companion-routing.md#local-dispatcher-seam-dmc-3-partial-2026-10-27).
 The subsequent [local workspace preparation](evidence/desktop-companion-workspace-20261027.md)
 command reviews and saves preparation for the current existing trusted local
 workspace, then reports that no phone is connected. It reuses activity binding
