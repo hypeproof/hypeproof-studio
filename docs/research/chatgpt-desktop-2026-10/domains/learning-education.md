@@ -275,6 +275,10 @@ REQ/DES-CGP-LEARN-14 as built (2026-10-26, DEC-LEARN-14): Chalk `/authoring` ask
 DES-CGP-LEARN-14 closed (2026-10-27, CGP-LEARN-D-014, DEC-LEARN-14d): the R-014 panel already met one screen, two questions,
 44px chips and 375/1280 px; 나중에 was an outlined ghost button, so it now draws no border (a text button beside the filled
 저장). T-48 measures each clause in headless Chromium.
+DES-CGP-LEARN-17 closed (2026-10-27, CGP-LEARN-D-017, DEC-LEARN-17d): already met on main by the R-017 build (#2956); no
+product change. The R-017 browser test measured height only and the dark scheme only, so it now also measures 44×44 and a
+centre hit test for every action, the 3:1 ring under a light-scheme request, mouse close of the sheet, and touch taps under
+`pointer: coarse` (`chalk/test/help-triage.browser.mjs`). Six mutations that the old test passed now fail.
 
 DES-CGP-LEARN-15 status (2026-10-27, CGP-LEARN-D-015): already met on main by the CGP-LEARN-R-015 build. Chalk `/authoring`
 draws the checklist as one list row per item (sentence + record kind + row actions), with no points column and no level
