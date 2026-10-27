@@ -65,7 +65,7 @@ no alternate credential or Service bootstrap was initiated by this writer.
 
 | Check | Result |
 |---|---|
-| Source/controller filesystem and failure behavior | PASS, 5 tests |
+| Source/controller filesystem and failure behavior | PASS, 6 tests |
 | Production command adapter with mocked native VS Code UI/binding APIs | PASS, 3 tests |
 | Existing `task-workspace-store.test.mjs` regression | PASS, 19 tests |
 | Existing workspace routing smoke | PASS, 12 checks |
@@ -107,3 +107,19 @@ No production activation, merge or installed-app changes were performed.
 The canonical DMC REA and requirement/traceability indexes are maintained by the
 Delivery Captain on the separate planning branch; this bounded writer did not
 modify those shared records or the cloud-record work.
+
+
+## Independent review correction
+
+The independent host-adapter control reproduced a stale display when the current
+activity changed during asynchronous binding verification while reopening an
+existing preparation. The controller now checks the current scope after that
+await, and again after the final asynchronous directory/metadata validation
+before displaying a newly saved preparation. A regression control exercises
+both transitions and requires a generic blocked message without stale folder
+or preparation details. The saved original preparation remains in its own scope.
+
+Resource job `dmc-workspace-async-scope-fix-v1`: PASS 9 focused companion tests,
+PASS extension bundle, PASS TypeScript check. Raw logs use `async-scope-*.log`
+in the existing evidence artifact directory. Native app preparation at earlier
+source `e76417fa` is separate and cannot establish native acceptance of this fix.

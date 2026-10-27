@@ -35,7 +35,7 @@ export class CompanionWorkspaceController {
     const stored = scope ? this.host.get(companionKey(scope)) : undefined;
     const state = await companionState(scope, stored);
     if (!scope || state.status !== 'UNPAIRED') { await this.host.show(state, state.message); return; }
-    if (!await this.host.verify(scope)) throw new Error('activity binding changed');
+    if (!await this.host.verify(scope) || !this.unchanged(scope)) throw new Error('activity binding changed');
     const detail = [
       `작업 폴더 (로컬 저장): ${scope.workspace}`,
       `현재 활동: ${scope.activityLabel}`,
@@ -62,6 +62,7 @@ export class CompanionWorkspaceController {
     await this.host.update(companionKey(scope), prepared);
     if (!this.unchanged(scope) || !await this.host.verify(scope)) throw new Error('scope changed');
     const after = await companionState(scope, this.host.get(companionKey(scope)));
+    if (!this.unchanged(scope)) throw new Error('scope changed');
     if (!after.preparation) throw new Error('metadata persistence failed');
     await this.host.show(after, detail);
   }

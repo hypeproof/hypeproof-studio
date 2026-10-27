@@ -98,3 +98,32 @@ test('cancel, duplicate click and metadata changed under modal preserve prior st
   assert.equal(f.writes(), 0); assert.equal(f.shown.at(-1).state.status, 'BLOCKED');
   assert.equal(f.saved.get(companionKey(f.scope)), 'concurrent corrupt metadata');
 }));
+
+
+test('restored and newly saved preparation never displays a previous activity after asynchronous validation', async () => {
+  await fixture(async f => {
+    await new CompanionWorkspaceController(f.host).run();
+    f.shown.length = 0;
+    f.host.verify = async () => { f.scopeAs({ ...f.scope, activityId: 'activity-b', activityLabel: 'Other activity' }); return true; };
+    await new CompanionWorkspaceController(f.host).run();
+    assert.equal(f.shown.length, 1);
+    assert.equal(f.shown[0].state.status, 'BLOCKED');
+    assert.equal(f.shown[0].state.preparation, undefined);
+    assert.ok(!f.shown[0].detail.includes(f.scope.workspace), 'stale folder detail must not be shown');
+    assert.equal(f.writes(), 1, 'restoring does not rewrite the saved preparation');
+  });
+  await fixture(async f => {
+    const get = f.host.get;
+    f.host.get = key => {
+      const value = get(key);
+      if (value) f.scopeAs({ ...f.scope, activityId: 'activity-b', activityLabel: 'Other activity' });
+      return value;
+    };
+    await new CompanionWorkspaceController(f.host).run();
+    assert.equal(f.shown.length, 1);
+    assert.equal(f.shown[0].state.status, 'BLOCKED');
+    assert.equal(f.shown[0].state.preparation, undefined);
+    assert.ok(!f.shown[0].detail.includes(f.scope.workspace), 'final validation cannot display a stale prepared folder');
+    assert.equal(f.writes(), 1, 'the original preparation remains preserved under its original scope');
+  });
+});
