@@ -56,6 +56,10 @@ export class CompanionAuthoringHost {
       if (!store) return outcome('denied','current_task_required');
       const held = await store.readCompanionHandoff(expected);
       if (!alive() || store !== this.ports.store()) return outcome('denied','owner_changed');
+      const retained = held?.checkpoint.id === request.requestId ? null : await store.retainedCompanionAuthoringRequest(expected,request.requestId);
+      if (!alive() || store !== this.ports.store()) return outcome('denied','owner_changed');
+      if (retained) return retained.authoringImport?.requestHash === requestHash && retained.checkpoint.target.taskId === before.taskId
+        ? outcome('imported_draft','already_imported',request.requestId) : outcome('denied','request_id_conflict',request.requestId);
       const selected = companionSelectionRequest(before,request.selection.requestId);
       const matches = (allowImportedRevision: boolean) => Object.entries(selected).every(([key,value]) =>
         allowImportedRevision && key === 'version' ? held?.authoringImport?.state === 'imported' : request.selection[key as keyof typeof selected] === value);
@@ -73,7 +77,10 @@ export class CompanionAuthoringHost {
           workspaceId:selected.workspaceId,projectId:selected.projectId,taskId:selected.taskId,version:selected.version,
           epoch:selected.epoch,consentRevision:selected.consentRevision,artifactId:selected.artifactId,artifactVersion:selected.artifactVersion},
         originalDraft:request.text,reviewedIntent:request.text,attachments:[{artifactId:selected.artifactId,artifactVersion:selected.artifactVersion}],run:{id:null,state:'not_started'}};
-      await store.stageCompanionHandoff(checkpoint,expected,requestHash,alive);
+      const rotating = held && held.checkpoint.id !== request.requestId
+        && held.authoringImport?.state === 'imported' && held.authoringImport.presented
+        && (held.authoringRun?.state === 'completed' || held.authoringRun?.state === 'failed');
+      if (!rotating) await store.stageCompanionHandoff(checkpoint,expected,requestHash,alive);
       const draft = store.getDraft();
       review = await this.ports.reviewDraft?.(before.taskId,alive);
       if (!alive()) return outcome('denied','owner_changed');
@@ -86,8 +93,10 @@ export class CompanionAuthoringHost {
       await review?.check();
       if (!alive()) return outcome('denied','owner_changed');
       importing = true;
-      const receipt = await store.importCompanionAuthoringDraft(request.requestId,requestHash,expected,draft,
-        ()=>alive() && store === this.ports.store());
+      const current = ()=>alive() && store === this.ports.store();
+      const receipt = rotating
+        ? await store.importNextCompanionAuthoringDraft(checkpoint,requestHash,{id:held.checkpoint.id,digest:held.digest},expected,draft,current)
+        : await store.importCompanionAuthoringDraft(request.requestId,requestHash,expected,draft,current);
       if (!alive()) return outcome('outcome_unknown','draft_import_reconciliation_required',request.requestId);
       if (review) await review.imported(before.taskId,receipt.authoringImport!.revision!,request.text);
       else await this.ports.imported(before.taskId,receipt.authoringImport!.revision!);
