@@ -15688,7 +15688,8 @@
         "ST-IMP-COMPANION-WORKSPACE",
         "ST-IMP-COMPANION-HOST",
         "ST-IMP-COMPANION-SESSION",
-        "ST-IMP-COMPANION-AUTH-TRANSPORT"
+        "ST-IMP-COMPANION-AUTH-TRANSPORT",
+        "ST-IMP-COMPANION-HOST-CONTROLS"
       ],
       "sources": [
         {
@@ -15744,6 +15745,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-authenticated-transport.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-dev-host-owner.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-dev-host-commands.smoke.mjs"
         }
       ]
     },
@@ -15781,7 +15788,8 @@
         "ST-REQ-COMPANION",
         "ST-DES-COMPANION",
         "ST-IMP-COMPANION-DISPATCH",
-        "ST-IMP-COMPANION-WORKSPACE"
+        "ST-IMP-COMPANION-WORKSPACE",
+        "ST-IMP-COMPANION-AUTH-TRANSPORT"
       ],
       "sources": [
         {
@@ -15798,6 +15806,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionHostSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionDevHostOwner.ts"
         }
       ]
     },
@@ -15845,6 +15856,21 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/src/companionAuthenticatedTransport.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-HOST-CONTROLS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-COMPANION-HOST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/companionDevHostCommands.ts"
         }
       ]
     }
