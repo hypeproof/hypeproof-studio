@@ -12,8 +12,11 @@ its current claim, confirm only the supplied previously inspected code, connect
 the paired cipher, describe selected saved HTML and receive one host turn. The
 existing preparation, authenticated transport, shared caller budget, task view,
 epoch/journal, native bridge and HostSession own their established behavior.
-Every actual HTTP, including initial /me once and internal client refreshes,
+Every pairing/status/relay HTTP and the authenticated transport initial /me
 uses the same caller-owned budget; no second operation admission is nested.
+Existing AccountSession refresh and native bridge /me/profile/activity authority
+checks retain their existing implementations; this owner does not newly budget
+those calls.
 The owner never disposes the shared budget or existing stores.
 
 Comparison approves pairing only. Exact-file consent, current profile/folder/
