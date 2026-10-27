@@ -108,9 +108,20 @@ destroy the ephemeral client and prevent further delivery. Closing cannot undo a
 read already approved and durably running. There is no background polling,
 listener, host-execution HTTP endpoint, new authority or production registration.
 
-Five focused lifecycle scenarios and full extension TypeScript passed. Actual
-Worker composition of this new host turn is recorded separately when observed;
-it is not established by the previous controller integration.
+The frozen `f857bceea` host-turn source passed a separate 31-observation local
+Worker/D1 + product-controller integration, including one explicit desktop turn
+without a browser host-execution endpoint. An earlier run delivered the result
+but left the host turn waiting at ACK; its exact transient cause was not captured
+and is not retrospectively asserted to be TTL expiry. Prior runs are retained.
+
+Independent lifecycle controls found two reproducible defects: permanently
+expired request ACKs blocked later requests, and a deadline returned zero progress
+after an earlier successful ACK. The repair retires only an already-replied
+expired request, retains its identity tombstone and reports `expired` separately
+from `acknowledged`. It never fabricates an ACK, extends expiry or repeats the
+completed local decision. Per-turn progress survives the deadline race. Seven
+focused scenarios, full extension TypeScript, docs contract and scoped alignment
+pass after repair. Independent repair and the later full composition are pending.
 
 ## Remaining acceptance
 

@@ -9,12 +9,12 @@ function setup(options = {}) {
     grant_expires_at: Math.floor(Date.now() / 1000) + 300, capability: 'preview.read' };
   const messages = [1, 2].map(i => ({ message_id: `request-${i}`, message_hash: String(i).repeat(64), text: `selected request ${i}` }));
   const calls = [];
-  let current = { ...pair }, batch = messages, ackFailure = false, handler, receive;
+  let current = { ...pair }, batch = messages, ackFailure = false, handler, receive, expired;
   const client = { role: 'host', row: pair,
     async receive() { calls.push('receive'); if (receive) return receive(); return batch; },
     async prepare(text, id) { calls.push(`prepare:${id}`); return 'injected-encrypted'; },
     async send(id) { calls.push(`send:${id}`); },
-    async acknowledge(id) { calls.push(`ack:${id}`); if (ackFailure) { ackFailure = false; throw Error('lost ACK response'); } },
+    async acknowledge(id) { calls.push(`ack:${id}`); if (id === expired) throw Error('relay_message_expired'); if (ackFailure) { ackFailure = false; throw Error('lost ACK response'); } },
     close() { calls.push('close'); },
   };
   const bridge = { async handleAndReply(message, reply) {
@@ -27,7 +27,7 @@ function setup(options = {}) {
   const session = new CompanionHostSession({ client, bridge, currentPair: async () => current }, options);
   return { session, calls, messages, set pair(value) { current = value; }, get pair() { return current; },
     set batch(value) { batch = value; }, set ackFailure(value) { ackFailure = value; },
-    set handler(value) { handler = value; }, set receive(value) { receive = value; } };
+    set handler(value) { handler = value; }, set receive(value) { receive = value; }, set expired(value) { expired = value; } };
 }
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 
@@ -35,14 +35,36 @@ test('explicit host turn preserves a delivered batch after ACK failure; concurre
   const f = setup(); f.ackFailure = true;
   assert.deepEqual(f.calls, [], 'construction does not poll or execute');
   const first = f.session.receiveAndHandle(); assert.equal(f.session.receiveAndHandle(), first);
-  assert.deepEqual(await first, { state: 'waiting', processed: 0, pending: 2, reason: 'transport_unavailable' });
+  assert.deepEqual(await first, { state: 'waiting', processed: 0, acknowledged: 0, expired: 0, pending: 2, reason: 'transport_unavailable' });
   assert.deepEqual(f.calls, ['receive', 'handle:request-1', 'prepare:result-request-1', 'send:result-request-1', 'ack:request-1']);
-  assert.deepEqual(await f.session.receiveAndHandle(), { state: 'processed', processed: 2, pending: 0 });
+  assert.deepEqual(await f.session.receiveAndHandle(), { state: 'processed', processed: 2, acknowledged: 2, expired: 0, pending: 0 });
   assert.equal(f.calls.filter(x => x === 'receive').length, 1);
   assert.equal(f.calls.filter(x => x === 'handle:request-1').length, 1);
   assert.equal(f.calls.filter(x => x === 'handle:request-2').length, 1);
   assert.equal(f.calls.filter(x => x === 'ack:request-1').length, 2);
   f.session.close();
+});
+
+test('a replied request whose ACK permanently expired is retired distinctly so later requests progress once', async () => {
+  const f = setup(); f.expired = 'request-1';
+  assert.deepEqual(await f.session.receiveAndHandle(), { state: 'processed', processed: 2, acknowledged: 1, expired: 1, pending: 0 });
+  assert.equal(f.calls.filter(x => x === 'handle:request-1').length, 1);
+  assert.equal(f.calls.filter(x => x === 'handle:request-2').length, 1);
+  await f.session.receiveAndHandle();
+  assert.equal(f.calls.filter(x => x.startsWith('handle:')).length, 2, 'finished-byte tombstones still prevent execution replay');
+  f.session.close();
+});
+
+test('a deadline preserves earlier completed ACK counts while preventing the later response', async () => {
+  const f = setup({ deadlineMs: 30 }); const release = deferred();
+  f.handler = async (message, reply) => {
+    if (message.messageId === 'request-2') await release.promise;
+    await reply.send(`result-${message.messageId}`); return { state: 'completed', code: 'preview_read' };
+  };
+  const result = await f.session.receiveAndHandle();
+  assert.deepEqual(result, { state: 'closed', processed: 1, acknowledged: 1, expired: 0, pending: 0, reason: 'session_closed' });
+  release.resolve(); await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(f.calls.some(x => x === 'send:result-request-2' || x === 'ack:request-2'), false);
 });
 
 test('closing during an outstanding reply stops remaining output and ACK, despite a completed local decision', async () => {

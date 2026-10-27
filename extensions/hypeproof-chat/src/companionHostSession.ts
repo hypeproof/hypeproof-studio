@@ -20,10 +20,13 @@ export interface CompanionHostSessionPorts {
 export interface CompanionHostTurn {
   state: 'idle' | 'processed' | 'waiting' | 'closed';
   processed: number;
+  acknowledged: number;
+  expired: number;
   pending: number;
   reason?: 'transport_unavailable' | 'session_closed';
 }
 type Entry = { message_id: string; message_hash: string; text: string; replied: boolean };
+type Progress = { processed: number; acknowledged: number; expired: number };
 const identity = (p: CompanionHostSessionPair) => JSON.stringify([p.schema, p.id, p.status, p.account_id,
   p.host_session_id, p.device_session_id, p.host_id, p.device_id, p.workspace_id, p.project_id,
   p.invitation_digest, p.claim_digest, p.grant_expires_at, p.capability]);
@@ -44,7 +47,7 @@ export class CompanionHostSession {
   private readonly bindingIdentity: string;
   private readonly deadlineMs: number;
   private readonly pending: Entry[] = [];
-  private readonly acknowledged = new Map<string, string>();
+  private readonly finished = new Map<string, string>();
   private closed = false;
   private active: Promise<CompanionHostTurn> | null = null;
   private interrupt: (() => void) | null = null;
@@ -73,32 +76,32 @@ export class CompanionHostSession {
         || !/^[a-f0-9]{64}$/.test(message.message_hash) || typeof message.text !== 'string'
         || new TextEncoder().encode(message.text).length > 2032 || ids.has(message.message_id)) throw Error('companion_host_invalid_batch');
       ids.add(message.message_id);
-      const prior = this.acknowledged.get(message.message_id);
+      const prior = this.finished.get(message.message_id);
       if (prior !== undefined && prior !== message.message_hash) throw Error('companion_host_message_conflict');
       entries.push({ ...message, replied: prior !== undefined });
     }
-    if (this.acknowledged.size + entries.filter(entry => !entry.replied).length > 64) throw Error('companion_host_session_bound');
+    if (this.finished.size + entries.filter(entry => !entry.replied).length > 64) throw Error('companion_host_session_bound');
     this.pending.push(...entries);
   }
-  private result(state: CompanionHostTurn['state'], processed: number, reason?: CompanionHostTurn['reason']): CompanionHostTurn {
-    return { state, processed, pending: this.pending.length, ...(reason ? { reason } : {}) };
+  private result(state: CompanionHostTurn['state'], progress: Progress, reason?: CompanionHostTurn['reason']): CompanionHostTurn {
+    return { state, ...progress, pending: this.pending.length, ...(reason ? { reason } : {}) };
   }
   /** Concurrent UI callbacks share one receive turn. No background retry is scheduled. */
   receiveAndHandle(): Promise<CompanionHostTurn> {
-    if (this.closed) return Promise.resolve(this.result('closed', 0, 'session_closed'));
+    const progress: Progress = { processed: 0, acknowledged: 0, expired: 0 };
+    if (this.closed) return Promise.resolve(this.result('closed', progress, 'session_closed'));
     if (this.active) return this.active;
     let timer: ReturnType<typeof setTimeout>;
     const interrupted = new Promise<never>((_, reject) => { this.interrupt = () => reject(stop()); });
     timer = setTimeout(() => this.close(), this.deadlineMs);
-    const run = Promise.race([this.turn(), interrupted]).catch(() => this.result(this.closed ? 'closed' : 'waiting', 0,
+    const run = Promise.race([this.turn(progress), interrupted]).catch(() => this.result(this.closed ? 'closed' : 'waiting', progress,
       this.closed ? 'session_closed' : 'transport_unavailable')).finally(() => {
       clearTimeout(timer); this.interrupt = null; if (this.active === run) this.active = null;
     });
     this.active = run;
     return run;
   }
-  private async turn(): Promise<CompanionHostTurn> {
-    let processed = 0;
+  private async turn(progress: Progress): Promise<CompanionHostTurn> {
     try {
       await this.fresh();
       if (this.pending.length === 0) {
@@ -127,20 +130,30 @@ export class CompanionHostSession {
         }
         // Transport ACK follows the bridge's durable decision/reply, never substitutes for it.
         await this.fresh();
-        await this.ports.client.acknowledge(entry.message_id);
+        try {
+          await this.ports.client.acknowledge(entry.message_id);
+          this.check(); progress.acknowledged++;
+        } catch (error) {
+          this.check();
+          if (!(error instanceof Error) || error.message !== 'relay_message_expired') throw error;
+          // The bridge already completed its durable decision/reply. Expired transport
+          // evidence is terminal, not a failed execution and not an ACK. Retire this
+          // entry without blocking the rest of the delivered batch or rerunning it.
+          progress.expired++;
+        }
         this.check();
-        this.acknowledged.set(entry.message_id, entry.message_hash);
-        this.pending.shift(); processed++;
+        this.finished.set(entry.message_id, entry.message_hash);
+        this.pending.shift(); progress.processed++;
       }
-      return this.result(processed ? 'processed' : 'idle', processed);
+      return this.result(progress.processed ? 'processed' : 'idle', progress);
     } catch {
-      return this.result(this.closed ? 'closed' : 'waiting', processed, this.closed ? 'session_closed' : 'transport_unavailable');
+      return this.result(this.closed ? 'closed' : 'waiting', progress, this.closed ? 'session_closed' : 'transport_unavailable');
     }
   }
   /** Stops delivery and new work. It cannot undo a read already approved and durably running. */
   close(): void {
     if (this.closed) return;
-    this.closed = true; this.pending.length = 0; this.acknowledged.clear();
+    this.closed = true; this.pending.length = 0; this.finished.clear();
     this.interrupt?.();
     try { this.ports.client.close(); } catch { /* Terminal locally even if an injected close hook fails. */ }
   }
