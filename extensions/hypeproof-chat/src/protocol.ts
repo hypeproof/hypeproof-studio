@@ -569,7 +569,7 @@ export type WebviewMessage = (
   | { type: 'taskReturnFromSource'; requestId: string; url: string }
   /** CGP-CHAT-R-026 — search this activity's own tasks on this device. */
   | { type: 'taskSearch'; query: string; requestId: string }
-  | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string;imagePreparationFailed?:boolean}
+  | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string;imagePreparationFailed?:boolean;uiGeneration?:number;companionApplied?:boolean}
   /** REQ-STUDIO-QUIT-GUARD — whether this chat surface holds a queued, unsent message. */
   | { type: 'queueState'; queued: boolean }
   /**
@@ -881,6 +881,8 @@ export type HostMessage = (
   /** D-028 — the photos of the message just sent were saved; `note` is the `[첨부한 사진]` list. */
   | {type:'attachedImagesSaved';note:string}
   | {type:'activityFreeze';frozen:boolean;nonce?:string}
+  | {type:'companionDraftCapture';nonce:string}
+  | {type:'companionDraftApply';nonce:string;generation:number;text:string}
   | {type:'activityDraftError';error:string}
   /** #897 (VO-01) — a request to run the probe. Raised only by a command, never at activation time. */
   | { type: 'probeVoiceCapability'; probeId: string }

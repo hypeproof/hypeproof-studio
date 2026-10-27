@@ -596,6 +596,52 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.taskChanging || this.connectionChanging ? null : this.currentTaskStore()?.getView() ?? null;
   }
 
+  /** Native DEV data adapter only. Does not bypass ordinary Send or any runtime admission. */
+  companionTaskStore(): TaskWorkspaceStore | null {
+    return this.taskChanging || this.connectionChanging ? null : this.currentTaskStore() ?? null;
+  }
+  async reviewCompanionDraft(taskId: string, isCurrent: () => boolean): Promise<import('./companionAuthoringHost').CompanionDraftReview> {
+    const store = this.companionTaskStore(), activityId = activityConnections(this.context)?.scope;
+    const source = this.draftSource ?? this.editorChat?.webview ?? this.view?.webview;
+    const epoch = this.opsRuntimeGeneration();
+    let closed = false;
+    const check = () => {
+      if (closed || !isCurrent() || !store || !source || (source!==this.editorChat?.webview && source!==this.view?.webview) || !activityId || this.companionTaskStore() !== store
+        || activityConnections(this.context)?.scope !== activityId || store.getView().activeTaskId !== taskId
+        || this.opsRuntimeGeneration() !== epoch || this.pendingSends || this.activeStreams.size
+        || this.pendingFileAttachment || this.pendingPageAttachment
+        || (this.draftSource && this.draftSource !== source)) throw Error('companion_draft_scope_changed');
+    };
+    const capture = async (apply?: {generation:number;text:string}) => {
+      check(); await this.draftWrites; check();
+      if (this.draftFlush) throw Error('draft_capture_busy');
+      const nonce = crypto.randomUUID();
+      const value = await new Promise<{draft:ActivityDraft;generation:number}>((resolve,reject) => {
+        let captured: {draft:ActivityDraft;generation:number} | undefined;
+        const timer = setTimeout(()=>{if(this.draftFlush?.nonce===nonce)this.draftFlush=undefined;reject(Error('draft_capture_timeout'));},8000);
+        this.draftFlush = {nonce,source:source!,capture:(draft,generation,applied)=>{
+          check(); if (!Number.isSafeInteger(generation) || Number(generation)<0 || (apply && applied!==true)) throw Error('draft_capture_changed');
+          captured={draft:structuredClone(draft),generation:generation!};
+        },resolve:()=>{clearTimeout(timer);this.draftFlush=undefined;captured?resolve(captured):reject(Error('draft_capture_missing'));},
+          reject:error=>{clearTimeout(timer);this.draftFlush=undefined;reject(error);}};
+        void Promise.resolve(source!.postMessage(apply ? {type:'companionDraftApply',nonce,activityId,taskId,...apply} :
+          {type:'companionDraftCapture',nonce,activityId,taskId})).then(sent=>{if(!sent&&this.draftFlush?.nonce===nonce)this.draftFlush.reject(Error('draft_capture_unavailable'));},()=>{if(this.draftFlush?.nonce===nonce)this.draftFlush.reject(Error('draft_capture_unavailable'));});
+      });
+      check(); return value;
+    };
+    const empty = (draft:ActivityDraft) => !draft.text && !draft.images.length && draft.queued===null
+      && !draft.inlineEdit && !draft.imports?.length && !draft.recovered?.length;
+    const initial = await capture();
+    if (!empty(initial.draft) || !empty(store!.getDraft()) || (initial.draft.toolMode??'auto')!==(store!.getDraft().toolMode??'auto')) throw Error('desktop_draft_conflict');
+    return {check:async()=>{const current=await capture();if(current.generation!==initial.generation || JSON.stringify(current.draft)!==JSON.stringify(initial.draft))throw Error('desktop_draft_changed');},
+      imported:async(id,revision,text)=>{
+        check(); if(id!==taskId || store!.getView().revision!==revision || store!.getDraft().text!==text)throw Error('imported_draft_changed');
+        const applied=await capture({generation:initial.generation,text});
+        if(applied.draft.text!==text)throw Error('draft_apply_unconfirmed');
+        await this.post({type:'taskWorkspaceState',view:store!.getView()});
+      },close:()=>{closed=true;}};
+  }
+
   private currentTaskStore(): TaskWorkspaceStore | undefined {
     return this.taskWorkspace?.activityId === activityConnections(this.context)?.scope ? this.taskWorkspace?.store : undefined;
   }
@@ -4440,7 +4486,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private connectionChanging = false;
   private draftWrites: Promise<void> = Promise.resolve();
   private draftSource?: vscode.Webview;
-  private draftFlush?: {nonce:string;source:vscode.Webview;resolve:()=>void;reject:(e:Error)=>void;capture?:(draft:ActivityDraft)=>void};
+  private draftFlush?: {nonce:string;source:vscode.Webview;resolve:()=>void;reject:(e:Error)=>void;capture?:(draft:ActivityDraft, generation?:number, applied?:boolean)=>void};
   async setConnectionChanging(value: boolean, capture?: (draft: ActivityDraft) => void, leaving = true): Promise<void> {
     if (value && leaving && !await this.confirmAnnotationLeave()) throw new ActivityConnectionError(ANNOTATION_LEAVE_KEPT);
     if (value) this.companionRuntimeInvalidated?.();
@@ -7059,7 +7105,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       if (msg.nonce && flush?.nonce === msg.nonce && flush.source === source && flush.capture) {
-        flush.capture(msg.draft);
+        try { flush.capture(msg.draft,msg.uiGeneration,msg.companionApplied); } catch(error) { flush.reject(error instanceof Error?error:Error('draft_capture_rejected')); return; }
         flush.resolve();
         return;
       }

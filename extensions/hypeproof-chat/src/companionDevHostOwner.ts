@@ -1,4 +1,7 @@
 /** Explicit native DEV lifecycle. No registration, listener, browser execution endpoint or poll. */
+import { createDevCompanionAuthoringHost } from './companionAuthoringHostNative.ts';
+import type { CompanionAuthoringHostPorts } from './companionAuthoringHost.ts';
+import type { CompanionAuthoringResult } from './companionAuthoringResult.ts';
 import { ExtensionMode } from 'vscode';
 import { accountPreviewEnabled, type AccountSession } from './accountSession.ts';
 import type { ActivityConnections } from './activityConnections.ts';
@@ -26,6 +29,7 @@ export interface CompanionHostPairingClient {
   revoke(): Promise<unknown>;
 }
 export interface CompanionDevHostOwnerPorts extends Omit<CompanionNativeBridgePorts, 'paired'> {
+  authoring?: Pick<CompanionAuthoringHostPorts,'store'> & Required<Pick<CompanionAuthoringHostPorts,'reviewDraft'>>;
   accounts: AccountSession;
   connections: ActivityConnections;
   configured(): { service: string; site: string };
@@ -66,6 +70,7 @@ export class CompanionDevHostOwner {
   private relay: ReturnType<CompanionDevHostOwnerPorts['clients']['relay']> | undefined;
   private bridge: ReturnType<typeof createDevCompanionHostBridge> | undefined;
   private session: CompanionHostSession | undefined;
+  private authoring: ReturnType<typeof createDevCompanionAuthoringHost> | undefined;
   private state: CompanionDevHostView = { state: 'idle', executionAuthorized: false };
   private active: { name: string; promise: Promise<unknown>; abort: AbortController; interrupt(): void } | undefined;
   private signal: AbortSignal | undefined;
@@ -79,7 +84,7 @@ export class CompanionDevHostOwner {
     if (pairing) { pairing.keys = null; pairing.qr = null; pairing.claim = null; pairing.frozenClaim = null; }
   }
   private release(): void {
-    this.publication = undefined;
+    this.publication = undefined; this.authoring?.close(); this.authoring = undefined;
     if (this.session) this.session.close(); else this.relay?.close();
     this.erase(); this.pairing = undefined; this.relay = undefined; this.session = undefined; this.bridge = undefined; this.binding = undefined;
     this.authenticatedRelay = async () => { throw failure('closed'); };
@@ -147,6 +152,10 @@ export class CompanionDevHostOwner {
         transport: (role, id, action, payload) => transport.pairing(role, id, action, payload, this.signal) });
       this.pairing = pairing; ownedPair = pairing;
       this.bridge = createDevCompanionHostBridge({ ...this.ports, paired: async () => { const row = await this.refreshPaired(); return row ? { ...row, execution_authorized: false } : null; } });
+      if(this.ports.authoring) this.authoring=createDevCompanionAuthoringHost({...this.ports,...this.ports.authoring,
+        paired:async()=>{const row=await this.refreshPaired();return row?{...row,execution_authorized:false}:null;},
+        lifecycle:{capture:()=>this.ports.epoch(),isCurrent:revision=>!['closed','revoked'].includes(this.state.state)&&this.ports.epoch()===revision},
+        imported:async()=>{throw failure('draft_review_required');}});
       await this.bridge.recover(); await this.current();
       const p = this.binding.preparation, challenge = await pairing.start({ host_id: p.hostId, workspace_id: companionDigest('hps-companion-workspace/1:' + p.scope), project_id: p.projectId });
       await this.current(); const row = this.row();
@@ -179,7 +188,17 @@ export class CompanionDevHostOwner {
       if (!this.relay) this.relay = this.ports.clients.relay({ pairing: this.pairing,
         transport: (role, id, action, raw) => this.authenticatedRelay(role, id, action, raw) });
       await this.relay.publishOffer(); await this.current(); await this.relay.connect(); await this.current();
-      this.session = new CompanionHostSession({ client: this.relay, currentPair: () => this.refreshPaired(), onClosed:()=>this.close('scope_changed'), bridge: this.bridge! });
+      this.session = new CompanionHostSession({ client: this.relay, currentPair: () => this.refreshPaired(), onClosed:()=>this.close('scope_changed'), bridge: {handleAndReply:async(message,reply)=>{
+        let schema: unknown;try{schema=JSON.parse(message.text)?.schema;}catch{this.close();throw failure('invalid_message');}
+        if(schema==='hps-companion-host-request/1')return this.bridge!.handleAndReply(message,reply);
+        if(schema!=='hps-companion-authoring-intent/1'||!this.authoring){this.close();throw failure('unsupported_message');}
+        const outcome=await this.authoring.handle(message);await this.current();this.check();
+        const result:CompanionAuthoringResult={schema:'hps-companion-authoring-result/1',requestId:message.messageId,
+          requestHash:companionDigest(message.text),outcome};
+        const text=JSON.stringify(result),id='authoring_result_'+companionDigest(text);
+        await reply.prepare(text,id);await this.current();this.check();await reply.send(id);await this.current();this.check();
+        return outcome;
+      }} });
       this.state = { ...this.state, state: 'connected' }; return this.view();
     });
   }

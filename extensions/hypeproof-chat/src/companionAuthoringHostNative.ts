@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { CompanionAuthoringHost, type CompanionAuthoringHostPorts } from './companionAuthoringHost.ts';
 import { createDevCompanionAuthoritySnapshot, type CompanionNativeBridgePorts } from './companionHostBridgeNative.ts';
 export function createDevCompanionAuthoringHost(ports: CompanionNativeBridgePorts &
-  Pick<CompanionAuthoringHostPorts,'store'|'lifecycle'|'imported'>): CompanionAuthoringHost {
+  Pick<CompanionAuthoringHostPorts,'store'|'lifecycle'|'imported'> & Required<Pick<CompanionAuthoringHostPorts,'reviewDraft'>>): CompanionAuthoringHost {
   return new CompanionAuthoringHost({ ...ports, now: ports.now ?? Date.now,
     snapshot:createDevCompanionAuthoritySnapshot(ports), confirm:async intent => {
       if (ports.context.extensionMode !== vscode.ExtensionMode.Development) return false;

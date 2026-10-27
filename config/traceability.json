@@ -15775,6 +15775,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-authoring-intent.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authoring-provider.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authoring-draft.test.tsx"
         }
       ]
     },
@@ -15845,6 +15851,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionAuthoringHostNative.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthoringResult.ts"
         }
       ]
     },

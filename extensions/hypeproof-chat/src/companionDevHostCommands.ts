@@ -95,7 +95,7 @@ export function registerDevCompanionHostCommands(
         if (view.state === 'connected') {
           items.push({ label: '현재 작업과 저장된 HTML 확인', action: 'describe' });
           items.push({ label: '선택한 작업을 휴대폰에 알리기', description: view.publication?.state==='delivery_unconfirmed'?'같은 알림을 직접 다시 확인 · 파일 승인은 별도':'작업 정보만 암호화해 전달 · 파일 승인은 별도', action:'publish' });
-          items.push({ label: '요청 한 번 받기·확인', description: '자동 수신하지 않음 · 파일 읽기는 별도 승인', action: 'receive' });
+          items.push({ label: '요청 한 번 받기·확인', description: '자동 수신하지 않음 · 파일 읽기와 초안 가져오기는 별도 확인', action: 'receive' });
         }
         items.push({ label: '이 컴퓨터에서만 연결 닫기', description: '서버 권한 철회와 별개', action: 'close' });
         items.push({ label: '이 기기의 연결 권한 철회', description: '서버에 서명된 철회 요청', action: 'revoke' });

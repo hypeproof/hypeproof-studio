@@ -599,6 +599,21 @@ export function ChatPanel(props: Props) {
   const noteInSummary = imgNote != null && composerFailures.some(f => f.reason === imgNote);
   const composerIdentity = [activityId,taskId,draft,pendingImages,stagedPhotos.map(p=>p.id).join("|"),imports,toolMode,queued,streaming,frozen,config?.activity?.verified,props.sendLocked,props.sendPending];
   const composerIdentityRef = useRef(composerIdentity); composerIdentityRef.current=composerIdentity;
+  const companionDraftState = useRef({signature:'',generation:0,blocked:true});
+  const companionBlocked = !!(streaming || frozen || props.sendLocked || props.sendPending || stagedPhotos.length
+    || pendingImages.length || imports.length || props.fileAttachment || props.pageAttachment || preparingImages);
+  const companionSignature = JSON.stringify([activityId,taskId,snapshot.current,companionBlocked,stagedPhotos.map(p=>p.id)]);
+  if(companionDraftState.current.signature!==companionSignature) companionDraftState.current={signature:companionSignature,generation:companionDraftState.current.generation+1,blocked:companionBlocked};
+  const companionApply = useRef<{nonce:string;text:string;rest:string}|null>(null);
+  useEffect(()=>{
+    const pending=companionApply.current;if(!pending||!activityId)return;
+    companionApply.current=null;
+    const {text,...rest}=snapshot.current;
+    postToHost({type:'saveActivityDraft',activityId,taskId,nonce:pending.nonce,draft:snapshot.current,
+      uiGeneration:companionDraftState.current.generation,companionApplied:text===pending.text && JSON.stringify(rest)===pending.rest && !companionDraftState.current.blocked,
+      imagePreparationFailed:companionDraftState.current.blocked});
+  },[activityId,taskId,draft]);
+
   const photoSources = useRef(new Map<string, File>());
   // CGP-CHAT-R-029 — the state an undo offer was made against; an offer is valid only while it is unchanged.
   const undoScope = { activityId: activityId ?? null, taskId: taskId ?? null };
@@ -642,6 +657,20 @@ export function ChatPanel(props: Props) {
         setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
         setToolMode(rejectedMode);
         if (msg.images?.length) setPendingImages(images => [...new Set([...images,...msg.images!])]);
+      }
+      if (msg.type === 'companionDraftCapture' && activityId) {
+        postToHost({type:'saveActivityDraft',activityId,taskId,nonce:msg.nonce,draft:snapshot.current,
+          uiGeneration:companionDraftState.current.generation,imagePreparationFailed:companionDraftState.current.blocked});
+      }
+      if (msg.type === 'companionDraftApply' && activityId) {
+        const current=snapshot.current, state=companionDraftState.current;
+        const empty=!current.text && !current.images.length && current.queued===null && !current.inlineEdit && !current.recovered?.length && !current.imports?.length;
+        if(state.generation!==msg.generation || state.blocked || !empty || companionApply.current) {
+          postToHost({type:'saveActivityDraft',activityId,taskId,nonce:msg.nonce,draft:current,uiGeneration:state.generation,companionApplied:false});
+        } else {
+          const {text,...rest}=current;companionApply.current={nonce:msg.nonce,text:msg.text,rest:JSON.stringify(rest)};
+          snapshot.current={...current,text:msg.text};setDraft(msg.text);
+        }
       }
       if (msg.type === "activityFreeze" && activityId) {
         setFrozen(msg.frozen);

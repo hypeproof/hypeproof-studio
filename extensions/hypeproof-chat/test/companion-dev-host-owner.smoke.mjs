@@ -9,7 +9,7 @@ import { CompanionTransportBudget } from '../src/companionTransportBudget.ts';
 const require=createRequire(import.meta.url),pairId='ci_'+'a'.repeat(32);
 const bundle=await build({entryPoints:[fileURLToPath(new URL('../src/companionDevHostOwner.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return{promise,resolve};};
-async function fixture(){
+async function fixture(authoring=false){
  const native=await nativeBridgeFixture(),module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?native.vscode:require(id),process,Buffer,console,fetch:native.fetcher,URL,Response,AbortSignal,AbortController,TextEncoder,TextDecoder,crypto,btoa,atob,performance,structuredClone,setTimeout,clearTimeout});
  const calls={start:0,refresh:0,approve:[],revoke:0,offer:0,connect:0,close:0,acks:[],prepared:[],sent:[]};let onStart=async()=>{},onRefresh=async()=>{},onPrepare=async()=>{},onSend=async()=>{},batch=[];
  const pair={invitation:null,keys:null,qr:null,claim:null,frozenClaim:null,
@@ -17,7 +17,7 @@ async function fixture(){
   async refresh(){calls.refresh++;await onRefresh();return this.invitation;},async approve(code){calls.approve.push(code);this.invitation={...this.invitation,status:'approved'};return this.invitation;},async revoke(){calls.revoke++;this.invitation={...this.invitation,status:'revoked'};return this.invitation;}};
  const relay={role:'host',get row(){return pair.invitation;},async publishOffer(){calls.offer++;},async connect(){calls.connect++;},async prepare(text,id){calls.prepared.push({text,id});await onPrepare();return id;},async send(id){calls.sent.push(id);await onSend();},async receive(){const delivered=batch;batch=[];return delivered;},async acknowledge(id){calls.acks.push(id);},close(){calls.close++;}};
  const budget=new CompanionTransportBudget();let rawFetch=(...args)=>native.fetcher(...args);let config={service:'http://127.0.0.1:44321/v1',site:'http://127.0.0.1:44321'};
- const owner=new module.exports.CompanionDevHostOwner({context:native.context,connections:native.connections,accounts:native.accounts,configured:()=>config,identity:{accountId:'account',sessionId:'host-session'},budget,fetch:(...args)=>rawFetch(...args),taskView:()=>native.store.getView(),epoch:()=>1,journal:native.journal,clients:{pairing:()=>pair,relay:()=>relay}});
+ const owner=new module.exports.CompanionDevHostOwner({context:native.context,connections:native.connections,accounts:native.accounts,configured:()=>config,identity:{accountId:'account',sessionId:'host-session'},...(authoring?{authoring:{store:()=>native.store,reviewDraft:async()=>({check:async()=>{},imported:async()=>{},close(){}})}}:{}),budget,fetch:(...args)=>rawFetch(...args),taskView:()=>native.store.getView(),epoch:()=>1,journal:native.journal,clients:{pairing:()=>pair,relay:()=>relay}});
  const startAndClaim=async()=>{const value=await owner.startInvitation();pair.invitation={...pair.invitation,status:'claimed',compare_code:'a'.repeat(12),device_session_id:'device-session',device_id:'phone'};await owner.inspectClaim();return value;};
  const connect=async()=>{await startAndClaim();await owner.confirmComparedCode('a'.repeat(12));pair.invitation={...pair.invitation,status:'paired'};await owner.connectCipher();};
  return{native,owner,pair,relay,calls,startAndClaim,connect,set rawFetch(v){rawFetch=v;},set onStart(v){onStart=v;},set onRefresh(v){onRefresh=v;},set onPrepare(v){onPrepare=v;},set onSend(v){onSend=v;},set config(v){config=v;},set batch(v){batch=v;},cleanup:async()=>{owner.close();budget.dispose();await native.cleanup();}};
@@ -109,3 +109,12 @@ test('cipher receive deadline closes native owner and erases keys before late re
   f.owner.close();assert.equal(f.calls.close,1,'owner cleanup is idempotent');
  }finally{release.resolve();await f.cleanup();}
 });
+
+test('same verified DEV receive routes authored intent to distinct import receipt without preview journal execution',async()=>{const f=await fixture(true);try{
+ await f.connect();const selection=await f.owner.describeSelected('selected');const request={schema:'hps-companion-authoring-intent/1',requestId:'intent',pairingId:f.pair.invitation.id,selection,text:'제목을 바꾸고 싶어요'};
+ f.batch=[{message_id:request.requestId,message_hash:'c'.repeat(64),text:JSON.stringify(request)}];const turn=await f.owner.receiveAndHandle();assert.equal(turn.processed,1);assert.equal(f.native.store.getDraft().text,request.text);const reply=JSON.parse(f.calls.prepared.at(-1).text);assert.equal(reply.schema,'hps-companion-authoring-result/1');assert.equal(reply.outcome.state,'imported_draft');assert.equal(reply.outcome.executionAuthorized,false);assert.equal((await f.native.journal.load()).entries.length,0);assert.equal(f.calls.acks.at(-1),'intent');assert.equal(f.native.dialogs.length,1);
+ f.batch=[{message_id:request.requestId,message_hash:'c'.repeat(64),text:JSON.stringify(request)}];await f.owner.receiveAndHandle();assert.equal(f.native.dialogs.length,1);
+}finally{await f.cleanup();}});
+test('unknown verified message closes the owner and is never acknowledged as handled',async()=>{const f=await fixture(true);try{
+ await f.connect();f.batch=[{message_id:'unknown',message_hash:'c'.repeat(64),text:JSON.stringify({schema:'future-operation/1'})}];await assert.rejects(()=>f.owner.receiveAndHandle(),/closed/);assert.equal(f.owner.view().state,'closed');assert.equal(f.calls.acks.length,0);assert.equal(f.calls.prepared.length,0);
+}finally{await f.cleanup();}});

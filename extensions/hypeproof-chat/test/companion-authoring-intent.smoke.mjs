@@ -56,3 +56,8 @@ test('actual final receipt write failure preserves imported text and restart hol
   f.restart();assert.equal((await f.host.handle(f.message())).state,'outcome_unknown');assert.equal(f.confirms,1);assert.equal(f.store.getDraft().text,f.request.text);
  }finally{await f.cleanup();}
 });
+
+test('store import independently refuses a held request for another current task',async()=>{const f=await fixture();try{
+ f.approve=false;await f.host.handle(f.message());const before=f.store.getView();await f.store.create('other task',{taskId:before.activeTaskId,revision:before.revision});const after=f.store.getView();
+ await assert.rejects(()=>f.store.importCompanionAuthoringDraft(f.request.requestId,hash(f.message().text),{taskId:after.activeTaskId,revision:after.revision},f.store.getDraft(),()=>true));assert.equal(f.store.getDraft().text,'');assert.equal(f.store.getDraft(before.activeTaskId).text,'');
+}finally{await f.cleanup();}});

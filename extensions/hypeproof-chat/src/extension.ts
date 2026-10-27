@@ -268,6 +268,7 @@ export async function activate(context: vscode.ExtensionContext) {
     configured: () => { const config = vscode.workspace.getConfiguration('hypeproofChat'); return {
       service: config.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1'), site: config.get<string>('siteBase', 'https://hypeproof-ai.xyz'),
     }; }, taskView: () => provider.companionTaskView(), epoch: () => provider.opsRuntimeGeneration(),
+    authoring: {store:()=>provider.companionTaskStore(),reviewDraft:(taskId,isCurrent)=>provider.reviewCompanionDraft(taskId,isCurrent)},
   });
   if (companionDev) {
     const invalidate = () => companionDev?.invalidate();

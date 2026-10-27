@@ -15,7 +15,7 @@ export interface CompanionHostSessionPorts {
   client: CompanionHostSessionClient;
   /** Refresh the verified pairing identity; host bridge separately resolves current runtime/file authority. */
   currentPair(): Promise<CompanionHostSessionPair | null>;
-  bridge: { handleAndReply(message: VerifiedCompanionMessage, reply: CompanionEncryptedReply): Promise<CompanionDispatchResult> };
+  bridge: { handleAndReply(message: VerifiedCompanionMessage, reply: CompanionEncryptedReply): Promise<unknown> };
   /** Synchronous terminal notification: stop pending native owner work as the cipher closes. */
   onClosed?(): void;
 }

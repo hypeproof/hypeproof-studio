@@ -516,13 +516,25 @@ export class TaskWorkspaceStore {
     draft: ActivityDraft, isCurrent: () => boolean): Promise<CompanionDesktopHandoffRecord> {
     const original = clone(draft);
     return this.companionHandoffOperation({ ...expected }, held => {
-      if (!held || held.checkpoint.id !== id || held.authoringImport?.requestHash !== requestHash)
+      if (!held || held.checkpoint.id !== id || held.authoringImport?.requestHash !== requestHash
+        || held.checkpoint.target.taskId !== expected.taskId
+        || (held.authoringImport.state === 'review' && held.checkpoint.target.version !== expected.revision))
         return fail('stale', '검토한 요청이 바뀌었어요.');
       if (held.authoringImport.state === 'imported') return held;
       if (held.authoringImport.state === 'prepared') return fail('stale', '초안 가져오기 결과를 확인해야 해요. 자동으로 다시 가져오지 않아요.');
       if (!isCurrent()) return fail('stale', '현재 작업이 바뀌었어요.');
       return { ...held, authoringImport: { requestHash, state: 'prepared' } };
     }, {draft: original, isCurrent}).then(record=>record!);
+  }
+  /** Persist the view ACK separately: saved text without a confirmed composer must remain uncertain. */
+  presentCompanionAuthoringDraft(id: string, requestHash: string, expected: TaskWorkspaceExpected,
+    isCurrent: () => boolean): Promise<void> {
+    return this.companionHandoffOperation({...expected}, held=>{
+      if (!isCurrent() || !held || held.checkpoint.id!==id || held.checkpoint.target.taskId!==expected.taskId
+        || held.authoringImport?.requestHash!==requestHash || held.authoringImport.state!=='imported'
+        || this.getDraft().text!==held.checkpoint.reviewedIntent) return fail('stale','가져온 입력을 다시 확인해야 해요.');
+      return {...held,authoringImport:{...held.authoringImport,presented:true}};
+    }).then(()=>undefined);
   }
   acceptCompanionHandoff(id: string, digest: string, expected: TaskWorkspaceExpected, now = Date.now()): Promise<CompanionDesktopHandoffRecord> {
     return this.companionHandoffOperation({ ...expected }, held => {

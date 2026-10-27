@@ -19,6 +19,7 @@ export interface CompanionDevActivationApi {
   registerClients(clients: CompanionDevHostOwnerPorts['clients']): vscode.Disposable;
 }
 export interface CompanionDevEntryPorts {
+  authoring?: CompanionDevHostOwnerPorts['authoring'];
   accounts?: AccountSession;
   connections: ActivityConnections;
   configured(): { service: string; site: string };
@@ -134,7 +135,7 @@ export function createCompanionDevHostEntry(context: vscode.ExtensionContext, po
     try {
       owner = new CompanionDevHostOwner({ context, connections: ports.connections, accounts, configured: ports.configured,
         identity: { accountId: account.account.id, sessionId: stored.sessionId }, budget, clients,
-        taskView: ports.taskView, epoch: ports.epoch, journal: lease.journal });
+        taskView: ports.taskView, epoch: ports.epoch, journal: lease.journal, authoring: ports.authoring });
     } catch (error) { lease.stopAdmission(); retain(lease.release()); throw error; }
     const held = owner;
     let released = false;
