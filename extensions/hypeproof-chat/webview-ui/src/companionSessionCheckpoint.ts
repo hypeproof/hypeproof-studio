@@ -63,11 +63,18 @@ export function parseCompanionSessionCheckpoint(raw: string, now: number): Compa
     || !integer(v.cursor)||v.cursor>batch.length || batch.slice(0,v.cursor).some(m=>byId.get(m.message_id)!==m.text)) invalid();
   return {schema:v.schema,createdAt:v.createdAt,expiresAt:v.expiresAt,context,request:{...request},validated,pendingAcks:[...v.pendingAcks],batch,cursor:v.cursor};
 }
-/** Serialized local writes; terminal forget always removes after all already-started replacements. */
-const owners = new WeakMap<CompanionCheckpointStorage, { queue: Promise<unknown>; generation: number; pending: number }>();
+/** Serialized local operations; only the current lifecycle may erase after prior writes. */
+interface CheckpointOwner {
+  /** Ordering barrier settles even when an observable storage operation rejects. */
+  queue: Promise<void>;
+  generation: number; pending: number; nextIdentity: number; activeIdentity: number;
+}
+const owners = new WeakMap<CompanionCheckpointStorage, CheckpointOwner>();
 export class CompanionLocalCheckpoint {
-  private readonly owner: { queue: Promise<unknown>; generation: number; pending: number };
+  private readonly owner: CheckpointOwner;
   private readonly generation: number;
+  private readonly identity: number;
+  private eraseGeneration: number | undefined;
   private closed = false;
   private forgetPromise: Promise<void> | undefined;
   private readonly storage: CompanionCheckpointStorage;
@@ -75,35 +82,53 @@ export class CompanionLocalCheckpoint {
   constructor(storage: CompanionCheckpointStorage, now = Date.now) {
     this.storage=storage;this.now=now;
     let owner=owners.get(storage);
-    if(!owner){owner={queue:Promise.resolve(),generation:0,pending:0};owners.set(storage,owner);}
-    this.owner=owner;this.generation=owner.generation;
+    if(!owner){owner={queue:Promise.resolve(),generation:0,pending:0,nextIdentity:0,activeIdentity:0};owners.set(storage,owner);}
+    this.owner=owner;this.generation=owner.generation;this.identity=++owner.nextIdentity;
+  }
+  /** Construction alone does not take over; a successor claims the namespace when it operates. */
+  private claim(): boolean {
+    if(this.closed||this.generation!==this.owner.generation||this.identity<this.owner.activeIdentity)return false;
+    this.owner.activeIdentity=this.identity;return true;
+  }
+  private current(): boolean {
+    return !this.closed&&this.generation===this.owner.generation&&this.identity===this.owner.activeIdentity;
   }
   time(): number { return this.now(); }
   async load(): Promise<CompanionSessionCheckpoint | null> {
+    if(!this.claim())return null;
     await this.owner.queue;
-    if(this.closed||this.generation!==this.owner.generation)return null;
+    if(!this.current())return null;
     const raw=await this.storage.read();
-    if(this.closed||this.generation!==this.owner.generation||raw===null)return null;
+    if(!this.current()||raw===null)return null;
     try { return parseCompanionSessionCheckpoint(raw,this.now()); }
     catch (error) { await this.forget(); throw error; }
   }
   save(value: CompanionSessionCheckpoint): Promise<void> {
-    if(this.closed||this.generation!==this.owner.generation)return Promise.reject(Error('companion_checkpoint_forgotten'));
+    if(!this.claim())return Promise.reject(Error('companion_checkpoint_forgotten'));
     const raw=JSON.stringify(value);
     if(this.owner.pending>=2)return Promise.reject(Error('companion_checkpoint_write_bound'));
     try { parseCompanionSessionCheckpoint(raw,this.now()); }
     catch (error) { return this.forget().then(()=>{throw error;}); }
     this.owner.pending++;
-    const pending=this.owner.queue.catch(()=>{}).then(()=>this.storage.replace(raw)).finally(()=>{this.owner.pending--;});
-    this.owner.queue=pending;return pending;
+    const pending=this.owner.queue.then(()=>this.storage.replace(raw)).finally(()=>{this.owner.pending--;});
+    this.owner.queue=pending.then(()=>{},()=>{});return pending;
   }
   forget(): Promise<void> {
     if(this.forgetPromise)return this.forgetPromise;
-    this.closed=true;
-    // A repeated or superseded owner's erase cannot delete a newer lifecycle.
-    if(this.generation!==this.owner.generation){this.forgetPromise=Promise.resolve();return this.forgetPromise;}
-    this.owner.generation++;
-    const pending=this.owner.queue.catch(()=>{}).then(()=>this.storage.remove());
-    this.forgetPromise=pending;this.owner.queue=pending;return pending;
+    if(!this.closed){
+      const owned=this.claim();this.closed=true;
+      // A never-owning/superseded instance closes without erasing another lifecycle.
+      if(!owned){this.forgetPromise=Promise.resolve();return this.forgetPromise;}
+      this.eraseGeneration=++this.owner.generation;
+    }
+    // A failed erase may retry only while no successor has claimed or erased the namespace.
+    if(this.eraseGeneration!==this.owner.generation||this.identity!==this.owner.activeIdentity)
+      return Promise.reject(Error('companion_checkpoint_superseded'));
+    const pending=this.owner.queue.then(()=>this.storage.remove());
+    this.forgetPromise=pending;
+    this.owner.queue=pending.then(()=>{},()=>{});
+    // Keep successful/in-flight calls idempotent; rejection must remain observable and retryable.
+    void pending.catch(()=>{if(this.forgetPromise===pending)this.forgetPromise=undefined;});
+    return pending;
   }
 }

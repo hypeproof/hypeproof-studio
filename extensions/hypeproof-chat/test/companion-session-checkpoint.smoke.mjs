@@ -111,3 +111,25 @@ test('forget is idempotent and superseded owners cannot erase a newer checkpoint
  await stale.local.forget();assert.equal(f.raw,before,'first erase from a superseded owner also preserves newer data');
  assert.equal((await next.local.load()).request.requestId,'new-request');await next.local.forget();assert.equal(f.raw,null);
 });
+
+test('same owner can retry a failed erase and only reports success after storage removal settles',async()=>{
+ const f=fixture(),live=f.make(),remove=f.storage.remove,pause=deferred();let removals=0;
+ f.storage.remove=async()=>{removals++;if(removals===1)throw Error('transient_local_remove');await pause.promise;await remove();};
+ await live.local.save(checkpoint());const before=f.raw;
+ const failed=live.local.forget();assert.equal(live.local.forget(),failed);await assert.rejects(failed,/transient_local_remove/);
+ assert.equal(f.raw,before,'failed erase never claims or fabricates removal');
+ const retry=live.local.forget();assert.notEqual(retry,failed,'retry must schedule a new storage attempt');assert.equal(live.local.forget(),retry,'concurrent retry gestures share the attempt');
+ let erased=false;const observed=retry.then(()=>{erased=true;});await tick();assert.equal(removals,2);assert.equal(erased,false);assert.equal(f.raw,before);
+ pause.resolve();await observed;assert.equal(f.raw,null);assert.equal(erased,true);
+ assert.equal(live.local.forget(),retry,'successful erase remains idempotent');await live.local.forget();assert.equal(removals,2);
+});
+
+test('successor loads after a failed erase and stale failed-owner retries cannot delete successor bytes',async()=>{
+ const f=fixture(),old=f.make();let removals=0;
+ f.storage.remove=async()=>{removals++;throw Error('transient_local_remove');};
+ await old.local.save(checkpoint());await assert.rejects(old.local.forget(),/transient_local_remove/);
+ const next=f.make();assert.equal((await next.local.load()).request.requestId,request.requestId,'failed predecessor erase cannot poison the shared ordering barrier');
+ const newer=checkpoint();newer.request.requestId='successor-request';await next.local.save(newer);const before=f.raw;
+ await assert.rejects(old.local.forget(),/superseded/);assert.equal(removals,1,'stale erase must not reach storage');assert.equal(f.raw,before);
+ assert.equal((await next.local.load()).request.requestId,'successor-request');
+});
