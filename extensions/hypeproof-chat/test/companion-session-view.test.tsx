@@ -15,6 +15,11 @@ const clone = <T,>(value:T):T => structuredClone(value);
 let checks=0;
 const eq=(a:unknown,b:unknown,label:string)=>{assert.deepEqual(a,b,label);checks++;};
 const good={...clone(initial),receipt:{request:clone(request),outcome:clone(result)}};
+const inFlight=companionSessionPresentation({...clone(initial),busy:true});
+eq(inFlight.phase,'waiting_for_response','local waiting is distinct from host accepted/running');
+eq(inFlight.action,null,'in-flight request offers no second send gesture');
+eq(inFlight.preview,null,'waiting cannot expose a prior artifact');
+eq(inFlight.body.includes('허용 창이 뜨면 컴퓨터에서'),true,'waiting guides computer-side consent instead of implying approval');
 const view=companionSessionPresentation(good);eq(view.phase,'completed','only exact verified selected result completes');eq(view.preview?.text,result.artifact!.text,'renderer receives exact source text without transformation');
 for(const field of ['schema','requestId','actorId','deviceId','hostId','workspaceId','projectId','taskId','version','epoch','consentRevision','artifactId','artifactVersion','operation'] as const){
  const changed=clone(good);(changed.receipt!.request as unknown as Record<string,unknown>)[field]=typeof changed.receipt!.request[field]==='number'?99:'different-value';

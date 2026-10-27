@@ -24,7 +24,7 @@ export interface CompanionSessionController {
    * Must be safe to retry after rejection. Does not delete computer originals or undo approved work. */
   forget?(): Promise<void>;
 }
-export type CompanionSessionPhase = 'no_selection' | 'idle' | 'waiting_for_computer' | 'reconnecting' | 'stale' | 'local_cleared' | CompanionDispatchResult['state'];
+export type CompanionSessionPhase = 'no_selection' | 'idle' | 'waiting_for_response' | 'waiting_for_computer' | 'reconnecting' | 'stale' | 'local_cleared' | CompanionDispatchResult['state'];
 export interface CompanionSessionPresentation {
   phase: CompanionSessionPhase;
   title: string;
@@ -45,6 +45,7 @@ export function companionSessionPresentation(snapshot: CompanionSessionSnapshot)
   if (!selected) return view('no_selection', '컴퓨터에서 볼 결과를 골라 주세요', '컴퓨터에서 작업과 결과 하나를 고르면 여기에서 확인할 수 있어요.');
   if (selected.request.operation !== 'preview.read') return view('denied', '휴대폰에서 볼 수 있는 결과가 아니에요', '컴퓨터에서 선택한 결과와 허용 여부를 확인해 주세요.');
   const receipt = snapshot.receipt;
+  if (!receipt && snapshot.busy) return view('waiting_for_response', '컴퓨터 응답을 기다리고 있어요', '허용 창이 뜨면 컴퓨터에서 선택한 결과를 확인해 주세요. 같은 요청을 다시 보낼 필요는 없어요.', null);
   if (!receipt) return view('idle', '컴퓨터에서 고른 결과를 볼까요?', '보기 요청을 보내면 컴퓨터에서 허용 여부와 선택한 결과를 확인해요.', 'request_preview', '선택한 결과 보기');
   if (companionSelectionIdentity(receipt.request) !== companionSelectionIdentity(selected.request)
     || (receipt.outcome.requestId !== undefined && receipt.outcome.requestId !== selected.request.requestId)) return view('stale', '지금 선택한 결과를 다시 확인해 주세요', '다른 작업이나 이전 요청의 결과는 열지 않았어요. 컴퓨터에서 선택을 확인한 뒤 연결 상태를 확인해 주세요.');
