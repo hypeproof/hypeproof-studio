@@ -46,6 +46,8 @@ export class CompanionMobileSessionController implements CompanionSessionControl
   private verified: CompanionDispatchResult | null = null;
   private processing: Promise<void> | null = null;
   private inbox: Promise<readonly { message_id: string; text: string }[]> | null = null;
+  private batch: readonly { message_id: string; text: string }[] | null = null;
+  private cursor = 0;
   private readonly timer: CompanionSessionClock;
   private readonly timeoutMs: number;
   private readonly pollMs: number;
@@ -152,24 +154,29 @@ export class CompanionMobileSessionController implements CompanionSessionControl
     }
   }
   private async poll(signal: AbortSignal): Promise<void> {
-    if (this.processing) await this.bounded(this.processing, signal);
+    if (this.processing) { await this.bounded(this.processing, signal); this.processing = null; }
     await this.flushAcks(signal);
     if (this.verified && terminal(this.verified)) return;
     while (true) {
       this.check(signal);
-      // An existing relay client may deduplicate on receive. Keep a late delivery for
-      // reconnect instead of dropping it when a port ignores the poll's abort signal.
-      if (!this.inbox) {
-        const pending = this.ports.transport.receive(signal).catch(error => {
-          if (this.inbox === pending) this.inbox = null;
-          throw error;
-        });
-        this.inbox = pending;
+      // A relay may deduplicate the whole delivered batch. Keep both its bytes and
+      // cursor until each message's validation/ACK obligation is retained locally.
+      if (!this.batch) {
+        if (!this.inbox) {
+          const pending = this.ports.transport.receive(signal).catch(error => {
+            if (this.inbox === pending) this.inbox = null;
+            throw error;
+          });
+          this.inbox = pending;
+        }
+        const messages = await this.bounded(this.inbox, signal);
+        if (messages.length > 64) throw Error('companion_session_inbox_bound');
+        this.batch = messages.map(message => Object.freeze({ ...message }));
+        this.cursor = 0;
+        this.inbox = null;
       }
-      const messages = await this.bounded(this.inbox, signal);
-      this.inbox = null;
-      if (messages.length > 64) throw Error('companion_session_inbox_bound');
-      for (const message of messages) {
+      while (this.cursor < this.batch.length) {
+        const message = this.batch[this.cursor];
         this.check(signal);
         if (typeof message.message_id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(message.message_id)) throw Error('companion_session_invalid_message');
         const previous = this.validated.get(message.message_id);
@@ -182,6 +189,7 @@ export class CompanionMobileSessionController implements CompanionSessionControl
             if (this.closed) return;
             this.validated.set(message.message_id, message.text);
             this.pendingAcks.add(message.message_id);
+            this.cursor++;
             if (outcome) {
               this.verified = Object.freeze({ ...outcome, ...(outcome.artifact ? { artifact: Object.freeze({ ...outcome.artifact }) } : {}) });
               if (!terminal(outcome)) this.receiver?.reset();
@@ -189,12 +197,16 @@ export class CompanionMobileSessionController implements CompanionSessionControl
           });
           await this.bounded(this.processing, signal);
           this.processing = null;
+        } else {
+          this.pendingAcks.add(message.message_id);
+          this.cursor++;
         }
         if (!await this.current(signal)) throw stopped();
         this.pendingAcks.add(message.message_id);
         await this.flushAcks(signal);
         if (this.verified && terminal(this.verified)) return;
       }
+      this.batch = null; this.cursor = 0;
       await this.delay(signal);
     }
   }
@@ -203,7 +215,7 @@ export class CompanionMobileSessionController implements CompanionSessionControl
     if (this.closed) return;
     this.closed = true;
     this.active?.abort.abort(); this.receiver?.discard(); this.receiver = null;
-    this.inbox = null; this.processing = null;
+    this.inbox = null; this.processing = null; this.batch = null; this.cursor = 0;
     this.listeners.clear(); this.validated.clear(); this.pendingAcks.clear(); this.verified = null; this.request = null;
     this.snapshot = Object.freeze({ ...this.snapshot, selection: null, receipt: null, busy: false, connection: 'waiting_for_computer' });
   };

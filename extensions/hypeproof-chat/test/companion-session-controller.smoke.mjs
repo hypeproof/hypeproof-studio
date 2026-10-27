@@ -101,3 +101,45 @@ test('a receive finishing after timeout is reconciled once; a changed descriptor
     f.controller.dispose();
   }
 });
+
+test('reconnect drains a deduplicated eight-part batch after the fourth ACK times out', {timeout:5000}, async()=>{
+  const batchText='<html lang="ko"><body><h1>내 작품</h1><pre>'+'a'.repeat(7400)+'</pre></body></html>';
+  const expected={...request,artifactVersion:createHash('sha256').update(batchText).digest('hex')};
+  const outcome={...completed,artifact:{id:expected.artifactId,version:expected.artifactVersion,text:batchText}};
+  const parts=messages(await packCompanionPreviewPayload(raw(outcome),expected.requestId));
+  assert.equal(parts.length,8,'real packer produces exactly eight fragments');
+  const entered=deferred(),pause=deferred();let hold=true;
+  const seen=new Set(),acks=[],completedOutcomes=new Set();
+  const f=fixture({
+    receive:async()=>{
+      f.calls.receive++;
+      const fresh=parts.filter(part=>!seen.has(part.message_id));
+      fresh.forEach(part=>seen.add(part.message_id));
+      return fresh;
+    },
+    acknowledge:async id=>{
+      if(hold&&id===parts[3].message_id){hold=false;entered.resolve();await pause.promise;}
+      acks.push(id);
+    },
+  });
+  f.ports.descriptor=async()=>({computerName:'내 컴퓨터',online:true,selection:{...selection,request:expected}});
+  f.controller.subscribe(snapshot=>{if(snapshot.receipt?.outcome.state==='completed')completedOutcomes.add(snapshot.receipt.outcome);});
+  try {
+    const first=f.controller.requestPreview(expected);
+    await entered.promise;
+    assert.equal(seen.size,8,'transport deduplicates every delivered message before any ACK');
+    assert.deepEqual(acks,parts.slice(0,3).map(part=>part.message_id));
+    f.clock.fire(1000);await first;
+    assert.equal(f.controller.getSnapshot().receipt,null,'partial HTML is never exposed');
+    assert.equal(f.controller.getSnapshot().connection,'waiting_for_computer');
+    pause.resolve();await tick();
+    await f.controller.reconnect(expected);
+    assert.deepEqual(f.controller.getSnapshot().receipt.outcome,outcome);
+    assert.equal(new Set(acks).size,8,'remaining four fragments survive and receive their ACKs');
+    assert.equal(f.calls.receive,1,'reconnect drains local batch without asking the deduplicating transport again');
+    assert.equal(f.calls.prepare,1);assert.equal(f.calls.send,1);
+    await f.controller.reconnect(expected);
+    assert.equal(f.calls.receive,1);assert.equal(f.calls.send,1);
+    assert.equal(completedOutcomes.size,1,'same verified outcome is reused, never reconstructed or duplicated');
+  } finally {pause.resolve();f.controller.dispose();}
+});

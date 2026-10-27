@@ -34,6 +34,10 @@ receive none. An ACK never means host durable acceptance, adoption or consent.
 ACK uncertainty retains the validated bytes/result privately for a later ACK
 retry. Late receives are preserved for reconnect when a transport ignores abort,
 so client receive deduplication does not silently drop a timed-out delivery.
+A delivered batch and explicit processing cursor survive operation timeout. The
+cursor advances only once validation and its ACK obligation are retained locally;
+reconnect drains the unprocessed suffix before receiving another batch. Terminal
+disposal clears both the batch and cursor.
 
 Each operation has a 25-second default deadline (configurable up to 60 seconds)
 and 100ms polling interval. There are at most 64 validated messages per
@@ -49,7 +53,10 @@ Caller-owned transport disposal remains the caller's responsibility.
 Deterministic async tests cover one delivery with framed completion,
 invalid fragment refusal and oversized-result denial, ignored-abort timeout,
 disposal/late callbacks, ACK retry without resend, and late delivery reconciliation
-with changed-descriptor refusal. They use the real browser-safe result receiver
+with changed-descriptor refusal. A genuine eight-part result also pauses its
+fourth ACK past the deadline after transport deduplication of all eight messages;
+reconnect must complete the exact result with all fragment ACKs, one prepare/send,
+one transport receive and one verified outcome identity. They use the real browser-safe result receiver
 and WebCrypto hashing, with injected transport and clock. Full webview TypeScript
 and unchanged result-receiver regressions are required alongside these tests.
 Actual Worker/D1 relay composition, installed app/phone, human/child acceptance,
