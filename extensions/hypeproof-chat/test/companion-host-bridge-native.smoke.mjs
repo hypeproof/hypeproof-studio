@@ -1,8 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import { CompanionPreviewResultReceiver } from '../src/companionPreviewResult.ts';
 import { nativeBridgeFixture } from './lib/companion-native-bridge-harness.mjs';
 import { FOLDER_CONSENT_KEY, writeFolderConsent } from '../src/folderConsent.ts';
+
+test('native composition transfers a useful saved Korean artifact through the real framed result consumer',async()=>{
+ const f=await nativeBridgeFixture();try{
+  const text='<html><button>내 작품</button><p>'+('내가 설명하는 퀴즈입니다. '.repeat(350))+'</p></html>';
+  await writeFile(f.file,text);f.document.getText=()=>text;
+  const message=await f.message(),request=JSON.parse(message.text),receiver=new CompanionPreviewResultReceiver(request);
+  const packets=new Map();let received=null;
+  const reply={prepare:async(raw,id)=>{packets.set(id,raw);return raw;},send:async id=>{const result=await receiver.accept(packets.get(id));if(result)received=result;},close:()=>{throw Error('unexpected transport close');}};
+  const result=await f.bridge.handleAndReply(message,reply);
+  assert.equal(result.state,'completed');assert.ok(packets.size>8);assert.equal(received.artifact.text,text);
+  assert.equal(f.dialogs.length,1);assert.equal((await f.journal.load()).entries.length,1);assert.equal(await readFile(f.file,'utf8'),text);
+ }finally{await f.cleanup();}
+});
 
 test('an external folder uses the resolved activity consent in an unwrapped native context', async () => {
  const f=await nativeBridgeFixture();try{

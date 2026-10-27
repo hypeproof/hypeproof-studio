@@ -5,6 +5,7 @@ import type { JournalStore } from './classroomOpsCommands.ts';
 import type { AccountPassBinding } from './accountSession.ts';
 import type { CompanionPreparation } from './companionWorkspace.ts';
 import type { ResolvedProfile } from './protocol.ts';
+import { packCompanionPreviewPayload, COMPANION_PREVIEW_ENVELOPE_BYTES } from './companionPreviewPayload.ts';
 import { isMinorProfile } from './sdkCoachHelpers.ts';
 
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -45,6 +46,8 @@ export interface CompanionEncryptedReply {
   send(id: string): Promise<unknown>;
   /** Terminally discard ephemeral keys and every cached prepared packet; a new pairing is required. */
   close(): void;
+  /** Optional bounded backpressure pause; the bridge rechecks current scope before the next send. */
+  waitForCapacity?(): Promise<void>;
 }
 function context(s: CompanionAuthoritySnapshot, authorized: boolean): CompanionHostContext {
   return { actorId: s.accountId, deviceId: s.pair.device_id, hostId: s.preparation.hostId,
@@ -113,21 +116,46 @@ export class CompanionHostBridge {
   private async runAndReply(message: VerifiedCompanionMessage, encryptedReply: CompanionEncryptedReply): Promise<CompanionDispatchResult> {
     let outcome = await this.run(message);
     const requestId = typeof message?.messageId === 'string' ? message.messageId : '';
-    let text = JSON.stringify({ schema: 'hps-companion-host-result/1', requestId, outcome });
-    if (Buffer.byteLength(text) > 2032) {
+    const encode = () => JSON.stringify({ schema: 'hps-companion-host-result/1', requestId, outcome });
+    if (Buffer.byteLength(encode()) > COMPANION_PREVIEW_ENVELOPE_BYTES) {
       outcome = { state: 'denied', code: 'result_too_large', requestId };
-      text = JSON.stringify({ schema: 'hps-companion-host-result/1', requestId, outcome });
     }
-    const id = hash('hps-companion-host-result/1:' + requestId + ':' + hash(text));
-    try { await encryptedReply.prepare(text, id); }
-    catch { this.consent = null; encryptedReply.close(); return { state: 'denied', code: 'relay_unavailable' }; }
-    const current = await this.current();
-    if (outcome.artifact && (!current || !this.consent || this.consent.request !== hash(message.text) || this.consent.scope !== identity(current))) {
-      this.consent = null; encryptedReply.close();
-      return { state: 'denied', code: 'authority_changed' };
+    let packets: readonly string[];
+    try { packets = await packCompanionPreviewPayload(encode(), requestId); }
+    catch { this.consent = null; encryptedReply.close(); return { state: 'denied', code: 'preview_transfer_unavailable' }; }
+    const fresh = async () => {
+      const current = await this.current();
+      return !outcome.artifact || !!(current && this.consent && this.consent.request === hash(message.text) && this.consent.scope === identity(current));
+    };
+    for (let index = 0; index < packets.length; index++) {
+      const text = packets[index];
+      const id = hash((packets.length === 1 ? 'hps-companion-host-result/1:' : 'hps-companion-host-result-part/1:' + index + ':') + requestId + ':' + hash(text));
+      try { await encryptedReply.prepare(text, id); }
+      catch { this.consent = null; encryptedReply.close(); return { state: 'denied', code: 'relay_unavailable' }; }
+      let sent = false;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        if (!await fresh()) {
+          this.consent = null; encryptedReply.close();
+          return { state: 'denied', code: 'authority_changed' };
+        }
+        try { await encryptedReply.send(id); sent = true; break; }
+        catch (error) {
+          if (!error || typeof error !== 'object' || (error as { message?: unknown }).message !== 'relay_backpressure' || attempt === 7) break;
+          // Retry only the already prepared ciphertext. A request-local bounded wait is not a background scheduler.
+          try {
+            if (encryptedReply.waitForCapacity) {
+              let timer: ReturnType<typeof setTimeout> | undefined;
+              try {
+                await Promise.race([encryptedReply.waitForCapacity(), new Promise<never>((_, reject) => {
+                  timer = setTimeout(() => reject(Error('relay_capacity_timeout')), 1_000);
+                })]);
+              } finally { if (timer) clearTimeout(timer); }
+            } else await new Promise(resolve => setTimeout(resolve, 100));
+          } catch { break; }
+        }
+      }
+      if (!sent) { this.consent = null; encryptedReply.close(); return { state: 'denied', code: 'relay_unavailable' }; }
     }
-    try { await encryptedReply.send(id); }
-    catch { this.consent = null; encryptedReply.close(); return { state: 'denied', code: 'relay_unavailable' }; }
     return outcome;
   }
   private async run(message: VerifiedCompanionMessage): Promise<CompanionDispatchResult> {

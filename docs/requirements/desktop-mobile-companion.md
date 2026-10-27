@@ -88,3 +88,8 @@ connects these source seams with the existing account/pass/profile and selected
 saved HTML. It requires an explicit current-request desktop confirmation and
 keeps the factory development-only. Synthetic local Worker/browser observations
 do not close DMC-3 or installed-app/device/classroom acceptance.
+
+The [bounded transfer and mobile presentation slice](../evidence/companion-artifact-transfer-20261028.md)
+adds framed results and one-request UI reconciliation while retaining the
+original runtime/relay limits. Its partial source/browser evidence does not
+complete device, restart, classroom or production acceptance.

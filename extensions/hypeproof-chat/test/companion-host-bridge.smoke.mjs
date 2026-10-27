@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { CompanionHostBridge } from '../src/companionHostBridge.ts';
+import { CompanionPreviewPayloadReceiver } from '../src/companionPreviewPayload.ts';
 const hash = s => createHash('sha256').update(s).digest('hex');
 async function fixture(text='<html><button>합성 퀴즈</button></html>') {
  const root=await mkdtemp(join(tmpdir(),'hps-companion-bridge-')),file=join(root,'quiz.html');
@@ -23,10 +24,10 @@ async function fixture(text='<html><button>합성 퀴즈</button></html>') {
  return {root,file,text,bridge,make,journal,request,message,get snapshot(){return snapshot;},set snapshot(s){snapshot=s;},get confirms(){return confirms;},set approve(v){approve=v;},set now(v){now=v;},set onConfirm(v){onConfirm=v;},set onSave(v){onSave=v;},cleanup:()=>rm(root,{recursive:true,force:true})};
 }
 
-test('JSON expansion beyond the packet limit gives host and mobile the same result', async () => {
- const text='<html>'+String.fromCharCode(34).repeat(1100)+'</html>';
+test('JSON expansion beyond the transfer limit gives host and mobile the same result', async () => {
+ const text='<html>'+String.fromCharCode(34).repeat(17000)+'</html>';
  const f=await fixture(text);try{
-  assert.ok(Buffer.byteLength(text)<1400);
+  assert.ok(Buffer.byteLength(text)<24*1024);
   let packet;
   const relay={async prepare(raw){packet=JSON.parse(raw);assert.ok(Buffer.byteLength(raw)<=2032);return 'encrypted';},async send(){},close(){}};
   const result=await f.bridge.handleAndReply(f.message(),relay);
@@ -43,6 +44,34 @@ test('actual dispatcher requires native consent and current independent profile,
   f.approve=true;const answer=await f.bridge.handle(f.message());assert.equal(answer.state,'completed');assert.equal(answer.artifact.text,f.text);
   await writeFile(f.file,'later saved version');assert.deepEqual(await f.bridge.handle(f.message()),answer);assert.equal(f.confirms,2,'one denied prompt plus one approved prompt; exact retry does not prompt or read again');
   const restart=f.make();await restart.recover();assert.deepEqual(await restart.handle(f.message()),answer);assert.equal(f.confirms,3,'restart loses consent and requires explicit reapproval before cached result release');
+ }finally{await f.cleanup();}
+});
+
+test('a useful HTML result crosses a bounded relay window without duplicate file reads or early preview', async () => {
+ const text='<html><button>색깔 퀴즈</button><p>'+('내가 만든 작품입니다. '.repeat(300))+'</p></html>';
+ const f=await fixture(text);try{
+  const prepared=new Map(),pending=[],received=new CompanionPreviewPayloadReceiver('request');
+  let assembled=null,pauses=0,closed=false;
+  const drain=async()=>{for(const id of pending.splice(0)){const value=await received.accept(prepared.get(id));if(value!==null)assembled=value;}};
+  const relay={async prepare(raw,id){assert.ok(Buffer.byteLength(raw)<=2032);assert.equal(prepared.has(id),false);prepared.set(id,raw);return 'encrypted';},
+   async send(id){if(pending.length===8)throw {message:'relay_backpressure'};pending.push(id);},
+   async waitForCapacity(){pauses++;assert.equal(assembled,null);await drain();},close(){closed=true;}};
+  const result=await f.bridge.handleAndReply(f.message(),relay);await drain();
+  assert.equal(result.state,'completed');assert.ok(pauses>0);assert.equal(closed,false);
+  assert.deepEqual(JSON.parse(assembled).outcome,result);assert.equal(result.artifact.text,text);
+  assert.equal(f.confirms,1);assert.equal((await f.journal.load()).entries.length,1);
+  assert.equal(await readFile(f.file,'utf8'),text);
+ }finally{await f.cleanup();}
+});
+
+test('selection change while a transfer waits stops the remaining parts', async () => {
+ const f=await fixture('<html>'+('큰 작품 '.repeat(1000))+'</html>');try{
+  let sent=0,closed=false;
+  const relay={async prepare(){return 'encrypted';},async send(){if(sent===8)throw Error('relay_backpressure');sent++;},
+   async waitForCapacity(){f.snapshot.epoch++;},close(){closed=true;}};
+  const result=await f.bridge.handleAndReply(f.message(),relay);
+  assert.equal(result.code,'authority_changed');assert.equal(sent,8);assert.equal(closed,true);
+  assert.equal(await readFile(f.file,'utf8'),f.text);
  }finally{await f.cleanup();}
 });
 

@@ -11,10 +11,16 @@ transport condition, never file authority. The reply port receives the existing
 encrypted relay client; no second auth/task store or production listener is added.
 
 The mobile result consumer checks the requested artifact/version and text digest.
-Rendering is a caller-owned sandboxed preview. HTML is limited to 1,400 UTF-8 bytes
-for this small development slice; JSON-escaped results exceeding 2,032 bytes give
-both sides the same `denied/result_too_large` outcome. No truncation occurs.
-This limit is not a complete classroom-artifact capacity promise.
+Rendering is a caller-owned sandboxed preview. The initial 1,400-byte source
+probe has been extended to a selected HTML cap of 24 KiB, with a separate 32 KiB
+serialized-envelope cap. Existing relay packets remain at most 2,032 bytes and
+the eight-message pending window remains unchanged. The framed consumer emits
+only a complete, request/version/digest-verified artifact. JSON expansion past
+the envelope cap gives both sides `denied/result_too_large`; framing/runtime
+failures return `preview_transfer_unavailable` rather than a false size diagnosis.
+No truncation occurs. This is not a complete classroom-artifact capacity promise.
+See [bounded transfer evidence](companion-artifact-transfer-20261028.md) for the
+independent source, native-probe, browser and rate-limit boundaries.
 
 ## Reproduction and evidence boundaries
 
