@@ -10,6 +10,14 @@ recorded separately below. Full DMC-1, installed-host DMC-T01, integrated
 DMC-T14, real mobile pairing and production acceptance remain **OPEN / NOT RUN**.
 In particular, current activity identity is not verified personal ownership.
 
+Canonical mapping: `ST-IMP-COMPANION-WORKSPACE` extends the foundation's
+`ST-INT-COMPANION` → `ST-REQ-COMPANION` → `ST-DES-COMPANION` chain and
+existing `ST-TEST-COMPANION` contract. No separate requirement definition or
+completion record is introduced. Subsequent foundation synchronization and
+mapping/evidence-only commits preserve the observed source above; they are not
+new native runs. Studio #3071 and parent #2803 remain broader tracking context,
+not a claim that this preparation completes their acceptance.
+
 ## Observable desktop flow
 
 The command palette entry **HypeProof: 휴대폰 연결: 로컬 작업 폴더 준비**

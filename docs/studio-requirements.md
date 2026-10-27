@@ -7654,3 +7654,12 @@ record experiments retain their separate scope.
 The first source slice is an advisory route planner with synthetic tests; it does
 not connect a phone, authorize tools or satisfy installed-device acceptance.
 [Product tests](testing/desktop-mobile-companion.md) remain separately tracked.
+
+The subsequent [local workspace preparation](evidence/desktop-companion-workspace-20261027.md)
+command reviews and saves preparation for the current existing trusted local
+workspace, then reports that no phone is connected. It reuses activity binding
+and task-scope identity without rewriting workspace files or task/history stores.
+Current activity and host labels are preparation context, not verified account
+ownership or execution authority. Source tests and an actual isolated development
+app with a synthetic profile cover this bounded flow; full DMC-1, DMC-T01/DMC-T14,
+real account continuity, pairing and release acceptance remain open.

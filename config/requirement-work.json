@@ -844,7 +844,7 @@
         "DMC-15"
       ],
       "inline_prefixes": [],
-      "sha256": "c9af533409c501e467a3145c5dbc5043bc367c58cfd680592c5e20c0e1bfb43f",
+      "sha256": "8c35bb16070163281e3706f7d5879a84b6a8bf0094927ee482f32412bdb33b48",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
@@ -4242,18 +4242,26 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Follow DMC-0 through DMC-8 in docs/plan/desktop-mobile-companion.md. DMC-0 is only a tested route-planning seam; next integrate local workspace setup and authenticated device pairing. Scope PR-sized child issues through MCP. Preserve cloud-record experiments and do not close this parent for foundation work.",
+      "next_action": "Follow DMC-0 through DMC-8 in docs/plan/desktop-mobile-companion.md. Routing and local workspace preparation have bounded source/fixture evidence; preparation also has isolated native app evidence with a synthetic profile. Full DMC-1 verified ownership/capabilities and DMC-T01/T14 remain open. Integrate authenticated device pairing without treating preparation as authority. Scope PR-sized child issues through MCP. Preserve cloud-record experiments and do not close this parent for partial preparation work.",
       "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
       "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
       "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",
       "evidence_required": "Exact source and test contracts; actual Service/host/mobile transport plus persistence and device evidence. Routing-unit tests alone do not fulfill any complete DMC requirement. Real classroom/adult external-effect acceptance is separate.",
       "implementation_paths": [
-        "extensions/hypeproof-chat/src/companionRouting.ts"
+        "extensions/hypeproof-chat/src/companionRouting.ts",
+        "extensions/hypeproof-chat/src/companionWorkspace.ts",
+        "extensions/hypeproof-chat/src/companionWorkspaceController.ts",
+        "extensions/hypeproof-chat/src/companionWorkspaceHost.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
         "extensions/hypeproof-chat/test/companion-routing.smoke.mjs",
-        "scripts/companion-routing-demo.mjs"
+        "scripts/companion-routing-demo.mjs",
+        "extensions/hypeproof-chat/src/companionWorkspace.ts",
+        "extensions/hypeproof-chat/src/companionWorkspaceController.ts",
+        "extensions/hypeproof-chat/src/companionWorkspaceHost.ts",
+        "extensions/hypeproof-chat/test/companion-workspace.test.mjs",
+        "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
       ]
     }
   ]

@@ -2,7 +2,8 @@
 
 Targets: [DMC requirements](../requirements/desktop-mobile-companion.md).
 Plan: [delivery order](../plan/desktop-mobile-companion.md).
-All product acceptance starts NOT_RUN. Unit route tests are a separate boundary.
+Product acceptance starts NOT_RUN; partial observations below do not complete
+the scenarios. Unit route tests are a separate boundary.
 
 | ID | Targets | Scenario and expected evidence | Layer |
 |---|---|---|---|
@@ -26,3 +27,23 @@ Use synthetic data and recorded model output first. Hosted AI, external actions,
 real learner data and production activation are separately evidenced. Record
 exact source, OS/device, fixture and adapter versions; do not inflate one layer
 into another. Child learning outcomes require a separate research protocol.
+
+## Local workspace preparation observations — 2026-10-27
+
+[Preparation evidence](../evidence/desktop-companion-workspace-20261027.md)
+binds source `b7ee35cf0adcd945d0cbc88330c2225f677d3262` to 9 passing
+source/host-adapter tests and an actual isolated macOS development app run.
+The run observed restricted-mode refusal, an existing-folder picker, explicit
+Korean review/save, unpaired copy and preparation/file preservation after process
+restart. It used a synthetic loopback profile and in-memory credentials reseeded
+after restart. It did not verify a real personal account, owner, OS keychain or
+released installed app.
+
+These observations cover only the preparation part of DMC-T01 and unpaired
+status part of DMC-T14. Both scenarios remain **NOT COMPLETE**. Integrated host
+events, authenticated owner/device/capabilities, mobile, relay, execution and
+physical-device acceptance remain **NOT RUN**. The two focused files are
+`extensions/hypeproof-chat/test/companion-workspace.test.mjs` and
+`extensions/hypeproof-chat/test/companion-workspace-host.test.mjs`; native artifact
+paths and reproduction are in the linked evidence. Later mapping/evidence-only
+commits do not turn this observed source into a new native acceptance run.
