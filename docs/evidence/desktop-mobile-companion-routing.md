@@ -45,3 +45,58 @@ execution/outbox integration, native Android/iOS UI, classroom capacity/pilot,
 adult external-effect automation and production activation. No complete DMC
 requirement or parent Epic is accepted from these checks. No framework, production
 retention policy, new spending or live permission change is approved here.
+
+## Local dispatcher seam (DMC-3 partial, 2026-10-27)
+
+`companionHostDispatch.ts` implements a host adapter over the existing
+`CommandRunner`/`JournalStore` receipt journal and `fileAttachment` read gates.
+It accepts only exact bounded request bytes identifying an already selected
+artifact; a request cannot supply a file path, URL, tool or command. Before
+acceptance, the real selected-file adapter rejects path/symlink escape or changed
+bytes. Current actor/device/host/workspace/project/task, epoch, source and artifact
+versions, consent and resolved profile must match. Runtime execution authority is
+an independent current adapter input. Pairing preview `/2` always supplies false
+and can never authorize this dispatcher. A permitted `sdk_tools.read` profile
+alone also does not authorize a remote caller.
+
+Only `preview.read` reads the selected text artifact through existing profile,
+folder and canonical file boundaries. `desktop.continue` returns a continuation
+instruction without opening a desktop surface or executing work. Write, model,
+shell, external delivery and unrecognized operations are refused. Host-offline
+requests wait without being accepted; no cloud path exists.
+
+The existing journal persists exact request bytes before accepting/running and
+persists the exact bounded read result with the terminal receipt. Identical
+retries reuse that result only after current authority checks; a request ID with
+different bytes is refused. Recovered `running` work becomes outcome-unknown,
+never automatically re-executed. A failed durable write blocks that dispatcher
+instance until a fresh instance inspects the journal. Capacity is bounded at 200
+entries without automatically deleting prior receipts. The composition must own
+one runner per account/activity journal, keep it outside the shared workspace,
+return null only for an absent journal and throw on unreadable/corrupt data. This
+slice does not introduce a second auth or activity store.
+
+Focused source validation: `extensions/hypeproof-chat/test/companion-host-dispatch.smoke.mjs`.
+Real temporary files and a disk-backed injected existing journal exercise reads,
+denials, result recovery and fault boundaries. This is source-level synthetic
+adapter evidence. Service transport, resolved production session integration,
+mobile client, installed host/mobile, actual quiz revision and the complete
+DMC-3 acceptance remain NOT RUN. No relay or preview pairing grants execution.
+
+The normalized runtime authority must name the exact requested capability as
+well as supply current execution authorization. A preview-read authority does
+not permit desktop continuation. This is an adapter view of existing policy,
+not a new grant mechanism; no caller-supplied pairing capability is accepted.
+
+Validation on 2026-10-27, Darwin arm64 / Node 22.22.1:
+
+- PASS: new dispatcher scenarios plus existing classroom command runner,
+  file-attachment and companion-routing source checks (`node --experimental-strip-types
+  --test --test-concurrency=1 ...`): 13 test results, zero failures.
+- PASS: full extension TypeScript `tsc --noEmit -p
+  extensions/hypeproof-chat/tsconfig.json`, using the existing prepared DMC-1
+  worktree's dependency installation through a read-only local symlink.
+- Both commands ran through `hype-resource`, final job
+  `dmc3-capability-final-check`; no dependency download or hosted AI was used.
+- NOT RUN: Service relay integration, installed host/mobile, runtime auth
+  integration and quiz modification. No production activation occurred.

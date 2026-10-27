@@ -26,3 +26,14 @@ Use synthetic data and recorded model output first. Hosted AI, external actions,
 real learner data and production activation are separately evidenced. Record
 exact source, OS/device, fixture and adapter versions; do not inflate one layer
 into another. Child learning outcomes require a separate research protocol.
+
+### Local dispatcher seam
+
+`extensions/hypeproof-chat/test/companion-host-dispatch.smoke.mjs` exercises
+DMC-T04/05/06/12 against real synthetic local files and the existing command
+receipt journal interface: exact-byte request/result persistence, duplicate and
+restart behavior, outcome-unknown recovery, offline waiting, continuation-only
+handoff, revoked or changed runtime context, ungranted profile, changed consent,
+path/symlink escape, unsupported tool/model/write payloads and storage failure.
+Pairing preview `execution_authorized:false` is a mandatory denial control.
+These checks do not establish the Service transport or device acceptance rows.
