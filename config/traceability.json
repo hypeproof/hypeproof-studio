@@ -15686,7 +15686,8 @@
         "ST-TEST-CLASSROOM-ADMIN",
         "ST-TEST-CHAT-FILE-ATTACH",
         "ST-IMP-COMPANION-WORKSPACE",
-        "ST-IMP-COMPANION-HOST"
+        "ST-IMP-COMPANION-HOST",
+        "ST-IMP-COMPANION-SESSION"
       ],
       "sources": [
         {
@@ -15715,6 +15716,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/lib/companion-native-bridge-harness.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-preview-payload.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-session-view.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-session-controller.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-transport-budget.smoke.mjs"
         }
       ]
     },
@@ -15763,6 +15776,36 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionPreviewResult.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionPreviewPayload.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-SESSION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-COMPANION-HOST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CompanionSessionView.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionPresentation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionView.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionController.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionTransportBudget.ts"
         }
       ]
     }

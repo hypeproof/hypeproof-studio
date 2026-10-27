@@ -40,8 +40,8 @@ export function createDevCompanionHostBridge(ports: CompanionNativeBridgePorts):
       || !document || document.uri.scheme !== 'file' || document.isDirty || document.isUntitled
       || !/\.html?$/i.test(document.uri.fsPath) || vscode.env.remoteName || !vscode.workspace.isTrusted) return null;
     const text = document.getText();
-    // Leave room for the version-bound result envelope. Refuse, never truncate.
-    if (Buffer.byteLength(text) > 1400) return null;
+    // Keep the selected HTML bounded; the serialized result has its own 32KiB framing cap. Refuse, never truncate.
+    if (Buffer.byteLength(text) > 24 * 1024) return null;
     return { active: { id: active.id, ref: active.ref, serverId: active.serverId, workspace: active.workspace, accountPass: { ...active.accountPass } },
       service, taskId: task.activeTaskId, revision: task.revision, taskScope: task.scope, epoch: ports.epoch(),
       file: document.uri.fsPath, documentVersion: document.version, digest: hash(text) };
