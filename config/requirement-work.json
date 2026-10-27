@@ -291,7 +291,7 @@
         "WEB-09"
       ],
       "inline_prefixes": [],
-      "sha256": "3a10c5be6cb3fbe98a8844e2614f21bd4067074431a2c5ac168ffef4dc512bef",
+      "sha256": "e54e1ea28dd9d37a7c9e937e5471bfd62cd75b04f3b331efd0df7a387f26f26a",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/chalk-authoring.md",
@@ -823,6 +823,32 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/personal-claude-continuation.md",
       "test": "docs/testing/personal-claude-continuation.md"
+    },
+    {
+      "path": "docs/requirements/desktop-mobile-companion.md",
+      "ids": [
+        "DMC-01",
+        "DMC-02",
+        "DMC-03",
+        "DMC-04",
+        "DMC-05",
+        "DMC-06",
+        "DMC-07",
+        "DMC-08",
+        "DMC-09",
+        "DMC-10",
+        "DMC-11",
+        "DMC-12",
+        "DMC-13",
+        "DMC-14",
+        "DMC-15"
+      ],
+      "inline_prefixes": [],
+      "sha256": "c9af533409c501e467a3145c5dbc5043bc367c58cfd680592c5e20c0e1bfb43f",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/plan/desktop-mobile-companion.md",
+      "test": "docs/testing/desktop-mobile-companion.md"
     }
   ],
   "work_items": [
@@ -4185,6 +4211,49 @@
         "extensions/hypeproof-chat/test/trial-end-card-host.smoke.mjs",
         "extensions/hypeproof-chat/test/trial-end-card-dismiss.test.tsx",
         "e2e/customer-claude/run.mjs"
+      ]
+    },
+    {
+      "id": "desktop-mobile-companion",
+      "title": "Desktop-owned workspace and bounded mobile companion acceptance",
+      "issue": 2803,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/desktop-mobile-companion.md",
+          "ids": [
+            "DMC-01",
+            "DMC-02",
+            "DMC-03",
+            "DMC-04",
+            "DMC-05",
+            "DMC-06",
+            "DMC-07",
+            "DMC-08",
+            "DMC-09",
+            "DMC-10",
+            "DMC-11",
+            "DMC-12",
+            "DMC-13",
+            "DMC-14",
+            "DMC-15"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Follow DMC-0 through DMC-8 in docs/plan/desktop-mobile-companion.md. DMC-0 is only a tested route-planning seam; next integrate local workspace setup and authenticated device pairing. Scope PR-sized child issues through MCP. Preserve cloud-record experiments and do not close this parent for foundation work.",
+      "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
+      "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
+      "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",
+      "evidence_required": "Exact source and test contracts; actual Service/host/mobile transport plus persistence and device evidence. Routing-unit tests alone do not fulfill any complete DMC requirement. Real classroom/adult external-effect acceptance is separate.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/companionRouting.ts"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/src/companionRouting.ts",
+        "extensions/hypeproof-chat/test/companion-routing.smoke.mjs",
+        "scripts/companion-routing-demo.mjs"
       ]
     }
   ]

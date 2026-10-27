@@ -7640,3 +7640,17 @@ with stubbed dialogs, and the real provider in personal, trial, classroom and in
 `test/work-export-entry-browser.smoke.mjs` (computed geometry in personal and classroom, dark/light,
 320/800/1420 and forced colours; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). The native
 folder dialog and notification are owner-run checks.
+
+
+## Desktop-first mobile companion (DMC-01–15)
+
+The [companion REA](requirements/desktop-mobile-companion.md) and
+[delivery plan](plan/desktop-mobile-companion.md) record the 2026-10-27 approved
+local-host direction under Studio #2803. The computer owns the selected workspace
+and execution; mobile provides bounded interaction; Service provides identity and
+relay. Classroom learners can use an instructor-prepared host. Existing cloud
+record experiments retain their separate scope.
+
+The first source slice is an advisory route planner with synthetic tests; it does
+not connect a phone, authorize tools or satisfy installed-device acceptance.
+[Product tests](testing/desktop-mobile-companion.md) remain separately tracked.

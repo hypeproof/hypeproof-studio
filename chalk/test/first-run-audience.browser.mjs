@@ -64,6 +64,26 @@ try {
     const later = g.targets.find((t) => t.name === '나중에');
     assert.ok(later && /rgba\(0, 0, 0, 0\)|transparent/.test(later.bg), `${width}px: 나중에 is a quiet text button, not a filled one (${later?.bg})`);
     checks += g.targets.length + 3;
+
+    // DES-CGP-LEARN-14 (CGP-LEARN-D-014): one screen with exactly two questions, all on view together with no step,
+    // 다음 or dialog; 나중에 is a text button (no fill, no visible border) next to the filled 저장; a chip shows a focus ring.
+    const s = await ev(`const box=document.getElementById('first-run'), shown=e=>{const r=e.getBoundingClientRect(),cs=getComputedStyle(e);return r.width>0&&r.height>0&&cs.display!=='none'&&cs.visibility!=='hidden';};
+      const qs=[...box.querySelectorAll('fieldset')], later=getComputedStyle(document.getElementById('fr-later')), save=getComputedStyle(document.getElementById('fr-save'));
+      const chip=box.querySelector('.fr-chips input'); chip.focus(); const f=getComputedStyle(chip);
+      return { questions: qs.map(q=>q.querySelector('legend').textContent.split(' — ')[0]), allShown: [...qs,document.getElementById('fr-save'),document.getElementById('fr-later')].every(shown),
+        hiddenParts: [...box.querySelectorAll('section,fieldset,div')].filter(e=>e.hidden).length, buttons: [...box.querySelectorAll('button')].map(e=>e.textContent.trim()),
+        dialog: box.matches('dialog,[role=dialog],[aria-modal]')||getComputedStyle(box).position==='fixed',
+        later: [later.backgroundColor, later.borderTopColor, later.borderBottomColor], save: save.backgroundColor,
+        focus: [f.outlineStyle, parseFloat(f.outlineWidth)] };`);
+    assert.deepEqual(s.questions, ['학년대', '과목'], `${width}px: exactly two questions (grade band, subject)`);
+    assert.ok(s.allShown, `${width}px: both questions, 저장 and 나중에 are on view together (one screen)`);
+    assert.equal(s.hiddenParts, 0, `${width}px: no hidden step inside the first-run panel`);
+    assert.deepEqual(s.buttons.filter((t) => t !== '빼기'), ['과목 목록에 추가', '저장', '나중에'], `${width}px: no 다음/step buttons`);
+    assert.equal(s.dialog, false, `${width}px: inline section, not a modal`);
+    for (const c of s.later.slice(1)) assert.match(c, /rgba\(\d+, \d+, \d+, 0\)|transparent/, `${width}px: 나중에 has no visible border (${c})`);
+    assert.doesNotMatch(s.save, /rgba\(\d+, \d+, \d+, 0\)|transparent/, `${width}px: 저장 stays the filled primary`);
+    assert.ok(s.focus[0] !== 'none' && s.focus[1] >= 2, `${width}px: a focused chip shows a ≥2px focus ring (${s.focus})`);
+    checks += 8;
   }
   await b.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
 
