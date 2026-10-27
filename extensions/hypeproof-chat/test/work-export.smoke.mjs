@@ -6,7 +6,8 @@
 // learner's and the AI's messages with secrets redacted (grep over every inflated byte), works with the
 // network gone and no token, never replaces an existing file, refuses a destination inside the work
 // folder, refuses past the size cap without writing, refuses while a turn runs, and stops when the turn
-// scope changes before writing.
+// scope changes before writing. DES-SHELL-27: progress while it runs and a result line that shows the
+// folder safely (no link, control or bidi characters, long paths kept whole at both ends).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -154,6 +155,8 @@ try {
   // File name: controls, bidi and separators removed from the folder part.
   assert.equal(workExportName('/x/a\u202eb/c:d', now), '내-작업-c-d-20261026-153012.zip');
   assert.equal(workExportName('/x/..', now), '내-작업-20261026-153012.zip');
+  // The name is shown in the result line too (DES-SHELL-27): bidi marks and zero-width characters go as well.
+  assert.equal(workExportName('/x/w\u200f\u061c\u200b\ufeff\u2060\u200eork', now), '내-작업-work-20261026-153012.zip');
 
   // --- fix1: every probe case of the FAIL verify (planted fake values only) ----------------------
   {
@@ -350,6 +353,53 @@ try {
   pick = async () => [{ scheme: 'file', fsPath: dest }]; await mod.exports.runWorkExport({ ...source, current: () => false }); assert.match(shown.warn.at(-1), /작업이 바뀌어서 멈췄어요/);
   let calls = 0; await mod.exports.runWorkExport({ ...source, current: () => ++calls < 2 }); assert.match(shown.warn.at(-1), /작업이 바뀌어서 멈췄어요/, 'turn started during collection');
   assert.equal(fs.readdirSync(dest).length, count0, 'refusals write nothing');
+
+  // --- DES-SHELL-27 (CGP-SHELL-D-027): progress while it runs, and a result line that shows the real
+  // folder without letting a hostile folder name become a link, reorder the line or push the counts out.
+  {
+    // VS Code's notification link syntax (base/common/linkedText.ts); a match runs with allowCommands.
+    const LINK = /\[([^\]]+)\]\(((?:https?:\/\/|command:|file:)[^\)\s]+)(?: (["'])(.+?)(\3))?\)/i;
+    const many = path.join(base, 'many'); for (let i = 0; i < 120; i++) put(many, `p/${String(i).padStart(3, '0')}.txt`, 'page ' + i);
+    const hostile = path.join(base, '[열기](command:workbench.action.terminal.new)', 'a\u202egpj.exe\u2028b');
+    fs.mkdirSync(hostile, { recursive: true });
+    const reports = [];
+    const saveProgress = vscode.window.withProgress;
+    vscode.window.withProgress = async (options, task) => { shown.progress++; return task({ report: r => reports.push(r.message) }); };
+    pick = async () => [{ scheme: 'file', fsPath: hostile }];
+    const progress0 = shown.progress, info0 = shown.info.length, cmd0 = shown.commands.length;
+    const zip = await mod.exports.runWorkExport({ root: many, secrets: [], tasks: [], current: () => true });
+    vscode.window.withProgress = saveProgress;
+    assert.ok(zip && path.dirname(zip) === fs.realpathSync(hostile), 'written into the hostile folder itself');
+    await new Promise(r => setTimeout(r, 0));
+    assert.equal(shown.progress, progress0 + 1, 'one progress notification for the run');
+    assert.deepEqual(reports, ['파일 50개 담는 중', '파일 100개 담는 중'], 'the running count is reported while files are read');
+    const [line, items] = shown.info[info0];
+    assert.ok(line.startsWith('저장했어요: '), line);
+    assert.ok(!LINK.test(line), 'no notification link forms from the folder name: ' + line);
+    assert.ok(!/[\u0000-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/u.test(line), 'no control or bidi character in the line');
+    assert.ok(line.includes('［열기］(command:workbench.action.terminal.new)'), 'the folder is still readable: ' + line);
+    assert.ok(line.includes('a\ufffdgpj.exe\ufffdb'), 'hidden characters show as a mark: ' + line);
+    assert.ok(Array.from(line).length < 1000, 'under the notification cut at 1000 characters');
+    assert.ok(line.includes(' · ' + path.basename(zip) + ' · 작업 파일 120개 · 대화 0개'), 'file name and counts stay whole: ' + line);
+    assert.deepEqual(items, ['폴더 열기']);
+    assert.equal(shown.commands[cmd0][0], 'revealFileInOS');
+    assert.equal(shown.commands[cmd0][1].fsPath, zip, '폴더 열기 reveals the real file, not the display copy');
+    // A long folder keeps its start and end, so the file name and counts are never cut by the 1000 limit.
+    const long = mod.exports.displayFolder('/Users/학생/' + 'x'.repeat(2000) + '/끝 폴더');
+    assert.equal(Array.from(long).length, 120); assert.ok(long.startsWith('/Users/학생/x') && long.endsWith('x/끝 폴더') && long.includes('…'), long);
+    // A hostile work folder name reaches the same line through the zip name: still no link and no hidden mark.
+    const hostileRoot = path.join(base, 'w\u200f\u061c\u200b\ufeff\u2060ork[a](command:x)'); put(hostileRoot, 'a.txt', 'a');
+    const info1 = shown.info.length;
+    pick = async () => [{ scheme: 'file', fsPath: hostile }];
+    const zip2 = await mod.exports.runWorkExport({ root: hostileRoot, secrets: [], tasks: [], current: () => true });
+    await new Promise(r => setTimeout(r, 0));
+    const line2 = shown.info[info1][0];
+    assert.ok(zip2 && line2.includes(' · ' + path.basename(zip2) + ' · '), line2);
+    assert.ok(!LINK.test(line2), 'no link through the zip name: ' + line2);
+    assert.ok(!/[\u0000-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/u.test(line2), 'no hidden mark through the zip name: ' + JSON.stringify(line2));
+    // An ordinary folder is shown exactly.
+    assert.equal(mod.exports.displayFolder('/Users/학생/Desktop/내 작업 (1) [최종]'), '/Users/학생/Desktop/내 작업 (1) [최종]');
+  }
 
   // --- the real provider: every seat that has a folder, offline and tokenless -------------------
   for (const kind of ['personal', 'trial', 'classroom', 'instructor']) {

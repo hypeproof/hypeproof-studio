@@ -7657,6 +7657,14 @@ command (kept out of the palette, like the other learner commands). It writes on
 7. Progress shows as a notification ("내 작업을 내보내는 중이에요"); the result is one line
    "저장했어요: <폴더> · <파일 이름> · 작업 파일 n개 · 대화 m개" with "폴더 열기", which reveals the zip.
    The entry is a 44px target with ≥14px text, a focus ring and a forced-colours border (DES-SHELL-27).
+   The progress notification opens as soon as the export starts and counts files read every 50
+   ("파일 50개 담는 중"). The folder in the result line is a display copy (DES-SHELL-27, CGP-SHELL-D-027):
+   VS Code runs `[text](command:…)` in a notification as a link and draws control and bidi characters, so
+   C0/C1 controls, U+2028/2029, bidi marks and embeddings, zero-width space and BOM show as `�`; when `](`
+   appears, `[`/`]` show as `［`/`］`; a path over 120 characters keeps its first 40 and last 79 around
+   `…`, so the file name and counts are never cut by the 1000-character notification limit. "폴더 열기"
+   reveals the real file. The zip name in the same line drops those control, bidi and zero-width characters from its
+   work-folder part, and `:` too, so no link scheme forms there either.
 
 Evidence: `extensions/hypeproof-chat/test/work-export.smoke.mjs` (real disk fixtures, the zip read back
 by an independent reader with CRC checks, a grep over every inflated byte for secrets, the host flow

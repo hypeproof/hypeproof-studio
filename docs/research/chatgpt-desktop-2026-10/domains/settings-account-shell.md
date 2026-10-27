@@ -339,3 +339,12 @@ reply already carries reply choices; columns follow the chat pane width (DES-SHE
 and Markdown to a folder the learner picks. Local only, so it works offline and after a pass ends;
 it never replaces a file and refuses rather than truncates past 300 MB / 20,000 files. Contract:
 `docs/studio-requirements.md` "Work export zip (CGP-SHELL-R-028)"; choices in DEC-SHELL-R028.
+
+## Export progress and result decision (CGP-SHELL-D-027)
+
+DES-SHELL-27 was met on main by the R-028 build: a progress notification for the whole run (with a
+running file count), the one-line result "저장했어요: <폴더> · <파일 이름> · …" with "폴더 열기", and
+the settings entry measured at 320 px. One gap fixed: the folder in the result line was shown raw, so
+a picked folder named like a notification link (`[x](command:…)`) became a link that runs a command,
+and bidi or control characters could reorder the line. The line now shows a display copy; the native
+notification has no 320 px layout of its own (owner-run check). See DEC-SHELL-D027.
