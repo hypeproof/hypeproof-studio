@@ -18,6 +18,8 @@ export type WriteChangeView =
     almostAll: boolean;
     /** Nothing but whitespace or line breaks differ (diffGuard normalises whitespace inside a unit). */
     spacingOnly: boolean;
+    /** CGP-ART-D-021: the text after the call differs from the file now, so the host can show the two side by side. */
+    diff?: boolean;
   }
   | { kind: "unknown"; reason: WriteChangeUnknownReason };
 
@@ -37,6 +39,8 @@ export const WRITE_CHANGE_TEXT = {
   /** A rewrite below ALMOST_ALL_RATIO: still more than half, so still warned, without overstating it. */
   overHalf: "절반 넘게 바뀌어요",
   spacing: "글자는 그대로, 띄어쓰기·줄바꿈만 달라져요",
+  /** CGP-ART-D-021: opens the file now and the text after the call side by side; it never answers the dialog. */
+  showDiff: "바뀐 곳 보기",
   same: "내용은 그대로예요",
   unknown: "얼마나 바뀌는지 미리 알 수 없어요",
   reasons: {
@@ -49,6 +53,24 @@ export const WRITE_CHANGE_TEXT = {
     "no-change": "바꾸기 전과 후가 같아요",
   } satisfies Record<WriteChangeUnknownReason, string>,
 } as const;
+
+/** CGP-ART-D-021 (DES-ART-21): the change bar has this many steps. */
+export const WRITE_CHANGE_STEPS = 4;
+
+/**
+ * CGP-ART-D-021: filled steps of the change bar, aligned with the words beside it so the bar never says more than
+ * the label: 0 when no existing content changes, 1 up to a quarter, 2 up to half (not a rewrite), 3 for a rewrite
+ * below ALMOST_ALL_RATIO ("절반 넘게"), 4 only at or above it ("거의 전부").
+ */
+export function writeChangeSteps(v: Extract<WriteChangeView, { kind: "measured" }>): number {
+  if (v.ratio === 0 && v.addedLines === 0) return 0;
+  if (v.rewrite) return v.almostAll ? 4 : 3;
+  return v.ratio > 0.25 ? 2 : 1;
+}
+
+/** CGP-ART-D-021: the bar's text equivalent (the visible percentage stays beside it). */
+export const writeChangeStepsLabel = (v: Extract<WriteChangeView, { kind: "measured" }>): string =>
+  `${WRITE_CHANGE_TEXT.heading} ${v.percent} · ${WRITE_CHANGE_STEPS}칸 중 ${writeChangeSteps(v)}칸`;
 
 /** The lines under "바뀌는 정도: {percent}" for a measured change. */
 export function writeChangeDetail(v: Extract<WriteChangeView, { kind: "measured" }>): string {

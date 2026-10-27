@@ -116,6 +116,16 @@ try {
     assert.deepEqual(C.writeChangeView(existing(PAGE), { tool: 'edit', edits: [{ old_string: '없는 글', new_string: 'x', replace_all: false }] }, 'index.html'), { kind: 'unknown', reason: 'no-match' });
     assert.deepEqual(C.writeChangeView({ exists: true, fingerprint: 'f', text: null, reason: 'large' }, { tool: 'write', content: 'x' }, 'big.html'), { kind: 'unknown', reason: 'large' });
     ok('view: partial below REWRITE_RATIO, rewrite above it, unchanged, pure addition, unknown, none for a new file');
+    // CGP-ART-D-021: "바뀐 곳 보기" compares exactly the summarised bytes with the call's text; nothing when they match.
+    assert.equal(spaced.diff, true); assert.equal(added.diff, true);
+    assert.equal(C.writeChangeView(existing(PAGE), { tool: 'write', content: PAGE }, 'index.html').diff, false, 'identical text: no diff');
+    assert.deepEqual(C.writeChangeComparison(existing(PAGE), { tool: 'edit', edits: [{ old_string: '월요일', new_string: '화요일', replace_all: false }] }), { before: PAGE, after: PAGE.replace('월요일', '화요일') });
+    assert.equal(C.writeChangeComparison(existing(PAGE), { tool: 'write', content: PAGE }), null);
+    assert.equal(C.writeChangeComparison(existing(PAGE), null), null);
+    assert.equal(C.writeChangeComparison(existing(PAGE), { tool: 'edit', edits: [{ old_string: '없는 글', new_string: 'x', replace_all: false }] }), null, 'a refused replacement has nothing to show');
+    assert.equal(C.writeChangeComparison({ exists: false, fingerprint: 'absent' }, { tool: 'write', content: 'x' }), null);
+    assert.equal(C.writeChangeComparison({ exists: true, fingerprint: 'f', text: null, reason: 'binary' }, { tool: 'write', content: 'x' }), null);
+    ok('comparison: the summarised before text and the call\'s after text; none for identical, refused, new or unreadable');
   }
 
   // ── 4. The request carries the call's text (host-built only) ──
@@ -129,9 +139,21 @@ try {
   // ── 5. The real host: the prompt the dialog receives ──
   const require = createRequire(import.meta.url);
   const bundle = await build({ entryPoints: [new URL('../src/chatPanelProvider.ts', import.meta.url).pathname], bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'error' });
+  // CGP-ART-D-021: just enough of the editor API to see which diff opens, with what text, and which tabs close.
+  class TabInputTextDiff { constructor(original, modified) { this.original = original; this.modified = modified; } }
+  const diffCalls = [], closedTabs = [], openTabs = [], providers = new Map();
+  let onDiff = null;
   const vscode = {
-    window: { showWarningMessage: async () => undefined },
+    TabInputTextDiff, ViewColumn: { Beside: -2 },
+    Uri: { from: ({ scheme, path: p }) => ({ scheme, path: p, toString: () => `${scheme}:${p}` }) },
+    commands: { executeCommand: async (cmd, left, right, title, opts) => {
+      diffCalls.push({ cmd, left: left.toString(), right: right.toString(), title, opts, before: providers.get(left.scheme).provideTextDocumentContent(left), after: providers.get(right.scheme).provideTextDocumentContent(right) });
+      await onDiff?.(); // e.g. the dialog answered while the editor is still opening: the tab appears after that
+      if (!openTabs.some((t) => t.input.original.toString() === left.toString())) openTabs.push({ input: new TabInputTextDiff(left, right) }); // the editor reuses an open diff
+    } },
+    window: { showWarningMessage: async () => undefined, tabGroups: { get all() { return [{ tabs: [...openTabs] }]; }, close: async (tabs) => { for (const t of tabs) { closedTabs.push(t.input.original.toString()); openTabs.splice(openTabs.indexOf(t), 1); } return true; } } },
     workspace: {
+      registerTextDocumentContentProvider: (scheme, provider) => { providers.set(scheme, provider); return { dispose() {} }; },
       getConfiguration: () => ({ get: (key, fallback) => (key === 'requireApprovalFor' ? ['executeShell', 'openBrowser', 'delegateAgent', 'browserType', 'writeFile'] : fallback) }),
       workspaceFolders: [{ uri: { fsPath: WS } }],
     },
@@ -147,7 +169,9 @@ try {
   host.context = { secrets: { get: async () => 'token' } };
   host.confirmWriteFiles = (...args) => P.confirmWriteFiles.call(host, ...args);
   host.resolveActionApprovalTracked = (req) => P.resolveActionApproval.call(host, req);
-  host.writeApprovalRequest = { invalidate() {}, confirm: async (prompt) => { prompts.push(structuredClone(prompt)); during(prompt); return answer; } };
+  host.writeApprovalRequest = { invalidate() {}, confirm: async (prompt) => { prompts.push(structuredClone(prompt)); await during(prompt); return answer; } };
+  Object.assign(host, { writeApprovalDiffs: new Map(), writeApprovalDiffSeq: 0, writeApprovalDiffScheme: 'hps-write-approval-test', writeApprovalDiffContent: new Map() });
+  for (const m of ['openWriteApprovalDiff', 'closeWriteApprovalDiffs', 'closeWriteApprovalDiffTabs']) host[m] = (...a) => P[m].call(host, ...a);
   const ask = async (toolName, input) => {
     prompts.length = 0;
     const approved = await P.resolveActionApproval.call(host, { requestId: 'r', ...sdkToolToActionRequest({ toolName, input }) });
@@ -177,6 +201,74 @@ try {
     assert.deepEqual(twice.prompt.changes[0], { kind: 'unknown', reason: 'ambiguous' });
     during = () => {};
     ok('host: the dialog prompt has the summary before the write; rewrite flagged; new file none; text stays host-side');
+  }
+
+  {
+    // CGP-ART-D-021: "바뀐 곳 보기" from the real host.
+    const page = path.join(WS, 'diff.html');
+    fs.writeFileSync(page, PAGE);
+    let seen = null;
+    during = async (prompt) => {
+      seen = { id: prompt.id, material: host.writeApprovalDiffs.has(prompt.id) };
+      for (const [id, index] of [[prompt.id, 1], [prompt.id, -1], [prompt.id, '0'], [prompt.id, 0.5], ['other', 0], [7, 0]]) await host.openWriteApprovalDiff(id, index);
+      assert.equal(diffCalls.length, 0, 'a wrong id, a missing or malformed index opens nothing');
+      fs.writeFileSync(page, PAGE.replace('커피', '라떼')); // changed after the summary, before the press
+      await host.openWriteApprovalDiff(prompt.id, 0);
+      await host.openWriteApprovalDiff(prompt.id, 0);
+    };
+    const r = await ask('Write', { file_path: page, content: REWRITE });
+    assert.equal(seen.material, true);
+    assert.equal(diffCalls.length, 2);
+    const [first, again] = diffCalls;
+    assert.equal(first.cmd, 'vscode.diff');
+    assert.equal(first.before, PAGE, 'left is the file as summarised, not as it is when the button is pressed');
+    assert.equal(first.after, REWRITE, 'right is the text the call leaves behind');
+    assert.equal(again.before, PAGE, 'a second press shows the same summarised bytes, not a re-read');
+    assert.equal(again.left, first.left, 'a second press reopens the same diff');
+    assert.ok(first.left.endsWith('/0/지금/diff.html') && first.right.endsWith('/0/승인하면/diff.html'), first.left);
+    assert.equal(first.title, '작업 폴더/diff.html · 지금 ↔ 승인하면');
+    assert.deepEqual({ ...first.opts }, { preview: true, preserveFocus: true, viewColumn: -2 }, 'the dialog keeps focus; the chat stays visible');
+    assert.equal(r.approved, false, 'the file changed while the dialog was open: still refused (the diff does not refresh the summary)');
+    assert.equal(host.writeApprovalDiffs.size, 0, 'answered: the texts are dropped');
+    assert.equal(host.writeApprovalDiffContent.size, 0);
+    assert.deepEqual(closedTabs, [first.left], 'answered: the diff tab closes');
+    diffCalls.length = 0;
+    await host.openWriteApprovalDiff(seen.id, 0);
+    assert.equal(diffCalls.length, 0, 'after the answer the diff cannot open');
+
+    // Answered while the editor was still opening: the tab that opened late is closed too.
+    fs.writeFileSync(page, PAGE);
+    closedTabs.length = 0;
+    let late = null;
+    during = async (prompt) => { onDiff = () => P.closeWriteApprovalDiffs.call(host, prompt.id); await host.openWriteApprovalDiff(prompt.id, 0); onDiff = null; late = diffCalls.at(-1); };
+    await ask('Edit', { file_path: page, old_string: '월요일 휴무', new_string: '화요일 휴무' });
+    assert.equal(late.after, PAGE.replace('월요일 휴무', '화요일 휴무'));
+    assert.deepEqual(closedTabs, [late.left]); assert.equal(openTabs.length, 0);
+
+    // Denied (also Escape, timeout and panel close: confirm resolves false for each): the tab closes and the texts go.
+    closedTabs.length = 0;
+    let denied = null;
+    answer = false;
+    during = async (prompt) => { await host.openWriteApprovalDiff(prompt.id, 0); denied = diffCalls.at(-1); assert.equal(openTabs.length, 1); };
+    const no = await ask('Edit', { file_path: page, old_string: '월요일 휴무', new_string: '화요일 휴무' });
+    answer = true;
+    assert.equal(no.approved, false);
+    assert.deepEqual(closedTabs, [denied.left], 'denied: the diff tab closes');
+    assert.equal(openTabs.length, 0);
+    assert.equal(host.writeApprovalDiffs.size, 0, 'denied: the texts are dropped');
+    assert.equal(host.writeApprovalDiffContent.size, 0);
+
+    // No diff to offer: a new file, identical text, an unknown change, a webview-origin request.
+    const offered = [];
+    during = (prompt) => { offered.push(host.writeApprovalDiffs.has(prompt.id)); };
+    await ask('Write', { file_path: path.join(WS, 'brand-new.html'), content: REWRITE });
+    await ask('Write', { file_path: page, content: PAGE });
+    await ask('Edit', { file_path: page, old_string: '없는 글', new_string: 'x' });
+    await P.handleActionRequest.call(host, { requestId: 'w2', kind: 'writeFile', description: 'x', payload: { path: page, edit: { tool: 'write', content: REWRITE } } });
+    assert.deepEqual(offered, [false, false, false, false]);
+    assert.equal(prompts[0].changes[0].diff, undefined, 'the webview-origin view carries no diff flag');
+    during = () => {};
+    ok('host: 바뀐 곳 보기 opens the summarised bytes beside the call text, bound to the pending request, closed and dropped on the answer');
   }
 
   {

@@ -547,6 +547,8 @@ export type WebviewMessage = (
   | {type:'annotationLeaveAnswer';id:string;discard:boolean}
   | { type: "stopRunningProcess"; id: string }
   | {type:'writeApprovalAnswer';id:string;approved:boolean}
+  /** CGP-ART-D-021: open the file now beside the text after the call; never an answer. */
+  | {type:'writeApprovalDiff';id:string;index:number}
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
   | { type: 'taskCreate' }

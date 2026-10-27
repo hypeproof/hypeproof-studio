@@ -19,7 +19,7 @@ import * as fs from "node:fs";
 import { diffGuard, REWRITE_RATIO } from "./diffGuard.ts";
 import { ALMOST_ALL_RATIO, type WriteChangeUnknownReason, type WriteChangeView } from "./writeApprovalPrompt.ts";
 
-export { ALMOST_ALL_RATIO, WRITE_CHANGE_TEXT, writeChangeDetail, writeChangeWarning, type WriteChangeUnknownReason, type WriteChangeView } from "./writeApprovalPrompt.ts";
+export { ALMOST_ALL_RATIO, WRITE_CHANGE_STEPS, WRITE_CHANGE_TEXT, writeChangeSteps, writeChangeStepsLabel, writeChangeDetail, writeChangeWarning, type WriteChangeUnknownReason, type WriteChangeView } from "./writeApprovalPrompt.ts";
 
 /** Same cap as the diff guard's snapshot (orchestratorHooks SNAPSHOT_MAX_BYTES). */
 export const WRITE_CHANGE_MAX_BYTES = 2 * 1024 * 1024;
@@ -155,5 +155,18 @@ export function writeChangeView(existing: ExistingText, edit: WriteEdit | null, 
     rewrite: r.changed_ratio > REWRITE_RATIO,
     almostAll: r.changed_ratio >= ALMOST_ALL_RATIO,
     spacingOnly: r.verdict === "unchanged" && existing.text !== after,
+    diff: existing.text !== after,
   };
+}
+
+/**
+ * CGP-ART-D-021: the exact texts behind a measured summary, for "바뀐 곳 보기": the file as it was read for the
+ * summary (not re-read, so the diff and the numbers describe the same bytes) and the text the call leaves behind.
+ * Null whenever the summary is not a measured difference.
+ */
+export function writeChangeComparison(existing: ExistingText, edit: WriteEdit | null): { before: string; after: string } | null {
+  if (!existing.exists || existing.text === null || !edit) return null;
+  const applied = applyWriteEditResult(existing.text, edit);
+  if ("refused" in applied || applied.text === existing.text) return null;
+  return { before: existing.text, after: applied.text };
 }

@@ -168,6 +168,9 @@ host.writeApprovalScope=()=>WS;
 host.context={secrets:{get:async()=> 'token'}};
 host.confirmWriteFiles=(...args)=>P.confirmWriteFiles.call(host,...args);
 host.writeApprovalRequest={invalidate(){},confirm:async prompt=>{const m={message:prompt.title+'\n\n'+prompt.files.join('\n'),options:{modal:true},buttons:[prompt.verb],prompt};modals.push(m);return answer(m)===prompt.verb;}};
+// CGP-ART-D-021: the real per-request diff state and its cleanup, so every answer runs the same path as the host.
+host.writeApprovalDiffs=new Map();host.writeApprovalDiffSeq=0;host.writeApprovalDiffContent=new Map();
+host.closeWriteApprovalDiffs=(...a)=>P.closeWriteApprovalDiffs.call(host,...a);host.closeWriteApprovalDiffTabs=(...a)=>P.closeWriteApprovalDiffTabs.call(host,...a);
 const captured = [];
 const ask = async (label, req, pick) => {
   modals.length = 0;

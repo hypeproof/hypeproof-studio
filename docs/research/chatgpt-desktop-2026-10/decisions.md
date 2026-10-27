@@ -1064,7 +1064,14 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Whitespace-only changes read "글자는 그대로, 띄어쓰기·줄바꿈만 달라져요", not "그대로" (diffGuard ignores whitespace inside a unit).
 - Unknown is a warning, not silence: when the change cannot be computed for an existing file, the dialog says so with the reason. The call's text is taken only from host-built requests (`sdkToolToActionRequest`); a webview-origin request never supplies it, so it cannot forge "내용은 그대로예요".
 - Race: the file's sha256 (or absence) at prompt time must still hold after the answer, else the write is refused. A file that appears during the dialog is refused too: that would be an overwrite with no summary.
-- Not built: DES-ART-21 bar and diff link (CGP-ART-D-021).
+- Not built: DES-ART-21 bar and diff link (CGP-ART-D-021). Built by CGP-ART-D-021 below.
+
+## CGP-ART-D-021: change bar and "바뀐 곳 보기" in the write approval (2026-10-27, agent-selected conservative implementation)
+
+- Bar: 4 steps tied to the existing label thresholds, not a straight quarter split, so the bar never shows more than the words ("거의 전부" only with 4 steps; a 51% rewrite fills 3). Identical or whitespace-only text fills 0; pure additions (no existing line changed) fill 1. A text equivalent is the visible percentage plus `role="img"` named "바뀌는 정도 {pct} · 4칸 중 N칸".
+- Diff: a read-only VS Code diff editor (virtual documents from a per-window content provider), opened beside the chat with `preserveFocus`, so the in-panel dialog keeps focus and the chat panel is not hidden (hiding it could reload the webview and cancel the approval). Left is the text the summary was computed from, not a re-read, so the numbers and the diff describe the same bytes. The webview sends only the request id and file index; the host ignores any id that is not pending and any index without a measured difference.
+- Lifetime: texts are dropped and the diff tab closed when the approval is answered, cancelled or replaced (including a tab that finished opening after the answer). Opening the diff is never an answer and does not refresh the summary; the fingerprint re-check still refuses a file that changed while the dialog was open.
+- Default state: follows the existing optional write approval (off unless `writeFile` is in `requireApprovalFor`); no new data flow, permission or recipient. Learner 44px target and 14px text win over the register's "link" styling.
 
 ## CGP-ART-R-006: style tweak for a picked element (2026-10-25, agent-selected conservative implementation)
 
