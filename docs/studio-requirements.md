@@ -7740,5 +7740,14 @@ replay. The DEV owner routes authenticated intent messages separately from previ
 and asks the normal composer for nonce-bound snapshots before and after desktop
 review. Visible import requires the same UI generation and a rendered acknowledgement;
 newer text and attachments remain intact. The distinct encrypted import receipt
-is not a model result. Normal-engine execution, result preservation and
+is not a model result. The ordinary desktop Send may bind an unchanged presented
+phone draft to its actual user message, turn, complete pre-turn restore point,
+and measured artifact hashes. Native edits lose automatic phone provenance.
+Only a positively matched phone draft requires the selected artifact's exact
+previous bytes in the restore point before runtime admission; other native Sends
+keep their existing behavior. An interrupted reservation remains unknown and
+cannot be rebound automatically. Completion metadata describes the normal turn,
+not model quality or release acceptance. The existing single handoff slot remains
+occupied; this slice does not enable repeated mobile revisions. Installed
+normal-engine execution, result preservation and
 two-learner/classroom evidence remain required for DMC-5.

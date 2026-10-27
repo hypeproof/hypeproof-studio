@@ -1,4 +1,4 @@
-import { validCompanionDesktopHandoff, validCompanionDesktopHandoffRecord, type CompanionDesktopHandoffCheckpoint, type CompanionDesktopHandoffRecord } from './companionDesktopHandoff.ts';
+import { validCompanionDesktopHandoff, validCompanionDesktopHandoffRecord, type CompanionDesktopHandoffCheckpoint, type CompanionDesktopHandoffRecord, type CompanionAuthoringRun, type CompanionAuthoringSendSource } from './companionDesktopHandoff.ts';
 import { ATTEMPT_KEYS, validAttemptMeta } from './answerAttempts.ts';
 import { shellLabel } from "./shellDisplay.ts";
 import { storedDenialNotice } from "./denialNotice.ts";
@@ -434,7 +434,7 @@ export class TaskWorkspaceStore {
   private companionHandoffOperation(expected: TaskWorkspaceExpected,
     change: (held: CompanionDesktopHandoffRecord | null) => CompanionDesktopHandoffRecord | null,
     draftImport?: { draft: ActivityDraft; isCurrent(): boolean },
-    isCurrent?: () => boolean): Promise<CompanionDesktopHandoffRecord | null> {
+    isCurrent?: () => boolean, currentTaskRevision = false): Promise<CompanionDesktopHandoffRecord | null> {
     const expectedAt = { ...expected };
     const commitCurrent = draftImport?.isCurrent ?? isCurrent;
     const operation = this.queue.then(async () => {
@@ -446,7 +446,7 @@ export class TaskWorkspaceStore {
         if (!info.isFile() || info.isSymbolicLink()) fail('corrupt', '작업 기록의 위치를 확인해야 합니다.');
         const disk = decode(await readFile(this.filePath, 'utf8'), this.scope);
         if (JSON.stringify(disk) !== JSON.stringify(this.data)) fail('stale', '다른 창에서 작업이 바뀌었어요. 최신 작업에서 다시 확인해 주세요.');
-        this.checkExpected(disk, expectedAt);
+        this.checkExpected(disk, currentTaskRevision ? {...expectedAt,revision:disk.revision} : expectedAt);
         let held: CompanionDesktopHandoffRecord | null = null;
         try {
           const info = await lstat(this.companionHandoffPath);
@@ -537,6 +537,57 @@ export class TaskWorkspaceStore {
         || this.getDraft().text!==held.checkpoint.reviewedIntent) return fail('stale','가져온 입력을 다시 확인해야 해요.');
       return {...held,authoringImport:{...held.authoringImport,presented:true}};
     }, undefined, isCurrent).then(()=>undefined);
+  }
+  /** Capture before the ordinary composer clears. Edited text carries no automatic phone provenance. */
+  captureCompanionAuthoringSend(expected: TaskWorkspaceExpected, submitted: string, userMessageId: string,
+    draft: ActivityDraft): Promise<CompanionAuthoringSendSource | null> {
+    const saved = clone(draft); let source: CompanionAuthoringSendSource | null = null;
+    return this.companionHandoffOperation({...expected}, held=>{
+      if (held?.authoringRun?.userMessageId === userMessageId) return fail('stale','이 휴대폰 요청의 보내기는 이미 기록했어요. 자동으로 다시 실행하지 않아요.');
+      if (!held || held.authoringImport?.state !== 'imported' || !held.authoringImport.presented
+        || held.checkpoint.target.taskId !== expected.taskId || held.checkpoint.reviewedIntent !== saved.text
+        || submitted !== saved.text.trim()
+        || saved.images.length || saved.queued !== null || saved.inlineEdit || saved.imports?.length || saved.recovered?.length) return held;
+      if (held.authoringRun) return fail('stale','이 휴대폰 요청의 실행 기록을 먼저 확인해 주세요.');
+      // A React autosave/clear may already be queued ahead of this read. It does
+      // not change the frozen Send; a different native draft or tool mode does.
+      const current = this.getDraft();
+      if ((current.text && current.text !== saved.text) || current.images.length || current.queued !== null
+        || current.inlineEdit || current.imports?.length || current.recovered?.length || (current.toolMode??'auto')!==(saved.toolMode??'auto'))
+        return fail('stale','현재 입력이 바뀌었어요. 휴대폰 요청의 보내기를 다시 확인해 주세요.');
+      source = Object.freeze({requestId:held.checkpoint.id,requestHash:held.authoringImport.requestHash,taskId:held.checkpoint.target.taskId,
+        text:submitted,artifactId:held.checkpoint.target.artifactId,artifactVersion:held.checkpoint.target.artifactVersion});
+      return held;
+    },undefined,undefined,true).then(()=>source);
+  }
+  /** Durable reservation BEFORE the existing runner. Any interrupted reservation remains unknown. */
+  bindCompanionAuthoringRun(source: CompanionAuthoringSendSource, run: CompanionAuthoringRun,
+    expected: TaskWorkspaceExpected, isCurrent: () => boolean): Promise<void> {
+    const saved = clone(source), binding = clone(run);
+    return this.companionHandoffOperation({...expected}, held=>{
+      if (!isCurrent() || !held || held.checkpoint.id !== saved.requestId || held.authoringImport?.requestHash !== saved.requestHash
+        || !held.authoringImport.presented || held.checkpoint.target.taskId !== expected.taskId || saved.taskId !== expected.taskId
+        || held.checkpoint.reviewedIntent.trim() !== saved.text || held.checkpoint.target.artifactId !== saved.artifactId
+        || held.checkpoint.target.artifactVersion !== saved.artifactVersion || binding.beforeArtifactVersion !== saved.artifactVersion
+        || binding.submittedHash !== hash(saved.text) || binding.state !== 'outcome_unknown' || held.authoringRun)
+        return fail('stale','검토한 휴대폰 요청이나 현재 작업이 바뀌었어요. 다시 확인해 주세요.');
+      const draft = this.getDraft();
+      if ((draft.text && draft.text !== held.checkpoint.reviewedIntent) || draft.images.length || draft.queued !== null || draft.inlineEdit || draft.imports?.length || draft.recovered?.length)
+        return fail('stale','새로 작성한 입력은 그대로 두었어요. 휴대폰 요청의 보내기를 다시 확인해 주세요.');
+      return {...held,authoringRun:binding};
+    },undefined,isCurrent).then(()=>undefined);
+  }
+  finishCompanionAuthoringRun(source: CompanionAuthoringSendSource, turnId: string,
+    result: Pick<CompanionAuthoringRun,'state'|'afterArtifactVersion'> & Partial<Pick<CompanionAuthoringRun,'runtime'>>, expected: TaskWorkspaceExpected,
+    isCurrent: () => boolean): Promise<void> {
+    const saved = clone(result);
+    return this.companionHandoffOperation({...expected}, held=>{
+      if (!isCurrent() || !held || held.checkpoint.id !== source.requestId || held.authoringImport?.requestHash !== source.requestHash
+        || held.checkpoint.target.taskId !== expected.taskId || held.authoringRun?.turnId !== turnId
+        || (held.authoringRun.state !== 'outcome_unknown' && JSON.stringify({...held.authoringRun,...saved}) !== JSON.stringify(held.authoringRun)))
+        return fail('stale','이 요청의 실행 결과를 확인하지 못했어요. 자동으로 다시 실행하지 않아요.');
+      return {...held,authoringRun:{...held.authoringRun,...saved}};
+    },undefined,isCurrent).then(()=>undefined);
   }
   acceptCompanionHandoff(id: string, digest: string, expected: TaskWorkspaceExpected, now = Date.now()): Promise<CompanionDesktopHandoffRecord> {
     return this.companionHandoffOperation({ ...expected }, held => {

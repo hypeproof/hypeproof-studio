@@ -224,6 +224,8 @@ import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
+import { companionAuthoringRun } from './companionAuthoringSend';
+import type { CompanionAuthoringRun, CompanionAuthoringSendSource } from './companionDesktopHandoff';
 import { readWorkspaceThumbnail } from "./artifactThumbnail";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
@@ -599,6 +601,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Native DEV data adapter only. Does not bypass ordinary Send or any runtime admission. */
   companionTaskStore(): TaskWorkspaceStore | null {
     return this.taskChanging || this.connectionChanging ? null : this.currentTaskStore() ?? null;
+  }
+  private async freezeCompanionAuthoringSend(text: string, userMessageId: string | undefined, source?: vscode.Webview) {
+    const store = this.companionTaskStore(), view = store?.getView(), epoch = this.opsRuntimeGeneration();
+    if (!store || !view?.activeTaskId || !userMessageId || !source || (source!==this.editorChat?.webview && source!==this.view?.webview)) return null;
+    const current = () => this.companionTaskStore()===store && store.getView().activeTaskId===view.activeTaskId
+      && this.opsRuntimeGeneration()===epoch && (source===this.editorChat?.webview || source===this.view?.webview);
+    let captured: CompanionAuthoringSendSource | null;
+    try { captured = await store.captureCompanionAuthoringSend({taskId:view.activeTaskId,revision:view.revision},text,userMessageId,store.getDraft()); }
+    catch(error) {
+      // A corrupt optional sidecar cannot grant provenance or change ordinary native Send behavior.
+      if (error instanceof TaskWorkspaceStoreError && (error.code==='corrupt' || error.code==='io')) return null;
+      throw error;
+    }
+    if (!captured) return null;
+    if (!current()) throw Error('휴대폰 요청의 작업이 바뀌었어요. 현재 입력을 다시 확인해 주세요.');
+    return {store,source:captured,current};
   }
   async reviewCompanionDraft(taskId: string, isCurrent: () => boolean): Promise<import('./companionAuthoringHost').CompanionDraftReview> {
     const store = this.companionTaskStore(), activityId = activityConnections(this.context)?.scope;
@@ -6723,7 +6741,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** Before a coach turn: record the work folder. Never throws; a failure is one visible line and the turn runs without a revert. */
-  private async beginTurnRestore(streamId: string): Promise<{ store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string } | null> {
+  private async beginTurnRestore(streamId: string): Promise<{ store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string; retain?: boolean } | null> {
     const pageCardScope = this.pageCardScope();
     if (this.turnReview) { this.turnReview = null; this.postTurnReview(); }
     if (this._instructorMode?.isInstructor === true) {
@@ -6766,7 +6784,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** After a coach turn: compare the folder with the turn's restore point and offer the review bar when anything changed. Never throws. */
-  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string } | null, streamId: string, messageId: string, assistantText = ""): Promise<void> {
+  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string; pageCardScope?: string; retain?: boolean } | null, streamId: string, messageId: string, assistantText = ""): Promise<Awaited<ReturnType<typeof scanFolder>> | void> {
     if (!handle) return;
     try {
       const now = await scanFolder(handle.root);
@@ -6779,7 +6797,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // CGP-KNOW-D-016 — the turn's task and assistant row, so the file's info popover can open this turn.
       await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now, { taskId: handle.taskKey, messageId });
       void this.postArtifactProvenance(false);
-      if (changeCount(changes) === 0) { await dropRestorePoint(handle.store, handle.point.id); return; }
+      if (changeCount(changes) === 0) { if (!handle.retain) await dropRestorePoint(handle.store, handle.point.id); return now; }
       // REQ-STUDIO-PAGE-CARD — the same diff (a stopped turn included) names the pages; the card sits under the
       // turn's last transcript row. `pending-` lines are hidden once done, so they cannot carry it. A card that
       // cannot be built never costs the review bar below.
@@ -6803,6 +6821,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.turnReview.view = { ...this.turnReview.view, checkpoint: { suggestion: suggestion.message, source: suggestion.source, history } };
       }
       this.postTurnReview();
+      return now;
     } catch {
       // The folder could not be read after the turn: no bar; the point stays until pruned.
       await this.provenanceRecorder()?.unobserved(handle.root);
@@ -7481,13 +7500,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postConfig();
         return;
       }
-      case "sendMessage":
+      case "sendMessage": {
+        let companionSend: Awaited<ReturnType<ChatPanelProvider['freezeCompanionAuthoringSend']>> = null;
+        if (!msg.editOf && !msg.images?.length && !msg.attachments?.length && !msg.imports?.length) {
+          try { companionSend = await this.freezeCompanionAuthoringSend(msg.text,msg.userMessageId,source); }
+          catch(error) {
+            await this.post({type:'inputRejected',text:msg.text,images:msg.images,toolMode:requestedMode});
+            await this.post({type:'streamError',streamId:'activity',error:error instanceof Error?error.message:'휴대폰 요청의 보내기 기록을 확인하지 못했어요.'});
+            return;
+          }
+        }
         // REQ-STUDIO-MISSING-TASK-FOLDER — no turn starts in a folder that is gone; the draft stays. Other seats
-        // pass without an await, so their send still reaches its first await exactly as before.
+        // preserve their existing missing-folder behavior after the provenance read.
         if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(msg.text, msg.images, requestedMode); return; }
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true); // CGP-CHAT-R-011 — a fresh send may carry the attached file
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true, companionSend); // CGP-CHAT-R-011 — a fresh send may carry the attached file
         return;
+      }
       case "prepareAttachments": {
         const result = this.prepareAttachments(msg.files, msg.sketch === true);
         await this.post({type:"attachmentsPrepared",requestId:msg.requestId,failures:result.failures}); return;
@@ -7929,6 +7958,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     editOf?: string,
     /** CGP-CHAT-R-011 — a fresh send (never a retry) takes the attached file when its model turn starts. */
     carryFile = false,
+    companionSend: Awaited<ReturnType<ChatPanelProvider['freezeCompanionAuthoringSend']>> = null,
   ): Promise<void> {
     const mode = turnToolMode(requestedMode);
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
@@ -8406,6 +8436,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } = { current: null };
     // AE-15 / CGP-ART-R-002 — the work folder as it was before this turn; the review bar compares against it.
     const turnRestorePoint = await this.beginTurnRestore(streamId);
+    if (companionSend && turnRestorePoint) turnRestorePoint.retain = true;
+    let companionBinding: CompanionAuthoringRun | undefined;
+    const bindCompanion = async (runtime: CompanionAuthoringRun['runtime']) => {
+      if (!companionSend) return;
+      if (!companionSend.current() || ctrl.signal.aborted) throw Error('휴대폰 요청의 현재 작업이 바뀌어 실행하지 않았어요.');
+      const binding = companionAuthoringRun(companionSend.source,userId,streamId,turnRestorePoint,runtime);
+      const view = companionSend.store.getView();
+      await companionSend.store.bindCompanionAuthoringRun(companionSend.source,binding,{taskId:view.activeTaskId,revision:view.revision},()=>companionSend.current()&&!ctrl.signal.aborted);
+      companionBinding = binding;
+      if (!companionSend.current() || ctrl.signal.aborted) throw Error('휴대폰 요청의 실행 여부를 확인하지 못했어요. 다시 실행하지 않았어요.');
+    };
     // REQ-STUDIO-DELEGATION-ROW — rows this turn left open are closed at its end (stop excepted).
     let delegations: DelegationTracker | null = null;
     const closeDelegations = (reason: string) => {
@@ -8803,6 +8844,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         seatProvider: selection?.provider ?? null,
       };
       const runProxyRuntime = async () => {
+        if (companionSend && !companionBinding) await bindCompanion('proxy');
         if (profile?.browser_control?.enabled) {
           await this.runBrowserLoop({
             generalBrowserRequest,
@@ -8958,6 +9000,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const chalkCtx = undefined; // student local path never has instructor chalkCtx
+          if (companionSend) await bindCompanion('local');
           const result=await runLocalCoach({config:local,profile,cwd,
             history:history.map(m=>({role:m.role,content:m.content})),userText:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,chalkCtx,
@@ -8986,6 +9029,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.maybeOfferSdkSeed(profile, cfg.get<string>("sdkBinaryPath", "") || undefined, ctrl.signal);
         try {
           const delegationScope=JSON.stringify([this.turnRequestScope(),this.profileGeneration]);
+          if (companionSend) await bindCompanion('agent-sdk');
           const sdkEnd = await runSdkCoach({
             processes: { registry: this.runningProcesses, prefix: `sdk:${streamId}:` },
             toolMode: mode,
@@ -9216,7 +9260,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       else if (!ctrl.signal.aborted) {
         // An edited request with no answer has not reached persisted history.
         // Preserve it through the existing durable recovery path before reporting the error.
-        if (mode === 'web-search' || (versionOf && assistantText.length === 0)) await this.post({ type: 'inputRejected', text, images, toolMode: mode });
+        if ((companionSend && !companionBinding) || mode === 'web-search' || (versionOf && assistantText.length === 0)) await this.post({ type: 'inputRejected', text, images, toolMode: mode });
         await this.handleSendError(err, streamId, { profile, proxyUrl, token, signal: ctrl.signal });
       }
       // #1298 — revert model choice if a direct-entry model caused this turn to fail.
@@ -9296,7 +9340,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await Promise.race([Promise.allSettled(pendingReveals), new Promise((r) => { timer = setTimeout(r, 10_000); })]);
         clearTimeout(timer);
       }
-      await this.endTurnRestore(turnRestorePoint, streamId, messageId, assistantText);
+      const companionAfter = await this.endTurnRestore(turnRestorePoint, streamId, messageId, assistantText);
+      if (companionSend && companionBinding) {
+        try {
+          const binding = companionBinding;
+          const file = companionAfter?.files.find(file=>file.path===binding.artifactPath);
+          const view = companionSend.store.getView();
+          await companionSend.store.finishCompanionAuthoringRun(companionSend.source,streamId,{
+            runtime:binding.runtime==='local'?'local':spoolRuntime??binding.runtime,
+            state:ctrl.signal.aborted?'outcome_unknown':spoolStatus==='error'?'failed':companionAfter?.complete&&file?'completed':'outcome_unknown',
+            ...(file?{afterArtifactVersion:file.sha256}:{}),
+          },{taskId:view.activeTaskId,revision:view.revision},companionSend.current);
+        } catch { this.postToolLog(streamId,{id:`companion-run-${streamId}`,icon:'⚠️',label:'휴대폰 요청의 실행 결과 기록을 확인하지 못했어요. 자동으로 다시 실행하지 않아요.',state:'error'}); }
+      }
       this.delegationControls.delete(streamId);
       this.activeStreams.delete(streamId);
       // cr-verify — the run this turn carried takes no more coach calls once the turn ends.

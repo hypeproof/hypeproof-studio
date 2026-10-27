@@ -18,6 +18,16 @@ export interface CompanionDesktopHandoffRecord {
   status: 'pending' | 'accepted'; acceptedAt?: number;
   /** Draft import receipt only; never a model turn or execution receipt. */
   authoringImport?: { requestHash: string; state: 'review' | 'prepared' | 'imported'; revision?: number; presented?: true };
+  /** Ordinary desktop Send provenance only. Reservation is not proof of provider dispatch. */
+  authoringRun?: CompanionAuthoringRun;
+}
+export interface CompanionAuthoringSendSource {
+  requestId: string; requestHash: string; taskId: string; text: string; artifactId: string; artifactVersion: string;
+}
+export interface CompanionAuthoringRun {
+  userMessageId: string; turnId: string; submittedHash: string;
+  restorePointId: string; restoreDigest: string; artifactPath: string; beforeArtifactVersion: string;
+  runtime: 'agent-sdk' | 'proxy' | 'local'; state: 'outcome_unknown' | 'completed' | 'failed'; afterArtifactVersion?: string;
 }
 export const COMPANION_HANDOFF_TEXT_BYTES = 2048;
 const encoder = new TextEncoder();
@@ -45,7 +55,8 @@ export function validCompanionDesktopHandoff(value: unknown): value is Companion
     && encoder.encode(JSON.stringify(value)).length <= 8192;
 }
 export function validCompanionDesktopHandoffRecord(value: unknown): value is CompanionDesktopHandoffRecord {
-  return object(value) && Object.keys(value).every(k=>['checkpoint','digest','status','acceptedAt','authoringImport'].includes(k))
+  return object(value) && Object.keys(value).every(k=>['checkpoint','digest','status','acceptedAt','authoringImport','authoringRun'].includes(k))
+    && (value.authoringRun === undefined || validCompanionAuthoringRun(value.authoringRun) && object(value.authoringImport) && value.authoringImport.presented === true)
     && (value.authoringImport === undefined || object(value.authoringImport)
       && Object.keys(value.authoringImport).every(k=>['requestHash','state','revision','presented'].includes(k))
       && (value.authoringImport.presented === undefined || value.authoringImport.presented === true && value.authoringImport.state === 'imported')
@@ -53,6 +64,16 @@ export function validCompanionDesktopHandoffRecord(value: unknown): value is Com
       && (value.authoringImport.state === 'imported' ? integer(value.authoringImport.revision) : value.authoringImport.revision === undefined))
     && validCompanionDesktopHandoff(value.checkpoint) && digest(value.digest)
     && (value.status === 'pending' ? value.acceptedAt === undefined : value.status === 'accepted' && integer(value.acceptedAt));
+}
+export function validCompanionAuthoringRun(value: unknown): value is CompanionAuthoringRun {
+  return object(value) && Object.keys(value).every(k=>['userMessageId','turnId','submittedHash','restorePointId','restoreDigest','artifactPath','beforeArtifactVersion','runtime','state','afterArtifactVersion'].includes(k))
+    && id(value.userMessageId) && id(value.turnId) && value.restorePointId === value.turnId && digest(value.submittedHash)
+    && digest(value.restoreDigest) && digest(value.beforeArtifactVersion)
+    && typeof value.artifactPath === 'string' && value.artifactPath.length > 0 && value.artifactPath.length <= 4096
+    && !value.artifactPath.includes('\\') && !value.artifactPath.includes('\0') && !value.artifactPath.startsWith('/') && !value.artifactPath.split('/').includes('..')
+    && ['agent-sdk','proxy','local'].includes(String(value.runtime)) && ['outcome_unknown','completed','failed'].includes(String(value.state))
+    && (value.afterArtifactVersion === undefined || digest(value.afterArtifactVersion))
+    && (value.state !== 'completed' || digest(value.afterArtifactVersion));
 }
 export function sameCompanionDesktopHandoffTarget(a: CompanionDesktopHandoffTarget, b: CompanionDesktopHandoffTarget): boolean {
   return [...targetIds,...targetNumbers,'artifactVersion'].every(k=>a[k as keyof CompanionDesktopHandoffTarget]===b[k as keyof CompanionDesktopHandoffTarget]);
