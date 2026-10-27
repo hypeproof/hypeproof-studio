@@ -14297,6 +14297,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/live-follow-hostile.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/live-follow-design.smoke.mjs"
         }
       ]
     },
@@ -15524,6 +15527,65 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/artifact-info-computed.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-DECK-SLIDE-PANEL",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-SLIDE-SUGGEST"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Deck slide suggestion panel (CGP-ART-D-016)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/artifacts-canvas-media.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-DECK-SLIDE-PANEL",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-SLIDE-PANEL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/slideStudio.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/slideStudioHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/slideSuggestion.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-DECK-SLIDE-PANEL",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DECK-SLIDE-PANEL",
+        "ST-IMP-DECK-SLIDE-PANEL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/slide-studio-computed.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/slide-studio-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/slide-suggestion.smoke.mjs"
         }
       ]
     }

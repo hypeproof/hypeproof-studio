@@ -16,6 +16,8 @@ const css=app.outputFiles.find(f=>f.path.endsWith('.css')).text;
 const js=await build({stdin:{contents:`import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {ChatPanel} from './src/ChatPanel';function Fixture(){const [props,setProps]=useState(window.fixture);window.patch=patch=>setProps(old=>({...old,...patch}));return <ChatPanel {...props}/>};createRoot(document.getElementById('root')).render(<Fixture/>);`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
 const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER==='1')throw Error('Chromium required');console.log('NOT RUN task activity layout: no Chromium');process.exit(0);}
 const evidence=process.env.TASK_ACTIVITY_EVIDENCE;if(evidence)mkdirSync(evidence,{recursive:true});const pause=(ms=120)=>new Promise(r=>setTimeout(r,ms));
+// Condition waits for the CGP-ART-D-020 checks: poll the page until the expression holds (no fixed delay).
+const until=async(expr,what,ms=5000)=>{const end=Date.now()+ms;for(;;){if(await b.evaluate(expr))return;if(Date.now()>end)throw Error(`timed out: ${what}`);await new Promise(r=>setImmediate(r));}};
 const f=(id,verb,target,inside)=>({id,verb,target,...(inside?{inside:true}:{})});
 const searches=Array.from({length:25},(_,i)=>f(`q${i}`,'search',`검색어 ${i+1}`));
 const activity=[f('r1','read','index.html',1),f('r2','read','css/style.css',1),f('r3','read','index.html',1),f('r4','read','notes/아주/긴/폴더/이름이/계속/이어지는/경로/그리고/더/깊은/하위/폴더/마지막-파일-이름.md',1),
@@ -45,9 +47,36 @@ const b=await launch(bin);try{for(const seat of ['personal','classroom'])for(con
  assert.deepEqual([list.n,list.expanded,list.more],[20,'true','더 보기 (5개)']);assert.ok(list.moreH>=44&&list.font>=14,JSON.stringify(list));
  await b.evaluate(`document.querySelector('.hps-task-activity-more').click()`);await pause();assert.equal(await b.evaluate(`document.querySelectorAll('#hps-task-activity-list li').length`),25);
  // 읽음: the long path is middle-ellipsized on screen, whole for assistive tech.
- await b.evaluate(`${chip('읽음')}.click()`);await pause();
- const read=await b.evaluate(`[...document.querySelectorAll('#hps-task-activity-list li .hps-task-activity-target')].map(e=>({shown:e.querySelector('[aria-hidden]').textContent,full:e.querySelector('.hps-sr-only').textContent}))`);
+ await b.evaluate(`${chip('읽음')}.click()`);await until(`${chip('읽음')}.getAttribute('aria-expanded')==='true'`,'읽음 opens');
+ // CGP-ART-D-020: opening one chip collapses the other's list.
+ assert.equal(await b.evaluate(`${chip('검색')}.getAttribute('aria-expanded')`),'false','one list open at a time');
+ const names=`[...document.querySelectorAll('#hps-task-activity-list li .hps-task-activity-target')].map(e=>{const s=e.querySelector('[aria-hidden]');return {shown:s.textContent,full:e.querySelector('.hps-sr-only').textContent,lines:s.getClientRects().length}})`;
+ const read=await b.evaluate(names);
  assert.deepEqual(read.map(r=>r.full),['index.html','css/style.css','notes/아주/긴/폴더/이름이/계속/이어지는/경로/그리고/더/깊은/하위/폴더/마지막-파일-이름.md']);assert.ok(read[2].shown.includes('…')&&read[2].shown.endsWith('이름.md'),JSON.stringify(read[2]));
+ // CGP-ART-D-020: a middle-ellipsized name fits one line at every width (320 included); short names stay whole.
+ assert.ok(read.every(r=>r.lines===1),`one line per name at ${width}: ${JSON.stringify(read)}`);assert.deepEqual(read.slice(0,2).map(r=>r.shown),['index.html','css/style.css']);
+ if(seat==='personal'&&dark&&width===1420){
+  // Refit on resize: the same open list narrowed to 320 px still shows each name on one line.
+  await b.send('Emulation.setDeviceMetricsOverride',{width:320,height:900,deviceScaleFactor:1,mobile:false});
+  await until(`(${names}).every(r=>r.lines===1)&&(${names})[2].shown.length<${JSON.stringify(read[2].shown.length)}`,'names refit at 320');
+  await b.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+  await until(`(${names})[2].shown===${JSON.stringify(read[2].shown)}`,'names refit back at 1420');
+  // Hostile names: the cut never lands inside a grapheme, the extension survives, and resizing settles (no refit loop).
+  const nasty=['👨‍👩‍👧‍👦'.repeat(15)+'.png','é'.repeat(60)+'.txt','한글'.normalize('NFD').repeat(25)+'.md','🇰🇷'.repeat(30)+'.md','보고서-'.repeat(20)+'.xlsx','report.'+'x'.repeat(70)];
+  await b.evaluate(`window.patch({messages:window.fixture.messages.map(m=>m.id==='a1'?{...m,activity:${JSON.stringify(nasty.map((t,i)=>f('n'+i,'read',t,1)))}}:{...m,activity:undefined}).filter(m=>m.id!=='a2')})`);
+  await until(`(${chip('읽음')}).textContent==='읽음 6'`,'hostile names planted');
+  await b.evaluate(`(${chip('읽음')}).getAttribute('aria-expanded')==='true'||(${chip('읽음')}).click()`);await until(`document.querySelectorAll('#hps-task-activity-list li').length===6`,'hostile list open');
+  const whole=`(()=>{const seg=new Intl.Segmenter('und',{granularity:'grapheme'});return (${names}).map(r=>{const[h,t]=r.shown.split('…');if(t===undefined)return {ok:r.shown===r.full,...r};const bounds=new Set();let at=0;for(const g of seg.segment(r.full)){at+=g.segment.length;bounds.add(at)}return {ok:bounds.has(h.length)&&bounds.has(r.full.length-t.length)&&r.full.startsWith(h)&&r.full.endsWith(t),...r}})})()`;
+  const settle=async()=>{await b.evaluate(`window.__m=0;window.__mo?.disconnect();window.__mo=new MutationObserver(m=>{window.__m+=m.length});window.__mo.observe(document.querySelector('#hps-task-activity-list'),{subtree:true,childList:true,characterData:true,attributes:true});window.__quiet=0;(function tick(){window.__quiet=window.__m?0:window.__quiet+1;window.__m=0;requestAnimationFrame(tick)})()`);await until(`window.__quiet>=5`,'refit settled (5 quiet frames)');};
+  for(const w of [1420,320,600,1420]){await b.send('Emulation.setDeviceMetricsOverride',{width:w,height:900,deviceScaleFactor:1,mobile:false});await settle();
+   const rows=await b.evaluate(whole);assert.ok(rows.every(r=>r.ok),`graphemes whole at ${w}: ${JSON.stringify(rows.filter(r=>!r.ok))}`);
+   const ext=rows.map(r=>r.shown);assert.ok(ext[5].endsWith('x')&&ext[4].endsWith('.xlsx'),`extension kept at ${w}: ${JSON.stringify(ext)}`);
+   if(w>=600)assert.ok(rows.every(r=>r.lines===1),`one line at ${w}: ${JSON.stringify(rows)}`);}
+  await b.evaluate(`window.__mo?.disconnect();window.patch({messages:window.fixture.messages})`);await until(`(${chip('읽음')}).textContent==='읽음 3'&&document.querySelectorAll('.hps-task-activity-chip').length===5`,'fixture restored');
+ }
+ // CGP-ART-D-020: the row is collapsible: pressing the open chip again folds its list back to the chips.
+ await b.evaluate(`${chip('읽음')}.click()`);await until(`!document.querySelector('#hps-task-activity-list')`,'읽음 collapses');
+ assert.deepEqual(await b.evaluate(`[...document.querySelectorAll('.hps-task-activity-chip')].map(c=>c.getAttribute('aria-expanded'))`),['false','false','false','false','false'],'collapsed: chips only');
  // 바꿈 without a review: no link, an honest note.
  await b.evaluate(`${chip('바꿈')}.click()`);await pause();
  assert.equal(await b.evaluate(`document.querySelectorAll('.hps-task-activity-review').length`),0);assert.ok(await b.evaluate(`!!document.querySelector('.hps-task-activity-note')`));

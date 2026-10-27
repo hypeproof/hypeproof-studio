@@ -118,8 +118,10 @@ import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
 import { answerPromptSources, answerProposal, answerSources, applyWikiProposal, archiveNotes, brainIntent, brainIntro, brainName, brainSummary, coachContext, defaultIngestSession, firstCoachTurn, ingestReport, initWiki, josa, jsonFromText, loadState, newState, productTitle, proposalPreview, readNotes, renderWikiPages, ro, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, writeWiki, type BrainIntent, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
-import { applyDeckProposal, applySlideText, deckPrompt, deckReport, deckRepairPrompt, refusedSlides, renderDeck, slideTextItems, type DeckProposal, type DeckRun } from "./deckGenerator";
-import { applySlidePatch, checkSlidePatch, slideChips, slidePatchDetail, slideSuggestionPrompt, type SlideChip } from "./slideSuggestion";
+import { applyDeckProposal, applySlideText, deckPrompt, deckReport, deckRepairPrompt, refusedSlides, renderDeck, slideTextItems, type DeckProposal, type DeckRun, type DeckTemplate } from "./deckGenerator";
+import { applySlidePatch, checkSlidePatch, slideChips, slideSuggestionPrompt } from "./slideSuggestion";
+import { slideStudioProposal, slideStudioView } from "./slideStudio";
+import { openSlideStudio, type SlideStudioUi } from "./slideStudioHost";
 import { applyHumanized, humanizePrompt, type HumanizeProposal } from "./humanizer";
 import { ReviewSession, directorAvailable } from "./reviewSession";
 import { qrDataUrl } from "./testQr";
@@ -2577,68 +2579,82 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * The command "덱 장 다듬기" (CGP-ART-R-016, REQ-STUDIO-DECK-SLIDE-SUGGEST): the student picks one drafted
-   * slide and one of its (at most three) suggestion chips; one model request proposes a patch for that slide
-   * only, slideSuggestion.ts gates it, and the before/after proposal is shown with 반영 and 그대로. Nothing is
-   * written unless the student picks 반영, and then only while that slide is still the one the patch was
-   * computed from. One run at a time.
+   * The command "덱 장 다듬기" (CGP-ART-R-016, REQ-STUDIO-DECK-SLIDE-SUGGEST; panel CGP-ART-D-016): a panel shows
+   * the drafted slides as thumbnails with at most three suggestion chips under the selected one. A chip is one
+   * model request for a patch to that slide only; slideSuggestion.ts gates it, and the proposal is shown side by
+   * side (지금 / 바꾼 안) with 반영 and 그대로. Nothing is written unless the student picks 반영, and then only
+   * while that slide is still the one the patch was computed from. One run at a time; the panel stays open for
+   * the next chip until it is closed.
    */
   async deckSlideSuggest(): Promise<void> {
-    if (this.slideSuggestBusy) { this.postPageNotice("장을 다듬는 중이에요. 끝난 뒤 다시 골라 주세요."); return; }
+    if (this.slideSuggestBusy) { this.slideStudio?.reveal(); this.postPageNotice("장을 다듬는 중이에요. 끝난 뒤 다시 골라 주세요."); return; }
     this.slideSuggestBusy = true;
     try {
       const run = await this.runSlideSuggest();
       if (run) await this.showBrainRun(run);
     } finally {
+      this.slideStudio?.dispose();
+      this.slideStudio = undefined;
       this.slideSuggestBusy = false;
     }
   }
   private slideSuggestBusy = false;
+  private slideStudio: SlideStudioUi | undefined;
+  /** The panel factory (a seam for the host smoke). */
+  private openSlideStudio: () => SlideStudioUi = openSlideStudio;
 
-  private async runSlideSuggest(): Promise<BrainRun | undefined> {
+  /** The deck the panel works on, re-read and re-gated on every step; `lines` is the refusal to show. */
+  private slideSuggestDeck(): { plan: LearningWikiPlan; template: DeckTemplate; dir: string; state: WikiState } | { lines: string[] } {
     const plan = this.learningWikiPlan();
-    if (!this.isLearningWikiEnabled()) { await this.postDenialNotice("lesson"); return { lines: [lessonFeatureOff("덱 다듬기", this.getSeatAudience())] }; }
+    if (!this.isLearningWikiEnabled()) return { lines: [lessonFeatureOff("덱 다듬기", this.getSeatAudience())] };
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder || !plan?.deck) return { lines: ["이 수업에는 덱 템플릿이 없어요."] };
-    const template = plan.deck;
     const dir = wikiDir(folder.uri.fsPath, plan);
     const folderBlocked = this.folderWriteRefusalFor(dir);
     if (folderBlocked) return { lines: [folderBlocked] };
     const state = loadState(dir);
-    const drafted = state ? template.slides.filter((x) => state.deck[String(x.no)]) : [];
-    if (!state || !drafted.length) return { lines: ["아직 초안을 쓴 장이 없어요. 먼저 덱 초안을 만들어 주세요."] };
-    const slide = await vscode.window.showQuickPick(
-      drafted.map((x) => ({ label: `${x.no} · ${x.title}`, description: state.deck[String(x.no)].headline, no: x.no })),
-      { placeHolder: "다듬을 장을 고르세요" },
-    );
-    if (!slide) return undefined;
-    const chip = await vscode.window.showQuickPick(
-      slideChips(state, slide.no).map((c) => ({ label: c.label, description: c.hint, id: c.id as SlideChip })),
-      { placeHolder: `${slide.no}번 장을 어떻게 다듬을까요?` },
-    );
-    if (!chip) return undefined;
-    const answer = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: "HypeProof: 덱 장 다듬는 중" },
-      () => this.completeSkill(slideSuggestionPrompt(state, template, slide.no, chip.id, plan), {}),
-    );
-    const checked = checkSlidePatch(state, template, slide.no, chip.id, answer.ok ? jsonFromText<DeckProposal>(answer.text) : null);
-    if (!checked.ok) return { lines: [checked.reason, "덱은 그대로예요."] };
-    const choice = await vscode.window.showInformationMessage(
-      `${slide.no}번 장을 이렇게 바꿀까요?`,
-      { modal: true, detail: slidePatchDetail(checked.patch) },
-      "반영", "그대로",
-    );
-    if (choice !== "반영") return { lines: ["그대로 두었어요. 덱은 바뀌지 않았어요."] };
-    // The switch and the folder may have changed while the proposal was open: check again before writing.
-    if (!this.isLearningWikiEnabled()) return { lines: [lessonFeatureOff("덱 다듬기", this.getSeatAudience())] };
-    const lateBlocked = this.folderWriteRefusalFor(dir);
-    if (lateBlocked) return { lines: [lateBlocked] };
-    const fresh = loadState(dir);
-    const next = fresh ? applySlidePatch(fresh, checked.patch) : null;
-    if (!next) return { lines: ["그 사이 이 장이 바뀌어서 반영하지 않았어요. 다시 골라 주세요."] };
-    saveState(dir, next);
-    writeFiles(dir, { ...renderWikiPages(next, plan), ...renderDeck(next, template, plan) }, "ai");
-    return { lines: [`${slide.no}번 장에 반영했어요.`, "덱 미리보기를 열었어요."], open: path.join(dir, "deck.html") };
+    if (!state || !plan.deck.slides.some((x) => state.deck[String(x.no)])) return { lines: ["아직 초안을 쓴 장이 없어요. 먼저 덱 초안을 만들어 주세요."] };
+    return { plan, template: plan.deck, dir, state };
+  }
+
+  private async runSlideSuggest(): Promise<BrainRun | undefined> {
+    if (!this.isLearningWikiEnabled()) await this.postDenialNotice("lesson");
+    const first = this.slideSuggestDeck();
+    if ("lines" in first) return first;
+    const ui = (this.slideStudio = this.openSlideStudio());
+    let selected: number | undefined;
+    let status = "";
+    // Each outcome goes to the panel's status line and to the chat notice.
+    const report = (lines: string[]) => { status = lines.join(" "); this.postPageNotice(status); };
+    for (let req = 1; ; req++) {
+      const deck = this.slideSuggestDeck();
+      if ("lines" in deck) return deck;
+      const { plan, template, dir, state } = deck;
+      const pick = await ui.pick(slideStudioView(state, template, plan, selected, status));
+      if (!pick) return undefined;
+      selected = pick.no;
+      if (!slideChips(state, pick.no).some((c) => c.id === pick.chip)) { report(["고를 수 없는 제안이에요."]); continue; }
+      const answer = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Window, title: "HypeProof: 덱 장 다듬는 중" },
+        () => this.completeSkill(slideSuggestionPrompt(state, template, pick.no, pick.chip, plan), {}),
+      );
+      if (ui.closed) return undefined;
+      const checked = checkSlidePatch(state, template, pick.no, pick.chip, answer.ok ? jsonFromText<DeckProposal>(answer.text) : null);
+      if (!checked.ok) { report([checked.reason, "덱은 그대로예요."]); continue; }
+      const choice = await ui.propose(slideStudioProposal(state, template, checked.patch, `${pick.no}-${req}`));
+      if (choice === undefined) return undefined;
+      if (!choice) { report(["그대로 두었어요. 덱은 바뀌지 않았어요."]); continue; }
+      // The switch and the folder may have changed while the proposal was open: check again before writing.
+      if (!this.isLearningWikiEnabled()) return { lines: [lessonFeatureOff("덱 다듬기", this.getSeatAudience())] };
+      const lateBlocked = this.folderWriteRefusalFor(dir);
+      if (lateBlocked) return { lines: [lateBlocked] };
+      const fresh = loadState(dir);
+      const next = fresh ? applySlidePatch(fresh, checked.patch) : null;
+      if (!next) { report(["그 사이 이 장이 바뀌어서 반영하지 않았어요. 다시 골라 주세요."]); continue; }
+      saveState(dir, next);
+      writeFiles(dir, { ...renderWikiPages(next, plan), ...renderDeck(next, template, plan) }, "ai");
+      report([`${pick.no}번 장에 반영했어요. 덱 미리보기에도 바뀌었어요.`]);
+    }
   }
 
   /** One deck-skill run; writes deck/ and deck.html and returns what happened (deckReport words it). */

@@ -979,8 +979,19 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Numbers, sources and speakers (fix 1, after the first verify): one shared detector (`numerals.ts`) serves the slide gate and deck generation. It reads every script (Unicode digits, Roman and circled numerals before NFKC, Hanja numerals, Korean number words with a counter or %) and compares exact values; spelled-out numbers in the evidence count as values. Uncertain parsing counts as a number (fail closed); only "한 번에", "한번" and "한 …씩" are treated as idioms. A quote's speaker label must be the slide's own label for its own quote or appear in the cited entries; a source word (조사, 통계, 장관, …) and the word before it must appear in the cited entries; a wiki id on the face is refused.
 - No new quantity words (owner decision, fix 2): value equality cannot see quantities it cannot parse (절반, 열에 아홉, 첫째, 서너 명, five users). A second, lexical rule refuses any quantity word (Korean and English number words, fractions and parts, N 중 M, ordinals, approximations, percent and %) absent from the slide's current face and its cited entries; deck generation applies it against the cited entries. Both sides are tokenized by the same lexicon, so the check is token against token. Residual risk: the lexicon is best-effort; words outside it (처음, 대부분, 몇, 여러) still pass, and so do source words outside SOURCE_TERMS. Source-word stems no longer cut a source word (보도 is not 보 + 도).
 - Accept is bound to the exact slide: 반영 applies only while the slide on disk is still the proposal's "before"; a slide changed meanwhile is kept and the learner is told to pick again. The switch and folder gate are checked again before the write. One run at a time.
-- Surface: the existing deck command surface (command palette quick picks, like 덱 만들기) and VS Code's native modal for 지금 / 바꾼 안 with 반영 / 그대로 (Esc or close = 그대로). The webview chips under a slide thumbnail and the side-by-side view are the design row CGP-ART-D-016, not built here.
+- Surface: the existing deck command surface (command palette quick picks, like 덱 만들기) and VS Code's native modal for 지금 / 바꾼 안 with 반영 / 그대로 (Esc or close = 그대로). The webview chips under a slide thumbnail and the side-by-side view are the design row CGP-ART-D-016, not built here. (Superseded 2026-10-27: CGP-ART-D-016 replaced the quick picks and modal with a panel.)
 - Chips: all three for any drafted slide, none for an undrafted one. Seats: wherever `learning_wiki.enabled` is served (lesson cohorts); default off with that switch.
+
+## CGP-ART-D-016: slide suggestion panel (2026-10-27, agent choice under the owner rules)
+
+- Surface: a VS Code webview panel "덱 장 다듬기", opened by the existing command. It replaces the quick picks and the native modal of CGP-ART-R-016; the gate, the one-run rule and the late re-checks before a write are unchanged. Not inside `deck.html`: that page has no host channel (CGP-ART-R-023) and is also the audience-facing deck.
+- Thumbnails: drafted slides only, as 16:9 text cards (number, title, headline, visual line), not rendered slide images, so no slide HTML or product iframe runs in the panel. The first drafted slide is selected on open; the selection follows the last slide worked on.
+- Evidence label: computed on the host from the slide's refs, which a patch cannot change (CR-55, "never stronger than what it cites"): 확인한 것 (observed) only when every ref is an evidence entry with state `real`; 가정 (assumed) when the slide cites no evidence entry (only the problem, a hypothesis or a decision); 해석 (interpreted) otherwise, including team trials (`self_reported`) and simulations. Korean words reuse the Venture Memory labels (`CONFIDENCE_LABEL`).
+- "Changed claim": each face row (title, visual, each support line) that differs; both panes mark it, and 바꾼 안 shows the label.
+- Focus starts on 그대로; Esc is 그대로; closing the panel writes nothing. While a request or proposal is open the chips and thumbnails are locked.
+- Targets and text: 44 px and 14 px (owner rule), over the register's 32 px.
+- Deck preview: after 반영 the deck preview no longer opens by itself (CGP-ART-R-016 opened `deck.html`). The panel stays open for the next chip and its status line says the thumbnail shows the new headline. No requirement text asked for the auto-open (verified by grep of `docs/studio-requirements.md` and `docs/requirements/`), and opening a browser tab on every accepted chip would pull the learner out of the panel.
+- Default state: unchanged from CGP-ART-R-016 (wherever `learning_wiki.enabled` is served; nothing new leaves the machine).
 
 ## CGP-ART-R-023: deck PDF export (2026-10-26, agent-selected conservative implementation)
 
@@ -1010,6 +1021,13 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Review link: only created or changed files that the open turn review (REQ-ART-02) lists get 바뀐 곳 보기. Older turns have no restore-point comparison, so they get a note instead of a link.
 - Seats: every seat that draws the transcript (personal, trial, pass, classroom and lesson, and instructor). Default state: on (local display only; no permission change). Target and text floors follow the owner rule (44px, 14px).
 
+## CGP-ART-D-020: collapsible row and one-line names (2026-10-27, agent choice)
+
+- Collapsible: the row rests collapsed to its "AI가 한 일" title and the verb chips. A chip opens its own list; pressing it again, or another chip, folds that list back, so at most one list is open. The chips themselves never fold away: they are the summary the learner judges the AI's work by (Product Intent 2), and a collapsed row with no counts would hide it.
+- Chips read "읽음 3", "만듦 1" and so on, one chip per verb with at least one entry; the register's "·" separators are the chip gaps, not characters.
+- Middle ellipsis: the shown name is the longest middle-ellipsized form, at most 48 characters, that fits one line at the width the list has, measured with the element's own font and refitted on resize. Below 12 characters the name stops shrinking and wraps, because a shorter cut no longer names the file. The full name stays in the tooltip and is what assistive technology reads.
+- Targets 44px and text 14px (owner rule) win over the register's chip size. Default state: on (local display only; no data flow change).
+
 ## CGP-LEARN-R-017: help-queue keyboard triage in Chalk (2026-10-26, agent choice under the owner rules)
 
 - "Resolve-and-advance" = save the open request as 답변 완료 · 학생 확인 대기 (`status: answered`) and open the next one. The instructor cannot mark a request resolved: the share contract lets only the learner move it to `resolved` (classroom-admin ADM-05), and the key never claims more. The visible button says "답변 완료로 저장하고 다음 요청".
@@ -1031,6 +1049,13 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Page script (owner scope 2026-10-26: no silent override, not a sandbox): the snippet is injected first, captures the DOM primitives before page script runs and removes its own `<script>`; only `isTrusted` input counts; showing is decided inside the closed root from Studio's coach-turn state; the host carries `:host{… !important}` plus inline `!important` styles and a MutationObserver re-attaches it (200 repairs per document). Accepted residuals: a page can draw over the toggle, can fetch its own HTML to read the token, and can outlast the repair cap; all deliberate, display-only.
 - Host and Origin (fix round 2, owner decision): every path of the live server refuses a Host other than `127.0.0.1:<port>` / `localhost:<port>` for its own port with 403, not only `/__hp_follow`. This also closes the older DNS-rebinding read of the served folder. Before the change I checked that the server binds 127.0.0.1 only and that every caller in the repo reaches it through `127.0.0.1:<port>` (`currentUrl()`/`ensure()`), and that the e2e servers use their own `serveStatic` instances. No phone or LAN preview uses it: QR codes point at published test origins. `/__hp_follow` also refuses a present `Origin` that is not the server's own; a missing `Origin` is allowed because the token still gates it. Learner targets 44 px and 14 px text win over DES-ART-17. Timing: 250 ms smooth scroll, 1 s outline.
 - Default state: on (local display only; no new data flow, nothing leaves the device).
+
+## CGP-ART-D-017: 따라 보기 toggle design (2026-10-27, agent choice)
+
+- Already met on main by CGP-ART-R-017 (REQ-STUDIO-PREVIEW-FOLLOW); no product change. This row adds a computed, frame-sampled test (`live-follow-design.smoke.mjs`) for each design clause: accessible name "따라 보기" with an eye icon (slashed when off), smooth scroll ending within 300 ms, one-frame jump under reduced motion, a 2 px outline that hugs the element for about 1 s, and an announcement on every toggle change.
+- "In the preview toolbar": kept as decided for R-017. The integrated browser's toolbar is VS Code chrome with no patch for this row, so the toggle stays a fixed control on the served page (top right).
+- Learner 44 px target and 14 px text win over any smaller toolbar control size. Timing: 250 ms scroll (inside the 300 ms cap), 1,000 ms outline.
+- Default state: on (local display only; no data flow).
 
 ## CGP-ART-R-021: overwrite change summary in the write approval (2026-10-26, agent-selected conservative implementation)
 

@@ -170,12 +170,35 @@ export function taskActivityTotal(s: TaskActivitySummary): number {
   return TASK_ACTIVITY_VERBS.reduce((n, v) => n + s[v].length, 0);
 }
 
-/** Middle ellipsis for long names: keeps the start and the file name end. */
+/** Grapheme clusters (ZWJ emoji, flags, combining marks, jamo sequences stay whole); code points where Intl.Segmenter is missing. */
+function graphemes(text: string): string[] {
+  const Seg = (Intl as { Segmenter?: new (l?: string, o?: { granularity: "grapheme" }) => { segment(s: string): Iterable<{ segment: string }> } }).Segmenter;
+  if (!Seg) return Array.from(text);
+  return Array.from(new Seg(undefined, { granularity: "grapheme" }).segment(text), (x) => x.segment);
+}
+
+/** Middle ellipsis for long names: keeps the start and the file name end, never cutting inside a grapheme. */
 export function middleEllipsis(text: string, max = 48): string {
-  const chars = Array.from(text);
+  const chars = graphemes(text);
   if (chars.length <= max) return text;
   const tail = Math.ceil((max - 1) / 2), head = max - 1 - tail;
   return `${chars.slice(0, head).join("")}…${chars.slice(chars.length - tail).join("")}`;
+}
+
+/**
+ * CGP-ART-D-020: the longest middle-ellipsized form (at most `max` characters) that `fits` on one line.
+ * Without a measurer it falls back to `max`. Below `min` characters the name keeps `min` and wraps,
+ * because a shorter cut no longer names the file.
+ */
+export function fitMiddleEllipsis(text: string, fits: ((shown: string) => boolean) | null, max = 48, min = 12): string {
+  const capped = middleEllipsis(text, max);
+  if (!fits || fits(capped)) return capped;
+  let lo = min, hi = Math.min(max, graphemes(text).length) - 1, best = middleEllipsis(text, min);
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1, shown = middleEllipsis(text, mid);
+    if (fits(shown)) { best = shown; lo = mid + 1; } else hi = mid - 1;
+  }
+  return best;
 }
 
 /**
