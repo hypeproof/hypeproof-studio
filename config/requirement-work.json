@@ -4266,7 +4266,8 @@
         "extensions/hypeproof-chat/src/companionTransportBudget.ts",
         "extensions/hypeproof-chat/src/companionClientAdapter.ts",
         "extensions/hypeproof-chat/webview-ui/src/companionSessionCheckpoint.ts",
-        "extensions/hypeproof-chat/src/companionHostSession.ts"
+        "extensions/hypeproof-chat/src/companionHostSession.ts",
+        "extensions/hypeproof-chat/src/companionAuthenticatedTransport.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
@@ -4299,7 +4300,9 @@
         "extensions/hypeproof-chat/test/companion-session-checkpoint.smoke.mjs",
         "extensions/hypeproof-chat/test/companion-forget-view.test.tsx",
         "extensions/hypeproof-chat/src/companionHostSession.ts",
-        "extensions/hypeproof-chat/test/companion-host-session.smoke.mjs"
+        "extensions/hypeproof-chat/test/companion-host-session.smoke.mjs",
+        "extensions/hypeproof-chat/src/companionAuthenticatedTransport.ts",
+        "extensions/hypeproof-chat/test/companion-authenticated-transport.smoke.mjs"
       ]
     }
   ]

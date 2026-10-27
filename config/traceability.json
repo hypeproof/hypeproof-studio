@@ -15687,7 +15687,8 @@
         "ST-TEST-CHAT-FILE-ATTACH",
         "ST-IMP-COMPANION-WORKSPACE",
         "ST-IMP-COMPANION-HOST",
-        "ST-IMP-COMPANION-SESSION"
+        "ST-IMP-COMPANION-SESSION",
+        "ST-IMP-COMPANION-AUTH-TRANSPORT"
       ],
       "sources": [
         {
@@ -15740,6 +15741,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-host-session.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authenticated-transport.smoke.mjs"
         }
       ]
     },
@@ -15827,6 +15831,20 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionCheckpoint.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-AUTH-TRANSPORT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthenticatedTransport.ts"
         }
       ]
     }
