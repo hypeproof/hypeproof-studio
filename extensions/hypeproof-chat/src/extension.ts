@@ -1,3 +1,4 @@
+import { createCompanionDevHostEntry } from "./companionDevHostEntry";
 import { registerCompanionWorkspace } from "./companionWorkspaceHost";
 import { workPower } from "./workPower";
 import { registerActivityTrash } from "./activityTrashCommands";
@@ -21,7 +22,7 @@ import * as os from "os";
 import { StartPage } from "./startPage";
 import { handleJoinLink, type JoinLinkHost } from "./joinLink";
 import { purchaseReturnOrder } from "./purchaseReturnHelpers";
-import { ACCOUNTS_ENABLED_DEFAULT, AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
+import { ACCOUNT_SECRET_KEY, ACCOUNTS_ENABLED_DEFAULT, AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
 import { accountLock } from "./accountLock";
 import { ChatPanelProvider } from "./chatPanelProvider";
 import {
@@ -222,6 +223,7 @@ export async function activate(context: vscode.ExtensionContext) {
   provider.perfTraceObserver = (msg) => perfTrace.observe(msg);
   provider.perfTracePanel = { state: () => perfTrace.state, stop: (id) => perfTrace.stopFromPanel(id) };
   providerRef = provider;
+  let companionDev: ReturnType<typeof createCompanionDevHostEntry>;
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.editImage", () => provider.editImage()));
   // One-click publish endpoints, decided once: GitHub itself, unless this is a test/dev run
   // pointing at a loopback mock (resolvePublishEndpoints explains why only then).
@@ -253,6 +255,7 @@ export async function activate(context: vscode.ExtensionContext) {
     lock: accountLock(context.globalStorageUri.fsPath),
     freeCredential: (): Promise<string | undefined> => startPage.freeSignInCredential(),
     invalidated: async sessionId => {
+      companionDev?.invalidate();
       if (connections.current?.accountPass?.sessionId === sessionId) provider.opsRequestStop();
       if (await connections.forgetAccount(sessionId)) { provider.invalidateProfile(); void provider.refreshConfig(); }
     },
@@ -261,6 +264,26 @@ export async function activate(context: vscode.ExtensionContext) {
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
   }, provider.githubContinueSource(), accounts);
+  companionDev = createCompanionDevHostEntry(context, { accounts, connections,
+    configured: () => { const config = vscode.workspace.getConfiguration('hypeproofChat'); return {
+      service: config.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1'), site: config.get<string>('siteBase', 'https://hypeproof-ai.xyz'),
+    }; }, taskView: () => provider.companionTaskView(), epoch: () => provider.opsRuntimeGeneration(),
+  });
+  if (companionDev) {
+    const invalidate = () => companionDev?.invalidate();
+    provider.companionRuntimeInvalidated = invalidate;
+    const secretChange = context.secrets.onDidChange?.(event => {
+      if (event.key === ACCOUNT_SECRET_KEY || event.key === TOKEN_KEY || event.key === connections.current?.ref) invalidate();
+    });
+    if (secretChange) context.subscriptions.push(secretChange);
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+      if (['hypeproofChat.proxyUrl', 'hypeproofChat.siteBase', 'hypeproofChat.accountsPreview', 'hypeproofChat.accountsEnabled', 'security.workspace.trust']
+        .some(key => event.affectsConfiguration(key))) invalidate();
+    }), vscode.workspace.onDidChangeWorkspaceFolders(invalidate));
+    const trustChange = vscode.workspace.onDidGrantWorkspaceTrust?.(invalidate);
+    if (trustChange) context.subscriptions.push(trustChange);
+    context.subscriptions.push({ dispose: () => { if (provider.companionRuntimeInvalidated === invalidate) provider.companionRuntimeInvalidated = undefined; companionDev?.dispose(); } });
+  }
   // D19/REQ-I15: the Service's free-start offer turns on the public-release update path for a
   // Studio without member access. Read at each check; the setting `publicUpdates` still works alone.
   registerPublicUpdateSignal(() => startPage.freeStartSignal());
@@ -935,6 +958,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // to a file the Playwright test can read. Gated on env so it can never
   // run in a real workshop build.
   void maybeSynthesizeTestAction(context, provider);
+  if (companionDev) return { companionDev: companionDev.api };
 }
 
 /**

@@ -590,15 +590,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private taskSourceBrowser?: { tab: vscode.BrowserTab; taskId: string; activityId: string; url: string; requestId?: string; source?: vscode.Webview };
 
 
+  /** Metadata-only DEV lifecycle hook; no listener/resource exists unless native registration supplies it. */
+  companionRuntimeInvalidated?: () => void;
+  companionTaskView(): import('./taskWorkspaceContract').TaskWorkspaceView | null {
+    return this.taskChanging || this.connectionChanging ? null : this.currentTaskStore()?.getView() ?? null;
+  }
+
   private currentTaskStore(): TaskWorkspaceStore | undefined {
     return this.taskWorkspace?.activityId === activityConnections(this.context)?.scope ? this.taskWorkspace?.store : undefined;
   }
 
   private async prepareTaskWorkspace(isInstructor: boolean): Promise<void> {
     const activity = activityConnections(this.context)?.current;
-    if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { this.taskWorkspace = undefined; return; }
+    if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { if (this.taskWorkspace) this.companionRuntimeInvalidated?.(); this.taskWorkspace = undefined; return; }
     if (this.taskWorkspace?.activityId === activity.id) return;
     const store = new TaskWorkspaceStore(taskWorkspaceRoot(this.context.globalStorageUri.fsPath), taskWorkspaceScope(activity));
+    this.companionRuntimeInvalidated?.();
     this.taskWorkspace = { activityId: activity.id, store };
     try {
       await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
@@ -4436,6 +4443,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private draftFlush?: {nonce:string;source:vscode.Webview;resolve:()=>void;reject:(e:Error)=>void;capture?:(draft:ActivityDraft)=>void};
   async setConnectionChanging(value: boolean, capture?: (draft: ActivityDraft) => void, leaving = true): Promise<void> {
     if (value && leaving && !await this.confirmAnnotationLeave()) throw new ActivityConnectionError(ANNOTATION_LEAVE_KEPT);
+    if (value) this.companionRuntimeInvalidated?.();
     this.connectionChanging = value;
     if (value) { this.personalContinuationPane?.dispose(); this.personalContinuationPane = undefined; }
     if (!activityConnections(this.context)) return;
@@ -4567,6 +4575,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   async opsNewGeneration(): Promise<number> {
     // Reached only after the stop was confirmed, so there is no run state to force-clear here.
     await this.ensureProfile(true);
+    this.companionRuntimeInvalidated?.();
     return ++this.opsGeneration;
   }
   /**
@@ -4727,6 +4736,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Force re-fetch on next config push (e.g. after token change). */
   invalidateProfile(): void {
+    this.companionRuntimeInvalidated?.();
     this.personalContinuationPane?.dispose(); this.personalContinuationPane = undefined;
     this.writeApprovalRequest?.cancel(); this.browserApprovalRequest?.cancel(); this.commandApprovalRequest?.cancel();
     this.outboundApproval?.cancel(); this.folderConsentRequest?.cancel();
