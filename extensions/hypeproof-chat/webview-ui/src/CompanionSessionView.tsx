@@ -90,7 +90,7 @@ function CompanionSessionOwnerView({ snapshot, controller, renderPreview }: Comp
     <header className="hps-companion-heading">
       <p className="hps-companion-project">{selected?.projectName ?? '컴퓨터와 함께 보기'}</p>
       <h2>{selected?.artifactName ?? '내가 만든 결과'}</h2>
-      <p className="hps-companion-computer"><ChatIcon kind={!cleared && !attemptedForget && snapshot.connection === 'connected' ? 'plug' : 'moon'} size={20}/><span>{cleared ? '내 컴퓨터' : attemptedForget ? retained?.computerName ?? snapshot.computerName : snapshot.computerName}</span><span>{cleared || forgetStage === 'failed' ? '보기 종료' : forgetStage === 'pending' ? '기록 정리 중' : snapshot.connection === 'connected' ? '연결됨' : snapshot.connection === 'reconnecting' ? '연결 확인 중' : '연결 기다림'}</span></p>
+      <p className="hps-companion-computer"><ChatIcon kind={!cleared && !attemptedForget && snapshot.connection === 'connected' ? 'plug' : 'moon'} size={20}/><span>{cleared ? '내 컴퓨터' : attemptedForget ? retained?.computerName ?? snapshot.computerName : snapshot.computerName}</span><span>{cleared || forgetStage === 'failed' ? '보기 종료' : forgetStage === 'pending' ? '기록 정리 중' : snapshot.connection === 'connected' ? '최근 연결 확인' : snapshot.connection === 'reconnecting' ? '연결 확인 중' : '연결 기다림'}</span></p>
     </header>
     <div ref={status} tabIndex={-1} className="hps-companion-status" role="status" aria-live="polite" aria-atomic="true">
       <ChatIcon kind={forgetStage === 'failed' ? 'alert' : forgetStage === 'pending' ? 'clock' : icon(presentation.phase)} size={24}/>

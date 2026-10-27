@@ -47,7 +47,7 @@ const renderPreview=(artifact:NonNullable<CompanionDispatchResult['artifact']>)=
 const render=async(snapshot:CompanionSessionSnapshot,c=controller)=>act(()=>{root.render(<CompanionSessionView snapshot={snapshot} controller={c} renderPreview={renderPreview}/>);});
 const buttons=()=>host.findAll(e=>e.localName==='button');
 async function run(){
-await render(clone(initial));eq(requested,0,'mount never requests or auto-approves');eq(reconnected,0,'mount never creates connection work');eq(buttons().length,1,'one primary action');eq(buttons()[0].textContent,'선택한 결과 보기','single clear primary action label');
+await render(clone(initial));eq(requested,0,'mount never requests or auto-approves');eq(host.textContent.includes('최근 연결 확인'),true,'paired transport is described as last verified rather than continuous host presence');eq(reconnected,0,'mount never creates connection work');eq(buttons().length,1,'one primary action');eq(buttons()[0].textContent,'선택한 결과 보기','single clear primary action label');
 await act(()=>click(buttons()[0]));eq(requested,1,'explicit preview request uses existing controller');eq(lastRequest,request,'exact current request passed unchanged');
 await render(good);eq(rendered,1,'exact completed result invokes injected existing renderer once');eq(host.textContent.includes('원본은 컴퓨터에 있어요.'),true,'local source ownership remains visible');
 await act(()=>click(buttons()[0]));eq(reconnected,1,'completed view only reconciles state, never reruns work');eq(requested,1,'state check sends no new preview request');

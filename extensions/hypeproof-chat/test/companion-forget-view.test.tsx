@@ -44,7 +44,7 @@ async function run(){
   eq(forgotten,1,'rapid confirm starts exactly one async cleanup');
   eq(buttons().every(el=>el.getAttribute('disabled')!==null),true,'all actions stay disabled while cleanup is pending');
   eq(preview(),1,'promise pending does not hide a still-current preview'); eq(state(),'local_forget_pending','pending is a local cleanup state, never a live connection claim');
-  eq(host.textContent.includes('연결됨'),false,'pending erase does not claim the disposed owner is connected');
+  eq(host.textContent.includes('최근 연결 확인'),false,'pending erase does not claim the disposed owner is connected');
   eq(buttons().some(el=>el.textContent==='계속 보기'),false,'confirmation cancellation is unavailable after erase begins');
   await render({...good,selection:null,receipt:null,connection:'waiting_for_computer'},owner);
   eq(preview(),1,'cached verified result survives owner disposal before storage erasure settles');
@@ -52,7 +52,7 @@ async function run(){
   eq(host.textContent.includes('이 기기의 보기 기록을 지웠어요'),false,'no success claim before callback completion');
   await act(()=>wait.resolve());
   eq(preview(),0,'awaited success unmounts the preview'); eq(state(),'local_cleared','awaited success shows cleared state');
-  eq(host.textContent.includes('내 퀴즈') || host.textContent.includes('내 작품') || host.textContent.includes('연결됨'),false,'cleared view also removes stale artifact titles and active connection claim');
+  eq(host.textContent.includes('내 퀴즈') || host.textContent.includes('내 작품') || host.textContent.includes('최근 연결 확인'),false,'cleared view also removes stale artifact titles and active connection claim');
   eq(host.textContent.includes('이미 허용한 컴퓨터 작업은 되돌리지 않았어요.'),true,'success claims no computer undo');
   eq(document.activeElement?.getAttribute('role'),'status','completion focuses the live status');
   eq(buttons().length,0,'cleared view cannot accidentally send/reconnect through its old owner');
@@ -64,7 +64,7 @@ async function run(){
   await render(good,failing); await act(()=>click(button(clearLabel))); await act(()=>click(button(clearLabel)));
   await render({...good,selection:null,receipt:null,connection:'waiting_for_computer'},failing);
   eq(preview(),1,'failed cleanup does not claim the preview was erased'); eq(state(),'local_forget_failed','failure remains an honest local cleanup failure');
-  eq(host.textContent.includes('연결됨'),false,'failed erase does not claim the disposed owner is connected');
+  eq(host.textContent.includes('최근 연결 확인'),false,'failed erase does not claim the disposed owner is connected');
   eq(buttons().some(el=>el.textContent==='계속 보기'),false,'failed erase cannot reactivate the dead request owner');
   eq(buttons().some(el=>el.textContent==='연결 상태 확인'||el.textContent==='선택한 결과 보기'),false,'failure exposes no old request or reconnect action');
   eq(document.activeElement,button('다시 지우기'),'failure focuses the safe explicit retry');

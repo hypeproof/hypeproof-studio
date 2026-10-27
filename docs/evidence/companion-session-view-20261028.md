@@ -55,3 +55,7 @@ synthetic verified receipts and controllers; they establish presentation and
 touch layout only. Production wiring, authenticated host/relay integration,
 installed Studio/phone, physical-device UX and child/human acceptance remain
 NOT RUN for this slice and require separate evidence.
+
+## Connection wording follow-up
+
+The connected transport header now says `최근 연결 확인` (last connection verified). A paired cipher and a fresh metadata response do not prove continuous desktop presence. Existing explicit request/result waiting behavior is unchanged. Both focused React render suites passed on 2026-10-28, including terminal cleanup removing that connection claim. Native Android wording is not yet device acceptance.
