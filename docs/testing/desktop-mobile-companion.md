@@ -136,3 +136,29 @@ manifest and Gradle inputs may reuse historical compile evidence only after
 byte comparison; changed web assets remain a distinct package identity. No APK
 rebuild, installation, native personal login or release acceptance is implied
 by these source/asset checks.
+
+## Local desktop handoff and packaged Android follow-up
+
+The [local handoff evidence](../evidence/companion-desktop-handoff-local-20261028.md)
+covers a bounded record in the existing TaskWorkspaceStore, explicit native review
+and discard, and preservation of all desktop drafts and selected file bytes.
+The final source requires the existing native owner's synchronous invalidation
+lease after asynchronous storage/navigation. Independent actual-store controls
+at `ca9e52b0e37b0d9a48f1a065ee86a7080d158dc8` passed original peer-discard,
+replacement, access/profile/task changes during final persistence, disposal and
+missing-lease cases. Earlier failing receipts remain preserved. These are local
+API/fixture observations; native registration, account invalidation wiring and
+desktop/mobile delivery do not yet fulfill DMC-T11.
+
+The [Android source evidence](../../apps/companion-android/RESULT-DEMUX-EVIDENCE.md)
+retains a packaged-React failure and later-selection/result interleaving failure.
+Source `9a7d92771d10d1b2984da65c6c4a0338c1a7ff2f` repairs both. Real isolated
+Chrome with the exact asset CSP reproduced the old APK's blank first screen and
+rendered the repaired first button without native protocol calls. APK SHA-256
+`724ddc17c89a5869b85a7949eaa194da4c29ef44edfaf42f6b750dd7f8ded607`
+contains those same three checked assets. An owned API35 emulator then observed
+the installed initial UI and invalid-provisioning refusal. The composed run
+stopped waiting for the separate Studio test driver to activate: normal native
+account/pass flow and installed-APK artifact delivery remain **NOT RUN** for
+this package. Source, browser, packaging and initial-screen observations are not
+whole mobile or physical-device acceptance.

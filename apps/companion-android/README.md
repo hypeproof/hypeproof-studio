@@ -80,8 +80,15 @@ tools and exact evidence/APK remain.
 `build-web.mjs` requires explicit authorized `COMPANION_CLIENT_ENTRY` and
 `COMPANION_SELECTION_ENTRY` inputs; no private sibling production import or
 package publication/pin is introduced. Use `COMPANION_NODE_PATHS` for existing
-React dependencies when the isolated worktree has no local install. Runtime JS
-is bundled into ignored `app/src/main/assets/ui/`, not vendored as source.
+non-React dependencies when the isolated worktree has no local install. Set
+`COMPANION_REACT_DEPS` to one explicitly reviewed `node_modules` directory
+containing matching `react` and `react-dom` versions; the default is this
+checkout's `extensions/hypeproof-chat/webview-ui/node_modules`. Both package
+roots and every subpath are aliased together, and the bundle graph rejects a
+second React runtime. `COMPANION_NODE_PATHS` alone cannot select the React
+runtime because an ancestor installation takes precedence. The exact generated
+bundle must render its first screen before it is packaged. Runtime JS is bundled
+into ignored `app/src/main/assets/ui/`, not vendored as source.
 
 Run each build/test under the shared hype-resource wrapper with the assigned
 owner, unique job, version1, work/local_heavy and1800s limits:

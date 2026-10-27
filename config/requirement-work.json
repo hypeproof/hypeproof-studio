@@ -4273,7 +4273,10 @@
         "apps/companion-android/web/main.tsx",
         "apps/companion-android/web/nativePort.ts",
         "apps/companion-android/web/resultTransport.ts",
-        "apps/companion-android/build-web.mjs"
+        "apps/companion-android/build-web.mjs",
+        "extensions/hypeproof-chat/src/companionDesktopHandoff.ts",
+        "extensions/hypeproof-chat/src/companionDesktopHandoffHost.ts",
+        "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
@@ -4316,7 +4319,13 @@
         "apps/companion-android/test/native-port.test.mjs",
         "apps/companion-android/test/result-entry.test.mjs",
         "apps/companion-android/test/result-transport.test.mjs",
-        "apps/companion-android/test/browser-boot.test.mjs"
+        "apps/companion-android/test/browser-boot.test.mjs",
+        "extensions/hypeproof-chat/src/companionDesktopHandoff.ts",
+        "extensions/hypeproof-chat/src/companionDesktopHandoffHost.ts",
+        "extensions/hypeproof-chat/src/taskWorkspaceStore.ts",
+        "extensions/hypeproof-chat/test/companion-desktop-handoff.smoke.mjs",
+        "apps/companion-android/web/resultTransport.ts",
+        "apps/companion-android/build-web.mjs"
       ]
     }
   ]
