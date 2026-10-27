@@ -107,3 +107,9 @@ Framing/2 retains decoding and exact saved bytes for historical framing/1.
 The separately recorded new-cut checks do not transfer historical browser or
 installed observations to a new package identity. No production/cold-key/device
 acceptance row is completed by these source checks.
+
+The [activated host pacing regression](../evidence/companion-dev-host-pacing-20261028.md)
+executes the native entry and authenticated transport with the real budget scheduler
+and an injected clock. It retains the failing burst case and passing paced case,
+including same-session owner replacement. The fixed entry is a source observation;
+installed Android composition and customer acceptance remain separately evidenced.

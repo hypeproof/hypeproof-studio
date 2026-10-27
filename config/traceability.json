@@ -15757,6 +15757,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-selection.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-dev-host-pacing.smoke.mjs"
         }
       ]
     },
