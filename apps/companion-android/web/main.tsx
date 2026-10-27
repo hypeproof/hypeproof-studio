@@ -62,9 +62,11 @@ function App(){
   adapter=new CompanionClientAdapter({pairing,relay,requestId:chosen.request.requestId,budget});
   const selected={request:chosen.request,projectName:'선택한 작업',artifactName:'저장된 HTML'};
   mobileTransport=resultTransport.bind(adapter);
-  controller=new CompanionMobileSessionController({transport:mobileTransport,descriptor:async(signal)=>{
-   await adapter!.refresh(signal);const diagnostics=relay.diagnostics();
-   if(closed||diagnostics.closed||!diagnostics.context_digest||pairing.invitation.status!=='paired')return null;
+  controller=new CompanionMobileSessionController({transport:mobileTransport,descriptor:async(signal,phase)=>{
+   // ACK already refreshes the verified pair and Service rechecks live authority in its conditional update.
+   // Keep local scope checks here; start, reconnect and final presentation still refresh explicitly.
+   if(phase!=='before_ack')await adapter!.refresh(signal);const diagnostics=relay.diagnostics();
+   if(closed||signal.aborted||diagnostics.closed||!diagnostics.context_digest||pairing.invitation.status!=='paired')return null;
    // This is transport readiness after authenticated metadata, not a host heartbeat.
    return {computerName:'연결된 컴퓨터',online:pairing.invitation.status==='paired'&&!diagnostics.closed,selection:selected};
   }},{timeoutMs:60000,pollMs:1000});

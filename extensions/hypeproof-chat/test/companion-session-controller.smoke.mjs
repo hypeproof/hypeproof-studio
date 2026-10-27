@@ -147,3 +147,20 @@ test('reconnect drains a deduplicated eight-part batch after the fourth ACK time
     assert.equal(completedOutcomes.size,1,'same verified outcome is reused, never reconstructed or duplicated');
   } finally {pause.resolve();f.controller.dispose();}
 });
+
+test('before-ACK phase retains local selection checks; generic descriptors keep all readiness checks',async()=>{
+ for(const changed of [false,true]){
+  const f=fixture(),phases=[];f.ports.descriptor=async(_signal,phase)=>{phases.push(phase);return{computerName:'computer',online:true,selection:changed&&phase==='before_ack'?{...selection,request:{...request,epoch:2}}:selection};};
+  f.batch([{message_id:'phase-result',text:raw({state:'denied',code:'result_too_large'})}]);await f.controller.requestPreview(request);
+  assert.equal(phases.filter(p=>p==='before_ack').length,1);assert.equal(f.calls.ack.length,changed?0:1);assert.equal(f.controller.getSnapshot().receipt?.outcome.state,changed?undefined:'denied');if(!changed)assert.deepEqual(phases,['readiness','before_ack','readiness']);f.controller.dispose();
+ }
+});
+
+test('revocation, expiry or cancellation during ACK cannot publish a completed result',async()=>{
+ for(const failure of ['revoked','expired','cancelled']){
+  const entered=deferred(),gate=deferred();let lateAck=false;const f=fixture({acknowledge:async()=>{entered.resolve();await gate.promise;if(failure==='revoked')throw Error('invitation_unavailable');if(failure==='expired')throw Error('relay_message_expired');lateAck=true;}});
+  f.batch(messages(await packCompanionPreviewPayload(raw(completed),request.requestId)));const work=f.controller.requestPreview(request);await entered.promise;
+  if(failure==='cancelled'){f.clock.fire(1000);await work;const before=f.controller.getSnapshot();gate.resolve();await tick();assert.equal(lateAck,true);assert.equal(f.controller.getSnapshot(),before);}else{gate.resolve();await work;}
+  assert.equal(f.controller.getSnapshot().receipt,null);assert.equal(f.calls.send,1);assert.equal(f.calls.prepare,1);f.controller.dispose();
+ }
+});

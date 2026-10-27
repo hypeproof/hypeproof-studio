@@ -15,7 +15,9 @@ export interface CompanionSessionDescriptor {
 }
 export interface CompanionSessionPorts {
   /** Resolve through the existing current authenticated session; no credentials belong in snapshots. */
-  descriptor(signal: AbortSignal): Promise<CompanionSessionDescriptor | null>;
+  /** before_ack still checks local ownership/selection. A caller may omit a duplicate
+   * status request only when its ACK independently revalidates live peer/session authority. */
+  descriptor(signal: AbortSignal, phase?: 'readiness' | 'before_ack'): Promise<CompanionSessionDescriptor | null>;
   transport: {
     prepare(text: string, messageId: string, signal: AbortSignal): Promise<unknown>;
     send(messageId: string, signal: AbortSignal): Promise<unknown>;
@@ -119,9 +121,9 @@ export class CompanionMobileSessionController implements CompanionSessionControl
     this.active = { abort, promise };
     return promise;
   }
-  private async current(signal: AbortSignal): Promise<boolean> {
+  private async current(signal: AbortSignal, phase: 'readiness' | 'before_ack' = 'readiness'): Promise<boolean> {
     this.check(signal);
-    const descriptor = await this.bounded(this.ports.descriptor(signal), signal);
+    const descriptor = await this.bounded(this.ports.descriptor(signal, phase), signal);
     if (!descriptor) { this.availability = 'unknown'; return false; }
     this.availability = descriptor.online ? 'online' : 'offline';
     const selection = descriptor.selection ? Object.freeze({ ...descriptor.selection, request: Object.freeze({ ...descriptor.selection.request }) }) : null;
@@ -288,7 +290,7 @@ export class CompanionMobileSessionController implements CompanionSessionControl
           this.pendingAcks.add(message.message_id);
           this.cursor++;
         }
-        if (!await this.current(signal)) throw stopped();
+        if (!await this.current(signal, 'before_ack')) throw stopped();
         this.pendingAcks.add(message.message_id);
         await this.flushAcks(signal);
         if (this.verified && terminal(this.verified)) return;
