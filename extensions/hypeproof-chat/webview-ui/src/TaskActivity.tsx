@@ -3,10 +3,10 @@
 // live turn): no entry, no chip. Each chip opens its own list; changed files that the current turn
 // review covers open that review at the file (REQ-ART-02).
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ChatIcon, type IconKind } from "./ChatDetails";
 import {
-  TASK_ACTIVITY_LABEL, TASK_ACTIVITY_VERBS, middleEllipsis, taskActivityTotal,
+  TASK_ACTIVITY_LABEL, TASK_ACTIVITY_VERBS, fitMiddleEllipsis, middleEllipsis, taskActivityTotal,
   type TaskActivitySummary, type TaskActivityVerb,
 } from "../../src/taskActivity";
 import "./taskActivity.css";
@@ -14,6 +14,40 @@ import "./taskActivity.css";
 export const TASK_ACTIVITY_LIST_CAP = 20;
 
 const ICON: Record<TaskActivityVerb, IconKind> = { read: "eye", created: "plus", changed: "pencil", web: "globe", search: "search" };
+
+let measureCanvas: HTMLCanvasElement | null = null;
+
+/** One-line test for `el`'s own width and font; null when the element has no layout (e.g. jsdom). */
+function lineFits(el: HTMLElement): ((shown: string) => boolean) | null {
+  const width = el.clientWidth;
+  if (!width) return null;
+  measureCanvas ??= document.createElement("canvas");
+  const ctx = measureCanvas.getContext("2d");
+  if (!ctx) return null;
+  const st = getComputedStyle(el);
+  ctx.font = `${st.fontStyle} ${st.fontWeight} ${st.fontSize} ${st.fontFamily}`;
+  return (shown) => ctx.measureText(shown).width <= width - 1;
+}
+
+/** CGP-ART-D-020: the name is middle-ellipsized to the width it has, refitted on resize; assistive tech reads it whole. */
+function TargetName({ target }: { target: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [shown, setShown] = useState(() => middleEllipsis(target));
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => setShown(fitMiddleEllipsis(target, lineFits(el)));
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [target]);
+  return <span ref={ref} className="hps-task-activity-target" title={target}>
+    <span aria-hidden="true">{shown}</span>
+    <span className="hps-sr-only">{target}</span>
+  </span>;
+}
 
 export interface TaskActivityProps {
   summary: TaskActivitySummary;
@@ -45,10 +79,7 @@ export function TaskActivity({ summary, reviewPaths, onShowReview }: TaskActivit
     {shown && <div className="hps-task-activity-panel">
       <ul id="hps-task-activity-list" className="hps-task-activity-list" aria-label={`${TASK_ACTIVITY_LABEL[shown]} 목록`}>
         {visible.map((it) => <li key={it.target} className="hps-task-activity-item">
-          <span className="hps-task-activity-target" title={it.target}>
-            <span aria-hidden="true">{middleEllipsis(it.target)}</span>
-            <span className="hps-sr-only">{it.target}</span>
-          </span>
+          <TargetName target={it.target} />
           {fileVerb && it.inside && reviewPaths.has(it.target) &&
             <button type="button" className="hps-task-activity-review" aria-label={`${it.target} 바뀐 곳 보기`} onClick={() => onShowReview(it.target)}>바뀐 곳 보기</button>}
         </li>)}
