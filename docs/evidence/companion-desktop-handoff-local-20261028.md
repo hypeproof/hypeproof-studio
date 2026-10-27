@@ -15,8 +15,12 @@ unreadable after a downgrade. The sidecar does not increment the task revision. 
 task/draft bytes stay unchanged. Missing sidecar is absent; malformed/unreadable or
 wrong-scope/digest data fails the explicit handoff closed, leaving the ordinary task
 readable. Same ID/bytes stage/accept is idempotent; different bytes or a second stored
-checkpoint cannot overwrite the one retained request. A future explicit dismissal/
-retention policy is outside this first bounded one-checkpoint slice.
+checkpoint cannot overwrite the one retained request. Explicit native-confirmed discard
+requires exact ID/digest and current store CAS plus the same active account/host/
+workspace/project/task. It may remove that owner's stale revision/pair/artifact/run
+metadata without opening or executing anything; cancellation, mismatch, changed CAS
+or failed removal preserves the record. No automatic deletion/replacement occurs.
+Production retention policy remains outside this slice.
 
 The native adapter receives the already available TaskWorkspaceStore, caller-owned
 fresh current binding/selection/run snapshot and existing-task reveal callback. The
@@ -31,7 +35,9 @@ run or revoked access cannot report opened. The exact selected file is resolved 
 the host, inspected by the existing workspace file helper and verified against its
 saved document hash. Explicit native acceptance records the reviewed decision; opening
 failure remains accepted-but-unconfirmed and recoverable for an explicit retry.
-“Opened” requires actual native navigation API completion and final scope checks.
+“Opened” requires actual native navigation API completion and final scope AND live
+document dirty/hash checks after task-reveal/editor-show awaits, before the request
+panel or success is published.
 
 The incoming original/reviewed text opens in a readonly, script-disabled request panel
 beside the exact saved HTML. Every desktop draft field, attachment, queued input and
@@ -50,3 +56,11 @@ durable draft/outbox, authenticated encrypted handoff delivery, closed/cross-pro
 navigation, production, release, real member/physical device and whole DMC-7/DMC-T11
 acceptance remain NOT RUN/open. Canonical requirements/tests are unchanged; root owns
 mapping, issue scope and PRs.
+
+
+Root review of initial local commit `3b787130a7b5bd646d4f08c0d69ba487db5fa3c7`
+identified a document-change window after navigation awaits and no explicit cleanup
+for the bounded retained slot. The unchanged-source controls reproduced both failures.
+The repair rechecks the live document after awaited navigation and adds the explicit
+owner/CAS-bound discard path described above. Original FAIL evidence is retained;
+new source/fixture results have their own exact SHA. This is not a new native app run.

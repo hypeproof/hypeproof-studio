@@ -457,9 +457,12 @@ export class TaskWorkspaceStore {
         } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
         const next = change(held);
         if (JSON.stringify(next) !== JSON.stringify(held)) {
-          if (!next || !validCompanionDesktopHandoffRecord(next)) fail('invalid', '이어갈 요청을 확인해 주세요.');
-          const data = { version: 1, scope: this.scope, record: next };
-          await this.writeAtomic(this.companionHandoffPath, JSON.stringify({ checksum: hash(JSON.stringify(data)), data }), lock.owner.nonce);
+          if (next === null) await unlink(this.companionHandoffPath);
+          else {
+            if (!validCompanionDesktopHandoffRecord(next)) fail('invalid', '이어갈 요청을 확인해 주세요.');
+            const data = { version: 1, scope: this.scope, record: next };
+            await this.writeAtomic(this.companionHandoffPath, JSON.stringify({ checksum: hash(JSON.stringify(data)), data }), lock.owner.nonce);
+          }
         }
         return next ? clone(next) : null;
       } catch (error) {
@@ -494,6 +497,16 @@ export class TaskWorkspaceStore {
       if (!timestamp(now)) return fail('invalid', '확인 시각을 확인해 주세요.');
       return { ...held, status: 'accepted', acceptedAt: now };
     }).then(record => record!);
+  }
+
+  /** Explicit local discard may remove an old revision's record, but only under CURRENT task/store CAS. */
+  discardCompanionHandoff(id: string, digest: string, expected: TaskWorkspaceExpected): Promise<void> {
+    const at = { ...expected };
+    return this.companionHandoffOperation(at, held => {
+      if (!held || held.checkpoint.id !== id || held.digest !== digest || held.checkpoint.target.taskId !== at.taskId)
+        return fail('stale', '지우려는 보관 요청이 바뀌었어요. 최신 작업에서 다시 확인해 주세요.');
+      return null;
+    }).then(() => undefined);
   }
 
   create(title: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
