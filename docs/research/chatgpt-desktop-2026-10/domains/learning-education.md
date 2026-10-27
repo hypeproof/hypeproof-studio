@@ -272,6 +272,9 @@ width nothing scrolls horizontally and captions use the short variant.
 REQ/DES-CGP-LEARN-14 as built (2026-10-26, DEC-LEARN-14): Chalk `/authoring` asks once per browser
 (`localStorage`, no Service store), pre-fills only lessons made with 새 강의 만들기, maps 초 1–6 → lv1, 중/고 → lv2,
 성인 → adult and 유아 → no tier, and adds a per-lesson 대상 단계 select. Owning requirement: chalk-authoring CH-01.
+DES-CGP-LEARN-14 closed (2026-10-27, CGP-LEARN-D-014, DEC-LEARN-14d): the R-014 panel already met one screen, two questions,
+44px chips and 375/1280 px; 나중에 was an outlined ghost button, so it now draws no border (a text button beside the filled
+저장). T-48 measures each clause in headless Chromium.
 
 ## 4. Open questions / unknowns
 
