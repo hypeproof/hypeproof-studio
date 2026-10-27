@@ -7465,6 +7465,20 @@ ring, dark/light/forced colours at 320/800/1420 and a 320x500 pane; IME composit
 folder and follow-up chips). The browser smoke fails under
 `FOCUS_REQUIRE_BROWSER=1` without a browser.
 
+Design acceptance (DES-SHELL-19, CGP-SHELL-D-019, 2026-10-28): at most six cards; each whole
+card, title and `이걸로 시작` together, is at most two line boxes tall, also for a title far
+longer than any shipped one, and no shipped title is clipped; `이걸로 시작` stays on one line
+inside its card. The list is one column below a 640px chat pane and two at 640px and wider,
+measured at 639 and 640px of the chat pane itself. `내가 정할래요` lies inside the visible
+conversation and is the topmost element at its own centre in 320x420, 320x500 and 1420x500
+panes, without any scrolling, in forced colours too. While a Korean IME composition is open every
+pick is disabled; a real mouse press on a card first commits the composition (the browser ends
+it on the press, as the OS input method does), so the composed syllable is kept exactly as typed
+and the idea follows on a new line; mouse and keyboard picks never send. Evidence:
+`extensions/hypeproof-chat/test/project-ideas-design-browser.smoke.mjs` (computed line boxes,
+the pane width set to 639/640px, `elementFromPoint`, and mouse, key and IME input sent through
+the DevTools protocol; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
 ## What's new after an update (CGP-SHELL-R-035)
 
 `REQ-STUDIO-WHATS-NEW` (REQ-SHELL-35 / CGP-SHELL-R-035 / CGP-SHELL-089 / PI#3, learning is
