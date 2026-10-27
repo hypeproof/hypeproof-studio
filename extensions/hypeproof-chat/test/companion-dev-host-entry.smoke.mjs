@@ -1,4 +1,7 @@
 import {test} from 'node:test';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {createRequire} from 'node:module';
@@ -37,8 +40,8 @@ test('journal lease retains admitted old write and cross-process lock until drai
 test('corrupt journal read is not absence; closed waiting acquisition never gets a runner',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'companion-corrupt-'));const acquire=load().__testAcquire;let first;
  try{await writeFile(join(directory,'journal.json'),'{broken');first=await acquire(directory,()=>true).ready;await assert.rejects(()=>first.journal.load(),/JSON|Unexpected|property/i);
-  const waiting=acquire(directory,()=>true);waiting.cancel();await assert.rejects(()=>waiting.ready,/cancelled/);await first.release();await waiting.settled;const successor=await acquire(directory,()=>true).ready;await successor.release();await assert.rejects(()=>first.journal.load(),/journal_closed/);assert.equal(await readFile(join(directory,'journal.json'),'utf8'),'{broken');
- }finally{await first?.release();await rm(directory,{recursive:true,force:true});}
+  const waiting=acquire(directory,()=>true);waiting.cancel();await assert.rejects(()=>waiting.ready,/cancelled/);await assert.rejects(()=>first.release(),/JSON|Unexpected|property/i);await waiting.settled;const successor=await acquire(directory,()=>true).ready;await successor.release();await assert.rejects(()=>first.journal.load(),/journal_closed/);assert.equal(await readFile(join(directory,'journal.json'),'utf8'),'{broken');
+ }finally{await first?.release().catch(()=>{});await rm(directory,{recursive:true,force:true});}
 });
 
 test('real provider exposes existing task view and emits metadata invalidation at native task/profile/runtime boundaries',async()=>{
@@ -72,4 +75,30 @@ test('registered native controls construct a real prepared owner on gesture and 
   const registration=control.api.registerClients({pairing(){created++;return {invitation:null,async start(scope){this.invitation={...native.pair,...scope,id:'ci_'+'a'.repeat(32),status:'open'};return {schema:'hps-companion-pairing-preview/2',id:this.invitation.id,invite_secret:'synthetic-challenge',host_key:'synthetic-public-key',invitation_digest:'a'.repeat(64),host_invite_proof:'synthetic-proof',challenge_expires_at:Math.floor(Date.now()/1000)+60};},async refresh(){return this.invitation;},async approve(){},async revoke(){}};},relay(){throw Error('no implicit cipher connection');}});
   assert.equal(created,0);const before=native.calls.length;await handler();assert.equal(created,1);assert.equal(native.calls.length,before+1,'one explicit authenticated routing /me, no implicit relay or profile read');control.invalidate();await handler();assert.equal(created,2);assert.equal(native.calls.length,before+2);assert.equal(messages.length,2);registration.dispose();control.dispose();
  }finally{await native.cleanup();}
+});
+
+
+test('never-acquired peer lock timeout permits a fresh explicit invitation after the peer releases', {timeout:80_000}, async()=>{
+ const native=await nativeBridgeFixture();let handler,created=0,control,registration,peer;const errors=[];
+ try{
+  native.context.globalStorageUri={fsPath:native.state};native.accounts.view=()=>({status:'signedIn',account:{id:'account'}});
+  native.vscode.commands={registerCommand:(_id,fn)=>{handler=fn;return new Disposable(()=>{});}};native.vscode.ProgressLocation={Notification:15};
+  native.vscode.window.showQuickPick=async items=>items.find(item=>item.action==='prepare');native.vscode.window.withProgress=async(_options,work)=>work({}, {onCancellationRequested:()=>new Disposable(()=>{})});native.vscode.window.showInformationMessage=async()=>{};native.vscode.window.showErrorMessage=async message=>errors.push(message);
+  const service='http://127.0.0.1:44321/v1',p=native.preparation;
+  const directory=join(native.state,'companion-host',createHash('sha256').update(JSON.stringify([service,'account','host-session',p.scope,p.hostId,p.projectId])).digest('hex'));
+  const lockModule=new URL('../src/accountLock.ts',import.meta.url).href;
+  const script=`import {accountLock} from ${JSON.stringify(lockModule)}; let release; const finish=new Promise(r=>release=r); process.on('message',()=>release()); const timer=setTimeout(release,60000); await accountLock(process.argv[1])(async()=>{process.send('held');await finish;});clearTimeout(timer);process.disconnect();`;
+  peer=spawn(process.execPath,['--experimental-strip-types','--input-type=module','-e',script,directory],{stdio:['ignore','ignore','inherit','ipc']});await once(peer,'message');
+  control=load({native}).createCompanionDevHostEntry(native.context,{accounts:native.accounts,connections:native.connections,configured:()=>({service,site:'http://127.0.0.1:44321'}),taskView:()=>native.store.getView(),epoch:()=>1});
+  registration=control.api.registerClients({pairing(){created++;return {invitation:null,async start(scope){this.invitation={...native.pair,...scope,id:'ci_'+'a'.repeat(32),status:'open'};return {schema:'hps-companion-pairing-preview/2',id:this.invitation.id,invite_secret:'synthetic-challenge',host_key:'synthetic-public-key',invitation_digest:'a'.repeat(64),host_invite_proof:'synthetic-proof',challenge_expires_at:Math.floor(Date.now()/1000)+60};},async refresh(){return this.invitation;},async approve(){},async revoke(){}};},relay(){throw Error('no implicit relay');}});
+  await handler();assert.equal(created,0);assert.equal(errors.length,1,'contention is reported to the first explicit gesture');const exited=once(peer,'exit');peer.send('release');await exited;
+  await handler();assert.equal(created,1,'a fresh gesture can start after never-owned contention ends');assert.equal(errors.length,1);
+ }finally{registration?.dispose();control?.dispose();if(peer?.connected){const exited=once(peer,'exit');peer.send('release');await exited;}await native.cleanup();}
+});
+
+test('admitted journal IO failure drains and unlocks but rejects cleanup instead of admitting a local successor',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'companion-io-failure-'));const io={...realFs,writeFile:async()=>{throw Error('synthetic_owned_write_failure');}};
+ const acquire=load({io}).__testAcquire;const first=await acquire(directory,()=>true).ready;
+ try{await assert.rejects(()=>first.journal.save({entries:[]}),/synthetic_owned_write_failure/);await assert.rejects(()=>first.release(),/synthetic_owned_write_failure/);await assert.rejects(()=>readFile(join(directory,'account-session.lock')),error=>error.code==='ENOENT');}
+ finally{await first.release().catch(()=>{});await rm(directory,{recursive:true,force:true});}
 });

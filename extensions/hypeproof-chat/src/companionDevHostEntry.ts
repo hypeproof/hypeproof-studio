@@ -34,17 +34,21 @@ function acquireJournalLease(directory: string, live: () => boolean, signal?: Ab
 } {
   let resolve!: (lease: JournalLease) => void, reject!: (reason: Error) => void;
   const ready = new Promise<JournalLease>((yes, no) => { resolve = yes; reject = no; });
-  let cancelled = false, lease: JournalLease | undefined;
+  let cancelled = false, enteredLock = false, lease: JournalLease | undefined;
   const cancel = () => { cancelled = true; reject(failure('cancelled')); lease?.stopAdmission(); void lease?.release().catch(() => {}); };
   if (signal?.aborted) cancelled = true;
   signal?.addEventListener('abort', cancel, { once: true });
   const settled = accountLock(directory)(async () => {
+    enteredLock = true;
     if (cancelled || !live()) { reject(failure('cancelled')); return; }
     let open = true, tail: Promise<void> = Promise.resolve(), unlock!: () => void, releasing: Promise<void> | undefined;
     const released = new Promise<void>(yes => { unlock = yes; });
+    let ioFailed = false, ioFailure: unknown;
     const admit = <T>(operation: () => Promise<T>): Promise<T> => {
       if (!open || !live()) return Promise.reject(failure('journal_closed'));
-      const work = tail.then(operation); tail = work.then(() => undefined, () => undefined); return work;
+      const work = tail.then(operation);
+      tail = work.then(() => undefined, error => { if (!ioFailed) { ioFailed = true; ioFailure = error; } });
+      return work;
     };
     const file = path.join(directory, 'journal.json');
     lease = {
@@ -65,12 +69,19 @@ function acquireJournalLease(directory: string, live: () => boolean, signal?: Ab
       stopAdmission: () => { open = false; },
       release: () => {
         open = false;
-        if (!releasing) releasing = (async () => { await tail; unlock(); await settled; })();
+        if (!releasing) releasing = (async () => { await tail; unlock(); await settled; if (ioFailed) throw ioFailure; })();
         return releasing;
       },
     };
     resolve(lease); await released;
-  }).catch(error => { reject(error); throw error; }).finally(() => signal?.removeEventListener('abort', cancel));
+  }).catch(error => {
+    reject(error);
+    // accountLock has already completed its owner-file cleanup before rejecting.
+    // Only its exact contention timeout without entering the critical section is retryable.
+    // Never normalize filesystem/acquisition errors or any owned cleanup/IO failure.
+    if (!enteredLock && error instanceof Error && error.message === '계정 연결이 다른 창에서 갱신 중이에요. 잠시 뒤 다시 시도해 주세요.') return;
+    throw error;
+  }).finally(() => signal?.removeEventListener('abort', cancel));
   // Callers retain this promise as a release barrier; attach an observer without changing its failure.
   void settled.catch(() => {});
   if (cancelled) reject(failure('cancelled'));
@@ -142,6 +153,7 @@ export function createCompanionDevHostEntry(context: vscode.ExtensionContext, po
       confirmComparedCode: (code, abort) => invoke(() => held.confirmComparedCode(code, abort)),
       connectCipher: abort => invoke(() => held.connectCipher(abort)),
       describeSelected: (id, abort) => invoke(() => held.describeSelected(id, abort)),
+      publishSelected: (id, abort) => invoke(() => held.publishSelected(id, abort)),
       receiveAndHandle: abort => invoke(() => held.receiveAndHandle(abort)),
       revoke: abort => invoke(() => held.revoke(abort)),
       close: release,
