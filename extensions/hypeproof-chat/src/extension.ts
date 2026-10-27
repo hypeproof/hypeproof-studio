@@ -1,3 +1,4 @@
+import { registerCompanionWorkspace } from "./companionWorkspaceHost";
 import { workPower } from "./workPower";
 import { registerActivityTrash } from "./activityTrashCommands";
 import { confirmOutbound } from "./outboundConsentHost.ts";
@@ -98,6 +99,7 @@ export async function activate(context: vscode.ExtensionContext) {
   try { await connections.initialize(); }
   catch (error) { void vscode.window.showWarningMessage(error instanceof ActivityConnectionError ? error.message : '저장된 활동 연결을 확인하지 못했습니다. 파일은 보존됩니다. 저장된 활동과 연결 서버를 확인해 주세요.'); }
   context = connections.wrap();
+  registerCompanionWorkspace(context, connections);
   registerExternalSkillCommands(context);
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const activationService = vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
