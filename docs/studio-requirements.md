@@ -4207,8 +4207,23 @@ prompt time must still hold after the answer; a file created, changed or removed
 the dialog is open refuses the write (files over 64 MB compare size and modification time
 only). The gap between this re-check and the CLI's own write is the one REQ-E1 records. The call's text stays in the host; the webview gets
 only the summary. Text is at least 14px, the section stays inside the dialog at 320px,
-and forced colours draw its edge and warning in CanvasText. Not built here: DES-ART-21's
-4-step bar and diff link (CGP-ART-D-021). Tests: `test/write-approval-change.smoke.mjs`,
+and forced colours draw its edge and warning in CanvasText.
+
+DES-ART-21 (CGP-ART-D-021): under the percentage, a 4-step bar whose filled steps follow the
+words beside it, so the bar never says more than the label: 0 when no existing content changes,
+1 up to 25%, 2 up to 50%, 3 for a rewrite below 80% ("절반 넘게"), 4 at 80% or more ("거의 전부").
+The bar is named in words for assistive tech ("바뀌는 정도 {pct} · 4칸 중 N칸"); a rewrite's bar is
+drawn in the warning colour beside the warning icon and words, and forced colours draw the steps
+in CanvasText on Canvas. "바뀐 곳 보기" (a 44px text button) appears only for a measured
+difference (never for an unknown change or identical text) and opens a read-only diff editor
+beside the chat: left, the exact bytes the summary was computed from (not a re-read); right, the
+text the call would leave behind. Both texts stay in the host, bound to the pending request id;
+the request id and file index from the webview select, never supply, text. Opening it keeps focus
+in the dialog and never answers it; once the dialog is answered, cancelled or replaced, the texts
+are dropped, the diff tab is closed (also one that finished opening after the answer) and later
+requests for it are ignored. A file changed while the dialog is open is still refused by the
+fingerprint check; the diff does not refresh the summary. The section and link fit at 320px
+with no horizontal scroll. Tests: `test/write-approval-change.smoke.mjs`,
 `test/write-approval-change-layout.smoke.mjs`, `test/write-approval-dialog.test.tsx`.
 
 ### Version side panel (CGP-KNOW-D-017 / DES-KNOW-30)

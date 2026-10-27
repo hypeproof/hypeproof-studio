@@ -241,7 +241,7 @@ import { browserRememberLabel, browserTarget, cleanName } from "./browserTargetH
 import { learnerToolLine, UNKNOWN_TOOL_LINE } from "./toolLineLabel";
 import { WriteApprovalRequest } from "./writeApprovalPrompt";
 import { writePathLine, writePathEntries, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
-import { asWriteEdit, existingFingerprint, readExistingText, writeChangeView } from "./writeApprovalChange";
+import { asWriteEdit, existingFingerprint, readExistingText, writeChangeComparison, writeChangeView } from "./writeApprovalChange";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
@@ -1185,11 +1185,64 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const edit=entries.length===1?asWriteEdit((payload as {edit?:unknown}|null|undefined)?.edit):null;
     const existing=entries.map(e=>readExistingText(e.key));
     const changes=entries.map((e,i)=>writeChangeView(existing[i],edit,e.display));
-    const approved=await this.writeApprovalRequest.confirm({id,title,verb,files:entries.map(writePathLine),changes});
+    // CGP-ART-D-021: "바뀐 곳 보기" compares the exact bytes the summary was computed from with the call's text. The
+    // texts stay in the host, bound to this request id, and are dropped (with any diff tab) once it is answered.
+    const comparisons=entries.map((e,i)=>{const c=changes[i]?.kind==='measured'?writeChangeComparison(existing[i],edit):null;return c?{...c,name:e.display}:null;});
+    if(comparisons.some(Boolean))this.writeApprovalDiffs.set(id,{seq:++this.writeApprovalDiffSeq,files:comparisons,uris:[]});
+    let approved:boolean;
+    try { approved=await this.writeApprovalRequest.confirm({id,title,verb,files:entries.map(writePathLine),changes}); }
+    finally { void this.closeWriteApprovalDiffs(id); }
     if(!approved)return false;
     if(entries.some((e,i)=>existingFingerprint(e.key)!==existing[i].fingerprint))return false;
     const after=await this.context.secrets.get(TOKEN_KEY);
     return token===after && current();
+  }
+  /** CGP-ART-D-021: per pending write approval, the texts "바뀐 곳 보기" may open; deleted when it is answered. */
+  private readonly writeApprovalDiffs=new Map<string,{seq:number;files:Array<{before:string;after:string;name:string}|null>;uris:vscode.Uri[]}>();
+  private writeApprovalDiffSeq=0;
+  private readonly writeApprovalDiffScheme=`hps-write-approval-${crypto.randomUUID()}`;
+  private readonly writeApprovalDiffContent=new Map<string,string>();
+  private writeApprovalDiffProvider?:vscode.Disposable;
+  /**
+   * CGP-ART-D-021 (DES-ART-21): a read-only diff of one existing file as it was summarised and the text the call
+   * would leave behind. Only for the pending request that offered it; opening it never answers, and the dialog keeps
+   * focus (preserveFocus, beside the chat so the chat panel stays visible).
+   */
+  private async openWriteApprovalDiff(id:unknown,index:unknown):Promise<void> {
+    const pending=typeof id==='string'?this.writeApprovalDiffs.get(id):undefined;
+    const file=pending&&typeof index==='number'&&Number.isInteger(index)&&index>=0?pending.files[index]:null;
+    if(!pending||!file)return;
+    if(!this.writeApprovalDiffProvider){
+      this.writeApprovalDiffProvider=vscode.workspace.registerTextDocumentContentProvider(this.writeApprovalDiffScheme,{provideTextDocumentContent:uri=>this.writeApprovalDiffContent.get(uri.toString())??''});
+      this.context.subscriptions?.push(this.writeApprovalDiffProvider);
+    }
+    const clean=(text:string)=>text.replace(/[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/g,'');
+    const base=Array.from(clean(file.name.split(/[\\/]/).pop()||'').replace(/[?#%]/g,'_')).slice(0,80).join('')||'file';
+    const left=vscode.Uri.from({scheme:this.writeApprovalDiffScheme,path:`/${pending.seq}/${index}/지금/${base}`});
+    const right=vscode.Uri.from({scheme:this.writeApprovalDiffScheme,path:`/${pending.seq}/${index}/승인하면/${base}`});
+    if(!pending.uris.some(u=>u.toString()===left.toString())){
+      this.writeApprovalDiffContent.set(left.toString(),file.before);this.writeApprovalDiffContent.set(right.toString(),file.after);
+      pending.uris.push(left,right);
+    }
+    try {
+      await vscode.commands.executeCommand('vscode.diff',left,right,`${clean(file.name)} · 지금 ↔ 승인하면`,{preview:true,preserveFocus:true,viewColumn:vscode.ViewColumn.Beside});
+    } catch { /* the dialog stays; nothing is approved by a failed view */ }
+    // Answered while the editor was opening: the close already ran, so close what just opened.
+    if(this.writeApprovalDiffs.get(id as string)!==pending)await this.closeWriteApprovalDiffTabs(pending.uris);
+  }
+  private async closeWriteApprovalDiffs(id:string):Promise<void> {
+    const pending=this.writeApprovalDiffs.get(id);
+    if(!pending)return;
+    this.writeApprovalDiffs.delete(id);
+    await this.closeWriteApprovalDiffTabs(pending.uris);
+  }
+  private async closeWriteApprovalDiffTabs(uris:vscode.Uri[]):Promise<void> {
+    const keys=new Set(uris.map(u=>u.toString()));
+    try {
+      const tabs=vscode.window.tabGroups.all.flatMap(g=>g.tabs).filter(t=>t.input instanceof vscode.TabInputTextDiff&&keys.has(t.input.original.toString()));
+      if(tabs.length)await vscode.window.tabGroups.close(tabs);
+    } catch { /* closing is tidiness; the texts are dropped below either way */ }
+    for(const k of keys)this.writeApprovalDiffContent.delete(k);
   }
   /**
    * #476 — has the participant ever been told about the agent-sdk → proxy fallback
@@ -7205,6 +7258,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "commandApprovalAnswer": this.commandApprovalRequest.respond(msg.id,msg.choice); return;
       case "annotationLeaveAnswer": this._annotationLeaveRequest?.respond(msg.id,msg.discard); return;
       case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
+      case "writeApprovalDiff": await this.openWriteApprovalDiff(msg.id,msg.index); return;
       case "folderConsentAnswer":
         if (!(this.editorChat?.visible || this.view?.visible)) this.folderConsentRequest?.cancel();
         else this.folderConsentRequest?.respond(msg.id,msg.level);
