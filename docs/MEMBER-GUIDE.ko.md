@@ -242,6 +242,92 @@ repo별 세부 규칙은 각 consumer의 `README.md`, `DEV-GUIDE.md`, `docs/` �
 
 ---
 
+## 2e. 에이전트 App 인증
+
+PR 준비에는 다른 비공개 정본 저장소를 읽는 과정도 있다. 읽기(GET·Git fetch)는
+본인의 기존 `gh`/Git 로그인, 쓰기(push·PR)는 대상 저장소 전용 App 토큰을 쓴다.
+읽기 권한 부족은 관리자가 접근 권한을 확인해야 하며, 사람 명의 쓰기로 우회하지 않는다.
+
+에이전트가 만든 커밋·push·PR은 팀의 `hypeproof-agent[bot]`으로 기록한다.
+**멤버마다 GitHub App을 만들거나 조직 private key(PEM)를 받을 필요는 없다.**
+사람이 직접 한 작업은 사람 신원을 유지한다.
+
+### 최초 설정과 현재 활성화 상태
+
+**운영 브로커는 활성화됐다.** 2026-10-26에 Jay 계정으로 저장소별 토큰 발급과
+봇 Draft PR [#474](https://github.com/hypeproof/hypeproof-harness/pull/474) 생성을
+확인했다(시험 PR은 닫고 브랜치 정리). 다른 팀원 PC에서의 성공을 대신 보증하지
+않으므로 Harness가 각자의 로그인·저장소 접근을 확인한다.
+
+팀원은 Claude Code나 Codex에 **“이 저장소 개발을 시작할 수 있게 연결하고,
+작업을 이어가 줘”**라고 말하면 된다. 인증 명령을 직접 입력할 필요는 없다.
+
+1. Harness가 연결 상태를 확인한다.
+2. 최초 한 번, 기존 GitHub 인증 정보를 HypeProof에 보내는 이유를 설명하고 동의를
+   받는다. 기존 동의가 있으면 다시 묻지 않는다.
+3. GitHub에 로그인되어 있지 않으면 에이전트가 브라우저 로그인을 시작한다.
+   팀원은 GitHub 화면에서 본인 인증만 완료한다.
+4. 실제 저장소 권한이 확인되면 원래 개발과 PR 작업을 이어간다.
+
+기존 `gh` 인증 토큰은 고정 주소 `https://mcp.hypeproof-ai.xyz/agent-auth/token`에
+본인 확인용으로 전송된다. 조직의 active 멤버이고 요청한 저장소 하나의 write
+권한이 있어야 짧은 수명 App 토큰을 받을 수 있다. 로컬에는 비밀이 아닌 동의만
+저장하고, 토큰이나 PEM을 새 파일로 저장하지 않는다. 진단용 토큰은 확인 직후
+폐기한다. 일반 쓰기 명령의 토큰은 명령별로 발급하며 최대 한 시간 후 만료된다.
+
+연결을 끊고 싶으면 **“이 컴퓨터의 HypeProof 개발 연결을 해제해 줘”**라고 요청한다.
+에이전트가 `agent-auth.py logout`을 실행한다. 기존 GitHub 로그인은 유지되고
+이미 발급된 쓰기 토큰은 만료 때까지 남을 수 있다.
+
+<details>
+<summary>직접 진단하는 사람을 위한 명령</summary>
+
+정본 Harness에서 실행한다. `login`은 설명된 전송에 직접 동의할 때만 사용한다.
+
+```bash
+python3 scripts/agent-identity/agent-auth.py ensure --repo hypeproof/hypeprooflab --json
+python3 scripts/agent-identity/agent-auth.py login
+python3 scripts/agent-identity/agent-auth.py status
+python3 scripts/agent-identity/agent-auth.py logout
+```
+
+`status`는 동의 기록만 검사한다. 실제 권한 확인은 `ensure`로 한다.
+
+</details>
+
+### 일상 작업
+
+```bash
+# HYPEPROOF_HARNESS는 본인의 정본 Harness checkout 경로
+"$HYPEPROOF_HARNESS/scripts/agent-identity/agent-git.sh" commit -m 'fix: 설명'
+"$HYPEPROOF_HARNESS/scripts/agent-identity/agent-git.sh" rebase origin/main
+"$HYPEPROOF_HARNESS/scripts/agent-identity/with-agent-identity.sh" git push -u origin BRANCH
+```
+
+로컬 커밋·rebase는 로그인·키·토큰·네트워크 없이 실행한다. 네트워크 쓰기 wrapper는
+명령의 `--repo` 또는 현재 저장소의 `origin`에서 대상 하나를 정한다. 모호하면
+`HYPEPROOF_AGENT_REPOSITORY=hypeproof/<repo>`로 명시한다. 여러 저장소 전체 토큰은
+요청하지 않는다. 다른 저장소 작업은 별도 호출로 권한을 다시 확인한다.
+
+workflow 파일을 쓰는 작업만 `HYPEPROOF_AGENT_WORKFLOWS=1`로 명시적으로 선택하고,
+본인의 `gh` OAuth 인증에도 `workflow` scope가 있어야 한다. 기본 토큰에는 이 권한이
+없다. 브로커 토큰은 organization Projects·관리·멤버·Actions·배포 권한을 요청하지
+않는다. 보드 hook이 별도 권한 부족을 보고하면 본래 쓰기 작업과 구분해 보고한다.
+기존 키 보관자의 승인된 bootstrap 경로는 유지하지만 저장소 범위는 동일하게
+좁히며 키를 멤버에게 배포하지 않는다.
+
+| 오류 | 확인할 일 |
+|---|---|
+| `No agent login/key configured` | 에이전트에게 개발 연결을 요청한다. Harness가 최초 동의와 로그인 복구를 진행하며 PEM은 필요 없다. |
+| 봇 committer 신원 거부 | 문제 커밋의 실제 작성자를 확인하고 본인이 에이전트로 만든 커밋만 수정한다. 사람 커밋은 보존한다. |
+| HTTP 403 | active 조직 멤버십과 요청 저장소 write 권한 확인. 사람 신원 fallback은 하지 않는다. |
+| HTTP 404 / 503 | 관리자에게 브로커 배포·활성화 상태 확인. 로그인 완료로 해결됐다고 보고하지 않는다. |
+
+실패 시 `status`와 오류의 비밀 아닌 부분만 보고한다. 토큰을 출력·복사하거나,
+사람 신원으로 push/PR을 재시도하거나, 실제 사람 커밋을 봇으로 일괄 재작성하지 않는다.
+
+---
+
 ## 3. 어떤 스킬이 있나
 
 `.claude/skills/` 안을 보면 그 repo가 쓰는 Claude Code 스킬들이 있다.
