@@ -47,6 +47,7 @@ async function run(){
   eq(host.textContent.includes('이 기기의 보기 기록을 지웠어요'),false,'no success claim before callback completion');
   await act(()=>wait.resolve());
   eq(preview(),0,'awaited success unmounts the preview'); eq(state(),'local_cleared','awaited success shows cleared state');
+  eq(host.textContent.includes('내 퀴즈') || host.textContent.includes('내 작품') || host.textContent.includes('연결됨'),false,'cleared view also removes stale artifact titles and active connection claim');
   eq(host.textContent.includes('이미 허용한 컴퓨터 작업은 되돌리지 않았어요.'),true,'success claims no computer undo');
   eq(document.activeElement?.getAttribute('role'),'status','completion focuses the live status');
   eq(buttons().length,0,'cleared view cannot accidentally send/reconnect through its old owner');

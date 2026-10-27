@@ -56,3 +56,10 @@ No dependency installation or shared dependency mutation was performed.
 NOT RUN here: actual local-storage/transport-ledger deletion, browser layout,
 screen-reader/device acceptance, remote cancellation/revocation, production or
 release validation. Root composition supplies the real clearing callback.
+## Follow-up: stale header after cleanup
+
+The cleared view now also drops the previous artifact/project labels and the
+active-connection label. This prevents stale controlled props from retaining
+visible viewing metadata after the caller's completed cleanup. A focused React
+regression verifies those labels are gone together with the preview. This does
+not claim storage or key deletion beyond the caller's awaited `forget` contract.

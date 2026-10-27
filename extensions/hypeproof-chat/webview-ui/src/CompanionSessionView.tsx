@@ -63,13 +63,14 @@ export function CompanionSessionView({ snapshot, controller, renderPreview }: Co
       if (mounted.current) setPending(false);
     }
   }
-  const selected = snapshot.selection, busy = snapshot.busy || pending;
+  const cleared = forgetStage === 'cleared';
+  const selected = cleared ? null : snapshot.selection, busy = snapshot.busy || pending;
   const confirmingForget = !!controller.forget && ['confirming', 'pending', 'failed'].includes(forgetStage);
   return <section className="hps-companion-session" aria-label="컴퓨터 결과 보기" data-state={presentation.phase}>
     <header className="hps-companion-heading">
       <p className="hps-companion-project">{selected?.projectName ?? '컴퓨터와 함께 보기'}</p>
       <h2>{selected?.artifactName ?? '내가 만든 결과'}</h2>
-      <p className="hps-companion-computer"><ChatIcon kind={snapshot.connection === 'connected' ? 'plug' : 'moon'} size={20}/><span>{snapshot.computerName}</span><span>{snapshot.connection === 'connected' ? '연결됨' : snapshot.connection === 'reconnecting' ? '연결 확인 중' : '연결 기다림'}</span></p>
+      <p className="hps-companion-computer"><ChatIcon kind={!cleared && snapshot.connection === 'connected' ? 'plug' : 'moon'} size={20}/><span>{cleared ? '내 컴퓨터' : snapshot.computerName}</span><span>{cleared ? '보기 종료' : snapshot.connection === 'connected' ? '연결됨' : snapshot.connection === 'reconnecting' ? '연결 확인 중' : '연결 기다림'}</span></p>
     </header>
     <div ref={status} tabIndex={-1} className="hps-companion-status" role="status" aria-live="polite" aria-atomic="true">
       <ChatIcon kind={icon(presentation.phase)} size={24}/>
