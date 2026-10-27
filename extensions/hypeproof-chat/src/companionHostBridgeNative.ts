@@ -29,7 +29,7 @@ export interface CompanionNativeBridgePorts {
   now?: () => number;
 }
 /** Construct explicitly in an isolated development session; the production extension does not register it. */
-export function createDevCompanionHostBridge(ports: CompanionNativeBridgePorts): CompanionHostBridge {
+export function createDevCompanionAuthoritySnapshot(ports: CompanionNativeBridgePorts): () => Promise<CompanionAuthoritySnapshot | null> {
   const now = ports.now ?? Date.now;
   const local = () => {
     const active = ports.connections.current, document = vscode.window.activeTextEditor?.document;
@@ -79,6 +79,10 @@ export function createDevCompanionHostBridge(ports: CompanionNativeBridgePorts):
       consentRevision: parseInt(hash(JSON.stringify(folder)).slice(0, 12), 16), folderReadAllowed: true, host: 'online',
       artifact: { id: hash('hps-companion-artifact/1:' + before.file), version: before.digest, path: before.file, label: basename(before.file) } };
   };
+  return snapshot;
+}
+export function createDevCompanionHostBridge(ports: CompanionNativeBridgePorts): CompanionHostBridge {
+  const snapshot = createDevCompanionAuthoritySnapshot(ports), now = ports.now ?? Date.now;
   return new CompanionHostBridge({ journal: ports.journal, now, snapshot, confirm: async prompt => {
     const detail = [`연결된 휴대폰: ${prompt.deviceId}`, `선택한 파일: ${prompt.artifact}`, `작업 폴더: ${prompt.workspace}`,
       `작업: ${prompt.taskId} · 버전 ${prompt.version}`, `파일 버전: ${prompt.artifactVersion}`, `요청: ${prompt.requestId}`,

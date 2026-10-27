@@ -15772,6 +15772,9 @@
         },
         {
           "path": "apps/companion-android/test/browser-boot.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authoring-intent.smoke.mjs"
         }
       ]
     },
@@ -15833,6 +15836,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionSelection.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthoringIntent.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthoringHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthoringHostNative.ts"
         }
       ]
     },

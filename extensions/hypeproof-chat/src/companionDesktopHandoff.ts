@@ -16,6 +16,8 @@ export interface CompanionDesktopHandoffCheckpoint {
 export interface CompanionDesktopHandoffRecord {
   checkpoint: CompanionDesktopHandoffCheckpoint; digest: string;
   status: 'pending' | 'accepted'; acceptedAt?: number;
+  /** Draft import receipt only; never a model turn or execution receipt. */
+  authoringImport?: { requestHash: string; state: 'review' | 'prepared' | 'imported'; revision?: number };
 }
 export const COMPANION_HANDOFF_TEXT_BYTES = 2048;
 const encoder = new TextEncoder();
@@ -43,7 +45,11 @@ export function validCompanionDesktopHandoff(value: unknown): value is Companion
     && encoder.encode(JSON.stringify(value)).length <= 8192;
 }
 export function validCompanionDesktopHandoffRecord(value: unknown): value is CompanionDesktopHandoffRecord {
-  return object(value) && Object.keys(value).every(k=>['checkpoint','digest','status','acceptedAt'].includes(k))
+  return object(value) && Object.keys(value).every(k=>['checkpoint','digest','status','acceptedAt','authoringImport'].includes(k))
+    && (value.authoringImport === undefined || object(value.authoringImport)
+      && Object.keys(value.authoringImport).every(k=>['requestHash','state','revision'].includes(k))
+      && digest(value.authoringImport.requestHash) && ['review','prepared','imported'].includes(String(value.authoringImport.state))
+      && (value.authoringImport.state === 'imported' ? integer(value.authoringImport.revision) : value.authoringImport.revision === undefined))
     && validCompanionDesktopHandoff(value.checkpoint) && digest(value.digest)
     && (value.status === 'pending' ? value.acceptedAt === undefined : value.status === 'accepted' && integer(value.acceptedAt));
 }

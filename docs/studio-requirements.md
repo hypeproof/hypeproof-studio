@@ -7729,3 +7729,13 @@ The [bounded transfer and mobile presentation slice](evidence/companion-artifact
 adds framed results and controlled result presentation while retaining the
 original runtime/relay limits. Its partial source/browser evidence does not
 complete device, restart, classroom or production acceptance.
+
+The bounded DMC-5 authoring-import seam treats a phone request as exact text for
+desktop review, with a distinct strict contract and the existing pair, account,
+task, saved-artifact and owner checks. Explicit desktop import may fill only an
+empty current task draft under the existing store lock; conflicting drafts and
+cancelled requests remain preserved. Import receipts do not authorize execution.
+An interrupted import is retained for reconciliation and cannot automatically
+replay. The native adapter is not yet registered to a transport or normal chat
+view: owner demultiplexing, safe visible-draft refresh, normal-engine execution,
+result preservation and two-learner/classroom evidence remain required for DMC-5.

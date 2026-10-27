@@ -26,14 +26,19 @@ const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v ===
 const exact = (v: Record<string, unknown>, keys: readonly string[]) => Object.keys(v).length === keys.length && Object.keys(v).every(k => keys.includes(k));
 const requestKeys = ['schema','requestId','actorId','deviceId','hostId','workspaceId','projectId','taskId','version','epoch','consentRevision','artifactId','artifactVersion','operation'];
 function fail(): never { throw Error('companion_selection_invalid'); }
-function request(value: unknown, pair: CompanionSelectionPair): CompanionHostRequest {
+/** Browser-safe structural parser; native/verified-pair callers still bind current authority separately. */
+export function parseCompanionPreviewSelection(value: unknown): CompanionHostRequest | null {
  if (!object(value) || !exact(value, requestKeys) || value.schema !== 'hps-companion-host-request/1' || value.operation !== 'preview.read'
   || !['requestId','actorId','deviceId','hostId','workspaceId','projectId','taskId','artifactId'].every(k=>id(value[k]))
   || String(value.requestId).length > 96 || !digest(value.artifactVersion)
-  || !['version','epoch','consentRevision'].every(k=>integer(value[k]))
-  || value.actorId !== pair.account_id || value.deviceId !== pair.device_id || value.hostId !== pair.host_id
-  || value.workspaceId !== pair.workspace_id || value.projectId !== pair.project_id) fail();
+  || !['version','epoch','consentRevision'].every(k=>integer(value[k]))) return null;
  return Object.freeze({...value}) as unknown as CompanionHostRequest;
+}
+function request(value: unknown, pair: CompanionSelectionPair): CompanionHostRequest {
+ const selected = parseCompanionPreviewSelection(value);
+ if (!selected || selected.actorId !== pair.account_id || selected.deviceId !== pair.device_id || selected.hostId !== pair.host_id
+  || selected.workspaceId !== pair.workspace_id || selected.projectId !== pair.project_id) fail();
+ return selected;
 }
 function active(pair: CompanionSelectionPair): void {
  if (!pair || pair.status !== 'paired' || pair.capability !== 'preview.read' || !id(pair.id)

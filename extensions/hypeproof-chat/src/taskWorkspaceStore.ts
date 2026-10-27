@@ -430,9 +430,10 @@ export class TaskWorkspaceStore {
     });
   }
 
-  /** Explicit local data handoff only; uses this store's queue, lock and exact revision. No draft mutation. */
+  /** Local handoff and explicitly reviewed draft import share this store's queue, lock and exact revision. */
   private companionHandoffOperation(expected: TaskWorkspaceExpected,
-    change: (held: CompanionDesktopHandoffRecord | null) => CompanionDesktopHandoffRecord | null): Promise<CompanionDesktopHandoffRecord | null> {
+    change: (held: CompanionDesktopHandoffRecord | null) => CompanionDesktopHandoffRecord | null,
+    draftImport?: { draft: ActivityDraft; isCurrent(): boolean }): Promise<CompanionDesktopHandoffRecord | null> {
     const expectedAt = { ...expected };
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
@@ -455,7 +456,14 @@ export class TaskWorkspaceStore {
             || envelope.data.record.digest !== hash(JSON.stringify(envelope.data.record.checkpoint))) return fail('corrupt', '이어갈 요청 기록의 범위나 형식을 확인할 수 없습니다.');
           held = clone(envelope.data.record as CompanionDesktopHandoffRecord);
         } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
-        const next = change(held);
+        let next = change(held);
+        if (draftImport && next?.authoringImport?.state !== 'imported') {
+          const task = this.requireTask(disk, disk.activeTaskId);
+          if (!draftImport.isCurrent() || JSON.stringify(task.draft) !== JSON.stringify(draftImport.draft)
+            || task.draft.text || task.draft.images.length || task.draft.queued !== null || task.draft.inlineEdit
+            || task.draft.recovered?.length || task.draft.imports?.length)
+            fail('stale', '컴퓨터에 입력 중인 내용이 있어요. 기존 입력은 그대로 두었어요.');
+        }
         if (JSON.stringify(next) !== JSON.stringify(held)) {
           if (next === null) await unlink(this.companionHandoffPath);
           else {
@@ -463,6 +471,20 @@ export class TaskWorkspaceStore {
             const data = { version: 1, scope: this.scope, record: next };
             await this.writeAtomic(this.companionHandoffPath, JSON.stringify({ checksum: hash(JSON.stringify(data)), data }), lock.owner.nonce);
           }
+        }
+        if (draftImport && next?.authoringImport?.state === 'prepared') {
+          // Write-ahead receipt: interruption must never silently reimport a request after Send.
+          if (!draftImport.isCurrent()) fail('stale', '현재 작업이 바뀌었어요. 요청을 다시 확인해 주세요.');
+          const task = this.requireTask(disk, disk.activeTaskId);
+          task.draft = { ...clone(draftImport.draft), text: next.checkpoint.reviewedIntent };
+          disk.revision++;
+          const encoded = JSON.stringify({ checksum: hash(JSON.stringify(disk)), data: disk });
+          decode(encoded, this.scope);
+          await this.writeAtomic(this.filePath, encoded, lock.owner.nonce);
+          this.data = disk;
+          next = { ...next, authoringImport: { ...next.authoringImport, state: 'imported', revision: disk.revision } };
+          const data = { version: 1, scope: this.scope, record: next };
+          await this.writeAtomic(this.companionHandoffPath, JSON.stringify({ checksum: hash(JSON.stringify(data)), data }), lock.owner.nonce);
         }
         return next ? clone(next) : null;
       } catch (error) {
@@ -476,18 +498,31 @@ export class TaskWorkspaceStore {
   readCompanionHandoff(expected: TaskWorkspaceExpected): Promise<CompanionDesktopHandoffRecord | null> {
     return this.companionHandoffOperation(expected, held => held);
   }
-  stageCompanionHandoff(checkpoint: CompanionDesktopHandoffCheckpoint, expected: TaskWorkspaceExpected): Promise<CompanionDesktopHandoffRecord> {
+  stageCompanionHandoff(checkpoint: CompanionDesktopHandoffCheckpoint, expected: TaskWorkspaceExpected, authoringHash?: string): Promise<CompanionDesktopHandoffRecord> {
     // Snapshot before a queued caller may mutate its input. Data itself grants no authority.
-    if (!validCompanionDesktopHandoff(checkpoint) || checkpoint.target.taskId !== expected.taskId || checkpoint.target.version !== expected.revision)
+    if ((authoringHash !== undefined && !/^[a-f0-9]{64}$/.test(authoringHash)) || !validCompanionDesktopHandoff(checkpoint) || checkpoint.target.taskId !== expected.taskId || checkpoint.target.version !== expected.revision)
       return Promise.reject(new TaskWorkspaceStoreError('invalid', '현재 작업과 같은 요청만 보관할 수 있어요.'));
     const saved = clone(checkpoint), digest = hash(JSON.stringify(saved));
     return this.companionHandoffOperation({ ...expected }, held => {
       if (held) {
-        if (held.checkpoint.id === saved.id && held.digest === digest) return held;
+        if (held.checkpoint.id === saved.id && held.digest === digest && held.authoringImport?.requestHash === authoringHash) return held;
         return fail('stale', '이미 보관한 이어갈 요청이 있어요. 기존 요청을 먼저 확인해 주세요.');
       }
-      return { checkpoint: saved, digest, status: 'pending' };
+      return { checkpoint: saved, digest, status: 'pending', ...(authoringHash ? {authoringImport: {requestHash: authoringHash, state: 'review' as const}} : {}) };
     }).then(record => record!);
+  }
+  /** Separate explicit desktop decision; DMC7 open/accept never implies draft import. */
+  importCompanionAuthoringDraft(id: string, requestHash: string, expected: TaskWorkspaceExpected,
+    draft: ActivityDraft, isCurrent: () => boolean): Promise<CompanionDesktopHandoffRecord> {
+    const original = clone(draft);
+    return this.companionHandoffOperation({ ...expected }, held => {
+      if (!held || held.checkpoint.id !== id || held.authoringImport?.requestHash !== requestHash)
+        return fail('stale', '검토한 요청이 바뀌었어요.');
+      if (held.authoringImport.state === 'imported') return held;
+      if (held.authoringImport.state === 'prepared') return fail('stale', '초안 가져오기 결과를 확인해야 해요. 자동으로 다시 가져오지 않아요.');
+      if (!isCurrent()) return fail('stale', '현재 작업이 바뀌었어요.');
+      return { ...held, authoringImport: { requestHash, state: 'prepared' } };
+    }, {draft: original, isCurrent}).then(record=>record!);
   }
   acceptCompanionHandoff(id: string, digest: string, expected: TaskWorkspaceExpected, now = Date.now()): Promise<CompanionDesktopHandoffRecord> {
     return this.companionHandoffOperation({ ...expected }, held => {
@@ -505,6 +540,8 @@ export class TaskWorkspaceStore {
     return this.companionHandoffOperation(at, held => {
       if (!held || held.checkpoint.id !== id || held.digest !== digest || held.checkpoint.target.taskId !== at.taskId)
         return fail('stale', '지우려는 보관 요청이 바뀌었어요. 최신 작업에서 다시 확인해 주세요.');
+      if (held.authoringImport && held.authoringImport.state !== 'review')
+        return fail('stale', '가져온 요청의 기록은 실행 결과와 확인하기 전까지 보존해야 해요.');
       return null;
     }).then(() => undefined);
   }

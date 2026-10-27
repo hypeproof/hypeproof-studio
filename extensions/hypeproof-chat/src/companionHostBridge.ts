@@ -57,7 +57,7 @@ function context(s: CompanionAuthoritySnapshot, authorized: boolean): CompanionH
     profile: s.profile, instructor: false, folderReadAllowed: s.folderReadAllowed,
     artifact: { id: s.artifact.id, version: s.artifact.version, path: s.artifact.path }, workspaceRoot: s.preparation.workspace };
 }
-function valid(s: CompanionAuthoritySnapshot, now: number): boolean {
+export function validCompanionAuthority(s: CompanionAuthoritySnapshot, now: number): boolean {
   const p = s.pair;
   return p.schema === 'hps-companion-pairing-preview/2' && p.status === 'paired' && p.execution_authorized === false
     && p.capability === 'preview.read' && p.grant_expires_at > Math.floor(now / 1000)
@@ -71,13 +71,13 @@ function valid(s: CompanionAuthoritySnapshot, now: number): boolean {
     && s.folderReadAllowed === true;
 }
 /** Stable policy identity excludes changing display/usage counters; all authority/scope inputs are bound. */
-function identity(s: CompanionAuthoritySnapshot): string {
+export function companionAuthorityIdentity(s: CompanionAuthoritySnapshot): string {
   return hash(JSON.stringify([s.preparation, s.pair, s.accountId, s.accountSessionId, s.binding,
     s.profile.profile_id, s.profile.activity_id, s.profile.activity_kind, s.profile.sdk_tools,
     s.profile.minor_cohort, s.profile.pass?.expires_at, s.taskId, s.version, s.epoch,
     s.consentRevision, s.folderReadAllowed, s.host, s.artifact]));
 }
-function requestFor(s: CompanionAuthoritySnapshot, requestId: string): CompanionHostRequest {
+export function companionSelectionRequest(s: CompanionAuthoritySnapshot, requestId: string): CompanionHostRequest {
   const c = context(s, false);
   return { schema: 'hps-companion-host-request/1', requestId,
     actorId: c.actorId, deviceId: c.deviceId, hostId: c.hostId, workspaceId: c.workspaceId, projectId: c.projectId,
@@ -93,17 +93,17 @@ export class CompanionHostBridge {
     this.ports = ports;
     this.dispatcher = new CompanionHostDispatcher({ journal: ports.journal, now: ports.now, context: async () => {
       const current = await this.current();
-      return current && this.consent && identity(current) === this.consent.scope ? context(current, true) : null;
+      return current && this.consent && companionAuthorityIdentity(current) === this.consent.scope ? context(current, true) : null;
     } });
   }
   async recover(): Promise<void> { this.consent = null; await this.dispatcher.recover(); }
   /** Explicit desktop publication of selected version metadata only; contains neither path nor content nor authority. */
   async describe(requestId: string): Promise<CompanionHostRequest | null> {
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(requestId)) return null;
-    const current = await this.current(); return current ? requestFor(current, requestId) : null;
+    const current = await this.current(); return current ? companionSelectionRequest(current, requestId) : null;
   }
   private async current(): Promise<CompanionAuthoritySnapshot | null> {
-    try { const s = await this.ports.snapshot(); return s && valid(s, this.ports.now()) ? s : null; } catch { return null; }
+    try { const s = await this.ports.snapshot(); return s && validCompanionAuthority(s, this.ports.now()) ? s : null; } catch { return null; }
   }
   handle(message: VerifiedCompanionMessage): Promise<CompanionDispatchResult> {
     const next = this.queue.then(() => this.run(message)); this.queue = next.catch(() => {}); return next;
@@ -125,7 +125,7 @@ export class CompanionHostBridge {
     catch { this.consent = null; encryptedReply.close(); return { state: 'denied', code: 'preview_transfer_unavailable' }; }
     const fresh = async () => {
       const current = await this.current();
-      return !outcome.artifact || !!(current && this.consent && this.consent.request === hash(message.text) && this.consent.scope === identity(current));
+      return !outcome.artifact || !!(current && this.consent && this.consent.request === hash(message.text) && this.consent.scope === companionAuthorityIdentity(current));
     };
     for (let index = 0; index < packets.length; index++) {
       const text = packets[index];
@@ -166,22 +166,22 @@ export class CompanionHostBridge {
     let request: CompanionHostRequest;
     try { request = JSON.parse(message.text); } catch { return deny('invalid_request'); }
     if (!request || typeof request.requestId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(request.requestId) || message.messageId !== request.requestId) return deny('invalid_request');
-    const expected = requestFor(before, request.requestId);
+    const expected = companionSelectionRequest(before, request.requestId);
     if (Object.keys(request).length !== Object.keys(expected).length || !Object.entries(expected).every(([k, v]) => request[k as keyof CompanionHostRequest] === v)) return deny('request_scope_mismatch');
     if (before.host !== 'online') return { state: 'wait_for_host', code: 'host_unavailable', requestId: request.requestId };
-    const binding = { request: hash(message.text), scope: identity(before) };
+    const binding = { request: hash(message.text), scope: companionAuthorityIdentity(before) };
     if (!this.consent || this.consent.request !== binding.request || this.consent.scope !== binding.scope) {
       this.consent = null;
       const approved = await this.ports.confirm({ requestId: request.requestId, deviceId: before.pair.device_id,
         artifact: before.artifact.label, artifactVersion: before.artifact.version, workspace: before.preparation.workspace,
         taskId: before.taskId, version: before.version });
       const after = await this.current();
-      if (!approved || !after || identity(after) !== binding.scope) return deny(approved ? 'consent_scope_changed' : 'host_consent_required');
+      if (!approved || !after || companionAuthorityIdentity(after) !== binding.scope) return deny(approved ? 'consent_scope_changed' : 'host_consent_required');
       this.consent = binding;
     }
     const result = await this.dispatcher.dispatch(message.text);
     const after = await this.current();
-    if (!after || identity(after) !== binding.scope) { this.consent = null; return deny('authority_changed'); }
+    if (!after || companionAuthorityIdentity(after) !== binding.scope) { this.consent = null; return deny('authority_changed'); }
     return result;
   }
 }
