@@ -7173,7 +7173,8 @@ the notes painted red over every slide and the switch on: three pages at 1280x72
 any page, the no-emulation fallback, a failed slide named, a reload mid-export, another document in the
 tab, an empty deck) and `test/deck-pdf-host.test.mjs` (the real provider: gate, refused folder write,
 another preview root, background tab and close, busy press, a deck changed mid-export, a link at
-`deck.pdf`, the failure notice). Both fail under `FOCUS_REQUIRE_BROWSER=1` without a browser. NOT RUN
+`deck.pdf`, the failure notice; DES-ART-23 / CGP-ART-D-023: the progress line within 300 ms while the
+preview server has not answered, and the preview-server and tab-open failure reasons). Both fail under `FOCUS_REQUIRE_BROWSER=1` without a browser. NOT RUN
 here: the export inside the installed Studio (its integrated browser's CDP and background-tab capture).
 
 ## Preview follow (CGP-ART-R-017)

@@ -165,3 +165,40 @@ test('a slide that cannot be captured: no file, the notice names deck/NN.md', { 
     assert.equal(s.notices().at(-1), 'deck/05.md 장을 PDF로 옮기지 못해 저장하지 않았어요. 덱 미리보기가 열리는지 확인한 뒤 다시 해 주세요.');
   } finally { await browser.close(); await s.done(); }
 });
+
+// DES-ART-23 (CGP-ART-D-023): "PDF export progress is shown within 300 ms. Failure says why." The progress line must
+// not wait on the preview server, the tab or the capture, so each of those is held open or failed here. No browser.
+test('DES-ART-23: progress within 300 ms while the preview server has not answered; each failure says why', async () => {
+  const s = await setup();
+  try {
+    const started = '덱을 PDF로 저장하고 있어요 (0 / 3장)';
+    const shownWithin = async (label, ms) => {
+      const t0 = performance.now();
+      while (!s.notices().includes(label)) {
+        if (performance.now() - t0 > ms) return null;
+        await new Promise((r) => setImmediate(r));
+      }
+      return performance.now() - t0;
+    };
+    // The preview server never answers until released: the line is already shown, nothing is opened yet.
+    let fail;
+    s.f.h.liveServer.ensure = () => new Promise((_, reject) => { fail = reject; });
+    const run = s.f.h.deckPdf();
+    const at = await shownWithin(started, 300);
+    assert.notEqual(at, null, `the progress line was not shown within 300 ms (notices: ${JSON.stringify(s.notices())})`);
+    assert.equal(s.f.opened.length, 0, 'shown before any tab is opened');
+    fail(new Error('preview server down'));
+    await run;
+    assert.equal(s.notices().at(-1), '덱을 다 불러오지 못해 PDF를 만들지 못했어요. 잠시 뒤 다시 해 주세요.');
+    assert.equal(s.f.h.deckPdfBusy, false, 'a failed export frees the command');
+    // The background tab cannot be opened: the reason names the window, no file is written.
+    s.f.posts.length = 0;
+    s.f.h.liveServer.ensure = async () => s.srv.base;
+    s.f.vscode.window.openBrowserTab = async () => { throw new Error('no browser'); };
+    const run2 = s.f.h.deckPdf();
+    assert.notEqual(await shownWithin(started, 300), null);
+    await run2;
+    assert.equal(s.notices().at(-1), '덱을 그릴 창을 열지 못해 PDF를 만들지 못했어요. 잠시 뒤 다시 해 주세요.');
+    assert.equal(fs.existsSync(path.join(s.work, 'venture', 'deck.pdf')), false);
+  } finally { await s.done(); }
+});
