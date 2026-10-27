@@ -1,12 +1,41 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CompanionClientAdapter } from '../src/companionClientAdapter.ts';
+import { createCompanionAuthoringIntent } from '../src/companionAuthoringIntent.ts';
 const tick = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 const deferred = () => { let resolve; const promise = new Promise(yes => { resolve = yes; }); return { promise, resolve }; };
 const signal = () => new AbortController().signal;
 const request = { schema: 'hps-companion-host-request/1', requestId: 'request-1', actorId: 'actor', deviceId: 'device', hostId: 'host', workspaceId: 'workspace', projectId: 'project', taskId: 'task', version: 1, epoch: 1, consentRevision: 1, artifactId: 'artifact', artifactVersion: 'a'.repeat(64), operation: 'preview.read' };
 const raw = JSON.stringify(request);
 const context = { accountId: 'account', sessionId: 'session', deviceId: 'device', pairingId: 'pair', cipherContext: 'b'.repeat(64), workspaceId: 'workspace', artifactId: 'artifact', artifactVersion: request.artifactVersion, epoch: 1 };
+
+test('authoring is a separate selected draft message through the same budget, never a preview/execution receipt', async () => {
+  const f=fixture();
+  const proposed=createCompanionAuthoringIntent({requestId:'intent-one',pairingId:'pair',selection:request,text:'정답 뒤에 설명을 보여 주세요.'});
+  await assert.rejects(f.adapter.submitAuthoring(proposed.text,proposed.requestId,signal()),/authoring_mismatch/);
+  assert.equal(f.calls.prepare,0);
+  await f.adapter.prepare(raw,request.requestId,signal());
+  const wrong=createCompanionAuthoringIntent({requestId:'intent-one',pairingId:'other',selection:request,text:'다른 컴퓨터'});
+  await assert.rejects(f.adapter.submitAuthoring(wrong.text,wrong.requestId,signal()),/authoring_mismatch/);
+  const changed=createCompanionAuthoringIntent({requestId:'intent-one',pairingId:'pair',selection:{...request,taskId:'other-task'},text:'다른 작업'});
+  await assert.rejects(f.adapter.submitAuthoring(changed.text,changed.requestId,signal()),/authoring_mismatch/);
+  const receipt=await f.adapter.submitAuthoring(proposed.text,proposed.requestId,signal());
+  assert.deepEqual(receipt,{state:'relay_received',requestId:'intent-one'});
+  assert.equal(f.calls.send,1);assert.equal(f.calls.budget,1);
+  await assert.rejects(f.adapter.submitAuthoring(proposed.text,proposed.requestId,signal()),/authoring_already_attempted/);
+  assert.equal(f.calls.send,1);f.adapter.dispose();
+});
+
+test('uncertain authored delivery stays held; changed bytes, duplicate gestures and close cannot send again', async () => {
+  const f=fixture({failSend:true});await f.adapter.prepare(raw,request.requestId,signal());
+  const proposed=createCompanionAuthoringIntent({requestId:'intent-two',pairingId:'pair',selection:request,text:'다음 문제를 만들어 주세요.'});
+  await assert.rejects(f.adapter.submitAuthoring(proposed.text,proposed.requestId,signal()),/http_429/);
+  await assert.rejects(f.adapter.submitAuthoring(proposed.text,proposed.requestId,signal()),/authoring_already_attempted/);
+  const altered=createCompanionAuthoringIntent({requestId:'intent-two',pairingId:'pair',selection:request,text:'바뀐 내용'});
+  await assert.rejects(f.adapter.submitAuthoring(altered.text,altered.requestId,signal()),/authoring_mismatch/);
+  f.adapter.dispose();await assert.rejects(f.adapter.submitAuthoring(proposed.text,proposed.requestId,signal()),/stopped/);
+  assert.equal(f.calls.send,1);
+});
 function fixture(options = {}) {
   const calls = { prepare: 0, send: 0, receive: 0, ack: 0, close: 0, budget: 0, dispatch: [] };
   const pairing = { role: 'device', sessionId: 'session', invitation: { id: 'pair', status: 'paired', account_id: 'account', device_session_id: 'session', device_id: 'device', workspace_id: 'workspace' },

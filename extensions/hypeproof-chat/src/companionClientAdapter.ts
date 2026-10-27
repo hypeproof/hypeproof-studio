@@ -1,4 +1,5 @@
 /** Structural injection seam for private @hypeproof/companion-client; no crypto or account transport implementation. */
+import { parseCompanionAuthoringIntent } from './companionAuthoringIntent.ts';
 import type { CompanionSessionPorts } from '../webview-ui/src/companionSessionController';
 import type { CompanionHostRequest } from './companionHostDispatch';
 import type { CompanionTransportBudget } from './companionTransportBudget';
@@ -70,6 +71,8 @@ export class CompanionClientAdapter implements MobileTransport {
   private requestText: string | null = null;
   private prepared: string | null = null;
   private sendAttempted = false;
+  private authoringText: string | null = null;
+  private authoringSendAttempted = false;
   private requestSnapshot: Readonly<CompanionHostRequest> | null = null;
   private readonly checkpoint: CompanionClientAdapterOptions['checkpoint'];
   private readonly ledger = new Map<string, string>();
@@ -153,6 +156,27 @@ export class CompanionClientAdapter implements MobileTransport {
       return this.relay.send(messageId);
     });
   }
+  /** One proposed draft after this selected preview; Service receipt is not desktop review or execution. */
+  submitAuthoring(text: string, messageId: string, signal: AbortSignal): Promise<Readonly<{ state: 'relay_received'; requestId: string }>> {
+    try {
+      this.check(signal);
+      const intent = parseCompanionAuthoringIntent(text);
+      if (!intent || messageId !== intent.requestId || !this.requestSnapshot
+        || intent.pairingId !== this.relay.row.id || !same(intent.selection, this.requestSnapshot)
+        || (this.authoringText !== null && this.authoringText !== text)) throw failure('authoring_mismatch');
+      this.authoringText = text;
+    } catch (error) { return Promise.reject(error); }
+    return this.run(signal, async () => {
+      if (this.authoringSendAttempted) throw failure('authoring_already_attempted');
+      await this.relay.prepare(text, messageId);
+      this.check(this.activeSignal);
+      // Keep uncertain delivery held. A second gesture must not create another model/task request.
+      this.authoringSendAttempted = true;
+      await this.relay.send(messageId);
+      this.check(this.activeSignal);
+      return Object.freeze({ state: 'relay_received' as const, requestId: messageId });
+    });
+  }
   receive(signal: AbortSignal): Promise<readonly { message_id: string; text: string }[]> {
     return this.run(signal, async () => {
       if (this.inbox.size === 0) {
@@ -216,7 +240,7 @@ export class CompanionClientAdapter implements MobileTransport {
     if (this.closed) return;
     this.closed = true;
     for (const controller of this.pending) controller.abort();
-    this.inbox.clear(); this.ledger.clear(); this.acknowledged.clear(); this.requestText = null; this.requestSnapshot = null; this.prepared = null;
+    this.inbox.clear(); this.ledger.clear(); this.acknowledged.clear(); this.requestText = null; this.authoringText = null; this.requestSnapshot = null; this.prepared = null;
     this.relay.close();
   }
   /** The shared account-session budget remains caller-owned. */
