@@ -15760,6 +15760,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-dev-host-pacing.smoke.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/native-port.test.mjs"
         }
       ]
     },
@@ -15892,6 +15895,43 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-ANDROID-DEV",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-COMPANION-SESSION",
+        "ST-IMP-COMPANION-HOST"
+      ],
+      "sources": [
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/MainActivity.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/debug/java/ai/hypeproof/companion/FixtureActivity.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/AndroidManifest.xml"
+        },
+        {
+          "path": "apps/companion-android/app/src/debug/AndroidManifest.xml"
+        },
+        {
+          "path": "apps/companion-android/web/main.tsx"
+        },
+        {
+          "path": "apps/companion-android/web/nativePort.ts"
+        },
+        {
+          "path": "apps/companion-android/build-web.mjs"
+        },
+        {
+          "path": "apps/companion-android/app/build.gradle"
         }
       ]
     }
