@@ -96,8 +96,9 @@ session. There is no durable recovery or refresh in this slice.
 
 A separate debug-only `ai.hypeproof.companion.DeviceSignInFixtureActivity`
 accepts one noncredential `serviceUrl` Intent extra, consumed once and discarded
-on recreation. It must be canonical `http://127.0.0.1:PORT/v1` or
-`http://10.0.2.2:PORT/v1`. Its test-owned approval site must be that exact origin,
+on recreation. It must be canonical `http://127.0.0.1:PORT/v1`, reached through a test-owned adb
+reverse mapping. `10.0.2.2` is rejected by this login entry because Service does
+not allow that HTTP Lab approval origin. Its test-owned approval site must be that exact origin,
 with `/studio/connect?code=PUBLIC-CODE`; no alternate URL is accepted from the
 server. This debug entry enables the existing WebView only after the real device
 protocol and `/me` succeed. It never accepts a bootstrap token. The original

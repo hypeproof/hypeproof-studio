@@ -2,7 +2,6 @@ package ai.hypeproof.companion;
 
 import java.net.URI;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Consumer;
 
 /** Existing personal-account device protocol. No storage, refresh, or workspace authority. */
@@ -13,7 +12,7 @@ final class NativeDeviceSignIn {
   static Target production(){return new Target("https://api.hypeproof-ai.xyz/v1","https://hypeproof-ai.xyz");}
   static Target debugLoopback(boolean debug,String service) throws Exception {
    URI u=new URI(service);
-   if(!debug || !"http".equals(u.getScheme()) || !Set.of("127.0.0.1","10.0.2.2").contains(u.getHost())
+   if(!debug || !"http".equals(u.getScheme()) || !"127.0.0.1".equals(u.getHost())
     || u.getPort()<1 || u.getPort()>65535 || !"/v1".equals(u.getRawPath()) || u.getRawUserInfo()!=null || u.getRawQuery()!=null || u.getRawFragment()!=null)throw new Exception("invalid_debug_target");
    String site="http://"+u.getHost()+":"+u.getPort();
    if(!service.equals(site+"/v1"))throw new Exception("invalid_debug_target");
