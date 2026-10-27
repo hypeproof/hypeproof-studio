@@ -44,6 +44,12 @@ and 100ms polling interval. There are at most 64 validated messages per
 instance, each bounded by the existing receiver and 64 messages per batch, layered over the existing receiver limits.
 The controller adds no persistent retention policy. Offline/reconnecting state
 continues to hide cached receipts through the existing presentation policy.
+The optional `waitingReason` preserves existing callers while distinguishing an
+unconfirmed request result from an explicitly offline descriptor. A timeout or
+failed attempted request without confirmed offline evidence offers result-state
+reconciliation, without claiming host acceptance or asking to turn on an online
+computer. A successful descriptor reconciliation clears that reason; an explicit
+`online: false` retains the computer-offline guidance.
 `dispose()`/`cancel()` is terminal: aborts waits, discards receiver/cache references,
 clears listeners and prevents late UI emissions or initiation of later ACKs.
 Caller-owned transport disposal remains the caller's responsibility.

@@ -8,6 +8,8 @@ export interface CompanionSessionSelection {
 export interface CompanionSessionSnapshot {
   computerName: string;
   connection: 'connected' | 'waiting_for_computer' | 'reconnecting';
+  /** Missing retains the existing offline copy for callers that do not supply a reason. */
+  waitingReason?: 'request_unconfirmed' | 'host_unavailable';
   selection: CompanionSessionSelection | null;
   /** Inject only the existing verified result consumer's output, bound to its original request. */
   receipt: { request: Readonly<CompanionHostRequest>; outcome: Readonly<CompanionDispatchResult> } | null;
@@ -33,6 +35,7 @@ export const companionSelectionIdentity = (request: Readonly<CompanionHostReques
 const view = (phase: CompanionSessionPhase, title: string, body: string, action: CompanionSessionPresentation['action'] = 'reconnect', actionLabel = '연결 상태 확인'): CompanionSessionPresentation => ({ phase, title, body, action, actionLabel, preview: null });
 export function companionSessionPresentation(snapshot: CompanionSessionSnapshot): CompanionSessionPresentation {
   if (snapshot.connection === 'reconnecting') return view('reconnecting', '연결을 다시 확인하고 있어요', '컴퓨터에서 온 응답을 확인한 뒤 같은 작업으로 돌아갈게요.', null);
+  if (snapshot.connection === 'waiting_for_computer' && snapshot.waitingReason === 'request_unconfirmed') return view('waiting_for_computer', '요청 결과를 아직 확인하지 못했어요', '같은 요청을 다시 보내지 않고 결과 상태를 확인해요.', 'reconnect', '결과 상태 확인');
   if (snapshot.connection === 'waiting_for_computer') return view('waiting_for_computer', '컴퓨터를 기다리고 있어요', '선택한 컴퓨터를 켜고 Studio를 열어 주세요. 연결 상태를 확인한 뒤 결과를 가져올 수 있어요.', 'reconnect', '컴퓨터 연결 확인');
   if (snapshot.connection !== 'connected') return view('waiting_for_computer', '컴퓨터 연결을 아직 확인하지 못했어요', '선택한 컴퓨터에서 Studio를 열고 연결 상태를 확인해 주세요.', 'reconnect', '컴퓨터 연결 확인');
   const selected = snapshot.selection;

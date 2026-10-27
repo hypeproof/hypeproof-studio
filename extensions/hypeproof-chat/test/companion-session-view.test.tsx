@@ -22,6 +22,9 @@ for(const field of ['schema','requestId','actorId','deviceId','hostId','workspac
 }
 for(const field of ['id','version'] as const){const changed=clone(good);changed.receipt!.outcome.artifact![field]='different-value';eq(companionSessionPresentation(changed).preview,null,'mismatched artifact '+field+' never rendered');}
 for(const connection of ['waiting_for_computer','reconnecting'] as const){const changed={...clone(good),connection};eq(companionSessionPresentation(changed).preview,null,'offline/reconnect hides former preview');eq(companionSessionPresentation(changed).phase,connection,'connection state overrides old completion');}
+const unconfirmed:CompanionSessionSnapshot={...clone(good),connection:'waiting_for_computer',waitingReason:'request_unconfirmed'};
+const pendingView=companionSessionPresentation(unconfirmed);eq(pendingView.title,'요청 결과를 아직 확인하지 못했어요','timeout does not claim the computer is offline');eq(pendingView.body,'같은 요청을 다시 보내지 않고 결과 상태를 확인해요.','pending copy preserves the same request');eq(pendingView.actionLabel,'결과 상태 확인','pending action checks result state');eq(pendingView.preview,null,'pending state hides a former completed artifact');
+eq(companionSessionPresentation({...unconfirmed,waitingReason:'host_unavailable'}).body.includes('컴퓨터를 켜고'),true,'confirmed offline keeps computer recovery copy');
 const invalidConnection={...clone(good),connection:'unknown'} as unknown as CompanionSessionSnapshot;eq(companionSessionPresentation(invalidConnection).preview,null,'unknown connection cannot show completion');
 for(const state of ['wait_for_host','accepted','running','outcome_unknown','desktop_handoff','denied','failed'] as const){
  const changed={...clone(initial),receipt:{request:clone(request),outcome:{state,code:'synthetic_status',requestId:request.requestId}}};
@@ -43,10 +46,11 @@ await render(clone(initial));eq(requested,0,'mount never requests or auto-approv
 await act(()=>click(buttons()[0]));eq(requested,1,'explicit preview request uses existing controller');eq(lastRequest,request,'exact current request passed unchanged');
 await render(good);eq(rendered,1,'exact completed result invokes injected existing renderer once');eq(host.textContent.includes('원본은 컴퓨터에 있어요.'),true,'local source ownership remains visible');
 await act(()=>click(buttons()[0]));eq(reconnected,1,'completed view only reconciles state, never reruns work');eq(requested,1,'state check sends no new preview request');
+await render(unconfirmed);eq(buttons()[0].textContent,'결과 상태 확인','unconfirmed result has one clear status action');await act(()=>click(buttons()[0]));eq(requested,1,'pending status action does not send a new preview request');eq(reconnected,2,'pending status action reconciles existing request');
 const before=rendered;await render({...clone(good),connection:'waiting_for_computer'});eq(rendered,before,'offline does not rerender cached completion');eq(host.findAll(e=>e.getAttribute('data-testid')==='injected-preview').length,0,'old preview unmounted while waiting');
 let release:()=>void=()=>{};const pending:CompanionSessionController={...controller,reconnect:async()=>{reconnected++;await new Promise<void>(resolve=>{release=resolve;});}};
 await render({...clone(initial),connection:'waiting_for_computer'},pending);
-await act(()=>{click(buttons()[0]);click(buttons()[0]);});eq(reconnected,2,'rapid repeated presses start one connection check');eq(buttons()[0].getAttribute('disabled')!==null,true,'pending action is visibly disabled');
+await act(()=>{click(buttons()[0]);click(buttons()[0]);});eq(reconnected,3,'rapid repeated presses start one connection check');eq(buttons()[0].getAttribute('disabled')!==null,true,'pending action is visibly disabled');
 await act(()=>release());eq(buttons()[0].getAttribute('disabled'),null,'controller completion unlocks without inventing a connection');eq(host.textContent.includes('컴퓨터를 기다리고 있어요'),true,'resolved callback alone never shows connected/completed');
 const failing:CompanionSessionController={...controller,reconnect:async()=>{throw Error('do not display raw credential or provider detail');}};
 await render({...clone(initial),connection:'waiting_for_computer'},failing);await act(()=>click(buttons()[0]));eq(host.textContent.includes('연결 상태를 확인하지 못했어요.'),true,'action failure offers clear Korean recovery');eq(host.textContent.includes('provider detail'),false,'raw error details not shown');

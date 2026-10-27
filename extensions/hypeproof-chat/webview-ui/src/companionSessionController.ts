@@ -40,6 +40,7 @@ export class CompanionMobileSessionController implements CompanionSessionControl
   private closed = false;
   private request: Readonly<CompanionHostRequest> | null = null;
   private attempted = false;
+  private availability: 'unknown' | 'online' | 'offline' = 'unknown';
   private receiver: CompanionPreviewResultReceiver | null = null;
   private readonly validated = new Map<string, string>();
   private readonly pendingAcks = new Set<string>();
@@ -93,11 +94,12 @@ export class CompanionMobileSessionController implements CompanionSessionControl
   private run(action: (signal: AbortSignal) => Promise<void>): Promise<void> {
     if (this.closed) return Promise.reject(stopped());
     if (this.active) return this.active.promise;
+    this.availability = 'unknown';
     const abort = new AbortController();
     const deadline = this.timer.setTimeout(() => abort.abort(), this.timeoutMs);
     // Defer work so reentrant subscriptions/gestures observe the same in-flight operation.
     const promise = Promise.resolve().then(() => action(abort.signal)).catch(() => {
-      if (!this.closed) this.emit({ connection: 'waiting_for_computer' });
+      if (!this.closed) this.emit({ connection: 'waiting_for_computer', waitingReason: this.attempted && this.availability !== 'offline' ? 'request_unconfirmed' : 'host_unavailable' });
     }).finally(() => {
       this.timer.clearTimeout(deadline);
       if (this.active?.abort === abort) this.active = null;
@@ -109,10 +111,11 @@ export class CompanionMobileSessionController implements CompanionSessionControl
   private async current(signal: AbortSignal): Promise<boolean> {
     this.check(signal);
     const descriptor = await this.bounded(this.ports.descriptor(signal), signal);
-    if (!descriptor) return false;
+    if (!descriptor) { this.availability = 'unknown'; return false; }
+    this.availability = descriptor.online ? 'online' : 'offline';
     const selection = descriptor.selection ? Object.freeze({ ...descriptor.selection, request: Object.freeze({ ...descriptor.selection.request }) }) : null;
     if (this.request && companionSelectionIdentity(selection?.request) !== companionSelectionIdentity(this.request)) return false;
-    this.emit({ computerName: descriptor.computerName, selection, connection: descriptor.online ? 'connected' : 'waiting_for_computer' });
+    this.emit({ computerName: descriptor.computerName, selection, connection: descriptor.online ? 'connected' : 'waiting_for_computer', waitingReason: descriptor.online ? undefined : 'host_unavailable' });
     return descriptor.online;
   }
   reconnect = (expected: Readonly<CompanionHostRequest> | null = null): Promise<void> => this.run(async signal => {
@@ -217,7 +220,7 @@ export class CompanionMobileSessionController implements CompanionSessionControl
     this.active?.abort.abort(); this.receiver?.discard(); this.receiver = null;
     this.inbox = null; this.processing = null; this.batch = null; this.cursor = 0;
     this.listeners.clear(); this.validated.clear(); this.pendingAcks.clear(); this.verified = null; this.request = null;
-    this.snapshot = Object.freeze({ ...this.snapshot, selection: null, receipt: null, busy: false, connection: 'waiting_for_computer' });
+    this.snapshot = Object.freeze({ ...this.snapshot, selection: null, receipt: null, busy: false, connection: 'waiting_for_computer', waitingReason: undefined });
   };
   cancel = (): void => this.dispose();
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { CompanionMobileSessionController } from '../webview-ui/src/companionSessionController.ts';
+import { companionSessionPresentation } from '../webview-ui/src/companionSessionPresentation.ts';
 import { packCompanionPreviewPayload } from '../src/companionPreviewPayload.ts';
 
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
@@ -43,8 +44,9 @@ test('one explicit delivery, framed exact result only after all validated fragme
   assert.deepEqual(f.controller.getSnapshot().receipt.outcome,completed);
   assert.deepEqual(f.calls.ack,parts.map(p=>p.message_id));
   f.online(false);await f.controller.reconnect(request);assert.equal(f.controller.getSnapshot().connection,'waiting_for_computer');
+  assert.equal(f.controller.getSnapshot().waitingReason,'host_unavailable');assert.match(companionSessionPresentation(f.controller.getSnapshot()).body,/컴퓨터를 켜고/);
   f.online(true);await f.controller.reconnect(request);
-  assert.equal(f.controller.getSnapshot().connection,'connected');assert.equal(f.calls.send,1);
+  assert.equal(f.controller.getSnapshot().connection,'connected');assert.equal(f.controller.getSnapshot().waitingReason,undefined);assert.equal(f.calls.send,1);
   const foreign={...request,epoch:2};await f.controller.requestPreview(foreign);assert.equal(f.calls.send,1);
   assert.equal(f.controller.getSnapshot().connection,'waiting_for_computer');f.controller.dispose();
 });
@@ -60,6 +62,8 @@ test('timeout bounds a transport that ignores abort; reconnect only receives the
   const stalled=deferred();const f=fixture({send:()=>{f.calls.send++;return stalled.promise;}});
   const first=f.controller.requestPreview(request);await tick();f.clock.fire(1000);await first;
   assert.equal(f.controller.getSnapshot().connection,'waiting_for_computer');assert.equal(f.controller.getSnapshot().busy,false);
+  assert.equal(f.controller.getSnapshot().waitingReason,'request_unconfirmed');
+  const pendingView=companionSessionPresentation(f.controller.getSnapshot());assert.equal(pendingView.title,'요청 결과를 아직 확인하지 못했어요');assert.equal(pendingView.actionLabel,'결과 상태 확인');assert.equal(pendingView.preview,null);
   f.batch([{message_id:'accepted',text:raw({state:'accepted',code:'accepted'})}]);
   const reconnect=f.controller.reconnect(request);await tick();f.clock.fire(1000);await reconnect;
   assert.equal(f.calls.send,1);assert.equal(f.calls.prepare,1);
@@ -97,7 +101,7 @@ test('a receive finishing after timeout is reconciled once; a changed descriptor
     await f.controller.reconnect(request);
     assert.equal(f.calls.receive,1);assert.equal(f.calls.send,1);
     if(changed){assert.equal(f.controller.getSnapshot().receipt,null);assert.deepEqual(f.calls.ack,[]);}
-    else{assert.equal(f.controller.getSnapshot().receipt.outcome.state,'denied');assert.deepEqual(f.calls.ack,['late']);}
+    else{assert.equal(f.controller.getSnapshot().receipt.outcome.state,'denied');assert.equal(f.controller.getSnapshot().waitingReason,undefined);assert.deepEqual(f.calls.ack,['late']);}
     f.controller.dispose();
   }
 });
