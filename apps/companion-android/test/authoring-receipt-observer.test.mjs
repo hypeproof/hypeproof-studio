@@ -1,0 +1,22 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {CompanionAuthoringReceiptObserver} from '../web/authoringReceiptObserver.ts';
+const tick=async()=>{for(let i=0;i<40;i++)await Promise.resolve();};const deferred=()=>{let resolve;return{promise:new Promise(r=>resolve=r),resolve:()=>resolve()};};
+class Clock{timers=new Set();setTimeout(callback,ms){const timer={callback,ms};this.timers.add(timer);return timer;}clearTimeout(timer){this.timers.delete(timer);}fire(ms){for(const timer of [...this.timers])if(timer.ms===ms){this.timers.delete(timer);timer.callback();}}}
+function fixture(options={}){const clock=new Clock(),states=[];let current=true,received=false,calls=0,receive=async()=>{};const observer=new CompanionAuthoringReceiptObserver({current:()=>current,received:()=>received,receive:signal=>{calls++;return receive(signal);},changed:state=>states.push(state)},{clock,pollMs:10,timeoutMs:1000,...options});return{observer,clock,states,get calls(){return calls;},current:value=>current=value,received:value=>received=value,receive:fn=>receive=fn};}
+test('only explicit start waits; duplicate starts and a manual check share the same pending read',async()=>{
+ const f=fixture(),gate=deferred(),abort=new AbortController();f.receive(async signal=>{await gate.promise;if(signal.aborted)throw Error('aborted');f.received(true);});assert.equal(f.calls,0);
+ const first=f.observer.start(abort.signal),duplicate=f.observer.start(abort.signal);assert.equal(first,duplicate);await tick();const manual=f.observer.check(abort.signal);await tick();assert.equal(f.calls,1);gate.resolve();assert.equal(await first,'received');await manual;assert.deepEqual(f.states,['waiting','received']);assert.equal(f.clock.timers.size,0);await f.observer.check(abort.signal);assert.equal(f.calls,1);f.observer.close();
+});
+test('bounded wait ends truthfully and a later receipt is received only by explicit Check',async()=>{
+ const f=fixture({maxPolls:2}),signal=new AbortController().signal;const waiting=f.observer.start(signal);await tick();f.clock.fire(10);assert.equal(await waiting,'unconfirmed');assert.equal(f.calls,2);assert.equal(f.clock.timers.size,0);f.clock.fire(10);await tick();assert.equal(f.calls,2);
+ f.receive(async()=>f.received(true));await f.observer.check(signal);assert.equal(f.calls,3);assert.equal(await f.observer.start(signal),'unconfirmed','automatic wait never restarts');f.observer.close();
+});
+test('deadline bounds an ignored abort and retains the in-flight read instead of overlapping it',async()=>{
+ const f=fixture(),gate=deferred(),signal=new AbortController().signal;f.receive(async readSignal=>{await gate.promise;if(readSignal.aborted)throw Error('late_aborted_read');});const waiting=f.observer.start(signal);await tick();f.clock.fire(1000);assert.equal(await waiting,'unconfirmed');assert.equal(f.calls,1);
+ const manual=assert.rejects(f.observer.check(signal),/aborted|stopped/);await tick();assert.equal(f.calls,1);gate.resolve();await manual;await tick();assert.equal(f.clock.timers.size,0);assert.deepEqual(f.states,['waiting','unconfirmed']);f.observer.close();
+});
+test('owner/pair/selection expiry or read denial stops automatic observation without repeating an operation',async()=>{
+ for(const cause of ['owner_changed','pair_revoked','selection_changed','expired','receive_denied']){const f=fixture(),signal=new AbortController().signal;const waiting=f.observer.start(signal);await tick();if(cause==='receive_denied')f.receive(async()=>{throw Error('invitation_unavailable');});else f.current(false);f.clock.fire(10);assert.equal(await waiting,'unconfirmed');const calls=f.calls;f.clock.fire(10);await tick();assert.equal(f.calls,calls);assert.equal(calls,cause==='receive_denied'?2:1);assert.equal(f.clock.timers.size,0);f.observer.close();}
+});
+test('local close aborts the owned read, removes timers and suppresses late received state',async()=>{
+ const f=fixture(),gate=deferred(),signal=new AbortController().signal;let ownedSignal;f.receive(async readSignal=>{ownedSignal=readSignal;await gate.promise;});const waiting=f.observer.start(signal);await tick();f.observer.close();assert.equal(await waiting,'closed');assert.equal(ownedSignal.aborted,true);gate.resolve();await tick();assert.deepEqual(f.states,['waiting','closed']);assert.equal(f.clock.timers.size,0);await assert.rejects(f.observer.check(signal),/stopped/);assert.equal(f.calls,1);
+});
