@@ -605,12 +605,19 @@ export function ChatPanel(props: Props) {
   const companionSignature = JSON.stringify([activityId,taskId,snapshot.current,companionBlocked,stagedPhotos.map(p=>p.id)]);
   if(companionDraftState.current.signature!==companionSignature) companionDraftState.current={signature:companionSignature,generation:companionDraftState.current.generation+1,blocked:companionBlocked};
   const companionApply = useRef<{nonce:string;text:string;rest:string}|null>(null);
+  const companionSavedRender = useRef<string|null>(null);
   useEffect(()=>{
     const pending=companionApply.current;if(!pending||!activityId)return;
     companionApply.current=null;
     const {text,...rest}=snapshot.current;
+    const applied=text===pending.text && JSON.stringify(rest)===pending.rest && !companionDraftState.current.blocked;
+    // This exact render came from a draft already committed by the host. Send
+    // its presentation ACK only: the normal autosave below must not race the
+    // host's presentation receipt with another task revision. A different or
+    // subsequent user edit still takes the ordinary autosave path.
+    companionSavedRender.current=applied?JSON.stringify([activityId,taskId,snapshot.current]):null;
     postToHost({type:'saveActivityDraft',activityId,taskId,nonce:pending.nonce,draft:snapshot.current,
-      uiGeneration:companionDraftState.current.generation,companionApplied:text===pending.text && JSON.stringify(rest)===pending.rest && !companionDraftState.current.blocked,
+      uiGeneration:companionDraftState.current.generation,companionApplied:applied,
       imagePreparationFailed:companionDraftState.current.blocked});
   },[activityId,taskId,draft]);
 
@@ -632,7 +639,10 @@ export function ChatPanel(props: Props) {
   const initialDraft = useRef(true);
   useEffect(() => {
     if (initialDraft.current) { initialDraft.current=false; return; }
-    if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
+    const payload=draftPayload(),saved=companionSavedRender.current;
+    companionSavedRender.current=null;
+    if(saved===JSON.stringify([activityId,taskId,payload])) return;
+    if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:payload});
   }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused,recovered,inlineEdit]);
   // REQ-STUDIO-QUIT-GUARD: the host names an unsent queued message in the quit dialog.
   const hasQueued = queued !== null;

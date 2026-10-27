@@ -14,8 +14,18 @@ async function run(){
  await hostSays({type:'config',config});
  const scope={activityId:'activity',taskId:'task'};
  await hostSays({type:'companionDraftCapture',nonce:'capture',...scope});const captured=posted().findLast(m=>m.nonce==='capture');assert.equal(captured.draft.text,'');assert.equal(captured.imagePreparationFailed,false);
+ const beforeApply=posted().length;
  await hostSays({type:'companionDraftApply',nonce:'apply',generation:captured.uiGeneration,text:'검토한 휴대폰 요청',...scope});const applied=posted().findLast(m=>m.nonce==='apply');assert.equal(applied.companionApplied,true);assert.equal(host.querySelector('textarea').value,'검토한 휴대폰 요청');
+ // The native host has already durably imported this text. A second ordinary
+ // autosave from this render races its exact-revision presentation receipt.
+ assert.equal(posted().slice(beforeApply).filter(m=>m.type==='saveActivityDraft'&&!m.nonce).length,0,'confirmed companion render must ACK without a competing ordinary autosave');
  await hostSays({type:'companionDraftApply',nonce:'replay',generation:captured.uiGeneration,text:'overwrite',...scope});assert.equal(posted().findLast(m=>m.nonce==='replay').companionApplied,false);assert.equal(host.querySelector('textarea').value,'검토한 휴대폰 요청');
+ const beforeNativeEdit=posted().length;
+ await act(async()=>{const area=host.querySelector('textarea');area.value='검토한 휴대폰 요청\n컴퓨터에서 이어 쓴 내용';area.dispatchEvent({type:'input',bubbles:true});});
+ const laterSaves=posted().slice(beforeNativeEdit).filter(m=>m.type==='saveActivityDraft'&&!m.nonce);
+ assert.equal(laterSaves.length,1,'later ordinary composer changes still autosave');
+ assert.ok(laterSaves[0].draft.text.includes('컴퓨터에서 이어 쓴 내용'));
+ assert.ok(laterSaves[0].draft.text.includes('검토한 휴대폰 요청'));
  await act(async()=>root.unmount());
  const second=mountPoint(),root2=createRoot(second as any);await act(async()=>root2.render(<ChatPanel {...props} config={config}/>));
  await hostSays({type:'companionDraftCapture',nonce:'beforeEdit',...scope});const beforeEdit=posted().findLast(m=>m.nonce==='beforeEdit');
