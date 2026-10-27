@@ -844,7 +844,7 @@
         "DMC-15"
       ],
       "inline_prefixes": [],
-      "sha256": "e446ded7df91bb55a80a06e5ac35a8dd74fcd38a2083858927898dd0a20ec6c0",
+      "sha256": "f5c954b2fa996740cc5417a01536af7c64abc96b9be5debb510e13be1d757f77",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
@@ -4242,7 +4242,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Routing, workspace preparation and selected-artifact dispatch have bounded source/fixture evidence; preparation also has isolated native evidence with a synthetic profile. Preserve both mappings. Full DMC-1 ownership/capabilities and connected DMC-3 remain open. Integrate authenticated host authority, explicit current-scope consent and bounded Service/mobile transport without treating preparation or pairing as execution authority. Preserve cloud-record experiments and do not close Studio #2803/#3072 for these partial seams.",
+      "next_action": "Development-only account/profile + explicit host confirmation + bounded selected-preview composition now exists with local Worker/browser evidence. Integrate the actual dev app and scoped mobile presentation, then verify device lifecycle and useful artifact revision. Keep parent #3072/#2803 open; fixture APIs are not installed native/human acceptance.",
       "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
       "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
       "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",
@@ -4254,7 +4254,10 @@
         "extensions/hypeproof-chat/src/fileAttachment.ts",
         "extensions/hypeproof-chat/src/companionWorkspace.ts",
         "extensions/hypeproof-chat/src/companionWorkspaceController.ts",
-        "extensions/hypeproof-chat/src/companionWorkspaceHost.ts"
+        "extensions/hypeproof-chat/src/companionWorkspaceHost.ts",
+        "extensions/hypeproof-chat/src/companionHostBridge.ts",
+        "extensions/hypeproof-chat/src/companionHostBridgeNative.ts",
+        "extensions/hypeproof-chat/src/companionPreviewResult.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
@@ -4270,7 +4273,11 @@
         "extensions/hypeproof-chat/src/companionWorkspaceController.ts",
         "extensions/hypeproof-chat/src/companionWorkspaceHost.ts",
         "extensions/hypeproof-chat/test/companion-workspace.test.mjs",
-        "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
+        "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs",
+        "extensions/hypeproof-chat/test/companion-host-bridge.smoke.mjs",
+        "extensions/hypeproof-chat/test/companion-host-bridge-native.smoke.mjs",
+        "extensions/hypeproof-chat/test/companion-preview-result.smoke.mjs",
+        "extensions/hypeproof-chat/test/lib/companion-native-bridge-harness.mjs"
       ]
     }
   ]
