@@ -43,7 +43,12 @@ async function run(){
   await act(()=>{click(button(clearLabel));click(button(clearLabel));click(button('연결 상태 확인'));});
   eq(forgotten,1,'rapid confirm starts exactly one async cleanup');
   eq(buttons().every(el=>el.getAttribute('disabled')!==null),true,'all actions stay disabled while cleanup is pending');
-  eq(preview(),1,'promise pending does not hide a still-current preview'); eq(state(),'completed','pending is not falsely cleared');
+  eq(preview(),1,'promise pending does not hide a still-current preview'); eq(state(),'local_forget_pending','pending is a local cleanup state, never a live connection claim');
+  eq(host.textContent.includes('연결됨'),false,'pending erase does not claim the disposed owner is connected');
+  eq(buttons().some(el=>el.textContent==='계속 보기'),false,'confirmation cancellation is unavailable after erase begins');
+  await render({...good,selection:null,receipt:null,connection:'waiting_for_computer'},owner);
+  eq(preview(),1,'cached verified result survives owner disposal before storage erasure settles');
+  eq(host.findAll(el=>el.getAttribute('aria-label')==='이 기기에 남은 결과').length,1,'retained preview is explicitly local cached content');
   eq(host.textContent.includes('이 기기의 보기 기록을 지웠어요'),false,'no success claim before callback completion');
   await act(()=>wait.resolve());
   eq(preview(),0,'awaited success unmounts the preview'); eq(state(),'local_cleared','awaited success shows cleared state');
@@ -57,13 +62,19 @@ async function run(){
   let fail=true; const retry=deferred();
   const failing:CompanionSessionController={...controller,async forget(){forgotten++;if(fail)throw Error('private token/provider detail');await retry.promise;}};
   await render(good,failing); await act(()=>click(button(clearLabel))); await act(()=>click(button(clearLabel)));
-  eq(preview(),1,'failed cleanup does not claim the preview was erased'); eq(state(),'completed','failure never becomes cleared');
+  await render({...good,selection:null,receipt:null,connection:'waiting_for_computer'},failing);
+  eq(preview(),1,'failed cleanup does not claim the preview was erased'); eq(state(),'local_forget_failed','failure remains an honest local cleanup failure');
+  eq(host.textContent.includes('연결됨'),false,'failed erase does not claim the disposed owner is connected');
+  eq(buttons().some(el=>el.textContent==='계속 보기'),false,'failed erase cannot reactivate the dead request owner');
+  eq(buttons().some(el=>el.textContent==='연결 상태 확인'||el.textContent==='선택한 결과 보기'),false,'failure exposes no old request or reconnect action');
+  eq(document.activeElement,button('다시 지우기'),'failure focuses the safe explicit retry');
   eq(host.findAll(el=>el.getAttribute('role')==='alert')[0].textContent,'보기 기록을 지웠는지 확인하지 못했어요. 다시 시도해 주세요.','failure gives an honest retry message');
   eq(host.textContent.includes('private token'),false,'failure omits raw details');
   fail=false; await act(()=>{click(button('다시 지우기'));click(button('다시 지우기'));}); eq(forgotten,3,'safe retry also guards rapid duplicate gestures');
   // The cleanup owner may drop its current selection before its final erase promise settles.
   await render({...good,selection:null,receipt:null},failing);
-  eq(state(),'no_selection','owner clearing selection alone does not claim final deletion');
+  eq(state(),'local_forget_pending','owner clearing selection alone does not claim final deletion');
+  eq(preview(),1,'retry retains exact cached result until actual erase success');
   await act(()=>retry.resolve()); eq(state(),'local_cleared','same owner confirms completion after its selection is cleared');
   const reconnectWait=deferred();
   const checking:CompanionSessionController={...controller,async reconnect(){reconnected++;await reconnectWait.promise;},async forget(){forgotten++;}};
