@@ -120,7 +120,7 @@ export function createCompanionDevHostEntry(context: vscode.ExtensionContext, po
     const prepared = await readPreparedCompanionWorkspace(context, ports.connections); check();
     if (!prepared.preparation || prepared.status !== 'UNPAIRED' || !ports.taskView()?.activeTaskId) throw failure('existing_task_preparation_required');
     const key = JSON.stringify([configured.service, stored.sessionId]);
-    if (!budget || budgetKey !== key) { budget?.dispose(); budget = new CompanionTransportBudget(); budgetKey = key; }
+    if (!budget || budgetKey !== key) { budget?.dispose(); budget = new CompanionTransportBudget({ minSpacingMs: 1200 }); budgetKey = key; }
     const directory = path.join(context.globalStorageUri.fsPath, 'companion-host', companionDigest(JSON.stringify([
       configured.service, account.account.id, stored.sessionId, prepared.preparation.scope, prepared.preparation.hostId, prepared.preparation.projectId,
     ])));
