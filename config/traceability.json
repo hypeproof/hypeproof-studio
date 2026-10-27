@@ -14846,6 +14846,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/project-ideas-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/project-ideas-design-browser.smoke.mjs"
         }
       ]
     },
