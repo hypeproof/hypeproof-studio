@@ -9,6 +9,9 @@
 // - HC Dark / HC Light: no shadow; a 1px solid border, >= 3:1 against what is around it, drawn in the
 //   theme's contrastBorder on menus, popovers, dialogs and drawers.
 // - Forced colors: no shadow, the 1px border remains.
+// - CGP-DS-D-009 (DES-CGP-DS-13 numbers): the composer, catch-up button and start card are exactly raised
+//   (`0 1px 2px`), menus, popovers, the dialog and the drawer exactly overlay (`0 4px 8px -2px`), alpha
+//   exactly .30 dark / .10 light; inline content (the user bubble, the assistant answer) is flat in every theme.
 // Without a browser it prints NOT RUN; with FOCUS_REQUIRE_BROWSER=1 (CI) a missing browser fails.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -43,11 +46,17 @@ const SURFACES = {
   composer: ['top', 'control'], catchup: ['top', 'control'], tools: ['top', 'overlay'], prefs: ['top', 'overlay'],
   myq: ['top', 'overlay'], chatmenu: ['top', 'overlay'], sources: ['left', 'overlay'], connect: ['top', 'forest'],
 };
+// CGP-DS-D-009: the named level each elevated surface must compute to (geometry as Chromium serialises it).
+const LEVEL = { raised: '0px 1px 2px 0px', overlay: '0px 4px 8px -2px' };
+const LEVEL_OF = { composer: 'raised', catchup: 'raised', connect: 'raised', tools: 'overlay', prefs: 'overlay', myq: 'overlay', chatmenu: 'overlay', sources: 'overlay' };
+// Inline content sits in the flow and casts no shadow ("none (inline)").
+const INLINE = ['userbubble', 'answer'];
 const fixture = (vars, body) => `<!doctype html><html style="${vars}"><head><style>${css}</style></head><body class="${body}">
 <div class="tw-workspace" data-sources-open="true" style="position:relative;display:block;height:720px">
   <div class="hps-shell" data-chat-detail="personal">
     <header class="hps-header"><div class="hps-myq"><button class="hps-myq-toggle" type="button">내 질문</button><div class="hps-myq-panel" id="myq" role="dialog" aria-label="내 질문"><ol class="hps-myq-list"><li><button class="hps-myq-item" type="button">첫 질문</button></li></ol></div></div>
       <div style="position:relative;margin-left:auto"><div class="tw-chat-menu-panel" id="chatmenu" role="menu" aria-label="대화 메뉴"><button role="menuitem" type="button">기록</button></div></div></header>
+    <div class="hps-messages"><div class="hps-msg hps-msg-user"><div class="hps-msg-body" id="userbubble">질문입니다</div></div><div class="hps-msg hps-msg-assistant"><div class="hps-msg-body" id="answer"><p>답입니다</p></div></div></div>
     <div class="hps-catchup"><button id="catchup" type="button">새 답 보기</button></div>
     <div class="hps-input-area" style="margin-top:260px"><div class="hps-input" id="composer"><div style="position:relative"><div class="hps-tools-menu" id="tools" role="menu"><button role="menuitem" type="button">파일 첨부</button></div></div><textarea aria-label="메시지"></textarea></div></div>
   </div>
@@ -73,6 +82,7 @@ const probe = `(() => {
     out[id] = { shadow: s.boxShadow, width: parseFloat(s['border' + Edge + 'Width']), style: s['border' + Edge + 'Style'], color: s['border' + Edge + 'Color'],
       text: s.color, vsAround: ratio(over(color, around), around), visible: el.getBoundingClientRect().width > 0 };
   }
+  for (const id of ${JSON.stringify(INLINE)}) { const el = document.getElementById(id); out[id] = { shadow: getComputedStyle(el).boxShadow, visible: el.getBoundingClientRect().width > 0 }; }
   return out;
 })()`;
 const alphaOf = (shadow) => { const m = /rgba?\(([^)]*)\)/.exec(shadow); if (!m) return 0; const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); return p.length > 3 ? p[3] : 1; };
@@ -98,7 +108,17 @@ try {
   }
 } finally { await b.close(); }
 
+// Inline content is flat in every run; the elevated-surface checks below cover only SURFACES.
+for (const [name, m] of Object.entries(results)) for (const id of INLINE) { assert.ok(m[id].visible, `${name}: fixture ${id} must render`); assert.equal(m[id].shadow, 'none', `${name}: inline ${id} must be flat (none), got ${m[id].shadow}`); delete m[id]; }
 const dark = results['Dark+'], light = results['Light+'];
+// CGP-DS-D-009: exact DES-CGP-DS-13 geometry per level and exact theme alpha (.30 dark, .10 light; forest stays .30).
+for (const [theme, m, alpha] of [['Dark+', dark, 0.3], ['Light+', light, 0.1]]) {
+  for (const [id, level] of Object.entries(LEVEL_OF)) {
+    assert.equal(geometryOf(m[id].shadow), LEVEL[level], `${theme}: ${id} must be the ${level} level (${LEVEL[level]}), got ${m[id].shadow}`);
+    const want = SURFACES[id][1] === 'forest' ? 0.3 : alpha;
+    assert.ok(Math.abs(alphaOf(m[id].shadow) - want) < 0.005, `${theme}: ${id} alpha must be ${want}, got ${m[id].shadow}`);
+  }
+}
 for (const [id, v] of Object.entries(dark)) assert.ok(v.shadow !== 'none' && alphaOf(v.shadow) >= 0.2, `Dark+: ${id} shadow must be visible (alpha >= .2): ${v.shadow}`);
 // A level is its geometry; its alpha is the theme's (the forest start card keeps the dark one everywhere).
 const levels = new Set(Object.values(dark).map((v) => geometryOf(v.shadow)));
@@ -125,4 +145,4 @@ for (const [id, v] of Object.entries(results['forced colors'])) {
   assert.equal(v.shadow, 'none', `forced colors: ${id} has no shadow`);
   assert.ok(v.width >= 1 && v.style === 'solid', `forced colors: ${id} keeps a 1px solid border (${v.width}px ${v.style})`);
 }
-console.log(`PASS elevation-computed: ${Object.keys(SURFACES).length} surfaces; Dark+ levels ${[...levels].join(' | ')}; Light+ ${[...lightLevels].join(' | ')}; HC Dark/Light/custom flat with 1px contrastBorder edges; forced colors flat`);
+console.log(`PASS elevation-computed: ${Object.keys(SURFACES).length} surfaces at the exact DES-CGP-DS-13 levels (.30 dark / .10 light), ${INLINE.length} inline surfaces flat; Dark+ levels ${[...levels].join(' | ')}; Light+ ${[...lightLevels].join(' | ')}; HC Dark/Light/custom flat with 1px contrastBorder edges; forced colors flat`);

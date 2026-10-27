@@ -7535,14 +7535,19 @@ light) and under forced colors there is no shadow: each elevated surface draws a
 in the theme's `contrastBorder` for menus, popovers, the dialog and the drawer, the fixed control
 boundary for the composer and the catch-up button, and the text colour for the forest-only start
 card. Inset selection bars and the pending glow are not elevation. Decisions: decisions.md
-CGP-DS-R-012.
+CGP-DS-R-012. CGP-DS-D-009 pins the DES-CGP-DS-13 numbers on the computed cascade: the composer,
+the catch-up button and the start card compute to exactly `0 1px 2px`, menus, popovers, the dialog
+and the drawer to exactly `0 4px 8px -2px`, with alpha exactly .30 on dark hosts and .10 on light
+ones (the forest start card keeps .30), and inline content (the user bubble, the assistant answer)
+computes to no shadow in every theme.
 
 Validation: `test/elevation-levels.smoke.mjs` (every Studio and Chalk stylesheet: the three levels,
 the per-theme binding, no outer shadow outside a named level, an HC border rule per elevated
 surface, with negative controls) and `test/elevation-computed.smoke.mjs` (headless Chromium over the
 bundled webview CSS: eight surfaces in Dark+, Light+, HC Dark, HC Light, a user HC theme and forced
 colors; dark alpha >= .2, at most two shadow geometries, lighter light alpha, HC flat with a 1px
->= 3:1 contrastBorder edge). `chalk/test/elevation.browser.mjs` measures the real `/manage` page's
+>= 3:1 contrastBorder edge; CGP-DS-D-009: exact geometry per surface, exact .30 / .10 alpha, inline
+bubble and answer flat). `chalk/test/elevation.browser.mjs` measures the real `/manage` page's
 three drawers and menu. The browser tests fail under `FOCUS_REQUIRE_BROWSER=1` without a browser.
 
 ## Tabular figures in Chalk numeric columns and counters (CGP-DS-R-030)
