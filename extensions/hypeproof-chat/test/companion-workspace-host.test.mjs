@@ -16,7 +16,7 @@ async function fixture(run) {
   const temporary = await mkdtemp(join(tmpdir(), 'studio-companion-host-'));
   const root = await realpath(temporary), dialogs = [], commands = new Map(), saved = new Map();
   await writeFile(join(root, 'index.html'), 'synthetic native host fixture');
-  const activity = { id: 'synthetic-a', name: 'Synthetic owner scope', workspace: root, ref: 'synthetic-binding-a' };
+  const activity = { id: 'synthetic-a', name: 'Synthetic activity', workspace: root, ref: 'synthetic-binding-a' };
   const connections = { current: activity, matchesService: true, forWorkspace: async folder => folder === root ? activity : undefined };
   const vscode = {
     env: { machineId: 'synthetic-machine', remoteName: undefined },
@@ -49,10 +49,15 @@ test('production palette adapter selects existing folder, confirms local scope, 
   assert.equal(f.dialogs[0].type, 'picker'); assert.equal(f.dialogs[0].options.canSelectFiles, false);
   assert.equal(f.dialogs[0].options.canSelectFolders, true); assert.equal(f.dialogs[0].options.canSelectMany, false);
   const confirm = f.dialogs[1]; assert.equal(confirm.options.modal, true); assert.equal(confirm.action, '준비 정보 저장');
-  assert.match(confirm.options.detail, /Synthetic owner scope/); assert.ok(confirm.options.detail.includes(f.root));
-  assert.match(f.dialogs.at(-1).message, /^UNPAIRED/); assert.equal(f.saved.size, 1);
+  assert.match(confirm.options.detail, /Synthetic activity/); assert.ok(confirm.options.detail.includes(f.root));
+  assert.equal(f.dialogs.at(-1).message, '이 컴퓨터에 준비 정보가 저장됐어요. 연결된 휴대폰은 없어요.'); assert.equal(f.saved.size, 1);
+  assert.match(confirm.options.detail, /현재 활동: Synthetic activity/);
+  const stored = f.saved.values().next().value;
+  for (const value of [stored.activityId, stored.hostId, stored.hostId.slice(0, 12), stored.projectId])
+    assert.ok(!confirm.options.detail.includes(value), 'internal scope IDs stay out of the confirmation');
+  assert.doesNotMatch(confirm.options.detail, /소유/);
   f.dialogs.length = 0; f.register(); await f.invoke();
-  assert.equal(f.dialogs.length, 1); assert.match(f.dialogs[0].message, /^UNPAIRED/);
+  assert.equal(f.dialogs.length, 1); assert.equal(f.dialogs[0].message, '이 컴퓨터에 준비 정보가 저장됐어요. 연결된 휴대폰은 없어요.');
   const prepared = await f.readPrepared();
   assert.equal(prepared.status, 'UNPAIRED'); assert.equal(prepared.preparation.workspace, f.root);
   f.connections.forWorkspace = async () => undefined;
@@ -60,22 +65,22 @@ test('production palette adapter selects existing folder, confirms local scope, 
   assert.deepEqual(await readFile(join(f.root, 'index.html')), before);
 }));
 
-test('host adapter rejects revoked owner binding and service changes without saving', async () => fixture(async f => {
+test('host adapter rejects revoked activity binding and service changes without saving', async () => fixture(async f => {
   f.connections.forWorkspace = async () => undefined;
   f.register(); await f.invoke();
-  assert.equal(f.saved.size, 0); assert.equal(f.dialogs.length, 1); assert.match(f.dialogs[0].message, /^BLOCKED/);
+  assert.equal(f.saved.size, 0); assert.equal(f.dialogs.length, 1); assert.equal(f.dialogs[0].message, '준비 정보를 저장하거나 확인하지 못했어요. 원본 파일과 기존 기록은 보존돼요.');
   f.dialogs.length = 0; f.connections.matchesService = false;
-  await f.invoke(); assert.equal(f.saved.size, 0); assert.match(f.dialogs[0].message, /^UNSUPPORTED/);
+  await f.invoke(); assert.equal(f.saved.size, 0); assert.equal(f.dialogs[0].message, '로컬 컴퓨터에서 기존 활동과 작업 폴더를 먼저 열어 주세요.');
 }));
 
 test('remote, multi-root and trust changes in native dialogs never produce preparation', async () => fixture(async f => {
   f.register();
-  f.vscode.env.remoteName = 'ssh-remote'; await f.invoke(); assert.match(f.dialogs.at(-1).message, /^UNSUPPORTED/);
+  f.vscode.env.remoteName = 'ssh-remote'; await f.invoke(); assert.equal(f.dialogs.at(-1).message, '로컬 컴퓨터에서 기존 활동과 작업 폴더를 먼저 열어 주세요.');
   f.vscode.env.remoteName = undefined;
   f.vscode.workspace.workspaceFolders.push({ uri: { scheme: 'file', fsPath: '/not-selected' } });
-  await f.invoke(); assert.match(f.dialogs.at(-1).message, /^UNSUPPORTED/);
+  await f.invoke(); assert.equal(f.dialogs.at(-1).message, '로컬 컴퓨터에서 기존 활동과 작업 폴더를 먼저 열어 주세요.');
   f.vscode.workspace.workspaceFolders.pop();
   const show = f.vscode.window.showInformationMessage;
   f.vscode.window.showInformationMessage = async (...args) => { f.vscode.workspace.isTrusted = false; return show(...args); };
-  await f.invoke(); assert.match(f.dialogs.at(-1).message, /^BLOCKED/); assert.equal(f.saved.size, 0);
+  await f.invoke(); assert.equal(f.dialogs.at(-1).message, '준비 정보를 저장하거나 확인하지 못했어요. 원본 파일과 기존 기록은 보존돼요.'); assert.equal(f.saved.size, 0);
 }));

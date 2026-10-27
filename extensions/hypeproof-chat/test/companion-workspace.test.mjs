@@ -11,7 +11,7 @@ async function fixture(run) {
   const folder = join(root, 'existing');
   await mkdir(folder);
   await writeFile(join(folder, 'index.html'), '<h1>existing synthetic work</h1>');
-  const scope = { activityId: 'activity-a', workspace: await realpath(folder), ownerLabel: 'Synthetic activity', hostId: 'host-a', hostLabel: 'Synthetic host', trusted: true, local: true };
+  const scope = { activityId: 'activity-a', workspace: await realpath(folder), activityLabel: 'Synthetic activity', hostId: 'host-a', hostLabel: 'Synthetic host', trusted: true, local: true };
   const saved = new Map(), shown = [], confirmations = [];
   let selected = folder, current = scope, permitted = true, writes = 0;
   const host = {
@@ -31,7 +31,11 @@ test('selected existing workspace survives a fresh controller without changing f
   assert.equal(f.shown.at(-1).state.status, 'UNPAIRED');
   assert.equal(f.shown.at(-1).state.preparation.workspace, f.scope.workspace);
   assert.match(f.confirmations[0], /로컬 저장/);
-  assert.match(f.confirmations[0], /Synthetic activity/);
+  assert.match(f.confirmations[0], /현재 활동: Synthetic activity/);
+  assert.ok(!f.confirmations[0].includes(f.scope.activityId), 'activity ID is not customer-facing');
+  assert.ok(!f.confirmations[0].includes(f.scope.hostId), 'host digest is not customer-facing');
+  assert.ok(!f.confirmations[0].includes(f.shown.at(-1).state.preparation.projectId), 'project hash stays internal');
+  assert.doesNotMatch(f.confirmations[0], /소유/);
   assert.match(f.confirmations[0], /Synthetic host/);
   const persisted = JSON.parse(JSON.stringify([...f.saved]));
   f.saved.clear(); persisted.forEach(([key, value]) => f.saved.set(key, value));

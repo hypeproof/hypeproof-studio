@@ -15,7 +15,7 @@ function activeCompanionScope(connections: ActivityConnections): CompanionScope 
   let currentRoot: string;
   try { currentRoot = canonicalRoot(folder.uri.fsPath); } catch { return; }
   return {
-    activityId: active.id, workspace: active.workspace, ownerLabel: active.name,
+    activityId: active.id, workspace: active.workspace, activityLabel: active.name,
     hostId: companionHostId(vscode.env.machineId), hostLabel: hostname(),
     trusted: vscode.workspace.isTrusted, local: currentRoot === active.workspace,
   };
@@ -60,7 +60,7 @@ export function registerCompanionWorkspace(context: vscode.ExtensionContext, con
       '이 컴퓨터에 작업 폴더 준비 정보를 저장할까요?', { modal: true, detail }, '준비 정보 저장',
     )) === '준비 정보 저장',
     show: async (state, detail) => {
-      const message = `${state.status} · ${state.message}`;
+      const message = state.message;
       if (state.status === 'UNPAIRED') await vscode.window.showInformationMessage(message, { modal: true, detail }, '확인');
       else await vscode.window.showWarningMessage(message, { modal: true, detail }, '확인');
     },

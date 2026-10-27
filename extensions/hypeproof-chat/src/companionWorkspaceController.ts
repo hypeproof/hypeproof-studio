@@ -38,9 +38,8 @@ export class CompanionWorkspaceController {
     if (!await this.host.verify(scope)) throw new Error('activity binding changed');
     const detail = [
       `작업 폴더 (로컬 저장): ${scope.workspace}`,
-      `활동 소유 범위: ${scope.ownerLabel} (${scope.activityId})`,
-      `컴퓨터: ${scope.hostLabel} (${scope.hostId.slice(0, 12)})`,
-      `프로젝트: ${companionDigest(companionScope(scope))}`,
+      `현재 활동: ${scope.activityLabel}`,
+      `컴퓨터: ${scope.hostLabel}`,
       '이 설정은 현재 컴퓨터의 활동 범위에만 적용돼요. 교실 이름이나 폴더 선택은 다른 사용자의 접근 권한을 주지 않아요.',
       '지원 범위: 로컬 준비 정보 저장·다시 확인. 휴대폰 연결·파일 전달·원격 실행은 아직 지원하지 않아요.',
       '파일 내용은 읽거나 업로드하지 않아요. 기존 대화와 파일은 그대로 보존돼요.',

@@ -7,7 +7,7 @@ import * as path from 'node:path';
 export interface CompanionScope {
   activityId: string;
   workspace: string;
-  ownerLabel: string;
+  activityLabel: string;
   hostId: string;
   hostLabel: string;
   trusted: boolean;
