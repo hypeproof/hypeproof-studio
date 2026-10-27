@@ -7319,8 +7319,9 @@ judgment stays visible): the learner can tell at a glance whether the coach is w
 something up, changing their work, or waiting for them, so a pending decision is never missed. The
 chat header shows exactly one coach run state from a fixed set: 준비됨 / 생각 중 / 찾는 중 /
 만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요. It is a static 20px stroke icon plus the
-words at the 14px floor (DEC-29) in a polite live region (`role="status"`, `aria-live="polite"`);
-there is no character and no animation, and colour only reinforces the words (approval and error
+words at the 14px floor (DEC-29) in a polite live region (`role="status"`, `aria-live="polite"`,
+`aria-atomic="true"`). DES-CGP-LEARN-16 (CGP-LEARN-D-016): a change of state is announced, so the region is
+one node that stays mounted while its words change in place; it is never replaced per state. There is no character and no animation, and colour only reinforces the words (approval and error
 draw the label in body text, others muted). In a pane 480px wide or narrower the state takes its own
 row under the header controls (the access line's ≤640px pattern), so its words are never cut, the
 controls stay on one row and the page never scrolls sideways.
