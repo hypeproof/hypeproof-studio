@@ -2,12 +2,17 @@ package ai.hypeproof.companion;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.graphics.Insets;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.CookieManager;
 import android.widget.TextView;
+import android.widget.FrameLayout;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -54,6 +59,7 @@ public class MainActivity extends Activity {
  protected void requestProvision(java.util.function.Consumer<Session> receive) { receive.accept(provision()); }
  private Session session;
  private WebView web;
+ private FrameLayout content;
  private volatile boolean closed;
  private final Map<String,Pending> pending=new ConcurrentHashMap<>();
  private final ThreadPoolExecutor workers=new ThreadPoolExecutor(4,4,0,TimeUnit.SECONDS,new ArrayBlockingQueue<>(32));
@@ -62,14 +68,33 @@ public class MainActivity extends Activity {
 
  @Override public void onCreate(Bundle state) {
   super.onCreate(state); deadlines.setRemoveOnCancelPolicy(true);
-  TextView waiting=new TextView(this);waiting.setText("DEV 기기 연결을 준비하고 있어요.");waiting.setPadding(24,48,24,24);setContentView(waiting);
+  getWindow().setDecorFitsSystemWindows(false);
+  content=new FrameLayout(this);
+  content.setBackgroundColor(android.graphics.Color.rgb(245,246,248));
+  content.setOnApplyWindowInsetsListener((view,insets)->{
+   Insets safe=insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+   view.setPadding(safe.left,safe.top,safe.right,safe.bottom);
+   WindowInsetsController bars=view.getWindowInsetsController();
+   if(bars!=null) {
+    int light=WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+    bars.setSystemBarsAppearance(light,light);
+   }
+   // Preserve dispatch to WebView so it can still handle keyboard/visual viewport insets.
+   return insets;
+  });
+  setContentView(content);content.requestApplyInsets();
+  TextView waiting=new TextView(this);waiting.setText("DEV 기기 연결을 준비하고 있어요.");waiting.setPadding(24,48,24,24);showContent(waiting);
   requestProvision(value->runOnUiThread(()->{if(closed){if(value!=null)value.bearer=null;return;}session=value;initializeWebView();}));
+ }
+ private void showContent(View view) {
+  content.removeAllViews();
+  content.addView(view,new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.MATCH_PARENT));
  }
  private void initializeWebView() {
   if(session==null || !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-   TextView text=new TextView(this);text.setText("DEV 기기 연결 준비가 필요해요. 이 앱은 출시용 로그인을 제공하지 않아요.");text.setPadding(24,48,24,24);setContentView(text);return;
+   TextView text=new TextView(this);text.setText("DEV 기기 연결 준비가 필요해요. 이 앱은 출시용 로그인을 제공하지 않아요.");text.setPadding(24,48,24,24);showContent(text);return;
   }
-  web=new WebView(this);setContentView(web);
+  web=new WebView(this);showContent(web);
   web.getSettings().setJavaScriptEnabled(true);
   web.getSettings().setDomStorageEnabled(false);
   web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);
