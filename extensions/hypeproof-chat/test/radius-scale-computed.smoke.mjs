@@ -14,6 +14,10 @@
 // A nested radius (menu item, Send button inside the composer) must equal the outer radius minus the measured
 // inset at both multipliers, so it has to be a calc() of the outer token, not a step that happens to match.
 // Negative controls at the end inject a later literal override and a hard-coded nested step; both must be caught.
+// CGP-DS-D-008 (DES-CGP-DS-12): every measured standalone radius sits on the design list 4 / 8 / 12 / 16 / 24 / full;
+// the composer may sit anywhere in 16-24px and the user bubble in 16-20px (its tail corner is owner decision
+// CGP-DS-D-017); a nested radius is computed, so it may land between steps. Every dialog root in the webview
+// (all modal-surface dialogs and the capability sheet) is measured at 12px, not only three of them.
 // Without a headless Chromium this prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 (CI) makes that a failure.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -60,6 +64,7 @@ import { CitationRack } from "./CitationPreview";
 import { ComposerTools } from "./ComposerTools";
 window.__keep = [LocalReview, StartPage, App];
 const which = window.__kind;
+const DIALOGS = window.__dialogs;
 const outbound = { id: 'r1', public: true, notes: [], excluded: '포함하지 않는 것: 비밀번호', sections: [{ recipient: '갤러리 · site.invalid', items: [{ id: 'a', label: 'index.html', bytes: 1200 }] }] };
 const write = { id: 'w', title: '파일을 바꿔도 될까요?', verb: '바꿈', files: ['a.html'], changes: [{ kind: 'unknown', reason: 'no-match' }] };
 function Page() {
@@ -75,6 +80,8 @@ function Page() {
     + '<section class="hps-goal-status"><div><button type="button">목표</button></div></section>'
     + '<span class="hps-style-tweak-chip"></span>'
     + '<dialog class="hps-preferences" open>설정</dialog>' }} />;
+  // Every dialog root the webview draws (CGP-DS-D-008: dialog 12px), with the class lists the components use.
+  if (which === 'dialogs') return <div dangerouslySetInnerHTML={{ __html: DIALOGS.map(([cls]) => '<dialog open class="' + cls + '">확인</dialog>').join('') }} />;
   // The personal seat's CitationRack chip under both seat shells (the classroom answer's own pill is measured in the App fixture).
   return <><StatusChip state="verified" /><CitationRack citations={[{ kind: 'web', url: 'https://example.org/a', title: '예시 자료', domain: 'example.org', tier: 1 }]} /></>;
 }
@@ -126,6 +133,41 @@ const corners = (el) => `(e=>{if(!e)return null;const s=getComputedStyle(e);retu
 const pad = (el) => `(e=>e?parseFloat(getComputedStyle(e).paddingTop):null)(${el})`;
 const q = (sel) => `document.querySelector(${JSON.stringify(sel)})`;
 
+// CGP-DS-D-008: the root class list of every dialog in webview-ui/src (grep '<dialog' and 'hp-modal'). A new dialog
+// that is missing here fails the inventory check below.
+const DIALOGS = [
+  ['hps-annotation-leave hp-modal', 'AnnotationLeaveDialog.tsx'],
+  ['hps-write-approval hps-browser-approval hp-modal', 'BrowserApprovalDialog.tsx'],
+  ['hps-write-approval hps-command-approval hp-modal', 'CommandApprovalDialog.tsx'],
+  ['hps-delegation-panel hp-modal', 'DelegationGroup.tsx'],
+  ['hps-file-context-preview hp-modal', 'FileContextChip.tsx'],
+  ['hps-outbound hp-modal hps-folder-consent', 'FolderConsentDialog.tsx'],
+  ['hp-capability-sheet', 'ChatPanel.tsx'],
+  ['hp-modal hps-sketch', 'SketchDialog.tsx'],
+  ['hps-outbound hp-modal', 'OutboundDialog.tsx'],
+  ['hps-outbound hps-outbound-public hp-modal', 'OutboundDialog.tsx'],
+  ['hps-write-approval hp-modal', 'WriteApprovalDialog.tsx'],
+  ['hp-modal tw-appearance', 'TaskAppearance.tsx'],
+  ['tw-trash-dialog hp-modal', 'ActivityTrashPanel.tsx'],
+  ['hps-preferences hp-modal', 'ChatPreferences.tsx'],
+];
+{
+  // Inventory: every <dialog> or hp-modal root in the sources is listed above, so a new dialog is measured too.
+  const { readdirSync } = await import('node:fs');
+  // A navigation drawer is an edge panel, not a dialog card (modalSurface.css, CGP-DS-D-020), so it is not on the 12px dialog radius.
+  const listed = new Set([...DIALOGS.map(([cls]) => cls), 'tw-works-drawer']);
+  for (const file of readdirSync(src).filter((f) => f.endsWith('.tsx'))) {
+    const text = readFileSync(path.join(src, file), 'utf8');
+    for (const m of text.matchAll(/<(?:dialog|div)\b[^>]*?className=(?:"([^"]*)"|\{\[?'([^']*)')/g)) {
+      const cls = (m[1] ?? m[2]).trim();
+      const words = cls.split(/\s+/);
+      if (!m[0].startsWith('<dialog') && !words.includes('hp-modal')) continue;
+      assert.ok(listed.has(cls), `radius-scale-computed: dialog root "${cls}" in ${file} is not in DIALOGS; add it so its radius is measured`);
+    }
+  }
+}
+// DES-CGP-DS-12 design list for standalone radii (px); full is checked separately.
+const DESIGN_STEPS = [0, 4, 8, 12, 16, 24];
 const findings = [];
 let checked = 0;
 // A control the fixture needs that is missing is a finding, not a crash.
@@ -158,6 +200,12 @@ function judge(label, probes, m) {
       if (p.want && one.c.some((c) => !near(c, p.want))) findings.push(`${label}: ${p.name} is ${one.c.join('/')}px, want ${p.want}px`);
     } else {
       if (one.c.some((c, i) => !near(c, p.want[i]))) findings.push(`${label}: ${p.name} is ${one.c.join('/')}px, want ${p.want.join('/')}px`);
+      // CGP-DS-D-008: the measured value, not the expectation, must be on the design list or inside the surface's range.
+      one.c.forEach((c, i) => {
+        if (p.tail === i) return;
+        const ok = p.range ? c >= p.range[0] - 0.5 && c <= p.range[1] + 0.5 : DESIGN_STEPS.some((s) => near(c, s));
+        if (!ok) findings.push(`${label}: ${p.name} corner ${i} is ${c}px, off DES-CGP-DS-12 (${p.range ? `range ${p.range.join('-')}px` : `steps ${DESIGN_STEPS.slice(1).join('/')}/full`})`);
+      });
       if (big.c.some((c, i) => !near(c, one.c[i] * 1.5))) findings.push(`${label}: ${p.name} does not follow the radius scale (x1 ${one.c.join('/')} -> x1.5 ${big.c.join('/')})`);
     }
   }
@@ -181,11 +229,11 @@ async function run(b, { evidence } = {}) {
       await new Promise((r) => setTimeout(r, 150));
       const bubble = seat === 'personal' ? [18, 18, 6, 18] : [16, 16, 4, 16];
       const restProbes = [
-        { name: 'composer', sel: '.hps-input', want: all(20) },
+        { name: 'composer', sel: '.hps-input', want: all(20), range: [16, 24] },
         seat === 'personal'
           ? { name: 'composer send (round)', sel: '.hps-input .hps-btn-send', full: true }
           : { name: 'composer send (nested)', sel: '.hps-input .hps-btn-send', outer: '.hps-input', nested: true, want: 8 },
-        { name: 'user bubble', sel: '.hps-msg-user .hps-msg-body', want: bubble },
+        { name: 'user bubble', sel: '.hps-msg-user .hps-msg-body', want: bubble, range: [16, 20], tail: 2 },
         ...(seat === 'personal'
           ? [{ name: 'citation chip', sel: '.cp-citation', want: all(8) }, { name: 'tools trigger (round)', sel: '.hps-tool-trigger', full: true }]
           : [{ name: 'classroom citation pill', sel: '.hps-cit-chip', full: true }, { name: 'composer field (nested)', sel: '.hps-input textarea', outer: '.hps-input', nested: true, want: 8 }]),
@@ -232,10 +280,10 @@ async function run(b, { evidence } = {}) {
     } finally { await b.send('Page.removeScriptToEvaluateOnNewDocument', { identifier }); }
   }
   // Dialogs and chips: the real components, both seats and themes.
-  for (const seat of ['personal', 'classroom']) for (const theme of ['dark', 'light']) for (const kind of ['write', 'outbound', 'trash', 'status', 'tools', 'chips']) {
+  for (const seat of ['personal', 'classroom']) for (const theme of ['dark', 'light']) for (const kind of ['write', 'outbound', 'trash', 'status', 'tools', 'chips', 'dialogs']) {
     if (kind === 'trash' && seat === 'classroom') continue; // the 내 작품 panel exists only in the personal workspace
     const label = `${seat}/${theme}/${kind}`;
-    await b.load(`<!doctype html><html style="${THEMES[theme]}"><head><meta charset="utf-8"><style>${fixtureCss}${extraCss}</style></head><body class="${theme === 'dark' ? 'vscode-dark' : 'vscode-light'}">${seat === 'personal' ? '<div class="hps-shell" data-chat-detail="personal"><div class="tw-workspace"><div id="r"></div></div></div>' : '<div class="hps-shell"><div id="r"></div></div>'}<script>window.__kind=${JSON.stringify(kind)}</script><script>${fixtureJs}</script></body></html>`, { width: 1420, height: 800, dark: theme === 'dark' });
+    await b.load(`<!doctype html><html style="${THEMES[theme]}"><head><meta charset="utf-8"><style>${fixtureCss}${extraCss}</style></head><body class="${theme === 'dark' ? 'vscode-dark' : 'vscode-light'}">${seat === 'personal' ? '<div class="hps-shell" data-chat-detail="personal"><div class="tw-workspace"><div id="r"></div></div></div>' : '<div class="hps-shell"><div id="r"></div></div>'}<script>window.__kind=${JSON.stringify(kind)};window.__dialogs=${JSON.stringify(DIALOGS)}</script><script>${fixtureJs}</script></body></html>`, { width: 1420, height: 800, dark: theme === 'dark' });
     await new Promise((r) => setTimeout(r, 150));
     if (kind === 'trash') {
       await b.evaluate(`window.postMessage({ type: 'activityTrashState', view: { scope: 's', entries: [{ id: 'e1', path: 'index.html', at: 1760000000000 }], damaged: 0 } }, '*')`);
@@ -247,7 +295,7 @@ async function run(b, { evidence } = {}) {
     }
     if (kind === 'tools') { await click(b, label, '.hps-tool-trigger'); await new Promise((r) => setTimeout(r, 60)); }
     const probes = {
-      write: [{ name: 'write dialog', sel: '.hps-write-approval', want: all(12) }, { name: 'write file chip', sel: '.hps-write-chip', want: all(6) }],
+      write: [{ name: 'write dialog', sel: '.hps-write-approval', want: all(12) }, { name: 'write file chip', sel: '.hps-write-chip', want: all(8) }],
       outbound: [{ name: 'outbound dialog', sel: '.hps-outbound', want: all(12) }],
       trash: [{ name: 'trash dialog', sel: '.tw-trash-dialog', want: all(12) }],
       status: [{ name: 'status chip', sel: '.hp-status-chip', want: all(4) }, { name: 'citation chip', sel: '.cp-citation', want: all(8) }],
@@ -256,10 +304,11 @@ async function run(b, { evidence } = {}) {
         { name: 'access chip', sel: '.hps-access-chip', want: all(4) },
         { name: 'task activity chip', sel: '.hps-task-activity-chip', want: all(8) },
         { name: 'goal status chip', sel: '.hps-goal-status button', want: all(4) },
-        { name: 'style swatch', sel: '.hps-style-tweak-chip', want: all(6) },
+        { name: 'style swatch', sel: '.hps-style-tweak-chip', want: all(4) },
         { name: 'settings card', sel: '.hps-preferences', want: all(12) },
         ...(seat === 'personal' ? [{ name: 'provenance chip', sel: '.tw-provenance-chip', want: all(8) }] : []),
       ],
+      dialogs: DIALOGS.map(([cls]) => ({ name: `dialog .${cls.split(' ').join('.')}`, sel: `dialog.${cls.split(' ').join('.')}`, want: all(12) })),
     }[kind];
     judge(label, probes, await readAt(b, probes));
     if (kind === 'write') {
@@ -280,7 +329,9 @@ async function run(b, { evidence } = {}) {
     await b.load(chalkPage('manage.html', extraCss), { width: 1420, height: 800, dark: true });
     await b.evaluate(`for (const d of [document.getElementById('ops-bulk'), document.getElementById('ops-tools'), document.getElementById('ops-pick-by')]) { d.hidden = false; if (d.tagName === 'DETAILS') d.open = true; }`);
     await new Promise((r) => setTimeout(r, 60));
-    const menu = [{ name: 'Chalk manage menu', sel: '#ops-pick-by .menu-body', want: all(8) }];
+    // The simple disclosure chip is drawn by script at runtime; the markup here carries the shipped class.
+    await b.evaluate(`document.body.insertAdjacentHTML('beforeend','<details class="simple"><summary>설명</summary></details>')`);
+    const menu = [{ name: 'Chalk manage menu', sel: '#ops-pick-by .menu-body', want: all(8) }, { name: 'Chalk simple disclosure chip', sel: 'details.simple > summary', want: all(8) }];
     judge('chalk/manage', menu, await readAt(b, menu));
   }
   return { findings: [...findings], checked };
@@ -300,6 +351,10 @@ try {
     ['a hard-coded nested step on the menu items', '.hps-shell .hps-input .hps-tools-menu > button.x, .hps-shell .hps-tools-menu > button{border-radius:var(--hp-radius-8)!important}'],
     ['the bubble on a spacing token', '.hps-shell .hps-msg-user .hps-msg-body.hps-msg-body{border-radius:calc(var(--hp-space) * 4)}'],
     ['a Chalk dialog literal', 'dialog#outbound.hp-modal{border-radius:12px}'],
+    // CGP-DS-D-008: an off-list step, a bubble outside 16-20px and a dialog off the dialog radius must each be caught.
+    ['a chip on the off-list 6px step', '.hps-write-approval .hps-write-chip.hps-write-chip{border-radius:var(--hp-radius-6)}'],
+    ['a user bubble outside 16-20px', '.hps-shell .hps-msg-user .hps-msg-body.hps-msg-body.hps-msg-body{border-radius:var(--hp-radius-24) var(--hp-radius-24) var(--hp-radius-4) var(--hp-radius-24)}'],
+    ['a dialog on the menu-item radius', 'dialog.hp-modal.tw-appearance.tw-appearance{border-radius:var(--hp-radius-8)}'],
   ];
   for (const [name, css] of mutations) {
     extraCss = css;

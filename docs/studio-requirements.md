@@ -1343,8 +1343,18 @@ chips (8px), the manage page's menu, selection-tools and first-run audience chip
 disclosure chips (6px). Overridden rules on the same surfaces (the personal composer's 22px and 28px, the
 personal bubble's 20px, the personal citation chip's 9px) name the same tokens so no literal is left behind.
 Not covered: the other radii in the webview and Chalk keep their shipped values until a design review
-moves them (as DEC-DS-R-010 did for spacing); DES-CGP-DS-12's narrower step list (CGP-DS-D-008) and
-`corner-shape: superellipse` are not adopted here; a capture in the built app.
+moves them (as DEC-DS-R-010 did for spacing); `corner-shape: superellipse`; a capture in the built app.
+Design list (CGP-DS-D-008, 2026-10-28; DES-CGP-DS-12, P2, Both): on the surfaces above every standalone
+radius is one of 4 / 8 / 12 / 16 / 24px or full. The composer may take any step in 16-24px (it keeps 20px,
+DES-CGP-DS-21) and the user bubble any step in 16-20px (personal 18px, classroom 16px); the bubble's tail
+corner is owner decision CGP-DS-D-017 (personal 6px, classroom 4px), and a nested radius is computed, so it
+may land between steps (task menu items 6px). The three standalone 6px radii move onto the list: the write
+approval file chip 6 -> 8px (the chip family's step), the style tweak swatch 6 -> 4px (a 28px colour square
+inside a 44px button) and Chalk's simple disclosure chip 6 -> 8px (Chalk's chip step). Every dialog card is
+12px: all fourteen dialog roots in the webview (annotation leave, browser and command approval, delegation,
+file preview, folder consent, the capability sheet, sketch, outbound and public audience, write approval,
+task appearance, trash purge, settings) and Chalk's sharing dialog; the 내 작품 drawer is a navigation
+drawer, not a dialog card. The 6/18/20px steps stay in the scale for the composer, the bubble and its tail.
 Test: `test/radius-scale-computed.smoke.mjs` (headless Chromium; `FOCUS_REQUIRE_BROWSER=1` makes a
 missing browser a failure) renders the real App from `main.tsx` driven by host messages (personal and
 classroom, dark and light, 1420 and 800 px: composer, Send, the classroom composer field, tools trigger,
@@ -1352,16 +1362,19 @@ user bubble, suggestion chips, personal citation chips and classroom citation pi
 task menus and the "내 질문" popover with their items), the real WriteApprovalDialog (also as the 390px
 bottom sheet), OutboundDialog, ActivityTrashPanel purge dialog, StatusChip, the personal CitationRack and
 the ComposerTools menu under both seat shells and themes, and Chalk's `sharing.html` dialog and
-`manage.html` menu with the transport Chalk serves. Changed but measured only by the declaration and
-layout smokes, not by this test: the expanded composer (same rule as the card), the access, provenance,
-task activity and goal bar chips, the style tweak swatch, the settings card and other modal-surface
-dialogs, and Chalk's board and first-run chips. It reads computed radii at multiplier 1 and again at 1.5: a scale radius must move by
+`manage.html` menu and simple disclosure chip with the transport Chalk serves, plus (CGP-DS-D-008) the
+access, provenance, task activity and goal bar chips, the style tweak swatch, the settings card and every
+dialog root listed in the test's `DIALOGS` table (a source scan fails when a `<dialog>` or `hp-modal` root
+is not in it). Each measured standalone corner must also be on the DES-CGP-DS-12 list or inside the
+surface's range; reverting the three 6px moves gives 45 findings (write chip and swatch in both seats and
+themes, Chalk chip). Changed but measured only by the declaration and layout smokes, not by this test: the
+expanded composer (same rule as the card) and Chalk's board and first-run chips. It reads computed radii at multiplier 1 and again at 1.5: a scale radius must move by
 exactly 1.5x (a literal, a spacing token or another token fails), a nested radius must equal the outer
 radius minus the measured inset at both multipliers, and a round control must stay on the full step. On
 origin/main it fails with more than 100 findings (no radius follows the multiplier; menu items 6px, round
 controls on 50%, classroom Send 4px, classroom bubble 14px, suggestion chip 10px, citation chip 9px). Negative controls: a later literal on
 the composer, a hard-coded step on the menu items, the bubble on a spacing token and a Chalk dialog
-literal. The declaration smokes that pinned the old literals (`modal-surface`, `goal-status-css`,
+literal; for CGP-DS-D-008 a chip on the 6px step, a bubble at 24px and a dialog on 8px. The declaration smokes that pinned the old literals (`modal-surface`, `goal-status-css`,
 `status-chip`, `control-ladder`) now expect the scale names or resolve them through `radiusScale.css`.
 
 ### Chat reference interaction (CG-IMPL-R1)
