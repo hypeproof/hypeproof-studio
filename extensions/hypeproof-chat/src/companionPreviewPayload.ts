@@ -2,8 +2,11 @@
 export const COMPANION_PREVIEW_PACKET_BYTES = 2032;
 export const COMPANION_PREVIEW_ENVELOPE_BYTES = 32 * 1024;
 export const COMPANION_PREVIEW_MAX_PARTS = 48;
-const SLICE_BYTES = 1024;
-const SCHEMA = 'hps-companion-result-part/1';
+/** Explicit DEV framing version; older /1-only receivers cannot consume this producer. */
+export const COMPANION_PREVIEW_FRAMING_SCHEMA = 'hps-companion-result-part/2';
+const SLICE_BYTES = 1280;
+const LEGACY_SCHEMA = 'hps-companion-result-part/1';
+const sliceBytesFor = (schema: unknown) => schema === COMPANION_PREVIEW_FRAMING_SCHEMA ? SLICE_BYTES : schema === LEGACY_SCHEMA ? 1024 : 0;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -30,13 +33,13 @@ export async function packCompanionPreviewPayload(raw: string, expectedRequestId
   const count = Math.ceil(bytes.length / SLICE_BYTES);
   if (count > COMPANION_PREVIEW_MAX_PARTS) fail();
   return Array.from({ length: count }, (_, index) => {
-    const packet = JSON.stringify({ schema: SCHEMA, requestId: expectedRequestId, sha256: sha256Hex,
+    const packet = JSON.stringify({ schema: COMPANION_PREVIEW_FRAMING_SCHEMA, requestId: expectedRequestId, sha256: sha256Hex,
       length: bytes.length, count, index, data: base64(bytes.subarray(index * SLICE_BYTES, (index + 1) * SLICE_BYTES)) });
     if (encoder.encode(packet).length > COMPANION_PREVIEW_PACKET_BYTES) fail();
     return packet;
   });
 }
-interface Metadata { sha256: string; length: number; count: number }
+interface Metadata { schema: string; sha256: string; length: number; count: number }
 export interface CompanionPreviewPayloadProgress {
   readonly received: number; readonly total: number; readonly bytes: number;
   readonly complete: boolean; readonly discarded: boolean;
@@ -96,24 +99,25 @@ export class CompanionPreviewPayloadReceiver {
       if (this.complete) return null;
       this.single = packet; this.complete = true; return packet;
     }
-    if (this.single !== undefined || part.schema !== SCHEMA || part.requestId !== this.expectedRequestId
+    const sliceBytes = sliceBytesFor(part.schema);
+    if (this.single !== undefined || !sliceBytes || part.requestId !== this.expectedRequestId
       || Object.keys(part).length !== 7 || !Object.keys(part).every(k => ['schema', 'requestId', 'sha256', 'length', 'count', 'index', 'data'].includes(k))
       || typeof part.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(part.sha256)
       || !Number.isSafeInteger(part.length) || Number(part.length) <= COMPANION_PREVIEW_PACKET_BYTES || Number(part.length) > COMPANION_PREVIEW_ENVELOPE_BYTES
-      || !Number.isSafeInteger(part.count) || Number(part.count) !== Math.ceil(Number(part.length) / SLICE_BYTES) || Number(part.count) > COMPANION_PREVIEW_MAX_PARTS
+      || !Number.isSafeInteger(part.count) || Number(part.count) !== Math.ceil(Number(part.length) / sliceBytes) || Number(part.count) > COMPANION_PREVIEW_MAX_PARTS
       || !Number.isSafeInteger(part.index) || Number(part.index) < 0 || Number(part.index) >= Number(part.count)
       || typeof part.data !== 'string') fail();
-    const metadata = { sha256: part.sha256 as string, length: Number(part.length), count: Number(part.count) };
-    if (this.metadata && (this.metadata.sha256 !== metadata.sha256 || this.metadata.length !== metadata.length || this.metadata.count !== metadata.count)) fail();
+    const metadata = { schema: String(part.schema), sha256: part.sha256 as string, length: Number(part.length), count: Number(part.count) };
+    if (this.metadata && (this.metadata.schema !== metadata.schema || this.metadata.sha256 !== metadata.sha256 || this.metadata.length !== metadata.length || this.metadata.count !== metadata.count)) fail();
     const index = Number(part.index);
     const bytes = Uint8Array.from(atob(part.data as string), c => c.charCodeAt(0));
-    if (base64(bytes) !== part.data || bytes.length !== Math.min(SLICE_BYTES, metadata.length - index * SLICE_BYTES)) fail();
+    if (base64(bytes) !== part.data || bytes.length !== Math.min(sliceBytes, metadata.length - index * sliceBytes)) fail();
     const previous = this.parts.get(index);
     if (previous) { if (base64(previous) !== part.data) fail(); return null; }
     this.metadata = metadata; this.parts.set(index, bytes);
     if (this.parts.size !== metadata.count) return null;
     const joined = new Uint8Array(metadata.length);
-    for (let i = 0; i < metadata.count; i++) joined.set(this.parts.get(i)!, i * SLICE_BYTES);
+    for (let i = 0; i < metadata.count; i++) joined.set(this.parts.get(i)!, i * sliceBytes);
     if (await sha256(joined) !== metadata.sha256) fail();
     if (generation !== this.generation) fail();
     const raw = decoder.decode(joined);

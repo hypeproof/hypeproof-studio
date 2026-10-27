@@ -89,6 +89,21 @@ test('framed transfer integrity does not substitute for artifact identity, versi
   }
 });
 
+test('new framing/2 remains request-bound and a remounted semantic receiver accepts historical /1 bytes', async () => {
+  const packet = largeResult(125), raw = JSON.stringify(packet), bytes = Buffer.from(raw);
+  const expected = { ...request, artifactVersion: packet.outcome.artifact.version };
+  const count = Math.ceil(bytes.length / 1024);
+  const legacy = Array.from({ length: count }, (_, index) => JSON.stringify({ schema: 'hps-companion-result-part/1',
+    requestId: request.requestId, sha256: createHash('sha256').update(bytes).digest('hex'), length: bytes.length,
+    count, index, data: bytes.subarray(index * 1024, (index + 1) * 1024).toString('base64') }));
+  const receiver = new CompanionPreviewResultReceiver(expected);
+  for (const part of legacy.slice(0, -1)) assert.equal(await receiver.accept(part), null);
+  assert.deepEqual(await receiver.accept(legacy.at(-1)), packet.outcome);
+  const wrong = new CompanionPreviewResultReceiver({ ...expected, requestId: 'another-request' });
+  await assert.rejects(wrong.accept((await packCompanionPreviewPayload(raw, request.requestId))[0]));
+  assert.equal(wrong.progress.discarded, true);
+});
+
 test('discard and reset prevent an in-flight semantic digest from emitting or changing new progress', async () => {
   for (const action of ['discard', 'reset']) {
     let release, started;

@@ -7,7 +7,7 @@ import { packCompanionPreviewPayload } from '../src/companionPreviewPayload.ts';
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return{promise,resolve};};
 const tick=async()=>{for(let i=0;i<50;i++)await Promise.resolve();};
 class Clock {timers=new Set();setTimeout(callback,ms){const h={callback,ms};this.timers.add(h);return h;}clearTimeout(h){this.timers.delete(h);}fire(ms){for(const h of [...this.timers])if(h.ms===ms){this.timers.delete(h);h.callback();}}}
-const text='<html lang="ko"><pre>'+'a'.repeat(7400)+'</pre></html>';
+const text='<html lang="ko"><pre>'+'a'.repeat(9000)+'</pre></html>';
 const request={schema:'hps-companion-host-request/1',requestId:'restore-request',actorId:'actor',deviceId:'phone',hostId:'host',workspaceId:'workspace',projectId:'project',taskId:'task',version:2,epoch:1,consentRevision:4,artifactId:'quiz',artifactVersion:createHash('sha256').update(text).digest('hex'),operation:'preview.read'};
 const context={accountId:'account',sessionId:'session',deviceId:request.deviceId,pairingId:'ci_pair',cipherContext:'c'.repeat(64),workspaceId:request.workspaceId,artifactId:request.artifactId,artifactVersion:request.artifactVersion,epoch:request.epoch};
 const outcome={state:'completed',code:'preview_read',requestId:request.requestId,artifact:{id:request.artifactId,version:request.artifactVersion,text}};
@@ -28,6 +28,20 @@ function fixture(initial=null){
  const reattach=async saved=>saved.messages.every(m=>ledger.get(m.message_id)===m.text)?'same_live_transport_verified_bytes':'unavailable';
  return{calls,ports,storage,ledger,make,reattach,get raw(){return raw;},set raw(v){raw=v;},set now(v){now=v;}};
 }
+
+test('retained framing/1 checkpoint restores exact original raw bytes without a request resend',async()=>{
+ const bytes=Buffer.from(envelope),count=Math.ceil(bytes.length/1024);
+ const legacy=Array.from({length:count},(_,index)=>({message_id:'legacy_'+index,text:JSON.stringify({
+  schema:'hps-companion-result-part/1',requestId:request.requestId,sha256:createHash('sha256').update(bytes).digest('hex'),
+  length:bytes.length,count,index,data:bytes.subarray(index*1024,(index+1)*1024).toString('base64')})}));
+ const saved=checkpoint();saved.validated=legacy;
+ const f=fixture(JSON.stringify(saved));legacy.forEach(m=>f.ledger.set(m.message_id,m.text));const live=f.make();
+ assert.equal(await live.controller.restore(f.reattach),'restored');
+ assert.deepEqual(live.controller.getSnapshot().receipt.outcome,outcome);
+ assert.equal(f.calls.prepare,0);assert.equal(f.calls.send,0);assert.equal(f.calls.receive,0);
+ assert.deepEqual(JSON.parse(f.raw).validated,legacy,'checkpoint retains historical bytes, not re-encoded /2');
+ await live.controller.forget();
+});
 
 test('remount restores partial ACK obligations and deduplicated suffix, one request, exact immutable receipt', {timeout:5000},async()=>{
  const f=fixture(),first=f.make(),pause=deferred(),entered=deferred();const ack=f.ports.transport.acknowledge;let hold=true;

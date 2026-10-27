@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { packCompanionPreviewPayload, CompanionPreviewPayloadReceiver,
-  COMPANION_PREVIEW_PACKET_BYTES, COMPANION_PREVIEW_ENVELOPE_BYTES, COMPANION_PREVIEW_MAX_PARTS } from '../src/companionPreviewPayload.ts';
+  COMPANION_PREVIEW_PACKET_BYTES, COMPANION_PREVIEW_ENVELOPE_BYTES, COMPANION_PREVIEW_MAX_PARTS, COMPANION_PREVIEW_FRAMING_SCHEMA } from '../src/companionPreviewPayload.ts';
 import { verifyCompanionPreviewResult } from '../src/companionPreviewResult.ts';
 const size = text => new TextEncoder().encode(text).length;
 const requestId = 'preview-한국'; // Request IDs remain the existing ASCII contract.
@@ -12,6 +12,13 @@ const html = repeats => '<!doctype html><html lang="ko"><meta charset="utf-8"><b
 const result = text => JSON.stringify({ schema: 'hps-companion-host-result/1', requestId: id,
   outcome: { state: 'completed', code: 'preview_read', requestId: id,
     artifact: { id: 'quiz', version: createHash('sha256').update(text).digest('hex'), text } } });
+// Historical /1 bytes: independent reference encoder, never a product producer fallback.
+const legacyParts = (raw, requestId = id) => {
+  const bytes = Buffer.from(raw), slice = 1024, count = Math.ceil(bytes.length / slice);
+  return Array.from({ length: count }, (_, index) => JSON.stringify({ schema: 'hps-companion-result-part/1', requestId,
+    sha256: createHash('sha256').update(bytes).digest('hex'), length: bytes.length, count, index,
+    data: bytes.subarray(index * slice, (index + 1) * slice).toString('base64') }));
+};
 
 test('useful Korean interactive HTML at 8–24KiB survives reversed parts and duplicate delivery exactly', async () => {
   for (const repeats of [120, 300]) {
@@ -51,13 +58,61 @@ test('exact envelope ceiling and maximum request ID keep every packet within rel
   const raw = prefix.replace('"text":""', '"text":"' + 'x'.repeat(COMPANION_PREVIEW_ENVELOPE_BYTES - size(prefix)) + '"');
   assert.equal(size(raw), COMPANION_PREVIEW_ENVELOPE_BYTES);
   const packets = await packCompanionPreviewPayload(raw, longId);
-  assert.equal(packets.length, 32);
-  assert.ok(packets.every(p => size(p) <= 2032));
+  assert.equal(packets.length, 26);
+  assert.ok(packets.every(p => JSON.parse(p).schema === COMPANION_PREVIEW_FRAMING_SCHEMA));
+  assert.equal(Math.max(...packets.map(size)), 2014);
+  assert.ok(packets.every(p => size(p) <= 2032 && size(p) + 16 <= 2048));
   const receiver = new CompanionPreviewPayloadReceiver(longId);
   const emitted = await Promise.all(packets.map(p => receiver.accept(p)));
   assert.deepEqual(emitted.filter(p => p !== null), [raw]);
   await assert.rejects(packCompanionPreviewPayload(raw + ' ', longId));
   await assert.rejects(packCompanionPreviewPayload(result(html(1)), requestId));
+});
+
+test('framing/2 packs the same 17316-byte envelope into14 parts instead of17 without changing bytes', async () => {
+  const base = html(120), raw = result(base + 'x'.repeat(17316 - size(result(base))));
+  assert.equal(size(raw), 17316);
+  assert.equal(legacyParts(raw).length, 17);
+  const packets = await packCompanionPreviewPayload(raw, id);
+  assert.equal(packets.length, 14);
+  assert.ok(packets.every(p => JSON.parse(p).schema === 'hps-companion-result-part/2'));
+  const receiver = new CompanionPreviewPayloadReceiver(id);
+  assert.deepEqual((await Promise.all(packets.map(p => receiver.accept(p)))).filter(Boolean), [raw]);
+});
+
+test('retained framing/1 raw parts replay unchanged after remount, while mixed versions are discarded', async () => {
+  const raw = result(html(120)), saved = legacyParts(raw), original = [...saved];
+  const first = new CompanionPreviewPayloadReceiver(id);
+  for (const packet of saved.slice(0, 4)) assert.equal(await first.accept(packet), null);
+  first.discard();
+  const remounted = new CompanionPreviewPayloadReceiver(id);
+  assert.deepEqual((await Promise.all(saved.map(p => remounted.accept(p)))).filter(Boolean), [raw]);
+  assert.deepEqual(saved, original);
+  // At 2033–2048 bytes both versions have count=2. Changing only schema would otherwise
+  // pass count checks on the short final part; transfer identity must include schema.
+  const prefix = result('');
+  const ambiguous = result('x'.repeat(2040 - size(prefix)));
+  const old = legacyParts(ambiguous), current = await packCompanionPreviewPayload(ambiguous, id);
+  assert.equal(old.length, current.length);
+  for (const [a, b] of [[old, current], [current, old]]) {
+    const receiver = new CompanionPreviewPayloadReceiver(id);
+    assert.equal(await receiver.accept(a[0]), null);
+    await assert.rejects(receiver.accept(b[1]));
+    assert.equal(receiver.progress.discarded, true);
+  }
+});
+
+test('frame shape, version, byte lengths and excessive part metadata fail closed', async () => {
+  const parts = await packCompanionPreviewPayload(result(html(120)), id);
+  for (const change of [p => { p.schema = 'hps-companion-result-part/3'; }, p => { p.extra = true; },
+    p => { p.length = 32769; }, p => { p.index = -1; }, p => { p.count = 1.5; },
+    p => { p.data = Buffer.alloc(1279).toString('base64'); }, p => { p.count = 49; }]) {
+    const part = JSON.parse(parts[0]); change(part);
+    const receiver = new CompanionPreviewPayloadReceiver(id);
+    await assert.rejects(receiver.accept(JSON.stringify(part)));
+    assert.equal(receiver.progress.complete, false);
+    assert.equal(receiver.progress.discarded, true);
+  }
 });
 
 test('conflicting parts or metadata, wrong requests, and full digest mismatches never emit a result', async () => {

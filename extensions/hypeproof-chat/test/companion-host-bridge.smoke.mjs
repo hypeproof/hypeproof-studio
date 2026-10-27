@@ -48,7 +48,7 @@ test('actual dispatcher requires native consent and current independent profile,
 });
 
 test('a useful HTML result crosses a bounded relay window without duplicate file reads or early preview', async () => {
- const text='<html><button>색깔 퀴즈</button><p>'+('내가 만든 작품입니다. '.repeat(300))+'</p></html>';
+ const text='<html><button>색깔 퀴즈</button><p>'+('내가 만든 작품입니다. '.repeat(420))+'</p></html>';
  const f=await fixture(text);try{
   const prepared=new Map(),pending=[],received=new CompanionPreviewPayloadReceiver('request');
   let assembled=null,pauses=0,closed=false;

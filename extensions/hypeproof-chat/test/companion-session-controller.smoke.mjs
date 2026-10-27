@@ -107,7 +107,7 @@ test('a receive finishing after timeout is reconciled once; a changed descriptor
 });
 
 test('reconnect drains a deduplicated eight-part batch after the fourth ACK times out', {timeout:5000}, async()=>{
-  const batchText='<html lang="ko"><body><h1>내 작품</h1><pre>'+'a'.repeat(7400)+'</pre></body></html>';
+  const batchText='<html lang="ko"><body><h1>내 작품</h1><pre>'+'a'.repeat(9000)+'</pre></body></html>';
   const expected={...request,artifactVersion:createHash('sha256').update(batchText).digest('hex')};
   const outcome={...completed,artifact:{id:expected.artifactId,version:expected.artifactVersion,text:batchText}};
   const parts=messages(await packCompanionPreviewPayload(raw(outcome),expected.requestId));
