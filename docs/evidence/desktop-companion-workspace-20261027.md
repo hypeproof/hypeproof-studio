@@ -1,8 +1,9 @@
 # DMC-1 local workspace preparation evidence
 
 Scope: the local preparation portion of DMC-01 and DMC-14 under
-`hypeproof/hypeproof-studio#2803`; DMC-1 tracking issue: Studio #3071.
-Source base: `4ff05dba`; verified implementation:
+`hypeproof/hypeproof-studio#2803`; preparation close target: Studio #3080;
+broader DMC-1 tracking issue: Studio #3071 (remains open).
+Source base: `4ff05dba`; native-observed implementation:
 `b7ee35cf0adcd945d0cbc88330c2225f677d3262`;
 branch: `feat/desktop-companion-workspace-20261027`.
 Source/fixture checks and an actual isolated desktop development app run are
@@ -13,10 +14,11 @@ In particular, current activity identity is not verified personal ownership.
 Canonical mapping: `ST-IMP-COMPANION-WORKSPACE` extends the foundation's
 `ST-INT-COMPANION` → `ST-REQ-COMPANION` → `ST-DES-COMPANION` chain and
 existing `ST-TEST-COMPANION` contract. No separate requirement definition or
-completion record is introduced. Subsequent foundation synchronization and
-mapping/evidence-only commits preserve the observed source above; they are not
-new native runs. Studio #3071 and parent #2803 remain broader tracking context,
-not a claim that this preparation completes their acceptance.
+completion record is introduced. Foundation synchronization and mapping-only
+commits preserved the observed source above. The subsequent scope-boundary
+correction below changes the controller and its regression tests; its native
+acceptance has **NOT RUN**. Studio #3071 and parent #2803 remain broader tracking
+context, not a claim that this preparation completes their acceptance.
 
 ## Observable desktop flow
 
@@ -70,6 +72,8 @@ workspace/task rollback, migration or source deletion is needed.
 
 ## Executed local evidence
 
+The following baseline checks precede the subsequent scope-boundary correction;
+its current-source checks are recorded separately below.
 Environment: Node **22.22.1**, macOS Darwin 24.6.0, arm64. Synthetic temporary
 folders only. All installs/tests/builds used the shared `hype-resource` queue
 (owner `codex:01a12522-7c7d-70c2-b09a-353dad5e2280`). Dependency acquisition used
@@ -174,3 +178,34 @@ re-ran all 9 focused tests and the two original race reproductions at
 `b7ee35cf` with PASS. Native preparation at earlier source `e76417fa` is historical;
 the separately bound `b7ee35cf` observation above covers the corrected app source
 within its stated synthetic-profile boundary.
+
+## Subsequent scope-boundary correction — Studio #3080
+
+Before this correction, all four production-host-adapter controls reproduced
+failures at source `083f21a97df4f4a8ec9be77419baf6901a9e0777`:
+
+- A scope switch during binding validation or actual filesystem inspection after
+  folder selection opened the previous activity's review.
+- A scope switch during either validation after approval wrote the old activity's
+  preparation metadata before the later display guard blocked it.
+
+The controller now checks scope after awaited binding/filesystem validation and
+immediately before persistence. Switching activities before review cannot open
+the stale review; switching before persistence writes no preparation. Existing
+cancellation, concurrent metadata preservation and scope-safe saved-state display
+remain covered. These are preparation controls, not execution authorization.
+
+The unchanged four negative controls now require no stale confirmation, no
+metadata write, generic blocked copy without the old folder and unchanged fixture
+bytes. The full focused run passes: **14/14 Node-reported tests** (10 top-level
+scenarios including the four-subcontrol group), no skips, exit 0. Source/runtime
+validation is separate from native UI acceptance; the earlier `b7ee35cf` native
+run does not prove these new failure paths or the current controller bytes.
+
+Resource jobs: `dmc-workspace-precommit-race-red-v2` (all four negative controls
+failed as expected), `dmc-workspace-precommit-race-green-v1` (full focused PASS).
+`dmc-workspace-precommit-race-build-v1` also passed the extension bundle and
+TypeScript `--noEmit` check. Alignment of the canonical companion chain and
+`git diff --check` passed. Raw logs: `precommit-race-red.log`,
+`precommit-race-green.log` and `precommit-race-build.log` in
+`/Users/jaylee/CodeWorkspace/artifacts/desktop-companion-workspace-20261027/`.

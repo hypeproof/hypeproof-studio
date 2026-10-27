@@ -29,16 +29,25 @@ async function fixture(run) {
     },
   };
   const context = { subscriptions: [], globalState: { get: key => saved.get(key), update: async (key, value) => saved.set(key, value) } };
+  const inspection = { afterAccess: undefined };
+  const filesystem = require('node:fs/promises');
   const module = { exports: {} };
   vm.runInNewContext(bundle.outputFiles[0].text, {
-    module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id),
+    module, exports: module.exports, require: id => {
+      if (id === 'vscode') return vscode;
+      if (id === 'node:fs/promises') return { ...filesystem, access: async (...args) => {
+        await filesystem.access(...args);
+        await inspection.afterAccess?.();
+      } };
+      return require(id);
+    },
     process, Buffer, console, fetch: () => { throw Error('Network forbidden in companion preparation'); },
   });
   const { registerCompanionWorkspace, COMPANION_WORKSPACE_COMMAND, readPreparedCompanionWorkspace } = module.exports;
   const readPrepared = () => readPreparedCompanionWorkspace(context, connections);
   const register = () => registerCompanionWorkspace(context, connections);
   const invoke = () => commands.get(COMPANION_WORKSPACE_COMMAND)();
-  try { await run({ root, dialogs, saved, context, vscode, connections, register, invoke, readPrepared }); }
+  try { await run({ root, dialogs, saved, context, vscode, connections, inspection, register, invoke, readPrepared }); }
   finally { await rm(temporary, { recursive: true, force: true }); }
 }
 
@@ -84,3 +93,49 @@ test('remote, multi-root and trust changes in native dialogs never produce prepa
   f.vscode.window.showInformationMessage = async (...args) => { f.vscode.workspace.isTrusted = false; return show(...args); };
   await f.invoke(); assert.equal(f.dialogs.at(-1).message, '준비 정보를 저장하거나 확인하지 못했어요. 원본 파일과 기존 기록은 보존돼요.'); assert.equal(f.saved.size, 0);
 }));
+
+test('scope changes during validation cannot show stale review or persist an approved old activity', async t => {
+  for (const validation of ['binding', 'filesystem']) {
+    for (const transition of ['before-review', 'before-save']) {
+      await t.test(`${validation} ${transition}`, () => fixture(async f => {
+        const before = await readFile(join(f.root, 'index.html'));
+        let phase = 'initial', switched = false;
+        const picker = f.vscode.window.showOpenDialog;
+        f.vscode.window.showOpenDialog = async (...args) => {
+          const selected = await picker(...args);
+          phase = 'before-review';
+          return selected;
+        };
+        const information = f.vscode.window.showInformationMessage;
+        f.vscode.window.showInformationMessage = async (...args) => {
+          const answer = await information(...args);
+          if (args[2] === '준비 정보 저장') phase = 'before-save';
+          return answer;
+        };
+        const switchActivity = async () => {
+          if (phase !== transition || switched) return;
+          switched = true;
+          f.connections.current = { ...f.connections.current, id: 'synthetic-b', name: 'Other activity', ref: 'synthetic-binding-b' };
+        };
+        if (validation === 'binding') {
+          const binding = f.connections.forWorkspace;
+          f.connections.forWorkspace = async folder => {
+            const result = await binding(folder);
+            await switchActivity();
+            return result;
+          };
+        } else f.inspection.afterAccess = switchActivity;
+        f.register(); await f.invoke();
+        const control = `${validation} ${transition}`;
+        assert.ok(switched, `${control}: control reached its scope transition`);
+        assert.equal(f.saved.size, 0, `${control}: no preparation may be written for the old activity`);
+        assert.equal(f.dialogs.filter(dialog => dialog.action === '준비 정보 저장').length,
+          transition === 'before-review' ? 0 : 1, `${control}: no review may open after the activity changes`);
+        assert.equal(f.dialogs.at(-1).type, 'warning', `${control}: scope switch is blocked`);
+        assert.equal(f.dialogs.at(-1).message, '준비 정보를 저장하거나 확인하지 못했어요. 원본 파일과 기존 기록은 보존돼요.');
+        assert.ok(!f.dialogs.at(-1).options.detail.includes(f.root), `${control}: blocked detail does not expose the old folder`);
+        assert.deepEqual(await readFile(join(f.root, 'index.html')), before);
+      }));
+    }
+  }
+});

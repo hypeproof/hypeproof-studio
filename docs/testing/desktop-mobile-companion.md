@@ -47,3 +47,8 @@ physical-device acceptance remain **NOT RUN**. The two focused files are
 `extensions/hypeproof-chat/test/companion-workspace-host.test.mjs`; native artifact
 paths and reproduction are in the linked evidence. Later mapping/evidence-only
 commits do not turn this observed source into a new native acceptance run.
+The subsequent Studio #3080 scope-boundary correction adds four host-adapter
+controls for activity changes during binding/filesystem validation before review
+or persistence; all four must block stale review or metadata writes. Those new
+failure paths and controller bytes have source/fixture checks, with native
+acceptance **NOT RUN**; the earlier native run remains bound to `b7ee35cf`.

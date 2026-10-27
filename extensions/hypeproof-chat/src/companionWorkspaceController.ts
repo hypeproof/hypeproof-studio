@@ -14,7 +14,7 @@ export interface CompanionWorkspaceHost {
   now(): number;
 }
 
-/** Native UI and persistence share one scope snapshot, rechecked after each user interaction. */
+/** Native UI and persistence share one scope snapshot, rechecked after awaited validation and interaction. */
 export class CompanionWorkspaceController {
   private busy = false;
   private readonly host: CompanionWorkspaceHost;
@@ -47,11 +47,13 @@ export class CompanionWorkspaceController {
     if (state.preparation) { await this.host.show(state, detail); return; }
     const selected = await this.host.selectFolder();
     if (!selected) return;
-    if (!this.unchanged(scope) || !await this.host.verify(scope)) throw new Error('scope changed');
+    if (!this.unchanged(scope) || !await this.host.verify(scope) || !this.unchanged(scope)) throw new Error('scope changed');
     await inspectCompanionWorkspace(selected, scope);
+    if (!this.unchanged(scope)) throw new Error('scope changed');
     if (!await this.host.confirm(detail)) return;
-    if (!this.unchanged(scope) || !await this.host.verify(scope)) throw new Error('scope changed');
+    if (!this.unchanged(scope) || !await this.host.verify(scope) || !this.unchanged(scope)) throw new Error('scope changed');
     await inspectCompanionWorkspace(selected, scope);
+    if (!this.unchanged(scope)) throw new Error('scope changed');
     // Do not replace a preparation that appeared while the modal was open, even if corrupt.
     if (this.host.get(companionKey(scope)) !== undefined) throw new Error('metadata changed');
     const prepared: CompanionPreparation = {
@@ -59,8 +61,9 @@ export class CompanionWorkspaceController {
       projectId: companionDigest(companionScope(scope)), activityId: scope.activityId,
       hostId: scope.hostId, preparedAt: this.host.now(),
     };
+    if (!this.unchanged(scope)) throw new Error('scope changed');
     await this.host.update(companionKey(scope), prepared);
-    if (!this.unchanged(scope) || !await this.host.verify(scope)) throw new Error('scope changed');
+    if (!this.unchanged(scope) || !await this.host.verify(scope) || !this.unchanged(scope)) throw new Error('scope changed');
     const after = await companionState(scope, this.host.get(companionKey(scope)));
     if (!this.unchanged(scope)) throw new Error('scope changed');
     if (!after.preparation) throw new Error('metadata persistence failed');
