@@ -52,6 +52,20 @@ test('raw dispatch failures never echo a credential/body; malformed relay succes
  f.handler=async()=>json({schema:'hps-companion-relay-dev/1',execution_authorized:false,scope_authority:'authenticated_declaration',transport_only:true,host_durable_accepted:false});await assert.rejects(()=>f.api.relay('host',pairId,'receive','{}'),/invalid_response/);
 });
 
+test('rejected response headers cancel the live body before the bounded operation ends',async()=>{
+ for(const headers of [{ 'content-type':'text/html' },{}, { 'content-type':'application/json', 'content-length':'65537' }]){
+  const f=fixture();await f.api.resolveIdentity();let cancelled=0;
+  f.handler=async()=>new Response(new ReadableStream({cancel(){cancelled++;}}),{headers});
+  await assert.rejects(()=>f.api.pairing('host',pairId,'status',{}),/invalid_response|response_too_large/);
+  assert.equal(cancelled,1,'rejected live response must release its body');
+  assert.equal(f.calls.length,2,'cleanup must not retry the operation');
+ }
+ const f=fixture();await f.api.resolveIdentity();let cancelled=0;
+ f.handler=async()=>{const response=new Response(new ReadableStream({cancel(){cancelled++;}}),{headers:{'content-type':'application/json'}});Object.defineProperty(response,'redirected',{value:true});return response;};
+ await assert.rejects(()=>f.api.pairing('host',pairId,'status',{}),/invalid_response/);
+ assert.equal(cancelled,1,'a rejected redirected response must release its body');
+});
+
 test('relay receive permits a real eight-message-sized envelope under64KiB; caller admits actual HTTP exactly once',async()=>{
  const f=fixture();let admissions=0;const budget=new CompanionTransportBudget();const api=createCompanionAuthenticatedTransport({context:f.context,accounts:f.accounts,configured:()=>({service:'http://127.0.0.1:44321/v1',site:'http://localhost:3193'}),identity:{accountId:'account',sessionId:'session'},role:'host',dispatch:(url,init)=>budget.run(async()=>{admissions++;return url.endsWith('/me')?json({account:{id:'account'},session_id:'session'}):json({schema:'hps-companion-relay-dev/1',execution_authorized:false,scope_authority:'authenticated_declaration',transport_only:true,host_durable_accepted:false,messages:Array.from({length:8},()=>({ciphertext:'a'.repeat(4096),proof:'b'.repeat(128),metadata:'x'.repeat(350)}))});},init?.signal)});
  await api.resolveIdentity();const received=await api.relay('host',pairId,'receive','{}');assert.equal(received.messages.length,8);assert.equal(admissions,2);budget.dispose();

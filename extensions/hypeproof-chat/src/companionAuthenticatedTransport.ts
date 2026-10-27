@@ -86,7 +86,12 @@ export function createCompanionAuthenticatedTransport(ports: CompanionAuthentica
         });
         void dispatched.then(response => { if (controller.signal.aborted) void response.body?.cancel().catch(() => {}); }, () => {});
         const response = await wait(dispatched);
-        if (response.redirected || !/^application\/json(?:;|$)/i.test(response.headers.get('content-type') ?? '')) fail('invalid_response');
+        if (response.redirected || !/^application\/json(?:;|$)/i.test(response.headers.get('content-type') ?? '')) {
+          // No reader owns this body yet. Release it before the operation clears
+          // its deadline, including a live body that never completes by itself.
+          void response.body?.cancel().catch(() => {});
+          fail('invalid_response');
+        }
         const length = response.headers.get('content-length');
         if (length !== null && (!/^\d+$/.test(length) || Number(length) > RESPONSE_BYTES)) { void response.body?.cancel().catch(() => {}); fail('response_too_large'); }
         const reader = response.body?.getReader(); if (!reader) return fail('invalid_response');

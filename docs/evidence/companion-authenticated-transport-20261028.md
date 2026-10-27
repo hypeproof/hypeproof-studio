@@ -76,3 +76,17 @@ Executed exact-head results and commands are recorded in the private artifact
 report returned with the commit. Existing ST-REQ-COMPANION/ST-DES-COMPANION and
 ST-TEST-COMPANION remain canonical context; DMC-02/03/14 acceptance is unchanged
 and open. This supporting evidence adds no new acceptance definition or owner.
+
+## Independent rejection cleanup repair
+
+Independent review of author commit `f2f7c11c73a0c1c43013444d4999c09404796152`
+found that rejecting a non-JSON/redirected HTTP response before acquiring a reader
+left its live body uncancelled after the operation cleared its deadline. The
+original streaming counterexample failed with cancel count zero. Header rejection
+now cancels that unowned body before returning the same sanitized failure; it
+neither waits for body completion nor retries the request. Existing oversized
+header cleanup is unchanged. The focused controls now cover non-JSON, missing
+content type, oversized length and redirect responses, and pass alongside the
+existing transport lifecycle checks. This changes resource cleanup only; the
+independent actual Worker/auth/relay evidence retains its exact original input
+revision, and the repaired source receives its own focused review.
