@@ -68,6 +68,59 @@ ready, 다른 세션 작업, 리뷰 대기, 의존성, 사람/환경 대기, 재
 - harness 변경은 세 consumer repo에 영향을 줄 수 있으므로 더 좁고 검증 가능한
   변경으로 유지한다.
 
+## 2a. 에이전트 Git 신원과 멤버 인증
+
+에이전트가 작성한 커밋과 GitHub 쓰기는 `hypeproof-agent[bot]` 신원을 쓴다.
+로컬 커밋·amend·rebase·cherry-pick은 정본 Harness의
+`scripts/agent-identity/agent-git.sh <git 하위명령>`으로 실행한다. 이 경로는
+키·로그인·토큰 발급·네트워크를 요구하지 않는다. 기존
+`with-agent-identity.sh git commit ...` 호출도 로컬 명령이면 이 경로로 위임한다.
+사람이 직접 작성한 커밋까지 봇으로 일괄 재작성하지 않는다. 신원 검사에 걸리면
+해당 커밋의 실제 작성자를 확인하고 에이전트가 만든 커밋만 바로잡는다.
+
+push·이슈·PR 등 네트워크 쓰기는 `with-agent-identity.sh <command>`를 쓴다.
+일반 멤버는 조직 App private key(PEM)를 받거나 개인 App을 새로 만들지 않는다.
+최초 동의·진단·철회 방법과 브로커 활성화 상태는
+[멤버 가이드 §2e](MEMBER-GUIDE.ko.md#2e-에이전트-app-인증)에서 확인한다.
+인증 실패나 브로커 미활성은 GitHub 쓰기의 BLOCKED다. 사람 토큰으로 쓰거나
+보호 규칙을 낮추는 우회는 하지 않는다. 로컬 개발·검증은 계속할 수 있다.
+
+### Harness가 연결을 진행하는 방법
+
+팀원에게 인증 명령을 복사해서 실행하라고 넘기지 않는다. 온보딩 또는 첫 push/PR
+직전에 에이전트가 정본 Harness에서 다음을 실행한다. 읽기·편집·로컬 커밋은
+연결을 기다릴 필요가 없다. 대상은 원래 작업의 저장소이며 Harness로 바꾸지 않는다.
+정본 경로는 설정된 `HYPEPROOF_HARNESS`, 없으면 제품의 main checkout과 형제인
+`hypeproof-harness`를 사용한다. 경로와 origin을 확인하고 아래 명령의 작업 디렉터리를
+그 Harness로 지정한다. 환경변수가 없는 정상 형제 배치에서도 동작해야 한다.
+
+```bash
+python3 scripts/agent-identity/agent-auth.py ensure --repo hypeproof/REPO --json
+```
+
+| 반환 상태 | 에이전트의 다음 행동 |
+|---|---|
+| `ready` (exit 0) | 실제 저장소 권한 확인·진단 토큰 폐기 완료. 연결 질문 없이 원래 작업을 이어간다. |
+| `consent_required` (exit 3) | 아래 설명으로 최초 동의를 받고, 동의한 경우에만 같은 명령에 `--accept-github-login`을 추가해 에이전트가 실행한다. |
+| `github_login_required` (exit 4) | `gh` 설치 여부를 확인한다. 준비돼 있으면 에이전트가 `gh auth login --hostname github.com --web`을 시작하고, 팀원이 GitHub 화면에서 로그인하도록 안내한다. 완료 후 같은 `ensure`로 돌아간다. |
+| 그 외 실패 | JSON의 안전한 오류와 필요한 조치만 설명한다. 쓰기는 중단하고 로컬 작업을 보존한다. 자동 반복·개인 토큰 쓰기·권한 확대로 우회하지 않는다. |
+
+최초 동의 설명 예시: “기존 GitHub 로그인 인증 정보를
+`https://mcp.hypeproof-ai.xyz/agent-auth/token`으로 보내 조직 멤버와 저장소 권한을
+확인합니다. 이 컴퓨터에는 연결 동의만 저장하고, 토큰이나 App 키는 저장하지
+않습니다. 연결을 철회할 수 있습니다. 이 방식으로 연결할까요?”
+사용자의 해당 전송에 대한 기존 명시적 동의는 재사용한다. 일반적인 개발 요청만으로
+동의를 추정하거나 `--accept-github-login`을 미리 붙이지 않는다. 거절하면 멈추고
+동의 기록을 만들지 않는다. CI/비대화 실행에서도 자동 브라우저·자동 동의는 없다.
+GitHub 로그인 복구 후 아직 동의 기록이 없을 때는 이미 받은 동의에 한해서 플래그를
+다시 붙인다. `ready`는 해당 시점의 인증 검증이며 PR 생성·머지 승인 증거가 아니다.
+
+`ensure`는 정상 온보딩/작업 시작 시 한 번 실행한다. push마다 별도 진단을 반복하지
+않는다. 쓰기 wrapper는 매 명령의 토큰을 자동 발급한다. workflow 수정이 필요한
+작업만 `ensure --workflows`와 wrapper의 `HYPEPROOF_AGENT_WORKFLOWS=1`을 함께
+선택한다. 단순 온보딩에 workflow 권한을 추가하지 않는다. `probe_cleanup_failed`는
+진단 토큰 폐기 미확인으로 보고하고 자동 재시도하지 않는다.
+
 ## 3. 리뷰와 배포 권한
 
 리뷰 요청과 배포 권한은 repo마다 다르게 해석하지 않는다.
