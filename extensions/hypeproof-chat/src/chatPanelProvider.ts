@@ -224,7 +224,7 @@ import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
-import { companionAuthoringRun } from './companionAuthoringSend';
+import { companionAuthoringRun, companionAuthoringRunState } from './companionAuthoringSend';
 import type { CompanionAuthoringRun, CompanionAuthoringSendSource } from './companionDesktopHandoff';
 import { readWorkspaceThumbnail } from "./artifactThumbnail";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
@@ -487,6 +487,7 @@ const ANNOTATION_LEAVE_KEPT = '표시를 그대로 두었어요. 계속 고친 �
 /** CGP-CHAT-R-023 — served lesson step per user message id (lessonStepMarks.ts). */
 const STEP_MARKS_KEY = "hps.lessonStepMarks";
 
+type CompanionSendContext = {store:TaskWorkspaceStore;source:CompanionAuthoringSendSource;current():boolean};
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
   /** #897 H-13 — has the model-substitution notice already been attached to this turn? One turn per seat (REQ-M37 ③). */
@@ -602,21 +603,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   companionTaskStore(): TaskWorkspaceStore | null {
     return this.taskChanging || this.connectionChanging ? null : this.currentTaskStore() ?? null;
   }
-  private async freezeCompanionAuthoringSend(text: string, userMessageId: string | undefined, source?: vscode.Webview) {
+  private freezeCompanionAuthoringSend(text: string, userMessageId: string | undefined, source?: vscode.Webview) {
     const store = this.companionTaskStore(), view = store?.getView(), epoch = this.opsRuntimeGeneration();
     if (!store || !view?.activeTaskId || !userMessageId || !source || (source!==this.editorChat?.webview && source!==this.view?.webview)) return null;
     const current = () => this.companionTaskStore()===store && store.getView().activeTaskId===view.activeTaskId
       && this.opsRuntimeGeneration()===epoch && (source===this.editorChat?.webview || source===this.view?.webview);
-    let captured: CompanionAuthoringSendSource | null;
-    try { captured = await store.captureCompanionAuthoringSend({taskId:view.activeTaskId,revision:view.revision},text,userMessageId,store.getDraft()); }
-    catch(error) {
-      // A corrupt optional sidecar cannot grant provenance or change ordinary native Send behavior.
+    const read=store.captureCompanionAuthoringSend({taskId:view.activeTaskId,revision:view.revision},text,userMessageId,store.getDraft()).catch(error=>{
+      // Optional unreadable metadata cannot grant provenance or block unrelated native Send.
       if (error instanceof TaskWorkspaceStoreError && (error.code==='corrupt' || error.code==='io')) return null;
       throw error;
-    }
-    if (!captured) return null;
-    if (!current()) throw Error('휴대폰 요청의 작업이 바뀌었어요. 현재 입력을 다시 확인해 주세요.');
-    return {store,source:captured,current};
+    });
+    return {store,read,current,webview:source,activityId:activityConnections(this.context)?.scope,taskId:view.activeTaskId};
   }
   async reviewCompanionDraft(taskId: string, isCurrent: () => boolean): Promise<import('./companionAuthoringHost').CompanionDraftReview> {
     const store = this.companionTaskStore(), activityId = activityConnections(this.context)?.scope;
@@ -7501,20 +7498,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage": {
-        let companionSend: Awaited<ReturnType<ChatPanelProvider['freezeCompanionAuthoringSend']>> = null;
-        if (!msg.editOf && !msg.images?.length && !msg.attachments?.length && !msg.imports?.length) {
-          try { companionSend = await this.freezeCompanionAuthoringSend(msg.text,msg.userMessageId,source); }
-          catch(error) {
-            await this.post({type:'inputRejected',text:msg.text,images:msg.images,toolMode:requestedMode});
-            await this.post({type:'streamError',streamId:'activity',error:error instanceof Error?error.message:'휴대폰 요청의 보내기 기록을 확인하지 못했어요.'});
-            return;
-          }
-        }
+        const companionWebview=!msg.editOf&&!msg.images?.length&&!msg.attachments?.length&&!msg.imports?.length?source:undefined;
         // REQ-STUDIO-MISSING-TASK-FOLDER — no turn starts in a folder that is gone; the draft stays. Other seats
         // preserve their existing missing-folder behavior after the provenance read.
         if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(msg.text, msg.images, requestedMode); return; }
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true, companionSend); // CGP-CHAT-R-011 — a fresh send may carry the attached file
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true, companionWebview); // CGP-CHAT-R-011 — a fresh send may carry the attached file
         return;
       }
       case "prepareAttachments": {
@@ -7958,7 +7947,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     editOf?: string,
     /** CGP-CHAT-R-011 — a fresh send (never a retry) takes the attached file when its model turn starts. */
     carryFile = false,
-    companionSend: Awaited<ReturnType<ChatPanelProvider['freezeCompanionAuthoringSend']>> = null,
+    companionWebview?: vscode.Webview,
   ): Promise<void> {
     const mode = turnToolMode(requestedMode);
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
@@ -7968,6 +7957,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     this.pendingSends++;
+    // Preserve the original synchronous admission/settling reservation. Metadata
+    // starts from the same draft, but is awaited only inside that admitted turn.
+    const companionOwner=companionWebview?this.freezeCompanionAuthoringSend(text,userMessageId,companionWebview):null;
+    const companionRead=companionOwner?.read.then(value=>({value}),error=>({error}));
     // REQ-KNOW-35 — measure free space as the turn starts; awaited just before the runtime runs (below),
     // so the bar is up before the turn can write a file. Started here so earlier awaits keep their order.
     const lowDiskCheck = this.refreshLowDisk();
@@ -7997,11 +7990,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let completionSignal: AbortSignal | undefined;
     // REQ-STUDIO-TASK-RUN-STATE — a turn whose stream closed normally but whose result failed (#751 U4) ends as 오류, not 끝남.
     let completionFailed = false;
+    let companionSend: CompanionSendContext | null = null, companionScopeRefused = false;
     const deferCompletion = (streamId: string, signal?: AbortSignal, failed = false) => { completedStreamId = streamId; completionSignal = signal; completionFailed = failed; };
     const attachmentNames = (attachments ?? []).map(id=>({id,name:this.imageStaging?.name(id) ?? "사진"}));
     let preflightComplete=false;
     const releasePower = workPower.acquire("coach-turn");
     try {
+    if(companionOwner&&companionRead){
+      const read=await companionRead;
+      if(!companionOwner.current()){companionScopeRefused=true;throw Error('보내려던 작업이 바뀌었어요. 원래 작업에서 입력을 다시 확인해 주세요.');}
+      if('error' in read)throw read.error;
+      if(read.value)companionSend={store:companionOwner.store,source:read.value,current:companionOwner.current};
+    }
     // CGP-CHAT-R-002 — an error retry of an edited prompt (same id) stays a version of its group.
     const retryRoot = retrySourceId ? attemptGroups(this.editableHistory()).find(group => group.attempts.some(attempt => attempt.user.id === retrySourceId))?.root : undefined;
     const versionOf = editOf ?? retryRoot?.editOf ?? (retrySourceId !== undefined && retrySourceId === userMessageId ? this.retryMessages().find(message => message.id === retrySourceId)?.editOf : undefined);
@@ -8438,14 +8438,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const turnRestorePoint = await this.beginTurnRestore(streamId);
     if (companionSend && turnRestorePoint) turnRestorePoint.retain = true;
     let companionBinding: CompanionAuthoringRun | undefined;
+    let companionTerminalObserved = false, companionModelRefused = false;
     const bindCompanion = async (runtime: CompanionAuthoringRun['runtime']) => {
-      if (!companionSend) return;
-      if (!companionSend.current() || ctrl.signal.aborted) throw Error('휴대폰 요청의 현재 작업이 바뀌어 실행하지 않았어요.');
-      const binding = companionAuthoringRun(companionSend.source,userId,streamId,turnRestorePoint,runtime);
-      const view = companionSend.store.getView();
-      await companionSend.store.bindCompanionAuthoringRun(companionSend.source,binding,{taskId:view.activeTaskId,revision:view.revision},()=>companionSend.current()&&!ctrl.signal.aborted);
+      const retained = companionSend;
+      if (!retained) return;
+      if (!retained.current() || ctrl.signal.aborted) throw Error('휴대폰 요청의 현재 작업이 바뀌어 실행하지 않았어요.');
+      const binding = companionAuthoringRun(retained.source,userId,streamId,turnRestorePoint,runtime);
+      const view = retained.store.getView();
+      await retained.store.bindCompanionAuthoringRun(retained.source,binding,{taskId:view.activeTaskId,revision:view.revision},()=>retained.current()&&!ctrl.signal.aborted);
       companionBinding = binding;
-      if (!companionSend.current() || ctrl.signal.aborted) throw Error('휴대폰 요청의 실행 여부를 확인하지 못했어요. 다시 실행하지 않았어요.');
+      if (!retained.current() || ctrl.signal.aborted) throw Error('휴대폰 요청의 실행 여부를 확인하지 못했어요. 다시 실행하지 않았어요.');
     };
     // REQ-STUDIO-DELEGATION-ROW — rows this turn left open are closed at its end (stop excepted).
     let delegations: DelegationTracker | null = null;
@@ -8497,6 +8499,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(instructorPromptRefs?.length ? { instructorPromptRefs } : {}),
       });
       const onRefusal = modelRefusalNotifier(ctrl.signal, () => runtimeSettled, () => {
+        companionModelRefused = true;
         void this.post({ type: "streamRefusal", streamId });
       });
       const onDelta = (delta: string) => {
@@ -9109,6 +9112,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             },
             onCitations,
             onAssetScore,
+            onTerminal: successful => { companionTerminalObserved = successful; },
             // Map the SDK tool call → an accurate host ActionRequest so the
             // executeShell hard-deny and writeFile workspace-scope actually fire.
             requestApproval: async (action) => {
@@ -9348,7 +9352,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const view = companionSend.store.getView();
           await companionSend.store.finishCompanionAuthoringRun(companionSend.source,streamId,{
             runtime:binding.runtime==='local'?'local':spoolRuntime??binding.runtime,
-            state:ctrl.signal.aborted?'outcome_unknown':spoolStatus==='error'?'failed':companionAfter?.complete&&file?'completed':'outcome_unknown',
+            state:companionAuthoringRunState({aborted:ctrl.signal.aborted,failed:spoolStatus==='error',refused:companionModelRefused,
+              terminalObserved:companionTerminalObserved,artifactMeasured:!!companionAfter?.complete&&!!file}),
             ...(file?{afterArtifactVersion:file.sha256}:{}),
           },{taskId:view.activeTaskId,revision:view.revision},companionSend.current);
         } catch { this.postToolLog(streamId,{id:`companion-run-${streamId}`,icon:'⚠️',label:'휴대폰 요청의 실행 결과 기록을 확인하지 못했어요. 자동으로 다시 실행하지 않아요.',state:'error'}); }
@@ -9367,6 +9372,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     } catch (error) {
       completedStreamId = undefined;
+      if(companionScopeRefused&&companionOwner){
+        const scope={activityId:companionOwner.activityId,taskId:companionOwner.taskId};
+        await companionOwner.webview.postMessage({type:'inputRejected',...scope,text,images,toolMode:mode});
+        await companionOwner.webview.postMessage({type:'streamError',...scope,streamId:'activity',error:'보내려던 작업이 바뀌었어요. 원래 작업에서 입력을 다시 확인해 주세요.'});
+        return;
+      }
       // Storage/profile failures can also happen after a reply has started.
       // Bind that error to its own turn so a late failure cannot end the next one.
       if (responseStreamId) {

@@ -10,7 +10,7 @@ import {build} from 'esbuild';
 import {createTaskHarness} from './task-workspace-harness.mjs';
 import {TaskWorkspaceStore} from '../src/taskWorkspaceStore.ts';
 import {takeRestorePoint,turnRestoreStoreDir,scanFolder,restoreToPoint,loadRestorePoint} from '../src/turnRestore.ts';
-import {companionAuthoringRun} from '../src/companionAuthoringSend.ts';
+import {companionAuthoringRun,companionAuthoringRunState} from '../src/companionAuthoringSend.ts';
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const require=createRequire(import.meta.url);let runSdkCoach,sdkModuleDirectory;
 before(async()=>{
@@ -28,7 +28,11 @@ async function fixture(){
  await f.store.stageCompanionHandoff(checkpoint,at(),requestHash,()=>true);
  await f.store.importCompanionAuthoringDraft(checkpoint.id,requestHash,at(),f.store.getDraft(),()=>true);
  await f.store.presentCompanionAuthoringDraft(checkpoint.id,requestHash,at(),()=>true);
- const capture=id=>f.h.freezeCompanionAuthoringSend(text.trim(),id,f.source);
+ const capture=async(id,submitted=text.trim())=>{
+  const owner=f.h.freezeCompanionAuthoringSend(submitted,id,f.source);if(!owner)return null;
+  const source=await owner.read;if(!owner.current())throw Error('fixture_owner_changed');
+  return source?{store:owner.store,source,current:owner.current}:null;
+ };
  const point=async id=>{const store=turnRestoreStoreDir(join(base,'private'),root,view.activeTaskId);return{root,store,...await takeRestorePoint({store,root,id,turnId:id,kind:'turn'})};};
  return{base,root,f,file,original,text,at,capture,point,held:()=>f.store.readCompanionHandoff(at()),cleanup:()=>rm(base,{recursive:true,force:true})};
 }
@@ -61,14 +65,16 @@ test('ordinary Send freezes the exact presented draft; real SDK policy writes a 
 test('edited native input stays ordinary Send and preflight refusal cannot reserve a phone run',async()=>{
  const f=await fixture();try{
   await f.f.store.saveDraft(f.at().taskId,{text:'native edit',images:[],queued:null});let calls=0,origin;
+  assert.equal(await f.capture('local-native','native edit'),null);
   f.f.h.handleSend=async(...args)=>{calls++;origin=args.at(-1);};f.f.h.missingFolderApplies=()=>false;
-  await f.f.handle(f.f.scoped({type:'sendMessage',text:'native edit',history:[],userMessageId:'local-native'}));assert.equal(calls,1);assert.equal(origin,null);assert.equal((await f.held()).authoringRun,undefined);
+  await f.f.handle(f.f.scoped({type:'sendMessage',text:'native edit',history:[],userMessageId:'local-native'}));assert.equal(calls,1);assert.equal(origin,f.f.source);assert.equal((await f.held()).authoringRun,undefined);
   await f.f.store.saveDraft(f.at().taskId,{text:f.text,images:[],queued:null});f.f.h.missingFolderApplies=()=>true;f.f.h.missingTaskFolderPath=async()=>'/missing';let held=0;f.f.h.holdSendForMissingFolder=async()=>{held++;};
   await f.f.handle(f.f.scoped({type:'sendMessage',text:f.text.trim(),history:[],userMessageId:'local-preflight'}));assert.equal(calls,1);assert.equal(held,1);assert.equal((await f.held()).authoringRun,undefined);
   await f.f.store.saveDraft(f.at().taskId,{text:'ordinary native message',images:[],queued:null});
   await writeFile(f.f.store.filePath.replace(/\.json$/,'.companion-handoff.json'),'{malformed optional metadata');
+  assert.equal(await f.capture('local-without-provenance','ordinary native message'),null);
   f.f.h.missingFolderApplies=()=>false;
-  await f.f.handle(f.f.scoped({type:'sendMessage',text:'ordinary native message',history:[],userMessageId:'local-without-provenance'}));assert.equal(calls,2);assert.equal(origin,null);
+  await f.f.handle(f.f.scoped({type:'sendMessage',text:'ordinary native message',history:[],userMessageId:'local-without-provenance'}));assert.equal(calls,2);assert.equal(origin,f.f.source);
  }finally{await f.cleanup();}
 });
 test('missing or wrong snapshot holds only the positively frozen phone request before a runner can start',async()=>{
@@ -98,7 +104,25 @@ test('interrupted reservation stays unknown across reload; duplicate Send cannot
   const reloaded=new TaskWorkspaceStore(f.base,'synthetic-personal-a');await reloaded.initialize();const view=reloaded.getView();
   const held=await reloaded.readCompanionHandoff({taskId:view.activeTaskId,revision:view.revision});assert.equal(held.authoringRun.state,'outcome_unknown');
   await assert.rejects(reloaded.bindCompanionAuthoringRun(frozen.source,{...binding,turnId:randomUUID()}, {taskId:view.activeTaskId,revision:view.revision},()=>true));
-  let runners=0;f.f.h.handleSend=async()=>{runners++;};f.f.h.missingFolderApplies=()=>false;
-  await f.f.handle(f.f.scoped({type:'sendMessage',text:f.text.trim(),history:[],userMessageId:userId}));assert.equal(runners,0);assert.equal((await f.held()).authoringRun.state,'outcome_unknown');
+  let runners=0;const duplicate=async()=>{await f.capture(userId);runners++;};
+  await assert.rejects(duplicate());assert.equal(runners,0);assert.equal((await f.held()).authoringRun.state,'outcome_unknown');
+ }finally{await f.cleanup();}
+});
+test('actual SDK terminal evidence separates unchanged successful turns, explicit refusal, failure and absent terminal from edit acceptance',async()=>{
+ const f=await fixture();try{
+  const success={type:'result',subtype:'success',is_error:false,usage:{input_tokens:11,output_tokens:7}};
+  const cases=[{name:'unchanged',events:[success],state:'completed'},
+   {name:'refused',events:[{type:'system',subtype:'model_refusal_no_fallback'},success],state:'failed'},
+   {name:'failed',events:[{...success,subtype:'error_during_execution',is_error:true}],state:'failed'},
+   {name:'no-terminal',events:[],state:'outcome_unknown'},
+   {name:'unknown-terminal',events:[{...success,subtype:'future_unknown_result'}],state:'outcome_unknown'}];
+  for(const item of cases){
+   let terminalObserved=false,refused=false,queries=0;
+   const sdk={query:()=>(async function*(){queries++;for(const event of item.events)yield event;})()};
+   const result=await runSdkCoach({sdk,binaryResolution:{available:true,reasons:[]},gatewayUrl:'http://127.0.0.1:1/v1',token:'synthetic-only',model:'hypeproof-default',profile:{game:{template_tier:'website'},sdk_tools:{read:true,write:true}},systemPrompt:'',history:[],userText:'This fixture makes no file edit',signal:new AbortController().signal,cwd:f.root,onDelta:()=>{},onRefusal:()=>{refused=true;},onTerminal:successful=>{terminalObserved=successful;},requestApproval:async()=>false});
+   const state=companionAuthoringRunState({aborted:false,failed:result.failed,refused,terminalObserved,artifactMeasured:true});
+   assert.equal(state,item.state,item.name);assert.equal(queries,1);assert.equal(await readFile(f.file,'utf8'),f.original);
+   assert.equal(companionAuthoringRunState({aborted:true,failed:result.failed,refused,terminalObserved,artifactMeasured:true}),'outcome_unknown');
+  }
  }finally{await f.cleanup();}
 });

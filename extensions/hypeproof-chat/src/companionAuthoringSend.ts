@@ -4,6 +4,12 @@ import { join } from 'node:path';
 import type { RestoreManifest } from './turnRestore';
 import type { CompanionAuthoringRun, CompanionAuthoringSendSource } from './companionDesktopHandoff';
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
+/** A terminal receipt says the normal turn ended, never that an edit was accepted or changed a file. */
+export function companionAuthoringRunState(value: {aborted:boolean;failed:boolean;refused:boolean;terminalObserved:boolean;artifactMeasured:boolean}): CompanionAuthoringRun['state'] {
+  if (value.aborted) return 'outcome_unknown';
+  if (value.failed || value.refused) return 'failed';
+  return value.terminalObserved && value.artifactMeasured ? 'completed' : 'outcome_unknown';
+}
 export function companionAuthoringRun(source: CompanionAuthoringSendSource, userMessageId: string, turnId: string,
   before: {root:string;point:RestoreManifest} | null, runtime: CompanionAuthoringRun['runtime']): CompanionAuthoringRun {
   const file = before?.point.files.find(file=>hash('hps-companion-artifact/1:'+join(before.root,file.path))===source.artifactId);

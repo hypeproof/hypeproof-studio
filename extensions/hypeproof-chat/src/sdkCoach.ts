@@ -183,6 +183,8 @@ export interface SdkCoachArgs {
   onDelta: (delta: string) => void;
   /** Explicit model refusal, never inferred from generated text. */
   onRefusal?: () => void;
+  /** Strict terminal result observation, independent of generated content and file changes. */
+  onTerminal?: (successful: boolean) => void;
   /**
    * #414 — what the coach is DOING (thinking / tool calls / results), so the
    * student sees real work instead of a static "만드는 중" line. Optional: the
@@ -923,6 +925,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     },
     onDelta: args.onDelta,
     onRefusal: args.onRefusal,
+    ...(args.onTerminal ? { onTerminal: args.onTerminal } : {}),
     ...(args.onActivity ? { onActivity: args.onActivity } : {}),
     ...(args.onUsage ? { onUsage: args.onUsage } : {}),
     stallMs,

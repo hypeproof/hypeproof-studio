@@ -7747,7 +7747,11 @@ Only a positively matched phone draft requires the selected artifact's exact
 previous bytes in the restore point before runtime admission; other native Sends
 keep their existing behavior. An interrupted reservation remains unknown and
 cannot be rebound automatically. Completion metadata describes the normal turn,
-not model quality or release acceptance. The existing single handoff slot remains
+not model quality or release acceptance. Completed requires an explicit successful SDK result
+and may have an unchanged artifact hash; explicit refusal is failed, while no
+terminal observation or an interrupted turn remains unknown. Other runtime paths
+retain conservative unknown metadata without such a terminal receipt.
+The existing single handoff slot remains
 occupied; this slice does not enable repeated mobile revisions. Installed
 normal-engine execution, result preservation and
 two-learner/classroom evidence remain required for DMC-5.

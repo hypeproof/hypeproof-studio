@@ -2099,6 +2099,8 @@ export interface SdkStreamHandlers {
   onDelta: (delta: string) => void;
   /** Explicit model refusal, never inferred from generated text. */
   onRefusal?: () => void;
+  /** Only an explicit successful SDK result is a positive terminal observation. */
+  onTerminal?: (successful: boolean) => void;
   /**
    * #414 — everything the coach is DOING (thinking, tool calls, their results).
    * Optional so the fast-fail/stall tests can ignore it; when absent the stream
@@ -2436,6 +2438,7 @@ export async function consumeSdkStream(
         if (usage) h.onUsage(usage);
       }
       const type = String(msg["type"] ?? "");
+      if (type === 'result') h.onTerminal?.(msg['subtype'] === 'success' && msg['is_error'] === false && msg['stop_reason'] !== 'refusal');
       const cliLine = sdkCliErrorLine(msg);
       // REQ-M44 — the CLI's API-error line is plumbing, not the coach: keep it for the banner, out of the bubble.
       if (cliLine !== null) cliError = cliLine;
