@@ -15,6 +15,10 @@ export interface CompanionDesktopHandoffPorts {
   context: Pick<vscode.ExtensionContext, 'extensionMode'>; store: TaskWorkspaceStore;
   /** Existing account/preparation/profile/task/selection owner. Checkpoint bytes cannot supply this authority. */
   snapshot(): Promise<CompanionDesktopHandoffSnapshot | null>;
+  /** REQUIRED existing native-owner invalidation lease, synchronous and fail-closed; never a new auth store.
+   * Invalidate on account/session/pass/profile/policy/task/preparation/config/workspace changes or observed denial.
+   * Remote changes remain unknown until the native owner receives authoritative invalidation. */
+  lifecycle: { capture(): number; isCurrent(revision: number): boolean };
   /** Reveal the already active exact task through the existing provider. Never send/execute a request. */
   revealTask(taskId: string): Promise<void>;
 }
@@ -32,9 +36,13 @@ export class CompanionDesktopHandoffHost {
   private closed = false;
   private busy = false;
   private panel?: vscode.WebviewPanel;
+  private operationRevision?: number;
+  private lastOwnerRevision?: number;
   constructor(ports: CompanionDesktopHandoffPorts) { this.ports = ports; }
   private check(): void {
     if (this.closed || this.ports.context.extensionMode !== vscode.ExtensionMode.Development) throw new Refused('denied','development_session_required');
+    if (this.operationRevision === undefined || this.ports.lifecycle.isCurrent(this.operationRevision) !== true)
+      throw new Refused('stale','native_owner_changed');
   }
   private async current(checkpoint: CompanionDesktopHandoffCheckpoint): Promise<CompanionDesktopHandoffSnapshot> {
     this.check(); const snapshot = structuredClone(await this.ports.snapshot()); this.check();
@@ -50,11 +58,19 @@ export class CompanionDesktopHandoffHost {
     return snapshot;
   }
   private async run(work: () => Promise<CompanionDesktopHandoffOutcome>): Promise<CompanionDesktopHandoffOutcome> {
+    if (this.closed || this.ports.context.extensionMode !== vscode.ExtensionMode.Development) return result('denied','development_session_required');
     if (this.busy) return result('failed','operation_in_progress');
-    this.busy = true;
-    try { this.check(); return await work(); }
-    catch (error) { return error instanceof Refused ? result(error.state,error.message) : result('failed','handoff_unconfirmed'); }
-    finally { this.busy = false; }
+    this.busy = true; const priorPanel = this.panel;
+    try {
+      const revision = this.ports.lifecycle.capture();
+      if (!Number.isSafeInteger(revision) || revision < 0 || (this.lastOwnerRevision !== undefined && revision < this.lastOwnerRevision))
+        throw new Refused('denied','invalid_native_owner_revision');
+      this.lastOwnerRevision = revision; this.operationRevision = revision;
+      this.check(); const outcome = await work(); this.check(); return outcome;
+    } catch (error) {
+      if (this.panel && this.panel !== priorPanel) { this.panel.dispose(); this.panel = undefined; }
+      return error instanceof Refused ? result(error.state,error.message) : result('failed','handoff_unconfirmed');
+    } finally { this.operationRevision = undefined; this.busy = false; }
   }
   stage(value: CompanionDesktopHandoffCheckpoint): Promise<CompanionDesktopHandoffOutcome> {
     if (!validCompanionDesktopHandoff(value)) return Promise.resolve(result('denied','invalid_local_checkpoint'));
@@ -105,11 +121,11 @@ export class CompanionDesktopHandoffHost {
       const editor = await vscode.window.showTextDocument(document,{viewColumn:vscode.ViewColumn.One,preserveFocus:false});
       await this.current(checkpoint); await retained(); documentCurrent();
       if (editor.document !== document) throw new Refused('stale','opened_document_changed');
-      this.panel?.dispose();
+      this.check(); this.panel?.dispose(); this.check();
       const panel = vscode.window.createWebviewPanel('hypeproofCompanionPendingIntent','컴퓨터에서 이어갈 요청',vscode.ViewColumn.Beside,{enableScripts:false,localResourceRoots:[]});
       this.panel = panel;
       panel.webview.html = `<!doctype html><html lang="ko"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>body{font:16px system-ui;padding:20px;color:var(--vscode-foreground);background:var(--vscode-editor-background)}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h1>검토한 요청</h1><pre>${escape(checkpoint.reviewedIntent)}</pre><h2>휴대폰 원래 초안</h2><pre>${escape(checkpoint.originalDraft)}</pre><p>작업 ${escape(checkpoint.target.taskId)} · ${escape(basename(fresh.artifactPath))}</p><p>파일 버전 ${escape(checkpoint.target.artifactVersion)}</p><p>기존 실행 ${escape(checkpoint.run.id ?? '없음')} · ${escape(checkpoint.run.state)}</p><p>컴퓨터 입력과 첨부는 그대로예요. 이 화면은 보내거나 실행하지 않아요.</p></html>`;
-      return result('opened','accepted_and_opened',checkpoint.id);
+      this.check(); return result('opened','accepted_and_opened',checkpoint.id);
     });
   }
   /** Local stale-data cleanup is not execution/delivery: require current OWNER identity, not old artifact/epoch/run. */

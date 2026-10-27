@@ -73,3 +73,18 @@ CAS around open/reveal/show awaits, including immediately before panel/receipt
 publication. Missing/replaced/unaccepted data is stale. This suppresses a new current
 panel/receipt; it does not claim that discarding a record reverses an already approved
 file-opening operation. Original counterexamples remain separately evidenced.
+
+Independent review of `eaa3b8c83` then changed authority during the final retained
+read and reproduced an opened panel/receipt. The adapter now REQUIRES the existing
+native owner's synchronous lifecycle lease: capture a safe monotonic integer and
+validate that captured revision after awaits and immediately before panel/receipt.
+There is no default/always-true fallback. Missing/throwing/invalid or rolled-back
+lease ports fail closed before publication; production refuses even capture.
+Actual native integration must invalidate its existing owner on account/session/
+pass/profile/policy/task/preparation/config/workspace changes or observed denial,
+and call dispose including while idle. No watcher/auth store/remote poll is added.
+Async authority resolution and locked retained-record CAS remain separate inputs;
+no endless alternating await loop is used. A newly created panel is disposed if
+final synchronous validation fails. Remote revocation remains unknown until the
+native owner receives authoritative invalidation; this lease is not omniscience
+or proof that a prior successful server response still represents live authority.
