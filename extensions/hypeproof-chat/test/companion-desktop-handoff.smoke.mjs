@@ -92,3 +92,9 @@ test('discard rejects owner changes, concurrent task CAS and unlink failure with
 
 
 test('an editor-show result for another live document cannot count as exact checkpoint navigation',async()=>{const f=await fixture();try{await f.host.stage(f.checkpoint);f.onShow=async document=>({...document,getText:()=>'<p>other live document</p>'});assert.equal((await f.host.accept(f.checkpoint.id)).state,'stale');assert.equal(f.calls.includes('panel'),false);assert.equal((await f.store.readCompanionHandoff(f.expected())).status,'accepted');}finally{await f.cleanup();}});
+
+
+test('a second store discarding or replacing the accepted checkpoint during open prevents a current panel/receipt',async()=>{for(const replace of [false,true]){const f=await fixture();try{
+ await f.host.stage(f.checkpoint);f.onOpen=async()=>{const peer=new TaskWorkspaceStore(f.state,'synthetic-desktop-scope'),at={taskId:peer.getView().activeTaskId,revision:peer.getView().revision};const record=await peer.readCompanionHandoff(at);await peer.discardCompanionHandoff(record.checkpoint.id,record.digest,at);if(replace)await peer.stageCompanionHandoff({...f.checkpoint,id:'peer_replacement',reviewedIntent:'new peer-reviewed pending intent'},at);};
+ assert.equal((await f.host.accept(f.checkpoint.id)).state,'stale');assert.equal(f.calls.includes('panel'),false);const retained=await f.store.readCompanionHandoff(f.expected());assert.equal(retained?.checkpoint.id??null,replace?'peer_replacement':null);assert.equal(await readFile(f.file,'utf8'),f.text);assert.deepEqual(f.store.getDraft(),{text:'',images:[],queued:null});
+ }finally{await f.cleanup();}}});

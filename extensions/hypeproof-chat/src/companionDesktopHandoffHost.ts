@@ -84,18 +84,26 @@ export class CompanionDesktopHandoffHost {
       this.check(); if (approved !== '검토한 요청 열기') return result('cancelled','desktop_acceptance_required',checkpoint.id);
       await this.current(checkpoint);
       if (JSON.stringify(this.ports.store.getDraft()) !== JSON.stringify(desktopDraft)) throw new Refused('stale','desktop_draft_changed');
-      await this.ports.store.acceptCompanionHandoff(checkpoint.id,held.digest,{taskId:checkpoint.target.taskId,revision:checkpoint.target.version});
-      const fresh = await this.current(checkpoint);
+      const accepted = await this.ports.store.acceptCompanionHandoff(checkpoint.id,held.digest,{taskId:checkpoint.target.taskId,revision:checkpoint.target.version});
+      const retained = async () => {
+        const record = await this.ports.store.readCompanionHandoff({taskId:checkpoint.target.taskId,revision:checkpoint.target.version});
+        this.check();
+        const view = this.ports.store.getView();
+        if (!record || record.checkpoint.id !== checkpoint.id || record.digest !== held.digest || record.status !== 'accepted'
+          || record.acceptedAt !== accepted.acceptedAt || view.activeTaskId !== checkpoint.target.taskId || view.revision !== checkpoint.target.version)
+          throw new Refused('stale','retained_checkpoint_changed');
+      };
+      const fresh = await this.current(checkpoint); await retained();
       const document = await vscode.workspace.openTextDocument(vscode.Uri.file(fresh.artifactPath));
-      await this.current(checkpoint);
+      await this.current(checkpoint); await retained();
       const documentCurrent = () => {
         if (document.isClosed || document.isDirty || document.isUntitled || document.uri.scheme !== 'file' || document.uri.fsPath !== fresh.artifactPath
           || digest(document.getText()) !== checkpoint.target.artifactVersion) throw new Refused('stale','saved_artifact_changed');
       };
       documentCurrent();
-      await this.ports.revealTask(checkpoint.target.taskId); await this.current(checkpoint); documentCurrent();
+      await this.ports.revealTask(checkpoint.target.taskId); await this.current(checkpoint); await retained(); documentCurrent();
       const editor = await vscode.window.showTextDocument(document,{viewColumn:vscode.ViewColumn.One,preserveFocus:false});
-      await this.current(checkpoint); documentCurrent();
+      await this.current(checkpoint); await retained(); documentCurrent();
       if (editor.document !== document) throw new Refused('stale','opened_document_changed');
       this.panel?.dispose();
       const panel = vscode.window.createWebviewPanel('hypeproofCompanionPendingIntent','컴퓨터에서 이어갈 요청',vscode.ViewColumn.Beside,{enableScripts:false,localResourceRoots:[]});

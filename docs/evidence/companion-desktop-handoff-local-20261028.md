@@ -64,3 +64,12 @@ for the bounded retained slot. The unchanged-source controls reproduced both fai
 The repair rechecks the live document after awaited navigation and adds the explicit
 owner/CAS-bound discard path described above. Original FAIL evidence is retained;
 new source/fixture results have their own exact SHA. This is not a new native app run.
+
+A subsequent independent review of `557ca0a7e` reproduced another store discarding
+or replacing the accepted sidecar while native document opening was awaited. The
+old operation could still create a current request panel/opened receipt. The next
+repair re-reads the exact retained accepted record under TaskWorkspaceStore's current
+CAS around open/reveal/show awaits, including immediately before panel/receipt
+publication. Missing/replaced/unaccepted data is stale. This suppresses a new current
+panel/receipt; it does not claim that discarding a record reverses an already approved
+file-opening operation. Original counterexamples remain separately evidenced.
