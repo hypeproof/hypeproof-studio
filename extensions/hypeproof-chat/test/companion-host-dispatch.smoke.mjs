@@ -4,6 +4,8 @@ import { mkdtemp, writeFile, readFile, rename, rm, symlink } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { CompanionHostDispatcher } from '../src/companionHostDispatch.ts';
 import { CommandRunner } from '../src/classroomOpsCommands.ts';
 const hash = s => createHash('sha256').update(s).digest('hex');
@@ -96,7 +98,7 @@ test('DMC-T04/T05: offline host waits without accepted/running work; desktop con
   } finally { await f.cleanup(); }
 });
 
-test('DMC-T12: actual artifact adapter refuses outside path, symlink escape and changed source before accepted', async () => {
+test('DMC-T12: actual artifact adapter refuses path/symlink escape before accepted and changed bytes after durable receipt', async () => {
   const f = await fixture(), outside = await mkdtemp(join(tmpdir(), 'hps-companion-outside-'));
   try {
     const secret = join(outside, 'secret.html'); await writeFile(secret, f.text);
@@ -107,9 +109,62 @@ test('DMC-T12: actual artifact adapter refuses outside path, symlink escape and 
       assert.equal((await f.journal.load()).entries.length, 0);
     }
     f.context.artifact.path = f.path; await writeFile(f.path, 'new content');
-    assert.equal((await f.dispatcher.dispatch(f.bytes())).state, 'denied');
+    const changed = await f.dispatcher.dispatch(f.bytes());
+    assert.equal(changed.state, 'failed'); assert.equal(changed.code, 'artifact_version_changed');
+    assert.equal((await f.journal.load()).entries[0].state, 'failed', 'content validation follows the durable request receipt');
     assert.equal(await readFile(secret, 'utf8'), f.text);
   } finally { await f.cleanup(); await rm(outside, { recursive: true, force: true }); }
+});
+
+test('DMC-T06: selected content is read once after durable running, and never when first acceptance write fails', async () => {
+  const f = await fixture(), original = { openSync: fs.openSync, readFileSync: fs.readFileSync, closeSync: fs.closeSync };
+  const descriptors = new Map(), observed = [], selected = fs.realpathSync(f.path);
+  try {
+    fs.openSync = function(path, ...args) { const fd = original.openSync.call(this, path, ...args); descriptors.set(fd, String(path)); return fd; };
+    fs.readFileSync = function(path, ...args) {
+      if (typeof path === 'number' && descriptors.get(path) === selected) {
+        const durable = JSON.parse(original.readFileSync(f.file, 'utf8'));
+        observed.push(durable.entries.at(-1)?.state);
+      }
+      return original.readFileSync.call(this, path, ...args);
+    };
+    fs.closeSync = function(fd, ...args) { descriptors.delete(fd); return original.closeSync.call(this, fd, ...args); };
+    syncBuiltinESMExports();
+    f.failSave = true;
+    assert.equal((await f.dispatcher.dispatch(f.bytes())).code, 'journal_unavailable');
+    assert.deepEqual(observed, [], 'failed acceptance must not read selected content bytes');
+    f.failSave = false;
+    const fresh = f.make(); await fresh.recover();
+    const answer = await fresh.dispatch(f.bytes()); assert.equal(answer.state, 'completed');
+    assert.deepEqual(observed, ['running'], 'single content read follows accepted and running persistence');
+    assert.deepEqual(await fresh.dispatch(f.bytes()), answer); assert.deepEqual(observed, ['running']);
+  } finally { Object.assign(fs, original); syncBuiltinESMExports(); await f.cleanup(); }
+});
+
+test('DMC-T06/T12: continuation output and malformed preview outputs fail closed at recovery', async () => {
+  const f = await fixture();
+  try {
+    f.request.operation = 'desktop.continue'; f.context.capability = 'desktop.continue';
+    const first = await f.dispatcher.dispatch(f.bytes()); assert.equal(first.state, 'desktop_handoff'); assert.equal(first.artifact, undefined);
+    const held = await f.journal.load();
+    for (const output of [null, {}, { id: 'unselected', version: hash('private'), text: 'private' }]) {
+      await f.journal.save({ entries: [{ ...held.entries[0], output }] });
+      await assert.rejects(() => f.make().recover(), /invalid_companion_journal/);
+    }
+    for (const result_code of ['preview_read', 'private /path', 'x'.repeat(65)]) {
+      await f.journal.save({ entries: [{ ...held.entries[0], result_code }] });
+      await assert.rejects(() => f.make().recover(), /invalid_companion_journal/);
+    }
+    await f.journal.save(held);
+    const continuation = f.make(); await continuation.recover(); assert.deepEqual(await continuation.dispatch(f.bytes()), first);
+    f.request.requestId = 'preview-shape'; f.request.operation = 'preview.read'; f.context.capability = 'preview.read';
+    assert.equal((await continuation.dispatch(f.bytes())).state, 'completed');
+    const preview = await f.journal.load(), entry = preview.entries.at(-1);
+    for (const output of [{ ...entry.output, extra: 'unexpected' }, { ...entry.output, id: 'unselected' }, { ...entry.output, text: 'corrupted' }]) {
+      await f.journal.save({ entries: [...preview.entries.slice(0, -1), { ...entry, output }] });
+      await assert.rejects(() => f.make().recover(), /invalid_companion_journal/);
+    }
+  } finally { await f.cleanup(); }
 });
 
 test('DMC-T06/T12: authority change at durable running boundary and persistence failure cannot expose results or retry the same instance', async () => {

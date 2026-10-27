@@ -52,8 +52,9 @@ retention policy, new spending or live permission change is approved here.
 `CommandRunner`/`JournalStore` receipt journal and `fileAttachment` read gates.
 It accepts only exact bounded request bytes identifying an already selected
 artifact; a request cannot supply a file path, URL, tool or command. Before
-acceptance, the real selected-file adapter rejects path/symlink escape or changed
-bytes. Current actor/device/host/workspace/project/task, epoch, source and artifact
+acceptance, the real selected-file adapter checks metadata/readability and rejects
+path/symlink escape without reading content bytes. Byte/version verification occurs
+only after durable acceptance and running receipts. Current actor/device/host/workspace/project/task, epoch, source and artifact
 versions, consent and resolved profile must match. Runtime execution authority is
 an independent current adapter input. Pairing preview `/2` always supplies false
 and can never authorize this dispatcher. A permitted `sdk_tools.read` profile
@@ -100,3 +101,21 @@ Validation on 2026-10-27, Darwin arm64 / Node 22.22.1:
   `dmc3-capability-final-check`; no dependency download or hosted AI was used.
 - NOT RUN: Service relay integration, installed host/mobile, runtime auth
   integration and quiz modification. No production activation occurred.
+
+Independent review repairs (2026-10-27): metadata/readability preflight now shares
+`fileAttachment`'s canonical selected-file gates without reading content. The
+executor performs exactly one content read after durable accepted/running state;
+a failed initial acceptance save performs zero reads. A changed content digest
+is detected by that journaled read and returns a failed version-check receipt.
+Retries continue to reuse the exact persisted result without rereading content.
+Recovery and response release reject all output on continuation/non-success
+entries. Successful preview results require the exact bounded id/version/text
+shape and matching text digest; continuation success requires its own result code
+and never includes an artifact. These correct independent findings DMC3-R1/R2;
+they do not add runtime transport or device acceptance.
+
+Repair validation PASS: the focused dispatcher/privacy, command-runner,
+file-attachment and routing checks report 15 results and zero failures, followed
+by full extension `tsc --noEmit`. Both ran with Node 22.22.1 through
+`hype-resource` job `dmc3-dispatch-review-repair-final` (ticket
+`565d0fbc30ab447aa5287bcf9d286935`). No host/Service/mobile acceptance was added.

@@ -37,3 +37,8 @@ handoff, revoked or changed runtime context, ungranted profile, changed consent,
 path/symlink escape, unsupported tool/model/write payloads and storage failure.
 Pairing preview `execution_authorized:false` is a mandatory denial control.
 These checks do not establish the Service transport or device acceptance rows.
+The review regressions instrument real selected-file fd reads: failed acceptance
+persistence must perform zero content reads; a successful request performs one
+read only after durable running and retries perform none. Recovery must reject
+any continuation output and malformed or unselected preview output, preserving
+normal continuation without an artifact.

@@ -84,13 +84,25 @@ export function buildFileAttachment(relPath: string, text: string, bytes: number
   return { preview: { path: relPath, text, bytes }, modelText };
 }
 
-const refuse = (cause: FileRefusalCause): FileAttachResult => ({ ok: false, cause, reason: FILE_REFUSAL_COPY[cause] });
+const refuse = (cause: FileRefusalCause): Extract<FileAttachResult, { ok: false }> => ({ ok: false, cause, reason: FILE_REFUSAL_COPY[cause] });
+export type FileSelectionResult = { ok: true } | Extract<FileAttachResult, { ok: false }>;
+
+/** Check selected-file metadata and readability without reading content bytes. */
+export function inspectWorkspaceTextFile(workspaceRoot: string | undefined, chosen: string): FileSelectionResult {
+  return workspaceTextFile(workspaceRoot, chosen, 'inspect');
+}
 
 /**
  * Read the file the picker returned. Refuses anything outside the work folder (lexically or after
  * resolving links), any link on the way, hidden paths, non-files, oversize and non-text files.
  */
 export function readWorkspaceTextFile(workspaceRoot: string | undefined, chosen: string): FileAttachResult {
+  return workspaceTextFile(workspaceRoot, chosen, 'read');
+}
+
+function workspaceTextFile(workspaceRoot: string | undefined, chosen: string, mode: 'read'): FileAttachResult;
+function workspaceTextFile(workspaceRoot: string | undefined, chosen: string, mode: 'inspect'): FileSelectionResult;
+function workspaceTextFile(workspaceRoot: string | undefined, chosen: string, mode: 'read' | 'inspect'): FileAttachResult | FileSelectionResult {
   if (!workspaceRoot) return refuse("no-workspace");
   let fd: number | undefined;
   try {
@@ -115,12 +127,16 @@ export function readWorkspaceTextFile(workspaceRoot: string | undefined, chosen:
     }
     const file = segment;
     if (!inside(root, fs.realpathSync(file))) return refuse("outside");
-    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-    const stat = fs.fstatSync(fd);
+    if (mode === 'read') fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const stat = fd === undefined ? fs.statSync(file) : fs.fstatSync(fd);
     if (!stat.isFile()) return refuse("not-file");
     if (stat.size === 0) return refuse("empty");
     if (stat.size > FILE_ATTACH_MAX_BYTES) return refuse("too-large");
-    const bytes = fs.readFileSync(fd);
+    if (mode === 'inspect') {
+      fs.accessSync(file, fs.constants.R_OK);
+      return { ok: true };
+    }
+    const bytes = fs.readFileSync(fd!);
     const after = fs.lstatSync(file);
     if (after.isSymbolicLink() || after.dev !== stat.dev || after.ino !== stat.ino || bytes.length !== stat.size) return refuse("changed");
     const text = decodeTextFile(bytes);

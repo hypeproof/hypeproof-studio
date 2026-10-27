@@ -1,7 +1,7 @@
 /** DMC-04/06/12/14: local adapter seam, deliberately not a relay or pairing authority. */
 import { createHash } from 'node:crypto';
 import { CommandRunner, type JournalStore, type JournalState, type CommandEnvelope } from './classroomOpsCommands.ts';
-import { fileAttachAllowed, readWorkspaceTextFile } from './fileAttachment.ts';
+import { fileAttachAllowed, inspectWorkspaceTextFile, readWorkspaceTextFile, FILE_ATTACH_MAX_BYTES, FILE_ATTACH_MAX_CHARS } from './fileAttachment.ts';
 
 const hash = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 const id = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value);
@@ -54,6 +54,23 @@ function gate(r: CompanionHostRequest, c: CompanionHostContext | null): Companio
   return null;
 }
 
+function validPreviewOutput(r: CompanionHostRequest, output: unknown): output is NonNullable<CompanionDispatchResult['artifact']> {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return false;
+  const o = output as Record<string, unknown>;
+  return Object.keys(o).length === 3 && Object.keys(o).every(k => ['id', 'version', 'text'].includes(k))
+    && o.id === r.artifactId && o.version === r.artifactVersion && typeof o.text === 'string'
+    && o.text.trim().length > 0 && !o.text.includes('\0') && o.text.length <= FILE_ATTACH_MAX_CHARS
+    && Buffer.byteLength(o.text) <= FILE_ATTACH_MAX_BYTES && hash(o.text) === r.artifactVersion;
+}
+
+function validResult(r: CompanionHostRequest, state: string, code: unknown, output: unknown): boolean {
+  if (typeof code !== 'string' || !/^[a-z0-9_.-]{0,64}$/.test(code)) return false;
+  if (state !== 'succeeded') return output === undefined;
+  return r.operation === 'preview.read'
+    ? code === 'preview_read' && validPreviewOutput(r, output)
+    : code === 'continuation_required' && output === undefined;
+}
+
 /**
  * One instance per existing account/activity journal; never share its journal with another runner.
  * JournalStore.load returns null only for a genuinely absent file; read/parse errors must throw.
@@ -101,10 +118,9 @@ export class CompanionHostDispatcher {
     const seen = new Set<string>();
     for (const entry of held?.entries ?? []) {
       const r = parse(entry?.envelope?.args?.bytes);
-      const out = entry.output as CompanionDispatchResult['artifact'];
       if (!r || seen.has(r.requestId) || entry.envelope.command_id !== r.requestId || entry.envelope.action !== `companion.${r.operation}`
         || entry.envelope.connection_epoch !== r.epoch || !['accepted', 'running', 'succeeded', 'failed', 'rejected', 'outcome_unknown', 'unsupported'].includes(entry.state)
-        || (entry.state === 'succeeded' && r.operation === 'preview.read' && (!out || out.id !== r.artifactId || out.version !== r.artifactVersion || typeof out.text !== 'string' || hash(out.text) !== r.artifactVersion))) throw Error('invalid_companion_journal');
+        || !validResult(r, entry.state, entry.result_code, entry.output)) throw Error('invalid_companion_journal');
       seen.add(r.requestId);
     }
     this.journalState = held ?? { entries: [] };
@@ -122,10 +138,10 @@ export class CompanionHostDispatcher {
     const refused = gate(r, context); if (refused) return refused;
     const previous = this.journalState.entries.find(e => e.envelope.command_id === r.requestId);
     if (previous && previous.envelope.args.bytes !== bytes) return { state: 'denied', code: 'request_id_conflict', requestId: r.requestId };
-    // Validate the actual selected resource before accepting; no path is taken from the request.
+    // Only metadata/readability preflight before persistence. Content is read by the journaled executor.
     if (!previous && r.operation === 'preview.read') {
-      const read = readWorkspaceTextFile(context!.workspaceRoot, context!.artifact.path);
-      if (!read.ok || hash(read.preview.text) !== r.artifactVersion) return { state: 'denied', code: 'artifact_unavailable_or_changed', requestId: r.requestId };
+      const selected = inspectWorkspaceTextFile(context!.workspaceRoot, context!.artifact.path);
+      if (!selected.ok) return { state: 'denied', code: 'artifact_unavailable_or_changed', requestId: r.requestId };
     }
     this.epoch = context!.epoch;
     try {
@@ -137,9 +153,10 @@ export class CompanionHostDispatcher {
       }
       const result = this.runner.result(r.requestId);
       if (!result) return { state: 'denied', code: 'journal_unavailable', requestId: r.requestId };
+      if (!validResult(r, result.state, result.code, result.output)) throw Error('invalid_companion_result');
       if (gate(r, await this.currentContext())) return { state: 'denied', code: 'authority_changed', requestId: r.requestId };
       return { state: result.state === 'succeeded' ? r.operation === 'desktop.continue' ? 'desktop_handoff' : 'completed' : result.state === 'rejected' || result.state === 'unsupported' ? 'denied' : result.state,
-        code: result.code, requestId: r.requestId, ...(result.state === 'succeeded' && result.output ? { artifact: result.output as CompanionDispatchResult['artifact'] } : {}) };
+        code: result.code, requestId: r.requestId, ...(r.operation === 'preview.read' && result.state === 'succeeded' ? { artifact: result.output as CompanionDispatchResult['artifact'] } : {}) };
     } catch {
       // A failed durable write is not ACK. Stop this instance; recovery must inspect the held journal.
       this.poisoned = true; this.runner.close();
