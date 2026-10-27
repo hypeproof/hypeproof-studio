@@ -6,7 +6,9 @@ type Message={message_id:string;text:string};
 interface Relay {receive():Promise<readonly CompanionSelectionMessage[]>}
 type Held=Extract<CompanionSelectionAccepted,{request:unknown}>;
 interface Options {relay:Relay;selection:Pick<CompanionSelectionReceiver,'accept'|'close'>;initialRevision:number;
- onHeld(value:Readonly<{revision:number;requestId:string}>):void;onInvalid():void}
+ onHeld(value:Readonly<{revision:number;requestId:string}>):void;onInvalid():void;
+ /** Accept only an exact pending authored request receipt from this verified relay. */
+ onAuthoringResult?(message:Readonly<Message>):boolean}
 const stop=()=>Error('android_result_owner_closed');
 const metadata=(text:string):boolean=>{
  const value=JSON.parse(text);
@@ -69,7 +71,12 @@ export class CompanionAndroidResultTransport {
   const results:Message[]=[];
   for(const message of messages){
    this.check(signal);
-   let isMetadata=false;try{isMetadata=metadata(message.text);}catch{this.invalid();}
+   let isMetadata=false,isAuthoring=false;try{const value=JSON.parse(message.text);isAuthoring=typeof value?.schema==='string'&&value.schema.startsWith('hps-companion-authoring-result/');isMetadata=metadata(message.text);}catch{this.invalid();}
+   if(isAuthoring){
+    let accepted=false;try{accepted=this.options.onAuthoringResult?.(Object.freeze({...message}))===true;}catch{/* Invalid receipts are never ACKed. */}
+    this.check(signal);if(!accepted)this.invalid();
+    await transport.acknowledge(message.message_id,signal);this.check(signal);continue;
+   }
    if(!isMetadata){results.push(message);continue;}
    const original=this.captured.get(message.message_id);
    if(!original||original.text!==message.text)this.invalid();

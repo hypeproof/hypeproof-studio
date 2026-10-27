@@ -22,11 +22,19 @@ async function fixture(messages,options={}){
  const relay={role:'device',pairing,row:{...pair},transport:async(_role,_id,action,raw)=>{requests.push({action,raw,time:now});if(options.failAck&&action==='ack'&&!failed){failed=true;throw Error(typeof options.failAck==='string'?options.failAck:'fixture_lost_ack_response');}return{};},async prepare(){prepared++;return'prepared';},async send(){sent++;},async receive(){receives++;await this.transport('device',pair.id,'receive','{}');if(options.receiveGate)await options.receiveGate.promise;return receives===1?messages:[];},async acknowledge(id){await pairing.refresh();return this.transport('device',pair.id,'ack',JSON.stringify({message_id:id}));},close(){}};
  let selection=receiver;
  if(options.acceptGate)selection={async accept(message){options.entered.resolve();await options.acceptGate.promise;return receiver.accept(message);},close:()=>receiver.close()};
- const demux=new CompanionAndroidResultTransport({relay,selection,initialRevision:1,onHeld:v=>notices.push(v),onInvalid:()=>{invalid++;controller.dispose();adapter.dispose();}});
+ const demux=new CompanionAndroidResultTransport({relay,selection,initialRevision:1,onHeld:v=>notices.push(v),onAuthoringResult:options.onAuthoringResult,onInvalid:()=>{invalid++;controller.dispose();adapter.dispose();}});
  const adapter=new CompanionClientAdapter({pairing,relay,requestId:request.requestId,budget});
  const transport=demux.bind(adapter),controller=new CompanionMobileSessionController({transport,descriptor:async signal=>{await adapter.refresh(signal);return{computerName:'fixture computer',online:true,selection:{request,projectName:'original',artifactName:'original'}};}},{timeoutMs:5000,pollMs:1});
  return{demux,adapter,controller,transport,receiver,notices,requests,get invalid(){return invalid;},get receives(){return receives;},get prepared(){return prepared;},get sent(){return sent;},close(){demux.close();controller.dispose();adapter.dispose();budget.dispose();}};
 }
+test('authoring receipt is separately validated and ACKed without poisoning preview results',async()=>{
+ const text=JSON.stringify({schema:'hps-companion-authoring-result/1',requestId:'intent-one',requestHash:'e'.repeat(64),outcome:{state:'imported_draft',code:'desktop_draft_imported',requestId:'intent-one',executionAuthorized:false}});
+ const receipt={message_id:'authoring-result',message_hash:await hash(text),text};let seen=0;
+ const f=await fixture([receipt,result],{onAuthoringResult:value=>{assert.equal(value.text,text);seen++;return true;}});
+ try{await f.controller.reconnect(null);await f.controller.requestPreview(request);assert.equal(seen,1);assert.equal(f.invalid,0);assert.equal(f.controller.getSnapshot().receipt.outcome.artifact.text,html);assert.equal(f.requests.filter(r=>r.action==='ack'&&JSON.parse(r.raw).message_id===receipt.message_id).length,1);}
+ finally{f.close();}
+ const wrong=await fixture([receipt,result],{onAuthoringResult:()=>false});try{await wrong.controller.reconnect(null);await wrong.controller.requestPreview(request);assert.equal(wrong.invalid,1);assert.equal(wrong.controller.getSnapshot().receipt,null);assert.equal(wrong.requests.filter(r=>r.action==='ack').length,0);}finally{wrong.close();}
+});
 test('failed metadata ACK retains authenticated provenance and original result for explicit reconciliation',async()=>{
  const f=await fixture([later,stale,result],{failAck:true});try{
   await f.controller.reconnect(null);await f.controller.requestPreview(request);
