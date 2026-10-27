@@ -8,7 +8,7 @@ Historical APK observations below retain their original source/asset identities.
 A new cut or generated web bundle is not an installed-APK acceptance result.
 
 This is an API35-only installed-APK prototype, not the final mobile framework,
-account product entry, release or cold-restart design. It reuses Studio's existing
+finished account product entry, release or cold-restart design. It reuses Studio's existing
 React companion view/controller, authenticated result verifier, framing/adapter,
 request scheduler and the explicitly injected private browser client package.
 The native Java host contains no crypto implementation.
@@ -25,7 +25,7 @@ recreation drops the provisioning URL rather than restoring credentials or
 fetching automatically. No token is placed in adb arguments, JS, URL query,
 browser storage, logs or app files. This is synthetic fixture provisioning, not
 real account login. The release source set has no such component or override;
-MainActivity's default provision is null and loads no web/native transport.
+MainActivity uses the personal-account entry below and keeps production workspace transport disabled.
 
 Native bearer HTTP goes directly to the fixed loopback Service, without browser
 Origin/cookies or a proxy that changes browser authority. Explicit `/me` binds
@@ -67,6 +67,49 @@ close can leave a clearly labelled cached result without connected/request
 controls; explicit forget awaits controller cleanup and closes transport/keys,
 then removes the preview. No durable store/checkpoint is enabled. Process death
 does not restore keys, counters, request execution or a user login.
+
+## Personal-account device sign-in preparation
+
+The default launcher has an explicit personal-account login button. It uses only
+`https://api.hypeproof-ai.xyz/v1` and `https://hypeproof-ai.xyz`, the existing
+`/auth/device/start` and `/auth/device/poll` protocol, and an exact
+`/studio/connect?code=PUBLIC-CODE` browser approval URL. There is no Android
+callback or new account provider. Existing Lab/Service age, consent, membership
+and entitlement decisions remain authoritative; this is not child/classroom
+eligibility or onboarding. After approval, native `/me` must match the poll
+account and session and report an active account before any WebView can open.
+Production workspace transport remains hard-disabled: account confirmation says
+that computer/workspace connection is unavailable, rather than claiming pairing.
+
+Access tokens live only in native RAM. Refresh tokens and unrelated account
+fields are discarded. No token is put in an Intent, browser URL, WebView,
+preferences, logs or files. Activity/process recreation starts over. Cancel
+interrupts local waiting/HTTP and suppresses stale completion. Polling waits at
+least three seconds, honors slow-down, and stops at the earlier of the challenge
+expiry (at most ten minutes) or 200 polls. Each HTTP operation has a monotonic 12-second whole-call deadline, a native
+cancel/disconnect watchdog, remaining-time connect/read limits and response size; network failure returns to explicit retry.
+Known tokens from cancelled, expired or mismatched completion use best-effort
+existing logout. The Service has no pending-device cancellation endpoint: a
+cancelled code can remain until expiry, and an unknown/lost network response
+cannot guarantee remote session revocation. Local close never installs that
+session. There is no durable recovery or refresh in this slice.
+
+A separate debug-only `ai.hypeproof.companion.DeviceSignInFixtureActivity`
+accepts one noncredential `serviceUrl` Intent extra, consumed once and discarded
+on recreation. It must be canonical `http://127.0.0.1:PORT/v1` or
+`http://10.0.2.2:PORT/v1`. Its test-owned approval site must be that exact origin,
+with `/studio/connect?code=PUBLIC-CODE`; no alternate URL is accepted from the
+server. This debug entry enables the existing WebView only after the real device
+protocol and `/me` succeed. It never accepts a bootstrap token. The original
+`FixtureActivity` and its synthetic bootstrap contract are unchanged. Both debug
+components are absent from the release manifest. Do not use an unowned local
+Service or claim that a local approval fixture proves Google login.
+
+Run `bash test/device-sign-in.test.sh` with Java 17 under the resource wrapper.
+Its protocol controls use an in-memory transport/clock; separate owned loopback
+HTTP drip/cancel controls exercise the absolute deadline helper. Neither uses a
+browser, account or Android runtime. Offline native Java compilation and release manifest processing
+are separate from APK, installed sign-in and production acceptance.
 
 ## Build inputs and commands
 
@@ -114,8 +157,7 @@ install, approve or publish a release APK.
 Debug application: `ai.hypeproof.companion.debug`; explicit Activity:
 `ai.hypeproof.companion.FixtureActivity`. The fixtureUrl extra contains no
 credential. Fixture server must return its own origin in service and must not
-log its native-only credential response. Default launcher without valid fixture
-provisioning shows a native prerequisite message and starts no companion HTTP.
+log its native-only credential response. The default launcher offers personal-account login; it never enables production companion HTTP.
 
 WebView debugging is enabled only in debug. Owned test tooling can discover
 `webview_devtools_remote_<pid>` and the trusted asset target. Drive visible UI:

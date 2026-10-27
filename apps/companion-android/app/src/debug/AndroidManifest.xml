@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
  <application android:networkSecurityConfig="@xml/debug_network" tools:replace="android:usesCleartextTraffic" android:usesCleartextTraffic="false">
+  <activity android:name=".DeviceSignInFixtureActivity" android:exported="true" />
   <activity android:name=".FixtureActivity" android:exported="true"/>
  </application>
 </manifest>

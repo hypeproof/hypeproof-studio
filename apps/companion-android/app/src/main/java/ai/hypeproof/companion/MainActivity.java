@@ -12,6 +12,9 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.CookieManager;
 import android.widget.TextView;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.content.Intent;
 import android.widget.FrameLayout;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
@@ -56,7 +59,51 @@ public class MainActivity extends Activity {
   }
  }
  protected Session provision() { return null; }
- protected void requestProvision(java.util.function.Consumer<Session> receive) { receive.accept(provision()); }
+ protected NativeDeviceSignIn.Target signInTarget(){return NativeDeviceSignIn.Target.production();}
+ // Production workspace transport remains disabled pending an operations decision.
+ protected boolean signInTransportEnabled(){return false;}
+ protected void requestProvision(java.util.function.Consumer<Session> receive) {
+  Session supplied=provision();if(supplied!=null){receive.accept(supplied);return;}
+  showSignIn(receive,"개인계정으로 로그인해 주세요. 컴퓨터 작업 연결은 별도로 준비해야 해요.");
+ }
+ private volatile NativeDeviceSignIn.Cancel signInAttempt;
+ private void showSignIn(java.util.function.Consumer<Session> receive,String message) {
+  LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(24,32,24,24);
+  TextView text=new TextView(this);text.setText(message);panel.addView(text);
+  Button start=new Button(this);start.setText("개인계정 로그인");panel.addView(start);
+  start.setEnabled(signInTarget()!=null);start.setOnClickListener(v->beginSignIn(receive));showContent(panel);
+ }
+ private void beginSignIn(java.util.function.Consumer<Session> receive) {
+  if(closed || signInAttempt!=null)return;
+  NativeDeviceSignIn.Target target=signInTarget();if(target==null)return;
+  NativeDeviceSignIn.Cancel attempt=new NativeDeviceSignIn.Cancel();signInAttempt=attempt;
+  NativeDeviceSignIn flow=new NativeDeviceSignIn(target,new DeviceSignInHttp(target,deadlines),NativeDeviceSignIn.MONOTONIC);
+  LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(24,32,24,24);
+  TextView text=new TextView(this);text.setText("로그인 승인을 준비하고 있어요.");panel.addView(text);
+  Button open=new Button(this);open.setText("브라우저에서 승인 열기");open.setEnabled(false);panel.addView(open);
+  Button cancel=new Button(this);cancel.setText("로그인 취소");panel.addView(cancel);showContent(panel);
+  cancel.setOnClickListener(v->{if(signInAttempt==attempt){signInAttempt=null;attempt.cancel();showSignIn(receive,"로그인을 취소했어요. 승인 코드는 만료될 때까지 남을 수 있어요.");}});
+  try {workers.execute(()->{
+   try {
+    NativeDeviceSignIn.Credentials credentials=flow.run(attempt,challenge->runOnUiThread(()->{
+     if(closed || signInAttempt!=attempt || attempt.isCancelled())return;
+     text.setText("브라우저에서 개인계정 로그인을 승인해 주세요.\n코드: "+challenge.code()+"\n최대 10분 동안 승인을 기다려요.");
+     Runnable openApproval=()->{if(closed || signInAttempt!=attempt || attempt.isCancelled())return;try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse(challenge.url())).addCategory(Intent.CATEGORY_BROWSABLE));}catch(android.content.ActivityNotFoundException e){text.setText("승인 페이지를 열 브라우저가 필요해요.\n코드: "+challenge.code());}};
+     open.setEnabled(true);open.setOnClickListener(v->openApproval.run());openApproval.run();
+    }));
+    runOnUiThread(()->{
+     if(closed || signInAttempt!=attempt || attempt.isCancelled()){try{workers.execute(()->flow.logout(credentials.bearer()));}catch(Exception ignored){}return;}
+     signInAttempt=null;Session value=new Session(target.service,credentials.account(),credentials.session(),credentials.bearer());value.verified=true;
+     if(signInTransportEnabled()){receive.accept(value);return;}
+     session=value;
+     LinearLayout done=new LinearLayout(this);done.setOrientation(LinearLayout.VERTICAL);done.setPadding(24,32,24,24);
+     TextView confirmed=new TextView(this);confirmed.setText("개인계정을 확인했어요.\n이 앱의 컴퓨터·작업 공간 연결은 아직 사용할 수 없어요.");done.addView(confirmed);
+     Button logout=new Button(this);logout.setText("로그아웃");done.addView(logout);showContent(done);
+     logout.setOnClickListener(v->{if(session!=value)return;session=null;String token=value.bearer;value.bearer=null;value.verified=false;try{workers.execute(()->flow.logout(token));}catch(Exception ignored){}showSignIn(receive,"이 기기에서 로그아웃했어요.");});
+    });
+   } catch(Exception e){runOnUiThread(()->{if(!closed && signInAttempt==attempt){signInAttempt=null;attempt.cancel();showSignIn(receive,"로그인을 완료하지 못했어요. 승인 거절·만료 또는 연결 상태를 확인하고 다시 시도해 주세요.");}});}
+  });}catch(Exception e){signInAttempt=null;attempt.cancel();showSignIn(receive,"잠시 후 다시 시도해 주세요.");}
+ }
  private Session session;
  private WebView web;
  private FrameLayout content;
@@ -83,7 +130,7 @@ public class MainActivity extends Activity {
    return insets;
   });
   setContentView(content);content.requestApplyInsets();
-  TextView waiting=new TextView(this);waiting.setText("DEV 기기 연결을 준비하고 있어요.");waiting.setPadding(24,48,24,24);showContent(waiting);
+  TextView waiting=new TextView(this);waiting.setText("앱 연결을 준비하고 있어요.");waiting.setPadding(24,48,24,24);showContent(waiting);
   requestProvision(value->runOnUiThread(()->{if(closed){if(value!=null)value.bearer=null;return;}session=value;initializeWebView();}));
  }
  private void showContent(View view) {
@@ -92,7 +139,7 @@ public class MainActivity extends Activity {
  }
  private void initializeWebView() {
   if(session==null || !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-   TextView text=new TextView(this);text.setText("DEV 기기 연결 준비가 필요해요. 이 앱은 출시용 로그인을 제공하지 않아요.");text.setPadding(24,48,24,24);showContent(text);return;
+   TextView text=new TextView(this);text.setText("기기 연결을 시작할 수 없어요. 로그인 또는 앱의 연결 지원 상태를 확인해 주세요.");text.setPadding(24,48,24,24);showContent(text);return;
   }
   web=new WebView(this);showContent(web);
   web.getSettings().setJavaScriptEnabled(true);
@@ -191,6 +238,7 @@ public class MainActivity extends Activity {
  }
  private void closeSession(){
   if(closed)return;closed=true;
+  NativeDeviceSignIn.Cancel auth=signInAttempt;signInAttempt=null;if(auth!=null)auth.cancel();
   Session prior=session;session=null;if(prior!=null){prior.verified=false;prior.bearer=null;}
   for(Pending item:pending.values())item.cancel();pending.clear();
  }
