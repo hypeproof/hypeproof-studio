@@ -15588,6 +15588,80 @@
           "path": "extensions/hypeproof-chat/test/slide-suggestion.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-INT-COMPANION",
+      "stage": "intent",
+      "owner": "jayleekr",
+      "depends_on": [
+        "LAB-PRODUCT-ROLES",
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/plan/desktop-mobile-companion.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-COMPANION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-COMPANION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/desktop-mobile-companion.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-COMPANION",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION"
+      ],
+      "sources": [
+        {
+          "path": "docs/plan/desktop-mobile-companion.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-ROUTING",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/companionRouting.ts"
+        },
+        {
+          "path": "scripts/companion-routing-demo.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-COMPANION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-IMP-COMPANION-ROUTING"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/desktop-mobile-companion.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-routing.smoke.mjs"
+        }
+      ]
     }
   ]
 }
