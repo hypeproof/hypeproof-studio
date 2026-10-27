@@ -61,16 +61,56 @@ Independent ordinary lifecycle verification found a genuine eight-part result
 lost its unprocessed suffix when the fourth ACK timed out. Controller follow-up
 `dbb378493838b5a1e762f356ae50e41a5bfc5af6` retains the delivered batch and cursor.
 Author regression: seven lifecycle cases and six receiver regressions PASS,
-full webview TypeScript PASS. Independent repair and actual controller/Worker
-composition are pending; the above 29-observation integration used the prior
-private request driver, not this new controller. Restart persistence is absent.
+full webview TypeScript PASS. Independent recheck passed the original interrupted
+eight-part batch with one prepare/send/receive and eight ACKs. A subsequent actual
+local Worker/D1 + cipher client + product-controller run at `856706cf` passed 30
+observations. Its 17,310-byte HTML used 18 encrypted packets; after one explicit
+"결과 상태 확인" gesture, request prepare/send remained one each. Offline/reconnect
+restored the receipt without another file read. The new copy distinguishes an
+unconfirmed request from a computer actually known offline. The 29-observation
+run above used the prior private request driver; these are distinct runs.
 
-## Distinct earlier native observation
+`companion-product-controller-integration.json` records the actual controller run
+and source hashes. Prior failed drivers are preserved under
+`controller-integration-failures/`: the final driver waits for each explicit UI
+reconciliation to settle before simulating the next offline action. Restart
+persistence is still absent at this source.
+
+## Distinct native observations
 
 The isolated macOS source probe at `9b726d08eafce93777f10b79cbd6cb467f18deb7`
 observed the real Cancel and Allow modals, zero/one delivery, and unchanged source.
 It used a small artifact, synthetic identity and fixture transport; it does not
 verify these later framed-transfer/controller changes or full installed pairing.
+
+The later isolated native probe at `3b049feb` observed the real Dev extension host
+with its actual WebCrypto globals. Cancel produced zero artifact contents and
+zero journal entries (one 141-byte denial control was delivered). Allow produced
+18 frames, one journal entry, and an exact 17,095-byte Korean HTML result visible
+in the native webview. Source file hashes stayed unchanged. All 63 imported
+product inputs matched the frozen revision. Only test-owned processes were
+closed; the existing app binary was not rebuilt or modified.
+
+Evidence: `/Users/jaylee/CodeWorkspace/artifacts/companion-host-native-large-20261028/native-review.md`
+and its manifest. Its identity, account responses and transport were synthetic.
+Do not combine this native proof and the encrypted browser proof into an
+unobserved full installed-device flow.
+
+## Explicit desktop receive turn
+
+`CompanionHostSession` now owns a bounded, caller-initiated receive turn. It takes
+only an already paired host client, refreshes that identity, calls the existing
+native-policy bridge, and acknowledges a transport request after the bridge's
+durable decision and reply. A lost ACK retains the delivered batch and replied
+cursor; the next explicit turn does not repeat the completed local decision.
+Concurrent callbacks share one turn. Pair changes, close or the bounded deadline
+destroy the ephemeral client and prevent further delivery. Closing cannot undo a
+read already approved and durably running. There is no background polling,
+listener, host-execution HTTP endpoint, new authority or production registration.
+
+Five focused lifecycle scenarios and full extension TypeScript passed. Actual
+Worker composition of this new host turn is recorded separately when observed;
+it is not established by the previous controller integration.
 
 ## Remaining acceptance
 

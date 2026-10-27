@@ -15737,6 +15737,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-forget-view.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-host-session.smoke.mjs"
         }
       ]
     },
@@ -15788,6 +15791,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionPreviewPayload.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionHostSession.ts"
         }
       ]
     },
