@@ -7663,3 +7663,11 @@ version, epoch and consent rechecked before results leave the adapter. Only
 selected `preview.read` and a continuation instruction are implemented; no
 mobile quiz write, model execution or connected device acceptance is claimed.
 See [dispatcher evidence](evidence/desktop-mobile-companion-routing.md#local-dispatcher-seam-dmc-3-partial-2026-10-27).
+The subsequent [local workspace preparation](evidence/desktop-companion-workspace-20261027.md)
+command reviews and saves preparation for the current existing trusted local
+workspace, then reports that no phone is connected. It reuses activity binding
+and task-scope identity without rewriting workspace files or task/history stores.
+Current activity and host labels are preparation context, not verified account
+ownership or execution authority. Source tests and an actual isolated development
+app with a synthetic profile cover this bounded flow; full DMC-1, DMC-T01/DMC-T14,
+real account continuity, pairing and release acceptance remain open.
