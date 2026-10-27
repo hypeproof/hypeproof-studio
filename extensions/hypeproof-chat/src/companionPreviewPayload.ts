@@ -11,7 +11,7 @@ function fail(): never { throw Error('companion_preview_payload_invalid'); }
 const validId = (id: string) => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id);
 const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 async function sha256(bytes: Uint8Array): Promise<string> {
-  return Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes)), n => n.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(bytes).buffer)), n => n.toString(16).padStart(2, '0')).join('');
 }
 function envelope(raw: string, requestId: string): void {
   const value: unknown = JSON.parse(raw);
