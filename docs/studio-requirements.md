@@ -7517,7 +7517,10 @@ once per notes id, remount, reload, close, late shown, instructor, fresh install
 and `test/whats-new-layout.smoke.mjs` (the real App in headless Chromium: due-only, hidden during a
 turn and not recorded until drawn, close and focus, late answer, instructor, Help sheet, text-only
 lines, computed geometry in both seats, themes and widths, forced colours; fails under
-`FOCUS_REQUIRE_BROWSER=1` without a browser).
+`FOCUS_REQUIRE_BROWSER=1` without a browser). For DES-SHELL-34 (CGP-SHELL-D-034) the layout test
+renders the shipped lines and measures them as at most 3 visible bullets of at most 40 characters,
+the row as in flow and not modal (no dialog, `aria-modal` or `inert`; the composer stays
+hit-testable) and its text at >= 4.5:1 in dark and light.
 
 ## Elevation levels (CGP-DS-R-012)
 

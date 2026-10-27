@@ -295,6 +295,11 @@ alone.
 | DES-SHELL-33 (REQ-34) | Version column in Chalk manage list. | Column ≤ 96 px; outdated = amber icon + "업데이트 필요"; sortable; included in the dense comparison view (report-gap reset G1). |
 | DES-SHELL-34 (REQ-35) | What's-new panel is dismissible and short. | ≤ 3 bullets, ≤ 40 chars each; close × with 44 px hit area; not modal; light/dark. |
 
+DES-SHELL-34 status (2026-10-28, CGP-SHELL-D-034): already met on main by the CGP-SHELL-R-035 build. The panel draws the
+shipped lines as a bulleted list (host caps: ≤ 3 lines, a line over 40 characters dropped), closes with a 44px × and is a
+non-modal row in flow above the composer in light and dark. Proved by computed assertions added to
+`extensions/hypeproof-chat/test/whats-new-layout.smoke.mjs`. Decision: `decisions.md` CGP-SHELL-D-034.
+
 ## 4. Open questions and unknowns
 
 1. Studio's built `Info.plist` permission strings and menu language were not checked: the snapshot has
