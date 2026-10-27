@@ -15754,6 +15754,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-dev-host-entry.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-selection.smoke.mjs"
         }
       ]
     },
@@ -15812,6 +15815,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionDevHostOwner.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionSelection.ts"
         }
       ]
     },
