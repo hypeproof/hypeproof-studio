@@ -8,7 +8,7 @@ import type { CompanionSessionSnapshot, CompanionSessionController } from '../we
 import type { CompanionHostRequest } from '../src/companionHostDispatch';
 const reactAct = (React as unknown as { act(fn: () => unknown): Promise<void> }).act;
 const act = (fn: () => unknown) => reactAct(async () => { await fn(); await Promise.resolve(); });
-const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(yes => { resolve = yes; }); return { promise, resolve }; };
+const deferred = () => { let resolve!: () => void; let reject!: (error: Error) => void; const promise = new Promise<void>((yes,no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const request: CompanionHostRequest = { schema:'hps-companion-host-request/1',requestId:'request-1',actorId:'actor',deviceId:'device',hostId:'host',workspaceId:'workspace',projectId:'project',taskId:'task',version:1,epoch:1,consentRevision:1,artifactId:'quiz',artifactVersion:'a'.repeat(64),operation:'preview.read' };
 const good: CompanionSessionSnapshot = { computerName:'내 컴퓨터',connection:'connected',selection:{request,projectName:'내 작품',artifactName:'내 퀴즈'},receipt:{request,outcome:{state:'completed',code:'preview_read',requestId:request.requestId,artifact:{id:'quiz',version:request.artifactVersion,text:'exact saved preview'}}},busy:false };
 type El = { getAttribute(name:string):string|null; textContent:string; localName:string; findAll(fn:(el:El)=>boolean):El[] };
@@ -83,6 +83,30 @@ async function run(){
   await act(()=>reconnectWait.resolve());
   await render({...good,busy:true},checking); eq(button(clearLabel).getAttribute('disabled')!==null,true,'caller busy state also disables cleanup');
   eq(requested,0,'cleanup interactions never send a preview request'); eq(reconnected,1,'only the explicit connection control reconciles');
+  // Same mounted surface, new owner: old completions cannot own the new owner's UI state.
+  for(const oldAction of ['forget','reconnect'] as const) for(const sameSelection of [true,false]) for(const outcome of ['resolve','reject'] as const){
+    const oldWait=deferred(),newWait=deferred();let newCalls=0;
+    const oldOwner:CompanionSessionController={...controller,reconnect:()=>oldWait.promise,forget:()=>oldWait.promise};
+    await render(good,oldOwner);
+    if(oldAction==='forget'){await act(()=>click(button(clearLabel)));await act(()=>click(button(clearLabel)));}
+    else await act(()=>click(button('연결 상태 확인')));
+    const newRequest=sameSelection?request:{...request,requestId:'replacement-request',epoch:2};
+    const useRequest=outcome==='resolve';
+    const nextSnapshot:CompanionSessionSnapshot={...good,selection:{...good.selection!,request:newRequest},receipt:null,connection:useRequest?'connected':'waiting_for_computer'};
+    const nextOwner:CompanionSessionController={async requestPreview(){newCalls++;await newWait.promise;},async reconnect(){newCalls++;await newWait.promise;},async forget(){throw Error('not invoked');}};
+    await render(nextSnapshot,nextOwner);
+    const label=useRequest?'선택한 결과 보기':'컴퓨터 연결 확인';
+    eq(buttons()[0].textContent,label,'replacement owner does not inherit old pending label');
+    eq(button(label).getAttribute('disabled'),null,'replacement owner is not blocked by old '+oldAction);
+    eq(preview(),0,'replacement owner never inherits old retained preview');
+    await act(()=>{click(button(label));click(button(label));});eq(newCalls,1,'new owner retains its own concurrent-action guard');
+    await act(()=>{if(outcome==='resolve')oldWait.resolve();else oldWait.reject(Error('old owner failure'));});
+    eq(buttons()[0].getAttribute('disabled')!==null,true,'late old '+oldAction+' '+outcome+' cannot clear new pending state');
+    eq(host.textContent.includes('연결 상태를 확인하지 못했어요.')||host.textContent.includes('보기 기록을 지웠는지 확인하지 못했어요.'),false,'old owner error/erase state cannot leak into replacement');
+    await act(()=>click(buttons()[0]));eq(newCalls,1,'late old settlement cannot unlock duplicate new work');
+    await act(()=>newWait.resolve());eq(button(label).getAttribute('disabled'),null,'only the new operation unlocks its owner');
+    eq(preview(),0,'late old erase never restores cached content');
+  }
   await act(()=>root.unmount());
   console.log(`PASS ${checks} companion local-forget React render assertions; callback contract only. Real storage/transport deletion and browser/device layout NOT_RUN.`);
 }

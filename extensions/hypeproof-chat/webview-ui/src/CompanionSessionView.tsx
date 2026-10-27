@@ -11,7 +11,14 @@ export interface CompanionSessionViewProps {
 }
 const icon = (phase: CompanionSessionPresentation['phase']): IconKind => ['completed', 'local_cleared'].includes(phase) ? 'check' : ['denied', 'stale', 'failed'].includes(phase) ? 'lock' : phase === 'desktop_handoff' ? 'open-window' : 'clock';
 /** Controlled touch surface; no auth, transport, approval, executor, credential or persistent store. */
-export function CompanionSessionView({ snapshot, controller, renderPreview }: CompanionSessionViewProps) {
+export function CompanionSessionView(props: CompanionSessionViewProps) {
+  const owners = useRef(new WeakMap<CompanionSessionController, number>()), nextOwner = useRef(0);
+  let generation = owners.current.get(props.controller);
+  if (generation === undefined) { generation = ++nextOwner.current; owners.current.set(props.controller, generation); }
+  // A controller replacement gets fresh hook/ref state; abandoned owner completions keep only their old refs.
+  return <CompanionSessionOwnerView key={generation} {...props}/>;
+}
+function CompanionSessionOwnerView({ snapshot, controller, renderPreview }: CompanionSessionViewProps) {
   const identity = companionSelectionIdentity(snapshot.selection?.request);
   const [forgetStage, setForgetStage] = useState<'idle' | 'confirming' | 'pending' | 'failed' | 'cleared'>('idle');
   const base = companionSessionPresentation(snapshot);
@@ -27,31 +34,31 @@ export function CompanionSessionView({ snapshot, controller, renderPreview }: Co
       : base;
   const forgetTitle = useId(), forgetDescription = useId();
   const forgetEntry = useRef<HTMLButtonElement>(null), cancelForget = useRef<HTMLButtonElement>(null), retryForget = useRef<HTMLButtonElement>(null), status = useRef<HTMLDivElement>(null);
-  const returnToForget = useRef(false), owner = useRef(controller); owner.current = controller;
+  const returnToForget = useRef(false);
   const [pending, setPending] = useState(false), [note, setNote] = useState<string | null>(null);
-  const current = useRef(identity), inFlight = useRef(false), eraseStarted = useRef(false), mounted = useRef(true);
+  const current = useRef(identity), inFlight = useRef(false), eraseStarted = useRef(false), mounted = useRef(true), operation = useRef(0);
   current.current = identity;
   useEffect(() => { setNote(null); }, [identity, controller]);
-  useEffect(() => { eraseStarted.current = false; setForgetStage('idle'); setForgetRecord(null); }, [controller]);
   useEffect(() => {
     if (forgetStage === 'confirming') cancelForget.current?.focus();
     if (forgetStage === 'cleared') status.current?.focus();
     if (forgetStage === 'failed') retryForget.current?.focus();
     if (forgetStage === 'idle' && returnToForget.current) { returnToForget.current = false; forgetEntry.current?.focus(); }
   }, [forgetStage]);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; operation.current++; }; }, []);
+  const ownsOperation = (token: number) => mounted.current && operation.current === token;
   async function act() {
     if (eraseStarted.current || inFlight.current || snapshot.busy || !presentation.action || ['confirming', 'pending', 'failed'].includes(forgetStage)) return;
+    const token = ++operation.current;
     inFlight.current = true; setPending(true); setNote(null);
     const selectedIdentity = identity;
     try {
       if (presentation.action === 'request_preview' && snapshot.selection) await controller.requestPreview(snapshot.selection.request);
       else await controller.reconnect(snapshot.selection?.request ?? null);
     } catch {
-      if (mounted.current && current.current === selectedIdentity) setNote('연결 상태를 확인하지 못했어요. 컴퓨터의 연결을 확인한 뒤 다시 눌러 주세요.');
+      if (ownsOperation(token) && current.current === selectedIdentity) setNote('연결 상태를 확인하지 못했어요. 컴퓨터의 연결을 확인한 뒤 다시 눌러 주세요.');
     } finally {
-      inFlight.current = false;
-      if (mounted.current) setPending(false);
+      if (ownsOperation(token)) { inFlight.current = false; setPending(false); }
     }
   }
   function askForget() {
@@ -63,16 +70,16 @@ export function CompanionSessionView({ snapshot, controller, renderPreview }: Co
     eraseStarted.current = true;
     if (forgetStage === 'confirming') setForgetRecord({ owner: controller, preview: base.preview ? Object.freeze({ ...base.preview }) : null,
       selection: snapshot.selection ? { ...snapshot.selection, request: Object.freeze({ ...snapshot.selection.request }) } : null, identity, computerName: snapshot.computerName });
+    const token = ++operation.current;
     inFlight.current = true; setPending(true); setForgetStage('pending'); setNote(null);
     const selectedOwner = controller;
     try {
       await selectedOwner.forget!();
-      if (mounted.current && owner.current === selectedOwner) { setForgetRecord(null); setForgetStage('cleared'); }
+      if (ownsOperation(token)) { setForgetRecord(null); setForgetStage('cleared'); }
     } catch {
-      if (mounted.current && owner.current === selectedOwner) setForgetStage('failed');
+      if (ownsOperation(token)) setForgetStage('failed');
     } finally {
-      inFlight.current = false;
-      if (mounted.current) setPending(false);
+      if (ownsOperation(token)) { inFlight.current = false; setPending(false); }
     }
   }
   const cleared = forgetStage === 'cleared';
