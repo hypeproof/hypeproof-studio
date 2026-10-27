@@ -1,9 +1,14 @@
 # DMC-1 local workspace preparation evidence
 
-Scope: DMC-01 and the preparation portion of DMC-14 under Studio #2803.
-Source base: `4ff05dba`; branch: `feat/desktop-companion-workspace-20261027`.
-This is implementation and synthetic local evidence. Installed-host DMC-T01,
-real mobile pairing and production activation remain **NOT RUN**.
+Scope: the local preparation portion of DMC-01 and DMC-14 under
+`hypeproof/hypeproof-studio#2803`; DMC-1 tracking issue: Studio #3071.
+Source base: `4ff05dba`; verified implementation:
+`b7ee35cf0adcd945d0cbc88330c2225f677d3262`;
+branch: `feat/desktop-companion-workspace-20261027`.
+Source/fixture checks and an actual isolated desktop development app run are
+recorded separately below. Full DMC-1, installed-host DMC-T01, integrated
+DMC-T14, real mobile pairing and production acceptance remain **OPEN / NOT RUN**.
+In particular, current activity identity is not verified personal ownership.
 
 ## Observable desktop flow
 
@@ -74,7 +79,8 @@ no alternate credential or Service bootstrap was initiated by this writer.
 | Extension `tsc --noEmit` | PASS |
 | `git diff --check` | PASS |
 | Full extension suite, webview build and full application shell build | NOT RUN |
-| Native dialog layout, keyboard/screen reader and real app restart | NOT RUN |
+| Actual isolated desktop palette, folder picker, review, trust denial and process restart | PASS, bounded native observation below |
+| Keyboard/screen-reader and released installed-app acceptance | NOT RUN |
 | Installed-host DMC-T01 acceptance and DMC-T14 integrated status acceptance | NOT RUN |
 | Mobile device connection, Service relay, execution and production release | NOT RUN |
 
@@ -93,20 +99,54 @@ while internal states remain available through the metadata interface, the
 current activity label without an account-owner claim, and the absence of
 activity IDs, host digests and project hashes from confirmation details.
 
-## Remaining native acceptance
+## Actual isolated desktop observation
 
-In an authorized isolated development app, open a synthetic activity's existing
-folder. Invoke the palette command, select that same folder, and review the
-activity/path/host before saving. Confirm the Korean message that no phone is
-connected, restart only the isolated app, then reopen the same activity/folder and invoke again. Record native screenshots,
-identity, unchanged fixture bytes and absence of companion content transmission.
-Then repeat with untrusted/read-only/wrong-scope/corrupt metadata fixtures.
-Mocked host API tests above do not substitute for these native observations.
-No production activation, merge or installed-app changes were performed.
+The native observation agent used the actual isolated **HypeProof Studio Dev.app**
+at source `b7ee35cf0adcd945d0cbc88330c2225f677d3262`, macOS 15.7.4 arm64,
+Node 22.22.1. The prepared and observed extension bundles both have SHA-256
+`d6ee1438de296027115372349647ce59efc5250c76412a0de48afe54e2d655a2`.
+No source changed during the native run.
 
-The canonical DMC REA and requirement/traceability indexes are maintained by the
-Delivery Captain on the separate planning branch; this bounded writer did not
-modify those shared records or the cloud-record work.
+Observed in the actual app: the registered palette command; Korean refusal in
+restricted mode; trust granted only to the owned synthetic workspace; the real
+macOS existing-folder picker; the Korean review of local path/current activity/
+computer without internal IDs; explicit save; and the message that no phone is
+connected. After closing and restarting the owned process, invoking the command
+restored the same preparation without reopening the folder picker. Preparation
+metadata was exactly preserved. The synthetic `index.html` SHA-256 before and
+after both runs was
+`37c16595160f84ab89c33841db4f52af354f7a20fb0118a4ebb4434554895d3a`.
+
+The profile authority was a synthetic loopback `/profile` fixture, committed
+through the existing production `ActivityConnections` path. Credentials used
+in-memory storage and were reseeded with the same synthetic identity after
+restart via existing `hps-test-state.json`. This demonstrates preparation
+persistence in an actual isolated desktop app; it does **not** demonstrate real
+account continuity, OS keychain persistence or verified ownership. The activity
+recovery warning remains visible on restart because in-memory credentials were
+deliberately lost. The confirmation is the app's custom VS Code modal; only the
+folder picker is a native macOS open panel.
+
+The owned loopback fixture implemented profile/activity/health GET endpoints.
+Existing access checks and trace POSTs were logged and rejected with 404. The
+companion preparation feature adds no network transport; an existing updater
+banner was visible, so this is not a global no-network assertion. The ordinary
+installed app was unchanged at preparation. Physical mobile pairing, real
+Service relay, execution, released-device and human acceptance were not run.
+Read-only/wrong-scope/corrupt metadata negatives remain source/fixture evidence;
+only the restricted-mode denial above was observed in the native app.
+
+Local evidence and exact reproduction:
+
+- `/Users/jaylee/CodeWorkspace/artifacts/desktop-companion-native-20261027/evidence/native-observation.json`
+- `/Users/jaylee/CodeWorkspace/artifacts/desktop-companion-native-20261027/REPRODUCE.txt`
+- `/Users/jaylee/CodeWorkspace/artifacts/desktop-companion-workspace-20261027/dmc1-independent-review.md`
+
+These are retained local artifacts, not hosted or released acceptance evidence.
+Native resource jobs were `dmc-workspace-native-prepare-b7ee35cf`,
+`dmc-workspace-native-quiet-prep-v1`,
+`dmc-workspace-native-observe-focusable-b7ee35cf` and
+`dmc-workspace-native-reopen-b7ee35cf`, under the same resource owner above.
 
 
 ## Independent review correction
@@ -121,5 +161,8 @@ or preparation details. The saved original preparation remains in its own scope.
 
 Resource job `dmc-workspace-async-scope-fix-v1`: PASS 9 focused companion tests,
 PASS extension bundle, PASS TypeScript check. Raw logs use `async-scope-*.log`
-in the existing evidence artifact directory. Native app preparation at earlier
-source `e76417fa` is separate and cannot establish native acceptance of this fix.
+in the existing evidence artifact directory. The independent source reviewer
+re-ran all 9 focused tests and the two original race reproductions at
+`b7ee35cf` with PASS. Native preparation at earlier source `e76417fa` is historical;
+the separately bound `b7ee35cf` observation above covers the corrected app source
+within its stated synthetic-profile boundary.
