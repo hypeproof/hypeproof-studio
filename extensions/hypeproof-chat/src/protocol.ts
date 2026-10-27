@@ -778,6 +778,9 @@ export type WebviewMessage = (
   | { type: "missingTaskFolderRequest" }
   /** REQ-KNOW-35 (CGP-KNOW-R-019) — ask the host to measure free space on the work folder's volume now; `mount` = the panel has no state yet, so the host re-sends even an unchanged one. */
   | { type: "lowDiskRequest"; mount?: boolean }
+  /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — ask whether a 느려요 기록 is running; stop the one recording `id` names (the pill's own id). */
+  | { type: "perfTraceStateRequest" }
+  | { type: "perfTraceStop"; id: string }
   | { type: "missingTaskFolderRepick" }
   /** REQ-STUDIO-PREVIEW-RECOVERY — ask for the preview's measured state; run the one action its cause line names. */
   | { type: "previewRecoveryRequest" }
@@ -908,6 +911,8 @@ export type HostMessage = (
   | { type: "missingTaskFolder"; notice: import("./missingTaskFolder").MissingTaskFolderNotice | null }
   /** REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume is under the threshold: one persistent bar above the composer; null hides it. */
   | { type: "lowDisk"; notice: import("./lowDisk").LowDiskNotice | null }
+  /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — a 느려요 기록 is running (red 기록 중 · 멈추기 pill above the composer) or not; `id` names the recording. */
+  | { type: "perfTraceState"; recording: boolean; id: string | null }
   /** REQ-STUDIO-PREVIEW-RECOVERY — the learner's preview tab as measured (server state, HTTP status); null = no preview tab. `result` answers a press. */
   | { type: "previewRecovery"; signals: import("./previewFailure").PreviewSignals | null; result?: import("./previewFailure").PreviewRecoveryResult }
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — one label per work-folder file, from recorded events only; null when there is no folder. */

@@ -1,6 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { StyleTweakView } from '../../src/styleTweak';
 import { ChatIcon } from './ChatDetails';
+import { imeComposing } from './imeGuard';
 import './styleTweak.css';
 
 /**
@@ -9,6 +10,9 @@ import './styleTweak.css';
  * browser tab only. The send button sends the learner's chosen values as their own message, and
  * only that send carries the structured request (property, old value, new value) after the element
  * block; the exact text is shown under 이 버튼이 보낼 요청 보기.
+ * CGP-ART-D-006: the rows open as a compact popover (≤ 280 px) anchored under the element chip's
+ * toggle, the trusted surface nearest the picked element (the browser tab has none). Escape closes
+ * it and returns focus to the toggle without reaching the panel or workspace handlers above.
  */
 export function StyleTweakPanel(props: { view: StyleTweakView; onSet: (prop: string, value: string | null) => void; onSend: (text: string) => void; disabled?: boolean }) {
   const { view } = props;
@@ -21,17 +25,34 @@ export function StyleTweakPanel(props: { view: StyleTweakView; onSet: (prop: str
     props.onSet(prop, value);
   };
   const panelId = `hps-style-tweak-${view.id}`;
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const close = () => { setOpen(false); toggleRef.current?.focus(); };
   return (
     <div className="hps-style-tweak" data-testid="style-tweak">
-      <button type="button" className="hps-style-tweak-toggle" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>
+      <button ref={toggleRef} type="button" className="hps-style-tweak-toggle" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>
         <ChatIcon kind="pencil" size={16} /> 스타일 바꿔 보기{view.changes > 0 ? ` · ${view.changes}개 고름` : ''}
       </button>
       {open && (
-        <div id={panelId} className="hps-style-tweak-body" role="group" aria-label="고른 요소의 스타일 바꿔 보기">
+        <div
+          id={panelId}
+          className="hps-style-tweak-body"
+          role="group"
+          aria-label="고른 요소의 스타일 바꿔 보기"
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape' || imeComposing(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            close();
+          }}
+        >
           <p className="hps-style-tweak-note">미리보기 탭에서만 바뀌어 보여요. 파일은 코치가 고쳐요.</p>
           {view.rows.map((row) => (
             <div key={row.prop} className="hps-style-tweak-row" data-prop={row.prop}>
               <span className="hps-style-tweak-label">{row.label}</span>
+              {/* The reset sits on the label line, before the controls, in focus order and on screen. */}
+              <button type="button" className="hps-style-tweak-reset" aria-label={`${row.label} 되돌리기`} disabled={props.disabled || row.chosen === null} onClick={() => set(row.prop, null)}>
+                <ChatIcon kind="retry" size={16} />
+              </button>
               {row.kind === 'color' ? (
                 row.options.length ? (
                   <div className="hps-style-tweak-swatches" role="radiogroup" aria-label={`${row.label}: 이 페이지에 쓰인 색`}>
@@ -59,9 +80,6 @@ export function StyleTweakPanel(props: { view: StyleTweakView; onSet: (prop: str
                   </button>
                 </div>
               )}
-              <button type="button" className="hps-style-tweak-reset" aria-label={`${row.label} 되돌리기`} disabled={props.disabled || row.chosen === null} onClick={() => set(row.prop, null)}>
-                <ChatIcon kind="retry" size={16} />
-              </button>
               {row.chosen !== null && <span className="hps-style-tweak-change">{row.current} → {row.chosen}</span>}
             </div>
           ))}

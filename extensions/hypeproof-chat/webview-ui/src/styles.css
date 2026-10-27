@@ -1393,15 +1393,20 @@ html, body, #root {
   font: inherit;
   cursor: pointer;
 }
-.hps-turn-review-actions button:hover:not(:disabled) {
+.hps-turn-review-actions button:hover:not(:disabled):not(.hps-checkpoint-save) {
   background-color: var(--hp-bg-control-hover);
 }
-.hps-turn-review-actions button:active:not(:disabled) { background-color: var(--hp-bg-control-pressed); }
+.hps-turn-review-actions button:active:not(:disabled):not(.hps-checkpoint-save) { background-color: var(--hp-bg-control-pressed); }
 .hps-turn-review-actions button:focus-visible {
   outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default);
   outline-offset: var(--ds-c-studio-styles-size-7);
 }
 .hps-turn-review-actions button:disabled { opacity: 0.55; cursor: default; }
+/* DES-CGP-AGENT-53 — 저장 지점 남기기 is the form's primary: the theme's button fill, like the edit form's
+   Save; 취소 stays quiet. Hover and pressed lay the fill's own ink over it (CGP-DS-R-005). */
+.hps-turn-review-actions .hps-checkpoint-save { background: var(--vscode-button-background, var(--ds-c-studio-styles-surface-23)); color: var(--vscode-button-foreground, var(--ds-c-studio-styles-ink-2)); border-color: transparent; }
+.hps-turn-review-actions .hps-checkpoint-save:hover:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-turn-review-actions .hps-checkpoint-save:active:not(:disabled) { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
 /* CGP-AGENT-R-027 / DES-CGP-AGENT-53 — checkpoint form and history inside the 바뀐 것 panel. */
 .hps-checkpoint { margin-top: var(--ds-c-studio-styles-space-15); padding-top: var(--ds-c-studio-styles-space-15); border-top: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); min-width: 0; }
 .hps-checkpoint-title { display: block; }
@@ -1739,6 +1744,10 @@ html, body, #root {
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-trial-end-card-primary:active:not(:disabled),
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button:active:not(:disabled),
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-edit-actions .hps-edit-save:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
+/* DES-CGP-AGENT-53 — the checkpoint form's 저장 지점 남기기 steps down the same way beside region A's Primary. */
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-turn-review-actions .hps-checkpoint-save { color: var(--hp-text-primary-default); background: transparent; border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); }
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-turn-review-actions .hps-checkpoint-save:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-turn-review-actions .hps-checkpoint-save:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
 /* ...and the student's own chat bubble, which takes the same theme colour as its background: Lime
    on a second element of the viewport is SX-04's failure (SX-49 negative), and a bubble is none of
    Lime's roles (Primary CTA, current step). Found in the App beside region A's Primary, mid-turn and
@@ -2462,6 +2471,28 @@ html, body, #root {
 .hps-low-disk-detail[hidden] { display: none; }
 .hps-low-disk-amounts, .hps-low-disk-keep { margin: 0; }
 .hps-low-disk-steps { margin: var(--ds-c-studio-styles-space-13) 0; padding-inline-start: var(--ds-c-studio-styles-space-20); }
+/* CGP-AGENT-D-026 (DES-CGP-AGENT-64) — the 느려요 기록 pill above the composer while a recording runs.
+   Red fill with its own ink in each theme (4.5:1 text, 3:1 against the panel), a 44px target, text at the
+   body size, and a border in the ink colour so the pill keeps an edge in high contrast; forced colours turn it into a
+   system button whose border and focus ring stay (no opt-out). */
+.hps-perf-trace-pill-row { display: flex; justify-content: flex-start; min-width: 0; }
+.hps-perf-trace-pill {
+  --hps-rec-bg: var(--ds-c-rec-pill-bg-dark);
+  --hps-rec-ink: var(--ds-c-rec-pill-ink-dark);
+  display: inline-flex; align-items: center; gap: var(--ds-c-studio-styles-space-2);
+  box-sizing: border-box; max-width: 100%; min-height: var(--ds-c-studio-styles-size-8); min-width: var(--ds-c-studio-styles-size-8);
+  padding: 0 var(--ds-c-studio-styles-space-1);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hps-rec-ink); border-radius: var(--hp-radius-full);
+  background: var(--hps-rec-bg); color: var(--hps-rec-ink);
+  font: inherit; font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label);
+  word-break: keep-all; overflow-wrap: anywhere; text-align: start; cursor: pointer;
+}
+body.vscode-light .hps-perf-trace-pill, body.vscode-high-contrast-light .hps-perf-trace-pill { --hps-rec-bg: var(--ds-c-rec-pill-bg-light); --hps-rec-ink: var(--ds-c-rec-pill-ink-light); }
+body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-text-primary-default); }
+.hps-perf-trace-pill:hover { background-image: linear-gradient(var(--hp-bg-layer-hover), var(--hp-bg-layer-hover)); }
+.hps-perf-trace-pill:active { background-image: linear-gradient(var(--hp-bg-layer-pressed), var(--hp-bg-layer-pressed)); }
+.hps-perf-trace-pill[aria-disabled="true"] { cursor: progress; }
+.hps-perf-trace-pill .hps-icon { flex: 0 0 auto; }
 /* CGP-DS-R-016 — forced colors (REQ-STUDIO-FORCED-COLORS). Marks drawn only in colour, or only as a
    background (which forced colors repaints as Canvas), get a line or a shape. Normal mode is unchanged. */
 @media (forced-colors: active) {

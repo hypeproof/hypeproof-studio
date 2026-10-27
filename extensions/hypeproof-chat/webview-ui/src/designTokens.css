@@ -614,6 +614,10 @@
   --ds-p-task-mark-purple-light: #7e22ce;
   --ds-p-task-mark-pink-dark: #f472b6;
   --ds-p-task-mark-pink-light: #be185d;
+  --ds-p-rec-pill-bg-dark: #ff6b6b;
+  --ds-p-rec-pill-ink-dark: #1a1a1a;
+  --ds-p-rec-pill-bg-light: #c62828;
+  --ds-p-rec-pill-ink-light: #ffffff;
 }
 :root, [data-theme="dark"], .vscode-dark {
   --ds-s-typography-ui: var(--ds-p-136);
@@ -1350,6 +1354,10 @@
   --ds-s-task-mark-purple-light: var(--ds-p-task-mark-purple-light);
   --ds-s-task-mark-pink-dark: var(--ds-p-task-mark-pink-dark);
   --ds-s-task-mark-pink-light: var(--ds-p-task-mark-pink-light);
+  --ds-s-rec-pill-bg-dark: var(--ds-p-rec-pill-bg-dark);
+  --ds-s-rec-pill-ink-dark: var(--ds-p-rec-pill-ink-dark);
+  --ds-s-rec-pill-bg-light: var(--ds-p-rec-pill-bg-light);
+  --ds-s-rec-pill-ink-light: var(--ds-p-rec-pill-ink-light);
 }
 [data-theme="light"], .vscode-light {
   --ds-s-typography-ui: var(--ds-p-136);
@@ -2086,6 +2094,10 @@
   --ds-s-task-mark-purple-light: var(--ds-p-task-mark-purple-light);
   --ds-s-task-mark-pink-dark: var(--ds-p-task-mark-pink-dark);
   --ds-s-task-mark-pink-light: var(--ds-p-task-mark-pink-light);
+  --ds-s-rec-pill-bg-dark: var(--ds-p-rec-pill-bg-dark);
+  --ds-s-rec-pill-ink-dark: var(--ds-p-rec-pill-ink-dark);
+  --ds-s-rec-pill-bg-light: var(--ds-p-rec-pill-bg-light);
+  --ds-s-rec-pill-ink-light: var(--ds-p-rec-pill-ink-light);
 }
 :root, body {
   --ds-c-studio-copy-toast-max: var(--ds-s-size-106);
@@ -3729,4 +3741,8 @@
   --ds-c-task-mark-purple-light: var(--ds-s-task-mark-purple-light);
   --ds-c-task-mark-pink-dark: var(--ds-s-task-mark-pink-dark);
   --ds-c-task-mark-pink-light: var(--ds-s-task-mark-pink-light);
+  --ds-c-rec-pill-bg-dark: var(--ds-s-rec-pill-bg-dark);
+  --ds-c-rec-pill-ink-dark: var(--ds-s-rec-pill-ink-dark);
+  --ds-c-rec-pill-bg-light: var(--ds-s-rec-pill-bg-light);
+  --ds-c-rec-pill-ink-light: var(--ds-s-rec-pill-ink-light);
 }

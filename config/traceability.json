@@ -13391,6 +13391,9 @@
           "path": "extensions/hypeproof-chat/test/deck-present-computed.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/deck-present-letterbox-browser.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/learning-wiki.smoke.mjs"
         }
       ]
@@ -13937,6 +13940,21 @@
         },
         {
           "path": "extensions/hypeproof-chat/package.json"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/PerfTracePill.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/designTokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
         }
       ]
     },
@@ -13951,6 +13969,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/perf-trace.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/perf-trace-pill.smoke.mjs"
         }
       ]
     },
@@ -14141,6 +14162,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/checkpoint-layout.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/checkpoint-keyboard-browser.smoke.mjs"
         }
       ]
     },

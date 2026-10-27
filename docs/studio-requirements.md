@@ -4365,6 +4365,14 @@ there is no git vocabulary and no push.
   inserts a newline (IME composition never saves); Cmd/Ctrl+Enter and the primary
   **저장 지점 남기기** save; **취소** closes. An empty message cannot be saved. There is no push,
   publish, upload or commit control.
+- **Primary (DES-CGP-AGENT-53, CGP-AGENT-D-023, 2026-10-27).** 저장 지점 남기기 comes first in the
+  form and is its primary: it takes the theme's button fill (`--vscode-button-background`), like the
+  edit form's Save, while 취소 stays a quiet outlined button. Hover and pressed lay the fill's own ink
+  over it; its keyboard ring sits 2px outside the fill even inside the scrolling transcript
+  (`focusGeometry.css`). Beside region A's Primary (a lesson mission) it steps down to the quiet style
+  like the other theme-filled buttons (SX-04, one Lime button per screen). In the browser, a
+  Cmd/Ctrl+Enter while a Hangul syllable is still composed, or reported with keyCode 229, saves
+  nothing and the composed text stays in the field.
 - **Suggestion.** No new model request. Source `ai`: the first prose line of the AI's own
   text for that turn (the whole streamed answer, so it can be an opening sentence rather than
   a summary; the learner reviews it), with Markdown decoration, code fences, tables, rules and bare
@@ -4408,7 +4416,11 @@ walk, single flight, seat change, revert/save exclusion, evidence without text;
 `extensions/hypeproof-chat/test/checkpoint.test.tsx`: the real TurnReviewBar and ChatPanel on
 mini-dom — prefill, focus and selection, Enter/IME/Cmd+Enter, no push control, history as text,
 posted message). Layout: `extensions/hypeproof-chat/test/checkpoint-layout.smoke.mjs` measures the
-44px targets and 14px text in headless Chromium. Native app run: NOT RUN.
+44px targets and 14px text in headless Chromium. Keyboard and primary:
+`extensions/hypeproof-chat/test/checkpoint-keyboard-browser.smoke.mjs` drives real key and IME events
+through the DevTools protocol into the bundled webview (Enter newline, composition and keyCode 229,
+Cmd+Enter and Ctrl+Enter save once), reads the section's controls from the accessibility tree and
+measures the primary's fill and outside ring. Native app run: NOT RUN.
 
 ### Attachment failure retention — REQ-STUDIO-ATTACHMENT-FAILURE
 
@@ -6603,6 +6615,18 @@ idle hide, Esc and fullscreen refusal; fails under `FOCUS_REQUIRE_BROWSER=1` wit
 browser). This supports PI#1: the learner shows their own work to an audience from the same
 artifact they built, without the evidence layer leaking onto the slides.
 
+Design confirmation (DES-ART-15, CGP-ART-D-015, 2026-10-27): already met by the build above;
+no product code changed. The look is proven on rendered output: the letterbox bands are black
+in screenshot pixels (bands above and below, and left and right, in the light and dark
+scheme), the control group sits 16 px from the right and bottom edges with the position text
+in the bottom-right corner, the controls stay shown for the whole 2 s after entering, a mouse
+move, a key or a pointer press and are hidden after it, a keyboard-focused control is never
+hidden, and a refused fullscreen in a top-level window (rejected, thrown or missing API) shows
+the status line and fills the window, which is the maximized-panel fallback; that status line
+idles away with the controls and returns on mouse move. Test:
+`extensions/hypeproof-chat/test/deck-present-letterbox-browser.smoke.mjs` (headless Chromium
+on the real deck.html; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
 ## Learner tool lines and a compact turn layout (#2788)
 
 REQ-STUDIO-TOOL-LINE-LABELS. PI#4 (Minimum necessary intervention) and PI#2 (Human judgment stays
@@ -7021,8 +7045,17 @@ off). It opens a modal with the consent text of `docs/session-log-consent.ko.md`
 what is and is not recorded, how a sent copy is used) and one 기록 시작 button; closing the dialog
 or any other answer starts nothing, and the seat is checked again after the click.
 
-While recording, a red status bar item "기록 중 · 멈추기" (error background, accessible role
-button) stops it; the 느려요 기록 멈추기 command does the same. The trace holds numbers only: per
+While recording, a red "기록 중 · 멈추기" pill sits above the chat composer in every chat seat
+(CGP-AGENT-D-026 / DES-CGP-AGENT-64): a button at least 44px tall and wide with 14px or larger
+text, a red fill with its own ink in each theme (text at least 4.5:1 on the fill, the fill at
+least 3:1 against the panel), an ink-coloured border and a focus ring; in forced colours it is a
+system button that keeps its border and ring. It shows only what the host reports (`perfTraceState`, sent on every start and stop and
+when a panel mounts and asks), so a reloaded panel finds a running recording and the pill leaves
+the moment the recording stops. Each recording has an id; a press sends that id back and the
+host stops only the recording it names (a stale or forged id stops nothing and the host re-sends
+the current state); a second press while the stop is on its way does nothing. A red status bar
+item with the same words (error background, accessible role button) and the 느려요 기록 멈추기
+command stop it too. The trace holds numbers only: per
 turn, bound to the turn's stream id, the start offset, time to the first chunk, total time, chunk
 count and outcome (end, failed, stopped, error, open), and once a second the extension-host memory
 (RSS, heap) and event-loop lag. No prompt, answer, error text, file name, path or stream id is
@@ -7046,11 +7079,16 @@ OS, client time and a summary (aggregates plus the newest turns, at most 6,000 c
 the Service's 8,192-character attachments cap). The local file stays after sending. No Service
 change: the summary rides in the schemaless `attachments` the route already accepts.
 
-Not built: the in-panel pill and start dialog of DES-CGP-AGENT-64 (CGP-AGENT-D-026; the status bar
-item is VS Code chrome and does not meet its 44px target), a viewer for kept files, and automatic
-deletion of kept files. Tests: `extensions/hypeproof-chat/test/perf-trace.smoke.mjs` (recorder,
-seat rule, summary cap, note cleaning, consent-text equality with the doc, the host controller with
-a fake VS Code, and the real provider's seat rule and post() hook). PI#5: the learner owns what
+The start dialog (three numbered steps) and the review (file size, 내 컴퓨터에만 두기 first, then
+보내기) of DES-CGP-AGENT-64 stay native VS Code modals; step 2 names the chat-panel pill. Not
+built: an in-panel start dialog or review, a viewer for kept files, and automatic deletion of kept
+files. Tests: `extensions/hypeproof-chat/test/perf-trace.smoke.mjs` (recorder, seat rule, summary
+cap, note cleaning, consent-text equality with the doc, the host controller with a fake VS Code
+including the panel state and id-bound stop, and the real provider's seat rule, post() hook and
+pill messages) and `extensions/hypeproof-chat/test/perf-trace-pill.smoke.mjs` (the built webview
+in headless Chromium: computed size, colours and contrast in dark, light and forced colours at 320,
+800 and 1420px in personal and classroom shells, mount request, id-bound press, single press, hide
+on stop). PI#5: the learner owns what
 leaves the machine (OWNERSHIP); recording and sending are two separate explicit acts.
 
 ## Deck slide suggestion chips (CGP-ART-R-016)
@@ -7211,8 +7249,20 @@ choice and says `화면이 바뀌어서 고른 스타일을 지웠어요. 요소
 offered on the annotation batch path (`annotationBatchEnabled`), which has no single-element chip.
 Learner targets are 44px and text 14px, overriding the design row's 32px stepper.
 
+DES-ART-06 (CGP-ART-D-006) presentation: the rows open as a compact popover card under the chip's
+`스타일 바꿔 보기` toggle (its left edge, directly below it), at most 280px wide and never wider than
+the chip column, so it fits a 320px panel with no inner or page scroll. It is anchored to the chip,
+the trusted surface nearest the picked element: the preview tab has no trusted in-page surface, and a
+page-injected popover could be styled or clicked by the page. It stays in the message flow so the
+scroller never clips it, has its own 1px edge, the menu radius and the overlay elevation. Each row
+puts its label and its labelled reset (`{행} 되돌리기`) on the first line, before the swatches or
+stepper in focus order. The selected swatch has a 2px ring in the focus-ring colour (a border; forced
+colours use the system selection fill instead). Escape inside the popover closes it and returns focus
+to the toggle; the key does not reach the panel or workspace handlers, and is left to the IME while a
+composition is active.
+
 Tests: `extensions/hypeproof-chat/test/style-tweak.test.tsx` (offer, validation, request text,
-stepper, queue binding, panel presses), `test/style-tweak-host.test.tsx` (the real provider:
+stepper, queue binding, panel presses, popover Escape and focus return), `test/style-tweak-host.test.tsx` (the real provider:
 refusal before any page write, ordered writes, restore before a re-pick's read, a stale read refused,
 page change, removal, new pick, switch off), `test/style-tweak-control.test.tsx` (the real
 BrowserControl on a fake CDP session: isolated world, generation and origin checks, restore with the
@@ -7220,8 +7270,9 @@ switch off, restore before a tab switch closes the session, a page that never an
 `test/style-tweak-page.smoke.mjs` (real headless Chromium: read, live preview on that node only
 within 100 ms, exact restore, a hostile page's DOM overrides defeated by the isolated world, source
 file byte-identical) and `test/style-tweak-layout.smoke.mjs`
-(computed 44px targets, 14px text, 24px swatches, focus ring, inside the chip at 320/800/1420,
-personal and classroom, dark/light/forced colours). The browser smokes fail under
+(computed 44px targets, 14px text, 24px swatches, 2px selected ring, a popover of at most 280px
+anchored under its toggle, labelled resets on the label line, focus ring, inside the chip at
+320/800/1420, personal and classroom, dark/light/forced colours). The browser smokes fail under
 `FOCUS_REQUIRE_BROWSER=1` without a browser.
 
 ## Coach run state (CGP-LEARN-R-016)
