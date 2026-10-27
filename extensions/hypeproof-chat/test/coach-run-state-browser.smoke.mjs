@@ -2,7 +2,9 @@
 // with the shipped stylesheet in headless Chromium. Personal seat (header drawn into the task workspace heading)
 // and classroom lesson seat, dark and light, 320, 390, 800 and 1420 px, all seven states: exactly one state in the header,
 // a 20px icon and its words at the 14px floor, fully visible (not clipped, not covered, inside the viewport), no
-// animation or transition on it, no second visible run state (the personal heading's run note), a polite live region, and readable words under forced colours. Fails under
+// animation or transition on it, no second visible run state (the personal heading's run note), a polite live region, and readable words under forced colours.
+// CGP-LEARN-D-016: a state change is announced, so the live region is one node that stays mounted while its words
+// change in place (a region that is replaced on each change is a new region and screen readers stay silent). Fails under
 // FOCUS_REQUIRE_BROWSER=1 without a browser; prints NOT RUN otherwise. COACH_RUN_STATE_EVIDENCE=<dir> saves PNGs.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -27,7 +29,14 @@ const bin = findChromium();
 if (!bin) { if (process.env.FOCUS_REQUIRE_BROWSER === '1') throw Error('Chromium required'); console.log('NOT RUN: coach-run-state browser unavailable'); process.exit(0); }
 const browser = await launch(bin), evidence = process.env.COACH_RUN_STATE_EVIDENCE;
 if (evidence) mkdirSync(evidence, { recursive: true });
-const delay = (ms = 80) => new Promise((r) => setTimeout(r, ms));
+// Wait on a condition in the page, never on a fixed delay.
+const waitFor = async (expr, what, ms = 5000) => {
+  const end = Date.now() + ms;
+  for (;;) { if (await browser.evaluate(`!!(${expr})`)) return; if (Date.now() > end) throw Error(`timed out waiting for ${what}`); await new Promise((r) => setTimeout(r, 16)); }
+};
+// The first region of a page load is kept with an observer that counts in-place changes to its words.
+const LIVE = `(()=>{const el=document.querySelector('.hps-run-state');if(!window.__liveNode){window.__liveNode=el;window.__liveChanges=0;new MutationObserver(()=>{window.__liveChanges++}).observe(el,{subtree:true,childList:true,characterData:true})}
+  return {same:el===window.__liveNode&&el.isConnected,changes:window.__liveChanges,live:el.getAttribute('aria-live'),atomic:el.getAttribute('aria-atomic')}})()`;
 
 const user = { id: 'u1', role: 'user', content: '홈페이지 제목을 바꿔 줘', createdAt: 1 };
 const line = (icon, label) => ({ id: `t-${icon}`, role: 'tool', content: '', createdAt: 2, tool: { id: `t-${icon}`, icon, label, state: 'running' } });
@@ -64,10 +73,19 @@ try {
     const vars = Object.entries(THEMES[dark ? 'Dark+' : 'Light+']).filter(([k2, v]) => typeof v === 'string' && !['kind', 'file'].includes(k2)).map(([k2, v]) => `--vscode-${k2.replaceAll('.', '-')}:${v}`).join(';');
     await browser.load(`<html lang="ko" style="${vars}"><style>${css}</style><style>html,body,#root{height:100%}</style><body class="${dark ? 'vscode-dark' : 'vscode-light'}" style="margin:0"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>({}),setState:()=>{}});</script><script>${js}</script></body></html>`, { width, height: 900, dark });
     await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
+    // setDocumentContent keeps the window's globals: forget the previous document's region.
+    await browser.evaluate('window.__liveNode=null');
+    let before = null;
     for (const [key, s] of Object.entries(STATES)) {
-      await browser.evaluate(`mount(${JSON.stringify(config)},${JSON.stringify(s.messages)},${JSON.stringify(frame)},${JSON.stringify(s.extra)})`); await delay(120);
+      await browser.evaluate(`mount(${JSON.stringify(config)},${JSON.stringify(s.messages)},${JSON.stringify(frame)},${JSON.stringify(s.extra)})`);
+      await waitFor(`document.querySelector('.hps-run-state')?.dataset.runState===${JSON.stringify(key)}`, `${tag} ${key}`);
       const m = await browser.evaluate(MEASURE(header));
       const t = `${tag} ${key}`;
+      const live = await browser.evaluate(LIVE);
+      assert.ok(live.same, `${t}: the live region stays the same mounted node across state changes`);
+      assert.equal(live.atomic, 'true', `${t}: the whole state is read on a change`);
+      if (before !== null) assert.ok(live.changes > before, `${t}: the words changed in place inside the live region (${before} -> ${live.changes})`);
+      before = live.changes;
       assert.equal(m.count, 1, `${t}: exactly one run state`);
       assert.equal(m.key, key, `${t}: derived state`);
       assert.equal(m.text, s.label, `${t}: the words`);
@@ -88,12 +106,13 @@ try {
       cases++;
     }
     if (width === 800) {
-      await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }, { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] }); await delay();
+      await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }, { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
+      await waitFor(`matchMedia('(forced-colors: active)').matches`, `${tag} forced colours`);
       const fc = await browser.evaluate(MEASURE(header));
       const bg = await browser.evaluate(`(()=>{let n=document.querySelector('.hps-run-state');while(n){const b=getComputedStyle(n).backgroundColor;if(b&&b!=='rgba(0, 0, 0, 0)'&&b!=='transparent')return b;n=n.parentElement}return getComputedStyle(document.body).backgroundColor})()`);
       assert.ok(fc.count === 1 && fc.text === STATES.error.label && fc.color !== bg && !fc.clipped, `${tag}: forced colours keep the words readable ${JSON.stringify({ fc, bg })}`);
       await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'none' }, { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
     }
   }
-  console.log(`PASS coach-run-state-browser: ${cases} seat/theme/width/state cases, one state in the header, 20px icon + words >= 14px, visible, static, forced colours`);
+  console.log(`PASS coach-run-state-browser: ${cases} seat/theme/width/state cases, one state in the header, 20px icon + words >= 14px, one live region changed in place, visible, static, forced colours`);
 } finally { await browser.close(); }
