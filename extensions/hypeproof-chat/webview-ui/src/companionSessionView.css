@@ -44,7 +44,7 @@
 .hps-companion-action-quiet:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
 .hps-companion-action-quiet:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
 .hps-companion-action:disabled { color: var(--hp-text-muted-default); background: var(--hp-bg-panel-default); cursor: default; }
-.hps-companion-action:focus-visible, .hps-companion-details > summary:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }
+.hps-companion-status:focus-visible, .hps-companion-action:focus-visible, .hps-companion-details > summary:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }
 .hps-companion-origin { display: flex; gap: var(--hp-space-3); color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); }
 .hps-companion-origin > div > p:first-child { color: var(--hp-text-primary-default); font-weight: var(--hp-weight-strong); }
 .hps-companion-origin > div > p + p { margin-block-start: var(--hp-space-1); }
@@ -56,3 +56,11 @@
 .hps-companion-note { font-size: var(--hp-font-caption); color: var(--hp-text-warn-default); }
 @media (max-width: 480px) { .hps-companion-session { padding: var(--hp-space-4); padding-block-end: max(var(--hp-space-4), env(safe-area-inset-bottom)); gap: var(--hp-space-5); } }
 @media (forced-colors: active) { .hps-companion-preview, .hps-companion-status { border-color: CanvasText; } .hps-companion-action { border-color: ButtonText; } }
+
+.hps-companion-forget-confirmation {
+  display: grid; gap: var(--hp-space-3); padding: var(--hp-space-4);
+  border: 1px solid var(--hp-border-control-default); border-radius: var(--hp-radius-8);
+}
+.hps-companion-forget-confirmation h3 { font-size: var(--hp-font-lead); line-height: var(--hp-leading-label); }
+.hps-companion-forget-confirmation > p { color: var(--hp-text-muted-default); word-break: keep-all; }
+.hps-companion-forget-confirmation > .hps-companion-note { color: var(--hp-text-warn-default); }

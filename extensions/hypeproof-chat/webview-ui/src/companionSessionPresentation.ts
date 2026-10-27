@@ -20,8 +20,11 @@ export interface CompanionSessionController {
   reconnect(request: Readonly<CompanionHostRequest> | null): Promise<void>;
   /** Reuse the existing request lifecycle and exact host approval; the view grants nothing. */
   requestPreview(request: Readonly<CompanionHostRequest>): Promise<void>;
+  /** Opt-in: resolve only after this device's cache, receipt and transport ledger are cleared.
+   * Must be safe to retry after rejection. Does not delete computer originals or undo approved work. */
+  forget?(): Promise<void>;
 }
-export type CompanionSessionPhase = 'no_selection' | 'idle' | 'waiting_for_computer' | 'reconnecting' | 'stale' | CompanionDispatchResult['state'];
+export type CompanionSessionPhase = 'no_selection' | 'idle' | 'waiting_for_computer' | 'reconnecting' | 'stale' | 'local_cleared' | CompanionDispatchResult['state'];
 export interface CompanionSessionPresentation {
   phase: CompanionSessionPhase;
   title: string;
