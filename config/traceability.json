@@ -80,7 +80,7 @@
         },
         {
           "path": "docs/requirements/studio-native-trial.md",
-          "section": "## Product Intent\uc640 \uccb4\ud5d8 \ubc94\uc704"
+          "section": "## Product Intent와 체험 범위"
         }
       ]
     },
@@ -107,7 +107,7 @@
       "sources": [
         {
           "path": "docs/requirements/studio-native-trial.md",
-          "section": "## \uc811\uadfc \ubc29\uc2dd"
+          "section": "## 접근 방식"
         }
       ]
     },
@@ -379,7 +379,7 @@
       "sources": [
         {
           "path": "docs/design/model-effort-and-course-usage.md",
-          "section": "## \uc218\uc5c5 effort \uad6c\ud604 \uacc4\uc57d (#799)"
+          "section": "## 수업 effort 구현 계약 (#799)"
         }
       ]
     },
@@ -638,7 +638,7 @@
       "sources": [
         {
           "path": "docs/PRODUCT-INTENT.md",
-          "section": "## \ud6c4\ubcf4 \ubaa8\ub378\uacfc \uc774\uc6a9 \uad8c\ud55c\uc5d0 \ub300\ud55c Intent"
+          "section": "## 후보 모델과 이용 권한에 대한 Intent"
         }
       ]
     },
@@ -1020,7 +1020,7 @@
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "## R. \uc74c\uc131 capability \uacc4\uce21 (#896 / #897 V0)"
+          "section": "## R. 음성 capability 계측 (#896 / #897 V0)"
         }
       ]
     },
@@ -1250,11 +1250,11 @@
       "sources": [
         {
           "path": "docs/design/unified-studio-experience.md",
-          "section": "## UX\uc640 \uc0c1\ud0dc \uacbd\uacc4"
+          "section": "## UX와 상태 경계"
         },
         {
           "path": "docs/design/unified-studio-experience.md",
-          "section": "## \ubc30\ud3ec\uc640 \uacc4\uce35"
+          "section": "## 배포와 계층"
         },
         {
           "path": "docs/plan/unified-studio-experience.md"
@@ -2334,7 +2334,7 @@
     {
       "id": "ST-TEST-FEEDBACK-LOOP",
       "stage": "test",
-      "label": "Feedback loop \u2014 learner answer, retrospective and next draft tests (#1013)",
+      "label": "Feedback loop — learner answer, retrospective and next draft tests (#1013)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-LEARNING-AGENT-EXPERIENCE",
@@ -2364,7 +2364,7 @@
     {
       "id": "ST-IMP-FEEDBACK-LOOP",
       "stage": "implementation",
-      "label": "Feedback loop \u2014 learner answer to feedback, lesson retrospective \u2192 next draft (#1013)",
+      "label": "Feedback loop — learner answer to feedback, lesson retrospective → next draft (#1013)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-LEARNING-AGENT-EXPERIENCE",
@@ -2411,7 +2411,7 @@
     {
       "id": "ST-TEST-AE-GOAL",
       "stage": "test",
-      "label": "Learner goal beside the lesson criteria \u2014 rules, host, screen, browser and App tests (AE-01, #554)",
+      "label": "Learner goal beside the lesson criteria — rules, host, screen, browser and App tests (AE-01, #554)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-LEARNING-AGENT-EXPERIENCE",
@@ -3457,7 +3457,7 @@
         },
         {
           "path": "docs/studio-requirements.md",
-          "section": "## Learning experience revision \u2014 2026-09-18"
+          "section": "## Learning experience revision — 2026-09-18"
         }
       ]
     },
@@ -3782,7 +3782,7 @@
         },
         {
           "path": "docs/studio-requirements.md",
-          "section": "## Curriculum runtime proposal \u2014 2026-09-29"
+          "section": "## Curriculum runtime proposal — 2026-09-29"
         }
       ]
     },
@@ -4283,7 +4283,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \uc9c4\uc785\u00b7\ubaa9\ub85d (UX)"
+          "section": "## 진입·목록 (UX)"
         }
       ]
     },
@@ -4298,7 +4298,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \uc0dd\uc131 (GEN)"
+          "section": "## 생성 (GEN)"
         }
       ]
     },
@@ -4312,7 +4312,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \ud53c\ub4dc\ubc31\uacfc \uac80\uc0ac (FB)"
+          "section": "## 피드백과 검사 (FB)"
         }
       ]
     },
@@ -4327,7 +4327,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \uac15\uc758 \ub9cc\ub4e4\uae30 (OUT)"
+          "section": "## 강의 만들기 (OUT)"
         }
       ]
     },
@@ -4341,7 +4341,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \ub9ac\ud5c8\uc124 (RH)"
+          "section": "## 리허설 (RH)"
         }
       ]
     },
@@ -4355,7 +4355,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \uac15\uc758 \uacc4\ud68d\uc548 (PLAN)"
+          "section": "## 강의 계획안 (PLAN)"
         }
       ]
     },
@@ -4369,7 +4369,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \uac15\uc0ac \uad6c\ub3c5 \uc5f0\uacb0 (SUB)"
+          "section": "## 강사 구독 연결 (SUB)"
         }
       ]
     },
@@ -4383,7 +4383,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \uacc4\ud68d\uc11c \ud615\uc2dd (HTML)"
+          "section": "## 계획서 형식 (HTML)"
         }
       ]
     },
@@ -4397,7 +4397,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \uc800\uc7a5 \ud615\uc2dd (SCH)"
+          "section": "## 저장 형식 (SCH)"
         }
       ]
     },
@@ -4411,7 +4411,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-mvp.md",
-          "section": "## \uc9c0\uc2dd\uc6d0 (KB)"
+          "section": "## 지식원 (KB)"
         }
       ]
     },
@@ -4425,7 +4425,7 @@
       "sources": [
         {
           "path": "docs/design/chalk-knowledge-and-plan-spec.md",
-          "section": "## 1. \uc81c\ud488 \uc9c0\uc2dd \uc800\uc7a5 (KB-01 \u00b7 03 \u00b7 05)"
+          "section": "## 1. 제품 지식 저장 (KB-01 · 03 · 05)"
         }
       ]
     },
@@ -4537,11 +4537,11 @@
       "sources": [
         {
           "path": "docs/design/chalk-knowledge-and-plan-spec.md",
-          "section": "## 2. \uacc4\ud68d\uc11c HTML \uaddc\uaca9 `chalk-plan/1` (HTML-01~04 \u00b7 GEN-04 \u00b7 \uacb0\uc815 2 \u00b7 9)"
+          "section": "## 2. 계획서 HTML 규격 `chalk-plan/1` (HTML-01~04 · GEN-04 · 결정 2 · 9)"
         },
         {
           "path": "docs/design/chalk-knowledge-and-plan-spec.md",
-          "section": "## 3. \ucd08\uc548 \uc800\uc7a5 (\uacb0\uc815 3 \u00b7 OUT-04)"
+          "section": "## 3. 초안 저장 (결정 3 · OUT-04)"
         }
       ]
     },
@@ -4558,19 +4558,19 @@
       "sources": [
         {
           "path": "docs/design/chalk-instructor-mode.md",
-          "section": "## 1. \uac15\uc0ac \ubaa8\ub4dc (SUB-08)"
+          "section": "## 1. 강사 모드 (SUB-08)"
         },
         {
           "path": "docs/design/chalk-instructor-mode.md",
-          "section": "## 2. \uad6c\ub3c5 \uc5f0\uacb0 (SUB-01 \u00b7 02 \u00b7 04)"
+          "section": "## 2. 구독 연결 (SUB-01 · 02 · 04)"
         },
         {
           "path": "docs/design/chalk-instructor-mode.md",
-          "section": "## 5. \uc11c\ubc84 AI \uac15\uc0ac\uc6a9 \uacbd\ub85c (SUB-03 \u00b7 GEN-06, E4-8)"
+          "section": "## 5. 서버 AI 강사용 경로 (SUB-03 · GEN-06, E4-8)"
         },
         {
           "path": "docs/design/chalk-instructor-mode.md",
-          "section": "## 6. \ub514\uc790\uc778 \uae30\uc900 (UX-04 \u00b7 UX-05)"
+          "section": "## 6. 디자인 기준 (UX-04 · UX-05)"
         }
       ]
     },
@@ -4704,7 +4704,7 @@
     {
       "id": "ST-IMP-CHALK-KB-STORE",
       "stage": "implementation",
-      "label": "Chalk knowledge store \u2014 worker implementation",
+      "label": "Chalk knowledge store — worker implementation",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-KB",
@@ -4721,7 +4721,7 @@
     {
       "id": "ST-TEST-CHALK-KB-STORE",
       "stage": "test",
-      "label": "Chalk knowledge store \u2014 unit + integration tests",
+      "label": "Chalk knowledge store — unit + integration tests",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-IMP-CHALK-KB-STORE",
@@ -4957,7 +4957,7 @@
     {
       "id": "ST-IMP-CHALK-GEN-APP",
       "stage": "implementation",
-      "label": "Chalk \uc0dd\uc131 \ub3c4\uad6c 4\uac1c \u2014 \uc571 \uce21 (E2-6 / #1295, #1306)",
+      "label": "Chalk 생성 도구 4개 — 앱 측 (E2-6 / #1295, #1306)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-DES-CHALK-TOOLS",
@@ -4972,7 +4972,7 @@
     {
       "id": "ST-TEST-CHALK-GEN-APP",
       "stage": "test",
-      "label": "Chalk \uc0dd\uc131 \ub3c4\uad6c \ub2e8\uc704 \uc2dc\ud5d8 (E2-6 / #1295, #1306)",
+      "label": "Chalk 생성 도구 단위 시험 (E2-6 / #1295, #1306)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-GEN",
@@ -4987,7 +4987,7 @@
     {
       "id": "ST-IMP-CHALK-FEEDBACK",
       "stage": "implementation",
-      "label": "Chalk \ud53c\ub4dc\ubc31 \uae30\ub85d\u00b7\ube44\uad50\u00b7\uc774\ub825 \uad6c\ud604 (E2-7 / #1466)",
+      "label": "Chalk 피드백 기록·비교·이력 구현 (E2-7 / #1466)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-AUTHORING"
@@ -5029,7 +5029,7 @@
     {
       "id": "ST-TEST-CHALK-FEEDBACK",
       "stage": "test",
-      "label": "Chalk \ud53c\ub4dc\ubc31 \ub77c\uc6b0\ud2b8\u00b7\ub3c4\uad6c \uc2dc\ud5d8 (E2-7 / #1466)",
+      "label": "Chalk 피드백 라우트·도구 시험 (E2-7 / #1466)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-AUTHORING",
@@ -5054,7 +5054,7 @@
     {
       "id": "ST-IMP-CHALK-JUDGEMENTS",
       "stage": "implementation",
-      "label": "Context judgement items and records \u2014 server (E2-5 / #1465)",
+      "label": "Context judgement items and records — server (E2-5 / #1465)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-GEN",
@@ -5086,7 +5086,7 @@
     {
       "id": "ST-TEST-CHALK-JUDGEMENTS",
       "stage": "test",
-      "label": "Context judgement items and records \u2014 tests (E2-5 / #1465)",
+      "label": "Context judgement items and records — tests (E2-5 / #1465)",
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-GEN",
@@ -5210,7 +5210,7 @@
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "## P. \ubc30\ud3ec \uc790\ub3d9\ud654 (\ucf54\uce58 \uc2a4\ud0ac \u00b7 #431 \uacb0\uacfc\ubb3c 2\ubc88)"
+          "section": "## P. 배포 자동화 (코치 스킬 · #431 결과물 2번)"
         }
       ]
     },
@@ -7135,7 +7135,7 @@
     {
       "id": "ST-TEST-IME-GUARD-KEYS",
       "stage": "test",
-      "label": "Compose \uc548\ub155 then Enter, Escape, Tab, Arrow-up, Cmd/Ctrl+Enter: nothing acts, nothing reaches the host (CGP-DS-D-024)",
+      "label": "Compose 안녕 then Enter, Escape, Tab, Arrow-up, Cmd/Ctrl+Enter: nothing acts, nothing reaches the host (CGP-DS-D-024)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CHAT-DETAIL",
@@ -7672,7 +7672,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-authoring.md",
-          "section": "### VER-03 \ud655\uc815 \uc804 \uc548\ub0b4 \ubb38\uad6c \uc904 \ube44\uad50 \u00b7 2026-10-20"
+          "section": "### VER-03 확정 전 안내 문구 줄 비교 · 2026-10-20"
         }
       ]
     },
@@ -7729,7 +7729,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-authoring.md",
-          "section": "### CH-01 \uccab \uc2e4\ud589 \uae30\ubcf8 \ub300\uc0c1 \u00b7 2026-10-26"
+          "section": "### CH-01 첫 실행 기본 대상 · 2026-10-26"
         }
       ]
     },
@@ -8365,7 +8365,7 @@
         },
         {
           "path": "docs/requirements/classroom-admin.md",
-          "section": "### \uc218\uc5c5 \ucc38\uc5ec \ub9c1\ud06c \u00b7 2026-10-20 (ADM-01 \u00b7 CGP-SHELL-R-005)"
+          "section": "### 수업 참여 링크 · 2026-10-20 (ADM-01 · CGP-SHELL-R-005)"
         }
       ]
     },
@@ -11755,7 +11755,7 @@
       "sources": [
         {
           "path": "docs/studio-requirements.md",
-          "section": "### REQ-KNOW-63 \u2014 Visitor preview before publication"
+          "section": "### REQ-KNOW-63 — Visitor preview before publication"
         },
         {
           "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md",
@@ -13917,7 +13917,7 @@
         },
         {
           "path": "docs/session-log-consent.ko.md",
-          "section": "## 8. \ub290\ub824\uc694 \uae30\ub85d (\uc131\ub2a5 \uae30\ub85d) \uace0\uc9c0\ubb38"
+          "section": "## 8. 느려요 기록 (성능 기록) 고지문"
         }
       ]
     },
@@ -14470,7 +14470,7 @@
       "sources": [
         {
           "path": "docs/requirements/chalk-authoring.md",
-          "section": "### \uc644\ub8cc \uc870\uac74 \ub3c4\uc6b0\ubbf8 \u2014 \ubb34\uc5c7\uc744 \ub9cc\ub4e4\uba74 \ub05d\uc778\uac00 (CGP-LEARN-R-015) \u00b7 2026-10-26"
+          "section": "### 완료 조건 도우미 — 무엇을 만들면 끝인가 (CGP-LEARN-R-015) · 2026-10-26"
         }
       ]
     },
@@ -14526,7 +14526,7 @@
       "sources": [
         {
           "path": "docs/requirements/classroom-admin.md",
-          "section": "### \ub3c4\uc6c0 \uc694\uccad \ud0a4\ubcf4\ub4dc \ubd84\ub958 \u00b7 2026-10-26 (ADM-05 \u00b7 DES-06 \u00b7 CGP-LEARN-R-017)"
+          "section": "### 도움 요청 키보드 분류 · 2026-10-26 (ADM-05 · DES-06 · CGP-LEARN-R-017)"
         }
       ]
     },

@@ -7,11 +7,11 @@
   ],
   "excluded": {
     "docs/requirements/studio-trial.md": {
-      "reason": "\uc120\ud0dd\ud615 \uc6f9 \ud504\ub85c\ud1a0\ud0c0\uc785\uc758 \uc5ed\uc0ac \uae30\ub85d. \ud604\uc7ac \uc2e4\uc81c \uccb4\ud5d8\uc740 studio-native-trial.md\uac00 \ub300\uccb4\ud558\uba70 \ud574\ub2f9 \ubb38\uc11c\ub97c \uc6d0\uc7a5\uc5d0 \ud3ec\ud568\ud55c\ub2e4.",
+      "reason": "선택형 웹 프로토타입의 역사 기록. 현재 실제 체험은 studio-native-trial.md가 대체하며 해당 문서를 원장에 포함한다.",
       "sha256": "1c4345c878ca05c026e0a84b3d0a7e5c0afa9ed04b997d8413d2e797cf6ffaef"
     },
     "docs/requirements/local-task-review.md": {
-      "reason": "#1020 \ub85c\uceec \uac80\ud1a0 \uc2ac\ub77c\uc774\uc2a4\uc758 \uc11c\uc220\ud615 \uacc4\uc57d. \uc790\uccb4 \uc694\uad6c\uc0ac\ud56d \ubc88\ud638 \uc5c6\uc774 measurement-core.md\uc758 MC-07\u00b7MC-21\u201325\u00b7MC-27\u201332\u00b7MC-34\u201335\ub97c \uad6c\ud604 \ubc94\uc704\ub85c \uc778\uc6a9\ud558\ubbc0\ub85c, \uc6d0\uc7a5\uc740 \uadf8 \uc0c1\uc704 \ubb38\uc11c\ub97c \uc13c\ub2e4.",
+      "reason": "#1020 로컬 검토 슬라이스의 서술형 계약. 자체 요구사항 번호 없이 measurement-core.md의 MC-07·MC-21–25·MC-27–32·MC-34–35를 구현 범위로 인용하므로, 원장은 그 상위 문서를 센다.",
       "sha256": "84a4998d1f89c9b8fe6f217bdfa81c85590e8a8ff3e74d9c0d5519551dd1926c"
     }
   },
@@ -854,7 +854,7 @@
   "work_items": [
     {
       "id": "goal",
-      "title": "\ud559\uc0dd \ubaa9\ud45c\uc640 \uc218\uc5c5 \uae30\uc900 \ubcf4\uc874",
+      "title": "학생 목표와 수업 기준 보존",
       "issue": 554,
       "kind": "implementation",
       "feature_ids": [
@@ -870,11 +870,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uae30\uc874 \ubaa9\ud45c/\ub300\ud654 \uc800\uc7a5\uc744 \uc870\uc0ac\ud558\uace0 \ud559\uc0dd \ubaa9\ud45c \uc218\uc815\uc774 \uc218\uc5c5 \uae30\uc900\uc744 \uc9c0\uc6b0\uc9c0 \uc54a\ub294 \uccab PR\uc744 \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "\uc218\uc5c5 \uae30\uc900\uc740 \ubd88\ubcc0 revision, \ud559\uc0dd \ubaa9\ud45c\ub294 \ubcc4\ub3c4 \uc218\uc815 \uac12. \ud654\uba74 \uc774\ub3d9\u00b7\uc7ac\uc811\uc18d \uc2dc \ub450 \uac12\uc744 \ubcf5\uc6d0\ud55c\ub2e4.",
-      "positive_control": "\ubaa9\ud45c \ubcc0\uacbd \ub4a4 \ub300\ud654\uc640 \uacb0\uacfc \ud654\uba74\uc5d0\uc11c \uac19\uc740 \uc0c8 \ubaa9\ud45c\uc640 \uc6d0 \uc218\uc5c5 \uae30\uc900\uc744 \ud655\uc778.",
-      "negative_control": "\ud559\uc0dd \uc218\uc815\uc73c\ub85c \uacf5\ud1b5 \uae30\uc900 \uc0ad\uc81c\u00b7\ub2e4\ub978 \uc218\uc5c5 \ubaa9\ud45c \ubcf5\uc6d0\u00b7\uc5f4\ub78c\ub9cc\uc73c\ub85c \uc644\ub8cc \uae30\ub85d \uac70\ubd80.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "기존 목표/대화 저장을 조사하고 학생 목표 수정이 수업 기준을 지우지 않는 첫 PR을 구현한다.",
+      "design_delta": "수업 기준은 불변 revision, 학생 목표는 별도 수정 값. 화면 이동·재접속 시 두 값을 복원한다.",
+      "positive_control": "목표 변경 뒤 대화와 결과 화면에서 같은 새 목표와 원 수업 기준을 확인.",
+      "negative_control": "학생 수정으로 공통 기준 삭제·다른 수업 목표 복원·열람만으로 완료 기록 거부.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src/studentGoal.ts",
         "extensions/hypeproof-chat/src/chatPanelProvider.ts",
@@ -922,7 +922,7 @@
     },
     {
       "id": "context",
-      "title": "\uc81c\uc678\ud55c \uc790\ub8cc\uac00 \uc774\ud6c4 \ubaa8\ub378 \ubb38\ub9e5\uc5d0 \ub0a8\uc9c0 \uc54a\ub3c4\ub85d \uc9d1\ud589",
+      "title": "제외한 자료가 이후 모델 문맥에 남지 않도록 집행",
       "issue": 555,
       "kind": "implementation",
       "feature_ids": [
@@ -938,11 +938,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ud604\uc7ac \ub9e4 \ud134 \ub300\ud654\ub97c \uc7ac\uc804\uc1a1\ud558\ub294 \ub450 \ubaa8\ub378 \uacbd\ub85c\uc5d0\uc11c \uba54\ubaa8\u00b7\ud14d\uc2a4\ud2b8 \uc790\ub8cc A\ub97c \uc774\ud6c4 \ubb38\ub9e5\uc5d0\uc11c \uc81c\uc678\ud558\ub294 \uccab \uc218\uc9c1 \uc870\uac01\uc744 \uad6c\ud604\ud55c\ub2e4. \ucd9c\ucc98 \uc5c6\ub294 \uacfc\uac70 \ubb38\ub9e5\uc740 \ud655\uc778\ub41c \ubaa9\ud45c\uc640 \uc720\uc9c0 \uc790\ub8cc\ub85c \uc7ac\uad6c\uc131\ud558\uace0 \uadf8 \uacbd\uacc4\ub97c \ud45c\uc2dc\ud55c\ub2e4.",
-      "design_delta": "\ud65c\ub3d9 \ubc94\uc704\uc758 \ud638\uc2a4\ud2b8 \uc18c\uc720 \uc81c\uc678 \uc0c1\ud0dc\ub97c \uc785\ub825 \ucd08\uc548\uacfc \ubd84\ub9ac\ud574 \uc800\uc7a5\ud558\uace0 SDK\u00b7proxy\uac00 \uacf5\uc720\ud558\ub294 \ub300\ud654 \uc7ac\uc0dd \uacbd\ub85c\uc640 UI\uc5d0 \uc801\uc6a9\ud55c\ub2e4. \uccab \uc870\uac01\uc740 \uba54\ubaa8\u00b7\ud14d\uc2a4\ud2b8\ub9cc \uc9c0\uc6d0\ud558\uba70 \ud30c\uc77c\u00b7\ud398\uc774\uc9c0\u00b7\uc774\ubbf8\uc9c0\u00b7\uc790\ub3d9 \ub3c4\uad6c \uc77d\uae30\ub294 \uc2e4\uc81c \uc9d1\ud589 \uc804\uae4c\uc9c0 \uc81c\uc678 \uac00\ub2a5\ud558\ub2e4\uace0 \ud45c\uc2dc\ud558\uc9c0 \uc54a\ub294\ub2e4. SDK resume \ub3c4\uc785\uc740 \uc120\ud589 \uc870\uac74\uc774 \uc544\ub2c8\ub2e4.",
-      "positive_control": "\ud3ec\ud568 \uc790\ub8cc B\uc640 \ud655\uc778\ub41c \uc791\uc5c5 \ubaa9\ud45c\ub294 \ub2e4\uc74c \uc694\uccad\uacfc \uc7ac\uc5f4\uae30 \ub4a4\uc5d0\ub3c4 \uc720\uc9c0.",
-      "negative_control": "\uc81c\uc678\ud55c \uba54\ubaa8\u00b7\ud14d\uc2a4\ud2b8 \uc790\ub8cc A\uc758 \ud45c\uc2dd\uc774 \uc774\uc804 assistant \uc778\uc6a9, \uc785\ub825 \ucd08\uc548 \uc800\uc7a5\u00b7\uc804\uc1a1, \uc608\uc57d \uc804\uc1a1, \ud65c\ub3d9 \uc7ac\uc5f4\uae30 \ub4a4 \ub450 \ubaa8\ub378 \uc694\uccad \uacbd\ub85c\uc5d0 \ub0a8\uac70\ub098 \ub2e4\ub978 \ud65c\ub3d9\uc758 \uc81c\uc678 \uc0c1\ud0dc\uac00 \ubc14\ub00c\uba74 \uc2e4\ud328. \uc9c0\uc6d0\ud558\uc9c0 \uc54a\ub294 \uc790\ub8cc \uc720\ud615\uc744 \uc548\uc804\ud558\uac8c \uc81c\uc678\ub410\ub2e4\uace0 \ud45c\uc2dc\ud558\uac70\ub098 \uacfc\uac70 \uacf5\uae09\uc790 \uc804\uc1a1\uc744 \uc0ad\uc81c\ud588\ub2e4\uace0 \ud45c\uc2dc\ud574\ub3c4 \uc2e4\ud328.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "현재 매 턴 대화를 재전송하는 두 모델 경로에서 메모·텍스트 자료 A를 이후 문맥에서 제외하는 첫 수직 조각을 구현한다. 출처 없는 과거 문맥은 확인된 목표와 유지 자료로 재구성하고 그 경계를 표시한다.",
+      "design_delta": "활동 범위의 호스트 소유 제외 상태를 입력 초안과 분리해 저장하고 SDK·proxy가 공유하는 대화 재생 경로와 UI에 적용한다. 첫 조각은 메모·텍스트만 지원하며 파일·페이지·이미지·자동 도구 읽기는 실제 집행 전까지 제외 가능하다고 표시하지 않는다. SDK resume 도입은 선행 조건이 아니다.",
+      "positive_control": "포함 자료 B와 확인된 작업 목표는 다음 요청과 재열기 뒤에도 유지.",
+      "negative_control": "제외한 메모·텍스트 자료 A의 표식이 이전 assistant 인용, 입력 초안 저장·전송, 예약 전송, 활동 재열기 뒤 두 모델 요청 경로에 남거나 다른 활동의 제외 상태가 바뀌면 실패. 지원하지 않는 자료 유형을 안전하게 제외됐다고 표시하거나 과거 공급자 전송을 삭제했다고 표시해도 실패.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src/protocol.ts",
         "extensions/hypeproof-chat/src/contextExclusion.ts",
@@ -956,7 +956,7 @@
     },
     {
       "id": "help-modes",
-      "title": "\ub2e8\uacc4\ubcc4 \ub3c4\uc6c0 \uc120\ud0dd\uacfc \uc2e4\uc81c \ubaa8\ub378 \ud589\ub3d9 \uc5f0\uacb0",
+      "title": "단계별 도움 선택과 실제 모델 행동 연결",
       "issue": 1008,
       "kind": "implementation",
       "feature_ids": [
@@ -980,11 +980,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uae30\uc874 lesson binding\uc5d0 \ub3c4\uc6c0 \ubaa8\ub4dc\uc640 \ucd9c\ucc98\ub97c \ucd94\uac00\ud558\ub294 \uc881\uc740 schema/\uc694\uccad PR\ubd80\ud130 \uc791\uc131\ud55c\ub2e4.",
-      "design_delta": "\uc2dc\uc5f0/\ud78c\ud2b8/\ud568\uaed8 \uc218\uc815/\uc9c1\uc811 \uc218\ud589\uc740 \uad50\uc218 \uc804\ub7b5\uc774\uba70 \uad8c\ud55c\uacfc \ubd84\ub9ac. \uc2e4\ud589 \uc911 \ubcc0\uacbd\uc740 \ub2e4\uc74c \uc2e4\ud589\uc5d0 \uc801\uc6a9\ud558\uace0 \uc785\ub825 \ubcf4\uc874.",
-      "positive_control": "\uba85\ud655\ud55c \ubaa9\ud45c\ub294 \ubc14\ub85c \uc218\ud589, \ubaa8\ud638\ud55c \ubaa9\ud45c\ub294 \ub2e4\uc74c \uacb0\uc815 \ud558\ub098\ub9cc \uc9c8\ubb38.",
-      "negative_control": "\ub3c4\uc6c0 \uc804\ud658\uc73c\ub85c \ub3c4\uad6c \uad8c\ud55c \ud655\ub300\u00b7\ucd08\uc548 \uc18c\uc2e4\u00b7\ub3c4\uc6c0\ubc1b\uc740 \uc218\ud589\uc758 \ub3c5\ub9bd \uc218\ud589 \ud45c\uc2dc \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "기존 lesson binding에 도움 모드와 출처를 추가하는 좁은 schema/요청 PR부터 작성한다.",
+      "design_delta": "시연/힌트/함께 수정/직접 수행은 교수 전략이며 권한과 분리. 실행 중 변경은 다음 실행에 적용하고 입력 보존.",
+      "positive_control": "명확한 목표는 바로 수행, 모호한 목표는 다음 결정 하나만 질문.",
+      "negative_control": "도움 전환으로 도구 권한 확대·초안 소실·도움받은 수행의 독립 수행 표시 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "worker/src/lib/lesson-feature-policy.ts",
         "extensions/hypeproof-chat/src"
@@ -993,7 +993,7 @@
     },
     {
       "id": "approval-scope",
-      "title": "\uc81c\ud55c\ub41c \uc2b9\uc778 \ubb36\uc74c\uc758 \ubc94\uc704\uc640 \ub9cc\ub8cc",
+      "title": "제한된 승인 묶음의 범위와 만료",
       "issue": 563,
       "kind": "design",
       "feature_ids": [
@@ -1008,11 +1008,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uae30\uc874 \ud56d\uc0c1 \uc2b9\uc778 \uaddc\uce59\uacfc \uc0c8 \ubb36\uc74c \uacc4\uc57d\uc758 \ucc28\uc774\ub97c \uba85\uc2dc\ud558\uace0 \uc815\ucc45 \ub300\uc870\uad70\uc744 \ub9cc\ub4e0\ub2e4.",
-      "design_delta": "\uc791\uc5c5\u00b7\ud30c\uc77c \uc9d1\ud569\u00b7origin\u00b7\ud589\uc704\u00b7\ub9cc\ub8cc\u00b7policy revision\uc744 \uace0\uc815. \uacf5\uac1c/\ud30c\uad34 \uc791\uc5c5\uc740 \uae30\uc874 \uac1c\ubcc4 \uc2b9\uc778 \uc720\uc9c0.",
-      "positive_control": "\ubcc0\uacbd \uc5c6\ub294 \ub3d9\uc77c \ubc94\uc704\ub294 \uc2b9\uc778 \uc7ac\uc0ac\uc6a9.",
-      "negative_control": "\ud30c\uc77c \ucd94\uac00/origin/\uc815\ucc45 \ubcc0\uacbd\u00b7\ub9cc\ub8cc\u00b7\uacf5\uac1c \uc791\uc5c5\uc5d0\uc11c \ubb36\uc74c \uc7ac\uc0ac\uc6a9 \uac70\uc808.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "기존 항상 승인 규칙과 새 묶음 계약의 차이를 명시하고 정책 대조군을 만든다.",
+      "design_delta": "작업·파일 집합·origin·행위·만료·policy revision을 고정. 공개/파괴 작업은 기존 개별 승인 유지.",
+      "positive_control": "변경 없는 동일 범위는 승인 재사용.",
+      "negative_control": "파일 추가/origin/정책 변경·만료·공개 작업에서 묶음 재사용 거절.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/studio-requirements.md",
         "extensions/hypeproof-chat/src"
@@ -1021,7 +1021,7 @@
     },
     {
       "id": "session",
-      "title": "\uc138\uc158 \uc555\ucd95\u00b7\uc911\ubcf5 \uc2e4\ud589\u00b7\uc7ac\uac1c \uacbd\uacc4",
+      "title": "세션 압축·중복 실행·재개 경계",
       "issue": 647,
       "kind": "validation",
       "feature_ids": [
@@ -1038,11 +1038,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ud604\uc7ac SDK \uc138\uc158 \uad6c\ud604\uacfc #807\uc758 \uc2e4\uae30 \ubc94\uc704\ub97c \uc77d\uace0 20\ud134 \uc555\ucd95/\uc911\ub2e8 \ub300\uc870\uc5d0\uc11c \uc544\uc9c1 \ubbf8\uac80\uc99d\uc778 \ubd84\uae30\ub97c \uc2e4\ud589\ud55c\ub2e4.",
-      "design_delta": "\ud559\uc0dd/\uc218\uc5c5/workspace \uc2dd\ubcc4\uc790\uc640 policy revision\uc744 \uc7ac\uac1c \ub54c \ud655\uc778. \ubd88\uba85\ud655\ud55c \uc678\ubd80 \ud6a8\uacfc\ub294 \uc870\ud68c \uc804 \uc7ac\uc2e4\ud589\ud558\uc9c0 \uc54a\uc74c.",
-      "positive_control": "\ub3d9\uc77c \uc88c\uc11d \uc7ac\uac1c \uc2dc \ubaa9\ud45c\u00b7\uae30\uc900 \ubcf4\uc874, \uc0c8 \uc815\uc0c1 \uc694\uccad \uc131\uacf5.",
-      "negative_control": "\ud0c0 \uc88c\uc11d \ubb38\ub9e5\u00b7\uc774\uc804 grant \ubcf5\uc6d0\u00b7\uc911\ubcf5 \ubd80\uc791\uc6a9\u00b7\uad6c SDK\uc758 \uc0c8 \uae30\ub2a5 \uc624\uc778 \uc131\uacf5 \uac70\ubd80.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "현재 SDK 세션 구현과 #807의 실기 범위를 읽고 20턴 압축/중단 대조에서 아직 미검증인 분기를 실행한다.",
+      "design_delta": "학생/수업/workspace 식별자와 policy revision을 재개 때 확인. 불명확한 외부 효과는 조회 전 재실행하지 않음.",
+      "positive_control": "동일 좌석 재개 시 목표·기준 보존, 새 정상 요청 성공.",
+      "negative_control": "타 좌석 문맥·이전 grant 복원·중복 부작용·구 SDK의 새 기능 오인 성공 거부.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src/sdkCoach.ts",
         "worker/src"
@@ -1051,7 +1051,7 @@
     },
     {
       "id": "recovery",
-      "title": "\ud30c\uc77c \uc9d1\ud569 \ubcf5\uad6c\uc640 \ubcf5\uad6c \uc804 \uc0c1\ud0dc \ubcf4\uc874",
+      "title": "파일 집합 복구와 복구 전 상태 보존",
       "issue": 673,
       "kind": "implementation",
       "feature_ids": [
@@ -1072,11 +1072,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ud604\uc7ac checkpoint/backup\uc744 \uc870\uc0ac\ud558\uace0 \ucd94\uac00\u00b7\uc218\uc815\u00b7\uc0ad\uc81c\uc640 \uc218\ub3d9 \ud3b8\uc9d1\uc744 \ud3ec\ud568\ud558\ub294 \ub85c\uceec \ubcf5\uad6c\ubd80\ud130 \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "\ud30c\uc77c manifest/hash\ub97c \ubcf5\uad6c \ub2e8\uc704\ub85c \uc0ac\uc6a9\ud558\uace0 \ubcf5\uad6c \uc804 snapshot\uc744 \ubcf4\uc874. \uc678\ubd80 DB\u00b7\uacf5\uac1c \ubc30\ud3ec \ubcf5\uad6c\ub294 \ubcc4\ub3c4.",
-      "positive_control": "Read/Write/Edit/shell \ub4a4 \uc9c0\uc815 snapshot\uc758 \uc804\uccb4 \ud30c\uc77c \uc9d1\ud569/\ud574\uc2dc \ubcf5\uc6d0.",
-      "negative_control": "\ucd94\uc801 \ubc16 \ud30c\uc77c\u00b7\uc0ad\uc81c \ud30c\uc77c\u00b7\uc218\ub3d9 \ud3b8\uc9d1\uc744 \ub204\ub77d\ud558\uac70\ub098 \uc678\ubd80 \ubc30\ud3ec\ub3c4 \ubcf5\uad6c\ub410\ub2e4\uace0 \ud45c\uc2dc\ud558\uba74 \uc2e4\ud328.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "현재 checkpoint/backup을 조사하고 추가·수정·삭제와 수동 편집을 포함하는 로컬 복구부터 구현한다.",
+      "design_delta": "파일 manifest/hash를 복구 단위로 사용하고 복구 전 snapshot을 보존. 외부 DB·공개 배포 복구는 별도.",
+      "positive_control": "Read/Write/Edit/shell 뒤 지정 snapshot의 전체 파일 집합/해시 복원.",
+      "negative_control": "추적 밖 파일·삭제 파일·수동 편집을 누락하거나 외부 배포도 복구됐다고 표시하면 실패.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src"
       ],
@@ -1084,7 +1084,7 @@
     },
     {
       "id": "review-validity",
-      "title": "\ud604\uc7ac \uc0b0\ucd9c\ubb3c \ubc84\uc804\uc5d0 \uadc0\uc18d\ub41c \uac80\uc218",
+      "title": "현재 산출물 버전에 귀속된 검수",
       "issue": 557,
       "kind": "implementation",
       "feature_ids": [
@@ -1110,11 +1110,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ube0c\ub77c\uc6b0\uc800 \uac80\uc0ac \uacb0\uacfc\uc5d0 \ud30c\uc77c \uc9d1\ud569/\uae30\uc900/viewport/\uac80\uc0ac\uae30 revision\uc744 \uc5f0\uacb0\ud558\uace0 \uc624\ub798\ub41c \ud569\uaca9 \ubb34\ud6a8\ud654\ub97c \uccab PR\ub85c \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "\ub3c4\uad6c \uc131\uacf5\u00b7\uac80\uc0ac \ud1b5\uacfc\u00b7\ud559\uc0dd \ucc44\ud0dd\uc740 \ubcc4\ub3c4 \uc0c1\ud0dc. \uacfc\uac70 \uc99d\uac70\ub97c \ubcf4\uc874\ud558\ub418 \uc218\uc815 \ub4a4 \uc7ac\uac80\uc0ac \ud544\uc694 \ud45c\uc2dc.",
-      "positive_control": "\uc815\uc0c1 \ud398\uc774\uc9c0 \ud1b5\uacfc\uc640 \ubb34\ubcc0\uacbd \uc99d\uac70 \uc720\uc9c0, \ub450 \ub300\uc548 \ubaa8\ub450 \ubcf4\ub958 \uac00\ub2a5.",
-      "negative_control": "\uae68\uc9c4 \uc774\ubbf8\uc9c0/\ub9c1\ud06c/JS/390px \ub118\uce68\uc744 \ud0d0\uc9c0. \ud30c\uc77c\u00b7\uae30\uc900\u00b7viewport \ubcc0\uacbd \ub4a4 \uc61b \ud1b5\uacfc \ud45c\uc2dc \ub610\ub294 \uc798\ubabb\ub41c \ud0ed \uc870\uc791\uc740 \uc2e4\ud328.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "브라우저 검사 결과에 파일 집합/기준/viewport/검사기 revision을 연결하고 오래된 합격 무효화를 첫 PR로 구현한다.",
+      "design_delta": "도구 성공·검사 통과·학생 채택은 별도 상태. 과거 증거를 보존하되 수정 뒤 재검사 필요 표시.",
+      "positive_control": "정상 페이지 통과와 무변경 증거 유지, 두 대안 모두 보류 가능.",
+      "negative_control": "깨진 이미지/링크/JS/390px 넘침을 탐지. 파일·기준·viewport 변경 뒤 옛 통과 표시 또는 잘못된 탭 조작은 실패.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src/browserMcp.ts",
         "extensions/hypeproof-chat/webview-ui/src"
@@ -1123,7 +1123,7 @@
     },
     {
       "id": "export",
-      "title": "\uc218\uc5c5\u00b7AI \ub9cc\ub8cc \ud6c4 \uc120\ud0dd \ub0b4\ubcf4\ub0b4\uae30",
+      "title": "수업·AI 만료 후 선택 내보내기",
       "issue": 553,
       "kind": "implementation",
       "feature_ids": [
@@ -1144,11 +1144,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uae30\uc874 export/local history\ub97c \uc7ac\uc0ac\uc6a9\ud574 \uc790\uaca9 \ub9cc\ub8cc \uc0c1\ud0dc\uc5d0\uc11c\ub3c4 \ud30c\uc77c\uacfc \uc120\ud0dd \uae30\ub85d\uc744 \ub0b4\ubcf4\ub0b4\ub294 \uccab PR\uc744 \ub9cc\ub4e0\ub2e4.",
-      "design_delta": "\ud30c\uc77c\u00b7\ubaa9\ud45c\u00b7\ubcc0\uacbd \uc774\uc720\u00b7\uac80\uc218 \uadfc\uac70\ub97c \uc120\ud0dd manifest\ub85c \ub0b4\ubcf4\ub0b4\uba70 \uc2e4\ud589 \uc790\uaca9/\ud0c0\uc778 \uc790\ub8cc\ub97c \uc81c\uc678.",
-      "positive_control": "\uc624\ud504\ub77c\uc778\u00b7\uc218\uc5c5 \uc885\ub8cc \ub4a4 \ub2e4\ub978 \ud3f4\ub354\uc5d0 \uc7ac\uc5f4\uae30\uc640 \uc218\uc815 \uac00\ub2a5.",
-      "negative_control": "SDK \uc124\uc815/\ud569\uc131 \ube44\ubc00/\ubbf8\uc120\ud0dd \ub300\ud654/\ub2e4\ub978 \ud559\uc0dd \ud30c\uc77c \ud3ec\ud568 \uae08\uc9c0. \ud638\uc2a4\ud305 \ub9cc\ub8cc\uc640 \ud30c\uc77c \uc18c\uc720 \uad6c\ubd84.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "기존 export/local history를 재사용해 자격 만료 상태에서도 파일과 선택 기록을 내보내는 첫 PR을 만든다.",
+      "design_delta": "파일·목표·변경 이유·검수 근거를 선택 manifest로 내보내며 실행 자격/타인 자료를 제외.",
+      "positive_control": "오프라인·수업 종료 뒤 다른 폴더에 재열기와 수정 가능.",
+      "negative_control": "SDK 설정/합성 비밀/미선택 대화/다른 학생 파일 포함 금지. 호스팅 만료와 파일 소유 구분.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src"
       ],
@@ -1156,7 +1156,7 @@
     },
     {
       "id": "model-routing",
-      "title": "Auto\uc640 \ubaa8\ub378 \uc804\ud658\uc758 \ubb38\ub9e5\u00b7\uc2e4\ud328 \uacc4\uc57d",
+      "title": "Auto와 모델 전환의 문맥·실패 계약",
       "issue": 1009,
       "kind": "implementation",
       "feature_ids": [
@@ -1176,11 +1176,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ud604\uc7ac picker/alias/substitution \uad6c\ud604\uc744 \uc7ac\uc0ac\uc6a9\ud558\uace0 \uc218\uc5c5 \ud5c8\uc6a9 \ud6c4\ubcf4 \uc548\uc758 \uba85\uc2dc\uc801 Auto \uc815\ucc45\uacfc \uc2e4\ud328 \ubd84\uae30\ub97c \uba3c\uc800 \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "Auto\uc640 \uc7a5\uc560 \ub300\uccb4\ub294 \ubcc4\ub3c4 \uc815\ucc45. \uc2e4\uc81c \ubaa8\ub378/\uc2e4\ud589\uae30/\ub2a5\ub825\u00b7\ubb38\ub9e5 \uc804\ub2ec\u00b7\uc6d0\ubcf8 \ubcf5\uadc0\u00b7\ucd1d\ube44\uc6a9 \uadc0\uc18d\uc744 \ubcf4\uc874.",
-      "positive_control": "\ud5c8\uc6a9\ub41c \ub3d9\uc77c \uc2e4\ud589\uae30 \uc870\ud569 \ud558\ub098\uc5d0\uc11c \uc120\ud0dd/\uc2e4\uc81c \ubaa8\ub378\uacfc \uc804\ub2ec \uc790\ub8cc \uc77c\uce58.",
-      "negative_control": "\ubbf8\ud5c8\uc6a9 \ud6c4\ubcf4\u00b7\uc740\ud1f4 \ubaa8\ub378\u00b7\uc608\uc0b0 \ubd80\uc871\u00b7\uc2a4\ud2b8\ub9bc \uc911 \uc2e4\ud328 \ub4a4 \uc870\uc6a9\ud55c \uc804\ud658\uc774\ub098 \uc678\ubd80 \ud6a8\uacfc \uc911\ubcf5 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "현재 picker/alias/substitution 구현을 재사용하고 수업 허용 후보 안의 명시적 Auto 정책과 실패 분기를 먼저 구현한다.",
+      "design_delta": "Auto와 장애 대체는 별도 정책. 실제 모델/실행기/능력·문맥 전달·원본 복귀·총비용 귀속을 보존.",
+      "positive_control": "허용된 동일 실행기 조합 하나에서 선택/실제 모델과 전달 자료 일치.",
+      "negative_control": "미허용 후보·은퇴 모델·예산 부족·스트림 중 실패 뒤 조용한 전환이나 외부 효과 중복 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "worker/src",
         "extensions/hypeproof-chat/src"
@@ -1189,7 +1189,7 @@
     },
     {
       "id": "model-review",
-      "title": "\ub450 \ubc88\uc9f8 \ubaa8\ub378\uc758 \uc77d\uae30 \uc804\uc6a9 \uac80\ud1a0",
+      "title": "두 번째 모델의 읽기 전용 검토",
       "issue": 1010,
       "kind": "implementation",
       "feature_ids": [
@@ -1206,11 +1206,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uac19\uc740 \uc0b0\ucd9c\ubb3c hash\uc640 \uae30\uc900\uc744 \ub450 \uc77d\uae30 \uac80\ud1a0\uc5d0 \uc804\ub2ec\ud558\uace0 \ud55c \ubd84\uae30 \uc2e4\ud328/\ucde8\uc18c \ucc98\ub9ac\ubd80\ud130 \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "\ud3b8\uc9d1\uc790\ub294 \ud55c \uc2e4\ud589\uae30. \ubd84\uae30 provenance\u00b7\ube44\uc6a9 \uc608\uc57d\u00b7\ubd80\ubd84 \uacb0\uacfc\u00b7\ucc44\ud0dd/\ubcf4\ub958 \uc774\uc720\ub97c \ubcf4\uc874. \ubaa8\ub378 \ud569\uc758\ub294 \uc815\ub2f5\uc774 \uc544\ub2d8.",
-      "positive_control": "\uc815\uc0c1\u00b7\uacb0\ud568 \uc608\uc81c\uc5d0\uc11c \ub2e8\uc77c/\uc774\uc911 \uac80\ud1a0 \ud0d0\uc9c0/\uc624\ud0d0\uacfc \ucd1d\ube44\uc6a9 \ube44\uad50.",
-      "negative_control": "\uac80\ud1a0 \ubd84\uae30 \uc4f0\uae30\u00b7\ud0c0 \ud559\uc0dd \uc790\uaca9\u00b7\ubb34\uc81c\ud55c \uc7ac\uc2dc\ub3c4\u00b7\uc2e4\ud328 \ubd84\uae30\ub97c \uc131\uacf5\uc73c\ub85c \ubcd1\ud569 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "같은 산출물 hash와 기준을 두 읽기 검토에 전달하고 한 분기 실패/취소 처리부터 구현한다.",
+      "design_delta": "편집자는 한 실행기. 분기 provenance·비용 예약·부분 결과·채택/보류 이유를 보존. 모델 합의는 정답이 아님.",
+      "positive_control": "정상·결함 예제에서 단일/이중 검토 탐지/오탐과 총비용 비교.",
+      "negative_control": "검토 분기 쓰기·타 학생 자격·무제한 재시도·실패 분기를 성공으로 병합 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "worker/src",
         "extensions/hypeproof-chat/src"
@@ -1219,7 +1219,7 @@
     },
     {
       "id": "lesson-settings",
-      "title": "\uac15\uc0ac \uc124\uc815\u00b7\ud655\uc815 \ubc84\uc804\u00b7\ud559\uc0dd \uc2e4\ud589 \ubc14\uc778\ub529",
+      "title": "강사 설정·확정 버전·학생 실행 바인딩",
       "issue": 1011,
       "kind": "implementation",
       "feature_ids": [
@@ -1248,11 +1248,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uae30\uc874 identity/model/features ADR\uacfc \uad6c\ud604\uc744 \uc77d\uace0 \uad50\uc721\uc790 \uc124\uc815\ubd80\ud130 \ud559\uc0dd profile\uae4c\uc9c0 \ube60\uc9c4 \uc804\ub2ec \ud55c \uacbd\ub85c\ub97c \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "\uc774\ub984\u00b7\uad50\uc218\ubc95\u00b7\ubaa8\ub378\u00b7\ub3c4\uad6c\u00b7\uad8c\ud55c\uc744 \ubcc4\ub3c4 \uac12\uc73c\ub85c \uace0\uc815. \ud655\uc815 \uc218\uc5c5\uc740 snapshot\uc744 \ucc38\uc870\ud558\uba70 \uad50\uc9d1\ud569/deny\ub97c \uc720\uc9c0.",
-      "positive_control": "\ub450 \uc218\uc5c5\uc758 \uc11c\ub85c \ub2e4\ub978 \uc774\ub984/\ud5c8\uc6a9 \ubaa8\ub378\uc774 \uac01\uac01 \uc815\uc0c1 \uc801\uc6a9.",
-      "negative_control": "\ud0c0 \uc218\uc5c5/\uc704\uc870 \ub2e8\uacc4/\ud559\uc0dd API/\uad6c\ubc84\uc804 \uc0c8 capability \uc6b0\ud68c \uac70\uc808. \uc774\ub984 \ubcc0\uacbd\uc740 \uad8c\ud55c \ud655\ub300 \ubd88\uac00.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "기존 identity/model/features ADR과 구현을 읽고 교육자 설정부터 학생 profile까지 빠진 전달 한 경로를 구현한다.",
+      "design_delta": "이름·교수법·모델·도구·권한을 별도 값으로 고정. 확정 수업은 snapshot을 참조하며 교집합/deny를 유지.",
+      "positive_control": "두 수업의 서로 다른 이름/허용 모델이 각각 정상 적용.",
+      "negative_control": "타 수업/위조 단계/학생 API/구버전 새 capability 우회 거절. 이름 변경은 권한 확대 불가.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "chalk/src",
         "worker/src/lib/lesson-feature-policy.ts",
@@ -1262,7 +1262,7 @@
     },
     {
       "id": "rehearsal",
-      "title": "\ud559\uc0dd \uc790\uaca9 \ub9ac\ud5c8\uc124\uacfc \ubc84\uc804\ubcc4 \uc900\ube44 \uc99d\uac70",
+      "title": "학생 자격 리허설과 버전별 준비 증거",
       "issue": 1012,
       "kind": "implementation",
       "feature_ids": [
@@ -1285,11 +1285,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ud604\uc7ac not_run/activated literal\uacfc \uae30\uc874 authoring \uc800\uc7a5\uc744 \ud655\uc778\ud558\uace0 \ud559\uc0dd \uc790\uaca9 \uc2e4\ud589/\uc99d\uac70 \uc800\uc7a5 \uacbd\ub85c\ub97c \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "\uac15\uc0ac \uc790\uaca9 \uc5c6\ub294 \uc2e4\ud589, \ub0b4\uc6a9\u00b7\ud15c\ud50c\ub9bf\u00b7\uc815\ucc45\u00b7\ub3c4\uad6c\u00b7App/SDK hash\uc5d0 \uc99d\uac70 \uadc0\uc18d. \uc900\ube44/\uc2e4\ud589/\uc778\uc99d/\ubbf8\uc9c0\uc6d0 \uc0c1\ud0dc \ubd84\ub9ac.",
-      "positive_control": "\ud559\uc0dd \uad8c\ud55c\uc73c\ub85c \uc815\uc0c1 \uc608\uc81c \uc2e4\ud589 \ud6c4 \ud574\ub2f9 revision\ub9cc \uc900\ube44 \uc644\ub8cc.",
-      "negative_control": "\uac15\uc0ac \uc804\uc6a9 \uc790\uaca9\uc73c\ub85c\ub9cc \uc131\uacf5\ud558\ub294 \uc608\uc81c \uac70\ubd80. \ub3c4\uad6c/\ub0b4\uc6a9 \uc218\uc815 \ub4a4 \uc61b \ud569\uaca9 \uc7ac\uc0ac\uc6a9 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "현재 not_run/activated literal과 기존 authoring 저장을 확인하고 학생 자격 실행/증거 저장 경로를 구현한다.",
+      "design_delta": "강사 자격 없는 실행, 내용·템플릿·정책·도구·App/SDK hash에 증거 귀속. 준비/실행/인증/미지원 상태 분리.",
+      "positive_control": "학생 권한으로 정상 예제 실행 후 해당 revision만 준비 완료.",
+      "negative_control": "강사 전용 자격으로만 성공하는 예제 거부. 도구/내용 수정 뒤 옛 합격 재사용 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "chalk/src",
         "worker/src"
@@ -1298,7 +1298,7 @@
     },
     {
       "id": "operations",
-      "title": "\uc6d0\uc778\ubcc4 \ub3c4\uc6c0\uacfc \ud559\uae09 \uc77c\uc2dc\uc815\uc9c0",
+      "title": "원인별 도움과 학급 일시정지",
       "issue": 751,
       "kind": "implementation",
       "feature_ids": [
@@ -1336,11 +1336,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "2026-09-18 \uc6d0\uaca9 \uc6b4\uc601 PRD\uc640 R0~R7 \uc21c\uc11c\uc5d0 \ub530\ub77c \ud68c\ucc28 \uba85\ub2e8\u00b7pairing\u00b7\ud1a0\ud070 \ud65c\uc131\ud654\u00b7\ub2e8\uacc4\u00b7\uc6d0\uc778\ubcc4 \uc624\ub958\uc758 \uccab \uc218\uc9c1 \uacbd\ub85c\ubd80\ud130 \uad6c\ud604\ud55c\ub2e4. \ub2e4\ub978 \uc5f4\ub9b0 PR\uacfc scope\ub97c \ud655\uc778\ud55c\ub2e4.",
-      "design_delta": "\uae30\uc874 Chalk\u00b7Service\u00b7App \uc7ac\uc0ac\uc6a9. D1 command CAS/lease/epoch/receipt, \ubcf4\uc874\ud615 reset, \ub3d9\uc758\ub41c immutable \uc218\uc9d1, \uacf5\ud1b5 \uce21\uc815/legacy adapter, \uc2b9\uc778\ub41c \uc218\uc2e0\uc790\u00b7delivery outbox. \ub2e8\uacc4\ubcc4 \uae30\ub2a5 flag.",
-      "positive_control": "\uc815\uc0c1 \ud559\uc0dd/\ubb34\uc2e0\ud638 \ud559\uc0dd \ubaa8\ub450 \ubcf4\uc774\uba70 \ud559\uc0dd\uc774 \ud574\uacb0 \ud655\uc778.",
-      "negative_control": "\ubc1c\uae09\uc744 \ud65c\uc131\ud654\ub85c \ud45c\uc2dc\u00b7\ubb34\uc2e0\ud638 \uc815\uc0c1\ud654\u00b7401/403/429/5xx\ub97c \ubaa8\ub450 \uac19\uc740 \uc6d0\uc778\uc73c\ub85c \ub2e8\uc815\u00b7\ud0c0 \ud559\uc0dd \uc81c\uc5b4/\uc6d0\ubb38\u00b7\uc911\ubcf5 reset\u00b7\ubbf8\uac80\uc218 \ubc1c\uc1a1\u00b7provider \uc218\ub77d\uc744 \uc804\ub2ec \uc644\ub8cc\ub85c \ud45c\uc2dc \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "2026-09-18 원격 운영 PRD와 R0~R7 순서에 따라 회차 명단·pairing·토큰 활성화·단계·원인별 오류의 첫 수직 경로부터 구현한다. 다른 열린 PR과 scope를 확인한다.",
+      "design_delta": "기존 Chalk·Service·App 재사용. D1 command CAS/lease/epoch/receipt, 보존형 reset, 동의된 immutable 수집, 공통 측정/legacy adapter, 승인된 수신자·delivery outbox. 단계별 기능 flag.",
+      "positive_control": "정상 학생/무신호 학생 모두 보이며 학생이 해결 확인.",
+      "negative_control": "발급을 활성화로 표시·무신호 정상화·401/403/429/5xx를 모두 같은 원인으로 단정·타 학생 제어/원문·중복 reset·미검수 발송·provider 수락을 전달 완료로 표시 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "chalk/src",
         "worker/src",
@@ -1355,7 +1355,7 @@
     },
     {
       "id": "feedback-loop",
-      "title": "\uc0ac\ub78c \ud53c\ub4dc\ubc31\uacfc \ub2e4\uc74c \uc218\uc5c5 \ucd08\uc548 \uc5f0\uacb0",
+      "title": "사람 피드백과 다음 수업 초안 연결",
       "issue": 1013,
       "kind": "implementation",
       "feature_ids": [
@@ -1381,11 +1381,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uae30\uc874 observation/share/feedback\uc744 \ucc38\uc870\ud558\ub294 \ud68c\uace0\u2192\uc0c8 \ucd08\uc548 \uc5f0\uacb0\uc744 \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "\uac00\uc124\u00b7\ub3c4\uc6c0 \uc870\uac74\u00b7\ucd9c\ucc98\u00b7\uc0ac\ub78c \ubc18\ub860\u00b7\ucc44\ud0dd/\ubcf4\ub958 \uc774\uc720\ub97c \uc800\uc7a5\ud558\uba70 \uae30\uc874 \ud655\uc815 \uc218\uc5c5\uc740 \ubd88\ubcc0.",
-      "positive_control": "\uc120\ud0dd \uacf5\uc720\ub41c \ud53c\ub4dc\ubc31\uc5d0\uc11c \uc0c8 \ucd08\uc548\uacfc \ub2e4\uc74c \ub9ac\ud5c8\uc124 \uadfc\uac70\ub97c \uc5f0\uacb0.",
-      "negative_control": "\uacf5\uc720 \ucca0\ud68c/\ub9cc\ub8cc/\ud0c0 \uc218\uc5c5 \uc811\uadfc \uac70\ubd80. AI \uac80\ud1a0\ub97c \uc0ac\ub78c \ud53c\ub4dc\ubc31\uc73c\ub85c \ud45c\uc2dc\ud558\uac70\ub098 \ub204\ub77d\uc744 \ub3c5\ub9bd \uc218\ud589\uc73c\ub85c \ucc44\uc6b0\uc9c0 \uc54a\uc74c.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "기존 observation/share/feedback을 참조하는 회고→새 초안 연결을 구현한다.",
+      "design_delta": "가설·도움 조건·출처·사람 반론·채택/보류 이유를 저장하며 기존 확정 수업은 불변.",
+      "positive_control": "선택 공유된 피드백에서 새 초안과 다음 리허설 근거를 연결.",
+      "negative_control": "공유 철회/만료/타 수업 접근 거부. AI 검토를 사람 피드백으로 표시하거나 누락을 독립 수행으로 채우지 않음.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "worker/src/lib/feedback-loop.ts",
         "worker/src/routes/lesson-retrospective.ts",
@@ -1408,7 +1408,7 @@
     },
     {
       "id": "human-learning",
-      "title": "\ud310\ub2e8 \ubcc0\ud654\u00b7\uc804\uc774 \uc5f0\uad6c \uc778\uc218",
+      "title": "판단 변화·전이 연구 인수",
       "issue": 1014,
       "kind": "research",
       "feature_ids": [
@@ -1427,22 +1427,22 @@
       "depends_on": [
         "feedback-loop"
       ],
-      "next_action": "\uae30\uc220 \uc778\uc218\uc640 \uad6c\ubd84\ud574 \uacfc\uc81c/\ub3c4\uc6c0/\uc21c\uc11c/\ub204\ub77d \uc870\uac74\uc744 \uace0\uc815\ud55c \ub4a4 \uc0ac\ub78c \ud6c4\uc18d \uad00\ucc30\uc744 \uc218\ud589\ud55c\ub2e4.",
-      "design_delta": "AI \ub300\ud589\u00b7\ub3c4\uc6c0\ubc1b\uc740 \uc218\ud589\u00b7\uc9c1\uc811 \uc218\ud589\uc744 \ube44\uad50\ud558\uace0 \uc131\uc7a5/\ubb34\ubcc0\ud654/\uc57d\ud654/\ubbf8\ud655\uc778\uc744 \ubaa8\ub450 \uae30\ub85d.",
-      "positive_control": "\ub3d9\uc758\ub41c \ucc38\uc5ec\uc790\uc758 \uc0c8 \uacfc\uc81c\uc640 \ud6c4\uc18d \uad00\ucc30\uc5d0\uc11c \ucd9c\ucc98\uac00 \uc788\ub294 \ud310\ub2e8 \uadfc\uac70.",
-      "negative_control": "\ud569\uc131 \uacb0\uacfc\u00b7\ubc1c\ud654\ub7c9\u00b7\uc81c\ucd9c \uc644\ub8cc\ub97c \ud559\uc2b5 \uc131\uc7a5 PASS\ub85c \ubc14\uafb8\uc9c0 \uc54a\uc74c.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "기술 인수와 구분해 과제/도움/순서/누락 조건을 고정한 뒤 사람 후속 관찰을 수행한다.",
+      "design_delta": "AI 대행·도움받은 수행·직접 수행을 비교하고 성장/무변화/약화/미확인을 모두 기록.",
+      "positive_control": "동의된 참여자의 새 과제와 후속 관찰에서 출처가 있는 판단 근거.",
+      "negative_control": "합성 결과·발화량·제출 완료를 학습 성장 PASS로 바꾸지 않음.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing/learning-agent-experience.md"
       ],
       "verification_inputs": [],
       "gate": {
-        "reason": "\uc2e4\uc81c \uc0ac\ub78c \ucc38\uc5ec\u00b7\uc5f0\uad6c \uc870\uac74 \ud655\uc815\u00b7\ud6c4\uc18d \uad00\uce21\uc774 \ud544\uc694\ud558\ub2e4. fixture\uc640 \uae30\ub85d \ud615\uc2dd\uc740 feedback-loop\uc5d0\uc11c \uc120\ud589 \uac00\ub2a5."
+        "reason": "실제 사람 참여·연구 조건 확정·후속 관측이 필요하다. fixture와 기록 형식은 feedback-loop에서 선행 가능."
       }
     },
     {
       "id": "computer-use",
-      "title": "\uaca9\ub9ac Computer Use \ud0c0\ub2f9\uc131 \uc124\uacc4",
+      "title": "격리 Computer Use 타당성 설계",
       "issue": 752,
       "kind": "design",
       "feature_ids": [
@@ -1457,11 +1457,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc6f9/API \ub300\uc548\uacfc \ube44\uad50\ud560 \ud569\uc131 \uacfc\uc81c\u00b7\ud5c8\uc6a9 \uc571\u00b7VM\u00b7\uc790\uaca9/\ud654\uba74 \uacbd\uacc4\u00b7Stop \uc2dc\ub098\ub9ac\uc624\ub97c \uba3c\uc800 \ud655\uc815 \uac00\ub2a5\ud55c \uc2e4\ud5d8 \ubb38\uc11c\ub85c \ub9cc\ub4e0\ub2e4.",
-      "design_delta": "\uac1c\uc778 \ubc14\ud0d5\ud654\uba74 \ub300\uc2e0 \uaca9\ub9ac \ud658\uacbd. \uc2e4\ud589 \ub2e8\uacc4\ub294 \uc2b9\uc778\ub41c \uacfc\uc81c/\ud658\uacbd \ud655\ubcf4 \ud6c4 \ubcc4\ub3c4 packet\uc73c\ub85c \ubd84\ub9ac.",
-      "positive_control": "\uac19\uc740 \uacfc\uc81c\uc758 \uc6f9/API/\uc9c0\uc815 \uc571 \ube44\uad50\uc640 no-go\ub3c4 \uc720\ud6a8\ud55c \uacb0\ub860.",
-      "negative_control": "\uc77c\ubc18 \ub370\uc2a4\ud06c\ud1b1 \uad8c\ud55c \ud655\ub300\u00b7\uc790\ub3d9 fallback\u00b7\ub3d9\uc758 \uc5c6\ub294 \ud654\uba74 \ucea1\ucc98 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "웹/API 대안과 비교할 합성 과제·허용 앱·VM·자격/화면 경계·Stop 시나리오를 먼저 확정 가능한 실험 문서로 만든다.",
+      "design_delta": "개인 바탕화면 대신 격리 환경. 실행 단계는 승인된 과제/환경 확보 후 별도 packet으로 분리.",
+      "positive_control": "같은 과제의 웹/API/지정 앱 비교와 no-go도 유효한 결론.",
+      "negative_control": "일반 데스크톱 권한 확대·자동 fallback·동의 없는 화면 캡처 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/plan/learning-agent-experience-epics.md",
         "docs/testing/learning-agent-experience.md"
@@ -1470,7 +1470,7 @@
     },
     {
       "id": "candidate-contract",
-      "title": "\ud6c4\ubcf4 \ubaa8\ub378 provenance\uc640 legacy \ud638\ud658",
+      "title": "후보 모델 provenance와 legacy 호환",
       "issue": 852,
       "kind": "design",
       "feature_ids": [
@@ -1493,11 +1493,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc591\ucabd observation validator\uc640 legacy fixture\ub97c \uac10\uc0ac\ud558\uace0 \ubaa8\ub378 revision/provenance \uc9c4\ud654 \uacc4\uc57d\uc744 \uc791\uc131\ud55c\ub2e4.",
-      "design_delta": "\uc815\uc758\u00b7\uad00\uce21\u00b7\ud574\uc11d\u00b7\ucc44\ud0dd\uc744 \ubd84\ub9ac. \uae30\uc874 \ud0a4\ub294 \ud638\ud658\uc131\uc744 \uc720\uc9c0\ud558\uace0 \ubbf8\ud655\uc778\uc740 unknown.",
-      "positive_control": "\uad6c \uae30\ub85d \uc655\ubcf5\uacfc \uc0c8 revision/\ucd9c\ucc98 \uae30\ub85d\uc744 \ubd84\ub9ac\ud574 \uc77d\uc74c.",
-      "negative_control": "\uc0c8 \uc774\ub984/\uac1c\uc218 \ucc44\ud0dd\ub9cc\uc73c\ub85c \uc790\ub3d9 \uc810\uc218\u00b7\ub3c5\ub9bd \ub2a5\ub825 \uc778\uc99d\u00b7\uacfc\uac70 \uc99d\uac70 \uc7ac\ubd84\ub958 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "양쪽 observation validator와 legacy fixture를 감사하고 모델 revision/provenance 진화 계약을 작성한다.",
+      "design_delta": "정의·관측·해석·채택을 분리. 기존 키는 호환성을 유지하고 미확인은 unknown.",
+      "positive_control": "구 기록 왕복과 새 revision/출처 기록을 분리해 읽음.",
+      "negative_control": "새 이름/개수 채택만으로 자동 점수·독립 능력 인증·과거 증거 재분류 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "worker/src/lib/native-observation.ts",
         "extensions/hypeproof-chat/src"
@@ -1506,7 +1506,7 @@
     },
     {
       "id": "voice-897",
-      "title": "\uc74c\uc131 V0 \uc794\uc5ec \uacc4\uc57d\uacfc \uc778\uc218",
+      "title": "음성 V0 잔여 계약과 인수",
       "issue": 897,
       "kind": "validation",
       "feature_ids": [
@@ -1525,11 +1525,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "docs/plan/voice-conversation-epics.md\uc640 \ud574\ub2f9 \uc774\uc288\uc758 \uae30\uc874 \uad6c\ud604/\uae30\ub85d\uc744 \ub300\uc870\ud558\uace0 \ubbf8\ucda9\uc871 VO \ud589 \ud558\ub098\ub97c \uccab PR/\uac80\uc99d \ub300\uc0c1\uc73c\ub85c \uc120\ud0dd\ud55c\ub2e4.",
-      "design_delta": "\ubc1c\ud654\u00b7\ud14d\uc2a4\ud2b8\u00b7\ub3c4\uad6c \uc791\uc5c5\u00b7\uc624\ub514\uc624 \uc7ac\uc0dd\u00b7\ube44\uc6a9 \ucd9c\ucc98\ub97c \uac19\uc740 activity\uc5d0 \uc5f0\uacb0\ud558\ub418 \uac01\uac01\uc758 \uc0c1\ud0dc\uc640 \uc2b9\uc778 \uc8fc\uccb4\ub97c \uad6c\ubd84\ud55c\ub2e4.",
-      "positive_control": "\ud574\ub2f9 VO-T \uc815\uc0c1 \uacbd\ub85c\uc640 \uae30\uc874 \ud14d\uc2a4\ud2b8 \uacbd\ub85c\uac00 \uac19\uc740 \uc791\uc5c5/\uacb0\uacfc\ub85c \uc774\uc5b4\uc9d0.",
-      "negative_control": "\uc911\ubcf5/\uc5ed\uc21c/\uc911\ub2e8/\uad8c\ud55c \ucca0\ud68c/\ub2a6\uc740 \ub9c8\uc774\ud06c grant/\ud55c\ub3c4/\ud0c0 activity \uc774\ubca4\ud2b8\uc5d0\uc11c \ub204\ucd9c\u00b7\uc911\ubcf5 \ud6a8\uacfc\u00b7\ud5c8\uc704 \uc131\uacf5 0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "docs/plan/voice-conversation-epics.md와 해당 이슈의 기존 구현/기록을 대조하고 미충족 VO 행 하나를 첫 PR/검증 대상으로 선택한다.",
+      "design_delta": "발화·텍스트·도구 작업·오디오 재생·비용 출처를 같은 activity에 연결하되 각각의 상태와 승인 주체를 구분한다.",
+      "positive_control": "해당 VO-T 정상 경로와 기존 텍스트 경로가 같은 작업/결과로 이어짐.",
+      "negative_control": "중복/역순/중단/권한 철회/늦은 마이크 grant/한도/타 activity 이벤트에서 누출·중복 효과·허위 성공 0.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src",
         "extensions/hypeproof-chat/webview-ui/src",
@@ -1539,7 +1539,7 @@
     },
     {
       "id": "voice-898",
-      "title": "\uc74c\uc131 V1 \uc794\uc5ec \uacc4\uc57d\uacfc \uc778\uc218",
+      "title": "음성 V1 잔여 계약과 인수",
       "issue": 898,
       "kind": "implementation",
       "feature_ids": [
@@ -1566,11 +1566,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "docs/plan/voice-conversation-epics.md\uc640 \ud574\ub2f9 \uc774\uc288\uc758 \uae30\uc874 \uad6c\ud604/\uae30\ub85d\uc744 \ub300\uc870\ud558\uace0 \ubbf8\ucda9\uc871 VO \ud589 \ud558\ub098\ub97c \uccab PR/\uac80\uc99d \ub300\uc0c1\uc73c\ub85c \uc120\ud0dd\ud55c\ub2e4.",
-      "design_delta": "\ubc1c\ud654\u00b7\ud14d\uc2a4\ud2b8\u00b7\ub3c4\uad6c \uc791\uc5c5\u00b7\uc624\ub514\uc624 \uc7ac\uc0dd\u00b7\ube44\uc6a9 \ucd9c\ucc98\ub97c \uac19\uc740 activity\uc5d0 \uc5f0\uacb0\ud558\ub418 \uac01\uac01\uc758 \uc0c1\ud0dc\uc640 \uc2b9\uc778 \uc8fc\uccb4\ub97c \uad6c\ubd84\ud55c\ub2e4.",
-      "positive_control": "\ud574\ub2f9 VO-T \uc815\uc0c1 \uacbd\ub85c\uc640 \uae30\uc874 \ud14d\uc2a4\ud2b8 \uacbd\ub85c\uac00 \uac19\uc740 \uc791\uc5c5/\uacb0\uacfc\ub85c \uc774\uc5b4\uc9d0.",
-      "negative_control": "\uc911\ubcf5/\uc5ed\uc21c/\uc911\ub2e8/\uad8c\ud55c \ucca0\ud68c/\ub2a6\uc740 \ub9c8\uc774\ud06c grant/\ud55c\ub3c4/\ud0c0 activity \uc774\ubca4\ud2b8\uc5d0\uc11c \ub204\ucd9c\u00b7\uc911\ubcf5 \ud6a8\uacfc\u00b7\ud5c8\uc704 \uc131\uacf5 0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "docs/plan/voice-conversation-epics.md와 해당 이슈의 기존 구현/기록을 대조하고 미충족 VO 행 하나를 첫 PR/검증 대상으로 선택한다.",
+      "design_delta": "발화·텍스트·도구 작업·오디오 재생·비용 출처를 같은 activity에 연결하되 각각의 상태와 승인 주체를 구분한다.",
+      "positive_control": "해당 VO-T 정상 경로와 기존 텍스트 경로가 같은 작업/결과로 이어짐.",
+      "negative_control": "중복/역순/중단/권한 철회/늦은 마이크 grant/한도/타 activity 이벤트에서 누출·중복 효과·허위 성공 0.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src",
         "extensions/hypeproof-chat/webview-ui/src",
@@ -1580,7 +1580,7 @@
     },
     {
       "id": "voice-899",
-      "title": "\uc74c\uc131 V2 \uc794\uc5ec \uacc4\uc57d\uacfc \uc778\uc218",
+      "title": "음성 V2 잔여 계약과 인수",
       "issue": 899,
       "kind": "implementation",
       "feature_ids": [
@@ -1600,11 +1600,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "docs/plan/voice-conversation-epics.md\uc640 \ud574\ub2f9 \uc774\uc288\uc758 \uae30\uc874 \uad6c\ud604/\uae30\ub85d\uc744 \ub300\uc870\ud558\uace0 \ubbf8\ucda9\uc871 VO \ud589 \ud558\ub098\ub97c \uccab PR/\uac80\uc99d \ub300\uc0c1\uc73c\ub85c \uc120\ud0dd\ud55c\ub2e4.",
-      "design_delta": "\ubc1c\ud654\u00b7\ud14d\uc2a4\ud2b8\u00b7\ub3c4\uad6c \uc791\uc5c5\u00b7\uc624\ub514\uc624 \uc7ac\uc0dd\u00b7\ube44\uc6a9 \ucd9c\ucc98\ub97c \uac19\uc740 activity\uc5d0 \uc5f0\uacb0\ud558\ub418 \uac01\uac01\uc758 \uc0c1\ud0dc\uc640 \uc2b9\uc778 \uc8fc\uccb4\ub97c \uad6c\ubd84\ud55c\ub2e4.",
-      "positive_control": "\ud574\ub2f9 VO-T \uc815\uc0c1 \uacbd\ub85c\uc640 \uae30\uc874 \ud14d\uc2a4\ud2b8 \uacbd\ub85c\uac00 \uac19\uc740 \uc791\uc5c5/\uacb0\uacfc\ub85c \uc774\uc5b4\uc9d0.",
-      "negative_control": "\uc911\ubcf5/\uc5ed\uc21c/\uc911\ub2e8/\uad8c\ud55c \ucca0\ud68c/\ub2a6\uc740 \ub9c8\uc774\ud06c grant/\ud55c\ub3c4/\ud0c0 activity \uc774\ubca4\ud2b8\uc5d0\uc11c \ub204\ucd9c\u00b7\uc911\ubcf5 \ud6a8\uacfc\u00b7\ud5c8\uc704 \uc131\uacf5 0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "docs/plan/voice-conversation-epics.md와 해당 이슈의 기존 구현/기록을 대조하고 미충족 VO 행 하나를 첫 PR/검증 대상으로 선택한다.",
+      "design_delta": "발화·텍스트·도구 작업·오디오 재생·비용 출처를 같은 activity에 연결하되 각각의 상태와 승인 주체를 구분한다.",
+      "positive_control": "해당 VO-T 정상 경로와 기존 텍스트 경로가 같은 작업/결과로 이어짐.",
+      "negative_control": "중복/역순/중단/권한 철회/늦은 마이크 grant/한도/타 activity 이벤트에서 누출·중복 효과·허위 성공 0.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src",
         "extensions/hypeproof-chat/webview-ui/src",
@@ -1614,7 +1614,7 @@
     },
     {
       "id": "voice-900",
-      "title": "\uc74c\uc131 V3 \uc794\uc5ec \uacc4\uc57d\uacfc \uc778\uc218",
+      "title": "음성 V3 잔여 계약과 인수",
       "issue": 900,
       "kind": "implementation",
       "feature_ids": [
@@ -1634,11 +1634,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "docs/plan/voice-conversation-epics.md\uc640 \ud574\ub2f9 \uc774\uc288\uc758 \uae30\uc874 \uad6c\ud604/\uae30\ub85d\uc744 \ub300\uc870\ud558\uace0 \ubbf8\ucda9\uc871 VO \ud589 \ud558\ub098\ub97c \uccab PR/\uac80\uc99d \ub300\uc0c1\uc73c\ub85c \uc120\ud0dd\ud55c\ub2e4.",
-      "design_delta": "\ubc1c\ud654\u00b7\ud14d\uc2a4\ud2b8\u00b7\ub3c4\uad6c \uc791\uc5c5\u00b7\uc624\ub514\uc624 \uc7ac\uc0dd\u00b7\ube44\uc6a9 \ucd9c\ucc98\ub97c \uac19\uc740 activity\uc5d0 \uc5f0\uacb0\ud558\ub418 \uac01\uac01\uc758 \uc0c1\ud0dc\uc640 \uc2b9\uc778 \uc8fc\uccb4\ub97c \uad6c\ubd84\ud55c\ub2e4.",
-      "positive_control": "\ud574\ub2f9 VO-T \uc815\uc0c1 \uacbd\ub85c\uc640 \uae30\uc874 \ud14d\uc2a4\ud2b8 \uacbd\ub85c\uac00 \uac19\uc740 \uc791\uc5c5/\uacb0\uacfc\ub85c \uc774\uc5b4\uc9d0.",
-      "negative_control": "\uc911\ubcf5/\uc5ed\uc21c/\uc911\ub2e8/\uad8c\ud55c \ucca0\ud68c/\ub2a6\uc740 \ub9c8\uc774\ud06c grant/\ud55c\ub3c4/\ud0c0 activity \uc774\ubca4\ud2b8\uc5d0\uc11c \ub204\ucd9c\u00b7\uc911\ubcf5 \ud6a8\uacfc\u00b7\ud5c8\uc704 \uc131\uacf5 0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "docs/plan/voice-conversation-epics.md와 해당 이슈의 기존 구현/기록을 대조하고 미충족 VO 행 하나를 첫 PR/검증 대상으로 선택한다.",
+      "design_delta": "발화·텍스트·도구 작업·오디오 재생·비용 출처를 같은 activity에 연결하되 각각의 상태와 승인 주체를 구분한다.",
+      "positive_control": "해당 VO-T 정상 경로와 기존 텍스트 경로가 같은 작업/결과로 이어짐.",
+      "negative_control": "중복/역순/중단/권한 철회/늦은 마이크 grant/한도/타 activity 이벤트에서 누출·중복 효과·허위 성공 0.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src",
         "extensions/hypeproof-chat/webview-ui/src",
@@ -1648,7 +1648,7 @@
     },
     {
       "id": "voice-901",
-      "title": "\uc74c\uc131 V4 \uc794\uc5ec \uacc4\uc57d\uacfc \uc778\uc218",
+      "title": "음성 V4 잔여 계약과 인수",
       "issue": 901,
       "kind": "implementation",
       "feature_ids": [
@@ -1668,11 +1668,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "docs/plan/voice-conversation-epics.md\uc640 \ud574\ub2f9 \uc774\uc288\uc758 \uae30\uc874 \uad6c\ud604/\uae30\ub85d\uc744 \ub300\uc870\ud558\uace0 \ubbf8\ucda9\uc871 VO \ud589 \ud558\ub098\ub97c \uccab PR/\uac80\uc99d \ub300\uc0c1\uc73c\ub85c \uc120\ud0dd\ud55c\ub2e4.",
-      "design_delta": "\ubc1c\ud654\u00b7\ud14d\uc2a4\ud2b8\u00b7\ub3c4\uad6c \uc791\uc5c5\u00b7\uc624\ub514\uc624 \uc7ac\uc0dd\u00b7\ube44\uc6a9 \ucd9c\ucc98\ub97c \uac19\uc740 activity\uc5d0 \uc5f0\uacb0\ud558\ub418 \uac01\uac01\uc758 \uc0c1\ud0dc\uc640 \uc2b9\uc778 \uc8fc\uccb4\ub97c \uad6c\ubd84\ud55c\ub2e4.",
-      "positive_control": "\ud574\ub2f9 VO-T \uc815\uc0c1 \uacbd\ub85c\uc640 \uae30\uc874 \ud14d\uc2a4\ud2b8 \uacbd\ub85c\uac00 \uac19\uc740 \uc791\uc5c5/\uacb0\uacfc\ub85c \uc774\uc5b4\uc9d0.",
-      "negative_control": "\uc911\ubcf5/\uc5ed\uc21c/\uc911\ub2e8/\uad8c\ud55c \ucca0\ud68c/\ub2a6\uc740 \ub9c8\uc774\ud06c grant/\ud55c\ub3c4/\ud0c0 activity \uc774\ubca4\ud2b8\uc5d0\uc11c \ub204\ucd9c\u00b7\uc911\ubcf5 \ud6a8\uacfc\u00b7\ud5c8\uc704 \uc131\uacf5 0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "docs/plan/voice-conversation-epics.md와 해당 이슈의 기존 구현/기록을 대조하고 미충족 VO 행 하나를 첫 PR/검증 대상으로 선택한다.",
+      "design_delta": "발화·텍스트·도구 작업·오디오 재생·비용 출처를 같은 activity에 연결하되 각각의 상태와 승인 주체를 구분한다.",
+      "positive_control": "해당 VO-T 정상 경로와 기존 텍스트 경로가 같은 작업/결과로 이어짐.",
+      "negative_control": "중복/역순/중단/권한 철회/늦은 마이크 grant/한도/타 activity 이벤트에서 누출·중복 효과·허위 성공 0.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src",
         "extensions/hypeproof-chat/webview-ui/src",
@@ -1682,7 +1682,7 @@
     },
     {
       "id": "voice-902",
-      "title": "\uc74c\uc131 V5 \uc794\uc5ec \uacc4\uc57d\uacfc \uc778\uc218",
+      "title": "음성 V5 잔여 계약과 인수",
       "issue": 902,
       "kind": "validation",
       "feature_ids": [
@@ -1702,11 +1702,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "docs/plan/voice-conversation-epics.md\uc640 \ud574\ub2f9 \uc774\uc288\uc758 \uae30\uc874 \uad6c\ud604/\uae30\ub85d\uc744 \ub300\uc870\ud558\uace0 \ubbf8\ucda9\uc871 VO \ud589 \ud558\ub098\ub97c \uccab PR/\uac80\uc99d \ub300\uc0c1\uc73c\ub85c \uc120\ud0dd\ud55c\ub2e4.",
-      "design_delta": "\ubc1c\ud654\u00b7\ud14d\uc2a4\ud2b8\u00b7\ub3c4\uad6c \uc791\uc5c5\u00b7\uc624\ub514\uc624 \uc7ac\uc0dd\u00b7\ube44\uc6a9 \ucd9c\ucc98\ub97c \uac19\uc740 activity\uc5d0 \uc5f0\uacb0\ud558\ub418 \uac01\uac01\uc758 \uc0c1\ud0dc\uc640 \uc2b9\uc778 \uc8fc\uccb4\ub97c \uad6c\ubd84\ud55c\ub2e4.",
-      "positive_control": "\ud574\ub2f9 VO-T \uc815\uc0c1 \uacbd\ub85c\uc640 \uae30\uc874 \ud14d\uc2a4\ud2b8 \uacbd\ub85c\uac00 \uac19\uc740 \uc791\uc5c5/\uacb0\uacfc\ub85c \uc774\uc5b4\uc9d0.",
-      "negative_control": "\uc911\ubcf5/\uc5ed\uc21c/\uc911\ub2e8/\uad8c\ud55c \ucca0\ud68c/\ub2a6\uc740 \ub9c8\uc774\ud06c grant/\ud55c\ub3c4/\ud0c0 activity \uc774\ubca4\ud2b8\uc5d0\uc11c \ub204\ucd9c\u00b7\uc911\ubcf5 \ud6a8\uacfc\u00b7\ud5c8\uc704 \uc131\uacf5 0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "docs/plan/voice-conversation-epics.md와 해당 이슈의 기존 구현/기록을 대조하고 미충족 VO 행 하나를 첫 PR/검증 대상으로 선택한다.",
+      "design_delta": "발화·텍스트·도구 작업·오디오 재생·비용 출처를 같은 activity에 연결하되 각각의 상태와 승인 주체를 구분한다.",
+      "positive_control": "해당 VO-T 정상 경로와 기존 텍스트 경로가 같은 작업/결과로 이어짐.",
+      "negative_control": "중복/역순/중단/권한 철회/늦은 마이크 grant/한도/타 activity 이벤트에서 누출·중복 효과·허위 성공 0.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src",
         "extensions/hypeproof-chat/webview-ui/src",
@@ -1716,7 +1716,7 @@
     },
     {
       "id": "voice-903",
-      "title": "\uc74c\uc131 V6 \uc794\uc5ec \uacc4\uc57d\uacfc \uc778\uc218",
+      "title": "음성 V6 잔여 계약과 인수",
       "issue": 903,
       "kind": "research",
       "feature_ids": [
@@ -1738,11 +1738,11 @@
         "voice-902",
         "voice-901"
       ],
-      "next_action": "docs/plan/voice-conversation-epics.md\uc640 \ud574\ub2f9 \uc774\uc288\uc758 \uae30\uc874 \uad6c\ud604/\uae30\ub85d\uc744 \ub300\uc870\ud558\uace0 \ubbf8\ucda9\uc871 VO \ud589 \ud558\ub098\ub97c \uccab PR/\uac80\uc99d \ub300\uc0c1\uc73c\ub85c \uc120\ud0dd\ud55c\ub2e4.",
-      "design_delta": "\ubc1c\ud654\u00b7\ud14d\uc2a4\ud2b8\u00b7\ub3c4\uad6c \uc791\uc5c5\u00b7\uc624\ub514\uc624 \uc7ac\uc0dd\u00b7\ube44\uc6a9 \ucd9c\ucc98\ub97c \uac19\uc740 activity\uc5d0 \uc5f0\uacb0\ud558\ub418 \uac01\uac01\uc758 \uc0c1\ud0dc\uc640 \uc2b9\uc778 \uc8fc\uccb4\ub97c \uad6c\ubd84\ud55c\ub2e4.",
-      "positive_control": "\ud574\ub2f9 VO-T \uc815\uc0c1 \uacbd\ub85c\uc640 \uae30\uc874 \ud14d\uc2a4\ud2b8 \uacbd\ub85c\uac00 \uac19\uc740 \uc791\uc5c5/\uacb0\uacfc\ub85c \uc774\uc5b4\uc9d0.",
-      "negative_control": "\uc911\ubcf5/\uc5ed\uc21c/\uc911\ub2e8/\uad8c\ud55c \ucca0\ud68c/\ub2a6\uc740 \ub9c8\uc774\ud06c grant/\ud55c\ub3c4/\ud0c0 activity \uc774\ubca4\ud2b8\uc5d0\uc11c \ub204\ucd9c\u00b7\uc911\ubcf5 \ud6a8\uacfc\u00b7\ud5c8\uc704 \uc131\uacf5 0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "docs/plan/voice-conversation-epics.md와 해당 이슈의 기존 구현/기록을 대조하고 미충족 VO 행 하나를 첫 PR/검증 대상으로 선택한다.",
+      "design_delta": "발화·텍스트·도구 작업·오디오 재생·비용 출처를 같은 activity에 연결하되 각각의 상태와 승인 주체를 구분한다.",
+      "positive_control": "해당 VO-T 정상 경로와 기존 텍스트 경로가 같은 작업/결과로 이어짐.",
+      "negative_control": "중복/역순/중단/권한 철회/늦은 마이크 grant/한도/타 activity 이벤트에서 누출·중복 효과·허위 성공 0.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src",
         "extensions/hypeproof-chat/webview-ui/src",
@@ -1750,12 +1750,12 @@
       ],
       "verification_inputs": [],
       "gate": {
-        "reason": "\uc0ac\ub78c \ud30c\uc77c\ub7ff\uacfc \ud6c4\uc18d \uc7ac\uc0ac\uc6a9 \uad00\uce21\uc740 V5 \ub300\uc0c1 \ud658\uacbd \uc778\uc218\u00b7V4 \ube44\uc6a9 \ud1b5\uc81c\u00b7\ucc38\uc5ec \uc815\ucc45 \uc900\ube44 \ub4a4 \uc9c4\ud589."
+        "reason": "사람 파일럿과 후속 재사용 관측은 V5 대상 환경 인수·V4 비용 통제·참여 정책 준비 뒤 진행."
       }
     },
     {
       "id": "course-create",
-      "title": "\uae30\uc874 \uace0\uac1d \ud504\ub85c\ud544 \uc5c6\ub294 \uc0c8 \uac15\uc758 \uac1c\uc124",
+      "title": "기존 고객 프로필 없는 새 강의 개설",
       "issue": 1006,
       "kind": "implementation",
       "feature_ids": [
@@ -1778,11 +1778,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "IC-01/02/03\uc758 \ucd08\uc548\uacfc \uba85\uc2dc\uc801 \uac1c\uc124 \uacc4\uc57d\ubd80\ud130 \uad6c\ud604\ud558\uace0 #1005\uc640 \uacb9\uce58\ub294 \ubcc0\uacbd\uc744 \uba3c\uc800 \ub300\uc870\ud55c\ub2e4.",
-      "design_delta": "\ubd88\ubcc0 \uac15\uc758\uc640 \uc2e4\ud589 \ud15c\ud50c\ub9bf\u00b7\uae30\uad00 \ubc94\uc704\u00b7\uac1c\uc124 operation\uc744 \ubd84\ub9ac. \uc2b9\uc778\ub41c \uae30\uc874 \uc778\uc99d/\uba85\ub2e8/\uc11c\uba85\uc744 \uc7ac\uc0ac\uc6a9.",
-      "positive_control": "\ud569\uc131 \uc0c8 \uac15\uc758 \uc0dd\uc131\u00b7\uc911\ubcf5 \uac1c\uc124 \uc7ac\uc2dc\ub3c4\u00b7\ud559\uc0dd \ucf54\ub4dc \uc9c4\uc785.",
-      "negative_control": "\ub2e4\ub978 \uae30\uad00 \uc124\uc815 \uc794\uc874\u00b7\uc815\ucc45 \ud655\ub300\u00b7\uae30\uc874 \ucf54\ub4dc \ubcc0\uacbd\u00b7\uc911\ubcf5 session \uc0dd\uc131 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "IC-01/02/03의 초안과 명시적 개설 계약부터 구현하고 #1005와 겹치는 변경을 먼저 대조한다.",
+      "design_delta": "불변 강의와 실행 템플릿·기관 범위·개설 operation을 분리. 승인된 기존 인증/명단/서명을 재사용.",
+      "positive_control": "합성 새 강의 생성·중복 개설 재시도·학생 코드 진입.",
+      "negative_control": "다른 기관 설정 잔존·정책 확대·기존 코드 변경·중복 session 생성 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "chalk/src",
         "worker/src"
@@ -1791,7 +1791,7 @@
     },
     {
       "id": "course-generation",
-      "title": "\uac80\uc218 \uac00\ub2a5\ud55c \uc218\uc5c5 \ucd08\uc548 \uc0dd\uc131\uacfc \uc7ac\uc0ac\uc6a9",
+      "title": "검수 가능한 수업 초안 생성과 재사용",
       "issue": 1015,
       "kind": "implementation",
       "feature_ids": [
@@ -1809,11 +1809,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uae30\uc874 Module authoring\uc5d0\uc11c \uc608\uc81c/\uacfc\uc81c/\uac80\uc218 \uae30\uc900\uc744 \uac16\ucd98 \uc0dd\uc131 \ucd08\uc548 \ud55c \uc885\ub958\ub97c \uc800\uc7a5\u00b7\ud3b8\uc9d1\u00b7\ud655\uc815\ud558\ub294 \ubc94\uc704\ub85c \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "\uc0dd\uc131\uc740 \ucd08\uc548\uc774\uba70 \uc0ac\ub78c\uc774 \ud655\uc815. \ud559\uc0dd\ubcc4 \uc608\uc81c \uc0ac\ubcf8\uacfc \ub2e4\uc74c \uae30\uc218 \ubcf5\uc81c\uc5d0\uc11c \ud559\uc0dd \uae30\ub85d/\uc790\uaca9 \uc81c\uc678.",
-      "positive_control": "\ub450 \ud559\uc0dd \ub3c5\ub9bd \uc0ac\ubcf8, \uae30\ubcf8/\ud655\uc7a5 \uacfc\uc81c, \ub2e4\uc74c \uae30\uc218 \uc7ac\ud3b8\uc9d1.",
-      "negative_control": "\uc0dd\uc131 \uc9c1\ud6c4 \uc790\ub3d9 \uac1c\uc124\u00b7\uc6d0\ubcf8 \ubcc0\uacbd\u00b7\ub2e4\ub978 \ud559\uc0dd \uc790\ub8cc \ubcf5\uc81c\u00b7\ud544\uc218 \uae30\uc900 \uc5c6\ub294 \ud655\uc815 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "기존 Module authoring에서 예제/과제/검수 기준을 갖춘 생성 초안 한 종류를 저장·편집·확정하는 범위로 구현한다.",
+      "design_delta": "생성은 초안이며 사람이 확정. 학생별 예제 사본과 다음 기수 복제에서 학생 기록/자격 제외.",
+      "positive_control": "두 학생 독립 사본, 기본/확장 과제, 다음 기수 재편집.",
+      "negative_control": "생성 직후 자동 개설·원본 변경·다른 학생 자료 복제·필수 기준 없는 확정 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "chalk/src",
         "worker/src"
@@ -1822,7 +1822,7 @@
     },
     {
       "id": "support-request",
-      "title": "\uac15\uc0ac\uc758 \uae30\ub2a5 \uc694\uccad\uacfc \uc2e4\uc81c \ud574\uacb0 \ud655\uc778",
+      "title": "강사의 기능 요청과 실제 해결 확인",
       "issue": 1016,
       "kind": "implementation",
       "feature_ids": [
@@ -1840,11 +1840,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uae30\uc874 \uc9c0\uc6d0 \uc694\uccad \uc800\uc7a5 \uacbd\ub85c\ub97c \uc870\uc0ac\ud558\uace0 \uc218\uc5c5/\ubaa9\uc801/\ucc38\uace0/\ud544\uc694 \ub0a0\uc9dc/\uc0c1\ud0dc/\ub2e4\uc74c \uc870\uce58\ub97c \uc5f0\uacb0\ud55c\ub2e4.",
-      "design_delta": "\uae30\uc874 \uc548\ub0b4\u00b7\uc120\ud0dd \ud655\uc7a5\u00b7\uae30\ubcf8 \uac1c\ubc1c \ubd84\ub958\uc640 \uc774\uc720\ub97c \ubcf4\uc874. \ucc98\ub9ac \uc644\ub8cc\uc640 \uac15\uc0ac\uc758 \uc2e4\uc81c \ud574\uacb0 \ud655\uc778\uc744 \uad6c\ubd84.",
-      "positive_control": "\ubcf8\uc778 \uc694\uccad \uc7ac\uc5f4\uae30\u00b7\uc9c4\ud589 \uc0c1\ud0dc\u00b7\uba85\uc2dc\uc801\uc778 \ubbf8\uc815 \uc0ac\uc720 \ud45c\uc2dc.",
-      "negative_control": "\ub2e4\ub978 \uc218\uc5c5 \uc694\uccad \uc6d0\ubb38 \uc811\uadfc\u00b7\uc608\uc0c1 \ub0a0\uc9dc \ucd94\uce21\u00b7PR \ubcd1\ud569\ub9cc\uc73c\ub85c \ud574\uacb0 \ud655\uc778 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "기존 지원 요청 저장 경로를 조사하고 수업/목적/참고/필요 날짜/상태/다음 조치를 연결한다.",
+      "design_delta": "기존 안내·선택 확장·기본 개발 분류와 이유를 보존. 처리 완료와 강사의 실제 해결 확인을 구분.",
+      "positive_control": "본인 요청 재열기·진행 상태·명시적인 미정 사유 표시.",
+      "negative_control": "다른 수업 요청 원문 접근·예상 날짜 추측·PR 병합만으로 해결 확인 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "chalk/src",
         "worker/src"
@@ -1853,7 +1853,7 @@
     },
     {
       "id": "extension-admission",
-      "title": "\ubbf8\ub4f1\ub85d \ub3c4\uad6c\uc758 \uaca9\ub9ac \uc2dc\ud5d8\uacfc \uc218\uc5c5 \ud3b8\uc785",
+      "title": "미등록 도구의 격리 시험과 수업 편입",
       "issue": 1017,
       "kind": "design",
       "feature_ids": [
@@ -1869,11 +1869,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ud604\uc7ac \uce74\ud0c8\ub85c\uadf8 \uacbd\uacc4\ub97c \uc7ac\uc0ac\uc6a9\ud574 \ud6c4\ubcf4 \ub3c4\uad6c\uc758 \uc124\uce58/\uc2e4\ud589/\uc2e4\ud328/\uc81c\uac70 \uc99d\uac70\uc640 \ud3b8\uc785 \ud310\ub2e8 \uacc4\uc57d\uc744 \uc791\uc131\ud55c\ub2e4.",
-      "design_delta": "\uaca9\ub9ac \uc2dc\ud5d8\u2192\uac80\ud1a0\u2192\ubd88\ubcc0 \uc218\uc5c5 \ubc84\uc804\uc758 \uba85\uc2dc\uc801 \ud3b8\uc785. \uc2e4\ud328 \uc2dc \uae30\uc874 \uc218\uc5c5 \uc601\ud5a5 \uc5c6\uc74c.",
-      "positive_control": "\uac80\uc99d\ub41c \ud6c4\ubcf4\ub9cc \ud574\ub2f9 \uad8c\ud55c \ubc94\uc704\uc5d0\uc11c \uc5f0\uacb0 \uc2dc\ud5d8 \uc131\uacf5.",
-      "negative_control": "\uc784\uc758 MCP/\ud50c\ub7ec\uadf8\uc778 \uc790\ub3d9 \uc124\uce58\u00b7\uc218\uc5c5 \ubcf5\uc81c \uc790\uaca9 \ud3ec\ud568\u00b7\uc2e4\ud328 \ub4a4 \uad8c\ud55c \ud655\ub300 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "현재 카탈로그 경계를 재사용해 후보 도구의 설치/실행/실패/제거 증거와 편입 판단 계약을 작성한다.",
+      "design_delta": "격리 시험→검토→불변 수업 버전의 명시적 편입. 실패 시 기존 수업 영향 없음.",
+      "positive_control": "검증된 후보만 해당 권한 범위에서 연결 시험 성공.",
+      "negative_control": "임의 MCP/플러그인 자동 설치·수업 복제 자격 포함·실패 뒤 권한 확대 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/adr/0007-lesson-feature-binding.md",
         "worker/src"
@@ -1882,7 +1882,7 @@
     },
     {
       "id": "publish-recovery",
-      "title": "\uacf5\uac1c \ubc84\uc804 \ubcf5\uad6c\uc640 \uc6f9\uc571 \uc2e4\ud589 \ubc94\uc704",
+      "title": "공개 버전 복구와 웹앱 실행 범위",
       "issue": 1018,
       "kind": "design",
       "feature_ids": [
@@ -1899,11 +1899,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ud604\uc7ac publish \uacbd\ub85c\uc640 #718\uc758 \ud658\uacbd \ub300\uae30\ub97c \uc77d\uace0 \uc815\uc801 \uacf5\uac1c \ubcf5\uad6c\uc640 \uc758\uc874\uc131 \uc788\ub294 \uc6f9\uc571 \uc9c0\uc6d0 \ubc94\uc704\ub97c \ubcc4\ub3c4 \uacc4\uc57d\uc73c\ub85c \ubd84\ub9ac\ud55c\ub2e4.",
-      "design_delta": "\ub9b4\ub9ac\uc2a4 artifact/\uc6d0\uaca9 revision\u00b7URL \ud655\uc778\uc744 \ub85c\uceec \ud30c\uc77c \ubcf5\uad6c\uc640 \uad6c\ubd84. \uc6f9\uc571\uc740 \uac80\uc99d\ud55c \ud15c\ud50c\ub9bf\ub9cc admission.",
-      "positive_control": "\ud1b5\uc81c\ub41c \ub300\uc0c1\uc758 \uacf5\uac1c \ubc84\uc804/\uc790\uc0b0\uc744 \uc7ac\uc811\uc18d \ud655\uc778, \uc124\uce58/\ube4c\ub4dc \uc2e4\ud328\ub294 \uc791\uc5c5 \ubcf4\uc874.",
-      "negative_control": "\ubbf8\uc2b9\uc778 production \ubc30\ud3ec\u00b7URL \uc874\uc7ac\ub9cc\uc73c\ub85c \ud604\uc7ac \ubc84\uc804 \uc131\uacf5\u00b7\uc678\ubd80 DB\uae4c\uc9c0 \ubcf5\uad6c \uc8fc\uc7a5 \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "현재 publish 경로와 #718의 환경 대기를 읽고 정적 공개 복구와 의존성 있는 웹앱 지원 범위를 별도 계약으로 분리한다.",
+      "design_delta": "릴리스 artifact/원격 revision·URL 확인을 로컬 파일 복구와 구분. 웹앱은 검증한 템플릿만 admission.",
+      "positive_control": "통제된 대상의 공개 버전/자산을 재접속 확인, 설치/빌드 실패는 작업 보존.",
+      "negative_control": "미승인 production 배포·URL 존재만으로 현재 버전 성공·외부 DB까지 복구 주장 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing/chalk-authoring.md",
         "extensions/hypeproof-chat/src"
@@ -1912,7 +1912,7 @@
     },
     {
       "id": "acceptance-unified-studio-experience",
-      "title": "unified-studio-experience \uae30\uc874 \uad6c\ud604\uc758 \ud589\ubcc4 \uc778\uc218 \ub300\uc870",
+      "title": "unified-studio-experience 기존 구현의 행별 인수 대조",
       "issue": 919,
       "kind": "validation",
       "feature_ids": [
@@ -1945,11 +1945,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc5f0\uacb0\ub41c \uac80\uc99d \uae30\ub85d\uc758 SHA/\ud658\uacbd/\uac1c\ubcc4 REQ\ub97c \ud604\uc7ac \uad6c\ud604\uacfc \ub300\uc870\ud55c\ub2e4. \uccab \ubbf8\ucda9\uc871 \ud589 \ud558\ub098\ub97c \uc2e4\ud589\ud558\uace0 \uc81c\ud488 \uacb0\ud568\uacfc \uacc4\uce21 \uacb0\ud568\uc744 \uad6c\ubd84\ud574 \uc218\uc815\ud55c\ub2e4.",
-      "design_delta": "\uc774\ubbf8 \uad6c\ud604\ub41c \uc800\uc7a5\uc18c\u00b7API\u00b7UI\ub294 \uc7ac\uc0ac\uc6a9\ud55c\ub2e4. \ucf54\ub4dc/\ud569\uc131/\uc2e4\uae30/\uc6b4\uc601/\uc0ac\ub78c \uacb0\uacfc\ub97c \ubcc4\ub3c4 \uc5f4\ub85c \uae30\ub85d\ud558\uace0 \ud558\uc704 \uc870\uac74\uc744 \ud3ec\uad04 \uc644\ub8cc \ucc98\ub9ac\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc5f0\uacb0\ub41c \ud14c\uc2a4\ud2b8 \uacc4\ud68d\uc758 \uc815\uc0c1 \uc785\ub825\uc5d0\uc11c \uae30\ub300 \uc0c1\ud0dc/\ud30c\uc77c/API \uacb0\uacfc \uc77c\uce58.",
-      "negative_control": "\ud574\ub2f9 \uacc4\ud68d\uc758 \ud0c0 \uc218\uc5c5/\ub9cc\ub8cc/\uc911\ubcf5/\uc624\ud504\ub77c\uc778/\uae34 \ub0b4\uc6a9/\ub204\ub77d \uc99d\uac70 \ub300\uc870. \ub2eb\ud78c PR\u00b7\ud14c\uc2a4\ud2b8 \ud30c\uc77c\ub9cc\uc73c\ub85c \uc804\uccb4 \uc694\uad6c\uc0ac\ud56d PASS \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "연결된 검증 기록의 SHA/환경/개별 REQ를 현재 구현과 대조한다. 첫 미충족 행 하나를 실행하고 제품 결함과 계측 결함을 구분해 수정한다.",
+      "design_delta": "이미 구현된 저장소·API·UI는 재사용한다. 코드/합성/실기/운영/사람 결과를 별도 열로 기록하고 하위 조건을 포괄 완료 처리하지 않는다.",
+      "positive_control": "연결된 테스트 계획의 정상 입력에서 기대 상태/파일/API 결과 일치.",
+      "negative_control": "해당 계획의 타 수업/만료/중복/오프라인/긴 내용/누락 증거 대조. 닫힌 PR·테스트 파일만으로 전체 요구사항 PASS 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing",
         "extensions/hypeproof-chat/src",
@@ -1960,7 +1960,7 @@
     },
     {
       "id": "acceptance-studio-native-trial",
-      "title": "studio-native-trial \uae30\uc874 \uad6c\ud604\uc758 \ud589\ubcc4 \uc778\uc218 \ub300\uc870",
+      "title": "studio-native-trial 기존 구현의 행별 인수 대조",
       "issue": 758,
       "kind": "validation",
       "feature_ids": [
@@ -1989,11 +1989,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc5f0\uacb0\ub41c \uac80\uc99d \uae30\ub85d\uc758 SHA/\ud658\uacbd/\uac1c\ubcc4 REQ\ub97c \ud604\uc7ac \uad6c\ud604\uacfc \ub300\uc870\ud55c\ub2e4. \uccab \ubbf8\ucda9\uc871 \ud589 \ud558\ub098\ub97c \uc2e4\ud589\ud558\uace0 \uc81c\ud488 \uacb0\ud568\uacfc \uacc4\uce21 \uacb0\ud568\uc744 \uad6c\ubd84\ud574 \uc218\uc815\ud55c\ub2e4.",
-      "design_delta": "\uc774\ubbf8 \uad6c\ud604\ub41c \uc800\uc7a5\uc18c\u00b7API\u00b7UI\ub294 \uc7ac\uc0ac\uc6a9\ud55c\ub2e4. \ucf54\ub4dc/\ud569\uc131/\uc2e4\uae30/\uc6b4\uc601/\uc0ac\ub78c \uacb0\uacfc\ub97c \ubcc4\ub3c4 \uc5f4\ub85c \uae30\ub85d\ud558\uace0 \ud558\uc704 \uc870\uac74\uc744 \ud3ec\uad04 \uc644\ub8cc \ucc98\ub9ac\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc5f0\uacb0\ub41c \ud14c\uc2a4\ud2b8 \uacc4\ud68d\uc758 \uc815\uc0c1 \uc785\ub825\uc5d0\uc11c \uae30\ub300 \uc0c1\ud0dc/\ud30c\uc77c/API \uacb0\uacfc \uc77c\uce58.",
-      "negative_control": "\ud574\ub2f9 \uacc4\ud68d\uc758 \ud0c0 \uc218\uc5c5/\ub9cc\ub8cc/\uc911\ubcf5/\uc624\ud504\ub77c\uc778/\uae34 \ub0b4\uc6a9/\ub204\ub77d \uc99d\uac70 \ub300\uc870. \ub2eb\ud78c PR\u00b7\ud14c\uc2a4\ud2b8 \ud30c\uc77c\ub9cc\uc73c\ub85c \uc804\uccb4 \uc694\uad6c\uc0ac\ud56d PASS \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "연결된 검증 기록의 SHA/환경/개별 REQ를 현재 구현과 대조한다. 첫 미충족 행 하나를 실행하고 제품 결함과 계측 결함을 구분해 수정한다.",
+      "design_delta": "이미 구현된 저장소·API·UI는 재사용한다. 코드/합성/실기/운영/사람 결과를 별도 열로 기록하고 하위 조건을 포괄 완료 처리하지 않는다.",
+      "positive_control": "연결된 테스트 계획의 정상 입력에서 기대 상태/파일/API 결과 일치.",
+      "negative_control": "해당 계획의 타 수업/만료/중복/오프라인/긴 내용/누락 증거 대조. 닫힌 PR·테스트 파일만으로 전체 요구사항 PASS 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing",
         "extensions/hypeproof-chat/src",
@@ -2004,7 +2004,7 @@
     },
     {
       "id": "acceptance-studio-native-trial-ux",
-      "title": "studio-native-trial-ux \uae30\uc874 \uad6c\ud604\uc758 \ud589\ubcc4 \uc778\uc218 \ub300\uc870",
+      "title": "studio-native-trial-ux 기존 구현의 행별 인수 대조",
       "issue": 848,
       "kind": "validation",
       "feature_ids": [
@@ -2084,11 +2084,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc5f0\uacb0\ub41c \uac80\uc99d \uae30\ub85d\uc758 SHA/\ud658\uacbd/\uac1c\ubcc4 REQ\ub97c \ud604\uc7ac \uad6c\ud604\uacfc \ub300\uc870\ud55c\ub2e4. \uccab \ubbf8\ucda9\uc871 \ud589 \ud558\ub098\ub97c \uc2e4\ud589\ud558\uace0 \uc81c\ud488 \uacb0\ud568\uacfc \uacc4\uce21 \uacb0\ud568\uc744 \uad6c\ubd84\ud574 \uc218\uc815\ud55c\ub2e4.",
-      "design_delta": "\uc774\ubbf8 \uad6c\ud604\ub41c \uc800\uc7a5\uc18c\u00b7API\u00b7UI\ub294 \uc7ac\uc0ac\uc6a9\ud55c\ub2e4. \ucf54\ub4dc/\ud569\uc131/\uc2e4\uae30/\uc6b4\uc601/\uc0ac\ub78c \uacb0\uacfc\ub97c \ubcc4\ub3c4 \uc5f4\ub85c \uae30\ub85d\ud558\uace0 \ud558\uc704 \uc870\uac74\uc744 \ud3ec\uad04 \uc644\ub8cc \ucc98\ub9ac\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc5f0\uacb0\ub41c \ud14c\uc2a4\ud2b8 \uacc4\ud68d\uc758 \uc815\uc0c1 \uc785\ub825\uc5d0\uc11c \uae30\ub300 \uc0c1\ud0dc/\ud30c\uc77c/API \uacb0\uacfc \uc77c\uce58.",
-      "negative_control": "\ud574\ub2f9 \uacc4\ud68d\uc758 \ud0c0 \uc218\uc5c5/\ub9cc\ub8cc/\uc911\ubcf5/\uc624\ud504\ub77c\uc778/\uae34 \ub0b4\uc6a9/\ub204\ub77d \uc99d\uac70 \ub300\uc870. \ub2eb\ud78c PR\u00b7\ud14c\uc2a4\ud2b8 \ud30c\uc77c\ub9cc\uc73c\ub85c \uc804\uccb4 \uc694\uad6c\uc0ac\ud56d PASS \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "연결된 검증 기록의 SHA/환경/개별 REQ를 현재 구현과 대조한다. 첫 미충족 행 하나를 실행하고 제품 결함과 계측 결함을 구분해 수정한다.",
+      "design_delta": "이미 구현된 저장소·API·UI는 재사용한다. 코드/합성/실기/운영/사람 결과를 별도 열로 기록하고 하위 조건을 포괄 완료 처리하지 않는다.",
+      "positive_control": "연결된 테스트 계획의 정상 입력에서 기대 상태/파일/API 결과 일치.",
+      "negative_control": "해당 계획의 타 수업/만료/중복/오프라인/긴 내용/누락 증거 대조. 닫힌 PR·테스트 파일만으로 전체 요구사항 PASS 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing",
         "extensions/hypeproof-chat/src",
@@ -2099,7 +2099,7 @@
     },
     {
       "id": "acceptance-model-access-usage",
-      "title": "model-access-usage \uae30\uc874 \uad6c\ud604\uc758 \ud589\ubcc4 \uc778\uc218 \ub300\uc870",
+      "title": "model-access-usage 기존 구현의 행별 인수 대조",
       "issue": 830,
       "kind": "validation",
       "feature_ids": [
@@ -2121,11 +2121,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc5f0\uacb0\ub41c \uac80\uc99d \uae30\ub85d\uc758 SHA/\ud658\uacbd/\uac1c\ubcc4 REQ\ub97c \ud604\uc7ac \uad6c\ud604\uacfc \ub300\uc870\ud55c\ub2e4. \uccab \ubbf8\ucda9\uc871 \ud589 \ud558\ub098\ub97c \uc2e4\ud589\ud558\uace0 \uc81c\ud488 \uacb0\ud568\uacfc \uacc4\uce21 \uacb0\ud568\uc744 \uad6c\ubd84\ud574 \uc218\uc815\ud55c\ub2e4.",
-      "design_delta": "\uc774\ubbf8 \uad6c\ud604\ub41c \uc800\uc7a5\uc18c\u00b7API\u00b7UI\ub294 \uc7ac\uc0ac\uc6a9\ud55c\ub2e4. \ucf54\ub4dc/\ud569\uc131/\uc2e4\uae30/\uc6b4\uc601/\uc0ac\ub78c \uacb0\uacfc\ub97c \ubcc4\ub3c4 \uc5f4\ub85c \uae30\ub85d\ud558\uace0 \ud558\uc704 \uc870\uac74\uc744 \ud3ec\uad04 \uc644\ub8cc \ucc98\ub9ac\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc5f0\uacb0\ub41c \ud14c\uc2a4\ud2b8 \uacc4\ud68d\uc758 \uc815\uc0c1 \uc785\ub825\uc5d0\uc11c \uae30\ub300 \uc0c1\ud0dc/\ud30c\uc77c/API \uacb0\uacfc \uc77c\uce58.",
-      "negative_control": "\ud574\ub2f9 \uacc4\ud68d\uc758 \ud0c0 \uc218\uc5c5/\ub9cc\ub8cc/\uc911\ubcf5/\uc624\ud504\ub77c\uc778/\uae34 \ub0b4\uc6a9/\ub204\ub77d \uc99d\uac70 \ub300\uc870. \ub2eb\ud78c PR\u00b7\ud14c\uc2a4\ud2b8 \ud30c\uc77c\ub9cc\uc73c\ub85c \uc804\uccb4 \uc694\uad6c\uc0ac\ud56d PASS \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "연결된 검증 기록의 SHA/환경/개별 REQ를 현재 구현과 대조한다. 첫 미충족 행 하나를 실행하고 제품 결함과 계측 결함을 구분해 수정한다.",
+      "design_delta": "이미 구현된 저장소·API·UI는 재사용한다. 코드/합성/실기/운영/사람 결과를 별도 열로 기록하고 하위 조건을 포괄 완료 처리하지 않는다.",
+      "positive_control": "연결된 테스트 계획의 정상 입력에서 기대 상태/파일/API 결과 일치.",
+      "negative_control": "해당 계획의 타 수업/만료/중복/오프라인/긴 내용/누락 증거 대조. 닫힌 PR·테스트 파일만으로 전체 요구사항 PASS 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing",
         "extensions/hypeproof-chat/src",
@@ -2136,7 +2136,7 @@
     },
     {
       "id": "acceptance-access-budget-settlement",
-      "title": "access-budget-settlement \uae30\uc874 \uad6c\ud604\uc758 \ud589\ubcc4 \uc778\uc218 \ub300\uc870",
+      "title": "access-budget-settlement 기존 구현의 행별 인수 대조",
       "issue": 857,
       "kind": "validation",
       "feature_ids": [
@@ -2168,11 +2168,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc5f0\uacb0\ub41c \uac80\uc99d \uae30\ub85d\uc758 SHA/\ud658\uacbd/\uac1c\ubcc4 REQ\ub97c \ud604\uc7ac \uad6c\ud604\uacfc \ub300\uc870\ud55c\ub2e4. \uccab \ubbf8\ucda9\uc871 \ud589 \ud558\ub098\ub97c \uc2e4\ud589\ud558\uace0 \uc81c\ud488 \uacb0\ud568\uacfc \uacc4\uce21 \uacb0\ud568\uc744 \uad6c\ubd84\ud574 \uc218\uc815\ud55c\ub2e4.",
-      "design_delta": "\uc774\ubbf8 \uad6c\ud604\ub41c \uc800\uc7a5\uc18c\u00b7API\u00b7UI\ub294 \uc7ac\uc0ac\uc6a9\ud55c\ub2e4. \ucf54\ub4dc/\ud569\uc131/\uc2e4\uae30/\uc6b4\uc601/\uc0ac\ub78c \uacb0\uacfc\ub97c \ubcc4\ub3c4 \uc5f4\ub85c \uae30\ub85d\ud558\uace0 \ud558\uc704 \uc870\uac74\uc744 \ud3ec\uad04 \uc644\ub8cc \ucc98\ub9ac\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc5f0\uacb0\ub41c \ud14c\uc2a4\ud2b8 \uacc4\ud68d\uc758 \uc815\uc0c1 \uc785\ub825\uc5d0\uc11c \uae30\ub300 \uc0c1\ud0dc/\ud30c\uc77c/API \uacb0\uacfc \uc77c\uce58.",
-      "negative_control": "\ud574\ub2f9 \uacc4\ud68d\uc758 \ud0c0 \uc218\uc5c5/\ub9cc\ub8cc/\uc911\ubcf5/\uc624\ud504\ub77c\uc778/\uae34 \ub0b4\uc6a9/\ub204\ub77d \uc99d\uac70 \ub300\uc870. \ub2eb\ud78c PR\u00b7\ud14c\uc2a4\ud2b8 \ud30c\uc77c\ub9cc\uc73c\ub85c \uc804\uccb4 \uc694\uad6c\uc0ac\ud56d PASS \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "연결된 검증 기록의 SHA/환경/개별 REQ를 현재 구현과 대조한다. 첫 미충족 행 하나를 실행하고 제품 결함과 계측 결함을 구분해 수정한다.",
+      "design_delta": "이미 구현된 저장소·API·UI는 재사용한다. 코드/합성/실기/운영/사람 결과를 별도 열로 기록하고 하위 조건을 포괄 완료 처리하지 않는다.",
+      "positive_control": "연결된 테스트 계획의 정상 입력에서 기대 상태/파일/API 결과 일치.",
+      "negative_control": "해당 계획의 타 수업/만료/중복/오프라인/긴 내용/누락 증거 대조. 닫힌 PR·테스트 파일만으로 전체 요구사항 PASS 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing",
         "extensions/hypeproof-chat/src",
@@ -2183,7 +2183,7 @@
     },
     {
       "id": "acceptance-chalk-authoring",
-      "title": "chalk-authoring \uae30\uc874 \uad6c\ud604\uc758 \ud589\ubcc4 \uc778\uc218 \ub300\uc870",
+      "title": "chalk-authoring 기존 구현의 행별 인수 대조",
       "issue": 732,
       "kind": "validation",
       "feature_ids": [
@@ -2221,11 +2221,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc5f0\uacb0\ub41c \uac80\uc99d \uae30\ub85d\uc758 SHA/\ud658\uacbd/\uac1c\ubcc4 REQ\ub97c \ud604\uc7ac \uad6c\ud604\uacfc \ub300\uc870\ud55c\ub2e4. \uccab \ubbf8\ucda9\uc871 \ud589 \ud558\ub098\ub97c \uc2e4\ud589\ud558\uace0 \uc81c\ud488 \uacb0\ud568\uacfc \uacc4\uce21 \uacb0\ud568\uc744 \uad6c\ubd84\ud574 \uc218\uc815\ud55c\ub2e4.",
-      "design_delta": "\uc774\ubbf8 \uad6c\ud604\ub41c \uc800\uc7a5\uc18c\u00b7API\u00b7UI\ub294 \uc7ac\uc0ac\uc6a9\ud55c\ub2e4. \ucf54\ub4dc/\ud569\uc131/\uc2e4\uae30/\uc6b4\uc601/\uc0ac\ub78c \uacb0\uacfc\ub97c \ubcc4\ub3c4 \uc5f4\ub85c \uae30\ub85d\ud558\uace0 \ud558\uc704 \uc870\uac74\uc744 \ud3ec\uad04 \uc644\ub8cc \ucc98\ub9ac\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc5f0\uacb0\ub41c \ud14c\uc2a4\ud2b8 \uacc4\ud68d\uc758 \uc815\uc0c1 \uc785\ub825\uc5d0\uc11c \uae30\ub300 \uc0c1\ud0dc/\ud30c\uc77c/API \uacb0\uacfc \uc77c\uce58.",
-      "negative_control": "\ud574\ub2f9 \uacc4\ud68d\uc758 \ud0c0 \uc218\uc5c5/\ub9cc\ub8cc/\uc911\ubcf5/\uc624\ud504\ub77c\uc778/\uae34 \ub0b4\uc6a9/\ub204\ub77d \uc99d\uac70 \ub300\uc870. \ub2eb\ud78c PR\u00b7\ud14c\uc2a4\ud2b8 \ud30c\uc77c\ub9cc\uc73c\ub85c \uc804\uccb4 \uc694\uad6c\uc0ac\ud56d PASS \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "연결된 검증 기록의 SHA/환경/개별 REQ를 현재 구현과 대조한다. 첫 미충족 행 하나를 실행하고 제품 결함과 계측 결함을 구분해 수정한다.",
+      "design_delta": "이미 구현된 저장소·API·UI는 재사용한다. 코드/합성/실기/운영/사람 결과를 별도 열로 기록하고 하위 조건을 포괄 완료 처리하지 않는다.",
+      "positive_control": "연결된 테스트 계획의 정상 입력에서 기대 상태/파일/API 결과 일치.",
+      "negative_control": "해당 계획의 타 수업/만료/중복/오프라인/긴 내용/누락 증거 대조. 닫힌 PR·테스트 파일만으로 전체 요구사항 PASS 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing",
         "extensions/hypeproof-chat/src",
@@ -2236,7 +2236,7 @@
     },
     {
       "id": "acceptance-classroom-admin",
-      "title": "classroom-admin \uae30\uc874 \uad6c\ud604\uc758 \ud589\ubcc4 \uc778\uc218 \ub300\uc870",
+      "title": "classroom-admin 기존 구현의 행별 인수 대조",
       "issue": 732,
       "kind": "validation",
       "feature_ids": [
@@ -2266,11 +2266,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc5f0\uacb0\ub41c \uac80\uc99d \uae30\ub85d\uc758 SHA/\ud658\uacbd/\uac1c\ubcc4 REQ\ub97c \ud604\uc7ac \uad6c\ud604\uacfc \ub300\uc870\ud55c\ub2e4. \uccab \ubbf8\ucda9\uc871 \ud589 \ud558\ub098\ub97c \uc2e4\ud589\ud558\uace0 \uc81c\ud488 \uacb0\ud568\uacfc \uacc4\uce21 \uacb0\ud568\uc744 \uad6c\ubd84\ud574 \uc218\uc815\ud55c\ub2e4.",
-      "design_delta": "\uc774\ubbf8 \uad6c\ud604\ub41c \uc800\uc7a5\uc18c\u00b7API\u00b7UI\ub294 \uc7ac\uc0ac\uc6a9\ud55c\ub2e4. \ucf54\ub4dc/\ud569\uc131/\uc2e4\uae30/\uc6b4\uc601/\uc0ac\ub78c \uacb0\uacfc\ub97c \ubcc4\ub3c4 \uc5f4\ub85c \uae30\ub85d\ud558\uace0 \ud558\uc704 \uc870\uac74\uc744 \ud3ec\uad04 \uc644\ub8cc \ucc98\ub9ac\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc5f0\uacb0\ub41c \ud14c\uc2a4\ud2b8 \uacc4\ud68d\uc758 \uc815\uc0c1 \uc785\ub825\uc5d0\uc11c \uae30\ub300 \uc0c1\ud0dc/\ud30c\uc77c/API \uacb0\uacfc \uc77c\uce58.",
-      "negative_control": "\ud574\ub2f9 \uacc4\ud68d\uc758 \ud0c0 \uc218\uc5c5/\ub9cc\ub8cc/\uc911\ubcf5/\uc624\ud504\ub77c\uc778/\uae34 \ub0b4\uc6a9/\ub204\ub77d \uc99d\uac70 \ub300\uc870. \ub2eb\ud78c PR\u00b7\ud14c\uc2a4\ud2b8 \ud30c\uc77c\ub9cc\uc73c\ub85c \uc804\uccb4 \uc694\uad6c\uc0ac\ud56d PASS \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "연결된 검증 기록의 SHA/환경/개별 REQ를 현재 구현과 대조한다. 첫 미충족 행 하나를 실행하고 제품 결함과 계측 결함을 구분해 수정한다.",
+      "design_delta": "이미 구현된 저장소·API·UI는 재사용한다. 코드/합성/실기/운영/사람 결과를 별도 열로 기록하고 하위 조건을 포괄 완료 처리하지 않는다.",
+      "positive_control": "연결된 테스트 계획의 정상 입력에서 기대 상태/파일/API 결과 일치.",
+      "negative_control": "해당 계획의 타 수업/만료/중복/오프라인/긴 내용/누락 증거 대조. 닫힌 PR·테스트 파일만으로 전체 요구사항 PASS 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing",
         "extensions/hypeproof-chat/src",
@@ -2281,7 +2281,7 @@
     },
     {
       "id": "acceptance-classroom-design",
-      "title": "classroom-design \uae30\uc874 \uad6c\ud604\uc758 \ud589\ubcc4 \uc778\uc218 \ub300\uc870",
+      "title": "classroom-design 기존 구현의 행별 인수 대조",
       "issue": 732,
       "kind": "validation",
       "feature_ids": [
@@ -2308,11 +2308,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc5f0\uacb0\ub41c \uac80\uc99d \uae30\ub85d\uc758 SHA/\ud658\uacbd/\uac1c\ubcc4 REQ\ub97c \ud604\uc7ac \uad6c\ud604\uacfc \ub300\uc870\ud55c\ub2e4. \uccab \ubbf8\ucda9\uc871 \ud589 \ud558\ub098\ub97c \uc2e4\ud589\ud558\uace0 \uc81c\ud488 \uacb0\ud568\uacfc \uacc4\uce21 \uacb0\ud568\uc744 \uad6c\ubd84\ud574 \uc218\uc815\ud55c\ub2e4.",
-      "design_delta": "\uc774\ubbf8 \uad6c\ud604\ub41c \uc800\uc7a5\uc18c\u00b7API\u00b7UI\ub294 \uc7ac\uc0ac\uc6a9\ud55c\ub2e4. \ucf54\ub4dc/\ud569\uc131/\uc2e4\uae30/\uc6b4\uc601/\uc0ac\ub78c \uacb0\uacfc\ub97c \ubcc4\ub3c4 \uc5f4\ub85c \uae30\ub85d\ud558\uace0 \ud558\uc704 \uc870\uac74\uc744 \ud3ec\uad04 \uc644\ub8cc \ucc98\ub9ac\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc5f0\uacb0\ub41c \ud14c\uc2a4\ud2b8 \uacc4\ud68d\uc758 \uc815\uc0c1 \uc785\ub825\uc5d0\uc11c \uae30\ub300 \uc0c1\ud0dc/\ud30c\uc77c/API \uacb0\uacfc \uc77c\uce58.",
-      "negative_control": "\ud574\ub2f9 \uacc4\ud68d\uc758 \ud0c0 \uc218\uc5c5/\ub9cc\ub8cc/\uc911\ubcf5/\uc624\ud504\ub77c\uc778/\uae34 \ub0b4\uc6a9/\ub204\ub77d \uc99d\uac70 \ub300\uc870. \ub2eb\ud78c PR\u00b7\ud14c\uc2a4\ud2b8 \ud30c\uc77c\ub9cc\uc73c\ub85c \uc804\uccb4 \uc694\uad6c\uc0ac\ud56d PASS \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "연결된 검증 기록의 SHA/환경/개별 REQ를 현재 구현과 대조한다. 첫 미충족 행 하나를 실행하고 제품 결함과 계측 결함을 구분해 수정한다.",
+      "design_delta": "이미 구현된 저장소·API·UI는 재사용한다. 코드/합성/실기/운영/사람 결과를 별도 열로 기록하고 하위 조건을 포괄 완료 처리하지 않는다.",
+      "positive_control": "연결된 테스트 계획의 정상 입력에서 기대 상태/파일/API 결과 일치.",
+      "negative_control": "해당 계획의 타 수업/만료/중복/오프라인/긴 내용/누락 증거 대조. 닫힌 PR·테스트 파일만으로 전체 요구사항 PASS 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing",
         "extensions/hypeproof-chat/src",
@@ -2323,7 +2323,7 @@
     },
     {
       "id": "acceptance-learning-agent-experience",
-      "title": "learning-agent-experience \uae30\uc874 \uad6c\ud604\uc758 \ud589\ubcc4 \uc778\uc218 \ub300\uc870",
+      "title": "learning-agent-experience 기존 구현의 행별 인수 대조",
       "issue": 846,
       "kind": "validation",
       "feature_ids": [
@@ -2342,11 +2342,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uc5f0\uacb0\ub41c \uac80\uc99d \uae30\ub85d\uc758 SHA/\ud658\uacbd/\uac1c\ubcc4 REQ\ub97c \ud604\uc7ac \uad6c\ud604\uacfc \ub300\uc870\ud55c\ub2e4. \uccab \ubbf8\ucda9\uc871 \ud589 \ud558\ub098\ub97c \uc2e4\ud589\ud558\uace0 \uc81c\ud488 \uacb0\ud568\uacfc \uacc4\uce21 \uacb0\ud568\uc744 \uad6c\ubd84\ud574 \uc218\uc815\ud55c\ub2e4.",
-      "design_delta": "\uc774\ubbf8 \uad6c\ud604\ub41c \uc800\uc7a5\uc18c\u00b7API\u00b7UI\ub294 \uc7ac\uc0ac\uc6a9\ud55c\ub2e4. \ucf54\ub4dc/\ud569\uc131/\uc2e4\uae30/\uc6b4\uc601/\uc0ac\ub78c \uacb0\uacfc\ub97c \ubcc4\ub3c4 \uc5f4\ub85c \uae30\ub85d\ud558\uace0 \ud558\uc704 \uc870\uac74\uc744 \ud3ec\uad04 \uc644\ub8cc \ucc98\ub9ac\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc5f0\uacb0\ub41c \ud14c\uc2a4\ud2b8 \uacc4\ud68d\uc758 \uc815\uc0c1 \uc785\ub825\uc5d0\uc11c \uae30\ub300 \uc0c1\ud0dc/\ud30c\uc77c/API \uacb0\uacfc \uc77c\uce58.",
-      "negative_control": "\ud574\ub2f9 \uacc4\ud68d\uc758 \ud0c0 \uc218\uc5c5/\ub9cc\ub8cc/\uc911\ubcf5/\uc624\ud504\ub77c\uc778/\uae34 \ub0b4\uc6a9/\ub204\ub77d \uc99d\uac70 \ub300\uc870. \ub2eb\ud78c PR\u00b7\ud14c\uc2a4\ud2b8 \ud30c\uc77c\ub9cc\uc73c\ub85c \uc804\uccb4 \uc694\uad6c\uc0ac\ud56d PASS \uae08\uc9c0.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "연결된 검증 기록의 SHA/환경/개별 REQ를 현재 구현과 대조한다. 첫 미충족 행 하나를 실행하고 제품 결함과 계측 결함을 구분해 수정한다.",
+      "design_delta": "이미 구현된 저장소·API·UI는 재사용한다. 코드/합성/실기/운영/사람 결과를 별도 열로 기록하고 하위 조건을 포괄 완료 처리하지 않는다.",
+      "positive_control": "연결된 테스트 계획의 정상 입력에서 기대 상태/파일/API 결과 일치.",
+      "negative_control": "해당 계획의 타 수업/만료/중복/오프라인/긴 내용/누락 증거 대조. 닫힌 PR·테스트 파일만으로 전체 요구사항 PASS 금지.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "docs/testing",
         "extensions/hypeproof-chat/src",
@@ -2357,7 +2357,7 @@
     },
     {
       "id": "measurement-core-dogfood",
-      "title": "\uce21\uc815 \ucf54\uc5b4\uc640 Jay \uccab \uc0ac\uc6a9 \uacbd\ub85c",
+      "title": "측정 코어와 Jay 첫 사용 경로",
       "issue": 1020,
       "kind": "implementation",
       "requirements": [
@@ -2408,11 +2408,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ub2e8\uc704 1\u00b72(\uacf5\ud1b5 \ucf54\uc5b4 \ucd94\ucd9c, \ub85c\uceec \uae30\ub85d\u00b7\uac80\ud1a0\u00b7\uc81c\ucd9c \uc811\uc218)\ub294 #1043\u00b7#1047\ub85c \uba38\uc9c0\ub410\ub2e4. \ub2e4\uc74c\uc740 \ub2e8\uc704 3\u00b74\uc758 Claude Code\u00b7Codex \uc587\uc740 \uc5b4\ub311\ud130\uc640 \uc124\uce58\u00b7\uc9c4\ub2e8, \uadf8\ub9ac\uace0 Studio \uc7ac\uc5f0\uacb0\uc758 \uc2e4\uc81c \ud638\ucd9c \uc99d\uac70\ub2e4.",
-      "design_delta": "\ud638\uc2a4\ud2b8 \ub3c5\ub9bd \ucf54\uc5b4\uac00 \uc815\uaddc\ud654\u00b7\uadfc\uac70 \uc5f0\uacb0\u00b7\ud574\uc11d \uac80\uc99d\uc744 \uc18c\uc720\ud558\uace0, \uc5b4\ub311\ud130\ub294 \ud638\uc2a4\ud2b8 \uc0ac\uac74\ub9cc \uc62e\uae34\ub2e4. \uae30\uc874 7\uac1c Asset \uae30\ub85d\uc740 \uc6d0\ub798 \ud0a4\ub85c \ubcf4\uc874\ud558\uace0 \uc0c8 \ud574\uc11d\uc740 6\uac1c \ubaa8\ub378\ub85c \ubc84\uc804\uc744 \ubd99\uc5ec \ub530\ub85c \uc0dd\uc131\ud55c\ub2e4.",
-      "positive_control": "\uc2e4\uc81c \ud638\uc2a4\ud2b8 \uc0ac\uac74\uc774 \uac19\uc740 \ucf54\uc5b4\ub97c \uac70\uccd0 \uce74\ub4dc\u00b7\uadfc\uac70\u00b7\ub85c\uceec \uc811\uc218\uae4c\uc9c0 \uc774\uc5b4\uc9c0\uace0, \uac19\uc740 \uc815\uaddc \uc785\ub825\uc774 \uc138 \ud638\uc2a4\ud2b8\uc5d0\uc11c \uac19\uc740 \uac80\uc99d \uacb0\uacfc\ub97c \ub0b8\ub2e4.",
-      "negative_control": "\ub0a0\uc870\ub41c \uc778\uc6a9\u00b7AI \ub300\ud544\uc744 \uc0ac\ub78c\uc758 \ub3c5\ub9bd \ud310\ub2e8\uc73c\ub85c \uc2b9\uaca9, \ubbf8\uad00\ucc30\uc744 0\uc810 \ucc98\ub9ac, 7\u21926 \uc790\ub3d9 \ud658\uc0b0, \ubbf8\uc9c0\uc6d0 schema \ud1b5\uacfc\ub97c \ubaa8\ub450 \uac70\ubd80\ud55c\ub2e4.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "단위 1·2(공통 코어 추출, 로컬 기록·검토·제출 접수)는 #1043·#1047로 머지됐다. 다음은 단위 3·4의 Claude Code·Codex 얇은 어댑터와 설치·진단, 그리고 Studio 재연결의 실제 호출 증거다.",
+      "design_delta": "호스트 독립 코어가 정규화·근거 연결·해석 검증을 소유하고, 어댑터는 호스트 사건만 옮긴다. 기존 7개 Asset 기록은 원래 키로 보존하고 새 해석은 6개 모델로 버전을 붙여 따로 생성한다.",
+      "positive_control": "실제 호스트 사건이 같은 코어를 거쳐 카드·근거·로컬 접수까지 이어지고, 같은 정규 입력이 세 호스트에서 같은 검증 결과를 낸다.",
+      "negative_control": "날조된 인용·AI 대필을 사람의 독립 판단으로 승격, 미관찰을 0점 처리, 7→6 자동 환산, 미지원 schema 통과를 모두 거부한다.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "worker/src/lib/measurement-core",
         "packages/measurement/src",
@@ -2422,7 +2422,7 @@
     },
     {
       "id": "measurement-core-team-research",
-      "title": "\uc6d0\uaca9 \ud300 \uc218\uc9d1\uacfc Asset \uc5f0\uad6c \ud050",
+      "title": "원격 팀 수집과 Asset 연구 큐",
       "issue": 1020,
       "kind": "research",
       "requirements": [
@@ -2444,13 +2444,13 @@
         "measurement-core-dogfood"
       ],
       "gate": {
-        "reason": "P1\u00b7P2. \uc804 \uba64\ubc84 \uc124\uce58\ub294 2026-10-01 \uacb0\uc815\uc73c\ub85c \ud544\uc218\ub2e4(#1377): HypeProof \uc791\uc5c5 \uc800\uc7a5\uc18c(studio\u00b7lab\u00b7harness) \ucd5c\uc18c 1\uac1c \ub4f1\ub85d, \uadf8 \uc774\uc0c1\uc740 \uc790\ubc1c; \ub370\uc774\ud130\ub294 \uacc4\uce21\uae30 \uc810\uac80\uc5d0\ub9cc \uc4f0\uace0 \ud3c9\uac00\u00b7\ubcf4\uc218\u00b7KPI\uc5d0 \uc4f0\uc9c0 \uc54a\uc74c; #1249 P2\u00b7P3 \ucd9c\uc2dc \uc804\uc5d0\ub294 \ud504\ub85c\ud544 \uc810\uc218 \ud45c\uc2dc\u00b7\ube44\uad50 \uc5c6\uc74c; \uc6d0\uc2dc \uae30\ub85d \uc5f4\ub78c\uc740 \uc6b4\uc601\uc790(Jay)\u00b7\uc5f0\uad6c \ub2f4\ub2f9(\uc870\ubbfc\ud55c\u00b7\ud0dc\ubd09\ud638). \uc6d0\uaca9 \ud300 \uc81c\ucd9c\u00b7\uc5f0\uad6c \ud050 \uad6c\ud604\uc740 Jay \uccab \uc0ac\uc6a9 \uc218\uc6a9(MC-47\u00b748)\uacfc \ub0a8\uc740 \ub370\uc774\ud130 \uc815\ucc45(MC-41 \ucca0\ud68c\u00b7\uc0ad\uc81c\u00b7\ubcf4\uad00\u00b7\ub0b4\ubcf4\ub0b4\uae30\u00b7\uc9c0\uc6d0 \ucc45\uc784) \uc900\ube44 \uc804\uc5d0\ub294 \ucc29\uc218\ud558\uc9c0 \uc54a\ub294\ub2e4."
+        "reason": "P1·P2. 전 멤버 설치는 2026-10-01 결정으로 필수다(#1377): HypeProof 작업 저장소(studio·lab·harness) 최소 1개 등록, 그 이상은 자발; 데이터는 계측기 점검에만 쓰고 평가·보수·KPI에 쓰지 않음; #1249 P2·P3 출시 전에는 프로필 점수 표시·비교 없음; 원시 기록 열람은 운영자(Jay)·연구 담당(조민한·태봉호). 원격 팀 제출·연구 큐 구현은 Jay 첫 사용 수용(MC-47·48)과 남은 데이터 정책(MC-41 철회·삭제·보관·내보내기·지원 책임) 준비 전에는 착수하지 않는다."
       },
-      "next_action": "Jay \uccab \uc0ac\uc6a9 \uc218\uc6a9\uc774 \ud655\uc778\ub41c \ub4a4 \uc778\uc99d\u00b7\uad8c\ud55c\u00b7\uc6b4\uc601 \uaddc\uce59\uacfc \uc5f0\uad6c \ud050 \uc124\uacc4\ub97c \ucc29\uc218\ud55c\ub2e4.",
-      "design_delta": "\uc6d0\uaca9 \uc81c\ucd9c\uc740 \uc11c\ubc84\uac00 \uba64\ubc84\u00b7\ud504\ub85c\uc81d\ud2b8 \uad8c\ud55c\u00b7\uc218\uc9d1 \ubaa9\uc801\uc744 \uac80\uc99d\ud558\uace0, \ub85c\uceec \uc811\uc218\uc640 \uc6d0\uaca9 \uc811\uc218\ub97c \ubd84\ub9ac\ud55c\ub2e4.",
-      "positive_control": "\uc778\uc99d\ub41c \uba64\ubc84\uc758 \uc81c\ucd9c\ub9cc \uc811\uc218\ub418\uace0, \uc5f0\uad6c \ud050\uc5d0 \ubc18\ub840\u00b7\ubbf8\ubd84\ub958\uac00 \uc0ac\ub840\uc640 \ud568\uaed8 \ub0a8\ub294\ub2e4.",
-      "negative_control": "\ud0c0\uc778 \ub370\uc774\ud130 \uc811\uadfc\u00b7\uc704\uc870 \ub85c\uceec \uc811\uc218\u00b7\uc81c\ucd9c\ub7c9\uc744 \ub3c5\ub9bd \ud45c\ubcf8\uc73c\ub85c \uc138\ub294 \uc9d1\uacc4\ub97c \uac70\ubd80\ud55c\ub2e4.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "Jay 첫 사용 수용이 확인된 뒤 인증·권한·운영 규칙과 연구 큐 설계를 착수한다.",
+      "design_delta": "원격 제출은 서버가 멤버·프로젝트 권한·수집 목적을 검증하고, 로컬 접수와 원격 접수를 분리한다.",
+      "positive_control": "인증된 멤버의 제출만 접수되고, 연구 큐에 반례·미분류가 사례와 함께 남는다.",
+      "negative_control": "타인 데이터 접근·위조 로컬 접수·제출량을 독립 표본으로 세는 집계를 거부한다.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "worker/src",
         "packages/measurement/src"
@@ -2459,7 +2459,7 @@
     },
     {
       "id": "session-sync",
-      "title": "\ud638\uc2a4\ud2b8 \uc138\uc158 \uc790\ub3d9 \ub3d9\uae30\ud654",
+      "title": "호스트 세션 자동 동기화",
       "issue": 1049,
       "kind": "implementation",
       "requirements": [
@@ -2486,11 +2486,11 @@
       "depends_on": [
         "measurement-core-dogfood"
       ],
-      "next_action": "packages/measurement\uc758 CLI\u00b7\uc5b4\ub311\ud130\u00b7\uad00\uce21\uae30\ub85c Codex\u00b7Claude Code \uc138\uc158\uc744 \ub0b4\ubcf4\ub0b4\uace0 \uba64\ubc84 \uc11c\ubc84\ub85c \ub3d9\uae30\ud654\ud558\ub294 \uacbd\ub85c\ub97c \uc2e4\uc81c \ud638\uc2a4\ud2b8\uc5d0\uc11c \uac80\uc99d\ud55c\ub2e4.",
-      "design_delta": "Studio \ubc14\uc774\ub108\ub9ac \uc5c6\uc774 \uc124\uce58\ub418\ub294 Node \ud328\ud0a4\uc9c0\uac00 \uacf5\ud1b5 \ucf54\uc5b4\uc640 \uc5b4\ub311\ud130\ub97c \ub178\ucd9c\ud558\uace0, \uc11c\ubc84\uac00 \uc2b9\uc778\ud55c \ud504\ub85c\uc81d\ud2b8 \ud574\uc2dc\ub9cc \uc218\uc9d1\ud55c\ub2e4.",
-      "positive_control": "\uc120\ud0dd\ud55c \ud504\ub85c\uc81d\ud2b8\uc758 \uc138\uc158\uc774 \uc99d\ubd84\uc73c\ub85c \ub3d9\uae30\ud654\ub418\uace0, \uac19\uc740 \uc138\uc158 \uc7ac\uc2dc\ub3c4\uac00 \uc911\ubcf5\uc744 \ub9cc\ub4e4\uc9c0 \uc54a\ub294\ub2e4.",
-      "negative_control": "\uc2b9\uc778\ub418\uc9c0 \uc54a\uc740 \ud504\ub85c\uc81d\ud2b8 \uacbd\ub85c \uc218\uc9d1, \ud638\uc2a4\ud2b8 \uc790\uaca9\uc99d\uba85 \ubcc0\uacbd, \uc0ad\uc81c\ub41c \uae30\ub85d\uc758 \uc7ac\uc218\uc9d1\uc744 \uac70\ubd80\ud55c\ub2e4.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "packages/measurement의 CLI·어댑터·관측기로 Codex·Claude Code 세션을 내보내고 멤버 서버로 동기화하는 경로를 실제 호스트에서 검증한다.",
+      "design_delta": "Studio 바이너리 없이 설치되는 Node 패키지가 공통 코어와 어댑터를 노출하고, 서버가 승인한 프로젝트 해시만 수집한다.",
+      "positive_control": "선택한 프로젝트의 세션이 증분으로 동기화되고, 같은 세션 재시도가 중복을 만들지 않는다.",
+      "negative_control": "승인되지 않은 프로젝트 경로 수집, 호스트 자격증명 변경, 삭제된 기록의 재수집을 거부한다.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "packages/measurement/src"
       ],
@@ -2498,7 +2498,7 @@
     },
     {
       "id": "lesson-pedagogy-gate",
-      "title": "\ud655\uc815 \uc2dc\uc810 \uad50\uc721 \uc6d0\uce59 \ud310\uc815",
+      "title": "확정 시점 교육 원칙 판정",
       "issue": 1114,
       "kind": "implementation",
       "feature_ids": [
@@ -2515,11 +2515,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\ud655\uc815 \uc2dc\uc810\uc5d0 \uad50\uc721 \uc6d0\uce59 \ud310\uc815\uc744 \uac78\uace0, \ucc28\ub2e8 \uc0ac\uc720\uc640 \ub2e4\uc74c \ud589\ub3d9\uc744 \uac15\uc0ac\uc5d0\uac8c \ub3cc\ub824\uc900\ub2e4. \uaddc\uce59 \uc815\ubcf8\uc740 \ucee4\ub9ac\ud058\ub7fc \uc704\ud0a4\uc774\uba70 \ubcf5\uc0ac\ud558\uc9c0 \uc54a\uace0 \uc870\ud56d ID\ub9cc \uc778\uc6a9\ud55c\ub2e4.",
-      "design_delta": "\uad8c\ud55c\uc774 \uc544\ub2c8\ub77c \uc124\uacc4 \uc18d\uc131\uc774\ubbc0\ub85c \ud655\uc815 1\ud68c\ub9cc \uac80\uc0ac\ud55c\ub2e4. \uc77d\uae30 \uc2dc\uc810 \uc7ac\uac80\uc0ac \uc5c6\uc74c. fail\uc740 422\ub85c \ub9c9\uace0 warn\uc740 \ud655\uc815\uc744 \uc9c4\ud589\ud558\ub418 \ud310\uc815\uc744 \uc751\ub2f5\uc5d0 \uc2e3\ub294\ub2e4.",
-      "positive_control": "\uc2e4\uc81c \uc800\uc791\ubcf8(dental-ownership L1~L5, 30\ub2e8\uacc4)\uc774 \ucc28\ub2e8\ub418\uc9c0 \uc54a\ub294\ub2e4.",
-      "negative_control": "\uc644\ub8cc \uae30\uc900\u00b7\uc120\ud589 \uc870\uac74\u00b7\uc99d\uac70\ubb3c\uc744 \ud558\ub098\uc529 \ube44\uc6e0\uc744 \ub54c \uadf8 \uac80\uc0ac\ub9cc \uae68\uc5b4\ub09c\ub2e4. \ucc28\ub2e8\ub41c \ud655\uc815\uc740 \ubc84\uc804 \ud589\uc744 \ub0a8\uae30\uc9c0 \uc54a\uace0, \ud615\ud0dc \uac80\uc99d\uc774 \uad00\ubb38\ubcf4\ub2e4 \uba3c\uc800\ub2e4.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7App/Service/\ubaa8\ub378/OS\u00b7\uc2e4\ud589 \uc870\uac74\u00b7\uba85\ub839\u00b7\uae30\ub300/\uad00\uce21\u00b7\ud30c\uc77c hash\u00b7\ud654\uba74/\uc774\ubca4\ud2b8. NOT RUN/BLOCKED\uc640 \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud55c\ub2e4.",
+      "next_action": "확정 시점에 교육 원칙 판정을 걸고, 차단 사유와 다음 행동을 강사에게 돌려준다. 규칙 정본은 커리큘럼 위키이며 복사하지 않고 조항 ID만 인용한다.",
+      "design_delta": "권한이 아니라 설계 속성이므로 확정 1회만 검사한다. 읽기 시점 재검사 없음. fail은 422로 막고 warn은 확정을 진행하되 판정을 응답에 싣는다.",
+      "positive_control": "실제 저작본(dental-ownership L1~L5, 30단계)이 차단되지 않는다.",
+      "negative_control": "완료 기준·선행 조건·증거물을 하나씩 비웠을 때 그 검사만 깨어난다. 차단된 확정은 버전 행을 남기지 않고, 형태 검증이 관문보다 먼저다.",
+      "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
         "worker/src/lib",
         "worker/src/routes"
@@ -2528,7 +2528,7 @@
     },
     {
       "id": "sx-p0-curriculum-first",
-      "title": "\ud559\uc2b5 \uacbd\ud5d8 \uc6b0\uc120 P0 \u2014 \ud654\uba74\uc758 \uc8fc\uc778\uacf5\uc744 \ud604\uc7ac \uacfc\uc81c\ub85c",
+      "title": "학습 경험 우선 P0 — 화면의 주인공을 현재 과제로",
       "issue": 1171,
       "kind": "implementation",
       "feature_ids": [
@@ -2567,11 +2567,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "6\uc8fc \ucee4\ub9ac\ud058\ub7fc\uc744 \uc138\uc158 \uc124\uacc4 \ud30c\uc77c\uc5d0\uc11c \uc77d\uace0, \uc791\uc5c5 \uc911 \ud654\uba74\uc758 \uc5ed\ub7c9 \uc810\uc218\ub97c \uc9c0\uc6b0\uace0, \ubbf8\uc158 \ubb38\uc7a5\uc744 \ud654\uba74\uc5d0\uc11c \uac00\uc7a5 \ud070 \ud65c\uc790\ub85c \uc138\uc6b4\ub2e4. \ucf54\uce58\uc5d0\uac8c\ub294 \ubbf8\uc158\u00b7\ud604\uc7ac \ub2e8\uacc4\u00b7\uae08\uc9c0 \ubaa9\ub85d\uc744 \uc774\ub984 \ubd99\uc5ec \uc8fc\ub418 \uad00\ucc30 \ud56d\ubaa9\uc740 \uac10\ucd98\ub2e4.",
-      "design_delta": "\uae30\uc874 hps-session-design/1 \uc5d0 \uc120\ud0dd \ud0a4\ub97c \ub354\ud55c\ub2e4. \uc2a4\ud0a4\ub9c8 id \ub97c \uc62c\ub9ac\uc9c0 \uc54a\uace0 \uc81c2 \ud3ec\ub9f7\uc744 \ub9cc\ub4e4\uc9c0 \uc54a\ub294\ub2e4. \ud310\uc815\uc740 \uc2e4\uc81c \ucef4\ud3ec\ub10c\ud2b8\ub97c \ub80c\ub354\ud574\uc11c \ud558\uace0, \uacc4\uce21\uae30\ub9c8\ub2e4 \uc591\uc131\u00b7\uc74c\uc131 \ub300\uc870\uad70\uacfc \uc2ec\uc740 \uc815\ub2f5\uc744 \ub454\ub2e4.",
-      "positive_control": "learning \ud0a4\uac00 \uc5c6\ub294 \uae30\uc874 \uc218\uc5c5\uc774 \ucd08\uc548\u00b7\ud655\uc815 \uc591\ucabd\uc5d0\uc11c \uc624\ub298\uacfc \ubc14\uc774\ud2b8 \ub2e8\uc704\ub85c \uac19\uac8c \ub3d9\uc791\ud55c\ub2e4. \uc2e4\uc81c \ucd9c\ud558 \uc911\uc778 \ubd80\uc815 \ubb38\uc7a5(\"\uad00\ucc30\uc740 \uc810\uc218\ub098 \ub2a5\ub825 \uc778\uc99d\uc774 \uc544\ub2d9\ub2c8\ub2e4\")\uc774 \uac10\uc0ac\ub97c \ud1b5\uacfc\ud55c\ub2e4. 3\uc8fc\ucc28\u00b7\ub0a8\uc740 \ub2e8\uacc4 N\u00b7\ubaa9\ub85d \ubc88\ud638\u00b7\ubaa8\ub4c8 \ubc84\uc804\uc774 \uc218\uce58\ub85c \uc7a1\ud788\uc9c0 \uc54a\ub294\ub2e4.",
-      "negative_control": "learning \uc548\uc758 \uc810\uc218 \ud0a4\uc640 week \uc678 \uc22b\uc790, \uc774\ubca4\ud2b8 8\uc885 \ubc16\uc758 \uc644\ub8cc \uc870\uac74, 6\uc885 \ubc16\uc758 \ub2e8\uacc4 ui/evidence/gate, \uc644\ub8cc \uae30\uc900 \uc5c6\uc774 \uad00\ucc30\ub9cc \uc120\uc5b8\ud55c \ub2e8\uacc4\uac00 \uc804\ubd80 \uac70\ubd80\ub41c\ub2e4. \uae08\uc9c0 \ub77c\ubca8 6\uac1c\ub97c \uc2ec\uc73c\uba74 \uc815\ud655\ud788 6\uac74\uc744 \uc13c\ub2e4. \uad6c\ud615 \uc0c1\ud0dc\ubc14 \ubb38\uc790\uc5f4\uc744 \uacc4\uce21\uae30\uac00 \uc7a1\ub294\ub2e4.",
-      "evidence_required": "\uc81c\ucd9c SHA \u00b7 \uc2e4\ud589\ud55c \uac8c\uc774\ud2b8\uc640 exit code \u00b7 \uad6c\ud604 \uc804 \ud2b8\ub9ac\uc5d0\uc11c control \uc774 \ube68\uac30\ub2e4\ub294 \uc99d\uac70 \u00b7 NOT RUN \ubaa9\ub85d. \ud569\uc131/\uc2e4\uae30/\uc0ac\ub78c \uc99d\uac70\ub97c \uad6c\ubd84\ud558\uace0, \uc2e4\uae30\uac00 \uc5c6\uc73c\uba74 \uc5c6\ub2e4\uace0 \uc801\ub294\ub2e4.",
+      "next_action": "6주 커리큘럼을 세션 설계 파일에서 읽고, 작업 중 화면의 역량 점수를 지우고, 미션 문장을 화면에서 가장 큰 활자로 세운다. 코치에게는 미션·현재 단계·금지 목록을 이름 붙여 주되 관찰 항목은 감춘다.",
+      "design_delta": "기존 hps-session-design/1 에 선택 키를 더한다. 스키마 id 를 올리지 않고 제2 포맷을 만들지 않는다. 판정은 실제 컴포넌트를 렌더해서 하고, 계측기마다 양성·음성 대조군과 심은 정답을 둔다.",
+      "positive_control": "learning 키가 없는 기존 수업이 초안·확정 양쪽에서 오늘과 바이트 단위로 같게 동작한다. 실제 출하 중인 부정 문장(\"관찰은 점수나 능력 인증이 아닙니다\")이 감사를 통과한다. 3주차·남은 단계 N·목록 번호·모듈 버전이 수치로 잡히지 않는다.",
+      "negative_control": "learning 안의 점수 키와 week 외 숫자, 이벤트 8종 밖의 완료 조건, 6종 밖의 단계 ui/evidence/gate, 완료 기준 없이 관찰만 선언한 단계가 전부 거부된다. 금지 라벨 6개를 심으면 정확히 6건을 센다. 구형 상태바 문자열을 계측기가 잡는다.",
+      "evidence_required": "제출 SHA · 실행한 게이트와 exit code · 구현 전 트리에서 control 이 빨갰다는 증거 · NOT RUN 목록. 합성/실기/사람 증거를 구분하고, 실기가 없으면 없다고 적는다.",
       "implementation_paths": [
         "worker/src/lib",
         "extensions/hypeproof-chat/webview-ui/src",
@@ -2606,7 +2606,7 @@
     },
     {
       "id": "sx-p1-evidence-capture",
-      "title": "\ud559\uc2b5 \uacbd\ud5d8 \uc6b0\uc120 P1 \u2014 \ud310\ub2e8\uc758 \uadfc\uac70\uac00 \ud750\ub984 \uc548\uc5d0 \ub0a8\ub294\ub2e4",
+      "title": "학습 경험 우선 P1 — 판단의 근거가 흐름 안에 남는다",
       "issue": 1172,
       "kind": "implementation",
       "feature_ids": [
@@ -2638,11 +2638,11 @@
       "depends_on": [
         "sx-p0-curriculum-first"
       ],
-      "next_action": "hps-observation/1 \uc744 \uc0c1\uc704 \uc9d1\ud569\uc73c\ub85c \ud655\uc7a5\ud574 \ud559\uc2b5 \uc774\ubca4\ud2b8 8\uc885\uacfc \ud544\ub4dc 7\uac1c\ub97c \ubc1b\uace0, \uae30\ub300 \uc870\uac74 \uac8c\uc774\ud2b8\uc640 \uc7ac\ud655\uc778 \uac8c\uc774\ud2b8\ub97c \uc774\ubca4\ud2b8\ub9cc\uc73c\ub85c \ud310\uc815\ud55c\ub2e4. \uadfc\uac70 \uc11c\ub78d\uc5d0\uc11c \uae30\ub300 \uc870\uac74\u00b7\uc774\uc720\u00b7\uc804\ud6c4\u00b7\ucd9c\ucc98\ub97c \uc5f0\ub2e4.",
-      "design_delta": "/1 \uc740 \uc190\ub300\uc9c0 \uc54a\uace0 /2 \ub97c \uac19\uc740 \ud30c\uc77c\uc5d0\uc11c \ubc1b\ub294\ub2e4. \uac8c\uc774\ud2b8 \uacb0\uacfc\ub294 \uc800\uc7a5\ud558\uc9c0 \uc54a\uace0 \ub9e4\ubc88 \uc774\ubca4\ud2b8\uc5d0\uc11c \uacc4\uc0b0\ud55c\ub2e4 \u2014 \uc800\uc7a5\ub41c \uac12\uacfc \uacc4\uc0b0\ub41c \uac12\uc774 \uac08\ub77c\uc9c0\ub294 \uae38\uc744 \ub450\uc9c0 \uc54a\ub294\ub2e4. student_text \ub294 \ud559\uc0dd actor \uc5d0\ub9cc \ud5c8\uc6a9\ud55c\ub2e4.",
-      "positive_control": "/1 \ubc30\uce58\uac00 golden verdict \uadf8\ub300\ub85c \uc720\ud6a8\ud558\uace0, \ud559\uc0dd\uc774 \uc4f4 criterion_set \uc774 self_reported \ub85c \ubc1b\uc544\ub4e4\uc5ec\uc9c4\ub2e4. \uae30\ub300 \uc870\uac74\uc744 \uc4f0\uba74 \uc644\ub8cc \uac8c\uc774\ud2b8\uac00 \uc5f4\ub9b0\ub2e4.",
-      "negative_control": "AI \uac00 \uc4f4 \ud14d\uc2a4\ud2b8\uac00 \ud559\uc0dd \ud589\ub3d9\uc73c\ub85c \uae30\ub85d\ub418\uc9c0 \uc54a\ub294\ub2e4. source_state \uc5c6\ub294 \uc678\ubd80 \ubc18\uc751\uc774 \uac70\ubd80\ub41c\ub2e4. \uac19\uc740 \uae30\uc900\uc774 \uc544\ub2cc \uc7ac\ud655\uc778\uc740 \uac80\uc99d\uc73c\ub85c \uc138\uc9c0 \uc54a\ub294\ub2e4. \uc874\uc7ac\ud558\uc9c0 \uc54a\ub294 id \ucc38\uc870\uc640 \ub0a1\uc740 artifact \uac00 \uac70\ubd80\ub41c\ub2e4.",
-      "evidence_required": "\uc81c\ucd9c SHA \u00b7 /1 golden verdict \uac00 \ud55c \uac74\ub3c4 \uc6c0\uc9c1\uc774\uc9c0 \uc54a\uc558\ub2e4\ub294 \ud655\uc778 \u00b7 \uac8c\uc774\ud2b8 \ub450 \uac1c\uac00 \uc2e4\uc81c\ub85c \ub9c9\ub294 \uac83\uc744 \ubcf4\uc778 \uae30\ub85d \u00b7 NOT RUN \ubaa9\ub85d.",
+      "next_action": "hps-observation/1 을 상위 집합으로 확장해 학습 이벤트 8종과 필드 7개를 받고, 기대 조건 게이트와 재확인 게이트를 이벤트만으로 판정한다. 근거 서랍에서 기대 조건·이유·전후·출처를 연다.",
+      "design_delta": "/1 은 손대지 않고 /2 를 같은 파일에서 받는다. 게이트 결과는 저장하지 않고 매번 이벤트에서 계산한다 — 저장된 값과 계산된 값이 갈라지는 길을 두지 않는다. student_text 는 학생 actor 에만 허용한다.",
+      "positive_control": "/1 배치가 golden verdict 그대로 유효하고, 학생이 쓴 criterion_set 이 self_reported 로 받아들여진다. 기대 조건을 쓰면 완료 게이트가 열린다.",
+      "negative_control": "AI 가 쓴 텍스트가 학생 행동으로 기록되지 않는다. source_state 없는 외부 반응이 거부된다. 같은 기준이 아닌 재확인은 검증으로 세지 않는다. 존재하지 않는 id 참조와 낡은 artifact 가 거부된다.",
+      "evidence_required": "제출 SHA · /1 golden verdict 가 한 건도 움직이지 않았다는 확인 · 게이트 두 개가 실제로 막는 것을 보인 기록 · NOT RUN 목록.",
       "implementation_paths": [
         "worker/src/lib/measurement-core",
         "extensions/hypeproof-chat/src",
@@ -2655,7 +2655,7 @@
     },
     {
       "id": "sx-p2-boundary-reflection",
-      "title": "\ud559\uc2b5 \uacbd\ud5d8 \uc6b0\uc120 P2 \u2014 \ud68c\uace0\ub294 \uacbd\uacc4\uc5d0\uc11c\ub9cc, \ub2e4\uc74c \uc2e4\ud5d8\uc73c\ub85c \uc787\ub294\ub2e4",
+      "title": "학습 경험 우선 P2 — 회고는 경계에서만, 다음 실험으로 잇는다",
       "issue": 1173,
       "kind": "implementation",
       "feature_ids": [
@@ -2677,11 +2677,11 @@
       "depends_on": [
         "sx-p1-evidence-capture"
       ],
-      "next_action": "\uc81c\ucd9c\u00b7\uc138\uc158 \uc885\ub8cc\u00b7\uc8fc\ucc28 \uc885\ub8cc \uc138 \uacbd\uacc4\uc5d0\uc11c\ub9cc \ud68c\uace0\ub97c inline \uc73c\ub85c \uc5f4\uace0, \"\ubc14\ub010 \uc0dd\uac01 1\uac1c + \ub2e4\uc74c \uc2e4\ud5d8 1\uac1c\" \ub9cc \ubc1b\uc544 \ub2e4\uc74c \uacfc\uc81c \ud648\uc5d0 \uc6d0\ubb38 \uadf8\ub300\ub85c \uc787\ub294\ub2e4.",
-      "design_delta": "\uae30\uc874 \uac1c\uc120 \ud589\ub3d9 \ub8e8\ud504(Improvement\u00b7follow_up)\ub97c \uc7ac\uc0ac\uc6a9\ud558\uace0 \uc0c8 \uc6d0\uc7a5\uc744 \ub9cc\ub4e4\uc9c0 \uc54a\ub294\ub2e4. \ud68c\uace0 \ud45c\uc2dc \uc870\uac74\uc740 \ud638\uc2a4\ud2b8\uac00 \uc0c1\ud0dc \uae30\uacc4\ub85c \ud310\uc815\ud558\uace0 \uc6f9\ubdf0\uac00 \ub2e4\uc2dc \uacc4\uc0b0\ud558\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\uc81c\ucd9c \uc2dc\uc810\uc5d0 \ud68c\uace0\uac00 inline \uc73c\ub85c \uc5f4\ub9ac\uace0 \uc785\ub825\uc774 \uc815\ud655\ud788 \ub458\uc774\ub2e4. \uac74\ub108\ub6f0\uae30\uac00 \uac00\ub2a5\ud558\uace0 \uac74\ub108\ub6f4 \uc0ac\uc2e4\uc774 \uae30\ub85d\ub41c\ub2e4. \ub2e4\uc74c \uc2e4\ud5d8\uc774 \ub2e4\uc74c \uacfc\uc81c action \ubaa9\ub85d\uc5d0 \uc758\uc5ed \uc5c6\uc774 \ub098\ud0c0\ub09c\ub2e4.",
-      "negative_control": "\uc720\ud734 \ud0c0\uc774\uba38\u00b7\uba54\uc2dc\uc9c0 \uc218\u00b7\uc2dc\uac04 \uacbd\uacfc\ub85c\ub294 \ud68c\uace0\uac00 \uc5f4\ub9ac\uc9c0 \uc54a\ub294\ub2e4. \ubaa8\ub2ec\ub85c \ub728\uc9c0 \uc54a\ub294\ub2e4. \ud68c\uace0 \ubbf8\uc791\uc131\uc774 \ub2e4\uc74c \uc138\uc158 \uc9c4\uc785\uc744 \ub9c9\uc9c0 \uc54a\ub294\ub2e4. \ubc30\uc9c0\u00b7\uc2a4\ud2b8\ub9ad\u00b7\ub7ad\ud0b9\u00b7\ucd95\ud558 \uc560\ub2c8\uba54\uc774\uc158\uc774 \uc5c6\ub2e4.",
-      "evidence_required": "\uc81c\ucd9c SHA \u00b7 \ub124 \uc2dc\uc810(\uc791\uc5c5 \uc911\u00b7\uc81c\ucd9c\u00b7\uc138\uc158 \uc885\ub8cc\u00b7\uc8fc\ucc28 \uc885\ub8cc)\uc5d0\uc11c\uc758 \ud68c\uace0 \uc601\uc5ed \uc720\ubb34 \uae30\ub85d \u00b7 \ub2e4\uc74c \uacfc\uc81c\ub85c \uc774\uc5b4\uc9c4 \uc6d0\ubb38 \u00b7 NOT RUN \ubaa9\ub85d.",
+      "next_action": "제출·세션 종료·주차 종료 세 경계에서만 회고를 inline 으로 열고, \"바뀐 생각 1개 + 다음 실험 1개\" 만 받아 다음 과제 홈에 원문 그대로 잇는다.",
+      "design_delta": "기존 개선 행동 루프(Improvement·follow_up)를 재사용하고 새 원장을 만들지 않는다. 회고 표시 조건은 호스트가 상태 기계로 판정하고 웹뷰가 다시 계산하지 않는다.",
+      "positive_control": "제출 시점에 회고가 inline 으로 열리고 입력이 정확히 둘이다. 건너뛰기가 가능하고 건너뛴 사실이 기록된다. 다음 실험이 다음 과제 action 목록에 의역 없이 나타난다.",
+      "negative_control": "유휴 타이머·메시지 수·시간 경과로는 회고가 열리지 않는다. 모달로 뜨지 않는다. 회고 미작성이 다음 세션 진입을 막지 않는다. 배지·스트릭·랭킹·축하 애니메이션이 없다.",
+      "evidence_required": "제출 SHA · 네 시점(작업 중·제출·세션 종료·주차 종료)에서의 회고 영역 유무 기록 · 다음 과제로 이어진 원문 · NOT RUN 목록.",
       "implementation_paths": [
         "extensions/hypeproof-chat/webview-ui/src",
         "extensions/hypeproof-chat/src"
@@ -2693,7 +2693,7 @@
     },
     {
       "id": "sx-p3-change-record",
-      "title": "\ud559\uc2b5 \uacbd\ud5d8 \uc6b0\uc120 P3 \u2014 \uc810\uc218 \ub300\uc2e0 \ubcc0\ud654 \uc774\uc57c\uae30",
+      "title": "학습 경험 우선 P3 — 점수 대신 변화 이야기",
       "issue": 1174,
       "kind": "implementation",
       "feature_ids": [
@@ -2717,11 +2717,11 @@
       "depends_on": [
         "sx-p2-boundary-reflection"
       ],
-      "next_action": "\ubcc0\ud654 \uae30\ub85d \uccab \ud654\uba74\uc744 \ucd5c\uadfc \ubc1c\uacac\ud55c \ubcc0\ud654 \ubb38\uc7a5\uacfc \uadfc\uac70 2~3\uac1c\ub85c \ub9cc\ub4e4\uace0, \uc5ec\uc12f \uc810\uc218 \uce74\ub4dc\ub97c \uc811\ud78c \ubc29\ubc95/\uc138\ubd80 \ub370\uc774\ud130 \uc548\uc73c\ub85c \ub0b4\ub9b0\ub2e4.",
-      "design_delta": "\ud328\ud134 \uacc4\uc0b0\uc740 \uc21c\uc218 \ud568\uc218\ub85c \ub450\uace0 \ucd9c\ub825\uc5d0 \uc22b\uc790 \ud544\ub4dc\ub294 \ubc29\ubc95 \ube14\ub85d \uc548\uc5d0\ub9cc \ub454\ub2e4. \uac19\uc740 \uae30\uc900\u00b7\uac19\uc740 \ud3c9\uac00\uae30 \uc544\ub798 \uc5ec\ub7ec \uacfc\uc81c\uc5d0\uc11c \ubc18\ubcf5\ub420 \ub54c\ub9cc \ud328\ud134\uc774\ub77c\uace0 \ub9d0\ud55c\ub2e4.",
-      "positive_control": "\uc11c\ub85c \ub2e4\ub978 \uacfc\uc81c \ub450 \uac1c \uc774\uc0c1\uc5d0\uc11c \uac19\uc740 \uae30\uc900\uc73c\ub85c \ubc18\ubcf5\ub41c \ud589\ub3d9\uc774 \"\ucd5c\uadfc \ubc18\ubcf5\ub41c \ud328\ud134\" \uc73c\ub85c \ub098\uc624\uace0 \uadfc\uac70\uac00 \ud074\ub9ad\uc73c\ub85c \uc5f4\ub9b0\ub2e4.",
-      "negative_control": "\uccab \ud654\uba74\uc5d0 \uc22b\uc790\uac00 \ud558\ub098\ub77c\ub3c4 \uc788\uc73c\uba74 \uc2e4\ud328. \ud55c \uacfc\uc81c\ub9cc \uc788\uc73c\uba74 \ud328\ud134 \ubb38\uc7a5\uc744 \ub9cc\ub4e4\uc9c0 \uc54a\ub294\ub2e4. \ud3c9\uac00\uae30\uac00 \ubc14\ub010 \ub450 \uacfc\uc81c\ub97c \ube44\uad50\ud558\uc9c0 \uc54a\ub294\ub2e4. \uadfc\uac70 \uc5c6\uc74c\uc744 0 \uc774\ub098 \ube48 \ub9c9\ub300\ub85c \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4.",
-      "evidence_required": "\uc81c\ucd9c SHA \u00b7 \uccab \ubdf0\ud3ec\ud2b8 \ub80c\ub354\uc758 \uc218\uce58 0\uac74 \ud655\uc778 \u00b7 \uadfc\uac70 \ub9c1\ud06c\uac00 \uc2e4\uc81c \uc774\ubca4\ud2b8 \uc6d0\ubb38\uc744 \uc5ec\ub294 \uae30\ub85d \u00b7 Lab MP-01 \uac1c\uc815 \uacb0\uc815 \ub9c1\ud06c \u00b7 NOT RUN \ubaa9\ub85d.",
+      "next_action": "변화 기록 첫 화면을 최근 발견한 변화 문장과 근거 2~3개로 만들고, 여섯 점수 카드를 접힌 방법/세부 데이터 안으로 내린다.",
+      "design_delta": "패턴 계산은 순수 함수로 두고 출력에 숫자 필드는 방법 블록 안에만 둔다. 같은 기준·같은 평가기 아래 여러 과제에서 반복될 때만 패턴이라고 말한다.",
+      "positive_control": "서로 다른 과제 두 개 이상에서 같은 기준으로 반복된 행동이 \"최근 반복된 패턴\" 으로 나오고 근거가 클릭으로 열린다.",
+      "negative_control": "첫 화면에 숫자가 하나라도 있으면 실패. 한 과제만 있으면 패턴 문장을 만들지 않는다. 평가기가 바뀐 두 과제를 비교하지 않는다. 근거 없음을 0 이나 빈 막대로 그리지 않는다.",
+      "evidence_required": "제출 SHA · 첫 뷰포트 렌더의 수치 0건 확인 · 근거 링크가 실제 이벤트 원문을 여는 기록 · Lab MP-01 개정 결정 링크 · NOT RUN 목록.",
       "implementation_paths": [
         "worker/src/lib/measurement-core",
         "extensions/hypeproof-chat/webview-ui/src"
@@ -2731,12 +2731,12 @@
         "docs/testing/studio-learning-experience.md"
       ],
       "gate": {
-        "reason": "SX-60 \uc740 Lab products/lab-web/measurement-profile.md MP-01(score-first) \uac1c\uc815 \uacb0\uc815 \uae30\ub85d\uc774 \uba3c\uc800 \uc788\uc5b4\uc57c \uad6c\ud604 PR \uc744 \ub0bc \uc218 \uc788\ub2e4. \uadf8 \uc804\uae4c\uc9c0 \ub85c\uceec \ud654\uba74\ub9cc \ub9cc\ub4e4\uace0 Lab \uc6f9\uc740 \uac74\ub4dc\ub9ac\uc9c0 \uc54a\ub294\ub2e4."
+        "reason": "SX-60 은 Lab products/lab-web/measurement-profile.md MP-01(score-first) 개정 결정 기록이 먼저 있어야 구현 PR 을 낼 수 있다. 그 전까지 로컬 화면만 만들고 Lab 웹은 건드리지 않는다."
       }
     },
     {
       "id": "sx-p4-instructor-evidence",
-      "title": "\ud559\uc2b5 \uacbd\ud5d8 \uc6b0\uc120 P4\u00b7P5 \u2014 \uac15\uc0ac \ud654\uba74\uacfc \ubc29\ubc95 \ub808\uc774\uc5b4",
+      "title": "학습 경험 우선 P4·P5 — 강사 화면과 방법 레이어",
       "issue": 1175,
       "kind": "design",
       "feature_ids": [
@@ -2757,11 +2757,11 @@
       "depends_on": [
         "sx-p1-evidence-capture"
       ],
-      "next_action": "\ud559\uc2b5 \uadfc\uac70\ub97c \uae30\uc874 issuer \ubc94\uc704\ub85c \ub0b4\ubcf4\ub0b4\ub294 \uc870\ud68c \uacbd\ub85c\uc640 \ud559\uc0dd\uc758 \uacf5\uc720 \ubc94\uc704 \uc120\ud0dd\uc744 \uc124\uacc4\ud55c\ub2e4. \uc0c8 \uc5ed\ud560\uc744 \ub9cc\ub4e4\uc9c0 \uc54a\ub294\ub2e4.",
-      "design_delta": "\uac15\uc0ac \uc815\uccb4\uc131\uacfc \ud654\uba74\uc740 \uc774\ubbf8 \uc788\ub2e4(role issuer + IssuerScope, instructor-auth.ts \ud558\ub098, Chalk \ud654\uba74 5\uc885). \uc5c6\ub294 \uac83\uc740 \uc870\ud68c \uacbd\ub85c\uc640 \uacf5\uc720 \uacb0\uc815\uc774\ub2e4. \uac80\uc99d\uc740 \ub450 \uc6cc\ucee4\uac00 \uacf5\uc720\ud558\ub294 \uad6c\ud604 \ud558\ub098\ub9cc \uc4f0\uace0 \ub450 \ubc88\uc9f8 \uc2e0\ub8b0 \uacbd\uacc4\ub97c \ub9cc\ub4e4\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\ub9c9\ud798\u00b7\ud559\uc0dd \uc6d0\ubb38\u00b7\ud655\uc778\ud560 \uc99d\uac70\u00b7\uc2e4\uc81c/\uac00\uc0c1 \uc5ec\ubd80\uac00 \ubcf4\uc774\uace0, \uac1c\uc785 CTA \uac00 \uc9c8\ubb38 \ubcf4\ub0b4\uae30 / \ub2e4\uc2dc \ubcf4\uac8c \ud560 \uc9c0\uc810 \ud45c\uc2dc / \uadfc\uac70 \ud655\uc778\u00b7\ucd94\uac00 \uad00\ucc30 \ud544\uc694 \uc14b\ubfd0\uc774\ub2e4.",
-      "negative_control": "\uc810\uc218 \uc21c\uc704\u00b7\ucc44\ud305\ub7c9\u00b7\ud1a0\ud070\ub7c9\u00b7\uccb4\ub958\uc2dc\uac04\u00b7AI \uc758\uc874\ub3c4 \ucd94\uc815\uce58\u00b7\uc131\uaca9 \ud3c9\uac00\u00b7\ucf54\ud638\ud2b8 \ub7ad\ud0b9\uc774 \uc5c6\ub2e4. \ud559\uc0dd\uc774 \uacf5\uc720 \ubc94\uc704\ub97c \uace0\ub974\uc9c0 \uc54a\uc740 \uadfc\uac70\uac00 \uac15\uc0ac \ud654\uba74\uc5d0 \ub098\ud0c0\ub098\uc9c0 \uc54a\ub294\ub2e4. \uc815\ub82c \uc635\uc158\uc5d0 \uc810\uc218\uac00 \uc5c6\ub2e4.",
-      "evidence_required": "\uc124\uacc4 \ubb38\uc11c \ub9c1\ud06c \u00b7 \uae30\uc874 issuer \ubc94\uc704\ub97c \uadf8\ub300\ub85c \uc4f4\ub2e4\ub294 \ud655\uc778 \u00b7 MC-39 \uc6d0\uaca9 \uc81c\ucd9c \uc758\uc874 \uba85\uc2dc \u00b7 \ubbf8\uc131\ub144 \ub3d9\uc758 \uacbd\ub85c\uc758 Lab \uacb0\uc815 \ub9c1\ud06c. \uad6c\ud604 \uc804\uc774\uba74 NOT RUN \uc73c\ub85c \uc801\ub294\ub2e4.",
+      "next_action": "학습 근거를 기존 issuer 범위로 내보내는 조회 경로와 학생의 공유 범위 선택을 설계한다. 새 역할을 만들지 않는다.",
+      "design_delta": "강사 정체성과 화면은 이미 있다(role issuer + IssuerScope, instructor-auth.ts 하나, Chalk 화면 5종). 없는 것은 조회 경로와 공유 결정이다. 검증은 두 워커가 공유하는 구현 하나만 쓰고 두 번째 신뢰 경계를 만들지 않는다.",
+      "positive_control": "막힘·학생 원문·확인할 증거·실제/가상 여부가 보이고, 개입 CTA 가 질문 보내기 / 다시 보게 할 지점 표시 / 근거 확인·추가 관찰 필요 셋뿐이다.",
+      "negative_control": "점수 순위·채팅량·토큰량·체류시간·AI 의존도 추정치·성격 평가·코호트 랭킹이 없다. 학생이 공유 범위를 고르지 않은 근거가 강사 화면에 나타나지 않는다. 정렬 옵션에 점수가 없다.",
+      "evidence_required": "설계 문서 링크 · 기존 issuer 범위를 그대로 쓴다는 확인 · MC-39 원격 제출 의존 명시 · 미성년 동의 경로의 Lab 결정 링크. 구현 전이면 NOT RUN 으로 적는다.",
       "implementation_paths": [
         "chalk/src",
         "worker/src/routes"
@@ -2771,12 +2771,12 @@
         "docs/testing/studio-learning-experience.md"
       ],
       "gate": {
-        "reason": "\ud559\uc2b5 \uc774\ubca4\ud2b8\ub294 \uc9c0\uae08 \ub85c\uceec\uc5d0\ub9cc \uc788\ub2e4(MC-24). MC-39 \uc6d0\uaca9 \uc81c\ucd9c\uacfc \ud559\uc0dd \uacf5\uc720 \ubc94\uc704 \uc120\ud0dd\uc774 \uc5c6\uc73c\uba74 \uac15\uc0ac \ud654\uba74\uc5d0 \ubcf4\ub0bc \uadfc\uac70 \uc790\uccb4\uac00 \uc5c6\ub2e4. \ubbf8\uc131\ub144 \ud30c\uc77c\ub7ff\uc758 \ubcf4\ud638\uc790 \ub3d9\uc758\u00b7\uac15\uc0ac \ub9e4\uac1c \uacbd\ub85c\ub294 Lab MISSION \uc544\ub3d9 \uc548\uc804 \uacb0\uc815 \ub300\uae30."
+        "reason": "학습 이벤트는 지금 로컬에만 있다(MC-24). MC-39 원격 제출과 학생 공유 범위 선택이 없으면 강사 화면에 보낼 근거 자체가 없다. 미성년 파일럿의 보호자 동의·강사 매개 경로는 Lab MISSION 아동 안전 결정 대기."
       }
     },
     {
       "id": "chalk-mvp-kb-html-sch",
-      "title": "Chalk \uc81c\ud488 \uc9c0\uc2dd\u00b7\uacc4\ud68d\uc11c \ud615\uc2dd\u00b7\uc800\uc7a5 \ud615\uc2dd \uad6c\ud604",
+      "title": "Chalk 제품 지식·계획서 형식·저장 형식 구현",
       "issue": 1280,
       "kind": "implementation",
       "requirements": [
@@ -2799,15 +2799,15 @@
         }
       ],
       "depends_on": [],
-      "next_action": "chalk_knowledge_versions\u00b7chalk_knowledge_docs \ud14c\uc774\ube14, \uacc4\ud68d\uc11c HTML \ud615\uc2dd \ud30c\uc11c, SessionDesign \uc0c8 \uce78\uc744 \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "E1-1 \uc124\uacc4(docs/design/chalk-knowledge-and-plan-spec.md) \u00a71\u00b7\u00a72\u00b7\u00a74\ub97c \ub530\ub978\ub2e4. chalk_plan_files \ub294 \ubcc4\ub3c4 \ud14c\uc774\ube14, content \uc5d0 \uacc4\ud68d\uc11c \uc6d0\ubb38\uc744 \ub123\uc9c0 \uc54a\ub294\ub2e4.",
-      "positive_control": "\ubcfc\ud2b8 \uac00\uc838\uc624\uae30 \ud6c4 /admin/chalk/knowledge/:version/docs \ub85c \ubb38\uc11c \uc870\ud68c. \uacc4\ud68d\uc11c HTML \uc5d0\uc11c section\u00b7step \ud30c\uc2f1. SessionDesign \uc0c8 \uce78 \uc800\uc7a5\u00b7\uc7ac\uc77d\uae30.",
-      "negative_control": "\ud559\uc0dd \ud1a0\ud070\uc73c\ub85c \uc9c0\uc2dd \uc5d4\ub4dc\ud3ec\uc778\ud2b8 403. scope \ud0a4 \uc5c6\uc74c. \ud0c0\uc785 \ud2c0\ub9b0 \uac12 \uc800\uc7a5 \uac70\ubd80.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7\uc2e4\ud589 \uba85\ub839\u00b7\uae30\ub300/\uad00\uce21. NOT RUN \uc740 NOT RUN \uc73c\ub85c \uc801\ub294\ub2e4."
+      "next_action": "chalk_knowledge_versions·chalk_knowledge_docs 테이블, 계획서 HTML 형식 파서, SessionDesign 새 칸을 구현한다.",
+      "design_delta": "E1-1 설계(docs/design/chalk-knowledge-and-plan-spec.md) §1·§2·§4를 따른다. chalk_plan_files 는 별도 테이블, content 에 계획서 원문을 넣지 않는다.",
+      "positive_control": "볼트 가져오기 후 /admin/chalk/knowledge/:version/docs 로 문서 조회. 계획서 HTML 에서 section·step 파싱. SessionDesign 새 칸 저장·재읽기.",
+      "negative_control": "학생 토큰으로 지식 엔드포인트 403. scope 키 없음. 타입 틀린 값 저장 거부.",
+      "evidence_required": "제출 SHA·실행 명령·기대/관측. NOT RUN 은 NOT RUN 으로 적는다."
     },
     {
       "id": "chalk-mvp-gen-fb",
-      "title": "Chalk \uc0dd\uc131\uae30\uc640 \uac80\uc0ac \uace0\ub9ac \uad6c\ud604",
+      "title": "Chalk 생성기와 검사 고리 구현",
       "issue": 1281,
       "kind": "implementation",
       "requirements": [
@@ -2831,15 +2831,15 @@
       "depends_on": [
         "chalk-mvp-kb-html-sch"
       ],
-      "next_action": "\uacc4\ud68d\uc11c \ucd08\uc548 \uc0dd\uc131 \ub3c4\uad6c\uc640 \uad00\ubb38 \uac80\uc0ac(G1~G3) \uace0\ub9ac\ub97c \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "E1-1 \u00a72(HTML \uaddc\uaca9), E2 \uc0dd\uc131\uae30 \uc124\uacc4\ub97c \ub530\ub978\ub2e4. \uac80\uc0ac\ub294 \uc11c\ubc84\uc5d0\uc11c \ud55c\ub2e4(ARC-01).",
-      "positive_control": "\ucd08\uc548 \uc0dd\uc131 \uc694\uccad \ud6c4 chalk-plan/1 \ud615\uc2dd \uacc4\ud68d\uc11c \ud30c\uc77c \ubc18\ud658. \uad00\ubb38 \uc704\ubc18 \uc788\uc73c\uba74 FB \uc751\ub2f5.",
-      "negative_control": "\uad00\ubb38 \uc704\ubc18 \uc788\ub294 \ucd08\uc548 \ud655\uc815 \uac70\ubd80. \ud559\uc0dd \ud654\uba74\uc5d0 \uad50\uc0ac \uce78 \ub178\ucd9c \uc5c6\uc74c.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7\uc2e4\ud589 \uba85\ub839\u00b7\uae30\ub300/\uad00\uce21. NOT RUN \uc740 NOT RUN \uc73c\ub85c \uc801\ub294\ub2e4."
+      "next_action": "계획서 초안 생성 도구와 관문 검사(G1~G3) 고리를 구현한다.",
+      "design_delta": "E1-1 §2(HTML 규격), E2 생성기 설계를 따른다. 검사는 서버에서 한다(ARC-01).",
+      "positive_control": "초안 생성 요청 후 chalk-plan/1 형식 계획서 파일 반환. 관문 위반 있으면 FB 응답.",
+      "negative_control": "관문 위반 있는 초안 확정 거부. 학생 화면에 교사 칸 노출 없음.",
+      "evidence_required": "제출 SHA·실행 명령·기대/관측. NOT RUN 은 NOT RUN 으로 적는다."
     },
     {
       "id": "chalk-mvp-plan",
-      "title": "Chalk \uac15\uc758 \uacc4\ud68d\uc548 \uad6c\ud604",
+      "title": "Chalk 강의 계획안 구현",
       "issue": 1282,
       "kind": "implementation",
       "requirements": [
@@ -2862,15 +2862,15 @@
       "depends_on": [
         "chalk-mvp-gen-fb"
       ],
-      "next_action": "\uc6b4\uc601 \uacc4\ud68d\uc548(ops) \uc0dd\uc131, \uc9c4\ud589\uc790 \ub7f0\ubd81\u00b7\ucc38\uac00\uc790 \uc548\ub0b4\ubb38 \ud30c\uc0dd, \uc2dc\uac04\ud45c\u00b7\ud589\uc704\uc790\u00b7\uc704\ud5d8\u00b7\ub3d9\uc758 \uce78\uc744 \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "E3 \uc124\uacc4(#1282 \ud558\uc704)\ub97c \ub530\ub978\ub2e4. \ud30c\uc0dd \ud30c\uc77c\uc740 data-chalk-derived-from sha256 \ub9c1\ud06c.",
-      "positive_control": "ops \uc0dd\uc131 \ud6c4 runbook\u00b7handout \ud30c\uc0dd \ud30c\uc77c \ud655\uc778. \uc2dc\uac04\ud45c \ube14\ub85d step-ref \uc815\ud569.",
-      "negative_control": "step-ref \uc5c6\ub294 \ube14\ub85d \uac70\ubd80. \ud589\uc704\uc790 \ud544\uc218 \uce78(teacher\u00b7learner) \uc5c6\uc73c\uba74 \uac70\ubd80.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7\uc2e4\ud589 \uba85\ub839\u00b7\uae30\ub300/\uad00\uce21. NOT RUN \uc740 NOT RUN \uc73c\ub85c \uc801\ub294\ub2e4."
+      "next_action": "운영 계획안(ops) 생성, 진행자 런북·참가자 안내문 파생, 시간표·행위자·위험·동의 칸을 구현한다.",
+      "design_delta": "E3 설계(#1282 하위)를 따른다. 파생 파일은 data-chalk-derived-from sha256 링크.",
+      "positive_control": "ops 생성 후 runbook·handout 파생 파일 확인. 시간표 블록 step-ref 정합.",
+      "negative_control": "step-ref 없는 블록 거부. 행위자 필수 칸(teacher·learner) 없으면 거부.",
+      "evidence_required": "제출 SHA·실행 명령·기대/관측. NOT RUN 은 NOT RUN 으로 적는다."
     },
     {
       "id": "chalk-mvp-ux",
-      "title": "Chalk \uac15\uc0ac \uba74\u00b7\ucc44\ud305 \uc9c4\uc785\u00b7\ubaa9\ub85d \uad6c\ud604",
+      "title": "Chalk 강사 면·채팅 진입·목록 구현",
       "issue": 1283,
       "kind": "implementation",
       "requirements": [
@@ -2886,15 +2886,15 @@
         }
       ],
       "depends_on": [],
-      "next_action": "\uac15\uc0ac \ucc44\ud305 \ud328\ub110\uc5d0\uc11c Chalk \uc9c4\uc785\u00b7\uac15\uc758 \ubaa9\ub85d\u00b7\uc0c1\ud0dc \ud45c\uc2dc\ub97c \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "E4 \uc124\uacc4(#1283 \ud558\uc704)\ub97c \ub530\ub978\ub2e4. Studio \ud655\uc7a5 webview \uc5d0\uc11c \uac15\uc0ac \ucc44\ud305\uc73c\ub85c Chalk \uc804\ubd80.",
-      "positive_control": "\uac15\uc758 \ubaa9\ub85d \ubd88\ub7ec\uc624\uae30\u00b7\uc0c8 \uac15\uc758 \ub9cc\ub4e4\uae30\u00b7\ucd08\uc548 \uc774\uc5b4 \uc791\uc131 \ud750\ub984.",
-      "negative_control": "\ud559\uc0dd \ud1a0\ud070\uc73c\ub85c \uac15\uc758 \ubaa9\ub85d \uc811\uadfc \uac70\ubd80.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7\uc2e4\ud589 \uba85\ub839\u00b7\uae30\ub300/\uad00\uce21. NOT RUN \uc740 NOT RUN \uc73c\ub85c \uc801\ub294\ub2e4."
+      "next_action": "강사 채팅 패널에서 Chalk 진입·강의 목록·상태 표시를 구현한다.",
+      "design_delta": "E4 설계(#1283 하위)를 따른다. Studio 확장 webview 에서 강사 채팅으로 Chalk 전부.",
+      "positive_control": "강의 목록 불러오기·새 강의 만들기·초안 이어 작성 흐름.",
+      "negative_control": "학생 토큰으로 강의 목록 접근 거부.",
+      "evidence_required": "제출 SHA·실행 명령·기대/관측. NOT RUN 은 NOT RUN 으로 적는다."
     },
     {
       "id": "chalk-mvp-out",
-      "title": "Chalk \uac15\uc758 \ub9cc\ub4e4\uae30 \uad6c\ud604",
+      "title": "Chalk 강의 만들기 구현",
       "issue": 1284,
       "kind": "implementation",
       "requirements": [
@@ -2912,15 +2912,15 @@
       "depends_on": [
         "chalk-mvp-gen-fb"
       ],
-      "next_action": "\uacc4\ud68d\uc11c\uc5d0\uc11c \ud559\uc0dd \uac15\uc758\ub85c \ubcc0\ud658(E5)\u00b7\ud655\uc815\u00b7\ubc30\ud3ec \ud750\ub984\uc744 \uad6c\ud604\ud55c\ub2e4.",
-      "design_delta": "E5 \uc124\uacc4(#1284 \ud558\uc704)\ub97c \ub530\ub978\ub2e4. \uad50\uc0ac \uce78 \ud559\uc0dd \uc804\ub2ec \uae08\uc9c0(ARC-01), plan_ref \ub9cc content \uc5d0 \ud3ec\ud568.",
-      "positive_control": "\uacc4\ud68d\uc11c \ud655\uc815 \ud6c4 /v1/profile \uc5d0 plan_ref \ud3ec\ud568. \ucf54\uce58 system_prompt \uc5d0 \uad50\uc0ac \uce78 \uc5c6\uc74c.",
-      "negative_control": "\uad50\uc0ac \uce78(prohibited_moves \ub4f1)\uc774 \ud559\uc0dd \ucc44\ud305\u00b7\ucf54\uce58 prompt JSON \uc5d0 \uc5c6\uc74c.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7\uc2e4\ud589 \uba85\ub839\u00b7\uae30\ub300/\uad00\uce21. NOT RUN \uc740 NOT RUN \uc73c\ub85c \uc801\ub294\ub2e4."
+      "next_action": "계획서에서 학생 강의로 변환(E5)·확정·배포 흐름을 구현한다.",
+      "design_delta": "E5 설계(#1284 하위)를 따른다. 교사 칸 학생 전달 금지(ARC-01), plan_ref 만 content 에 포함.",
+      "positive_control": "계획서 확정 후 /v1/profile 에 plan_ref 포함. 코치 system_prompt 에 교사 칸 없음.",
+      "negative_control": "교사 칸(prohibited_moves 등)이 학생 채팅·코치 prompt JSON 에 없음.",
+      "evidence_required": "제출 SHA·실행 명령·기대/관측. NOT RUN 은 NOT RUN 으로 적는다."
     },
     {
       "id": "chalk-mvp-rh-sub",
-      "title": "Chalk \ub9ac\ud5c8\uc124\u00b7\uad6c\ub3c5 \uc5f0\uacb0 \uad6c\ud604",
+      "title": "Chalk 리허설·구독 연결 구현",
       "issue": 1285,
       "kind": "implementation",
       "requirements": [
@@ -2948,11 +2948,11 @@
       "depends_on": [
         "chalk-mvp-out"
       ],
-      "next_action": "\ub9ac\ud5c8\uc124 \ud750\ub984(\uac15\uc0ac\uac00 \ud559\uc0dd \uc870\uac74\uc73c\ub85c \uccb4\ud5d8)\uacfc \uad6c\ub3c5 \uc5f0\uacb0(\uac15\uc758 \ud074\ub77c\uc774\uc5b8\ud2b8 \ubc30\ud3ec) \uad6c\ud604.",
-      "design_delta": "E6 \ub9ac\ud5c8\uc124\u00b7E7 \uad6c\ub3c5 \uc124\uacc4\ub97c \ub530\ub978\ub2e4. \ub9ac\ud5c8\uc124 \uc810\uac80\ud45c\ub294 \uc9c0\ub3c4\uc548 13\uc808 support \uc139\uc158\uc5d0\uc11c \ud30c\uc0dd.",
-      "positive_control": "\ub9ac\ud5c8\uc124 \ubaa8\ub4dc \uc9c4\uc785\u00b7\ud559\uc0dd \ud654\uba74 \uccb4\ud5d8\u00b7\uc810\uac80\ud45c \ud655\uc778. \uad6c\ub3c5 \ud1a0\ud070 \ubc1c\uae09\u00b7\uac15\uc758 \uc5f4\uae30.",
-      "negative_control": "\ub9ac\ud5c8\uc124 \uc911 \uad50\uc0ac \uce78 \ub178\ucd9c \uc5c6\uc74c. \uad6c\ub3c5 \ub9cc\ub8cc \ud6c4 \uac15\uc758 \uc5f4\uae30 \uac70\ubd80.",
-      "evidence_required": "\uc81c\ucd9c SHA\u00b7\uc2e4\ud589 \uba85\ub839\u00b7\uae30\ub300/\uad00\uce21. NOT RUN \uc740 NOT RUN \uc73c\ub85c \uc801\ub294\ub2e4."
+      "next_action": "리허설 흐름(강사가 학생 조건으로 체험)과 구독 연결(강의 클라이언트 배포) 구현.",
+      "design_delta": "E6 리허설·E7 구독 설계를 따른다. 리허설 점검표는 지도안 13절 support 섹션에서 파생.",
+      "positive_control": "리허설 모드 진입·학생 화면 체험·점검표 확인. 구독 토큰 발급·강의 열기.",
+      "negative_control": "리허설 중 교사 칸 노출 없음. 구독 만료 후 강의 열기 거부.",
+      "evidence_required": "제출 SHA·실행 명령·기대/관측. NOT RUN 은 NOT RUN 으로 적는다."
     },
     {
       "id": "cr-recon",
@@ -2980,7 +2980,7 @@
       ],
       "depends_on": [],
       "curriculum_week": "W1",
-      "next_action": "Read the ten PRD \u00a713 Phase 0 areas (docs/design/curriculum-runtime-prd-v1.0-2026-09-28.md) on origin/main and write the architecture map (exact paths, symbols, extension points, data flows) and the per-row gap matrix into docs/plan/curriculum-runtime.md, replacing the provisional matrix. Decide whether the upstream browserView tools can be driven from hypeproof-chat through vscodium-base/patches and where the adapter boundary sits, how the CR switch (CR-02) is resolved, and which skill loader CR-43 uses.",
+      "next_action": "Read the ten PRD §13 Phase 0 areas (docs/design/curriculum-runtime-prd-v1.0-2026-09-28.md) on origin/main and write the architecture map (exact paths, symbols, extension points, data flows) and the per-row gap matrix into docs/plan/curriculum-runtime.md, replacing the provisional matrix. Decide whether the upstream browserView tools can be driven from hypeproof-chat through vscodium-base/patches and where the adapter boundary sits, how the CR switch (CR-02) is resolved, and which skill loader CR-43 uses.",
       "design_delta": "No production code. Every claim names a path or symbol that exists at the recorded commit; unknowns stay unknown. Before calling a gap new, check the owners of the reused requirements (review-validity #557, publish-recovery #1018, sx-p1-evidence-capture #1172, measurement-core-dogfood #1020, model-routing #1009) and their open PRs.",
       "positive_control": "Every map entry resolves to a path and symbol at the recorded commit; the matrix has one verdict (reuse / extend / new) for each CR row.",
       "negative_control": "A map entry with a non-existent path or symbol, a missing PRD area, or a CR row missing from the matrix fails CR-T01. A gap called new while an open PR already implements it is recorded as a finding.",
@@ -3066,7 +3066,7 @@
       "design_delta": "Extend the existing CDP stack and MCP tools; no second browser-control framework. The upstream browserView agent tools are not driven and vscodium-base is not patched (docs/plan/curriculum-runtime-recon.md R1). Results bind to the artifact version that recon R4 defines: the digest of the published file set. AE-37 (#557) binds single-file artifact events, and each file keeps the sha256 those events carry.",
       "positive_control": "Existing browser smokes and 09-preview.spec.ts stay green with the switch off; the kiosk fixture five-step flow succeeds; a clean page reports zero console records. Agent browser actions on the live-server origin run, with the automation indicator shown during each browser-tool step and gone after it.",
       "negative_control": "Stale refs after reload or navigation are rejected; a planted console error in flow step 3 is reported once, at the index of the agent action that raised it with the opening navigate counted (action 4 in the App flow), and a later request that does not navigate reads it as an earlier request's record, never at one of its own steps, while an error the student raises between requests stays a failure of the next request; an agent browser action navigating to an external origin is refused with a reason; an agent browser-tool step with no visible indicator fails; a CR surface visible with the switch off fails, except CR-02's listed delete command while the signed-in person has browser-result bytes stored, which must be hidden when they have none and must not reach another person's bytes.",
-      "evidence_required": "Submitted SHA \u00b7 gates run with exit codes \u00b7 evidence that each control was red on the pre-implementation tree \u00b7 the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) \u00b7 NOT RUN list. If there is no real-device run, say so. Timings name the machine and sample size. PRD \u00a715 outputs for this slice: a manual demo procedure and the known limitations and risks.",
+      "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so. Timings name the machine and sample size. PRD §15 outputs for this slice: a manual demo procedure and the known limitations and risks.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src/cdpSession.ts",
         "extensions/hypeproof-chat/src/experimentBrowser.ts",
@@ -3242,11 +3242,11 @@
         "cr-browser"
       ],
       "curriculum_week": "W2",
-      "next_action": "Add the 'Test my product' action that takes 1\u20135 criteria, runs them with the CR-06 actions (DOM and accessibility first), and writes an hps-verification/1 report through criterion_set / test_observed bound to the artifact version; hand failed criteria to the coach as a fix request and re-test by criterion ID; show 'verified' only for a version with an all-pass report; keep runner steps on the project's own origins (CR-11) and show the automation indicator during a run (CR-68).",
+      "next_action": "Add the 'Test my product' action that takes 1–5 criteria, runs them with the CR-06 actions (DOM and accessibility first), and writes an hps-verification/1 report through criterion_set / test_observed bound to the artifact version; hand failed criteria to the coach as a fix request and re-test by criterion ID; show 'verified' only for a version with an all-pass report; keep runner steps on the project's own origins (CR-11) and show the automation indicator during a run (CR-68).",
       "design_delta": "The report is a view over existing learning events plus artifact references (SX-48); no new store. AI-proposed criteria stay AI-actor drafts until the student confirms (SX-14, HC-04). Stale-pass handling reuses AE-37 (#557).",
       "positive_control": "Three student criteria on the kiosk fixture give the same verdicts on two runs of the same version; a failed criterion re-tested after a fix yields retest_confirmed. Runner steps on the live-server origin run, and the automation indicator shows during a verify run and is gone after it.",
       "negative_control": "Zero or six criteria are refused; an unconfirmed AI criterion does not run; a verdict without a cited observation is 'not verified'; an earlier pass shown as current after a file change fails. 'Verified' shown for a version without an all-pass report bound to it fails. With the CR switch off, the \"Test my product\" command and its verification routes are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory. A runner step navigating to an external origin is refused with a reason; a runner step with no visible indicator fails.",
-      "evidence_required": "Submitted SHA \u00b7 gates run with exit codes \u00b7 evidence that each control was red on the pre-implementation tree \u00b7 the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) \u00b7 NOT RUN list. If there is no real-device run, say so. PRD \u00a715 outputs that close Phase 1 (with cr-browser): a manual demo procedure, the known limitations and risks, and a concrete interface proposal for the next vertical slice, Publish for User Test + Evidence Capture (cr-publish, cr-evidence).",
+      "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so. PRD §15 outputs that close Phase 1 (with cr-browser): a manual demo procedure, the known limitations and risks, and a concrete interface proposal for the next vertical slice, Publish for User Test + Evidence Capture (cr-publish, cr-evidence).",
       "implementation_paths": [
         "worker/src/lib/measurement-core/verification.ts",
         "worker/src/lib/measurement-core/legacy-observation.ts",
@@ -3312,11 +3312,11 @@
         "cr-verify"
       ],
       "curriculum_week": "W1",
-      "next_action": "Read galleryPublish.ts, the Lab /api/gallery/publish route and publish-recovery #1018, then generalise that path to publish a chosen verified version as a content-addressed test version with share URL, client-side QR, revocation, required expiry, anonymous participant sessions, project / experiment / version attribution and channel-labelled links. Starting a test creates the Experiment record (CR-39, every PRD \u00a710.1 field) and, when the project has none, the Hypothesis it names; agent browser actions and the runner may also reach the project's published test origins, and no other project's (CR-11).",
+      "next_action": "Read galleryPublish.ts, the Lab /api/gallery/publish route and publish-recovery #1018, then generalise that path to publish a chosen verified version as a content-addressed test version with share URL, client-side QR, revocation, required expiry, anonymous participant sessions, project / experiment / version attribution and channel-labelled links. Starting a test creates the Experiment record (CR-39, every PRD §10.1 field) and, when the project has none, the Hypothesis it names; agent browser actions and the runner may also reach the project's published test origins, and no other project's (CR-11).",
       "design_delta": "One publish path, not a second one beside gallery publish; WEB-07/08 stay with #1018. Test versions are immutable and keyed by digest; experiments pin a version. Until Jay sets a default expiry, publishing requires an explicit one. The published runtime denies microphone and camera unless the experiment declares them. Lab-side changes go in a separate Lab PR linked from #1393. cr-publish creates the participant session record when a link is opened, with project, experiment, version and channel; cr-evidence (CR-23) adds the other event kinds on that path and they inherit the session's attribution. The Experiment record (CR-39) and the Hypothesis it names are created here, in the storage cr-recon chose for Venture Memory (CR-35), because attribution, pinning, channel links and the experiment declarations need them before cr-memory; cr-evidence adds its declarations to that record and cr-memory extends it, and neither creates a second one.",
       "positive_control": "Same bytes publish to the same version ID; a phone (emulated, and one real) opens the link at 390 px without login; publishing v1 leaves the running v0 experiment on v0. Two channel-labelled links of one experiment attribute sessions to their own channel. The publish action shows verified only for a version with an all-pass report bound to it (CR-81). Starting a test on a verified version stores one Experiment record with every CR-39 field whose hypothesis_id resolves (CR-T80); runner steps on the project's published test origin run.",
       "negative_control": "Changing files behind a published version is refused; a revoked or expired link answers 410 with no content; a publish without an explicit expiry is refused while no default is set; a session whose version is not the experiment's is refused; an undeclared page calling getUserMedia is denied. A session claiming an experiment other than its link's is refused. With the CR switch off, the publish action and the public share, QR and session routes are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory. An experiment whose hypothesis_id does not resolve is refused; a runner step or agent browser action on another project's published origin is refused.",
-      "evidence_required": "Submitted SHA \u00b7 gates run with exit codes \u00b7 evidence that each control was red on the pre-implementation tree \u00b7 the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) \u00b7 NOT RUN list. If there is no real-device run, say so.",
+      "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so.",
       "implementation_paths": [
         "worker/src/routes/curriculum.ts",
         "worker/src/routes/curriculum-test-origin.ts",
@@ -3409,7 +3409,7 @@
       "design_delta": "SX-48: extend hps-observation/1 and learning-events; no new evidence table (migration 0033 holds policy, rate and retention-clock state only: cr_link_rates, cr_cohort_controls, and cr_experiment_records, one last-record time per experiment for decision-6 retention, no evidence), KV namespace, validator copy or scorer. Raw records are immutable; interpretation edits are revisions (MC-22). Raw participant input is not retained unless the experiment declares it; participant records, declared raw input included, are deleted 30 days after the experiment ends with a per-cohort override (Jay's decision 6, 2026-10-01). Deletion propagates to derived drafts following MC-31 and classroom-erasure.ts. Experiment declarations (repeated-use measurement, raw-input retention, comparison variants) are fields of the Experiment record cr-publish created (CR-39), not a record of their own.",
       "positive_control": "One scripted participant session yields the six kinds; three real citations validate; editing an interpretation leaves raw hashes unchanged; clicking a claim opens its sources. A declared repeated-use experiment reports one pseudonym's return count citing its sessions; a two-variant comparison reports per variant.",
       "negative_control": "Three planted fabricated statements are refused; events for a revoked version and events with identity fields are refused; typed text for an undeclared experiment is not stored; a store-inventory check finds no new evidence table. An undeclared experiment shows returns as 'not measured', not 0; an event without a variant in a comparison experiment is refused. With the CR switch off, the participant event ingest route and the manual-record and evidence-draft panels are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory.",
-      "evidence_required": "Submitted SHA \u00b7 gates run with exit codes \u00b7 evidence that each control was red on the pre-implementation tree \u00b7 the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) \u00b7 NOT RUN list. If there is no real-device run, say so.",
+      "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so.",
       "implementation_paths": [
         "worker/src/lib/measurement-core/learning-events.ts",
         "worker/src/lib/measurement-core/legacy-observation.ts",
@@ -3499,11 +3499,11 @@
         "cr-evidence"
       ],
       "curriculum_week": "W1",
-      "next_action": "Implement the PRD \u00a710 Experiment, Evidence item, Decision and Artifact contracts and the project entity set as a worker schema extension that links hypotheses, experiments, evidence (by reference), decisions, product versions and deck slides, with stakeholder roles, metric definitions, a product version diff, a project timeline, hypothesis revisions for the \"belief changed because\u2026\" view, a fact/assumption register, and a director traversal API limited to the director's scope.",
+      "next_action": "Implement the PRD §10 Experiment, Evidence item, Decision and Artifact contracts and the project entity set as a worker schema extension that links hypotheses, experiments, evidence (by reference), decisions, product versions and deck slides, with stakeholder roles, metric definitions, a product version diff, a project timeline, hypothesis revisions for the \"belief changed because…\" view, a fact/assumption register, and a director traversal API limited to the director's scope.",
       "design_delta": "Observations and evidence items are references into the measurement-core store, never copies (SX-48). Extend hps-session-design/1 conventions without changing its schema ID unless Jay approves a breaking change. Director scope reuses the issuer identity (SX-38); no new role. The Hypothesis and Experiment records cr-publish created (CR-39) are extended in place: cr-memory re-runs CR-T80 and creates no second hypothesis or experiment record.",
-      "positive_control": "The four PRD \u00a710 samples validate; a project reopened with chat history deleted shows the same state; a director walks hypothesis \u2192 evidence \u2192 decision \u2192 version. A v0 \u2192 v1 diff names the decision and evidence behind v1; every timeline entry opens its record. The register lists every evidence item by confidence, and a student-accepted revision with real sources moves an assumption to observed while keeping the earlier revision.",
+      "positive_control": "The four PRD §10 samples validate; a project reopened with chat history deleted shows the same state; a director walks hypothesis → evidence → decision → version. A v0 → v1 diff names the decision and evidence behind v1; every timeline entry opens its record. The register lists every evidence item by confidence, and a student-accepted revision with real sources moves an assumption to observed while keeping the earlier revision.",
       "negative_control": "Each sample missing a required field is refused; an observed evidence item with empty source_refs, slide number 9 and an artifact without entry_html are refused; a director outside scope is refused; a duplicated evidence table fails the store inventory. A stakeholder with no role is refused; a simulated metric input counted as a real result fails; a belief change with no linked decision shows 'reason not recorded'. With the CR switch off, the Venture Memory APIs, the register and timeline views and the director traversal route are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory. A dangling assumption_ref is refused; an assumption promoted by an AI or skill statement with no resolvable source_refs is refused.",
-      "evidence_required": "Submitted SHA \u00b7 gates run with exit codes \u00b7 evidence that each control was red on the pre-implementation tree \u00b7 the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) \u00b7 NOT RUN list. If there is no real-device run, say so.",
+      "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so.",
       "implementation_paths": [
         "worker/src/lib/curriculum/venture.ts",
         "worker/src/lib/curriculum/memory.ts",
@@ -3572,7 +3572,7 @@
       "design_delta": "No parallel plugin framework. Skill loading must not let workspace settings add tool allow-rules (the SDK coach keeps settingSources: [] or an equivalent restriction). Curriculum content is data, never code (SX-56). Skill outputs and the model requests a skill issues carry skill ID and version and name a capability, not a model ID. Until cr-gateway lands (it depends on this item), skills call models through the existing coach route, where the capability is recorded but resolved by the existing lesson model policy.",
       "positive_control": "A complete skill contract loads; valid Evidence output writes only its declared targets; planted-answer fixtures give the expected outputs. The Critic lists a claim that no verification criterion or experiment checks as a missing test; the Demo Coach returns a demo flow and Q&A.",
       "negative_control": "A skill missing a contract field is not loaded; invalid output writes nothing; a workspace allow-rule has no effect; planted leading questions, weak claims, a product whose AI failure has no handling, out-of-scope file changes and unaffected-slide edits are caught. With the CR switch off, the curriculum skill loader and the skill commands are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory. An unsupported claim planted in the Demo Coach Q&A is caught.",
-      "evidence_required": "Submitted SHA \u00b7 gates run with exit codes \u00b7 evidence that each control was red on the pre-implementation tree \u00b7 the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) \u00b7 NOT RUN list. If there is no real-device run, say so.",
+      "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so.",
       "implementation_paths": [
         "worker/src/skills/index.ts",
         "worker/src/skills/curriculum/contract.ts",
@@ -3663,11 +3663,11 @@
         "cr-skills"
       ],
       "curriculum_week": "W2",
-      "next_action": "Add a student-app endpoint on the worker with app-scoped tokens and origin-bound CORS, a capability \u2192 model policy table, a normalised adapter interface with a mock adapter, a hard credit ceiling on the existing budget admission, per-app-token and per-participant-session rate limits, and attribution by organisation, cohort, team, student, project, skill, capability and provider/model. Keep no request, response or R2 turn body for app calls unless the experiment declares raw-input retention, and extend the CR-69 delete path to gateway trace and usage rows. Teach the coach and the Product Builder skill to generate hypeproof.ai.* capability calls through the snippet, with the key scan extended to provider SDK imports, provider endpoints and model IDs.",
+      "next_action": "Add a student-app endpoint on the worker with app-scoped tokens and origin-bound CORS, a capability → model policy table, a normalised adapter interface with a mock adapter, a hard credit ceiling on the existing budget admission, per-app-token and per-participant-session rate limits, and attribution by organisation, cohort, team, student, project, skill, capability and provider/model. Keep no request, response or R2 turn body for app calls unless the experiment declares raw-input retention, and extend the CR-69 delete path to gateway trace and usage rows. Teach the coach and the Product Builder skill to generate hypeproof.ai.* capability calls through the snippet, with the key scan extended to provider SDK imports, provider endpoints and model IDs.",
       "design_delta": "Adapt the existing /v1/chat/completions and /v1/messages stack, budgets and ledgers instead of a new gateway. MU-02 stays: same-provider retry of the mapped model only before output, every attempt metered; no automatic substitution to another provider or an unmapped model; failures are typed errors. The model-practice route keeps MU-02's single upstream call. Admin ceilings reuse AB-04 authorisation. App calls ignore the cohort log_user_messages flag for bodies unless the experiment declares raw-input retention; deleting a participant session drops its trace rows and strips its key from usage rows, which keep cost for settlement (AB-07).",
       "positive_control": "The kiosk app calls text.fast from its published origin without a key; the same request passes through a recorded real adapter and the mock with one shape; requests up to the ceiling succeed with full attribution. Requests under the rate limit from two participant sessions succeed. Asked for an AI feature on the kiosk fixture, the coach generates a hypeproof.ai.* call with a capability that passes the scan and works from the published version.",
       "negative_control": "A planted key pattern in a bundle is found; a token from another origin is refused; a model ID in a request is refused; after a mapped-provider failure a spy sees zero calls to another provider; the request past the ceiling gets 429 with no upstream call; a burst from one participant session gets 429 rate_limited without draining the team ceiling; 20 concurrent requests do not overshoot. With the CR switch off, the `/v1/app/*` routes and the client snippet are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory. With log_user_messages on, an undeclared experiment's app call that stores a body fails; a usage or trace row still keyed to a deleted participant session fails; planted generated code with a provider SDK import, a provider URL or a model ID is caught by the scan.",
-      "evidence_required": "Submitted SHA \u00b7 gates run with exit codes \u00b7 evidence that each control was red on the pre-implementation tree \u00b7 the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) \u00b7 NOT RUN list. If there is no real-device run, say so.",
+      "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so.",
       "implementation_paths": [
         "worker/src/routes/chat.ts",
         "worker/src/routes/messages.ts",
@@ -3722,7 +3722,7 @@
       "design_delta": "Reuse classroom-report, classroom-evaluator and classroom-report-html rather than a second report engine. Opening a pack never calls a model; stale packs open marked stale. Claims link to sources and interpretation stays apart, reading only the existing store (SX-48).",
       "positive_control": "The Week 2 fixture yields ten sections with linked claims; opening the cached pack makes zero model calls; the director's decision and next experiment appear in memory after reopen. With no slide patch pending, the \"deck slides affected\" section names the decisions' slides and says \"no proposal\".",
       "negative_control": "An unlinked factual claim fails; changing one evidence item regenerates only the sections that read it; any model call on open fails; another cohort's team never appears in the overview. With the CR switch off, the review screen, \"Prepare Weekly Review\" and the director overview routes are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory.",
-      "evidence_required": "Submitted SHA \u00b7 gates run with exit codes \u00b7 evidence that each control was red on the pre-implementation tree \u00b7 the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) \u00b7 NOT RUN list. If there is no real-device run, say so.",
+      "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so.",
       "implementation_paths": [
         "worker/src/lib/curriculum/review.ts",
         "worker/src/lib/curriculum/store.ts",
@@ -3792,9 +3792,9 @@
       "curriculum_week": "W2",
       "next_action": "Store the eight v5 slides as structured state rendered to HTML in the embedded browser, let the Deck Builder propose per-slide patches with evidence refs, flag unsupported numbers, and add per-slide accept / reject and a change view that shows which claims changed and why.",
       "design_delta": "State and render are separate; editing rendered HTML never changes state. Patches touch affected slides only. Numbers without evidence refs are flagged and simulated numbers are labelled (SX-46, SX-58). Export stays out of scope.",
-      "positive_control": "The fixture deck renders the eight titles verbatim; the Week 2 fixture yields patches for slides 2\u20133 only; accepting slide 2 changes only slide 2. Each slide claim shows observed, interpreted or assumed, never stronger than the evidence it cites. A pack prepared while a slide patch is pending lists it under \"deck slides affected\" with its evidence refs.",
-      "negative_control": "Four planted unsupported numbers yield four flags; a rejected patch leaves state byte-identical; any proposal outside slides 2\u20133 for the Week 2 fixture fails. With the CR switch off, the deck view and the slide patch routes are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory. A claim labelled observed without citing an observed evidence item fails. A pack prepared while a patch is pending that leaves it out of \"deck slides affected\" fails.",
-      "evidence_required": "Submitted SHA \u00b7 gates run with exit codes \u00b7 evidence that each control was red on the pre-implementation tree \u00b7 the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) \u00b7 NOT RUN list. If there is no real-device run, say so.",
+      "positive_control": "The fixture deck renders the eight titles verbatim; the Week 2 fixture yields patches for slides 2–3 only; accepting slide 2 changes only slide 2. Each slide claim shows observed, interpreted or assumed, never stronger than the evidence it cites. A pack prepared while a slide patch is pending lists it under \"deck slides affected\" with its evidence refs.",
+      "negative_control": "Four planted unsupported numbers yield four flags; a rejected patch leaves state byte-identical; any proposal outside slides 2–3 for the Week 2 fixture fails. With the CR switch off, the deck view and the slide patch routes are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory. A claim labelled observed without citing an observed evidence item fails. A pack prepared while a patch is pending that leaves it out of \"deck slides affected\" fails.",
+      "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src/previewProvider.ts",
         "extensions/hypeproof-chat/src/liveServer.ts",
@@ -3836,11 +3836,11 @@
         "cr-gateway"
       ],
       "curriculum_week": "W1",
-      "next_action": "Script the fifteen PRD \u00a714 steps (the \u00a714 procedure in docs/testing/curriculum-runtime.md) on the kiosk-practice app in the Studio app (e2e/curriculum-runtime/loop-app.spec.ts), run it on the dev host, then run it once live on a real Mac with a real phone and record the evidence file. Measure CR-59 (preview refresh after save, CR-T55) and CR-60 (element capture to context, CR-T56) in the Studio app on this Mac, 30 samples each, with the screen unlocked (Jay's decision 9, 2026-10-01: moved here from cr-browser). Blocking CR-71 (2026-10-06): no panel registers a product version without starting a test of it, and none names the version a decision produced (CR-41's control; the Service route POST /v1/curriculum/decisions/:id/version exists). Until a panel does, step 13 runs through e2e/curriculum-runtime/register-version.mjs, a harness script, and is PARTIAL, so this item cannot complete.",
+      "next_action": "Script the fifteen PRD §14 steps (the §14 procedure in docs/testing/curriculum-runtime.md) on the kiosk-practice app in the Studio app (e2e/curriculum-runtime/loop-app.spec.ts), run it on the dev host, then run it once live on a real Mac with a real phone and record the evidence file. Measure CR-59 (preview refresh after save, CR-T55) and CR-60 (element capture to context, CR-T56) in the Studio app on this Mac, 30 samples each, with the screen unlocked (Jay's decision 9, 2026-10-01: moved here from cr-browser). Blocking CR-71 (2026-10-06): no panel registers a product version without starting a test of it, and none names the version a decision produced (CR-41's control; the Service route POST /v1/curriculum/decisions/:id/version exists). Until a panel does, step 13 runs through e2e/curriculum-runtime/register-version.mjs, a harness script, and is PARTIAL, so this item cannot complete.",
       "design_delta": "Uses only shipped CR behaviour behind the switch; no test-only shortcuts in product code. Each step reads the previous step's record. The existing preview and HTML regressions are re-run with the switch off (e2e/tests/09-preview.spec.ts, re-run unchanged, so it is not an implementation path), and CR-T02 walks the whole switch-off inventory the earlier items built.",
       "positive_control": "All fifteen steps pass on the dev host; the live run completes with a real phone; the switch-off regressions stay green. With the switch off, CR-T02 walks the full switch-off inventory from every item and finds every entry unreachable. In the Studio app on the reference Mac, preview refresh after save has p50 under 2 s (CR-T55) and element capture to context p50 under 1 s (CR-T56), 30 samples each.",
       "negative_control": "A planted break between steps 8 and 10 stops the loop at step 10; a live-run step satisfied only by synthetic data is NOT RUN, not PASS. Any inventory entry reachable with the switch off fails. A planted 3 s delay in the refresh path, and a full-page screenshot planted in place of the element crop, are each reported as a miss.",
-      "evidence_required": "Submitted SHA \u00b7 app build and machine \u00b7 phone model and browser \u00b7 per-step result with evidence class \u00b7 the live-host run recorded in docs/testing/curriculum-runtime-<date>-evidence.md \u00b7 CR-T55 and CR-T56 timings from the Studio app on the reference Mac (machine, app build, sample size, p50) with their planted-delay controls \u00b7 NOT RUN list.",
+      "evidence_required": "Submitted SHA · app build and machine · phone model and browser · per-step result with evidence class · the live-host run recorded in docs/testing/curriculum-runtime-<date>-evidence.md · CR-T55 and CR-T56 timings from the Studio app on the reference Mac (machine, app build, sample size, p50) with their planted-delay controls · NOT RUN list.",
       "implementation_paths": [
         "e2e/curriculum-runtime/loop-app.spec.ts",
         "e2e/curriculum-runtime/timing-app.spec.ts",
@@ -3994,9 +3994,9 @@
         "installer-sdk-seed-fail-closed"
       ],
       "next_action": "Merge after the SDK seed fail-closed change; run one Mac install without Homebrew and one Windows install without Git Bash and confirm the consent prompts, step headers and doctor verdict read in Korean.",
-      "design_delta": "install.sh and install.ps1 ask the Homebrew, nvm and WSL questions, print step headers, the doctor verdict and the final line in Korean, with Korean answer hints; tool output and diagnostic log lines stay as they are. Both installers read Korean and Korean-IME answers (\uc544\ub2c8\uc694, \u3134, \u315c / \ub124, \u3147, \u315b) the way the learner meant; a not-understood answer is asked again and, after three tries, taken as no.",
+      "design_delta": "install.sh and install.ps1 ask the Homebrew, nvm and WSL questions, print step headers, the doctor verdict and the final line in Korean, with Korean answer hints; tool output and diagnostic log lines stay as they are. Both installers read Korean and Korean-IME answers (아니요, ㄴ, ㅜ / 네, ㅇ, ㅛ) the way the learner meant; a not-understood answer is asked again and, after three tries, taken as no.",
       "positive_control": "Korean prompts and headers that keep tool names pass, and both shipped installers pass with at least their known number of prompts and headers (scripts/test-check-installer-korean.py). Every yes answer, Korean, IME jamo or English, and Enter on a default-yes question is read as yes by both shipped parsers (scripts/test-installer-answers.sh).",
-      "negative_control": "English confirm/Confirm-Or/Read-Host prompts, step headers, [Y/n] answer hints and doctor verdicts are rejected (scripts/test-check-installer-korean.py). Every no answer, including \uc544\ub2c8\uc694 (which the old install.sh read as yes and so installed Homebrew), is read as no, and a not-understood answer is never read as yes (scripts/test-installer-answers.sh).",
+      "negative_control": "English confirm/Confirm-Or/Read-Host prompts, step headers, [Y/n] answer hints and doctor verdicts are rejected (scripts/test-check-installer-korean.py). Every no answer, including 아니요 (which the old install.sh read as yes and so installed Homebrew), is read as no, and a not-understood answer is never read as yes (scripts/test-installer-answers.sh).",
       "evidence_required": "Studio commit and the static check output. A real install on each platform is required before completion; a static check is not an installed-user result.",
       "implementation_paths": [
         "scripts/install.sh",
@@ -4108,7 +4108,7 @@
     },
     {
       "id": "chalk-confirm-instruction-diff",
-      "title": "\ud655\uc815 \uc804 \uc548\ub0b4 \ubb38\uad6c \uc904 \ube44\uad50 (CGP-AGENT-R-016)",
+      "title": "확정 전 안내 문구 줄 비교 (CGP-AGENT-R-016)",
       "issue": 2118,
       "kind": "implementation",
       "feature_ids": [
@@ -4127,7 +4127,7 @@
       ],
       "next_action": "Review and merge feat/cgp-chalk-diff. Then add the Service half: the confirmation route rejects a compared_with that is not the newest confirmed version, and /versions exposes the newest confirmed version so a long course is not locked. Then build the grouped per-field change list of R-016.",
       "design_delta": "The confirm step diffs the candidate's step titles and instructions against the newest confirmed version, client-side from existing reads (Myers line diff, CRLF/NFC/trailing-newline normalised, folds over 3 unchanged lines, whitespace-only pairs labelled, >2000 edits reported as skipped). Confirm stays locked while the diff loads, fails, has an unexpected shape, or the base cannot be proven; the base is re-read right before confirm and sent as compared_with.",
-      "positive_control": "Identical text draws no rows; a normal edit draws +/\u2212 rows with \ucd94\uac00/\uc0ad\uc81c spoken words, underline/strike and a fold; a complete version list with no confirmed version is a first confirmation and does not lock (chalk/test/instruction-diff.test.mjs, e2e/chalk-authoring/confirm-diff.mjs).",
+      "positive_control": "Identical text draws no rows; a normal edit draws +/− rows with 추가/삭제 spoken words, underline/strike and a fold; a complete version list with no confirmed version is a first confirmation and does not lock (chalk/test/instruction-diff.test.mjs, e2e/chalk-authoring/confirm-diff.mjs).",
       "negative_control": "A failed or malformed base read, or a truncated list without a confirmed version, keeps confirm locked; a base confirmed elsewhere after the review refuses the confirm and re-diffs; markup in lesson text never renders; a 3000-line lesson with two edits is not drawn as a full replace.",
       "evidence_required": "Studio commit, unit and browser test output with the mutation list, screenshots at 1280/800px. The Service-side compared_with check and a real instructor confirm are separate evidence.",
       "implementation_paths": [
