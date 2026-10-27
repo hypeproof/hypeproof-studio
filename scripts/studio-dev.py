@@ -189,6 +189,14 @@ def configure_copy(app, identifier, account_preview=False):
     root = app_resources(app)
     product_path = root / 'product.json'
     product = json.loads(product_path.read_text(encoding='utf-8'))
+    engine_version = json.loads((root / 'package.json').read_text(encoding='utf-8')).get('version')
+    if not isinstance(engine_version, str) or not re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?', engine_version):
+        raise RuntimeError('Copied app package.json has no valid VS Code engine version.')
+    # Product version wins over package.json at runtime. A release stamp here
+    # otherwise breaks extension engine checks and the vscode.version API.
+    if 'hpsReleaseVersion' not in product and product.get('version'):
+        product['hpsReleaseVersion'] = product['version']
+    product['version'] = engine_version
     product.update(nameShort='HypeProof Studio Dev', nameLong='HypeProof Studio Dev',
                    applicationName='hypeproof-studio-dev-' + identifier,
                    dataFolderName='.hypeproof-studio-dev-' + identifier,
