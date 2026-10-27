@@ -67,11 +67,13 @@ const focused = (b) => b.evaluate(`(() => { const a = document.activeElement; co
 const settle = () => new Promise((r) => setTimeout(r, 120));
 // WCAG relative luminance contrast of two rgb() strings (alpha ignored: the ring and the panels are opaque).
 const contrast = (a, b) => { const lum = (c) => { const [r, g, bl] = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * bl; }; const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+// Each action target is measured where it is drawn and hit-tested at its centre, so a pointer or a finger lands on it.
+const SIZES = `[...document.querySelectorAll('#ops-help-list li[data-help-id] button, #ops-help-keys-toggle, #answer-next')].filter((e) => e.getBoundingClientRect().height > 0).map((e) => { e.scrollIntoView({ block: 'center', inline: 'nearest' }); const r = e.getBoundingClientRect(); return { name: e.id || e.className, h: r.height, w: r.width, font: parseFloat(getComputedStyle(e).fontSize), hit: e.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) }; })`;
 const GEOMETRY = `(() => {
   const li = document.activeElement.closest('#ops-help-list li[data-help-id]'), s = getComputedStyle(li);
   let n = li, under = 'rgba(0, 0, 0, 0)';
   while (n && (under = getComputedStyle(n).backgroundColor) === 'rgba(0, 0, 0, 0)') n = n.parentElement;
-  const sizes = [...document.querySelectorAll('#ops-help-list li[data-help-id] button, #ops-help-keys-toggle, #answer-next')].filter((e) => e.getBoundingClientRect().height > 0).map((e) => ({ name: e.id || e.className, h: e.getBoundingClientRect().height, w: e.getBoundingClientRect().width, font: parseFloat(getComputedStyle(e).fontSize) }));
+  const sizes = ${SIZES};
   return { width: s.outlineWidth, style: s.outlineStyle, color: s.outlineColor, under, sizes, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
 })()`;
 
@@ -154,39 +156,81 @@ const check = (cond, msg) => { assert.ok(cond, msg); checks++; };
   } finally { await b.close(); }
 }
 
-// (b) "?" sheet, and geometry at 1420 and 800 px, then forced colours.
-for (const [width, forcedColors] of [[1420, false], [800, false], [800, true]]) {
+// (b) "?" sheet, and geometry at 1420 and 800 px in the dark and light schemes, then forced colours (DES-CGP-LEARN-17).
+for (const [width, forcedColors, dark] of [[1420, false, true], [800, false, true], [1420, false, false], [800, false, false], [800, true, true]]) {
   const b = await launch(bin);
+  const at = `${width}px ${forcedColors ? 'forced' : dark ? 'dark' : 'light'}`;
   try {
-    await b.load(html, { width, height: 900, forcedColors });
+    await b.load(html, { width, height: 900, forcedColors, dark });
     await b.evaluate(SETUP);
     await b.evaluate(`document.querySelector('#ops-help-list li[data-help-id="r1"] .help-open').focus()`);
     await press(b, '?');
     let st = await b.evaluate(`(() => { const k = document.getElementById('ops-help-keys'), t = document.getElementById('ops-help-keys-toggle'); return { shown: !k.hidden && getComputedStyle(k).display !== 'none' && k.getBoundingClientRect().height > 0, text: k.textContent, expanded: t.getAttribute('aria-expanded'), modal: !!k.closest('dialog'), focus: (document.activeElement.closest('li[data-help-id]') || {}).dataset?.helpId }; })()`);
-    check(st.shown && st.expanded === 'true' && !st.modal && st.focus === 'r1', `? opens the inline sheet without moving focus at ${width}px`);
+    check(st.shown && st.expanded === 'true' && !st.modal && st.focus === 'r1', `? opens the inline sheet without moving focus at ${at}`);
     for (const word of ['J', 'K', '↓', '↑', 'Enter', 'E', '?', '답변 완료', '글자를 쓰는 칸']) check(st.text.includes(word), `the sheet lists ${word}`);
     await press(b, '?');
     check(await b.evaluate(`document.getElementById('ops-help-keys').hidden`), '? again closes the sheet');
     await b.evaluate(`document.getElementById('ops-help-keys-toggle').click()`);
     check(!(await b.evaluate(`document.getElementById('ops-help-keys').hidden`)), 'the 단축키 button opens the sheet by mouse');
+    await b.evaluate(`document.getElementById('ops-help-keys-toggle').click()`);
+    check(await b.evaluate(`document.getElementById('ops-help-keys').hidden`), 'the 단축키 button closes the sheet by mouse');
+    await b.evaluate(`document.getElementById('ops-help-keys-toggle').click()`);
     await b.evaluate(`document.querySelector('#ops-help-list li[data-help-id="r1"] .help-open').focus()`);
     await press(b, 'esc');
-    check(await b.evaluate(`document.getElementById('ops-help-keys').hidden && document.activeElement.id === 'ops-help-keys-toggle'`), `Esc closes the sheet and returns focus to the 단축키 button at ${width}px`);
+    check(await b.evaluate(`document.getElementById('ops-help-keys').hidden && document.activeElement.id === 'ops-help-keys-toggle'`), `Esc closes the sheet and returns focus to the 단축키 button at ${at}`);
     await b.evaluate(`document.querySelector('#ops-help-list li[data-help-id="r1"] .help-open').focus()`);
     await b.evaluate(`openShare('r1')`); await settle();
     await b.evaluate(`document.querySelector('#ops-help-list li[data-help-id="r2"] .help-open').focus()`);
     const g = await b.evaluate(GEOMETRY);
-    check(g.width === '2px' && g.style === 'solid', `ring 2px solid at ${width}px forced=${forcedColors}`);
-    if (!forcedColors) check(contrast(g.color, g.under) >= 3, `ring contrast ${contrast(g.color, g.under).toFixed(2)}:1 at ${width}px`);
+    check(g.width === '2px' && g.style === 'solid', `ring 2px solid at ${at}`);
+    if (!forcedColors) check(contrast(g.color, g.under) >= 3, `ring ${g.color} on ${g.under} = ${contrast(g.color, g.under).toFixed(2)}:1 >= 3:1 at ${at}`);
     check(g.sizes.length >= 5, 'open, seat-less rows, toggle and answer button measured: ' + g.sizes.length);
-    for (const s of g.sizes) { check(s.h >= 43.5, `${s.name} ${s.h}px >= 44 at ${width}px`); check(s.font >= 12, `${s.name} font ${s.font}px`); }
-    check(g.overflow <= 0, `no horizontal page scroll at ${width}px (${g.overflow})`);
+    for (const s of g.sizes) { check(s.h >= 43.5 && s.w >= 43.5, `${s.name} ${s.w}x${s.h}px >= 44x44 at ${at}`); check(s.hit, `${s.name} is hit at its centre at ${at}`); check(s.font >= 12, `${s.name} font ${s.font}px`); }
+    check(g.overflow <= 0, `no horizontal page scroll at ${at} (${g.overflow})`);
     if (process.env.HELP_TRIAGE_PNG) {
       const { writeFileSync } = await import('node:fs');
       await b.evaluate(`document.getElementById('ops-help').scrollIntoView({ block: 'start' })`);
       const shot = await b.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
-      writeFileSync(`${process.env.HELP_TRIAGE_PNG}/help-triage-${width}${forcedColors ? '-forced' : ''}.png`, Buffer.from(shot.data, 'base64'));
+      writeFileSync(`${process.env.HELP_TRIAGE_PNG}/help-triage-${width}${forcedColors ? '-forced' : dark ? '' : '-light'}.png`, Buffer.from(shot.data, 'base64'));
     }
   } finally { await b.close(); }
 }
-console.log(`help-triage.browser: J/K/arrows, Enter, E answer-and-advance, ? sheet, text-field and IME guards, 2px ring, 44px targets (${checks} checks) PASS`);
+// DES-CGP-LEARN-17: every triage action without a keyboard, by touch taps (CDP tap gestures at the target's centre, page
+// input only) at 800px light: the 단축키 button opens and closes the sheet, a row's 요청 열기 selects and opens it, and the
+// 44px 답변 완료로 저장하고 다음 요청 button saves and opens the next request.
+{
+  const b = await launch(bin);
+  try {
+    await b.load(html, { width: 800, height: 900, dark: false });
+    await b.evaluate(SETUP);
+    await b.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    const tap = async (sel) => {
+      const r = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      // Raw touch points, not synthesizeTapGesture: the gesture synthesizer produced no click on Linux CI (#3087).
+      await b.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x, y: r.y }] });
+      await b.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await settle();
+    };
+    // A synthesized tap reaches the page asynchronously (later on slow CI hosts): wait for the expected state, not a fixed delay.
+    const until = async (expr, ms = 3000) => { const end = Date.now() + ms; for (;;) { if (await b.evaluate(`!!(${expr})`)) return true; if (Date.now() > end) return false; await new Promise((r) => setTimeout(r, 25)); } };
+    await tap('#ops-help-keys-toggle');
+    check(await until(`!document.getElementById('ops-help-keys').hidden`), 'a tap on 단축키 opens the sheet');
+    await tap('#ops-help-keys-toggle');
+    check(await until(`document.getElementById('ops-help-keys').hidden`), 'a second tap on 단축키 closes the sheet');
+    await tap('#ops-help-list li[data-help-id="r2"] .help-open');
+    await until(`!document.getElementById('detail').hidden && document.getElementById('detail-title').textContent.includes('학생-r2')`);
+    let st = await b.evaluate(`({ open: !document.getElementById('detail').hidden, title: document.getElementById('detail-title').textContent, next: !document.getElementById('answer-next').hidden, get: __calls.filter((c) => c.method === 'GET').map((c) => c.url.split('/').pop()) })`);
+    check(st.open && st.title.includes('학생-r2') && st.next && st.get.join() === 'r2', 'a tap on a row opens that request: ' + JSON.stringify(st));
+    // With touch emulation on, (pointer: coarse) matches: the targets keep 44x44 and stay hittable on a touch screen.
+    check(await b.evaluate(`matchMedia('(pointer: coarse)').matches`), 'touch emulation reports a coarse pointer');
+    const sizes = await b.evaluate(SIZES);
+    check(sizes.some((t) => t.name === 'answer-next') && sizes.length >= 5, 'touch targets measured: ' + sizes.map((t) => t.name).join());
+    for (const t of sizes) check(t.h >= 43.5 && t.w >= 43.5 && t.hit, `${t.name} ${t.w}x${t.h}px >= 44x44 and hittable under touch`);
+    await b.evaluate(`document.getElementById('next-action').value = '터치로 답변'`);
+    await tap('#answer-next');
+    await until(`document.getElementById('detail-title').textContent.includes('학생-r3')`);
+    st = await b.evaluate(`({ put: __calls.filter((c) => c.method === 'PUT').map((c) => ({ id: c.url.split('/').pop(), status: c.body.status })), title: document.getElementById('detail-title').textContent })`);
+    check(st.put.length === 1 && st.put[0].id === 'r2' && st.put[0].status === 'answered' && st.title.includes('학생-r3'), 'a tap on 답변 완료로 저장하고 다음 요청 saves and opens the next request: ' + JSON.stringify(st));
+  } finally { await b.close(); }
+}
+console.log(`help-triage.browser: J/K/arrows, Enter, E answer-and-advance, ? sheet, text-field and IME guards, 2px ring dark/light, 44x44 targets, touch taps (${checks} checks) PASS`);
