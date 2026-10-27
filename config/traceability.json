@@ -15814,6 +15814,15 @@
         },
         {
           "path": "apps/companion-android/test/NativeHttpDeadlineTest.java"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-record.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-policy.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-authority.smoke.mjs"
         }
       ]
     },
@@ -15905,6 +15914,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionPolicy.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionAuthority.ts"
         }
       ]
     },

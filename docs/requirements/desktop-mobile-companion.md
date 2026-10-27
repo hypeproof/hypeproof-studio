@@ -151,3 +151,20 @@ can outlive local cancellation because Service has no pending-device cancel API.
 These source controls do not prove Google login, genuine-member eligibility,
 physical-device/iOS, classroom or production readiness. Selected execution #3097
 remains a separate, default-disabled scope.
+
+## Selected HTML execution foundation
+
+The local execution prototype keeps `preview.read` separate from
+`authoring.selected-html`. A Service reservation must match the native owner,
+paired device, selected artifact/version, exact phone packet, actual normal-turn
+ID, and existing activated model-pass identity. A response digest is provenance,
+not an authorization token. Live Service validation, current native consent and
+the existing profile/folder policy remain required before effects.
+
+The existing TaskWorkspaceStore retains prepared/bound/terminal records and
+returns `created:false` for retained requests; callers must never dispatch those
+again. Unknown outcomes remain locked for reconciliation. The SDK policy permits
+only the selected regular HTML file through Read/Write/Edit and preserves existing
+write approval. No proxy fallback, shell, external tools or broader workspace
+context is granted. These source foundations do not activate a production entry
+or complete the mobile-only DMC-T04/08/12 scenarios.

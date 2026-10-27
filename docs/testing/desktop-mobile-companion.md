@@ -190,3 +190,22 @@ Java compilation and processed release-manifest evidence. This cut keeps web
 and extension bytes unchanged from #3114. Historical installed synthetic-login
 observations remain bound to their original source/package; new source checks
 and reused compile evidence do not establish installed or genuine-member acceptance.
+
+## Scoped execution source contract
+
+`companion-execution-record.smoke.mjs` exercises real local persistence: one-shot
+binding, exact text including whitespace, retained terminal history, replay,
+unknown outcomes, draft conflict and owner invalidation. The `created:false`
+return is a no-dispatch instruction, not permission to resume an interrupted run.
+`companion-execution-policy.test.mjs` covers selected-file tool restrictions and
+live scope checks; it does not establish an OS filesystem sandbox.
+`companion-execution-authority.smoke.mjs` compares authenticated Service evidence
+against independently held native scope, activated-pass identity and exact packet
+bytes, including terminal/expired/mismatched evidence and bounded ASCII headers.
+Its parser performs no network authentication and cannot execute a request.
+
+Complete acceptance additionally needs the actual shared Send path, Service
+atomic model admission, installed host/Android flow, original-version restoration
+and a second version without replay. Source controls alone do not close those
+rows; real provider quality, physical devices, iOS and classroom outcomes remain
+separate from synthetic-account and scripted-upstream observations.
