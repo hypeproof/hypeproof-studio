@@ -7,7 +7,7 @@ const SCHEMA = 'hps-companion-result-part/1';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
-const fail = (): never => { throw Error('companion_preview_payload_invalid'); };
+function fail(): never { throw Error('companion_preview_payload_invalid'); }
 const validId = (id: string) => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id);
 const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 async function sha256(bytes: Uint8Array): Promise<string> {

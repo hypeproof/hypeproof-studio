@@ -31,10 +31,10 @@ policy. Callers own lifecycle and must explicitly discard/reset as appropriate.
 
 This helper performs framing, not result authorization or artifact verification.
 SHA-256 here checks whole-transfer integrity, not sender identity or encryption.
-No existing host, browser verifier, relay client or UI was changed. In particular,
-`verifyCompanionPreviewResult` still rejects envelopes above 2,032 bytes; larger
-payload consumer integration and its semantic verification remain follow-up
-work. No artifact limits or authority checks were widened.
+No existing host, relay client or UI was changed. The existing
+`verifyCompanionPreviewResult(raw, expected, cryptoApi?)` entry point retains its
+2,032-byte ceiling and previous callers. The subsequent request-bound semantic
+composition below is opt-in. No artifact limits or authority checks were widened.
 
 ## Executed validation
 
@@ -61,6 +61,56 @@ Executed from the isolated worktree using the shared resource queue:
 The initial runs exposed unsupported strip-only parameter properties and an
 undersized test fixture; both were corrected before the final 6/6 pass.
 The existing package emits Node's module-type warning; the test exits zero.
-NOT RUN: full extension build/typecheck, full suite, browser UI, installed app,
+NOT RUN at this initial helper stage: full extension build/typecheck, full suite, browser UI, installed app,
 actual mobile device, live relay and production validation. No fetch, push,
 GitHub writes or production changes were performed.
+
+
+## Request-bound semantic composition
+
+`CompanionPreviewResultReceiver(expected, cryptoApi?)` composes the framing
+receiver with the existing result, artifact ID/version and artifact SHA-256
+checks. It snapshots the expected request context at construction. Its
+`accept(packet)` returns only a fully reconstructed and semantically verified
+`CompanionDispatchResult`, or `null` for incomplete/duplicate input. `progress`
+reports complete only after semantic verification, while `reset()` and
+`discard()` invalidate in-flight semantic checks as well as framed transfer work.
+Invalid semantics discard the transfer. Partial or unverified artifact text is
+never returned. There is no rendering, durable storage or transport integration.
+
+The internal shared semantic check accepts a 32 KiB reconstructed envelope only
+through this bounded receiver. The original exported verifier still uses 2,032
+bytes. Host/UI/relay integration, actual authorization, device acceptance and DMC
+parent completion remain separate work.
+
+Executed validation for this composition: PASS 12/12 focused payload/result
+tests on Node 22.22.1, including 8–24 KiB Korean interactive HTML,
+pack→reassembly→semantic result verification, unchanged legacy compatibility,
+mutated caller context, wrong artifact ID/version/content, and explicit
+discard/reset while the semantic artifact digest is awaiting completion.
+PASS: full extension TypeScript validation (`tsc --noEmit`) using the existing
+prepared dependency tree (exit 0). No dependency installation was
+performed. Two initial TypeScript issues (unknown narrowing in the framing
+helper and a DOM-only Crypto type annotation) were corrected without changing
+the protocol contract.
+
+Focused command: the resource wrapper above with job
+`companion-preview-semantic-focused-r2-20261028` and command:
+
+```bash
+/Users/jaylee/.nvm/versions/node/v22.22.1/bin/node --experimental-strip-types --test \
+  extensions/hypeproof-chat/test/companion-preview-result.smoke.mjs \
+  extensions/hypeproof-chat/test/companion-preview-payload.smoke.mjs
+```
+
+Full TypeScript command: the same wrapper with job
+`companion-preview-semantic-full-ts-r2-20261028` and command:
+
+```bash
+/Users/jaylee/.nvm/versions/node/v22.22.1/bin/node \
+  extensions/hypeproof-chat/node_modules/typescript/bin/tsc \
+  --noEmit -p extensions/hypeproof-chat/tsconfig.json
+```
+
+NOT RUN for this composition: full extension build/test suite, browser UI,
+installed app, actual mobile device, live relay or production validation.
