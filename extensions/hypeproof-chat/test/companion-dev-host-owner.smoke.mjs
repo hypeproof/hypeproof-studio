@@ -11,16 +11,16 @@ const bundle=await build({entryPoints:[fileURLToPath(new URL('../src/companionDe
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return{promise,resolve};};
 async function fixture(){
  const native=await nativeBridgeFixture(),module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?native.vscode:require(id),process,Buffer,console,fetch:native.fetcher,URL,Response,AbortSignal,AbortController,TextEncoder,TextDecoder,crypto,btoa,atob,performance,structuredClone,setTimeout,clearTimeout});
- const calls={start:0,refresh:0,approve:[],revoke:0,offer:0,connect:0,close:0,acks:[],prepared:[],sent:[]};let onStart=async()=>{},onRefresh=async()=>{},batch=[];
+ const calls={start:0,refresh:0,approve:[],revoke:0,offer:0,connect:0,close:0,acks:[],prepared:[],sent:[]};let onStart=async()=>{},onRefresh=async()=>{},onPrepare=async()=>{},onSend=async()=>{},batch=[];
  const pair={invitation:null,keys:null,qr:null,claim:null,frozenClaim:null,
   async start(scope){calls.start++;await onStart();this.keys={privateKey:'test-owned-synthetic-reference'};this.invitation={...native.pair,id:pairId,status:'open',host_id:scope.host_id,workspace_id:scope.workspace_id,project_id:scope.project_id};this.qr={schema:this.invitation.schema,id:pairId,invite_secret:'synthetic-invitation-challenge',host_key:'synthetic-public-key',invitation_digest:'a'.repeat(64),host_invite_proof:'synthetic-proof',challenge_expires_at:Math.floor(Date.now()/1000)+120};return this.qr;},
   async refresh(){calls.refresh++;await onRefresh();return this.invitation;},async approve(code){calls.approve.push(code);this.invitation={...this.invitation,status:'approved'};return this.invitation;},async revoke(){calls.revoke++;this.invitation={...this.invitation,status:'revoked'};return this.invitation;}};
- const relay={role:'host',get row(){return pair.invitation;},async publishOffer(){calls.offer++;},async connect(){calls.connect++;},async prepare(text,id){calls.prepared.push({text,id});return id;},async send(id){calls.sent.push(id);},async receive(){const delivered=batch;batch=[];return delivered;},async acknowledge(id){calls.acks.push(id);},close(){calls.close++;}};
+ const relay={role:'host',get row(){return pair.invitation;},async publishOffer(){calls.offer++;},async connect(){calls.connect++;},async prepare(text,id){calls.prepared.push({text,id});await onPrepare();return id;},async send(id){calls.sent.push(id);await onSend();},async receive(){const delivered=batch;batch=[];return delivered;},async acknowledge(id){calls.acks.push(id);},close(){calls.close++;}};
  const budget=new CompanionTransportBudget();let rawFetch=(...args)=>native.fetcher(...args);let config={service:'http://127.0.0.1:44321/v1',site:'http://127.0.0.1:44321'};
  const owner=new module.exports.CompanionDevHostOwner({context:native.context,connections:native.connections,accounts:native.accounts,configured:()=>config,identity:{accountId:'account',sessionId:'host-session'},budget,fetch:(...args)=>rawFetch(...args),taskView:()=>native.store.getView(),epoch:()=>1,journal:native.journal,clients:{pairing:()=>pair,relay:()=>relay}});
  const startAndClaim=async()=>{const value=await owner.startInvitation();pair.invitation={...pair.invitation,status:'claimed',compare_code:'a'.repeat(12),device_session_id:'device-session',device_id:'phone'};await owner.inspectClaim();return value;};
  const connect=async()=>{await startAndClaim();await owner.confirmComparedCode('a'.repeat(12));pair.invitation={...pair.invitation,status:'paired'};await owner.connectCipher();};
- return{native,owner,pair,relay,calls,startAndClaim,connect,set rawFetch(v){rawFetch=v;},set onStart(v){onStart=v;},set onRefresh(v){onRefresh=v;},set config(v){config=v;},set batch(v){batch=v;},cleanup:async()=>{owner.close();budget.dispose();await native.cleanup();}};
+ return{native,owner,pair,relay,calls,startAndClaim,connect,set rawFetch(v){rawFetch=v;},set onStart(v){onStart=v;},set onRefresh(v){onRefresh=v;},set onPrepare(v){onPrepare=v;},set onSend(v){onSend=v;},set config(v){config=v;},set batch(v){batch=v;},cleanup:async()=>{owner.close();budget.dispose();await native.cleanup();}};
 }
 
 test('explicit lifecycle requires supplied code and preserves separate native exact-file Cancel/Allow',async()=>{
@@ -54,4 +54,46 @@ test('post-fetch binding rejection cancels an unconsumed live body before it can
 
 test('production mode or foreign configuration cannot read native credentials or start clients',async()=>{
  for(const unsafe of [f=>{f.native.context.extensionMode=1;},f=>{f.config={service:'https://api.hypeproof-ai.xyz/v1',site:'https://hypeproof-ai.xyz'};}]){const f=await fixture();let reads=0;try{f.native.accounts.accessToken=async()=>{reads++;throw Error('must not access native credentials');};unsafe(f);await assert.rejects(()=>f.owner.startInvitation(),/scope_changed/);assert.equal(reads,0);assert.equal(f.calls.start,0);assert.equal(f.native.calls.length,0);}finally{await f.cleanup();}}
+});
+
+test('selection publication is metadata only, uncertain explicit retry preserves exact bytes and identity',async()=>{
+ const f=await fixture();try{
+  await f.connect();let fail=true;f.onSend=async()=>{if(fail)throw Error('uncertain_delivery');};
+  const first=await f.owner.publishSelected('publication');assert.equal(first.state,'delivery_unconfirmed');assert.equal(f.calls.sent.length,1);
+  assert.equal(f.native.dialogs.length,0);assert.equal((await f.native.journal.load())?.entries?.length??0,0);
+  const encoded=JSON.parse(f.calls.prepared[0].text);assert.equal(encoded.schema,'hps-companion-selection/1');assert.equal(encoded.execution_authorized,false);
+  assert.equal(f.calls.prepared[0].text.includes(f.native.root),false);assert.equal(f.calls.prepared[0].text.includes(f.native.text),false);
+  await assert.rejects(f.owner.publishSelected('another'),/selection_pending/);assert.equal(f.calls.sent.length,1);
+  fail=false;const next=await f.owner.publishSelected('publication');assert.equal(next.state,'transport_accepted');assert.equal(next.messageId,first.messageId);
+  assert.deepEqual(f.calls.prepared[0],f.calls.prepared[1]);assert.deepEqual(f.calls.sent,[first.messageId,first.messageId]);
+  assert.equal(f.owner.view().publication.messageId,first.messageId);assert.equal(f.owner.view().publication.requestId,'publication');
+  f.owner.close();assert.equal(f.owner.view().publication,undefined);
+ }finally{await f.cleanup();}
+});
+
+test('selected file change before explicit retry or during preparation prevents metadata send and clears pending',async()=>{
+ for(const phase of ['retry','prepare']){
+  const f=await fixture();try{await f.connect();
+   const change=()=>{f.native.document.version++;f.native.document.getText=()=>'<html>new selected version</html>';};
+   if(phase==='retry'){f.onSend=async()=>{throw Error('uncertain');};await f.owner.publishSelected('publication');change();}
+   else f.onPrepare=async()=>change();
+   const sent=f.calls.sent.length;await assert.rejects(f.owner.publishSelected('publication'),/selection_changed|closed/);
+   assert.equal(f.calls.sent.length,sent);assert.equal(f.owner.view().state,'closed');assert.equal(f.owner.view().publication,undefined);
+  }finally{await f.cleanup();}
+ }
+});
+
+test('cancel during metadata preparation is terminal and cannot emit a late send or receipt',async()=>{
+ const f=await fixture(),entered=deferred(),release=deferred(),abort=new AbortController();try{
+  await f.connect();f.onPrepare=async()=>{entered.resolve();await release.promise;};
+  const work=f.owner.publishSelected('publication',abort.signal);await entered.promise;abort.abort();await assert.rejects(work,/closed/);
+  release.resolve();await new Promise(r=>setTimeout(r,0));assert.equal(f.calls.sent.length,0);assert.equal(f.owner.view().publication,undefined);assert.equal(f.owner.view().state,'closed');
+ }finally{release.resolve();await f.cleanup();}
+});
+
+test('selection change during a completed HTTP send clears publication instead of returning a current receipt',async()=>{
+ const f=await fixture();try{await f.connect();f.onSend=async()=>{f.native.document.version++;f.native.document.getText=()=>'<html>changed during send</html>';};
+  await assert.rejects(f.owner.publishSelected('publication'),/closed|selection_changed/);
+  assert.equal(f.calls.sent.length,1,'already sent metadata cannot be recalled');assert.equal(f.owner.view().publication,undefined);assert.equal(f.owner.view().state,'closed');
+ }finally{await f.cleanup();}
 });

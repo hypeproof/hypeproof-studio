@@ -10,6 +10,7 @@ import { createDevCompanionHostBridge, type CompanionNativeBridgePorts } from '.
 import { CompanionHostSession, type CompanionHostSessionClient, type CompanionHostSessionPair, type CompanionHostTurn } from './companionHostSession.ts';
 import type { CompanionHostRequest } from './companionHostDispatch.ts';
 import type { CompanionTransportBudget } from './companionTransportBudget.ts';
+import { createCompanionSelection, type CompanionSelectionPublication } from './companionSelection.ts';
 
 /** Native-only QR challenge. It is never included in view()/selected-file descriptors. */
 export interface CompanionHostChallenge {
@@ -44,6 +45,7 @@ export interface CompanionDevHostView {
   pairingId?: string; comparisonCode?: string; expiresAt?: number;
   reason?: 'local_close' | 'scope_changed' | 'cancelled' | 'revocation_unconfirmed';
   executionAuthorized: false;
+  publication?: Readonly<CompanionSelectionPublication>;
 }
 type PairRow = Omit<CompanionHostSessionPair, 'status' | 'device_session_id' | 'device_id' | 'claim_digest'> & {
   status: string; device_session_id: string | null; device_id: string | null; claim_digest: string | null; compare_code?: string | null;
@@ -67,14 +69,17 @@ export class CompanionDevHostOwner {
   private state: CompanionDevHostView = { state: 'idle', executionAuthorized: false };
   private active: { name: string; promise: Promise<unknown>; abort: AbortController; interrupt(): void } | undefined;
   private signal: AbortSignal | undefined;
+  private publication: {text:string;messageId:string;request:Readonly<CompanionHostRequest>;revision:number;state:CompanionSelectionPublication['state']} | undefined;
+  private publicationRevision = 0;
 
   constructor(ports: CompanionDevHostOwnerPorts) { this.ports = ports; this.identity = Object.freeze({ ...ports.identity }); }
-  view(): Readonly<CompanionDevHostView> { return Object.freeze({ ...this.state }); }
+  view(): Readonly<CompanionDevHostView> { return Object.freeze({ ...this.state, ...(this.publication?{publication:Object.freeze({state:this.publication.state,requestId:this.publication.request.requestId,messageId:this.publication.messageId,revision:this.publication.revision})}:{}) }); }
   private check(): void { if (this.state.state === 'closed' || this.state.state === 'revoked') throw failure('closed'); }
   private erase(pairing = this.pairing): void {
     if (pairing) { pairing.keys = null; pairing.qr = null; pairing.claim = null; pairing.frozenClaim = null; }
   }
   private release(): void {
+    this.publication = undefined;
     if (this.session) this.session.close(); else this.relay?.close();
     this.erase(); this.pairing = undefined; this.relay = undefined; this.session = undefined; this.bridge = undefined; this.binding = undefined;
     this.authenticatedRelay = async () => { throw failure('closed'); };
@@ -183,6 +188,34 @@ export class CompanionDevHostOwner {
     return this.run('describe', signal, async () => {
       if (this.state.state !== 'connected') throw failure('cipher_required');
       return this.bridge!.describe(requestId);
+    });
+  }
+  /** Explicit encrypted declaration only. HTTP acceptance never claims phone receipt or file approval. */
+  publishSelected(requestId:string,signal?:AbortSignal):Promise<Readonly<CompanionSelectionPublication>> {
+    return this.run('publish',signal,async()=>{
+      if(this.state.state!=='connected')throw failure('cipher_required');
+      if(!/^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(requestId))throw failure('selection_request_id');
+      const held=this.publication;
+      if(held&&held.request.requestId!==requestId&&held.state==='delivery_unconfirmed')throw failure('selection_pending');
+      const selected=await this.bridge!.describe(requestId);this.check();
+      if(!selected){if(held)this.close('scope_changed');throw failure('selection_unavailable');}
+      const pair=await this.refreshPaired();if(!pair)throw failure('paired_required');
+      if(held&&held.request.requestId===requestId){
+        if(JSON.stringify(selected)!==JSON.stringify(held.request)){this.close('scope_changed');throw failure('selection_changed');}
+      }else{
+        const encoded=await createCompanionSelection(selected,pair,++this.publicationRevision);this.check();
+        this.publication={...encoded,revision:this.publicationRevision,state:'delivery_unconfirmed'};
+      }
+      const publication=this.publication!;
+      // The reviewed client preserves prepared wire bytes for this immutable transport ID.
+      await this.relay!.prepare(publication.text,publication.messageId);this.check();
+      const fresh=await this.bridge!.describe(requestId);this.check();
+      if(!fresh||JSON.stringify(fresh)!==JSON.stringify(publication.request)){this.close('scope_changed');throw failure('selection_changed');}
+      try{await this.relay!.send(publication.messageId);this.check();publication.state='transport_accepted';}
+      catch{this.check();publication.state='delivery_unconfirmed';}
+      const after=await this.bridge!.describe(requestId);this.check();
+      if(!after||JSON.stringify(after)!==JSON.stringify(publication.request)){this.close('scope_changed');throw failure('selection_changed');}
+      return Object.freeze({state:publication.state,requestId,messageId:publication.messageId,revision:publication.revision});
     });
   }
   receiveAndHandle(signal?: AbortSignal): Promise<CompanionHostTurn> {

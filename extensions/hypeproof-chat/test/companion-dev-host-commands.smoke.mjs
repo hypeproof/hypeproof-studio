@@ -9,15 +9,16 @@ const require = createRequire(import.meta.url);
 const compiled = await build({ entryPoints: [fileURLToPath(new URL('../src/companionDevHostCommands.ts', import.meta.url))], bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 function host() {
-  let state = 'idle';
+  let state = 'idle', publication;
   const calls = [], challenge = { schema: 'fixture-challenge', invite_secret: 'explicit-copy-only', host_key: 'fixture-public-key' };
   const api = {
-    view: () => ({ state, ...(state === 'claimed' ? { comparisonCode: '123456' } : {}), executionAuthorized: false }),
+    view: () => ({ state, ...(state === 'claimed' ? { comparisonCode: '123456' } : {}), ...(publication?{publication}:{}), executionAuthorized: false }),
     async startInvitation(signal) { calls.push(['start', signal]); state = 'inviting'; return { challenge, view: api.view() }; },
     async inspectClaim(signal) { calls.push(['inspect', signal]); if (state === 'inviting') state = 'claimed'; return api.view(); },
     async confirmComparedCode(code, signal) { calls.push(['confirm', code, signal]); if (code !== '123456') throw Error('private-token and /private/workspace'); state = 'approved'; return api.view(); },
     async connectCipher(signal) { calls.push(['connect', signal]); state = 'connected'; return api.view(); },
     async describeSelected(requestId, signal) { calls.push(['describe', requestId, signal]); return { taskId: 'task-1', version: 3, artifactId: 'artifact-1', artifactVersion: 'a'.repeat(64) }; },
+    async publishSelected(requestId,signal){calls.push(['publish',requestId,signal]);publication={state:calls.filter(c=>c[0]==='publish').length===1?'delivery_unconfirmed':'transport_accepted',requestId,messageId:'selection_'+'a'.repeat(64),revision:1};return publication;},
     async receiveAndHandle(signal) { calls.push(['receive', signal]); return { state: 'waiting', processed: 1, acknowledged: 0, expired: 0, pending: 1 }; },
     close() { calls.push(['close']); state = 'closed'; },
     async revoke(signal) { calls.push(['revoke', signal]); state = 'revoked'; return api.view(); },
@@ -111,4 +112,14 @@ test('cancelled progress closes owner and suppresses late turns; stale factory r
   g.ports.createOwner = async () => { factoryEntered.resolve(); return factoryGate.promise; };
   const preparing = g.run('prepare'); await factoryEntered.promise; g.registration.dispose(); factoryGate.resolve(late.api); await preparing;
   assert.equal(late.calls.filter(c => c[0] === 'close').length, 1); assert.equal(late.calls.filter(c => c[0] === 'start').length, 0); assert.equal(g.messages.length, 0);
+});
+
+test('explicit selected-work announcement retries the uncertain ID and never claims phone receipt or file approval',async()=>{
+ const h=host(),f=fixture([h]);await f.run('prepare');await f.run('inspect');f.inputs.push('123456');f.warnings.push('두 화면의 코드가 같아요');await f.run('compare');await f.run('connect');
+ await f.run(undefined);assert.equal(h.calls.filter(c=>c[0]==='publish').length,0);
+ await f.run('publish');const first=h.calls.find(c=>c[0]==='publish');assert.match(first[1],/^[a-f0-9-]{36}$/);
+ assert.ok(f.messages.at(-1).message.includes('아직 확인하지 못했어요'));
+ await f.run('publish');const calls=h.calls.filter(c=>c[0]==='publish');assert.equal(calls[1][1],calls[0][1]);
+ assert.ok(f.messages.at(-1).message.includes('서버가 접수했어요'));assert.ok(f.messages.at(-1).message.includes('휴대폰 수신과 파일 전달 승인은 아직 확인하지 않았어요'));
+ assert.equal(h.calls.filter(c=>c[0]==='receive').length,0);f.registration.dispose();
 });

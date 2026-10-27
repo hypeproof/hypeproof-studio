@@ -3,12 +3,14 @@ import * as vscode from 'vscode';
 import { randomUUID } from 'node:crypto';
 import type { CompanionHostRequest } from './companionHostDispatch.ts';
 import type { CompanionHostTurn } from './companionHostSession.ts';
+import type { CompanionSelectionPublication } from './companionSelection.ts';
 
 export const DEV_COMPANION_HOST_COMMAND = 'hypeproofChat.devCompanionHost';
 export interface CompanionDevHostCommandView {
   state: 'idle' | 'inviting' | 'claimed' | 'approved' | 'connected' | 'closed' | 'revoked';
   comparisonCode?: string;
   executionAuthorized: false;
+  publication?: Readonly<CompanionSelectionPublication>;
 }
 /** Structural port implemented by CompanionDevHostOwner; no account or key material crosses it. */
 export interface CompanionDevHostCommandOwner {
@@ -18,6 +20,7 @@ export interface CompanionDevHostCommandOwner {
   confirmComparedCode(code: string, signal?: AbortSignal): Promise<Readonly<CompanionDevHostCommandView>>;
   connectCipher(signal?: AbortSignal): Promise<Readonly<CompanionDevHostCommandView>>;
   describeSelected(requestId: string, signal?: AbortSignal): Promise<CompanionHostRequest | null>;
+  publishSelected(requestId:string,signal?:AbortSignal):Promise<Readonly<CompanionSelectionPublication>>;
   receiveAndHandle(signal?: AbortSignal): Promise<CompanionHostTurn>;
   close(): void;
   revoke(signal?: AbortSignal): Promise<Readonly<CompanionDevHostCommandView>>;
@@ -27,7 +30,7 @@ export interface CompanionDevHostCommandPorts {
   /** Required account/configuration/task/workspace lifecycle invalidation supplied by the native caller. */
   onDidInvalidate(listener: () => void): vscode.Disposable;
 }
-type Action = 'prepare' | 'copy' | 'inspect' | 'compare' | 'connect' | 'describe' | 'receive' | 'close' | 'revoke';
+type Action = 'prepare' | 'copy' | 'inspect' | 'compare' | 'connect' | 'describe' | 'publish' | 'receive' | 'close' | 'revoke';
 interface Item extends vscode.QuickPickItem { action: Action }
 const labels: Record<CompanionDevHostCommandView['state'], string> = {
   idle: '초대 전', inviting: '기기 참여 기다리는 중', claimed: '기기 참여 확인 · 코드 비교 필요',
@@ -91,6 +94,7 @@ export function registerDevCompanionHostCommands(
         if (view.state === 'approved') items.push({ label: '암호화 연결 준비', action: 'connect' });
         if (view.state === 'connected') {
           items.push({ label: '현재 작업과 저장된 HTML 확인', action: 'describe' });
+          items.push({ label: '선택한 작업을 휴대폰에 알리기', description: view.publication?.state==='delivery_unconfirmed'?'같은 알림을 직접 다시 확인 · 파일 승인은 별도':'작업 정보만 암호화해 전달 · 파일 승인은 별도', action:'publish' });
           items.push({ label: '요청 한 번 받기·확인', description: '자동 수신하지 않음 · 파일 읽기는 별도 승인', action: 'receive' });
         }
         items.push({ label: '이 컴퓨터에서만 연결 닫기', description: '서버 권한 철회와 별개', action: 'close' });
@@ -142,6 +146,10 @@ export function registerDevCompanionHostCommands(
         const turn = await progress(() => target.receiveAndHandle(lease.controller.signal));
         await show(turn.state === 'closed' ? '연결이 닫혀 이번 확인을 마치지 못했어요.'
           : `이번 수신 확인: 처리 ${turn.processed}건, 전송 확인 ${turn.acknowledged}건, 전송 만료 ${turn.expired}건, 대기 ${turn.pending}건.${turn.state === 'waiting' ? ' 연결 또는 확인이 아직 끝나지 않았어요.' : ''} 자동으로 다음 확인을 시작하지 않아요.`);
+      } else if(picked.action==='publish'){
+        const prior=target.view().publication;
+        const published=await progress(()=>target.publishSelected(prior?.state==='delivery_unconfirmed'?prior.requestId:randomUUID(),lease.controller.signal));
+        await show(published.state==='transport_accepted'?'작업 정보 전송을 서버가 접수했어요. 휴대폰 수신과 파일 전달 승인은 아직 확인하지 않았어요.':'작업 정보 전달 결과를 아직 확인하지 못했어요. 같은 알림을 다시 확인하려면 직접 선택해 주세요. 파일 전달 승인은 별도예요.');
       } else if (picked.action === 'close') {
         const confirmed = await vscode.window.showWarningMessage('이 컴퓨터의 연결과 암호화 키를 닫을까요? 서버 권한 철회와 별개이며 이미 승인한 작업을 되돌리지 않아요.', { modal: true }, '이 컴퓨터 연결 닫기');
         check(); if (confirmed !== '이 컴퓨터 연결 닫기') return;
