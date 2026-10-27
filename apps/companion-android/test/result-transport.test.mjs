@@ -22,7 +22,7 @@ async function fixture(messages,options={}){
  const relay={role:'device',pairing,row:{...pair},transport:async(_role,_id,action,raw)=>{requests.push({action,raw,time:now});if(options.failAck&&action==='ack'&&!failed){failed=true;throw Error(typeof options.failAck==='string'?options.failAck:'fixture_lost_ack_response');}return{};},async prepare(){prepared++;return'prepared';},async send(){sent++;},async receive(){receives++;await this.transport('device',pair.id,'receive','{}');if(options.receiveGate)await options.receiveGate.promise;return receives===1?messages:[];},async acknowledge(id){await pairing.refresh();return this.transport('device',pair.id,'ack',JSON.stringify({message_id:id}));},close(){}};
  let selection=receiver;
  if(options.acceptGate)selection={async accept(message){options.entered.resolve();await options.acceptGate.promise;return receiver.accept(message);},close:()=>receiver.close()};
- const demux=new CompanionAndroidResultTransport({relay,selection,initialRevision:1,onHeld:v=>notices.push(v),onAuthoringResult:options.onAuthoringResult,onInvalid:()=>{invalid++;controller.dispose();adapter.dispose();}});
+ const demux=new CompanionAndroidResultTransport({relay,selection,initialRevision:1,onHeld:v=>notices.push(v),validateAuthoringResult:options.validateAuthoringResult,onAuthoringResult:options.onAuthoringResult,onInvalid:()=>{invalid++;controller.dispose();adapter.dispose();}});
  const adapter=new CompanionClientAdapter({pairing,relay,requestId:request.requestId,budget});
  const transport=demux.bind(adapter),controller=new CompanionMobileSessionController({transport,descriptor:async signal=>{await adapter.refresh(signal);return{computerName:'fixture computer',online:true,selection:{request,projectName:'original',artifactName:'original'}};}},{timeoutMs:5000,pollMs:1});
  return{demux,adapter,controller,transport,receiver,notices,requests,get invalid(){return invalid;},get receives(){return receives;},get prepared(){return prepared;},get sent(){return sent;},close(){demux.close();controller.dispose();adapter.dispose();budget.dispose();}};
@@ -30,10 +30,10 @@ async function fixture(messages,options={}){
 test('authoring receipt is separately validated and ACKed without poisoning preview results',async()=>{
  const text=JSON.stringify({schema:'hps-companion-authoring-result/1',requestId:'intent-one',requestHash:'e'.repeat(64),outcome:{state:'imported_draft',code:'desktop_draft_imported',requestId:'intent-one',executionAuthorized:false}});
  const receipt={message_id:'authoring-result',message_hash:await hash(text),text};let seen=0;
- const f=await fixture([receipt,result],{onAuthoringResult:value=>{assert.equal(value.text,text);seen++;return true;}});
+ const f=await fixture([receipt,result],{validateAuthoringResult:value=>value.text===text,onAuthoringResult:value=>{assert.equal(value.text,text);seen++;}});
  try{await f.controller.reconnect(null);await f.controller.requestPreview(request);assert.equal(seen,1);assert.equal(f.invalid,0);assert.equal(f.controller.getSnapshot().receipt.outcome.artifact.text,html);assert.equal(f.requests.filter(r=>r.action==='ack'&&JSON.parse(r.raw).message_id===receipt.message_id).length,1);}
  finally{f.close();}
- const wrong=await fixture([receipt,result],{onAuthoringResult:()=>false});try{await wrong.controller.reconnect(null);await wrong.controller.requestPreview(request);assert.equal(wrong.invalid,1);assert.equal(wrong.controller.getSnapshot().receipt,null);assert.equal(wrong.requests.filter(r=>r.action==='ack').length,0);}finally{wrong.close();}
+ const wrong=await fixture([receipt,result],{validateAuthoringResult:()=>false});try{await wrong.controller.reconnect(null);await wrong.controller.requestPreview(request);assert.equal(wrong.invalid,1);assert.equal(wrong.controller.getSnapshot().receipt,null);assert.equal(wrong.requests.filter(r=>r.action==='ack').length,0);}finally{wrong.close();}
 });
 test('failed metadata ACK retains authenticated provenance and original result for explicit reconciliation',async()=>{
  const f=await fixture([later,stale,result],{failAck:true});try{
@@ -47,6 +47,17 @@ test('failed metadata ACK retains authenticated provenance and original result f
   assert.ok(f.requests.every((r,i,a)=>i===0||r.time-a[i-1].time>=1200),'every actual adapter HTTP, including metadata ACK retry, uses its existing budget');
   assert.deepEqual(f.demux.progress,{heldSelections:1,capturedMetadata:0});assert.equal(f.invalid,0);
  }finally{f.close();assert.deepEqual(f.demux.progress,{heldSelections:0,capturedMetadata:0});}
+});
+test('authoring ACK failure retains manual reconciliation; expired ACK closes without publishing completion',async()=>{
+ const text=JSON.stringify({schema:'hps-companion-authoring-result/1',requestId:'intent-one',requestHash:'e'.repeat(64),outcome:{state:'imported_draft',code:'desktop_draft_imported',executionAuthorized:false}});
+ const receipt={message_id:'authoring-result',message_hash:await hash(text),text};let published=0;
+ const f=await fixture([receipt],{failAck:true,validateAuthoringResult:m=>m.text===text,onAuthoringResult:()=>published++});
+ try{await assert.rejects(f.transport.receive(new AbortController().signal),/fixture_lost_ack_response/);assert.equal(published,0);assert.equal(f.invalid,0);
+  assert.deepEqual(await f.transport.receive(new AbortController().signal),[]);assert.equal(published,1);assert.equal(f.receives,1);assert.equal(f.sent,0);
+ }finally{f.close();}
+ const expired=await fixture([receipt],{failAck:'relay_message_expired',validateAuthoringResult:m=>m.text===text,onAuthoringResult:()=>published++});
+ try{await assert.rejects(expired.transport.receive(new AbortController().signal),/android_selection_invalid/);assert.equal(expired.invalid,1);assert.equal(published,1);assert.equal(expired.sent,0);await assert.rejects(expired.transport.receive(new AbortController().signal),/closed/);}
+ finally{expired.close();}
 });
 test('invalid authenticated metadata closes fail-closed before ACK or original-result rendering',async()=>{
  const body=JSON.parse(later.text);body.request.workspaceId='foreign';const raw=JSON.stringify(body),bad={message_id:'selection_'+await hash(raw),message_hash:await hash(raw),text:raw};

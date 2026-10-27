@@ -55,7 +55,8 @@ function App(){
   // Settled, exclusive handoff: adapter now admits each raw transport HTTP with the same budget.
   pairing.transport=rawPair;relay.transport=rawRelay;
   resultTransport=new CompanionAndroidResultTransport({relay,selection:receiver,initialRevision:chosen.revision,
-   onAuthoringResult:message=>{if(closed||!authoringPending)return false;const parsed=parseCompanionAuthoringResult(message.text,authoringPending.requestId,authoringPending.requestHash);if(!parsed||(authoringPending.reply&&authoringPending.reply!==message.text))return false;authoringPending.reply=message.text;setAuthoringResult(parsed);return true;},
+   validateAuthoringResult:message=>{if(closed||!authoringPending)return false;const parsed=parseCompanionAuthoringResult(message.text,authoringPending.requestId,authoringPending.requestHash);if(!parsed||(authoringPending.reply&&authoringPending.reply!==message.text))return false;authoringPending.reply=message.text;return true;},
+   onAuthoringResult:message=>{if(closed||!authoringPending)return;const parsed=parseCompanionAuthoringResult(message.text,authoringPending.requestId,authoringPending.requestHash);if(parsed&&authoringPending.reply===message.text)setAuthoringResult(parsed);},
    onHeld:()=>{if(!closed)setMessage('컴퓨터에서 새 선택 정보를 받았어요. 현재 요청의 결과는 계속 확인하며, 새 선택을 자동으로 요청하지 않아요. 새 선택으로 보려면 연결을 새로 준비해 주세요.');},
    onInvalid:()=>{if(closed)return;clear();setStage('closed');setMessage('선택 정보 처리를 마치지 못해 이 기기 연결을 닫았어요. 이미 받은 결과만 남아 있어요. 현재 컴퓨터 작업의 취소나 완료를 확인한 것은 아니에요.');}});
   adapter=new CompanionClientAdapter({pairing,relay,requestId:chosen.request.requestId,budget});
