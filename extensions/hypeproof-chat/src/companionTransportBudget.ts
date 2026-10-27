@@ -6,6 +6,8 @@ type Sleep = (milliseconds: number, signal: AbortSignal) => Promise<void>;
 interface Options {
   /** May lower the local default of 50; never increases the server's limit. */
   maxRequests?: number;
+  /** Optional pacing between admissions; zero preserves burst admission. */
+  minSpacingMs?: number;
   now?: () => number;
   sleep?: Sleep;
 }
@@ -32,6 +34,8 @@ const sleep: Sleep = (milliseconds, signal) => new Promise((resolve, reject) => 
  */
 export class CompanionTransportBudget {
   private readonly maxRequests: number;
+  private readonly minSpacingMs: number;
+  private lastAdmitted: number | undefined;
   private readonly now: () => number;
   private readonly sleep: Sleep;
   private readonly admitted: number[] = [];
@@ -42,6 +46,8 @@ export class CompanionTransportBudget {
   constructor(options: Options = {}) {
     this.maxRequests = options.maxRequests ?? 50;
     if (!Number.isSafeInteger(this.maxRequests) || this.maxRequests < 1 || this.maxRequests > 50) throw error('invalid_limit');
+    this.minSpacingMs = options.minSpacingMs === undefined ? 0 : options.minSpacingMs;
+    if (!Number.isSafeInteger(this.minSpacingMs) || this.minSpacingMs < 0 || this.minSpacingMs > 5000) throw error('invalid_spacing');
     this.now = options.now ?? (() => performance.now());
     this.sleep = options.sleep ?? sleep;
   }
@@ -86,8 +92,11 @@ export class CompanionTransportBudget {
       if (now - entry.enqueued >= COMPANION_TRANSPORT_BUDGET_MAX_WAIT_MS) {
         this.queue.shift(); this.detach(entry); entry.reject(error('wait_expired')); continue;
       }
-      if (this.admitted.length < this.maxRequests) {
-        this.queue.shift(); this.detach(entry); this.admitted.push(now);
+      const capacityAt = this.admitted.length < this.maxRequests ? now : this.admitted[0] + COMPANION_TRANSPORT_BUDGET_WINDOW_MS;
+      const spacingAt = this.lastAdmitted === undefined ? now : this.lastAdmitted + this.minSpacingMs;
+      const waitMs = Math.max(capacityAt, spacingAt) - now;
+      if (waitMs <= 0) {
+        this.queue.shift(); this.detach(entry); this.admitted.push(now); this.lastAdmitted = now;
         // Reserve before invocation, including synchronous throws and failed operations.
         void Promise.resolve().then(entry.operation).then(entry.resolve, entry.reject);
         continue;
@@ -95,7 +104,7 @@ export class CompanionTransportBudget {
       const controller = new AbortController();
       this.sleeper = controller;
       try {
-        await this.sleep(Math.min(this.admitted[0] + COMPANION_TRANSPORT_BUDGET_WINDOW_MS - now,
+        await this.sleep(Math.min(waitMs,
           entry.enqueued + COMPANION_TRANSPORT_BUDGET_MAX_WAIT_MS - now), controller.signal);
       } catch (reason) { if (!controller.signal.aborted) throw reason; }
       finally { if (this.sleeper === controller) this.sleeper = undefined; }

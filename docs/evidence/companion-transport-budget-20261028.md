@@ -64,3 +64,31 @@ NOT RUN: adapter integration, actual Service requests, browser UI, installed app
 mobile device or production validation. This helper does not establish full
 DMC acceptance. No existing consumer, semantic receiver, server state, GitHub
 record or production resource was changed.
+
+
+## Optional admission spacing
+
+`minSpacingMs` defaults to 0, preserving existing burst behaviour. Callers may
+choose an integer from 0 through 5,000 to space request admissions. The existing
+pump computes the later of rolling-window capacity and minimum spacing, then
+sleeps only until that point or the queued call's 65-second deadline, whichever
+comes first. Queue expiry is checked before every admission. This uses the same
+abortable scheduling sleep; no additional timer, HTTP retry or background poll
+is introduced. Failed operations still consume both their rate reservation and
+admission time. Spacing concerns admission, not network completion.
+
+The integration caller can explicitly select 1,200 ms; the default and Service
+limits remain unchanged. Local fake-clock pacing is not evidence of actual
+ciphertext lifetime or live relay performance. Actual Worker validation must use
+real elapsed time, with existing cryptography/scope checks unchanged.
+
+Follow-up validation uses job `companion-transport-budget-spacing-final-20261028` and
+the focused command above, and full extension TypeScript in the same resource-wrapped command. The added fake-clock control observes admissions
+at 0, 1,200 and 2,400 ms while the first network operation remains unfinished,
+and cancels another queued request without invocation. Invalid spacing values
+are rejected. A delayed wake at the 65-second deadline expires queued work
+before spacing can admit it.
+
+Follow-up results: PASS 6/6 focused tests; PASS full extension TypeScript
+(exit 0); PASS `git diff --check`. Both suites used Node 22.22.1 and the resource
+wrapper. Actual timed Worker/relay acceptance was not run by this helper slice.

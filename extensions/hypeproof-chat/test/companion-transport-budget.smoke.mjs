@@ -88,3 +88,29 @@ test('default budget admits fifty immediate calls and holds the next until the r
   await time.advance(59_999); assert.equal(calls, 50);
   await time.advance(1); assert.equal(await next, 51); budget.dispose();
 });
+
+
+test('optional spacing paces admissions without waiting for network completion and honours cancellation', async () => {
+  const time = clock(), budget = new CompanionTransportBudget({ ...time, minSpacingMs: 1200 });
+  const calls = []; let finishFirst;
+  const first = budget.run(() => { calls.push(time.now()); return new Promise(resolve => { finishFirst = resolve; }); });
+  const second = budget.run(async () => { calls.push(time.now()); return 'second'; });
+  const controller = new AbortController();
+  const cancelled = budget.run(async () => { calls.push('cancelled'); }, controller.signal);
+  const rejected = assert.rejects(cancelled, /cancelled/);
+  const fourth = budget.run(async () => { calls.push(time.now()); return 'fourth'; });
+  await flush(); assert.deepEqual(calls, [0]);
+  await time.advance(1199); assert.deepEqual(calls, [0]);
+  await time.advance(1); assert.equal(await second, 'second'); assert.deepEqual(calls, [0, 1200]);
+  controller.abort(); await rejected; await flush();
+  await time.advance(1199); assert.deepEqual(calls, [0, 1200]);
+  await time.advance(1); assert.equal(await fourth, 'fourth'); assert.deepEqual(calls, [0, 1200, 2400]);
+  finishFirst('first'); assert.equal(await first, 'first'); assert.equal(time.waiting, 0); budget.dispose();
+  const lateTime = clock(), lateBudget = new CompanionTransportBudget({ ...lateTime, minSpacingMs: 5000 });
+  let lateCalls = 0;
+  await lateBudget.run(async () => ++lateCalls);
+  const late = assert.rejects(lateBudget.run(async () => ++lateCalls), /wait_expired/);
+  await lateTime.advance(65_000); await late;
+  assert.equal(lateCalls, 1); lateBudget.dispose();
+  for (const minSpacingMs of [-1, 5001, 0.5, NaN, Infinity, null]) assert.throws(() => new CompanionTransportBudget({ minSpacingMs }), /invalid_spacing/);
+});
