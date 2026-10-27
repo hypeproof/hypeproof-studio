@@ -1,0 +1,14 @@
+import {build} from 'esbuild';
+import {mkdir,writeFile,readFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+const root=path.dirname(fileURLToPath(import.meta.url)),out=path.join(root,'app/src/main/assets/ui');
+const client=process.env.COMPANION_CLIENT_ENTRY,selection=process.env.COMPANION_SELECTION_ENTRY;
+if(!client||!selection)throw Error('Explicit authorized DEV client and frozen selection source paths required');
+await mkdir(out,{recursive:true});
+await build({entryPoints:[path.join(root,'web/main.tsx')],outdir:out,bundle:true,platform:'browser',format:'iife',target:'chrome120',jsx:'automatic',minify:false,define:{'process.env.NODE_ENV':'"production"'},nodePaths:(process.env.COMPANION_NODE_PATHS??'').split(path.delimiter).filter(Boolean),plugins:[{name:'explicit-dev-inputs',setup(api){api.onResolve({filter:new RegExp('^@hypeproof/companion-client$')},()=>({path:client}));api.onResolve({filter:new RegExp('^@companion/selection$')},()=>({path:selection}));}}]});
+const csp="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' about:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
+await writeFile(path.join(out,'index.html'),'<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="'+csp+'"><link rel="stylesheet" href="main.css"><title>HypeProof Companion DEV</title></head><body><div id="root"></div><script src="main.js"></script></body></html>');
+const hash=async p=>createHash('sha256').update(await readFile(p)).digest('hex');
+console.log(JSON.stringify({client,clientEntrySha256:await hash(client),selection,selectionSha256:await hash(selection),jsSha256:await hash(path.join(out,'main.js')),htmlSha256:await hash(path.join(out,'index.html'))},null,2));
