@@ -207,7 +207,7 @@ G2 첫 구현은 `learning` 블록을 보존만 했고 학생 화면은 "미션�
 | 표시 | 완료 조건은 그대로 평범한 목록 행이다. 점수 열·수준 머리글이 없다(DES-CGP-LEARN-15). 학생 화면은 기존대로 모두 ☐이다 |
 | 범위 밖 | Service 검증기는 `learning` 안의 점수 키만 거절하고 글은 보지 않는다. 이 변경 전에 저장된 초안을 API로 바로 고정하는 경로(`PUT …/versions/:v`)는 Chalk가 본문을 받지 않으므로 화면 검사만 있다. 단계별 “완료 기준”(`steps[].acceptance`)은 이 행의 범위가 아니다 |
 
-검증: [T-49](../testing/chalk-authoring.md#t-49-completion-checklist).
+검증: [T-49](../testing/chalk-authoring.md#t-49-completion-checklist). 표시(DES-CGP-LEARN-15)는 [T-50](../testing/chalk-authoring.md)이 실제 페이지의 계산된 배치로 잰다.
 
 ## 첫 구현 경계
 

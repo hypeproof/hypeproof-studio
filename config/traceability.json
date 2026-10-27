@@ -14507,6 +14507,9 @@
           "path": "chalk/test/completion-checklist.test.mjs"
         },
         {
+          "path": "chalk/test/checklist-output.browser.mjs"
+        },
+        {
           "path": "docs/testing/chalk-authoring.md"
         }
       ]

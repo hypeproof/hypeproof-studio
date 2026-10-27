@@ -276,6 +276,11 @@ DES-CGP-LEARN-14 closed (2026-10-27, CGP-LEARN-D-014, DEC-LEARN-14d): the R-014 
 44px chips and 375/1280 px; 나중에 was an outlined ghost button, so it now draws no border (a text button beside the filled
 저장). T-48 measures each clause in headless Chromium.
 
+DES-CGP-LEARN-15 status (2026-10-27, CGP-LEARN-D-015): already met on main by the CGP-LEARN-R-015 build. Chalk `/authoring`
+draws the checklist as one list row per item (sentence + record kind + row actions), with no points column and no level
+headers. Proved by a computed headless test (T-50, `chalk/test/checklist-output.browser.mjs`). Decision: `decisions.md`
+CGP-LEARN-D-015.
+
 ## 4. Open questions / unknowns
 
 1. **Who generates blocks?** ChatGPT appears to let the model choose type + params at answer time
