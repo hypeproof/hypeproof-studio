@@ -15,6 +15,11 @@
 //   - a pointer drag does not move it (no drag-to-hide);
 //   - every button is at least 44x44, every visible text at least 14px, focus ring at least 2px;
 //   - movement eases only when motion is allowed; under prefers-reduced-motion it is instant;
+//   - CGP-VOICE-D-007 (DES-CGPV-12): the running move transitions (slowed through the CDP
+//     Animation domain, read with getAnimations) last the press token (140ms, within the 150ms
+//     of the design row) on an ease-out curve, the control is seen between corners mid-move,
+//     and under reduced motion a move runs no transition at all; the move button's tooltip
+//     (title) and accessible description both carry the keyboard help text;
 //   - Escape still ends the session from the compact control (VO-41).
 // VoicePanel is not mounted by any screen yet (voice is planned, REQ-R1), so seats do not apply:
 // this measures the component that a seat will mount. Without a headless Chromium this prints
@@ -107,6 +112,23 @@ const assertAt = (m, corner, label) => {
   assert.ok(near(h === 'left' ? m.left : m.right, GAP), `${label}: ${h} gap ${h === 'left' ? m.left : m.right}px, want ${GAP}`);
 };
 const focusMove = () => browser.evaluate(`document.querySelector('.hps-voice-move').focus()`);
+// A key press with no settle delay, for reading a move while it runs.
+const press = async (k) => { for (const type of ['keyDown', 'keyUp']) await browser.send('Input.dispatchKeyEvent', { type, key: k, code: k, windowsVirtualKeyCode: CODES[k] }); };
+const waitFor = async (expression, what) => {
+  for (let i = 0; i < 200; i++) { if (await browser.evaluate(expression)) return; await delay(10); }
+  throw new Error(`voice-compact-corner: timed out waiting for ${what}`);
+};
+const HELP = '화살표 키로 네 모서리 중 한 곳으로 옮겨요. Home 키를 누르면 처음 자리로 돌아가요.';
+// The move transitions running on the control right now: property, duration (ms) and curve.
+const moves = () => browser.evaluate(`document.querySelector('.hps-voice-compact').getAnimations().filter((a) => a.transitionProperty && a.playState === 'running').map((a) => ({ prop: a.transitionProperty, duration: a.effect.getTiming().duration, easing: a.effect.getTiming().easing }))`);
+// An ease-out curve starts fast and settles: cubic-bezier(x1, y1, x2, y2) with y1 > x1 and the
+// end tangent no steeper than the start one. 'ease-out' itself is cubic-bezier(0, 0, .58, 1).
+const easeOut = (easing) => {
+  if (easing === 'ease-out') return true;
+  const m = /^cubic-bezier\(([^)]+)\)$/.exec(easing); if (!m) return false;
+  const [x1, y1, x2, y2] = m[1].split(',').map(Number);
+  return y1 > x1 && y2 >= x2 && y2 <= 1 && y1 <= 1;
+};
 
 const VIEWS = [[1420, 800], [800, 800], [320, 480]];
 let cases = 0;
@@ -125,6 +147,10 @@ try {
     assert.ok(m.minText >= 14, `${label}: text ${m.minText}px under 14px`);
     assert.ok(m.duration.split(',').some((d) => parseFloat(d) >= 0.1), `${label}: no move easing with motion allowed (${m.duration})`);
     const ring = await browser.focusVisibleStyle('.hps-voice-move', ['outline-width', 'outline-style']);
+    // DES-CGPV-12: keyboard help in the move button's tooltip and in its accessible description.
+    const tip = await browser.evaluate(`(() => { const b = document.querySelector('.hps-voice-move'); return { title: b.title, described: (b.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ') }; })()`);
+    assert.equal(tip.title, HELP, `${label}: move button tooltip is not the keyboard help (${tip.title})`);
+    assert.equal(tip.described, HELP, `${label}: move button description is not the keyboard help (${tip.described})`);
     assert.ok(parseFloat(ring['outline-width']) >= 2 && ring['outline-style'] !== 'none', `${label}: focus ring ${JSON.stringify(ring)}`);
 
     // Arrow keys from the move button: every corner, focus kept, move announced.
@@ -182,10 +208,36 @@ try {
     assertAt(await measure(), 'bottom-right', `${label} move with blocked store`);
     await browser.evaluate(`window.store.throws = false`);
 
+    // DES-CGPV-12 motion, read from the transitions a real move starts. The timeline runs at 1%
+    // so the move is still running when it is read; nothing here waits on a fixed delay.
+    await browser.send('Animation.enable');
+    await browser.send('Animation.setPlaybackRate', { playbackRate: 0.01 });
+    await focusMove(); await press('ArrowUp'); // bottom-right -> top-right
+    await waitFor(`document.querySelector('.hps-voice-compact').getAnimations().some((a) => a.transitionProperty && a.playState === 'running')`, 'the move transition');
+    const running = await moves();
+    assert.ok(running.some((a) => a.prop === 'top') && running.some((a) => a.prop === 'translate'), `${label}: a vertical move runs no top/translate transition ${JSON.stringify(running)}`);
+    for (const a of running) {
+      assert.ok(a.duration >= 100 && a.duration <= 150, `${label}: ${a.prop} moves over ${a.duration}ms, want the press token within 150ms`);
+      assert.ok(easeOut(a.easing), `${label}: ${a.prop} eases with ${a.easing}, want an ease-out curve`);
+    }
+    m = await measure();
+    assert.equal(m.corner, 'top-right', `${label}: data-corner did not change on the move`);
+    assert.ok(m.inside && !near(m.top, GAP), `${label}: control already at the top corner mid-move (top ${m.top}px), so it did not animate`);
+    await browser.send('Animation.setPlaybackRate', { playbackRate: 1 });
+    await browser.evaluate(`document.querySelector('.hps-voice-compact').getAnimations().forEach((a) => a.finish())`);
+    assertAt(await measure(), 'top-right', `${label} after the eased move`);
+
     // Reduced motion: the move is instant (the global reduce rule leaves 0.01ms, under 1ms).
     await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: forcedColors ? 'active' : 'none' }, { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }, { name: 'prefers-reduced-motion', value: 'reduce' }] });
     m = await measure();
     assert.ok(m.duration.split(',').every((d) => parseFloat(d) < 0.001), `${label}: moves still animate under reduced motion (${m.duration})`);
+    // ...and a real move under reduced motion runs nothing of 1ms or more, and is already there.
+    await focusMove(); await press('ArrowDown');
+    await waitFor(`document.querySelector('.hps-voice-compact').dataset.corner === 'bottom-right'`, 'the reduced-motion move');
+    const reduced = await browser.evaluate(`document.querySelector('.hps-voice-compact').getAnimations().filter((a) => a.transitionProperty).map((a) => a.effect.getTiming().duration)`);
+    assert.ok(reduced.every((d) => d < 1), `${label}: a move under reduced motion still transitions ${JSON.stringify(reduced)}`);
+    await browser.evaluate(`document.querySelector('.hps-voice-compact').getAnimations().forEach((a) => a.finish())`);
+    assertAt(await measure(), 'bottom-right', `${label} reduced-motion move`);
 
     // Escape from the compact control still ends the session.
     await focusMove(); await key('Escape');
@@ -194,7 +246,7 @@ try {
     assert.deepEqual(await browser.evaluate('window.errors'), [], `${label}: page errors`);
     cases++;
   }
-  console.log(`PASS voice-compact-corner: ${cases} theme/width cases; four corners at 16px, Home, focus kept, announced, inside the viewport, per-window memory with corrupt/blocked fallback, no drag, 44px/14px/ring, reduced motion instant`);
+  console.log(`PASS voice-compact-corner: ${cases} theme/width cases; four corners at 16px, Home, focus kept, announced, inside the viewport, per-window memory with corrupt/blocked fallback, no drag, 44px/14px/ring, reduced motion instant, eased 140ms ease-out move seen mid-way (DES-CGPV-12), keyboard help in the tooltip`);
 } finally {
   await browser.close();
 }
