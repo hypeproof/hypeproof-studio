@@ -32,7 +32,7 @@ export const START_SETTINGS_COPY = {
   reduceMotion: "움직임 줄이기",
   reduceMotionLabels: { auto: "기기 설정 따르기", on: "줄이기", off: "줄이지 않기" } as Record<ReduceMotionChoice, string>,
   notices: "알림",
-  noticesLabel: "창을 보고 있지 않을 때 컴퓨터 알림으로도 알려 주기",
+  noticesLabel: "창을 보고 있지 않을 때 컴퓨터 알림으로도 알려 줘요.",
   noticesHint: "코치가 일을 마치거나 확인을 기다릴 때 알려요. 답변 내용은 알림에 넣지 않아요.",
   advanced: "고급 설정",
 } as const;
