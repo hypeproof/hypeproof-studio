@@ -9,6 +9,7 @@ import {CompanionSessionView} from '../../../extensions/hypeproof-chat/webview-u
 import {companionSessionPresentation} from '../../../extensions/hypeproof-chat/webview-ui/src/companionSessionPresentation';
 import {PREVIEW_IFRAME_SANDBOX,PREVIEW_IFRAME_ALLOW} from '../../../extensions/hypeproof-chat/src/cspBuilder';
 import {createNativePort} from './nativePort';
+import {CompanionAndroidResultTransport} from './resultTransport';
 import './style.css';
 declare global {interface Window {CompanionNative:Parameters<typeof createNativePort>[0]}}
 const port=createNativePort(window.CompanionNative);
@@ -16,11 +17,12 @@ const budget=new CompanionTransportBudget({minSpacingMs:1200});
 let identity:any,pairing:any,relay:any,receiver:any,adapter:CompanionClientAdapter|undefined,controller:CompanionMobileSessionController|undefined;
 let lifetime=new AbortController(),closed=false;
 let bootstrap:any[]|null=null;
+let resultTransport:CompanionAndroidResultTransport|undefined;
 const rawPair=(_role:any,invitationId:any,action:any,payload:any,signal?:AbortSignal)=>port.call({kind:'pairing',invitationId,action,payload},signal??lifetime.signal);
 const rawRelay=(_role:any,invitationId:any,action:any,raw:any,signal?:AbortSignal)=>port.call({kind:'relay',invitationId,action,raw},signal??lifetime.signal);
 const schedule=<Args extends any[],Result>(operation:(...args:Args)=>Promise<Result>)=>(...args:Args):Promise<Result>=>budget.run<Result>(()=>operation(...args),lifetime.signal);
 function erasePair(client:any){if(client){client.keys=null;client.qr=null;client.claim=null;client.frozenClaim=null;}}
-function clear(){closed=true;lifetime.abort();controller?.dispose();adapter?.dispose();relay?.close();receiver?.close();erasePair(pairing);pairing=null;relay=null;receiver=null;bootstrap=null;identity=null;budget.dispose();port.close();}
+function clear(){closed=true;lifetime.abort();resultTransport?.close();resultTransport=undefined;controller?.dispose();adapter?.dispose();relay?.close();receiver?.close();erasePair(pairing);pairing=null;relay=null;receiver=null;bootstrap=null;identity=null;budget.dispose();port.close();}
 window.addEventListener('pagehide',clear,{once:true});
 function App(){
  const [stage,setStage]=useState('identity'),[challenge,setChallenge]=useState(''),[message,setMessage]=useState('컴퓨터에서 작업과 저장 HTML을 준비해 주세요.'),[busy,setBusy]=useState(false),[snapshot,setSnapshot]=useState<any>(null),[comparison,setComparison]=useState('');
@@ -44,9 +46,12 @@ function App(){
   if(closed)return;
   // Settled, exclusive handoff: adapter now admits each raw transport HTTP with the same budget.
   pairing.transport=rawPair;relay.transport=rawRelay;
+  resultTransport=new CompanionAndroidResultTransport({relay,selection:receiver,initialRevision:chosen.revision,
+   onHeld:()=>{if(!closed)setMessage('컴퓨터에서 새 선택 정보를 받았어요. 현재 요청의 결과는 계속 확인하며, 새 선택을 자동으로 요청하지 않아요. 새 선택으로 보려면 연결을 새로 준비해 주세요.');},
+   onInvalid:()=>{if(closed)return;clear();setStage('closed');setMessage('선택 정보 처리를 마치지 못해 이 기기 연결을 닫았어요. 이미 받은 결과만 남아 있어요. 현재 컴퓨터 작업의 취소나 완료를 확인한 것은 아니에요.');}});
   adapter=new CompanionClientAdapter({pairing,relay,requestId:chosen.request.requestId,budget});
   const selected={request:chosen.request,projectName:'선택한 작업',artifactName:'저장된 HTML'};
-  controller=new CompanionMobileSessionController({transport:adapter,descriptor:async(signal)=>{
+  controller=new CompanionMobileSessionController({transport:resultTransport.bind(adapter),descriptor:async(signal)=>{
    await adapter!.refresh(signal);const diagnostics=relay.diagnostics();
    if(closed||diagnostics.closed||!diagnostics.context_digest||pairing.invitation.status!=='paired')return null;
    // This is transport readiness after authenticated metadata, not a host heartbeat.
