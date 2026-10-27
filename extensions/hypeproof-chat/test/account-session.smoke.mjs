@@ -5,8 +5,8 @@ import { readFileSync } from 'node:fs';
 const SERVICE='http://127.0.0.1:8793/v1', SITE='http://localhost:3193';
 const reply=(status, body)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
 function harness(extra = {}) {
-  const world={now:1_000_000,store:new Map(),calls:[],opened:[],invalidated:[],refresh:0,poll:'pending',release:undefined,revoke:false,offline:false,failStore:false};
-  const secrets={get:async k=>world.store.get(k),store:async(k,v)=>{if(world.failStore)throw Error("secret storage unavailable");world.store.set(k,v)},delete:async k=>{world.store.delete(k)}};
+  const world={now:1_000_000,store:new Map(),calls:[],opened:[],invalidated:[],deletes:[],refresh:0,refreshAttempts:0,poll:'pending',release:undefined,revoke:false,offline:false,failStore:false};
+  const secrets={get:async k=>world.store.get(k),store:async(k,v)=>{if(world.failStore)throw Error("secret storage unavailable");world.store.set(k,v)},delete:async k=>{world.deletes.push(k);world.store.delete(k)}};
   const bundle=n=>({access_token:`account-secret-${n}`,refresh_token:`refresh-secret-${n}`,session_id:'session-one',expires_in:3600});
   const fetch=async(url,init={})=>{
     const u=new URL(url),body=init.body?JSON.parse(init.body):undefined;
@@ -20,7 +20,7 @@ function harness(extra = {}) {
       if(world.poll==='denied')return reply(409,{error:'access_denied'});
       return reply(200,bundle(0));
     }
-    if(u.pathname.endsWith('/auth/refresh')){world.refresh++;assert.equal(body.refresh_token,`refresh-secret-${world.refresh-1}`,'refresh token is consumed only once');await new Promise(r=>setImmediate(r));return reply(200,bundle(world.refresh));}
+    if(u.pathname.endsWith('/auth/refresh')){world.refreshAttempts++;if(body.refresh_token!==`refresh-secret-${world.refresh}`){world.revoke=true;return reply(401,{error:'refresh_reuse'});}world.refresh++;await new Promise(r=>setImmediate(r));return reply(200,bundle(world.refresh));}
     if(u.pathname.endsWith('/auth/logout')){if(world.now>4_600_000&&new Headers(init.headers).get('authorization')==='Bearer account-secret-0')return reply(401,{error:'invalid_token'});return reply(200,{ok:true});}
     if(world.revoke)return reply(401,{error:'session_revoked'});
     if(u.pathname.endsWith('/me'))return reply(200,{account:{id:'account-one',email:'buyer@example.test',display_name:'테스트 고객',access_token:'do-not-forward'}});
@@ -87,8 +87,61 @@ assert.equal(safeDeviceUrl('https://other.test/studio/connect?code=x',SITE),fals
 }
 
 {
+  const {world,client,make}=harness();await client.start();world.poll='approved';await client.poll();
+  const original=world.store.get(ACCOUNT_SECRET_KEY);world.now+=3_550_000;world.failStore=true;
+  await assert.rejects(()=>client.accessToken(),e=>e.code==='storage_failed');
+  assert.equal(world.store.get(ACCOUNT_SECRET_KEY),original,'rotation storage denial preserves the exact prior raw credential');
+  assert.equal(world.deletes.length,0);assert.deepEqual(world.invalidated,[]);
+  assert.equal(world.calls.filter(c=>c.path.endsWith('/auth/logout')).length,0,'same-session rotation failure never remotely revokes the prior session');
+  assert.equal(client.view().status,'signedOut','unpersisted rotated credentials never report login success');
+  assert.match(client.view().message,/저장/);assert.match(client.view().message,/이미 사용됐을 수/);
+  world.failStore=false;
+  await assert.rejects(()=>client.accessToken(),e=>e.code==='storage_failed');
+  assert.equal(world.refreshAttempts,1,'same host refuses to replay the known-consumed native refresh token');
+  assert.equal(world.store.get(ACCOUNT_SECRET_KEY),original);assert.equal(world.deletes.length,0);assert.deepEqual(world.invalidated,[]);
+  // Restart has no durable failure guard. The real Service contract rejects a
+  // consumed native token; only that definitive server invalidity forgets it.
+  const restarted=make();await assert.rejects(()=>restarted.accessToken(),e=>e.code==='refresh_reuse');
+  assert.equal(world.refreshAttempts,2);assert.equal(world.refresh,1,'restart cannot mint a successful volatile replacement');
+  assert.equal(world.calls.filter(c=>c.path.endsWith('/auth/logout')).length,0);
+  assert.equal(world.store.has(ACCOUNT_SECRET_KEY),false,'definitive server rejection follows the normal revoked-session cleanup');
+  client.dispose();restarted.dispose();console.log('PASS denied rotation preserves bytes without logout/deletion/invalidation; known consumed token blocks and restart fails safely');
+}
+{
+  const {world,client}=harness();await client.start();world.poll='approved';await client.poll();world.now+=3_550_000;world.failStore=true;
+  await assert.rejects(()=>client.accessToken(),e=>e.code==='storage_failed');world.failStore=false;
+  world.store.set(ACCOUNT_SECRET_KEY,JSON.stringify({service:SERVICE,accessToken:'other-window-access',refreshToken:'other-window-refresh',sessionId:'session-two',expiresAt:world.now+3_600_000}));
+  assert.equal(await client.accessToken(),'other-window-access','a different successfully persisted bundle clears the failure guard');
+  await client.refreshView();assert.equal(client.view().status,'signedIn');assert.equal(world.refreshAttempts,1);
+  assert.equal(world.deletes.length,0);assert.deepEqual(world.invalidated,[]);client.dispose();console.log('PASS another window persisted replacement recovers without replaying a consumed refresh');
+}
+{
+  const {world,client}=harness();await client.start();world.poll='approved';await client.poll();world.now+=3_550_000;world.failStore=true;
+  await assert.rejects(()=>client.accessToken(),e=>e.code==='storage_failed');world.failStore=false;
+  await client.start();assert.equal(client.view().status,'waiting','explicit re-login can replace a known unpersisted rotation after storage access is restored');
+  assert.equal(world.refreshAttempts,1,'explicit recovery also avoids replay of known-consumed refresh');
+  assert.deepEqual(world.invalidated,['session-one']);assert.deepEqual(world.deletes,[ACCOUNT_SECRET_KEY]);
+  assert.equal(world.calls.filter(c=>c.path.endsWith('/auth/logout')).length,1,'revocation is deferred until explicit recovery');
+  client.dispose();console.log('PASS explicit re-login recovers after storage restoration without implicit session destruction');
+}
+
+{
+  let replacement;
+  const {world,client}=harness({lock:async work=>{if(replacement){world.store.set(ACCOUNT_SECRET_KEY,replacement);replacement=undefined;}return work();}});
+  await client.start();world.poll='approved';await client.poll();world.now+=3_550_000;world.failStore=true;
+  await assert.rejects(()=>client.accessToken(),e=>e.code==='storage_failed');world.failStore=false;
+  const recovered=JSON.stringify({service:SERVICE,accessToken:'other-window-access',refreshToken:'other-window-refresh',sessionId:'session-two',expiresAt:world.now+3_600_000});
+  replacement=recovered;
+  await client.start();
+  assert.equal(world.store.get(ACCOUNT_SECRET_KEY),recovered,'re-login rechecks the failure identity under the cross-window lock');
+  assert.equal(client.view().status,'signedIn');assert.equal(world.deletes.length,0);assert.deepEqual(world.invalidated,[]);
+  assert.equal(world.calls.filter(c=>c.path.endsWith('/auth/logout')).length,0,'a concurrently replaced session is never revoked by recovery');
+  client.dispose();console.log('PASS explicit recovery preserves a different bundle published before its lock');
+}
+
+{
   const {world,client}=harness();await client.start();world.poll='slow';await client.poll();assert.equal(client.view().status,'waiting','Service slow_down preserves the pending approval');
-  world.poll='approved';world.failStore=true;await client.poll();assert.equal(world.store.size,0);assert.equal(client.view().status,'signedOut');assert.ok(world.calls.some(c=>c.path.endsWith('/auth/logout')),'an unpersisted session is revoked');
+  world.poll='approved';world.failStore=true;await client.poll();assert.match(client.view().message,/저장/);assert.equal(world.deletes.length,0);assert.equal(world.store.size,0);assert.equal(client.view().status,'signedOut');assert.ok(world.calls.some(c=>c.path.endsWith('/auth/logout')),'an unpersisted session is revoked');
   client.dispose();console.log('PASS polling slowdown retries; failed credential storage revokes the newly issued session');
 }
 

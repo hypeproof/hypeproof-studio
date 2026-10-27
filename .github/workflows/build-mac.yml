@@ -300,6 +300,13 @@ jobs:
         working-directory: vscodium-base
         run: bash ../scripts/apply-product-overrides.sh
 
+      - name: Verify RC isolation and recoverable encrypted storage
+        if: steps.path.outputs.mode == 'full'
+        shell: bash
+        env:
+          TYPESCRIPT_PATH: ${{ github.workspace }}/extensions/hypeproof-chat/node_modules/typescript/lib/typescript.js
+        run: node --test scripts/patches/core/rc-storage/rc-storage.test.mjs scripts/patches/core/secure-storage/secure-storage.test.mjs
+
       - name: Inject hypeproof-chat
         if: steps.path.outputs.mode == 'full'
         shell: bash

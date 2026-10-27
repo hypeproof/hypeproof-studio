@@ -30,9 +30,23 @@ REQ-I 업데이트 계약을 확장한다. P0는 통합 사용자 경로 출시 
 | US-16 | 릴리스 기록은 App tag/commit/OS별 digest, 실제 설치·확장 버전, Service endpoint/revision, Module pin 또는 compiled revision, 검사 버전/결과와 근거를 담는다. 머지/빌드/공개/설치·재시작을 구분하고 App·Service·Module별 복귀 대상과 데이터 보존을 검증한다. 파일 업로드 완료만으로 사용자 적용을 완료 처리하지 않는다. | INT-US-04; Evidence over claims, REQ-I | P0 | US-T20 |
 | US-17 | AI 체험 선택은 활동 진입만 결정한다. 홈페이지/index.html/PPT, 필수 목표 설문, 고정 질문 순서를 선행 조건으로 두지 않는다. 충분한 요청·이어지는 막막함·질문 건너뛰기·목표 변경은 기존 NAT-03을 따른다. 수업의 특정 예제/순서를 체험에 자동 적용하지 않는다. | INT-US-01/03; NAT-03/04, AE-01/36 | P0 | US-T15/21 |
 | US-18 | 활동 목록·전환·관찰/사용량은 기존 접근 범위를 유지한다. 개인 체험 대화나 파일은 수업 참여만으로 강사/다른 사용자에게 공유되지 않는다. 로그/화면/URL/설치본에 토큰·모델 키를 넣지 않으며 기존 보존·선택 공유 정책을 바꾸지 않는다. | INT-US-02/03; NAT-05/08, AE-22, AB-12/17 | P0 | US-T14/18 |
-| US-19 | 앱은 `POST /v1/free/claim` 을 무료 시작이 광고될 때만, 공개(무인증) 요청으로 정확한 세 키 `{install_id, app_version, age_ok}` 만 담아 보낸다. `install_id` 는 처음 청구할 때 만드는 UUID v4 로 SecretStorage(쓸 수 없으면 동기화되지 않는 globalState)에 두고 다시 쓴다. 성공(`granted`/`reused`)이면 받은 토큰을 평범한 참여 자격으로 기존 입장 경로에 넘기고, 토큰과 `install_id` 는 webview·로그·퍼널 이벤트에 보내지 않는다(`trial_entry` 는 청구 결과의 outcome 만 쓴다). 거절은 `{error:{code,message,resumes_at?}}` 의 한국어 문장을 그대로 보이고 `code` 는 배치에만 쓴다; 읽을 수 없는 문장이면 앱의 같은 코드 문장으로 대신한다. 형식이 맞지 않는 200 은 토큰을 만들어 내지 않는다. | INT-US-01/03; SPEC iteration 4 §1.2/§2.2 | P1 (Service `HPS_FREE_START` 뒤, 기본 꺼짐) | `extensions/hypeproof-chat/test/free-start.smoke.mjs`, `test/free-start-host.smoke.mjs` |
+| US-19 | 앱은 `POST /v1/free/claim` 을 무료 시작이 광고될 때만, 공개(무인증) 요청으로 정확한 세 키 `{install_id, app_version, age_ok}` 만 담아 보낸다. `install_id` 는 처음 청구할 때 만드는 UUID v4 로 SecretStorage에 두고 다시 쓴다. 읽기 실패 시 기존 ID를 보존하고 청구를 멈춘다. 기존 ID가 없음을 정상 확인한 첫 저장의 실패에만 동기화되지 않는 globalState를 쓴다. 성공(`granted`/`reused`)이면 받은 토큰을 평범한 참여 자격으로 기존 입장 경로에 넘기고, 토큰과 `install_id` 는 webview·로그·퍼널 이벤트에 보내지 않는다(`trial_entry` 는 청구 결과의 outcome 만 쓴다). 거절은 `{error:{code,message,resumes_at?}}` 의 한국어 문장을 그대로 보이고 `code` 는 배치에만 쓴다; 읽을 수 없는 문장이면 앱의 같은 코드 문장으로 대신한다. 예외로 HTTP 409 `claim_busy`는 같은 ID로 3·6·12초 뒤 최대 세 번 더 시도하고, 계속 막히면 버튼을 다시 활성화해 2분 뒤 재시도와 기존 문제 신고 명령을 안내한다. 다른 오류는 자동 재시도를 멈춘다. 형식이 맞지 않는 200 은 토큰을 만들어 내지 않는다. | INT-US-01/03; SPEC iteration 4 §1.2/§2.2 | P1 (Service `HPS_FREE_START` 뒤, 기본 꺼짐) | `extensions/hypeproof-chat/test/free-start.smoke.mjs`, `test/free-start-host.smoke.mjs` |
 
 ## 범위 해석
+
+### RC 저장소와 연결 보존 (US-10/13/16/18)
+
+Mac RC Test Kit은 버전별 영속 프로필과 고정된 RC 암호화 이름을 사용한다. 정상 설치된
+정식 앱의 이름·프로필·키체인 항목은 바꾸지 않는다. 키트의 앱을 직접 열어도 같은 RC
+프로필을 선택하고, 버전·소스·경로 표식이 없거나 충돌하면 정식 프로필로 돌아가지 않고
+실행을 거부한다. 기존 프로필이나 암호문을 새 암호화 이름으로 복사하지 않는다.
+
+없는 연결 조회와 저장된 키 목록 조회는 OS 암호화를 요청하지 않는다. 실제 비밀을
+읽거나 쓸 때 OS 접근이 거절되면 기존 암호문을 보존하고 실패를 전달한다. 임시 메모리
+저장을 영속 저장 성공으로 취급하거나 복호화 실패만으로 연결을 삭제하지 않는다.
+접근이 정상화된 뒤에는 같은 저장소로 다시 시도할 수 있어야 한다. 무료 체험 식별자를 읽지 못하면 새 식별자나 다른 저장소의 값으로 바꾸어 청구하지 않는다. 로그인 갱신의 저장 실패도 기존 암호문 삭제 사유가 아니다. 이미 서버에서 교체된 자격은 성공한 저장으로 간주하지 않으며, 재로그인이 필요하면 그 이유를 알린다. 암호 입력·항상 허용·
+키체인 ACL 변경은 RC 검증 성공의 선행 작업이 아니다. OS가 실제 비밀 접근에 요구하는
+보안 절차 자체를 끄는 기능도 제공하지 않는다.
 
 - US-01/02는 App과 Service의 전달 경로 통합이다. 서로 다른 수업의 데이터·강사 권한·Module pin까지 합치는 요구가 아니다.
 - US-04의 레거시 native-trial 참여 코드는 호환 경로다. 신규 개인 권한은 AB-02를 따라 기존 account/access에 연결하며 임시 가짜 수업 등록을 새 개인 가입 모델로 채택하지 않는다.

@@ -39,6 +39,15 @@ async function scenario(kind,{profile=true,storedIssuer,connection={current:reco
  return{decision,events,context,marker};
 }
 try{
+ for(const decision of ['valid','absent','expired','mismatch']){
+  const events=[];
+  await restoreInitialSurface({decision,getStoredIssuer:async()=>{throw Error('synthetic keychain denial');},
+   connections:()=>assert.fail('Unreadable credentials must not auto-resume a connection'),
+   notifyExpired:()=>assert.fail(),notifyMismatch:message=>events.push(['warning',message]),
+   showStart:async options=>events.push(['start',{...options}]),ensureProfile:()=>assert.fail(),openChat:()=>assert.fail()});
+  assert.deepEqual(events,[['warning','저장된 로그인 정보를 읽지 못했습니다. 기존 연결과 파일은 보존됩니다. 잠시 뒤 앱을 다시 열어 주세요.'],['start',{deferProfileUntilEntry:true}]]);
+ }
+ console.log('PASS stored issuer read rejection retains safe start surface without connection resume or secret mutation');
  for(const [kind,copy]of [['expired',expiredCopy],['mismatch',mismatchCopy]]){
   const result=await scenario(kind);assert.equal(result.decision,kind);assert.deepEqual(result.events,[[kind,copy],['start']]);
   assert.equal(result.context.workspaceState.map.size,0,'invalid checkpoint must not silently restore history or draft');

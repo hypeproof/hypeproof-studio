@@ -10,23 +10,33 @@ const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER==='1')thr
 const dir=fileURLToPath(new URL('../webview-ui/',import.meta.url));
 const app=await build({entryPoints:[dir+'src/main.tsx'],bundle:true,platform:'browser',format:'esm',outdir:'diff-assets',write:false,loader:{'.svg':'dataurl'},logLevel:'silent'});
 const css=app.outputFiles.find(f=>f.path.endsWith('.css')).text;
-const script=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {ChatPanel} from './src/ChatPanel';createRoot(document.getElementById('root')).render(React.createElement(ChatPanel,window.__diffProps));`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
+const script=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {ChatPanel} from './src/ChatPanel';setTimeout(()=>createRoot(document.getElementById('root')).render(React.createElement(ChatPanel,window.__diffProps)),window.__diffMountDelay);`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
 const row=(id,kind,text,at,extra={})=>({id,kind,text,at,actor:'user',evidence_type:null,source_kind:'none',source_state:'self_reported',provenance:null,adopted_from:null,...extra});
 const before='같은 줄\n이전 문장\n',after='같은 줄\n새 문장 <img src=x onerror=alert(1)>\n';
 const rows=[row('before','artifact',before,1,{sha256:'a'.repeat(64)}),row('change','change_requested','바꿔 주세요',2,{artifact_before:'a'.repeat(64)}),row('after','artifact',after,3,{sha256:'b'.repeat(64)}),row('check','retest_confirmed','확인했어요',4,{artifact_after:'b'.repeat(64)})];
 const learning={task:'task-1',phase:'working',currentStep:null,complete:{ok:false,reasons:[],missing:[]},declared:false,verification:{state:'unverified',source_state:'self_reported',line:'다시 확인해 주세요'},evidence:rows};
 const view={turnId:'turn-1',state:'open',added:[],changed:['notes.txt'],deleted:[],notCovered:[],files:[{path:'notes.txt',added:1,removed:1,lines:[{kind:'same',text:'같은 줄\n'},{kind:'removed',text:'이전 문장\n'},{kind:'added',text:'새 문장 <img src=x onerror=alert(1)>\n'}]}]};
 const b=await launch(bin),evidence=process.env.DIFF_SYMBOLS_EVIDENCE;if(evidence)mkdirSync(evidence,{recursive:true});
+// Host messages are one-shot. Wait for ChatPanel's subscription handshake instead of
+// assuming the 50ms document-load pause includes React's passive effects.
+const waitFor=async(expression,label)=>{
+ const deadline=Date.now()+5000;
+ while(Date.now()<deadline){if(await b.evaluate(expression))return;await new Promise(r=>setTimeout(r,20));}
+ assert.fail(`Timed out waiting for ${label}`);
+};
 const dispatch=async(type,payload)=>{await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify({type,...payload})}}))`);await new Promise(r=>setTimeout(r,60));};
 try{
  for(const seat of ['personal','classroom'])for(const dark of [true,false])for(const width of [800,1420])for(const forcedColors of [false,true]){
   const vars=Object.entries(THEMES[dark?'Dark+':'Light+']).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
   const config=chatConfig(3,{activity:{...chatConfig().activity,kind:seat},profile:{...chatConfig().profile,lesson:null},taskWorkspace:seat==='personal'?{tasks:[],sources:[]}:undefined});
   const props=chatPanelProps({config});
-  await b.load(`<html style="${vars};--vscode-diffEditor-insertedTextBackground:green;--vscode-diffEditor-removedTextBackground:red"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div class="${seat==='personal'?'tw-workspace':''}" style="display:block;height:900px"><div id="root"></div></div><script>window.__diffProps=${JSON.stringify(props)};</script><script>${script.outputFiles[0].text}</script></body></html>`,{width,height:1000,dark,forcedColors});
-  // Wait for the rendered surfaces instead of trusting a fixed delay: slow CI runners render after 60 ms,
-  // and a message posted before ChatPanel's listener is attached is lost, so resend the (idempotent) states.
-  for(let i=0;i<100;i++){if(i%10===0){await dispatch('learningState',{state:learning});await dispatch('turnReviewState',{view});}if(await b.evaluate(`!!document.querySelector('.hp-evidence')&&!!document.querySelector('.hps-turn-review')`))break;await new Promise(r=>setTimeout(r,50));}
+  await b.load(`<html style="${vars};--vscode-diffEditor-insertedTextBackground:green;--vscode-diffEditor-removedTextBackground:red"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div class="${seat==='personal'?'tw-workspace':''}" style="display:block;height:900px"><div id="root"></div></div><script>window.__diffProps=${JSON.stringify(props)};window.__diffMountDelay=${seat==='personal'&&dark&&width===800&&!forcedColors?75:0};window.__diffPosted=[];window.acquireVsCodeApi=()=>({postMessage:message=>window.__diffPosted.push(message),getState:()=>undefined,setState:()=>{}});</script><script>${script.outputFiles[0].text}</script></body></html>`,{width,height:1000,dark,forcedColors});
+  // The first scenario deliberately mounts after the old 50ms sleep to cover a busy CI runner.
+  await waitFor(`window.__diffPosted.some(message=>message.type==='turnReviewRequest')`,'ChatPanel host subscriptions');
+  await dispatch('learningState',{state:learning});
+  await waitFor(`document.querySelector('.hp-evidence')!==null`,'learning evidence drawer');
+  await dispatch('turnReviewState',{view});
+  await waitFor(`document.querySelector('.hps-turn-review')!==null`,'turn review');
   await b.evaluate(`document.querySelectorAll('.hp-evidence,.hp-evidence-diff,.hps-turn-review details').forEach(e=>e.open=true);[...document.querySelectorAll('.hps-turn-review button')].find(e=>e.textContent==='전후 비교 보기').click()`);await new Promise(r=>setTimeout(r,60));
   for(const surface of ['.hps-turn-review','.hp-evidence-compare']){
    await b.evaluate(`document.querySelector('.hp-evidence').open=${surface==='.hp-evidence-compare'}`);await new Promise(r=>setTimeout(r,60));

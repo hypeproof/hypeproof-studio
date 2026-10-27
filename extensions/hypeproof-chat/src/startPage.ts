@@ -12,7 +12,7 @@ import { PENDING_PURCHASE_KEY, PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecover
 import { isPurchaseReturnOrderId } from "./purchaseReturnHelpers";
 import type { ClassReposOutcome } from "./publish/publishHost";
 import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
-import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
+import { AGE_KEY, FREE_CLAIM_BUSY_RECOVERY, FREE_CLAIM_BUSY_RETRY_DELAYS_MS, FREE_CLAIM_REFUSALS, freeSeatEnding, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
 import type { FreeStartView } from "./startPageProtocol";
 import { isFreeSeat } from "./seatVocabulary";
 import { qrDataUrl } from "./testQr";
@@ -49,6 +49,9 @@ const TOKEN_KEY = "hypeproofChat.workshopToken";
 /** REQ-L12 — the order a buyer is in the middle of paying. Kept until the seat is claimed, so a restart cannot lose a paid order. */
 const DEFAULT_PROXY_URL = "https://api.hypeproof-ai.xyz/v1";
 const DEFAULT_SITE_BASE = "https://hypeproof-ai.xyz";
+class InstallIdReadError extends Error {
+  constructor() { super("저장된 무료 사용 정보를 확인하지 못했습니다. 기존 정보는 보존됩니다. 잠시 뒤 다시 눌러 주세요. 계속되면 Studio를 다시 열어 주세요."); }
+}
 
 /**
  * 활동 분리 **이전**에 쌓인 대화 기록 키인가 (#960).
@@ -417,11 +420,13 @@ export class StartPage {
     };
   }
   /**
-   * The per-install id (UUID v4), created at the first claim. SecretStorage first; if it cannot be
-   * used, globalState (not synced). It never reaches a webview, a log line or a funnel event.
+   * The per-install id (UUID v4), created at the first claim. A failed secret read must preserve
+   * the existing identity and block the claim. Only a successful read may select or create an id;
+   * a failed first store uses globalState (not synced). Never shown in a webview, log or event.
    */
   private async installId(): Promise<string> {
-    try { const v = await this.context.secrets.get(INSTALL_ID_KEY); if (isInstallId(v)) return v; } catch { /* fall back below */ }
+    try { const v = await this.context.secrets.get(INSTALL_ID_KEY); if (isInstallId(v)) return v; }
+    catch { throw new InstallIdReadError(); }
     const kept = this.context.globalState?.get<unknown>(INSTALL_ID_KEY);
     if (isInstallId(kept)) return kept;
     const id = randomUUID();
@@ -453,8 +458,16 @@ export class StartPage {
       const installId = await this.installId();
       const claim = (): Promise<FreeClaimResult> => claimFreeStart({ proxyUrl, installId, appVersion: this.appVersion(), ageOk: true });
       let result = await claim();
-      // A request in flight holds the seat's lease: one automatic retry, then the busy sentence.
-      if (!result.ok && result.code === "claim_busy") { await new Promise(r => setTimeout(r, 3000)); result = await claim(); }
+      // A valid in-flight lease may outlast one short retry. Keep the captured identity and stop
+      // after bounded waits, or immediately on any other refusal. Never mint a replacement id.
+      for (const delayMs of FREE_CLAIM_BUSY_RETRY_DELAYS_MS) {
+        if (result.ok || result.status !== 409 || result.code !== "claim_busy") break;
+        await new Promise(r => setTimeout(r, delayMs));
+        result = await claim();
+      }
+      if (!result.ok && result.status === 409 && result.code === "claim_busy") {
+        this.freeRefusal = { code: result.code, message: FREE_CLAIM_BUSY_RECOVERY }; return;
+      }
       if (!result.ok) { this.freeRefusal = { code: result.code, message: result.message, ...(result.resumesAt ? { resumesAt: result.resumesAt } : {}) }; return; }
       this.chat.noteFreeClaim?.(result.code, result.outcome);
       // From here the issued token takes the ordinary entry path, without a preview or a folder choice:
@@ -478,8 +491,10 @@ export class StartPage {
         if (this.error !== FOLDER_TAKEN_MESSAGE || attempt >= 2 || this.candidate !== c || !c.workspace) break;
         tried.add(c.workspace); this.error = undefined;
       }
-    } catch {
-      this.freeRefusal = { code: "network", message: "연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요." };
+    } catch (error) {
+      this.freeRefusal = error instanceof InstallIdReadError
+        ? { code: "storage_unavailable", message: error.message }
+        : { code: "network", message: "연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요." };
     } finally {
       this.freeClaiming = false;
       await this.refresh();
