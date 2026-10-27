@@ -62,7 +62,8 @@ const same = (a: object, b: object) => Object.keys(a).length === Object.keys(b).
 export class CompanionClientAdapter implements MobileTransport {
   private readonly relay: CompanionAdapterRelayClient;
   private readonly pairing: CompanionAdapterPairingClient;
-  private readonly requestId: string;
+  private requestId: string;
+  private readonly selectedRequests = new Set<string>();
   private readonly budget: CompanionClientAdapterOptions['budget'];
   private readonly pending = new Set<AbortController>();
   private queue: Promise<void> = Promise.resolve();
@@ -84,6 +85,7 @@ export class CompanionClientAdapter implements MobileTransport {
       || relay.row.status !== 'paired' || pairing.invitation?.status !== 'paired'
       || pairing.invitation.id !== relay.row.id) throw failure('paired_device_required');
     this.relay = relay; this.pairing = pairing; this.requestId = options.requestId; this.budget = options.budget;
+    this.selectedRequests.add(options.requestId);
     this.checkpoint = options.checkpoint ? { context: Object.freeze({ ...options.checkpoint.context }), currentContext: options.checkpoint.currentContext } : undefined;
     const pairingTransport = pairing.transport.bind(pairing);
     const relayTransport = relay.transport.bind(relay);
@@ -128,6 +130,25 @@ export class CompanionClientAdapter implements MobileTransport {
     return this.run(signal, async () => {
       if (!this.pairing.refresh) throw failure('pairing_refresh_required');
       return this.pairing.refresh();
+    });
+  }
+  /** Explicit caller-owned selection change after a verified terminal receipt. Keep the same cipher, inbox and ACK ledger. */
+  adoptSelection(next: Readonly<CompanionHostRequest>, previousRequestId: string, signal: AbortSignal, settledAndCurrent: () => boolean): Promise<void> {
+    const selected = Object.freeze({ ...next });
+    return this.run(signal, async () => {
+      if (this.checkpoint || !settledAndCurrent() || this.requestId !== previousRequestId || !this.requestSnapshot || !this.sendAttempted
+        || !validId(selected.requestId) || this.selectedRequests.has(selected.requestId) || this.selectedRequests.size >= 64
+        || selected.schema !== 'hps-companion-host-request/1' || selected.operation !== 'preview.read'
+        || !['actorId', 'deviceId', 'hostId', 'workspaceId', 'projectId'].every(key => selected[key as keyof CompanionHostRequest] === this.requestSnapshot![key as keyof CompanionHostRequest])) throw failure('selection_adoption_unavailable');
+      if (!this.pairing.refresh || !this.relay.diagnostics) throw failure('selection_adoption_unavailable');
+      const before = this.relay.diagnostics();
+      await this.pairing.refresh(); this.check(this.activeSignal);
+      const after = this.relay.diagnostics();
+      if (!settledAndCurrent() || before.closed || !before.context_digest || after.closed || after.context_digest !== before.context_digest
+        || this.pairing.invitation?.status !== 'paired' || this.pairing.invitation.id !== this.relay.row.id) throw failure('selection_adoption_unavailable');
+      this.selectedRequests.add(selected.requestId); this.requestId = selected.requestId;
+      this.requestText = null; this.requestSnapshot = null; this.prepared = null; this.sendAttempted = false;
+      this.authoringText = null; this.authoringSendAttempted = false;
     });
   }
   prepare(text: string, messageId: string, signal: AbortSignal): Promise<unknown> {

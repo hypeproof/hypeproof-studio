@@ -89,3 +89,19 @@ test('caller cancellation during validation retains bytes for retry without a la
   const messages=await f.transport.receive(new AbortController().signal);assert.deepEqual(messages,[{message_id:result.message_id,text:result.text}]);assert.equal(f.notices.length,1);assert.equal(f.receives,1);assert.equal(f.invalid,0);
  }finally{gate.resolve();f.close();}
 });
+test('new selection cannot be adopted before its own successful metadata ACK',async()=>{
+ const f=await fixture([later,result],{failAck:true});let adopted=0;try{
+  await f.controller.reconnect(null);await f.controller.requestPreview(request);assert.equal(f.demux.heldSelection,null);
+  await assert.rejects(f.demux.adoptHeld({revision:2,requestId:'later'},request,new AbortController().signal,async()=>{adopted++;}),/not_ready/);
+  assert.equal(adopted,0);await f.controller.reconnect(request);assert.equal(f.demux.heldSelection.request.requestId,'later');assert.equal(f.sent,1);
+ }finally{f.close();}
+});
+test('explicit adoption locks concurrent receives and duplicate adoption; close prevents late publication',async()=>{
+ const f=await fixture([later,result]),gate=deferred(),entered=deferred(),signal=new AbortController().signal;try{
+  await f.controller.reconnect(null);await f.controller.requestPreview(request);assert.equal(f.demux.heldSelection.revision,2);
+  const adopting=f.demux.adoptHeld({revision:2,requestId:'later'},request,signal,async next=>{assert.equal(next.requestId,'later');entered.resolve();await gate.promise;});
+  const denied=assert.rejects(adopting,/closed/);await entered.promise;
+  await assert.rejects(f.transport.receive(signal),/busy/);await assert.rejects(f.demux.adoptHeld({revision:2,requestId:'later'},request,signal,async()=>{}),/not_ready/);
+  f.close();gate.resolve();await denied;assert.equal(f.demux.heldSelection,null);assert.equal(f.sent,1);
+ }finally{gate.resolve();f.close();}
+});
