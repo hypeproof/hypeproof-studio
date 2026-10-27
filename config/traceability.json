@@ -15650,12 +15650,39 @@
       ]
     },
     {
+      "id": "ST-IMP-COMPANION-WORKSPACE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/companionWorkspace.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionWorkspaceController.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionWorkspaceHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-COMPANION",
       "stage": "test",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-COMPANION",
-        "ST-IMP-COMPANION-ROUTING"
+        "ST-IMP-COMPANION-ROUTING",
+        "ST-IMP-COMPANION-WORKSPACE"
       ],
       "sources": [
         {
@@ -15663,6 +15690,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-routing.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-workspace.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
         }
       ]
     }

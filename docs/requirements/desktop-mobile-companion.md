@@ -64,3 +64,11 @@ scope/version/capability mismatch, and returns a user-facing route/status. Its
 tests cannot satisfy DMC-01/02/03/06 or installed-device acceptance. The next slice
 must integrate workspace selection, actual pairing and a bounded host dispatcher
 before claiming a connected product.
+
+The subsequent [local preparation implementation](../evidence/desktop-companion-workspace-20261027.md)
+adds selection of the current existing trusted workspace, explicit review/save
+and persisted preparation with an unpaired status. It reuses the existing activity
+binding and task-scope identity. Its activity label and machine digest do not
+verify an account owner or device authority. This is partial DMC-01/DMC-14
+evidence; full DMC-1 ownership/capability acceptance, DMC-T01 and DMC-T14 remain
+open. Pairing, grants, transport and dispatch are not implemented by preparation.
