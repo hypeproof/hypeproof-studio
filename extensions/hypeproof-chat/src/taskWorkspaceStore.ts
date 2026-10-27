@@ -1,3 +1,4 @@
+import { validCompanionDesktopHandoff, validCompanionDesktopHandoffRecord, type CompanionDesktopHandoffCheckpoint, type CompanionDesktopHandoffRecord } from './companionDesktopHandoff.ts';
 import { ATTEMPT_KEYS, validAttemptMeta } from './answerAttempts.ts';
 import { shellLabel } from "./shellDisplay.ts";
 import { storedDenialNotice } from "./denialNotice.ts";
@@ -248,6 +249,8 @@ export class TaskWorkspaceStore {
   readonly archivePath: string;
   readonly appearancePath: string;
   private readonly directory: string;
+  /** Optional handoff data uses the existing sidecar pattern, preserving older task-file readers. */
+  private readonly companionHandoffPath: string;
   private readonly rootPath: string;
   /** The scope as given (before hashing), so a fresh read of the same store can be made. */
   private readonly scopeInput: string;
@@ -270,6 +273,7 @@ export class TaskWorkspaceStore {
     this.rootPath = rootPath;
     this.directory = join(rootPath, 'task-workspaces');
     this.filePath = join(this.directory, `${this.scope}.json`);
+    this.companionHandoffPath = join(this.directory, `${this.scope}.companion-handoff.json`);
     this.versionsPath = join(this.directory, `${this.scope}.versions.json`);
     this.versions = { version: 1, scope: this.scope, tasks: {} };
     this.verdictsPath = join(this.directory, `${this.scope}.verdicts.json`);
@@ -424,6 +428,72 @@ export class TaskWorkspaceStore {
         new TaskWorkspaceStoreError('io', '작업 기록을 준비하지 못했습니다. 원본을 보존했습니다. 앱을 다시 열어 주세요.');
       throw error;
     });
+  }
+
+  /** Explicit local data handoff only; uses this store's queue, lock and exact revision. No draft mutation. */
+  private companionHandoffOperation(expected: TaskWorkspaceExpected,
+    change: (held: CompanionDesktopHandoffRecord | null) => CompanionDesktopHandoffRecord | null): Promise<CompanionDesktopHandoffRecord | null> {
+    const expectedAt = { ...expected };
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      await this.prepareDirectory();
+      const lock = await this.acquireLock();
+      try {
+        const info = await lstat(this.filePath);
+        if (!info.isFile() || info.isSymbolicLink()) fail('corrupt', '작업 기록의 위치를 확인해야 합니다.');
+        const disk = decode(await readFile(this.filePath, 'utf8'), this.scope);
+        if (JSON.stringify(disk) !== JSON.stringify(this.data)) fail('stale', '다른 창에서 작업이 바뀌었어요. 최신 작업에서 다시 확인해 주세요.');
+        this.checkExpected(disk, expectedAt);
+        let held: CompanionDesktopHandoffRecord | null = null;
+        try {
+          const info = await lstat(this.companionHandoffPath);
+          if (!info.isFile() || info.isSymbolicLink() || info.size > 16 * 1024) fail('corrupt', '이어갈 요청 기록을 확인할 수 없습니다.');
+          const envelope: unknown = JSON.parse(await readFile(this.companionHandoffPath, 'utf8'));
+          if (!isRecord(envelope) || !exactKeys(envelope, ['checksum', 'data']) || !isRecord(envelope.data)
+            || !exactKeys(envelope.data, ['version', 'scope', 'record']) || envelope.data.version !== 1 || envelope.data.scope !== this.scope
+            || envelope.checksum !== hash(JSON.stringify(envelope.data)) || !validCompanionDesktopHandoffRecord(envelope.data.record)
+            || envelope.data.record.digest !== hash(JSON.stringify(envelope.data.record.checkpoint))) return fail('corrupt', '이어갈 요청 기록의 범위나 형식을 확인할 수 없습니다.');
+          held = clone(envelope.data.record as CompanionDesktopHandoffRecord);
+        } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
+        const next = change(held);
+        if (JSON.stringify(next) !== JSON.stringify(held)) {
+          if (!next || !validCompanionDesktopHandoffRecord(next)) fail('invalid', '이어갈 요청을 확인해 주세요.');
+          const data = { version: 1, scope: this.scope, record: next };
+          await this.writeAtomic(this.companionHandoffPath, JSON.stringify({ checksum: hash(JSON.stringify(data)), data }), lock.owner.nonce);
+        }
+        return next ? clone(next) : null;
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '이어갈 요청을 저장하거나 읽지 못했어요. 원래 입력은 그대로예요.');
+      } finally { await this.releaseLock(lock); }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
+  readCompanionHandoff(expected: TaskWorkspaceExpected): Promise<CompanionDesktopHandoffRecord | null> {
+    return this.companionHandoffOperation(expected, held => held);
+  }
+  stageCompanionHandoff(checkpoint: CompanionDesktopHandoffCheckpoint, expected: TaskWorkspaceExpected): Promise<CompanionDesktopHandoffRecord> {
+    // Snapshot before a queued caller may mutate its input. Data itself grants no authority.
+    if (!validCompanionDesktopHandoff(checkpoint) || checkpoint.target.taskId !== expected.taskId || checkpoint.target.version !== expected.revision)
+      return Promise.reject(new TaskWorkspaceStoreError('invalid', '현재 작업과 같은 요청만 보관할 수 있어요.'));
+    const saved = clone(checkpoint), digest = hash(JSON.stringify(saved));
+    return this.companionHandoffOperation({ ...expected }, held => {
+      if (held) {
+        if (held.checkpoint.id === saved.id && held.digest === digest) return held;
+        return fail('stale', '이미 보관한 이어갈 요청이 있어요. 기존 요청을 먼저 확인해 주세요.');
+      }
+      return { checkpoint: saved, digest, status: 'pending' };
+    }).then(record => record!);
+  }
+  acceptCompanionHandoff(id: string, digest: string, expected: TaskWorkspaceExpected, now = Date.now()): Promise<CompanionDesktopHandoffRecord> {
+    return this.companionHandoffOperation({ ...expected }, held => {
+      if (!held || held.checkpoint.id !== id || held.digest !== digest || held.checkpoint.target.taskId !== expected.taskId
+        || held.checkpoint.target.version !== expected.revision) return fail('stale', '이어갈 요청이나 작업 버전이 바뀌었어요. 다시 확인해 주세요.');
+      if (held.status === 'accepted') return held;
+      if (!timestamp(now)) return fail('invalid', '확인 시각을 확인해 주세요.');
+      return { ...held, status: 'accepted', acceptedAt: now };
+    }).then(record => record!);
   }
 
   create(title: string, expected: TaskWorkspaceExpected): Promise<TaskWorkspaceView> {
