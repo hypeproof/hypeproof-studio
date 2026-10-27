@@ -844,7 +844,7 @@
         "DMC-15"
       ],
       "inline_prefixes": [],
-      "sha256": "c9af533409c501e467a3145c5dbc5043bc367c58cfd680592c5e20c0e1bfb43f",
+      "sha256": "bbb344d965edd0984a1b9307af3037c85ce15178d3f5b708c424ac13620d53e4",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
@@ -4242,18 +4242,27 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Follow DMC-0 through DMC-8 in docs/plan/desktop-mobile-companion.md. DMC-0 is only a tested route-planning seam; next integrate local workspace setup and authenticated device pairing. Scope PR-sized child issues through MCP. Preserve cloud-record experiments and do not close this parent for foundation work.",
+      "next_action": "Follow DMC-0 through DMC-8 in docs/plan/desktop-mobile-companion.md. DMC-0 is only a tested route-planning seam; next integrate local workspace setup and authenticated device pairing. Scope PR-sized child issues through MCP. Preserve cloud-record experiments and do not close this parent for foundation work. The local selected-artifact dispatcher has independently verified source/fixture evidence only: integrate the real authenticated runtime/session, host journal ownership and Service/mobile transport before connected DMC-3 acceptance. Keep Studio #3072 and this aggregate open; the local dispatcher child does not close full DMC requirements.",
       "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
       "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
       "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",
       "evidence_required": "Exact source and test contracts; actual Service/host/mobile transport plus persistence and device evidence. Routing-unit tests alone do not fulfill any complete DMC requirement. Real classroom/adult external-effect acceptance is separate.",
       "implementation_paths": [
-        "extensions/hypeproof-chat/src/companionRouting.ts"
+        "extensions/hypeproof-chat/src/companionRouting.ts",
+        "extensions/hypeproof-chat/src/companionHostDispatch.ts",
+        "extensions/hypeproof-chat/src/classroomOpsCommands.ts",
+        "extensions/hypeproof-chat/src/fileAttachment.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
         "extensions/hypeproof-chat/test/companion-routing.smoke.mjs",
-        "scripts/companion-routing-demo.mjs"
+        "scripts/companion-routing-demo.mjs",
+        "extensions/hypeproof-chat/src/companionHostDispatch.ts",
+        "extensions/hypeproof-chat/src/classroomOpsCommands.ts",
+        "extensions/hypeproof-chat/src/fileAttachment.ts",
+        "extensions/hypeproof-chat/test/companion-host-dispatch.smoke.mjs",
+        "extensions/hypeproof-chat/test/classroom-ops-commands.smoke.mjs",
+        "extensions/hypeproof-chat/test/file-attachment.smoke.mjs"
       ]
     }
   ]

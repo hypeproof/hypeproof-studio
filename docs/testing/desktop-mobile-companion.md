@@ -42,3 +42,17 @@ persistence must perform zero content reads; a successful request performs one
 read only after durable running and retries perform none. Recovery must reject
 any continuation output and malformed or unselected preview output, preserving
 normal continuation without an artifact.
+
+Independent repair verification is bound to
+`1b91a03b310e9b8e9ef55cc99591a94136c89a43`: the original focused dispatcher,
+classroom runner, attachment and routing group passed 15/15 tests. Separate
+controls confirmed zero content reads on failed acceptance, one read after
+durable running, rejection of injected continuation output, current scope and
+capability checks during journal/read boundaries, and duplicate/recovery paths
+without another read. The previous `eeb2536f` FAIL and the two resolved findings
+are retained in the [evidence record](../evidence/desktop-mobile-companion-routing.md).
+These observations are source/fixture evidence only. Real authenticated runtime
+integration, Service transport, installed host/mobile and complete DMC-T04/05/06/
+07/12/14 acceptance remain **NOT RUN / NOT COMPLETE**. Mapping-only follow-up
+commits preserve the verified implementation bytes; they are not new transport
+or native acceptance runs.

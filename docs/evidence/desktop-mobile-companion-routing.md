@@ -119,3 +119,53 @@ file-attachment and routing checks report 15 results and zero failures, followed
 by full extension `tsc --noEmit`. Both ran with Node 22.22.1 through
 `hype-resource` job `dmc3-dispatch-review-repair-final` (ticket
 `565d0fbc30ab447aa5287bcf9d286935`). No host/Service/mobile acceptance was added.
+
+### Independent repair verdict and canonical mapping
+
+At `eeb2536f44a54c5a39c1011c18d865445e2cf67e`, the independent verdict was
+**FAIL**: DMC3-R1 observed a selected-content read before durable acceptance even
+when that acceptance save failed; DMC3-R2 recovered arbitrary injected output on
+a successful continuation and returned it as an artifact. Those observations
+remain historical evidence, not passing acceptance.
+
+The correction at `1b91a03b310e9b8e9ef55cc99591a94136c89a43` received an
+independent bounded **PASS** on macOS 15.7.4 arm64 / Node 22.22.1:
+
+- The original four focused files passed 15/15 Node test results, zero skips.
+  Existing classroom runner behavior, attachment containment/content defenses
+  and local-output exclusion from classroom receipts remained covered.
+- Reused counterexamples with repaired expectations observed zero selected
+  content reads on failed acceptance and poisoned retry, and one actual fd read
+  only after accepted/running were durable on normal completion.
+- The same injected continuation output was rejected at recovery; unrecovered
+  replay denied without an artifact. Preview digest corruption also failed closed.
+- Current workspace/capability changes during an awaited running save or just
+  after the actual content read denied result release without persisted output.
+  Concurrent duplicate, terminal retry/restart and interrupted-running recovery
+  did not reread or re-execute the selected artifact.
+
+Local independent evidence is retained under
+`/Users/jaylee/CodeWorkspace/artifacts/claude-mobile-bridge-rea-20261027/desktop-first-plan/`:
+
+- `dmc3-independent-review.md` and `dmc3-independent-controls.mjs`: original FAIL
+  report and unchanged counterexamples.
+- `dmc3-repair-independent-review.md`: exact-source PASS, reproduction and hashes.
+- `dmc3-repair-independent-controls.mjs`,
+  `dmc3-repair-independent-controls-results.json`,
+  `dmc3-repair-independent-controls.log`, `dmc3-repair-independent-base.log`:
+  independently executed repaired controls and original focused group.
+
+`ST-IMP-COMPANION-DISPATCH` extends the existing `ST-REQ-COMPANION` and
+`ST-DES-COMPANION` criteria. It depends on existing `ST-IMP-CLASSROOM-OPS` and
+`ST-IMP-CHAT-FILE-ATTACH` implementations; their ownership and original criteria
+are preserved. `ST-TEST-COMPANION` includes the new dispatcher checks and links
+the existing classroom/attachment test nodes. No replacement journal, attachment
+requirement or authentication authority is defined. Mapping-only follow-up
+commits preserve the independently observed implementation bytes above.
+
+The narrow delivery is the journaled selected-artifact dispatch seam. Parent
+Studio #3072 and Epic #2803 remain open. Runtime authority remains an injected
+normalized adapter input; real authenticated session/selected-workspace
+composition, one private journal owner per account/activity, Service/mobile
+transport, native dispatch, actual quiz revision and complete DMC-3 acceptance
+remain **NOT RUN**. These local artifact paths are not hosted or released evidence.

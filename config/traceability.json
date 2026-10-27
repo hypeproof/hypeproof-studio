@@ -2699,6 +2699,9 @@
         },
         {
           "path": "e2e/classroom/help-request.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/classroom-ops-commands.smoke.mjs"
         }
       ]
     },
@@ -15647,12 +15650,31 @@
       ]
     },
     {
+      "id": "ST-IMP-COMPANION-DISPATCH",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-CLASSROOM-OPS",
+        "ST-IMP-CHAT-FILE-ATTACH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/companionHostDispatch.ts"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-COMPANION",
       "stage": "test",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-COMPANION",
-        "ST-IMP-COMPANION-ROUTING"
+        "ST-IMP-COMPANION-ROUTING",
+        "ST-IMP-COMPANION-DISPATCH",
+        "ST-TEST-CLASSROOM-ADMIN",
+        "ST-TEST-CHAT-FILE-ATTACH"
       ],
       "sources": [
         {
@@ -15660,6 +15682,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-routing.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-host-dispatch.smoke.mjs"
         }
       ]
     }
