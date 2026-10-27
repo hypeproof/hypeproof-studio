@@ -73,7 +73,7 @@ export class CompanionAuthoringHost {
           workspaceId:selected.workspaceId,projectId:selected.projectId,taskId:selected.taskId,version:selected.version,
           epoch:selected.epoch,consentRevision:selected.consentRevision,artifactId:selected.artifactId,artifactVersion:selected.artifactVersion},
         originalDraft:request.text,reviewedIntent:request.text,attachments:[{artifactId:selected.artifactId,artifactVersion:selected.artifactVersion}],run:{id:null,state:'not_started'}};
-      await store.stageCompanionHandoff(checkpoint,expected,requestHash);
+      await store.stageCompanionHandoff(checkpoint,expected,requestHash,alive);
       const draft = store.getDraft();
       review = await this.ports.reviewDraft?.(before.taskId,alive);
       if (!alive()) return outcome('denied','owner_changed');

@@ -433,8 +433,10 @@ export class TaskWorkspaceStore {
   /** Local handoff and explicitly reviewed draft import share this store's queue, lock and exact revision. */
   private companionHandoffOperation(expected: TaskWorkspaceExpected,
     change: (held: CompanionDesktopHandoffRecord | null) => CompanionDesktopHandoffRecord | null,
-    draftImport?: { draft: ActivityDraft; isCurrent(): boolean }): Promise<CompanionDesktopHandoffRecord | null> {
+    draftImport?: { draft: ActivityDraft; isCurrent(): boolean },
+    isCurrent?: () => boolean): Promise<CompanionDesktopHandoffRecord | null> {
     const expectedAt = { ...expected };
+    const commitCurrent = draftImport?.isCurrent ?? isCurrent;
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       await this.prepareDirectory();
@@ -469,7 +471,7 @@ export class TaskWorkspaceStore {
           else {
             if (!validCompanionDesktopHandoffRecord(next)) fail('invalid', '이어갈 요청을 확인해 주세요.');
             const data = { version: 1, scope: this.scope, record: next };
-            await this.writeAtomic(this.companionHandoffPath, JSON.stringify({ checksum: hash(JSON.stringify(data)), data }), lock.owner.nonce);
+            await this.writeAtomic(this.companionHandoffPath, JSON.stringify({ checksum: hash(JSON.stringify(data)), data }), lock.owner.nonce, commitCurrent);
           }
         }
         if (draftImport && next?.authoringImport?.state === 'prepared') {
@@ -480,11 +482,11 @@ export class TaskWorkspaceStore {
           disk.revision++;
           const encoded = JSON.stringify({ checksum: hash(JSON.stringify(disk)), data: disk });
           decode(encoded, this.scope);
-          await this.writeAtomic(this.filePath, encoded, lock.owner.nonce);
+          await this.writeAtomic(this.filePath, encoded, lock.owner.nonce, commitCurrent);
           this.data = disk;
           next = { ...next, authoringImport: { ...next.authoringImport, state: 'imported', revision: disk.revision } };
           const data = { version: 1, scope: this.scope, record: next };
-          await this.writeAtomic(this.companionHandoffPath, JSON.stringify({ checksum: hash(JSON.stringify(data)), data }), lock.owner.nonce);
+          await this.writeAtomic(this.companionHandoffPath, JSON.stringify({ checksum: hash(JSON.stringify(data)), data }), lock.owner.nonce, commitCurrent);
         }
         return next ? clone(next) : null;
       } catch (error) {
@@ -498,7 +500,7 @@ export class TaskWorkspaceStore {
   readCompanionHandoff(expected: TaskWorkspaceExpected): Promise<CompanionDesktopHandoffRecord | null> {
     return this.companionHandoffOperation(expected, held => held);
   }
-  stageCompanionHandoff(checkpoint: CompanionDesktopHandoffCheckpoint, expected: TaskWorkspaceExpected, authoringHash?: string): Promise<CompanionDesktopHandoffRecord> {
+  stageCompanionHandoff(checkpoint: CompanionDesktopHandoffCheckpoint, expected: TaskWorkspaceExpected, authoringHash?: string, isCurrent?: () => boolean): Promise<CompanionDesktopHandoffRecord> {
     // Snapshot before a queued caller may mutate its input. Data itself grants no authority.
     if ((authoringHash !== undefined && !/^[a-f0-9]{64}$/.test(authoringHash)) || !validCompanionDesktopHandoff(checkpoint) || checkpoint.target.taskId !== expected.taskId || checkpoint.target.version !== expected.revision)
       return Promise.reject(new TaskWorkspaceStoreError('invalid', '현재 작업과 같은 요청만 보관할 수 있어요.'));
@@ -509,7 +511,7 @@ export class TaskWorkspaceStore {
         return fail('stale', '이미 보관한 이어갈 요청이 있어요. 기존 요청을 먼저 확인해 주세요.');
       }
       return { checkpoint: saved, digest, status: 'pending', ...(authoringHash ? {authoringImport: {requestHash: authoringHash, state: 'review' as const}} : {}) };
-    }).then(record => record!);
+    }, undefined, isCurrent).then(record => record!);
   }
   /** Separate explicit desktop decision; DMC7 open/accept never implies draft import. */
   importCompanionAuthoringDraft(id: string, requestHash: string, expected: TaskWorkspaceExpected,
@@ -534,7 +536,7 @@ export class TaskWorkspaceStore {
         || held.authoringImport?.requestHash!==requestHash || held.authoringImport.state!=='imported'
         || this.getDraft().text!==held.checkpoint.reviewedIntent) return fail('stale','가져온 입력을 다시 확인해야 해요.');
       return {...held,authoringImport:{...held.authoringImport,presented:true}};
-    }).then(()=>undefined);
+    }, undefined, isCurrent).then(()=>undefined);
   }
   acceptCompanionHandoff(id: string, digest: string, expected: TaskWorkspaceExpected, now = Date.now()): Promise<CompanionDesktopHandoffRecord> {
     return this.companionHandoffOperation({ ...expected }, held => {
@@ -1181,12 +1183,15 @@ export class TaskWorkspaceStore {
   }
 
   /** Atomic write of one file under the held lock: temporary file, fsync, rename. */
-  private async writeAtomic(target: string, content: string, nonce: string): Promise<void> {
+  private async writeAtomic(target: string, content: string, nonce: string, isCurrent?: () => boolean): Promise<void> {
     const temporaryPath = `${target}.tmp-${nonce}`;
     try {
       const temporary = await open(temporaryPath, 'wx', 0o600);
       try { await temporary.writeFile(content, 'utf8'); await temporary.sync(); }
       finally { await temporary.close(); }
+      // Last synchronous admission check: there is no await between this lease and rename dispatch.
+      // An OS rename already dispatched cannot be cancelled by later invalidation.
+      if (isCurrent && isCurrent() !== true) fail('stale', '현재 작업이 바뀌었어요. 저장 상태를 다시 확인해 주세요.');
       await rename(temporaryPath, target);
     } finally {
       await unlink(temporaryPath).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });

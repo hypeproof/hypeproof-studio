@@ -61,3 +61,49 @@ test('store import independently refuses a held request for another current task
  f.approve=false;await f.host.handle(f.message());const before=f.store.getView();await f.store.create('other task',{taskId:before.activeTaskId,revision:before.revision});const after=f.store.getView();
  await assert.rejects(()=>f.store.importCompanionAuthoringDraft(f.request.requestId,hash(f.message().text),{taskId:after.activeTaskId,revision:after.revision},f.store.getDraft(),()=>true));assert.equal(f.store.getDraft().text,'');assert.equal(f.store.getDraft(before.activeTaskId).text,'');
 }finally{await f.cleanup();}});
+
+test('revocation during temporary write/sync/close prevents main rename and cleans unpublished bytes',async()=>{
+ const require=createRequire(import.meta.url),fs=require('node:fs/promises');
+ const bundle=await build({entryPoints:[fileURLToPath(new URL('../src/taskWorkspaceStore.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false});
+ for(const phase of ['writeFile','sync','close']){
+  let armed=false,paused=false,mainRenames=0,signal,release;
+  const entered=new Promise(r=>signal=r),resume=new Promise(r=>release=r);
+  const io={...fs,open:async(path,...args)=>{
+   const handle=await fs.open(path,...args);
+   if(!String(path).includes('.json.tmp-')||String(path).includes('.companion-handoff.json.tmp-'))return handle;
+   return new Proxy(handle,{get(target,key){const value=Reflect.get(target,key,target);if(typeof value!=='function')return value;
+    return async(...values)=>{const result=await value.apply(target,values);if(armed&&!paused&&key===phase){paused=true;signal();await resume;}return result;};}});
+  },rename:async(from,to)=>{if(armed&&String(from).includes('.json.tmp-')&&!String(from).includes('.companion-handoff.json.tmp-'))mainRenames++;return fs.rename(from,to);}};
+  const module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='node:fs/promises'?io:require(id),Buffer,process,console,URL,structuredClone,TextEncoder,TextDecoder,setTimeout,clearTimeout,performance});
+  const f=await fixture(module.exports.TaskWorkspaceStore);try{
+   const original=await readFile(f.store.filePath,'utf8');armed=true;const pending=f.host.handle(f.message());await entered;f.invalidate();release();
+   assert.equal((await pending).state,'outcome_unknown');assert.equal(mainRenames,0,phase+': no rename may be dispatched after observed revocation');
+   assert.equal(await readFile(f.store.filePath,'utf8'),original);assert.equal(f.store.getDraft().text,'');assert.equal(f.imports,0);
+   assert.equal((await fs.readdir(join(f.root,'task-workspaces'))).some(name=>name.includes('.tmp-')),false,'temporary draft bytes cleaned');
+  }finally{release();await f.cleanup();}
+ }
+});
+
+test('revoked authoring receipt writes never publish a stale stage, completion or view acknowledgement',async()=>{
+ const require=createRequire(import.meta.url),fs=require('node:fs/promises');
+ const bundle=await build({entryPoints:[fileURLToPath(new URL('../src/taskWorkspaceStore.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false});
+ for(const stage of ['review','prepared','imported','presented']){
+  let paused=false,revoked=false,renamesAfterRevoke=0,signal,release;
+  const entered=new Promise(r=>signal=r),resume=new Promise(r=>release=r);
+  const io={...fs,open:async(path,...args)=>{
+   const handle=await fs.open(path,...args);if(!String(path).includes('.companion-handoff.json.tmp-'))return handle;
+   let matches=false;
+   return new Proxy(handle,{get(target,key){const value=Reflect.get(target,key,target);if(typeof value!=='function')return value;
+    return async(...values)=>{if(key==='writeFile'){const record=JSON.parse(String(values[0])).data.record.authoringImport;matches=stage==='presented'?record?.presented===true:record?.state===stage&&!record.presented;}
+     const result=await value.apply(target,values);if(!paused&&key==='close'&&matches){paused=true;signal();await resume;}return result;};}});
+  },rename:async(...args)=>{if(revoked)renamesAfterRevoke++;return fs.rename(...args);}};
+  const module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='node:fs/promises'?io:require(id),Buffer,process,console,URL,structuredClone,TextEncoder,TextDecoder,setTimeout,clearTimeout,performance});
+  const f=await fixture(module.exports.TaskWorkspaceStore);try{
+   const pending=f.host.handle(f.message());await entered;f.invalidate();revoked=true;release();assert.notEqual((await pending).state,'imported_draft');assert.equal(renamesAfterRevoke,0,stage+': no stale receipt rename dispatched');
+   const view=f.store.getView(),held=await f.store.readCompanionHandoff({taskId:view.activeTaskId,revision:view.revision});
+   assert.equal(held?.authoringImport?.state,stage==='review'?undefined:stage==='prepared'?'review':stage==='imported'?'prepared':'imported');assert.notEqual(held?.authoringImport?.presented,true);
+   f.restart();assert.equal(f.store.getDraft().text,['imported','presented'].includes(stage)?f.request.text:'','only previously admitted main write survives');
+   assert.equal((await fs.readdir(join(f.root,'task-workspaces'))).some(name=>name.includes('.tmp-')),false);
+  }finally{release();await f.cleanup();}
+ }
+});
