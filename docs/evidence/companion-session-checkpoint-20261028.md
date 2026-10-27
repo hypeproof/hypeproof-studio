@@ -26,7 +26,9 @@ metadata cannot make a preview complete. Restored receipts and artifact objects
 are frozen. Reconnect never prepares or sends the restored request. Disposal
 releases page state while retaining opt-in checkpoint for remount; `cancel()` and
 `forget()` terminally discard runtime state and return the awaited local erase.
-Already-started writes are ordered before erase, preventing resurrection.
+Already-started writes are ordered before erase, preventing resurrection. Erase
+is idempotent per owner and retains its completion promise. A superseded owner
+cannot advance the generation or remove data written by a newer lifecycle.
 
 ## Exact reattachment boundary
 

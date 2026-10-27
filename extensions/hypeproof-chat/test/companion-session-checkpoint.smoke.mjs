@@ -101,3 +101,13 @@ test('shared local owner serializes remount erase after an older in-flight write
  const next=f.make();let erased=false;const forgetting=next.local.forget().then(()=>{erased=true;});await tick();assert.equal(erased,false);
  pause.resolve();await write;await forgetting;assert.equal(f.raw,null);await assert.rejects(old.local.save(checkpoint()),/forgotten/);
 });
+
+
+test('forget is idempotent and superseded owners cannot erase a newer checkpoint lifecycle',async()=>{
+ const f=fixture(),old=f.make(),stale=f.make();
+ const erased=old.local.forget();assert.equal(old.local.forget(),erased,'same in-flight erase promise');await erased;
+ const next=f.make(),value=checkpoint();value.request.requestId='new-request';await next.local.save(value);const before=f.raw;
+ assert.equal(old.local.forget(),erased,'same settled erase promise');await old.local.forget();assert.equal(f.raw,before,'repeated old forget preserves newer data');
+ await stale.local.forget();assert.equal(f.raw,before,'first erase from a superseded owner also preserves newer data');
+ assert.equal((await next.local.load()).request.requestId,'new-request');await next.local.forget();assert.equal(f.raw,null);
+});

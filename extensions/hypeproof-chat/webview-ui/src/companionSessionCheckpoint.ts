@@ -69,6 +69,7 @@ export class CompanionLocalCheckpoint {
   private readonly owner: { queue: Promise<unknown>; generation: number; pending: number };
   private readonly generation: number;
   private closed = false;
+  private forgetPromise: Promise<void> | undefined;
   private readonly storage: CompanionCheckpointStorage;
   private readonly now: () => number;
   constructor(storage: CompanionCheckpointStorage, now = Date.now) {
@@ -97,8 +98,12 @@ export class CompanionLocalCheckpoint {
     this.owner.queue=pending;return pending;
   }
   forget(): Promise<void> {
-    this.closed=true;this.owner.generation++;
+    if(this.forgetPromise)return this.forgetPromise;
+    this.closed=true;
+    // A repeated or superseded owner's erase cannot delete a newer lifecycle.
+    if(this.generation!==this.owner.generation){this.forgetPromise=Promise.resolve();return this.forgetPromise;}
+    this.owner.generation++;
     const pending=this.owner.queue.catch(()=>{}).then(()=>this.storage.remove());
-    this.owner.queue=pending;return pending;
+    this.forgetPromise=pending;this.owner.queue=pending;return pending;
   }
 }
