@@ -78,7 +78,7 @@ export class CompanionAndroidResultTransport {
   try{const messages=await reading;this.check(signal);for(const message of messages){
    try{const outcome=await probe.receiver.accept(message.text);if(outcome&&!['completed','denied','failed','desktop_handoff'].includes(outcome.state))probe.receiver.reset();}
    catch{this.check(signal);this.invalid();}
-   this.check(signal);await this.bound.acknowledge(message.message_id,signal);this.check(signal);
+   await this.acknowledgeLateResult(this.bound,message.message_id,signal);
   }}finally{this.probing=false;}
  }
  /** Attach only after capture is installed, so the existing adapter retains every authenticated byte. */
@@ -97,6 +97,13 @@ export class CompanionAndroidResultTransport {
  }
  private check(signal?:AbortSignal):void{if(this.closed||signal?.aborted)throw stop();}
  private invalid():never{this.close();try{this.options.onInvalid();}catch{/* UI observers cannot reopen this owner. */}throw Error('android_selection_invalid');}
+ /** Expired retained bytes cannot become an impossible manual retry ahead of a new selection. */
+ private async acknowledgeLateResult(transport:Transport,id:string,signal:AbortSignal):Promise<void>{
+  this.check(signal);
+  try{await transport.acknowledge(id,signal);}
+  catch(error){if(this.closed||signal.aborted)throw stop();if(error instanceof Error&&error.message==='relay_message_expired')this.invalid();throw error;}
+  this.check(signal);
+ }
  private async receive(signal:AbortSignal):Promise<readonly Message[]> {
   const transport=this.transport!;
   const messages=await transport.receive(signal);this.check(signal);
@@ -119,7 +126,7 @@ export class CompanionAndroidResultTransport {
     if(retired){
      try{const outcome=await retired.accept(message.text);if(outcome&&!['completed','denied','failed','desktop_handoff'].includes(outcome.state))retired.reset();}
      catch{this.check(signal);this.invalid();}
-     this.check(signal);await transport.acknowledge(message.message_id,signal);this.check(signal);continue;
+     await this.acknowledgeLateResult(transport,message.message_id,signal);continue;
     }
     results.push(message);continue;
    }

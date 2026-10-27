@@ -19,7 +19,7 @@ async function fixture(messages,options={}){
  const requests=[],notices=[];let invalid=0,receives=0,prepared=0,sent=0,now=0,failed=false;
  const budget=new CompanionTransportBudget({minSpacingMs:1200,now:()=>now,sleep:async ms=>{now+=ms;}});
  const pairing={role:'device',sessionId:'device-session',invitation:{...pair},transport:async(_role,_id,action)=>{requests.push({action,time:now});return{};},async refresh(){await this.transport('device',pair.id,'status',{});return this.invitation;}};
- const relay={role:'device',pairing,row:{...pair},transport:async(_role,_id,action,raw)=>{requests.push({action,raw,time:now});if(options.failAck&&action==='ack'&&!failed){failed=true;throw Error(typeof options.failAck==='string'?options.failAck:'fixture_lost_ack_response');}return{};},async prepare(){prepared++;return'prepared';},async send(){sent++;},async receive(){receives++;await this.transport('device',pair.id,'receive','{}');if(options.receiveGate)await options.receiveGate.promise;return receives===1?messages:[];},async acknowledge(id){await pairing.refresh();return this.transport('device',pair.id,'ack',JSON.stringify({message_id:id}));},close(){}};
+ const relay={role:'device',pairing,row:{...pair},transport:async(_role,_id,action,raw)=>{requests.push({action,raw,time:now});if(options.failAck&&action==='ack'&&!failed&&(!options.failAckFor||JSON.parse(raw).message_id===options.failAckFor)){failed=true;throw Error(typeof options.failAck==='string'?options.failAck:'fixture_lost_ack_response');}return{};},diagnostics(){return{closed:false,context_digest:'c'.repeat(64)};},async prepare(){prepared++;return'prepared';},async send(){sent++;},async receive(){receives++;await this.transport('device',pair.id,'receive','{}');if(options.receiveGate)await options.receiveGate.promise;return options.batches?options.batches.shift()??[]:receives===1?messages:[];},async acknowledge(id){await pairing.refresh();return this.transport('device',pair.id,'ack',JSON.stringify({message_id:id}));},close(){}};
  let selection=receiver;
  if(options.acceptGate)selection={async accept(message){options.entered.resolve();await options.acceptGate.promise;return receiver.accept(message);},close:()=>receiver.close()};
  const demux=new CompanionAndroidResultTransport({relay,selection,initialRevision:1,onHeld:v=>notices.push(v),validateAuthoringResult:options.validateAuthoringResult,onAuthoringResult:options.onAuthoringResult,onInvalid:()=>{invalid++;controller.dispose();adapter.dispose();}});
@@ -104,4 +104,23 @@ test('explicit adoption locks concurrent receives and duplicate adoption; close 
   await assert.rejects(f.transport.receive(signal),/busy/);await assert.rejects(f.demux.adoptHeld({revision:2,requestId:'later'},request,signal,async()=>{}),/not_ready/);
   f.close();gate.resolve();await denied;assert.equal(f.demux.heldSelection,null);assert.equal(f.sent,1);
  }finally{gate.resolve();f.close();}
+});
+
+test('explicit settled-preview metadata check closes expired result ACK but retries a transient lost ACK without receiving or sending again',async()=>{
+ for(const expired of [false,true]){const f=await fixture([result],{failAck:expired?'relay_message_expired':true}),signal=new AbortController().signal;
+  try{await assert.rejects(f.demux.checkSelections(request,signal));assert.equal(f.invalid,expired?1:0);assert.equal(f.sent,0);
+   if(expired)await assert.rejects(f.transport.receive(signal),/closed/);
+   else{await f.demux.checkSelections(request,signal);assert.equal(f.receives,1);assert.equal(f.requests.filter(row=>row.action==='ack').length,2);assert.equal(f.sent,0);}
+  }finally{f.close();}
+ }
+});
+test('retired result ACK expires fail-closed; successful and transient ACK controls preserve the next owner without resend',async()=>{
+ for(const cause of ['success','transient','expired']){const late={...result,message_id:'retired-result'},f=await fixture([],{batches:[[later,result],[late]],failAck:cause==='expired'?'relay_message_expired':cause==='transient',failAckFor:late.message_id}),signal=new AbortController().signal;
+  try{await f.controller.reconnect(null);await f.controller.requestPreview(request);
+   await f.demux.adoptHeld({revision:2,requestId:'later'},request,signal,next=>f.adapter.adoptSelection(next,request.requestId,signal,()=>f.controller.getSnapshot().receipt?.outcome.state==='completed'));
+   if(cause==='success')assert.deepEqual(await f.transport.receive(signal),[]);
+   else{await assert.rejects(f.transport.receive(signal));if(cause==='expired'){assert.equal(f.invalid,1);await assert.rejects(f.transport.receive(signal),/closed/);}else{assert.equal(f.invalid,0);assert.deepEqual(await f.transport.receive(signal),[]);assert.equal(f.receives,2);}}
+   assert.equal(f.sent,1,'adoption and ACK handling never replay or create a new preview request');
+  }finally{f.close();}
+ }
 });

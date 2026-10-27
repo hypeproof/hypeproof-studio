@@ -78,7 +78,7 @@ function App(){
    return {computerName:'연결된 컴퓨터',online:true,selection:selected};
   }},{timeoutMs:60000,pollMs:1000});
   controller=ownedController;
-  const facade={requestPreview:(...args:Parameters<CompanionMobileSessionController['requestPreview']>)=>authoringStarted||adoptingSelection||controller!==ownedController?Promise.resolve():ownedController.requestPreview(...args),reconnect:(...args:Parameters<CompanionMobileSessionController['reconnect']>)=>authoringStarted||adoptingSelection||controller!==ownedController?Promise.resolve():ownedController.reconnect(...args),forget:async()=>{if(adoptingSelection||controller!==ownedController)return;await ownedController.forget();if(closed)return;const saved=ownedController.getSnapshot();clear();setSnapshot(saved);setComparison('');setChallenge('');setStage('forgotten');setMessage('이 기기의 보기 기록을 지웠어요. 컴퓨터 원본과 이미 허용한 작업은 그대로예요.');}};
+  const facade={requestPreview:(...args:Parameters<CompanionMobileSessionController['requestPreview']>)=>authoringStarted||adoptingSelection||controller!==ownedController?Promise.resolve():ownedController.requestPreview(...args),reconnect:(...args:Parameters<CompanionMobileSessionController['reconnect']>)=>authoringStarted||adoptingSelection||controller!==ownedController?Promise.resolve():ownedController.reconnect(...args),forget:async()=>{if(adoptingSelection||controller!==ownedController)return;await ownedController.forget();if(closed)return;const saved=ownedController.getSnapshot();clear();setPreviousPreview(null);setHeldSelection(null);setSnapshot(saved);setComparison('');setChallenge('');setStage('forgotten');setMessage('이 기기의 보기 기록을 지웠어요. 컴퓨터 원본과 이미 허용한 작업은 그대로예요.');}};
   (ownedController as any).presentationFacade=facade;
   ownedController.subscribe(value=>{if(!closed&&controller===ownedController)setSnapshot(value);});
   setSnapshot(ownedController.getSnapshot());await ownedController.reconnect(null);if(closed||controller!==ownedController)return;
@@ -150,7 +150,7 @@ function App(){
  {authoringActive&&stage==='preview'&&!authoringResult&&authoringWait==='waiting'&&<p role="status">컴퓨터의 검토 응답을 잠시 기다리고 있어요. 요청을 자동으로 다시 보내지 않아요.</p>}
  {authoringActive&&stage==='preview'&&!authoringResult&&authoringWait==='unconfirmed'&&<p role="status">아직 컴퓨터 응답을 확인하지 못했어요. 아래 ‘컴퓨터 검토 상태 확인’으로 직접 확인할 수 있어요. 요청은 다시 보내지 않았어요.</p>}
  {snapshot&&companionSessionPresentation(snapshot).preview&&!['forgotten'].includes(stage)&&<AuthoringComposer key={companionSelectionIdentity(snapshot.selection?.request)} disabled={closed||busy||!!snapshot.busy} submit={submitAuthoring} check={checkAuthoring} outcome={authoringResult?.outcome}/>}
- {stage==='closed'&&snapshot&&companionSessionPresentation(snapshot).preview&&<section><h2>이 기기에 남은 결과</h2>{artifact(companionSessionPresentation(snapshot).preview)}</section>}
+ {stage==='closed'&&snapshot&&(companionSessionPresentation(snapshot).preview??previousPreview)&&<section><h2>이 기기에 남은 결과</h2>{artifact(companionSessionPresentation(snapshot).preview??previousPreview)}</section>}
  {!['closed','forgotten'].includes(stage)&&<button className="secondary" onClick={cancel}>이 기기 연결 닫기</button>}
  <p className="detail">연결 표시는 최근 확인한 암호화 전송 상태예요. 컴퓨터가 지금 켜져 있다는 확인은 아니에요. 컴퓨터 응답은 요청 후 확인하며, 꺼져 있으면 기다려요. 기기 연결은 파일 실행 권한이 아니에요. 앱을 다시 시작하면 키를 복원하지 않아요.</p></main>;
 }
