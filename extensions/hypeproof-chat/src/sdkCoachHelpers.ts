@@ -1,4 +1,5 @@
 import { responseEvidence } from "./activityAvailability.ts";
+import { COMPANION_EXECUTION_TOOLS } from './companionExecutionPolicy.ts';
 // #282 — PURE mapping from a resolved cohort profile to Claude Agent SDK
 // options, plus the SDK-tool → host-approval mapping. No `vscode`, no SDK
 // import: safe to unit-test and typecheck standalone (extension pure/
@@ -113,6 +114,14 @@ export interface AgentCoachOptions {
    * attribution headers and env pins of spec §4.1.
    */
   orchestrator?: OrchestratorBinding;
+}
+
+/** Narrow a served profile for a selected-HTML turn; never manufacture a tool grant. */
+export function restrictCompanionExecutionTools(agent: AgentCoachOptions): AgentCoachOptions {
+  return { ...agent,
+    permittedTools: agent.permittedTools.filter(tool => (COMPANION_EXECUTION_TOOLS as readonly string[]).includes(tool)),
+    permittedAgentTools: [], permittedMcpTools: [], orchestrator: undefined,
+  };
 }
 
 export interface ProfileToAgentCtx {
