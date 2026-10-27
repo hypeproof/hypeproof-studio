@@ -7374,10 +7374,10 @@ stale one opens nothing). The sheet lists at most six rows, in the order REQ-SHE
 (글자 크기, 화면 밝기(테마), 움직임 줄이기, 알림, 팁 보기, 내 작업 내보내기), and only rows whose
 behaviour exists in the build (DEC-SHELL-R014):
 
-- 글자 크기 — 기본 / 크게 / 아주 크게, the same device preference as the personal chat settings
+- 글자 크기 — a 기본 / 크게 / 아주 크게 list, the same device preference as the personal chat settings
   (CGP-DS-R-009, `hypeproof.textSize`); the row says it is the size of personal-activity chat text.
   An open chat picks the change up at once.
-- 움직임 줄이기 — 기기 설정 따르기 / 줄이기 / 줄이지 않기, written to `workbench.reduceMotion`
+- 움직임 줄이기 — a 기기 설정 따르기 / 줄이기 / 줄이지 않기 list, written to `workbench.reduceMotion`
   (`auto` / `on` / `off`), which the chat already honours (CGP-DS-R-015).
 - 알림 — one checkbox for `hypeproofChat.osTaskNotices` (off by default), the existing opt-in for
   native task notices while the window is unfocused; notices never carry answer text.
@@ -7397,13 +7397,22 @@ key or value stores nothing and sends nothing. A failed write says
 chat settings dialog: Escape, × and the backdrop close it, focus returns to "설정", 44px targets,
 14px minimum text.
 
+Sheet geometry (CGP-SHELL-D-013 / DES-SHELL-13): the sheet is a modal right-side sheet over the
+page under it, on the right edge at full window height, 320–400px wide (the whole window below
+320px; the shared card's narrow bottom sheet does not apply). Every setting and "고급 설정" is one
+48px row with the row's name on the left and its one control on the right, on one line at 320px:
+글자 크기 and 움직임 줄이기 are a select, 알림 is a checkbox. A row's note (the text-size scope, the
+notice wording) sits under its row as the control's description. It reads the same in light and
+dark themes and in forced colours (DEC-SHELL-D013).
+
 Validation: `extensions/hypeproof-chat/test/start-settings-host.smoke.mjs` (the real StartPage in
 a vm: no direct editor path, writes land in their stores, hostile writes refused, minor tier /
 minor flag / under-14 never reach the editor) and
 `extensions/hypeproof-chat/test/start-settings-sheet.smoke.mjs` (the built start page in headless
 Chromium at 320/800/1420 px, dark/light and forced colours, adult and minor views: rows, cap,
 고급 설정 visibility, posted messages, 44px targets, 14px text, start-page text colour, Escape and
-focus return). The browser smoke fails under `FOCUS_REQUIRE_BROWSER=1` without a browser.
+focus return; DES-SHELL-13: a modal sheet on the right edge at full height, 320–400px wide, every
+row 48px with its name and control on one line). The browser smoke fails under `FOCUS_REQUIRE_BROWSER=1` without a browser.
 
 ## Example project ideas after a no-idea answer (CGP-SHELL-R-020)
 

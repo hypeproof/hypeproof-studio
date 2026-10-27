@@ -1172,6 +1172,13 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Text size row: the stored size is the personal-chat size (classroom chat keeps the base size), so the row says "혼자 하는 활동의 대화 글자 크기예요." for every seat.
 - Default state: on for every seat; no new data flow, no new permission; notices stay off until the learner turns them on.
 
+## DEC-SHELL-D013: learner settings sheet geometry (CGP-SHELL-D-013, 2026-10-27, agent-selected conservative implementation)
+
+- Surface: the sheet lives where its opener is, the start page "설정" (DEC-SHELL-R014). "Over the chat" is read as over the page under it: a modal right-side sheet on the right edge at full height, 320–400 px wide, the whole window below 320 px. The shared card's 390 px bottom-sheet rule does not apply to it.
+- One control per row: 글자 크기 and 움직임 줄이기 change from radio groups to a native select, 알림 stays a checkbox, so each row's name and control fit one 48 px line at 320 px. "고급 설정" is a 48 px row too.
+- Notes: the text-size scope note and the notice wording sit under their row as the control's description (`aria-describedby`), not inside the 48 px row; dropping them would make the row less honest. The notice wording becomes a sentence ("…알려 줘요.") because it is no longer the checkbox's label.
+- Learner floor: controls stay 44 px and text 14 px (owner rule); the 48 px row is the larger value.
+
 ## CGP-SHELL-R-020: example project ideas after a no-idea answer (2026-10-26, agent-selected conservative implementation)
 
 - Trigger: client-side and narrow. The learner's latest message must be short (at most 30 characters) and end in a no-idea phrase, and the coach message before it (or the greeting, for the first message) must end in a question about what to make or do. Anything uncertain shows nothing, so NAT-03's one-question flow is unchanged. The answer is still sent to the coach as typed.
