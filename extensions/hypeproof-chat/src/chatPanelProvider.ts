@@ -37,7 +37,7 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
-import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, resolveInstructorRuntime, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
+import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, needsChalkPrompt, resolveInstructorRuntime, type ContractOps, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
@@ -7010,11 +7010,54 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       onRefusal: () => emit({ kind: 'refusal' }),
       onActivity: (activity) => emit({ kind: 'activity', activity }),
       requestApproval: async (action) => {
+        const req = sdkToolToActionRequest(action);
+        const required = vscode.workspace.getConfiguration('hypeproofChat').get<string[]>('requireApprovalFor', ['executeShell', 'openBrowser', 'delegateAgent', 'browserType']);
+        if (needsChalkPrompt(req.kind, required)) {
+          const payload = req.payload as { url?: unknown } | null | undefined;
+          const files = req.kind === 'openBrowser'
+            ? (typeof payload?.url === 'string' && payload.url ? [payload.url] : [])
+            : writeTargetsFromPayload(req.payload).map(t => t.path);
+          const approved = await input.askApproval({
+            kind: req.kind,
+            toolName: action.toolName,
+            input: action.input,
+            title: req.description,
+            verb: req.kind === 'openBrowser' ? '열기' : '쓰기',
+            files,
+          });
+          return { approved, actor: 'user' as const };
+        }
         let prompted = false;
         const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; });
         return { approved, actor: prompted ? 'user' : 'policy' };
       },
     });
+  }
+
+  chalkOps(): ContractOps {
+    return {
+      openExternal: async (url) => {
+        const persisted = vscode.workspace.getConfiguration("hypeproof.browser").get<boolean>("safeSession");
+        if (routeExternalLink(url, linkSafety(this.cachedProfile, persisted)).kind === "refuse") return { ok: false, reason: "refused" };
+        await this.openLearnerLink(url);
+        return { ok: true };
+      },
+      openReport: async () => {
+        await vscode.commands.executeCommand("hypeproof-chat.reportProblem");
+        return { ok: true };
+      },
+      inboxView: async () => (await this.inboxSource?.inboxView().catch(() => null)) ?? null,
+      inboxOpened: async (objectId, generation) => { await this.inboxSource?.inboxOpened(objectId, generation); },
+      inboxLink: async (objectId, url, generation, action) => {
+        await this.handleInboxLink({ objectId, url, generation, action });
+        return { ok: true };
+      },
+      reviewPrepare: async (week) => {
+        if (!this.isCurriculumRuntimeEnabled()) return { ok: false, message: "off" };
+        const r = await this.reviewSession.prepare(week);
+        return r.ok ? { ok: true } : { ok: false, message: r.message };
+      },
+    };
   }
 
   private async contractPreviewOpen(webPath: string): Promise<{ ok: boolean; error?: string }> {

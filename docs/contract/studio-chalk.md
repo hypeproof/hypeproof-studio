@@ -85,11 +85,34 @@ Studio sends `done` exactly once per turn.
 
 ## 6. Approval
 
-Approval policy is owned by Studio: Studio decides whether an action needs approval. Chalk is asked only through `approvalRequest` and answers with the human's choice; Chalk's answer is only the answer.
+Approval policy is owned by Studio: Studio decides whether an action needs approval (`hypeproofChat.requireApprovalFor`). Chalk is asked only through `approvalRequest` and answers with the human's choice; Chalk's answer is only the answer.
 
 Deny by default: a missing answer, a closed dialog, an error, or a turn that is already closed is `approved: false`.
 
-In this version (S-2) Studio does not send `approvalRequest`. Runtime approvals (writes, shell, browser) use the existing Studio modal, exactly as before. The `approvalRequest` event is defined here so that Chalk can answer it when Studio starts sending it (M-4 / S-2b).
+Which approvals Chalk shows (decided from the Studio policy, S-2b):
+- `openBrowser` (the `browser_open` tool) and `writeFile` (only when `requireApprovalFor` includes it). Studio sends `approvalRequest` with `action.prompt` (`{ id, title, verb, files }`) and Chalk shows its own dialog.
+- Not sent to Chalk, and kept in Studio: `executeShell`, `delegateAgent`, `browserType`, `consultHelper`, and the read-outside-workspace refusal. The instructor tool profile has no shell, subagent, type or consult tool, so these do not reach an instructor turn.
+- Any other runtime approval still uses the existing Studio modal.
+
+`docs/contract/studio-chalk.md` §6 before S-2b said Studio did not send `approvalRequest`. That is now corrected: S-2b sends it for the two kinds above.
+
+## 6a. Instructor parity commands (S-2b, M-4)
+
+Chalk calls these Studio commands. Each carries `contractVersion` and `sessionNonce`, is refused with `{ ok: false, reason: "noSession" }` (or `null` for `inboxView`) when the nonce is stale, and returns only the short result shape listed here.
+
+| Command | Arguments | Result | Notes |
+|---|---|---|---|
+| `hypeproof.runtime.openExternal` | `{ url }` | `{ ok }` or `{ ok: false, reason }` | Opens through the same link check as the learner link path (http and https only). `reason` is `refused` or `invalidArgs`. |
+| `hypeproof.runtime.openReport` | `{ context? }` | `{ ok }` | Only `context.source` is read, and only when it matches `^[a-z0-9-]{1,32}$`. Every other key is dropped, including any token key. Runs the existing report command; no token is put in the report body. The report request sends the student token in the `Authorization` header to the Service, as the report button always has (`reportProblem.ts`, `reportProblemHelpers.ts`). |
+| `hypeproof.runtime.inboxView` | — | `InboxView` or `null` | Studio's classroom inbox view. |
+| `hypeproof.runtime.inboxOpen` | `{ objectId, generation }` | `{ ok }` | |
+| `hypeproof.runtime.inboxLink` | `{ objectId, url, generation, action }` | `{ ok }` | `action` is `open` or `copy`. Same behavior as the Studio inbox link. |
+| `hypeproof.runtime.reviewPrepare` | `{ week? }` | `{ ok }` or `{ ok: false, message }` | Studio prepares the review. The model call is Studio's. |
+| `hypeproof.chalk.onInboxState` (Studio → Chalk) | `{ view }` | — | Sent when the inbox changes and a session is active. |
+
+`done` events for an error can carry `requestId` and `runbookUrl` (taken from the Service error body). They are present only when the error had them.
+
+`hypeproof.chalk.onReviewState` is not part of the contract: Chalk reads review data from the admin API itself.
 
 ## 7. Model
 
@@ -112,4 +135,5 @@ Chalk side: the Chalk repository runs the matching round trip against a stub Stu
 
 ## 11. Version history
 
+- v0 (2026-10-28): S-2b adds the instructor parity commands (§6a) and corrects §6 about `approvalRequest`.
 - v0 (2026-10-23): first contract (S-2 in Studio; M-2 in Chalk). Adds `connection?` and `runLocalTurn` `message` as backward-compatible additions.
