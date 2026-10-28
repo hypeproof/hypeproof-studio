@@ -4958,6 +4958,50 @@
       ]
     },
     {
+      "id": "ST-IMP-CHALK-CONTRACT-V0",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-SUB",
+        "ST-DES-CHALK-INSTRUCTOR"
+      ],
+      "sources": [
+        {
+          "path": "docs/contract/studio-chalk.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chalkContract.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/modeDecision.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/serverBase.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-CONTRACT-V0",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-SUB",
+        "ST-DES-CHALK-INSTRUCTOR",
+        "ST-IMP-CHALK-CONTRACT-V0"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-contract.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/instructor-approval-spy.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/instructor-tool-merge.smoke.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-CHALK-GEN-APP",
       "stage": "implementation",
       "label": "Chalk 생성 도구 4개 — 앱 측 (E2-6 / #1295, #1306)",

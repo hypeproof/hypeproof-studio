@@ -225,6 +225,7 @@ export async function activate(context: vscode.ExtensionContext) {
       executeCommand: (id, ...args) => vscode.commands.executeCommand(id, ...args),
     },
     provider.chalkRunner(),
+    provider.chalkOps(),
   );
   context.subscriptions.push(...chalkContract.register());
   provider.attachChalkContract(chalkContract);
@@ -394,7 +395,7 @@ export async function activate(context: vscode.ExtensionContext) {
     post: (view) => provider.postHelp(view),
     log: (line) => console.log(line),
   });
-  context.subscriptions.push(classroomOps.onInboxChanged(() => { void provider.postInbox(); startPage.inboxChanged(); }));
+  context.subscriptions.push(classroomOps.onInboxChanged(() => { void provider.postInbox(); void chalkContract.pushInbox(); startPage.inboxChanged(); }));
   // CGP-DS-R-015: a reduce-motion change reaches the open chat panel without a reload.
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
     if (event.affectsConfiguration("workbench.reduceMotion")) void provider.refreshConfig();

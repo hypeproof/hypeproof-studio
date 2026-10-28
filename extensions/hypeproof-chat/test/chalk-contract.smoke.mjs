@@ -6,6 +6,8 @@ import {
   CONTRACT_VERSION,
   NO_LOCAL_RUNTIME_MESSAGE,
   connectionFor,
+  needsChalkPrompt,
+  reportSourceLabel,
   resolveInstructorRuntime,
 } from "../src/chalkContract.ts";
 
@@ -20,6 +22,22 @@ async function t(name, fn) {
   }
 }
 const tick = () => new Promise((r) => setTimeout(r, 0));
+
+
+function makeOps(over = {}) {
+  const calls = [];
+  const rec = (name, v) => { calls.push([name, v]); return v; };
+  return {
+    calls,
+    openExternal: async (url) => rec("openExternal", { ok: true, url }),
+    openReport: async (source) => rec("openReport", { ok: true, source }),
+    inboxView: async () => rec("inboxView", { run: "r1", cards: [] }),
+    inboxOpened: async (objectId, generation) => { rec("inboxOpened", { objectId, generation }); },
+    inboxLink: async (objectId, url, generation, action) => rec("inboxLink", { ok: true, objectId, url, generation, action }),
+    reviewPrepare: async (week) => rec("reviewPrepare", { ok: true, week }),
+    ...over,
+  };
+}
 
 function makeBus(activateReply = { ok: true }) {
   const handlers = new Map();
@@ -58,7 +76,7 @@ function makeRunner({ available = true, executorModel = "claude-test", behaviour
 
 async function activated(bus, runner) {
   let n = 0;
-  const host = new ChalkContractHost(bus, runner, () => `nonce-${++n}`);
+  const host = new ChalkContractHost(bus, runner, makeOps(), () => `nonce-${++n}`);
   host.register();
   const r = await host.activate({ issuerToken: "tok-value", verifiedServerUrl: "https://api.example/v1", connection: "server" });
   assert.equal(r.ok, true);
@@ -81,7 +99,7 @@ await t("activateInstructor carries version, nonce, token, verified url and conn
 
 await t("a refused activation leaves the host inactive and passes the reason", async () => {
   const bus = makeBus({ ok: false, reason: "serverChanged" });
-  const host = new ChalkContractHost(bus, makeRunner(), () => "n");
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps(), () => "n");
   host.register();
   const r = await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
   assert.deepEqual(r, { ok: false, reason: "serverChanged" });
@@ -185,6 +203,139 @@ await t("cancelTurn with a stale nonce does nothing", async () => {
   await activated(bus, makeRunner());
   const c = await bus.call("hypeproof.runtime.cancelTurn", { contractVersion: 1, sessionNonce: "old", turnId: "t9" });
   assert.deepEqual(c, { cancelled: false });
+});
+
+console.log("=== M-4 commands (S-2b) ===");
+const sessionArgs = { contractVersion: 1, sessionNonce: "nonce-1" };
+await t("openExternal passes url through the ops and refuses without a session", async () => {
+  const bus = makeBus();
+  const ops = makeOps();
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  assert.deepEqual(await bus.call("hypeproof.runtime.openExternal", { ...sessionArgs, url: "https://runbook.example/x" }), { ok: true });
+  assert.deepEqual(await bus.call("hypeproof.runtime.openExternal", { contractVersion: 1, sessionNonce: "old", url: "https://x" }), { ok: false, reason: "noSession" });
+  assert.deepEqual(await bus.call("hypeproof.runtime.openExternal", { ...sessionArgs, url: "" }), { ok: false, reason: "invalidArgs" });
+  assert.equal(ops.calls.length, 1);
+});
+
+await t("openReport keeps only a short lowercase source label and drops every other key (token keys too)", async () => {
+  assert.equal(reportSourceLabel({ source: "chalk" }), "chalk");
+  assert.equal(reportSourceLabel({ source: "Chalk Ext" }), undefined);
+  assert.equal(reportSourceLabel({ source: "a".repeat(33) }), undefined);
+  assert.equal(reportSourceLabel({ source: "a".repeat(32) }), "a".repeat(32));
+  assert.equal(reportSourceLabel(undefined), undefined);
+  const bus = makeBus();
+  const ops = makeOps();
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  const reply = await bus.call("hypeproof.runtime.openReport", { ...sessionArgs, context: { source: "chalk", issuerToken: "tok-value", token: "secret" } });
+  assert.deepEqual(reply, { ok: true });
+  assert.deepEqual(ops.calls, [["openReport", { ok: true, source: "chalk" }]]);
+  assert.ok(!JSON.stringify(reply).includes("tok-value"));
+});
+
+await t("inboxView returns the view or null, and never passes a token to the ops", async () => {
+  const bus = makeBus();
+  const ops = makeOps({ inboxView: async () => null });
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  assert.equal(await bus.call("hypeproof.runtime.inboxView", sessionArgs), null);
+  assert.equal(await bus.call("hypeproof.runtime.inboxView", { contractVersion: 1, sessionNonce: "old" }), null);
+});
+
+await t("inboxOpen and inboxLink validate arguments and call the ops once", async () => {
+  const bus = makeBus();
+  const ops = makeOps();
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  assert.deepEqual(await bus.call("hypeproof.runtime.inboxOpen", { ...sessionArgs, objectId: "o1", generation: 3 }), { ok: true });
+  assert.deepEqual(await bus.call("hypeproof.runtime.inboxOpen", { ...sessionArgs, objectId: "o1", generation: "3" }), { ok: false });
+  assert.deepEqual(await bus.call("hypeproof.runtime.inboxLink", { ...sessionArgs, objectId: "o1", url: "https://a.example", generation: 3, action: "copy" }), { ok: true });
+  assert.deepEqual(await bus.call("hypeproof.runtime.inboxLink", { ...sessionArgs, objectId: "o1", url: "https://a.example", generation: 3, action: "delete" }), { ok: false });
+  assert.deepEqual(ops.calls.map(c => c[0]), ["inboxOpened", "inboxLink"]);
+});
+
+await t("reviewPrepare passes an integer week only and calls prepare once", async () => {
+  const bus = makeBus();
+  const ops = makeOps();
+  const host = new ChalkContractHost(bus, makeRunner(), ops, () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  assert.deepEqual(await bus.call("hypeproof.runtime.reviewPrepare", { ...sessionArgs, week: 4 }), { ok: true });
+  assert.deepEqual(await bus.call("hypeproof.runtime.reviewPrepare", { ...sessionArgs, week: "4" }), { ok: true });
+  assert.deepEqual(ops.calls, [["reviewPrepare", { ok: true, week: 4 }], ["reviewPrepare", { ok: true, week: undefined }]]);
+});
+
+await t("done(error) carries requestId and runbookUrl when the runner error has them, and omits them otherwise", async () => {
+  const bus = makeBus();
+  const runner = makeRunner({
+    behaviour: async () => { const e = new Error("fail"); e.requestId = "req-42"; e.runbookUrl = "https://runbook.example/x"; throw e; },
+  });
+  const host = new ChalkContractHost(bus, runner, makeOps(), () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  await bus.call("hypeproof.runtime.runLocalTurn", { ...sessionArgs, turnId: "t9", policy: "chalk-instructor", messages: [], tools: [] });
+  await tick(); await tick();
+  const done = bus.calls.filter((c) => c.id === "hypeproof.chalk.onTurnEvent").map((c) => c.args[0]).find((e) => e.event.kind === "done");
+  assert.deepEqual(done.event, { kind: "done", status: "error", message: "fail", requestId: "req-42", runbookUrl: "https://runbook.example/x" });
+
+  const bus2 = makeBus();
+  const plain = makeRunner({ behaviour: async () => { throw new Error("plain"); } });
+  const host2 = new ChalkContractHost(bus2, plain, makeOps(), () => "nonce-1");
+  host2.register();
+  await host2.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  await bus2.call("hypeproof.runtime.runLocalTurn", { ...sessionArgs, turnId: "t10", policy: "chalk-instructor", messages: [], tools: [] });
+  await tick(); await tick();
+  const done2 = bus2.calls.filter((c) => c.id === "hypeproof.chalk.onTurnEvent").map((c) => c.args[0]).find((e) => e.event.kind === "done");
+  assert.deepEqual(done2.event, { kind: "done", status: "error", message: "plain" });
+});
+
+await t("pushInbox sends onInboxState only in an active session, with the nonce and version", async () => {
+  const bus = makeBus();
+  const host = new ChalkContractHost(bus, makeRunner(), makeOps({ inboxView: async () => ({ run: "r1" }) }), () => "nonce-1");
+  host.register();
+  await host.pushInbox();
+  assert.equal(bus.calls.filter((c) => c.id === "hypeproof.chalk.onInboxState").length, 0);
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  await host.pushInbox();
+  const sent = bus.calls.filter((c) => c.id === "hypeproof.chalk.onInboxState");
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].args[0], { contractVersion: 1, sessionNonce: "nonce-1", view: { run: "r1" } });
+});
+
+await t("needsChalkPrompt routes only openBrowser and writeFile, and only when the policy asks for them", async () => {
+  const defaults = ["executeShell", "openBrowser", "delegateAgent", "browserType"];
+  assert.equal(needsChalkPrompt("openBrowser", defaults), true);
+  assert.equal(needsChalkPrompt("writeFile", defaults), false);
+  assert.equal(needsChalkPrompt("writeFile", [...defaults, "writeFile"]), true);
+  for (const kind of ["executeShell", "delegateAgent", "browserType", "consultHelper", "readFile"]) {
+    assert.equal(needsChalkPrompt(kind, [...defaults, "writeFile", "consultHelper"]), false, `${kind} must stay in Studio`);
+  }
+});
+
+await t("askApproval sends an approvalRequest with the prompt and resolves false without an explicit approval", async () => {
+  const bus = makeBus();
+  let asked = null;
+  const runner = makeRunner({
+    behaviour: async (input) => {
+      asked = await input.askApproval({ kind: "openBrowser", toolName: "browser_open", input: { url: "https://a.example" }, title: "브라우저 열기", verb: "열기", files: ["https://a.example"] });
+    },
+  });
+  const host = new ChalkContractHost(bus, runner, makeOps(), () => "nonce-1");
+  host.register();
+  await host.activate({ issuerToken: "x", verifiedServerUrl: "u", connection: "server" });
+  bus.handlers.get("hypeproof.runtime.runLocalTurn");
+  await bus.call("hypeproof.runtime.runLocalTurn", { ...sessionArgs, turnId: "t11", policy: "chalk-instructor", messages: [], tools: [] });
+  await tick(); await tick();
+  const req = bus.calls.filter((c) => c.id === "hypeproof.chalk.onTurnEvent").map((c) => c.args[0]).find((e) => e.event.kind === "approvalRequest");
+  assert.equal(req.event.action.prompt.title, "브라우저 열기");
+  assert.equal(req.event.action.prompt.verb, "열기");
+  assert.deepEqual(req.event.action.prompt.files, ["https://a.example"]);
+  assert.equal(asked, false, "no reply from Chalk means not approved");
 });
 
 console.log("=== deactivate and preview ===");
