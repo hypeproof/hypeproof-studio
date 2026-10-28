@@ -82,3 +82,14 @@ binding and task-scope identity. Its activity label and machine digest do not
 verify an account owner or device authority. This is partial DMC-01/DMC-14
 evidence; full DMC-1 ownership/capability acceptance, DMC-T01 and DMC-T14 remain
 open. Pairing, grants, transport and dispatch are not implemented by preparation.
+
+The [development host preview composition](../evidence/companion-host-preview-composition.md)
+connects these source seams with the existing account/pass/profile and selected
+saved HTML. It requires an explicit current-request desktop confirmation and
+keeps the factory development-only. Synthetic local Worker/browser observations
+do not close DMC-3 or installed-app/device/classroom acceptance.
+
+The [bounded transfer and mobile presentation slice](../evidence/companion-artifact-transfer-20261028.md)
+adds framed results and controlled result presentation while retaining the
+original runtime/relay limits. Its partial source/browser evidence does not
+complete device, restart, classroom or production acceptance.

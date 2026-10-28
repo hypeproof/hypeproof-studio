@@ -81,3 +81,18 @@ controls for activity changes during binding/filesystem validation before review
 or persistence; all four must block stale review or metadata writes. Those new
 failure paths and controller bytes have source/fixture checks, with native
 acceptance **NOT RUN**; the earlier native run remains bound to `b7ee35cf`.
+
+## Development host preview composition — 2026-10-28
+
+[Composition evidence and reproduction](../evidence/companion-host-preview-composition.md)
+separate source/native-API fixture tests from a local Worker/D1 and headless
+mobile-sized browser integration. The latter observed the selected same-version
+HTML, explicit fixture confirmation, journaled read, source preservation and
+repeat-result reuse. Final source results are bound in the PR validation record.
+Installed native UI, real account/phone, classroom activity and DMC-T04/08/15
+remain **NOT RUN / NOT COMPLETE**. No acceptance row is replaced.
+
+The [bounded transfer and mobile presentation slice](../evidence/companion-artifact-transfer-20261028.md)
+adds framed results and controlled result presentation while retaining the
+original runtime/relay limits. Its partial source/browser evidence does not
+complete device, restart, classroom or production acceptance.

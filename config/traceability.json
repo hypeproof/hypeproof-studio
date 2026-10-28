@@ -15685,7 +15685,9 @@
         "ST-IMP-COMPANION-DISPATCH",
         "ST-TEST-CLASSROOM-ADMIN",
         "ST-TEST-CHAT-FILE-ATTACH",
-        "ST-IMP-COMPANION-WORKSPACE"
+        "ST-IMP-COMPANION-WORKSPACE",
+        "ST-IMP-COMPANION-HOST",
+        "ST-IMP-COMPANION-SESSION"
       ],
       "sources": [
         {
@@ -15702,6 +15704,24 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-host-bridge.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-host-bridge-native.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-preview-result.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lib/companion-native-bridge-harness.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-preview-payload.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-session-view.test.tsx"
         }
       ]
     },
@@ -15728,6 +15748,52 @@
         },
         {
           "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-HOST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-COMPANION-DISPATCH",
+        "ST-IMP-COMPANION-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/companionHostBridge.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionHostBridgeNative.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionPreviewResult.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionPreviewPayload.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-SESSION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-COMPANION-HOST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CompanionSessionView.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionPresentation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionView.css"
         }
       ]
     }
