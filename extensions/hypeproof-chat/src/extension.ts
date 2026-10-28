@@ -400,6 +400,8 @@ export async function activate(context: vscode.ExtensionContext) {
     if (event.affectsConfiguration("workbench.reduceMotion")) void provider.refreshConfig();
     // CGP-AGENT-D-002: the card must follow the policy used by the next action.
     if (event.affectsConfiguration("hypeproofChat.requireApprovalFor")) void provider.refreshConfig();
+    // #2556: a new server address changes the instructor verdict, so the verdict is judged again.
+    if (event.affectsConfiguration("hypeproofChat.proxyUrl")) void provider.refreshConfig();
   }));
   void classroomOps.resume();
   context.subscriptions.push(

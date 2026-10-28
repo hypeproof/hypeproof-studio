@@ -37,7 +37,7 @@ import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, 
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
-import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, resolveInstructorRuntime, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
+import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, resolveInstructorRuntime, syncInstructorSession, type ContractView, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
@@ -879,9 +879,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // #1298 — instructor-mode state and server calls. Reset in invalidateProfile().
   private _instructorMode = new InstructorModeManager();
   private chalkContract: ChalkContractHost | null = null;
-  private contractToken: string | undefined;
-  private contractUrl: string | undefined;
-  private contractConnection: string | undefined;
+  private contractView: ContractView = {};
+  // Verdict syncs run one at a time, so an activation never races the deactivation before it.
+  private contractSync: Promise<void> = Promise.resolve();
   private nativeObservationError: string | null = null;
   private nativeLearningPath: {title:string;url:string;reason:string} | null = null;
   private observationAssessment: AbortController | null = null;
@@ -6944,27 +6944,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let local: LocalRuntimeConfig | null = null;
     try { local = localRuntimeConfig(vscode.env.appName, s.proxyUrl); } catch { local = null; }
     const connection = connectionFor(local?.provider, local !== null);
-    if (s.isInstructor && s.issuerToken) {
-      if (host.active && this.contractToken === s.issuerToken && this.contractUrl === s.proxyUrl && this.contractConnection === connection) return;
-      const token = s.issuerToken;
-      const replacing = host.active;
-      void (async () => {
-        if (replacing) await host.deactivate('superseded').catch(() => undefined);
-        const reply = await host.activate({ issuerToken: token, verifiedServerUrl: s.proxyUrl, connection }).catch(() => ({ ok: false }));
-        if (reply.ok) {
-          this.contractToken = token;
-          this.contractUrl = s.proxyUrl;
-          this.contractConnection = connection;
-        }
-      })();
-      return;
-    }
-    if (!host.active) return;
-    const reason = s.panelMode !== 'instructor' ? 'studentSlotWins' : s.issuerToken ? 'rejected' : 'issuerRemoved';
-    this.contractToken = undefined;
-    this.contractUrl = undefined;
-    this.contractConnection = undefined;
-    void host.deactivate(reason).catch(() => undefined);
+    const want = { isInstructor: s.isInstructor, panelMode: s.panelMode, issuerToken: s.issuerToken, url: s.proxyUrl, connection };
+    this.contractSync = this.contractSync
+      .then(async () => { this.contractView = await syncInstructorSession(host, this.contractView, want); })
+      .catch(() => undefined);
   }
 
   chalkRunner(): LocalRunner {
@@ -10164,7 +10147,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       isInstructor = false;
     }
     if (resolveInstructorRuntime(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime')) === 'chalk-extension') {
-      this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl });
+      this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl: this._instructorMode.verifiedServerUrl ?? proxyUrl });
       this._instructorMode.reset();
       isInstructor = false;
     }

@@ -8,6 +8,9 @@ export type WhoamiStatus = "ok" | "rejected" | "unreachable" | null;
 export class InstructorModeManager {
   private _isInstructor: boolean | null = null;
   private _isInstructorToken: string | undefined = undefined;
+  // The verdict is keyed by token and admin base; the proxy URL it was judged against is kept for the contract.
+  private _judgedBase: string | undefined = undefined;
+  private _judgedServerUrl: string | undefined = undefined;
   private _instructorBrief: string | undefined = undefined;
   private _instructorBriefVersion: number | undefined = undefined;
   private _lastWhoamiStatus: WhoamiStatus = null;
@@ -18,6 +21,7 @@ export class InstructorModeManager {
 
   get isInstructor(): boolean | null { return this._isInstructor; }
   get brief(): string | undefined { return this._instructorBrief; }
+  get verifiedServerUrl(): string | undefined { return this._isInstructor === true ? this._judgedServerUrl : undefined; }
   // "ok" = 2xx, "rejected" = 401/403, "unreachable" = network/timeout, null = not checked yet
   get lastWhoamiStatus(): WhoamiStatus { return this._lastWhoamiStatus; }
 
@@ -25,6 +29,8 @@ export class InstructorModeManager {
   reset(): void {
     this._isInstructor = null;
     this._isInstructorToken = undefined;
+    this._judgedBase = undefined;
+    this._judgedServerUrl = undefined;
     this._instructorBrief = undefined;
     this._instructorBriefVersion = undefined;
     this._lastWhoamiStatus = null;
@@ -68,7 +74,7 @@ export class InstructorModeManager {
   }
 
   // Checks GET /admin/chalk/whoami with the current token.
-  // Caches result per token so we don't hammer the server on every postConfig.
+  // Caches the verdict per token and per admin base, so a server address change is judged again.
   // Sets lastWhoamiStatus: "ok" (2xx), "rejected" (401/403 only), or "unreachable" (network/timeout/other).
   // Unreachable results are NOT cached: the next refresh retries so a transient failure does not
   // permanently lock out instructor mode until the app restarts.
@@ -79,12 +85,12 @@ export class InstructorModeManager {
       this._lastWhoamiStatus = null;
       return false;
     }
-    // A different credential cannot inherit the previous issuer's authorization or brief.
-    // An unreachable whoami must fail closed for the new token.
-    if (this._isInstructorToken !== token) this.reset();
+    const base = adminBaseFrom(proxyUrl);
+    // A different credential or server address cannot inherit the previous verdict or brief.
+    // An unreachable whoami must fail closed for the new token or address.
+    if (this._isInstructorToken !== token || this._judgedBase !== base) this.reset();
     if (this._isInstructor !== null && this._isInstructorToken === token) return this._isInstructor;
     try {
-      const base = adminBaseFrom(proxyUrl);
       const res = await fetch(`${base}/admin/chalk/whoami`, {
         headers: { authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(5000),
@@ -106,6 +112,8 @@ export class InstructorModeManager {
       return this._isInstructor === true;
     }
     this._isInstructorToken = token;
+    this._judgedBase = base;
+    this._judgedServerUrl = proxyUrl;
     return this._isInstructor;
   }
 
