@@ -6,9 +6,9 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {appSdkVersion,checkSeededSdk} from '../unified-release/sdk-seed.mjs';
 import {sha256} from './safety.mjs';
-import {hostedCommands,OFFICIAL_SHELL_REPOSITORY} from './hosted-shell.mjs';
+import {hostedCommands,portableShellAsset,OFFICIAL_SHELL_REPOSITORY} from './hosted-shell.mjs';
 const args=process.argv.slice(2);
-if(args.includes('--help')){console.log('GITHUB_ACTIONS=true HPS_SERVICE_SOURCE=PINNED_CHECKOUT node e2e/feedback-native/hosted.mjs [PUBLIC_APP_TAG]\nNo provider requests. Foreground native input is confined to the hosted desktop. Optional HPS_NATIVE_DELAYED_RESUME=1 adds real2s/61s/610s activation holds; workflow needs35min.');process.exit(0);}
+if(args.includes('--help')){console.log('GITHUB_ACTIONS=true HPS_SERVICE_SOURCE=PINNED_CHECKOUT node e2e/feedback-native/hosted.mjs [PUBLIC_APP_TAG]\nDefault shell is the newest published stable containing this platform portable ZIP; an explicit tag is exact.\nNo provider requests. Foreground native input is confined to the hosted desktop. Optional HPS_NATIVE_DELAYED_RESUME=1 adds real2s/61s/610s activation holds; workflow needs35min.');process.exit(0);}
 if(process.env.GITHUB_ACTIONS!=='true'||!process.env.RUNNER_TEMP)throw Error('Hosted native foreground suite requires a GitHub Actions dedicated desktop');
 if(!['darwin','win32'].includes(process.platform))throw Error('Only Mac/Windows prepared shells are supported');
 if(args[0]&&!/^v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(args[0]))throw Error('Invalid official app tag');
@@ -16,10 +16,9 @@ const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),ba
 for(const d of[assets,extracted,evidence])fs.mkdirSync(d,{recursive:true});
 const commands=hostedCommands(repo),run=commands.run;
 const officialRepo=OFFICIAL_SHELL_REPOSITORY;
-const release=commands.release(args[0]??'');
-const platform=process.platform==='darwin'?'darwin-arm64':'win32-x64',selected=release.assets.filter(a=>a.name.endsWith('.zip')&&a.name.includes(platform));
-if(selected.length!==1)throw Error('Expected exactly one official portable shell for '+platform);
-const asset=selected[0];commands.download(release.tag_name,asset.name,assets);
+const platform=process.platform==='darwin'?'darwin-arm64':'win32-x64';
+const release=commands.release(platform,args[0]??'');
+const asset=portableShellAsset(release,platform);commands.download(release.tag_name,asset.name,assets);
 let expected=typeof asset.digest==='string'&&asset.digest.startsWith('sha256:')?asset.digest.slice(7):null;
 if(!expected){const acceptance=release.assets.find(a=>a.name==='unified-acceptance.json');if(!acceptance)throw Error('BLOCKED official release has neither asset digest nor published acceptance hashes');commands.download(release.tag_name,acceptance.name,assets);const proof=JSON.parse(fs.readFileSync(path.join(assets,acceptance.name),'utf8'));if(proof.schema!=='hps-unified-release/1')throw Error('Unrecognized official acceptance manifest');expected=proof.receipts?.find(r=>r.platform===platform)?.assets?.[asset.name];}
 if(!/^[a-f0-9]{64}$/.test(expected??'')||sha256(path.join(assets,asset.name))!==expected)throw Error('Official shell download checksum mismatch or missing hash');

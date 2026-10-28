@@ -27,7 +27,7 @@ async function fixture(t, opts={}) {
   const base=await mkdtemp(join(tmpdir(),'companion-normal-turn-')), workspace=join(await realpath(base),'work');await mkdir(workspace);
   t.after(()=>rm(base,{recursive:true,force:true}));
   const file=join(workspace,'selected.html'), original='<h1>before</h1>';await writeFile(file,original);await writeFile(join(workspace,'private.txt'),'do not send to model');
-  const errors=[],state=new Map(),posts=[],history=[{id:'prior',role:'user',content:'private prior task context',createdAt:0}],calls={sdk:0,lowDisk:0,approval:0,activity:0,reveal:0};let live=true,generation=1,ui={text:'',images:[],queued:null},f;
+  const errors=[],state=new Map(),posts=[],history=[{id:'prior',role:'user',content:'private prior task context',createdAt:0}],calls={sdk:0,lowDisk:0,approval:0,activity:0,reveal:0};let live=true,generation=1,ui={text:'',images:[],queued:null},uiStreaming=false,f;
   const forbidden=name=>()=>{throw Error('forbidden scoped context/effect: '+name);};
   const profile={ux:{coach:{naming_mode:'fixed',fallback_name:'코치'}},profile_id:'fixture',activity_id:'server-a',activity_kind:'personal',coach_runtime:'agent-sdk',workspace_root:workspace,game:{template_tier:'website'},sdk_tools:{read:true,write:true},worlds:[{id:'guest',guest:'world',emoji:'',chip:'world'}]};
   const vscode={ExtensionMode:{Development:2,Production:1},ViewColumn:{One:1,Two:2,Beside:2},env:{appName:'HypeProof Studio'},Uri:{file:fsPath=>({scheme:'file',fsPath})},window:{},
@@ -82,9 +82,13 @@ async function fixture(t, opts={}) {
     handleSendError:async error=>{errors.push(String(error?.stack??error));},resolveActionApprovalTracked:async(_request,onPrompt)=>{calls.approval++;if(opts.promptApproval)onPrompt();if(opts.onApproval)await opts.onApproval(f);return true;},reportOpsTurn:async()=>{},
   };
   for(const [key,value]of Object.entries(fields))Object.defineProperty(h,key,{value,writable:true,configurable:true});
-  const source={postMessage:async message=>{posts.push(structuredClone(message));if(message.type==='companionDraftCapture'){
+  const source={postMessage:async message=>{posts.push(structuredClone(message));
+    // Actual ChatPanel includes streaming in companionBlocked and its draft generation.
+    // Keep the real response contract instead of treating a newly running stream as idle.
+    if(opts.realStreamReadiness && message.type==='streamStart'){uiStreaming=true;generation++;}
+    if(message.type==='companionDraftCapture'){
     if(opts.onCapture)await opts.onCapture(f,message);
-    await h.handleMessage({type:'saveActivityDraft',activityId:activity.id,taskId:store.getView().activeTaskId,nonce:message.nonce,draft:ui,uiGeneration:generation},source);
+    await h.handleMessage({type:'saveActivityDraft',activityId:activity.id,taskId:store.getView().activeTaskId,nonce:message.nonce,draft:ui,uiGeneration:generation,imagePreparationFailed:!!opts.uiBlocked || !!(opts.realStreamReadiness&&uiStreaming)},source);
   }return true;}};
   h.editorChat={webview:source,reveal(){}};
   const view=store.getView(),request={schema:'hps-companion-authoring-intent/1',requestId:'phone-request',pairingId:'pair',text:'  Revise only this HTML.\n  ',selection:{schema:'hps-companion-host-request/1',requestId:'selected-preview',actorId:'actor',deviceId:'device',hostId:'host',workspaceId:'workspace',projectId:'project',taskId:view.activeTaskId,version:view.revision,epoch:1,consentRevision:1,artifactId:hash('hps-companion-artifact/1:'+file),artifactVersion:hash(original),operation:'preview.read'}};
@@ -216,4 +220,30 @@ test('actual provider approval status cannot clear a replacement owner after a p
   assert.deepEqual(oldStatus,[true]);assert.deepEqual(newStatus,[],'late old prompt must not clear the new owner status');
   assert.equal(await readFile(stale.file,'utf8'),stale.original);
   assert.equal(stale.calls.sdk,1);assert.equal(stale.deniedWrite,true);
+});
+
+test('prepared turn completes final draft review before its own UI streamStart changes real composer readiness',async t=>{
+  const f=await fixture(t,{realStreamReadiness:true});const result=await f.submit();
+  assert.equal(result.state,'completed',f.errors.join('\n'));assert.equal(f.calls.sdk,1);
+  const start=f.posts.findIndex(p=>p.type==='streamStart'),capture=f.posts.map((p,i)=>p.type==='companionDraftCapture'?i:-1).filter(i=>i>=0);
+  assert(start>=0 && capture.length>=3 && capture.every(i=>i<start),'all required UI reviews finish before prepared stream announcement');
+  assert.equal((await f.held()).authoringExecution.state,'bound');assert.equal(f.ui.text,'');
+});
+test('real composer image-preparation block still denies a prepared turn before any local reservation or SDK',async t=>{
+  const f=await fixture(t,{realStreamReadiness:true,uiBlocked:true});const result=await f.submit();
+  assert.equal(result.state,'denied');assert.equal(f.calls.sdk,0);assert.equal(await f.held(),null);assert.equal(f.posts.some(p=>p.type==='streamStart'),false);assert.equal(f.h.pendingSends,0);assert.equal(f.h.activeStreams.size,0);
+});
+
+
+test('prepared failure after internal stream setup but before announcement releases busy state and keeps draft/history',async t=>{
+  const f=await fixture(t,{realStreamReadiness:true});f.h.beginTurnRestore=async()=>null;
+  const before=JSON.stringify(f.history),result=await f.submit();assert.equal(result.state,'outcome_unknown');assert.equal(f.calls.sdk,0);
+  assert.equal(f.posts.some(p=>p.type==='streamStart'||p.type==='inputRejected'||p.type==='companionDraftApply'),false);
+  assert.equal(f.h.pendingSends,0);assert.equal(f.h.activeStreams.size,0);assert.equal(f.h.turnTimelines.size,0);
+  assert.equal(f.ui.text,'');assert.equal(JSON.stringify(f.history),before);assert.equal((await f.held()).authoringExecution.state,'prepared');
+});
+test('ordinary Send still announces its stream before restore setup and cleans up a later refusal',async t=>{
+  const f=await fixture(t);f.h.isLearningWikiEnabled=()=>false;f.h.pullQuestResultFromPreview=async()=>null;f.h.takeProjectSwitchBrief=()=>null;f.h.dropPageAttachment=()=>{};f.h.elementQueue.take=()=>null;f.h.verifySession.takeCoachContext=()=>undefined;f.h.recordLearnerUploads=()=>{};
+  let reached=false;f.h.beginTurnRestore=async()=>{reached=true;assert.equal(f.posts.filter(p=>p.type==='streamStart').length,1);throw Error('ordinary restore boundary');};
+  await assert.rejects(f.h.handleSend('ordinary request',[]),/ordinary restore boundary/);assert.equal(reached,true);assert.equal(f.h.pendingSends,0);assert.equal(f.h.activeStreams.size,0);
 });

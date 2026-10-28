@@ -1,35 +1,50 @@
 {
-  "requirement": "REQ-STUDIO-LOGICAL-CSS (CGP-DS-R-026)",
-  "note": "Physical inline-axis declarations that shipped before the rule. Counts per file of each property: value. New ones fail; removed ones must be dropped with node scripts/logical-css-lint.mjs --update.",
+  "requirement": "REQ-STUDIO-LOGICAL-CSS (CGP-DS-R-026, CGP-DS-D-023)",
+  "note": "Physical inline-axis declarations that shipped before the rule: margin/padding-left/right and left/right (CGP-DS-R-026, 102), text-align: left/right and asymmetric four-value margin/padding/inset (CGP-DS-D-023, 67). Counts per file of each property: value. New ones fail; removed ones must be dropped with node scripts/logical-css-lint.mjs --update.",
   "files": {
     "chalk/src/ui/authoring.html": {
       "margin-left: auto!important": 1,
       "margin-right: auto!important": 1,
+      "margin: var(--ds-c-chalk-authoring-space-16) var(--ds-c-chalk-authoring-space-13) var(--ds-c-chalk-authoring-space-16) 0": 1,
       "padding-left: var(--ds-c-chalk-authoring-space-19)": 1,
       "padding-left: var(--ds-c-chalk-authoring-space-34)": 1,
       "padding-right: var(--ds-c-chalk-authoring-space-2)": 2,
+      "padding: 0 var(--ds-c-chalk-authoring-space-15) 0 var(--ds-c-chalk-authoring-space-2)": 1,
       "right: 0": 1
+    },
+    "chalk/src/ui/board.html": {
+      "text-align: left": 2,
+      "text-align: right": 2
     },
     "chalk/src/ui/budgets.html": {
       "margin-left: auto!important": 1,
       "margin-right: auto!important": 1,
       "padding-left: var(--ds-c-chalk-budgets-space-34)": 1,
       "padding-right: var(--ds-c-chalk-budgets-space-2)": 2,
+      "padding: 0 var(--ds-c-chalk-budgets-space-15) 0 var(--ds-c-chalk-budgets-space-2)": 1,
       "right: 0": 1
     },
     "chalk/src/ui/console.html": {
       "margin-left: auto!important": 1,
       "margin-right: auto!important": 1,
       "padding-right: var(--ds-c-chalk-console-space-2)": 2,
-      "right: 0": 1
+      "padding: 0 var(--ds-c-chalk-console-space-15) 0 var(--ds-c-chalk-console-space-2)": 1,
+      "right: 0": 1,
+      "text-align: left": 2
     },
     "chalk/src/ui/issuer.html": {
       "margin-left: auto!important": 1,
       "margin-right: auto!important": 1,
       "padding-right: var(--ds-c-chalk-issuer-space-2)": 2,
+      "padding: 0 var(--ds-c-chalk-issuer-space-15) 0 var(--ds-c-chalk-issuer-space-2)": 1,
       "right: 0": 1
     },
+    "chalk/src/ui/learn.html": {
+      "margin: var(--ds-c-chalk-learn-space-1) var(--ds-c-chalk-learn-space-2) var(--ds-c-chalk-learn-space-1) 0": 1
+    },
     "chalk/src/ui/manage.html": {
+      "inset: 0 0 0 auto": 1,
+      "inset: 0 auto 0 0": 1,
       "left: 0": 2,
       "left: var(--ds-c-chalk-manage-size-78)": 1,
       "margin-left: 0": 1,
@@ -44,11 +59,21 @@
       "margin-right: var(--ds-c-chalk-manage-space-14)": 2,
       "margin-right: var(--ds-c-chalk-manage-space-2)": 6,
       "margin-right: var(--ds-c-chalk-manage-space-7)": 1,
+      "margin: 0 var(--ds-c-chalk-manage-space-15) var(--ds-c-chalk-manage-space-15) 0": 1,
+      "margin: 0 var(--ds-c-chalk-manage-space-2) 0 0": 1,
+      "margin: var(--ds-c-chalk-manage-space-14) var(--ds-c-chalk-manage-space-13) var(--ds-c-chalk-manage-space-14) 0": 1,
       "padding-left: var(--ds-c-chalk-manage-space-1)": 1,
       "padding-left: var(--ds-c-chalk-manage-space-20)": 1,
-      "padding-right: var(--ds-c-chalk-manage-space-20)": 1
+      "padding-right: var(--ds-c-chalk-manage-space-20)": 1,
+      "padding: 0 0 0 var(--ds-c-chalk-manage-space-7)": 1,
+      "padding: var(--ds-c-chalk-manage-space-12) var(--ds-c-chalk-manage-space-1) var(--ds-c-chalk-manage-space-12) var(--ds-c-chalk-manage-space-27)": 1,
+      "text-align: left": 3,
+      "text-align: right": 1
     },
     "chalk/src/ui/sharing.html": {
+      "margin: 0 var(--ds-c-chalk-sharing-space-7) 0 0": 1,
+      "margin: var(--ds-c-chalk-sharing-space-16) var(--ds-c-chalk-sharing-space-7) var(--ds-c-chalk-sharing-space-16) 0": 1,
+      "margin: var(--ds-c-chalk-sharing-space-7) var(--ds-c-chalk-sharing-space-18) var(--ds-c-chalk-sharing-space-13) 0": 1,
       "padding-left: var(--ds-c-chalk-sharing-space-5)": 1
     },
     "chalk/src/ui/start.html": {
@@ -63,10 +88,18 @@
       "margin-left: var(--ds-c-studio-chatdetails-space-13)": 1,
       "margin-left: var(--ds-c-studio-chatdetails-space-17)": 1,
       "margin-left: var(--ds-c-studio-chatdetails-space-23)": 2,
-      "margin-right: auto": 1
+      "margin-right: auto": 1,
+      "padding: 0 var(--ds-c-studio-chatdetails-space-14) var(--ds-c-studio-chatdetails-space-14) var(--ds-c-studio-chatdetails-space-1)": 1,
+      "text-align: left": 3
+    },
+    "extensions/hypeproof-chat/webview-ui/src/citationPreview.css": {
+      "text-align: left": 2
     },
     "extensions/hypeproof-chat/webview-ui/src/codeBlock.css": {
       "margin-left: var(--ds-c-studio-codeblock-space-13)": 1
+    },
+    "extensions/hypeproof-chat/webview-ui/src/goalStatusBar.css": {
+      "text-align: left": 1
     },
     "extensions/hypeproof-chat/webview-ui/src/keyboardNavigation.css": {
       "left: 0": 1,
@@ -74,11 +107,18 @@
       "left: var(--tw-rail-width)": 1,
       "right: calc(var(--tw-source-width) - var(--hp-control-min))": 1
     },
+    "extensions/hypeproof-chat/webview-ui/src/localReview.css": {
+      "margin: var(--ds-c-studio-localreview-space-15) var(--ds-c-studio-localreview-space-2) var(--ds-c-studio-localreview-space-15) 0": 1
+    },
     "extensions/hypeproof-chat/webview-ui/src/start.css": {
       "margin-left: auto": 2,
       "margin-left: var(--ds-c-studio-start-space-2)": 1,
+      "margin: 0 0 0 var(--ds-c-studio-start-space-42)": 1,
+      "margin: var(--ds-c-studio-start-space-13) 0 0 var(--ds-c-studio-start-space-42)": 1,
       "padding-left: var(--ds-c-studio-start-space-1)": 1,
-      "padding-right: var(--ds-c-studio-start-space-1)": 1
+      "padding-right: var(--ds-c-studio-start-space-1)": 1,
+      "text-align: left": 5,
+      "text-align: right": 2
     },
     "extensions/hypeproof-chat/webview-ui/src/styles.css": {
       "margin-left: 0": 1,
@@ -86,6 +126,7 @@
       "margin-left: var(--ds-c-studio-styles-space-13)": 3,
       "margin-right: var(--ds-c-studio-styles-space-15)": 1,
       "margin-right: var(--ds-c-studio-styles-space-16)": 1,
+      "margin: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-2) 0 0": 1,
       "padding-left: 0": 2,
       "padding-left: var(--ds-c-studio-styles-space-13)": 1,
       "padding-left: var(--ds-c-studio-styles-space-18)": 2,
@@ -94,19 +135,26 @@
       "padding-left: var(--ds-c-studio-styles-space-43)": 1,
       "padding-left: var(--ds-c-studio-styles-space-45)": 1,
       "padding-left: var(--ds-c-studio-styles-space-5)": 2,
-      "right: 0": 2
+      "padding: 0 0 0 var(--ds-c-studio-styles-space-1)": 1,
+      "padding: 0 0 0 var(--ds-c-studio-styles-space-18)": 1,
+      "padding: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-7) var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-34)": 1,
+      "right: 0": 2,
+      "text-align: left": 8
     },
     "extensions/hypeproof-chat/webview-ui/src/taskAppearance.css": {
       "margin-right: var(--ds-c-studio-taskworkspace-space-12)": 1
     },
     "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css": {
+      "inset: 0 auto 0 0": 1,
       "left: 0": 1,
       "left: var(--ds-c-studio-taskworkspace-size-27)": 1,
       "left: var(--ds-c-studio-taskworkspace-size-75)": 1,
       "margin-left: 0": 1,
       "margin-left: var(--ds-c-studio-taskworkspace-space-7)": 1,
       "margin-right: var(--ds-c-studio-taskworkspace-space-12)": 1,
-      "right: 0": 2
+      "padding: var(--hp-space-2) var(--hp-space-2) var(--hp-space-2) var(--hp-space-4)": 1,
+      "right: 0": 2,
+      "text-align: left": 10
     }
   }
 }

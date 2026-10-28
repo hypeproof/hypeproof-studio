@@ -16093,6 +16093,51 @@
           "path": "apps/companion-android/app/src/debug/java/ai/hypeproof/companion/DeviceSignInFixtureActivity.java"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-LEARNING-BLOCK-ATTACH",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-INT-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Learning block attached by the confirmed lesson (CGP-LEARN-R-001)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LEARNING-BLOCK-ATTACH",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-BLOCK-ATTACH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/lessonFocus.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LessonStepPanel.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LEARNING-BLOCK-ATTACH",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-BLOCK-ATTACH",
+        "ST-IMP-LEARNING-BLOCK-ATTACH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/learning-block-attach.test.tsx"
+        }
+      ]
     }
   ]
 }

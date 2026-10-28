@@ -311,6 +311,20 @@ test('decide: create only on schedule with an app change and no live class; ever
   assert.equal(decide({event: 'schedule', appFiles: app, live: 'blocked'}).run, false);
   assert.equal(decide({event: 'schedule', appFiles: app, live: ''}).run, false);           // freeze check failed: fail closed
   assert.equal(decide({event: 'schedule', appFiles: app, live: 'override'}).run, false);   // no override on a schedule
+  // A broken live check is not a quiet skip (2026-10-25..28: HTTP 401 skipped three days with a green run).
+  const failed = decide({event: 'schedule', appFiles: app, live: 'blocked', liveReason: 'query_failed'});
+  assert.equal(failed.run, false); assert.equal(failed.alarm, true); assert.match(failed.reason, /check failed.*query_failed/);
+  assert.equal(decide({event: 'schedule', appFiles: app, live: 'blocked', liveReason: 'bad_payload'}).alarm, true);
+  assert.equal(decide({event: 'schedule', appFiles: app, live: ''}).alarm, true);            // no decision written at all
+  // A class that really is live stays a quiet skip, until app changes have waited too long for an rc tag.
+  assert.equal(decide({event: 'schedule', appFiles: app, live: 'blocked', liveReason: 'live_session', rcAgeHours: 20}).alarm, undefined);
+  assert.equal(decide({event: 'schedule', appFiles: app, live: 'blocked', liveReason: 'undecidable_session'}).alarm, undefined);
+  const stale = decide({event: 'schedule', appFiles: app, live: 'blocked', liveReason: 'live_session', rcAgeHours: 73});
+  assert.equal(stale.alarm, true); assert.match(stale.reason, /last rc tag is 73 h old/);
+  // Expected skips and runs carry no alarm.
+  assert.equal(decide({event: 'schedule', appFiles: [], live: 'blocked', liveReason: 'query_failed'}).alarm, undefined);
+  assert.equal(decide({event: 'schedule', appFiles: app, live: 'proceed', dailySwitch: 'off'}).alarm, undefined);
+  assert.equal(decide({event: 'schedule', appFiles: app, live: 'proceed', rcAgeHours: 99}).alarm, undefined);
   assert.equal(decide({event: 'schedule', appFiles: app, live: 'proceed', dailySwitch: 'off'}).run, false);
   assert.equal(decide({event: 'schedule', appFiles: app, live: 'proceed', dailySwitch: 'yes'}).run, false);
   // manual dispatch keeps its input; absent input is a dry run

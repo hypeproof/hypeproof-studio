@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { HELP_MODE_LABELS, REHEARSAL_REASON_WORDS, helpChoices, surfaceOf, type HelpMode, type RenderedStep, type StepWork } from "../../src/lessonFocus";
+import { HELP_MODE_LABELS, REHEARSAL_REASON_WORDS, helpChoices, stepMaterial, surfaceOf, type HelpMode, type RenderedStep, type StepWork } from "../../src/lessonFocus";
 import type { ResolvedProfile, WebviewMessage } from "../../src/protocol";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
@@ -35,6 +35,10 @@ export function LessonStepPanel(props: {
 }) {
   const { lesson, step, post } = props;
   const choices = helpChoices(step), surface = surfaceOf(step);
+  // CGP-LEARN-R-001 — the block this step of the confirmed lesson attaches (its `ui`), named on the element that draws it.
+  // Nothing else in the screen carries `data-hps-material`: a coach reply is text and can never attach one.
+  const material = stepMaterial(lesson, step.id);
+  const materialAttrs = material ? { "data-hps-material": material.kind, "data-hps-material-step": material.stepId, "data-hps-material-version": material.version } : {};
   const [picked, setPicked] = useState<Record<string, HelpMode>>({});
   const key = lesson.sha256 + ":" + step.id;
   const chosen = picked[key] ?? null;
@@ -89,7 +93,7 @@ export function LessonStepPanel(props: {
         </fieldset>
       )}
       {surface === "criterion_form" ? (
-        <form data-surface="criterion_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "criterion", text }); }}>
+        <form {...materialAttrs} data-surface="criterion_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "criterion", text }); }}>
           <label>이 단계의 확인 기준 — 무엇이 되면 잘 된 것인지 한 줄로 적으세요
             <textarea value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} rows={2} />
           </label>
@@ -97,7 +101,7 @@ export function LessonStepPanel(props: {
           {saved && <p className="hp-rail-lesson-note" data-saved-work="criterion">저장한 기준: {saved.text} · 다음 질문에 함께 보냅니다</p>}
         </form>
       ) : surface === "decision_form" ? (
-        <form data-surface="decision_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "decision", text, reason }); }}>
+        <form {...materialAttrs} data-surface="decision_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "decision", text, reason }); }}>
           <label>무엇을 바꾸기로 했나요
             <input value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} />
           </label>
@@ -108,7 +112,7 @@ export function LessonStepPanel(props: {
           {saved && <p className="hp-rail-lesson-note" data-saved-work="decision">저장한 결정: {saved.text} · 이유: {saved.reason} · 다음 질문에 함께 보냅니다</p>}
         </form>
       ) : surface.startsWith("unsupported:") ? (
-        <p className="hp-rail-lesson-note" data-surface={surface}>이 단계의 작업 화면({surface.slice(12)})은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요.</p>
+        <p {...materialAttrs} className="hp-rail-lesson-note" data-surface={surface}>이 단계의 작업 화면({surface.slice(12)})은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요.</p>
       ) : (
         <span hidden data-surface="chat" />
       )}

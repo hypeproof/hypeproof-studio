@@ -537,7 +537,9 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
  * sheet does not apply). Each row is one 48px line: the row's name, then one control. */
 .studio-start .hps-preferences.studio-settings.hp-modal {
   position:fixed;
-  inset:0 0 0 auto;
+  inset-block:0;
+  inset-inline-start:auto;
+  inset-inline-end:0;
   margin:0;
   /* 100% of the fixed containing block, not 100vw: 100vw includes a classic scrollbar and pushed the sheet off the left edge on Linux. */
   width:min(100%, calc(var(--hp-space-4) * 25));

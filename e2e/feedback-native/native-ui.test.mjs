@@ -253,11 +253,13 @@ test('public skill preview outcome distinguishes actual confirmation, canonical 
 
 test('saved activity selects complete workspace identity, never another folder with matching basename',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777'),pressed=[];
- const view={evaluate:async()=>[{index:0,workspace:'/different/A'},{index:1,workspace:'/owned/A'}]};
+ const row=(index,workspace,label='Saved activity, '+workspace)=>({index,workspace,label});
+ const view={evaluate:async()=>[row(0,'/different/A'),row(1,'/owned/A')]};
  ui.press=async(_view,selector)=>pressed.push(selector);
  await ui.savedActivity(view,'/owned/A');assert.deepEqual(pressed,['.studio-saved-activities button:nth-of-type(2)']);
- await assert.rejects(ui.savedActivity({evaluate:async()=>[{index:0,workspace:'/different/A'}]},'/owned/A',1),/unique saved activity/);
- await assert.rejects(ui.savedActivity({evaluate:async()=>[{index:0,workspace:'/owned/A'},{index:1,workspace:'/owned/A'}]},'/owned/A',1),/unique saved activity/);
+ await assert.rejects(ui.savedActivity({evaluate:async()=>[row(0,'/different/A')]},'/owned/A',1),/unique saved activity/);
+ await assert.rejects(ui.savedActivity({evaluate:async()=>[row(0,'/owned/A'),row(1,'/owned/A')]},'/owned/A',1),/unique saved activity/);
+ await assert.rejects(ui.savedActivity({evaluate:async()=>[row(0,'/owned/A','Saved activity, /different/A')]},'/owned/A',1),/unique saved activity/);
  assert.equal(pressed.length,1,'missing or ambiguous identity cannot click');
 });
 
