@@ -20,7 +20,7 @@ test('SDK environment removes ambient execution claims and accepts only exact tu
   const binding=executionBinding(),env=buildSdkGatewayEnv(base,{proxyUrl:'http://127.0.0.1:1/v1',token:'synthetic',turnId:binding.turnId,companionExecutionBinding:binding});
   const lines=env.ANTHROPIC_CUSTOM_HEADERS.split('\n');assert.equal(lines.filter(x=>x.startsWith('x-hps-companion-execution:')).length,1);
   assert(lines.includes('x-hps-turn-id: companion-turn'));assert.equal(JSON.parse(lines.find(x=>x.startsWith('x-hps-companion-execution:')).slice('x-hps-companion-execution: '.length)).request_id,'phone-intent');
-  for(const changed of [{...binding,turnId:'other'},{...binding,task_id:'task\r\nAuthorization: x'},{...binding,extra:'grant'},{...binding,grant_id:'preview-only'},{...binding,epoch:0}])
+  for(const changed of [{...binding,turnId:'other'},{...binding,task_id:'task\r\nAuthorization: x'},{...binding,extra:'grant'},{...binding,grant_id:'preview-only'},{...binding,epoch:-1}])
     assert.throws(()=>buildSdkGatewayEnv({}, {proxyUrl:'http://127.0.0.1:1/v1',token:'synthetic',turnId:binding.turnId,companionExecutionBinding:changed}));
 });
 

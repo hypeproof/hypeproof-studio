@@ -52,6 +52,7 @@ async function fixture(t, opts={}) {
           if(opts.onQuery)await opts.onQuery(f);
           if(opts.write!==false){
             const input={file_path:file,content:'<h1>after</h1>'}, decision=await options.canUseTool('Write',input,{toolUseID:'write',signal:args.signal});
+            if(opts.denyWrite){assert.equal(decision.behavior,'deny');f.deniedWrite=true;return;}
             assert.equal(decision.behavior,'allow');await writeFile(decision.updatedInput.file_path,decision.updatedInput.content);
             yield{type:'assistant',message:{id:'tool-assistant',content:[{type:'tool_use',id:'write',name:'Write',input}]}};
             yield{type:'user',message:{content:[{type:'tool_result',tool_use_id:'write',content:'written'}]}};
@@ -78,7 +79,7 @@ async function fixture(t, opts={}) {
     prepareObservation:async()=>null,crBlobSinkFor:()=>null,recordLearnerUploads:forbidden('upload'),resolveCoachCwd:()=>workspace,
     funnel:{emit(){}},saveAgentMdIfPresent:forbidden('agent.md'),revealBuilt:async html=>{calls.reveal++;await writeFile(join(workspace,'index.html'),html);return true;},revealPrebuiltWorld:forbidden('prebuilt'),revealWrittenHtml:forbidden('preview timer'),
     buildBrowserMcpHost:()=>undefined,postAccuracyEducation:async()=>{},provenanceRecorder:()=>undefined,postArtifactProvenance:async()=>{},postTurnReview(){},postCheckpoint(){},
-    handleSendError:async error=>{errors.push(String(error?.stack??error));},resolveActionApprovalTracked:async()=>{calls.approval++;return true;},reportOpsTurn:async()=>{},
+    handleSendError:async error=>{errors.push(String(error?.stack??error));},resolveActionApprovalTracked:async()=>{calls.approval++;if(opts.onApproval)await opts.onApproval(f);return true;},reportOpsTurn:async()=>{},
   };
   for(const [key,value]of Object.entries(fields))Object.defineProperty(h,key,{value,writable:true,configurable:true});
   const source={postMessage:async message=>{posts.push(structuredClone(message));if(message.type==='companionDraftCapture'){
@@ -92,7 +93,7 @@ async function fixture(t, opts={}) {
     executionBinding:{turnId:reservation.turnId,grant_id:reservation.grantId,request_id:request.requestId,request_hash:reservation.requestHash,
       task_id:request.selection.taskId,epoch:1,consent_revision:1,selection_hash:hash(original)},
     executionPolicy:createCompanionExecutionPolicy({workspaceRoot:workspace,artifactPath:file,expiresAt:Date.now()+60000,isCurrent:()=>live}),
-    verifyReservation:async()=>{if(opts.verify)await opts.verify(f);return {...reservation};}};
+    verifyReservation:async()=>{if(opts.verify)await opts.verify(f);return {...reservation,...f.authorityPatch};}};
   f={errors,h,store,context,connections,vscode,workspace,base,file,original,request,input,calls,posts,history,source,profile,signal,
     held:()=>{const v=store.getView();return store.readCompanionHandoff({taskId:v.activeTaskId,revision:v.revision});},
     revoke:()=>{live=false;},type:text=>{ui={...ui,text};generation++;},get ui(){return ui;},get generation(){return generation;},
@@ -189,4 +190,16 @@ test('queued native Send keeps synchronous admission and cannot be overtaken by 
 test('caller abort during SDK turn stays unknown and never replays',async t=>{
   const f=await fixture(t,{write:false,onQuery:async f=>f.signal.abort()});
   assert.equal((await f.submit()).state,'outcome_unknown');assert.equal(f.calls.sdk,1);assert.equal((await f.submit()).state,'denied');assert.equal(f.calls.sdk,1);assert.equal(await readFile(f.file,'utf8'),f.original);
+});
+
+test('actual provider revalidates all reservation fields before SDK writes and after approval',async t=>{
+  for(const field of ['grantId','turnId','requestHash','authorityDigest']){
+    const f=await fixture(t,{denyWrite:true,onQuery:async f=>{f.authorityPatch={[field]:'changed'};}});
+    assert.notEqual((await f.submit()).state,'completed',field);assert.equal(f.deniedWrite,true,field);
+    assert.equal(f.calls.approval,0);assert.equal(await readFile(f.file,'utf8'),f.original);
+    await f.submit();assert.equal(f.calls.sdk,1,'changed reservation cannot replay');
+  }
+  const f=await fixture(t,{denyWrite:true,onApproval:async f=>{f.authorityPatch={authorityDigest:'changed-after-approval'};}});
+  assert.notEqual((await f.submit()).state,'completed');assert.equal(f.deniedWrite,true);
+  assert.equal(f.calls.approval,1);assert.equal(await readFile(f.file,'utf8'),f.original);
 });
