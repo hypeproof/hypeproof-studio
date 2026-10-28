@@ -38,5 +38,11 @@ for path, (fixture, before, after) in changes.items():
   new = new.replace("if (process.platform === 'win32' || process.platform === 'linux') {\n\tconst electronLocale", "if (true) { // Include macOS native role labels.\n\tconst electronLocale")
   # Avoid TS narrowing errors now that userLocale is a literal.
   new = new.replace("(!userLocale || userLocale === 'qps-ploc') ? 'en' : userLocale", "userLocale")
+  # Its only caller is replaced above; an unused function fails the build (noUnusedLocals): every
+  # macOS rc build from 2026-10-24 to 10-28 stopped on it.
+  unused = "function getUserDefinedLocale(argvConfig: IArgvConfig): string | undefined {\n\tconst locale = args['locale'];\n\tif (locale) {\n\t\treturn locale.toLowerCase(); // a directly provided --locale always wins\n\t}\n\n\treturn typeof argvConfig?.locale === 'string' ? argvConfig.locale.toLowerCase() : undefined;\n}\n\n"
+  assert new.count(unused) == 1, 'upstream getUserDefinedLocale changed'
+  new = new.replace(unused, '')
+  assert 'getUserDefinedLocale' not in new
  patch += ''.join(difflib.unified_diff(old.splitlines(True),new.splitlines(True),fromfile='a/'+path,tofile='b/'+path))
 (HERE.parent/'hps-korean-shell.patch').write_text(patch)
