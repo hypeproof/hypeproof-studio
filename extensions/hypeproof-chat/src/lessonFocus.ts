@@ -53,6 +53,73 @@ export function stepMaterial(lesson: Lesson | null | undefined, stepId: string):
   return { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256 };
 }
 
+/** What a block's state sentence is computed from: the fields as the learner has them now, and the last save, if any. */
+export interface MaterialInput { text: string; reason: string; saved?: { text: string; reason?: string } }
+export interface MaterialState { key: string; sentence: string }
+export interface MaterialText { title: string; controlsHelp: string; state: (input: MaterialInput) => MaterialState }
+
+const UNDRAWN = (title: string): MaterialText => ({
+  title,
+  controlsHelp: "이 자료에는 누를 곳이나 적을 칸이 없어요. 대화로 진행하고 강사에게 알려 주세요.",
+  state: () => ({ key: "unavailable", sentence: "이 Studio에서는 아직 열 수 없는 자료예요. 바뀌는 내용이 없어요." }),
+});
+
+/**
+ * CGP-LEARN-R-003 (REQ-STUDIO-LEARNING-BLOCK-TEXT) — the live text equivalent of every block kind: a title, one sentence on
+ * how to work its controls, and a state sentence computed from what the learner has in the fields now. The sentence names the
+ * state (empty, written, saved, changed after saving), not every keystroke: a polite region that re-read the text on each key
+ * would talk over the screen reader's own typing echo. Words only; no score, grade or right/wrong (REQ-CGP-LEARN-02).
+ */
+export const MATERIAL_TEXT: Record<MaterialKind, MaterialText> = {
+  criterion_form: {
+    title: "확인 기준 적기",
+    controlsHelp: "아래 칸에 무엇이 되면 잘 된 것인지 한 줄로 적고 '기준 저장'을 누르세요. 저장한 기준은 다음 질문에 함께 보내요.",
+    state: ({ text, saved }) => {
+      const t = text.trim();
+      if (saved && t === saved.text) return { key: "saved", sentence: "기준을 저장했어요. 다음 질문에 함께 보내요." };
+      if (saved) return t
+        ? { key: "edited", sentence: "저장한 기준과 다르게 고쳤어요. 아직 저장하지 않았어요." }
+        : { key: "cleared", sentence: "칸을 비웠어요. 전에 저장한 기준은 그대로 있어요." };
+      return t
+        ? { key: "written", sentence: "기준을 적었어요. 아직 저장하지 않았어요." }
+        : { key: "empty", sentence: "아직 기준을 적지 않았어요." };
+    },
+  },
+  decision_form: {
+    title: "결정과 이유 적기",
+    controlsHelp: "첫 칸에 무엇을 바꾸기로 했는지, 둘째 칸에 그 이유를 적고 '결정 저장'을 누르세요. 두 칸을 모두 적어야 저장할 수 있어요.",
+    state: ({ text, reason, saved }) => {
+      const t = text.trim(), r = reason.trim();
+      if (saved && t === saved.text && r === (saved.reason ?? "")) return { key: "saved", sentence: "결정과 이유를 저장했어요. 다음 질문에 함께 보내요." };
+      const tail = saved ? " 전에 저장한 결정은 그대로 있어요." : "";
+      if (t && r) return { key: saved ? "edited" : "written", sentence: (saved ? "저장한 결정과 다르게 고쳤어요." : "결정과 이유를 모두 적었어요.") + " 아직 저장하지 않았어요." };
+      if (t) return { key: "need-reason", sentence: "결정을 적었어요. 이유를 적으면 저장할 수 있어요." + tail };
+      if (r) return { key: "need-decision", sentence: "이유를 적었어요. 무엇을 바꾸기로 했는지 적으면 저장할 수 있어요." + tail };
+      return { key: saved ? "cleared" : "empty", sentence: saved ? "두 칸을 비웠어요. 전에 저장한 결정은 그대로 있어요." : "아직 결정과 이유를 적지 않았어요." };
+    },
+  },
+  canvas_editor: UNDRAWN("작업 화면에서 고치기"),
+  canvas_preview: UNDRAWN("작업 화면 미리 보기"),
+  evidence_note: UNDRAWN("근거 메모"),
+  coach_request: UNDRAWN("코치에게 부탁하기"),
+  metric_board: UNDRAWN("수치 살펴보기"),
+};
+
+/** Catalog check: every kind needs a title, a controls help sentence and a state sentence in Korean. Returns the gaps. */
+export function materialTextGaps(catalog: Record<string, MaterialText | undefined> = MATERIAL_TEXT): string[] {
+  const hangul = (s: unknown) => typeof s === "string" && /[가-힣]/.test(s) && s.trim() === s && s.length > 0;
+  const gaps: string[] = [];
+  for (const kind of MATERIAL_KINDS) {
+    const c = catalog[kind];
+    if (!c) { gaps.push(kind + ": missing"); continue; }
+    if (!hangul(c.title)) gaps.push(kind + ": title");
+    if (!hangul(c.controlsHelp)) gaps.push(kind + ": controlsHelp");
+    const s = typeof c.state === "function" ? c.state({ text: "", reason: "" }) : null;
+    if (!s || !hangul(s.sentence) || !s.key) gaps.push(kind + ": stateDescription");
+  }
+  return gaps;
+}
+
 /** Help choices the step offers, in the lesson's order, known modes only. Empty = this step has no help choice. */
 export function helpChoices(step: Step): HelpMode[] {
   return (step.help?.allowed ?? []).filter(isMode);

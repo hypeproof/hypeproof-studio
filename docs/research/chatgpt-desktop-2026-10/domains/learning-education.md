@@ -241,6 +241,8 @@ ChatGPT's.
 | REQ-CGP-LEARN-16 | The Studio header shows one coach run state from a fixed set: 준비됨 / 생각 중 / 찾는 중 / 만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요. | (a) Exactly one state visible at a time, derived from the existing timeline (REQ-C17) and approval state (REQ-E1). (b) "확인이 필요해요" appears whenever an approval is pending. (c) No character or animation is required to convey state. | P2 | 2 |
 | REQ-CGP-LEARN-17 | Chalk help-request queue supports keyboard triage: next, previous, open, resolve-and-advance. | (a) J/K (or ↓/↑) moves selection; Enter opens; a documented key resolves and advances. (b) "?" shows the shortcut list. (c) Shortcuts never fire inside text inputs (Korean IME composition safe). | P2 | 1 (one-instructor intent, ADM-05, DES-06) |
 
+REQ-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-R-003): implemented in Studio's lesson step panel. Every block kind has a Korean title, controls help and state sentence in the block catalog (`MATERIAL_TEXT`, checked by `materialTextGaps()`); the state sentence sits in a visible polite live region that changes within 500 ms of each state change. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-TEXT. Tests: `learning-block-text.smoke.mjs`, `learning-block-text-browser.smoke.mjs`. (c) VoiceOver run is NOT RUN (manual). Owner choices in `decisions.md`.
+
 REQ-CGP-LEARN-15 status (2026-10-26, CGP-LEARN-R-015): implemented in Chalk `/authoring` as the completion-condition helper. Requirement: `docs/requirements/chalk-authoring.md` "완료 조건 도우미". Test: T-49. Owner choices are in `decisions.md`: bare 점 is allowed, the check runs on the page and in the Chalk forwarder, and there is no Service text check.
 
 ## 3. Design requirements (same rows)
