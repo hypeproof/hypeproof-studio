@@ -15,9 +15,9 @@ ciphertext. Framing is not encryption or authorization. The receiver withholds
 partial output and verifies the complete selected artifact/version/digest.
 
 The UI uses existing Studio tokens, presents waiting/reconnecting/denied/results,
-and renders through an injected sandbox. A subscribed controller now owns one
-request and bounded receipt reconciliation, not account authentication or host
-execution. Neither component registers a production entry point.
+and renders through an injected caller-owned sandbox. The owned request
+controller, request budget and checkpoint lifecycle are separate follow-up work
+and are not included in this PR cut. No production entry point is registered.
 
 ## Observed source and integration results
 
@@ -51,9 +51,11 @@ The integration is explicitly a private cross-checkout test: product imports do
 not depend on a private sibling checkout. Its account/native APIs are synthetic;
 its host-approval HTTP route must never be copied into product code.
 
-## Mobile controller interruption correction
+## Related controller evidence outside this PR cut
 
-Independent ordinary lifecycle verification found a genuine eight-part result
+The following historical controller observations concern follow-up source that
+is not included in this PR cut. Independent ordinary lifecycle verification found
+a genuine eight-part result
 lost its unprocessed suffix when the fourth ACK timed out. Controller follow-up
 `dbb378493838b5a1e762f356ae50e41a5bfc5af6` retains the delivered batch and cursor.
 Author regression: seven lifecycle cases and six receiver regressions PASS,

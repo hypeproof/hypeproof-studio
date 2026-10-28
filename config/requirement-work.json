@@ -844,7 +844,7 @@
         "DMC-15"
       ],
       "inline_prefixes": [],
-      "sha256": "c9d3be0bf1057c5d26e76eba33656708661e03c4ce86de887e8551529d1c02f8",
+      "sha256": "adb69ebba23a81a5a750547d61691b85c5ebca6d9657a97bd969ab2f5203b9ee",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
@@ -4242,7 +4242,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Finish framed transfer and mobile lifecycle integration within existing relay rate limits, then wire isolated real host/mobile product entry and durable reconnect/drafts. Native9b and browser fixtures remain partial evidence; keep parent #3072/#2803 open.",
+      "next_action": "Integrate the separately scoped owned mobile controller/checkpoint, then native DEV controls and installed Android. This cut covers DEV host consent, verified framing and controlled presentation only; parent #3072/#2803 stays open.",
       "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
       "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
       "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",
@@ -4261,9 +4261,7 @@
         "extensions/hypeproof-chat/src/companionPreviewPayload.ts",
         "extensions/hypeproof-chat/webview-ui/src/CompanionSessionView.tsx",
         "extensions/hypeproof-chat/webview-ui/src/companionSessionPresentation.ts",
-        "extensions/hypeproof-chat/webview-ui/src/companionSessionView.css",
-        "extensions/hypeproof-chat/webview-ui/src/companionSessionController.ts",
-        "extensions/hypeproof-chat/src/companionTransportBudget.ts"
+        "extensions/hypeproof-chat/webview-ui/src/companionSessionView.css"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
@@ -4285,9 +4283,7 @@
         "extensions/hypeproof-chat/test/companion-preview-result.smoke.mjs",
         "extensions/hypeproof-chat/test/lib/companion-native-bridge-harness.mjs",
         "extensions/hypeproof-chat/test/companion-preview-payload.smoke.mjs",
-        "extensions/hypeproof-chat/test/companion-session-view.test.tsx",
-        "extensions/hypeproof-chat/test/companion-session-controller.smoke.mjs",
-        "extensions/hypeproof-chat/test/companion-transport-budget.smoke.mjs"
+        "extensions/hypeproof-chat/test/companion-session-view.test.tsx"
       ]
     }
   ]

@@ -7726,6 +7726,6 @@ app with a synthetic profile cover this bounded flow; full DMC-1, DMC-T01/DMC-T1
 real account continuity, pairing and release acceptance remain open.
 
 The [bounded transfer and mobile presentation slice](evidence/companion-artifact-transfer-20261028.md)
-adds framed results and one-request UI reconciliation while retaining the
+adds framed results and controlled result presentation while retaining the
 original runtime/relay limits. Its partial source/browser evidence does not
 complete device, restart, classroom or production acceptance.

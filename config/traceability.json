@@ -15722,12 +15722,6 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-session-view.test.tsx"
-        },
-        {
-          "path": "extensions/hypeproof-chat/test/companion-session-controller.smoke.mjs"
-        },
-        {
-          "path": "extensions/hypeproof-chat/test/companion-transport-budget.smoke.mjs"
         }
       ]
     },
@@ -15800,12 +15794,6 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionView.css"
-        },
-        {
-          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionController.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/companionTransportBudget.ts"
         }
       ]
     }
