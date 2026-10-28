@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // CGP-DS-R-026 (REQ-STUDIO-LOGICAL-CSS): new component CSS uses logical properties.
+// CGP-DS-D-023 (DES-CGP-DS-29) widens the list to `text-align: left/right` and to the four-value
+// margin/padding/inset shorthands whose left and right sides differ.
 //
 // Ratchet lint. It finds every physical inline-axis declaration (margin-left/right,
-// padding-left/right, left, right) in the component CSS of the Studio webview and Chalk, and
+// padding-left/right, left, right, text-align: left/right, asymmetric four-value margin,
+// padding and inset) in the component CSS of the Studio webview and Chalk, and
 // compares the result with config/logical-css-baseline.json, which grandfathers the
 // declarations that shipped before the rule. A declaration is identified by its file,
 // property and normalised value, counted per file. The lint fails when:
@@ -26,16 +29,63 @@ export const PHYSICAL_PROPERTIES = Object.freeze([
   'margin-left', 'margin-right', 'padding-left', 'padding-right', 'left', 'right',
 ]);
 const PHYSICAL = new Set(PHYSICAL_PROPERTIES);
+// Shorthands that are physical only for some values (CGP-DS-D-023).
+export const SHORTHAND_PROPERTIES = Object.freeze(['margin', 'padding', 'inset']);
+const SHORTHAND = new Set(SHORTHAND_PROPERTIES);
 const CAMEL = Object.freeze({
   marginLeft: 'margin-left', marginRight: 'margin-right',
   paddingLeft: 'padding-left', paddingRight: 'padding-right',
   left: 'left', right: 'right',
+  textAlign: 'text-align', margin: 'margin', padding: 'padding', inset: 'inset',
 });
 export const LOGICAL_HINT = Object.freeze({
   'margin-left': 'margin-inline-start', 'margin-right': 'margin-inline-end',
   'padding-left': 'padding-inline-start', 'padding-right': 'padding-inline-end',
   left: 'inset-inline-start', right: 'inset-inline-end',
 });
+
+// Top-level whitespace split, so `calc(a + b)` and `var(--x, 0 4px)` stay one component.
+function components(value) {
+  const parts = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of value) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    if (depth === 0 && /\s/.test(ch)) { if (cur) parts.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  if (cur) parts.push(cur);
+  return parts;
+}
+// The value as CSS sees it: TSX values keep their quotes in the key, so strip them here, and drop
+// a trailing !important.
+const bareValue = (value) => value.replace(/^(['"`])(.*)\1$/s, '$2').replace(/\s*!\s*important\s*$/, '').trim();
+
+// Is this declaration a physical inline-axis one?
+export function isPhysical(d) {
+  if (PHYSICAL.has(d.prop)) return true;
+  const v = bareValue(d.value);
+  if (d.prop === 'text-align') return /^(left|right)$/.test(v);
+  if (SHORTHAND.has(d.prop)) {
+    const c = components(v);
+    return c.length === 4 && c[1] !== c[3];
+  }
+  return false;
+}
+
+// The logical replacement to name in a finding.
+export function hintFor(key) {
+  const colon = key.indexOf(':');
+  const prop = key.slice(0, colon);
+  const v = bareValue(key.slice(colon + 1).trim());
+  if (prop === 'text-align') return v === 'right' ? 'text-align: end' : 'text-align: start';
+  if (SHORTHAND.has(prop)) return prop === 'inset'
+    ? 'inset-block plus inset-inline-start/end'
+    : `${prop}-block plus ${prop}-inline-start/end (or ${prop}-inline)`;
+  return LOGICAL_HINT[prop];
+}
+
 // The reason must be words (at least three characters before the comment closes).
 const EXEMPT = /logical-css:\s*physical\s+[\p{L}\p{N}][^*\n]{2,}/u;
 
@@ -135,7 +185,7 @@ export function extractDeclarations(rel, text) {
       const base = m.index + m[0].indexOf(body);
       for (const k of body.matchAll(/(^|[\s,{])(['"]?)([A-Za-z-]+)\2\s*:\s*([^,]*)/g)) {
         const key = k[3];
-        const prop = CAMEL[key] ?? (PHYSICAL.has(key) ? key : null);
+        const prop = CAMEL[key] ?? (PHYSICAL.has(key) || SHORTHAND.has(key) || key === 'text-align' ? key : null);
         if (!prop) continue;
         const at = base + k.index + k[1].length;
         out.push({ prop, value: normValue(k[4]), index: at, line: lineAt(text, at) });
@@ -149,7 +199,7 @@ export function extractDeclarations(rel, text) {
 export function physicalDeclarations(rel, text) {
   const lines = text.split('\n');
   return extractDeclarations(rel, text)
-    .filter((d) => PHYSICAL.has(d.prop))
+    .filter(isPhysical)
     .map((d) => ({ ...d, file: rel, exempt: EXEMPT.test(lines[d.line - 1] ?? '') }));
 }
 
@@ -219,8 +269,7 @@ function main(argv) {
     return 0;
   }
   for (const a of added) {
-    const prop = a.key.split(':')[0];
-    console.error(`logical-css: ${a.file}:${a.lines.join(',')} new physical "${a.key}" (+${a.extra}); use ${LOGICAL_HINT[prop]}`);
+    console.error(`logical-css: ${a.file}:${a.lines.join(',')} new physical "${a.key}" (+${a.extra}); use ${hintFor(a.key)}`);
   }
   for (const s of stale) {
     console.error(`logical-css: ${s.file} baseline lists "${s.key}" ${s.missing} more time(s) than the file has; run node scripts/logical-css-lint.mjs --update`);
