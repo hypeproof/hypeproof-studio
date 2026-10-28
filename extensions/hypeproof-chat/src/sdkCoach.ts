@@ -143,6 +143,8 @@ export interface SdkCoachArgs {
   companionExecutionPolicy?: CompanionExecutionPolicy;
   /** Exact already verified reservation, still checked live by Service on every upstream call. */
   companionExecutionBinding?: Readonly<CompanionExecutionSdkBinding>;
+  /** Recheck the same immutable Service reservation; local policy alone is not live authority. */
+  companionExecutionRevalidate?: () => Promise<void>;
   effort?: import('./protocol').CourseEffort;
   turnId?: string;
   fundingSource?: string;
@@ -542,10 +544,20 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   const companionPolicy = args.companionExecutionPolicy;
   // Freeze before the first await; a later caller mutation cannot retarget a CLI turn.
   const companionBinding = args.companionExecutionBinding === undefined ? undefined : Object.freeze({...args.companionExecutionBinding});
+  const companionRevalidate = args.companionExecutionRevalidate;
   if (companionBinding) {
-    if (!companionPolicy) throw new CompanionExecutionPolicyError('authority');
+    if (!companionPolicy || typeof companionRevalidate !== 'function') throw new CompanionExecutionPolicyError('authority');
     try { companionExecutionHeader(companionBinding,args.turnId); } catch { throw new CompanionExecutionPolicyError('authority'); }
   }
+  const revalidateCompanion = async () => {
+    if (!companionBinding) return;
+    companionPolicy!.assertCurrent(args.cwd);
+    if (args.signal.aborted) throw abortError();
+    try { await companionRevalidate!(); }
+    catch { throw new CompanionExecutionPolicyError('authority'); }
+    companionPolicy!.assertCurrent(args.cwd);
+    if (args.signal.aborted) throw abortError();
+  };
   companionPolicy?.assertCurrent(args.cwd);
   const mode = turnToolMode(args.toolMode);
   requireTurnTools(mode, turnToolsAvailability({ profile: args.profile, runtime: 'agent-sdk' }));
@@ -783,6 +795,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         try {
           if (args.signal.aborted) throw abortError();
           input = companionPolicy.toolInput(name, input, args.cwd) as typeof input;
+          if (companionBinding) {
+            await revalidateCompanion();
+            input = companionPolicy.toolInput(name, input, args.cwd) as typeof input;
+          }
         }
         catch {
           decision(false);
@@ -891,6 +907,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         try {
           if (args.signal.aborted) throw abortError();
           input = companionPolicy.toolInput(name, input, args.cwd) as typeof input;
+          if (companionBinding) {
+            await revalidateCompanion();
+            input = companionPolicy.toolInput(name, input, args.cwd) as typeof input;
+          }
         }
         catch {
           decision(false);
@@ -908,6 +928,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
 
   companionPolicy?.assertCurrent(args.cwd);
   if (companionPolicy && args.signal.aborted) throw abortError();
+  if (companionBinding) await revalidateCompanion();
   const stream = sdk.query({ prompt, options });
   delegationStop = new DelegationStop(id=>stream.stopTask ? stream.stopTask(id) : Promise.reject(new Error("SDK task stop unavailable")),state=>args.onDelegationStop?.(state));
   if(stream.stopTask)args.onDelegationControl?.(()=>delegationStop?.request());

@@ -30,14 +30,14 @@ test('real SDK orchestration snapshots exact companion headers before async setu
     const lines=options.env.ANTHROPIC_CUSTOM_HEADERS.split('\n'),header=lines.find(x=>x.startsWith('x-hps-companion-execution: '));
     assert.equal(JSON.parse(header.slice('x-hps-companion-execution: '.length)).request_id,'phone-intent');
     assert(lines.includes('x-hps-turn-id: companion-turn'));
-  },{turnId:binding.turnId,companionExecutionBinding:binding});
+  },{turnId:binding.turnId,companionExecutionBinding:binding,companionExecutionRevalidate:async()=>{}});
   binding.request_id='changed-after-admission';await running;
 });
 
 test('SDK execution binding cannot omit local selected-file restriction or name another turn',async t=>{
   const f=await fixture(t);let queried=false;
-  for(const extra of [{companionExecutionPolicy:undefined},{turnId:'another-turn'}]){
-    await assert.rejects(turn(f,async()=>{queried=true;},{turnId:'companion-turn',companionExecutionBinding:executionBinding(),...extra}),e=>e.name==='CompanionExecutionPolicyError');
+  for(const extra of [{companionExecutionPolicy:undefined},{turnId:'another-turn'},{companionExecutionRevalidate:undefined}]){
+    await assert.rejects(turn(f,async()=>{queried=true;},{turnId:'companion-turn',companionExecutionBinding:executionBinding(),companionExecutionRevalidate:async()=>{},...extra}),e=>e.name==='CompanionExecutionPolicyError');
   }
   assert.equal(queried,false);
 });
@@ -212,4 +212,95 @@ test('absent policy retains ordinary desktop tools, read scope and approval beha
     assert.equal((await use('Write', { file_path: f.other, content: 'x' })).behavior, 'allow');
   }, { companionExecutionPolicy: undefined });
   assert.equal(result.approvals, 1);
+});
+
+// Synthetic authority callbacks only: these controls make no Service/network claim.
+test('bound SDK start revalidates authority and never queries on remote failure or changed owner', async t => {
+  for (const mode of ['remote', 'owner', 'abort']) {
+    const f = await fixture(t), controller = new AbortController(); let checks = 0, queried = false;
+    await assert.rejects(turn(f, async () => { queried = true; }, {
+      turnId: 'companion-turn', companionExecutionBinding: executionBinding(), signal: controller.signal,
+      companionExecutionRevalidate: async () => {
+        checks++;
+        if (mode === 'remote') throw Error('synthetic Service revoked');
+        if (mode === 'owner') f.revoke();
+        if (mode === 'abort') controller.abort();
+      },
+    }), error => error.name === 'CompanionExecutionPolicyError' || error.name === 'AbortError');
+    assert.equal(checks, 1); assert.equal(queried, false);
+  }
+});
+
+test('remote revocation after model reply blocks every selected tool before local effect or approval', async t => {
+  const f = await fixture(t); let remoteLive = true, checks = 0;
+  const result = await turn(f, async (_options, use) => {
+    remoteLive = false; // A model response already arrived; local owner still reports current.
+    for (const [name, input] of [['Read', {}], ['Write', {content: 'forbidden'}], ['Edit', {old_string: 'original', new_string: 'forbidden'}]]) {
+      assert.equal((await use(name, {file_path: f.artifact, ...input})).behavior, 'deny', name);
+    }
+  }, {turnId: 'companion-turn', companionExecutionBinding: executionBinding(), companionExecutionRevalidate: async () => {
+    checks++; if (!remoteLive) throw Error('synthetic Service revoked');
+  }});
+  assert.equal(checks, 4); assert.equal(result.approvals, 0);
+});
+
+test('remote revocation during asynchronous host approval refuses selected Write and Edit', async t => {
+  for (const [name, input] of [['Write', {content: 'forbidden'}], ['Edit', {old_string: 'original', new_string: 'forbidden'}]]) {
+    const f = await fixture(t); let remoteLive = true, checks = 0, approvals = 0;
+    await turn(f, async (_options, use) => {
+      assert.equal((await use(name, {file_path: f.artifact, ...input})).behavior, 'deny');
+    }, {turnId: 'companion-turn', companionExecutionBinding: executionBinding(),
+      requestApproval: async () => { approvals++; await Promise.resolve(); remoteLive = false; return true; },
+      companionExecutionRevalidate: async () => { checks++; if (!remoteLive) throw Error('synthetic Service revoked'); },
+    });
+    assert.equal(checks, 3); assert.equal(approvals, 1);
+  }
+});
+
+test('successful live checks preserve selected tool approval and run once at every effect boundary', async t => {
+  const f = await fixture(t); let checks = 0;
+  const result = await turn(f, async (_options, use) => {
+    for (const [name, input] of [['Read', {}], ['Write', {content: 'allowed'}], ['Edit', {old_string: 'original', new_string: 'allowed'}]])
+      assert.equal((await use(name, {file_path: f.artifact, ...input})).behavior, 'allow');
+  }, {turnId: 'companion-turn', companionExecutionBinding: executionBinding(), companionExecutionRevalidate: async () => { checks++; }});
+  assert.equal(checks, 6); // start + Read + Write(before/after approval) + Edit(before/after approval)
+  assert.equal(result.approvals, 2);
+});
+
+test('local owner, abort and selected path are checked again after asynchronous tool revalidation', async t => {
+  for (const mode of ['owner', 'abort', 'path']) {
+    const f = await fixture(t), controller = new AbortController(); let checks = 0;
+    const running = turn(f, async (_options, use) => {
+      assert.equal((await use('Read', {file_path: f.artifact})).behavior, 'deny', mode);
+    }, {turnId: 'companion-turn', companionExecutionBinding: executionBinding(), signal: controller.signal,
+      companionExecutionRevalidate: async () => {
+        if (++checks !== 2) return;
+        await Promise.resolve();
+        if (mode === 'owner') f.revoke();
+        if (mode === 'abort') controller.abort();
+        if (mode === 'path') { await rm(f.artifact); await symlink(f.other, f.artifact); }
+      },
+    });
+    if (mode === 'abort') await assert.rejects(running, error => error.name === 'AbortError');
+    else await running;
+    assert.equal(checks, 2);
+  }
+});
+
+test('callback is captured before await and ordinary or policy-only SDK does not invoke it', async t => {
+  const f = await fixture(t); let checks = 0, replacement = 0;
+  const controller = new AbortController();
+  const args = {turnId: 'companion-turn', companionExecutionBinding: executionBinding(), companionExecutionRevalidate: async () => { checks++; },
+    sdk: {query: ({options}) => (async function* () {
+      assert.equal((await options.canUseTool('Read', {file_path:f.artifact}, {toolUseID:'read',signal:controller.signal})).behavior,'allow');
+      yield {type:'result',subtype:'success',is_error:false};
+    })()}, binaryResolution:{available:true,reasons:[]},gatewayUrl:'http://127.0.0.1:1/v1',token:'synthetic',model:'m',
+    profile:{sdk_tools:{read:true,write:true}},systemPrompt:'',history:[],userText:'Read selected HTML',cwd:f.workspace,
+    signal:controller.signal,stallTimeoutMs:0,onDelta(){},requestApproval:async()=>true,companionExecutionPolicy:f.policy};
+  const running = runSdkCoach(args);
+  args.companionExecutionRevalidate = async () => { replacement++; throw Error('replaced callback'); };
+  await running; assert.equal(checks, 2); assert.equal(replacement, 0);
+  for (const policy of [f.policy, undefined]) await turn(f, async (_options, use) => {
+    assert.equal((await use('Read', {file_path:f.artifact})).behavior, 'allow');
+  }, {companionExecutionPolicy:policy,companionExecutionRevalidate:async()=>{throw Error('ordinary must not call this');}});
 });
