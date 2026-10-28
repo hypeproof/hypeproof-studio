@@ -221,11 +221,11 @@ Related but deliberately not merged (different behavior, same epic): task search
 | CGP-KNOW-R-013 | REQ-KNOW-24 | Deleting a learner file through Studio moves it to the activity trash; it can be restored to its original path until the activity is removed. | Studio | DEC-12; DEC-13 |
 | CGP-KNOW-R-017 | REQ-KNOW-30 | Each learner artifact has a visible version list (who changed it, when) and restore archives the current copy before replacing it. | Studio | DEC-12 |
 | CGP-KNOW-R-020 | REQ-KNOW-37 | Each attachment failure cause has its own learner message and next step; the attachment chip and draft remain. | Studio | - |
-| CGP-KNOW-R-022 | REQ-KNOW-40 | Memory is available only when the activity's Service profile enables it; minor cohorts default to off; the current state is visible in the activity. | Both | DEC-01; DEC-02 |
+| CGP-KNOW-R-022 | REQ-KNOW-40 | Personal memory is local files inside the activity and is always on for every cohort, minor cohorts included; there is no Service profile switch and no instructor switch; the activity shows that memory is on and where its files live. | Both | CGP-KNOW-R-030; DEC-01; DEC-02 |
 | CGP-KNOW-R-023 | REQ-KNOW-41 | The learner can view and delete each remembered item; a deleted item is absent from all later requests. | Studio | CGP-KNOW-R-022; CGP-KNOW-R-030; DEC-01 |
 | CGP-KNOW-R-026 | REQ-KNOW-44 | An answer that used memory shows "기억 사용 N" listing the exact items; the learner can exclude an item from the rest of this task. | Studio | CGP-KNOW-R-022; CGP-KNOW-R-030; DEC-01 |
 | CGP-KNOW-R-027 | REQ-KNOW-45 | Every memory write appears as a timeline line in the turn that caused it, with an undo. | Studio | CGP-KNOW-R-022; CGP-KNOW-R-030; DEC-01 |
-| CGP-KNOW-R-031 | REQ-KNOW-49 | First enablement of memory shows once what is stored, where, who can read it and how to delete it; for minors the enablement happens in Chalk, not in a learner pop-up. | Both | CGP-KNOW-R-022; DEC-01; DEC-02 |
+| CGP-KNOW-R-031 | REQ-KNOW-49 | The first time memory is used in an activity, the learner sees once what is stored, where, who can read it and how to delete it; it is a notice, not a consent switch, and every cohort sees it, minor cohorts included. | Both | CGP-KNOW-R-022; DEC-01; DEC-02 |
 | CGP-KNOW-R-033 | REQ-KNOW-51 | Help, collect, gallery and publish payloads exclude memory files unless the learner explicitly selects one. | Studio | CGP-KNOW-R-006; DEC-01 |
 | CGP-KNOW-R-036 | REQ-KNOW-68 | When an activity can no longer run AI (class ended, token expired, cohort paused, budget exhausted), one status screen states the cause, what still works and who can fix  | Studio | - |
 | CGP-AGENT-R-001 | REQ-CGP-AGENT-01a | Chalk lets the instructor choose one approval preset per lesson version from `항상 묻기`, `중요한 것만 묻기`, `바꾸기 전에 묻기`; there is no full-access preset. | Chalk | DEC-11 |
@@ -302,12 +302,12 @@ Owner is Jay unless stated. Blocked IDs are canonical master IDs.
 
 | id | decision | blocked | owner |
 |---|---|---|---|
-| DEC-01 | Does Studio adopt memory at all; is there any server-side memory and who may read it (cr-memory #1450). Preferred shape: file-based memory inside the activity | CGP-KNOW-R-005, CGP-KNOW-R-022, CGP-KNOW-R-023, CGP-KNOW-R-024, CGP-KNOW-R-025, CGP-KNOW-R-026, CGP-KNOW-R-027, CGP-KNOW-R-028, CGP-KNOW-R-029, CGP-KNOW-R-030, CGP-KNOW-R-031, CGP-KNOW-R-033 | Jay + Service owner |
-| DEC-02 | Who switches memory on for a minor cohort: instructor in Chalk, guardian, or nobody | CGP-KNOW-R-022, CGP-KNOW-R-031 | Jay |
-| DEC-03 | Microphone capture path (REQ-R1 / ADR-0009): the core patch every mic feature depends on | CGP-VOICE-R-001, CGP-VOICE-R-002, CGP-VOICE-R-003, CGP-VOICE-R-012, CGP-VOICE-R-014, CGP-VOICE-R-015, CGP-VOICE-R-016, CGP-VOICE-R-017, CGP-VOICE-R-018, CGP-VOICE-R-019, CGP-VOICE-R-026, CGP-VOICE-R-027 | Jay |
+| DEC-01 | Does Studio adopt memory at all; is there any server-side memory and who may read it (cr-memory #1450). Preferred shape: file-based memory inside the activity. **Ruled 2026-10-28:** Adopt memory as files inside the activity folder only; no server-side memory; the learner can read and delete it. | CGP-KNOW-R-005, CGP-KNOW-R-022, CGP-KNOW-R-023, CGP-KNOW-R-024, CGP-KNOW-R-025, CGP-KNOW-R-026, CGP-KNOW-R-027, CGP-KNOW-R-028, CGP-KNOW-R-029, CGP-KNOW-R-030, CGP-KNOW-R-031, CGP-KNOW-R-033 | Jay + Service owner |
+| DEC-02 | Who switches memory on for a minor cohort: instructor in Chalk, guardian, or nobody. **Ruled 2026-10-28:** Always on, minor cohorts included (memory stays local per DEC-01). | CGP-KNOW-R-022, CGP-KNOW-R-031 | Jay |
+| DEC-03 | Microphone capture path (REQ-R1 / ADR-0009): the core patch every mic feature depends on. **Ruled 2026-10-28:** Proceed with the microphone core patch; a full `build.sh` and a release still need Jay's explicit go when the patch is ready. | CGP-VOICE-R-001, CGP-VOICE-R-002, CGP-VOICE-R-003, CGP-VOICE-R-012, CGP-VOICE-R-014, CGP-VOICE-R-015, CGP-VOICE-R-016, CGP-VOICE-R-017, CGP-VOICE-R-018, CGP-VOICE-R-019, CGP-VOICE-R-026, CGP-VOICE-R-027 | Jay |
 | DEC-04 | Dictation spec home (VO-48+ in voice-conversation.md or its own file) and whether read-aloud (no mic) ships first | CGP-VOICE-R-012, CGP-CHAT-R-009 | Jay |
-| DEC-05 | Audio and transcript retention policy (VO-25); the disclosure copy cannot be written truthfully before it | CGP-VOICE-R-004, CGP-VOICE-R-016 | Jay |
-| DEC-06 | Audio metering: are TTS/STT inside the one-request unit or a separate audio entitlement (REQ-R3); default for elementary cohorts | CGP-CHAT-R-009, CGP-VOICE-R-012, CGP-VOICE-R-024 | Jay |
+| DEC-05 | Audio and transcript retention policy (VO-25); the disclosure copy cannot be written truthfully before it. **Ruled 2026-10-28:** Audio is never stored and is discarded once transcribed; the transcript lives only where ordinary chat text lives. | CGP-VOICE-R-004, CGP-VOICE-R-016 | Jay |
+| DEC-06 | Audio metering: are TTS/STT inside the one-request unit or a separate audio entitlement (REQ-R3); default for elementary cohorts. **Ruled 2026-10-28:** STT/TTS count as one ordinary request (no separate audio entitlement); voice is on by default for elementary cohorts. | CGP-CHAT-R-009, CGP-VOICE-R-012, CGP-VOICE-R-024 | Jay |
 | DEC-07 | New class feature keys voice / dictation / read_aloud need a Service profile schema change | CGP-VOICE-R-024 | Service owner |
 | DEC-08 | Does the original prompt/answer of an edit-and-resend count as a separate attempt in the observation record (MC-*) | CGP-CHAT-R-002 | Jay (measurement-core owner) |
 | DEC-09 | Learner answer verdict: local spool only, or visible to the instructor in Chalk (AE-20 forbids raw-content surveillance) | CGP-CHAT-R-005 | Jay |
@@ -317,11 +317,11 @@ Owner is Jay unless stated. Blocked IDs are canonical master IDs.
 | DEC-13 | Trash retention: life of the activity vs 30 days, and what happens at activity removal (US-10) | CGP-KNOW-R-013 | Jay |
 | DEC-14 | External links for minors: force the in-app safe-session browser (ART) or show full URL + confirm (SHELL); does a blocked click notify the instructor | CGP-ART-R-008 | Jay |
 | DEC-15 | Minor-cohort first publish: instructor confirmation step and whether the CR-20 clock starts at confirmation | CGP-ART-R-012 | Jay |
-| DEC-16 | Starter style/template source: knowledge base (KB-03, versioned) or cohort profile | CGP-ART-R-014 | Jay |
+| DEC-16 | Starter style/template source: knowledge base (KB-03, versioned) or cohort profile. **Ruled 2026-10-28:** Knowledge base (KB-03, versioned). | CGP-ART-R-014 | Jay |
 | DEC-17 | Image generation: cost, minors' likeness in reference photos, provider policy | CGP-ART-040 | Jay |
-| DEC-18 | Learning blocks: who authors the first blocks, which curricula first, and whether coach-selected blocks are ever allowed for adults | CGP-LEARN-R-001, CGP-LEARN-R-012 | Jay |
-| DEC-19 | Schema home for steps[].materials[] (hps-session-design bump or existing `ui` field) | CGP-LEARN-R-001, CGP-LEARN-R-004, CGP-LEARN-R-009, CGP-LEARN-R-012 | Jay + Service owner |
-| DEC-20 | Block rendering runtime: sandboxed iframe per block vs in-webview component (bundle weight, CSP REQ-L2) | CGP-LEARN-R-003, CGP-LEARN-R-005, CGP-LEARN-R-006, CGP-LEARN-R-007, CGP-LEARN-R-009, CGP-LEARN-R-010 | Jay |
+| DEC-18 | Learning blocks: who authors the first blocks, which curricula first, and whether coach-selected blocks are ever allowed for adults. **Ruled 2026-10-28:** AI-made (coach-selected) blocks are allowed for every cohort, not only instructor-authored ones. | CGP-LEARN-R-001, CGP-LEARN-R-012 | Jay |
+| DEC-19 | Schema home for steps[].materials[] (hps-session-design bump or existing `ui` field). **Ruled 2026-10-28:** Reuse the existing lesson `ui` field (no hps-session-design bump). | CGP-LEARN-R-001, CGP-LEARN-R-004, CGP-LEARN-R-009, CGP-LEARN-R-012 | Jay + Service owner |
+| DEC-20 | Block rendering runtime: sandboxed iframe per block vs in-webview component (bundle weight, CSP REQ-L2). **Ruled 2026-10-28:** Render blocks as in-webview components. | CGP-LEARN-R-003, CGP-LEARN-R-005, CGP-LEARN-R-006, CGP-LEARN-R-007, CGP-LEARN-R-009, CGP-LEARN-R-010 | Jay |
 | DEC-21 | Does a sampling-block expectation ever become a criterion_set event (risk of a disguised quiz, SX-57) | CGP-LEARN-R-008 | Jay (MC/SX owner) |
 | DEC-22 | Self-harm escalation: PIPA/legal review, responsible adult outside class hours for 14+ personal preview, no mid-class account pause | CGP-LEARN-R-013 | Jay |
 | DEC-23 | PIPA guardian/consent decisions: guardian linking, trusted contact, account/data deletion by learner or guardian | CGP-SHELL-R-027, CGP-SHELL-052, CGP-SHELL-056 | Jay |
@@ -332,7 +332,7 @@ Owner is Jay unless stated. Blocked IDs are canonical master IDs.
 | DEC-28 | Bundle Pretendard (OFL) or use system fonts only (size, CSP, Windows Malgun Gothic Latin) | CGP-DS-R-007, CGP-DS-R-008 | Jay |
 | DEC-29 | Scope of DES-02 (>=14px) for the personal chat metadata (CC-R1 11px) and line measure 35 vs 40 syllables (test with learners) | CGP-DS-R-008, CGP-DS-R-020 | Jay |
 | DEC-30 | Chalk conversation-starter field in hps-authoring-batch/1 plus frozen-version compatibility | CGP-AGENT-R-015 | Jay + Service owner |
-| DEC-31 | Chalk scheduled lesson operations need a Service scheduler (Worker cron availability/cost) | CGP-AGENT-R-012 | Jay + Service owner |
+| DEC-31 | Chalk scheduled lesson operations need a Service scheduler (Worker cron availability/cost). **Ruled 2026-10-28:** Deferred; instructors open and close lessons by hand. | CGP-AGENT-R-012 | Jay + Service owner |
 | DEC-32 | Math rendering: any curriculum need beyond adult courses; otherwise move to DEFER | CGP-CHAT-R-022 | Jay |
 | DEC-33 | Shared team memory / team projects across several learners' PCs (no contract yet) | CGP-KNOW-008 | Jay |
 | DEC-34 | Cross-domain verdict conflicts exposed by the merge (see conflict table); the canonical verdict stands until Jay rules | CGP-KNOW-047, CGP-SHELL-042, CGP-AGENT-046, CGP-AGENT-012, CGP-CHAT-040, CGP-KNOW-013, CGP-SHELL-039, CGP-CHAT-084, CGP-AGENT-018, CGP-AGENT-059, CGP-AGENT-020, CGP-AGENT-053, CGP-KNOW-057, CGP-CHAT-037, CGP-LEARN-035, CGP-KNOW-068, CGP-VOICE-023, CGP-DS-020, CGP-CHAT-066, CGP-KNOW-062 | Jay |
