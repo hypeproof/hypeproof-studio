@@ -5,7 +5,7 @@
 .hps-write-approval h2 { font: inherit; font-weight: var(--ds-c-studio-writeapprovaldialog-typography-7); }
 .hps-write-files { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-writeapprovaldialog-space-2); }
 .hps-write-files li { min-width: 0; max-width: 100%; }
-.hps-write-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--ds-c-studio-writeapprovaldialog-space-2); min-height: var(--ds-c-studio-writeapprovaldialog-size-8); max-width: 100%; padding: var(--ds-c-studio-writeapprovaldialog-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--hp-radius-6); background: var(--vscode-badge-background, var(--ds-c-studio-writeapprovaldialog-surface-125)); color: var(--vscode-badge-foreground, var(--ds-c-studio-writeapprovaldialog-ink-2)); }
+.hps-write-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--ds-c-studio-writeapprovaldialog-space-2); min-height: var(--ds-c-studio-writeapprovaldialog-size-8); max-width: 100%; padding: var(--ds-c-studio-writeapprovaldialog-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--hp-radius-8); background: var(--vscode-badge-background, var(--ds-c-studio-writeapprovaldialog-surface-125)); color: var(--vscode-badge-foreground, var(--ds-c-studio-writeapprovaldialog-ink-2)); }
 .hps-write-chip svg { flex: 0 0 var(--ds-c-studio-writeapprovaldialog-size-30); }
 .hps-write-chip span { min-width: 0; overflow-wrap: anywhere; }
 .hps-write-full-name { display: block; padding: var(--ds-c-studio-writeapprovaldialog-space-2) 0; overflow-wrap: anywhere; }
