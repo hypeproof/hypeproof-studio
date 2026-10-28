@@ -7767,3 +7767,36 @@ minimal DOM: the rule with positive and negative controls, the block for the cur
 mission header's real step buttons switch steps, a lesson without materials and one with refused values
 showing none, and hostile coach replies to "그림으로 보여줘" rendering no block, form, frame or SVG in the
 stream; seats: classroom with and without materials, personal without a lesson).
+
+## Learning block stays out of the canvas and never judges (CGP-LEARN-R-002)
+
+REQ-STUDIO-LEARNING-BLOCK-NO-JUDGMENT / REQ-CGP-LEARN-02 (CGP-LEARN-001) / PI#7 (capability models are hypotheses, not UI
+labels; SX-01, SX-59, SX-43): a learning block (REQ-STUDIO-LEARNING-BLOCK-ATTACH) never sits in the work canvas and never shows
+capability names, scores, grades or "correct/incorrect" judgments.
+
+- Placement. The only element that draws a block is the coach rail's step panel (`LessonStepPanel`, class `hp-step-work`) in the
+  chat surface, for all seven `ui` kinds, `canvas_editor` and `canvas_preview` included. It is never inside the message stream or a
+  message, the mission header (region A), the evidence drawer (region D) or the composer. The work canvas is the editor area: the
+  learner's files and every editor-area panel this extension creates (preview, start page, change record, take-away, slide studio,
+  visitor preview, artifact history, image edit comparison, personal continuation). None of them imports the block component or
+  carries `data-hps-material`. When the start page hands the editor tab to the conversation (`openInEditor`), that tab is the chat
+  surface and the block stays in its rail.
+- Words. Every word a block shows (its text, and the `aria-label`, `title`, `placeholder` and `alt` it speaks), empty or with the
+  learner's saved lines, passes the SX-35/SX-59 audit (`test/sx-audit.mjs`: banned labels, 7자산, rankings, score and grade
+  words, numeric scores) and contains no capability key or Korean label from either capability model
+  (`candidate-capability-v1`, `legacy-seven-assets`) and no verdict on the learner's work (정답, 오답, 맞았/틀렸, 통과, 실패,
+  잘했, 우수, 미흡, correct, wrong …). The instructor rehearsal's own pass/fail line is drawn outside the block.
+- Records. A block interaction records no observation and no evidence. A save from a `criterion_form` or `decision_form` block
+  is kept on this device and writes one workflow line `lesson_work_saved` with only `lesson_version`, `step_id` and `kind`: no
+  `evidence_type`, nothing to the classroom ops observer and nothing to a learning or observation recorder. A save the step's
+  block does not ask for records nothing. The learner's own "이 단계를 마쳤어요" sits outside the block and is not a block event.
+
+Every seat that draws the lesson rail (classroom, personal with a lesson, instructor rehearsal) follows the same rule. Default
+state: on (this row adds no behaviour; it holds what main already does with behavioural tests).
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-no-judgment.test.tsx` (the mounted ChatPanel on classroom and personal
+seats walks all seven blocks and checks their region, with a control that the ruled-out regions are on the screen; LessonStepPanel
+for every kind, empty and saved, learner and rehearsal seat, audited with positive and negative controls) and
+`extensions/hypeproof-chat/test/learning-block-no-judgment-host.smoke.mjs` (the real host handler with every recorder captured
+and the learner's step report as the control; the editor-area panels bundled, with an exhaustiveness check over every
+`createWebviewPanel` maker and the chat panel bundle as the control).
