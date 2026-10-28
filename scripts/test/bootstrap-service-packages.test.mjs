@@ -78,3 +78,11 @@ test('download failure is sanitized, removes staging and never falls back', asyn
   await assert.rejects(bootstrapServicePackages({ root: f.root, manifest: pins(), download: async () => { attempts++; throw new Error('GH_TOKEN-fixture-sensitive'); } }), error => /download failed/.test(error.message) && !error.message.includes('fixture-sensitive'));
   assert.equal(attempts, 1); assert.deepEqual(await readdir(join(f.root, '.private-service-cache')), []);
 });
+
+test('optional sixth companion DEV archive uses the same verified bootstrap and corrupt bytes fail closed', async t => {
+  const f = await fixture(t), manifest = pins(), asset = 'hypeproof-companion-client-0.1.0.tgz';
+  manifest.packages.push({asset, tag: 'companion-client-v0.1.0-dev.1', sha256: digest(bytes(asset)), sourceCommit: 'a'.repeat(40)});
+  assert.equal(await bootstrapServicePackages({root: f.root, manifest, download: f.download}), 6);
+  await writeFile(join(f.root, '.private-service-cache', asset), 'tampered');
+  await assert.rejects(bootstrapServicePackages({root:f.root, manifest, download:async()=>assert.fail('must not redownload corruption')}), /SHA256 mismatch/);
+});

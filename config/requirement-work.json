@@ -4364,7 +4364,10 @@
         "extensions/hypeproof-chat/test/companion-execution-result.smoke.mjs",
         "extensions/hypeproof-chat/test/companion-execution-transport.smoke.mjs",
         "extensions/hypeproof-chat/test/companion-normal-turn.test.mjs",
-        "apps/companion-android/test/execution-result-entry.test.mjs"
+        "apps/companion-android/test/execution-result-entry.test.mjs",
+        ".github/workflows/companion-source.yml",
+        "scripts/companion-ci.mjs",
+        "scripts/test/companion-ci-input.test.mjs"
       ]
     }
   ]

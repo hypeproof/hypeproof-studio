@@ -26,6 +26,12 @@
       "asset": "hypeproof-service-testkit-0.1.2.tgz",
       "tag": "service-testkit-v0.1.2-private.1",
       "sha256": "15bd637cdfc438ca6b63dd56434fd01ea0e26ec3ef88f4284ca8ea8e13f95d93"
+    },
+    {
+      "asset": "hypeproof-companion-client-0.1.0.tgz",
+      "tag": "companion-client-v0.1.0-private.1",
+      "sha256": "d7f29a17e32b5d3d8c5f21351c9a4089a583005a83d621ef0d3452262378b892",
+      "sourceCommit": "c53022b28771fe406be56b2f0847e4971dfb9df9"
     }
   ]
 }
