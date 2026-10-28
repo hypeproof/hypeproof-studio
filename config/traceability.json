@@ -4592,9 +4592,6 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/instructorMode.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/chalkContract.ts"
         }
       ]
     },
