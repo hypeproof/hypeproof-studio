@@ -15784,6 +15784,27 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-authoring-send.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-desktop-handoff.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authoring-repeat.smoke.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/ack-phase.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/authoring-receipt-observer.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/authoring-wait-entry.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/selection-adoption-adapter.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/selection-adoption-entry.test.mjs"
         }
       ]
     },
@@ -15860,6 +15881,21 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionAuthoringSend.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionDesktopHandoff.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionDesktopHandoffHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
         }
       ]
     },
@@ -15971,6 +16007,12 @@
         },
         {
           "path": "apps/companion-android/web/resultTransport.ts"
+        },
+        {
+          "path": "apps/companion-android/web/AuthoringComposer.tsx"
+        },
+        {
+          "path": "apps/companion-android/web/authoringReceiptObserver.ts"
         }
       ]
     }

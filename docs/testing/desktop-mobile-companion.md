@@ -162,3 +162,16 @@ stopped waiting for the separate Studio test driver to activate: normal native
 account/pass flow and installed-APK artifact delivery remain **NOT RUN** for
 this package. Source, browser, packaging and initial-screen observations are not
 whole mobile or physical-device acceptance.
+
+## Reviewed draft/manual Send source cut — #3114
+
+Focused checks cover actual TaskWorkspaceStore handoff/import, current owner
+before final atomic rename, conflicting or cancelled review, native UI generation
+and autosave ordering, existing Send admission and exact restore/run provenance.
+SDK terminal tests distinguish measured completion, failure/refusal and unknown.
+Mobile checks cover one send, bounded receipt observation, manual receive races,
+explicit same-pair selection adoption, stale/retired results and preserved cached
+preview/draft. The previously lifted cipher-close callback remains singular.
+Historical Worker/installed/native SDK evidence is retained at its old identity;
+new-cut source/React/asset checks do not imply a new installed observation,
+genuine membership, provider quality or production readiness.

@@ -844,7 +844,7 @@
         "DMC-15"
       ],
       "inline_prefixes": [],
-      "sha256": "ea9db19eb688f9195764e30e17ce70ec14563f1faffe7396b20449b3d0a2d695",
+      "sha256": "f82f888954309cbac073dfe276f8a5abec4255f5807074507ae0a0c2e6a22560",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
@@ -4242,7 +4242,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Independently review and verify the initial #3100 fixture-only Android preview cut, then integrate separately scoped #3114 ordinary draft/handoff and #3115 phone-native personal sign-in. Selected execution is #3097; real members, physical/iOS, cold-key recovery and production remain open.",
+      "next_action": "Independently review the #3114 reviewed draft/ordinary manual Send/version-adoption source cut, then integrate separate #3115 phone-native personal sign-in and #3097 selected execution. New-cut source checks are separate from historical installed/native SDK observations; parent #3072/#2803 and genuine-member/physical/iOS/production acceptance remain open.",
       "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
       "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
       "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",
@@ -4276,7 +4276,16 @@
         "apps/companion-android/build-web.mjs",
         "extensions/hypeproof-chat/src/companionDesktopHandoff.ts",
         "extensions/hypeproof-chat/src/companionDesktopHandoffHost.ts",
-        "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        "extensions/hypeproof-chat/src/taskWorkspaceStore.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx",
+        "apps/companion-android/web/AuthoringComposer.tsx",
+        "apps/companion-android/web/authoringReceiptObserver.ts",
+        "extensions/hypeproof-chat/src/companionAuthoringIntent.ts",
+        "extensions/hypeproof-chat/src/companionAuthoringHost.ts",
+        "extensions/hypeproof-chat/src/companionAuthoringHostNative.ts",
+        "extensions/hypeproof-chat/src/companionAuthoringResult.ts",
+        "extensions/hypeproof-chat/src/companionAuthoringSend.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
@@ -4325,7 +4334,17 @@
         "extensions/hypeproof-chat/src/taskWorkspaceStore.ts",
         "extensions/hypeproof-chat/test/companion-desktop-handoff.smoke.mjs",
         "apps/companion-android/web/resultTransport.ts",
-        "apps/companion-android/build-web.mjs"
+        "apps/companion-android/build-web.mjs",
+        "extensions/hypeproof-chat/test/companion-authoring-repeat.smoke.mjs",
+        "apps/companion-android/test/ack-phase.test.mjs",
+        "apps/companion-android/test/authoring-receipt-observer.test.mjs",
+        "apps/companion-android/test/authoring-wait-entry.test.mjs",
+        "apps/companion-android/test/selection-adoption-adapter.test.mjs",
+        "apps/companion-android/test/selection-adoption-entry.test.mjs",
+        "extensions/hypeproof-chat/test/companion-authoring-intent.smoke.mjs",
+        "extensions/hypeproof-chat/test/companion-authoring-provider.smoke.mjs",
+        "extensions/hypeproof-chat/test/companion-authoring-send.smoke.mjs",
+        "extensions/hypeproof-chat/test/companion-authoring-draft.test.tsx"
       ]
     }
   ]

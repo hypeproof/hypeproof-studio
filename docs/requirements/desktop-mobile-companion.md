@@ -122,3 +122,16 @@ encrypted selection metadata is the only device descriptor source. This initial
 fixture boundary is distinct from later #3115 personal sign-in, #3114 draft
 review and #3097 selected execution. New asset/source checks do not establish
 installed or real-member acceptance for a newly assembled cut.
+
+The separately scoped #3114 cut carries a verified phone request as data through
+reviewed local handoff and the existing native task draft. Import never dispatches
+a model. An explicit ordinary desktop Send may bind the exact unchanged request,
+normal user/turn identity, valid restore point and terminal run evidence. Edited
+native text loses automatic provenance and remains an ordinary draft; uncertain
+runs remain unknown and do not replay. Completion describes a measured ordinary
+SDK turn, not edit acceptance, changed HTML or result quality. Prior terminal
+records remain when the next request is imported. Mobile receipt observation is
+bounded after the one send attempt settles and never resends it. A newer saved
+selection is adopted only by an explicit gesture on the same verified pair, and
+its preview must be verified before another authored draft. Selected execution
+permission is separate #3097 work, and phone-native personal sign-in is #3115.
