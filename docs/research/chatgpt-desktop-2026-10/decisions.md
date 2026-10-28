@@ -1251,6 +1251,15 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 | Escape hatch | `logical-css: physical <reason>` on the same line | Some placements are physical on purpose (e.g. centring with translateX, which does not flip in RTL) | On | no |
 | Tooling | A repo script plus a static smoke, not Stylelint | The repo has no Stylelint; Chalk's CSS lives in HTML and TS strings that Stylelint would not read without custom syntaxes | On | no |
 
+## DEC-DS-D-023: logical CSS design list (CGP-DS-D-023, 2026-10-28; agent choice, not a new human agreement)
+
+| Decision | Choice | Why | Default | Human approval |
+|---|---|---|---|---|
+| "Stylelint or equivalent" | Widen the DEC-DS-R-026 ratchet lint, not Stylelint | Same reason as DEC-DS-R-026: no Stylelint in the repo, and Chalk CSS lives in HTML and TS strings | On | no |
+| Added findings | `text-align: left/right`; four-value `margin`/`padding`/`inset` whose right and left components differ | These are the physical forms of the row's four names (`text-align:start`, `*-inline`); shorthands with one to three values or equal sides are already symmetric | On | no |
+| Existing declarations | Grandfather the 67 on main (baseline 102 -> 169) with one `--allow-grow` | Same as DEC-DS-R-026: converting is invisible in LTR but rewrites geometry DEC-27 keeps; the ratchet still stops new ones and stale slack | On | no |
+| Left out | `float`, `clear`, `border-left/right`, `scroll-margin`/`scroll-padding` | Not in DES-CGP-DS-29's list; adding them would grow the baseline for no named acceptance | On | no |
+
 ## CGP-DS-R-030: tabular figures in Chalk (2026-10-26, agent choice under the owner rules)
 
 - Scope is the row's three nouns read literally on the pages that have them: seat tables (/manage, /board), usage (/budgets) and timers (/console countdown, /manage help-queue ages and "N분 전"). Counters next to them (roster summary, state filters, help badge) are included because they change while the instructor watches.
@@ -1427,3 +1436,12 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - "Keeps Korean IME composition intact": while a composition is open every pick is disabled. A real mouse press on a card first ends the composition (Chromium commits it on the press, like the OS input method), so the composed syllable is kept exactly as typed and the idea follows on a new line. Making the pick a no-op after such a press would throw away a deliberate click; the requirement is that nothing the learner composed is lost or overwritten, and the test holds that.
 - Mutations run on a scratch copy, each caught by the new test: stacked card, a 3-line clamp, a shrinking 이걸로 시작, a 641px breakpoint, a window media query, a 7th card, 내가 정할래요 above the list, picks enabled while composing, a pick that replaces the draft, a covered 내가 정할래요. Four of them (stacked card, shrinking label, 641px breakpoint, covered button) passed the R-020 layout smoke.
 - Default state: unchanged (on for personal seats; local display only, no new data flow).
+
+## CGP-LEARN-R-001: learning block attached by the confirmed lesson (2026-10-28, agent-selected under DEC-18/19/20)
+
+- Contract check first: the pinned Service (`@hypeproof/service-testkit` 0.1.2, `worker/src/lib/session-design.ts` and `learning-design.ts`) accepts the optional step key `ui` with the seven `STEP_UI_KINDS` and serves it unchanged on `/v1/profile` (`test/service-integration/session-design-learning.test.mjs`). `steps[].materials[]` would be refused (`invalid step fields`), so DEC-19's `ui` field is the only home. Not blocked.
+- A block is the step's `ui` value, exactly one of the seven kinds. Anything else (other case, unknown word, an object) is not a block. `ui` carries no parameters, so a block's content is the step's own text; parametric block types (REQ-CGP-LEARN-04) need a Service contract and stay open.
+- Identity: the element that draws the block carries `data-hps-material`, `data-hps-material-step` and `data-hps-material-version`, so REQ-CGP-LEARN-02's canvas check and REQ-CGP-LEARN-11's report have a block identity to use.
+- Kinds this Studio cannot draw yet (`canvas_editor`, `canvas_preview`, `evidence_note`, `coach_request`, `metric_board`) keep the existing honest notice, now with the block identity. No new component is built in this row.
+- DEC-18 is applied at authoring time (an AI-drafted `ui` reaches learners only in a confirmed version, any cohort). Coach-selected blocks at answer time are not built: no Service turn contract carries one, and REQ-CGP-LEARN-01 keeps v1 lesson-attached only.
+- Seats: every seat that draws the lesson rail (classroom lesson, personal with a lesson, instructor rehearsal). Default state: on (identity attributes only; no new data flow, no visual change).

@@ -17,7 +17,7 @@ export const HELP_MODE_LABELS: Record<HelpMode, string> = {
   co_edit: "함께 수정",
   independent: "직접 해보기",
 };
-/** Work surfaces this Studio renders. The Service accepts seven `ui` values; the rest are reported as unsupported. */
+/** Work surfaces this Studio renders. The Service accepts seven `ui` values (MATERIAL_KINDS); the rest are reported as unsupported. */
 export const SUPPORTED_SURFACES = ["chat", "criterion_form", "decision_form"] as const;
 export const WORK_TEXT_MAX = 1000;
 
@@ -31,6 +31,26 @@ const isMode = (x: unknown): x is HelpMode => typeof x === "string" && (HELP_MOD
 export function surfaceOf(step: Step): string {
   const kind = typeof step.ui === "string" ? step.ui : "chat";
   return (SUPPORTED_SURFACES as readonly string[]).includes(kind) ? kind : "unsupported:" + kind;
+}
+
+/**
+ * CGP-LEARN-R-001 (DEC-19) — a step's learning block lives in the step's existing `ui` field: the seven values the Service's
+ * learning-design.ts accepts (STEP_UI_KINDS). No other key and no other value is a block.
+ */
+export const MATERIAL_KINDS = ["canvas_editor", "canvas_preview", "criterion_form", "evidence_note", "coach_request", "decision_form", "metric_board"] as const;
+export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+export interface StepMaterial { kind: MaterialKind; stepId: string; version: string; sha256: string }
+
+/**
+ * The block the confirmed lesson version attaches to ONE step, or null. The only source is the served lesson (pinned by its
+ * version and sha256); a coach reply, a host message or the learner cannot add one. A step without `ui`, or with a value outside the
+ * seven kinds, has no block.
+ */
+export function stepMaterial(lesson: Lesson | null | undefined, stepId: string): StepMaterial | null {
+  const step = lesson?.content.steps.find((s) => s.id === stepId);
+  const kind = step?.ui;
+  if (!lesson || !step || typeof kind !== "string" || !(MATERIAL_KINDS as readonly string[]).includes(kind)) return null;
+  return { kind: kind as MaterialKind, stepId: step.id, version: lesson.version, sha256: lesson.sha256 };
 }
 
 /** Help choices the step offers, in the lesson's order, known modes only. Empty = this step has no help choice. */

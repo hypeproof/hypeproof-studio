@@ -139,3 +139,17 @@ CI 가 자동으로 같은 것을 재고, **그 자동 검사가 6개월 동안 
 - **dry-run 만:** `RELEASE_CUT_DAILY=dry-run` — 매일 범위·smoke·PR 본문 아티팩트만 만든다.
 - **재개:** 변수를 지우거나 `create` 로 둔다.
 - 손으로 돌리는 `workflow_dispatch` 는 변수와 상관없이 그대로 쓸 수 있다.
+
+### Loud skips
+
+A scheduled skip is quiet only when it is expected: paused, no app change, or a class that really is
+live (`live_session`, `undecidable_session`). The `alarm` job turns the run red, opens or comments on
+one issue titled "Daily release cut skipped: needs attention", and posts to `#alerts` when the
+`DISCORD_WEBHOOK_ALERTS` secret is set, in two cases:
+
+- the live check failed (`query_failed`, `bad_payload`, or no decision), for example a stale
+  `HPS_ADMIN_PASSWORD` secret (HTTP 401 from `/admin/cohorts`);
+- app changes have waited more than 48 h for an rc tag.
+
+From 2026-10-25 to 10-28 the admin password rotation left this secret stale and the gate skipped three
+days with green runs and no message; this section exists because of that.

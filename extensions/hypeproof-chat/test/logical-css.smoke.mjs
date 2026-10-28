@@ -1,5 +1,6 @@
 // CGP-DS-R-026 (REQ-STUDIO-LOGICAL-CSS): no new margin-left/right, padding-left/right, left or
-// right in the component CSS of the Studio webview and Chalk. Runs the ratchet lint on the real
+// right in the component CSS of the Studio webview and Chalk; CGP-DS-D-023 (DES-CGP-DS-29) adds
+// text-align: left/right and asymmetric four-value margin/padding/inset. Runs the ratchet lint on the real
 // tree, then on planted samples: positive controls must pass, negative controls must fail.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -68,12 +69,37 @@ passes('a grandfathered declaration stays', { [W]: '.a { margin-left: auto }' },
 passes('a grandfathered declaration moves to another selector', { [W]: '.renamed {\n  margin-left: auto;\n}' }, { [W]: { 'margin-left: auto': 1 } });
 passes('JS geometry in a Chalk TS file is not CSS', { [T]: 'export function place(el, x) { el.style.left = x + "px"; return { left: x }; }' });
 passes('a Chalk TS non-Css template literal', { [T]: 'export const help = `left: is a word here`;' });
+// CGP-DS-D-023 positive controls: logical or symmetric forms of the wider list.
+for (const v of ['start', 'end', 'center', 'justify', 'inherit', 'start !important']) {
+  passes(`text-align: ${v}`, { [W]: `.a { text-align: ${v} }` });
+}
+passes('one to three value shorthands are symmetric', { [W]: '.a { margin: 4px; padding: 0 8px; inset: 0 auto 4px }' });
+passes('a four-value shorthand with equal left and right', { [W]: '.a { padding: 2px 8px 4px 8px; margin: 0 auto 4px auto; inset: 0 0 0 0 }' });
+passes('spaces inside calc() and var() are one component', { [W]: '.a { padding: calc(1px + 2px) var(--gap, 0 4px) calc(1px + 2px) var(--gap, 0 4px) }' });
+passes('a logical shorthand pair', { [W]: '.a { padding-block: 2px 4px; padding-inline: 4px 8px; inset-inline: 0 auto }' });
+passes('TSX textAlign start and symmetric padding', { [X]: 'export const A = () => <i style={{ textAlign: "start", padding: "0 8px" }} />;' });
+passes('a grandfathered text-align stays', { [W]: '.a { text-align: left }' }, { [W]: { 'text-align: left': 1 } });
 
 // Negative controls: every property of the acceptance, in every carrier.
 for (const prop of lint.PHYSICAL_PROPERTIES) {
   fails(`new ${prop} in webview CSS`, { [W]: `.a { ${prop}: 4px }` });
 }
 fails('upper-case property', { [W]: '.a { MARGIN-LEFT: 4px }' });
+// CGP-DS-D-023 negative controls.
+fails('new text-align: left', { [W]: '.a { text-align: left }' });
+fails('new text-align: right', { [W]: '.a { text-align: right }' });
+fails('upper-case text-align value with !important', { [W]: '.a { TEXT-ALIGN: LEFT !important }' });
+fails('asymmetric four-value padding', { [W]: '.a { padding: 0 8px 0 4px }' });
+fails('asymmetric four-value margin', { [W]: '.a { margin: 0 auto 0 0 }' });
+fails('asymmetric four-value inset', { [W]: '.a { position: absolute; inset: 0 auto 0 0 }' });
+fails('asymmetric shorthand with calc() sides', { [W]: '.a { padding: 0 calc(1px + 2px) 0 calc(2px + 2px) }' });
+fails('Chalk style attribute text-align', { [H]: '<td style="text-align: right">1</td>' });
+fails('Chalk <style> block asymmetric padding', { [H]: '<style>.row { padding: 0 0 0 12px }</style>' });
+fails('Chalk exported Css literal text-align', { [T]: 'export const cellCss = `.c { text-align: left; }`;' });
+fails('TSX textAlign left', { [X]: 'export const A = () => <i style={{ textAlign: "left" }} />;' });
+fails('TSX asymmetric padding string', { [X]: "export const A = () => <i style={{ padding: '0 0 0 4px' }} />;" });
+fails('a grandfathered text-align copied once more', { [W]: '.a { text-align: left }\n.b { text-align: left }' }, { [W]: { 'text-align: left': 1 } });
+fails('text-align swapped left to right', { [W]: '.a { text-align: right }' }, { [W]: { 'text-align: left': 1 } });
 fails('last declaration without a semicolon, nested rule', { [W]: '.a { &:hover { padding-right: 2px } }' });
 fails('inside an @media rule', { [W]: '@media (max-width: 700px) { .a { right: 0; } }' });
 fails('Chalk <style> block', { [H]: '<html><head><style>\n.row { padding-right: 8px; }\n</style></head></html>' });
@@ -94,6 +120,8 @@ ok(stale.stale.length === 1 && stale.added.length === 0, 'a removed declaration 
 const where = run({ [W]: '.a {\n  color: red;\n  padding-left: 3px;\n}' });
 ok(where.added[0]?.lines?.[0] === 3, 'the finding carries the declaration line');
 ok(lint.LOGICAL_HINT['padding-left'] === 'padding-inline-start', 'the hint names the logical property');
+ok(lint.hintFor('text-align: left') === 'text-align: start' && lint.hintFor('text-align: right!important') === 'text-align: end', 'text-align hints name start/end');
+ok(/padding-inline/.test(lint.hintFor('padding: 0 0 0 4px')) && /inset-inline/.test(lint.hintFor('inset: 0 auto 0 0')), 'shorthand hints name the logical shorthands');
 
 // 4. The CLI fails on a planted tree and --update refuses to grow the baseline.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'logical-css-'));
@@ -109,6 +137,9 @@ try {
   const bad = spawnSync(process.execPath, [path.join(tmp, 'scripts/logical-css-lint.mjs')], { cwd: tmp, encoding: 'utf8' });
   ok(bad.status === 1 && /a\.css:1 new physical "margin-right: 4px".*margin-inline-end/.test(bad.stderr), `CLI must fail on a new declaration: ${bad.stderr}`);
   const grow = spawnSync(process.execPath, [path.join(tmp, 'scripts/logical-css-lint.mjs'), '--update'], { cwd: tmp, encoding: 'utf8' });
+  fs.writeFileSync(path.join(tmp, 'extensions/hypeproof-chat/webview-ui/src/b.css'), '.b {\n  text-align: right;\n}');
+  const ta = spawnSync(process.execPath, [path.join(tmp, 'scripts/logical-css-lint.mjs')], { cwd: tmp, encoding: 'utf8' });
+  ok(ta.status === 1 && /b\.css:2 new physical "text-align: right".*text-align: end/.test(ta.stderr), `CLI must fail on a new text-align: ${ta.stderr}`);
   ok(grow.status === 1 && JSON.parse(fs.readFileSync(base, 'utf8')).files && !Object.keys(JSON.parse(fs.readFileSync(base, 'utf8')).files).length, '--update must refuse to grandfather a new declaration');
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
