@@ -44,6 +44,11 @@ async function fixture(t, opts={}) {
         sdk:{query:({options})=>(async function*(){
           assert.equal(args.history.length,0);assert.equal(args.userText,f.request.text);assert.equal(args.images?.length??0,0);
           assert.deepEqual([...options.tools].sort(),['Edit','Read','Write']);
+          const headers=options.env.ANTHROPIC_CUSTOM_HEADERS.split('\n');
+          assert(headers.includes('x-hps-turn-id: '+f.input.reservation.turnId));
+          assert.deepEqual(JSON.parse(headers.find(line=>line.startsWith('x-hps-companion-execution: ')).slice('x-hps-companion-execution: '.length)),
+            {grant_id:f.input.reservation.grantId,request_id:f.request.requestId,request_hash:f.input.reservation.requestHash,
+              task_id:f.request.selection.taskId,epoch:1,consent_revision:1,selection_hash:hash(f.original)});
           if(opts.onQuery)await opts.onQuery(f);
           if(opts.write!==false){
             const input={file_path:file,content:'<h1>after</h1>'}, decision=await options.canUseTool('Write',input,{toolUseID:'write',signal:args.signal});
@@ -82,8 +87,10 @@ async function fixture(t, opts={}) {
   }return true;}};
   h.editorChat={webview:source,reveal(){}};
   const view=store.getView(),request={schema:'hps-companion-authoring-intent/1',requestId:'phone-request',pairingId:'pair',text:'  Revise only this HTML.\n  ',selection:{schema:'hps-companion-host-request/1',requestId:'selected-preview',actorId:'actor',deviceId:'device',hostId:'host',workspaceId:'workspace',projectId:'project',taskId:view.activeTaskId,version:view.revision,epoch:1,consentRevision:1,artifactId:hash('hps-companion-artifact/1:'+file),artifactVersion:hash(original),operation:'preview.read'}};
-  const packet=JSON.stringify(request),reservation={grantId:'grant',turnId:randomUUID(),requestHash:hash(packet),authorityDigest:'b'.repeat(64)},signal=new AbortController();
+  const packet=JSON.stringify(request),reservation={grantId:'ceg_'+'1'.repeat(32),turnId:randomUUID(),requestHash:hash(packet),authorityDigest:'b'.repeat(64)},signal=new AbortController();
   const input={packet,createdAt:1,reservation,current:()=>live,signal:signal.signal,
+    executionBinding:{turnId:reservation.turnId,grant_id:reservation.grantId,request_id:request.requestId,request_hash:reservation.requestHash,
+      task_id:request.selection.taskId,epoch:1,consent_revision:1,selection_hash:hash(original)},
     executionPolicy:createCompanionExecutionPolicy({workspaceRoot:workspace,artifactPath:file,expiresAt:Date.now()+60000,isCurrent:()=>live}),
     verifyReservation:async()=>{if(opts.verify)await opts.verify(f);return {...reservation};}};
   f={errors,h,store,context,connections,vscode,workspace,base,file,original,request,input,calls,posts,history,source,profile,signal,
@@ -139,6 +146,14 @@ test('immutable prepared envelope refuses another selected policy; no terminal p
   assert.notEqual(frozen.reservation.turnId,f.input.reservation.turnId);assert.equal(frozen.source.text,f.request.text);
   assert.equal(companionNormalTurnResult(frozen.source,frozen.reservation).state,'outcome_unknown');
   assert.throws(()=>freezeCompanionNormalTurn({...f.input,executionPolicy:{...f.input.executionPolicy,artifactPath:join(f.workspace,'other.html')}}));
+});
+
+test('prepared native entry requires exact execution binding before persistence or SDK work',async t=>{
+  for(const patch of [undefined,{grant_id:'ceg_'+'2'.repeat(32)},{request_id:'different-phone-request'},
+    {request_hash:'0'.repeat(64)},{task_id:'another-task'},{epoch:2},{consent_revision:2},{selection_hash:'0'.repeat(64)}]){
+    const f=await fixture(t);f.input.executionBinding=patch===undefined?undefined:{...f.input.executionBinding,...patch};
+    assert.throws(()=>f.submit(),/companion_/);assert.equal(f.calls.sdk,0);assert.equal(await f.held(),null);
+  }
 });
 
 

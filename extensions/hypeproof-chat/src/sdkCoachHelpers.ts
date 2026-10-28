@@ -1,5 +1,6 @@
 import { responseEvidence } from "./activityAvailability.ts";
 import { COMPANION_EXECUTION_TOOLS } from './companionExecutionPolicy.ts';
+import { companionExecutionHeader, type CompanionExecutionSdkBinding } from './companionExecutionAuthority.ts';
 // #282 — PURE mapping from a resolved cohort profile to Claude Agent SDK
 // options, plus the SDK-tool → host-approval mapping. No `vscode`, no SDK
 // import: safe to unit-test and typecheck standalone (extension pure/
@@ -933,7 +934,7 @@ export const SDK_AUTO_COMPACT_WINDOW_TOKENS = 200_000;
  * ambient environment that names one is dropped before ours are added.
  */
 const OWNED_HEADER_LINE =
-  /^\s*x-hps-(effort|turn-id|funding-source|lesson-binding|lesson-step|help-mode|agent|agent-call|roster|orchestrator)\s*:/i;
+  /^\s*x-hps-(effort|turn-id|companion-execution|funding-source|lesson-binding|lesson-step|help-mode|agent|agent-call|roster|orchestrator)\s*:/i;
 
 /**
  * #749 (AE-14) — the seat a CLI session belongs to: this student, on this
@@ -1109,6 +1110,7 @@ export function buildSdkGatewayEnv(
   args: {
     effort?: "low" | "medium" | "high";
     turnId?: string;
+    companionExecutionBinding?: Readonly<CompanionExecutionSdkBinding>;
   fundingSource?: string;
   /** #751 U3 — the lesson binding this turn EXPECTS (from the profile it was started under). An expectation, never a selector. */
   lessonBinding?: string;
@@ -1198,6 +1200,7 @@ export function buildSdkGatewayEnv(
   // REQ-STUDIO-TURN-ID — ANTHROPIC_CUSTOM_HEADERS is fixed for the CLI process, i.e. for
   // the turn, so every request the CLI makes for this user message carries the same id.
   if (validClientTurnId(args.turnId)) custom.push(`${CLIENT_TURN_ID_HEADER}: ${args.turnId}`);
+  if (args.companionExecutionBinding !== undefined) custom.push(`x-hps-companion-execution: ${companionExecutionHeader(args.companionExecutionBinding,args.turnId)}`);
   if (args.workspace?.trim()) {
     custom.push(`x-hps-workspace: ${encodeURIComponent(args.workspace.trim())}`);
   }
@@ -1367,6 +1370,7 @@ export function buildSdkQueryOptions(
   args: {
     effort?: "low" | "medium" | "high";
     turnId?: string;
+    companionExecutionBinding?: Readonly<CompanionExecutionSdkBinding>;
   fundingSource?: string;
   /** #751 U3 — the lesson binding this turn EXPECTS (from the profile it was started under). An expectation, never a selector. */
   lessonBinding?: string;
@@ -1440,6 +1444,7 @@ export function buildSdkQueryOptions(
       proxyUrl: args.proxyUrl,
       effort: args.effort,
       turnId: args.turnId,
+      companionExecutionBinding: args.companionExecutionBinding,
       fundingSource: args.fundingSource,
       lessonBinding: args.lessonBinding,
       lessonStep: args.lessonStep,

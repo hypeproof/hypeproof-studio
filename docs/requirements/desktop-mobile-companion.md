@@ -168,3 +168,12 @@ only the selected regular HTML file through Read/Write/Edit and preserves existi
 write approval. No proxy fallback, shell, external tools or broader workspace
 context is granted. These source foundations do not activate a production entry
 or complete the mobile-only DMC-T04/08/12 scenarios.
+
+The prepared development entry uses the existing desktop Send admission and
+history/restore lifecycle. It requires both the local selected-file policy and
+the exact Service reservation binding; a client header alone grants nothing.
+The reservation's turn ID is the actual SDK turn ID. The binding is captured
+before asynchronous work, and Service remains responsible for checking the live
+grant and activated-pass identity on every upstream model request. Ambient
+environment headers cannot attach a companion reservation to ordinary Send.
+No production command or relay execution callback is registered by this seam.

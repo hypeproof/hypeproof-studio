@@ -1,5 +1,6 @@
 import {DelegationStop, type DelegationStopState} from "./delegationStop";
 import { CompanionExecutionPolicyError, type CompanionExecutionPolicy } from './companionExecutionPolicy.ts';
+import { companionExecutionHeader, type CompanionExecutionSdkBinding } from './companionExecutionAuthority.ts';
 import { SdkProcesses } from "./runningProcesses";
 // #282 — ORCHESTRATION: run the coach on the Claude Agent SDK instead of the
 // single-turn proxy. Drop-in with proxyChat's callback contract so
@@ -140,6 +141,8 @@ export class SdkGatewayAuthError extends ProxyAuthError {
 export interface SdkCoachArgs {
   /** Optional local restriction only. The prepared owner supplies authority; no production caller. */
   companionExecutionPolicy?: CompanionExecutionPolicy;
+  /** Exact already verified reservation, still checked live by Service on every upstream call. */
+  companionExecutionBinding?: Readonly<CompanionExecutionSdkBinding>;
   effort?: import('./protocol').CourseEffort;
   turnId?: string;
   fundingSource?: string;
@@ -537,6 +540,12 @@ function abortError(): Error {
  */
 export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   const companionPolicy = args.companionExecutionPolicy;
+  // Freeze before the first await; a later caller mutation cannot retarget a CLI turn.
+  const companionBinding = args.companionExecutionBinding === undefined ? undefined : Object.freeze({...args.companionExecutionBinding});
+  if (companionBinding) {
+    if (!companionPolicy) throw new CompanionExecutionPolicyError('authority');
+    try { companionExecutionHeader(companionBinding,args.turnId); } catch { throw new CompanionExecutionPolicyError('authority'); }
+  }
   companionPolicy?.assertCurrent(args.cwd);
   const mode = turnToolMode(args.toolMode);
   requireTurnTools(mode, turnToolsAvailability({ profile: args.profile, runtime: 'agent-sdk' }));
@@ -708,6 +717,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       proxyUrl: args.gatewayUrl,
       effort: args.effort,
       turnId: args.turnId,
+      companionExecutionBinding: companionBinding,
       fundingSource: args.fundingSource,
       lessonBinding: args.lessonBinding,
       lessonStep: args.lessonStep,

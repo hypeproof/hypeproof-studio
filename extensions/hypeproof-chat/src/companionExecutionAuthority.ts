@@ -24,6 +24,12 @@ export interface VerifiedCompanionExecutionReservation {
   intent: Readonly<CompanionAuthoringIntent>;
   headers: Readonly<{ 'x-hps-turn-id': string; 'x-hps-companion-execution': string }>;
   expiresAtMs: number;
+  sdkBinding: Readonly<CompanionExecutionSdkBinding>;
+}
+/** Fixed Service binding, not an arbitrary SDK-header extension point or grant. */
+export interface CompanionExecutionSdkBinding {
+  turnId: string; grant_id: string; request_id: string; request_hash: string;
+  task_id: string; epoch: number; consent_revision: number; selection_hash: string;
 }
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -32,6 +38,16 @@ const id = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A
 const digest = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
 const integer = (v: unknown, min: number, max: number) => Number.isSafeInteger(v) && Number(v) >= min && Number(v) <= max;
 function fail(): never { throw Error('companion_execution_reservation_mismatch'); }
+
+export function companionExecutionHeader(binding: Readonly<CompanionExecutionSdkBinding>, turnId: string | undefined): string {
+  if (!object(binding) || !exact(binding,['turnId','grant_id','request_id','request_hash','task_id','epoch','consent_revision','selection_hash'])
+    || typeof turnId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(turnId) || binding.turnId !== turnId
+    || !/^ceg_[a-f0-9]{32}$/.test(binding.grant_id) || !id(binding.request_id) || !id(binding.task_id)
+    || !digest(binding.request_hash) || !digest(binding.selection_hash)
+    || !integer(binding.epoch,1,2147483647) || !integer(binding.consent_revision,1,2147483647)) fail();
+  return JSON.stringify({grant_id:binding.grant_id,request_id:binding.request_id,request_hash:binding.request_hash,
+    task_id:binding.task_id,epoch:binding.epoch,consent_revision:binding.consent_revision,selection_hash:binding.selection_hash});
+}
 
 /** Reconstruct canonical key order instead of trusting the response's JSON property order. */
 export function verifyCompanionExecutionReservation(raw: string, expected: CompanionExecutionExpectation, nowMs = Date.now()): VerifiedCompanionExecutionReservation {
@@ -79,10 +95,12 @@ export function verifyCompanionExecutionReservation(raw: string, expected: Compa
     || !integer(turn.ordinal,1,expected.maxTurns) || !integer(turn.created_at,Number(grant.created_at),Math.floor(nowMs / 1000))) fail();
   const binding = {grant_id:authority.grant_id,request_id:authority.request_id,request_hash:authority.request_hash,
     task_id:authority.task_id,epoch:authority.epoch,consent_revision:authority.consent_revision,selection_hash:authority.selection_hash};
+  const sdkBinding = Object.freeze({turnId:authority.turn_id,...binding});
   return Object.freeze({
     reservation:Object.freeze({grantId:authority.grant_id,turnId:authority.turn_id,requestHash:authority.request_hash,authorityDigest}),
     intent:Object.freeze({...intent,selection:Object.freeze({...intent.selection})}),
-    headers:Object.freeze({'x-hps-turn-id':authority.turn_id,'x-hps-companion-execution':JSON.stringify(binding)}),
+    headers:Object.freeze({'x-hps-turn-id':authority.turn_id,'x-hps-companion-execution':companionExecutionHeader(sdkBinding,authority.turn_id)}),
+    sdkBinding,
     expiresAtMs:expected.expiresAt * 1000,
   });
 }

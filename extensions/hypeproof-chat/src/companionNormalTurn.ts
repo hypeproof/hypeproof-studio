@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { parseCompanionAuthoringIntent } from './companionAuthoringIntent.ts';
 import type { CompanionExecutionPolicy } from './companionExecutionPolicy.ts';
+import { companionExecutionHeader, type CompanionExecutionSdkBinding } from './companionExecutionAuthority.ts';
 import type { CompanionAuthoringRun, CompanionAuthoringSendSource, CompanionDesktopHandoffCheckpoint, CompanionExecutionReservation } from './companionDesktopHandoff.ts';
 
 export type CompanionNormalTurnReservation = CompanionExecutionReservation;
@@ -11,6 +12,7 @@ export interface PreparedCompanionNormalTurn {
   /** Stable timestamp retained by the owner for retries of this exact request. */
   createdAt: number;
   reservation: CompanionNormalTurnReservation;
+  executionBinding: Readonly<CompanionExecutionSdkBinding>;
   /** Lookup/revalidate the separately approved Service reservation, never mint one here. */
   verifyReservation(): Promise<CompanionNormalTurnReservation>;
   /** Authenticated owner/pair/task/executor/profile/folder/consent scope is still current. */
@@ -33,11 +35,18 @@ export function sameCompanionReservation(a: CompanionNormalTurnReservation, b: C
 }
 export function freezeCompanionNormalTurn(input: PreparedCompanionNormalTurn) {
   const request = parseCompanionAuthoringIntent(input.packet), reservation = Object.freeze({ ...input.reservation });
+  const executionBinding = Object.freeze({...input.executionBinding});
   if (!request || !Number.isSafeInteger(input.createdAt) || input.createdAt < 0 || !id(reservation.grantId)
     || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(reservation.turnId)
     || !hex(reservation.authorityDigest) || reservation.requestHash !== digest(input.packet)
     || Object.keys(reservation).length !== 4 || !input.executionPolicy || !input.signal) throw Error('companion_turn_invalid');
   const { selection, text } = request;
+  companionExecutionHeader(executionBinding,reservation.turnId);
+  if (selection.operation !== 'preview.read' || executionBinding.grant_id !== reservation.grantId
+    || executionBinding.request_id !== request.requestId || executionBinding.request_hash !== reservation.requestHash
+    || executionBinding.task_id !== selection.taskId || executionBinding.epoch !== selection.epoch
+    || executionBinding.consent_revision !== selection.consentRevision || executionBinding.selection_hash !== selection.artifactVersion)
+    throw Error('companion_execution_binding_mismatch');
   if (selection.artifactId !== digest('hps-companion-artifact/1:' + input.executionPolicy.artifactPath)) throw Error('companion_selected_file_changed');
   const { requestId: _selectionRequest, operation: _operation, schema: _schema, ...selected } = selection;
   const checkpoint: CompanionDesktopHandoffCheckpoint = {
@@ -52,7 +61,7 @@ export function freezeCompanionNormalTurn(input: PreparedCompanionNormalTurn) {
   const current = () => {
     try { return !signal.aborted && ownerCurrent() === true; } catch { return false; }
   };
-  return Object.freeze({ checkpoint, source, reservation, current, verifyReservation, executionPolicy, signal });
+  return Object.freeze({ checkpoint, source, reservation, executionBinding, current, verifyReservation, executionPolicy, signal });
 }
 
 /** A stored or newly measured normal turn is proof; a transport ACK or prepared row is not. */

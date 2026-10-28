@@ -15823,6 +15823,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-execution-authority.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-normal-turn.test.mjs"
         }
       ]
     },
@@ -15920,6 +15923,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionExecutionAuthority.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionNormalTurn.ts"
         }
       ]
     },

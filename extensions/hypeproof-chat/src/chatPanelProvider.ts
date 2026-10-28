@@ -9099,7 +9099,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const delegationScope=JSON.stringify([this.turnRequestScope(),this.profileGeneration]);
           if (companionSend) await bindCompanion('agent-sdk');
           const sdkEnd = await runSdkCoach({
-            ...(prepared ? {companionExecutionPolicy:prepared.executionPolicy}:{}),
+            ...(prepared ? {companionExecutionPolicy:prepared.executionPolicy,companionExecutionBinding:prepared.executionBinding}:{}),
             processes: { registry: this.runningProcesses, prefix: `sdk:${streamId}:` },
             toolMode: mode,
             gatewayUrl: proxyUrl,

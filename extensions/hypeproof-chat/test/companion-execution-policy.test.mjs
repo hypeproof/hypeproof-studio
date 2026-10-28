@@ -8,6 +8,39 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCompanionExecutionPolicy } from '../src/companionExecutionPolicy.ts';
+import { buildSdkGatewayEnv } from '../src/sdkCoachHelpers.ts';
+
+const executionBinding = () => ({turnId:'companion-turn',grant_id:'ceg_'+'a'.repeat(32),request_id:'phone-intent',request_hash:'b'.repeat(64),
+  task_id:'selected-task',epoch:1,consent_revision:1,selection_hash:'c'.repeat(64)});
+
+test('SDK environment removes ambient execution claims and accepts only exact turn-bound fields', () => {
+  const base = {ANTHROPIC_CUSTOM_HEADERS:'X-HPS-Companion-Execution: injected\nx-hps-turn-id: wrong\nx-extra: unchanged'};
+  const plain = buildSdkGatewayEnv(base,{proxyUrl:'http://127.0.0.1:1/v1',token:'synthetic'});
+  assert.equal(plain.ANTHROPIC_CUSTOM_HEADERS,'x-extra: unchanged');
+  const binding=executionBinding(),env=buildSdkGatewayEnv(base,{proxyUrl:'http://127.0.0.1:1/v1',token:'synthetic',turnId:binding.turnId,companionExecutionBinding:binding});
+  const lines=env.ANTHROPIC_CUSTOM_HEADERS.split('\n');assert.equal(lines.filter(x=>x.startsWith('x-hps-companion-execution:')).length,1);
+  assert(lines.includes('x-hps-turn-id: companion-turn'));assert.equal(JSON.parse(lines.find(x=>x.startsWith('x-hps-companion-execution:')).slice('x-hps-companion-execution: '.length)).request_id,'phone-intent');
+  for(const changed of [{...binding,turnId:'other'},{...binding,task_id:'task\r\nAuthorization: x'},{...binding,extra:'grant'},{...binding,grant_id:'preview-only'},{...binding,epoch:0}])
+    assert.throws(()=>buildSdkGatewayEnv({}, {proxyUrl:'http://127.0.0.1:1/v1',token:'synthetic',turnId:binding.turnId,companionExecutionBinding:changed}));
+});
+
+test('real SDK orchestration snapshots exact companion headers before async setup',async t=>{
+  const f=await fixture(t),binding=executionBinding();
+  const running=turn(f,async options=>{
+    const lines=options.env.ANTHROPIC_CUSTOM_HEADERS.split('\n'),header=lines.find(x=>x.startsWith('x-hps-companion-execution: '));
+    assert.equal(JSON.parse(header.slice('x-hps-companion-execution: '.length)).request_id,'phone-intent');
+    assert(lines.includes('x-hps-turn-id: companion-turn'));
+  },{turnId:binding.turnId,companionExecutionBinding:binding});
+  binding.request_id='changed-after-admission';await running;
+});
+
+test('SDK execution binding cannot omit local selected-file restriction or name another turn',async t=>{
+  const f=await fixture(t);let queried=false;
+  for(const extra of [{companionExecutionPolicy:undefined},{turnId:'another-turn'}]){
+    await assert.rejects(turn(f,async()=>{queried=true;},{turnId:'companion-turn',companionExecutionBinding:executionBinding(),...extra}),e=>e.name==='CompanionExecutionPolicyError');
+  }
+  assert.equal(queried,false);
+});
 
 let bundle, runSdkCoach, SdkUnavailableError, originalAppData;
 test.before(async () => {

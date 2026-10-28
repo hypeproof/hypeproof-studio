@@ -204,6 +204,16 @@ against independently held native scope, activated-pass identity and exact packe
 bytes, including terminal/expired/mismatched evidence and bounded ASCII headers.
 Its parser performs no network authentication and cannot execute a request.
 
+`companion-normal-turn.test.mjs` exercises the unregistered development entry
+through the same provider path as desktop Send. It checks admission before any
+await, empty-draft and current-scope checks, reservation replay suppression,
+durable binding, cancellation and measured terminal records. The SDK tests
+check the fixed reservation header on the actual SDK option builder: ambient
+companion headers are removed, mismatched turn/request/file fields fail closed,
+and caller mutation cannot replace the captured binding. A scripted SDK module
+is used for these controls; this is not installed-CLI or live Service acceptance.
+The prepared entry carries no browser, shell, orchestration or proxy fallback.
+
 Complete acceptance additionally needs the actual shared Send path, Service
 atomic model admission, installed host/Android flow, original-version restoration
 and a second version without replay. Source controls alone do not close those
