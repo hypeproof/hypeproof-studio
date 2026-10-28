@@ -14,7 +14,11 @@ import {AuthoringComposer} from './AuthoringComposer';
 import {CompanionAuthoringReceiptObserver,type AuthoringReceiptWaitState} from './authoringReceiptObserver';
 import {createCompanionAuthoringIntent} from '../../../extensions/hypeproof-chat/src/companionAuthoringIntent';
 import {parseCompanionAuthoringResult,type CompanionAuthoringResult} from '../../../extensions/hypeproof-chat/src/companionAuthoringResult';
+import {parseCompanionExecutionResult,type CompanionExecutionResult} from '../../../extensions/hypeproof-chat/src/companionExecutionResult';
 import './style.css';
+type AuthoringReply=CompanionAuthoringResult|Readonly<CompanionExecutionResult>;
+const parseAuthoringReply=(text:string,id:string,hash:string):AuthoringReply|null=>parseCompanionAuthoringResult(text,id,hash)??parseCompanionExecutionResult(text,id,hash);
+const replyState=(reply:AuthoringReply)=>reply.schema==='hps-companion-execution-result/1'?reply.state:reply.outcome.state;
 declare global {interface Window {CompanionNative:Parameters<typeof createNativePort>[0]}}
 const port=createNativePort(window.CompanionNative);
 const budget=new CompanionTransportBudget({minSpacingMs:1200});
@@ -36,7 +40,7 @@ window.addEventListener('pagehide',clear,{once:true});
 function App(){
  const [stage,setStage]=useState('identity'),[challenge,setChallenge]=useState(''),[message,setMessage]=useState('컴퓨터에서 작업과 저장 HTML을 준비해 주세요.'),[busy,setBusy]=useState(false),[snapshot,setSnapshot]=useState<any>(null),[comparison,setComparison]=useState('');
  const [authoringActive,setAuthoringActive]=useState(false);
- const [authoringResult,setAuthoringResult]=useState<CompanionAuthoringResult|null>(null);
+ const [authoringResult,setAuthoringResult]=useState<AuthoringReply|null>(null);
  const [authoringWait,setAuthoringWait]=useState<AuthoringReceiptWaitState|null>(null);
  const [heldSelection,setHeldSelection]=useState<{revision:number;requestId:string}|null>(null),[previousPreview,setPreviousPreview]=useState<any>(null);
  const inFlight=useRef(false);
@@ -59,9 +63,10 @@ function App(){
   if(closed)return;
   // Settled, exclusive handoff: adapter now admits each raw transport HTTP with the same budget.
   pairing.transport=rawPair;relay.transport=rawRelay;
+  const validateReply=(message:Readonly<{text:string}>)=>{if(closed)return false;if(retiredAuthoringReplies.has(message.text))return true;if(!authoringPending?.current())return false;const parsed=parseAuthoringReply(message.text,authoringPending.requestId,authoringPending.requestHash);if(!parsed||(authoringPending.reply&&authoringPending.reply!==message.text))return false;authoringPending.reply=message.text;return true;};
+  const publishReply=(message:Readonly<{text:string}>)=>{if(closed||!authoringPending?.current())return;const parsed=parseAuthoringReply(message.text,authoringPending.requestId,authoringPending.requestHash);if(parsed&&authoringPending.reply===message.text&&!authoringPending.received){authoringPending.received=true;setAuthoringResult(parsed);}};
   resultTransport=new CompanionAndroidResultTransport({relay,selection:receiver,initialRevision:chosen.revision,
-   validateAuthoringResult:message=>{if(closed)return false;if(retiredAuthoringReplies.has(message.text))return true;if(!authoringPending?.current())return false;const parsed=parseCompanionAuthoringResult(message.text,authoringPending.requestId,authoringPending.requestHash);if(!parsed||(authoringPending.reply&&authoringPending.reply!==message.text))return false;authoringPending.reply=message.text;return true;},
-   onAuthoringResult:message=>{if(closed||!authoringPending?.current())return;const parsed=parseCompanionAuthoringResult(message.text,authoringPending.requestId,authoringPending.requestHash);if(parsed&&authoringPending.reply===message.text&&!authoringPending.received){authoringPending.received=true;setAuthoringResult(parsed);}},
+   validateAuthoringResult:validateReply,onAuthoringResult:publishReply,validateExecutionResult:validateReply,onExecutionResult:publishReply,
    onHeld:value=>{if(!closed){setHeldSelection(value);setMessage('컴퓨터에서 새 선택 정보를 받았어요. 지금 보기는 그대로예요. 새 버전은 직접 선택한 뒤 보기를 요청해 주세요.');}},
    onInvalid:()=>{if(closed)return;clear();setStage('closed');setMessage('선택 정보 처리를 마치지 못해 이 기기 연결을 닫았어요. 이미 받은 결과만 남아 있어요. 현재 컴퓨터 작업의 취소나 완료를 확인한 것은 아니에요.');}});
   adapter=new CompanionClientAdapter({pairing,relay,requestId:chosen.request.requestId,budget});
@@ -87,7 +92,7 @@ function App(){
  function settledForSelection():boolean{
   const current=controller?.getSnapshot();
   return !!current&&!current.busy&&!!current.receipt&&['completed','denied','failed','desktop_handoff'].includes(current.receipt.outcome.state)
-   &&(!authoringStarted||(authoringPending?.received===true&&!!authoringResult&&authoringResult.outcome.state!=='outcome_unknown'));
+   &&(!authoringStarted||(authoringPending?.received===true&&!!authoringResult&&replyState(authoringResult)!=='outcome_unknown'));
  }
  async function checkNewSelection(){
   if(closed||adoptingSelection||!settledForSelection()||!resultTransport||!controller?.getSnapshot().selection)throw Error('previous_request_unconfirmed');
@@ -149,7 +154,7 @@ function App(){
  {authoringActive&&stage==='preview'&&snapshot&&companionSessionPresentation(snapshot).preview&&<section><h2>요청 전에 본 결과</h2>{artifact(companionSessionPresentation(snapshot).preview)}</section>}
  {authoringActive&&stage==='preview'&&!authoringResult&&authoringWait==='waiting'&&<p role="status">컴퓨터의 검토 응답을 잠시 기다리고 있어요. 요청을 자동으로 다시 보내지 않아요.</p>}
  {authoringActive&&stage==='preview'&&!authoringResult&&authoringWait==='unconfirmed'&&<p role="status">아직 컴퓨터 응답을 확인하지 못했어요. 아래 ‘컴퓨터 검토 상태 확인’으로 직접 확인할 수 있어요. 요청은 다시 보내지 않았어요.</p>}
- {snapshot&&companionSessionPresentation(snapshot).preview&&!['forgotten'].includes(stage)&&<AuthoringComposer key={companionSelectionIdentity(snapshot.selection?.request)} disabled={closed||busy||!!snapshot.busy} submit={submitAuthoring} check={checkAuthoring} outcome={authoringResult?.outcome}/>}
+ {snapshot&&companionSessionPresentation(snapshot).preview&&!['forgotten'].includes(stage)&&<AuthoringComposer key={companionSelectionIdentity(snapshot.selection?.request)} disabled={closed||busy||!!snapshot.busy} submit={submitAuthoring} check={checkAuthoring} outcome={authoringResult?.schema==='hps-companion-authoring-result/1'?authoringResult.outcome:undefined} execution={authoringResult?.schema==='hps-companion-execution-result/1'?authoringResult:undefined}/>}
  {stage==='closed'&&snapshot&&(companionSessionPresentation(snapshot).preview??previousPreview)&&<section><h2>이 기기에 남은 결과</h2>{artifact(companionSessionPresentation(snapshot).preview??previousPreview)}</section>}
  {!['closed','forgotten'].includes(stage)&&<button className="secondary" onClick={cancel}>이 기기 연결 닫기</button>}
  <p className="detail">연결 표시는 최근 확인한 암호화 전송 상태예요. 컴퓨터가 지금 켜져 있다는 확인은 아니에요. 컴퓨터 응답은 요청 후 확인하며, 꺼져 있으면 기다려요. 기기 연결은 파일 실행 권한이 아니에요. 앱을 다시 시작하면 키를 복원하지 않아요.</p></main>;

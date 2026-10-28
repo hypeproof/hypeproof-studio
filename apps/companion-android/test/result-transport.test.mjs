@@ -22,7 +22,7 @@ async function fixture(messages,options={}){
  const relay={role:'device',pairing,row:{...pair},transport:async(_role,_id,action,raw)=>{requests.push({action,raw,time:now});if(options.failAck&&action==='ack'&&!failed&&(!options.failAckFor||JSON.parse(raw).message_id===options.failAckFor)){failed=true;throw Error(typeof options.failAck==='string'?options.failAck:'fixture_lost_ack_response');}return{};},diagnostics(){return{closed:false,context_digest:'c'.repeat(64)};},async prepare(){prepared++;return'prepared';},async send(){sent++;},async receive(){receives++;await this.transport('device',pair.id,'receive','{}');if(options.receiveGate)await options.receiveGate.promise;return options.batches?options.batches.shift()??[]:receives===1?messages:[];},async acknowledge(id){await pairing.refresh();return this.transport('device',pair.id,'ack',JSON.stringify({message_id:id}));},close(){}};
  let selection=receiver;
  if(options.acceptGate)selection={async accept(message){options.entered.resolve();await options.acceptGate.promise;return receiver.accept(message);},close:()=>receiver.close()};
- const demux=new CompanionAndroidResultTransport({relay,selection,initialRevision:1,onHeld:v=>notices.push(v),validateAuthoringResult:options.validateAuthoringResult,onAuthoringResult:options.onAuthoringResult,onInvalid:()=>{invalid++;controller.dispose();adapter.dispose();}});
+ const demux=new CompanionAndroidResultTransport({relay,selection,initialRevision:1,onHeld:v=>notices.push(v),validateAuthoringResult:options.validateAuthoringResult,onAuthoringResult:options.onAuthoringResult,validateExecutionResult:options.validateExecutionResult,onExecutionResult:options.onExecutionResult,onInvalid:()=>{invalid++;controller.dispose();adapter.dispose();}});
  const adapter=new CompanionClientAdapter({pairing,relay,requestId:request.requestId,budget});
  const transport=demux.bind(adapter),controller=new CompanionMobileSessionController({transport,descriptor:async signal=>{await adapter.refresh(signal);return{computerName:'fixture computer',online:true,selection:{request,projectName:'original',artifactName:'original'}};}},{timeoutMs:5000,pollMs:1});
  return{demux,adapter,controller,transport,receiver,notices,requests,get invalid(){return invalid;},get receives(){return receives;},get prepared(){return prepared;},get sent(){return sent;},close(){demux.close();controller.dispose();adapter.dispose();budget.dispose();}};
@@ -122,5 +122,16 @@ test('retired result ACK expires fail-closed; successful and transient ACK contr
    else{await assert.rejects(f.transport.receive(signal));if(cause==='expired'){assert.equal(f.invalid,1);await assert.rejects(f.transport.receive(signal),/closed/);}else{assert.equal(f.invalid,0);assert.deepEqual(await f.transport.receive(signal),[]);assert.equal(f.receives,2);}}
    assert.equal(f.sent,1,'adoption and ACK handling never replay or create a new preview request');
   }finally{f.close();}
+ }
+});
+
+
+test('execution receipts use their own validator and ACK before publication; preview and import remain separate',async()=>{
+ const text=JSON.stringify({schema:'hps-companion-execution-result/1',requestId:'intent-one',requestHash:'e'.repeat(64),state:'completed',code:'normal_turn_measured',turnId:'12345678-1234-1234-1234-123456789abc',artifactVersion:'f'.repeat(64)}),receipt={message_id:'execution',message_hash:await hash(text),text};let seen=0;
+ const f=await fixture([receipt,result],{validateAuthoringResult:()=>{throw Error('wrong parser');},validateExecutionResult:m=>m.text===text,onExecutionResult:()=>seen++});
+ try{await f.controller.reconnect(null);await f.controller.requestPreview(request);assert.equal(seen,1);assert.equal(f.invalid,0);assert.equal(f.controller.getSnapshot().receipt.outcome.artifact.text,html);assert.equal(f.requests.filter(r=>r.action==='ack'&&JSON.parse(r.raw).message_id===receipt.message_id).length,1);}finally{f.close();}
+ for(const cause of ['missing-validator','bad','ack']){
+  const g=await fixture([receipt],{failAck:cause==='ack',validateExecutionResult:cause==='missing-validator'?undefined:()=>cause!=='bad',onExecutionResult:()=>seen++});
+  try{await assert.rejects(g.transport.receive(new AbortController().signal));assert.equal(seen,1);if(cause==='ack'){assert.equal(g.invalid,0);assert.deepEqual(await g.transport.receive(new AbortController().signal),[]);assert.equal(seen,2);assert.equal(g.receives,1);seen=1;}else{assert.equal(g.invalid,1);assert.equal(g.requests.filter(r=>r.action==='ack').length,0);}assert.equal(g.sent,0);}finally{g.close();}
  }
 });
