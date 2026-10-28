@@ -4977,12 +4977,6 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/serverBase.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
-        },
-        {
-          "path": "extensions/hypeproof-chat/src/extension.ts"
         }
       ]
     },
