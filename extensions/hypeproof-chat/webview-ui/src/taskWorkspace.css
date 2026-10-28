@@ -299,9 +299,21 @@ body.vscode-high-contrast :is(.tw-sources, .tw-chat-menu-panel) { border-color: 
 .tw-trash-dialog { box-sizing: border-box; width: 100%; max-width: var(--ds-c-studio-taskworkspace-size-101); max-height: 90vh; overflow: auto; padding: var(--ds-c-studio-taskworkspace-space-5); color: inherit; background: var(--tw-panel); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--hp-radius-dialog); font-size: var(--hp-font-caption); }
 .tw-trash-dialog h3 { margin: 0 0 var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-body); }
 .tw-trash-danger { font-weight: var(--hp-weight-strong); }
+/* REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030) — the activity's memory files under 내 작품. */
+.tw-memory { padding: 0 var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); border-top: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
+.tw-memory button { min-height: var(--ds-c-studio-taskworkspace-size-8); min-width: var(--ds-c-studio-taskworkspace-size-8); padding: 0 var(--ds-c-studio-taskworkspace-space-1); font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-memory-entry { box-sizing: border-box; width: 100%; margin-top: var(--ds-c-studio-taskworkspace-space-1); text-align: start; }
+.tw-memory-list ul { list-style: none; margin: 0; padding: 0; }
+.tw-memory-list li { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-15); padding: var(--ds-c-studio-taskworkspace-space-7) 0; }
+.tw-memory-name { font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
+.tw-memory-text { margin: 0; font-size: var(--hp-font-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tw-memory-list time, .tw-memory-note { margin: 0; font-size: var(--hp-font-caption); color: var(--tw-muted); overflow-wrap: anywhere; }
+.tw-memory-note:empty { display: none; }
+.tw-memory-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-taskworkspace-space-2); }
 @media (forced-colors: active) {
   .tw-trash button, .tw-trash-dialog button, .tw-trash-toast .tw-trash-undo, .tw-trash-error button { border-color: ButtonText; }
   .tw-trash-dialog, .tw-trash-toast[data-shown="true"] { border-color: CanvasText; }
+  .tw-memory button { border-color: ButtonText; }
 }
 
 /* CGP-DS-D-028: on light host themes the personal muted text takes the muted role's light value (VS Code's

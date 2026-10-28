@@ -1464,6 +1464,7 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - Undrawable kinds get a title and say there is nothing to operate; their state never changes. No new component is built.
 - (c) VoiceOver run: NOT RUN in this row (needs a person at the real desktop); the browser test checks the accessible names and descriptions a screen reader would read.
 - Default state: on, every seat that draws the lesson rail; display only, no new data flow.
+
 ## CGP-LEARN-D-001: the 자료 card in the coach rail (2026-10-29, agent-selected under the owner rules)
 
 - The card wraps the block R-001 already draws (the step's `ui` kind) in the coach rail's step panel, under the help choice. No new data, no Service change.
@@ -1478,3 +1479,15 @@ Default state: on (local measurement only; no data leaves the device, no permiss
 - The controls help sentence stays in the closed body (hidden while closed). It describes the controls, which are hidden too, so it has nothing to explain until the card opens; it is the block's `aria-describedby` and each field's description, which works on hidden text, and it is drawn the moment the card opens. The visible text equivalent while closed is the title plus the live state line (DES-CGP-LEARN-03's caption). If the owner wants the help visible while closed, it needs a second line and the 72px closed height would have to give.
 - Learner floor: the rail's 12px note style (`.hp-rail-lesson-note`: the saved-work line, the undrawable notice) is 14px inside a block card. The new closed-save test drew the saved line and caught it at 12px.
 - Default state: on for every seat that draws the lesson rail (display only).
+
+## CGP-KNOW-R-030: memory as files inside the activity (2026-10-29, agent-selected conservative implementation)
+
+Applies DEC-01 and DEC-02 (ruled by Jay 2026-10-28). Built as REQ-STUDIO-ACTIVITY-MEMORY-FILES.
+
+- Location: `.hypeproof/memory/` inside the activity folder (the learner's task-workspace root, the same root the activity trash binds). The team-brain alternative in REQ-KNOW-48 is not used: class activities keep their own stores (REQ-KNOW-07), and this row adds none.
+- Seats: every learner seat with a task workspace (personal, trial; minors included per DEC-02). Instructors and seats without a task workspace get no panel. No setting, no Service field.
+- Delete is permanent, not a move to the activity trash: a deleted memory must not stay inside the activity where a later reader could find it. The native confirm says it cannot be undone.
+- Delete is allowed under a restricted folder choice (REQ-KNOW-18): it is the learner's own privacy action on Studio's own store and never an AI tool write.
+- Hostile input fails closed: a linked `.hypeproof` or `memory` folder refuses the whole store; files with names outside a plain allowlist, links, hard links and folders are counted, never read or deleted by Studio.
+- Context: the store exposes `contextItems()` (fresh disk read, no cache) but no request carries memory in this row. Injecting it before the REQ-KNOW-49 first-use notice and the REQ-KNOW-44 count would use memory without telling the learner. Writes from turns come with REQ-KNOW-45 (timeline line with undo); `append()` is the only write path they may use.
+- UI home: a section of 내 작품 under the activity trash. DES-KNOW-48 (CGP-KNOW-D-030, a 기억 filter in the same drawer) may restyle it.

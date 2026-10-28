@@ -1,6 +1,7 @@
 import { registerCompanionWorkspace } from "./companionWorkspaceHost";
 import { workPower } from "./workPower";
 import { registerActivityTrash } from "./activityTrashCommands";
+import { registerActivityMemory } from "./activityMemoryHost";
 import { confirmOutbound } from "./outboundConsentHost.ts";
 import { restoreInitialSurface } from "./initialSurface";
 export { resolveActivateBranch } from "./initialSurface";
@@ -353,6 +354,7 @@ export async function activate(context: vscode.ExtensionContext) {
     binding: () => provider.activityTrashBinding,
     refusal: file => provider.folderWriteRefusalFor(file),
   }));
+  provider.setActivityMemoryPanel(registerActivityMemory({ binding: () => provider.activityMemoryBinding }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
 
