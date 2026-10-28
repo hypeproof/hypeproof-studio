@@ -1,9 +1,17 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, helpChoices, stepMaterial, surfaceOf, type HelpMode, type RenderedStep, type StepWork } from "../../src/lessonFocus";
+import { HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, helpChoices, stepMaterial, surfaceOf, type HelpMode, type MaterialKind, type RenderedStep, type StepWork } from "../../src/lessonFocus";
 import type { ResolvedProfile, WebviewMessage } from "../../src/protocol";
+import { ChatIcon, type IconKind } from "./ChatDetails";
+import "./learningBlockCard.css";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
 type Step = Lesson["content"]["steps"][number];
+
+/** CGP-LEARN-D-001 — the 자료 card's 48px thumbnail icon for each block kind (the card's title is MATERIAL_TEXT's). */
+const BLOCK_ICONS: Record<MaterialKind, IconKind> = {
+  criterion_form: "check-square", decision_form: "pencil", canvas_editor: "code", canvas_preview: "eye",
+  evidence_note: "book", coach_request: "message", metric_board: "ruler",
+};
 
 /**
  * #751 G2 — the part of the current step that CHANGES what the learner does: the help modes this step offers (applied to
@@ -41,6 +49,10 @@ export function LessonStepPanel(props: {
   const [picked, setPicked] = useState<Record<string, HelpMode>>({});
   const key = lesson.sha256 + ":" + step.id;
   const chosen = picked[key] ?? null;
+  // CGP-LEARN-D-001 — the block's card is closed by default; open/closed is keyed to the lesson version and step (not stored,
+  // not an evidence event).
+  const [openBlocks, setOpenBlocks] = useState<Record<string, boolean>>({});
+  const blockOpen = !!openBlocks[key];
   const effective = chosen ?? (choices.includes(step.help?.default as HelpMode) ? (step.help!.default as HelpMode) : null);
 
   // The host holds the focus for the NEXT turn; a running turn keeps what it started with.
@@ -68,13 +80,27 @@ export function LessonStepPanel(props: {
   // Until the fields are reset for this step, the sentence describes this step's own save, never the previous step's draft.
   const fresh = draftOf === key;
   const state = materialText?.state({ text: fresh ? text : saved?.text ?? "", reason: fresh ? reason : saved?.reason ?? "", saved: saved ? { text: saved.text, reason: saved.reason } : undefined });
+  // CGP-LEARN-D-001 — the block is a collapsible 자료 card under the current step: closed, one row with a 48px thumbnail, the
+  // block's title, its live state line and 열어 보기; opening expands it in place. The state line (R-003's polite region) lives
+  // in the always-drawn head, so a step switch or a host save that lands on a closed card is still shown and announced; closed
+  // it is one line (ellipsis), open it wraps to the full sentence. The help and the work surface sit in the body, which stays
+  // mounted while closed (`hidden`), so the rehearsal read-back keeps its nodes.
   const block = (content: ReactNode) => !material || !materialText || !state ? content : (
-    <section className="hp-material" data-hps-material={material.kind} data-hps-material-step={material.stepId} data-hps-material-version={material.version}
+    <section className="hp-material hp-block-card" data-block-card={material.kind} data-block-open={blockOpen ? "" : undefined} data-hps-material={material.kind} data-hps-material-step={material.stepId} data-hps-material-version={material.version}
       aria-labelledby={ids + "t"} aria-describedby={ids + "h"}>
-      <h3 id={ids + "t"} className="hp-material-title">{materialText.title}</h3>
-      <p id={ids + "h"} className="hp-material-help">{materialText.controlsHelp}</p>
-      {content}
-      <p id={ids + "s"} className="hp-material-state" role="status" aria-live="polite" aria-atomic="true" data-material-state={state.key}>{state.sentence}</p>
+      <div className="hp-block-card-head">
+        <span className="hp-block-card-thumb"><ChatIcon kind={BLOCK_ICONS[material.kind]} size={20} /><span className="hp-block-card-kicker">자료</span></span>
+        <div className="hp-block-card-title">
+          <h3 id={ids + "t"} className="hp-material-title hp-block-card-name">{materialText.title}</h3>
+          <p id={ids + "s"} className="hp-material-state hp-block-card-state" role="status" aria-live="polite" aria-atomic="true" data-material-state={state.key}>{state.sentence}</p>
+        </div>
+        <button type="button" className="hp-cta-quiet" aria-expanded={blockOpen} aria-controls={ids + "b"} data-block-toggle=""
+          onClick={() => setOpenBlocks((o) => ({ ...o, [key]: !blockOpen }))}>{blockOpen ? "닫기" : "열어 보기"}</button>
+      </div>
+      <div className="hp-block-card-body" id={ids + "b"} hidden={!blockOpen}>
+        <p id={ids + "h"} className="hp-material-help">{materialText.controlsHelp}</p>
+        {content}
+      </div>
     </section>
   );
   const describe = material ? ids + "h " + ids + "s" : undefined;
