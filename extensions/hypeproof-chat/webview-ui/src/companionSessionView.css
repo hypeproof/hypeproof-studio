@@ -44,7 +44,7 @@
 .hps-companion-action-quiet:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
 .hps-companion-action-quiet:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
 .hps-companion-action:disabled { color: var(--hp-text-muted-default); background: var(--hp-bg-panel-default); cursor: default; }
-.hps-companion-action:focus-visible, .hps-companion-details > summary:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--hp-space-1); }
+.hps-companion-action:focus-visible, .hps-companion-details > summary:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }
 .hps-companion-origin { display: flex; gap: var(--hp-space-3); color: var(--hp-text-muted-default); font-size: var(--hp-font-caption); }
 .hps-companion-origin > div > p:first-child { color: var(--hp-text-primary-default); font-weight: var(--hp-weight-strong); }
 .hps-companion-origin > div > p + p { margin-block-start: var(--hp-space-1); }
