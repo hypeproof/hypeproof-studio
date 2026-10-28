@@ -255,8 +255,9 @@ host, selected-file SDK policy and normal-turn admission `.test.mjs` suites once
 before the smoke glob. These tests use synthetic SDK/transport ports; they do not
 claim installed execution.
 
-The dedicated `companion-source` workflow uses the existing private Service
-bootstrap and an immutable `companion-client` archive pin in
+The existing `worker / test` job runs the required companion source checks first
+through `npm run test:service-integration`, after its existing private Service
+bootstrap and dependency setup. It uses an immutable `companion-client` pin in
 `config/service-packages.json`. `scripts/companion-ci.mjs` requires the tag, SHA256
 and Service source-commit metadata, validates the cached archive, installs it
 offline with scripts disabled in a temporary directory, and checks the real
@@ -265,7 +266,7 @@ inputs fail; no local sibling checkout or optional package skip supplies a pass.
 
 The same job typechecks Android web source, runs all existing Android `.test.mjs`
 files including the actual private-client browser-bundle first render, and runs
-the existing JVM sign-in/deadline controls with Java17. Its temporary dependency
+the existing JVM sign-in/deadline controls with Java17 or newer. Its temporary dependency
 link is removed after the run. It does not assemble an APK, execute Android's
 platform lifecycle, connect an account, or deploy Service. Earlier independent
 source evidence and installed failures remain bound to their original versions.

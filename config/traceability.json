@@ -15843,9 +15843,6 @@
           "path": "apps/companion-android/test/execution-result-entry.test.mjs"
         },
         {
-          "path": ".github/workflows/companion-source.yml"
-        },
-        {
           "path": "scripts/companion-ci.mjs"
         },
         {
