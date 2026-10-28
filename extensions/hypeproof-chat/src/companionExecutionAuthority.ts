@@ -44,7 +44,7 @@ export function companionExecutionHeader(binding: Readonly<CompanionExecutionSdk
     || typeof turnId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(turnId) || binding.turnId !== turnId
     || !/^ceg_[a-f0-9]{32}$/.test(binding.grant_id) || !id(binding.request_id) || !id(binding.task_id)
     || !digest(binding.request_hash) || !digest(binding.selection_hash)
-    || !integer(binding.epoch,1,2147483647) || !integer(binding.consent_revision,1,2147483647)) fail();
+    || !integer(binding.epoch,1,2147483647) || !integer(binding.consent_revision,1,Number.MAX_SAFE_INTEGER)) fail();
   return JSON.stringify({grant_id:binding.grant_id,request_id:binding.request_id,request_hash:binding.request_hash,
     task_id:binding.task_id,epoch:binding.epoch,consent_revision:binding.consent_revision,selection_hash:binding.selection_hash});
 }
@@ -64,7 +64,7 @@ export function verifyCompanionExecutionReservation(raw: string, expected: Compa
     || ![expected.pairingId,expected.accountId,expected.hostSessionId,expected.deviceSessionId,expected.turnId,
       expected.modelSessionId,expected.modelTokenJti,expected.modelProfileId].every(id)
     || expected.hostSessionId === expected.deviceSessionId || !/^ceg_[a-f0-9]{32}$/.test(expected.grantId) || !digest(expected.grantDigest)
-    || !integer(selected.epoch,1,2147483647) || !integer(selected.consentRevision,1,2147483647)
+    || !integer(selected.epoch,1,2147483647) || !integer(selected.consentRevision,1,Number.MAX_SAFE_INTEGER)
     || !integer(expected.maxTurns,1,2) || !integer(expected.maxCallsPerTurn,1,12)
     || !integer(expected.expiresAt,1,Math.floor(Number.MAX_SAFE_INTEGER / 1000))
     || expected.expiresAt * 1000 <= nowMs || expected.expiresAt > Math.floor(nowMs / 1000) + 600) fail();
