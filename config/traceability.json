@@ -15270,6 +15270,10 @@
         {
           "path": "docs/research/chatgpt-desktop-2026-10/domains/settings-account-shell.md",
           "section": "## Work export decision (CGP-SHELL-R-028)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/settings-account-shell.md",
+          "section": "## Export progress and result decision (CGP-SHELL-D-027)"
         }
       ]
     },
