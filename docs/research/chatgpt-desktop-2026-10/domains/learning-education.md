@@ -267,6 +267,8 @@ REQ-CGP-LEARN-15 status (2026-10-26, CGP-LEARN-R-015): implemented in Chalk `/au
 | DES-CGP-LEARN-16 | Run state. | One 20 px icon + text label in the chat header, ≥ 14 px; state change announced via `aria-live`; no animated character; color only as reinforcement. |
 | DES-CGP-LEARN-17 | Keyboard triage. | Selected row has a 2 px focus outline at 3:1; shortcut sheet opens inline; all actions also reachable by mouse/touch at 44×44 px. |
 
+DES-CGP-LEARN-03 status (2026-10-29, CGP-LEARN-D-003): implemented in Studio's 자료 card. The block's polite state line is the caption: it comes after the card body, so with the card open it sits under the work surface as the whole sentence (no ellipsis); closed, the card's grid lifts the same node under the title (one line, the 72px closed card of DES-CGP-LEARN-01). Measured in headless Chromium at 100 % and 200 % zoom: under the work surface, 14px+, 4.5:1+, updated in place within 500 ms, no sideways scroll. Requirement: `docs/studio-requirements.md` REQ-STUDIO-LEARNING-BLOCK-CAPTION. Test: `learning-block-caption-computed.smoke.mjs`. Owner choices in `decisions.md`.
+
 Layout rule applied to all blocks (DES from CGP-LEARN-11): container ≥ 448 px (28 rem) → diagram 50 % beside
 text; < 448 px (VS Code side rail is usually below this) → stacked, diagram full width then caption; at 320 px
 width nothing scrolls horizontally and captions use the short variant.

@@ -7837,12 +7837,12 @@ REQ-STUDIO-LEARNING-BLOCK-CARD / DES-CGP-LEARN-01 (traces to REQ-STUDIO-LEARNING
 lesson attaches to the current step is drawn as a collapsible 자료 card in the coach rail, under that step's help choice,
 never in the message stream and never as a dialog. Closed, the card is one row at most 72px tall: a 48x48 thumbnail (the
 block kind's stroke icon over the label 자료), the block's REQ-STUDIO-LEARNING-BLOCK-TEXT title with its polite live state
-line under it (one line, ellipsis; the whole sentence once open), and a 44px "열어 보기" button (`aria-expanded`,
+line under it (one line, ellipsis; once open the whole sentence moves under the work surface, REQ-STUDIO-LEARNING-BLOCK-CAPTION), and a 44px "열어 보기" button (`aria-expanded`,
 `aria-controls`). Pressing it expands the block in place: the same card grows in flow and pushes what follows it down, so
 nothing covers it and it covers nothing; the button then reads "닫기". The card starts closed for every step; the
 open/closed choice is keyed to the lesson version and step, so opening one step's card never opens another's (it is not
 stored and not an evidence event). The card is the block region itself: it carries the block identity (`data-hps-material`, `-step`, `-version`), is
-named by the title in its head and described by the controls help. The live state line is in the always-drawn head, so
+named by the title in its head and described by the controls help. The live state line is never in the hidden body, so
 a step switch or a host save that lands on a closed card is shown and announced in the same region. The controls help
 and the work surface are in the card body, which stays mounted while closed, so an instructor's rehearsal read-back still
 reports the drawn surface. Notes inside a card (saved work, the undrawable notice) are 14px. Rail widths
@@ -7902,3 +7902,23 @@ built CSS and real panel markup in headless Chromium, personal and classroom she
 800 and 1420 px, normal and forced colours: 44px targets, 14px text at 4.5:1, focus ring, no
 horizontal scroll, file text rendered as text, one request per press, focus kept after a delete;
 fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Learning block caption (CGP-LEARN-D-003)
+
+REQ-STUDIO-LEARNING-BLOCK-CAPTION / DES-CGP-LEARN-03 (traces to REQ-STUDIO-LEARNING-BLOCK-TEXT, CGP-LEARN-R-003) / PI#3
+(DES-11 classroom-design): the block's live text equivalent is a visible caption, not screen-reader only. The polite state
+line (`role="status"`, `aria-live="polite"`, `aria-atomic="true"`) comes after the card body in the markup, so with the
+card open it is drawn under the work surface (the block's "diagram") across the card's full width and read after the
+controls, as the whole sentence: it wraps instead of ending in an ellipsis. With the card closed the card's grid lifts the
+same node under the title in the head row (one line with an ellipsis, REQ-STUDIO-LEARNING-BLOCK-CARD keeps the closed card
+at 72px or less), so a step switch or a host save that lands on a closed card is still drawn and announced. The caption is
+14px or more in the Ink token with 4.5:1 or more against the background behind it, its words change in the same mounted
+node within 500 ms of the input event, and at 200 % zoom (the 480px rail and the 640, 800 and 1420px panes at device
+scale 2) it stays whole inside the card with no sideways page scroll. Seats: every seat that draws the lesson rail.
+Default: on; display only, no new data flow.
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-caption-computed.smoke.mjs` (headless Chromium on the cascade of
+the real webview entry: personal and classroom, dark and light, 800 and 1420px at 100 % and 480/640/800/1420px at 200 %;
+caption under the work surface, inside the card, drawn (hit test), 14px+, 4.5:1+, not clipped and no line past the
+viewport, no sideways scroll, the same node updated within 500 ms on typing, a host save, a cleared field and a step switch
+onto a closed card; six injected overrides caught).
