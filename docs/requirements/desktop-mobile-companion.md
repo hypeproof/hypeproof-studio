@@ -102,3 +102,14 @@ new request. An uncertain receipt is reconciled without resending the request.
 Cold process/key recovery, native product controls and installed device
 acceptance remain separate. See the controller, checkpoint, adapter and cleanup
 evidence for their exact local/synthetic boundaries.
+
+The separately scoped #3098 native-controls cut registers explicit DEV-only
+commands using the existing AccountSession, prepared workspace and task/profile
+binding. One owned host session shares the native protocol budget; its journal
+lease drains admitted writes before another owner can load. Cipher closure
+synchronously closes its native owner and erases owned key references before
+late receive work can publish. Local close remains distinct from signed remote
+revocation. This cut adds no authoring/execution callback, Android application,
+production registration or cold-key recovery. The isolated DEV-copy version fix
+retains the upstream extension-compatible engine version and a separate release
+marker; stable platform product stamping is outside this cut.

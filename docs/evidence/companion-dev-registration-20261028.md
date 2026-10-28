@@ -75,3 +75,14 @@ Dev app/Worker/mobile acceptance is a separate root-owned run and is NOT RUN by
 this change. Real member login, physical Android/iOS, release, production and full
 DMC acceptance remain open. Canonical ST-REQ-COMPANION/ST-DES-COMPANION/
 ST-TEST-COMPANION and original acceptance remain unchanged; root owns mapping/PRs.
+
+## Standalone #3098 cut boundary
+
+This source cut includes the synchronous cipher-close notification and native
+owner cleanup before delayed receive work resumes. The lifecycle hunk was
+reviewed later in the integration branch and is moved here so native controls
+remain correct independently of future authored-draft or SDK execution work.
+Those later slices must reconcile the identical callback rather than introduce
+it twice. Existing native observations above remain bound to their historical
+source. New-cut focused tests/type checks are recorded separately; no installed
+observation of this new cut is implied.

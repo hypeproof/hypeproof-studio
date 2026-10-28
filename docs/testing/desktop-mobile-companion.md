@@ -113,3 +113,15 @@ executes the native entry and authenticated transport with the real budget sched
 and an injected clock. It retains the failing burst case and passing paced case,
 including same-session owner replacement. The fixed entry is a source observation;
 installed Android composition and customer acceptance remain separately evidenced.
+
+## Standalone native controls/journal source cut — #3098
+
+Focused checks cover native identity/config/token invalidation, bounded/rejected
+response-stream cleanup, explicit native comparison/approval/cancel/close/revoke,
+single receive ownership and ACK-expiry retirement. Entry tests preserve exclusive
+journal ownership and old-write drainage; pacing retains the same-session budget
+through owner replacement. A real short session deadline must synchronously
+close the native owner, erase key references and suppress late receive effects.
+The isolated DEV-copy tests retain the semantic engine version separately from
+its release marker. These new-cut source checks do not establish installed UI,
+member identity, production deployment or stable Mac/Windows stamping.
