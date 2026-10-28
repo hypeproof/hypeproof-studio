@@ -125,3 +125,14 @@ close the native owner, erase key references and suppress late receive effects.
 The isolated DEV-copy tests retain the semantic engine version separately from
 its release marker. These new-cut source checks do not establish installed UI,
 member identity, production deployment or stable Mac/Windows stamping.
+
+## Initial Android debug preview source cut — #3100
+
+Focused checks cover bounded/cancelled native RPC correlation, authenticated
+selection/result demux and the actual React entry. The exact browser asset
+pipeline must pin one matching React/ReactDOM graph and render its initial UI
+without Node globals or native messages before an explicit gesture. Java,
+manifest and Gradle inputs may reuse historical compile evidence only after
+byte comparison; changed web assets remain a distinct package identity. No APK
+rebuild, installation, native personal login or release acceptance is implied
+by these source/asset checks.

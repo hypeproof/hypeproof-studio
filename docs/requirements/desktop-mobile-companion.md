@@ -113,3 +113,12 @@ revocation. This cut adds no authoring/execution callback, Android application,
 production registration or cold-key recovery. The isolated DEV-copy version fix
 retains the upstream extension-compatible engine version and a separate release
 marker; stable platform product stamping is outside this cut.
+
+The separately scoped #3100 Android preview experiment wraps the existing
+controller in an API35 debug shell with explicit synthetic native provisioning.
+The default launcher has no provisioned transport, and release source excludes
+the fixture activity. Account credentials remain native RAM; authenticated
+encrypted selection metadata is the only device descriptor source. This initial
+fixture boundary is distinct from later #3115 personal sign-in, #3114 draft
+review and #3097 selected execution. New asset/source checks do not establish
+installed or real-member acceptance for a newly assembled cut.

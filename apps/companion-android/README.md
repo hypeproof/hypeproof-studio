@@ -1,5 +1,11 @@
 # Companion Android debug experiment
 
+This #3100 source cut intentionally preserves the initial fixture-only debug
+boundary. Native personal-account sign-in belongs to #3115; reviewed draft
+import and selected execution belong to #3114/#3097 and are absent here.
+Historical APK observations below retain their original source/asset identities.
+A new cut or generated web bundle is not an installed-APK acceptance result.
+
 This is an API35-only installed-APK prototype, not the final mobile framework,
 account product entry, release or cold-restart design. It reuses Studio's existing
 React companion view/controller, authenticated result verifier, framing/adapter,

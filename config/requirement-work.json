@@ -844,7 +844,7 @@
         "DMC-15"
       ],
       "inline_prefixes": [],
-      "sha256": "d5cf6a7d5e2b354cb268f622def92a5563df352e5c4e0c0f8ab02d2e713501cb",
+      "sha256": "ea9db19eb688f9195764e30e17ce70ec14563f1faffe7396b20449b3d0a2d695",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
@@ -4242,7 +4242,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Integrate #3100 Android debug preview using the existing native DEV owner, then separately scoped #3114 draft review and #3115 phone sign-in. This #3098 source cut has explicit native lifecycle and exclusive journal ownership only; parent #3072/#2803 and installed/cold-key/production acceptance remain open.",
+      "next_action": "Independently review and verify the initial #3100 fixture-only Android preview cut, then integrate separately scoped #3114 ordinary draft/handoff and #3115 phone-native personal sign-in. Selected execution is #3097; real members, physical/iOS, cold-key recovery and production remain open.",
       "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
       "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
       "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",
@@ -4269,7 +4269,11 @@
         "extensions/hypeproof-chat/src/companionHostSession.ts",
         "extensions/hypeproof-chat/src/companionAuthenticatedTransport.ts",
         "extensions/hypeproof-chat/src/companionDevHostOwner.ts",
-        "extensions/hypeproof-chat/src/companionDevHostCommands.ts"
+        "extensions/hypeproof-chat/src/companionDevHostCommands.ts",
+        "apps/companion-android/web/main.tsx",
+        "apps/companion-android/web/nativePort.ts",
+        "apps/companion-android/web/resultTransport.ts",
+        "apps/companion-android/build-web.mjs"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
@@ -4308,7 +4312,11 @@
         "extensions/hypeproof-chat/src/companionDevHostOwner.ts",
         "extensions/hypeproof-chat/src/companionDevHostCommands.ts",
         "extensions/hypeproof-chat/test/companion-dev-host-owner.smoke.mjs",
-        "extensions/hypeproof-chat/test/companion-dev-host-commands.smoke.mjs"
+        "extensions/hypeproof-chat/test/companion-dev-host-commands.smoke.mjs",
+        "apps/companion-android/test/native-port.test.mjs",
+        "apps/companion-android/test/result-entry.test.mjs",
+        "apps/companion-android/test/result-transport.test.mjs",
+        "apps/companion-android/test/browser-boot.test.mjs"
       ]
     }
   ]
