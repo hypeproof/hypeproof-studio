@@ -532,11 +532,70 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
   --tw-muted:var(--hp-text-muted-default);
   --tw-panel:var(--hp-bg-panel-default);
   color:var(--hp-text-primary-default)}
-.studio-start .studio-settings .studio-settings-hint {
-  flex-basis:100%;
+/* CGP-SHELL-D-013 (DES-SHELL-13) — a right-side sheet over the page: full height on the right edge,
+ * 320–400px wide (the whole width below 320px), at every width (the shared card's narrow bottom
+ * sheet does not apply). Each row is one 48px line: the row's name, then one control. */
+.studio-start .hps-preferences.studio-settings.hp-modal {
+  position:fixed;
+  inset-block:0;
+  inset-inline-start:auto;
+  inset-inline-end:0;
   margin:0;
+  /* 100% of the fixed containing block, not 100vw: 100vw includes a classic scrollbar and pushed the sheet off the left edge on Linux. */
+  width:min(100%, calc(var(--hp-space-4) * 25));
+  min-width:min(100%, calc(var(--hp-space-8) * 10));
+  max-width:100%;
+  height:100dvh;
+  max-height:100dvh;
+  border-width:0 0 0 var(--ds-c-studio-start-size-3);
+  border-radius:0}
+.studio-start .studio-settings .studio-settings-row {
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:var(--hp-space-3);
+  width:100%;
+  min-height:var(--hp-control-lg);
+  margin:0;
+  padding:0;
+  border:0;
+  border-bottom:var(--ds-c-studio-start-size-3) solid var(--tw-line);
+  font-size:var(--hp-font-caption)}
+.studio-start .studio-settings .studio-settings-row > label:first-child {
+  display:flex;
+  align-items:center;
+  min-height:var(--hp-control-md);
+  min-width:0;
+  font-weight:var(--hp-weight-strong);
+  white-space:nowrap}
+.studio-start .studio-settings .studio-settings-row select {
+  flex:none;
+  max-width:60%;
+  min-height:var(--hp-control-md);
+  padding:0 var(--hp-space-2);
+  border:var(--ds-c-studio-start-size-3) solid var(--hp-border-control-default);
+  border-radius:var(--ds-c-studio-start-radius-10);
+  background:var(--tw-panel);
+  color:inherit;
+  font-family:inherit;
+  font-size:var(--hp-font-caption)}
+.studio-start .studio-settings .studio-settings-check {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:var(--hp-control-md);
+  min-height:var(--hp-control-md);
+  cursor:pointer}
+.studio-start .studio-settings .studio-settings-hint {
+  margin:0;
+  padding:var(--hp-space-2) 0;
+  border-bottom:var(--ds-c-studio-start-size-3) solid var(--tw-line);
   font-size:var(--hp-font-caption)}
 .studio-start .studio-settings .studio-settings-advanced {
-  display:block;
-  font-size:var(--hp-font-caption);
-  text-decoration:underline}
+  background:transparent;
+  color:inherit;
+  text-align:start;
+  font-family:inherit;
+  text-decoration:underline;
+  cursor:pointer}

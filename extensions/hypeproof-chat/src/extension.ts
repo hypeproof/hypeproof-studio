@@ -1,3 +1,4 @@
+import { registerCompanionWorkspace } from "./companionWorkspaceHost";
 import { workPower } from "./workPower";
 import { registerActivityTrash } from "./activityTrashCommands";
 import { confirmOutbound } from "./outboundConsentHost.ts";
@@ -99,6 +100,7 @@ export async function activate(context: vscode.ExtensionContext) {
   try { await connections.initialize(); }
   catch (error) { void vscode.window.showWarningMessage(error instanceof ActivityConnectionError ? error.message : '저장된 활동 연결을 확인하지 못했습니다. 파일은 보존됩니다. 저장된 활동과 연결 서버를 확인해 주세요.'); }
   context = connections.wrap();
+  registerCompanionWorkspace(context, connections);
   registerExternalSkillCommands(context);
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const activationService = vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
@@ -226,8 +228,9 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(...chalkContract.register());
   provider.attachChalkContract(chalkContract);
-  const perfTrace = new PerfTraceController({ context, seatAllowed: () => provider.perfTraceSeatAllowed(), getProfileId: () => provider.getProfileId() });
+  const perfTrace = new PerfTraceController({ context, seatAllowed: () => provider.perfTraceSeatAllowed(), getProfileId: () => provider.getProfileId(), onState: (state) => provider.postPerfTraceState(state) });
   provider.perfTraceObserver = (msg) => perfTrace.observe(msg);
+  provider.perfTracePanel = { state: () => perfTrace.state, stop: (id) => perfTrace.stopFromPanel(id) };
   providerRef = provider;
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.editImage", () => provider.editImage()));
   // One-click publish endpoints, decided once: GitHub itself, unless this is a test/dev run
@@ -576,7 +579,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // REQ-STUDIO-PERF-TRACE (CGP-AGENT-R-030): 느려요 기록, adult and instructor seats, default off.
     vscode.commands.registerCommand("hypeproof-chat.recordPerformanceTrace", async () => { await perfTrace.start(); }),
     vscode.commands.registerCommand("hypeproof-chat.stopPerformanceTrace", async () => { await perfTrace.stop("learner"); }),
-    { dispose: () => { provider.perfTraceObserver = undefined; perfTrace.dispose(); } },
+    { dispose: () => { provider.perfTraceObserver = undefined; provider.perfTracePanel = undefined; perfTrace.dispose(); } },
 
     vscode.commands.registerCommand("hypeproof-chat.reportProblem", async () => {
       await runReportProblemCommand({

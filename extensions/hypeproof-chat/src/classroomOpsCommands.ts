@@ -21,7 +21,7 @@ export type ReceiptState = "accepted" | "running" | "succeeded" | "failed" | "re
 export interface Receipt { command_id: string; lease_generation: number; connection_epoch: number; state: ReceiptState; result_code: string; observed_at: number }
 export interface ReceiptAck { command_id: string; state: string; proceed: boolean; reason: string }
 
-export interface ExecutorResult { ok: boolean; code: string }
+export interface ExecutorResult { ok: boolean; code: string; output?: unknown }
 export interface Executor {
   /** True when the action changes learner-visible state; such an action is never auto-retried. */
   mutating: boolean;
@@ -40,6 +40,8 @@ interface JournalEntry {
   settled: boolean;
   /** `accepted` was answered with proceed. */
   proceed: boolean;
+  /** Local result only; never included in classroom receipt transport. */
+  output?: unknown;
 }
 export interface JournalState { entries: JournalEntry[] }
 export interface JournalStore { load(): Promise<JournalState | null>; save(s: JournalState): Promise<void> }
@@ -104,6 +106,12 @@ export class CommandRunner {
   close(): void { this.closed = true; this.current?.abort(); }
   get isClosed(): boolean { return this.closed; }
 
+  /** Local adapters may return the result persisted with the terminal receipt. */
+  result(commandId: string): { state: ReceiptState; code: string; output?: unknown } | null {
+    const e = this.state.entries.find(entry => entry.envelope.command_id === commandId);
+    return e ? structuredClone({ state: e.state, code: e.result_code, ...(e.output !== undefined ? { output: e.output } : {}) }) : null;
+  }
+
   /** Receipts the Service has not acknowledged yet. Sent on every sync until it does. */
   pendingReceipts(): Receipt[] {
     return this.state.entries.filter((e) => !e.settled).slice(0, 50).map((e) => ({ command_id: e.envelope.command_id, lease_generation: e.envelope.lease_generation, connection_epoch: e.envelope.connection_epoch, state: e.state, result_code: e.result_code, observed_at: e.observed_at }));
@@ -161,6 +169,7 @@ export class CommandRunner {
         ex.run(abort.signal, c),
         new Promise<ExecutorResult>((resolve) => { timer = setTimeout(() => { timedOut = true; abort.abort(); resolve({ ok: false, code: "timeout" }); }, Math.max(1000, c.run_within_ms)); }),
       ]);
+      if (result.ok && result.output !== undefined) e.output = result.output;
       // A timed-out state-changing action may still have landed: that is unknown, not failed.
       // (The abort may make the executor answer first; the deadline, not the answer's wording, decides.)
       // Stopped because the connection closed mid-run: a stop was REQUESTED; for a state-changing action the result is unknown.

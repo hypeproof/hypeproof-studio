@@ -1,7 +1,7 @@
 // CGP-AGENT-R-030 / REQ-CGP-AGENT-64 (REQ-STUDIO-PERF-TRACE): the "느려요 기록" performance trace.
 //
 // Pure: no vscode, no DOM, no Node imports, so tests run it directly. The host side
-// (perfTraceHost.ts) owns the start click, the status bar pill, the local file and the send.
+// (perfTraceHost.ts) owns the start click, the pills (status bar; chat panel through the provider), the local file and the send.
 //
 // What a trace holds is numbers only: per-turn timings bound to the turn's stream id, and
 // periodic samples of extension-host memory and event-loop lag. No prompt, answer, file name,
@@ -144,7 +144,7 @@ export const PERF_TRACE_START_QUESTION = "느려요 기록을 시작할까요?";
 export const PERF_TRACE_START_BUTTON = "기록 시작";
 export const PERF_TRACE_CONSENT_LINES: readonly string[] = [
   "1. ‘기록 시작’을 누른 뒤, 느렸던 일을 한 번 더 해 보세요.",
-  "2. 아래 상태 표시줄의 ‘기록 중 · 멈추기’를 누르면 기록이 끝나요. 10분이 지나면 저절로 멈춰요.",
+  "2. 채팅 창 아래쪽의 빨간 ‘기록 중 · 멈추기’를 누르면 기록이 끝나요. 상태 표시줄에도 같은 버튼이 있어요. 10분이 지나면 저절로 멈춰요.",
   "3. 기록은 이 컴퓨터에만 저장돼요. ‘보내기’를 직접 누르기 전에는 밖으로 나가지 않아요.",
   "",
   "기록하는 것: 답이 시작되고 끝나기까지 걸린 시간, 코치 기능이 멈칫한 시간과 메모리 사용량.",
@@ -153,12 +153,14 @@ export const PERF_TRACE_CONSENT_LINES: readonly string[] = [
 ];
 export const PERF_TRACE_PILL = "$(record) 기록 중 · 멈추기";
 export const PERF_TRACE_PILL_LABEL = "느려요 기록 중. 누르면 기록을 멈춰요.";
+/** CGP-AGENT-D-026: the chat panel's pill text (the status bar item adds a codicon in front). */
+export const PERF_TRACE_PANEL_PILL = "기록 중 · 멈추기";
 export const PERF_TRACE_NOTE_PROMPT = "무엇이 느렸는지 적어 주세요 (선택). 비워 두어도 돼요.";
 export const PERF_TRACE_KEEP = "내 컴퓨터에만 두기";
 export const PERF_TRACE_SEND = "보내기";
 export const PERF_TRACE_NOTE_NONE = "느려요 기록 (메모 없음)";
 export const PERF_TRACE_SEAT_REFUSED = "이 자리에서는 느려요 기록을 쓸 수 없어요. 성인 이용자와 강사만 쓸 수 있어요.";
-export const PERF_TRACE_ALREADY = "이미 기록하고 있어요. 상태 표시줄의 ‘기록 중 · 멈추기’를 누르면 끝나요.";
+export const PERF_TRACE_ALREADY = "이미 기록하고 있어요. 채팅 창 아래쪽이나 상태 표시줄의 ‘기록 중 · 멈추기’를 누르면 끝나요.";
 export const PERF_TRACE_KEPT = "기록을 이 컴퓨터에만 두었어요. 아무것도 보내지 않았어요.";
 export const perfTraceStoppedLine = (by: PerfTraceStop): string =>
   by === "limit" ? "10분이 지나 기록을 멈췄어요." : by === "seat" ? "이 자리에서는 기록을 이어 갈 수 없어서 멈췄어요." : "기록을 멈췄어요.";

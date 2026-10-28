@@ -17,12 +17,12 @@ html body :focus-visible:where(:not(.hps-shell[data-chat-detail="personal"] .hps
  * scroll scope: an inset ring would sit on its own fill, and the ring colour is usually the fill
  * colour. The 2px gap separates the ring from the fill, so the ring only has to contrast with
  * the surface around the control. */
-html body :is(.hp-cta-primary, .hps-btn-send, .hps-edit-save, .hps-msg-run, .hps-error-banner-retry) {
+html body :is(.hp-cta-primary, .hps-btn-send, .hps-edit-save, .hps-checkpoint-save, .hps-msg-run, .hps-error-banner-retry) {
   --hp-focus-offset: var(--ds-c-focus-offset);
 }
 /* Scroll scopes: the focusable viewport itself and every control inside it. */
 html body :is(
-  .tw-task-list, .tw-source-list, .tw-sources, .tw-trash-dialog, .tw-home-materials,
+  .tw-task-list, .tw-source-list, .tw-sources, .tw-trash-dialog, .tw-home-materials, .tw-works-body,
   .hps-messages, .hps-markdown-table, .hps-codepill-body, .hps-fatal-detail, .hps-file-mentions-list, .hps-pasted-list, .hps-pasted-editor, .hps-turn-raw, .hps-math-block,
   .hps-update-banner-notes, .hps-element-meta pre, .hps-shell-row pre, .hp-rail-lesson, .hp-rail-goal,
   .hps-native-observation, .hps-effort details[open], .hps-access[open],

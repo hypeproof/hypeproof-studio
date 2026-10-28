@@ -190,7 +190,7 @@ check('focus never repaints the control: no background/color rule on the focus s
   });
 });
 check('accent-filled controls keep the outside offset inside scroll scopes', () => {
-  const d = declaration('html body :is(.hp-cta-primary, .hps-btn-send, .hps-edit-save, .hps-msg-run, .hps-error-banner-retry)', '--hp-focus-offset');
+  const d = declaration('html body :is(.hp-cta-primary, .hps-btn-send, .hps-edit-save, .hps-checkpoint-save, .hps-msg-run, .hps-error-banner-retry)', '--hp-focus-offset');
   assert.match(d.value, /2px/);
 });
 check('forced colors: Highlight against Canvas including selected controls; descendants follow the text colour', () => {

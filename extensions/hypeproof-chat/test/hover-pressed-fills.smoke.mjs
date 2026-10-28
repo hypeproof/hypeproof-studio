@@ -191,7 +191,7 @@ const specificity = (s) => {
   return [ids, cls, types];
 };
 const cmpSpec = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
-const STATE_PSEUDO = /:(hover|active|enabled)\b|:not\(:disabled\)|:not\(\.hps-edit-save\)|:not\(\[aria-pressed="true"\]\)/g;
+const STATE_PSEUDO = /:(hover|active|enabled)\b|:not\(:disabled\)|:not\(\.hps-(?:edit|checkpoint)-save\)|:not\(\[aria-pressed="true"\]\)/g;
 // main.tsx imports tokens.css, then styles.css, then chatDetails.css; other files have no fixed order
 // against these, so an equal-specificity tie across them counts as lost.
 const LOAD = ["tokens.css", "styles.css", "chatDetails.css"];

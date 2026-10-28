@@ -52,6 +52,7 @@
       ]
     },
     "commands": [
+      { "command": "hypeproof-chat.prepareCompanionWorkspace", "title": "휴대폰 연결: 로컬 작업 폴더 준비", "category": "HypeProof" },
       { "command": "hypeproof-chat.exportMyWork", "title": "내 작업 내보내기", "category": "HypeProof" },
       { "command": "hypeproof-chat.takeMyWork", "title": "내 작업 가져가기", "enablement": "config.hypeproofChat.workTakeawayEnabled" },
       { "command": "hypeproof-chat.artifactHistory", "title": "이 파일의 이전 버전", "category": "HypeProof" },
@@ -676,7 +677,8 @@
     "build:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js",
     "build:webview": "cd webview-ui && npm install && npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:deck-pdf-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs",
+    "test:companion-workspace": "node --experimental-strip-types --test test/companion-workspace.test.mjs test/companion-workspace-host.test.mjs",
+    "test": "npm run test:companion-workspace && node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:deck-pdf-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs",
     "test:activity-resume": "node --experimental-strip-types test/activity-resume.test.mjs",
     "test:instructor-render": "node scripts/run-tsx-tests.mjs instructor-render",
     "test:signin-copy-link": "node scripts/run-tsx-tests.mjs signin-copy-link",

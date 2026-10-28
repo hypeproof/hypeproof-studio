@@ -127,6 +127,29 @@ const moved = { ...S, deck: { ...S.deck, "3": { ...S.deck["3"], headline: "학�
 assert.equal(sg.applySlidePatch(moved, good.patch), null, "planted: the slide changed since the proposal → not applied");
 ok("accept changes only that slide and only while it is still the proposal's 'before'");
 
+// ── evidence label of the changed claim (CR-55 / DES-ART-16) ──
+assert.equal(sg.claimConfidence(S, ["E-1"]), "observed", "only real evidence → observed");
+assert.equal(sg.claimConfidence(S, ["D-1"]), "assumed", "a decision alone cites no evidence → assumed");
+assert.equal(sg.claimConfidence(S, []), "assumed");
+assert.equal(sg.claimConfidence(S, ["E-1", "D-1"]), "interpreted", "evidence mixed with a decision is not observed");
+assert.equal(sg.claimConfidence({ ...S, E: S.E.map((e) => ({ ...e, state: "simulated" })) }, ["E-1"]), "interpreted", "simulated evidence is not observed");
+assert.equal(sg.claimConfidence({ ...S, E: S.E.map((e) => ({ ...e, state: "self_reported" })) }, ["E-1"]), "interpreted");
+{
+  const rows = sg.slidePatchRows(good.patch);
+  assert.deepEqual(rows.map((r) => [r.label, r.changed]), [["제목", true], ["그림", false], ["짧은 문장 1", true]], "the removed support line counts as changed");
+  const studio = await import("../src/slideStudio.ts");
+  const p = studio.slideStudioProposal(S, template, good.patch, "3-1");
+  assert.equal(p.confidence, "assumed"); assert.equal(p.confidenceLabel, "가정");
+  assert.match(p.basis, /^근거:/);
+  const v = studio.slideStudioView(S, template, PLAN, 99, "");
+  assert.equal(v.selected, 2, "an unknown selection falls back to the first drafted slide");
+  assert.ok(v.slides.every((x) => x.chips.length <= sg.MAX_SLIDE_CHIPS));
+  const host = studio.slideStudioHtml({ ...v, heading: "</script><script>alert(1)</script>\u2028" }, "n0");
+  assert.equal(host.match(/<\/script>/g).length, 2, "view text cannot close the data script");
+  assert.ok(!host.includes("\u2028"), "U+2028 is escaped");
+}
+ok("evidence label: observed only for real evidence, assumed without evidence; the page data cannot break out");
+
 // ── the real command, with VS Code and the model replaced ──
 const require = createRequire(import.meta.url);
 const here = fileURLToPath(new URL("..", import.meta.url));
@@ -135,7 +158,7 @@ const bundle = await build({
   bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "silent",
 });
 const ws = mkdtempSync(join(tmpdir(), "slide-suggest-"));
-let picks = [], modal = [], modalAnswer, executed = [];
+let picks = [], modal = [], modalAnswer, executed = [], views = [], disposed = 0;
 const vscode = {
   workspace: { workspaceFolders: [{ uri: { fsPath: ws } }], getConfiguration: () => ({ get: (_k, fallback) => fallback }) },
   Uri: { file: (p) => ({ fsPath: p }) },
@@ -143,8 +166,6 @@ const vscode = {
   commands: { executeCommand: async (...a) => { executed.push(a); } },
   window: {
     createOutputChannel: () => ({ appendLine: () => {} }),
-    showQuickPick: async (items) => { const want = picks.shift(); return want === undefined ? undefined : items.find(want); },
-    showInformationMessage: async (message, opts, ...buttons) => { modal.push({ message, opts, buttons }); return typeof modalAnswer === "function" ? modalAnswer() : modalAnswer; },
     withProgress: async (_o, fn) => fn(),
   },
 };
@@ -169,26 +190,38 @@ Object.assign(h, {
   postDenialNotice: async () => {},
   postPageNotice: (t) => { notices.push(t); },
   completeSkill: async (p) => { calls.push(p); return model; },
+  // The panel (slideStudioHost.ts) replaced by a scripted learner: one chip press, then the panel is closed.
+  openSlideStudio: () => {
+    const ui = { closed: false,
+      pick: async (view) => { views.push(view); const p = picks.shift(); if (!p) ui.closed = true; return p; },
+      propose: async (p) => { modal.push(p); return typeof modalAnswer === "function" ? modalAnswer() : modalAnswer; },
+      reveal: () => {}, dispose: () => { disposed++; } };
+    return ui;
+  },
 });
 Object.defineProperty(h, "cachedProfile", { get: () => ({ learning_wiki: { enabled, plan: PLAN } }) });
-const reset = () => { seed(); picks = [(x) => x.no === 3, (x) => x.id === "simplify"]; modal = []; modalAnswer = undefined; executed = []; notices = []; calls = []; enabled = true; model = { ok: true, text: JSON.stringify(answer([simpler3])) }; };
+const reset = () => { seed(); picks = [{ no: 3, chip: "simplify" }]; modal = []; views = []; disposed = 0; modalAnswer = undefined; executed = []; notices = []; calls = []; enabled = true; model = { ok: true, text: JSON.stringify(answer([simpler3])) }; };
 
-// R1 reject (그대로) and close (Esc → undefined): byte-identical folder
-for (const a of ["그대로", undefined]) {
+// R1 reject (그대로) and close (panel closed → undefined): byte-identical folder
+for (const a of [false, undefined]) {
   reset(); modalAnswer = a;
   const before = snapshot();
   await h.deckSlideSuggest();
   assert.equal(modal.length, 1, "the proposal is shown");
-  assert.equal(modal[0].opts.modal, true);
-  assert.deepEqual(modal[0].buttons, ["반영", "그대로"]);
-  assert.match(modal[0].opts.detail, /지금[\s\S]*바꾼 안/);
+  assert.equal(modal[0].no, 3);
+  assert.equal(modal[0].rows[0].label, "제목");
+  assert.deepEqual([modal[0].rows[0].before, modal[0].rows[0].after], ["버튼을 52px로 키웠다", "버튼을 52px로"]);
+  assert.equal(modal[0].rows[0].changed, true);
   assert.deepEqual(snapshot(), before, `${a ?? "closed"}: every file in the wiki folder is byte-identical`);
-  assert.match(notices.at(-1), /그대로 두었어요/);
+  if (a === false) assert.match(notices.at(-1), /그대로 두었어요/);
+  assert.equal(disposed, 1, "the panel is closed when the command ends");
 }
+assert.deepEqual(views[0].slides.map((x) => x.no), [2, 3], "the panel lists the drafted slides");
+assert.ok(views[0].slides.every((x) => x.chips.length === 3));
 ok("host: 그대로 or closing the proposal leaves the wiki folder byte-identical");
 
 // R2 accept (반영): only slide 3 changes; slide 2's files are byte-identical
-reset(); modalAnswer = "반영";
+reset(); modalAnswer = true;
 let before = snapshot();
 await h.deckSlideSuggest();
 let after = snapshot();
@@ -202,7 +235,7 @@ assert.equal(calls.length, 1, "one model request");
 ok("host: 반영 writes only the chosen slide");
 
 // R3 the model also rewrote slide 2: refused, no proposal shown, nothing written
-reset(); model = { ok: true, text: JSON.stringify(answer([simpler3, { no: 2, headline: "다른 장", visual: { type: "statement", value: "x" } }])) }; modalAnswer = "반영";
+reset(); model = { ok: true, text: JSON.stringify(answer([simpler3, { no: 2, headline: "다른 장", visual: { type: "statement", value: "x" } }])) }; modalAnswer = true;
 before = snapshot();
 await h.deckSlideSuggest();
 assert.equal(modal.length, 0, "no proposal for an answer touching another slide");
@@ -212,13 +245,13 @@ ok("host: an answer touching another slide is refused without a proposal");
 
 // R4 the slide changed while the proposal was open: not applied
 reset();
-modalAnswer = () => { wiki.saveState(dir, { ...S, deck: { ...S.deck, "3": { ...S.deck["3"], headline: "학생이 고친 제목" } } }); return "반영"; };
+modalAnswer = () => { wiki.saveState(dir, { ...S, deck: { ...S.deck, "3": { ...S.deck["3"], headline: "학생이 고친 제목" } } }); return true; };
 await h.deckSlideSuggest();
 assert.equal(JSON.parse(readFileSync(join(dir, ".wiki-state.json"), "utf8")).deck["3"].headline, "학생이 고친 제목", "the newer slide is kept");
 assert.match(notices.at(-1), /그 사이 이 장이 바뀌어서/);
 // R5 the switch went off while the proposal was open: nothing written
 reset();
-modalAnswer = () => { enabled = false; return "반영"; };
+modalAnswer = () => { enabled = false; return true; };
 before = snapshot();
 await h.deckSlideSuggest();
 assert.deepEqual(snapshot(), before, "switch off before 반영 → nothing written");
@@ -229,7 +262,7 @@ reset();
 let release;
 model = new Promise((r) => { release = () => r({ ok: true, text: JSON.stringify(answer([simpler3])) }); });
 h.completeSkill = async (p) => { calls.push(p); return model; };
-modalAnswer = "그대로";
+modalAnswer = false;
 const first = h.deckSlideSuggest();
 await new Promise((r) => setTimeout(r, 0));
 await h.deckSlideSuggest();
@@ -241,6 +274,23 @@ await h.deckSlideSuggest();
 assert.equal(calls.length, 0, "switch off: no model call");
 assert.equal(modal.length, 0);
 ok("host: one run at a time; the learning wiki switch is checked first");
+
+// R7 (CGP-ART-D-016) one panel, several chips: a pick the view does not offer starts no model call, the panel
+// stays open after each outcome, and every outcome reaches the panel's status line.
+reset();
+picks = [{ no: 1, chip: "simplify" }, { no: 3, chip: "zoom" }, { no: 3, chip: "simplify" }, { no: 3, chip: "simplify" }];
+let answers = [false, true];
+modalAnswer = () => answers.shift();
+await h.deckSlideSuggest();
+assert.equal(calls.length, 2, "an undrafted slide or an unknown chip starts no model request");
+assert.equal(modal.length, 2);
+assert.equal(views.length, 5, "the panel stays open for the next chip until it is closed");
+assert.match(views[1].status, /고를 수 없는 제안이에요/);
+assert.match(views[3].status, /그대로 두었어요/);
+assert.equal(views[4].slides.find((x) => x.no === 3).headline, "버튼을 52px로", "the thumbnail shows the accepted slide");
+assert.equal(views[4].selected, 3, "the selection stays on the slide just worked on");
+assert.ok(new Set(modal.map((m) => m.req)).size === 2, "each proposal has its own request id");
+ok("host: one panel runs several chips; picks it did not offer are refused without a model call");
 
 // ── manifest ──
 {

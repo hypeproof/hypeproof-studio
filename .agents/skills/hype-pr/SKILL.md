@@ -152,23 +152,38 @@ uncommitted text. Read working changes directly when developing.
      --issue ISSUE_NUMBER --preparation RECEIPT_PATH --apply
    ```
 
-   **Agent identity (local runs).** An agent session commits, pushes and creates as
-   the `hypeproof-agent` GitHub App, not as the human whose machine it runs on.
-   Prefix each of those commands with the canonical Harness wrapper and pass
-   `--author 'hypeproof-agent[bot]'`:
+   **Agent identity (local runs).** Use the canonical Harness local Git wrapper
+   for agent-authored commits and rebases. It needs no key, login, token or network.
+   Use the authenticated wrapper for network writes and pass the App author:
 
    ```bash
-   AGENT="$HYPEPROOF_HARNESS/scripts/agent-identity/with-agent-identity.sh"  # or ../hypeproof-harness/...
-   "$AGENT" git commit ...
+   AGENT_GIT="$HYPEPROOF_HARNESS/scripts/agent-identity/agent-git.sh"
+   AGENT="$HYPEPROOF_HARNESS/scripts/agent-identity/with-agent-identity.sh"
+   "$AGENT_GIT" commit -m 'fix: 설명'
+   "$AGENT_GIT" rebase origin/main
    "$AGENT" git push -u origin BRANCH
    "$AGENT" python3 scripts/hype-pr/pr.py create ... --author 'hypeproof-agent[bot]' --apply
    ```
 
-   The human is then a real second person on the PR, and their approval satisfies
-   the control-plane gate and review rules that exclude the author. A push after an
-   approval makes that approval stale. If the wrapper cannot mint a token (no App
-   key on this machine), stop and say so instead of falling back to the human's
-   identity without being told to.
+   Legacy authenticated-wrapper calls for local Git commands dispatch tokenlessly.
+   Preserve genuine human commits; correct only commits actually authored by agents.
+   Before the first network write, the agent runs `agent-auth.py ensure --repo
+   hypeproof/<target> --json` from the canonical Harness. Follow the state handling
+   and initial credential-transfer consent in `docs/AGENT-GUIDE.ko.md` §2a.
+   Execute setup on behalf of the member; do not hand them a list of commands.
+   Only after informed consent use `--accept-github-login`; reuse existing consent.
+   `ready` means live repository access was checked and the probe token revoked.
+   It does not create the PR or grant merge approval. Missing GitHub login requires
+   browser sign-in; other failures block writes without personal-token fallback.
+   Keep local work. Members never need an organization PEM or a new GitHub App.
+   Request a single repository from `--repo`, origin or explicit
+   `HYPEPROOF_AGENT_REPOSITORY=hypeproof/<repo>`. Workflow writes require
+   `HYPEPROOF_AGENT_WORKFLOWS=1` and the user's OAuth `workflow` scope.
+   Preparation GETs and fixed Git fetches may read other private canonical repos
+   with the member's existing stored gh/Git login. Mutations retain the single-repo
+   App token. Missing read access blocks preparation; never widen the write grant.
+   The human remains a separate reviewer; approval and merge rules still apply,
+   and a push after approval makes that approval stale.
 
    The PR body must close that issue and no other issue. Omit `--apply` for a command
    preview. The apply path verifies that the target is an existing open same-repository

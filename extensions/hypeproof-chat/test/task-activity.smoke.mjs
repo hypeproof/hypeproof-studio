@@ -127,6 +127,24 @@ await t("untrusted names: control/bidi/U+2028 are neutralised, length is capped,
   assert.equal(A.validTaskActivityFact({ id: "z", verb: "read", target: "a\u202eb" }), false, "store refuses bidi in a target");
   assert.equal(A.validTaskActivityFact({ id: "z", verb: "read", target: "a", extra: 1 }), false, "exact keys");
   assert.equal(A.middleEllipsis("src/components/very/long/path/to/the/file/Name.tsx", 20), "src/compo…e/Name.tsx", "keeps the start and the file name end");
+  // CGP-ART-D-020: the shown name is the longest middle-ellipsized form that fits one line.
+  const long = "notes/아주/긴/폴더/이름이/계속/이어지는/경로/마지막-파일-이름.md";
+  assert.equal(A.fitMiddleEllipsis(long, null), A.middleEllipsis(long), "no measurer: the 48-character cap");
+  const fit = A.fitMiddleEllipsis(long, (s) => Array.from(s).length <= 20);
+  assert.equal(Array.from(fit).length, 20, "longest form that fits"); assert.ok(fit.includes("…") && fit.endsWith("이름.md"), fit);
+  assert.equal(A.fitMiddleEllipsis(long, () => false), A.middleEllipsis(long, 12), "never cut below the floor");
+  assert.equal(A.fitMiddleEllipsis("index.html", () => true), "index.html");
+  // The cut never lands inside a grapheme: ZWJ emoji, flags, combining marks, decomposed Hangul.
+  const seg = new Intl.Segmenter("und", { granularity: "grapheme" });
+  const cuts = (full, shown) => {
+    if (!shown.includes("…")) return shown === full;
+    const [head, tail] = shown.split("…");
+    const bounds = new Set(); let at = 0; for (const g of seg.segment(full)) { at += g.segment.length; bounds.add(at); }
+    return bounds.has(head.length) && bounds.has(full.length - tail.length) && full.startsWith(head) && full.endsWith(tail);
+  };
+  const nasty = { zwj: "👨‍👩‍👧‍👦".repeat(30) + ".png", flags: "🇰🇷".repeat(30) + ".md", combining: "e\u0301".repeat(60) + ".txt", jamo: "한글".normalize("NFD").repeat(30) + ".txt", ext: "report." + "x".repeat(60) };
+  for (const [name, full] of Object.entries(nasty)) for (const max of [12, 13, 20, 30, 48]) assert.ok(cuts(full, A.middleEllipsis(full, max)), `${name} @${max}: ${A.middleEllipsis(full, max)}`);
+  assert.ok(cuts(nasty.zwj, A.fitMiddleEllipsis(nasty.zwj, (s) => [...seg.segment(s)].length <= 15)), "fit keeps graphemes whole");
 });
 
 await t("symlinked work folder: the realpath of a write through a link is inside", async () => {

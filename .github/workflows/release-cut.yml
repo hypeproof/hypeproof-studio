@@ -59,6 +59,8 @@ jobs:
     outputs:
       run: ${{ steps.decide.outputs.run }}
       mode: ${{ steps.decide.outputs.mode }}
+      alarm: ${{ steps.decide.outputs.alarm }}
+      reason: ${{ steps.decide.outputs.reason }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,7 +87,44 @@ jobs:
           MODE: ${{ inputs.mode }}
           DAILY: ${{ vars.RELEASE_CUT_DAILY }}
           LIVE: ${{ steps.live.outputs.decision }}
-        run: node scripts/release/daily-gate.mjs --event "$EVENT" --mode "${MODE:-dry-run}" --switch "${DAILY:-}" --live "${LIVE:-}"
+          LIVE_REASON: ${{ steps.live.outputs.reason }}
+        run: node scripts/release/daily-gate.mjs --event "$EVENT" --mode "${MODE:-dry-run}" --switch "${DAILY:-}" --live "${LIVE:-}" --live-reason "${LIVE_REASON:-}"
+
+  # A skip the gate cannot explain (the live check failed, or app changes have waited too long for an rc
+  # tag) must be loud: one open issue that each failing day updates, an optional #alerts post, and a red run.
+  alarm:
+    needs: gate
+    if: needs.gate.outputs.alarm == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the release-cut alarm issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REASON: ${{ needs.gate.outputs.reason }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Daily release cut skipped: needs attention"
+          body="$(date -u +%F) — ${REASON}"$'\n\n'"Run: ${RUN_URL}"$'\n\n'"The gate skips the cut until this is fixed. See scripts/release/daily-gate.mjs."
+          n=$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then gh issue comment "$n" --repo "$REPO" --body "$body"; else gh issue create --repo "$REPO" --title "$title" --body "$body"; fi
+      - name: Post to #alerts (when the webhook secret is set)
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_ALERTS }}
+          REASON: ${{ needs.gate.outputs.reason }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "DISCORD_WEBHOOK_ALERTS not set; issue only"; exit 0; fi
+          jq -n --arg c "Studio daily release cut skipped: ${REASON} ${RUN_URL}" '{content:$c}' | curl -fsS -H 'Content-Type: application/json' -d @- "$WEBHOOK"
+      - name: Fail the run
+        env:
+          REASON: ${{ needs.gate.outputs.reason }}
+        run: |
+          echo "::error::Daily release cut skipped: ${REASON}"
+          exit 1
 
   cut:
     needs: gate

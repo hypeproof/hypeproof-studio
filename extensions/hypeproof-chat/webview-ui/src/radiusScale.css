@@ -7,6 +7,8 @@
  * same steps. A radius on a composer, bubble, menu, dialog or chip names a step or a named radius below,
  * never a literal or a spacing token. A rounded item drawn inside a rounded container takes the
  * container's radius minus the inset between them (calc), so the two curves stay concentric.
+ * CGP-DS-D-008 (DES-CGP-DS-12): a standalone radius on those surfaces takes 4 / 8 / 12 / 16 / 24 or full;
+ * 6, 18 and 20 serve only the composer (16-24px), the user bubble (16-20px) and its tail corner.
  * Declared on body as well, so a component token redeclared on body resolves there.
  * Guard: extensions/hypeproof-chat/test/radius-scale-computed.smoke.mjs (headless, computed). */
 :root, body {

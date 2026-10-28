@@ -119,8 +119,10 @@ import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
 import { answerPromptSources, answerProposal, answerSources, applyWikiProposal, archiveNotes, brainIntent, brainIntro, brainName, brainSummary, coachContext, defaultIngestSession, firstCoachTurn, ingestReport, initWiki, josa, jsonFromText, loadState, newState, productTitle, proposalPreview, readNotes, renderWikiPages, ro, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, writeWiki, type BrainIntent, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
-import { applyDeckProposal, applySlideText, deckPrompt, deckReport, deckRepairPrompt, refusedSlides, renderDeck, slideTextItems, type DeckProposal, type DeckRun } from "./deckGenerator";
-import { applySlidePatch, checkSlidePatch, slideChips, slidePatchDetail, slideSuggestionPrompt, type SlideChip } from "./slideSuggestion";
+import { applyDeckProposal, applySlideText, deckPrompt, deckReport, deckRepairPrompt, refusedSlides, renderDeck, slideTextItems, type DeckProposal, type DeckRun, type DeckTemplate } from "./deckGenerator";
+import { applySlidePatch, checkSlidePatch, slideChips, slideSuggestionPrompt } from "./slideSuggestion";
+import { slideStudioProposal, slideStudioView } from "./slideStudio";
+import { openSlideStudio, type SlideStudioUi } from "./slideStudioHost";
 import { applyHumanized, humanizePrompt, type HumanizeProposal } from "./humanizer";
 import { ReviewSession, directorAvailable } from "./reviewSession";
 import { qrDataUrl } from "./testQr";
@@ -223,6 +225,7 @@ import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import { artifactHistoryStore, captureArtifactVersion, reviewTurnFiles, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
+import { readWorkspaceThumbnail } from "./artifactThumbnail";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
@@ -231,7 +234,7 @@ import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { BrowserDownloadWatcher } from "./browserDownloadWatcher";
-import { downloadPolicy, type DownloadNotice } from "./browserDownloads";
+import { DOWNLOAD_ACTION_COPY, downloadPolicy, resolveDownloadedFile, type DownloadNotice } from "./browserDownloads";
 import { LiveServer } from "./liveServer";
 import { PreviewSurfaceRequests } from "./previewSurfaceRequests";
 import { recoverLearnerPreview, isLoopbackPreview, previewPagePath, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
@@ -239,7 +242,7 @@ import { browserRememberLabel, browserTarget, cleanName } from "./browserTargetH
 import { learnerToolLine, UNKNOWN_TOOL_LINE } from "./toolLineLabel";
 import { WriteApprovalRequest } from "./writeApprovalPrompt";
 import { writePathLine, writePathEntries, writeTargetsFromPayload, type WritePathEntry } from "./writeApprovalPaths";
-import { asWriteEdit, existingFingerprint, readExistingText, writeChangeView } from "./writeApprovalChange";
+import { asWriteEdit, existingFingerprint, readExistingText, writeChangeComparison, writeChangeView } from "./writeApprovalChange";
 import { measurePreview, probePreviewPage, runPreviewRecoveryAction, type PreviewSignals } from "./previewFailure";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
@@ -1187,11 +1190,64 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const edit=entries.length===1?asWriteEdit((payload as {edit?:unknown}|null|undefined)?.edit):null;
     const existing=entries.map(e=>readExistingText(e.key));
     const changes=entries.map((e,i)=>writeChangeView(existing[i],edit,e.display));
-    const approved=await this.writeApprovalRequest.confirm({id,title,verb,files:entries.map(writePathLine),changes});
+    // CGP-ART-D-021: "바뀐 곳 보기" compares the exact bytes the summary was computed from with the call's text. The
+    // texts stay in the host, bound to this request id, and are dropped (with any diff tab) once it is answered.
+    const comparisons=entries.map((e,i)=>{const c=changes[i]?.kind==='measured'?writeChangeComparison(existing[i],edit):null;return c?{...c,name:e.display}:null;});
+    if(comparisons.some(Boolean))this.writeApprovalDiffs.set(id,{seq:++this.writeApprovalDiffSeq,files:comparisons,uris:[]});
+    let approved:boolean;
+    try { approved=await this.writeApprovalRequest.confirm({id,title,verb,files:entries.map(writePathLine),changes}); }
+    finally { void this.closeWriteApprovalDiffs(id); }
     if(!approved)return false;
     if(entries.some((e,i)=>existingFingerprint(e.key)!==existing[i].fingerprint))return false;
     const after=await this.context.secrets.get(TOKEN_KEY);
     return token===after && current();
+  }
+  /** CGP-ART-D-021: per pending write approval, the texts "바뀐 곳 보기" may open; deleted when it is answered. */
+  private readonly writeApprovalDiffs=new Map<string,{seq:number;files:Array<{before:string;after:string;name:string}|null>;uris:vscode.Uri[]}>();
+  private writeApprovalDiffSeq=0;
+  private readonly writeApprovalDiffScheme=`hps-write-approval-${crypto.randomUUID()}`;
+  private readonly writeApprovalDiffContent=new Map<string,string>();
+  private writeApprovalDiffProvider?:vscode.Disposable;
+  /**
+   * CGP-ART-D-021 (DES-ART-21): a read-only diff of one existing file as it was summarised and the text the call
+   * would leave behind. Only for the pending request that offered it; opening it never answers, and the dialog keeps
+   * focus (preserveFocus, beside the chat so the chat panel stays visible).
+   */
+  private async openWriteApprovalDiff(id:unknown,index:unknown):Promise<void> {
+    const pending=typeof id==='string'?this.writeApprovalDiffs.get(id):undefined;
+    const file=pending&&typeof index==='number'&&Number.isInteger(index)&&index>=0?pending.files[index]:null;
+    if(!pending||!file)return;
+    if(!this.writeApprovalDiffProvider){
+      this.writeApprovalDiffProvider=vscode.workspace.registerTextDocumentContentProvider(this.writeApprovalDiffScheme,{provideTextDocumentContent:uri=>this.writeApprovalDiffContent.get(uri.toString())??''});
+      this.context.subscriptions?.push(this.writeApprovalDiffProvider);
+    }
+    const clean=(text:string)=>text.replace(/[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/g,'');
+    const base=Array.from(clean(file.name.split(/[\\/]/).pop()||'').replace(/[?#%]/g,'_')).slice(0,80).join('')||'file';
+    const left=vscode.Uri.from({scheme:this.writeApprovalDiffScheme,path:`/${pending.seq}/${index}/지금/${base}`});
+    const right=vscode.Uri.from({scheme:this.writeApprovalDiffScheme,path:`/${pending.seq}/${index}/승인하면/${base}`});
+    if(!pending.uris.some(u=>u.toString()===left.toString())){
+      this.writeApprovalDiffContent.set(left.toString(),file.before);this.writeApprovalDiffContent.set(right.toString(),file.after);
+      pending.uris.push(left,right);
+    }
+    try {
+      await vscode.commands.executeCommand('vscode.diff',left,right,`${clean(file.name)} · 지금 ↔ 승인하면`,{preview:true,preserveFocus:true,viewColumn:vscode.ViewColumn.Beside});
+    } catch { /* the dialog stays; nothing is approved by a failed view */ }
+    // Answered while the editor was opening: the close already ran, so close what just opened.
+    if(this.writeApprovalDiffs.get(id as string)!==pending)await this.closeWriteApprovalDiffTabs(pending.uris);
+  }
+  private async closeWriteApprovalDiffs(id:string):Promise<void> {
+    const pending=this.writeApprovalDiffs.get(id);
+    if(!pending)return;
+    this.writeApprovalDiffs.delete(id);
+    await this.closeWriteApprovalDiffTabs(pending.uris);
+  }
+  private async closeWriteApprovalDiffTabs(uris:vscode.Uri[]):Promise<void> {
+    const keys=new Set(uris.map(u=>u.toString()));
+    try {
+      const tabs=vscode.window.tabGroups.all.flatMap(g=>g.tabs).filter(t=>t.input instanceof vscode.TabInputTextDiff&&keys.has(t.input.original.toString()));
+      if(tabs.length)await vscode.window.tabGroups.close(tabs);
+    } catch { /* closing is tidiness; the texts are dropped below either way */ }
+    for(const k of keys)this.writeApprovalDiffContent.delete(k);
   }
   /**
    * #476 — has the participant ever been told about the agent-sdk → proxy fallback
@@ -2581,68 +2637,82 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * The command "덱 장 다듬기" (CGP-ART-R-016, REQ-STUDIO-DECK-SLIDE-SUGGEST): the student picks one drafted
-   * slide and one of its (at most three) suggestion chips; one model request proposes a patch for that slide
-   * only, slideSuggestion.ts gates it, and the before/after proposal is shown with 반영 and 그대로. Nothing is
-   * written unless the student picks 반영, and then only while that slide is still the one the patch was
-   * computed from. One run at a time.
+   * The command "덱 장 다듬기" (CGP-ART-R-016, REQ-STUDIO-DECK-SLIDE-SUGGEST; panel CGP-ART-D-016): a panel shows
+   * the drafted slides as thumbnails with at most three suggestion chips under the selected one. A chip is one
+   * model request for a patch to that slide only; slideSuggestion.ts gates it, and the proposal is shown side by
+   * side (지금 / 바꾼 안) with 반영 and 그대로. Nothing is written unless the student picks 반영, and then only
+   * while that slide is still the one the patch was computed from. One run at a time; the panel stays open for
+   * the next chip until it is closed.
    */
   async deckSlideSuggest(): Promise<void> {
-    if (this.slideSuggestBusy) { this.postPageNotice("장을 다듬는 중이에요. 끝난 뒤 다시 골라 주세요."); return; }
+    if (this.slideSuggestBusy) { this.slideStudio?.reveal(); this.postPageNotice("장을 다듬는 중이에요. 끝난 뒤 다시 골라 주세요."); return; }
     this.slideSuggestBusy = true;
     try {
       const run = await this.runSlideSuggest();
       if (run) await this.showBrainRun(run);
     } finally {
+      this.slideStudio?.dispose();
+      this.slideStudio = undefined;
       this.slideSuggestBusy = false;
     }
   }
   private slideSuggestBusy = false;
+  private slideStudio: SlideStudioUi | undefined;
+  /** The panel factory (a seam for the host smoke). */
+  private openSlideStudio: () => SlideStudioUi = openSlideStudio;
 
-  private async runSlideSuggest(): Promise<BrainRun | undefined> {
+  /** The deck the panel works on, re-read and re-gated on every step; `lines` is the refusal to show. */
+  private slideSuggestDeck(): { plan: LearningWikiPlan; template: DeckTemplate; dir: string; state: WikiState } | { lines: string[] } {
     const plan = this.learningWikiPlan();
-    if (!this.isLearningWikiEnabled()) { await this.postDenialNotice("lesson"); return { lines: [lessonFeatureOff("덱 다듬기", this.getSeatAudience())] }; }
+    if (!this.isLearningWikiEnabled()) return { lines: [lessonFeatureOff("덱 다듬기", this.getSeatAudience())] };
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder || !plan?.deck) return { lines: ["이 수업에는 덱 템플릿이 없어요."] };
-    const template = plan.deck;
     const dir = wikiDir(folder.uri.fsPath, plan);
     const folderBlocked = this.folderWriteRefusalFor(dir);
     if (folderBlocked) return { lines: [folderBlocked] };
     const state = loadState(dir);
-    const drafted = state ? template.slides.filter((x) => state.deck[String(x.no)]) : [];
-    if (!state || !drafted.length) return { lines: ["아직 초안을 쓴 장이 없어요. 먼저 덱 초안을 만들어 주세요."] };
-    const slide = await vscode.window.showQuickPick(
-      drafted.map((x) => ({ label: `${x.no} · ${x.title}`, description: state.deck[String(x.no)].headline, no: x.no })),
-      { placeHolder: "다듬을 장을 고르세요" },
-    );
-    if (!slide) return undefined;
-    const chip = await vscode.window.showQuickPick(
-      slideChips(state, slide.no).map((c) => ({ label: c.label, description: c.hint, id: c.id as SlideChip })),
-      { placeHolder: `${slide.no}번 장을 어떻게 다듬을까요?` },
-    );
-    if (!chip) return undefined;
-    const answer = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: "HypeProof: 덱 장 다듬는 중" },
-      () => this.completeSkill(slideSuggestionPrompt(state, template, slide.no, chip.id, plan), {}),
-    );
-    const checked = checkSlidePatch(state, template, slide.no, chip.id, answer.ok ? jsonFromText<DeckProposal>(answer.text) : null);
-    if (!checked.ok) return { lines: [checked.reason, "덱은 그대로예요."] };
-    const choice = await vscode.window.showInformationMessage(
-      `${slide.no}번 장을 이렇게 바꿀까요?`,
-      { modal: true, detail: slidePatchDetail(checked.patch) },
-      "반영", "그대로",
-    );
-    if (choice !== "반영") return { lines: ["그대로 두었어요. 덱은 바뀌지 않았어요."] };
-    // The switch and the folder may have changed while the proposal was open: check again before writing.
-    if (!this.isLearningWikiEnabled()) return { lines: [lessonFeatureOff("덱 다듬기", this.getSeatAudience())] };
-    const lateBlocked = this.folderWriteRefusalFor(dir);
-    if (lateBlocked) return { lines: [lateBlocked] };
-    const fresh = loadState(dir);
-    const next = fresh ? applySlidePatch(fresh, checked.patch) : null;
-    if (!next) return { lines: ["그 사이 이 장이 바뀌어서 반영하지 않았어요. 다시 골라 주세요."] };
-    saveState(dir, next);
-    writeFiles(dir, { ...renderWikiPages(next, plan), ...renderDeck(next, template, plan) }, "ai");
-    return { lines: [`${slide.no}번 장에 반영했어요.`, "덱 미리보기를 열었어요."], open: path.join(dir, "deck.html") };
+    if (!state || !plan.deck.slides.some((x) => state.deck[String(x.no)])) return { lines: ["아직 초안을 쓴 장이 없어요. 먼저 덱 초안을 만들어 주세요."] };
+    return { plan, template: plan.deck, dir, state };
+  }
+
+  private async runSlideSuggest(): Promise<BrainRun | undefined> {
+    if (!this.isLearningWikiEnabled()) await this.postDenialNotice("lesson");
+    const first = this.slideSuggestDeck();
+    if ("lines" in first) return first;
+    const ui = (this.slideStudio = this.openSlideStudio());
+    let selected: number | undefined;
+    let status = "";
+    // Each outcome goes to the panel's status line and to the chat notice.
+    const report = (lines: string[]) => { status = lines.join(" "); this.postPageNotice(status); };
+    for (let req = 1; ; req++) {
+      const deck = this.slideSuggestDeck();
+      if ("lines" in deck) return deck;
+      const { plan, template, dir, state } = deck;
+      const pick = await ui.pick(slideStudioView(state, template, plan, selected, status));
+      if (!pick) return undefined;
+      selected = pick.no;
+      if (!slideChips(state, pick.no).some((c) => c.id === pick.chip)) { report(["고를 수 없는 제안이에요."]); continue; }
+      const answer = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Window, title: "HypeProof: 덱 장 다듬는 중" },
+        () => this.completeSkill(slideSuggestionPrompt(state, template, pick.no, pick.chip, plan), {}),
+      );
+      if (ui.closed) return undefined;
+      const checked = checkSlidePatch(state, template, pick.no, pick.chip, answer.ok ? jsonFromText<DeckProposal>(answer.text) : null);
+      if (!checked.ok) { report([checked.reason, "덱은 그대로예요."]); continue; }
+      const choice = await ui.propose(slideStudioProposal(state, template, checked.patch, `${pick.no}-${req}`));
+      if (choice === undefined) return undefined;
+      if (!choice) { report(["그대로 두었어요. 덱은 바뀌지 않았어요."]); continue; }
+      // The switch and the folder may have changed while the proposal was open: check again before writing.
+      if (!this.isLearningWikiEnabled()) return { lines: [lessonFeatureOff("덱 다듬기", this.getSeatAudience())] };
+      const lateBlocked = this.folderWriteRefusalFor(dir);
+      if (lateBlocked) return { lines: [lateBlocked] };
+      const fresh = loadState(dir);
+      const next = fresh ? applySlidePatch(fresh, checked.patch) : null;
+      if (!next) { report(["그 사이 이 장이 바뀌어서 반영하지 않았어요. 다시 골라 주세요."]); continue; }
+      saveState(dir, next);
+      writeFiles(dir, { ...renderWikiPages(next, plan), ...renderDeck(next, template, plan) }, "ai");
+      report([`${pick.no}번 장에 반영했어요. 덱 미리보기에도 바뀌었어요.`]);
+    }
   }
 
   /** One deck-skill run; writes deck/ and deck.html and returns what happened (deckReport words it). */
@@ -3151,6 +3221,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** REQ-STUDIO-PERF-TRACE: sees every host message before it is posted; set only while extension.ts owns a trace controller. */
   perfTraceObserver: ((msg: HostMessage) => void) | undefined;
+
+  /** CGP-AGENT-D-026: the trace controller's state and its id-bound stop, for the chat panel's pill; set by extension.ts. */
+  perfTracePanel: { state: () => { recording: boolean; id: string | null }; stop: (id: unknown) => unknown } | undefined;
+
+  /** CGP-AGENT-D-026: show or hide the panel pill; the controller calls this on every start and stop. */
+  postPerfTraceState(state: { recording: boolean; id: string | null }): void {
+    // Straight to every chat view, not through post(): no activity or task stamp (the webview would drop it on a
+    // task switch), and it is not a turn message, so it must not touch open prompts.
+    const msg: HostMessage = { type: "perfTraceState", recording: state.recording === true, id: state.recording === true && typeof state.id === "string" ? state.id : null };
+    for (const view of [this.editorChat?.webview, this.view?.webview]) if (view) void Promise.resolve(view.postMessage(msg)).catch(() => undefined);
+  }
 
   /** #278 — is "페이지를 코치에게" allowed for this cohort? Default off (minor-safe). */
   isPageContextEnabled(): boolean {
@@ -3794,10 +3875,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return { store, taskId: store?.getView().activeTaskId ?? undefined, activityId: activityConnections(this.context)?.scope, historyKey: this.historyKey() };
   }
 
-  /** Same delivery as a denial notice: persisted in the task where the download began, posted only if it is still open. */
+  /**
+   * Same delivery as a denial notice: persisted in the task where the download began, posted only if it is still open.
+   * CGP-KNOW-D-021: a running line is posted only (never stored) under the id its final line will take, so the
+   * webview replaces it in place; a reload or a task switch drops it until the final line arrives.
+   */
   private postDownloadNotice(notice: DownloadNotice, dest: DownloadDestination): Promise<void> {
-    const id = `download-${randomId()}`;
-    const message: ChatMessage = { id, role: 'tool', content: '', createdAt: Date.now(), tool: { icon: '📄', label: notice.label, state: notice.state } };
+    const id = this.downloadLineId(notice);
+    const createdAt = Date.now();
+    const sameView = () => this.historyKey() === dest.historyKey && activityConnections(this.context)?.scope === dest.activityId && this.currentTaskStore?.()?.getView().activeTaskId === dest.taskId;
+    if (notice.state === 'running') {
+      const show = async () => { if (sameView()) await this.post({ type: 'downloadNotice', id, icon: '📄', label: notice.label, state: 'running', at: createdAt }); };
+      this.downloadWrites = (this.downloadWrites ?? Promise.resolve()).then(show).catch(() => undefined);
+      return this.downloadWrites;
+    }
+    const message: ChatMessage = { id, role: 'tool', content: '', createdAt, tool: { icon: '📄', label: notice.label, state: notice.state } };
     const write = async () => {
       if (dest.store) {
         if (!dest.taskId) throw Error('missing task');
@@ -3806,7 +3898,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const current = this.context.workspaceState.get<ChatMessage[]>(dest.historyKey, []);
         await this.context.workspaceState.update(dest.historyKey, clampTimeline([...current, message], HISTORY_MAX));
       }
-      if (this.historyKey() !== dest.historyKey || activityConnections(this.context)?.scope !== dest.activityId || this.currentTaskStore?.()?.getView().activeTaskId !== dest.taskId) return;
+      if (!sameView()) return;
       await this.post({ type: 'downloadNotice', id, icon: '📄', label: notice.label, state: notice.state, at: message.createdAt });
     };
     const operation = (this.downloadWrites ?? Promise.resolve()).then(write);
@@ -3818,6 +3910,40 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private downloadWrites?: Promise<void>;
+  /** CGP-KNOW-D-021 — the row id of each download still running (its key from the tracker), bounded. */
+  private downloadLineIds = new Map<string, string>();
+
+  private downloadLineId(notice: DownloadNotice): string {
+    const ids = (this.downloadLineIds ??= new Map());
+    const key = notice.key;
+    const id = (key && ids.get(key)) || `download-${randomId()}`;
+    if (key && notice.state === 'running') {
+      ids.set(key, id);
+      while (ids.size > 64) ids.delete(ids.keys().next().value as string);
+    } else if (key) ids.delete(key);
+    return id;
+  }
+
+  /**
+   * CGP-KNOW-D-021 — 열기 opens the downloaded file in a Studio editor tab (never the OS default app, never run);
+   * 폴더에서 보기 shows it in the OS file manager. Only a stored "다운로드 완료" line of the open task counts, and
+   * the file is re-checked against the folder in force now (browserDownloads resolveDownloadedFile).
+   */
+  private async handleDownloadLineAction(msg: { id?: unknown; action?: unknown }): Promise<void> {
+    const id = msg.id, action = msg.action;
+    if (typeof id !== 'string' || !id.startsWith('download-') || id.length > 80 || (action !== 'open' && action !== 'reveal')) return;
+    const line = this.getHistory().find((m) => m.id === id && m.role === 'tool' && m.tool?.state === 'done');
+    if (!line?.tool) return;
+    const file = resolveDownloadedFile(this.browserDownloadPolicy(), line.tool.label);
+    if (!file.ok) {
+      await this.post({ type: 'downloadLineNotice', id, notice: file.cause === 'denied' ? DOWNLOAD_ACTION_COPY.denied : DOWNLOAD_ACTION_COPY.missing });
+      return;
+    }
+    await this.post({ type: 'downloadLineNotice', id, notice: null });
+    try {
+      await vscode.commands.executeCommand(action === 'open' ? 'vscode.open' : 'revealFileInOS', vscode.Uri.file(file.abs));
+    } catch { /* the press passed the check; a failed open adds no claim */ }
+  }
 
   // ── Curriculum Runtime (cr-browser, #1391) ────────────────────────────────
 
@@ -6363,6 +6489,33 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } catch { view = null; }
     await this.post({ type: "artifactProvenance", view });
   }
+  /** CGP-KNOW-D-011 (DES-KNOW-20) — one 내 작품 thumbnail, on the same seats as the provenance list. Never throws. */
+  private async postArtifactThumbnail(msg: Extract<WebviewMessage, { type: "artifactThumbnailRequest" }>): Promise<void> {
+    if (typeof msg.requestId !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) || typeof msg.path !== "string") return;
+    const cwd = this.currentTaskStore() && this._instructorMode?.isInstructor !== true ? this.resolveCoachCwd() : undefined;
+    const src = cwd ? readWorkspaceThumbnail(cwd, msg.path) : null;
+    await this.post({ type: "artifactThumbnail", requestId: msg.requestId, path: msg.path, src });
+  }
+
+  /**
+   * CGP-KNOW-D-016 (DES-KNOW-29) — 종류, 크기, 만든 대화, 마지막으로 바꾼 대화 for one listed file, read
+   * from the saved ledger. The turn links are resolved against the task store now, so a cleared,
+   * edited-away, moved or archived turn comes back as plain text instead of a dead link. Never throws.
+   */
+  private async postArtifactInfo(requestId: unknown, filePath: unknown): Promise<void> {
+    if (typeof requestId !== "string" || !requestId || requestId.length > 100 || typeof filePath !== "string" || !filePath || filePath.length > 4096) return;
+    const recorder = this.provenanceRecorder();
+    const store = this.currentTaskStore();
+    const cwd = store && this._instructorMode?.isInstructor !== true ? this.resolveCoachCwd() : undefined;
+    let info: import("./artifactProvenanceView").ArtifactInfo | null = null;
+    try {
+      if (recorder && store && cwd) {
+        const root = await fs.promises.realpath(cwd);
+        info = await recorder.info(root, filePath, (ref) => store.findTurnRow(ref.taskId, ref.messageId));
+      }
+    } catch { info = null; }
+    await this.post({ type: "artifactInfo", requestId, info });
+  }
   // CGP-KNOW-D-013 (DES-KNOW-24) — the activity trash at the bottom of 내 작품. The store, its gates
   // and native confirms live in activityTrashCommands.ts; this only routes the panel's requests.
   private activityTrashPanel?: import("./activityTrashCommands").ActivityTrashPanelApi;
@@ -6572,7 +6725,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       const changes = diffRestorePoint(handle.point, now);
-      await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now);
+      // CGP-KNOW-D-016 — the turn's task and assistant row, so the file's info popover can open this turn.
+      await this.provenanceRecorder()?.turnEnd(handle.root, handle.point, changes, now, { taskId: handle.taskKey, messageId });
       void this.postArtifactProvenance(false);
       if (changeCount(changes) === 0) { await dropRestorePoint(handle.store, handle.point.id); return; }
       // REQ-STUDIO-PAGE-CARD — the same diff (a stopped turn included) names the pages; the card sits under the
@@ -6948,6 +7102,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (source) { if (msg.queued === true) this.queuedSources.add(source); else this.queuedSources.delete(source); }
       return;
     }
+    // CGP-AGENT-D-026 — the 느려요 기록 pill. A recording belongs to the machine, not to an activity or task,
+    // so it is answered before those gates (a press from a panel on another task still stops it).
+    if (msg.type === 'perfTraceStateRequest') { this.postPerfTraceState(this.perfTracePanel?.state() ?? { recording: false, id: null }); return; }
+    if (msg.type === 'perfTraceStop') {
+      // The state is re-sent after the press settles, so a pill drawn for a stale id is corrected rather than left waiting.
+      const panel = this.perfTracePanel;
+      void Promise.resolve().then(() => panel?.stop(msg.id)).catch(() => undefined).finally(() => this.postPerfTraceState(this.perfTracePanel?.state() ?? { recording: false, id: null }));
+      return;
+    }
     const connections=activityConnections(this.context);
     if (connections && msg.activityId && msg.activityId!==connections.scope) {
       if (msg.type === 'taskMove') await this.refuseTaskMove(msg);
@@ -7163,11 +7326,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "activityTrashRequest": await this.postActivityTrash(); return;
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
+      case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
+      case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
       case "pageCardsRequest": this.postPageCards(); return;
       case "pageCardOpen":
       case "pageCardReveal":
         await this.handlePageCardMessage(msg);
         return;
+      case "downloadLineAction": await this.handleDownloadLineAction(msg); return;
       case "turnRevert":
       case "turnKeep":
       case "turnReviewClose":
@@ -7190,6 +7356,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "commandApprovalAnswer": this.commandApprovalRequest.respond(msg.id,msg.choice); return;
       case "annotationLeaveAnswer": this._annotationLeaveRequest?.respond(msg.id,msg.discard); return;
       case "writeApprovalAnswer": this.writeApprovalRequest.respond(msg.id,msg.approved); return;
+      case "writeApprovalDiff": await this.openWriteApprovalDiff(msg.id,msg.index); return;
       case "folderConsentAnswer":
         if (!(this.editorChat?.visible || this.view?.visible)) this.folderConsentRequest?.cancel();
         else this.folderConsentRequest?.respond(msg.id,msg.level);

@@ -7,22 +7,29 @@
 .hps-style-tweak button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
 .hps-style-tweak button:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
 .hps-style-tweak button:disabled { color: var(--hp-text-muted-default); cursor: default; }
-.hps-style-tweak-body { display: grid; gap: var(--ds-c-studio-styles-space-15); min-width: 0; margin-block-start: var(--ds-c-studio-styles-space-15); }
+/* CGP-ART-D-006: a compact popover card under the toggle, at most 280 px and never wider than the chip
+ * column (so it fits a 320 px panel). It stays in flow: the message scroller can never clip it. */
+.hps-style-tweak-body { display: grid; gap: var(--ds-c-studio-styles-space-15); box-sizing: border-box; inline-size: min(var(--ds-c-studio-styles-size-29), 100%); min-width: 0; margin-block-start: var(--ds-c-studio-styles-space-15); padding: var(--ds-c-studio-styles-space-7); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-menu); background: var(--hp-bg-panel-default); box-shadow: var(--hp-elevation-overlay); }
 .hps-style-tweak-note { margin: 0; color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
-.hps-style-tweak-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-15); min-width: 0; }
-.hps-style-tweak-label { flex: 0 0 auto; min-width: calc(2 * var(--hp-control-min)); font-weight: var(--hp-weight-strong); }
+/* CGP-ART-D-006: label and reset share the first line; the swatches or stepper take the popover width below. */
+.hps-style-tweak-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--ds-c-studio-styles-space-13) var(--ds-c-studio-styles-space-15); min-width: 0; }
+.hps-style-tweak-row > .hps-style-tweak-swatches, .hps-style-tweak-row > .hps-style-tweak-stepper, .hps-style-tweak-row > .hps-style-tweak-value, .hps-style-tweak-change { grid-column: 1 / -1; }
+.hps-style-tweak-label { min-width: 0; font-weight: var(--hp-weight-strong); }
 .hps-style-tweak-swatches, .hps-style-tweak-stepper { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-c-studio-styles-space-13); min-width: 0; flex: 1 1 auto; }
 .hps-style-tweak .hps-style-tweak-swatch { padding: 0; }
-.hps-style-tweak-chip { display: block; background-color: var(--hps-style-tweak-swatch); width: calc(var(--hp-control-min) - 2 * var(--ds-c-studio-styles-space-7)); height: calc(var(--hp-control-min) - 2 * var(--ds-c-studio-styles-space-7)); border-radius: var(--hp-radius-6); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); box-sizing: border-box; }
-.hps-style-tweak .hps-style-tweak-swatch[aria-checked="true"] { border-color: var(--hp-ring-focus-default); box-shadow: inset 0 0 0 var(--ds-c-focus-width) var(--hp-ring-focus-default); }
+.hps-style-tweak-chip { display: block; background-color: var(--hps-style-tweak-swatch); width: calc(var(--hp-control-min) - 2 * var(--ds-c-studio-styles-space-7)); height: calc(var(--hp-control-min) - 2 * var(--ds-c-studio-styles-space-7)); border-radius: var(--hp-radius-4); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); box-sizing: border-box; }
+/* CGP-DS-R-012: the overlay level is flat in high contrast, so the popover's edge takes the contrast border. */
+body.vscode-high-contrast .hps-style-tweak-body { border-color: var(--vscode-contrastBorder, currentColor); }
+/* DES-ART-06: the selected swatch has a 2 px ring. A border, not a shadow, so forced colours keep it. */
+.hps-style-tweak .hps-style-tweak-swatch[aria-checked="true"] { border-width: var(--ds-c-focus-width); border-color: var(--hp-ring-focus-default); }
 .hps-style-tweak-value { min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.hps-style-tweak-change { flex-basis: 100%; color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
-.hps-style-tweak-reset { flex: 0 0 auto; margin-inline-start: auto; }
+.hps-style-tweak-change { color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
 .hps-style-tweak .hps-style-tweak-send { justify-self: start; max-width: 100%; white-space: normal; font-weight: var(--hp-weight-strong); }
 @media (forced-colors: active) {
   .hps-style-tweak button { color: ButtonText; border-color: ButtonText; background: Canvas; }
   .hps-style-tweak button:disabled { color: GrayText; border-color: GrayText; }
-  .hps-style-tweak .hps-style-tweak-swatch[aria-checked="true"] { border-color: Highlight; box-shadow: inset 0 0 0 var(--ds-c-focus-width) Highlight; }
+  .hps-style-tweak .hps-style-tweak-swatch[aria-checked="true"] { border-color: Highlight; }
+  .hps-style-tweak-body { border-color: CanvasText; }
   /* CGP-DS-R-016: the swatch is the page colour the learner is choosing, so it keeps that colour;
    * its CanvasText border and the selected button's Highlight ring carry the boundary and state. */
   .hps-style-tweak-chip { forced-color-adjust: none; border-color: CanvasText; }

@@ -459,11 +459,12 @@ export async function buildZip(files: readonly WorkExportFile[]): Promise<Buffer
 
 function two(n: number): string { return String(n).padStart(2, '0'); }
 
-/** `내-작업-<folder>-20261026-153012.zip`; the folder part is cleaned and capped. */
+/** `내-작업-<folder>-20261026-153012.zip`; the folder part is cleaned and capped. It is also shown in the export
+ *  result line (DES-SHELL-27), so bidi marks and zero-width characters go with the controls. */
 export function workExportName(root: string, now: Date, secrets: readonly string[] = []): string {
   // A folder name that carries a secret does not go into the zip's file name.
   const base = nameCarriesCredential(path.basename(root), secrets) ? '' : path.basename(root);
-  const folder = base.normalize('NFKC').replace(/[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu, '')
+  const folder = base.normalize('NFKC').replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/gu, '')
     .replace(/[\\/:*?"<>|]+/g, '-').replace(/^[.\s-]+|[.\s-]+$/g, '').slice(0, 40);
   const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`;
   return ['내-작업', folder, stamp].filter(Boolean).join('-') + '.zip';

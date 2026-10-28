@@ -20,6 +20,18 @@ export const WORK_EXPORT_COPY = {
   failed: '내 작업을 내보내지 못했어요. 원본은 그대로 있어요. 저장할 폴더와 권한을 확인해 주세요.',
 } as const;
 
+/** DES-SHELL-27: the result line's folder, made safe to show. The notification runs `[text](command:…)`
+ *  in its message as a link (allowCommands) and draws control and bidi characters, and it cuts a message
+ *  past 1000 characters; a picked folder name is untrusted. Those characters become U+FFFD, brackets
+ *  before `(` become full-width so no link forms, and a long path keeps its start and end. 폴더 열기 still
+ *  reveals the real file. */
+export function displayFolder(folder: string): string {
+  let text = folder.replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/gu, '\ufffd');
+  if (/\]\s*\(/u.test(text)) text = text.replace(/\[/g, '\uff3b').replace(/\]/g, '\uff3d');
+  const chars = Array.from(text);
+  return chars.length > 120 ? chars.slice(0, 40).join('') + '…' + chars.slice(-79).join('') : text;
+}
+
 /** Returns the zip path written, or undefined when cancelled, refused or failed (each says why). */
 export async function runWorkExport(source: WorkExportSource): Promise<string | undefined> {
   const picked = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false,
@@ -43,7 +55,7 @@ export async function runWorkExport(source: WorkExportSource): Promise<string | 
   }
   if (result === 'stale') { void vscode.window.showWarningMessage(WORK_EXPORT_COPY.stale); return undefined; }
   // A non-modal message shows no `detail`, so the one line carries the file and the counts.
-  const line = [WORK_EXPORT_COPY.saved(path.dirname(result.file)), path.basename(result.file), `작업 파일 ${result.files}개 · 대화 ${result.tasks}개`,
+  const line = [WORK_EXPORT_COPY.saved(displayFolder(path.dirname(result.file))), path.basename(result.file), `작업 파일 ${result.files}개 · 대화 ${result.tasks}개`,
     ...(result.skipped ? [`넣지 않은 파일 ${result.skipped}개는 zip 안 내보내기-안내.txt에 적었어요`] : [])].join(' · ');
   void vscode.window.showInformationMessage(line, WORK_EXPORT_COPY.openFolder).then(answer => {
     if (answer === WORK_EXPORT_COPY.openFolder) void vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(result.file));

@@ -272,13 +272,13 @@ alone.
 | DES-SHELL-10 (REQ-11) | Offline banner sits at the top of the chat panel. | Amber left border 4 px + icon; height ≤ 48 px; `role="status"` announces once; does not cover messages; light/dark both ≥ 4.5:1. |
 | DES-SHELL-11 (REQ-12) | Skip link visible on focus; splitter focus ring. | Skip link appears at top-left on first Tab, 2 px lime focus ring; splitter hit area ≥ 8 px, focus ring 2 px; Arrow = 16 px, Shift+Arrow = 64 px. |
 | DES-SHELL-12 (REQ-13) | Panel error state replaces only the failed panel. | Icon + 1 line + "다시 시도" button 36 px; composer remains interactive; no stack trace shown to learners. |
-| DES-SHELL-13 (REQ-14) | Learner settings sheet is a right-side sheet over the chat. | Width 320–400 px; rows 48 px; each row label + control on one line at 320 px; Esc closes; focus returns to the opener; light/dark. |
+| DES-SHELL-13 (REQ-14) | Learner settings sheet is a right-side sheet over the chat. | Width 320–400 px; rows 48 px; each row label + control on one line at 320 px; Esc closes; focus returns to the opener; light/dark. Studio (2026-10-27): the start page sheet (REQ-STUDIO-START-SETTINGS) is a modal right-side sheet, full height, 320–400 px, 48 px one-line rows with select/checkbox controls; see decisions.md DEC-SHELL-D013. |
 | DES-SHELL-14 (REQ-15) | Locked row shows lock icon and reason. | Lock icon 16 px + text "선생님이 정한 설정이에요" 13 px; control `aria-disabled=true` with the reason in its description. |
 | DES-SHELL-15 (REQ-16) | HP Light uses Paper #F4F6F0 background and forest text. | Body text ≥ 7:1 contrast; lime CTA uses forest text on lime (≥ 4.5:1); theme switch without flash (> 1 frame of wrong background = fail). |
 | DES-SHELL-16 (REQ-17) | Text size control is a 3-step segmented control with live preview. | Steps 15/17/20 px, line-height 1.6; Hangul line-break by word (`word-break: keep-all`); no horizontal scroll at 320 px with 아주 크게. |
 | DES-SHELL-17 (REQ-18) | Reduced motion removes movement, keeps state changes. | All `transform` animations disabled; opacity fades ≤ 120 ms; verified with OS setting and the in-app toggle. |
 | DES-SHELL-18 (REQ-19) | Tip is an inline chip under the last message. | One chip at a time; 13 px; dismiss × 24 px target inside a 44 px hit area; never overlaps the composer. |
-| DES-SHELL-19 (REQ-20) | Idea cards appear as a list after the goal question. | ≤ 6 cards, one column at 320 px, two at ≥ 640 px; each card 2 lines max; "내가 정할래요" visible without scroll; picking an idea fills the composer and keeps Korean IME composition intact. |
+| DES-SHELL-19 (REQ-20) | Idea cards appear as a list after the goal question. | ≤ 6 cards, one column at 320 px, two at ≥ 640 px; each card 2 lines max; "내가 정할래요" visible without scroll; picking an idea fills the composer and keeps Korean IME composition intact. Built in REQ-STUDIO-PROJECT-IDEAS (CGP-SHELL-R-020); confirmed by CGP-SHELL-D-019 (2026-10-28) with a headless test of whole-card line boxes, the 639/640px pane boundary, the topmost 내가 정할래요 in short panes and real mouse, key and IME input (decisions.md "CGP-SHELL-D-019"). |
 | DES-SHELL-20 (REQ-21) | Chalk checklist uses the existing start.html steps with a progress line. | Progress text + bar; completed steps show check icon + "완료"; keyboard navigable. |
 | DES-SHELL-21 (REQ-22) | Copy-link fallback appears under the waiting spinner. | Appears after 10 s; button 36 px; confirmation "링크를 복사했어요" inline for 3 s, announced by `role="status"`. |
 | DES-SHELL-22 (REQ-23) | Accuracy card is an inline card in the chat stream. | Amber icon + 2 lines max; action button lime; dismissible; not shown again after dismissal. |
@@ -294,6 +294,11 @@ alone.
 | DES-SHELL-32 (REQ-33) | Rules acknowledgement is a single screen at join. | Text ≤ 8 short lines, 17 px; one lime "알겠어요"; no scroll trap; Chalk column shows check icon + time. |
 | DES-SHELL-33 (REQ-34) | Version column in Chalk manage list. | Column ≤ 96 px; outdated = amber icon + "업데이트 필요"; sortable; included in the dense comparison view (report-gap reset G1). |
 | DES-SHELL-34 (REQ-35) | What's-new panel is dismissible and short. | ≤ 3 bullets, ≤ 40 chars each; close × with 44 px hit area; not modal; light/dark. |
+
+DES-SHELL-34 status (2026-10-28, CGP-SHELL-D-034): already met on main by the CGP-SHELL-R-035 build. The panel draws the
+shipped lines as a bulleted list (host caps: ≤ 3 lines, a line over 40 characters dropped), closes with a 44px × and is a
+non-modal row in flow above the composer in light and dark. Proved by computed assertions added to
+`extensions/hypeproof-chat/test/whats-new-layout.smoke.mjs`. Decision: `decisions.md` CGP-SHELL-D-034.
 
 ## 4. Open questions and unknowns
 
@@ -339,3 +344,12 @@ reply already carries reply choices; columns follow the chat pane width (DES-SHE
 and Markdown to a folder the learner picks. Local only, so it works offline and after a pass ends;
 it never replaces a file and refuses rather than truncates past 300 MB / 20,000 files. Contract:
 `docs/studio-requirements.md` "Work export zip (CGP-SHELL-R-028)"; choices in DEC-SHELL-R028.
+
+## Export progress and result decision (CGP-SHELL-D-027)
+
+DES-SHELL-27 was met on main by the R-028 build: a progress notification for the whole run (with a
+running file count), the one-line result "저장했어요: <폴더> · <파일 이름> · …" with "폴더 열기", and
+the settings entry measured at 320 px. One gap fixed: the folder in the result line was shown raw, so
+a picked folder named like a notification link (`[x](command:…)`) became a link that runs a command,
+and bidi or control characters could reorder the line. The line now shows a display copy; the native
+notification has no 320 px layout of its own (owner-run check). See DEC-SHELL-D027.

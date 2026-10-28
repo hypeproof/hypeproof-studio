@@ -14,6 +14,7 @@ export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
 import { imeComposing } from './imeGuard';
 import { ActivityTrashPanel } from './ActivityTrashPanel';
+import { MyWorksDrawer } from './MyWorksDrawer';
 import { actionable, returnFocus, returnFocusSoon, returnTarget, trapTab } from './dialogFocus';
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 import { KeyboardSplitter, SkipToInput } from './KeyboardNavigation';
@@ -22,7 +23,7 @@ import { PanelBoundary } from './PanelBoundary';
 import { filterTasksByTitle, markTitleMatches, railSearchFolded, TASK_SEARCH_MAX } from './taskTitleFilter';
 import { offerUndo } from './UndoToast';
 import { MaterialsPanel } from './MaterialsPanel';
-import { ActivityHomeContext, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
+import { ActivityHomeContext, activityTitleText, HOME_VIEW_LABEL, HOME_VIEWS, loadHomeView, nextHomeView, saveHomeView, type HomeView } from './activityHome';
 import { TaskAppearanceContext, TaskAppearanceDialog, TaskMark } from './TaskAppearance';
 import { TaskMenu } from './TaskMenu';
 import type { TaskMoveView } from '../../src/taskMove';
@@ -41,6 +42,8 @@ interface Props {
   onAskAboutFile?: (path: string) => void;
   /** CGP-KNOW-R-002 — set where the seat has the activity's 자료 list (R-003's gate, never the instructor): the rail offers 작업/자료. */
   materials?: boolean;
+  /** CGP-KNOW-D-002 — the activity's name, drawn as the title above the 작업/자료 tabs (only where the tabs are). */
+  activityTitle?: string;
   /** CGP-KNOW-R-009 — the host's move rule for this activity's tasks; absent → no task menu. */
   taskMove?: TaskMoveView;
   children: ReactNode;
@@ -92,7 +95,7 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, taskMove, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, onAskAboutFile, materials = false, activityTitle, taskMove, children }: Props) {
   // REQ-STUDIO-TASK-RAIL-SEARCH: `text` is what the field shows, `applied` the committed query the list
   // filters by. An open IME composition (a half-built Hangul syllable) never filters; the commit does.
   // Both belong to one activity: a different scope starts with an empty search.
@@ -109,6 +112,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const [homeChoice, setHomeChoice] = useState(() => ({ scope: view.scope, value: loadHomeView(view.scope) }));
   const homeView: HomeView = !materials ? 'tasks' : homeChoice.scope === view.scope ? homeChoice.value : loadHomeView(view.scope);
   const homeTabs = useRef<HTMLDivElement>(null);
+  const homeTitle = activityTitleText(activityTitle);
   const chooseHome = (next: HomeView, focus = false) => {
     setHomeChoice({ scope: view.scope, value: next });
     saveHomeView(view.scope, next);
@@ -135,6 +139,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     savePanelSizes(view.scope, next);
   };
   const [railOpen, setRailOpen] = useState(false);
+  // CGP-KNOW-D-011 — the 내 작품 drawer, opened from the rail; a task or activity change closes it.
+  const [worksOpen, setWorksOpen] = useState(false);
+  const worksButton = useRef<HTMLButtonElement>(null);
   // CGP-CHAT-R-025 — 보관함 is a separate view of the task list, inside the same rail.
   const [archiveOpen, setArchiveOpen] = useState(false);
   const archiveToggle = useRef<HTMLButtonElement>(null);
@@ -339,6 +346,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     setRenamePending(null);
     setRenameError(null);
     setRailOpen(false);
+    setWorksOpen(false);
     setArchiveOpen(false);
     setAppearanceScope(null);
     setMenuFor(null);
@@ -387,6 +395,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   useEffect(() => { setArtifacts(undefined); }, [scopeKey]);
   // Each opening asks again: the host rescans the folder when no turn runs.
   useEffect(() => { if (sourcesOpen) postToHost({ type: 'artifactProvenanceRequest' }); }, [sourcesOpen, scopeKey]);
+  useEffect(() => { if (worksOpen) postToHost({ type: 'artifactProvenanceRequest' }); }, [worksOpen, scopeKey]);
   useEffect(() => {
     if (preview && !previewSourceValue) setPreview(null);
     if (request && !sources.some(source => source.url === request.url)) { clearRequestTimer(); updateRequest(null); }
@@ -576,6 +585,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     <nav id="task-rail" ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
+      {/* CGP-KNOW-D-002 — the segmented control sits under the activity title; one line, the full name in the tooltip. */}
+      {materials && homeTitle && <h2 id="tw-activity-title" className="tw-activity-title" dir="auto" data-hp-tooltip={homeTitle}>{homeTitle}</h2>}
       {/* CGP-KNOW-R-002 — 작업/자료: one tab stop, arrow keys move between the two views (automatic activation). */}
       {materials && <div ref={homeTabs} className="tw-home-tabs" role="tablist" aria-label="활동 보기" onKeyDown={event => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented || imeComposing(event)) return;
@@ -658,6 +669,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         {/* Mounted only while chosen: the list asks the host once per opening. */}
         {homeView === 'materials' && <PanelBoundary panel="activity-home-materials"><MaterialsPanel home /></PanelBoundary>}
       </div>}
+      {/* CGP-KNOW-D-011 — 내 작품 opens as a drawer over the rail; on the narrow rail the rail closes first. */}
+      <button ref={worksButton} type="button" className="tw-quiet tw-works-open" aria-haspopup="dialog" aria-expanded={worksOpen} onClick={() => { setRailOpen(false); setWorksOpen(true); }}><ChatIcon kind="folder" size={20} /><span>내 작품</span></button>
       {taskMove && <p className="tw-move-status" role="status" aria-live="polite">{moveStatus}</p>}
       <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
@@ -715,9 +728,17 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         // focus request after the attach reaches the composer.
         if (sourceDialog) closeSources(null, false);
         onAskAboutFile(filePath);
-      })} />}
+      })} onOpenTurn={(taskId, messageId) => {
+        // CGP-KNOW-D-016 — the same jump as a search result: open the task, then scroll to the turn once it is drawn.
+        // While a turn runs the host refuses the switch with its own error line, which also drops the jump.
+        if (sourceDialog) closeSources(null, false);
+        pendingReveal.current = { taskId, messageId, from: view.activeTaskId };
+        if (taskId !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: taskId });
+        setRevealTick(tick => tick + 1);
+      }} />}
       </>}</PanelBoundary>
     </aside>
+    {worksOpen && <MyWorksDrawer key={scopeKey} files={artifacts} viewport={viewport} opener={() => worksButton.current} fallback={() => railToggle.current} onClose={() => setWorksOpen(false)} />}
     {active && appearanceScope === scopeKey && <TaskAppearanceDialog key={scopeKey} task={active} onClose={() => setAppearanceScope(null)} />}
   </div></CitationPreviewContext.Provider>;
 }

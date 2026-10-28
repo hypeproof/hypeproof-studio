@@ -63,7 +63,49 @@ redirect 때문에 틀린 이름도 성공한 것처럼 보인다 (#290).
 
 ---
 
+## 에이전트 인증 요구사항
+
+`HAR-REQ-CHANGE`의 PR 준비 흐름에서 로컬 Git 신원과 네트워크 권한을 분리한다.
+로컬 커밋·rebase는 `scripts/agent-identity/agent-git.sh`로 토큰 없이 수행한다.
+push·PR 생성은 `scripts/agent-identity/with-agent-identity.sh`로 저장소 하나의
+App 토큰을 요청한다. `--repo` 또는 `origin`을 사용하고 필요하면
+`HYPEPROOF_AGENT_REPOSITORY=hypeproof/<repo>`로 대상을 명시한다.
+멤버 동의·`ensure/login/status/logout`·고정 브로커 주소·운영 검증 상태는
+[멤버 가이드 §2e](MEMBER-GUIDE.ko.md#2e-에이전트-app-인증)를 따른다.
+
+인증이 실패하면 네트워크 쓰기를 중단한다. 사람 신원 fallback, 조직 PEM 배포,
+멤버별 신규 App은 해결 경로가 아니다. workflow 쓰기는
+`HYPEPROOF_AGENT_WORKFLOWS=1`와 사용자 OAuth `workflow` scope가 함께 필요하다.
+기본 토큰에 organization Projects·관리·멤버·Actions·배포 권한을 추가하지 않는다.
+
+팀원은 자연어로 연결과 개발을 요청한다. 에이전트가 `ensure --repo ... --json`으로
+진단하고 최초 동의가 필요한 때만 설명과 질문을 제공한다. 동의 전에는 인증 정보를
+읽거나 전송하지 않으며 설정을 만들지 않는다. 이후 GitHub 로그인 복구와 저장소별
+실제 권한 확인을 수행한다. CI/비대화 환경은 질문 없이 구조화된 실패로 종료한다.
+
+## 에이전트 인증 설계와 검증
+
+`HAR-DES-CHANGE`는 `agent-auth.py`의 비밀 아닌 동의 기록과 기존 `gh` 인증을
+사용한 본인 확인, 고정 HTTPS 브로커, 요청 저장소 하나의 토큰을 연결한다.
+서버는 active 조직 멤버십과 요청 저장소 write 권한을 검증해야 한다.
+기존 키 보관자 bootstrap도 동일한 저장소 범위를 적용하며 키를 재배포하지 않는다.
+`HAR-TEST-CHANGE`는 로컬 commit/rebase에서 토큰·인증·네트워크 미사용,
+명시적 동의와 철회, 저장소 제한, workflow opt-in, 인증 실패 시 사람 신원으로
+실행하지 않음을 검증한다. 클라이언트 테스트 PASS는 브로커 배포·실발급·GitHub
+쓰기 성공의 증거가 아니다. 운영 활성화는 별도 실증 결과로 기록한다.
+`ensure`의 `ready`는 실제 발급과 진단 토큰 폐기까지 성공했을 때만 반환한다.
+새 기기·동의 재사용·미로그인·권한 거부·서비스 장애·잘못된 설정·철회·비밀 출력
+금지를 `tests/hype_pr/test_agent_auth_ensure.py`로 검증한다. 서비스/머지 정책은
+변경하지 않는다.
+실제 사람이 작성한 커밋은 보존하고 에이전트가 작성한 커밋만 신원을 교정한다.
+
 ## Agent가 PR을 만드는 흐름
+
+인증의 읽기와 쓰기는 구분한다. `create`도 준비 근거를 다시 확인하므로 다른
+비공개 정본 저장소의 source가 필요하다. 이 GET 조회와 Git fetch는 팀원의 기존
+저장된 `gh`/Git 로그인을 사용하고, PR 생성 등 쓰기는 요청 저장소 하나에 제한된
+App 토큰을 유지한다. 읽기 권한이 없으면 준비를 멈춘다. 이를 해결하려고 App
+쓰기 범위를 넓히거나 사람 명의로 PR을 발행하지 않는다.
 
 Harness, Lab, Studio, Sediment의 PR 생성은 `skills/hype-pr/SKILL.md` 정본을 따른다. consumer에서는
 `.claude/skills/hype-pr/SKILL.md`로 배포되고 `.agents/skills/hype-pr/`도 같은 내용을 가리킨다.

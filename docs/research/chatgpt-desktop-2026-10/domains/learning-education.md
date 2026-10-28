@@ -272,6 +272,18 @@ width nothing scrolls horizontally and captions use the short variant.
 REQ/DES-CGP-LEARN-14 as built (2026-10-26, DEC-LEARN-14): Chalk `/authoring` asks once per browser
 (`localStorage`, no Service store), pre-fills only lessons made with 새 강의 만들기, maps 초 1–6 → lv1, 중/고 → lv2,
 성인 → adult and 유아 → no tier, and adds a per-lesson 대상 단계 select. Owning requirement: chalk-authoring CH-01.
+DES-CGP-LEARN-14 closed (2026-10-27, CGP-LEARN-D-014, DEC-LEARN-14d): the R-014 panel already met one screen, two questions,
+44px chips and 375/1280 px; 나중에 was an outlined ghost button, so it now draws no border (a text button beside the filled
+저장). T-48 measures each clause in headless Chromium.
+DES-CGP-LEARN-17 closed (2026-10-27, CGP-LEARN-D-017, DEC-LEARN-17d): already met on main by the R-017 build (#2956); no
+product change. The R-017 browser test measured height only and the dark scheme only, so it now also measures 44×44 and a
+centre hit test for every action, the 3:1 ring under a light-scheme request, mouse close of the sheet, and touch taps under
+`pointer: coarse` (`chalk/test/help-triage.browser.mjs`). Six mutations that the old test passed now fail.
+
+DES-CGP-LEARN-15 status (2026-10-27, CGP-LEARN-D-015): already met on main by the CGP-LEARN-R-015 build. Chalk `/authoring`
+draws the checklist as one list row per item (sentence + record kind + row actions), with no points column and no level
+headers. Proved by a computed headless test (T-50, `chalk/test/checklist-output.browser.mjs`). Decision: `decisions.md`
+CGP-LEARN-D-015.
 
 ## 4. Open questions / unknowns
 
@@ -313,3 +325,4 @@ REQ/DES-CGP-LEARN-14 as built (2026-10-26, DEC-LEARN-14): Chalk `/authoring` ask
 
 - **REQ-CGP-LEARN-17 (CGP-LEARN-R-017), 2026-10-26.** Implemented in Chalk `/manage` as REQ-CHALK-HELP-TRIAGE (`docs/requirements/classroom-admin.md#help-queue-keyboard-triage`), with DES-CGP-LEARN-17. Agent choices under the owner rules (recorded in `decisions.md`): "resolve" for the instructor is 답변 완료 · 학생 확인 대기, because only the learner marks a request resolved (ADM-05); the documented key is `E`; selection is keyboard focus on the row's own button; keys listen only in the help region and the open record.
 - **CGP-LEARN-R-016 (REQ-CGP-LEARN-16), 2026-10-26.** Implemented in Studio as REQ-STUDIO-COACH-RUN-STATE (`docs/studio-requirements.md`), with DES-CGP-LEARN-16. Owner-delegated choices (precedence, icon-based activity classifier with unknown → 생각 중, which dialogs count as approval, the personal heading's run note leaving the row, every seat) are recorded in `../decisions.md`.
+- **CGP-LEARN-D-016 (DES-CGP-LEARN-16), 2026-10-27.** Already met on main by the R-016 work (20px icon + words at 14px in the chat header, polite live region, no animation, colour only reinforcing). The one unguarded clause was "state change announced": nothing failed if the region was remounted per state. `test/coach-run-state-browser.smoke.mjs` now proves in headless Chromium that the live region is the same mounted node across all seven states and its words change in place. Recorded in `../decisions.md`.

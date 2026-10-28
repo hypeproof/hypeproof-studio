@@ -4,6 +4,10 @@
 // instructor console, reachable later from the settings dialog, lines rendered as text; computed
 // geometry (above the composer, inside the column, 44px close, >=14px text, focus ring, ChatIcon,
 // forced colours) for personal and classroom, dark and light, 320/800/1420 px.
+// CGP-SHELL-D-034 (DES-SHELL-34) — the shipped lines render as at most 3 bullets of at most 40
+// characters (visible disc markers with room inside the row), the row is in flow and not modal
+// (no dialog, aria-modal or inert; the composer stays hit-testable under it) and its text keeps
+// >= 4.5:1 against the row in dark and light.
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {fileURLToPath} from 'node:url';
@@ -11,6 +15,7 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 import {THEMES} from './lib/vscode-default-themes.mjs';
 import {chatConfig} from './sx-screen-fixtures.mjs';
 import {findChromium,launch} from './lib/headless-chromium.mjs';
+import {LEARNER_RELEASE_NOTES} from '../src/learnerReleaseNotes.ts';
 const bin=findChromium();
 if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER==='1')throw Error('Chromium required');console.log('NOT RUN whats-new layout: no Chromium');process.exit(0);}
 const dir=fileURLToPath(new URL('../webview-ui/',import.meta.url));
@@ -21,7 +26,7 @@ const settle=(ms=80)=>new Promise(r=>setTimeout(r,ms));
 const send=async data=>{await b.evaluate(`window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(data)}}))`);await settle();};
 const shim=`window.__posts=[];if(!crypto.randomUUID){let n=0;crypto.randomUUID=()=>'00000000-0000-4000-8000-'+String(++n).padStart(12,'0');}window.acquireVsCodeApi=()=>({postMessage:m=>window.__posts.push(m),getState:()=>undefined,setState:()=>{}});`;
 const page=(vars,dark)=>`<html style="${vars}"><style>${css}</style><body class="${dark?'vscode-dark':'vscode-light'}"><div id="root"></div><script>${shim}</script><script>${script.replaceAll('</script','<\\/script')}</script></body></html>`;
-const NOTES={id:'2026-10-26',items:['Cmd/Ctrl+F로 대화 안에서 글자를 찾을 수 있어요','? 키를 누르면 키보드 단축키를 볼 수 있어요','답에 나온 수식이 보기 좋게 보여요']};
+const NOTES={id:LEARNER_RELEASE_NOTES.id,items:[...LEARNER_RELEASE_NOTES.items]};
 const workspace={scope:'whats-new',revision:1,activeTaskId:'task',tasks:[{id:'task',title:'고양이 페이지',createdAt:1,updatedAt:1,messageCount:0}],sourceSelection:null};
 const configFor=(seat,extra={})=>chatConfig(3,{activity:{...chatConfig().activity,kind:seat},profile:{...chatConfig().profile,lesson:null},taskWorkspace:seat==='personal'?workspace:undefined,access:seat==='classroom'?{status:'unavailable'}:undefined,...extra});
 const posts=async()=>JSON.parse(await b.evaluate('JSON.stringify(window.__posts)'));
@@ -29,6 +34,10 @@ const answer=async(show,notes=NOTES)=>{const req=(await posts()).filter(m=>m.typ
 const panel=()=>b.evaluate(`(()=>{const p=document.querySelector('.hps-whats-new');return p?{title:p.querySelector('h2').textContent,items:[...p.querySelectorAll('li')].map(l=>l.textContent),html:p.innerHTML,modal:!!p.closest('dialog')}:null})()`);
 const shown=async()=>(await posts()).filter(m=>m.type==='whatsNewShown');
 const vars=theme=>Object.entries(THEMES[theme]).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
+const rgb=c=>{const m=c.match(/[\d.]+/g).map(Number);return {r:m[0],g:m[1],b:m[2],a:m[3]??1};};
+const lum=({r,g,b})=>{const f=v=>{v/=255;return v<=.03928?v/12.92:((v+.055)/1.055)**2.4;};return .2126*f(r)+.7152*f(g)+.0722*f(b);};
+const over=(top,under)=>({r:top.r*top.a+under.r*(1-top.a),g:top.g*top.a+under.g*(1-top.a),b:top.b*top.a+under.b*(1-top.a)});
+const contrast=(fg,bg)=>{const [x,y]=[lum(fg),lum(bg)].sort((a,b)=>b-a);return (x+.05)/(y+.05);};
 const open=async(seat,{dark=true,width=800,forcedColors=false,extra={}}={})=>{await b.send('Page.navigate',{url:'about:blank'});await b.load(page(vars(dark?'Dark+':'Light+'),dark),{width,height:900,dark,forcedColors});await send({type:'config',config:configFor(seat,extra)});await send({type:'history',messages:[]});};
 let cases=0;
 try{
@@ -108,6 +117,23 @@ try{
   assert.ok(g.close[0]>=44&&g.close[1]>=44,`${label}: 44px close ${g.close}`);
   assert.ok(Math.min(...g.fonts)>=14,`${label}: text >= 14px ${g.fonts}`);
   assert.equal(g.svg,1);assert.equal(g.glyph,'','close is a ChatIcon, not a glyph');assert.equal(g.label,'새로운 기능 닫기');
+  // DES-SHELL-34: short (<= 3 bullets, <= 40 characters), visible bullets, not modal, readable in this theme.
+  const d=await b.evaluate(`(()=>{const p=document.querySelector('.hps-whats-new'),ps=getComputedStyle(p),pr=p.getBoundingClientRect(),c=document.querySelector('.hps-input textarea'),cr=c.getBoundingClientRect();
+   const lis=[...p.querySelectorAll('.hps-whats-new-list > li')];
+   return {list:p.querySelector('.hps-whats-new-list').tagName,n:lis.length,lens:lis.map(l=>[...l.textContent].length),
+    bullets:lis.map(l=>{const s=getComputedStyle(l);return {display:s.display,type:s.listStyleType,room:l.getBoundingClientRect().left-pr.left-parseFloat(ps.borderInlineStartWidth),font:parseFloat(s.fontSize)}}),
+    position:ps.position,modal:p.closest('dialog,[aria-modal="true"],[role="dialog"],[role="alertdialog"]')!==null,inert:document.querySelector('[inert]')!==null,openDialogs:document.querySelectorAll('dialog[open]').length,
+    hit:document.elementFromPoint(cr.left+cr.width/2,cr.top+cr.height/2)===c,
+    bg:ps.backgroundColor,page:getComputedStyle(document.body).backgroundColor,text:[...p.querySelectorAll('h2,li')].map(e=>getComputedStyle(e).color)}})()`);
+  assert.equal(d.list,'UL',`${label}: the lines are a bulleted list`);
+  assert.ok(d.n>=1&&d.n<=3,`${label}: 1-3 bullets (${d.n})`);
+  assert.ok(d.lens.every(n=>n<=40),`${label}: each bullet <= 40 characters (${d.lens})`);
+  for(const x of d.bullets){assert.equal(x.display,'list-item',`${label}: bullet is a list item`);assert.notEqual(x.type,'none',`${label}: bullet marker visible`);assert.ok(x.room>=x.font,`${label}: marker has room inside the row (${x.room} >= ${x.font})`);}
+  assert.ok(['static','relative'].includes(d.position),`${label}: in flow, not an overlay (${d.position})`);
+  assert.equal(d.modal,false,`${label}: not inside a dialog or aria-modal`);assert.equal(d.inert,false,`${label}: nothing made inert`);assert.equal(d.openDialogs,0,`${label}: no dialog open`);
+  assert.ok(d.hit,`${label}: the composer stays hit-testable with the panel shown`);
+  const back=over(rgb(d.bg),rgb(d.page));
+  for(const color of d.text){const ratio=contrast(over(rgb(color),back),back);assert.ok(ratio>=4.5,`${label}: text ${color} on ${d.bg} is ${ratio.toFixed(2)}:1`);}
   const ring=await b.focusVisibleStyle('.hps-whats-new-dismiss');assert.equal(ring['outline-width'],'2px');assert.notEqual(ring['outline-style'],'none');
   if(shots){const png=await b.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${shots}/${seat}-${dark?'dark':'light'}-${width}.png`,Buffer.from(png.data,'base64'));}
   cases++;
@@ -120,5 +146,5 @@ try{
   if(shots){const png=await b.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${shots}/${seat}-forced-800.png`,Buffer.from(png.data,'base64'));}
   cases++;
  }
- console.log(`PASS whats-new actual App: ${cases} cases (due-only, hidden during a turn, seen only when drawn, close + late answer, instructor none, Help sheet, text-only lines, geometry both seats/themes/widths, forced colours)`);
+ console.log(`PASS whats-new actual App: ${cases} cases (due-only, hidden during a turn, seen only when drawn, close + late answer, instructor none, Help sheet, text-only lines, geometry both seats/themes/widths, DES-SHELL-34 shape/non-modal/contrast, forced colours)`);
 }finally{await b.close();}

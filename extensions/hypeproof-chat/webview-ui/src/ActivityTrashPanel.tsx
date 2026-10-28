@@ -33,11 +33,13 @@ const RESTORE_BUTTON = '[data-trash-restore]';
 let requestSeq = 0;
 const nextRequestId = () => `trash-${Date.now().toString(36)}-${(++requestSeq).toString(36)}`;
 
-export function ActivityTrashPanel({ files, scopeKey, onAsk }: {
+export function ActivityTrashPanel({ files, scopeKey, onAsk, onOpenTurn }: {
   files: ArtifactProvenanceView | null | undefined;
   /** The task workspace scope: a change drops every pending press, toast and dialog. */
   scopeKey: string;
   onAsk?: (path: string) => void;
+  /** CGP-KNOW-D-016 — a turn link in a file's info popover. */
+  onOpenTurn?: (taskId: string, messageId: string) => void;
 }) {
   const [view, setView] = useState<ActivityTrashView | null>(null);
   const [open, setOpen] = useState(false);
@@ -132,7 +134,7 @@ export function ActivityTrashPanel({ files, scopeKey, onAsk }: {
   };
 
   return <section ref={works} className="tw-works" aria-label="내 작품" data-testid="my-works">
-    <ArtifactProvenanceList view={files} onAsk={onAsk} onTrash={view ? (file, button) => act('move', file, { kind: 'move', index: [...(works.current?.querySelectorAll(MOVE_BUTTON) ?? [])].indexOf(button), origin: button }) : undefined} trashPending={pending} />
+    <ArtifactProvenanceList view={files} onAsk={onAsk} onOpenTurn={onOpenTurn} onTrash={view ? (file, button) => act('move', file, { kind: 'move', index: [...(works.current?.querySelectorAll(MOVE_BUTTON) ?? [])].indexOf(button), origin: button }) : undefined} trashPending={pending} />
     {error && <p role="alert" className="tw-trash-error">{error} <button type="button" onClick={() => { setError(''); postToHost({ type: 'activityTrashRequest' }); }}>다시 확인</button></p>}
     {view && <div className="tw-trash" data-testid="activity-trash">
       <button ref={entryButton} type="button" className="tw-trash-entry" aria-expanded={open} aria-controls="tw-trash-list" onClick={() => setOpen(value => !value)}>

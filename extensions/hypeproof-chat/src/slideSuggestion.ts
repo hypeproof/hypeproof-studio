@@ -20,6 +20,7 @@
 import type { LearningWikiPlan, WikiState } from "./learningWiki.ts";
 import { foldNumerals, unsupportedNumbers, unsupportedQuantityWords } from "./numerals.ts";
 import { basisLabel, citedText, type DeckProposal, type DeckTemplate, type PitchSlide, type Visual, type VisualType } from "./deckGenerator.ts";
+import { CONFIDENCE_LABEL, type Confidence } from "./memoryView.ts";
 
 export type SlideChip = "simplify" | "visual" | "highlight";
 
@@ -208,3 +209,30 @@ export function slidePatchDetail(patch: SlidePatch): string {
   const chip = SLIDE_CHIPS.find((x) => x.id === patch.chip)?.label ?? "";
   return [`[${chip}]`, "", "지금", ...slideFaceLines(patch.before), "", "바꾼 안", ...slideFaceLines(patch.after), "", `${patch.basis} (근거는 그대로예요)`].join("\n");
 }
+
+/**
+ * The evidence label of a slide's claim (CR-55, DES-ART-16), computed from what the slide cites, never from the
+ * model: observed only when every ref is evidence observed for real; assumed when it cites no evidence at all
+ * (only the problem, a hypothesis or a decision); interpreted otherwise (team trials, simulations, or evidence
+ * mixed with a decision or hypothesis). A patch keeps the refs, so the label never changes with a proposal.
+ */
+export function claimConfidence(s: WikiState, refs: string[]): Confidence {
+  const cited = refs.map((r) => s.E.find((e) => e.id === r)).filter((e) => !!e);
+  if (!cited.length) return "assumed";
+  return cited.length === refs.length && cited.every((e) => e.state === "real") ? "observed" : "interpreted";
+}
+
+export interface ProposalRow { label: string; before: string; after: string; changed: boolean }
+
+/** The before/after proposal as aligned rows (title, visual, each support line), each marked when it changed. */
+export function slidePatchRows(patch: SlidePatch): ProposalRow[] {
+  const rows: Array<[string, string, string]> = [
+    ["제목", patch.before.headline, patch.after.headline],
+    ["그림", slideFaceLines(patch.before)[1], slideFaceLines(patch.after)[1]],
+  ];
+  const n = Math.max(patch.before.support.length, patch.after.support.length);
+  for (let i = 0; i < n; i++) rows.push([`짧은 문장 ${i + 1}`, patch.before.support[i] ?? "", patch.after.support[i] ?? ""]);
+  return rows.map(([label, before, after]) => ({ label, before, after, changed: before !== after }));
+}
+
+export { CONFIDENCE_LABEL, type Confidence };

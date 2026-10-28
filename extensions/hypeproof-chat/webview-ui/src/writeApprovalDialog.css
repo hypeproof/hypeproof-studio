@@ -5,7 +5,7 @@
 .hps-write-approval h2 { font: inherit; font-weight: var(--ds-c-studio-writeapprovaldialog-typography-7); }
 .hps-write-files { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-writeapprovaldialog-space-2); }
 .hps-write-files li { min-width: 0; max-width: 100%; }
-.hps-write-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--ds-c-studio-writeapprovaldialog-space-2); min-height: var(--ds-c-studio-writeapprovaldialog-size-8); max-width: 100%; padding: var(--ds-c-studio-writeapprovaldialog-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--hp-radius-6); background: var(--vscode-badge-background, var(--ds-c-studio-writeapprovaldialog-surface-125)); color: var(--vscode-badge-foreground, var(--ds-c-studio-writeapprovaldialog-ink-2)); }
+.hps-write-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--ds-c-studio-writeapprovaldialog-space-2); min-height: var(--ds-c-studio-writeapprovaldialog-size-8); max-width: 100%; padding: var(--ds-c-studio-writeapprovaldialog-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--hp-radius-8); background: var(--vscode-badge-background, var(--ds-c-studio-writeapprovaldialog-surface-125)); color: var(--vscode-badge-foreground, var(--ds-c-studio-writeapprovaldialog-ink-2)); }
 .hps-write-chip svg { flex: 0 0 var(--ds-c-studio-writeapprovaldialog-size-30); }
 .hps-write-chip span { min-width: 0; overflow-wrap: anywhere; }
 .hps-write-full-name { display: block; padding: var(--ds-c-studio-writeapprovaldialog-space-2) 0; overflow-wrap: anywhere; }
@@ -37,3 +37,14 @@
 .hps-write-change-warning > .hps-icon { flex-shrink: 0; }
 .hps-write-change[data-change="rewrite"], .hps-write-change[data-change="unknown"] { border-color: var(--hp-border-warn-default); }
 /* Forced colours: Chromium maps the edge and the warning to CanvasText itself (measured in write-approval-change-layout.smoke.mjs). */
+/* CGP-ART-D-021 (DES-ART-21): a 4-step bar beside the percentage (role="img" names it in words) and "바뀐 곳 보기". */
+.hps-write-change-bar { display: flex; gap: var(--hp-space-1); max-inline-size: 100%; }
+.hps-write-change-step { box-sizing: border-box; flex: 0 1 var(--hp-space-8); min-inline-size: 0; block-size: var(--hp-space-2); border: var(--ds-c-studio-writeapprovaldialog-size-3) solid currentColor; border-radius: var(--ds-c-studio-writeapprovaldialog-radius-3); }
+.hps-write-change-step[data-filled="true"] { background: currentColor; }
+.hps-write-change[data-change="rewrite"] .hps-write-change-bar { color: var(--hp-text-warn-default); }
+.hps-write-approval .hps-write-change-diff { align-self: flex-start; border-color: transparent; padding-inline: 0; text-decoration: underline; color: var(--vscode-textLink-foreground, currentColor); }
+@media (forced-colors: active) {
+  /* Backgrounds become Canvas here, so a filled step is drawn by its edge: half the height on each side fills it. */
+  .hps-write-change-step[data-filled="true"] { border-width: calc(var(--hp-space-2) / 2); }
+  .hps-write-approval .hps-write-change-diff { color: LinkText; }
+}

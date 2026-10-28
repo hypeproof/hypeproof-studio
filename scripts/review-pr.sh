@@ -135,6 +135,8 @@ cleanup() {
   fi
   [[ -n "${KB_SQL:-}" ]] && rm -f "$KB_SQL" 2>/dev/null || true
   [[ -n "${HPS_DEV_ISSUER_TOKEN_FILE:-}" ]] && rm -f "$HPS_DEV_ISSUER_TOKEN_FILE" 2>/dev/null || true
+  [[ -n "${TOKEN_JSON_TMP:-}" ]] && rm -f "$TOKEN_JSON_TMP" 2>/dev/null || true
+  [[ -n "${TOKEN_ERR_TMP:-}" ]] && rm -f "$TOKEN_ERR_TMP" 2>/dev/null || true
   # Student token file (--student-session): cleanup target, never survives the session.
   rm -f "${WORKTREE_DIR}/student-token.txt" 2>/dev/null || true
   if [[ -d "$WORKTREE_DIR" ]]; then
@@ -313,7 +315,7 @@ if [[ -f "$IMPORT_SCRIPT" ]]; then
   else
     KB_SQL="$(mktemp /tmp/chalk-kb-XXXXXX.sql)"
     echo "볼트: $VAULT"
-    if node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types "$IMPORT_SCRIPT" \
+    if node --import "$WORKER_DIR/test/harness/loader.mjs" --experimental-strip-types "$IMPORT_SCRIPT" \
         --vault-path "$VAULT" \
         --version 1 \
         --note "review-pr auto-import" \
@@ -425,14 +427,20 @@ _ISSUE_ARGS=()
 if [[ "${STUDENT_SESSION:-0}" -eq 1 ]]; then
   _ISSUE_ARGS+=(--can-start-session --max-session-hours 3)
 fi
-TOKEN_JSON="$(HPS_SIGNING_SECRET="$LOCAL_SECRET" \
-  node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types \
-  "$WORKER_DIR/scripts/issue-issuer-token.ts" \
+TOKEN_JSON_TMP="$(umask 077; mktemp "$WORKTREE_DIR/.issuer-token-XXXXXX")"
+TOKEN_ERR_TMP="$(umask 077; mktemp "$WORKTREE_DIR/.issuer-token-err-XXXXXX")"
+# The helper comes from this checkout ($REPO), not the PR worktree: older PR branches lack it.
+if ! HPS_SIGNING_SECRET="$LOCAL_SECRET" bash "$REPO/scripts/review-pr-issue-token.sh" \
+  "$WORKER_DIR" "$TOKEN_JSON_TMP" "$TOKEN_ERR_TMP" \
   --instructor "jy-review-$$" \
   --cohorts "$COHORT_ID" \
   --profiles "$PROFILE_ID" \
   --max-hours 4 --days 1 \
-  ${_ISSUE_ARGS[@]+"${_ISSUE_ARGS[@]}"} 2>&1)"
+  ${_ISSUE_ARGS[@]+"${_ISSUE_ARGS[@]}"}; then
+  exit 1
+fi
+TOKEN_JSON="$(cat "$TOKEN_JSON_TMP")"
+rm -f "$TOKEN_JSON_TMP" "$TOKEN_ERR_TMP"
 
 TOKEN="$(echo "$TOKEN_JSON" | python3 -c "import sys,re; m=re.search(r'\"token\":\s*\"([^\"]+)\"', sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null)"
 if [[ -z "$TOKEN" ]]; then

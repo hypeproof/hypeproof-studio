@@ -547,6 +547,8 @@ export type WebviewMessage = (
   | {type:'annotationLeaveAnswer';id:string;discard:boolean}
   | { type: "stopRunningProcess"; id: string }
   | {type:'writeApprovalAnswer';id:string;approved:boolean}
+  /** CGP-ART-D-021: open the file now beside the text after the call; never an answer. */
+  | {type:'writeApprovalDiff';id:string;index:number}
   | {type:'folderConsentAnswer';id:string;level:import('./folderConsent').FolderConsentLevel|null}
   | {type:'outboundAnswer';id:string;selected:string[]|null}
   | { type: 'taskCreate' }
@@ -778,6 +780,9 @@ export type WebviewMessage = (
   | { type: "missingTaskFolderRequest" }
   /** REQ-KNOW-35 (CGP-KNOW-R-019) — ask the host to measure free space on the work folder's volume now; `mount` = the panel has no state yet, so the host re-sends even an unchanged one. */
   | { type: "lowDiskRequest"; mount?: boolean }
+  /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — ask whether a 느려요 기록 is running; stop the one recording `id` names (the pill's own id). */
+  | { type: "perfTraceStateRequest" }
+  | { type: "perfTraceStop"; id: string }
   | { type: "missingTaskFolderRepick" }
   /** REQ-STUDIO-PREVIEW-RECOVERY — ask for the preview's measured state; run the one action its cause line names. */
   | { type: "previewRecoveryRequest" }
@@ -792,10 +797,16 @@ export type WebviewMessage = (
   | { type: "activityTrashRequest" }
   | { type: "activityTrashAction"; requestId: string; scope: string; action: import("./activityTrashView").ActivityTrashAction; target: string }
   | { type: "artifactProvenanceRequest" }
+  // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
+  | { type: "artifactThumbnailRequest"; requestId: string; path: string }
+  /** CGP-KNOW-D-016 — the info popover of one listed work-folder file; answered once per request id. */
+  | { type: "artifactInfoRequest"; requestId: string; path: string }
   // REQ-STUDIO-PAGE-CARD — a press on a page card row; the host acts only on a row of a card it issued, inside the work folder.
   | { type: "pageCardsRequest" }
   | { type: "pageCardOpen"; turnId: string; path: string }
   | { type: "pageCardReveal"; turnId: string; path: string }
+  // CGP-KNOW-D-021 — 열기 / 폴더에서 보기 on a stored "다운로드 완료" line of the open task; the host re-checks the file.
+  | { type: "downloadLineAction"; id: string; action: "open" | "reveal" }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
@@ -902,12 +913,17 @@ export type HostMessage = (
   | { type: "missingTaskFolder"; notice: import("./missingTaskFolder").MissingTaskFolderNotice | null }
   /** REQ-KNOW-35 (CGP-KNOW-R-019) — free space on the work folder's volume is under the threshold: one persistent bar above the composer; null hides it. */
   | { type: "lowDisk"; notice: import("./lowDisk").LowDiskNotice | null }
+  /** CGP-AGENT-D-026 (REQ-STUDIO-PERF-TRACE) — a 느려요 기록 is running (red 기록 중 · 멈추기 pill above the composer) or not; `id` names the recording. */
+  | { type: "perfTraceState"; recording: boolean; id: string | null }
   /** REQ-STUDIO-PREVIEW-RECOVERY — the learner's preview tab as measured (server state, HTTP status); null = no preview tab. `result` answers a press. */
   | { type: "previewRecovery"; signals: import("./previewFailure").PreviewSignals | null; result?: import("./previewFailure").PreviewRecoveryResult }
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — one label per work-folder file, from recorded events only; null when there is no folder. */
   /** CGP-KNOW-D-013 — the current activity's trash; null when unavailable. `requestId`/`result` answer one press. */
   | { type: "activityTrashState"; view: import("./activityTrashView").ActivityTrashView | null; requestId?: string; result?: import("./activityTrashView").ActivityTrashResult }
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
+  /** CGP-KNOW-D-011 — an inline data: image read from inside the work folder, or null (the row keeps its type glyph). */
+  | { type: "artifactThumbnail"; requestId: string; path: string; src: string | null }
+  | { type: "artifactInfo"; requestId: string; info: import("./artifactProvenanceView").ArtifactInfo | null }
   /** REQ-STUDIO-PAGE-CARD — every page card of the current task this session (in memory only); [] removes them. */
   | { type: "pageCardsState"; cards: import("./pageCard").PageCardView[] }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
@@ -957,7 +973,9 @@ export type HostMessage = (
   // of a toast.
   | { type: "denialNotice"; id: string; label: string; at: number }
   // CGP-KNOW-R-021 — how a download from the Studio browser ended (re-checked by the webview).
-  | { type: "downloadNotice"; id: string; icon: string; label: string; state: "done" | "error"; at: number }
+  | { type: "downloadNotice"; id: string; icon: string; label: string; state: "done" | "error" | "running"; at: number }
+  // CGP-KNOW-D-021 — the outcome of a 열기 / 폴더에서 보기 press: a refusal line, or null once it went through.
+  | { type: "downloadLineNotice"; id: string; notice: string | null }
   | { type: "pageAttached"; label: string }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
   | { type: "annotations"; enabled: boolean; annotations: import("./annotationBatch").AnnotationView[] }

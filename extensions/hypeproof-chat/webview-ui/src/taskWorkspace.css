@@ -39,6 +39,9 @@
 /* CGP-KNOW-R-002 — the activity home's 작업/자료 views: two equal tabs under the brand. The chosen tab is
    marked by weight and an underline, never by colour alone; each tab is a 44px target. A panel is a flex
    column so the task list keeps its own scroll; the 자료 panel scrolls as a whole. */
+/* CGP-KNOW-D-002 — the activity title the segmented control sits under: one line at body size, a long name
+   ellipsizes (its full text is the accessible name and the tooltip); bidi-isolated so a name cannot reorder the rail. */
+.tw-workspace .tw-activity-title { margin: 0 var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; font-size: var(--hp-font-body); color: inherit; }
 .tw-home-tabs { display: flex; gap: var(--ds-c-studio-taskworkspace-space-12); margin: 0 0 var(--ds-c-studio-taskworkspace-space-18); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
 .tw-workspace .tw-home-tab { flex: 1 1 0; min-width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0 var(--ds-c-studio-taskworkspace-space-2); color: inherit; background: transparent; border: 0; border-bottom: var(--ds-c-studio-taskworkspace-size-7) solid transparent; border-radius: 0; font-size: var(--hp-font-caption); }
 .tw-workspace .tw-home-tab[aria-selected="true"] { font-weight: var(--hp-weight-strong); border-bottom-color: currentColor; }
@@ -124,6 +127,17 @@
 .tw-source-list small { font-size: var(--hp-font-caption); color: var(--tw-muted); overflow-wrap: anywhere; }
 /* CGP-KNOW-R-015 — 이 파일에 대해 묻기 under each work-folder file: a 44px target, text only. */
 .tw-source-list .tw-artifact-ask { flex-direction: row; align-items: center; align-self: flex-start; width: auto; min-height: var(--ds-c-studio-taskworkspace-size-8); padding: 0 var(--ds-c-studio-taskworkspace-space-1); border-color: var(--tw-line); font-size: var(--hp-font-caption); }
+/* CGP-KNOW-D-016 — a file's info popover: four labelled rows in flow under the row (no overlay, no new scroller). */
+.tw-source-list .tw-artifact-info { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-16); padding: var(--ds-c-studio-taskworkspace-space-7); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-1); background: var(--hp-bg-panel-default); color: var(--hp-text-primary-default); font-size: var(--hp-font-caption); }
+.tw-source-list .tw-artifact-info:focus-visible { outline: var(--ds-c-studio-taskworkspace-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-taskworkspace-size-7); }
+.tw-artifact-info p { margin: 0; }
+.tw-artifact-info dl { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-16); margin: 0; }
+.tw-artifact-info dl > div { display: flex; flex-direction: column; }
+.tw-artifact-info dt { font-weight: var(--hp-weight-strong); }
+.tw-artifact-info dd { margin: 0; overflow-wrap: anywhere; }
+.tw-source-list .tw-artifact-info .tw-artifact-info-link { flex-direction: row; align-items: center; width: auto; min-height: var(--ds-c-studio-taskworkspace-size-8); padding: 0; border-color: transparent; color: var(--vscode-textLink-foreground, inherit); text-decoration: underline; text-align: left; font-size: var(--hp-font-caption); }
+.tw-source-list .tw-artifact-info .tw-artifact-info-close { align-self: flex-end; }
+@media (forced-colors: active) { .tw-source-list .tw-artifact-info { border-color: CanvasText; background: Canvas; color: CanvasText; } .tw-source-list .tw-artifact-info .tw-artifact-info-link { color: LinkText; } }
 .tw-source-empty { padding: var(--ds-c-studio-taskworkspace-space-33) var(--ds-c-studio-taskworkspace-space-34); }
 .tw-source-empty > span { display: block; font-size: var(--ds-c-studio-taskworkspace-type-24); color: var(--tw-muted); margin-bottom: var(--ds-c-studio-taskworkspace-space-5); }
 .tw-rail-toggle { display: none; }
@@ -314,3 +328,45 @@ body.vscode-light .tw-workspace, body.vscode-high-contrast-light .tw-workspace {
 .tw-task-menu-panel button[role="menuitem"]:active:not([aria-disabled="true"]) { background-color: var(--hp-bg-control-pressed); }
 .tw-task-menu-panel button[role="menuitem"][aria-disabled="true"] { color: var(--tw-muted); cursor: not-allowed; }
 .tw-move-status { margin: 0; font-size: var(--hp-font-caption); color: var(--tw-muted); overflow-wrap: anywhere; }
+
+/* CGP-KNOW-D-011 (DES-KNOW-20) — 내 작품 as a drawer from the rail: a native modal dialog on the
+   rail's side, the full window height, at most 360px wide. Rows and every control are 44px targets;
+   text stays at the caption step (14px floor). The drawer fades with the modal tokens; the global
+   reduced-motion rule in tokens.css stops it. A window of 360px or less shows the list only. */
+.tw-works-open { display: flex; align-items: center; gap: var(--hp-space-2); min-height: var(--hp-control-min); margin: var(--hp-space-2) var(--ds-c-studio-taskworkspace-space-2) 0; padding: 0 var(--hp-space-2); text-align: left; font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-works-drawer { box-sizing: border-box; position: fixed; inset: 0 auto 0 0; width: min(calc(var(--hp-space-6) * 15), 100vw); max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; padding: 0; display: flex; flex-direction: column; color: var(--vscode-foreground, var(--hp-text-primary-default)); background: var(--tw-panel); border: 0; border-right: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); overflow-wrap: anywhere; animation: hp-modal-enter var(--hp-dur-modal-enter) ease-out both; }
+.tw-works-drawer:not([open]) { display: none; }
+.tw-works-drawer[data-closing] { animation: hp-modal-exit var(--hp-dur-modal-exit) var(--hp-ease-exit) both; }
+.tw-works-drawer::backdrop { background: var(--ds-c-modal-dim-dark); }
+body.vscode-light .tw-works-drawer::backdrop, body.vscode-high-contrast-light .tw-works-drawer::backdrop { background: var(--ds-c-modal-dim-light); }
+.tw-works-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-2); padding: var(--hp-space-2) var(--hp-space-2) var(--hp-space-2) var(--hp-space-4); border-bottom: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
+.tw-works-head h2 { flex: 1 1 auto; margin: 0; font-size: var(--hp-font-body); }
+.tw-works-drawer button { font: inherit; color: inherit; cursor: pointer; }
+.tw-works-views { display: flex; gap: var(--hp-space-1); }
+.tw-works-views button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); padding: 0 var(--hp-space-3); font-size: var(--hp-font-caption); background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-works-views button[aria-pressed="true"] { font-weight: var(--hp-weight-strong); text-decoration: underline; text-underline-offset: var(--hp-space-1); }
+.tw-works-close { display: inline-flex; align-items: center; justify-content: center; width: var(--hp-control-min); min-height: var(--hp-control-min); padding: 0; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-works-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--hp-space-2); }
+.tw-works-note { margin: var(--hp-space-2); font-size: var(--hp-font-caption); color: var(--tw-muted); }
+.tw-works-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--hp-space-1); }
+.tw-works-item { box-sizing: border-box; display: flex; align-items: flex-start; gap: var(--hp-space-3); min-height: var(--hp-control-min); padding: var(--hp-space-2); border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: var(--ds-c-studio-taskworkspace-radius-4); }
+.tw-works-thumb { flex: 0 0 auto; box-sizing: border-box; display: grid; place-items: center; width: var(--hp-control-min); height: var(--hp-control-min); overflow: hidden; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--ds-c-studio-taskworkspace-radius-1); background: var(--tw-canvas); }
+.tw-works-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tw-works-text { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--hp-space-1); }
+.tw-works-name { font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.tw-works-folder, .tw-works-meta time, .tw-works-meta > span:not(.tw-provenance-chip) { font-size: var(--hp-font-caption); color: var(--tw-muted); }
+.tw-works-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-1) var(--hp-space-2); }
+.tw-works-drawer[data-layout="grid"] .tw-works-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--hp-space-8) * 4), 1fr)); gap: var(--hp-space-2); }
+.tw-works-drawer[data-layout="grid"] .tw-works-item { flex-direction: column; border-color: var(--tw-line); }
+.tw-works-drawer[data-layout="grid"] .tw-works-thumb { width: 100%; height: calc(var(--hp-space-8) * 3); }
+@media (max-width: 360px) {
+  /* List only at phone widths, whatever the layout attribute says. */
+  .tw-works-drawer[data-layout="grid"] .tw-works-list { display: flex; flex-direction: column; }
+  .tw-works-drawer[data-layout="grid"] .tw-works-item { flex-direction: row; }
+  .tw-works-drawer[data-layout="grid"] .tw-works-thumb { width: var(--hp-control-min); height: var(--hp-control-min); }
+}
+@media (forced-colors: active) {
+  .tw-works-drawer { border-color: CanvasText; }
+  .tw-works-open, .tw-works-views button, .tw-works-thumb { border-color: ButtonText; }
+  .tw-works-views button[aria-pressed="true"] { border-width: calc(var(--ds-c-studio-taskworkspace-size-3) * 2); }
+}
