@@ -11,6 +11,7 @@ import { readDesignFile } from "./lib/design-token-values.mjs";
 // substituted where they are declared, calc). It cannot see a real render; the cascade it models
 // is the one the browser applies to these chains.
 import assert from "node:assert/strict";
+import ts from "typescript";
 import { readFileSync, readdirSync } from "node:fs";
 
 const SRC = new URL("../webview-ui/src/", import.meta.url);
@@ -813,8 +814,20 @@ const HEADER_TEXT = [
 // ─── Run on the real files ─────────────────────────────────────────────────────────────────────
 const cssFiles = readdirSync(SRC).filter((n) => n.endsWith(".css") && n !== "designTokens.css").sort();
 assert.deepEqual(cssFiles, [...ORDER, ...CONTROLLED_COMPONENT_CSS.map(({ css }) => css)].sort(), "every rule-bearing webview CSS file has a main-bundle or controlled-component owner (canonical static aliases are expanded by readDesignFile)");
+function hasControlledCssImport(component, source, css) {
+  const parsed = ts.createSourceFile(component, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  return parsed.statements.some((node) => ts.isImportDeclaration(node)
+    && node.importClause === undefined && ts.isStringLiteral(node.moduleSpecifier)
+    && node.moduleSpecifier.text === `./${css}`);
+}
 for (const { component, css } of CONTROLLED_COMPONENT_CSS) {
-  assert.ok(read(component).includes(`import './${css}';`), `${component} must import its mapped stylesheet`);
+  assert.ok(hasControlledCssImport(component, read(component), css), `${component} must import its mapped stylesheet`);
+  for (const inactive of [
+    `// import './${css}';`, `/* import './${css}'; */`,
+    `const note = "import './${css}';";`, `import type Styles from './${css}';`,
+    `import Styles from './${css}';`, `import('./${css}');`, `export * from './${css}';`,
+    `function later() { import('./${css}'); }`,
+  ]) assert.equal(hasControlledCssImport(component, inactive, css), false, "only an active static side-effect import owns controlled CSS");
 }
 // A separate consumer uses the same semantic tokens. Exercise its own learner text,
 // including a shrinking negative control; do not exempt its styles from inspection.
