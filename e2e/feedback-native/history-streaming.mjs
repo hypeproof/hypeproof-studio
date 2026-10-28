@@ -10,9 +10,49 @@ const blocked=message=>Object.assign(Error(message),{blocked:true});
 export function historyMarkers(rows){
  const counts={};for(const name of ['A1','D2','STOP_HOLD','QUIT_HOLD','FILE_HOLD'])counts[name]={user:rows.filter(r=>r.role==='user'&&r.text.includes(markerText(name))).length,assistant:rows.filter(r=>r.role==='assistant'&&r.text.includes(replyText(name))).length};return counts;
 }
-export function assertCompletedHistory(rows,names){
- const counts=historyMarkers(rows);for(const name of ['STOP_HOLD','QUIT_HOLD','FILE_HOLD']){assert.equal(counts[name].user,0,'Interrupted turn user must not be replayed into persisted history '+name);assert.equal(counts[name].assistant,0,'Interrupted assistant must not be committed '+name);}for(const name of ['A1','D2']){const expected=names.includes(name)?1:0;assert.equal(counts[name].user,expected,'Exact persisted user occurrence '+name);assert.equal(counts[name].assistant,expected,'Exact persisted assistant occurrence '+name);}return counts;
+const HELD=['STOP_HOLD','QUIT_HOLD','FILE_HOLD'];
+export function captureInterruptedHistory(rows,name){
+ assert(HELD.includes(name),'Known interrupted fixture turn required');
+ const result={};
+ for(const role of ['user','assistant']){
+  const text=role==='user'?markerText(name):replyText(name),matches=rows.filter(row=>row.role===role&&row.text.includes(text));
+  assert.equal(matches.length,1,'One observed interrupted '+role+' '+name);
+  assert.equal(matches[0].text,text,'Exact interrupted '+role+' bytes '+name);
+  assert.equal(typeof matches[0].id,'string');assert(matches[0].id.length>0,'Actual message identity required');
+  result[role]={id:matches[0].id,text};
+ }
+ assert.notEqual(result.user.id,result.assistant.id,'Distinct user and assistant identities required');return result;
 }
+export function assertInterruptedHistory(rows,names,interrupted={},requireStopped){
+ assert(names.every(name=>['A1','D2'].includes(name))&&new Set(names).size===names.length,'Only exact completed fixture turns may be claimed');
+ assert(Object.keys(interrupted).every(name=>HELD.includes(name)),'Known interrupted turns only');
+ assert(!requireStopped||Object.hasOwn(interrupted,requireStopped),'Stopped receipt requires an observed interrupted turn');
+ const counts=historyMarkers(rows);
+ for(const name of ['A1','D2',...HELD])for(const role of ['user','assistant']){
+  const expected=names.includes(name)||Object.hasOwn(interrupted,name)?1:0;
+  assert.equal(counts[name][role],expected,'Exact persisted '+role+' occurrence '+name);
+  if(expected){const text=role==='user'?markerText(name):replyText(name),row=rows.find(row=>row.role===role&&row.text.includes(text));
+   assert.equal(row.text,text,'Exact persisted '+role+' bytes '+name);
+   if(Object.hasOwn(interrupted,name)){
+    assert.equal(row.id,interrupted[name][role].id,'Original interrupted '+role+' identity '+name);
+    assert.equal(row.text,interrupted[name][role].text,'Frozen interrupted '+role+' bytes '+name);
+    if(role==='assistant'){
+     // Elapsed receipts belong to this mount, not stored history. Never invent one after reload.
+     if(row.receipt)assert.match(row.receipt,/^\d+(?:분(?: \d+초)?|초) 뒤 멈췄어요$/,'Interrupted answer cannot claim completion');
+     if(name===requireStopped)assert(row.receipt,'Explicit Stop must render its observed stopped receipt');
+    }
+   }
+  }
+ }
+ return counts;
+}
+export const assertCompletedHistory=(rows,names)=>assertInterruptedHistory(rows,names);
+// Read only the spoken body; omit the actual classroom streaming prelude from a detached copy.
+export const HISTORY_ROWS_EXPRESSION=`[...document.querySelectorAll('.hps-msg-user,.hps-msg-assistant')].map(e=>{
+ const body=e.querySelector('.hps-msg-body')?.cloneNode(true);
+ body?.querySelectorAll('.hps-code-progress-prelude').forEach(node=>node.remove());
+ return {id:e.getAttribute('data-message-id'),role:e.classList.contains('hps-msg-user')?'user':'assistant',text:body?.textContent?.trim()??'',receipt:(e.querySelector('.hps-turn-elapsed')??(e.nextElementSibling?.matches('.hps-turn-elapsed')?e.nextElementSibling:null))?.textContent??null};
+})`;
 export async function awaitUpstreamClosure(read,serviceSeq,timeout=10000){
  return waitFor(async()=>{const state=await read();return state.rows.find(row=>row.service_seq===serviceSeq&&row.client_closed===true&&row.state==='upstream_socket_closed'&&!row.fixture_finish);},'exact upstream socket closure before fixture cleanup',timeout);
 }
@@ -20,12 +60,14 @@ export async function runHistoryStreaming(ctx){
  const {c,ui,step,report,draft,start,focusChat,readDraft,nativeOpenBoundFolder,workspaceFiles,save,control,restart}=ctx;
  const passed=id=>report.tests.some(t=>t.id===id&&t.status==='PASS');
  const need=id=>{if(!passed(id))throw blocked('Scripted followup requires observed '+id);};
- const history=async()=>{const chat=await ui.frame('.hps-input textarea');return chat.evaluate("[...document.querySelectorAll('.hps-msg-user,.hps-msg-assistant')].map(e=>({role:e.classList.contains('hps-msg-user')?'user':'assistant',text:e.textContent}))");};
+ const history=async()=>{const chat=await ui.frame('.hps-input textarea');return chat.evaluate(HISTORY_ROWS_EXPRESSION);};
+ const interrupted={};
+ const capture=async name=>{interrupted[name]=captureInterruptedHistory(await history(),name);};
  const state=()=>scriptedState(control);
  const bound=async()=>{const value=await state();assert.equal(value.provider_called,false);assert.equal(value.request_limit,12);assert.equal(value.output_cap,4096);assert(value.rows.every(r=>r.attempt<=12&&(!r.max_tokens||r.max_tokens<=4096)));assert.equal(value.rejections.length,0,'Fixture refusals cannot be hidden as a successful turn');return value;};
  const openFolder=async folder=>{await ui.palette(coreCommandLabel('workbench.action.files.openFolder'));await ui.ownedOpenFolder(folder+path.sep);await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(folder)),'public File Open Folder actual destination',60000);};
  const send=async(name,held=false)=>{const before=await bound(),chat=await focusChat();await ui.input(chat,'.hps-input textarea',markerText(name));await ui.key(chat,'Enter');await waitFor(()=>chat.evaluate("!!document.querySelector('.hps-btn-stop')"),'actual native stream Stop visible',45000);
-  await waitFor(async()=>{const value=await state();return value.rows.some(r=>r.attempt>(before.counts.A??0)&&r.subject==='A'&&r.marker===name&&r.state===(held?'streaming':'complete'));},'actual SDK → actual Service → scripted upstream '+name,60000);
+  await waitFor(async()=>{const value=await state();return value.rows.some(r=>r.attempt>(before.counts.A??0)&&r.subject==='A'&&r.marker===name&&r.state===(held?'streaming':'complete'))&&(!held||(await history()).some(row=>row.role==='assistant'&&row.text===replyText(name)));},'actual SDK → actual Service → scripted upstream '+name,60000);
   if(!held){await waitFor(()=>chat.evaluate(`!document.querySelector('.hps-btn-stop')&&[...document.querySelectorAll('.hps-msg-assistant')].some(e=>e.textContent.includes(${JSON.stringify(replyText(name))}))`),'actual completed scripted assistant rendered');assert.equal(await chat.evaluate("document.querySelectorAll('.hps-error-banner').length"),0);}
  };
  const originalFiles=workspaceFiles(c.workspace.a),bindings=path.join(c.userDataDir,'User/globalStorage/hypeproof.hypeproof-chat/activity-bindings');
@@ -61,30 +103,31 @@ export async function runHistoryStreaming(ctx){
   report.history='PASS_SCRIPTED_NATIVE_SELECTED_PERSISTENCE';return {native_turn_entry:true,actual_sdk:true,synthetic_upstream:true,source_history_carried:true,destination_history_wins:true,exact_occurrences:counts,provider_called:false};
  });
  await step('T06-native-stream-block-and-stop',async()=>{
-  need('T03-native-scripted-history-persistence');await send('STOP_HOLD',true);const unsent=draft+'-during-stop';await ui.input(await focusChat(),'.hps-input textarea',unsent);
+  need('T03-native-scripted-history-persistence');await send('STOP_HOLD',true);await capture('STOP_HOLD');const unsent=draft+'-during-stop';await ui.input(await focusChat(),'.hps-input textarea',unsent);
   const beforeBindings=workspaceFiles(bindings),view=await start();await ui.clickText(view,'작업 폴더 열기');await waitFor(()=>view.evaluate("document.querySelector('#connection-error')?.textContent.includes('진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요.')"),'actual active-stream navigation refusal');
   assert(String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)));assert.deepEqual(workspaceFiles(bindings),beforeBindings);await ui.shot(path.join(c.evidence,'stream-navigation-refused.png'));
-  const chat=await focusChat();assert.equal((await readDraft()).value,unsent);await ui.press(chat,'.hps-btn-stop');await waitFor(()=>chat.evaluate("!document.querySelector('.hps-btn-stop')&&!!document.querySelector('.hps-stop-notice')"),'actual Stop acknowledged and idle');assert.equal((await readDraft()).value,unsent);
-  const cancellation=await finishHeld('STOP_HOLD'),before=(await bound()).counts.A;await nativeOpenBoundFolder(c.workspace.d);await nativeOpenBoundFolder(c.workspace.a);assert.equal((await readDraft()).value,unsent);assertCompletedHistory(await history(),['A1']);await sleep(10000);assert.equal((await bound()).counts.A,before,'Stop/navigation must not dispatch duplicates');
-  return {active_stream_refused_navigation:true,actual_stop_acknowledged:true,unsent_draft_preserved:true,completed_history_preserved:true,no_duplicate_dispatch_window_ms:10000,cancellation,provider_called:false};
+  const chat=await focusChat();assert.equal((await readDraft()).value,unsent);await ui.press(chat,'.hps-btn-stop');await waitFor(()=>chat.evaluate("!document.querySelector('.hps-btn-stop')&&[...document.querySelectorAll('.hps-stop-notice')].some(e=>e.textContent.includes('답변 생성이 중지되었습니다. 다시 채팅을 입력해주세요.'))"),'actual Stop acknowledged and idle');assert.equal((await readDraft()).value,unsent);
+  assertInterruptedHistory(await history(),['A1'],interrupted,'STOP_HOLD');
+  const cancellation=await finishHeld('STOP_HOLD'),before=(await bound()).counts.A;await nativeOpenBoundFolder(c.workspace.d);await nativeOpenBoundFolder(c.workspace.a);assert.equal((await readDraft()).value,unsent);assertInterruptedHistory(await history(),['A1'],interrupted);await sleep(10000);assert.equal((await bound()).counts.A,before,'Stop/navigation must not dispatch duplicates');
+  return {active_stream_refused_navigation:true,actual_stop_acknowledged:true,stopped_receipt_observed_before_navigation:true,unsent_draft_preserved:true,completed_history_preserved:true,interrupted_history_preserved:true,no_duplicate_dispatch_window_ms:10000,cancellation,provider_called:false};
  });
  await step('T06-native-stream-normal-quit-recovery',async()=>{
-  need('T06-native-stream-block-and-stop');await send('QUIT_HOLD',true);const unsent=draft+'-during-quit';await ui.input(await focusChat(),'.hps-input textarea',unsent);const before=(await bound()).counts.A;
-  const processProof=await restart(unsent);assertCompletedHistory(await history(),['A1']);const cancellation=await finishHeld('QUIT_HOLD');await sleep(10000);assert.equal((await bound()).counts.A,before,'Restart must not resume or duplicate interrupted model execution');
-  await ui.shot(path.join(c.evidence,'stream-quit-restored.png'));return {...processProof,completed_history_restored:true,interrupted_turn_replayed:false,no_duplicate_dispatch_window_ms:10000,cancellation,provider_called:false};
+  need('T06-native-stream-block-and-stop');await send('QUIT_HOLD',true);await capture('QUIT_HOLD');const unsent=draft+'-during-quit';await ui.input(await focusChat(),'.hps-input textarea',unsent);const before=(await bound()).counts.A;
+  const processProof=await restart(unsent);assertInterruptedHistory(await history(),['A1'],interrupted);const cancellation=await finishHeld('QUIT_HOLD');await sleep(10000);assert.equal((await bound()).counts.A,before,'Restart must not resume or duplicate interrupted model execution');
+  await ui.shot(path.join(c.evidence,'stream-quit-restored.png'));return {...processProof,completed_history_restored:true,interrupted_history_preserved:true,interrupted_execution_replayed:false,no_duplicate_dispatch_window_ms:10000,cancellation,provider_called:false};
  });
  await step('T06-native-stream-direct-file-open',async()=>{
   need('T06-native-stream-normal-quit-recovery');if((await bound()).counts.A>=12)throw blocked('Same activity attempt ceiling leaves no room; no reissue/reset');
-  await send('FILE_HOLD',true);const unsent=draft+'-during-file-open';await ui.input(await focusChat(),'.hps-input textarea',unsent);const before=(await bound()).counts.A;
+  await send('FILE_HOLD',true);await capture('FILE_HOLD');const unsent=draft+'-during-file-open';await ui.input(await focusChat(),'.hps-input textarea',unsent);const before=(await bound()).counts.A;
   await openFolder(c.workspace.d);await ui.frame('.hps-input textarea',60000);assertCompletedHistory(await history(),['A1','D2']);const cancellation=await finishHeld('FILE_HOLD');
-  await openFolder(c.workspace.a);await ui.frame('.hps-input textarea',60000);assert.equal((await readDraft()).value,unsent,'Direct File Open preserves in-flight unsent draft');assertCompletedHistory(await history(),['A1']);await sleep(10000);assert.equal((await bound()).counts.A,before,'Direct folder reload must not replay execution');
+  await openFolder(c.workspace.a);await ui.frame('.hps-input textarea',60000);assert.equal((await readDraft()).value,unsent,'Direct File Open preserves in-flight unsent draft');assertInterruptedHistory(await history(),['A1'],interrupted);await sleep(10000);assert.equal((await bound()).counts.A,before,'Direct folder reload must not replay execution');
   await ui.input(await focusChat(),'.hps-input textarea',draft);return {actual_direct_file_open:true,completed_history_restored:true,unsent_draft_preserved:true,no_duplicate_dispatch_window_ms:10000,cancellation,provider_called:false};
  });
  await step('T06-native-revoked-credential-no-auto-execution',async()=>{
   need('T06-native-stream-direct-file-open');const before=await bound(),beforeBindings=workspaceFiles(bindings),filesC=workspaceFiles(c.workspace.c);const callsBefore=await(await fetch(c.service.origin+'/__feedback-native/requests')).json();const bAttempts=calls=>calls.filter(r=>r.subject==='B'&&r.method==='POST'&&['/v1/messages','/v1/messages/count_tokens','/v1/chat/completions'].includes(r.path)).length;const denied=await revokeSyntheticB(control);
   await openFolder(c.workspace.c);const view=await ui.frame('.studio-start',60000);await waitFor(()=>view.evaluate(`document.querySelector('#connection-error')?.textContent.includes(${JSON.stringify(denied.ui_friendly)})`),'actual revoked activity refuses automatic admission');
   assert.equal(await view.evaluate("!!document.querySelector('.studio-course')"),false,'Revoked credential cannot admit activity');await sleep(10000);assert.deepEqual((await bound()).counts,before.counts,'Revoked credential must not reach upstream');const callsAfter=await(await fetch(c.service.origin+'/__feedback-native/requests')).json();assert.equal(bAttempts(callsAfter.calls),bAttempts(callsBefore.calls),'Revoked credential must not even attempt hidden model requests');assert.deepEqual(workspaceFiles(c.workspace.c),filesC);assert.deepEqual(workspaceFiles(bindings),beforeBindings);
-  await openFolder(c.workspace.a);await ui.frame('.hps-input textarea',60000);assert.equal((await readDraft()).value,draft);assertCompletedHistory(await history(),['A1']);assert.deepEqual(workspaceFiles(c.workspace.a),originalFiles);
+  await openFolder(c.workspace.a);await ui.frame('.hps-input textarea',60000);assert.equal((await readDraft()).value,draft);assertInterruptedHistory(await history(),['A1'],interrupted);assert.deepEqual(workspaceFiles(c.workspace.a),originalFiles);
   const ledger=await bound();report.scripted_upstream=ledger;report.sdk_service_requests=await(await fetch(c.service.origin+'/__feedback-native/requests')).json();const requests=report.sdk_service_requests.calls.filter(r=>r.path==='/v1/messages'||r.path==='/v1/messages/count_tokens');report.sdk_auxiliary={status:requests.some(r=>r.request_class&&/title|aux/i.test(r.request_class))?'OBSERVED_REQUEST_CLASS':'NOT_OBSERVED',count_tokens:requests.filter(r=>r.path.endsWith('/count_tokens')).length,requests:requests.map(({seq,path,status,turn_sha256,request_class,parent_request_id,ledger_request_id,scripted_dispatches})=>({seq,path,status,turn_sha256,request_class,parent_request_id:parent_request_id??null,ledger_request_id:ledger_request_id??null,scripted_dispatches:scripted_dispatches??0}))};report.scripted_model_turns='ACTUAL_SDK_WITH_SCRIPTED_UPSTREAM_NOT_REAL_MODEL';report.streaming='PASS_HOST_SELECTED; upstream cancellation separately recorded';save();
   return {canonical_revoke:true,invalid_activity_denied:true,automatic_model_attempts:0,no_auto_generation_window_ms:10000,a_history_draft_files_preserved:true,upstream_cancel:report.cancellation_layers?.every(x=>x.upstream_socket_closed)?'OBSERVED':'NOT_PROPAGATED',provider_called:false};
  });

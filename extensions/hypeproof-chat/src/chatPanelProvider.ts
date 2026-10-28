@@ -8384,7 +8384,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     responseStarted(streamId);
     // Kept before it is announced, so a history post racing this turn already carries the mark.
     if (stepMark) await this.rememberStepMark(userId, stepMark);
-    void this.post({ type: "streamStart", streamId, messageId, userMessageId: userId, ...(stepMark ? { lessonStep: stepMark } : {}) });
+    const announceStream = () => { void this.post({ type: "streamStart", streamId, messageId, userMessageId: userId, ...(stepMark ? { lessonStep: stepMark } : {}) }); };
+    // A prepared turn still has to verify the untouched composer. Its own stream
+    // would mark that composer busy; announce it only after the final review.
+    if (!prepared) announceStream();
     this.rememberAnswerTurn(messageId, streamId);
     // #503 — this turn's single timeline. It runs the same reducer as the webview, so
     // the history keeps exactly the on-screen order.
@@ -9098,6 +9101,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         try {
           const delegationScope=JSON.stringify([this.turnRequestScope(),this.profileGeneration]);
           if (companionSend) await bindCompanion('agent-sdk');
+          // No await/effect between the final prepared draft review and SDK entry.
+          // Later SDK/approval revalidation checks Service authority, not this UI capture.
+          if (prepared) announceStream();
           const sdkEnd = await runSdkCoach({
             ...(prepared ? {
               companionExecutionPolicy:prepared.executionPolicy,
