@@ -4591,7 +4591,7 @@
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "extensions/hypeproof-chat/src/chalk/instructorMode.ts"
+          "path": "extensions/hypeproof-chat/src/instructorMode.ts"
         }
       ]
     },

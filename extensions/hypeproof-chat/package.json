@@ -550,6 +550,20 @@
           "default": "hypeproof-default",
           "description": "요청할 모델 이름입니다. 실제 모델은 수업 정책에 따라 서비스가 정합니다."
         },
+        "hypeproofChat.instructorRuntime": {
+          "type": "string",
+          "enum": [
+            "legacy",
+            "chalk-extension"
+          ],
+          "enumItemLabels": [
+            "Studio 안 (기본)",
+            "Chalk 확장"
+          ],
+          "default": "legacy",
+          "scope": "machine",
+          "description": "강사 화면을 어디서 띄울지 정합니다. 'legacy'(기본값): 지금처럼 Studio 안에서 강사 모드를 씁니다. 'chalk-extension': Chalk 확장(hypeproof.hypeproof-chalk)이 강사 화면을 맡습니다. 이 확장이 없으면 강사 화면이 보이지 않습니다. 기기마다 적용됩니다."
+        },
         "hypeproofChat.coachRuntime": {
           "type": "string",
           "enum": [
