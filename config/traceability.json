@@ -1037,6 +1037,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/voice-probe-lifecycle.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/mic-delegation-scope.smoke.mjs"
         }
       ]
     },

@@ -11,6 +11,13 @@ Studio base: `studio@origin/main:` snapshot (`docs/requirements/voice-conversati
 
 - Studio voice is **planned, not shipped**. VO-01–47 are requirements; REQ-R1 records that the shipped
   webview iframe allow-list has no `microphone` and the Electron webview permission set has no `media`.
+  **Correction 2026-10-28 (DEC-03):** that is the 0.1.51 observation. Mic patch v4
+  (`vscodium-base/patches/user/60-webview-allow-microphone.patch`, fork `59e5792`, #992 on 2026-09-29)
+  has shipped since. It adds `media` to the webview permission set and delegates `microphone` at both iframe
+  levels, only for `hypeproof.hypeproof-chat` with `purpose === 'webviewView'` (the chat view: 1 of 10
+  script-enabled webviews). The installed 2026.1020.2 bundle carries all three changes.
+  `extensions/hypeproof-chat/test/mic-delegation-scope.smoke.mjs` locks that scope. Capture on a v4 build is
+  not yet measured. The missing piece for voice rows is a capture/playback product path, not the core patch.
   The extension snapshot has only a capability probe (`voiceCapability.ts`, command-triggered) and pure
   decision helpers (`voicePopupHelpers.ts`, `voiceSessionHelpers.ts`). No capture code in
   `extensions/hypeproof-chat/src` (searched: `getUserMedia|MediaRecorder|AudioContext`, comments only).
