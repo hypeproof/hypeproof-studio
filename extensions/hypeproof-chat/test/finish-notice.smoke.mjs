@@ -15,6 +15,7 @@ import vm from "node:vm";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import ts from "typescript";
 
 const FN = await import("../src/finishNotice.ts");
 
@@ -87,7 +88,7 @@ const hidden = (status, seat = personal, extra = {}) => ({ status, chatVisible: 
     commands: { executeCommand: async (id) => { ui.commands.push(id); } },
   };
   const mod = { exports: {} };
-  vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, process, Promise, setImmediate });
+  vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, process, Promise, TextEncoder, TextDecoder, setImmediate });
   const host = mod.exports;
 
   const surfaces = { viewVisible: false, editor: undefined };
@@ -235,7 +236,33 @@ const hidden = (status, seat = personal, extra = {}) => ({ status, chatVisible: 
   assert.match(callLine, /seat: profile,/, "the seat is the turn's own profile, not the cached one");
   assert.match(src, /view\.webview\.onDidReceiveMessage\([^\n]*\n\s*watchChatSurface\(view, this\.finishNotifier\);/, "sidebar view watched for becoming visible");
   assert.match(src, /entry\.webview\.onDidReceiveMessage\([^\n]*\n\s*watchChatSurface\(entry, this\.finishNotifier\);/, "editor chat panel watched for becoming visible");
-  assert.match(src, /this\.activeStreams\.set\(streamId, ctrl\);\n\s*this\.finishNotifier\.release\(\);/, "the hold ends at the next turn start");
+  function assertReleaseAtTurnStart(source) {
+    const tree = ts.createSourceFile('chatPanelProvider.ts', source, ts.ScriptTarget.Latest, true);
+    const blocks = [];
+    function visit(node) {
+      if (ts.isBlock(node) && node.statements.some(s => s.getText(tree) === 'this.activeStreams.set(streamId, ctrl);')) blocks.push(node);
+      ts.forEachChild(node, visit);
+    }
+    visit(tree);
+    assert.equal(blocks.length, 1, 'one active turn admission block');
+    const statements = blocks[0].statements, text = statements.map(s => s.getText(tree));
+    const start = text.indexOf('this.activeStreams.set(streamId, ctrl);');
+    const release = text.indexOf('this.finishNotifier.release();');
+    const response = text.indexOf('responseStarted(streamId);');
+    assert.ok(start < release && release < response, 'unconditional release follows admission before response publication');
+    function noSuspensionOrExit(node) {
+      assert.ok(!ts.isAwaitExpression(node) && !ts.isReturnStatement(node) && !ts.isThrowStatement(node), 'no suspension or early exit before release');
+      ts.forEachChild(node, noSuspensionOrExit);
+    }
+    statements.slice(start + 1, release).forEach(noSuspensionOrExit);
+  }
+  assertReleaseAtTurnStart(src);
+  const releaseFixture = 'function turn() { this.activeStreams.set(streamId, ctrl); this.finishNotifier.release(); responseStarted(streamId); }';
+  assertReleaseAtTurnStart(releaseFixture);
+  for (const before of ['await wait();', 'return;', 'throw Error();']) {
+    assert.throws(() => assertReleaseAtTurnStart(releaseFixture.replace('this.finishNotifier.release();', before + ' this.finishNotifier.release();')), /no suspension or early exit/);
+  }
+  assert.throws(() => assertReleaseAtTurnStart(releaseFixture.replace('this.finishNotifier.release();', 'if (prepared) this.finishNotifier.release();')), /unconditional release/);
   assert.doesNotMatch(callLine, /assistantText|text:/, "no answer text reaches the notifier");
   assert.equal(src.split("this.finishNotifier.turnEnded(").length - 1, 1, "one call site");
   assert.match(callLine, /scope: accuracyScope/, "turn-end notice carries the scope captured at turn start");

@@ -1,6 +1,7 @@
 // CGP-AGENT-D-002: exercise real postConfig, including effective settings and fallback.
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
+import ts from 'typescript';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -10,7 +11,7 @@ const built = await build({ stdin: { contents: "export { ChatPanelProvider } fro
 const settings = { coachRuntime: 'agent-sdk', requireApprovalFor: ['writeFile', 'delegateAgent', 'webSearch'] };
 const vscode = { env: { appName: 'HypeProof Studio' }, workspace: { getConfiguration: () => ({ get: (key, fallback) => settings[key] ?? fallback }) }, commands: { executeCommand: async () => {} } };
 const module = { exports: {} };
-vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, process, Buffer, URL, setTimeout, clearTimeout });
+vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, process, Buffer, URL, TextEncoder, TextDecoder, setTimeout, clearTimeout });
 const h = Object.create(module.exports.ChatPanelProvider.prototype);
 let profile = { activity_kind: 'personal', sdk_tools: { read: true, write: true, shell: true, subagents: true, browser: true }, tools: { web_search: true }, browser_control: { enabled: true } };
 const posts = [];
@@ -49,7 +50,31 @@ profile = null;
 assert.equal((await publish()).aiCapabilities, undefined, 'unknown profile has no card');
 // Execute the actual registered listener body with a fake configuration event.
 const extension = readFileSync(new URL('../src/extension.ts', import.meta.url), 'utf8');
-const listener = extension.match(/onDidChangeConfiguration\(event => \{([\s\S]*?)\n  \}\)/)[1];
+function configurationRefreshListener(source) {
+  const tree = ts.createSourceFile('extension.ts', source, ts.ScriptTarget.Latest, true);
+  const listeners = [];
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(tree) === 'vscode.workspace.onDidChangeConfiguration') {
+      const callback = node.arguments[0];
+      if (callback && ts.isArrowFunction(callback) && ts.isBlock(callback.body)) {
+        let refreshes = false;
+        function scan(child) {
+          if (ts.isCallExpression(child) && child.expression.getText(tree) === 'provider.refreshConfig') refreshes = true;
+          ts.forEachChild(child, scan);
+        }
+        scan(callback.body);
+        if (refreshes) listeners.push(callback.body.getText(tree).slice(1, -1));
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  assert.equal(listeners.length, 1, 'one registered configuration refresh listener');
+  return listeners[0];
+}
+const listener = configurationRefreshListener(extension);
+assert.throws(() => configurationRefreshListener('// vscode.workspace.onDidChangeConfiguration(event => { provider.refreshConfig(); });'), /one registered/);
+assert.throws(() => configurationRefreshListener('vscode.workspace.onDidChangeConfiguration(event => { invalidate(); });'), /one registered/);
 let refreshes = 0;
 for (const changed of ['hypeproofChat.requireApprovalFor', 'workbench.reduceMotion', 'unrelated.setting']) {
   const before = refreshes;

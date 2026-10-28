@@ -26,6 +26,15 @@ export function validateCompanionPackage(pkg){
   ||pkg.exports?.['.']?.import!=='./src/index.mjs'||pkg.exports?.['.']?.types!=='./types/index.d.ts'
   ||pkg.exports?.['./execution']?.import!=='./src/execution.mjs'||pkg.exports?.['./execution']?.types!=='./types/execution.d.ts')throw Error('Unexpected companion-client DEV package contract');
 }
+export function companionCiFailureDetail(error,env=process.env){
+ let detail=String(error.stdout??'')+'\n'+String(error.stderr??error.message??'');
+ // Redact inherited credential values and common credential forms before printing a bounded tail.
+ for(const [key,value] of Object.entries(env))if(/token|secret|password|authorization|api[_-]?key/i.test(key)&&typeof value==='string'&&value.length>=8)detail=detail.split(value).join('[redacted]');
+ detail=detail.replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g,'[redacted private key]')
+  .replace(/(Bearer\s+)[A-Za-z0-9._~+\/-]+/gi,'$1[redacted]')
+  .replace(/([?&](?:token|secret|password|key)=)[^&\s]+/gi,'$1[redacted]');
+ return detail.slice(-8000);
+}
 export async function runCompanionCi(){
  const {archive,pin}=await companionCiInput();
  // Inspect the verified package before offline installation; never execute package scripts.
@@ -36,7 +45,7 @@ export async function runCompanionCi(){
  let ownedLink=false,deps;const link=join(android,'node_modules');
  async function step(name,command,args,cwd=root,env=toolEnv){
   try{const result=await exec(command,args,{cwd,env,timeout:240000,maxBuffer:16*1024*1024});await writeFile(join(output,name+'.log'),result.stdout+result.stderr);report.steps.push({name,exitCode:0});}
-  catch(error){await writeFile(join(output,name+'.log'),String(error.stdout??'')+String(error.stderr??error.message));report.steps.push({name,exitCode:error.code??1});throw Error('Companion CI failed: '+name);}
+  catch(error){await writeFile(join(output,name+'.log'),String(error.stdout??'')+String(error.stderr??error.message));report.steps.push({name,exitCode:error.code??1});throw Error('Companion CI failed: '+name+' (exit '+String(error.code??'unknown')+')\n'+companionCiFailureDetail(error,env));}
  }
  try{
   deps=await realpath(join(ext,'node_modules'));
