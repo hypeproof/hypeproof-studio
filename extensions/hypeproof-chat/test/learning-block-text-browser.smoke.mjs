@@ -54,7 +54,8 @@ window.change=(act)=>{const live=window.__region,before=live.textContent;window.
 window.typeInto=(sel,value)=>window.change(()=>{const el=document.querySelector(sel);const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}))});
 window.hostSaved=(work)=>window.change(()=>window.postMessage({type:'lessonWorkState',sha256:${JSON.stringify(SHA)},work},'*'));
-window.pickStep=(id)=>window.change(()=>document.querySelector('button[data-step-id="'+id+'"]').click());`;
+window.pickStep=(id)=>window.change(()=>document.querySelector('button[data-step-id="'+id+'"]').click());
+window.openCard=()=>{const b=document.querySelector('[data-block-card] [data-block-toggle][aria-expanded="false"]');if(b)b.click();return !!b};`;
 
 const parse = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); const v = m[1].split(',').map(Number); return { r: v[0], g: v[1], b: v[2], a: v[3] ?? 1 }; };
 const lum = ({ r, g, b }) => { const f = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
@@ -112,6 +113,8 @@ try {
     await browser.evaluate(`mount(${JSON.stringify(lessonConfig(seat))})`);
     await waitFor(`document.querySelector('[data-hps-material="criterion_form"] .hp-material-state')`, `${tag} criterion block`);
     await browser.evaluate('track()');
+    // CGP-LEARN-D-001: the block is a 자료 card, closed by default; the learner opens it with 열어 보기 before reading or editing.
+    assert.equal(await browser.evaluate('openCard()'), true, `${tag}: the criterion card starts closed with 열어 보기`);
     const note = async (m) => { changes++; slowest = Math.max(slowest, m.ms); };
 
     // criterion_form: empty -> written -> host save -> edited -> cleared.
@@ -136,6 +139,7 @@ try {
 
     // A step switch to the decision block: same region, new block, its own sentence.
     await browser.evaluate(`pickStep('build')`); await note(await changed(`${tag} step to decision`, 'empty'));
+    assert.equal(await browser.evaluate('openCard()'), true, `${tag}: the decision card starts closed`);
     m = await browser.evaluate(MEASURE);
     checkVisible(`${tag} decision empty`, m, 'decision_form');
     assert.equal(m.state.text, MATERIAL_TEXT.decision_form.state({ text: '', reason: '' }).sentence);
@@ -145,6 +149,7 @@ try {
 
     // An undrawable kind keeps its title, help and a fixed state (the header's step buttons only move forward).
     await browser.evaluate(`pickStep('test')`); await note(await changed(`${tag} step to undrawable`, 'unavailable'));
+    assert.equal(await browser.evaluate('openCard()'), true, `${tag}: the undrawable card starts closed`);
     m = await browser.evaluate(MEASURE);
     checkVisible(`${tag} canvas_preview`, m, 'canvas_preview');
     assert.ok(/열 수 없습니다/.test(await browser.evaluate(`document.querySelector('[data-hps-material]').textContent`)), `${tag}: the honest notice stays`);

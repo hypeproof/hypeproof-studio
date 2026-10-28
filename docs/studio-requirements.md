@@ -7829,3 +7829,29 @@ stylesheet in headless Chromium, classroom and personal seats, dark and light, 8
 description, visible title/help/state at 14px+ and 4.5:1, each field's description, and 9 control changes per case
 each announced in the same live region within 500 ms). Not covered: a real VoiceOver run (REQ-CGP-LEARN-03 (c)) is a
 manual check.
+## Learning block card in the coach rail (CGP-LEARN-D-001)
+
+REQ-STUDIO-LEARNING-BLOCK-CARD / DES-CGP-LEARN-01 (traces to REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-001) / PI#4
+(the instructor shapes the environment), PI#7 (the work screen stays the learner's; SX-05, SX-52): the block the confirmed
+lesson attaches to the current step is drawn as a collapsible 자료 card in the coach rail, under that step's help choice,
+never in the message stream and never as a dialog. Closed, the card is one row at most 72px tall: a 48x48 thumbnail (the
+block kind's stroke icon over the label 자료), the block's REQ-STUDIO-LEARNING-BLOCK-TEXT title with its polite live state
+line under it (one line, ellipsis; the whole sentence once open), and a 44px "열어 보기" button (`aria-expanded`,
+`aria-controls`). Pressing it expands the block in place: the same card grows in flow and pushes what follows it down, so
+nothing covers it and it covers nothing; the button then reads "닫기". The card starts closed for every step; the
+open/closed choice is keyed to the lesson version and step, so opening one step's card never opens another's (it is not
+stored and not an evidence event). The card is the block region itself: it carries the block identity (`data-hps-material`, `-step`, `-version`), is
+named by the title in its head and described by the controls help. The live state line is in the always-drawn head, so
+a step switch or a host save that lands on a closed card is shown and announced in the same region. The controls help
+and the work surface are in the card body, which stays mounted while closed, so an instructor's rehearsal read-back still
+reports the drawn surface. Notes inside a card (saved work, the undrawable notice) are 14px. Rail widths
+280–480px (and wider panes) are supported with no sideways scroll; text is at least 14px; the card's background is the
+Panel token and its text the Ink token in dark and light (SX-49), with a CanvasText border under forced colours. Seats:
+every seat that draws the lesson rail (classroom lesson, personal with a lesson, instructor rehearsal); a step without a
+block has no card.
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-card.test.tsx` (mounted ChatPanel: closed by default with
+thumbnail, title and 열어 보기; opens in place with no dialog; another step's card starting closed after the mission
+header's real step button; no card without a block) and `extensions/hypeproof-chat/test/learning-block-card-computed.smoke.mjs` (headless
+Chromium on the cascade: personal and classroom, dark and light, 280/480/800/1420px; closed height, thumbnail, target and
+text sizes, tokens, in-flow expansion that is never covered and never wider than the rail; six injected overrides caught).

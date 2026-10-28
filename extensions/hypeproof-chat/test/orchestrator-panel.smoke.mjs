@@ -265,11 +265,15 @@ const OLD_SCREENS = {
 // sentence and a polite status sentence, and aria-describedby on the field. The HPS_A5_DUMP_DIR dumps of main and this
 // branch are byte-identical once those nodes and that attribute are removed and the identity attributes are dropped from
 // main's form; the five EffortControl digests are unchanged.
+// CGP-LEARN-D-001: re-taken again (TZ=UTC) because that block is now a collapsible 자료 card whose head holds the thumbnail
+// (icon and 자료), the title, the live state line and the button. Removing the head's wrappers, the 자료 label and the button,
+// moving the state line back to the end of the unwrapped body and dropping the card classes/attributes from the
+// HPS_A5_DUMP_DIR dumps gives main's markup byte for byte; the five EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "4df46849ad2eeddd11dfaf499879755b3759001a7cf25d8cbd2bfe60874013f0",
-  "ChatPanel/adult-effort-observed": "00d9816d8305eed72281ec176af2e101daeee20e0d2d47da61be459d7bfaca1e",
-  "ChatPanel/adult-timeline": "abba9c0357930f56a5dce5df6785d523e38c6443496bf7ac09f05569a58c9504",
-  "ChatPanel/kids": "95631360917d2c3dd9c7b0f1089e354f6e246d2414666f2459344367f3a79c5b",
+  "ChatPanel/adult-plain": "d43e060aacd651f5f8a6328bcd5b1d98abd6ecc996256715ba40c7e0ae984ee3",
+  "ChatPanel/adult-effort-observed": "6892ae1338ff8e9fa404dd75f10f97595ad881768e930f47b2ff43d7a807ad8f",
+  "ChatPanel/adult-timeline": "e1ff26d98f5f4789086239357036a51c589920d4a15a85bad736b6e8942e2d10",
+  "ChatPanel/kids": "7d0bfd13c5fe7a352db82db55fa7bf3361849e1890ed8d2eb0b5d21722cf4bbe",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -289,8 +293,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "4300d2e47064b8a3de7a8f673c9cf79338dd9c7d31f4ed1cc8f2f7fed37fbe47",
-  "ChatPanel/classroom-access-unknown": "9ca0d6968f2b26e48ca2b48e9b4cea5d6ee351ca5b0f357b8af58275d2fa1b49",
+  "ChatPanel/classroom-class-funded": "459f408582c9facd52c2f083256540648f4eb7ee7fe0319f5966ad541a16661c",
+  "ChatPanel/classroom-access-unknown": "967254c70b69e18eead2bf96afa49dfc99330671515af6d9a0a66338ec2449c1",
 };
 
 const status = rendererStatus();
