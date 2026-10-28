@@ -10,6 +10,7 @@ export interface CompanionDevHostCommandView {
   state: 'idle' | 'inviting' | 'claimed' | 'approved' | 'connected' | 'closed' | 'revoked';
   comparisonCode?: string;
   executionAuthorized: false;
+  scopedExecution?: Readonly<{state:'off'|'ready'|'busy'|'unknown'|'closed';expiresAt?:number;remaining?:number}>;
   publication?: Readonly<CompanionSelectionPublication>;
 }
 /** Structural port implemented by CompanionDevHostOwner; no account or key material crosses it. */
@@ -21,6 +22,7 @@ export interface CompanionDevHostCommandOwner {
   connectCipher(signal?: AbortSignal): Promise<Readonly<CompanionDevHostCommandView>>;
   describeSelected(requestId: string, signal?: AbortSignal): Promise<CompanionHostRequest | null>;
   publishSelected(requestId:string,signal?:AbortSignal):Promise<Readonly<CompanionSelectionPublication>>;
+  authorizeSelectedExecution?(signal?:AbortSignal):Promise<Readonly<CompanionDevHostCommandView>>;
   receiveAndHandle(signal?: AbortSignal): Promise<CompanionHostTurn>;
   close(): void;
   revoke(signal?: AbortSignal): Promise<Readonly<CompanionDevHostCommandView>>;
@@ -30,7 +32,7 @@ export interface CompanionDevHostCommandPorts {
   /** Required account/configuration/task/workspace lifecycle invalidation supplied by the native caller. */
   onDidInvalidate(listener: () => void): vscode.Disposable;
 }
-type Action = 'prepare' | 'copy' | 'inspect' | 'compare' | 'connect' | 'describe' | 'publish' | 'receive' | 'close' | 'revoke';
+type Action = 'prepare' | 'copy' | 'inspect' | 'compare' | 'connect' | 'describe' | 'publish' | 'authorize_execution' | 'receive' | 'close' | 'revoke';
 interface Item extends vscode.QuickPickItem { action: Action }
 const labels: Record<CompanionDevHostCommandView['state'], string> = {
   idle: '초대 전', inviting: '기기 참여 기다리는 중', claimed: '기기 참여 확인 · 코드 비교 필요',
@@ -93,6 +95,7 @@ export function registerDevCompanionHostCommands(
         if (view.state === 'claimed') items.push({ label: '두 화면의 코드 직접 확인', action: 'compare' });
         if (view.state === 'approved') items.push({ label: '암호화 연결 준비', action: 'connect' });
         if (view.state === 'connected') {
+          if(owner?.authorizeSelectedExecution&&(!view.scopedExecution||view.scopedExecution.state==='off'))items.push({label:'선택한 HTML 수정 허용',description:'별도 확인 후 최대 2번 · 10분 · 현재 이용권 사용',action:'authorize_execution'});
           items.push({ label: '현재 작업과 저장된 HTML 확인', action: 'describe' });
           items.push({ label: '선택한 작업을 휴대폰에 알리기', description: view.publication?.state==='delivery_unconfirmed'?'같은 알림을 직접 다시 확인 · 파일 승인은 별도':'작업 정보만 암호화해 전달 · 파일 승인은 별도', action:'publish' });
           items.push({ label: '요청 한 번 받기·확인', description: '자동 수신하지 않음 · 파일 읽기와 초안 가져오기는 별도 확인', action: 'receive' });
@@ -142,6 +145,11 @@ export function registerDevCompanionHostCommands(
       } else if (picked.action === 'describe') {
         const selected = await progress(() => target.describeSelected(randomUUID(), lease.controller.signal));
         await show(selected ? `현재 작업: ${safeId(selected.taskId)} (버전 ${selected.version}). 저장된 HTML: ${safeId(selected.artifactId)} (파일 버전 ${selected.artifactVersion.slice(0, 12)}). 내용을 읽거나 요청을 실행하지 않았어요.` : '현재 선택된 저장 HTML을 확인하지 못했어요. 컴퓨터에서 작업과 파일 선택을 먼저 확인해 주세요.');
+      } else if (picked.action === 'authorize_execution') {
+        if(!target.authorizeSelectedExecution)throw stopped;
+        const authorized=await progress(()=>target.authorizeSelectedExecution!(lease.controller.signal));
+        await show(authorized.scopedExecution?.state==='ready'?'선택한 HTML의 수정 요청을 받을 준비가 됐어요. 요청 받기를 직접 선택해 주세요.'
+          :authorized.scopedExecution?.state==='unknown'?'허용 여부를 확인하지 못했어요. 자동으로 요청을 실행하지 않아요.':'수정을 허용하지 않았어요.');
       } else if (picked.action === 'receive') {
         const turn = await progress(() => target.receiveAndHandle(lease.controller.signal));
         await show(turn.state === 'closed' ? '연결이 닫혀 이번 확인을 마치지 못했어요.'

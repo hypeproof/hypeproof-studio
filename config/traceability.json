@@ -15826,6 +15826,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-normal-turn.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-transport.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-result.smoke.mjs"
         }
       ]
     },
@@ -15926,6 +15935,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionNormalTurn.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionTransport.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionResult.ts"
         }
       ]
     },

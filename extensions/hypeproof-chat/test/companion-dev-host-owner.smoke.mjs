@@ -9,18 +9,31 @@ import { CompanionTransportBudget } from '../src/companionTransportBudget.ts';
 const require=createRequire(import.meta.url),pairId='ci_'+'a'.repeat(32);
 const bundle=await build({entryPoints:[fileURLToPath(new URL('../src/companionDevHostOwner.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return{promise,resolve};};
-async function fixture(authoring=false){
- const native=await nativeBridgeFixture(),module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?native.vscode:require(id),process,Buffer,console,fetch:native.fetcher,URL,Response,AbortSignal,AbortController,TextEncoder,TextDecoder,crypto,btoa,atob,performance,structuredClone,setTimeout,clearTimeout});
- const calls={start:0,refresh:0,approve:[],revoke:0,offer:0,connect:0,close:0,acks:[],prepared:[],sent:[]};let onStart=async()=>{},onRefresh=async()=>{},onPrepare=async()=>{},onSend=async()=>{},batch=[];
+async function fixture(authoring=false,execution=false){
+ const native=await nativeBridgeFixture(),module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?native.vscode:require(id),process,Buffer,console,fetch:native.fetcher,URL,Response,Headers,AbortSignal,AbortController,TextEncoder,TextDecoder,crypto,btoa,atob,performance,structuredClone,setTimeout,clearTimeout});
+ const calls={issue:0,submit:0,start:0,refresh:0,approve:[],revoke:0,offer:0,connect:0,close:0,acks:[],prepared:[],sent:[]};let onStart=async()=>{},onRefresh=async()=>{},onPrepare=async()=>{},onSend=async()=>{},batch=[];
  const pair={invitation:null,keys:null,qr:null,claim:null,frozenClaim:null,
   async start(scope){calls.start++;await onStart();this.keys={privateKey:'test-owned-synthetic-reference'};this.invitation={...native.pair,id:pairId,status:'open',host_id:scope.host_id,workspace_id:scope.workspace_id,project_id:scope.project_id};this.qr={schema:this.invitation.schema,id:pairId,invite_secret:'synthetic-invitation-challenge',host_key:'synthetic-public-key',invitation_digest:'a'.repeat(64),host_invite_proof:'synthetic-proof',challenge_expires_at:Math.floor(Date.now()/1000)+120};return this.qr;},
   async refresh(){calls.refresh++;await onRefresh();return this.invitation;},async approve(code){calls.approve.push(code);this.invitation={...this.invitation,status:'approved'};return this.invitation;},async revoke(){calls.revoke++;this.invitation={...this.invitation,status:'revoked'};return this.invitation;}};
  const relay={role:'host',get row(){return pair.invitation;},async publishOffer(){calls.offer++;},async connect(){calls.connect++;},async prepare(text,id){calls.prepared.push({text,id});await onPrepare();return id;},async send(id){calls.sent.push(id);await onSend();},async receive(){const delivered=batch;batch=[];return delivered;},async acknowledge(id){calls.acks.push(id);},close(){calls.close++;}};
  const budget=new CompanionTransportBudget();let rawFetch=(...args)=>native.fetcher(...args);let config={service:'http://127.0.0.1:44321/v1',site:'http://127.0.0.1:44321'};
- const owner=new module.exports.CompanionDevHostOwner({context:native.context,connections:native.connections,accounts:native.accounts,configured:()=>config,identity:{accountId:'account',sessionId:'host-session'},...(authoring?{authoring:{store:()=>native.store,reviewDraft:async()=>({check:async()=>{},imported:async()=>{},close(){}})}}:{}),budget,fetch:(...args)=>rawFetch(...args),taskView:()=>native.store.getView(),epoch:()=>1,journal:native.journal,clients:{pairing:()=>pair,relay:()=>relay}});
+ let executionCurrent;
+ if(execution){
+  native.profile={...native.profile,coach_runtime:'agent-sdk',sdk_tools:{read:true,write:true}};
+  const payload={native_trial:true,personal_account:'account',account_session:'host-session',jti:'model-jti',p:native.profile.profile_id,exp:Math.floor(Date.now()/1000)+3600};
+  const token='e30.'+Buffer.from(JSON.stringify(payload)).toString('base64url')+'.c2ln';
+  native.accounts.resolvePass=async()=>token;native.connections.token=async()=>token;
+  native.accounts.view=()=>({status:'signedIn',account:{id:'account'}});
+  native.vscode.window.showWarningMessage=native.vscode.window.showInformationMessage;
+  native.vscode.workspace.textDocuments=[native.document];
+  rawFetch=async(input,init)=>String(input).endsWith('/companion/execution-context')
+   ?Response.json({schema:'hps-companion-execution-context/1',account_id:'account',host_session_id:'host-session',model_session_id:'native-pass-id',model_token_jti:'model-jti',model_profile_id:native.profile.profile_id})
+   :native.fetcher(input,init);
+ }
+ const owner=new module.exports.CompanionDevHostOwner({context:native.context,connections:native.connections,accounts:native.accounts,configured:()=>config,identity:{accountId:'account',sessionId:'host-session'},...(authoring?{authoring:{store:()=>native.store,reviewDraft:async()=>({check:async()=>{},imported:async()=>{},close(){}})}}:{}),budget,fetch:(...args)=>rawFetch(...args),taskView:()=>native.store.getView(),epoch:()=>execution?0:1,journal:native.journal,...(execution?{execution:{submit:async()=>{calls.submit++;throw Error('no implicit execution');}}}:{}),clients:{pairing:()=>pair,relay:()=>relay,...(execution?{execution:options=>{executionCurrent=options.current;return{issue:async()=>{calls.issue++;assert.equal(options.grant.epoch,0);assert(options.grant.consent_revision>2147483647);return{grant:{id:options.grant.grant_id,grant_digest:'d'.repeat(64)}};},reserve:async()=>{throw Error('not part of this control');},complete:async()=>{throw Error('not part of this control');},revoke:async()=>{}};}}:{})}});
  const startAndClaim=async()=>{const value=await owner.startInvitation();pair.invitation={...pair.invitation,status:'claimed',compare_code:'a'.repeat(12),device_session_id:'device-session',device_id:'phone'};await owner.inspectClaim();return value;};
  const connect=async()=>{await startAndClaim();await owner.confirmComparedCode('a'.repeat(12));pair.invitation={...pair.invitation,status:'paired'};await owner.connectCipher();};
- return{native,owner,pair,relay,calls,startAndClaim,connect,set rawFetch(v){rawFetch=v;},set onStart(v){onStart=v;},set onRefresh(v){onRefresh=v;},set onPrepare(v){onPrepare=v;},set onSend(v){onSend=v;},set config(v){config=v;},set batch(v){batch=v;},cleanup:async()=>{owner.close();budget.dispose();await native.cleanup();}};
+ return{native,owner,pair,relay,calls,get executionCurrent(){return executionCurrent;},startAndClaim,connect,set rawFetch(v){rawFetch=v;},set onStart(v){onStart=v;},set onRefresh(v){onRefresh=v;},set onPrepare(v){onPrepare=v;},set onSend(v){onSend=v;},set config(v){config=v;},set batch(v){batch=v;},cleanup:async()=>{owner.close();budget.dispose();await native.cleanup();}};
 }
 
 test('explicit lifecycle requires supplied code and preserves separate native exact-file Cancel/Allow',async()=>{
@@ -118,3 +131,23 @@ test('same verified DEV receive routes authored intent to distinct import receip
 test('unknown verified message closes the owner and is never acknowledged as handled',async()=>{const f=await fixture(true);try{
  await f.connect();f.batch=[{message_id:'unknown',message_hash:'c'.repeat(64),text:JSON.stringify({schema:'future-operation/1'})}];await assert.rejects(()=>f.owner.receiveAndHandle(),/closed/);assert.equal(f.owner.view().state,'closed');assert.equal(f.calls.acks.length,0);assert.equal(f.calls.prepared.length,0);
 }finally{await f.cleanup();}});
+
+
+test('native execution permission is explicit; cancelled permission preserves ordinary draft import',async()=>{
+ const f=await fixture(true,true);try{
+  await f.connect();assert.equal(f.calls.issue,0);assert.equal(f.calls.submit,0);
+  f.native.approved=false;const denied=await f.owner.authorizeSelectedExecution();assert.equal(denied.scopedExecution,undefined);assert.equal(f.calls.issue,0);
+  f.native.approved=true;const selection=await f.owner.describeSelected('selected');const request={schema:'hps-companion-authoring-intent/1',requestId:'after_cancel',pairingId:f.pair.invitation.id,selection,text:'Keep my ordinary draft.'};
+  f.batch=[{message_id:request.requestId,message_hash:'c'.repeat(64),text:JSON.stringify(request)}];await f.owner.receiveAndHandle();assert.equal(JSON.parse(f.calls.prepared.at(-1).text).outcome.state,'imported_draft');assert.equal(f.calls.submit,0);
+ }finally{await f.cleanup();}
+});
+test('native zero-epoch lease keeps exact saved document and closes with the cipher session',async()=>{
+ for(const change of ['other-file','dirty','task-error','session-close']){const f=await fixture(true,true);try{
+  await f.connect();const ready=await f.owner.authorizeSelectedExecution();assert.equal(ready.scopedExecution.state,'ready');assert.equal(f.calls.issue,1);assert.equal(f.calls.submit,0);assert.equal(f.executionCurrent(),true);
+  if(change==='other-file')f.native.vscode.window.activeTextEditor={document:{...f.native.document,uri:{scheme:'file',fsPath:f.native.file+'.other.html'}}};
+  if(change==='dirty')f.native.document.isDirty=true;
+  if(change==='task-error'){const read=f.native.store.getView.bind(f.native.store);f.native.store.getView=()=>({...read(),error:'unreadable'});}
+  if(change==='session-close')f.owner.session.close();
+  assert.equal(f.executionCurrent(),false,change);if(change==='session-close')assert.equal(f.owner.view().state,'closed');assert.equal(f.calls.submit,0);
+ }finally{await f.cleanup();}}
+});

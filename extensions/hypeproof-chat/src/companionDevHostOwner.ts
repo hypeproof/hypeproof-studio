@@ -1,5 +1,10 @@
 /** Explicit native DEV lifecycle. No registration, listener, browser execution endpoint or poll. */
 import { createDevCompanionAuthoringHost } from './companionAuthoringHostNative.ts';
+import * as vscode from 'vscode';
+import { createCompanionExecutionTransport, type CompanionExecutionTransportRequest } from './companionExecutionTransport.ts';
+import { CompanionExecutionHost, type CompanionExecutionClientPort, type CompanionExecutionGrantScope, type CompanionExecutionModel } from './companionExecutionHost.ts';
+import type { PreparedCompanionNormalTurn, CompanionNormalTurnResult } from './companionNormalTurn.ts';
+import { folderConsentState } from './folderConsentHost.ts';
 import type { CompanionAuthoringHostPorts } from './companionAuthoringHost.ts';
 import type { CompanionAuthoringResult } from './companionAuthoringResult.ts';
 import { ExtensionMode } from 'vscode';
@@ -9,7 +14,7 @@ import { readPreparedCompanionWorkspace } from './companionWorkspaceHost.ts';
 import { companionDigest, type CompanionPreparation } from './companionWorkspace.ts';
 import { createCompanionAuthenticatedTransport } from './companionAuthenticatedTransport.ts';
 import type { CompanionAdapterPairingTransport, CompanionAdapterRelayTransport } from './companionClientAdapter.ts';
-import { createDevCompanionHostBridge, type CompanionNativeBridgePorts } from './companionHostBridgeNative.ts';
+import { createDevCompanionHostBridge, createDevCompanionAuthoritySnapshot, type CompanionNativeBridgePorts } from './companionHostBridgeNative.ts';
 import { CompanionHostSession, type CompanionHostSessionClient, type CompanionHostSessionPair, type CompanionHostTurn } from './companionHostSession.ts';
 import type { CompanionHostRequest } from './companionHostDispatch.ts';
 import type { CompanionTransportBudget } from './companionTransportBudget.ts';
@@ -30,6 +35,7 @@ export interface CompanionHostPairingClient {
 }
 export interface CompanionDevHostOwnerPorts extends Omit<CompanionNativeBridgePorts, 'paired'> {
   authoring?: Pick<CompanionAuthoringHostPorts,'store'> & Required<Pick<CompanionAuthoringHostPorts,'reviewDraft'>>;
+  execution?: { submit(input: PreparedCompanionNormalTurn): Promise<CompanionNormalTurnResult> };
   accounts: AccountSession;
   connections: ActivityConnections;
   configured(): { service: string; site: string };
@@ -42,6 +48,9 @@ export interface CompanionDevHostOwnerPorts extends Omit<CompanionNativeBridgePo
     relay(options: { pairing: CompanionHostPairingClient; transport: CompanionAdapterRelayTransport }): CompanionHostSessionClient & {
       publishOffer(): Promise<unknown>; connect(): Promise<unknown>;
     };
+    execution?(options: {host: CompanionHostPairingClient; grant: Readonly<CompanionExecutionGrantScope>; model: Readonly<CompanionExecutionModel>;
+      current(): boolean; nativeTransport(request: CompanionExecutionTransportRequest): Promise<unknown>;
+      modelTransport(request: CompanionExecutionTransportRequest): Promise<unknown>}): CompanionExecutionClientPort;
   };
 }
 export interface CompanionDevHostView {
@@ -49,6 +58,7 @@ export interface CompanionDevHostView {
   pairingId?: string; comparisonCode?: string; expiresAt?: number;
   reason?: 'local_close' | 'scope_changed' | 'cancelled' | 'revocation_unconfirmed';
   executionAuthorized: false;
+  scopedExecution?: ReturnType<CompanionExecutionHost['view']>;
   publication?: Readonly<CompanionSelectionPublication>;
 }
 type PairRow = Omit<CompanionHostSessionPair, 'status' | 'device_session_id' | 'device_id' | 'claim_digest'> & {
@@ -71,6 +81,7 @@ export class CompanionDevHostOwner {
   private bridge: ReturnType<typeof createDevCompanionHostBridge> | undefined;
   private session: CompanionHostSession | undefined;
   private authoring: ReturnType<typeof createDevCompanionAuthoringHost> | undefined;
+  private execution: CompanionExecutionHost | undefined;
   private state: CompanionDevHostView = { state: 'idle', executionAuthorized: false };
   private active: { name: string; promise: Promise<unknown>; abort: AbortController; interrupt(): void } | undefined;
   private signal: AbortSignal | undefined;
@@ -78,12 +89,13 @@ export class CompanionDevHostOwner {
   private publicationRevision = 0;
 
   constructor(ports: CompanionDevHostOwnerPorts) { this.ports = ports; this.identity = Object.freeze({ ...ports.identity }); }
-  view(): Readonly<CompanionDevHostView> { return Object.freeze({ ...this.state, ...(this.publication?{publication:Object.freeze({state:this.publication.state,requestId:this.publication.request.requestId,messageId:this.publication.messageId,revision:this.publication.revision})}:{}) }); }
+  view(): Readonly<CompanionDevHostView> { return Object.freeze({ ...this.state, ...(this.execution?{scopedExecution:this.execution.view()}:{}), ...(this.publication?{publication:Object.freeze({state:this.publication.state,requestId:this.publication.request.requestId,messageId:this.publication.messageId,revision:this.publication.revision})}:{}) }); }
   private check(): void { if (this.state.state === 'closed' || this.state.state === 'revoked') throw failure('closed'); }
   private erase(pairing = this.pairing): void {
     if (pairing) { pairing.keys = null; pairing.qr = null; pairing.claim = null; pairing.frozenClaim = null; }
   }
   private release(): void {
+    this.execution?.close(); this.execution = undefined;
     this.publication = undefined; this.authoring?.close(); this.authoring = undefined;
     if (this.session) this.session.close(); else this.relay?.close();
     this.erase(); this.pairing = undefined; this.relay = undefined; this.session = undefined; this.bridge = undefined; this.binding = undefined;
@@ -192,6 +204,12 @@ export class CompanionDevHostOwner {
         let schema: unknown;try{schema=JSON.parse(message.text)?.schema;}catch{this.close();throw failure('invalid_message');}
         if(schema==='hps-companion-host-request/1')return this.bridge!.handleAndReply(message,reply);
         if(schema!=='hps-companion-authoring-intent/1'||!this.authoring){this.close();throw failure('unsupported_message');}
+        if(this.execution){
+          const result=await this.execution.handle(message);await this.current();this.check();
+          const text=JSON.stringify(result),id='execution_result_'+companionDigest(text);
+          await reply.prepare(text,id);await this.current();this.check();await reply.send(id);await this.current();this.check();
+          return result;
+        }
         const outcome=await this.authoring.handle(message);await this.current();this.check();
         const result:CompanionAuthoringResult={schema:'hps-companion-authoring-result/1',requestId:message.messageId,
           requestHash:companionDigest(message.text),outcome};
@@ -203,6 +221,54 @@ export class CompanionDevHostOwner {
     });
   }
   private authenticatedRelay: CompanionAdapterRelayTransport = async () => { throw failure('transport_unavailable'); };
+  /** Explicit native gesture, separate from pairing and preview publication. No production registration. */
+  authorizeSelectedExecution(signal?: AbortSignal): Promise<Readonly<CompanionDevHostView>> {
+    return this.run('authorize_execution',signal,async()=>{
+      if(this.state.state!=='connected'||!this.pairing||!this.ports.execution||!this.ports.clients.execution)throw failure('execution_unavailable');
+      if(this.execution){await this.execution.authorize();await this.current();return this.view();}
+      const transport=createCompanionExecutionTransport({context:this.ports.context,accounts:this.ports.accounts,
+        configured:this.ports.configured,identity:this.identity,fetch:this.ports.fetch??fetch,budget:this.ports.budget,
+        currentModel:async()=>{await this.current();const token=await this.ports.connections.token();await this.current();return token?{token}:undefined;}});
+      await transport.resolveIdentity(this.signal);
+      const token=await this.ports.connections.token();if(!token)throw failure('existing_model_required');
+      const tokenDigest=companionDigest(token),model=await transport.resolveModel(this.signal),after=await this.ports.connections.token();
+      if(!after||companionDigest(after)!==tokenDigest)throw failure('existing_model_required');
+      const snapshot=createDevCompanionAuthoritySnapshot({...this.ports,paired:async()=>{
+        const row=await this.refreshPaired();return row?{...row,execution_authorized:false}:null;
+      }});
+      this.execution=new CompanionExecutionHost({snapshot,model:async()=>{
+        await this.current();const fresh=await this.ports.connections.token();await this.current();
+        return fresh&&companionDigest(fresh)===tokenDigest?model:null;
+      },current:(s)=>{
+        const active=this.ports.connections.current,task=this.ports.taskView(),account=this.ports.accounts.view();
+        // Chat focus may have no active text editor. An explicitly selected different
+        // document or an unsaved/closed granted document revokes this local turn.
+        const editor=vscode.window.activeTextEditor?.document;
+        const document=vscode.workspace.textDocuments?.find(d=>d.uri.scheme==='file'&&d.uri.fsPath===s.artifact.path)??editor;
+        const folder=folderConsentState(this.ports.context,s.profile,{servedRoot:s.profile.workspace_root,instructor:false});
+        return this.state.state==='connected'&&this.ports.epoch()===s.epoch&&task?.activeTaskId===s.taskId
+          &&!task.error&&task.scope===companionDigest(s.preparation.scope)&&!!document&&document.uri.scheme==='file'&&document.uri.fsPath===s.artifact.path
+          &&!document.isDirty&&!document.isUntitled&&(!editor||editor.uri.fsPath===s.artifact.path)
+          &&account.status==='signedIn'&&account.account?.id===s.accountId&&vscode.workspace.isTrusted&&!vscode.env.remoteName
+          &&this.ports.connections.matchesService&&active?.id===s.preparation.activityId&&active.workspace===s.preparation.workspace
+          &&active.accountPass?.sessionId===s.binding.sessionId&&active.accountPass?.passId===s.binding.passId
+          &&['skip','full'].includes(folder.tag)&&parseInt(companionDigest(JSON.stringify(folder)).slice(0,12),16)===s.consentRevision;
+      },confirm:async(s,grant)=>{
+        return await vscode.window.showWarningMessage('이 휴대폰에서 선택한 HTML 수정을 요청하도록 허용할까요?',{modal:true,
+          detail:[`파일: ${s.artifact.path}`,`휴대폰: ${s.pair.device_id}`,
+            `최대 ${grant.max_turns}번 · ${Math.max(0,Math.floor((grant.expires_at*1000-Date.now())/60000))}분 동안 이 파일만 수정해요.`,
+            '현재 컴퓨터의 이용권을 사용해요. 기존 폴더·도구 승인은 유지돼요. 컴퓨터를 닫거나 연결을 끊으면 실행하지 않아요.',
+            '아직 자동으로 요청을 받지는 않아요. 준비 후 요청 받기를 직접 선택해 주세요.'].join('\n\n')},'이 파일 수정 허용')==='이 파일 수정 허용';
+      },client:(grant,identity,current)=>this.ports.clients.execution!({host:this.pairing!,grant,model:identity,current,
+        nativeTransport:request=>transport.native(request,this.signal),modelTransport:request=>transport.model(request,this.signal)}),
+      submit:input=>this.ports.execution!.submit(input)});
+      const allowed=await this.execution.authorize();
+      // A cancelled modal produced no lease. Preserve the existing explicit draft-import path.
+      // An uncertain issue receipt retains its lease and must never silently fall back.
+      if(!allowed&&this.execution.view().expiresAt===undefined)this.execution=undefined;
+      await this.current();return this.view();
+    });
+  }
   describeSelected(requestId: string, signal?: AbortSignal): Promise<CompanionHostRequest | null> {
     return this.run('describe', signal, async () => {
       if (this.state.state !== 'connected') throw failure('cipher_required');

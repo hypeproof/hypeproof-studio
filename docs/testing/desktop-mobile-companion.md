@@ -214,6 +214,16 @@ and caller mutation cannot replace the captured binding. A scripted SDK module
 is used for these controls; this is not installed-CLI or live Service acceptance.
 The prepared entry carries no browser, shell, orchestration or proxy fallback.
 
+Execution-owner tests exercise cancelled consent, native zero epoch and 48-bit
+consent revision, foreign/stale scope, repeated exact requests, two successive
+versions, lost replies, wrong terminal proof and synchronous session-close
+cancellation. They use local files and scripted client/SDK ports. Native owner
+wiring controls exercise the actual account/profile/preparation composition
+with fixture HTTP and native UI. Android source controls check the new receipt
+schema, ACK-before-display, stale-result isolation and retained draft/preview.
+These checks do not replace fresh ephemeral D1/actual SDK/installed Android
+acceptance for the newly composed execution path.
+
 Complete acceptance additionally needs the actual shared Send path, Service
 atomic model admission, installed host/Android flow, original-version restoration
 and a second version without replay. Source controls alone do not close those

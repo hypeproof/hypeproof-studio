@@ -177,3 +177,15 @@ before asynchronous work, and Service remains responsible for checking the live
 grant and activated-pass identity on every upstream model request. Ambient
 environment headers cannot attach a companion reservation to ordinary Send.
 No production command or relay execution callback is registered by this seam.
+
+The subsequent development composition adds a separate native confirmation for
+the selected saved HTML, at most two turns and ten minutes. It resolves the
+existing activated pass through Service's authenticated execution context, then
+uses the private signed execution client and the same normal Send entry. The
+current task, saved document, folder consent and owner remain live conditions.
+Cipher closure aborts the local execution owner synchronously; cancelled
+permission with no issued lease preserves explicit ordinary draft import.
+An uncertain lease/result never falls back or allocates another turn. Android
+displays the distinct exact-request execution receipt and retains the user's
+draft and previous preview. This is development-only source composition; a new
+installed-package acceptance is still required before claiming that workflow.

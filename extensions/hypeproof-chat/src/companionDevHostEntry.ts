@@ -20,6 +20,7 @@ export interface CompanionDevActivationApi {
 }
 export interface CompanionDevEntryPorts {
   authoring?: CompanionDevHostOwnerPorts['authoring'];
+  execution?: CompanionDevHostOwnerPorts['execution'];
   accounts?: AccountSession;
   connections: ActivityConnections;
   configured(): { service: string; site: string };
@@ -135,7 +136,7 @@ export function createCompanionDevHostEntry(context: vscode.ExtensionContext, po
     try {
       owner = new CompanionDevHostOwner({ context, connections: ports.connections, accounts, configured: ports.configured,
         identity: { accountId: account.account.id, sessionId: stored.sessionId }, budget, clients,
-        taskView: ports.taskView, epoch: ports.epoch, journal: lease.journal, authoring: ports.authoring });
+        taskView: ports.taskView, epoch: ports.epoch, journal: lease.journal, authoring: ports.authoring, execution:ports.execution });
     } catch (error) { lease.stopAdmission(); retain(lease.release()); throw error; }
     const held = owner;
     let released = false;
@@ -155,6 +156,7 @@ export function createCompanionDevHostEntry(context: vscode.ExtensionContext, po
       connectCipher: abort => invoke(() => held.connectCipher(abort)),
       describeSelected: (id, abort) => invoke(() => held.describeSelected(id, abort)),
       publishSelected: (id, abort) => invoke(() => held.publishSelected(id, abort)),
+      authorizeSelectedExecution: abort => invoke(() => held.authorizeSelectedExecution(abort)),
       receiveAndHandle: abort => invoke(() => held.receiveAndHandle(abort)),
       revoke: abort => invoke(() => held.revoke(abort)),
       close: release,
