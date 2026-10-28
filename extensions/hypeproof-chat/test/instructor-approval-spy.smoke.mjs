@@ -1,42 +1,95 @@
-// S-2b spy: an instructor turn never reaches an approval kind that Chalk does not own.
-// The approval callback is reached only for tools whose policy decision is "ask"
-// (evaluateSdkToolUse). The instructor turn exposes the workspace tools (Read, Write, Edit)
-// and the two instructor browser tools (live_preview_start, browser_open); the Chalk tools
-// are not wrapped by the approval callback (localRuntime/index.ts: approve goes to workspaceTools only).
+// S-2b spy: an instructor turn never raises an approval kind that Chalk does not own.
+// Names come from the real sources, not from a hand-written list:
+//   - workspace tools: workspaceTools() with the real INSTRUCTOR_TOOL_PROFILE
+//   - browser tools: the canonical defs from browserMcp.ts, and an assertion that the provider's
+//     INSTRUCTOR_LOCAL_BROWSER_DEFS names the same two defs
 // Mapping-level spy: the full instructor turn is not driven here.
 import assert from "node:assert/strict";
-import { sdkToolToActionRequest, evaluateSdkToolUse, MCP_CONSULT } from "../src/sdkCoachHelpers.ts";
-import { MCP_BROWSER_OPEN, MCP_BROWSER_TYPE, MCP_LIVE_PREVIEW_START } from "../src/browserMcp.ts";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { sdkToolToActionRequest, evaluateSdkToolUse } from "../src/sdkCoachHelpers.ts";
+import { BROWSER_OPEN_TOOL_DEF, LIVE_PREVIEW_START_TOOL_DEF, MCP_BROWSER_OPEN, MCP_LIVE_PREVIEW_START } from "../src/browserMcp.ts";
+import { workspaceTools } from "../src/localRuntime/tools.ts";
+import { INSTRUCTOR_TOOL_PROFILE } from "../src/chalk/instructorTurn.ts";
+import { needsChalkPrompt } from "../src/chalkContract.ts";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+const DEFAULT_REQUIRE = pkg.contributes.configuration.properties["hypeproofChat.requireApprovalFor"].default;
 
 let n = 0;
 const check = (name, fn) => { fn(); n++; console.log(`  ok   ${name}`); };
 
-const INSTRUCTOR_NAMES = ["Read", "Write", "Edit", MCP_LIVE_PREVIEW_START, MCP_BROWSER_OPEN];
-const PERMITTED = [...INSTRUCTOR_NAMES];
-const INPUT = { path: "lesson/index.html", url: "https://example.com/a", content: "x" };
+const workspaceNames = workspaceTools({
+  cwd: path.join(root, "test"),
+  profile: INSTRUCTOR_TOOL_PROFILE,
+  signal: new AbortController().signal,
+  approve: async () => true,
+}).definitions.map((d) => d.name);
+// The model calls the MCP-prefixed names; the canonical defs carry the short names.
+const mcpName = (short) => `mcp__hypeproof__${short}`;
+const browserNames = [mcpName(LIVE_PREVIEW_START_TOOL_DEF.name), mcpName(BROWSER_OPEN_TOOL_DEF.name)];
+assert.equal(browserNames[0], MCP_LIVE_PREVIEW_START, "live_preview_start MCP name changed");
+assert.equal(browserNames[1], MCP_BROWSER_OPEN, "browser_open MCP name changed");
+const instructorNames = [...workspaceNames, ...browserNames];
 const WORKSPACE = "/tmp/hps-spy-workspace";
-const ALLOWED_FOR_INSTRUCTOR = ["readFile", "writeFile", "openBrowser"];
-const FORBIDDEN = ["browserType", "consultHelper", "executeShell", "delegateAgent"];
+const INPUT = { path: "lesson/index.html", url: "https://example.com/a", content: "x" };
+const decisionOf = (toolName, permitted = instructorNames) =>
+  evaluateSdkToolUse({ toolName, input: INPUT, permittedTools: permitted, workspaceRoot: WORKSPACE }).decision;
 
-const askedNames = INSTRUCTOR_NAMES.filter((toolName) =>
-  evaluateSdkToolUse({ toolName, input: INPUT, permittedTools: PERMITTED, workspaceRoot: WORKSPACE }).decision === "ask");
-
-check("S-2b spy: the instructor names that reach approval are the write and browser_open tools", () => {
-  assert.deepEqual(askedNames.sort(), ["Edit", MCP_BROWSER_OPEN, "Write"].sort());
+check("S-2b spy: the instructor profile exposes only read, write and browser workspace tools", () => {
+  assert.ok(workspaceNames.length > 0, "no workspace tools for the instructor profile");
+  for (const forbidden of ["Bash", "Task", "Shell"]) assert.ok(!workspaceNames.includes(forbidden), `${forbidden} must not be exposed`);
+  assert.deepEqual([...workspaceNames].sort(), ["Edit", "Read", "Write"].sort(), "workspace list changed; update the expectation with the profile");
 });
 
-check("S-2b spy: every instructor name that reaches approval maps to an allowed kind", () => {
-  for (const toolName of askedNames) {
+check("S-2b spy: the provider's instructor browser list names the same two canonical defs", () => {
+  const src = fs.readFileSync(path.join(root, "src/chatPanelProvider.ts"), "utf8");
+  assert.match(src, /const INSTRUCTOR_LOCAL_BROWSER_DEFS = \[LIVE_PREVIEW_START_TOOL_DEF, BROWSER_OPEN_TOOL_DEF\]/,
+    "the provider's instructor browser list changed; this spy must follow it");
+});
+
+check("S-2b spy: the instructor names that reach approval (decision ask) map to allowed kinds only", () => {
+  const asked = instructorNames.filter((x) => decisionOf(x) === "ask").sort();
+  assert.deepEqual(asked, ["Edit", "Write", MCP_BROWSER_OPEN].sort());
+  for (const toolName of asked) {
     const kind = sdkToolToActionRequest({ toolName, input: INPUT }).kind;
-    assert.ok(ALLOWED_FOR_INSTRUCTOR.includes(kind), `${toolName} maps to ${kind}`);
-    assert.ok(!FORBIDDEN.includes(kind), `${toolName} maps to forbidden ${kind}`);
+    assert.ok(["writeFile", "openBrowser"].includes(kind), `${toolName} maps to ${kind}`);
   }
 });
 
-check("S-2b spy: browser_type and consult are not instructor names, and never reach approval as ask", () => {
-  for (const toolName of [MCP_BROWSER_TYPE, MCP_CONSULT]) {
-    assert.ok(!INSTRUCTOR_NAMES.includes(toolName), `${toolName} is not exposed to the instructor turn`);
+check("S-2b spy: read and live_preview_start are allowed without asking", () => {
+  assert.equal(decisionOf("Read"), "allow");
+  assert.equal(decisionOf(MCP_LIVE_PREVIEW_START), "allow");
+});
+
+check("S-2b spy: with the default requireApprovalFor, Write and Edit are asked but no Chalk prompt is raised", () => {
+  assert.equal(decisionOf("Write"), "ask");
+  assert.equal(decisionOf("Edit"), "ask");
+  assert.equal(needsChalkPrompt("writeFile", DEFAULT_REQUIRE), false);
+  assert.equal(needsChalkPrompt("openBrowser", DEFAULT_REQUIRE), true);
+});
+
+check("S-2b spy: with writeFile added to requireApprovalFor, the same Write and Edit calls raise a Chalk prompt", () => {
+  const withWrite = [...DEFAULT_REQUIRE, "writeFile"];
+  assert.equal(decisionOf("Write"), "ask", "the policy decision does not depend on the setting");
+  assert.equal(needsChalkPrompt("writeFile", withWrite), true);
+  assert.equal(needsChalkPrompt("openBrowser", withWrite), true);
+});
+
+check("S-2b spy: Chalk prompts follow the setting exactly (the same rule the Studio resolver uses)", () => {
+  for (const extra of [[], ["writeFile"]]) {
+    const list = [...DEFAULT_REQUIRE, ...extra];
+    for (const kind of ["writeFile", "openBrowser", "executeShell", "browserType", "consultHelper", "delegateAgent"]) {
+      assert.equal(needsChalkPrompt(kind, list), list.includes(kind) && ["openBrowser", "writeFile"].includes(kind), `${kind} with ${extra}`);
+    }
   }
+});
+
+check("S-2b spy: browser_type and consult are not in the instructor name set", () => {
+  assert.ok(!instructorNames.includes("mcp__hypeproof__browser_type"));
+  assert.ok(!instructorNames.includes("mcp__hypeproof__consult"));
 });
 
 console.log(`\n${n} spy checks passed`);
