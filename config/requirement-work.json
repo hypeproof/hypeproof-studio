@@ -844,7 +844,7 @@
         "DMC-15"
       ],
       "inline_prefixes": [],
-      "sha256": "adb69ebba23a81a5a750547d61691b85c5ebca6d9657a97bd969ab2f5203b9ee",
+      "sha256": "afb80387edbb8b97fd11cdc4e6599bf63bed0cacca16e881ad24df99bd3ed5ee",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
@@ -4242,7 +4242,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Integrate the separately scoped owned mobile controller/checkpoint, then native DEV controls and installed Android. This cut covers DEV host consent, verified framing and controlled presentation only; parent #3072/#2803 stays open.",
+      "next_action": "Integrate separately scoped native DEV authentication/controls and exclusive journal lifecycle, then installed Android preview. The #3099 cut covers an owned mobile controller, budget, same-live-cipher data checkpoint and confirmed cleanup; cold-key restart and parent #3072/#2803 remain open.",
       "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
       "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
       "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",

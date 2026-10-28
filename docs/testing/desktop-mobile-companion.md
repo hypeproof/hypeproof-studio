@@ -96,3 +96,14 @@ The [bounded transfer and mobile presentation slice](../evidence/companion-artif
 adds framed results and controlled result presentation while retaining the
 original runtime/relay limits. Its partial source/browser evidence does not
 complete device, restart, classroom or production acceptance.
+
+## Owned mobile controller/recovery source cut — #3099
+
+Focused source checks cover one prepare/send, interrupted eight-part ACK batches,
+exact same-live-owner checkpoint restoration, stale/mutated packets, lost keys,
+confirmed cleanup with storage-error retry, and successor-owner fencing. The
+controlled React view tests waiting, reconciliation and explicit local removal.
+Framing/2 retains decoding and exact saved bytes for historical framing/1.
+The separately recorded new-cut checks do not transfer historical browser or
+installed observations to a new package identity. No production/cold-key/device
+acceptance row is completed by these source checks.

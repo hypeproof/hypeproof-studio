@@ -16,8 +16,9 @@ partial output and verifies the complete selected artifact/version/digest.
 
 The UI uses existing Studio tokens, presents waiting/reconnecting/denied/results,
 and renders through an injected caller-owned sandbox. The owned request
-controller, request budget and checkpoint lifecycle are separate follow-up work
-and are not included in this PR cut. No production entry point is registered.
+controller, request budget and same-live-transport checkpoint/cleanup lifecycle
+are now included in the separate #3099 source cut. No production entry point
+is registered; cold process/key restoration remains unavailable.
 
 ## Observed source and integration results
 
@@ -51,11 +52,12 @@ The integration is explicitly a private cross-checkout test: product imports do
 not depend on a private sibling checkout. Its account/native APIs are synthetic;
 its host-approval HTTP route must never be copied into product code.
 
-## Related controller evidence outside this PR cut
+## Historical controller interruption evidence
 
-The following historical controller observations concern follow-up source that
-is not included in this PR cut. Independent ordinary lifecycle verification found
-a genuine eight-part result
+The following historical controller observations explain the interruption repair
+now included in #3099. Exact new-cut source validation is recorded separately;
+these observations do not establish installed acceptance of the new cut.
+Independent ordinary lifecycle verification found a genuine eight-part result
 lost its unprocessed suffix when the fourth ACK timed out. Controller follow-up
 `dbb378493838b5a1e762f356ae50e41a5bfc5af6` retains the delivered batch and cursor.
 Author regression: seven lifecycle cases and six receiver regressions PASS,

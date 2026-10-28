@@ -93,3 +93,12 @@ The [bounded transfer and mobile presentation slice](../evidence/companion-artif
 adds framed results and controlled result presentation while retaining the
 original runtime/relay limits. Its partial source/browser evidence does not
 complete device, restart, classroom or production acceptance.
+
+The separately scoped #3099 source cut adds one owned mobile controller,
+request-budget admission, an explicit same-live-cipher data checkpoint and
+confirmed local-view cleanup. Restoring data requires exact saved packets and
+a surviving cipher-owner attestation; it does not restore keys or authorize a
+new request. An uncertain receipt is reconciled without resending the request.
+Cold process/key recovery, native product controls and installed device
+acceptance remain separate. See the controller, checkpoint, adapter and cleanup
+evidence for their exact local/synthetic boundaries.
