@@ -93,6 +93,6 @@ Installed native UI, real account/phone, classroom activity and DMC-T04/08/15
 remain **NOT RUN / NOT COMPLETE**. No acceptance row is replaced.
 
 The [bounded transfer and mobile presentation slice](../evidence/companion-artifact-transfer-20261028.md)
-adds framed results and one-request UI reconciliation while retaining the
+adds framed results and controlled result presentation while retaining the
 original runtime/relay limits. Its partial source/browser evidence does not
 complete device, restart, classroom or production acceptance.
