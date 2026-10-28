@@ -97,3 +97,15 @@ test('selection change during a completed HTTP send clears publication instead o
   assert.equal(f.calls.sent.length,1,'already sent metadata cannot be recalled');assert.equal(f.owner.view().publication,undefined);assert.equal(f.owner.view().state,'closed');
  }finally{await f.cleanup();}
 });
+
+
+test('cipher receive deadline closes native owner and erases keys before late receive can publish',async()=>{
+ const f=await fixture(),entered=deferred(),release=deferred();try{
+  await f.connect();assert.ok(f.pair.keys);f.owner.session.deadlineMs=15;
+  f.relay.receive=async()=>{entered.resolve();await release.promise;return[];};
+  const pending=f.owner.receiveAndHandle();await entered.promise;await assert.rejects(pending,/closed/);
+  assert.equal(f.owner.view().state,'closed');assert.equal(f.pair.keys,null);assert.equal(f.pair.qr,null);assert.equal(f.calls.close,1);
+  release.resolve();await new Promise(r=>setTimeout(r,0));assert.equal(f.calls.prepared.length,0);assert.equal(f.calls.sent.length,0);
+  f.owner.close();assert.equal(f.calls.close,1,'owner cleanup is idempotent');
+ }finally{release.resolve();await f.cleanup();}
+});

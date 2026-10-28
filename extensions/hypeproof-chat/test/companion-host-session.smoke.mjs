@@ -24,7 +24,7 @@ function setup(options = {}) {
     await reply.prepare('verified-result', `result-${message.messageId}`); await reply.send(`result-${message.messageId}`);
     return { state: 'completed', code: 'preview_read' };
   } };
-  const session = new CompanionHostSession({ client, bridge, currentPair: async () => current }, options);
+  const session = new CompanionHostSession({ client, bridge, currentPair: async () => current, onClosed:options.onClosed }, options);
   return { session, calls, messages, set pair(value) { current = value; }, get pair() { return current; },
     set batch(value) { batch = value; }, set ackFailure(value) { ackFailure = value; },
     set handler(value) { handler = value; }, set receive(value) { receive = value; }, set expired(value) { expired = value; } };
@@ -105,4 +105,15 @@ test('an invalid, conflicting or oversized batch is rejected before any host dec
   f.batch = [{ ...f.messages[0], message_hash: 'f'.repeat(64) }];
   assert.equal((await f.session.receiveAndHandle()).state, 'closed');
   assert.equal(f.calls.filter(x => x.startsWith('handle:')).length, initialHandles);
+});
+
+
+test('deadline synchronously notifies owner before delayed work can perform effects',async()=>{
+  const controller=new AbortController(),entered=deferred(),release=deferred();let closes=0,effects=0;
+  const f=setup({deadlineMs:15,onClosed:()=>{closes++;controller.abort();}});
+  f.handler=async()=>{entered.resolve();await release.promise;if(!controller.signal.aborted)effects++;};
+  const pending=f.session.receiveAndHandle();await entered.promise;
+  assert.equal((await pending).state,'closed');assert.equal(controller.signal.aborted,true);assert.equal(closes,1);
+  release.resolve();await new Promise(r=>setTimeout(r,0));assert.equal(effects,0);assert.equal(f.calls.some(c=>c.startsWith('ack:')),false);
+  f.session.close();assert.equal(closes,1,'terminal notification cannot fire twice');
 });

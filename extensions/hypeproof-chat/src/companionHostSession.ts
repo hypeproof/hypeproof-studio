@@ -16,6 +16,8 @@ export interface CompanionHostSessionPorts {
   /** Refresh the verified pairing identity; host bridge separately resolves current runtime/file authority. */
   currentPair(): Promise<CompanionHostSessionPair | null>;
   bridge: { handleAndReply(message: VerifiedCompanionMessage, reply: CompanionEncryptedReply): Promise<CompanionDispatchResult> };
+  /** Synchronous terminal notification: stop pending native owner work as the cipher closes. */
+  onClosed?(): void;
 }
 export interface CompanionHostTurn {
   state: 'idle' | 'processed' | 'waiting' | 'closed';
@@ -154,6 +156,7 @@ export class CompanionHostSession {
   close(): void {
     if (this.closed) return;
     this.closed = true; this.pending.length = 0; this.finished.clear();
+    try { this.ports.onClosed?.(); } catch { /* Cipher still closes if an owner cleanup hook throws. */ }
     this.interrupt?.();
     try { this.ports.client.close(); } catch { /* Terminal locally even if an injected close hook fails. */ }
   }

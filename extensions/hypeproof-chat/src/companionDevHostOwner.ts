@@ -179,7 +179,7 @@ export class CompanionDevHostOwner {
       if (!this.relay) this.relay = this.ports.clients.relay({ pairing: this.pairing,
         transport: (role, id, action, raw) => this.authenticatedRelay(role, id, action, raw) });
       await this.relay.publishOffer(); await this.current(); await this.relay.connect(); await this.current();
-      this.session = new CompanionHostSession({ client: this.relay, currentPair: () => this.refreshPaired(), bridge: this.bridge! });
+      this.session = new CompanionHostSession({ client: this.relay, currentPair: () => this.refreshPaired(), onClosed:()=>this.close('scope_changed'), bridge: this.bridge! });
       this.state = { ...this.state, state: 'connected' }; return this.view();
     });
   }
