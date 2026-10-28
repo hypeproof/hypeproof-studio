@@ -62,6 +62,6 @@ for(const injectLater of [false,true])test('actual Android React entry renders e
   assert.equal(host.findAll(e=>e.getAttribute('data-state')==='completed').length,1,'valid later selection must not poison the original result receiver; '+JSON.stringify({ui:host.textContent,acks,prepared:prepared.map(p=>p.id),returned:Array.from(returned.keys())}));
   const iframe=host.findAll(e=>e.localName==='iframe')[0];assert.ok(iframe);assert.ok((iframe.getAttribute('srcDoc')??iframe.getAttribute('srcdoc')??iframe.srcDoc).endsWith(text));
   assert.deepEqual(sent,[request.requestId]);assert.equal(prepared.length,1);assert.equal(JSON.parse(prepared[0].value).requestId,request.requestId);
-  if(injectLater){assert.ok(acks.includes(next.message_id));assert.ok(acks.includes(stale.message_id));assert.equal(returned.get(next.message_id),1,'authenticated client may deduplicate later delivery');assert.match(host.textContent,/새 선택/);assert.match(host.textContent,/자동.*요청하지/);}
+  if(injectLater){assert.ok(acks.includes(next.message_id));assert.ok(acks.includes(stale.message_id));assert.equal(returned.get(next.message_id),1,'authenticated client may deduplicate later delivery');assert.match(host.textContent,/새 선택/);assert.match(host.textContent,/지금 보기는 그대로/);assert.match(host.textContent,/직접 선택한 뒤 보기를 요청/);}
  }finally{if(root)await act(()=>root.unmount());host.remove();delete window.CompanionNative;}
 });
