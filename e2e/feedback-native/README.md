@@ -13,6 +13,29 @@ prepared app from `scripts/studio-dev.py`, an explicit Service manifest and priv
 credential files. No full desktop shell build, installed-app modification, `HOME`
 replacement, shell tool permission change or provider key is required.
 
+## Official platform baseline in hosted CI
+
+Without an explicit tag, each hosted platform uses the newest published stable
+release in `hypeproof/hypeproof-studio` that contains exactly one portable ZIP for
+its platform/architecture. Mac and Windows may therefore use different release
+labels. For example, stable v2026.1020.2 is Mac-only while the last published
+Windows shell is v2026.1017.0; a missing latest Windows asset does not authorize a
+draft, RC, arbitrary archive, mirror credential or skipped native check.
+
+An explicit `PUBLIC_APP_TAG` remains strict: that exact published stable tag must
+contain the requested platform asset. Default metadata enumeration is bounded by
+30 seconds/8 MiB and 1000 releases; malformed/ambiguous or unverifiable assets fail.
+The downloaded shell still requires the existing SHA-256 or published acceptance
+hash checks, current extension injection and verified SDK binary before native
+checks. Selection metadata is not a Windows execution pass.
+
+Saved-activity selection compares the complete absolute path from the real button
+`title`, checks its accessible name agrees, and requires one match. The visible
+`small` text intentionally contains only a shortened path. No basename/suffix
+matching, broader drive matching or product StartPage change is used. The actual
+component DOM control covers this contract; hosted native execution remains a
+separate required result.
+
 ## Existing candidate, actual local Service
 
 The delivery owner prepares the app and starts the actual local Service. Create a

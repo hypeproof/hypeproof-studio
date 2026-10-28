@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { createHmac } from 'node:crypto';
 import { nativeBridgeFixture } from './lib/companion-native-bridge-harness.mjs';
 import { CompanionTransportBudget } from '../src/companionTransportBudget.ts';
 const require=createRequire(import.meta.url),pairId='ci_'+'a'.repeat(32);
@@ -21,7 +22,9 @@ async function fixture(authoring=false,execution=false){
  if(execution){
   native.profile={...native.profile,coach_runtime:'agent-sdk',sdk_tools:{read:true,write:true}};
   const payload={native_trial:true,personal_account:'account',account_session:'host-session',jti:'model-jti',p:native.profile.profile_id,exp:Math.floor(Date.now()/1000)+3600};
-  const token='e30.'+Buffer.from(JSON.stringify(payload)).toString('base64url')+'.c2ln';
+  // Service v2 wire is base64url(payload).HMAC(raw payload), not a JWT.
+  const rawPayload=JSON.stringify(payload);
+  const token=Buffer.from(rawPayload).toString('base64url')+'.'+createHmac('sha256','synthetic-owner-token-contract-only').update(rawPayload).digest('base64url');
   native.accounts.resolvePass=async()=>token;native.connections.token=async()=>token;
   native.accounts.view=()=>({status:'signedIn',account:{id:'account'}});
   native.vscode.window.showWarningMessage=native.vscode.window.showInformationMessage;
