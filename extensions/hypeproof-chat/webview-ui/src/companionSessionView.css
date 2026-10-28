@@ -59,7 +59,7 @@
 
 .hps-companion-forget-confirmation {
   display: grid; gap: var(--hp-space-3); padding: var(--hp-space-4);
-  border: 1px solid var(--hp-border-control-default); border-radius: var(--hp-radius-8);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--hp-radius-8);
 }
 .hps-companion-forget-confirmation h3 { font-size: var(--hp-font-lead); line-height: var(--hp-leading-label); }
 .hps-companion-forget-confirmation > p { color: var(--hp-text-muted-default); word-break: keep-all; }
