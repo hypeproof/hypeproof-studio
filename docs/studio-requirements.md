@@ -5794,9 +5794,16 @@ baseline entry the tree no longer has (stale slack); `--update` rewrites the bas
 it. A declaration that must stay physical carries `logical-css: physical <reason>` in a comment on
 the same line; the reason is required. Existing declarations keep their values and geometry
 (DEC-27); converting them is not part of this requirement.
-Not covered: `text-align: left/right`, `float`, `border-left/right`, physical `inset` shorthands with
-four values and asymmetric `margin`/`padding` shorthands (DES-CGP-DS-29 / CGP-DS-D-023 owns the
-wider list); JS that positions an element from measured viewport rects (`tooltip.style.left`, the
+DES-CGP-DS-29 (CGP-DS-D-023, 2026-10-28; same PI#1 link) widens the lint to the rest of the design
+row's list: `text-align: left` and `text-align: right` (use `start`/`end`), and a four-value `margin`,
+`padding` or `inset` shorthand whose second (right) and fourth (left) components differ (use
+`*-block` plus `*-inline-start/end` or `*-inline`). Shorthands with one to three values, or four
+with equal sides, are symmetric and pass; components are split at the top level, so `calc()` and
+`var()` with spaces count as one. A value is compared without its TSX quotes, case and
+`!important`. The 67 such declarations on main are grandfathered the same way (169 in all,
+DEC-DS-D-023); the finding names `text-align: start/end` or the logical shorthand.
+Not covered: `float`, `border-left/right`, `clear`, `scroll-margin`/`scroll-padding` and other
+physical properties outside DES-CGP-DS-29's list; JS that positions an element from measured viewport rects (`tooltip.style.left`, the
 composer's off-screen measuring mirror), which is geometry rather than authored CSS; vendored KaTeX
 CSS; the generated Chalk token transport (`chalk/src/lib/design-tokens.ts`, a copy of webview
 sources the lint already reads); `[dir=rtl]` support (CGP-DS-29 DEFER, Korean and English only).
@@ -5809,7 +5816,14 @@ of the six properties, upper case, a nested rule, an `@media` rule, a Chalk `<st
 attribute, a Chalk `…Css` literal, TSX camelCase, quoted and `left` keys, a copied or swapped
 grandfathered value, a grandfathered value in a new file, a marker without a reason or on another
 line, a stale baseline entry) must fail, and the CLI must exit 1 on a planted tree and refuse to
-grow the baseline.
+grow the baseline. For CGP-DS-D-023 it adds positive controls (`text-align` start, end, center,
+justify, inherit; one- to three-value and equal-sided four-value shorthands; `calc()`/`var()`
+components with spaces; logical block/inline shorthands; TSX `textAlign: "start"`; a grandfathered
+`text-align: left`) and negative controls (`text-align: left` and `right`, upper case with
+`!important`, asymmetric four-value `padding`, `margin` and `inset`, `calc()` sides, a Chalk style
+attribute, `<style>` block and `…Css` literal, TSX `textAlign: "left"` and a quoted asymmetric
+padding, a copied or swapped grandfathered `text-align`), checks the start/end and shorthand hints,
+and has the CLI fail on a planted `text-align: right` with its line and hint.
 
 ## Startup and empty-state brand marks (CGP-DS-R-032)
 
