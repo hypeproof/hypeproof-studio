@@ -1,9 +1,9 @@
 # Companion Android debug experiment
 
-The native shell retains the initial #3100 fixture-only debug boundary. This
-#3114 source cut adds reviewed authored-request receipts and explicit next-version
-adoption. Native personal-account sign-in belongs to #3115; selected execution
-belongs to #3097 and both remain absent here.
+The native shell retains the initial #3100 fixture-only debug entry and #3114
+reviewed draft/receipt/version-adoption flow. This #3115 source cut adds a
+separate explicit native personal-account device sign-in entry. Production
+workspace transport remains disabled; selected execution #3097 remains absent.
 Historical APK observations below retain their original source/asset identities.
 A new cut or generated web bundle is not an installed-APK acceptance result.
 

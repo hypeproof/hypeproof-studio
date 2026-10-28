@@ -15805,6 +15805,15 @@
         },
         {
           "path": "apps/companion-android/test/selection-adoption-entry.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/device-sign-in.test.sh"
+        },
+        {
+          "path": "apps/companion-android/test/NativeDeviceSignInTest.java"
+        },
+        {
+          "path": "apps/companion-android/test/NativeHttpDeadlineTest.java"
         }
       ]
     },
@@ -16013,6 +16022,18 @@
         },
         {
           "path": "apps/companion-android/web/authoringReceiptObserver.ts"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/DeviceSignInHttp.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeDeviceSignIn.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeHttpDeadline.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/debug/java/ai/hypeproof/companion/DeviceSignInFixtureActivity.java"
         }
       ]
     }

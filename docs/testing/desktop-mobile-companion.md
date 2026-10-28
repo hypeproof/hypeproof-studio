@@ -175,3 +175,18 @@ preview/draft. The previously lifted cipher-close callback remains singular.
 Historical Worker/installed/native SDK evidence is retained at its old identity;
 new-cut source/React/asset checks do not imply a new installed observation,
 genuine membership, provider quality or production readiness.
+
+
+## Android personal-account sign-in source cut — #3115
+
+Run `apps/companion-android/test/device-sign-in.test.sh` with Java17 under the
+shared resource lease. Seven protocol groups cover exact browser origin/code,
+slow-down and expiry, cancelled/late credentials, active account/session matching
+and canonical debug-only loopback. Two real owned loopback HTTP controls exercise
+whole-call drip deadline and explicit cancellation; neither invokes an account,
+Service model endpoint, browser or Android runtime. Compare all Java/manifest/
+Gradle inputs with the reviewed native sign-in source before reusing its debug
+Java compilation and processed release-manifest evidence. This cut keeps web
+and extension bytes unchanged from #3114. Historical installed synthetic-login
+observations remain bound to their original source/package; new source checks
+and reused compile evidence do not establish installed or genuine-member acceptance.

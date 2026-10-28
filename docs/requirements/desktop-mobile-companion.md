@@ -135,3 +135,19 @@ bounded after the one send attempt settles and never resends it. A newer saved
 selection is adopted only by an explicit gesture on the same verified pair, and
 its preview must be verified before another authored draft. Selected execution
 permission is separate #3097 work, and phone-native personal sign-in is #3115.
+
+
+## Android native personal-account entry — #3115
+
+The Android launcher uses the existing Service device authorization protocol and
+fixed Service/Lab origins. Browser approval and current active `/me` account and
+session must agree before the separate debug companion entry can open. Access
+tokens stay in native RAM; no refresh, process recovery, token bootstrap, new
+credential authority or production workspace transport is introduced. The owned
+debug sign-in accepts only canonical127.0.0.1 with an explicit adb reverse mapping.
+Local cancel suppresses stale installation and interrupts bounded HTTP; known
+late credentials receive best-effort logout. A pending code or unknown response
+can outlive local cancellation because Service has no pending-device cancel API.
+These source controls do not prove Google login, genuine-member eligibility,
+physical-device/iOS, classroom or production readiness. Selected execution #3097
+remains a separate, default-disabled scope.
