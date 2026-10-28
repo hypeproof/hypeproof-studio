@@ -189,3 +189,23 @@ An uncertain lease/result never falls back or allocates another turn. Android
 displays the distinct exact-request execution receipt and retains the user's
 draft and previous preview. This is development-only source composition; a new
 installed-package acceptance is still required before claiming that workflow.
+
+
+## Selected execution source cut — #3097
+
+The native DEV host composes the existing activated account/pass, current task,
+folder consent, saved selected HTML and paired owner. A separate explicit native
+confirmation permits at most two turns within ten minutes; this cannot grant SDK
+read/write rights absent from the current profile or bypass normal approval.
+Before admission and each SDK tool decision the same live reservation, token and
+current native owner are rechecked; scope drift or uncertain receipt fails closed.
+The SDK carries the exact request/turn/model binding through its existing Send
+path. A digest records authenticated evidence rather than creating authority.
+A completed receipt means a measured successful terminal SDK turn with original
+restore and resulting content hashes, including an unchanged successful file;
+it does not establish requested-edit acceptance or provider quality. Unknown
+runs and retained duplicate records never dispatch again. Local close aborts
+pending work and cannot undo an already dispatched filesystem effect.
+Production registration/activation remains absent. The explicitly injected local
+private client must match repaired Service `c9714c86bc8ccd9471806287a02e962a7100af70`;
+new-cut source checks do not substitute for installed/native SDK acceptance.

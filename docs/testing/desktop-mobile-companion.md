@@ -229,3 +229,21 @@ atomic model admission, installed host/Android flow, original-version restoratio
 and a second version without replay. Source controls alone do not close those
 rows; real provider quality, physical devices, iOS and classroom outcomes remain
 separate from synthetic-account and scripted-upstream observations.
+
+
+## Selected execution cut validation and evidence identity — #3097
+
+The split source retains exactly one previously lifted synchronous HostSession
+close callback and one generic deadline test. Focused controls exercise actual
+TaskWorkspaceStore persistence, provider normal Send admission/restore/terminal
+mapping, selected SDK tool policy and per-tool live reservation checks, owner
+composition, bounded native transport and verified Android receipt rendering.
+Use the exact explicitly supplied private client from repaired Service
+`c9714c86bc8ccd9471806287a02e962a7100af70` for local ABI/types/assets checks.
+The prior Service `c066ca17655cb618730632238a8a08519da7c310` late-model-revocation
+failure stays preserved; its atomic live-reservation repair and independent
+Hono/D1 controls are separate Service evidence, not a new worker deployment.
+Historical installed runs remain bound to their original source/APK/Service
+identities. This cut runs source/React/scripted-SDK/bundle checks only and does
+not make a new installed CLI, model quality, physical/iOS, genuine-member,
+classroom or production claim.

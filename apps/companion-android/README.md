@@ -1,9 +1,10 @@
 # Companion Android debug experiment
 
-The native shell retains the initial #3100 fixture-only debug entry and #3114
-reviewed draft/receipt/version-adoption flow. This #3115 source cut adds a
-separate explicit native personal-account device sign-in entry. Production
-workspace transport remains disabled; selected execution #3097 remains absent.
+The native shell retains the initial #3100 fixture-only debug entry, #3114
+reviewed draft/receipt/version-adoption flow and #3115 separate personal-account
+device sign-in. This #3097 source cut adds verified selected-execution receipts
+for an explicitly prepared native DEV host. Production workspace transport
+remains disabled; pairing and metadata never grant execution.
 Historical APK observations below retain their original source/asset identities.
 A new cut or generated web bundle is not an installed-APK acceptance result.
 

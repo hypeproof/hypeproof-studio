@@ -15835,6 +15835,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-execution-result.smoke.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/execution-result-entry.test.mjs"
         }
       ]
     },
