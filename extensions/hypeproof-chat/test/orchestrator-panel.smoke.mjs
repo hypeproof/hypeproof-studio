@@ -257,11 +257,14 @@ const OLD_SCREENS = {
 // coach run state (span.hps-run-state[role=status][aria-live=polite] with a 20px svg and the label 준비됨). The
 // HPS_A5_DUMP_DIR dumps of main and this branch are byte-identical once that one span is removed; the
 // five EffortControl digests are unchanged.
+// CGP-LEARN-R-001: the six ChatPanel digests were re-taken (TZ=UTC) because the lesson step's work form now carries
+// its block identity (data-hps-material, data-hps-material-step, data-hps-material-version). The HPS_A5_DUMP_DIR dumps of
+// main and this branch are byte-identical once those three attributes are removed; the five EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "e7b78975c5529edfda2a304b4b36d1c33cfd2aefcdd52a0b7ec657c2cf7f0964",
-  "ChatPanel/adult-effort-observed": "aba8d30386fd7fce078b3b6275cfe16c8f910d04199a0410fcbead0850e43924",
-  "ChatPanel/adult-timeline": "11eaad72a5afe42826e27088708fb88264cb30a02f711bdbf965a6321f0a6b03",
-  "ChatPanel/kids": "4f11c643e12dae9759676215e307d603d1173747c3740153929aa7cdfd6eec11",
+  "ChatPanel/adult-plain": "4557289c0d15596b016552425f50545ff1926db224649008072441d2c3316b76",
+  "ChatPanel/adult-effort-observed": "1f51604fca67f5d8e12c124a183c6780469f6e2ff25f9985083b306e94d27185",
+  "ChatPanel/adult-timeline": "56d1206755a7db3fe0d2f0ec9e312bc7b568e859ebad2b897197ae9e8d307954",
+  "ChatPanel/kids": "8e2071491174ebf2d5bc27c685229ae94bacccbd4b82fcf4c91f13a779bbeeb8",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -281,8 +284,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "f79bf47aa8ca173dbc6ffb5a8639276a2a086fa036f2e3c97741852fddce7834",
-  "ChatPanel/classroom-access-unknown": "adcd0f7b3b6500e8dc53aeb8ae5f82778b6e76c1238edf682115c2ac23042ce7",
+  "ChatPanel/classroom-class-funded": "d5d0a74c0641d829c3fd28173cc12572702037f1d2f69f575a8ad75ebef1e608",
+  "ChatPanel/classroom-access-unknown": "15365a452a8410bdae6643cb529e37669511bce1f5f3aa7648396c5001b3a243",
 };
 
 const status = rendererStatus();

@@ -7738,3 +7738,32 @@ Current activity and host labels are preparation context, not verified account
 ownership or execution authority. Source tests and an actual isolated development
 app with a synthetic profile cover this bounded flow; full DMC-1, DMC-T01/DMC-T14,
 real account continuity, pairing and release acceptance remain open.
+
+## Learning block attached by the confirmed lesson (CGP-LEARN-R-001)
+
+REQ-STUDIO-LEARNING-BLOCK-ATTACH / REQ-CGP-LEARN-01 (CGP-LEARN-001) / PI#4 (the instructor shapes the
+environment), PI#6 (a confirmed lesson version is what runs; SX-05, SX-07): a learning block appears for a
+learner only when the confirmed lesson version attaches it to the current step. Per DEC-19 the block lives in
+the step's existing `ui` field (no `hps-session-design` bump): one of the seven values the Service validates
+(`canvas_editor`, `canvas_preview`, `criterion_form`, `evidence_note`, `coach_request`, `decision_form`,
+`metric_board`). Per DEC-20 a block renders as an in-webview component. A step without `ui`, or with any
+other value (case differs, unknown word, not a string), has no block.
+
+The block is drawn in the coach rail's step panel (`LessonStepPanel`), outside the message stream, for the
+current step only; choosing another step hides it and shows that step's own block, if any. The element that
+draws it carries the block identity: `data-hps-material` (the kind), `data-hps-material-step` and
+`data-hps-material-version`. `criterion_form` and `decision_form` are drawn as their work forms; a kind this
+Studio cannot draw yet keeps its identity on the existing notice ("이 Studio에서 아직 열 수 없습니다") and is
+never faked. A coach reply cannot attach, insert or draw a block in v1: a reply is prose and code rendered as
+text (raw HTML, a fenced snippet, an SVG or a JSON "block" all stay text), so a request such as "그림으로
+보여줘" in a lesson without materials gets text only. Every seat that draws the lesson rail (classroom lesson
+seats, personal seats with a lesson, instructor rehearsal) follows the same rule; a seat without a lesson has
+no block. DEC-18 (AI-made blocks allowed for every cohort) is applied at authoring time: an AI-drafted `ui`
+reaches learners only once it is in a confirmed version. Coach-selected blocks at answer time need a Service
+turn contract that does not exist and are not built.
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-attach.test.tsx` (the mounted ChatPanel on the
+minimal DOM: the rule with positive and negative controls, the block for the current step only while the
+mission header's real step buttons switch steps, a lesson without materials and one with refused values
+showing none, and hostile coach replies to "그림으로 보여줘" rendering no block, form, frame or SVG in the
+stream; seats: classroom with and without materials, personal without a lesson).
