@@ -7829,6 +7829,7 @@ stylesheet in headless Chromium, classroom and personal seats, dark and light, 8
 description, visible title/help/state at 14px+ and 4.5:1, each field's description, and 9 control changes per case
 each announced in the same live region within 500 ms). Not covered: a real VoiceOver run (REQ-CGP-LEARN-03 (c)) is a
 manual check.
+
 ## Learning block card in the coach rail (CGP-LEARN-D-001)
 
 REQ-STUDIO-LEARNING-BLOCK-CARD / DES-CGP-LEARN-01 (traces to REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-001) / PI#4
@@ -7855,3 +7856,49 @@ thumbnail, title and 열어 보기; opens in place with no dialog; another step'
 header's real step button; no card without a block) and `extensions/hypeproof-chat/test/learning-block-card-computed.smoke.mjs` (headless
 Chromium on the cascade: personal and classroom, dark and light, 280/480/800/1420px; closed height, thumbnail, target and
 text sizes, tokens, in-flow expansion that is never covered and never wider than the rail; six injected overrides caught).
+
+## Activity memory files (CGP-KNOW-R-030)
+
+REQ-STUDIO-ACTIVITY-MEMORY-FILES / REQ-KNOW-48 (CGP-KNOW-048) / PI#2 (the learner can see what the AI
+keeps), PI#5 (the learner owns what is kept about them); DEC-01 and DEC-02 (ruled 2026-10-28): personal
+memory is stored as readable files inside the activity folder, in `.hypeproof/memory/`, and nowhere
+else. There is no Service field, no setting and no instructor or learner switch: the store exists for
+every learner seat that has a task workspace (personal, trial; minor cohorts included).
+
+- **One item, one file.** Studio writes an item as a new `.md` file with an exclusive create
+  (`O_EXCL`, no link followed); an existing name is an error, never an overwrite. The store has no
+  edit path: its only writes are that append and the learner's explicit delete. Items are at most
+  2,000 characters; control, bidi, zero-width and line/paragraph separator characters are removed.
+- **Never outside the activity.** The folder is walked one component at a time from the real
+  activity root. If `.hypeproof` or `memory` is a link or not a folder, nothing is read, written or
+  deleted, and the panel says so. A file is read only when its name is plain (letters, digits,
+  Hangul, space, `.`, `_`, `-`; no leading dot; `.md` or `.txt`; NFC), it is a regular file with one
+  link, and it opens without following a link. A FIFO, socket or device is never opened (an lstat skips it and the open is non-blocking), so a named pipe in the folder cannot stall the extension host. Anything else in the folder is counted as "목록에 없는
+  파일 N개" and left alone. A file over 16 KB or not UTF-8 text is listed (it can be opened and
+  deleted) but its text is not shown and never handed to a request. At most 200 files are listed.
+- **Read, open and delete in Studio.** 작업 자료 → 내 작품 shows "AI 기억 파일 · N개" under the
+  activity trash. Opening it names the folder (`.hypeproof/memory/`), says that memory outside the
+  activity is never read, and lists each file newest first with its name, time and full text (as
+  text, line breaks kept). 열기 opens that exact file in a read-only editor tab. 지우기… shows the
+  host's native modal confirm naming the file, with one 취소; 취소, Escape or a closed dialog changes nothing. A confirmed delete
+  removes exactly the file the learner confirmed (its identity is pinned before the confirm; a file replaced under the same name meanwhile is refused with "기억 파일이 바뀌었어요"), permanently (not to the activity trash, so a deleted memory does not
+  linger in the activity), and a status line says "기억 파일 “…”을 지웠어요." A press with a stale task
+  or activity scope, an unknown action or a name outside the list is refused before any confirm; a
+  task or activity switch during the confirm cancels the delete. Instructors and seats without a
+  task workspace get no panel.
+- **Future context.** `ActivityMemory.contextItems()` is the only reader a request may use. It reads
+  the folder from disk on every call with no cache, so a deleted file is absent from the next call.
+  No request carries memory yet: injecting it waits for REQ-KNOW-44 (the "기억 사용 N" count) and the
+  REQ-KNOW-49 first-use notice, so memory is never used without the learner being told. The state
+  line of REQ-KNOW-40 builds on this store.
+
+Evidence: `extensions/hypeproof-chat/test/activity-memory.smoke.mjs` (the real store on real files:
+append is a new file and never an overwrite, delete removes the item from the next context read,
+linked folders, linked and hard-linked files and climbing names are refused and the outside file is
+untouched, hostile text and names; then the real provider routing into the host module: always-on
+view, seat refusals, read-only open of the exact file, native confirm with one Cancel, stale scope and
+mid-confirm task switch) and `extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs` (the
+built CSS and real panel markup in headless Chromium, personal and classroom shells, dark and light,
+800 and 1420 px, normal and forced colours: 44px targets, 14px text at 4.5:1, focus ring, no
+horizontal scroll, file text rendered as text, one request per press, focus kept after a delete;
+fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).

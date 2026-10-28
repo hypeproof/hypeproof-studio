@@ -6546,6 +6546,28 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.postActivityTrash({ requestId, result });
     if (!result.error && !result.cancelled) await this.postArtifactProvenance(true);
   }
+  // REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030) — the activity's memory files in 내 작품. Always on
+  // (DEC-01, DEC-02); the store and its native confirm live in activityMemoryHost.ts.
+  private activityMemoryPanel?: import("./activityMemoryHost").ActivityMemoryPanelApi;
+  setActivityMemoryPanel(api: import("./activityMemoryHost").ActivityMemoryPanelApi): void { this.activityMemoryPanel = api; }
+  /** The learner's activity folder on a task workspace (personal, trial); none for instructors or mid-switch. */
+  get activityMemoryBinding(): { root: string; scope: string } | undefined {
+    return this.currentTaskStore() ? this.activityTrashBinding : undefined;
+  }
+  private async postActivityMemory(extra?: { requestId: string; result: import("./activityMemoryView").ActivityMemoryResult }): Promise<void> {
+    const view = this.activityMemoryPanel && this.activityMemoryBinding ? await this.activityMemoryPanel.view() : null;
+    await this.post({ type: "activityMemoryState", view, ...extra });
+  }
+  private async runActivityMemoryAction(msg: Extract<WebviewMessage, { type: "activityMemoryAction" }>): Promise<void> {
+    const requestId = typeof msg.requestId === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) ? msg.requestId : null;
+    if (!requestId) return;
+    const action = msg.action === "open" || msg.action === "delete" ? msg.action : null;
+    const panel = this.activityMemoryPanel;
+    const result: import("./activityMemoryView").ActivityMemoryResult = !action || !panel || !this.activityMemoryBinding || typeof msg.name !== "string" || msg.name.length > 200 || typeof msg.scope !== "string"
+      ? { action: action ?? "open", error: "작업 상태가 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요." }
+      : await panel.act(action, msg.name, msg.scope);
+    await this.postActivityMemory({ requestId, result });
+  }
   // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
   // window starts with none, and the transcript stores nothing new for them.
   private pageCardRegistry: PageCardRegistry | undefined;
@@ -7325,6 +7347,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;
       case "activityTrashRequest": await this.postActivityTrash(); return;
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
+      case "activityMemoryRequest": await this.postActivityMemory(); return;
+      case "activityMemoryAction": await this.runActivityMemoryAction(msg); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
