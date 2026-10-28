@@ -7755,3 +7755,14 @@ The existing single handoff slot remains
 occupied; this slice does not enable repeated mobile revisions. Installed
 normal-engine execution, result preservation and
 two-learner/classroom evidence remain required for DMC-5.
+
+### DMC explicit native receiving (#3135)
+
+The DEV companion owner may receive explicit phone requests during one manually
+started, bounded desktop App lifetime. Native Stop remains a separate command
+while the connection menu is busy. Receiving does not authorize file/model work;
+existing selected-file approval, normal Send admission and Service validation
+remain required. Monotonic expiry, authority invalidation and uncertain outcomes
+stop admission without automatic replay. Local stopping, connection erase and
+confirmed signed remote revocation remain distinct. See DMC-04/05/06/07/12/14 and
+the #3135 controls in `docs/testing/desktop-mobile-companion.md`.

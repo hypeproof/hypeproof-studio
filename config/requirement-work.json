@@ -4242,7 +4242,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Independently review the #3097 selected-HTML execution source cut and bind any installed native Studio/SDK/Android acceptance to its exact new package and repaired Service identity. Production activation, genuine-member, physical/iOS, classroom and broad DMC acceptance remain open; retained failures are not erased.",
+      "next_action": "Independently review the #3097 selected-HTML execution source cut and bind any installed native Studio/SDK/Android acceptance to its exact new package and repaired Service identity. Production activation, genuine-member, physical/iOS, classroom and broad DMC acceptance remain open; retained failures are not erased. Scoped follow-up #3135 adds explicit bounded native receiving; source and installed Start/Stop/unknown/revoke acceptance remain required, without changing the parent completion state.",
       "design_delta": "Desktop owns selected originals and execution. Mobile owns scoped cache/drafts/outbox. Service authenticates and relays. A classroom host can serve isolated learners; adult automation uses explicit selected resources.",
       "positive_control": "An approved phone requests a bounded quiz revision, the computer executes once within scope, and the phone uses the exact result; reconnect preserves work and version.",
       "negative_control": "Wrong actor/device/workspace, stale version, revoked access, offline host and uncertain effect never cause unauthorized or duplicate execution or silent cloud fallback.",
@@ -4294,7 +4294,8 @@
         "extensions/hypeproof-chat/src/companionExecutionPolicy.ts",
         "extensions/hypeproof-chat/src/companionExecutionResult.ts",
         "extensions/hypeproof-chat/src/companionExecutionTransport.ts",
-        "extensions/hypeproof-chat/src/companionNormalTurn.ts"
+        "extensions/hypeproof-chat/src/companionNormalTurn.ts",
+        "extensions/hypeproof-chat/src/companionReceivingLifetime.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
@@ -4366,7 +4367,9 @@
         "extensions/hypeproof-chat/test/companion-normal-turn.test.mjs",
         "apps/companion-android/test/execution-result-entry.test.mjs",
         "scripts/companion-ci.mjs",
-        "scripts/test/companion-ci-input.test.mjs"
+        "scripts/test/companion-ci-input.test.mjs",
+        "extensions/hypeproof-chat/src/companionReceivingLifetime.ts",
+        "extensions/hypeproof-chat/test/companion-receiving-lifetime.smoke.mjs"
       ]
     }
   ]

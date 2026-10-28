@@ -27,9 +27,11 @@ function host() {
 }
 function fixture(owners = [host()], mode = 2) {
   const actions = [], inputs = [], warnings = [], menus = [], inputOptions = [], messages = [], clipboard = [], progress = [];
+  const handlers=new Map(),statuses=[];
   let handler, invalidation, created = 0, unregistered = false;
   class Disposable { constructor(fn) { this.fn = fn; } dispose() { this.fn?.(); this.fn = undefined; } }
   const ui = {
+    createStatusBarItem(){const item={text:'',command:'',show(){this.visible=true;},hide(){this.visible=false;},dispose(){this.visible=false;}};statuses.push(item);return item;},
     async showQuickPick(items, options) { menus.push({ items, options }); const action = actions.shift(); if (action === undefined) return undefined; const item = items.find(i => i.action === action); assert.ok(item, 'requested action must be available: ' + action); return item; },
     async showInputBox(options) { inputOptions.push(options); return inputs.shift(); },
     async showWarningMessage(message, options, ...buttons) { messages.push({ type: 'warning', message, buttons }); return warnings.shift(); },
@@ -39,14 +41,14 @@ function fixture(owners = [host()], mode = 2) {
   };
   const vscode = { Disposable, ExtensionMode: { Development: 2, Production: 1 }, ProgressLocation: { Notification: 15 }, window: ui,
     env: { clipboard: { async writeText(text) { clipboard.push(text); } } },
-    commands: { registerCommand(id, fn) { assert.equal(id, 'hypeproofChat.devCompanionHost'); handler = fn; return new Disposable(() => { unregistered = true; }); } },
+    commands: { registerCommand(id, fn) { assert.ok(['hypeproofChat.devCompanionHost','hypeproofChat.devCompanionStopReceiving','hypeproofChat.devCompanionRevoke'].includes(id));handlers.set(id,fn);if(id==='hypeproofChat.devCompanionHost')handler=fn; return new Disposable(() => { unregistered = true; }); } },
   };
   const module = { exports: {} };
   vm.runInNewContext(compiled.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), AbortController });
   const context = { extensionMode: mode, subscriptions: [] };
   const ports = { createOwner: async signal => { const owner = owners[created++]; assert.ok(owner); return owner.api; }, onDidInvalidate(fn) { invalidation = fn; return new Disposable(() => { invalidation = undefined; }); } };
   const registration = module.exports.registerDevCompanionHostCommands(context, ports);
-  return { actions, inputs, warnings, menus, inputOptions, messages, clipboard, progress, ports, context, registration,
+  return { actions, inputs, warnings, menus, inputOptions, messages, clipboard, progress, ports, context, registration,handlers,statuses,
     run: action => { actions.push(action); return handler?.(); }, invalidate: () => invalidation?.(), get created() { return created; }, get registered() { return !!handler; }, get unregistered() { return unregistered; } };
 }
 
@@ -123,3 +125,10 @@ test('explicit selected-work announcement retries the uncertain ID and never cla
  assert.ok(f.messages.at(-1).message.includes('서버가 접수했어요'));assert.ok(f.messages.at(-1).message.includes('휴대폰 수신과 파일 전달 승인은 아직 확인하지 않았어요'));
  assert.equal(h.calls.filter(c=>c[0]==='receive').length,0);f.registration.dispose();
 });
+
+test('persistent Stop and Revoke commands remain reachable while the menu command is busy',async()=>{for(const action of ['stop','revoke']){const h=host(),f=fixture([h]),entered=deferred(),gate=deferred();let stops=0;h.api.stopReceiving=()=>{stops++;};h.api.startReceiving=()=>true;
+ await f.run('prepare');await f.run('inspect');f.inputs.push('123456');f.warnings.push('두 화면의 코드가 같아요');await f.run('compare');await f.run('connect');
+ h.api.receiveAndHandle=async()=>{entered.resolve();return gate.promise;};const work=f.run('receive');await entered.promise;
+ assert.ok(f.statuses.some(s=>s.command==='hypeproofChat.devCompanionStopReceiving'&&s.visible));assert.ok(f.statuses.some(s=>s.command==='hypeproofChat.devCompanionRevoke'&&s.visible));
+ await f.handlers.get(action==='stop'?'hypeproofChat.devCompanionStopReceiving':'hypeproofChat.devCompanionRevoke')();assert.equal(action==='stop'?stops:h.calls.filter(c=>c[0]==='revoke').length,1);
+ gate.resolve({state:'closed',processed:0,acknowledged:0,expired:0,pending:0});await work;f.registration.dispose();assert.ok(f.statuses.every(s=>!s.visible));}});

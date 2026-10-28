@@ -18,6 +18,8 @@ export interface CompanionHostSessionPorts {
   bridge: { handleAndReply(message: VerifiedCompanionMessage, reply: CompanionEncryptedReply): Promise<unknown> };
   /** Synchronous terminal notification: stop pending native owner work as the cipher closes. */
   onClosed?(): void;
+  /** A sanitized semantic fence; retain later incoming bytes for explicit reconciliation. */
+  shouldContinue?(): boolean;
 }
 export interface CompanionHostTurn {
   state: 'idle' | 'processed' | 'waiting' | 'closed';
@@ -25,7 +27,7 @@ export interface CompanionHostTurn {
   acknowledged: number;
   expired: number;
   pending: number;
-  reason?: 'transport_unavailable' | 'session_closed';
+  reason?: 'transport_unavailable' | 'session_closed' | 'semantic_check_required';
 }
 type Entry = { message_id: string; message_hash: string; text: string; replied: boolean };
 type Progress = { processed: number; acknowledged: number; expired: number };
@@ -106,6 +108,7 @@ export class CompanionHostSession {
   private async turn(progress: Progress): Promise<CompanionHostTurn> {
     try {
       await this.fresh();
+      if(this.ports.shouldContinue?.()===false&&!this.pending[0]?.replied)return this.result('waiting',progress,'semantic_check_required');
       if (this.pending.length === 0) {
         const batch = await this.ports.client.receive();
         this.check();
@@ -114,6 +117,7 @@ export class CompanionHostSession {
       while (this.pending.length > 0) {
         await this.fresh();
         const entry = this.pending[0];
+        if(this.ports.shouldContinue?.()===false&&!entry.replied)return this.result('waiting',progress,'semantic_check_required');
         if (!entry.replied) {
           const message: VerifiedCompanionMessage = { sender: 'device', invitationId: this.binding.id,
             invitationDigest: this.binding.invitation_digest, claimDigest: this.binding.claim_digest,
@@ -146,6 +150,7 @@ export class CompanionHostSession {
         this.check();
         this.finished.set(entry.message_id, entry.message_hash);
         this.pending.shift(); progress.processed++;
+        if(this.ports.shouldContinue?.()===false)return this.result('waiting',progress,'semantic_check_required');
       }
       return this.result(progress.processed ? 'processed' : 'idle', progress);
     } catch {

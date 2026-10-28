@@ -1,4 +1,5 @@
-/** Explicit native DEV lifecycle. No registration, listener, browser execution endpoint or poll. */
+/** Explicit native DEV lifecycle. No automatic registration, listener, browser execution endpoint or receive start. */
+import {CompanionReceivingLifetime, type CompanionReceivingView} from './companionReceivingLifetime.ts';
 import { createDevCompanionAuthoringHost } from './companionAuthoringHostNative.ts';
 import * as vscode from 'vscode';
 import { createCompanionExecutionTransport, type CompanionExecutionTransportRequest } from './companionExecutionTransport.ts';
@@ -34,6 +35,7 @@ export interface CompanionHostPairingClient {
   revoke(): Promise<unknown>;
 }
 export interface CompanionDevHostOwnerPorts extends Omit<CompanionNativeBridgePorts, 'paired'> {
+  receivingBusy?(): boolean;
   authoring?: Pick<CompanionAuthoringHostPorts,'store'> & Required<Pick<CompanionAuthoringHostPorts,'reviewDraft'>>;
   execution?: { submit(input: PreparedCompanionNormalTurn): Promise<CompanionNormalTurnResult> };
   accounts: AccountSession;
@@ -58,6 +60,7 @@ export interface CompanionDevHostView {
   pairingId?: string; comparisonCode?: string; expiresAt?: number;
   reason?: 'local_close' | 'scope_changed' | 'cancelled' | 'revocation_unconfirmed';
   executionAuthorized: false;
+  receiving?: Readonly<CompanionReceivingView>;
   scopedExecution?: ReturnType<CompanionExecutionHost['view']>;
   publication?: Readonly<CompanionSelectionPublication>;
 }
@@ -87,10 +90,31 @@ export class CompanionDevHostOwner {
   private signal: AbortSignal | undefined;
   private publication: {text:string;messageId:string;request:Readonly<CompanionHostRequest>;revision:number;state:CompanionSelectionPublication['state']} | undefined;
   private publicationRevision = 0;
+  private readonly receiving: CompanionReceivingLifetime;
+  private readonly receivingListeners = new Set<() => void>();
+  private semanticNeedsCheck = false;
+  private receivingScope?: string;
+  private revocation?: {pair: CompanionHostPairingClient; id: string; statusAdmitted: boolean; revokeAdmitted: boolean; controller: AbortController; promise: Promise<Readonly<CompanionDevHostView>>};
 
-  constructor(ports: CompanionDevHostOwnerPorts) { this.ports = ports; this.identity = Object.freeze({ ...ports.identity }); }
-  view(): Readonly<CompanionDevHostView> { return Object.freeze({ ...this.state, ...(this.execution?{scopedExecution:this.execution.view()}:{}), ...(this.publication?{publication:Object.freeze({state:this.publication.state,requestId:this.publication.request.requestId,messageId:this.publication.messageId,revision:this.publication.revision})}:{}) }); }
-  private check(): void { if (this.state.state === 'closed' || this.state.state === 'revoked') throw failure('closed'); }
+  constructor(ports: CompanionDevHostOwnerPorts) {
+    this.ports = ports; this.identity = Object.freeze({ ...ports.identity });
+    this.receiving=new CompanionReceivingLifetime({remainingMs:()=>Math.min(this.state.expiresAt??0,this.execution?.view().expiresAt??Infinity)*1000-Date.now(),
+      gate:()=>this.state.state!=='connected'||this.revocation||this.receivingScope!==this.localReceivingScope()?'closed':this.semanticNeedsCheck||this.execution?.view().state==='unknown'||this.execution?.view().remaining===0?'needs-check':this.active||this.ports.receivingBusy?.()?'busy':'ready',
+      receive:signal=>this.receiveTurn(signal),changed:view=>{if(view.state==='closed'&&!this.revocation&&this.state.state==='connected')this.close('scope_changed');for(const listener of this.receivingListeners)try{listener();}catch{}}});
+  }
+  onReceivingChanged(listener:()=>void): {dispose():void} {this.receivingListeners.add(listener);return{dispose:()=>this.receivingListeners.delete(listener)};}
+  private localReceivingScope(): string {
+    const task=this.ports.taskView();return JSON.stringify([this.ports.epoch(),task?.scope,task?.activeTaskId,!!task?.error]);
+  }
+  startReceiving(): boolean {
+    if(this.state.state!=='connected'||this.revocation||!this.ports.taskView()?.activeTaskId||this.ports.taskView()?.error)return false;
+    if(!['listening','processing','awaiting-approval'].includes(this.receiving.view().state))this.receivingScope=this.localReceivingScope();
+    return this.receiving.start();
+  }
+  stopReceiving(): void {this.receiving.stop();if(this.active?.name==='receive')this.close('cancelled');}
+  approval(waiting:boolean): void {this.receiving.approval(waiting);}
+  view(): Readonly<CompanionDevHostView> { return Object.freeze({ ...this.state, receiving:this.receiving.view(), ...(this.execution?{scopedExecution:this.execution.view()}:{}), ...(this.publication?{publication:Object.freeze({state:this.publication.state,requestId:this.publication.request.requestId,messageId:this.publication.messageId,revision:this.publication.revision})}:{}) }); }
+  private check(allowRevoking=false): void { if (this.state.state === 'closed' || this.state.state === 'revoked' || (this.revocation&&!allowRevoking)) throw failure('closed'); }
   private erase(pairing = this.pairing): void {
     if (pairing) { pairing.keys = null; pairing.qr = null; pairing.claim = null; pairing.frozenClaim = null; }
   }
@@ -101,14 +125,14 @@ export class CompanionDevHostOwner {
     this.erase(); this.pairing = undefined; this.relay = undefined; this.session = undefined; this.bridge = undefined; this.binding = undefined;
     this.authenticatedRelay = async () => { throw failure('closed'); };
   }
-  private async current(): Promise<Binding> {
-    this.check();
+  private async current(allowRevoking=false): Promise<Binding> {
+    this.check(allowRevoking);
     const configured = this.ports.configured();
     if (this.ports.context.extensionMode !== ExtensionMode.Development || !this.ports.accounts.matches(configured.service, configured.site)
       || !accountPreviewEnabled(true, configured.service, configured.site)) { this.close('scope_changed'); throw failure('scope_changed'); }
-    const stored = await this.ports.accounts.sessionIdentity(); this.check();
-    const token = await this.ports.accounts.accessToken(); this.check();
-    const prepared = await readPreparedCompanionWorkspace(this.ports.context, this.ports.connections); this.check();
+    const stored = await this.ports.accounts.sessionIdentity(); this.check(allowRevoking);
+    const token = await this.ports.accounts.accessToken(); this.check(allowRevoking);
+    const prepared = await readPreparedCompanionWorkspace(this.ports.context, this.ports.connections); this.check(allowRevoking);
     const active = this.ports.connections.current;
     if (this.ports.context.extensionMode !== ExtensionMode.Development || !stored || !token
       || stored.sessionId !== this.identity.sessionId || stored.service !== configured.service
@@ -125,12 +149,12 @@ export class CompanionDevHostOwner {
     if (this.active) return name === 'receive' && this.active.name === name ? this.active.promise as Promise<T> : Promise.reject(failure('busy'));
     let interrupt!: () => void; const controller = new AbortController();
     const stopped = new Promise<never>((_, reject) => { interrupt = () => reject(failure('closed')); });
-    const abort = () => this.close('cancelled');
+    const abort = () => {if(this.revocation){controller.abort();interrupt();}else this.close('cancelled');};
     const underlying = (async () => {
       try { await this.current(); this.check(); const value = await work(); if (this.state.state !== 'revoked') { await this.current(); this.check(); } return value; }
       finally { if (this.state.state === 'closed' || this.state.state === 'revoked') this.erase(); }
     })();
-    const promise = Promise.race([underlying, stopped]).finally(() => { signal?.removeEventListener('abort', abort); this.signal = undefined; this.active = undefined; });
+    const promise = Promise.race([underlying, stopped]).finally(() => { signal?.removeEventListener('abort', abort); if(this.active?.promise===promise){this.signal = undefined; this.active = undefined;} });
     this.signal = controller.signal; this.active = { name, promise, abort: controller, interrupt };
     if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
     return promise;
@@ -156,15 +180,23 @@ export class CompanionDevHostOwner {
       this.binding = await this.current();
       const transport = createCompanionAuthenticatedTransport({ context: this.ports.context, accounts: this.ports.accounts,
         configured: this.ports.configured, identity: this.identity, role: 'host',
-        dispatch: (url, init) => this.ports.budget.run(async () => { await this.current(); const value = await (this.ports.fetch ?? fetch)(url, init);
-          try { await this.current(); return value; } catch (error) { void value.body?.cancel().catch(() => {}); throw error; } }, init?.signal ?? undefined) });
+        dispatch: (url, init) => this.ports.budget.run(async () => { const revoking=!!this.revocation&&['status','revoke'].some(action=>new URL(String(url)).pathname==='/v1/companion/invitations/'+this.revocation!.id+'/'+action); await this.current(revoking); const value = await (this.ports.fetch ?? fetch)(url, init);
+          try { await this.current(revoking); return value; } catch (error) { void value.body?.cancel().catch(() => {}); throw error; } }, init?.signal ?? undefined) });
       await transport.resolveIdentity(this.signal); await this.current();
       this.authenticatedRelay = (role, id, action, raw) => transport.relay(role, id, action, raw, this.signal);
       const pairing = this.ports.clients.pairing({ role: 'host', sessionId: this.identity.sessionId,
-        transport: (role, id, action, payload) => transport.pairing(role, id, action, payload, this.signal) });
+        transport: (role, id, action, payload) => {
+          const revocation=this.revocation;
+          if(revocation){
+            if(role!=='host'||id!==revocation.id||(action!=='status'&&action!=='revoke')||action==='status'&&revocation.statusAdmitted||action==='revoke'&&revocation.revokeAdmitted)return Promise.reject(failure('closed'));
+            if(action==='status')revocation.statusAdmitted=true;else revocation.revokeAdmitted=true;
+            return transport.pairing(role,id,action,payload,revocation.controller.signal);
+          }
+          return transport.pairing(role,id,action,payload,this.signal);
+        } });
       this.pairing = pairing; ownedPair = pairing;
-      this.bridge = createDevCompanionHostBridge({ ...this.ports, paired: async () => { const row = await this.refreshPaired(); return row ? { ...row, execution_authorized: false } : null; } });
-      if(this.ports.authoring) this.authoring=createDevCompanionAuthoringHost({...this.ports,...this.ports.authoring,
+      this.bridge = createDevCompanionHostBridge({ ...this.ports, approval:waiting=>this.approval(waiting), paired: async () => { const row = await this.refreshPaired(); return row ? { ...row, execution_authorized: false } : null; } });
+      if(this.ports.authoring) this.authoring=createDevCompanionAuthoringHost({...this.ports,...this.ports.authoring,approval:waiting=>this.approval(waiting),
         paired:async()=>{const row=await this.refreshPaired();return row?{...row,execution_authorized:false}:null;},
         lifecycle:{capture:()=>this.ports.epoch(),isCurrent:revision=>!['closed','revoked'].includes(this.state.state)&&this.ports.epoch()===revision},
         imported:async()=>{throw failure('draft_review_required');}});
@@ -200,17 +232,17 @@ export class CompanionDevHostOwner {
       if (!this.relay) this.relay = this.ports.clients.relay({ pairing: this.pairing,
         transport: (role, id, action, raw) => this.authenticatedRelay(role, id, action, raw) });
       await this.relay.publishOffer(); await this.current(); await this.relay.connect(); await this.current();
-      this.session = new CompanionHostSession({ client: this.relay, currentPair: () => this.refreshPaired(), onClosed:()=>this.close('scope_changed'), bridge: {handleAndReply:async(message,reply)=>{
+      this.session = new CompanionHostSession({ shouldContinue:()=>!this.semanticNeedsCheck&&this.execution?.view().remaining!==0, client: this.relay, currentPair: () => this.refreshPaired(), onClosed:()=>{if(!this.revocation)this.close('scope_changed');}, bridge: {handleAndReply:async(message,reply)=>{
         let schema: unknown;try{schema=JSON.parse(message.text)?.schema;}catch{this.close();throw failure('invalid_message');}
-        if(schema==='hps-companion-host-request/1')return this.bridge!.handleAndReply(message,reply);
+        if(schema==='hps-companion-host-request/1'){const outcome=await this.bridge!.handleAndReply(message,reply);this.observeOutcome(outcome);return outcome;}
         if(schema!=='hps-companion-authoring-intent/1'||!this.authoring){this.close();throw failure('unsupported_message');}
         if(this.execution){
-          const result=await this.execution.handle(message);await this.current();this.check();
+          const result=await this.execution.handle(message);this.observeOutcome(result);await this.current();this.check();
           const text=JSON.stringify(result),id='execution_result_'+companionDigest(text);
           await reply.prepare(text,id);await this.current();this.check();await reply.send(id);await this.current();this.check();
           return result;
         }
-        const outcome=await this.authoring.handle(message);await this.current();this.check();
+        const outcome=await this.authoring.handle(message);this.observeOutcome(outcome);await this.current();this.check();
         const result:CompanionAuthoringResult={schema:'hps-companion-authoring-result/1',requestId:message.messageId,
           requestHash:companionDigest(message.text),outcome};
         const text=JSON.stringify(result),id='authoring_result_'+companionDigest(text);
@@ -303,24 +335,42 @@ export class CompanionDevHostOwner {
       return Object.freeze({state:publication.state,requestId,messageId:publication.messageId,revision:publication.revision});
     });
   }
+  private observeOutcome(value: {state:string;code?:string}): void {
+    if(['outcome_unknown','wait_for_host','running','accepted'].includes(value.state)||['journal_unavailable','authority_changed','runtime_authority_required','execution_lease_unavailable','current_authority_required'].includes(value.code??''))this.semanticNeedsCheck=true;
+  }
   receiveAndHandle(signal?: AbortSignal): Promise<CompanionHostTurn> {
+    if(['listening','processing','awaiting-approval'].includes(this.receiving.view().state))return Promise.reject(failure('receiving_active'));
+    return this.receiveTurn(signal);
+  }
+  private receiveTurn(signal?: AbortSignal): Promise<CompanionHostTurn & {needsCheck?:boolean}> {
     return this.run('receive', signal, async () => {
       if (this.state.state !== 'connected') throw failure('cipher_required');
-      return this.session!.receiveAndHandle();
+      const turn=await this.session!.receiveAndHandle();
+      return {...turn,...(this.semanticNeedsCheck?{needsCheck:true}:{})};
     });
   }
+  /** Fence effects immediately, retain only this pair's signer for one bounded revoke, then erase. */
   revoke(signal?: AbortSignal): Promise<Readonly<CompanionDevHostView>> {
-    return this.run('revoke', signal, async () => {
-      if (!this.pairing) throw failure('invitation_required');
-      try { await this.pairing.revoke(); await this.current(); this.row(); }
-      catch (error) { this.close('revocation_unconfirmed'); throw error; }
-      this.state = { state: 'revoked', executionAuthorized: false }; this.release(); return this.view();
-    });
+    if(this.revocation)return this.revocation.promise;
+    try{this.check();if(!this.pairing)throw failure('invitation_required');}catch(error){return Promise.reject(error);}
+    const pair=this.pairing!,id=this.row().id,controller=new AbortController();
+    const revocation={pair,id,statusAdmitted:false,revokeAdmitted:false,controller,promise:undefined as unknown as Promise<Readonly<CompanionDevHostView>>};this.revocation=revocation;
+    this.receiving.close();this.execution?.close();this.authoring?.close();this.session?.close();this.active?.abort.abort();this.active?.interrupt();
+    let timer: ReturnType<typeof setTimeout>;const abort=()=>controller.abort();
+    const expired=new Promise<never>((_,reject)=>{const stop=()=>reject(failure('revocation_unconfirmed'));controller.signal.addEventListener('abort',stop,{once:true});timer=setTimeout(()=>controller.abort(),12000);});
+    signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
+    const operation=(async()=>{await this.current(true);if(controller.signal.aborted)throw failure('cancelled');await pair.revoke();await this.current(true);
+      if(controller.signal.aborted||this.row().status!=='revoked')throw failure('revocation_unconfirmed');return true;})();
+    revocation.promise=Promise.race([operation,expired]).then(()=>{this.state={state:'revoked',executionAuthorized:false};return this.view();},()=>{
+      this.state={state:'closed',reason:'revocation_unconfirmed',executionAuthorized:false};return this.view();
+    }).finally(()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);controller.abort();this.release();});
+    return revocation.promise;
   }
   /** Local disposal is not a signed remote revoke. Caller owns budget/stores and their disposal. */
   close(reason: CompanionDevHostView['reason'] = 'local_close'): void {
     if (this.state.state === 'closed' || this.state.state === 'revoked') return;
     this.state = { state: 'closed', reason, executionAuthorized: false };
+    this.receiving.close();this.revocation?.controller.abort();
     this.release(); this.active?.abort.abort(); this.active?.interrupt();
   }
 }

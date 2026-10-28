@@ -24,7 +24,7 @@ function setup(options = {}) {
     await reply.prepare('verified-result', `result-${message.messageId}`); await reply.send(`result-${message.messageId}`);
     return { state: 'completed', code: 'preview_read' };
   } };
-  const session = new CompanionHostSession({ client, bridge, currentPair: async () => current, onClosed:options.onClosed }, options);
+  const session = new CompanionHostSession({ client, bridge, currentPair: async () => current, onClosed:options.onClosed,shouldContinue:options.shouldContinue }, options);
   return { session, calls, messages, set pair(value) { current = value; }, get pair() { return current; },
     set batch(value) { batch = value; }, set ackFailure(value) { ackFailure = value; },
     set handler(value) { handler = value; }, set receive(value) { receive = value; }, set expired(value) { expired = value; } };
@@ -116,4 +116,18 @@ test('deadline synchronously notifies owner before delayed work can perform effe
   assert.equal((await pending).state,'closed');assert.equal(controller.signal.aborted,true);assert.equal(closes,1);
   release.resolve();await new Promise(r=>setTimeout(r,0));assert.equal(effects,0);assert.equal(f.calls.some(c=>c.startsWith('ack:')),false);
   f.session.close();assert.equal(closes,1,'terminal notification cannot fire twice');
+});
+
+test('semantic fence ACKs only the decided entry and retains exact remaining batch bytes without receiving again',async()=>{
+ let proceed=true;const f=setup({shouldContinue:()=>proceed});let held;
+ f.handler=async message=>{if(message.messageId==='request-1')proceed=false;else held=message.text;return{state:'outcome_unknown'};};
+ const first=await f.session.receiveAndHandle();assert.equal(first.state,'waiting');assert.equal(first.reason,'semantic_check_required');assert.equal(first.processed,1);assert.equal(first.acknowledged,1);assert.equal(first.pending,1);assert.equal(f.calls.includes('handle:request-2'),false);
+ const stopped=await f.session.receiveAndHandle();assert.equal(stopped.processed,0);assert.equal(stopped.pending,1);assert.equal(f.calls.filter(c=>c==='receive').length,1);
+ proceed=true;await f.session.receiveAndHandle();assert.equal(held,f.messages[1].text);assert.equal(f.calls.filter(c=>c==='handle:request-1').length,1);assert.equal(f.calls.filter(c=>c==='receive').length,1);f.session.close();
+});
+
+test('semantic unknown with lost ACK permits explicit ACK-only reconciliation, never the next undecided entry',async()=>{
+ let proceed=true;const f=setup({shouldContinue:()=>proceed});f.handler=async()=>{proceed=false;return{state:'outcome_unknown'};};f.ackFailure=true;
+ const first=await f.session.receiveAndHandle();assert.equal(first.acknowledged,0);assert.equal(first.pending,2);
+ const retry=await f.session.receiveAndHandle();assert.equal(retry.acknowledged,1);assert.equal(retry.processed,1);assert.equal(retry.pending,1);assert.equal(f.calls.filter(c=>c==='handle:request-1').length,1);assert.equal(f.calls.includes('handle:request-2'),false);assert.equal(f.calls.filter(c=>c==='receive').length,1);f.session.close();
 });

@@ -270,3 +270,22 @@ the existing JVM sign-in/deadline controls with Java17 or newer. Its temporary d
 link is removed after the run. It does not assemble an APK, execute Android's
 platform lifecycle, connect an account, or deploy Service. Earlier independent
 source evidence and installed failures remain bound to their original versions.
+
+## Bounded receiving controls — #3135
+
+DMC-T04/05/06/07/12/14 add `companion-receiving-lifetime.smoke.mjs`, real owner,
+entry/command, host-session and unchanged shared-budget controls. Exercise zero
+receives before Start, duplicate Start/manual receive exclusion, ten-second idle,
+sixty empties, monotonic deadline without renewal, hung/late callbacks, sticky
+unknown/closed fences, busy Stop/revoke, signer retention through a confirmed or
+lost reply, exact status/revoke-only authenticated transports and batch retention.
+The native status is an observation of existing approvals, never a decision.
+
+Installed acceptance must use one Start plus an explicit phone Submit without
+the one-shot command, preserve normal file/SDK approval and unknown no-replay,
+observe focus/browser/modal transitions without renewal, and exercise Stop and
+revocation while busy. Source fixtures do not establish physical reachability,
+latency, installed selected execution or classroom acceptance. #3135 remains
+open until its exact source and installed evidence are independently reviewed.
+
+The independent DEV Stop/Revoke command admission is source-tested while the menu is busy. Actual access through a native modal is NOT RUN: the OS modal may require Cancel before Stop; command registration and status visibility do not prove clickable controls during that modal.

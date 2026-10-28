@@ -27,6 +27,7 @@ export interface CompanionNativeBridgePorts {
   epoch(): number;
   journal: JournalStore;
   now?: () => number;
+  approval?(waiting:boolean): void;
 }
 /** Construct explicitly in an isolated development session; the production extension does not register it. */
 export function createDevCompanionAuthoritySnapshot(ports: CompanionNativeBridgePorts): () => Promise<CompanionAuthoritySnapshot | null> {
@@ -87,6 +88,8 @@ export function createDevCompanionHostBridge(ports: CompanionNativeBridgePorts):
     const detail = [`연결된 휴대폰: ${prompt.deviceId}`, `선택한 파일: ${prompt.artifact}`, `작업 폴더: ${prompt.workspace}`,
       `작업: ${prompt.taskId} · 버전 ${prompt.version}`, `파일 버전: ${prompt.artifactVersion}`, `요청: ${prompt.requestId}`,
       '이 요청의 선택한 HTML 내용만 암호화해 이 휴대폰에 전달해요. 파일 수정·AI·명령 실행 권한은 주지 않아요.'].join('\n\n');
-    return (await vscode.window.showInformationMessage('이 휴대폰에 선택한 미리보기를 한 번 전달할까요?', { modal: true, detail }, '이 요청만 전달')) === '이 요청만 전달';
+    ports.approval?.(true);
+    try{return (await vscode.window.showInformationMessage('이 휴대폰에 선택한 미리보기를 한 번 전달할까요?', { modal: true, detail }, '이 요청만 전달')) === '이 요청만 전달';}
+    finally{ports.approval?.(false);}
   } });
 }

@@ -15847,6 +15847,9 @@
         },
         {
           "path": "scripts/test/companion-ci-input.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-receiving-lifetime.smoke.mjs"
         }
       ]
     },
@@ -16027,6 +16030,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionReceivingLifetime.ts"
         }
       ]
     },

@@ -21,6 +21,7 @@ export interface CompanionDevActivationApi {
 export interface CompanionDevEntryPorts {
   authoring?: CompanionDevHostOwnerPorts['authoring'];
   execution?: CompanionDevHostOwnerPorts['execution'];
+  receivingBusy?(): boolean;
   accounts?: AccountSession;
   connections: ActivityConnections;
   configured(): { service: string; site: string };
@@ -92,7 +93,7 @@ function acquireJournalLease(directory: string, live: () => boolean, signal?: Ab
 
 /** Production activation gets no API and installs nothing. Native dependencies remain closure-private. */
 export function createCompanionDevHostEntry(context: vscode.ExtensionContext, ports: CompanionDevEntryPorts): {
-  api: CompanionDevActivationApi; invalidate(): void; dispose(): void;
+  api: CompanionDevActivationApi; invalidate(): void; approval(waiting:boolean):void; dispose(): void;
 } | undefined {
   if (context.extensionMode !== vscode.ExtensionMode.Development) return;
   const events = new vscode.EventEmitter<void>();
@@ -136,7 +137,7 @@ export function createCompanionDevHostEntry(context: vscode.ExtensionContext, po
     try {
       owner = new CompanionDevHostOwner({ context, connections: ports.connections, accounts, configured: ports.configured,
         identity: { accountId: account.account.id, sessionId: stored.sessionId }, budget, clients,
-        taskView: ports.taskView, epoch: ports.epoch, journal: lease.journal, authoring: ports.authoring, execution:ports.execution });
+        taskView: ports.taskView, epoch: ports.epoch, journal: lease.journal, authoring: ports.authoring, execution:ports.execution,receivingBusy:ports.receivingBusy });
     } catch (error) { lease.stopAdmission(); retain(lease.release()); throw error; }
     const held = owner;
     let released = false;
@@ -150,6 +151,8 @@ export function createCompanionDevHostEntry(context: vscode.ExtensionContext, po
     const invoke = <T>(operation: () => Promise<T>): Promise<T> => operation().finally(() => { if (['closed', 'revoked'].includes(held.view().state)) release(); });
     return {
       view: () => held.view(),
+      startReceiving:()=>held.startReceiving(),stopReceiving:()=>{held.stopReceiving();if(['closed','revoked'].includes(held.view().state))release();},
+      onReceivingChanged:listener=>held.onReceivingChanged(()=>{listener();if(['closed','revoked'].includes(held.view().state))release();}),
       startInvitation: abort => invoke(() => held.startInvitation(abort)),
       inspectClaim: abort => invoke(() => held.inspectClaim(abort)),
       confirmComparedCode: (code, abort) => invoke(() => held.confirmComparedCode(code, abort)),
@@ -171,6 +174,7 @@ export function createCompanionDevHostEntry(context: vscode.ExtensionContext, po
       return new vscode.Disposable(() => { registered.dispose(); if (commands === registered) { commands = undefined; invalidate(); } });
     } }),
     invalidate,
+    approval:waiting=>active?.owner.approval(waiting),
     dispose() { if (disposed) return; invalidate(); disposed = true; commands?.dispose(); commands = undefined; budget?.dispose(); events.dispose(); },
   };
 }

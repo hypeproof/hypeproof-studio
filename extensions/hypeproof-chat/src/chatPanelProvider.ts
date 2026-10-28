@@ -597,6 +597,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Metadata-only DEV lifecycle hook; no listener/resource exists unless native registration supplies it. */
   companionRuntimeInvalidated?: () => void;
+  /** Native receiving status only; never an approval decision or authority source. */
+  companionApprovalChanged?: (waiting:boolean) => void;
   companionTaskView(): import('./taskWorkspaceContract').TaskWorkspaceView | null {
     return this.taskChanging || this.connectionChanging ? null : this.currentTaskStore()?.getView() ?? null;
   }
@@ -9192,8 +9194,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             requestApproval: async (action) => {
               let prompted = false;
               let denialSource: import('./denialSource').DenialSource | undefined;
-              const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; }, source => { denialSource = source; });
-              return {approved, actor: prompted ? 'user' as const : 'policy' as const, denialSource};
+              try {
+                const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; if(prepared?.current())this.companionApprovalChanged?.(true); }, source => { denialSource = source; });
+                return {approved, actor: prompted ? 'user' as const : 'policy' as const, denialSource};
+              } finally { if(prompted&&prepared?.current())this.companionApprovalChanged?.(false); }
             },
             // #282 P2 slice 2 — native-browser capabilities for the hypeproof
             // MCP tools. Always passed; runSdkCoach registers the server only
