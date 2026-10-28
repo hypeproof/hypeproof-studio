@@ -5,7 +5,7 @@ import { readDesignFile } from "./lib/design-token-values.mjs";
 //   node --experimental-strip-types test/type-scale.smoke.mjs
 //
 // The webview has no DOM in tests, so this smoke computes font sizes itself: it parses every
-// webview CSS file in bundle order, matches selectors against element chains that mirror the
+// main-bundle CSS file in bundle order, matches selectors against element chains that mirror the
 // personal chat's markup (task workspace → conversation → chat shell), and runs the cascade
 // (media queries, !important, specificity, source order, inheritance, custom properties
 // substituted where they are declared, calc). It cannot see a real render; the cascade it models
@@ -19,6 +19,9 @@ const read = (f) => readDesignFile(new URL(f, SRC), "utf8");
 // imports tokens.css first, then modules pull in localReview/start/citationPreview/quoteAction/codeBlock/
 // quoteAction/taskWorkspace before the explicit styles.css and chatDetails.css imports.
 const ORDER = ["tokens.css", "radiusScale.css", "focusGeometry.css", "localReview.css", "start.css", "writeApprovalDialog.css", "recipientMemory.css", "outboundDialog.css", "modalSurface.css", "answerAttempts.css", "accuracyEducation.css", "annotationTray.css", "styleTweak.css", "citationPreview.css", "taskAppearance.css", "quoteAction.css", "taskActivity.css", "mathRender.css", "codeBlock.css", "refusalBanner.css", "goalStatusBar.css", "myQuestions.css", "coachRunState.css", "lessonTip.css", "whatsNew.css", "projectIdeas.css", "taskWorkspace.css", "keyboardNavigation.css", "styles.css", "chatDetails.css", "tooltips.css", "koreanProse.css"];
+// DMC's controlled consumer imports its own CSS but is not imported by main.tsx yet.
+// Account for it explicitly without pretending it changes the desktop bundle's cascade.
+const CONTROLLED_COMPONENT_CSS = [{ component: "CompanionSessionView.tsx", css: "companionSessionView.css" }];
 // The DEC-29 scope: files that style only the personal task workspace and its chat.
 const PERSONAL_FILES = ["chatDetails.css", "taskWorkspace.css", "citationPreview.css", "codeBlock.css", "taskAppearance.css"];
 const FLOOR = 14;
@@ -809,7 +812,37 @@ const HEADER_TEXT = [
 
 // ─── Run on the real files ─────────────────────────────────────────────────────────────────────
 const cssFiles = readdirSync(SRC).filter((n) => n.endsWith(".css") && n !== "designTokens.css").sort();
-assert.deepEqual(cssFiles, [...ORDER].sort(), "every rule-bearing webview CSS file is in the bundle order list (canonical static aliases are expanded by readDesignFile)");
+assert.deepEqual(cssFiles, [...ORDER, ...CONTROLLED_COMPONENT_CSS.map(({ css }) => css)].sort(), "every rule-bearing webview CSS file has a main-bundle or controlled-component owner (canonical static aliases are expanded by readDesignFile)");
+for (const { component, css } of CONTROLLED_COMPONENT_CSS) {
+  assert.ok(read(component).includes(`import './${css}';`), `${component} must import its mapped stylesheet`);
+}
+// A separate consumer uses the same semantic tokens. Exercise its own learner text,
+// including a shrinking negative control; do not exempt its styles from inspection.
+function companionTypeFindings(css) {
+  const rules = [];
+  for (const f of ["tokens.css", "radiusScale.css", "focusGeometry.css", "companionSessionView.css"])
+    rules.push(...parseCss(f === "companionSessionView.css" ? css : read(f), f, rules.length));
+  const chains = [
+    ["header.hps-companion-heading", "p.hps-companion-project"],
+    ["header.hps-companion-heading", "h2"],
+    ["header.hps-companion-heading", "p.hps-companion-computer", "span"],
+    ["div.hps-companion-status", "div", "h3"],
+    ["div.hps-companion-status", "div", "p"],
+    ["button.hps-companion-action"], ["p.hps-companion-note"],
+    ["aside.hps-companion-origin", "div", "p"],
+    ["details.hps-companion-details", "summary"],
+    ["details.hps-companion-details", "dl", "dd", "code"],
+  ];
+  const findings = [];
+  for (const w of [320, 800]) for (const chain of chains) {
+    const size = compute(rules, ["body", "section.hps-companion-session", ...chain], { w, h: 900, forced: false, reduce: false }).px;
+    if (!(size >= FLOOR)) findings.push(`${chain.join(" > ")} at ${w}px: ${size}px`);
+  }
+  return findings;
+}
+const companionCss = read("companionSessionView.css");
+assert.deepEqual(companionTypeFindings(companionCss), [], "controlled companion learner text follows the minimum type scale");
+assert.ok(companionTypeFindings(`${companionCss}\n.hps-companion-note { font-size: 12px; }`).some((f) => f.includes("p.hps-companion-note")), "controlled companion shrinking-text negative control must fail");
 const real = { ...Object.fromEntries(ORDER.map((f) => [f, read(f)])), "TaskWorkspace.tsx": read("TaskWorkspace.tsx"), "ChatPanel.tsx": read("ChatPanel.tsx") };
 
 // Emulator self-checks on known cascade facts (fail loudly if the model drifts from the CSS).
