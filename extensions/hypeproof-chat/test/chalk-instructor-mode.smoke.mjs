@@ -55,7 +55,7 @@ t("200 response → isInstructor true", async () => {
   assert.strictEqual(mgr.isInstructor, true);
 });
 
-t("caches result per token — no second fetch", async () => {
+t("caches result per token and address — no second fetch", async () => {
   const mgr = new InstructorModeManager();
   let calls = 0;
   const orig = globalThis.fetch;
