@@ -1,14 +1,23 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';import vm from 'node:vm';
+import {test} from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';import vm from 'node:vm';import {createHmac} from 'node:crypto';
 const require=createRequire(import.meta.url),compiled=await build({entryPoints:[fileURLToPath(new URL('../src/companionExecutionTransport.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});const module={exports:{}};
 vm.runInNewContext(compiled.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?{ExtensionMode:{Development:2,Production:1}}:require(id),URL,Headers,Response,AbortController,TextDecoder,setTimeout,clearTimeout,Buffer});const {createCompanionExecutionTransport}=module.exports;
 const pairingId='ci_'+'a'.repeat(32),grantId='ceg_'+'b'.repeat(32),turnId='turn_owned',json=(v,status=200)=>Response.json(v,{status}),deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {resolve,promise};};
-const jwt=(changes={})=>[Buffer.from('{}').toString('base64url'),Buffer.from(JSON.stringify({native_trial:true,personal_account:'account',account_session:'native_session',jti:'actual_jti',p:'paid_profile',exp:Math.floor(Date.now()/1000)+300,...changes})).toString('base64url'),'synthetic_signature'].join('.');
+// Immutable fixture generator for Service c9714c86bc8ccd9471806287a02e962a7100af70
+// worker/src/lib/tokens.ts SHA256 f2cdce16b5b71c28cac6ab54a09554434241447d246dfdeeee000cbcddac6c2f: issue()/canonicalize() v2 field order.
+// The pinned older service-testkit predates personal-account fields. This generator is also
+// compared byte-for-byte with that exact real Service issue() in the local cross-layer receipt.
+export const serviceTokenFixtureSecret='synthetic-service-contract-test-secret-only-0000000000';
+export function serviceTokenFixture(changes={}){
+ const now=Math.floor(Date.now()/1000),p={c:'synthetic_cohort',exp:now+300,iat:now,p:'paid_profile',u:'synthetic_user',v:2,jti:'actual_jti',native_trial:true,personal_account:'account',account_session:'native_session',...changes};
+ const raw=JSON.stringify(Object.fromEntries(['c','exp','iat','p','u','v','jti','native_trial','personal_account','account_session'].filter(k=>p[k]!==undefined).map(k=>[k,p[k]])));
+ return Buffer.from(raw).toString('base64url')+'.'+createHmac('sha256',serviceTokenFixtureSecret).update(raw).digest('base64url');
+}
 const modelIdentity={model_session_id:'actual_db_trial_id',model_token_jti:'actual_jti',model_profile_id:'paid_profile'};
 const context={schema:'hps-companion-execution-context/1',account_id:'account',host_session_id:'native_session',...modelIdentity};
 const envelope=()=>({schema:'hps-companion-selected-html-execution/1',capability:'authoring.selected-html',grant:{id:grantId,pairing_id:pairingId,account_id:'account',host_session_id:'native_session'},scope_authority:'authenticated_host_lease',dispatch_requires_live_validation:true,turn:{turn_id:turnId,...modelIdentity}});
 const fields={turn_id:turnId,request_id:'intent_owned',request_hash:'a'.repeat(64),selection_hash:'b'.repeat(64),task_id:'task_owned',epoch:1,consent_revision:0xabcdef123456,host_proof:'c'.repeat(128)};
 const request=(action)=>({action,pairingId,grantId,turnId:['reserve','complete'].includes(action)?turnId:null,body:action==='get'?null:JSON.stringify(action==='reserve'?fields:action==='complete'?{...Object.fromEntries(Object.entries(fields).filter(([k])=>k!=='turn_id')),state:'completed',result_hash:'d'.repeat(64)}:action==='issue'?{grant_id:grantId,capability:'authoring.selected-html',task_id:'task_owned',artifact_id:'html_owned',epoch:1,consent_revision:0xabcdef123456,selection_hash:'b'.repeat(64),max_turns:1,max_calls_per_turn:12,expires_at:Math.floor(Date.now()/1000)+300,host_proof:'c'.repeat(128)}:{host_proof:'c'.repeat(128)})});
-function fixture(options={}){let nativeToken='native_account_token',model=jwt(),modelRead,sessionId='native_session',config={service:'http://127.0.0.1:44321/v1',site:'http://localhost:3193'},handler,admit;const calls=[],admissions=[];const extension={extensionMode:2};
+function fixture(options={}){let nativeToken='native_account_token',model=serviceTokenFixture(),modelRead,sessionId='native_session',config={service:'http://127.0.0.1:44321/v1',site:'http://localhost:3193'},handler,admit;const calls=[],admissions=[];const extension={extensionMode:2};
  const accounts={matches:(s,t)=>s==='http://127.0.0.1:44321/v1'&&t==='http://localhost:3193',accessToken:async()=>nativeToken,sessionIdentity:async()=>nativeToken?{service:'http://127.0.0.1:44321/v1',sessionId}:undefined};
  const api=createCompanionExecutionTransport({context:extension,accounts,configured:()=>config,identity:{accountId:'account',sessionId:'native_session'},currentModel:async()=>modelRead?modelRead():model?{token:model}:undefined,budget:{run:async(work,signal)=>{admissions.push(signal);if(admit)await admit();return work();}},fetch:async(url,init)=>{calls.push({url,init});return handler?handler(url,init):json(url.endsWith('/me')?{account:{id:'account'},session_id:'native_session'}:url.endsWith('/execution-context')?context:envelope());},timeoutMs:options.timeoutMs});
  return {api,calls,admissions,extension,accounts,set modelRead(v){modelRead=v;},set handler(v){handler=v;},set admit(v){admit=v;},set model(v){model=v;},get model(){return model;},set nativeToken(v){nativeToken=v;},set sessionId(v){sessionId=v;},set config(v){config=v;}};}
@@ -24,7 +33,7 @@ test('fixed native/model endpoints preserve signed bytes, use shared budget once
 test('DEV/account/base URL gates and explicit identity/model resolution fail before execution HTTP',async()=>{
  for(const mutate of [f=>f.extension.extensionMode=1,f=>f.config={service:'https://api.hypeproof-ai.xyz/v1',site:'https://hypeproof-ai.xyz'},f=>f.nativeToken=undefined,f=>f.sessionId='other']){const f=fixture();mutate(f);await assert.rejects(()=>f.api.resolveIdentity());assert.equal(f.calls.length,0);}
  const f=fixture();await assert.rejects(()=>f.api.native(request('issue')),/identity_required/);await f.api.resolveIdentity();await assert.rejects(()=>f.api.model(request('reserve')),/model_identity_required/);assert.equal(f.calls.length,1);
- for(const model of [undefined,'opaque_secret',jwt({account_session:'phone'}),jwt({personal_account:'other'}),jwt({native_trial:false}),jwt({exp:1})]){const x=fixture();await x.api.resolveIdentity();x.model=model;await assert.rejects(()=>x.api.resolveModel(),/model_identity_required/);assert.equal(x.calls.length,1);}
+ for(const model of [undefined,'opaque_secret',serviceTokenFixture({account_session:'phone'}),serviceTokenFixture({personal_account:'other'}),serviceTokenFixture({native_trial:false}),serviceTokenFixture({exp:1})]){const x=fixture();await x.api.resolveIdentity();x.model=model;await assert.rejects(()=>x.api.resolveModel(),/model_identity_required/);assert.equal(x.calls.length,1);}
 });
 test('identity discovery rejects substituted account/session/profile/jti and extra sensitive response fields',async()=>{
  for(const changes of [{account_id:'other'},{host_session_id:'phone'},{model_token_jti:'rotated'},{model_profile_id:'other'},{model_session_id:''},{token:'malicious_secret'}]){const f=fixture();await f.api.resolveIdentity();f.handler=()=>json({...context,...changes});await assert.rejects(()=>f.api.resolveModel(),/invalid_response/);assert.equal(f.calls.length,2);}
@@ -35,15 +44,15 @@ test('fixed descriptors reject endpoint/role/header injection and preserve captu
  const gate=deferred(),entered=deferred();f.admit=async()=>{entered.resolve();await gate.promise;};const req=request('issue'),raw=req.body,pending=f.api.native(req);await entered.promise;req.body='mutated';req.grantId='ceg_'+'d'.repeat(32);gate.resolve();await pending;assert.equal(f.calls.at(-1).init.body,raw);
 });
 test('queued account or model drift and queued cancellation dispatch nothing and never retry',async()=>{
- for(const mutate of [f=>f.nativeToken='rotated_native',f=>f.sessionId='other',f=>f.config={service:'http://127.0.0.1:44322/v1',site:'http://localhost:3193'},f=>f.model=jwt({jti:'rotated'})]){const f=await ready(),gate=deferred(),entered=deferred();f.admit=async()=>{entered.resolve();await gate.promise;};const pending=f.api.model(request('reserve'));await entered.promise;mutate(f);gate.resolve();await assert.rejects(()=>pending,/binding_changed|model_changed/);assert.equal(f.calls.length,2);}
+ for(const mutate of [f=>f.nativeToken='rotated_native',f=>f.sessionId='other',f=>f.config={service:'http://127.0.0.1:44322/v1',site:'http://localhost:3193'},f=>f.model=serviceTokenFixture({jti:'rotated'})]){const f=await ready(),gate=deferred(),entered=deferred();f.admit=async()=>{entered.resolve();await gate.promise;};const pending=f.api.model(request('reserve'));await entered.promise;mutate(f);gate.resolve();await assert.rejects(()=>pending,/binding_changed|model_changed/);assert.equal(f.calls.length,2);}
  const f=await ready(),gate=deferred(),entered=deferred(),abort=new AbortController();f.admit=async()=>{entered.resolve();await gate.promise;};const pending=f.api.model(request('reserve'),abort.signal);await entered.promise;abort.abort();await assert.rejects(()=>pending,/cancelled/);gate.resolve();await new Promise(r=>setImmediate(r));assert.equal(f.calls.length,2);
 });
 test('post-dispatch native/model changes suppress late authority without an automatic resend',async()=>{
- for(const mutate of [f=>f.nativeToken='rotated',f=>f.sessionId='other',f=>f.model=jwt({jti:'rotated'})]){const f=await ready(),gate=deferred(),entered=deferred();f.handler=async()=>{entered.resolve();await gate.promise;return json(envelope());};const pending=f.api.model(request('reserve'));await entered.promise;mutate(f);gate.resolve();await assert.rejects(()=>pending,/binding_changed|model_changed/);assert.equal(f.calls.length,3);}
+ for(const mutate of [f=>f.nativeToken='rotated',f=>f.sessionId='other',f=>f.model=serviceTokenFixture({jti:'rotated'})]){const f=await ready(),gate=deferred(),entered=deferred();f.handler=async()=>{entered.resolve();await gate.promise;return json(envelope());};const pending=f.api.model(request('reserve'));await entered.promise;mutate(f);gate.resolve();await assert.rejects(()=>pending,/binding_changed|model_changed/);assert.equal(f.calls.length,3);}
 });
 test('native revoke/get remain available after model removal; reserve cannot switch activated credentials',async()=>{
  const f=await ready();f.model=undefined;await f.api.native(request('revoke'));await f.api.native(request('get'));await assert.rejects(()=>f.api.model(request('reserve')),/model_identity_required/);assert.equal(f.calls.length,4);
- const x=await ready();x.model=jwt({jti:'other'});await assert.rejects(()=>x.api.model(request('reserve')),/model_identity_required/);assert.equal(x.calls.length,2);
+ const x=await ready();x.model=serviceTokenFixture({jti:'other'});await assert.rejects(()=>x.api.model(request('reserve')),/model_identity_required/);assert.equal(x.calls.length,2);
 });
 test('bounded response/timeout/cancellation release late bodies; malformed authority and arbitrary errors stay sanitized',async()=>{
  for(const response of [()=>json({...envelope(),grant:{...envelope().grant,host_session_id:'phone'}}),()=>json({...envelope(),turn:{turn_id:turnId,...modelIdentity,model_session_id:'other'}}),()=>json({error:'raw_secret_token'},403),()=>new Response('invalid',{headers:{'content-type':'application/json'}}),()=>json({padding:'x'.repeat(65537)})]){const f=await ready();f.handler=response;await assert.rejects(()=>f.api.model(request('reserve')),e=>!e.message.includes('raw_secret_token'));assert.equal(f.calls.length,3);}
@@ -59,4 +68,17 @@ test('already aborted invocation and invalid response headers do not leak a live
 test('deadline also bounds pending native credential and model reads before any actual HTTP',async()=>{
  for(const which of ['account','model']){const f=await ready({timeoutMs:30});if(which==='account')f.accounts.accessToken=()=>new Promise(()=>{});else f.modelRead=()=>new Promise(()=>{});
  await assert.rejects(()=>f.api.native(request('get')),/timeout/);assert.equal(f.calls.length,2);}
+});
+
+test('Service v2 two-part fixture reaches authenticated execution-context; three-part JWT and malformed wire cannot dispatch',async()=>{
+ const token=serviceTokenFixture();assert.equal(token.split('.').length,2);const f=await ready();assert.equal(f.calls.length,2);assert.equal(f.calls[1].url.endsWith('/companion/execution-context'),true);
+ const [payload,signature]=token.split('.');
+ for(const malformed of ['e30.'+payload+'.'+signature,payload+'.',payload+'.'+signature+'.extra',payload+'.'+signature+'=',Buffer.from('not-json').toString('base64url')+'.'+signature,'a'.repeat(16385)]){
+  const x=fixture();await x.api.resolveIdentity();x.model=malformed;await assert.rejects(()=>x.api.resolveModel(),/model_identity_required/);assert.equal(x.calls.length,1);
+ }
+});
+test('local Service payload hints never authorize a tampered signature; authenticated server rejection stops before grant',async()=>{
+ const f=fixture();await f.api.resolveIdentity();const [payload,signature]=f.model.split('.');f.model=payload+'.'+(signature[0]==='a'?'b':'a')+signature.slice(1);
+ f.handler=(_url,init)=>{const bearer=init.headers.authorization.slice(7),[p,s]=bearer.split('.');const expected=createHmac('sha256',serviceTokenFixtureSecret).update(Buffer.from(p,'base64url')).digest('base64url');return s===expected?json(context):json({error:'unauthorized'},401);};
+ await assert.rejects(()=>f.api.resolveModel(),/denied/);assert.equal(f.calls.length,2);assert.equal(f.calls.at(-1).url.endsWith('/companion/execution-context'),true);assert.equal(f.calls.some(c=>c.url.includes('/execution-grants')),false);
 });

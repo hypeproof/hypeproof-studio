@@ -50,8 +50,10 @@ export function createCompanionExecutionTransport(ports:CompanionExecutionTransp
  },init?.signal??undefined)});
  const modelToken=async()=>{const value=await ports.currentModel();return value?.token;};
  function claims(token:string):Record<string,unknown>{
-  try{if(token.length>16384)fail('model_identity_required');const parts=token.split('.');if(parts.length!==3||!parts.every(p=>/^[A-Za-z0-9_-]+$/.test(p)))fail('model_identity_required');
-   const value:unknown=JSON.parse(Buffer.from(parts[1],'base64url').toString('utf8'));
+  // Service v2 is base64url(payload).base64url(HMAC), not a three-part JWT.
+  // These claims are only binding hints; execution-context still authenticates the bearer on Service.
+  try{if(token.length>16384)fail('model_identity_required');const parts=token.split('.');if(parts.length!==2||!parts.every(p=>/^[A-Za-z0-9_-]+$/.test(p)))fail('model_identity_required');
+   const value:unknown=JSON.parse(Buffer.from(parts[0],'base64url').toString('utf8'));
    if(!object(value)||value.native_trial!==true||value.personal_account!==expected.accountId||value.account_session!==expected.sessionId||!id(value.jti)||!id(value.p)||!Number.isSafeInteger(value.exp)||Number(value.exp)<=Date.now()/1000)fail('model_identity_required');return value;
   }catch{return fail('model_identity_required');}
  }
