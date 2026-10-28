@@ -7800,3 +7800,32 @@ for every kind, empty and saved, learner and rehearsal seat, audited with positi
 `extensions/hypeproof-chat/test/learning-block-no-judgment-host.smoke.mjs` (the real host handler with every recorder captured
 and the learner's step report as the control; the editor-area panels bundled, with an exhaustiveness check over every
 `createWebviewPanel` maker and the chat panel bundle as the control).
+
+## Learning block live text equivalent (CGP-LEARN-R-003)
+
+REQ-STUDIO-LEARNING-BLOCK-TEXT / REQ-CGP-LEARN-03 (CGP-LEARN-010) / PI#3 (DES-11 classroom-design): every
+learning block a confirmed lesson attaches (REQ-STUDIO-LEARNING-BLOCK-ATTACH) exposes a live text equivalent. The
+block catalog (`MATERIAL_TEXT` in `lessonFocus.ts`) gives each of the seven kinds a Korean `title`, a
+`controlsHelp` sentence and a `stateDescription`; the catalog check `materialTextGaps()` names any kind that lacks
+one. The block draws as one region (`section.hp-material`, carrying the block identity) named by its title and
+described by its help sentence, with the state sentence in a visible `role="status"` `aria-live="polite"`
+`aria-atomic="true"` line under the controls. Each field is described by the help and the current state sentence.
+The text is visible, not screen-reader only, at 14px or more.
+
+The state sentence is computed from the fields as the learner has them now and the host's last save: for
+`criterion_form` empty, written, saved, changed after saving, cleared; for `decision_form` also which of the two
+fields is still missing, and whether an earlier save is kept. Every change of any control that changes that state
+(typing into or clearing a field, a save the host confirms, switching steps) puts the new sentence into the same
+mounted live region, measured at under 500 ms. The sentence names states, not every keystroke, so the polite region
+does not talk over the screen reader's own typing echo. Kinds this Studio cannot draw yet keep their honest notice
+with a title, a help sentence saying there is nothing to operate, and a fixed state sentence. No block text carries a
+score, grade, right/wrong word or capability name (REQ-CGP-LEARN-02). Seats: every seat that draws the lesson rail.
+Default: on; display only, no new data flow.
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-text.smoke.mjs` (catalog check with five negative
+controls, one distinct sentence per state for both drawable kinds, no judgment words) and
+`extensions/hypeproof-chat/test/learning-block-text-browser.smoke.mjs` (the mounted ChatPanel with the shipped
+stylesheet in headless Chromium, classroom and personal seats, dark and light, 800 and 1420 px: region name and
+description, visible title/help/state at 14px+ and 4.5:1, each field's description, and 9 control changes per case
+each announced in the same live region within 500 ms). Not covered: a real VoiceOver run (REQ-CGP-LEARN-03 (c)) is a
+manual check.

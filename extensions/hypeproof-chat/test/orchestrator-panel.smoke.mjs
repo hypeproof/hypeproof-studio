@@ -260,11 +260,16 @@ const OLD_SCREENS = {
 // CGP-LEARN-R-001: the six ChatPanel digests were re-taken (TZ=UTC) because the lesson step's work form now carries
 // its block identity (data-hps-material, data-hps-material-step, data-hps-material-version). The HPS_A5_DUMP_DIR dumps of
 // main and this branch are byte-identical once those three attributes are removed; the five EffortControl digests are unchanged.
+// CGP-LEARN-R-003: the six ChatPanel digests were re-taken (TZ=UTC) because the week-3 step's criterion block now draws its
+// live text equivalent: a section.hp-material (carrying the block identity, moved off the form) with an h3 title, a help
+// sentence and a polite status sentence, and aria-describedby on the field. The HPS_A5_DUMP_DIR dumps of main and this
+// branch are byte-identical once those nodes and that attribute are removed and the identity attributes are dropped from
+// main's form; the five EffortControl digests are unchanged.
 const BASE = {
-  "ChatPanel/adult-plain": "4557289c0d15596b016552425f50545ff1926db224649008072441d2c3316b76",
-  "ChatPanel/adult-effort-observed": "1f51604fca67f5d8e12c124a183c6780469f6e2ff25f9985083b306e94d27185",
-  "ChatPanel/adult-timeline": "56d1206755a7db3fe0d2f0ec9e312bc7b568e859ebad2b897197ae9e8d307954",
-  "ChatPanel/kids": "8e2071491174ebf2d5bc27c685229ae94bacccbd4b82fcf4c91f13a779bbeeb8",
+  "ChatPanel/adult-plain": "4df46849ad2eeddd11dfaf499879755b3759001a7cf25d8cbd2bfe60874013f0",
+  "ChatPanel/adult-effort-observed": "00d9816d8305eed72281ec176af2e101daeee20e0d2d47da61be459d7bfaca1e",
+  "ChatPanel/adult-timeline": "abba9c0357930f56a5dce5df6785d523e38c6443496bf7ac09f05569a58c9504",
+  "ChatPanel/kids": "95631360917d2c3dd9c7b0f1089e354f6e246d2414666f2459344367f3a79c5b",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -284,8 +289,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "d5d0a74c0641d829c3fd28173cc12572702037f1d2f69f575a8ad75ebef1e608",
-  "ChatPanel/classroom-access-unknown": "15365a452a8410bdae6643cb529e37669511bce1f5f3aa7648396c5001b3a243",
+  "ChatPanel/classroom-class-funded": "4300d2e47064b8a3de7a8f673c9cf79338dd9c7d31f4ed1cc8f2f7fed37fbe47",
+  "ChatPanel/classroom-access-unknown": "9ca0d6968f2b26e48ca2b48e9b4cea5d6ee351ca5b0f357b8af58275d2fa1b49",
 };
 
 const status = rendererStatus();
