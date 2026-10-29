@@ -1783,7 +1783,7 @@ const STALLED = Symbol("sdk-stream-stalled");
 // loop already renders.
 
 export type SdkActivity = (
-  | { kind: 'approval'; id: string; name: string; input: unknown; actor: 'user'|'policy'; allowed: boolean; denialSource?: DenialSource }
+  | { kind: 'approval'; id: string; name: string; input: unknown; actor: 'user'|'policy'; allowed: boolean; denialSource?: DenialSource; denialDetail?: import('./denialNotice').DenialDetail }
   /** Running token estimate while the model thinks (Claude Code's "✻ …" counter). */
   | { kind: "thinking_tokens"; tokens: number }
   /** A completed thinking block. Raw model text — NOT translated (it is usually English). */
@@ -2808,7 +2808,9 @@ export type SdkToolVerdict =
   // `source` (REQ-STUDIO-DENIAL-SOURCE): who decided the deny — the lesson setting, a
   // platform safety rule, or this app/runtime. `friendly` is the tagged learner copy the
   // SDK returns to the coach as the tool_result (and the tool log shows).
-  | { decision: "deny"; reason: string; friendly: string; source: DenialSource; drift?: boolean };
+  //
+  // `cause` is the classifier input the deny came from; the host reads only `path_outside_workspace` (#3224).
+  | { decision: "deny"; reason: string; friendly: string; source: DenialSource; drift?: boolean; cause?: string };
 
 /** Reasons in the learner's words for the platform-safety denies (the copy builder adds the frame). */
 export const PATH_ESCAPE_REASON = "작업 폴더 밖의 파일이에요";
@@ -2854,6 +2856,7 @@ function denyVerdict(
     reason,
     friendly: denialToolText(d, audience),
     source: d.source,
+    cause,
     ...(drift ? { drift: true } : {}),
   };
 }

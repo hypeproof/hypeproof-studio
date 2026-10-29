@@ -2594,7 +2594,7 @@ Service 집행이 없다는 뜻이다.
 
 `REQ-STUDIO-DENIAL-SOURCE` (extends [AE-12](requirements/learning-agent-experience.md) and REQ-M17;
 CGP-AGENT-R-007 / REQ-CGP-AGENT-08, 2026-10-20): every denied tool call or disabled feature names
-who decided it, in the learner's words, with one next step. One pure module,
+who decided it, in the learner's words, with one next step. A tool call refused because its path is outside the work folder (`path_outside_workspace`) saves its step as 안전 규칙 with the reason "작업 폴더 밖이라 실행하지 않았어요. AI는 작업 폴더 안에서만 파일을 만들고 고쳐요." (#3224, Jay 2026-10-29; `DenialNotice.detail = 'outside_folder'`, an enum, never the path); every other safety step keeps "안전 규칙에 맞지 않아 실행하지 않았어요.", and saved steps of either form decode (`storedDenialNotice`). One pure module,
 `extensions/hypeproof-chat/src/denialSource.ts`, holds the six sources, the copy builder and the
 classifier (`classifyDenial`: a fixed cause table; any other value is unknown). Copy:
 수업 설정 "이 수업에서는 {기능}을 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요." (solo seats,
