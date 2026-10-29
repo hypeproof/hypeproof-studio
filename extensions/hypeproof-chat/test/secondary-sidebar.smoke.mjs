@@ -26,7 +26,7 @@ const vscode = {
   window: { browserTabs: [] },
 };
 const mod = { exports: {} };
-vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: id => id === 'vscode' ? vscode : require(id), process, console, Buffer, URL });
+vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: id => id === 'vscode' ? vscode : require(id), process, console, Buffer, URL, TextEncoder, TextDecoder });
 const { activate, NATIVE_CHAT_BAR_CLOSED_KEY } = mod.exports;
 const profile = () => { const map = new Map(); return { map, get: (k, d) => map.has(k) ? map.get(k) : d, update: async (k, v) => { map.set(k, v); } }; };
 const activateWith = async globalState => {
