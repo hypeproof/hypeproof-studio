@@ -7922,3 +7922,31 @@ the real webview entry: personal and classroom, dark and light, 800 and 1420px a
 caption under the work surface, inside the card, drawn (hit test), 14px+, 4.5:1+, not clipped and no line past the
 viewport, no sideways scroll, the same node updated within 500 ms on typing, a host save, a cleared field and a step switch
 onto a closed card; six injected overrides caught).
+
+## Activity memory state line (CGP-KNOW-R-022)
+
+REQ-STUDIO-ACTIVITY-MEMORY-STATE / REQ-KNOW-40 (CGP-KNOW-040) / PI#2 (the learner can see what the AI
+keeps); DEC-01 and DEC-02 (ruled 2026-10-28). Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES.
+
+- **Always on, no switch.** Personal memory is the activity's `.hypeproof/memory/` files and is on for
+  every learner seat that has the store (personal and trial task workspaces), minor and kids cohorts
+  included. No Service profile field, no Studio setting, no instructor flag and no learner control turns
+  it off: a profile with `minor_cohort`, a kids or teen tier, or any `memory`-named field gets the same
+  store, and the extension contributes no memory setting.
+- **The activity says so.** The memory section of 작업 자료 (under 내 작품) shows, before its list is
+  opened, the text line "AI 기억: 켜짐 · `.hypeproof/memory/`" naming the folder inside the activity.
+  It is a paragraph, never a switch or a button, and there is no off wording and no "선생님이 정해요".
+  If the folder is a link or not a folder, the same line stays and the reason Studio read nothing is
+  shown under it without opening the list.
+- **Only where the store exists.** The line is part of the store's own view: no view (an instructor, a
+  seat with no task workspace, a classroom lesson seat, a profile not loaded yet, a task or activity
+  switch in progress) means no line. Class activities keep their own stores (REQ-KNOW-07) and show none.
+- The line is learner text: at least 14px and 4.5:1 in both themes, inside the drawer at 800 and 1420 px.
+  The settings dialog and activity header disclosure of DES-KNOW-40 (CGP-KNOW-D-022) are not built here.
+
+Evidence: `extensions/hypeproof-chat/test/activity-memory.smoke.mjs` (the real provider and host module:
+a view for minor, teen and kids profiles and for a profile whose memory fields all say off; no
+contributed memory setting) and `extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs`
+(headless Chromium on the built CSS and real panel: the line's exact text before the list opens, no
+control or off wording, 14px and 4.5:1, the unreadable-store reason unexpanded, and no line without a
+view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
