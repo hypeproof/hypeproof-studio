@@ -2457,6 +2457,7 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 | REQ-I13 | 기존 앱 보존 (#730) | macOS는 같은 볼륨에 staging·backup 후 교체. 백업 실패 시 기존 앱 삭제 금지, 교체 실패 시 복구. 종료 취소·계속 실행 상태면 Mac/Windows 모두 설치 중단. Windows wrapper는 BOM을 유지하고 오류를 숨기지 않는다 | U (`test/update-installer`, `test/update-windows-wrapper`, OS별 CI fixture 실행) + M (실제 패키지 교체·재시작은 별도 릴리스 게이트) |
 | REQ-I14 | Without release access, point to the homepage download (trial-diagnosis I5, PRA-01, TUX-COND-02) | When no member credential can read the private release mirror (no env token and no `gh` login, or a token the mirror answers with 401/404), the check fails with `UpdateAccessError`; the private mirror is never called anonymously. The manual check shows an info notification "이 Studio에서는 앱 안에서 새 버전을 확인할 수 없어요. 새 버전은 홈페이지에서 받을 수 있어요." with "홈페이지 열기" (`https://hypeproof-ai.xyz/download`) — never `gh auth login`, `HPS_RELEASE_TOKEN` or "잠시 후 다시 시도". The automatic check is not silent: once per installed app version (globalState `hypeproofChat.updateAccessNotice`) it shows the non-modal line "새 버전은 홈페이지에서 받을 수 있어요." (not the status bar, which Studio hides by default). It neither pushes nor clears a banner. The member path (banner, up-to-date verdict, retry copy for transient failures, silent transient automatic failures per REQ-I11) is unchanged | U (`test/update-access-copy`: bundled updateChecker + `vscode` stub; no credential and token without access (positive), member token (control)) |
 | REQ-I15 | Non-member updates read the public release (D19, TUX-COND-02, PRA-01) | Behind the machine setting `hypeproofChat.publicUpdates` (default `false`) or the free-start signal registered with `registerPublicUpdateSignal` (the Service offer). Off: REQ-I14 exactly, no request at all without a credential. On: a member credential the private mirror accepts keeps the private mirror only (a transient mirror failure is not rerouted). With no credential, or a token the mirror answers 401/404, the check reads `https://api.github.com/repos/hypeproof/hypeproof-studio/releases/latest` anonymously — the release the Lab download and its code-free kit serve (Lab `PUBLIC_RELEASE_REPO`); the private mirror is never called anonymously. The update asset must belong to the repository the release was read from; a public asset downloads with no Authorization header, a mirror asset keeps the member token; size and SHA-256 checks are unchanged. An anonymous rate limit (429, or 403 marked by `x-ratelimit-remaining: 0`, a `retry-after` header or a "rate limit" body) is "check later": the automatic check stays silent and keeps any banner, a manual check shows the info line "지금은 새 버전을 확인할 수 없어요. 한 시간쯤 뒤에 다시 확인해 주세요." (no warning, no error banner). Public 404, and a public 403 that is not a rate limit (an abuse block or an access change, so a non-member is never left silently un-updated), is REQ-I14's homepage copy. The banner's install re-check gives an access or rate-limit failure the same manual-check copy, never an error line with the internal English detail; other install failures keep the error line. Follow-up: the Service free-start offer must call `registerPublicUpdateSignal` (offer-parsing branch) so free-start seats do not ship with the setting as the only switch. Cadence unchanged (30 s, then 24 h). No user-facing copy mentions `gh auth login`, a token or 체험 | U (`test/update-public-source`: setting off and member token (negative controls), asset from the other repository refused (negative), non-rate-limit 403 not deferred (negative), member 503 never reaches the public release (negative, request list), a real install failure stays an error (negative), no credential / refused token / rate-limit 403 (body, header, retry-after) / 429 / 404 / install copy / signal (positive)) |
+| REQ-STUDIO-START-UPDATE-NOTICE | The start page shows the update the chat banner offers (Jay 2026-10-29, "첫 기본화면에서도 새버전이 뜨도록해야하는데"; issue #3207). Before this, `scheduleUpdateChecks` pushed a found update only to the chat panel (`setAvailableUpdate`), so a person on the start page (every launch lands there first) saw nothing: a 2026.1020.2 app started on 2026-10-29 had no visible sign of v2026.1029.0 although both release sources served it and no dismissal was stored. Now `setAvailableUpdate` notifies listeners and an open start page redraws with `update: { version, heldForClass? }`: one row under the top bar, `새 버전이 나왔습니다 v… 업데이트하면 Studio가 다시 시작됩니다.` with `업데이트` (runs `hypeproof-chat.installUpdate`, which keeps its class and active-turn guards) and `나중에` (runs `hypeproof-chat.dismissUpdate`: the same 7-day per-version dismissal as the banner, which also clears the banner). During a class seat it is a status line `수업이 끝나면 설치할 수 있습니다.` with no button (CGP-SHELL-R-001). No offer, a current version or a dismissed version draws nothing. Also on first launch: the offer appears when the first check finishes (30 s after activation). A transient check failure (not an access or rate-limit answer) now retries after 15 minutes, at most 3 times per 24-hour cycle, instead of waiting a day (REQ-I11 still holds: a failure never clears an offer). **Not claimed:** a real packaged app showing the notice. | `src/startUpdateNotice.ts`, `src/startPage.ts`, `src/startPageProtocol.ts`, `src/chatPanelProvider.ts` (`onAvailableUpdateChanged`), `src/updateChecker.ts` (retry), `webview-ui/src/StartPage.tsx`, `webview-ui/src/start.css`; `test/start-update-notice.smoke.mjs` (pure + host: shows when newer, hidden when none/dismissed, class hold, commands), `test/start-update-notice-render.test.tsx` (rendered row: version and buttons, nothing without an offer, no button during class), `test/update-orchestration.smoke.mjs` (retry cases) |
 | REQ-I8 | Bundle id 일치 확인 | installer.sh 가 `ai.hypeproof.studio` 일 때만 swap | U |
 | REQ-I9 | win32 설치 pipeline (#447, #463) | macOS 처럼 우리가 .app 을 스왑하지 않고 Inno Setup 설치 관리자에 위임: download → `renderWindowsUpdateWrapper` 로 detached PowerShell wrapper write → spawn → `workbench.action.quit`. wrapper 가 앱 종료를 **먼저** 기다린 뒤 설치 관리자를 `/silent /mergetasks=runcode /LOG=…` 로 실행 — 종료 중인 구 인스턴스의 single-instance lock 과 경합하면 재실행된 프로세스가 죽어가는 구 인스턴스에 핸드오프하고 종료해 "업데이트는 됐는데 안 켜짐" 이 된다 | U (`test/update-checker`) |
 | REQ-I10 | win32 wrapper 는 UTF-8 BOM 으로 기록 — 한글 계정명 머신에서 업데이트 성립 | `renderWindowsUpdateWrapper` 반환값이 **U+FEFF 로 시작**하고 호출부가 그대로(`fs.writeFileSync(p, s, "utf8")`) 기록해 디스크에 `EF BB BF` 가 남아야 한다. 이유: 벤치 머신의 `powershell.exe` 는 Windows PowerShell **5.1** 이고, BOM 없는 `-File` 스크립트를 UTF-8 이 아니라 **ANSI 코드페이지(한국은 CP949)** 로 디코드한다. wrapper 에 박히는 설치 관리자 경로는 `%TEMP%` = `C:\Users\<계정명>\AppData\Local\Temp\…` 아래라, 계정명이 한글이면(코호트 대다수) 경로가 모지바케가 되어 `Start-Process` 가 아무것도 못 찾는다. 그런데 호출부는 wrapper 를 띄운 직후 앱을 종료하므로 **Studio 는 꺼지고 업데이트는 안 된 채 끝난다** — 실패가 조용하다. 실측(Windows 11 / PS 5.1.26100 / `C:\Users\신제형`): BOM 없음 → 설치 관리자 미기동, UTF-8 BOM → 기동. PS 5.1·PS 7 모두 UTF-8 BOM 을 존중한다. **주의(닭-달걀): 이 결함이 있는 빌드는 인앱 업데이트로 자신을 고칠 수 없다 — 해당 머신은 재설치가 유일한 경로다** | U (`test/update-checker`) + M (한글 경로 실기기 확인) |
@@ -7997,3 +7998,60 @@ the real webview entry: personal and classroom, dark and light, 800 and 1420px a
 caption under the work surface, inside the card, drawn (hit test), 14px+, 4.5:1+, not clipped and no line past the
 viewport, no sideways scroll, the same node updated within 500 ms on typing, a host save, a cleared field and a step switch
 onto a closed card; six injected overrides caught).
+
+## Activity memory state line (CGP-KNOW-R-022)
+
+REQ-STUDIO-ACTIVITY-MEMORY-STATE / REQ-KNOW-40 (CGP-KNOW-040) / PI#2 (the learner can see what the AI
+keeps); DEC-01 and DEC-02 (ruled 2026-10-28). Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES.
+
+- **Always on, no switch.** Personal memory is the activity's `.hypeproof/memory/` files and is on for
+  every learner seat that has the store (personal and trial task workspaces), minor and kids cohorts
+  included. No Service profile field, no Studio setting, no instructor flag and no learner control turns
+  it off: a profile with `minor_cohort`, a kids or teen tier, or any `memory`-named field gets the same
+  store, and the extension contributes no memory setting.
+- **The activity says so.** The memory section of 작업 자료 (under 내 작품) shows, before its list is
+  opened, the text line "AI 기억: 켜짐 · `.hypeproof/memory/`" naming the folder inside the activity.
+  It is a paragraph, never a switch or a button, and there is no off wording and no "선생님이 정해요".
+  If the folder is a link or not a folder, the same line stays and the reason Studio read nothing is
+  shown under it without opening the list.
+- **Only where the store exists.** The line is part of the store's own view: no view (an instructor, a
+  seat with no task workspace, a classroom lesson seat, a profile not loaded yet, a task or activity
+  switch in progress) means no line. Class activities keep their own stores (REQ-KNOW-07) and show none.
+- The line is learner text: at least 14px and 4.5:1 in both themes, inside the drawer at 800 and 1420 px.
+  The settings dialog and activity header disclosure of DES-KNOW-40 (CGP-KNOW-D-022) are not built here.
+
+Evidence: `extensions/hypeproof-chat/test/activity-memory.smoke.mjs` (the real provider and host module:
+a view for minor, teen and kids profiles and for a profile whose memory fields all say off; no
+contributed memory setting) and `extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs`
+(headless Chromium on the built CSS and real panel: the line's exact text before the list opens, no
+control or off wording, 14px and 4.5:1, the unreadable-store reason unexpanded, and no line without a
+view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Learning block draws no judgment visuals (CGP-LEARN-D-002)
+
+REQ-STUDIO-LEARNING-BLOCK-NO-JUDGMENT-VISUALS / DES-CGP-LEARN-02 (traces to REQ-CGP-LEARN-02, REQ-STUDIO-LEARNING-BLOCK-NO-JUDGMENT)
+/ PI#7 (capability models are hypotheses, not UI labels; SX-01, SX-59, SX-43) with SX-29 (no badge or celebration) and SX-50
+(state is wording, not colour alone): a learning block draws no judgment visual, and every state it shows reads in words.
+
+- Marks. In no state does a block draw a check, cross, O/X, star, trophy, party, applause or "100" mark: not in its text or spoken
+  attributes (`aria-label`, `aria-description`, `title`, `placeholder`, `alt`), not as `::before`/`::after`/`::marker` content,
+  not as an icon (`ChatIcon` kinds `check`, `check-square`, `close`, `ban`, `sparkle`), image, canvas, video or frame, and not as a
+  background, list, mask or border image.
+- Colour. No element of a block takes a saturated green or red (a pass/fail colour) for its text, fill, border or outline.
+- Celebration. A block runs no animation, and a change in it (typing, the host confirming a save, a step switch) starts none
+  anywhere on the page.
+- Numerals. A block shows no numeral except inside the learner's own words: no score, count or rank tied to the learner.
+- Colour removed. With the colour taken off the page (`grayscale(1)`), every state of a block reads differently in words, and its
+  text keeps 4.5:1 and full opacity. States: `criterion_form` empty, written, saved, edited after the save, cleared;
+  `decision_form` empty, only what, both, only why, saved; each of the five kinds this Studio cannot draw yet shows its
+  fixed notice.
+- Card icon. The 자료 card's thumbnail (CGP-LEARN-D-001) is part of the block, so its icon is neutral for every kind:
+  `criterion_form` uses `flag` (what the step aims at), not `check-square`.
+
+Every seat that draws the lesson rail (classroom, personal with a lesson) follows the same rule, in dark and light themes and at
+800 and 1420 px. Chalk draws no learner block (instructors author the step's `ui`), so the rule has no Chalk surface yet. Default
+state: on (the card icon swap is the only behaviour change; the rest holds what main does with a computed test).
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-judgment-visuals-browser.smoke.mjs` (the mounted ChatPanel with the
+shipped stylesheet in headless Chromium; 15 block states covering all seven kinds x 2 seats x 2 themes x 2 widths, each measured in colour and in
+grayscale; positive and negative controls for every finding kind; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).

@@ -66,7 +66,34 @@ try {
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(banners.length, count);
   } finally { globalThis.setTimeout = realTimeout; globalThis.setInterval = realInterval; }
-  console.log('PASS actual update orchestrator: check failures, platform, version, assets, cadence, banner retention and disposal');
+
+  // REQ-STUDIO-START-UPDATE-NOTICE — a transient failure retries after 15 minutes (at most 3 per
+  // 24-hour cycle) instead of waiting a day; a success needs no retry, and dispose cancels a pending one.
+  {
+    const timers = [], seen = [], realClear = globalThis.clearTimeout;
+    const flush = () => new Promise(r => setImmediate(r));
+    try {
+      globalThis.setTimeout = (fn, ms) => { timers.push({ fn, ms, kind: 'timeout' }); return timers.length; };
+      globalThis.setInterval = (fn, ms) => { timers.push({ fn, ms, kind: 'interval' }); return timers.length; };
+      globalThis.clearTimeout = () => {};
+      globalThis.fetch = async () => new Response('', { status: 503 });
+      const sch = scheduleUpdateChecks({ currentVersion: '0.1.50', context: { globalState: { get: () => ({}) } }, pushUpdateBanner: b => seen.push(b) });
+      timers[0].fn(); await flush(); await flush();
+      const retries = () => timers.filter(t => t.kind === 'timeout' && t.ms === 15 * 60_000);
+      assert.equal(retries().length, 1, 'a transient failure schedules one retry');
+      assert.deepEqual(seen, [], 'the failure still clears nothing (REQ-I11)');
+      for (let i = 0; i < 4; i++) { retries().at(-1).fn(); await flush(); await flush(); }
+      assert.equal(retries().length, 3, 'at most three retries per cycle');
+      timers.find(t => t.kind === 'interval').fn(); await flush(); await flush();
+      assert.equal(retries().length, 4, 'the next daily check starts a new retry budget');
+      globalThis.fetch = async () => Response.json(release);
+      retries().at(-1).fn(); await flush(); await flush();
+      assert.equal(seen.at(-1)?.version, '0.1.51', 'the retry finds the release the failed check missed');
+      assert.equal(retries().length, 4, 'a success schedules no retry');
+      sch.dispose();
+    } finally { globalThis.setTimeout = realTimeout; globalThis.setInterval = realInterval; globalThis.clearTimeout = realClear; }
+  }
+  console.log('PASS actual update orchestrator: check failures, platform, version, assets, cadence, banner retention and disposal, bounded retry after a transient failure');
 } finally {
   globalThis.fetch = originalFetch;
   if (originalToken === undefined) delete process.env.HPS_RELEASE_TOKEN; else process.env.HPS_RELEASE_TOKEN = originalToken;

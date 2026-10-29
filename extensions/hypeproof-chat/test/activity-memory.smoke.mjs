@@ -200,6 +200,29 @@ try {
     assert.deepEqual(view.entries.map(e => [e.name, e.text]), [['color.md', '좋아하는 색은 초록이에요.']]);
   });
 
+  // REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022): on for every cohort, minors included, and no profile
+  // field, setting or instructor flag turns it off (DEC-01, DEC-02).
+  await t('state: always on for minor and kids cohorts and whatever memory field a profile carries', async () => {
+    const saved = h.cachedProfile;
+    const profiles = [
+      { profile_id: 'synthetic-minor', minor_cohort: true, game: { template_tier: 'kids-quest' } },
+      { profile_id: 'synthetic-teen', minor_cohort: true, game: { template_tier: 'teen' } },
+      { profile_id: 'synthetic-off', memory: { enabled: false }, memory_enabled: false, personal_memory: false, instructor_memory_switch: 'off' },
+    ];
+    try {
+      for (const profile of profiles) {
+        h.cachedProfile = profile;
+        const view = await list();
+        assert.ok(view, `memory view for ${profile.profile_id}`);
+        assert.equal(view.folder, '.hypeproof/memory/');
+        assert.equal(view.unsafe, false);
+      }
+    } finally { h.cachedProfile = saved; }
+    const contributes = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).contributes ?? {};
+    const settings = [contributes.configuration ?? []].flat().flatMap(c => Object.keys(c.properties ?? {}));
+    assert.deepEqual(settings.filter(key => /memor|기억/i.test(key)), [], 'no learner setting switches memory');
+  });
+
   await t('panel: no view for an instructor, mid-switch, or without a task workspace', async () => {
     h._instructorMode = { isInstructor: true }; assert.equal(await list(), null);
     h._instructorMode = { isInstructor: false };

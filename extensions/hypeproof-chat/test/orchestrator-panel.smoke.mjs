@@ -283,17 +283,17 @@ const OLD_SCREENS = {
 // CGP-LEARN-D-003: re-taken again (TZ=UTC) because the live state line (the block's caption) moved out of the head, from
 // under the title to after the card body, and the head's title wrapper div is gone. Putting the line back under the title in
 // a div.hp-block-card-title gives main's HPS_A5_DUMP_DIR dumps byte for byte; the five EffortControl digests are unchanged.
-// PR3140: paired exact05fe/b128 renders reproduce every old raw BASE digest on
-// 05fe. All six ChatPanel differences are solely :R4n: -> :R8p: in lesson-block
-// IDs/IDREFs after inserting a null CompanionReceivingControls sibling. These six
-// canonical digests come from that verified parent markup, not refreshed UI.
-// The five EffortControl digests remain byte-identical. ID linkage controls below
-// reject missing/duplicate targets, crosswired references and visible changes.
+// CGP-LEARN-D-002: the six ChatPanel digests were re-taken (TZ=UTC) because the criterion card's thumbnail icon is now
+// `flag` instead of `check-square` (no check mark inside a block). Putting main's check-square <svg> back in place of the
+// flag <svg> in the HPS_A5_DUMP_DIR dumps gives main's markup byte for byte; the five EffortControl digests are unchanged.
+// PR3140: canonical baselines are derived from paired b6f14db8 parent and merged
+// renders. The parent reproduces all 11 raw baseline digests; canonical markup
+// matches across all 11 screens while preserving IDs, references and markup.
 const BASE = {
-  "ChatPanel/adult-plain": "4900d9fad15d7f267a8e8f43fa167c89486bd001a6680a2a16574435f25a1ee1",
-  "ChatPanel/adult-effort-observed": "f7661c16175da0f0a69734c9adaf3afb126e8d186d895381eecf532b3aeefa11",
-  "ChatPanel/adult-timeline": "ad00fb0e5d60b6e99f5797f4ff45982a534ddbae10b12dbde6c966bfb38fe401",
-  "ChatPanel/kids": "06e759742ea820ec2ca86977f2cf3b7473f20d1cca85495a0fabb84cc539035a",
+  "ChatPanel/adult-plain": "80cbc491375c07f561f6e45e2784804ce901c882f6a582f353308ca38a764c57",
+  "ChatPanel/adult-effort-observed": "2f3a30089ca45e4a1869684cb5b40f026b0efb9081f91396b63bb3160f9e2d51",
+  "ChatPanel/adult-timeline": "acff9402cd536f0cc15244408fc66b8a76f2add51eb824aea4c68291a088802f",
+  "ChatPanel/kids": "7464ada351e37158c7cd4cf651ffdf59885c0a67d4976fa2dff807d9ce73b491",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -313,8 +313,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "706222dbc9868a49024a5370329be8ab4aa65d52e7adf2a5715ef31d5552dd04",
-  "ChatPanel/classroom-access-unknown": "28ffa6b7560ee094ae3cf894ba8e5cf06f1250369b799012ce847f8187ba6fd2",
+  "ChatPanel/classroom-class-funded": "4197eb672c7126e0b897e8ef3b6c44264937ccc2ee73dbb10aec3ab30ad979ce",
+  "ChatPanel/classroom-access-unknown": "dba3e148fed59d22b9301b13374e7d608cf85b5f31f9f3aee1d569c45be36c16",
 };
 
 const status = rendererStatus();

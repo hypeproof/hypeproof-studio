@@ -4,7 +4,7 @@
 // confirm (with 취소) before a delete.
 
 import { useEffect, useRef, useState } from 'react';
-import { memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView } from '../../src/activityMemoryView';
+import { MEMORY_STATE_LABEL, memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView } from '../../src/activityMemoryView';
 import { focusIsLost } from './dialogFocus';
 import { onHostMessage, postToHost } from './vscode';
 
@@ -59,6 +59,10 @@ export function ActivityMemoryPanel({ scopeKey }: { scopeKey: string }) {
 
   if (!view) return null;
   return <section className="tw-memory" aria-labelledby="tw-memory-entry" data-testid="activity-memory">
+    {/* REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022): a text state, never a switch. Memory is always on
+        (DEC-01, DEC-02), so there is no off state to show; the line exists only while the store does. */}
+    <p className="tw-memory-state" data-testid="activity-memory-state">{MEMORY_STATE_LABEL} · <code>{view.folder}</code></p>
+    {view.unsafe && <p className="tw-memory-note">기억 폴더가 링크이거나 폴더가 아니어서 읽지 않았어요.</p>}
     <button ref={entryButton} id="tw-memory-entry" type="button" className="tw-memory-entry" aria-expanded={open} aria-controls="tw-memory-list"
       onClick={() => { setOpen(value => !value); if (!open) postToHost({ type: 'activityMemoryRequest' }); }}>
       AI 기억 파일 · {view.entries.length}개
@@ -67,7 +71,6 @@ export function ActivityMemoryPanel({ scopeKey }: { scopeKey: string }) {
     <p role="status" className="tw-memory-note">{notice}</p>
     {open && <div id="tw-memory-list" className="tw-memory-list">
       <p className="tw-memory-note">이 활동 폴더 안의 <code>{view.folder}</code>에 있는 파일이에요. 이 활동 밖의 기억은 읽지 않아요.</p>
-      {view.unsafe && <p className="tw-memory-note">기억 폴더가 링크이거나 폴더가 아니어서 읽지 않았어요.</p>}
       {view.other > 0 && <p className="tw-memory-note">목록에 없는 파일 {view.other}개는 폴더에서 직접 확인할 수 있어요.</p>}
       {view.entries.length === 0 ? <p className="tw-memory-note">아직 기억 파일이 없어요.</p>
         : <ul aria-label="AI 기억 파일">{view.entries.map(entry => <li key={entry.name}>
