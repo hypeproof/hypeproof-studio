@@ -44,6 +44,16 @@ export async function switchOwnedWindow(from,to,{observeChatFocus=false}={}){
  // palette command; no extra key, focus mutation or retry repairs it.
  if(observeChatFocus)await to.restoredFocus();
 }
+// Closing the secondary returns native focus asynchronously. Observe the exact
+// A document captured after its final reload before a later command opens F1.
+export async function closeSecondaryAndObserveOriginal(ui,other,retained,{onClosed=()=>{},timeout=30000}={}){
+ assert(ui.workbenchId&&other.workbenchId&&ui.workbenchId!==other.workbenchId&&ui.endpoint===other.endpoint,'Two distinct explicitly owned windows required');
+ if(retained)assert.equal(retained.workbench,ui.workbenchId,'Original return must retain the exact owned window');
+ await other.closeOwnedWindow();onClosed();
+ if(!retained)return {secondary_closed:true,original_return_observed:false}; // Failed main path still closes its owned secondary.
+ await ui.retainedChatReady(retained,timeout);
+ return {secondary_closed:true,original_return_observed:true,document:retained,focus_repaired:false};
+}
 export async function finishOwnedWindows({primary,observe,cleanup,proof,persist}){
  // Diagnostic failures and cleanup must never replace the original failure.
  try{await observe();}catch(error){proof.diagnostic_error=error.message;}
@@ -87,7 +97,7 @@ export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,w
  const selectedBinding=selectOwnedBinding(bindings,fs.realpathSync(c.workspace.c),c.service.origin+'/v1',activityId);
  const bindingFile=selectedBinding.file,bindingHash=selectedBinding.sha256,filesC=workspaceFiles(c.workspace.c);
  const proof={scope:'actual simultaneous windows and destination noninterference',original_window:original.info.id,secondary_window:null,secondary_closed:false,pending_marker_consumption:'NOT_OBSERVED; internal transient marker is not inferred from UI',slow_native_activation:'NOT_RUN; deterministic61s/expiry controls reused',observations:0,phases:[],diagnostics:[]};
- let secondary,other,cli,primary,focusObservation;ui.workbenchId=original.info.id;
+ let secondary,other,cli,primary,focusObservation,returnChat;ui.workbenchId=original.info.id;
  const persist=()=>saveProgress(structuredClone(proof));
  const phase=name=>{proof.phases.push({phase:name,at:new Date().toISOString()});persist();};
  const diagnose=async()=>{
@@ -132,16 +142,16 @@ export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,w
   await other.shot(path.join(c.evidence,'simultaneous-other-C.png'));await ui.shot(path.join(c.evidence,'simultaneous-destination-B.png'));persist();
   // Restore the original window using the public native File command before cleanup.
   phase('original-return-to-A');await ui.palette(coreCommandLabel('workbench.action.files.openFolder'));await ui.ownedOpenFolder(c.workspace.a+path.sep);
-  await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)),'original window returns to A',60000);await ui.restoredDraft(draft);await observeOther();
+  await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)),'original window returns to A',60000);await ui.restoredDraft(draft);await observeOther();returnChat=await ui.chatDocumentIdentity();
  }catch(error){primary=error;proof.primary_error=error.message;proof.failed_phase=proof.phases.at(-1)?.phase;persist();}
  if(focusObservation){proof.retained_focus_cleanup=await focusObservation.finish();persist();}
  await finishOwnedWindows({primary,proof,persist,observe:diagnose,cleanup:async()=>{
   try{
    if(other){
     phase('cleanup-switch-secondary');await switchOwnedWindow(ui,other);
-    phase('cleanup-close-secondary');await other.closeOwnedWindow();proof.secondary_closed=true;
+    phase('cleanup-close-secondary');proof.original_return=await closeSecondaryAndObserveOriginal(ui,other,returnChat,{onClosed:()=>{proof.secondary_closed=true;phase('cleanup-observe-original-return');}});
    }
   }finally{other?.close();ui.workbenchId=undefined;}
  }});
- assert(proof.secondary_closed);return {...proof,provider_dispatch:false,token_reentry:false};
+ assert(proof.secondary_closed);assert.equal(proof.original_return?.original_return_observed,true,'Original A native return must be observed before another command');return {...proof,provider_dispatch:false,token_reentry:false};
 }
