@@ -37,10 +37,11 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   // REQ-STUDIO-FOLDER-CONSENT (#2065): a trial seat whose picked folder is outside its served
   // home asks once per activity and folder before the first model call. A classroom seat
   // never asks. The turn writes a file, so the synthetic learner allows everything.
-  const consent=ctx.win.locator('.monaco-dialog-box').filter({hasText:'이 폴더에서 작업할까요?'});
+  // Since #2656 (2026-10-24) the question is a dialog in the chat panel, answered with 믿고 열기.
+  const consent=chat.locator('dialog.hps-folder-consent');
   if(managed){
    await expect(consent).toBeVisible({timeout:20000});
-   await consent.locator('.monaco-button').filter({hasText:'읽기·고치기·명령 실행 모두 허용'}).click();
+   await consent.locator('[data-folder-full]').click();
    await expect(consent).toHaveCount(0);
   }
   await expect(chat.locator('.hps-btn-stop')).toBeVisible();await expect(chat.locator('.hps-btn-stop')).toHaveCount(0,{timeout:100000});
@@ -84,7 +85,9 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   await ctx.win.screenshot({path:join(out,'activity-b.png')});
   await chatMenuAction(chat,'활동 변경');
   const list=await startFrame(ctx.win);const saved=list.getByRole('navigation',{name:'저장된 활동'}).getByRole('button');
-  await expect(saved).toHaveCount(2);await saved.filter({hasText:ctx.wsDir}).click();
+  await expect(saved).toHaveCount(2);
+  // Since #2776 (2026-10-25) a saved activity shows a short workspace; the full path is in its title (substring: macOS may prefix /private).
+  await saved.and(list.locator(`[title*=${JSON.stringify(ctx.wsDir)}]`)).click();
   const bViews=await ctx.win.locator('iframe.webview').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('name')));await begin();
   await expect.poll(()=>readAcrossReload(()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,bViews),-1)).toBe(0);
   await expect.poll(()=>readAcrossReload(()=>ctx.win.title(),'activity-b')).not.toContain('activity-b');

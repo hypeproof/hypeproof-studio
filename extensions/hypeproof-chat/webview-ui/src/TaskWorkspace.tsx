@@ -14,6 +14,7 @@ export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
 import { imeComposing } from './imeGuard';
 import { ActivityTrashPanel } from './ActivityTrashPanel';
+import { ActivityMemoryPanel } from './ActivityMemoryPanel';
 import { MyWorksDrawer } from './MyWorksDrawer';
 import { actionable, returnFocus, returnFocusSoon, returnTarget, trapTab } from './dialogFocus';
 import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
@@ -736,6 +737,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         if (taskId !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: taskId });
         setRevealTick(tick => tick + 1);
       }} />}
+      {sourcesOpen && <ActivityMemoryPanel scopeKey={scopeKey} />}
       </>}</PanelBoundary>
     </aside>
     {worksOpen && <MyWorksDrawer key={scopeKey} files={artifacts} viewport={viewport} opener={() => worksButton.current} fallback={() => railToggle.current} onClose={() => setWorksOpen(false)} />}

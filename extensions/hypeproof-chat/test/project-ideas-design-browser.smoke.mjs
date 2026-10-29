@@ -33,7 +33,10 @@ const open=async(theme,width,height,forcedColors=false)=>{await browser.send('Pa
 const value=()=>browser.evaluate(`document.querySelector('.hps-input textarea').value`);
 const sends=async()=>JSON.parse(await browser.evaluate('JSON.stringify(messages)')).filter(m=>m.type==='sendMessage'||m.type==='send').length;
 const center=(sel)=>browser.evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
-const mouseClick=async(sel)=>{const {x,y}=await center(sel);for(const type of ['mousePressed','mouseReleased'])await browser.send('Input.dispatchMouseEvent',{type,x,y,button:'left',clickCount:1});};
+// Let the layout settle before reading coordinates: the textarea grows after a pick, which moves the cards, and a
+// press at stale coordinates misses (this flaked on CI for unrelated PRs, 2026-10-28). No enabled check here: the IME
+// case presses a card on purpose while it is disabled.
+const mouseClick=async(sel)=>{await frames();const {x,y}=await center(sel);for(const type of ['mousePressed','mouseReleased'])await browser.send('Input.dispatchMouseEvent',{type,x,y,button:'left',clickCount:1});};
 // Visible line boxes of one element's text, counted from the browser's own rects (not height /
 // line-height); lines a clamp hides fall outside the element's box and are not counted.
 const CARD=`(card)=>{const lines=(el)=>{const box=el.getBoundingClientRect(),rg=document.createRange();rg.selectNodeContents(el);const tops=[];for(const r of rg.getClientRects()){if(r.width<1||r.top<box.top-1||r.bottom>box.bottom+1)continue;if(!tops.some(t=>Math.abs(t-r.top)<2))tops.push(r.top);}return tops.length;};
@@ -109,12 +112,15 @@ try{
  assert.equal(await value(),'내 생각 하\n'+PROMPT,'the composed syllable is kept exactly as typed, then the idea on a new line');
  assert.equal(await sends(),0,'a pick never sends');
  // A second pick replaces the first idea and still keeps the learner's own text.
+ await waitFor(`!document.querySelector('.hps-project-idea[data-idea="trip-plan"]').disabled`,'trip-plan card enabled');
  await mouseClick('.hps-project-idea[data-idea="trip-plan"]');
  await waitFor(`document.querySelector('.hps-input textarea').value.includes('여행')`,'second idea');
  const second=await value();
  assert.ok(second.startsWith('내 생각 하\n')&&!second.includes('퀴즈'),`second pick replaces the first, learner text kept: ${JSON.stringify(second)}`);
  // Keyboard: focus a card and press Enter (DevTools key events, not the OS).
+ await waitFor(`!document.querySelector('.hps-project-idea[data-idea="quiz"]').disabled`,'quiz card enabled');await frames();
  await browser.evaluate(`document.querySelector('.hps-project-idea[data-idea="quiz"]').focus()`);
+ await waitFor(`document.activeElement?.matches('.hps-project-idea[data-idea="quiz"]')`,'quiz card focused');
  await browser.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});await browser.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
  await waitFor(`document.querySelector('.hps-input textarea').value.includes('퀴즈')`,'keyboard pick');
  assert.ok((await value()).startsWith('내 생각 하\n'),'keyboard pick keeps the learner text');

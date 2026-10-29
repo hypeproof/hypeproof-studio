@@ -796,6 +796,8 @@ export type WebviewMessage = (
   // CGP-KNOW-D-013 — the 내 작품 panel's trash: list, and one press (move a file, restore or purge an item) bound to the listed scope.
   | { type: "activityTrashRequest" }
   | { type: "activityTrashAction"; requestId: string; scope: string; action: import("./activityTrashView").ActivityTrashAction; target: string }
+  | { type: "activityMemoryRequest" }
+  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string }
   | { type: "artifactProvenanceRequest" }
   // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
   | { type: "artifactThumbnailRequest"; requestId: string; path: string }
@@ -922,6 +924,7 @@ export type HostMessage = (
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — one label per work-folder file, from recorded events only; null when there is no folder. */
   /** CGP-KNOW-D-013 — the current activity's trash; null when unavailable. `requestId`/`result` answer one press. */
   | { type: "activityTrashState"; view: import("./activityTrashView").ActivityTrashView | null; requestId?: string; result?: import("./activityTrashView").ActivityTrashResult }
+  | { type: "activityMemoryState"; view: import("./activityMemoryView").ActivityMemoryView | null; requestId?: string; result?: import("./activityMemoryView").ActivityMemoryResult }
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   /** CGP-KNOW-D-011 — an inline data: image read from inside the work folder, or null (the row keeps its type glyph). */
   | { type: "artifactThumbnail"; requestId: string; path: string; src: string | null }

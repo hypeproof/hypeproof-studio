@@ -50,9 +50,10 @@ export interface ChalkToolDefinition {
 
 // #1297 (E4-2): first-pass filter — token presence + unverified claim.
 // Final gate is server-verified whoami in chatPanelProvider (#1298, E4-3).
+import type { ExtraTools } from "../localRuntime/index.ts";
 import { ISSUER_TOKEN_KEY } from "../mintStudentTokenHelpers.ts";
 import { looksLikeIssuerTokenUnverified } from "../chatPanelHelpers.ts";
-import { adminBaseFrom } from "./serverBase.ts";
+import { adminBaseFrom } from "../serverBase.ts";
 
 export async function chalkToolsEnabled(
   secrets: vscode.SecretStorage,
@@ -868,6 +869,14 @@ export const CHALK_TOOL_EXECUTORS: ExecutorMap = {
  * 결과는 JSON 문자열로 직렬화된다 — 모델이 읽는 tool_result 형식.
  * 토큰은 이 함수가 반환하는 문자열에 포함되지 않는다.
  */
+export function chalkExtraTools(ctx: ChalkToolContext | undefined): ExtraTools | undefined {
+  if (!ctx) return undefined;
+  return {
+    definitions: CHALK_TOOL_DEFINITIONS,
+    call: (name, input) => callChalkTool(ctx, name, input as Record<string, unknown>),
+  };
+}
+
 export async function callChalkTool(
   ctx: ChalkToolContext,
   name: string,

@@ -36,14 +36,15 @@ import { contentBytes, observationOutboundItems } from "./outboundConsent";
 import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "./attachmentFailure";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
-import type { BrowserToolsForLocal } from './localRuntime';
+import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
+import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, resolveInstructorRuntime, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
 import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
 import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
-import { InstructorModeManager } from './chalk/instructorMode';
-import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
+import { InstructorModeManager } from './instructorMode';
+import { decideMode, profileFailureToStatus } from './modeDecision';
 import { chalkToolsEnabled } from './chalk/tools';
 import { runInstructorTurn, INSTRUCTOR_TOOL_PROFILE } from './chalk/instructorTurn';
 import { ActivityConnectionError, activityConnections, canonicalRoot } from './activityConnections';
@@ -948,6 +949,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private sdkSeedInFlight: Promise<void> | null = null;
   // #1298 — instructor-mode state and server calls. Reset in invalidateProfile().
   private _instructorMode = new InstructorModeManager();
+  private chalkContract: ChalkContractHost | null = null;
+  private contractToken: string | undefined;
+  private contractUrl: string | undefined;
+  private contractConnection: string | undefined;
   private nativeObservationError: string | null = null;
   private nativeLearningPath: {title:string;url:string;reason:string} | null = null;
   private observationAssessment: AbortController | null = null;
@@ -6615,6 +6620,28 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.postActivityTrash({ requestId, result });
     if (!result.error && !result.cancelled) await this.postArtifactProvenance(true);
   }
+  // REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030) — the activity's memory files in 내 작품. Always on
+  // (DEC-01, DEC-02); the store and its native confirm live in activityMemoryHost.ts.
+  private activityMemoryPanel?: import("./activityMemoryHost").ActivityMemoryPanelApi;
+  setActivityMemoryPanel(api: import("./activityMemoryHost").ActivityMemoryPanelApi): void { this.activityMemoryPanel = api; }
+  /** The learner's activity folder on a task workspace (personal, trial); none for instructors or mid-switch. */
+  get activityMemoryBinding(): { root: string; scope: string } | undefined {
+    return this.currentTaskStore() ? this.activityTrashBinding : undefined;
+  }
+  private async postActivityMemory(extra?: { requestId: string; result: import("./activityMemoryView").ActivityMemoryResult }): Promise<void> {
+    const view = this.activityMemoryPanel && this.activityMemoryBinding ? await this.activityMemoryPanel.view() : null;
+    await this.post({ type: "activityMemoryState", view, ...extra });
+  }
+  private async runActivityMemoryAction(msg: Extract<WebviewMessage, { type: "activityMemoryAction" }>): Promise<void> {
+    const requestId = typeof msg.requestId === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) ? msg.requestId : null;
+    if (!requestId) return;
+    const action = msg.action === "open" || msg.action === "delete" ? msg.action : null;
+    const panel = this.activityMemoryPanel;
+    const result: import("./activityMemoryView").ActivityMemoryResult = !action || !panel || !this.activityMemoryBinding || typeof msg.name !== "string" || msg.name.length > 200 || typeof msg.scope !== "string"
+      ? { action: action ?? "open", error: "작업 상태가 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요." }
+      : await panel.act(action, msg.name, msg.scope);
+    await this.postActivityMemory({ requestId, result });
+  }
   // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
   // window starts with none, and the transcript stores nothing new for them.
   private pageCardRegistry: PageCardRegistry | undefined;
@@ -7004,6 +7031,99 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  attachChalkContract(host: ChalkContractHost): void {
+    this.chalkContract = host;
+  }
+
+  private syncChalkContract(s: { isInstructor: boolean; panelMode: string; issuerToken: string | undefined; proxyUrl: string }): void {
+    const host = this.chalkContract;
+    if (!host) return;
+    let local: LocalRuntimeConfig | null = null;
+    try { local = localRuntimeConfig(vscode.env.appName, s.proxyUrl); } catch { local = null; }
+    const connection = connectionFor(local?.provider, local !== null);
+    if (s.isInstructor && s.issuerToken) {
+      if (host.active && this.contractToken === s.issuerToken && this.contractUrl === s.proxyUrl && this.contractConnection === connection) return;
+      const token = s.issuerToken;
+      const replacing = host.active;
+      void (async () => {
+        if (replacing) await host.deactivate('superseded').catch(() => undefined);
+        const reply = await host.activate({ issuerToken: token, verifiedServerUrl: s.proxyUrl, connection }).catch(() => ({ ok: false }));
+        if (reply.ok) {
+          this.contractToken = token;
+          this.contractUrl = s.proxyUrl;
+          this.contractConnection = connection;
+        }
+      })();
+      return;
+    }
+    if (!host.active) return;
+    const reason = s.panelMode !== 'instructor' ? 'studentSlotWins' : s.issuerToken ? 'rejected' : 'issuerRemoved';
+    this.contractToken = undefined;
+    this.contractUrl = undefined;
+    this.contractConnection = undefined;
+    void host.deactivate(reason).catch(() => undefined);
+  }
+
+  chalkRunner(): LocalRunner {
+    const proxyUrl = () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
+    const local = (): LocalRuntimeConfig | null => {
+      try { return localRuntimeConfig(vscode.env.appName, proxyUrl()); } catch { return null; }
+    };
+    return {
+      available: () => local() !== null,
+      executorModel: () => local()?.model,
+      run: (input) => this.runContractTurn(input, local()),
+      previewOpen: (webPath) => this.contractPreviewOpen(webPath),
+    };
+  }
+
+  private async runContractTurn(input: RunTurnInput, local: LocalRuntimeConfig | null): Promise<void> {
+    if (!local) throw new Error(NO_LOCAL_RUNTIME_MESSAGE);
+    const cwd = this.resolveCoachCwd();
+    if (!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
+    const last = input.messages[input.messages.length - 1];
+    if (!last || last.role !== 'user') throw new Error('보낼 질문이 없습니다.');
+    const emit = (event: TurnEvent) => { void input.emit(event).catch(() => undefined); };
+    let seq = 0;
+    const extraTools = {
+      definitions: input.tools,
+      call: async (name: string, toolInput: unknown): Promise<string> => {
+        const reply = await input.emit({ kind: 'toolCall', callId: `${input.turnId}:${++seq}`, name, input: toolInput }) as { result?: unknown; isError?: unknown } | undefined;
+        const text = typeof reply?.result === 'string' ? reply.result : '';
+        if (reply?.isError === true) throw new Error(text || '도구 실행에 실패했습니다.');
+        return text;
+      },
+    };
+    await runLocalCoach({
+      config: local,
+      profile: INSTRUCTOR_TOOL_PROFILE,
+      cwd,
+      history: input.messages.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),
+      userText: last.content,
+      systemPrompt: input.systemBrief,
+      extraTools,
+      signal: input.signal,
+      onDelta: (text) => emit({ kind: 'delta', text }),
+      onRefusal: () => emit({ kind: 'refusal' }),
+      onActivity: (activity) => emit({ kind: 'activity', activity }),
+      requestApproval: async (action) => {
+        let prompted = false;
+        const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; });
+        return { approved, actor: prompted ? 'user' : 'policy' };
+      },
+    });
+  }
+
+  private async contractPreviewOpen(webPath: string): Promise<{ ok: boolean; error?: string }> {
+    const cwd = this.resolveCoachCwd();
+    if (!cwd) return { ok: false, error: 'no-folder' };
+    const root = path.resolve(cwd) + path.sep;
+    const target = path.resolve(cwd, webPath);
+    if (!target.startsWith(root)) return { ok: false, error: 'outside-folder' };
+    await vscode.commands.executeCommand('hypeproof-chat.previewActiveFile', vscode.Uri.file(target));
+    return { ok: true };
+  }
+
   private resolveCoachCwd(): string | undefined {
     const opened = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (opened) return opened;
@@ -7302,6 +7422,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "previewRecoveryAction": await this.runPreviewRecovery(msg.action); return;
       case "activityTrashRequest": await this.postActivityTrash(); return;
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
+      case "activityMemoryRequest": await this.postActivityMemory(); return;
+      case "activityMemoryAction": await this.runActivityMemoryAction(msg); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
@@ -9070,11 +9192,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (effectiveImages?.length) throw new Error('로컬 개발 연결의 이미지 입력은 아직 지원하지 않습니다. 텍스트로 요청하세요.');
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
-          const chalkCtx = undefined; // student local path never has instructor chalkCtx
           if (companionSend) await bindCompanion('local');
           const result=await runLocalCoach({config:local,profile,cwd,
             history:history.map(m=>({role:m.role,content:m.content})),userText:userTextForModel,
-            signal:ctrl.signal,onDelta,onRefusal,onActivity,chalkCtx,
+            signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{
               if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
               let prompted=false;
@@ -10277,6 +10398,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } else {
       // Student slot active: clear any cached instructor state so that handleSend and other
       // callers checking this._instructorMode.isInstructor === true see false, not a stale true.
+      this._instructorMode.reset();
+      isInstructor = false;
+    }
+    if (resolveInstructorRuntime(vscode.workspace.getConfiguration('hypeproofChat').get('instructorRuntime')) === 'chalk-extension') {
+      this.syncChalkContract({ isInstructor, panelMode, issuerToken: issuerToken ?? undefined, proxyUrl });
       this._instructorMode.reset();
       isInstructor = false;
     }

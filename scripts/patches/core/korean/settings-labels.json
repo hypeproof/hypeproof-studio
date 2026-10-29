@@ -5,6 +5,7 @@
   "hypeproofChat.freeStart": "코드 없이 시작",
   "hypeproofChat.model": "사용할 모델",
   "hypeproofChat.coachRuntime": "코치 실행 방식",
+  "hypeproofChat.instructorRuntime": "강사 화면 방식",
   "hypeproofChat.sdkBinaryPath": "에이전트 실행 파일 위치",
   "hypeproofChat.sdkSeedOnDemand": "에이전트 다운로드 안내",
   "hypeproofChat.sdkStallTimeoutMs": "응답 대기 제한 시간",

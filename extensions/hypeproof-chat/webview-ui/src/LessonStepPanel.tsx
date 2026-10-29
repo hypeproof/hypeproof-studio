@@ -1,9 +1,17 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { HELP_MODE_LABELS, REHEARSAL_REASON_WORDS, helpChoices, stepMaterial, surfaceOf, type HelpMode, type RenderedStep, type StepWork } from "../../src/lessonFocus";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { HELP_MODE_LABELS, MATERIAL_TEXT, REHEARSAL_REASON_WORDS, helpChoices, stepMaterial, surfaceOf, type HelpMode, type MaterialKind, type RenderedStep, type StepWork } from "../../src/lessonFocus";
 import type { ResolvedProfile, WebviewMessage } from "../../src/protocol";
+import { ChatIcon, type IconKind } from "./ChatDetails";
+import "./learningBlockCard.css";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
 type Step = Lesson["content"]["steps"][number];
+
+/** CGP-LEARN-D-001 — the 자료 card's 48px thumbnail icon for each block kind (the card's title is MATERIAL_TEXT's). */
+const BLOCK_ICONS: Record<MaterialKind, IconKind> = {
+  criterion_form: "check-square", decision_form: "pencil", canvas_editor: "code", canvas_preview: "eye",
+  evidence_note: "book", coach_request: "message", metric_board: "ruler",
+};
 
 /**
  * #751 G2 — the part of the current step that CHANGES what the learner does: the help modes this step offers (applied to
@@ -38,10 +46,13 @@ export function LessonStepPanel(props: {
   // CGP-LEARN-R-001 — the block this step of the confirmed lesson attaches (its `ui`), named on the element that draws it.
   // Nothing else in the screen carries `data-hps-material`: a coach reply is text and can never attach one.
   const material = stepMaterial(lesson, step.id);
-  const materialAttrs = material ? { "data-hps-material": material.kind, "data-hps-material-step": material.stepId, "data-hps-material-version": material.version } : {};
   const [picked, setPicked] = useState<Record<string, HelpMode>>({});
   const key = lesson.sha256 + ":" + step.id;
   const chosen = picked[key] ?? null;
+  // CGP-LEARN-D-001 — the block's card is closed by default; open/closed is keyed to the lesson version and step (not stored,
+  // not an evidence event).
+  const [openBlocks, setOpenBlocks] = useState<Record<string, boolean>>({});
+  const blockOpen = !!openBlocks[key];
   const effective = chosen ?? (choices.includes(step.help?.default as HelpMode) ? (step.help!.default as HelpMode) : null);
 
   // The host holds the focus for the NEXT turn; a running turn keeps what it started with.
@@ -58,10 +69,41 @@ export function LessonStepPanel(props: {
   });
 
   const saved = props.work[step.id];
-  const [text, setText] = useState(""), [reason, setReason] = useState("");
-  useEffect(() => { setText(saved?.text ?? ""); setReason(saved?.reason ?? ""); }, [key, saved?.savedAt]);
+  const [text, setText] = useState(""), [reason, setReason] = useState(""), [draftOf, setDraftOf] = useState("");
+  useEffect(() => { setText(saved?.text ?? ""); setReason(saved?.reason ?? ""); setDraftOf(key); }, [key, saved?.savedAt]);
 
   const r = props.rehearsal, rs = props.rehearsalState;
+  // CGP-LEARN-R-003 — the block's live text equivalent: a title, how its controls work, and a state sentence computed from the
+  // fields as they are now. The status line stays one mounted node while its words change, so the change is announced.
+  const ids = useId();
+  const materialText = material ? MATERIAL_TEXT[material.kind] : null;
+  // Until the fields are reset for this step, the sentence describes this step's own save, never the previous step's draft.
+  const fresh = draftOf === key;
+  const state = materialText?.state({ text: fresh ? text : saved?.text ?? "", reason: fresh ? reason : saved?.reason ?? "", saved: saved ? { text: saved.text, reason: saved.reason } : undefined });
+  // CGP-LEARN-D-001 — the block is a collapsible 자료 card under the current step: closed, one row with a 48px thumbnail, the
+  // block's title, its live state line and 열어 보기; opening expands it in place. The help and the work surface sit in the body,
+  // which stays mounted while closed (`hidden`), so the rehearsal read-back keeps its nodes.
+  // CGP-LEARN-D-003 — the state line (R-003's polite region) is the block's caption: it comes after the body, so open it is
+  // drawn under the work surface and read after it, as the whole sentence. It is never inside the hidden body, so a step switch
+  // or a host save that lands on a closed card is still drawn and announced; closed, the card's grid lifts it into the head row
+  // under the title, one line with an ellipsis.
+  const block = (content: ReactNode) => !material || !materialText || !state ? content : (
+    <section className="hp-material hp-block-card" data-block-card={material.kind} data-block-open={blockOpen ? "" : undefined} data-hps-material={material.kind} data-hps-material-step={material.stepId} data-hps-material-version={material.version}
+      aria-labelledby={ids + "t"} aria-describedby={ids + "h"}>
+      <div className="hp-block-card-head">
+        <span className="hp-block-card-thumb"><ChatIcon kind={BLOCK_ICONS[material.kind]} size={20} /><span className="hp-block-card-kicker">자료</span></span>
+        <h3 id={ids + "t"} className="hp-material-title hp-block-card-name">{materialText.title}</h3>
+        <button type="button" className="hp-cta-quiet" aria-expanded={blockOpen} aria-controls={ids + "b"} data-block-toggle=""
+          onClick={() => setOpenBlocks((o) => ({ ...o, [key]: !blockOpen }))}>{blockOpen ? "닫기" : "열어 보기"}</button>
+      </div>
+      <div className="hp-block-card-body" id={ids + "b"} hidden={!blockOpen}>
+        <p id={ids + "h"} className="hp-material-help">{materialText.controlsHelp}</p>
+        {content}
+      </div>
+      <p id={ids + "s"} className="hp-material-state hp-block-card-state" role="status" aria-live="polite" aria-atomic="true" data-material-state={state.key}>{state.sentence}</p>
+    </section>
+  );
+  const describe = material ? ids + "h " + ids + "s" : undefined;
   return (
     <div ref={panel} className="hp-rail-lesson hp-step-work" data-lesson-step-panel={step.id}>
       {r && (
@@ -92,30 +134,30 @@ export function LessonStepPanel(props: {
           <p className="hp-rail-lesson-note">도움 방식은 AI가 돕는 방법만 바꿉니다. 쓸 수 있는 도구나 권한은 바뀌지 않고, 직접 해보기를 골라도 혼자 했다고 기록되지는 않습니다.</p>
         </fieldset>
       )}
-      {surface === "criterion_form" ? (
-        <form {...materialAttrs} data-surface="criterion_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "criterion", text }); }}>
+      {block(surface === "criterion_form" ? (
+        <form data-surface="criterion_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "criterion", text }); }}>
           <label>이 단계의 확인 기준 — 무엇이 되면 잘 된 것인지 한 줄로 적으세요
-            <textarea value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} rows={2} />
+            <textarea value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} rows={2} aria-describedby={describe} />
           </label>
           <button type="submit" className="hp-cta-quiet" disabled={!text.trim()}>기준 저장</button>
           {saved && <p className="hp-rail-lesson-note" data-saved-work="criterion">저장한 기준: {saved.text} · 다음 질문에 함께 보냅니다</p>}
         </form>
       ) : surface === "decision_form" ? (
-        <form {...materialAttrs} data-surface="decision_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "decision", text, reason }); }}>
+        <form data-surface="decision_form" className="hp-surface" onSubmit={(e) => { e.preventDefault(); post({ type: "lessonWork", stepId: step.id, kind: "decision", text, reason }); }}>
           <label>무엇을 바꾸기로 했나요
-            <input value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} />
+            <input value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} aria-describedby={describe} />
           </label>
           <label>왜 그렇게 정했나요
-            <textarea value={reason} maxLength={1000} onChange={(e) => setReason(e.target.value)} rows={2} />
+            <textarea value={reason} maxLength={1000} onChange={(e) => setReason(e.target.value)} rows={2} aria-describedby={describe} />
           </label>
           <button type="submit" className="hp-cta-quiet" disabled={!text.trim() || !reason.trim()}>결정 저장</button>
           {saved && <p className="hp-rail-lesson-note" data-saved-work="decision">저장한 결정: {saved.text} · 이유: {saved.reason} · 다음 질문에 함께 보냅니다</p>}
         </form>
       ) : surface.startsWith("unsupported:") ? (
-        <p {...materialAttrs} className="hp-rail-lesson-note" data-surface={surface}>이 단계의 작업 화면({surface.slice(12)})은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요.</p>
+        <p className="hp-rail-lesson-note" data-surface={surface}>이 단계의 작업 화면({surface.slice(12)})은 이 Studio에서 아직 열 수 없습니다. 대화로 진행하고 강사에게 알려 주세요.</p>
       ) : (
         <span hidden data-surface="chat" />
-      )}
+      ))}
     </div>
   );
 }
