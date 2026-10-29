@@ -81,19 +81,18 @@ export function LessonStepPanel(props: {
   const fresh = draftOf === key;
   const state = materialText?.state({ text: fresh ? text : saved?.text ?? "", reason: fresh ? reason : saved?.reason ?? "", saved: saved ? { text: saved.text, reason: saved.reason } : undefined });
   // CGP-LEARN-D-001 — the block is a collapsible 자료 card under the current step: closed, one row with a 48px thumbnail, the
-  // block's title, its live state line and 열어 보기; opening expands it in place. The state line (R-003's polite region) lives
-  // in the always-drawn head, so a step switch or a host save that lands on a closed card is still shown and announced; closed
-  // it is one line (ellipsis), open it wraps to the full sentence. The help and the work surface sit in the body, which stays
-  // mounted while closed (`hidden`), so the rehearsal read-back keeps its nodes.
+  // block's title, its live state line and 열어 보기; opening expands it in place. The help and the work surface sit in the body,
+  // which stays mounted while closed (`hidden`), so the rehearsal read-back keeps its nodes.
+  // CGP-LEARN-D-003 — the state line (R-003's polite region) is the block's caption: it comes after the body, so open it is
+  // drawn under the work surface and read after it, as the whole sentence. It is never inside the hidden body, so a step switch
+  // or a host save that lands on a closed card is still drawn and announced; closed, the card's grid lifts it into the head row
+  // under the title, one line with an ellipsis.
   const block = (content: ReactNode) => !material || !materialText || !state ? content : (
     <section className="hp-material hp-block-card" data-block-card={material.kind} data-block-open={blockOpen ? "" : undefined} data-hps-material={material.kind} data-hps-material-step={material.stepId} data-hps-material-version={material.version}
       aria-labelledby={ids + "t"} aria-describedby={ids + "h"}>
       <div className="hp-block-card-head">
         <span className="hp-block-card-thumb"><ChatIcon kind={BLOCK_ICONS[material.kind]} size={20} /><span className="hp-block-card-kicker">자료</span></span>
-        <div className="hp-block-card-title">
-          <h3 id={ids + "t"} className="hp-material-title hp-block-card-name">{materialText.title}</h3>
-          <p id={ids + "s"} className="hp-material-state hp-block-card-state" role="status" aria-live="polite" aria-atomic="true" data-material-state={state.key}>{state.sentence}</p>
-        </div>
+        <h3 id={ids + "t"} className="hp-material-title hp-block-card-name">{materialText.title}</h3>
         <button type="button" className="hp-cta-quiet" aria-expanded={blockOpen} aria-controls={ids + "b"} data-block-toggle=""
           onClick={() => setOpenBlocks((o) => ({ ...o, [key]: !blockOpen }))}>{blockOpen ? "닫기" : "열어 보기"}</button>
       </div>
@@ -101,6 +100,7 @@ export function LessonStepPanel(props: {
         <p id={ids + "h"} className="hp-material-help">{materialText.controlsHelp}</p>
         {content}
       </div>
+      <p id={ids + "s"} className="hp-material-state hp-block-card-state" role="status" aria-live="polite" aria-atomic="true" data-material-state={state.key}>{state.sentence}</p>
     </section>
   );
   const describe = material ? ids + "h " + ids + "s" : undefined;
