@@ -21,8 +21,10 @@ jobs:
     timeout-minutes: 165
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
+      version: ${{ steps.candidate.outputs.version }}
       published: ${{ steps.candidate.outputs.published }}
       matrix: ${{ steps.candidate.outputs.matrix }}
+      accepted: ${{ steps.reuse.outputs.accepted }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,6 +60,11 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || exit 1
           sha="$(git rev-parse "$TAG^{commit}")"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          # The App version the packages carry: the final version for an rc cut with
+          # final-version bytes (#3172), otherwise the tag without its v.
+          version="$(node scripts/release/build-contract.mjs app-version "$TAG")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "expected App version: $version"
           echo "matrix=$(node scripts/release/platforms.mjs matrix "$sha")" >> "$GITHUB_OUTPUT"
           echo "release platforms: $(node scripts/release/platforms.mjs list "$sha")"
           for attempt in $(seq 1 150); do
@@ -65,7 +72,7 @@ jobs:
             # Duplicate builder dispatch after successful promotion is read-only.
             if jq -e '.isDraft == false' "$RUNNER_TEMP/candidate.json" >/dev/null; then
               gh release download "$TAG" --dir "$RUNNER_TEMP/already-published"
-              node scripts/check-unified-release.mjs "$RUNNER_TEMP/already-published" "$sha" "${TAG#v}"
+              node scripts/check-unified-release.mjs "$RUNNER_TEMP/already-published" "$sha" "$version"
               echo 'published=true' >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -76,9 +83,25 @@ jobs:
           done
           echo "Configured OS packages did not arrive (missing: $(paste -sd, "$RUNNER_TEMP/missing.txt")); candidate remains draft." >&2
           exit 1
+      # A v draft made by release-promote.yml holds the approved rc's packages and its acceptance
+      # receipts. When those receipts are the published rc's, still match these bytes and the public
+      # Service has not changed, acceptance is not run again. Otherwise accepted=false and it runs.
+      - name: Reuse the approved rc's acceptance (promoted release)
+        id: reuse
+        if: steps.candidate.outputs.published != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ steps.candidate.outputs.sha }}
+          VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$TAG" == *-* ]]; then echo "accepted=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          gh release download "$TAG" --dir "$RUNNER_TEMP/promoted"
+          node scripts/release/promote.mjs reuse-acceptance --tag "$TAG" --sha "$SHA" --version "$VERSION" --dir "$RUNNER_TEMP/promoted" | tee -a "$GITHUB_STEP_SUMMARY"
   acceptance:
     needs: candidate
-    if: needs.candidate.outputs.published != 'true'
+    if: needs.candidate.outputs.published != 'true' && needs.candidate.outputs.accepted != 'true'
     strategy:
       fail-fast: false
       # One session key per cohort: each OS run opens and closes the synthetic
@@ -163,11 +186,12 @@ jobs:
           HPS_SERVICE_SOURCE: ${{ github.workspace }}/.service-source
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          VERSION: ${{ needs.candidate.outputs.version }}
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/candidate-app"
           if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
-          node e2e/unified-release/run.mjs "$app" "$RUNNER_TEMP/candidate-assets" "$RUNNER_TEMP/unified-evidence" "$SOURCE_SHA" "${TAG#v}"
+          node e2e/unified-release/run.mjs "$app" "$RUNNER_TEMP/candidate-assets" "$RUNNER_TEMP/unified-evidence" "$SOURCE_SHA" "$VERSION"
       - name: Candidate App against the current public Service
         shell: bash
         env:
@@ -183,11 +207,12 @@ jobs:
           HPS_ACCEPTANCE_CLASSROOM_CODE: ${{ secrets.HPS_ACCEPTANCE_CLASSROOM_CODE }}
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          VERSION: ${{ needs.candidate.outputs.version }}
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/candidate-app"
           if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
-          node e2e/unified-release/public.mjs "$app" "$RUNNER_TEMP/unified-evidence/public" "$SOURCE_SHA" "${TAG#v}"
+          node e2e/unified-release/public.mjs "$app" "$RUNNER_TEMP/unified-evidence/public" "$SOURCE_SHA" "$VERSION"
       - name: Upload synthetic acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -198,7 +223,11 @@ jobs:
           retention-days: 14
   publish:
     needs: [candidate, acceptance]
-    if: needs.candidate.outputs.published != 'true'
+    # A promoted release skips acceptance (candidate.outputs.accepted) and publishes on the rc's receipts.
+    if: >-
+      always() && needs.candidate.result == 'success' && needs.candidate.outputs.published != 'true' &&
+      (needs.acceptance.result == 'success' ||
+       (needs.acceptance.result == 'skipped' && needs.candidate.outputs.accepted == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -209,6 +238,7 @@ jobs:
         with:
           node-version: '22.22.1'
       - uses: actions/download-artifact@v4
+        if: needs.candidate.outputs.accepted != 'true'
         with:
           pattern: unified-*
           path: receipts
@@ -217,16 +247,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
+          VERSION: ${{ needs.candidate.outputs.version }}
+          REUSED: ${{ needs.candidate.outputs.accepted }}
         run: |
           set -euo pipefail
           mkdir dist
           gh release download "$TAG" --dir dist
+          if [[ "$REUSED" == true ]]; then
+            # Promoted: dist/unified-acceptance.json is the approved rc's; check it against these bytes.
+            node scripts/check-unified-release.mjs dist "$SOURCE_SHA" "$VERSION"
+            exit 0
+          fi
           PLATFORMS="$(node scripts/release/platforms.mjs list "$SOURCE_SHA")" node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const receipts=JSON.parse(process.env.PLATFORMS).map(os=>JSON.parse(fs.readFileSync('receipts/unified-'+os+'/receipt.json','utf8')));
           fs.writeFileSync('dist/unified-acceptance.json',JSON.stringify({schema:'hps-unified-release/1',receipts},null,2));
           NODE
-          node scripts/check-unified-release.mjs dist "$SOURCE_SHA" "${TAG#v}"
+          node scripts/check-unified-release.mjs dist "$SOURCE_SHA" "$VERSION"
       - name: Confirm the public Service still matches acceptance
         run: |
           node --input-type=module <<'NODE'

@@ -6318,6 +6318,12 @@
         },
         {
           "path": ".github/workflows/release-cut.yml"
+        },
+        {
+          "path": "scripts/release/promote.mjs"
+        },
+        {
+          "path": ".github/workflows/release-promote.yml"
         }
       ]
     },
@@ -6338,6 +6344,9 @@
         },
         {
           "path": ".github/workflows/pr-ci.yml"
+        },
+        {
+          "path": "scripts/release/test/promote.test.mjs"
         }
       ]
     },

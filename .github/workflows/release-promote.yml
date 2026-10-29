@@ -1,0 +1,78 @@
+# Release promote (#3172): an approval of the release PR releases the App, with no rebuild.
+#
+# release-cut.yml cuts each rc with final-version bytes (build-contract.mjs, hps-release-candidate/1),
+# and verify-unified-release.yml accepts and publishes the rc as a prerelease. When a member with
+# write access approves the release PR (label `release`, branch release/<version>) on its current
+# head, scripts/release/promote.mjs:
+#   1. checks that approval, the single release-record commit on the rc commit, and that the rc's
+#      accepted packages carry <version> (an rc cut before #3172 carries its rc version: refused);
+#   2. tags <version> on the rc commit with the workflow token, which starts no build workflow;
+#   3. creates the <version> draft with the rc's packages and acceptance receipts, byte for byte;
+#   4. squash-merges the release PR (it adds only releases/<version>.md);
+#   5. dispatches verify-unified-release.yml for <version>. That run reuses the rc's acceptance when
+#      the bytes and the public Service are unchanged, runs the publish gate and publishes.
+# Every step is idempotent. If the rc was still being accepted, or a step failed, rerun with
+# `gh workflow run release-promote.yml -f pr=<number>`.
+name: release-promote
+
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Release PR number to promote (rerun after an approval)"
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: release-promote-${{ inputs.pr || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    # The script checks everything again; this only keeps other reviews from starting a runner.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.review.state == 'approved' &&
+       startsWith(github.event.pull_request.head.ref, 'release/v') &&
+       contains(github.event.pull_request.labels.*.name, 'release'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # The default branch's code decides, not the release branch's.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.1"
+
+      - name: Controls
+        run: node --test scripts/release/test/promote.test.mjs scripts/release/test/publish-gate.test.mjs
+
+      # The release PR is merged with the org bot App, as release-cut opens it: a protected main
+      # may refuse the workflow token.
+      - name: Bot token (hypeproof-org-lab-bot)
+        id: bot
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+
+      - name: Promote the approved rc
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
+          PR: ${{ inputs.pr || github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/release/promote.mjs run --pr "$PR" --out "$RUNNER_TEMP/promote"
