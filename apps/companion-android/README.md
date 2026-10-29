@@ -9,7 +9,7 @@ Historical APK observations below retain their original source/asset identities.
 A new cut or generated web bundle is not an installed-APK acceptance result.
 
 This is an API35-only installed-APK prototype, not the final mobile framework,
-finished account product entry, release or cold-restart design. It reuses Studio's existing
+finished account product entry or release. The #3121 data-only draft restart slice is described below. It reuses Studio's existing
 React companion view/controller, authenticated result verifier, framing/adapter,
 request scheduler and the explicitly injected private browser client package.
 The native Java host contains no crypto implementation.
@@ -66,8 +66,30 @@ request belongs to one live adapter/cipher. For independent Cancel and fresh
 Allow scenarios, explicitly restart the Activity and pair a fresh owner. Local
 close can leave a clearly labelled cached result without connected/request
 controls; explicit forget awaits controller cleanup and closes transport/keys,
-then removes the preview. No durable store/checkpoint is enabled. Process death
-does not restore keys, counters, request execution or a user login.
+then removes the preview. No durable preview or live-cipher checkpoint is enabled.
+The #3121 draft slot survives these operations; process death does not restore
+keys, counters, request execution or a user login.
+
+## Data-only draft recovery (#3121)
+
+After native identity verification, one app-private AtomicFile slot retains the
+last acknowledged <=1024-byte draft and strict selected-task metadata. It has no
+TTL, credentials, keys, original HTML or automatic replay. Editing recovery is
+explicit; changed scope requires text-only reassociation. Before relay preparation,
+the exact bounded intent must be atomically acknowledged as `attempted_unknown`.
+A missing ACK sends nothing; a cold attempted record remains read-only with its
+original request ID. Explicit local erase cannot cancel or prove nonexecution of
+host work. Foreign or unknown slot files block writing; owned corrupt/interrupted
+bytes remain until explicit erase. Native account/Service, generation and revision
+checks serialize writes with lifecycle invalidation. The desktop task store remains
+canonical for request/run history.
+
+Run `node --test test/draft-recovery.test.mjs`, the actual React entry tests and
+`bash test/draft-native.test.sh` under the resource wrapper. The Java test needs
+Java17 and `COMPANION_TEST_GSON` pointing to an already available Gson jar; its
+JSON/atomic IO ports are JVM test substitutes, not Android platform execution.
+Installed process-kill/relogin/AtomicFile acceptance for this new source is NOT RUN.
+See `docs/testing/desktop-mobile-companion.md` for the exact remaining boundary.
 
 ## Personal-account device sign-in preparation
 
@@ -93,7 +115,7 @@ Known tokens from cancelled, expired or mismatched completion use best-effort
 existing logout. The Service has no pending-device cancellation endpoint: a
 cancelled code can remain until expiry, and an unknown/lost network response
 cannot guarantee remote session revocation. Local close never installs that
-session. There is no durable recovery or refresh in this slice.
+session. There is no durable credential recovery or refresh in this sign-in slice.
 
 A separate debug-only `ai.hypeproof.companion.DeviceSignInFixtureActivity`
 accepts one noncredential `serviceUrl` Intent extra, consumed once and discarded
@@ -183,3 +205,109 @@ Genuine same-account browser device login, secure persistent credentials, final
 device identity lifecycle, physical Android/iOS, classroom and production
 acceptance remain outside this debug fixture proof. The package's existing DEV
 placeholder device_id remains unchanged and cannot establish physical identity.
+
+## Hosted Android35 native cold file slice (#3121)
+
+The existing Feedback native candidate workflow accepts the explicit PR label
+`companion-android-verify` or manual `android_draft=true` input. Adding that label
+runs only the Linux Android job. Open/reopen/source-update events on a PR with
+the label also run Android, while retaining their existing Mac/Windows jobs.
+An unrelated label event runs neither job, even on an opted-in PR. Ordinary PR
+and default manual desktop runs retain Mac/Windows; manual Android opt-in runs
+only Android. PR runs bind both checkout and source receipt to the PR head SHA.
+The label uses existing issue-label authority; it adds no credential or grant. The
+Android job requires `/dev/kvm` and one fresh AOSP API35 x86_64 guest, without
+CPU software fallback or a reused snapshot. Its exact source builds the target
+and AndroidJUnitRunner test APKs with the pinned DEV client and task-local
+Android/Gradle homes. APKs/private client source are not uploaded.
+
+Concurrency belongs to each job: desktop groups include the ref and OS, while
+Android has its own ref group. An Android attempt therefore does not wait behind
+a desktop attempt for that ref. Both keep `cancel-in-progress: false`; running
+jobs are preserved, and GitHub retains the latest pending run within each group.
+
+`NativeDraftLifecycleTest` uses the installed target application's UID and real
+`AndroidDraftFile`/Android `AtomicFile` in a nonce-owned directory beneath that
+application's no-backup directory. After each native assertion checkpoint, the
+host verifies the exact live package/process/UID/start time/canonical data path,
+externally force-stops that target once, and observes absence. Cold phases must
+have a new PID and start time with the same UID/data directory. They verify
+editing text/selection recovery, explicit erase and second-cold absence, while
+preserving a synthetic original, foreign-account refusal, corrupt bytes and an
+attempted-unknown packet until its explicit erase. Checkpoints intentionally
+hold for external termination; they are not completed JUnit test results.
+
+The host does not equate private paths by spelling alone. Only the two fixed
+package roots (`/data/user/0/<package>` and `/data/data/<package>`) and the exact
+nonce-owned no-backup namespace are eligible. Target-UID `readlink` must keep
+the reported root and namespace inside those exact fixed forms. Canonical spelling
+need not equal the host spelling: read-only `stat` must prove the reported root
+and namespace each match the host's corresponding directory device/inode and
+UID. Differing allowed root/namespace forms require both physical comparisons;
+no spelling alone authorizes acceptance.
+Live PID/UID/start/data identity is checked before and after these reads and again
+before external Stop. Unknown paths, escapes, mismatched inodes, failed reads or
+an expired native hold refuse. Diagnostics retain only hashes, shape categories
+and equality results, including canonical form categories. Run 4 observed legacy
+ACK forms but did not retain canonical forms or reach the inode proof; a bind-mount
+alias remains unconfirmed until actual hosted physical-identity evidence.
+
+The only Activity entry is the existing debug device-sign-in fixture without
+extras: it has no target origin or transport and its login button must remain
+disabled. Wi-Fi and mobile data are disabled and read back before launch; this
+is not a claim of packet-level guest isolation. No login, browser, pairing,
+relay, SDK, authoring send or production endpoint is exercised. This slice does
+not establish authenticated UI recovery, packet replay safety across a paired
+session, physical-device acceptance, or complete DMC acceptance. A source/fake
+control PASS is distinct from the hosted APK build and installed result.
+
+The downloadable evidence allowlist contains only source/build hashes,
+sanitized compiler categories, process checkpoints/cleanup and the unconfigured
+entry screenshot. It excludes APKs, private packages/source, Gradle caches and
+raw build/instrumentation output. A failed cleanup remains FAIL.
+
+### Separate hosted authenticated draft UI lane (#3121)
+
+The `companion-android-ui-verify` PR label (including labeled/synchronize events)
+or manual `android_ui` input runs one isolated Linux KVM guest and the exact
+Service source already pinned in `config/service-deployment.json`. It does not
+replace the passing `android_draft` native file-lifecycle lane. The old pinned
+Service testkit lacks account routes; this lane uses an explicit read-only private
+source checkout, its lockfiles and real Worker/Miniflare D1, not a rolling sibling.
+The existing read credential is used only for checkout/bootstrap, never in the
+app, fixture responses or uploaded evidence.
+
+`AuthenticatedDraftUiTest` clicks the real native login button. MainActivity
+performs `/auth/device/start`, pending poll, consumed poll and `/me`; the real
+identity button invokes `/me` again. The runner separately arms three synthetic
+Lab approvals against the actual local Service account API. This is **not**
+browser/human approval or real Google sign-in. No credential or `verified` field
+is assigned by the test. After verified login, test-only reflection obtains only
+the existing `draftBroker` reference. One empty-slot seed uses its ordinary
+`draft.read`/`draft.replace` methods and existing session/lifecycle guards. No
+`live=()->true` store, JS identity injection, production hook or extra API is used.
+The seed is deliberately synthetic data, not a user-created or UI-saved draft.
+
+Three held checkpoints are externally stopped with the same target UID/PID/start
+and physical directory proof as the native lane. On the second cold login, actual
+Android UIAutomator clicks inspect the detached text, require recovery disabled
+without a verified selected preview, cancel the first erase and verify unchanged
+bytes, then confirm the two-step local erase. The third cold login shows no draft
+and the actual private slot remains empty. Screenshots contain only this synthetic
+fixture. No selection reattachment/reassociation, paired flow, attempted-unknown
+UI, user-created save, physical device or complete DMC acceptance is claimed.
+
+Wi-Fi/mobile-data readback stays off; one exact owned `adb reverse` maps guest
+loopback to runner loopback. The fixture allows only native auth endpoints and
+`/me`, rejects model/relay/internal HTTP routes and all outbound Worker fetches,
+and creates no paid pass. Radio readback and reverse routing do not establish
+packet-level isolation. All fixture state is ephemeral and all owned children,
+reverse mappings and the guest must close; cleanup failure remains FAIL.
+
+The default API35 image may open no browser; missing browser approval remains an
+explicit scope limitation. Native authentication still requires actual Service
+approval/poll/me. UiAutomator WebView accessibility and loopback while radios are
+off require hosted acceptance; local source controls or compilation are NOT that
+acceptance. Existing native auth deadlines stay unchanged; the new hosted phase
+has a 120-second observation bound including UI assertions and a 30-second held
+ACK for external Stop, with no automatic action retry or second boot.

@@ -15756,6 +15756,27 @@
       ],
       "sources": [
         {
+          "path": ".github/workflows/feedback-candidate.yml"
+        },
+        {
+          "path": "e2e/companion-android/build-hosted.mjs"
+        },
+        {
+          "path": "e2e/companion-android/run-hosted.py"
+        },
+        {
+          "path": "e2e/companion-android/run-hosted.test.py"
+        },
+        {
+          "path": "e2e/companion-android/compiler-diagnostics.mjs"
+        },
+        {
+          "path": "e2e/companion-android/compiler-diagnostics.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/app/src/androidTest/java/ai/hypeproof/companion/NativeDraftLifecycleTest.java"
+        },
+        {
           "path": "docs/testing/desktop-mobile-companion.md"
         },
         {
@@ -15916,6 +15937,42 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-receiving-controls-render.smoke.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/NativeDraftStoreTest.java"
+        },
+        {
+          "path": "apps/companion-android/test/draft-native.test.sh"
+        },
+        {
+          "path": "apps/companion-android/test/draft-recovery.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/fixtures/draft-broker.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/fixtures/java/org/json/JSONObject.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/androidTest/java/ai/hypeproof/companion/AuthenticatedDraftUiTest.java"
+        },
+        {
+          "path": "e2e/companion-android/auth-contract.mjs"
+        },
+        {
+          "path": "e2e/companion-android/auth-contract.test.mjs"
+        },
+        {
+          "path": "e2e/companion-android/auth-service.mjs"
+        },
+        {
+          "path": "e2e/companion-android/auth-service.test.mjs"
+        },
+        {
+          "path": "e2e/companion-android/authenticated_ui.py"
+        },
+        {
+          "path": "e2e/companion-android/authenticated_ui.test.py"
         }
       ]
     },
@@ -16172,6 +16229,27 @@
         },
         {
           "path": "apps/companion-android/app/src/debug/java/ai/hypeproof/companion/DeviceSignInFixtureActivity.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeDraftRecord.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeDraftStore.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeDraftBroker.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/AndroidDraftFile.java"
+        },
+        {
+          "path": "apps/companion-android/web/draftRecovery.ts"
+        },
+        {
+          "path": "apps/companion-android/web/DraftRecoveryView.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionDraftRecord.ts"
         }
       ]
     },

@@ -1,3 +1,4 @@
+import {draftBrokerFixture} from './fixtures/draft-broker.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -42,7 +43,8 @@ for(const injectLater of [false,true])test('actual Android React entry renders e
   async receive(){const raw=batchIndex++===0?[first]:stream.slice(1).splice((batchIndex-2)*8,8);return raw.filter(m=>{if(seen.has(m.message_id))return false;seen.add(m.message_id);returned.set(m.message_id,(returned.get(m.message_id)??0)+1);return true;});}
   async acknowledge(id){acks.push(id);return{};}close(){this.closed=true;}
  }
- const endpoint={onmessage:null,postMessage(raw){const message=JSON.parse(raw);if(message.kind==='identity')queueMicrotask(()=>endpoint.onmessage?.({data:JSON.stringify({id:message.id,ok:true,value:{accountId:'account',sessionId:'device-session'}})}));}};
+ const draftBroker=draftBrokerFixture();
+ const endpoint={onmessage:null,postMessage(raw){const message=JSON.parse(raw);if(message.kind==='identity'||message.kind.startsWith('draft.'))queueMicrotask(()=>endpoint.onmessage?.({data:JSON.stringify({id:message.id,ok:true,...(message.kind.startsWith('draft.')?draftBroker.reply(message):{value:{accountId:'account',sessionId:'device-session'}})})}));}};
  window.CompanionNative=endpoint;
  const compiled=await build({entryPoints:[fileURLToPath(new URL('../web/main.tsx',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false,loader:{'.css':'empty'},jsx:'automatic',external:['react','react/jsx-runtime','react-dom/client'],plugins:[{name:'trusted-client-fixture',setup(api){
   if(process.env.COMPANION_ENTRY_BASELINE){const sha=process.env.COMPANION_ENTRY_BASELINE;assert.match(sha,/^[a-f0-9]{40}$/);api.onLoad({filter:/\/web\/main\.tsx$/},args=>({contents:execFileSync('git',['show',sha+':apps/companion-android/web/main.tsx'],{cwd:fileURLToPath(new URL('../../../',import.meta.url)),encoding:'utf8'}),loader:'tsx',resolveDir:path.dirname(args.path)}));}

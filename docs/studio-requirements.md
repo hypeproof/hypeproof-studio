@@ -7999,6 +7999,15 @@ caption under the work surface, inside the card, drawn (hit test), 14px+, 4.5:1+
 viewport, no sideways scroll, the same node updated within 500 ms on typing, a host save, a cleared field and a step switch
 onto a closed card; six injected overrides caught).
 
+
+## DMC-4b Android local draft recovery (#3121)
+
+See [DMC-03/06/07/15](requirements/desktop-mobile-companion.md) and
+[DMC restart tests](testing/desktop-mobile-companion.md). Explicit local recovery
+and erase preserve learner ownership of pending text; uncertain requests remain
+locked without automatic replay. Source evidence and installed acceptance remain
+separate; no production activation is implied.
+
 ## Activity memory state line (CGP-KNOW-R-022)
 
 REQ-STUDIO-ACTIVITY-MEMORY-STATE / REQ-KNOW-40 (CGP-KNOW-040) / PI#2 (the learner can see what the AI

@@ -844,7 +844,7 @@
         "DMC-15"
       ],
       "inline_prefixes": [],
-      "sha256": "ab796a36f2aea29406bcd590e44955156761fea32179820c4b6fc4b97d4c44fc",
+      "sha256": "d610c65140725e5f1affdf29b08da897c9a518408e8de5b02108d55bd6f05316",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
@@ -4295,7 +4295,14 @@
         "extensions/hypeproof-chat/src/companionExecutionResult.ts",
         "extensions/hypeproof-chat/src/companionExecutionTransport.ts",
         "extensions/hypeproof-chat/src/companionNormalTurn.ts",
-        "extensions/hypeproof-chat/src/companionReceivingLifetime.ts"
+        "extensions/hypeproof-chat/src/companionReceivingLifetime.ts",
+        "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeDraftRecord.java",
+        "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeDraftStore.java",
+        "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeDraftBroker.java",
+        "apps/companion-android/app/src/main/java/ai/hypeproof/companion/AndroidDraftFile.java",
+        "apps/companion-android/web/draftRecovery.ts",
+        "apps/companion-android/web/DraftRecoveryView.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/companionDraftRecord.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/src/companionRouting.ts",
@@ -4369,7 +4376,16 @@
         "scripts/companion-ci.mjs",
         "scripts/test/companion-ci-input.test.mjs",
         "extensions/hypeproof-chat/src/companionReceivingLifetime.ts",
-        "extensions/hypeproof-chat/test/companion-receiving-lifetime.smoke.mjs"
+        "extensions/hypeproof-chat/test/companion-receiving-lifetime.smoke.mjs",
+        "apps/companion-android/test/draft-recovery.test.mjs",
+        "apps/companion-android/test/draft-native.test.sh",
+        ".github/workflows/feedback-candidate.yml",
+        "e2e/companion-android/build-hosted.mjs",
+        "e2e/companion-android/run-hosted.py",
+        "e2e/companion-android/run-hosted.test.py",
+        "e2e/companion-android/compiler-diagnostics.mjs",
+        "e2e/companion-android/compiler-diagnostics.test.mjs",
+        "apps/companion-android/app/src/androidTest/java/ai/hypeproof/companion/NativeDraftLifecycleTest.java"
       ]
     }
   ]

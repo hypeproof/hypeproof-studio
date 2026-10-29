@@ -11,6 +11,8 @@ import {PREVIEW_IFRAME_SANDBOX,PREVIEW_IFRAME_ALLOW} from '../../../extensions/h
 import {createNativePort} from './nativePort';
 import {CompanionAndroidResultTransport} from './resultTransport';
 import {AuthoringComposer} from './AuthoringComposer';
+import {AndroidDraftRecovery,type DraftView} from './draftRecovery';
+import {DraftRecoveryView} from './DraftRecoveryView';
 import {CompanionAuthoringReceiptObserver,type AuthoringReceiptWaitState} from './authoringReceiptObserver';
 import {createCompanionAuthoringIntent} from '../../../extensions/hypeproof-chat/src/companionAuthoringIntent';
 import {parseCompanionAuthoringResult,type CompanionAuthoringResult} from '../../../extensions/hypeproof-chat/src/companionAuthoringResult';
@@ -30,16 +32,19 @@ let mobileTransport:ReturnType<CompanionAndroidResultTransport['bind']>|undefine
 let authoringPending:{requestId:string;requestHash:string;reply?:string;received:boolean;current():boolean}|undefined;
 let authoringObserver:CompanionAuthoringReceiptObserver|undefined;
 let authoringStarted=false,adoptingSelection=false;
+let draftOwner:AndroidDraftRecovery|undefined;
 const retiredAuthoringReplies=new Set<string>();
 const rawPair=(_role:any,invitationId:any,action:any,payload:any,signal?:AbortSignal)=>port.call({kind:'pairing',invitationId,action,payload},signal??lifetime.signal);
 const rawRelay=(_role:any,invitationId:any,action:any,raw:any,signal?:AbortSignal)=>port.call({kind:'relay',invitationId,action,raw},signal??lifetime.signal);
 const schedule=<Args extends any[],Result>(operation:(...args:Args)=>Promise<Result>)=>(...args:Args):Promise<Result>=>budget.run<Result>(()=>operation(...args),lifetime.signal);
 function erasePair(client:any){if(client){client.keys=null;client.qr=null;client.claim=null;client.frozenClaim=null;}}
-function clear(){closed=true;retiredAuthoringReplies.clear();authoringObserver?.close();authoringObserver=undefined;mobileTransport=undefined;authoringPending=undefined;lifetime.abort();resultTransport?.close();resultTransport=undefined;controller?.dispose();adapter?.dispose();relay?.close();receiver?.close();erasePair(pairing);pairing=null;relay=null;receiver=null;bootstrap=null;identity=null;budget.dispose();port.close();}
+function clear(){closed=true;draftOwner?.close();retiredAuthoringReplies.clear();authoringObserver?.close();authoringObserver=undefined;mobileTransport=undefined;authoringPending=undefined;lifetime.abort();resultTransport?.close();resultTransport=undefined;controller?.dispose();adapter?.dispose();relay?.close();receiver?.close();erasePair(pairing);pairing=null;relay=null;receiver=null;bootstrap=null;identity=null;budget.dispose();port.close();}
 window.addEventListener('pagehide',clear,{once:true});
 function App(){
  const [stage,setStage]=useState('identity'),[challenge,setChallenge]=useState(''),[message,setMessage]=useState('컴퓨터에서 작업과 저장 HTML을 준비해 주세요.'),[busy,setBusy]=useState(false),[snapshot,setSnapshot]=useState<any>(null),[comparison,setComparison]=useState('');
  const [authoringActive,setAuthoringActive]=useState(false);
+ const [draftView,setDraftView]=useState<DraftView>({status:'loading',text:'',saved:false,busy:false,error:false});
+ const [draftKey,setDraftKey]=useState(0);
  const [authoringResult,setAuthoringResult]=useState<AuthoringReply|null>(null);
  const [authoringWait,setAuthoringWait]=useState<AuthoringReceiptWaitState|null>(null);
  const [heldSelection,setHeldSelection]=useState<{revision:number;requestId:string}|null>(null),[previousPreview,setPreviousPreview]=useState<any>(null);
@@ -48,6 +53,7 @@ function App(){
  async function act(action:()=>Promise<void>){if(inFlight.current||closed)return;inFlight.current=true;setBusy(true);try{await action();}catch{if(!closed)setMessage('이번 확인을 마치지 못했어요. 완료로 표시하지 않았어요. 상태를 확인하고 직접 다시 시도해 주세요.');}finally{inFlight.current=false;setBusy(false);}}
  async function verify(){identity=await port.call({kind:'identity'},lifetime.signal);if(closed)return;
   if(!crypto.subtle||!crypto.getRandomValues)throw Error('webcrypto_required');
+  draftOwner=new AndroidDraftRecovery(port,identity.accountId,setDraftView);await draftOwner.load();if(closed)return;
   pairing=new CompanionPreviewClient({role:'device',sessionId:identity.sessionId,transport:schedule(rawPair)});setStage('invitation');setMessage('DEV 테스트 계정 연결을 확인했어요. 컴퓨터의 초대 정보를 직접 붙여 넣어 주세요.');}
  async function claim(){const client=pairing;try{if(new TextEncoder().encode(challenge).length>8192)throw Error('challenge_bound');await client.inspect(JSON.parse(challenge));if(closed)return;await client.claimDevice();if(closed)return;setChallenge('');setComparison(client.invitation.compare_code);setStage('approval');setMessage('두 화면의 코드를 직접 비교하고 컴퓨터에서 승인해 주세요.');}finally{if(closed)erasePair(client);}}
  async function offer(){await pairing.refresh();if(pairing.invitation.status==='approved')await pairing.consume();if(pairing.invitation.status!=='paired')throw Error('pairing_waiting');if(!relay)relay=new CompanionRelayClient({pairing,transport:schedule(rawRelay)});await relay.publishOffer();if(closed)return;setStage('cipher');setMessage('기기 암호화 키를 준비했어요. 컴퓨터에서 암호화 연결을 준비한 뒤 연결을 확인해 주세요.');}
@@ -113,7 +119,7 @@ function App(){
    if(pending?.reply)retiredAuthoringReplies.add(pending.reply);
    setPreviousPreview(companionSessionPresentation(prior).preview??previousPreview);ownedController.dispose();
    authoringStarted=false;authoringPending=undefined;setAuthoringActive(false);setAuthoringResult(null);setAuthoringWait(null);setHeldSelection(null);
-   await openSelection(next);
+   draftOwner?.detach();await openSelection(next);
   }finally{adoptingSelection=false;}
  }
 
@@ -131,8 +137,9 @@ function App(){
   pending.current=()=>!closed&&!lifetime.signal.aborted&&authoringPending===pending&&adapter===ownedAdapter&&relay===ownedRelay&&controller===ownedController&&mobileTransport===ownedTransport&&pairing===ownedPair&&ownedPair.invitation?.id===pairId&&ownedPair.invitation.status==='paired'&&ownedRelay.row.grant_expires_at*1000>Date.now()&&!ownedRelay.diagnostics().closed&&ownedRelay.diagnostics().context_digest===cipher&&companionSelectionIdentity(ownedController.getSnapshot().selection?.request)===selectedIdentity;
   authoringPending=pending;
   const observer=new CompanionAuthoringReceiptObserver({current:pending.current,received:()=>pending.received,receive:async signal=>{const messages=await ownedTransport.receive(signal);if(messages.length)throw Error('unexpected_preview_result_during_authoring');},changed:state=>{if(!closed&&authoringPending===pending)setAuthoringWait(state);}});authoringObserver=observer;
-  try{return await ownedAdapter.submitAuthoring(packet.text,packet.requestId,lifetime.signal);}
-  finally{if(pending.current())void observer.start(lifetime.signal);}
+  let transportAttempted=false;
+  try{if(!draftOwner)throw Error('draft_owner_required');await draftOwner.attempt(packet.text);if(!pending.current())throw Error('owner_closed');transportAttempted=true;return await ownedAdapter.submitAuthoring(packet.text,packet.requestId,lifetime.signal);}
+  finally{if(transportAttempted&&pending.current())void observer.start(lifetime.signal);else if(!transportAttempted){observer.close();authoringObserver=undefined;}}
  }
  async function checkAuthoring(){
   if(closed||adoptingSelection||!authoringPending||!authoringObserver||controller?.getSnapshot().busy)throw Error('authoring_not_ready');
@@ -142,6 +149,7 @@ function App(){
  const artifact=(value:any)=>{const csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
   return <iframe title="선택한 HTML 미리보기" sandbox={PREVIEW_IFRAME_SANDBOX} allow={PREVIEW_IFRAME_ALLOW} referrerPolicy="no-referrer" srcDoc={'<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+csp+'">'+value.text}/>;};
  return <main><h1>컴퓨터에서 고른 결과 보기</h1><p className="experiment">DEV APK 실험 · 테스트 계정 · 원본은 컴퓨터에 있어요</p><p role="status">{message}</p>
+ {stage!=='identity'&&<DraftRecoveryView view={draftView} selection={snapshot&&companionSessionPresentation(snapshot).preview?snapshot.selection?.request:undefined} disabled={closed||busy} liveAttempt={authoringActive} recover={async reassociate=>{if(!draftOwner||!snapshot?.selection)throw Error('selection_required');await draftOwner.recover(snapshot.selection.request,reassociate);setDraftKey(k=>k+1);}} erase={async()=>{if(!draftOwner)throw Error('draft_owner_required');await draftOwner.erase();setDraftKey(k=>k+1);}}/>}
  {stage==='identity'&&<button disabled={busy} onClick={()=>act(verify)}>기기 연결 확인</button>}
  {stage==='invitation'&&<><label htmlFor="challenge">컴퓨터 초대 정보</label><textarea id="challenge" value={challenge} maxLength={8192} onChange={e=>setChallenge(e.target.value)} disabled={busy}/><button disabled={busy||!challenge} onClick={()=>act(claim)}>초대 확인·참여 요청</button></>}
  {comparison&&stage!=='closed'&&<p aria-label="기기 비교 코드">비교 코드: <strong>{comparison}</strong></p>}
@@ -154,7 +162,7 @@ function App(){
  {authoringActive&&stage==='preview'&&snapshot&&companionSessionPresentation(snapshot).preview&&<section><h2>요청 전에 본 결과</h2>{artifact(companionSessionPresentation(snapshot).preview)}</section>}
  {authoringActive&&stage==='preview'&&!authoringResult&&authoringWait==='waiting'&&<p role="status">컴퓨터의 검토 응답을 잠시 기다리고 있어요. 요청을 자동으로 다시 보내지 않아요.</p>}
  {authoringActive&&stage==='preview'&&!authoringResult&&authoringWait==='unconfirmed'&&<p role="status">아직 컴퓨터 응답을 확인하지 못했어요. 아래 ‘컴퓨터 검토 상태 확인’으로 직접 확인할 수 있어요. 요청은 다시 보내지 않았어요.</p>}
- {snapshot&&companionSessionPresentation(snapshot).preview&&!['forgotten'].includes(stage)&&<AuthoringComposer key={companionSelectionIdentity(snapshot.selection?.request)} disabled={closed||busy||!!snapshot.busy} submit={submitAuthoring} check={checkAuthoring} outcome={authoringResult?.schema==='hps-companion-authoring-result/1'?authoringResult.outcome:undefined} execution={authoringResult?.schema==='hps-companion-execution-result/1'?authoringResult:undefined}/>}
+ {snapshot&&companionSessionPresentation(snapshot).preview&&!['forgotten'].includes(stage)&&<AuthoringComposer key={companionSelectionIdentity(snapshot.selection?.request)+':'+draftKey} draft={draftView.text} saved={draftView.saved} onDraft={text=>{if(draftOwner&&snapshot?.selection)draftOwner.edit(text,snapshot.selection.request);}} disabled={closed||busy||!!snapshot.busy||(!authoringActive&&!['empty','editing'].includes(draftView.status))} submit={submitAuthoring} check={checkAuthoring} outcome={authoringResult?.schema==='hps-companion-authoring-result/1'?authoringResult.outcome:undefined} execution={authoringResult?.schema==='hps-companion-execution-result/1'?authoringResult:undefined}/>}
  {stage==='closed'&&snapshot&&(companionSessionPresentation(snapshot).preview??previousPreview)&&<section><h2>이 기기에 남은 결과</h2>{artifact(companionSessionPresentation(snapshot).preview??previousPreview)}</section>}
  {!['closed','forgotten'].includes(stage)&&<button className="secondary" onClick={cancel}>이 기기 연결 닫기</button>}
  <p className="detail">연결 표시는 최근 확인한 암호화 전송 상태예요. 컴퓨터가 지금 켜져 있다는 확인은 아니에요. 컴퓨터 응답은 요청 후 확인하며, 꺼져 있으면 기다려요. 기기 연결은 파일 실행 권한이 아니에요. 앱을 다시 시작하면 키를 복원하지 않아요.</p></main>;

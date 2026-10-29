@@ -325,3 +325,68 @@ arrives. An observed unrelated edit before catch-up fences adoption. Between-tur
 external edits, duplicate completion replay, failed and unknown results cannot
 advance that pin or reserve another turn. Retain the existing preview-active-editor controls. An installed App
 run must separately exercise the real chat tab, execution, result, Stop and revoke.
+
+
+## Android draft restart source checks — #3121
+
+`apps/companion-android/test/draft-native.test.sh` exercises the real Java record,
+slot and fixed broker using owned temporary files. Its JVM JSON port uses cached
+Gson and its atomic IO port uses real filesystem rename/sync; it is not execution
+of Android's platform AtomicFile or installed Activity. Native Android compilation
+and JVM controls must remain separately labelled. Cases include exact Korean text,
+foreign account/Service, corrupt and interrupted base/.bak/.new namespaces,
+immutable attempts, stale revisions, failed writes/erase, and lifecycle replacement
+serialized with a delayed marker. Production code uses platform AtomicFile behind
+the same IO port and preserves `allowBackup=false` plus noBackupFilesDir.
+
+`draft-recovery.test.mjs` exercises native ACK ordering, coalesced saves, explicit
+recovery/reassociation, locked attempted requests and error/erase ownership.
+Actual React entry tests provide scripted native disk replies and verify that no
+relay prepare/send occurs when marker acknowledgement fails, saved text is detached
+until explicit recovery, and an old attempt remains locked after fresh pairing.
+These tests do not turn local records into authenticated host receipt recovery.
+
+Installed acceptance remains NOT RUN for this source: real native login after
+process kill, acknowledged editing recovery, death before/after marker and after
+relay acceptance, zero duplicate send/model work, and explicit erase across
+relaunch. Freeze new Studio/APK/Service identities and retain failure artifacts.
+No source/JVM/React result establishes physical/iOS, classroom, production or
+real-data encryption readiness.
+
+### Hosted native file lifecycle slice (issue #3121)
+
+In `feedback-candidate.yml`, adding the PR label `companion-android-verify`, or
+manual `android_draft=true`, selects only a fresh Linux KVM Android35 job.
+Open/reopen/source-update events with the current opt-in label additionally run
+Android and preserve the existing desktop jobs. Unrelated label events run
+neither job; ordinary PR/default manual events retain desktop behavior. PR
+checkout and source receipts use the exact PR head SHA rather than its merge
+SHA. Label opt-in uses existing issue-label authority without auth changes.
+The job builds and installs the exact debug target and test
+APK, observes a disabled unconfigured debug entry, then exercises production
+native draft storage/AtomicFile under the target UID in its nonce-owned
+no-backup directory. Native checkpoints hold the target alive until an external
+exact-owner force-stop; cold recovery/erase and second-cold absence require a
+new PID/start time and the same UID/canonical data directory. Synthetic original,
+foreign, corrupt and attempted-unknown preservation remain assertions.
+
+Record the hosted source/APK hashes, checkpoint ACKs, external death/new-process
+identities and owned cleanup before claiming this slice PASS. It is not a
+completed JUnit suite, authenticated UI recovery, live paired packet/replay
+acceptance, physical Android/iOS or full DMC acceptance. Local fake controls do
+not establish an installed result. Upload only the workflow's explicit JSON/PNG
+allowlist; target/test APKs contain private build inputs and remain ephemeral.
+
+### #3121 hosted authenticated detached-draft UI follow-up
+
+The separately opt-in `android_ui` hosted lane exercises actual native device
+sign-in and MainActivity's guarded broker against the exact pinned local Service.
+A test-owned synthetic record is seeded through that authenticated broker, then
+cold login must render its exact text, refuse recovery without selected preview,
+preserve bytes on erase cancellation, perform explicit two-step local erase, and
+show absence after another cold login. Synthetic Lab approval is not browser-user
+consent, and seeded text is not a UI-created save. Original native file-lifecycle
+acceptance remains separate. Current hosted UI result is NOT RUN; reattachment,
+reassociation, attempted-unknown UI and paired acceptance remain required later.
+No model/relay request, paid pass, production activation or public tunnel is part
+of this fixture. Source controls cannot mark these installed checks complete.

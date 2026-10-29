@@ -1,14 +1,27 @@
 name: Feedback native candidate (dedicated desktop)
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - 'e2e/feedback-native/**'
       - 'e2e/feedback-live/**'
+      - 'apps/companion-android/**'
+      - 'e2e/companion-android/**'
       - '.github/workflows/feedback-candidate.yml'
       - 'scripts/studio-dev.py'
       - 'scripts/studio-dev-vendor.mjs'
   workflow_dispatch:
     inputs:
+      android_draft:
+        description: Run only synthetic Android35 target-UID cold file lifecycle (no login/UI recovery)
+        required: false
+        type: boolean
+        default: false
+      android_ui:
+        description: Run authenticated synthetic Android draft readback/erase only (no pairing/provider)
+        required: false
+        type: boolean
+        default: false
       public_app_tag:
         description: Published official Studio shell tag (empty uses latest stable)
         required: false
@@ -19,11 +32,12 @@ on:
         default: ''
 permissions:
   contents: read
-concurrency:
-  group: feedback-native-${{ github.ref }}
-  cancel-in-progress: false
 jobs:
   native:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.action == 'labeled') && !(github.event_name == 'workflow_dispatch' && (inputs.android_draft || inputs.android_ui)) }}
+    concurrency:
+      group: feedback-native-${{ github.ref }}-${{ matrix.os }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -99,4 +113,176 @@ jobs:
         with:
           name: feedback-native-${{ runner.os }}-${{ github.sha }}
           path: ${{ runner.temp }}/feedback-native/evidence
+          if-no-files-found: warn
+
+  android-draft:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.android_draft) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'companion-android-verify') && (github.event.action != 'labeled' || github.event.label.name == 'companion-android-verify')) }}
+    concurrency:
+      group: feedback-android-draft-${{ github.ref }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      HPS_ANDROID_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Prepare task-owned Android paths
+        shell: bash
+        run: |
+          test -n "$RUNNER_TEMP"
+          printf '%s\n' "ANDROID_USER_HOME=$RUNNER_TEMP/android-draft-state/android" "GRADLE_USER_HOME=$RUNNER_TEMP/android-draft-state/gradle" "HPS_ANDROID_EVIDENCE=$RUNNER_TEMP/android-draft-evidence" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Require KVM and install Android35 inputs
+        shell: bash
+        run: |
+          test -c /dev/kvm
+          sudo setfacl -m "u:$(id -u):rw" /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          mkdir -p "$ANDROID_USER_HOME" "$GRADLE_USER_HOME" "$HPS_ANDROID_EVIDENCE"
+          python3 - <<'PYSDK'
+          import os,subprocess
+          from pathlib import Path
+          sdk=Path(os.environ['ANDROID_SDK_ROOT'])/'cmdline-tools/latest/bin/sdkmanager'
+          subprocess.run([str(sdk),'--licenses'],input=b'y\n'*40,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=120,check=True)
+          subprocess.run([str(sdk),'platform-tools','emulator','platforms;android-35','build-tools;34.0.0','system-images;android-35;default;x86_64'],timeout=360,check=True)
+          PYSDK
+      - name: Bootstrap pinned private build input
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install frozen build dependencies
+        run: |
+          npm ci --prefix extensions/hypeproof-chat
+          npm ci --prefix extensions/hypeproof-chat/webview-ui
+      - name: Check bounded hosted controls
+        run: |
+          node --test e2e/companion-android/*.test.mjs
+          python3 e2e/companion-android/run-hosted.test.py
+      - name: Build exact target and instrumentation APKs
+        run: node e2e/companion-android/build-hosted.mjs
+      - name: One owned KVM boot and native cold file checkpoints
+        env:
+          HPS_ANDROID_OWNED_HOSTED: '1'
+        run: python3 e2e/companion-android/run-hosted.py --run
+      - name: Upload only bounded public evidence (never APKs or private build input)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-draft-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/android-draft-evidence/result.json
+            ${{ runner.temp }}/android-draft-evidence/build-receipt.json
+            ${{ runner.temp }}/android-draft-evidence/attempt.json
+            ${{ runner.temp }}/android-draft-evidence/unconfigured-launch.png
+            ${{ runner.temp }}/android-draft-evidence/diagnostics.json
+          if-no-files-found: warn
+
+  android-authenticated-ui:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.android_ui && !inputs.android_draft) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'companion-android-ui-verify') && (github.event.action != 'labeled' || github.event.label.name == 'companion-android-ui-verify')) }}
+    concurrency:
+      group: feedback-android-authenticated-ui-${{ github.ref }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      HPS_ANDROID_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Prepare task-owned Android paths
+        shell: bash
+        run: |
+          test -n "$RUNNER_TEMP"
+          printf '%s\n' "ANDROID_USER_HOME=$RUNNER_TEMP/android-auth-ui-state/android" "GRADLE_USER_HOME=$RUNNER_TEMP/android-auth-ui-state/gradle" "HPS_ANDROID_EVIDENCE=$RUNNER_TEMP/android-auth-ui-evidence" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Require KVM and install Android35 inputs
+        shell: bash
+        run: |
+          test -c /dev/kvm
+          sudo setfacl -m "u:$(id -u):rw" /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          mkdir -p "$ANDROID_USER_HOME" "$GRADLE_USER_HOME" "$HPS_ANDROID_EVIDENCE"
+          python3 - <<'PYSDK'
+          import os,subprocess
+          from pathlib import Path
+          sdk=Path(os.environ['ANDROID_SDK_ROOT'])/'cmdline-tools/latest/bin/sdkmanager'
+          subprocess.run([str(sdk),'--licenses'],input=b'y\n'*40,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=120,check=True)
+          subprocess.run([str(sdk),'platform-tools','emulator','platforms;android-35','build-tools;34.0.0','system-images;android-35;default;x86_64'],timeout=360,check=True)
+          PYSDK
+      - name: Resolve existing exact Service source pin
+        id: service-pin
+        env:
+          REQUESTED_SERVICE_SHA: ${{ inputs.service_sha }}
+        run: |
+          pin="$(node -e 'const p=require("./config/service-deployment.json");if(p.repository!=="hypeproof/hypeproof-service"||!(/^[a-f0-9]{40}$/.test(p.sha)))process.exit(1);process.stdout.write(p.sha)')"
+          test -z "$REQUESTED_SERVICE_SHA" || test "$REQUESTED_SERVICE_SHA" = "$pin"
+          echo "sha=$pin" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.service-pin.outputs.sha }}
+          path: android-ui-service
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          persist-credentials: false
+      - name: Install exact Service fixture dependencies
+        run: npm --prefix android-ui-service run setup:packages -- worker
+      - name: Bootstrap pinned private build input
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install frozen build dependencies
+        run: |
+          npm ci --prefix extensions/hypeproof-chat
+          npm ci --prefix extensions/hypeproof-chat/webview-ui
+      - name: Check bounded hosted controls
+        env:
+          HPS_AUTH_SERVICE_TEST_SOURCE: ${{ github.workspace }}/android-ui-service
+        run: |
+          node --test e2e/companion-android/*.test.mjs
+          python3 e2e/companion-android/run-hosted.test.py
+          python3 e2e/companion-android/authenticated_ui.test.py
+      - name: Build exact target and instrumentation APKs
+        run: node e2e/companion-android/build-hosted.mjs
+      - name: One owned KVM boot and authenticated UI checkpoints
+        env:
+          HPS_ANDROID_OWNED_HOSTED: '1'
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/android-ui-service
+          HPS_SERVICE_SHA: ${{ steps.service-pin.outputs.sha }}
+        run: python3 e2e/companion-android/run-hosted.py --run-authenticated-ui
+      - name: Upload only bounded public evidence (never APKs or private build input)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-authenticated-ui-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/android-auth-ui-evidence/result.json
+            ${{ runner.temp }}/android-auth-ui-evidence/build-receipt.json
+            ${{ runner.temp }}/android-auth-ui-evidence/attempt.json
+            ${{ runner.temp }}/android-auth-ui-evidence/ui_*.png
+            ${{ runner.temp }}/android-auth-ui-evidence/diagnostics.json
           if-no-files-found: warn

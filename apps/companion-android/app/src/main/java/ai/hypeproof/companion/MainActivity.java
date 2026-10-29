@@ -107,6 +107,9 @@ public class MainActivity extends Activity {
  private Session session;
  private WebView web;
  private FrameLayout content;
+ private static final java.util.concurrent.atomic.AtomicLong DRAFT_ACTIVITY=new java.util.concurrent.atomic.AtomicLong();
+ private long draftActivity;
+ private NativeDraftBroker draftBroker;
  private volatile boolean closed;
  private final Map<String,Pending> pending=new ConcurrentHashMap<>();
  private final ThreadPoolExecutor workers=new ThreadPoolExecutor(4,4,0,TimeUnit.SECONDS,new ArrayBlockingQueue<>(32));
@@ -114,7 +117,7 @@ public class MainActivity extends Activity {
  private static final class Pending { volatile HttpURLConnection connection; final AtomicBoolean cancelled=new AtomicBoolean(); void cancel(){cancelled.set(true);HttpURLConnection c=connection;if(c!=null)c.disconnect();} }
 
  @Override public void onCreate(Bundle state) {
-  super.onCreate(state); deadlines.setRemoveOnCancelPolicy(true);
+  super.onCreate(state); NativeDraftStore.lifecycle(()->draftActivity=DRAFT_ACTIVITY.incrementAndGet()); deadlines.setRemoveOnCancelPolicy(true);
   getWindow().setDecorFitsSystemWindows(false);
   content=new FrameLayout(this);
   content.setBackgroundColor(android.graphics.Color.rgb(245,246,248));
@@ -131,7 +134,7 @@ public class MainActivity extends Activity {
   });
   setContentView(content);content.requestApplyInsets();
   TextView waiting=new TextView(this);waiting.setText("앱 연결을 준비하고 있어요.");waiting.setPadding(24,48,24,24);showContent(waiting);
-  requestProvision(value->runOnUiThread(()->{if(closed){if(value!=null)value.bearer=null;return;}session=value;initializeWebView();}));
+  requestProvision(value->runOnUiThread(()->{if(closed){if(value!=null)value.bearer=null;return;}NativeDraftStore.lifecycle(()->session=value);initializeWebView();}));
  }
  private void showContent(View view) {
   content.removeAllViews();
@@ -161,14 +164,14 @@ public class MainActivity extends Activity {
    @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){return true;}
   });
   WebViewCompat.addWebMessageListener(web,"CompanionNative",Set.of(ORIGIN),(view,message,origin,isMainFrame,reply)->{
-   if(closed || !isMainFrame || !ORIGIN.equals(origin.toString()) || message.getData()==null)return;
+   if(closed || !NativeDraftBroker.trustedFrame(isMainFrame,origin.toString()) || message.getData()==null)return;
    accept(message.getData(),reply);
   });
   web.loadUrl(ORIGIN+"/assets/ui/index.html");
  }
  private void reply(JavaScriptReplyProxy proxy,String id,JSONObject value,String error){
-  if(closed)return;
-  runOnUiThread(()->{if(closed)return;try{JSONObject result=new JSONObject().put("id",id).put("ok",error==null);if(error==null)result.put("value",value);else result.put("error",error);proxy.postMessage(result.toString());}catch(Exception ignored){}});
+  if(closed || draftActivity!=DRAFT_ACTIVITY.get())return;
+  runOnUiThread(()->{if(closed || draftActivity!=DRAFT_ACTIVITY.get())return;try{JSONObject result=new JSONObject().put("id",id).put("ok",error==null);if(error==null)result.put("value",value);else result.put("error",error);proxy.postMessage(result.toString());}catch(Exception ignored){}});
  }
  private void accept(String raw,JavaScriptReplyProxy reply) {
   String id="";
@@ -193,6 +196,14 @@ public class MainActivity extends Activity {
  private JSONObject request(JSONObject r,Pending item) throws Exception {
   Session current=session;if(closed || current==null || item.cancelled.get())throw new SafeFailure("native_closed");
   String kind=r.getString("kind"),path,body=null;
+  if(kind.startsWith("draft.")){
+   if(!BuildConfig.DEBUG || !current.verified || draftActivity!=DRAFT_ACTIVITY.get())throw new SafeFailure("native_identity_required");
+   synchronized(this){if(draftBroker==null)draftBroker=new NativeDraftBroker(
+    ()->new NativeDraftStore(new java.io.File(getNoBackupFilesDir(),"companion-draft"),current.accountId,current.service,new AndroidDraftFile(),
+     ()->!closed&&session==current&&current.verified&&draftActivity==DRAFT_ACTIVITY.get()),
+    ()->BuildConfig.DEBUG&&!closed&&session==current&&current.verified&&draftActivity==DRAFT_ACTIVITY.get());}
+   return draftBroker.request(r);
+  }
   if(kind.equals("identity")) path="/me";
   else{
    if(!current.verified)throw new SafeFailure("native_identity_required");
@@ -236,11 +247,11 @@ public class MainActivity extends Activity {
    return value;
   }finally{c.disconnect();item.connection=null;}
  }
- private void closeSession(){
+ private void closeSession(){NativeDraftStore.lifecycle(()->{
   if(closed)return;closed=true;
   NativeDeviceSignIn.Cancel auth=signInAttempt;signInAttempt=null;if(auth!=null)auth.cancel();
   Session prior=session;session=null;if(prior!=null){prior.verified=false;prior.bearer=null;}
   for(Pending item:pending.values())item.cancel();pending.clear();
- }
+ });}
  @Override protected void onDestroy(){closeSession();workers.shutdownNow();deadlines.shutdownNow();if(web!=null){WebViewCompat.removeWebMessageListener(web,"CompanionNative");web.destroy();web=null;}super.onDestroy();}
 }

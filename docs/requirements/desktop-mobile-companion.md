@@ -250,3 +250,26 @@ remaining turn of the same grant. Failed/unknown outcomes and duplicate terminal
 receipts cannot adopt external edits. Ordinary
 preview selection keeps its active-editor requirement. This source correction
 does not establish installed receiver or SDK acceptance.
+
+
+## Android draft restart recovery — #3121
+
+The scoped DMC-4b implementation follows approved intake
+`HP-a98ad386-855b-48f1-856b-f6dd22f093f5@2` and
+[hypeproof/hypeproof-studio#3121](https://github.com/hypeproof/hypeproof-studio/issues/3121).
+One native account/Service-bound, app-private text slot preserves the last
+acknowledged draft. Recovery is explicit; a changed selected scope requires
+text-only reassociation. An exact attempted request is durable before transport
+preparation and stays locked after restart. Local saving, relay receipt and host
+execution proof remain different states. The existing desktop TaskWorkspaceStore
+retains original request/run authority; no cold keys or cross-pair replay is added.
+
+DMC-03/06/07/15 prohibit automatic deletion of pending work. The preview
+checkpoint's TTL and invalid-record deletion are not applied to this slot.
+Unknown/corrupt records are retained, foreign identities cannot read or mutate
+it, and explicit same-owner local erase does not cancel host work, delete host
+source or revoke sharing. Interrupted AtomicFile side files are retained for
+explicit review/erase rather than implicitly restored or discarded. This is a
+single global slot, not one file per account: another occupied namespace blocks
+new writing. DEV-only storage does not activate production transport, establish
+real-data encryption policy or complete installed process-death acceptance.
