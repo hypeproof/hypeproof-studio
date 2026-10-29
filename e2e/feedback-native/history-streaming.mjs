@@ -65,9 +65,10 @@ export async function awaitRestoredHistory(sample, expected, interrupted, deadli
   const observed=await sample(Math.max(1,deadline-clock()));
   if(clock()>=deadline)throw Error('Timed out: restored exact history within draft readiness deadline');
   assert.equal(observed.workspace,expected.workspace,'Restored history workspace changed');
+  if(expected.document)assert.deepEqual(observed.document,expected.document,'Restored history document changed');
   const rows=observed.rows; assert(Array.isArray(rows),'Restored history rows required');
   if(rows.length){
-   assertInterruptedHistory(rows,['A1'],interrupted);
+   assertInterruptedHistory(rows,expected.names??['A1'],interrupted);
    for(const original of expected.completed){
     const found=rows.find(row=>row.role===original.role&&row.text===original.text);
     assert(found&&found.id===original.id,'Restored completed message identity changed');
@@ -86,6 +87,20 @@ export const HISTORY_ROWS_EXPRESSION=`[...document.querySelectorAll('.hps-msg-us
  const user=e.classList.contains('hps-msg-user'),spoken=user||body?.querySelector('.hps-prose,.hps-codepill,.hps-stream-note,.hps-code-progress');
  return {id:e.getAttribute('data-message-id'),role:user?'user':'assistant',text:spoken?(body?.textContent?.trim()??''):'',receipt:(e.querySelector('.hps-turn-elapsed')??(e.nextElementSibling?.matches('.hps-turn-elapsed')?e.nextElementSibling:null))?.textContent??null};
 })`;
+export function historyDocumentIdentity(chat){
+ const document={workbench:chat?.ownedWorkbenchId,target:chat?.info?.id,frame:chat?.ownedFrameId,loader:chat?.ownedLoaderId};
+ assert(Object.values(document).every(value=>typeof value==='string'&&value.length>0),'Exact history document required');
+ return document;
+}
+export async function readExactHistoryDocument(chat,expected){
+ const document=historyDocumentIdentity(chat),context=chat.contextId;
+ assert.deepEqual(document,expected,'Restored history document changed');
+ assert(Number.isInteger(context),'Explicit history context required');
+ const rows=await chat.evaluate(HISTORY_ROWS_EXPRESSION);
+ assert.deepEqual(historyDocumentIdentity(chat),document,'History document changed during read');
+ assert.equal(chat.contextId,context,'History context changed during read');
+ return {document,rows};
+}
 export async function awaitUpstreamClosure(read,serviceSeq,timeout=10000){
  return waitFor(async()=>{const state=await read();return state.rows.find(row=>row.service_seq===serviceSeq&&row.client_closed===true&&row.state==='upstream_socket_closed'&&!row.fixture_finish);},'exact upstream socket closure before fixture cleanup',timeout);
 }
@@ -94,6 +109,33 @@ export async function runHistoryStreaming(ctx){
  const passed=id=>report.tests.some(t=>t.id===id&&t.status==='PASS');
  const need=id=>{if(!passed(id))throw blocked('Scripted followup requires observed '+id);};
  const history=async()=>{const chat=await ui.frame('.hps-input textarea');return chat.evaluate(HISTORY_ROWS_EXPRESSION);};
+ // A fresh composer does not establish arrival of its separate history message.
+ // Observe the exact folder within the caller's existing readiness budget. Only
+ // an empty timeline may wait; populated foreign/partial/duplicate history fails.
+ const historyReady=async(folder,names,deadline,observedChat)=>{
+  if(Date.now()>=deadline)throw Error('Timed out: restored exact history within draft readiness deadline');
+  const workspace=String(await(await ui.workbench()).evaluate('document.title'));
+  assert(workspace.includes(path.basename(folder)),'Expected history folder required');
+  const document=historyDocumentIdentity(observedChat);
+  const progress={phase:'folder-history-readiness',folder:path.basename(folder),expected_turns:names,empty_samples:0,status:'OBSERVING'};
+  (report.history_readiness??=[]).push(progress);save();
+  try{
+   const rows=await awaitRestoredHistory(async remaining=>{
+    const current=String(await(await ui.workbench()).evaluate('document.title'));
+    const chat=await ui.frame('.hps-input textarea',Math.min(1500,remaining));
+    const {document:currentDocument,rows}=await readExactHistoryDocument(chat,document);
+    progress.last_row_count=rows.length;if(!rows.length)progress.empty_samples++;
+    progress.last_counts=historyMarkers(rows);save();
+    return {workspace:current,document:currentDocument,rows};
+   },{workspace,document,names,completed:[]},{},deadline);
+   progress.status='OBSERVED';return rows;
+  }catch(error){progress.status='REFUSED';throw error;}finally{save();}
+ };
+ const reopenHistory=async(folder,expectedDraft,names)=>{
+  const deadline=Date.now()+60000;
+  const restored=await nativeOpenBoundFolder(folder);assert.equal(restored.value,expectedDraft);
+  return historyReady(folder,names,deadline,restored.chat);
+ };
  const interrupted={};
  const capture=async name=>{interrupted[name]=captureInterruptedHistory(await history(),name);};
  const state=()=>scriptedState(control);
@@ -127,11 +169,11 @@ export async function runHistoryStreaming(ctx){
   await send('A1');await ui.input(await focusChat(),'.hps-input textarea',draft);
   const before=(await readDraft()).chat.info.id,view=await start();ctx.candidate(true);await ui.savedActivity(view,c.workspace.b);await waitFor(()=>view.evaluate("document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),'saved activity candidate for history');await ui.chooseCandidateFolder(view,c.workspace.d);await ui.press(view,'.studio-primary');
   await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.d)),'history destination D real reload',60000);
-  const moved=await ui.frame('.hps-input textarea',60000);assert.notEqual(moved.info.id,before);ctx.candidate(false);report.latest_activity_a_saved_workspace=c.workspace.d;save();
-  assertCompletedHistory(await history(),['A1']);await send('D2');const dDraft=draft+'-history-D';await ui.input(await focusChat(),'.hps-input textarea',dDraft);
-  assert.equal((await nativeOpenBoundFolder(c.workspace.a)).value,draft);assertCompletedHistory(await history(),['A1']);
-  assert.equal((await nativeOpenBoundFolder(c.workspace.d)).value,dDraft);assertCompletedHistory(await history(),['A1','D2']);
-  assert.equal((await nativeOpenBoundFolder(c.workspace.a)).value,draft);const counts=assertCompletedHistory(await history(),['A1']);
+  const deadline=Date.now()+60000,moved=await ui.frame('.hps-input textarea',Math.max(1,deadline-Date.now()));assert.notEqual(moved.info.id,before);ctx.candidate(false);report.latest_activity_a_saved_workspace=c.workspace.d;save();
+  await historyReady(c.workspace.d,['A1'],deadline,moved);await send('D2');const dDraft=draft+'-history-D';await ui.input(await focusChat(),'.hps-input textarea',dDraft);
+  await reopenHistory(c.workspace.a,draft,['A1']);
+  await reopenHistory(c.workspace.d,dDraft,['A1','D2']);
+  const counts=assertCompletedHistory(await reopenHistory(c.workspace.a,draft,['A1']),['A1']);
   const rows=(await bound()).rows;assert(rows.some(r=>r.marker==='D2'&&r.markers.A1&&r.markers.D2),'Actual SDK upstream prompt includes carried history');assert.deepEqual(workspaceFiles(c.workspace.a),originalFiles);
   report.history='PASS_SCRIPTED_NATIVE_SELECTED_PERSISTENCE';return {native_turn_entry:true,actual_sdk:true,synthetic_upstream:true,source_history_carried:true,destination_history_wins:true,exact_occurrences:counts,provider_called:false};
  });

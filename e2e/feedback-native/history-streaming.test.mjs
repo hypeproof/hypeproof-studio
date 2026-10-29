@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import path from 'node:path';
-import {historyMarkers,assertCompletedHistory,captureInterruptedHistory,assertInterruptedHistory,awaitRestoredHistory,awaitUpstreamClosure} from './history-streaming.mjs';
+import {historyMarkers,assertCompletedHistory,captureInterruptedHistory,assertInterruptedHistory,awaitRestoredHistory,awaitUpstreamClosure,historyDocumentIdentity,readExactHistoryDocument} from './history-streaming.mjs';
 test('rendered history requires exact user+assistant occurrence and rejects duplicates, foreign turns or partial-only claims',()=>{const rows=[{role:'user',text:'HPS_NATIVE_A1'},{role:'assistant',text:'HPS_NATIVE_REPLY_A1'}];assertCompletedHistory(rows,['A1']);assert.throws(()=>assertCompletedHistory([...rows,...rows],['A1']));assert.throws(()=>assertCompletedHistory(rows.slice(0,1),['A1']));assert.throws(()=>assertCompletedHistory(rows,['A1','D2']));assert.equal(historyMarkers(rows).A1.assistant,1);assert.throws(()=>assertCompletedHistory([...rows,{role:'user',text:'HPS_NATIVE_STOP_HOLD'}],['A1']));});
 
 test('observed stopped user and partial assistant persist exactly once without a fabricated completed turn',()=>{
@@ -72,4 +72,34 @@ test('draft may precede history without relaxing exact restored scope, IDs, and 
  await assert.rejects(attempt({workspace:'owned-A',rows:rows.slice(0,1)}),/Exact persisted assistant occurrence A1/);
  now=0;await assert.rejects(awaitRestoredHistory(async()=>({workspace:'owned-A',rows:[]}),expected,interrupted,300,()=>now,async ms=>{now+=ms;}),/within draft readiness deadline/);
  now=0;await assert.rejects(awaitRestoredHistory(async()=>{now=1000;return {workspace:'owned-A',rows};},expected,interrupted,1000,()=>now,async()=>{}),/within draft readiness deadline/,'late sample cannot pass');
+});
+
+test('folder history waits only for empty delivery within the inherited deadline and exact document',async()=>{
+ const rows=['A1','D2'].flatMap(name=>[{id:name+'u',role:'user',text:'HPS_NATIVE_'+name},{id:name+'a',role:'assistant',text:'HPS_NATIVE_REPLY_'+name}]);
+ const document={workbench:'W',target:'T',frame:'F',loader:'L'},expected={workspace:'owned-D',document,names:['A1','D2'],completed:[]};
+ let now=850,reads=0;const budgets=[];
+ const actual=await awaitRestoredHistory(async remaining=>{budgets.push(remaining);return{workspace:'owned-D',document,rows:++reads===1?[]:rows};},expected,{},1200,()=>now,async ms=>{now+=ms;});
+ assert.deepEqual(actual,rows);assert.deepEqual(budgets,[350,200],'reuse remaining reload budget, never restart it');
+ for(const bad of [{workspace:'other',document,rows:[]},{workspace:'owned-D',document:{...document,loader:'NEW'},rows:[]}]){
+  await assert.rejects(awaitRestoredHistory(async()=>bad,expected,{},1200,()=>850,async()=>assert.fail('scope mismatch cannot wait')),/workspace changed|document changed/);
+ }
+ for(const populated of [rows.slice(0,2),[...rows,...rows.slice(0,2)],[{role:'user',text:'other activity'}]]){
+  await assert.rejects(awaitRestoredHistory(async()=>({workspace:'owned-D',document,rows:populated}),expected,{},1200,()=>850,async()=>assert.fail('populated mismatch cannot wait')),/Exact persisted/);
+ }
+ now=1199;await assert.rejects(awaitRestoredHistory(async()=>({workspace:'owned-D',document,rows:[]}),expected,{},1200,()=>now,async ms=>{now+=ms;}),/readiness deadline/);
+ now=1199;await assert.rejects(awaitRestoredHistory(async()=>{now=1200;return{workspace:'owned-D',document,rows};},expected,{},1200,()=>now,async()=>assert.fail('no late retry')),/readiness deadline/);
+});
+
+test('history rows and document identity come from the same captured target and context',async()=>{
+ const rows=[{role:'user',text:'HPS_NATIVE_A1'}];let reads=0;
+ const target={ownedWorkbenchId:'W',info:{id:'T'},ownedFrameId:'F',ownedLoaderId:'L',contextId:8,evaluate:async()=>{reads++;return rows;}};
+ const expected=historyDocumentIdentity(target);
+ assert.deepEqual(await readExactHistoryDocument(target,expected),{document:expected,rows});
+ await assert.rejects(readExactHistoryDocument({...target,info:{id:'REPLACED'}},expected),/document changed/);
+ assert.equal(reads,1,'new discovery cannot read rows under a prior identity');
+ for(const field of ['ownedLoaderId','contextId']){
+  const changed={...target,evaluate:async()=>{changed[field]=field==='contextId'?9:'NEW';return rows;}};
+  await assert.rejects(readExactHistoryDocument(changed,expected),/changed during read/);
+ }
+ await assert.rejects(readExactHistoryDocument({...target,contextId:undefined},expected),/Explicit history context/);
 });
