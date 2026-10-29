@@ -1,5 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import{readFile}from'node:fs/promises';
 import{compilerDiagnostics,apkMetadata}from'./compiler-diagnostics.mjs';
+import{execFileSync}from'node:child_process';
+import{fileURLToPath}from'node:url';
 test('bounded compiler categories preserve public location without private snippets',()=>{
  const raw='/private/client/NativeDraftLifecycleTest.java:42: error: cannot find symbol\n SECRET_TOKEN=secret-code\n/private/PrivateClient.java:1: error: secret-code\nhttps://private.invalid/auth?token=secret-code';
  const d=compilerDiagnostics(raw,'gradle');assert.deepEqual(d.rows,[{file:'NativeDraftLifecycleTest.java',line:42,category:'cannot_find_symbol'}]);assert.equal(d.outputSha256.length,64);assert.equal(d.rawOutputIncluded,false);assert.doesNotMatch(JSON.stringify(d),/secret-code|private|https|SECRET/);assert.equal(compilerDiagnostics((raw+'\n').repeat(40),'gradle').rows.length,20);
@@ -10,9 +12,46 @@ test('APK metadata requires exact package and both API35 values',()=>{
 });
 test('Android opt-in keeps an explicit no-APK upload allowlist',async()=>{
  const workflow=await readFile(new URL('../../.github/workflows/feedback-candidate.yml',import.meta.url),'utf8');
- const block=workflow.split('name: Upload only bounded public evidence')[1];const paths=[...block.matchAll(/android-draft-evidence\/([^\s]+)/g)].map(m=>m[1]);assert.deepEqual(paths,['result.json','build-receipt.json','attempt.json','unconfigured-launch.png','diagnostics.json']);assert.doesNotMatch(paths.join(' '),/apk|\*/);
- const runner=await readFile(new URL('./run-hosted.py',import.meta.url),'utf8');assert.ok(runner.includes("'-accel','on'"));assert.doesNotMatch(runner,/'-accel','off'|kill-server/);assert.ok(runner.includes("if argv!=['--run']"));
+ for(const[job,directory,expected]of[
+  ['android-draft','android-draft-evidence',['result.json','build-receipt.json','attempt.json','unconfigured-launch.png','diagnostics.json']],
+  ['android-authenticated-ui','android-auth-ui-evidence',['result.json','build-receipt.json','attempt.json','ui_*.png','diagnostics.json']],
+ ]){
+  const block=workflow.split('  '+job+':\n')[1]?.split(/\n  [a-z-]+:\n/)[0];assert.ok(block,job+' exists');
+  const uploads=block.split('uses: actions/upload-artifact@v4');assert.equal(uploads.length,2,job+' has one evidence upload');
+  const paths=uploads[1].split('          path: |\n')[1]?.split('          if-no-files-found:')[0].trim().split('\n').map(line=>line.trim());
+  assert.deepEqual(paths,expected.map(name=>'${{ runner.temp }}/'+directory+'/'+name),job+' exact public evidence paths');
+ }
+ const runner=await readFile(new URL('./run-hosted.py',import.meta.url),'utf8');assert.ok(runner.includes("'-accel','on'"));assert.doesNotMatch(runner,/'-accel','off'|kill-server/);
  const java=await readFile(new URL('../../apps/companion-android/app/src/androidTest/java/ai/hypeproof/companion/NativeDraftLifecycleTest.java',import.meta.url),'utf8');for(const phase of ['seed_ready','erased_ready','cold_absence'])assert.ok(java.includes('ack("'+phase+'",true)'));assert.ok(java.includes('new AndroidDraftFile()'));assert.ok(java.includes('assertFalse(((DeviceSignInFixtureActivity)activity).signInTransportEnabled())'));
+});
+
+test('both explicit runner modes require hosted ownership; default, unknown and mixed arguments cannot launch',()=>{
+ const script=`
+import contextlib,importlib.util,io,json,sys
+from unittest.mock import patch
+spec=importlib.util.spec_from_file_location('hosted_optin',sys.argv[1]);h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
+class Admitted(Exception):pass
+owned={'GITHUB_ACTIONS':'true','RUNNER_OS':'Linux','HPS_ANDROID_OWNED_HOSTED':'1','HPS_ANDROID_EVIDENCE':'/owned/evidence'}
+with patch.object(h.subprocess,'run')as run,patch.object(h.subprocess,'Popen')as popen,patch.object(h,'Path',side_effect=Admitted)as path:
+ for args in [[],['--unknown'],['--run','--run-authenticated-ui'],['--run','extra'],['--run-authenticated-ui','extra'],['--run','--run']]:
+  with patch.dict(h.os.environ,owned,clear=True),contextlib.redirect_stdout(io.StringIO())as out:
+   assert h.main(args)==0
+  assert json.loads(out.getvalue())['status']=='NOT_RUN'
+  path.assert_not_called();run.assert_not_called();popen.assert_not_called()
+ for mode in ['--run','--run-authenticated-ui']:
+  for missing in ['GITHUB_ACTIONS','RUNNER_OS','HPS_ANDROID_OWNED_HOSTED']:
+   env={k:v for k,v in owned.items()if k!=missing}
+   with patch.dict(h.os.environ,env,clear=True):
+    try:h.main([mode]);raise AssertionError('missing ownership accepted')
+    except RuntimeError as error:assert str(error)=='owned_hosted_linux_only'
+   path.assert_not_called();run.assert_not_called();popen.assert_not_called()
+  with patch.dict(h.os.environ,owned,clear=True):
+   try:h.main([mode]);raise AssertionError('explicit mode not admitted')
+   except Admitted:pass
+  path.assert_called_once_with('/owned/evidence');path.reset_mock();run.assert_not_called();popen.assert_not_called()
+print('PASS explicit opt-in and ownership without process or filesystem effects')
+`;
+ assert.match(execFileSync('python3',['-c',script,fileURLToPath(new URL('./run-hosted.py',import.meta.url))],{encoding:'utf8',timeout:10000}),/^PASS explicit opt-in/);
 });
 
 test('workflow job conditions select PR label and manual Android opt-ins from an event truth table',async()=>{
@@ -36,8 +75,15 @@ test('workflow job conditions select PR label and manual Android opt-ins from an
   ['opted-in opened PR retains desktop',pr('opened',['companion-android-verify']),{},true,true],
   ['manual Android true',{event_name:'workflow_dispatch',event:{}},{android_draft:true},false,true],
   ['manual default',{event_name:'workflow_dispatch',event:{}},{android_draft:false},true,false],
+  ['UI label added',pr('labeled',['companion-android-ui-verify'],'companion-android-ui-verify'),{},false,false,true],
+  ['UI label missing',pr('labeled',[],'companion-android-ui-verify'),{},false,false,false],
+  ['unrelated label with UI opt-in',pr('labeled',['companion-android-ui-verify','unrelated'],'unrelated'),{},false,false,false],
+  ['UI synchronize retains desktop',pr('synchronize',['companion-android-ui-verify']),{},true,false,true],
+  ['both labels synchronize',pr('synchronize',['companion-android-verify','companion-android-ui-verify']),{},true,true,true],
+  ['manual UI only',{event_name:'workflow_dispatch',event:{}},{android_ui:true},false,false,true],
+  ['manual both selects original lane',{event_name:'workflow_dispatch',event:{}},{android_ui:true,android_draft:true},false,true,false],
  ];
- for(const[label,github,inputs,native,android]of cases){assert.equal(evaluate('native',github,inputs),native,label+' native');assert.equal(evaluate('android-draft',github,inputs),android,label+' Android');}
+ for(const[label,github,inputs,native,android,ui=false]of cases){assert.equal(evaluate('native',github,inputs),native,label+' native');assert.equal(evaluate('android-draft',github,inputs),android,label+' Android');assert.equal(evaluate('android-authenticated-ui',github,inputs),ui,label+' authenticated UI');}
  assert.match(workflow,/types: \[opened, synchronize, reopened, labeled\]/);
  for(const glob of ['apps/companion-android/**','e2e/companion-android/**'])assert.ok(workflow.includes("- '"+glob+"'"));
  const android=workflow.split('  android-draft:')[1];
