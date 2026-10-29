@@ -232,6 +232,7 @@ import type { TurnReviewView } from "./turnReviewView";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
 import { buildPageCard, handlePageCardAction, PageCardRegistry, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
+import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { BrowserDownloadWatcher } from "./browserDownloadWatcher";
@@ -2410,6 +2411,71 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       try { await channel?.close(); } catch { /* the tab may be gone already */ }
       try { await tab?.close(); } catch { /* as above */ }
       this.deckPdfBusy = false;
+    }
+  }
+
+  /**
+   * #3221 part 2 — "PDF로 저장" for an HTML page in the work folder, printed by Studio's own browser (pagePdf.ts)
+   * instead of running another app's program. Served by the preview server in a background tab, written next to
+   * the page as <name>.pdf. Progress and the result are in-chat notices, like the deck export.
+   */
+  private pagePdfBusy = false;
+  async savePagePdf(target?: vscode.Uri): Promise<void> {
+    if (this.pagePdfBusy || this.deckPdfBusy) { this.postPageNotice(PAGE_PDF_COPY.busy); return; }
+    const file = target?.fsPath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+    const workRoot = this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!file || !pdfNameFor(path.basename(file))) { this.postPageNotice(PAGE_PDF_COPY.notHtml); return; }
+    if (!workRoot) { this.postPageNotice(PAGE_PDF_COPY.outside); return; }
+    // The preview server that will serve it: the running one when it already serves a folder holding the page
+    // (never replaced), otherwise one started on the work folder.
+    const active = this.liveServer.currentRoot();
+    let root: string;
+    try {
+      const real = canonicalFolder(file);
+      if (!isInsideFolder(real, canonicalFolder(workRoot))) { this.postPageNotice(PAGE_PDF_COPY.outside); return; }
+      root = active && isInsideFolder(real, canonicalFolder(active)) ? active : workRoot;
+      if (active && root !== active) { this.postPageNotice(DECK_PDF_COPY.otherPreview); return; }
+    } catch { this.postPageNotice(PAGE_PDF_COPY.notLoaded); return; }
+    const rel = path.relative(canonicalFolder(root), canonicalFolder(file)).split(path.sep).join("/");
+    const page = resolvePageInFolder(root, rel);
+    if (!page.ok) { this.postPageNotice(PAGE_PDF_COPY.notLoaded); return; }
+    const out = path.join(path.dirname(page.abs), pdfNameFor(path.basename(page.abs))!);
+    const blocked = this.folderWriteRefusalFor(out);
+    if (blocked) { this.postPageNotice(blocked); return; }
+    this.pagePdfBusy = true;
+    this.postPageNotice(PAGE_PDF_COPY.started(path.basename(page.abs)));
+    let tab: vscode.BrowserTab | undefined;
+    let channel: { send: CdpSend; close(): Promise<void> } | undefined;
+    try {
+      const base = await this.liveServer.ensure(root);
+      const url = new URL(rel.split("/").map(encodeURIComponent).join("/"), base).href;
+      try {
+        tab = await vscode.window.openBrowserTab(url, { viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One, preserveFocus: true, background: true });
+        channel = await this.deckPdfAttach(tab);
+      } catch { this.postPageNotice(PAGE_PDF_COPY.openFailed); return; }
+      const result = await exportPagePdf(channel.send, { expectedUrl: url });
+      if (!result.ok) { this.postPageNotice(PAGE_PDF_COPY.notLoaded); return; }
+      const again = this.folderWriteRefusalFor(out);
+      if (again) { this.postPageNotice(again); return; }
+      // Write beside, then rename over: a link left at the target is replaced, never followed.
+      const tmp = path.join(path.dirname(out), `.${path.basename(out)}.${randomId()}.tmp`);
+      try {
+        fs.writeFileSync(tmp, result.pdf, { flag: "wx" });
+        fs.renameSync(tmp, out);
+      } catch {
+        try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to clean */ }
+        this.postPageNotice(PAGE_PDF_COPY.writeFailed);
+        return;
+      }
+      noteHostWrite([{ absPath: out, data: result.pdf }], "studio");
+      const shown = path.relative(workRoot, out).split(path.sep).join("/");
+      this.postPageNotice(result.method === "print" ? PAGE_PDF_COPY.saved(shown) : PAGE_PDF_COPY.savedAsImages(shown, result.pages));
+    } catch {
+      this.postPageNotice(PAGE_PDF_COPY.notLoaded);
+    } finally {
+      try { await channel?.close(); } catch { /* the tab may be gone already */ }
+      try { await tab?.close(); } catch { /* as above */ }
+      this.pagePdfBusy = false;
     }
   }
 
@@ -7876,6 +7942,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "previewReady":
         return;
+      case "savePagePdf": {
+        // #3221 part 2 — a path relative to the work folder, from the AI가 한 일 list; savePagePdf re-checks containment.
+        const workRoot = this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (typeof msg.path === "string" && msg.path && msg.path.length <= 300 && workRoot) void this.savePagePdf(vscode.Uri.file(path.resolve(workRoot, msg.path)));
+        return;
+      }
       case "openExternal":
         // #173 citation chip click. routeExternalLink keeps the http(s)-only guard against a
         // hostile scheme from a compromised upstream; CGP-ART-R-008 adds the cohort-aware exit.

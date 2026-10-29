@@ -54,9 +54,13 @@ export interface TaskActivityProps {
   /** Paths the open turn review lists (added + changed); only these get 바뀐 곳 보기. */
   reviewPaths: ReadonlySet<string>;
   onShowReview: (path: string) => void;
+  /** #3221 part 2 — 'PDF로 저장' for an HTML page the AI made or changed in the work folder. */
+  onSavePdf?: (path: string) => void;
 }
 
-export function TaskActivity({ summary, reviewPaths, onShowReview }: TaskActivityProps) {
+const HTML_PAGE = /\.html?$/i;
+
+export function TaskActivity({ summary, reviewPaths, onShowReview, onSavePdf }: TaskActivityProps) {
   const [open, setOpen] = useState<TaskActivityVerb | null>(null);
   const [all, setAll] = useState<TaskActivityVerb | null>(null);
   if (taskActivityTotal(summary) === 0) return null;
@@ -85,6 +89,8 @@ export function TaskActivity({ summary, reviewPaths, onShowReview }: TaskActivit
           <TargetName target={it.target} />
           {fileVerb && it.inside && reviewPaths.has(it.target) &&
             <button type="button" className="hps-task-activity-review" aria-label={`${it.target} 바뀐 곳 보기`} onClick={() => onShowReview(it.target)}>바뀐 곳 보기</button>}
+          {fileVerb && it.inside && onSavePdf && HTML_PAGE.test(it.target) &&
+            <button type="button" className="hps-task-activity-pdf" aria-label={`${it.target} PDF로 저장`} onClick={() => onSavePdf(it.target)}>PDF로 저장</button>}
         </li>)}
       </ul>
       {items.length > visible.length && <button type="button" className="hps-task-activity-more" onClick={() => setAll(shown)}>더 보기 ({items.length - visible.length}개)</button>}

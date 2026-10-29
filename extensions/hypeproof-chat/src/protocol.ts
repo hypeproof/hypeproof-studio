@@ -744,6 +744,7 @@ export type WebviewMessage = (
   | { type: "saveCoach"; name: string; personality: string }
   | { type: "runCode"; html: string }       // from chat panel → host → preview
   | { type: "previewReady" }                // from preview webview only
+  | { type: "savePagePdf"; path: string }  // #3221 part 2 — an HTML page in the work folder, relative to it
   | { type: "openExternal"; url: string }   // #173 — citation chip click → host opens browser
   /**
    * "갤러리에 올리기" — sends the world currently open to the lab gallery.
