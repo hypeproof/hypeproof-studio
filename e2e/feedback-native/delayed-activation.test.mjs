@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
-import {DELAYED_STAGES,EXPIRY_MESSAGE,delayedPrerequisite,delayedHistoryPrerequisite,stageObservation,checkExpiredActivation,checkDelayedDestination} from './delayed-activation.mjs';
+import {delayedFailure,DELAYED_STAGES,EXPIRY_MESSAGE,delayedPrerequisite,delayedHistoryPrerequisite,stageObservation,checkExpiredActivation,checkDelayedDestination} from './delayed-activation.mjs';
 test('expiry failure preserves exact UI facts and sanitized request boundaries before the unchanged gate rejects',()=>{
  const baseline=[{seq:1,method:'GET',path:'/v1/profile',subject:'A',status:200}],read={seq:2,method:'GET',path:'/v1/profile',subject:'A',status:200,request_id:'synthetic-request',authorization:'never-record',body:'never-record'};
  const observed={notification:EXPIRY_MESSAGE,startVisible:true,chatVisible:false,uiTimes:{notification:610120,start:610130,chat_probe_started:610140,chat_probe_finished:610180,privateText:'never-record'},callsAtPause:baseline,callsAfter:[...baseline,read],baselineAt:100,releasedAt:610100,observedAt:610200};
@@ -65,4 +65,14 @@ test('passive expiry retains exact bytes; explicit recovery permits only a valid
  const source=fs.readFileSync(new URL('./delayed-activation.mjs',import.meta.url),'utf8'),section=source.slice(source.indexOf("if(stage.name==='real-expiry'){",source.indexOf('runDelayedActivation')));
  assert(section.indexOf('item.binding_sha256=checkDelayedDestination')<section.indexOf('await ui.savedActivity'));
  assert(section.indexOf('item.recovered_binding_sha256=checkDelayedDestination')>section.indexOf("await ui.press(view,'.studio-primary')"));
+});
+
+test('early ownership failure stays primary when restart observation also fails',()=>{
+ const proof={},ownership=Error('Cannot establish inspector listener ownership'),restart=Error('private restored UI timeout');
+ assert.equal(delayedFailure(proof,restart,ownership),ownership);
+ assert.deepEqual(proof.secondary_failure,{phase:'startup_restart_observation',error_type:'Error',message_sha256:createHash('sha256').update(restart.message).digest('hex')});
+ assert(!JSON.stringify(proof).includes('private'));
+ for(const [p,caught,gate] of [[{},restart,null],[{},ownership,ownership],[{initial_owned_startup:true},restart,ownership]]){
+  assert.equal(delayedFailure(p,caught,gate),caught);assert(!p.secondary_failure);
+ }
 });
