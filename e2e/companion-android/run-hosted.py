@@ -71,6 +71,26 @@ class Device:
    require(pids==[identity['pid']],'foreign_process_after_stop');time.sleep(.1)
   raise RuntimeError('target_exit_not_observed')
 
+def disable_and_observe_radios(device,diagnostics,now=time.monotonic,sleep=time.sleep):
+ # Commands are issued once. Their return is not a postcondition on asynchronous services.
+ diagnostics.update({'budgetMs':10000,'polls':0,'status':'pending','stage':'wifi_disable'})
+ device.call('shell','svc','wifi','disable');diagnostics['stage']='mobile_disable';device.call('shell','svc','data','disable')
+ start=now();deadline=start+10;diagnostics['stage']='observe'
+ def normalized(value):return {'0':0,'1':1,'null':'unset','':'empty'}.get(value,'other')
+ try:
+  while now()<deadline:
+   state={}
+   for label,key in [('wifi','wifi_on'),('mobile','mobile_data')]:
+    remaining=deadline-now();require(remaining>0,'guest_radios_not_disabled')
+    state[label]=normalized(device.text('shell','settings','get','global',key,timeout=min(5,remaining)))
+   diagnostics['polls']+=1;diagnostics.setdefault('first',state.copy());diagnostics['last']=state
+   diagnostics['elapsedMs']=round((now()-start)*1000);require(now()<=deadline,'guest_radios_not_disabled')
+   if state=={'wifi':0,'mobile':0}:diagnostics['status']='disabled';return
+   sleep(min(.25,max(0,deadline-now())))
+  raise RuntimeError('guest_radios_not_disabled')
+ except Exception as error:
+  diagnostics['status']='refused';diagnostics['errorType']=type(error).__name__;diagnostics['elapsedMs']=round((now()-start)*1000);raise
+
 def read_ack(proc,phase,run,uid,data_dir,timeout=60):
  selector=selectors.DefaultSelector();selector.register(proc.stdout,selectors.EVENT_READ);end=time.monotonic()+timeout;data=b''
  try:
@@ -156,8 +176,7 @@ def main(argv):
   for name in ['target','test']:d.call('install','--no-streaming',*(['-t']if name=='test'else[]),str(out/receipt['apks'][name]['file']),timeout=60)
   line=d.text('shell','cmd','package','list','packages','-U','--user','0',PKG);matches=[m for text in line.splitlines() if (m:=re.fullmatch(r'package:'+re.escape(PKG)+r' uid:(\d+)',text))];require(len(matches)==1,'exact_package_uid_required');uid=int(matches[0][1]);data_dir=d.text('shell','run-as',PKG,'pwd','-P');canonical=d.text('shell','run-as',PKG,'readlink','-f','/data/user/0/'+PKG);require(data_dir==canonical and canonical in ['/data/user/0/'+PKG,'/data/data/'+PKG],'exact_private_data_dir_required')
   require(d.text('shell','pm','list','instrumentation',PKG)==f'instrumentation:{RUNNER} (target={PKG})','exact_instrumentation_required')
-  d.call('shell','svc','wifi','disable');d.call('shell','svc','data','disable')
-  require(d.text('shell','settings','get','global','wifi_on')=='0' and d.text('shell','settings','get','global','mobile_data')=='0','guest_radios_not_disabled')
+  result['radioReadiness']={};disable_and_observe_radios(d,result['radioReadiness'])
   result['guestNetworkBoundary']={'wifiEnabled':False,'mobileDataEnabled':False,'packetIsolation':'NOT_CLAIMED; unconfigured fixture has no transport target'}
   d.call('shell','am','start','-W','-n',COMPONENT,timeout=15);pids=d.pids();require(len(pids)==1,'single_target_launch_required');launched=d.identity(pids[0],uid,data_dir)
   shot=d.call('exec-out','screencap','-p',timeout=10).stdout;require(shot.startswith(b'\x89PNG\r\n\x1a\n'),'launch_screenshot_required');(out/'unconfigured-launch.png').write_bytes(shot);result['checks'].append({'phase':'unconfigured_debug_activity_launch','identity':launched,'component':COMPONENT,'noIntentExtras':True,'screenshotSha256':hashlib.sha256(shot).hexdigest()});d.stop(launched)

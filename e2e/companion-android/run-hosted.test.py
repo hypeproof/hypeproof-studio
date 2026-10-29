@@ -84,6 +84,41 @@ class Controls(unittest.TestCase):
   self.assertEqual(h.close_child(failed,1),{'closed':False,'errors':['OSError']})
  def test_unknown_ack_field_refused(self):
   with self.assertRaises(RuntimeError):h.status_blocks('INSTRUMENTATION_STATUS: hps_secret=untrusted')
+ def test_radio_transition_observes_once_commands_then_waits_for_exact_off(self):
+  from unittest.mock import Mock
+  for initial in [('1','0'),('0','1')]:
+   clock=[0.0];device=Mock();device.text.side_effect=[*initial,'0','0'];diagnostics={}
+   h.disable_and_observe_radios(device,diagnostics,now=lambda:clock[0],sleep=lambda seconds:clock.__setitem__(0,clock[0]+seconds))
+   self.assertEqual(device.call.call_count,2);self.assertEqual(device.call.call_args_list[0].args,('shell','svc','wifi','disable'));self.assertEqual(device.call.call_args_list[1].args,('shell','svc','data','disable'))
+   self.assertEqual(diagnostics['first'],dict(zip(['wifi','mobile'],map(int,initial))));self.assertEqual(diagnostics['last'],{'wifi':0,'mobile':0});self.assertEqual(diagnostics['status'],'disabled');self.assertEqual(diagnostics['polls'],2)
+ def test_radios_on_unset_or_untrusted_values_refuse_with_bounded_safe_diagnostics(self):
+  from unittest.mock import Mock
+  for value in ['1','null','','secret-token-private-url']:
+   clock=[0.0];device=Mock();device.text.return_value=value;diagnostics={}
+   with self.subTest(value=value),self.assertRaisesRegex(RuntimeError,'guest_radios_not_disabled'):
+    h.disable_and_observe_radios(device,diagnostics,now=lambda:clock[0],sleep=lambda seconds:clock.__setitem__(0,clock[0]+seconds))
+   self.assertEqual(clock[0],10);self.assertLessEqual(diagnostics['polls'],40);self.assertEqual(diagnostics['status'],'refused');self.assertEqual(device.call.call_count,2);self.assertNotIn('secret-token',str(diagnostics))
+ def test_radio_observation_owner_error_not_retried(self):
+  from unittest.mock import Mock
+  for error in [RuntimeError('owned_guest_closed'),subprocess.TimeoutExpired('private command',1)]:
+   device=Mock();device.text.side_effect=error;diagnostics={}
+   with self.assertRaises(type(error)):h.disable_and_observe_radios(device,diagnostics)
+   self.assertEqual(device.text.call_count,1);self.assertEqual(device.call.call_count,2);self.assertEqual(diagnostics['status'],'refused');self.assertNotIn('private command',str(diagnostics))
+ def test_radio_read_deadline_clips_remaining_command_budget(self):
+  from unittest.mock import Mock
+  clock=[0.0];device=Mock();diagnostics={}
+  def read(*args,**kw):
+   self.assertLessEqual(kw['timeout'],5);clock[0]+=kw['timeout'];return '1'
+  device.text.side_effect=read
+  with self.assertRaisesRegex(RuntimeError,'guest_radios_not_disabled'):h.disable_and_observe_radios(device,diagnostics,now=lambda:clock[0],sleep=lambda seconds:clock.__setitem__(0,clock[0]+seconds))
+  self.assertEqual(clock[0],10);self.assertEqual(device.text.call_count,2);self.assertEqual(diagnostics['status'],'refused')
+ def test_radio_disabled_observation_after_deadline_refuses(self):
+  from unittest.mock import Mock
+  clock=[0.0];device=Mock();diagnostics={}
+  def late_read(*args,**kw):clock[0]+=6;return '0'
+  device.text.side_effect=late_read
+  with self.assertRaisesRegex(RuntimeError,'guest_radios_not_disabled'):h.disable_and_observe_radios(device,diagnostics,now=lambda:clock[0],sleep=lambda seconds:None)
+  self.assertEqual(diagnostics['status'],'refused');self.assertEqual(diagnostics['last'],{'wifi':0,'mobile':0})
  def test_default_no_launch(self):
   with patch.object(h.subprocess,'Popen')as popen:self.assertEqual(h.main([]),0)
   popen.assert_not_called()
