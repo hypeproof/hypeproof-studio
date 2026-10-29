@@ -28,7 +28,8 @@ import { PreviewTabWatch } from "./previewTabWatch";
 import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
-import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { denialNotice, denialNoticeLabel, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { openMacPrivacySettings } from "./macPrivacySettings";
 import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
 import { activityLocalFile } from "./activityLocalFiles.ts";
 import { confirmOutbound, setOutboundPresenter } from "./outboundConsentHost";
@@ -8057,6 +8058,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (typeof msg.path === "string" && msg.path && msg.path.length <= 300 && workRoot) void this.savePagePdf(vscode.Uri.file(path.resolve(workRoot, msg.path)));
         return;
       }
+      case "openMacPrivacySettings":
+        // #3221 — fixed URL, macOS only; the webview never supplies it.
+        void openMacPrivacySettings();
+        return;
       case "openExternal":
         // #173 citation chip click. routeExternalLink keeps the http(s)-only guard against a
         // hostile scheme from a compromised upstream; CGP-ART-R-008 adds the cohort-aware exit.
@@ -8788,6 +8793,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // REQ-STUDIO-LONG-STEP-HINT — when each detailed tool line's clock starts (at its approval).
       const stepLines = new StepLines();
       const deniedCalls = new Map<string, DenialNotice>();
+      // #3221 — file-tool calls of this turn, so only their EPERM reads as macOS privacy (a shell's EPERM can be `kill`).
+      const fileToolCalls = new Set<string>();
       delegations = tracker;
       // Between a tool result and the next tool call the stream is completely silent
       // (a call only arrives once complete, in one lump). On a real device that stretch
@@ -8832,6 +8839,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         else if (a.kind === 'tool_result') this.noteTaskActivity(streamId, { kind: 'result', id: a.id, isError: a.isError });
         // studio-funnel-events — first write/edit/preview/publish result (kind + ok only).
         if (a.kind==='tool_use') { const k = funnelToolKind(a.name); if (k) funnelTools.set(a.id, k); }
+        if (a.kind==='tool_use' && FILE_TOOL_NAMES.has(a.name)) fileToolCalls.add(a.id);
         if (a.kind==='tool_result' && funnelTools.has(a.id)) { this.funnel.emit({ type: "trial_tool_result", kind: funnelTools.get(a.id), ok: !a.isError }); funnelTools.delete(a.id); }
         if (a.kind==='tool_use') this.crSdkResults.onToolUse(a.id, a.name, this.isCurriculumRuntimeEnabled());
         if (observation && (a.kind==='tool_use' || a.kind==='approval')) {
@@ -8984,7 +8992,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             const line = tracker.lineFor(a);
             // A denial is evidence even in summary mode. Runtime errors use unknown, never a guessed source.
             if (a.isError || deniedCalls.has(a.id)) {
-              const denial = deniedCalls.get(a.id) ?? denialNotice(taggedDenialSource(a.reason), this.getSeatAudience() === 'classroom');
+              // #3221 — a file tool that macOS's privacy setting refused says so, with a button to that setting.
+              const denial = deniedCalls.get(a.id) ?? (fileToolCalls.has(a.id) && macPrivacyBlocked(a.reason, process.platform)
+                ? denialNotice('runtime', this.getSeatAudience() === 'classroom', 'macos_privacy')
+                : denialNotice(taggedDenialSource(a.reason), this.getSeatAudience() === 'classroom'));
               deniedCalls.set(a.id, denial);
               tracker.settle(a.id);
               this.postToolLog(streamId, { id: line.lineId, icon: '🔒', label: '', state: 'error', denial });
