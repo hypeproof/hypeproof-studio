@@ -4,7 +4,8 @@
 # the seal has to cover the stamped files (#311, #361).
 #
 #   1. Editor watermark (scripts/install-shell-brand.mjs → out/media).
-#   2. Info.plist CFBundleShortVersionString = product version (#361).
+#   2. Info.plist CFBundleShortVersionString = product version (#361), and the
+#      Korean privacy usage descriptions (#3221, scripts/stamp-mac-usage.py).
 #   3. product.json .version = product version. VS Code's gulp derives it from
 #      vscode/package.json during the build, which #361 stopped stamping (that
 #      field feeds the runtime vscode.version API), so it must be re-stamped here
@@ -54,6 +55,8 @@ HPS_VER="${HPS_VER#v}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $HPS_VER" "$PLIST" \
   || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $HPS_VER" "$PLIST"
 echo "Stamped CFBundleShortVersionString → $HPS_VER (pre-sign)"
+# 2b. #3221 — Korean privacy usage descriptions, so macOS's folder prompt says why Studio asks.
+python3 "$REPO_ROOT/scripts/stamp-mac-usage.py" "$PLIST"
 
 tmp="$(mktemp)"
 if [[ -n "${BUILD_SOURCEVERSION:-}" ]]; then
