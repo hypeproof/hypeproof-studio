@@ -52,6 +52,7 @@ const short = candidate.slice(0, 8);
 const subjects = git('log', '--format=%s', `${baseline}..${candidate}`).split('\n').filter(Boolean);
 console.log(`\n[1] baseline ${baseline}  [2] candidate ${short}  [3] range ${subjects.length} commits`);
 if (subjects.length === 0) {
+  fs.writeFileSync(path.join(out, 'skipped.json'), JSON.stringify({schema: 'hps-release-skip/1', reason: 'no-commits', candidate, baseline}));
   console.log('\n→ no commits since the baseline. Skip this cycle (no tag, PR or issue).\n');
   process.exit(0);
 }
