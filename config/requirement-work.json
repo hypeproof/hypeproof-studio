@@ -844,7 +844,7 @@
         "DMC-15"
       ],
       "inline_prefixes": [],
-      "sha256": "f5fa93e52b7213ddefc61e58c2f79bae4bd55aae208b228417b816ab11215d59",
+      "sha256": "ab796a36f2aea29406bcd590e44955156761fea32179820c4b6fc4b97d4c44fc",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
