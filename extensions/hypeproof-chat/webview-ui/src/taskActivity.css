@@ -9,7 +9,9 @@
   line-height: var(--hp-leading-label);
   min-width: 0;
 }
-.hps-task-activity-title { margin: 0 0 var(--hp-space-2); font-weight: var(--hp-weight-strong); }
+.hps-task-activity-title { margin: 0; font-weight: var(--hp-weight-strong); }
+.hps-task-activity-hint { margin: 0 0 var(--hp-space-2); color: var(--hp-text-muted-default); }
+.hps-task-activity-chevron { display: inline-flex; color: var(--hp-text-muted-default); }
 .hps-task-activity-chips { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
 .hps-task-activity-chip,
 .hps-task-activity-review,

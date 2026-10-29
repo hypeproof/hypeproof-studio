@@ -34,8 +34,12 @@ const b=await launch(bin);try{for(const seat of ['personal','classroom'])for(con
  await load(messages.map(({activity,...m})=>m));assert.equal(await b.evaluate(`document.querySelectorAll('[data-testid=task-activity]').length`),0,'no entry, no row');
  await load(messages);
  const row=await b.evaluate(`(()=>{const s=document.querySelector('[data-testid=task-activity]');const chips=[...s.querySelectorAll('.hps-task-activity-chip')].map(c=>{const r=c.getBoundingClientRect(),st=getComputedStyle(c);return {text:c.textContent,w:r.width,h:r.height,font:parseFloat(st.fontSize),right:r.right,icon:!!c.querySelector('svg[data-icon]')}});const sr=s.getBoundingClientRect();return {title:s.querySelector('.hps-task-activity-title').textContent,titleFont:parseFloat(getComputedStyle(s.querySelector('.hps-task-activity-title')).fontSize),chips,secRight:sr.right,page:document.documentElement.scrollWidth}})()`);
- assert.equal(row.title,'AI가 한 일');assert.ok(row.titleFont>=14,JSON.stringify(row));
- assert.deepEqual(row.chips.map(c=>c.text),['읽음 3','만듦 1','바꿈 2','웹 페이지 1','검색 25'],'counts = distinct planted entries per verb');
+ assert.equal(row.title,'AI가 한 일');
+ // Jay 2026-10-29 ("이게 무슨 뜻이야? 누르라는 거야?"): the row says what the chips count and that pressing shows a list.
+ const hint=await b.evaluate(`(()=>{const s=document.querySelector('[data-testid=task-activity]');const h=s.querySelector('#hps-task-activity-hint');return {text:h?.textContent,font:h?parseFloat(getComputedStyle(h).fontSize):0,described:[...s.querySelectorAll('.hps-task-activity-chip')].every(c=>c.getAttribute('aria-describedby')==='hps-task-activity-hint'),chevrons:s.querySelectorAll('.hps-task-activity-chip .hps-task-activity-chevron svg').length}})()`);
+ assert.equal(hint.text,'이 작업에서 AI가 읽고 만든 것 · 누르면 목록이 보여요');assert.ok(hint.font>=14&&hint.described&&hint.chevrons===5,JSON.stringify(hint));
+ assert.ok(row.chips.every(c=>!/^(읽음|만듦|바꿈) \d+$/.test(c.text)),'no bare verb-and-number chip');assert.ok(row.titleFont>=14,JSON.stringify(row));
+ assert.deepEqual(row.chips.map(c=>c.text),['읽은 파일 3개','만든 파일 1개','고친 파일 2개','열어 본 웹 페이지 1개','검색 25번'],'counts = distinct planted entries per verb');
  for(const c of row.chips){assert.ok(c.w>=44&&c.h>=44&&c.font>=14&&c.icon,JSON.stringify(c));assert.ok(c.right<=row.secRight+0.5,'chips wrap inside the row');}
  assert.ok(row.page<=width+1,`no horizontal page scroll at ${width}: ${row.page}`);
  const ring=await b.focusVisibleStyle('.hps-task-activity-chip');assert.ok(parseFloat(ring['outline-width'])>=2&&ring['outline-style']!=='none',JSON.stringify(ring));
@@ -47,7 +51,7 @@ const b=await launch(bin);try{for(const seat of ['personal','classroom'])for(con
  assert.deepEqual([list.n,list.expanded,list.more],[20,'true','더 보기 (5개)']);assert.ok(list.moreH>=44&&list.font>=14,JSON.stringify(list));
  await b.evaluate(`document.querySelector('.hps-task-activity-more').click()`);await pause();assert.equal(await b.evaluate(`document.querySelectorAll('#hps-task-activity-list li').length`),25);
  // 읽음: the long path is middle-ellipsized on screen, whole for assistive tech.
- await b.evaluate(`${chip('읽음')}.click()`);await until(`${chip('읽음')}.getAttribute('aria-expanded')==='true'`,'읽음 opens');
+ await b.evaluate(`${chip('읽은 파일')}.click()`);await until(`${chip('읽은 파일')}.getAttribute('aria-expanded')==='true'`,'읽음 opens');
  // CGP-ART-D-020: opening one chip collapses the other's list.
  assert.equal(await b.evaluate(`${chip('검색')}.getAttribute('aria-expanded')`),'false','one list open at a time');
  const names=`[...document.querySelectorAll('#hps-task-activity-list li .hps-task-activity-target')].map(e=>{const s=e.querySelector('[aria-hidden]');return {shown:s.textContent,full:e.querySelector('.hps-sr-only').textContent,lines:s.getClientRects().length}})`;
@@ -64,32 +68,32 @@ const b=await launch(bin);try{for(const seat of ['personal','classroom'])for(con
   // Hostile names: the cut never lands inside a grapheme, the extension survives, and resizing settles (no refit loop).
   const nasty=['👨‍👩‍👧‍👦'.repeat(15)+'.png','é'.repeat(60)+'.txt','한글'.normalize('NFD').repeat(25)+'.md','🇰🇷'.repeat(30)+'.md','보고서-'.repeat(20)+'.xlsx','report.'+'x'.repeat(70)];
   await b.evaluate(`window.patch({messages:window.fixture.messages.map(m=>m.id==='a1'?{...m,activity:${JSON.stringify(nasty.map((t,i)=>f('n'+i,'read',t,1)))}}:{...m,activity:undefined}).filter(m=>m.id!=='a2')})`);
-  await until(`(${chip('읽음')}).textContent==='읽음 6'`,'hostile names planted');
-  await b.evaluate(`(${chip('읽음')}).getAttribute('aria-expanded')==='true'||(${chip('읽음')}).click()`);await until(`document.querySelectorAll('#hps-task-activity-list li').length===6`,'hostile list open');
+  await until(`(${chip('읽은 파일')}).textContent==='읽은 파일 6개'`,'hostile names planted');
+  await b.evaluate(`(${chip('읽은 파일')}).getAttribute('aria-expanded')==='true'||(${chip('읽은 파일')}).click()`);await until(`document.querySelectorAll('#hps-task-activity-list li').length===6`,'hostile list open');
   const whole=`(()=>{const seg=new Intl.Segmenter('und',{granularity:'grapheme'});return (${names}).map(r=>{const[h,t]=r.shown.split('…');if(t===undefined)return {ok:r.shown===r.full,...r};const bounds=new Set();let at=0;for(const g of seg.segment(r.full)){at+=g.segment.length;bounds.add(at)}return {ok:bounds.has(h.length)&&bounds.has(r.full.length-t.length)&&r.full.startsWith(h)&&r.full.endsWith(t),...r}})})()`;
   const settle=async()=>{await b.evaluate(`window.__m=0;window.__mo?.disconnect();window.__mo=new MutationObserver(m=>{window.__m+=m.length});window.__mo.observe(document.querySelector('#hps-task-activity-list'),{subtree:true,childList:true,characterData:true,attributes:true});window.__quiet=0;(function tick(){window.__quiet=window.__m?0:window.__quiet+1;window.__m=0;requestAnimationFrame(tick)})()`);await until(`window.__quiet>=5`,'refit settled (5 quiet frames)');};
   for(const w of [1420,320,600,1420]){await b.send('Emulation.setDeviceMetricsOverride',{width:w,height:900,deviceScaleFactor:1,mobile:false});await settle();
    const rows=await b.evaluate(whole);assert.ok(rows.every(r=>r.ok),`graphemes whole at ${w}: ${JSON.stringify(rows.filter(r=>!r.ok))}`);
    const ext=rows.map(r=>r.shown);assert.ok(ext[5].endsWith('x')&&ext[4].endsWith('.xlsx'),`extension kept at ${w}: ${JSON.stringify(ext)}`);
    if(w>=600)assert.ok(rows.every(r=>r.lines===1),`one line at ${w}: ${JSON.stringify(rows)}`);}
-  await b.evaluate(`window.__mo?.disconnect();window.patch({messages:window.fixture.messages})`);await until(`(${chip('읽음')}).textContent==='읽음 3'&&document.querySelectorAll('.hps-task-activity-chip').length===5`,'fixture restored');
+  await b.evaluate(`window.__mo?.disconnect();window.patch({messages:window.fixture.messages})`);await until(`(${chip('읽은 파일')}).textContent==='읽은 파일 3개'&&document.querySelectorAll('.hps-task-activity-chip').length===5`,'fixture restored');
  }
  // CGP-ART-D-020: the row is collapsible: pressing the open chip again folds its list back to the chips.
- await b.evaluate(`${chip('읽음')}.click()`);await until(`!document.querySelector('#hps-task-activity-list')`,'읽음 collapses');
+ await b.evaluate(`${chip('읽은 파일')}.click()`);await until(`!document.querySelector('#hps-task-activity-list')`,'읽음 collapses');
  assert.deepEqual(await b.evaluate(`[...document.querySelectorAll('.hps-task-activity-chip')].map(c=>c.getAttribute('aria-expanded'))`),['false','false','false','false','false'],'collapsed: chips only');
  // 바꿈 without a review: no link, an honest note.
- await b.evaluate(`${chip('바꿈')}.click()`);await pause();
+ await b.evaluate(`${chip('고친 파일')}.click()`);await pause();
  assert.equal(await b.evaluate(`document.querySelectorAll('.hps-task-activity-review').length`),0);assert.ok(await b.evaluate(`!!document.querySelector('.hps-task-activity-note')`));
  if(seat==='personal'){
   // Live: another task's entry is dropped; this task's adds to the count; a history load replaces live ones.
   await b.evaluate(host({type:'taskActivityFact',streamId:'s9',taskId:'task-other',fact:f('L0','read','other.md',1)}));await b.evaluate(host({type:'taskActivityFact',streamId:'s9',fact:f('L1','read','live.md',1)}));await b.evaluate(host({type:'taskActivityFact',streamId:'s9',fact:f('L1','read','live.md',1)}));await pause();
-  assert.equal(await b.evaluate(`${chip('읽음')}.textContent`),'읽음 4','live entry once, other task dropped');
+  assert.equal(await b.evaluate(`${chip('읽은 파일')}.textContent`),'읽은 파일 4개','live entry once, other task dropped');
   await b.evaluate(`window.patch({config:{...window.fixture.config,taskWorkspace:{...window.fixture.config.taskWorkspace,activeTaskId:'task-two'}}})`);await pause();
-  assert.equal(await b.evaluate(`${chip('읽음')}.textContent`),'읽음 3','a task switch drops live entries');
+  assert.equal(await b.evaluate(`${chip('읽은 파일')}.textContent`),'읽은 파일 3개','a task switch drops live entries');
   await b.evaluate(`window.patch({config:window.fixture.config})`);await pause();
   // The review link: only files the open turn review lists get 바뀐 곳 보기, and it opens that file's comparison.
   await b.evaluate(host({type:'turnReviewState',view:review}));await pause();
-  await b.evaluate(`${chip('바꿈')}.getAttribute('aria-expanded')==='true'||${chip('바꿈')}.click()`);await pause();
+  await b.evaluate(`${chip('고친 파일')}.getAttribute('aria-expanded')==='true'||${chip('고친 파일')}.click()`);await pause();
   const links=await b.evaluate(`[...document.querySelectorAll('.hps-task-activity-review')].map(e=>({label:e.getAttribute('aria-label'),h:e.getBoundingClientRect().height,w:e.getBoundingClientRect().width}))`);
   assert.deepEqual(links.map(l=>l.label),['index.html 바뀐 곳 보기','old/page.html 바뀐 곳 보기']);assert.ok(links[0].h>=44&&links[0].w>=44);
   await b.evaluate(`document.querySelector('.hps-task-activity-review').click()`);await pause(250);
