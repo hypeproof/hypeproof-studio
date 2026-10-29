@@ -355,8 +355,14 @@ real-data encryption readiness.
 
 ### Hosted native file lifecycle slice (issue #3121)
 
-Manual `feedback-candidate.yml` with `android_draft=true` selects only a fresh
-Linux KVM Android35 job. It builds and installs the exact debug target and test
+In `feedback-candidate.yml`, adding the PR label `companion-android-verify`, or
+manual `android_draft=true`, selects only a fresh Linux KVM Android35 job.
+Open/reopen/source-update events with the current opt-in label additionally run
+Android and preserve the existing desktop jobs. Unrelated label events run
+neither job; ordinary PR/default manual events retain desktop behavior. PR
+checkout and source receipts use the exact PR head SHA rather than its merge
+SHA. Label opt-in uses existing issue-label authority without auth changes.
+The job builds and installs the exact debug target and test
 APK, observes a disabled unconfigured debug entry, then exercises production
 native draft storage/AtomicFile under the target UID in its nonce-owned
 no-backup directory. Native checkpoints hold the target alive until an external

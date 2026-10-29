@@ -1,9 +1,12 @@
 name: Feedback native candidate (dedicated desktop)
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - 'e2e/feedback-native/**'
       - 'e2e/feedback-live/**'
+      - 'apps/companion-android/**'
+      - 'e2e/companion-android/**'
       - '.github/workflows/feedback-candidate.yml'
       - 'scripts/studio-dev.py'
       - 'scripts/studio-dev-vendor.mjs'
@@ -29,7 +32,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   native:
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.android_draft) }}
+    if: ${{ !(github.event_name == 'pull_request' && github.event.action == 'labeled') && !(github.event_name == 'workflow_dispatch' && inputs.android_draft) }}
     strategy:
       fail-fast: false
       matrix:
@@ -108,18 +111,18 @@ jobs:
           if-no-files-found: warn
 
   android-draft:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.android_draft }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.android_draft) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'companion-android-verify') && (github.event.action != 'labeled' || github.event.label.name == 'companion-android-verify')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       ANDROID_USER_HOME: ${{ runner.temp }}/android-draft-state/android
       GRADLE_USER_HOME: ${{ runner.temp }}/android-draft-state/gradle
       HPS_ANDROID_EVIDENCE: ${{ runner.temp }}/android-draft-evidence
-      HPS_ANDROID_SOURCE_SHA: ${{ github.sha }}
+      HPS_ANDROID_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:

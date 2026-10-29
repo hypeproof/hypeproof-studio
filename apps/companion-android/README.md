@@ -208,9 +208,14 @@ placeholder device_id remains unchanged and cannot establish physical identity.
 
 ## Hosted Android35 native cold file slice (#3121)
 
-The existing Feedback native candidate workflow has an explicit manual
-`android_draft=true` input. That choice runs only the Linux Android job;
-ordinary PR/manual desktop runs keep their existing Mac/Windows jobs. The
+The existing Feedback native candidate workflow accepts the explicit PR label
+`companion-android-verify` or manual `android_draft=true` input. Adding that label
+runs only the Linux Android job. Open/reopen/source-update events on a PR with
+the label also run Android, while retaining their existing Mac/Windows jobs.
+An unrelated label event runs neither job, even on an opted-in PR. Ordinary PR
+and default manual desktop runs retain Mac/Windows; manual Android opt-in runs
+only Android. PR runs bind both checkout and source receipt to the PR head SHA.
+The label uses existing issue-label authority; it adds no credential or grant. The
 Android job requires `/dev/kvm` and one fresh AOSP API35 x86_64 guest, without
 CPU software fallback or a reused snapshot. Its exact source builds the target
 and AndroidJUnitRunner test APKs with the pinned DEV client and task-local
