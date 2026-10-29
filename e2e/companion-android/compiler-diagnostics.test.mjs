@@ -44,3 +44,11 @@ test('workflow job conditions select PR label and manual Android opt-ins from an
  assert.ok(android.includes('HPS_ANDROID_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}'));
  assert.ok(android.includes('ref: ${{ github.event.pull_request.head.sha || github.sha }}'));
 });
+
+test('Android task paths are initialized in a step without invalid job-level runner context',async()=>{
+ const workflow=await readFile(new URL('../../.github/workflows/feedback-candidate.yml',import.meta.url),'utf8');
+ const android=workflow.split('  android-draft:')[1],jobEnv=android.split('    env:')[1].split('    steps:')[0];
+ assert.doesNotMatch(jobEnv,/runner\.temp/);assert.ok(jobEnv.includes('HPS_ANDROID_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}'));
+ const initialize=android.indexOf('name: Prepare task-owned Android paths'),checkout=android.indexOf('uses: actions/checkout@v4');assert.ok(initialize>=0&&initialize<checkout);
+ const step=android.slice(initialize,checkout);for(const path of ['ANDROID_USER_HOME=$RUNNER_TEMP/android-draft-state/android','GRADLE_USER_HOME=$RUNNER_TEMP/android-draft-state/gradle','HPS_ANDROID_EVIDENCE=$RUNNER_TEMP/android-draft-evidence'])assert.ok(step.includes(path));assert.ok(step.includes('>> "$GITHUB_ENV"'));
+});

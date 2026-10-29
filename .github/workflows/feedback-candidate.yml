@@ -115,11 +115,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
-      ANDROID_USER_HOME: ${{ runner.temp }}/android-draft-state/android
-      GRADLE_USER_HOME: ${{ runner.temp }}/android-draft-state/gradle
-      HPS_ANDROID_EVIDENCE: ${{ runner.temp }}/android-draft-evidence
       HPS_ANDROID_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
+      - name: Prepare task-owned Android paths
+        shell: bash
+        run: |
+          test -n "$RUNNER_TEMP"
+          printf '%s\n' "ANDROID_USER_HOME=$RUNNER_TEMP/android-draft-state/android" "GRADLE_USER_HOME=$RUNNER_TEMP/android-draft-state/gradle" "HPS_ANDROID_EVIDENCE=$RUNNER_TEMP/android-draft-evidence" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
