@@ -4178,6 +4178,11 @@ percentage appears. Builds on REQ-STUDIO-ARTIFACT-PROVENANCE: same list, same se
   resources; the page glyph is shown instead); opening a file from a row (REQ-KNOW-20's
   "opening an item reveals it"); trash actions in the drawer (they stay in the 작업 자료
   panel, CGP-KNOW-D-013); remembering the grid choice across openings.
+- **기억 filter (CGP-KNOW-D-030 / DES-KNOW-48).** A `파일`/`기억` group (aria-pressed, 44px) sits in
+  the header; `기억` shows the activity's memory view (state line, 작업별 기억 and files;
+  REQ-STUDIO-ACTIVITY-MEMORY-FILES) in the same drawer body, always as a list, and hides
+  `목록`/`격자`. The filter starts at `파일` on every opening. Evidence:
+  `memory-drawer-filter-browser.smoke.mjs`.
 - Tests: `artifact-thumbnail.smoke.mjs` (real temp folders: 5 images read, 24 refusals),
   `my-works-drawer.smoke.mjs` (the real App bundle in headless Chromium: dark/light,
   1420/800/320, forced colours, keyboard open/close, Tab containment, focus return, lazy
@@ -7880,16 +7885,24 @@ every learner seat that has a task workspace (personal, trial; minor cohorts inc
   link, and it opens without following a link. A FIFO, socket or device is never opened (an lstat skips it and the open is non-blocking), so a named pipe in the folder cannot stall the extension host. Anything else in the folder is counted as "목록에 없는
   파일 N개" and left alone. A file over 16 KB or not UTF-8 text is listed (it can be opened and
   deleted) but its text is not shown and never handed to a request. At most 200 files are listed.
-- **Read, open and delete in Studio.** 작업 자료 → 내 작품 shows "AI 기억 파일 · N개" under the
-  activity trash. Opening it names the folder (`.hypeproof/memory/`), says that memory outside the
-  activity is never read, and lists each file newest first with its name, time and full text (as
-  text, line breaks kept). 열기 opens that exact file in a read-only editor tab. 지우기… shows the
+- **Read, open and delete in Studio.** The memory view is the `기억` filter of the 내 작품 drawer
+  (CGP-KNOW-D-030 / DES-KNOW-48; REQ-STUDIO-MY-WORKS-DRAWER): the drawer header offers `파일`/`기억`
+  (aria-pressed, `파일` on every opening), and only pressing `기억` asks the host for the view. It is
+  the one memory surface: the 작업 자료 panel carries no memory section. In order the view shows the
+  state line (REQ-STUDIO-ACTIVITY-MEMORY-STATE), the folder note (`.hypeproof/memory/`, memory outside
+  the activity is never read), 작업별 기억 (REQ-STUDIO-MEMORY-OVERVIEW) when the host sends it, and
+  "AI 기억 파일 · N개" with each file newest first as a bounded card: its full path
+  (`.hypeproof/memory/<name>`, monospace, left-to-right isolated, at the 14px learner floor:
+  DES-KNOW-48's 11px loses to it), time and full text (as text, line breaks kept). Nothing in it
+  expands; it is always a list (no 목록/격자 under `기억`). A host answer with no store reads "이 활동에서는
+  기억 파일을 보여 줄 수 없어요." When a delete, a correction or 취소 removes the focused control, focus
+  moves to the `기억` filter button, never to the page. 열기 opens that exact file in a read-only editor tab. 지우기… shows the
   host's native modal confirm naming the file, with one 취소; 취소, Escape or a closed dialog changes nothing. A confirmed delete
   removes exactly the file the learner confirmed (its identity is pinned before the confirm: device, inode, change and birth time in nanoseconds, size and a SHA-256 of the bytes, so a file recreated under a reused inode number (ext4) is still told apart; a file replaced under the same name meanwhile is refused with "기억 파일이 바뀌었어요"), permanently (not to the activity trash, so a deleted memory does not
   linger in the activity), and a status line says "기억 파일 “…”을 지웠어요." A press with a stale task
   or activity scope, an unknown action or a name outside the list is refused before any confirm; a
   task or activity switch during the confirm cancels the delete. Instructors and seats without a
-  task workspace get no panel.
+  task workspace have no drawer and no view.
 - **Future context.** `ActivityMemory.contextItems()` is the only reader a request may use. It reads
   the folder from disk on every call with no cache, so a deleted file is absent from the next call.
   No request carries memory yet: injecting it waits for REQ-KNOW-44 (the "기억 사용 N" count) and the
@@ -7905,7 +7918,12 @@ mid-confirm task switch) and `extensions/hypeproof-chat/test/activity-memory-bro
 built CSS and real panel markup in headless Chromium, personal and classroom shells, dark and light,
 800 and 1420 px, normal and forced colours: 44px targets, 14px text at 4.5:1, focus ring, no
 horizontal scroll, file text rendered as text, one request per press, focus kept after a delete;
-fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). Since CGP-KNOW-D-030 that smoke mounts the 내 작품
+drawer and picks `기억` first, and `extensions/hypeproof-chat/test/memory-drawer-filter-browser.smoke.mjs` drives
+the real App bundle: the 파일/기억 filter at 1420/800/320 px, dark and light, normal and forced colours; no
+memory request before `기억`; the state line first with nothing to expand; 작업별 기억 above the files;
+monospace 14px paths; list layout even after a 격자 choice; a forged answer ignored; focus on `기억` after a
+delete; the 작업 자료 panel without any memory copy; a null store; a classroom seat with no view.
 
 ## Learning block caption (CGP-LEARN-D-003)
 
@@ -7937,11 +7955,12 @@ keeps); DEC-01 and DEC-02 (ruled 2026-10-28). Builds on REQ-STUDIO-ACTIVITY-MEMO
   included. No Service profile field, no Studio setting, no instructor flag and no learner control turns
   it off: a profile with `minor_cohort`, a kids or teen tier, or any `memory`-named field gets the same
   store, and the extension contributes no memory setting.
-- **The activity says so.** The memory section of 작업 자료 (under 내 작품) shows, before its list is
-  opened, the text line "AI 기억: 켜짐 · `.hypeproof/memory/`" naming the folder inside the activity.
+- **The activity says so.** The memory view (the `기억` filter of the 내 작품 drawer since CGP-KNOW-D-030)
+  shows first, with nothing to expand, the text line "AI 기억: 켜짐 · `.hypeproof/memory/`" naming the
+  folder inside the activity.
   It is a paragraph, never a switch or a button, and there is no off wording and no "선생님이 정해요".
   If the folder is a link or not a folder, the same line stays and the reason Studio read nothing is
-  shown under it without opening the list.
+  shown under it.
 - **Only where the store exists.** The line is part of the store's own view: no view (an instructor, a
   seat with no task workspace, a classroom lesson seat, a profile not loaded yet, a task or activity
   switch in progress) means no line. Class activities keep their own stores (REQ-KNOW-07) and show none.
@@ -7953,7 +7972,8 @@ a view for minor, teen and kids profiles and for a profile whose memory fields a
 contributed memory setting) and `extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs`
 (headless Chromium on the built CSS and real panel: the line's exact text before the list opens, no
 control or off wording, 14px and 4.5:1, the unreadable-store reason unexpanded, and no line without a
-view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). Since CGP-KNOW-D-030 it opens the drawer's
+`기억` filter first; `memory-drawer-filter-browser.smoke.mjs` checks the line leads that view in the real App.
 
 ## Learning block draws no judgment visuals (CGP-LEARN-D-002)
 
@@ -7988,7 +8008,7 @@ grayscale; positive and negative controls for every finding kind; fails under `F
 
 REQ-STUDIO-MEMORY-OVERVIEW / REQ-KNOW-43 (CGP-KNOW-043) / PI#7 (capability models are hypotheses, not UI labels),
 SX-01 (no capability label or evaluation sentence on the work screen); builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES
-(CGP-KNOW-R-030) and DEC-01. The memory panel in 내 작품 shows "작업별 기억": the stated facts in the activity's
+(CGP-KNOW-R-030) and DEC-01. The memory view (the `기억` filter of the 내 작품 drawer since CGP-KNOW-D-030) shows "작업별 기억": the stated facts in the activity's
 memory files, grouped by the task each came from. It filters ability, personality and capability statements out on a best-effort basis (word and pattern lists; see the rule below).
 
 - **Built here, from the files.** The overview is made on this computer from the memory files themselves; no model
@@ -8038,4 +8058,4 @@ no-op answer, every refusal, a real correction, a task switch right before the w
 personal and classroom shells, dark and light, 800 and 1420 px, normal and forced colours: no overview drawn without
 one, task headings, item text as text, 44px targets, 14px text at 4.5:1, focus rings, the field opens focused with the
 item's words, one request per press, the no-op line, 취소 sends nothing; fails under `FOCUS_REQUIRE_BROWSER=1` without a
-browser).
+browser). Since CGP-KNOW-D-030 it mounts the 내 작품 drawer and picks `기억` first.

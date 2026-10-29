@@ -13,7 +13,7 @@ const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER)throw Err
 const dir=fileURLToPath(new URL('../webview-ui/',import.meta.url));
 const app=await build({entryPoints:[dir+'src/main.tsx'],bundle:true,platform:'browser',format:'esm',outdir:'assets',write:false,loader:{'.svg':'dataurl'},logLevel:'silent'});
 const css=app.outputFiles.find(f=>f.path.endsWith('.css')).text;
-const fixture=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {ActivityMemoryPanel} from './src/ActivityMemoryPanel';createRoot(document.getElementById('root')).render(<ActivityMemoryPanel scopeKey="a/t"/>);`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
+const fixture=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {MyWorksDrawer} from './src/MyWorksDrawer';createRoot(document.getElementById('root')).render(<MyWorksDrawer files={null} scopeKey="a/t" viewport={innerWidth} opener={()=>null} fallback={()=>null} onClose={()=>{}}/>);`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
 const long='가'.repeat(80);
 const entries=[{name:'a.md',at:Date.UTC(2026,9,29,1),text:'발표는 금요일이에요.\n'},{name:'b.md',at:Date.UTC(2026,9,28),text:'<b>색</b>은 초록'},{name:'c.md',at:Date.UTC(2026,9,27),text:'너는 발표를 잘해요.'}];
 const overview={groups:[{task:'t1',title:`학급 신문 ${long}`,items:[{name:'a.md',at:entries[0].at,text:'발표는 금요일이에요.'}]},{task:null,title:'작업 정보가 없는 기억',items:[{name:'b.md',at:entries[1].at,text:'<b>색</b>은 초록'}]}],withheld:1};
@@ -26,11 +26,12 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const b=await launch(bin);
 try{for(const seat of ['personal','classroom'])for(const dark of [true,false])for(const width of [800,1420])for(const forcedColors of [false,true]){
  const vars=Object.entries(THEMES[dark?'Dark+':'Light+']).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
- await b.load(`<!doctype html><style>:root{${vars}}${css}</style><body class="${dark?'vscode-dark':'vscode-light'}" style="margin:0;background:var(--hp-bg-app-default);color:var(--hp-text-primary-default)"><div class="hps-shell" ${seat==='personal'?'data-chat-detail="personal"':''}><div class="tw-workspace"><aside class="tw-sources" style="width:360px;max-width:100%"><div id="root"></div></aside></div></div><script>window.__posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.__posted.push(m),getState(){},setState(){}});</script><script>${fixture.outputFiles[0].text.replaceAll('</script','<\\/script')}</script></body>`,{width,height:1600,dark,forcedColors});
+ await b.load(`<!doctype html><style>:root{${vars}}${css}</style><body class="${dark?'vscode-dark':'vscode-light'}" style="margin:0;background:var(--hp-bg-app-default);color:var(--hp-text-primary-default)"><div class="hps-shell" ${seat==='personal'?'data-chat-detail="personal"':''}><div class="tw-workspace" style="display:block"><aside class="tw-sources" style="width:360px;max-width:100%"><div id="root"></div></aside></div></div><script>window.__posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.__posted.push(m),getState(){},setState(){}});</script><script>${fixture.outputFiles[0].text.replaceAll('</script','<\\/script')}</script></body>`,{width,height:1600,dark,forcedColors});
  await sleep(30);
+ // CGP-KNOW-D-030: the memory view is the 기억 filter of the 내 작품 drawer; pick it first.
+ await b.evaluate(`[...document.querySelectorAll('.tw-works-filter button')].find(e=>e.textContent==='기억').click()`);await sleep(30);
  // A minor cohort's view carries no overview: nothing of it is drawn, the files stay.
  await b.evaluate(`window.postMessage({type:'activityMemoryState',view:${JSON.stringify({...view,overview:null})}},'*')`);await sleep(40);
- await b.evaluate(`document.querySelector('.tw-memory-entry').click()`);await sleep(40);
  assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=memory-overview]')`),false,'no overview without one from the host');
  assert.equal(await b.evaluate(`document.querySelectorAll('.tw-memory-list > ul > li').length`),3,'the files are still listed');
  await b.evaluate(`window.postMessage({type:'activityMemoryState',view:${JSON.stringify(view)}},'*')`);await sleep(50);
