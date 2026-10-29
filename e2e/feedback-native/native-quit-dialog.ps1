@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 try {
   $request = [Console]::In.ReadToEnd() | ConvertFrom-Json
-  if ($request.mode -notin @('capture','observe','invoke','census')) { throw 'mode' }
+  if ($request.mode -notin @('capture','observe','invoke','census','observe_win32','invoke_win32')) { throw 'mode' }
   $ownedPid = [int]$request.owner.pid
   if ($ownedPid -le 0) { throw 'pid' }
   function Read-Owner {
@@ -26,6 +26,10 @@ using System.Collections.Generic;
 using System.Text;
 public static class OwnedQuitWindow {
   public delegate bool EnumWindow(IntPtr h,IntPtr l);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr h);
+  [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)]
+  public static extern IntPtr SendMessageTimeout(IntPtr h,uint message,UIntPtr w,IntPtr l,uint flags,uint timeout,out UIntPtr result);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindow callback,IntPtr l);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
@@ -118,6 +122,88 @@ public static class OwnedQuitWindow {
     }
     $null=Read-Owner # census final identity fence; no action
     @{owner=$identity;windows=@($result)} | ConvertTo-Json -Depth 8 -Compress;exit 0
+  }
+  function Read-Class([IntPtr]$h) {
+    $text=[Text.StringBuilder]::new(128);if([OwnedQuitWindow]::GetClassName($h,$text,128) -le 0){throw 'class'};return $text.ToString()
+  }
+  function Assert-OwnedChild([IntPtr]$dialog,[IntPtr]$child) {
+    if(-not [OwnedQuitWindow]::IsChild($dialog,$child)){throw 'child ancestry'}
+    $at=$child;$depth=0
+    while($at -ne $dialog) {
+      if($at -eq [IntPtr]::Zero -or ++$depth -gt 16){throw 'child ancestry'}
+      [uint32]$pidAt=0;[void][OwnedQuitWindow]::GetWindowThreadProcessId($at,[ref]$pidAt)
+      if($pidAt -ne $ownedPid){throw 'child owner'}
+      $at=[OwnedQuitWindow]::GetParent($at)
+    }
+  }
+  function Read-KnownButton([IntPtr]$dialog,[IntPtr]$child) {
+    Assert-OwnedChild $dialog $child
+    if((Read-Class $child) -cne 'Button'){throw 'button class'}
+    $text=[Text.StringBuilder]::new(1024);$length=[OwnedQuitWindow]::GetWindowText($child,$text,1024)
+    $label=if($length -gt 0 -and $text.ToString() -ceq '계속하기'){'continue'}elseif($length -gt 0 -and $text.ToString() -ceq '끝내기'){'quit'}else{'other'}
+    return @{handle=$child.ToInt64().ToString();parentHandle=[OwnedQuitWindow]::GetParent($child).ToInt64().ToString();pid=$ownedPid;className='Button';ownedChain=$true;label=$label;visible=[OwnedQuitWindow]::IsWindowVisible($child);enabled=[OwnedQuitWindow]::IsWindowEnabled($child)}
+  }
+  function Read-Win32Dialogs {
+    $dialogs=@()
+    foreach($h in [OwnedQuitWindow]::OwnedHandles([uint32]$ownedPid)) {
+      if((Read-Class $h) -cne '#32770' -or -not [OwnedQuitWindow]::IsWindowVisible($h)){continue}
+      $parent=[OwnedQuitWindow]::GetWindow($h,4);[uint32]$parentPid=0;[void][OwnedQuitWindow]::GetWindowThreadProcessId($parent,[ref]$parentPid)
+      if($parent -eq [IntPtr]::Zero -or $parentPid -ne $ownedPid){throw 'dialog owner'}
+      $root=[Windows.Automation.AutomationElement]::FromHandle($h)
+      if($root.Current.ProcessId -ne $ownedPid){throw 'text owner'}
+      $elements=$root.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
+      if($elements.Count -gt 128){throw 'text bound'}
+      $copy=@{message=0;detail=0;other=0}
+      foreach($element in $elements) {
+        if($element.Current.ProcessId -ne $ownedPid){throw 'text owner'}
+        if($element.Current.ControlType -eq [Windows.Automation.ControlType]::Text) {
+          $name=$element.Current.Name.Replace("`r`n","`n").Trim()
+          if($name -ceq 'Studio를 끝낼까요?'){$copy.message++}
+          elseif($name -ceq "지금 하고 있는 대답이 멈춰요.`n만든 파일은 그대로 남아요."){$copy.detail++}
+          elseif($name.Length -gt 0){$copy.other++}
+        }
+      }
+      $buttons=@()
+      foreach($child in [OwnedQuitWindow]::ChildHandles($h)) {
+        Assert-OwnedChild $h $child
+        if((Read-Class $child) -ceq 'Button'){$buttons+=Read-KnownButton $h $child}
+      }
+      [uint32]$again=0;[void][OwnedQuitWindow]::GetWindowThreadProcessId($h,[ref]$again)
+      if($again -ne $ownedPid -or [OwnedQuitWindow]::GetWindow($h,4) -ne $parent){throw 'dialog changed'}
+      $dialogs+=@{handle=$h.ToInt64().ToString();ownerHandle=$parent.ToInt64().ToString();pid=$ownedPid;ownerPid=$parentPid;className='#32770';visible=[OwnedQuitWindow]::IsWindowVisible($h);foreground=([OwnedQuitWindow]::GetForegroundWindow() -eq $h);copy=$copy;buttons=@($buttons)}
+    }
+    $null=Read-Owner
+    return ,$dialogs
+  }
+  if($request.mode -in @('observe_win32','invoke_win32')) {
+    $nativeDialogs=Read-Win32Dialogs
+    if($request.mode -eq 'observe_win32'){@{owner=$identity;nativeDialogs=@($nativeDialogs)}|ConvertTo-Json -Depth 8 -Compress;exit 0}
+    if($nativeDialogs.Count -ne 1){throw 'dialog count'}
+    $d=$nativeDialogs[0]
+    if($d.handle -cne [string]$request.selection.handle -or $d.ownerHandle -cne [string]$request.selection.ownerHandle -or -not $d.visible -or -not $d.foreground){throw 'dialog replacement'}
+    if($d.copy.message -ne 1 -or $d.copy.detail -ne 1 -or $d.copy.other -ne 0){throw 'dialog text'}
+    if($d.buttons.Count -ne 2 -or $d.buttons[0].handle -eq $d.buttons[1].handle){throw 'buttons'}
+    $names=@($d.buttons|ForEach-Object{$_.label}|Sort-Object)
+    if($names[0] -cne 'continue' -or $names[1] -cne 'quit'){throw 'button labels'}
+    foreach($b in $d.buttons){if(-not $b.visible -or -not $b.enabled){throw 'button unavailable'}}
+    $quit=@($d.buttons|Where-Object{$_.label -ceq 'quit'})[0]
+    if($quit.handle -cne [string]$request.selection.buttonHandle -or $quit.parentHandle -cne [string]$request.selection.buttonParentHandle){throw 'button replacement'}
+    $timeout=[int]$request.actionTimeoutMs;if($timeout -lt 1 -or $timeout -gt 1000){throw 'timeout'}
+    $dialog=[IntPtr]::new([long]$d.handle);$button=[IntPtr]::new([long]$quit.handle)
+    $fresh=Read-KnownButton $dialog $button
+    if($fresh.label -cne 'quit' -or $fresh.parentHandle -cne $quit.parentHandle -or -not $fresh.visible -or -not $fresh.enabled){throw 'button changed'}
+    $null=Read-Owner
+    [uint32]$dialogPid=0;[uint32]$ownerPid=0
+    [void][OwnedQuitWindow]::GetWindowThreadProcessId($dialog,[ref]$dialogPid)
+    [void][OwnedQuitWindow]::GetWindowThreadProcessId([IntPtr]::new([long]$d.ownerHandle),[ref]$ownerPid)
+    if($dialogPid -ne $ownedPid -or $ownerPid -ne $ownedPid -or (Read-Class $dialog) -cne '#32770' -or -not [OwnedQuitWindow]::IsWindowVisible($dialog)){throw 'dialog owner changed'}
+    if([OwnedQuitWindow]::GetForegroundWindow() -ne $dialog -or [OwnedQuitWindow]::GetWindow($dialog,4).ToInt64().ToString() -cne $d.ownerHandle){throw 'foreground changed'}
+    # BM_CLICK is fixed, zero parameters, exact child only. No retry after dispatch.
+    # SMTO_BLOCK|SMTO_ABORTIFHUNG; never broadcast, activate, or extend the timeout.
+    [UIntPtr]$result=[UIntPtr]::Zero
+    $sent=[OwnedQuitWindow]::SendMessageTimeout($button,0x00F5,[UIntPtr]::Zero,[IntPtr]::Zero,3,[uint32]$timeout,[ref]$result)
+    if($sent -eq [IntPtr]::Zero){throw 'native action unknown'}
+    @{invoked=$true;route='win32';handle=$d.handle;buttonHandle=$quit.handle}|ConvertTo-Json -Compress;exit 0
   }
   function Read-Dialogs {
     $condition = [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,$ownedPid)

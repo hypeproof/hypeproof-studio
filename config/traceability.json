@@ -5697,6 +5697,9 @@
           "path": "e2e/feedback-native/native-quit-dialog.test.mjs"
         },
         {
+          "path": "e2e/feedback-native/native-win32-quit.test.mjs"
+        },
+        {
           "path": "e2e/feedback-native/owned-quit-census.test.mjs"
         },
         {
