@@ -11,17 +11,24 @@ export function historyMarkers(rows){
  const counts={};for(const name of ['A1','D2','STOP_HOLD','QUIT_HOLD','FILE_HOLD'])counts[name]={user:rows.filter(r=>r.role==='user'&&r.text.includes(markerText(name))).length,assistant:rows.filter(r=>r.role==='assistant'&&r.text.includes(replyText(name))).length};return counts;
 }
 const HELD=['STOP_HOLD','QUIT_HOLD','FILE_HOLD'];
+const assistantRowsAfterUser=(rows,id)=>{
+ const from=rows.findIndex(row=>row.role==='user'&&row.id===id);assert(from>=0,'Original interrupted user required');
+ const next=rows.findIndex((row,index)=>index>from&&row.role==='user');
+ return rows.slice(from+1,next<0?undefined:next).filter(row=>row.role==='assistant'&&row.text.trim());
+};
 export function captureInterruptedHistory(rows,name){
  assert(HELD.includes(name),'Known interrupted fixture turn required');
- const result={};
+ const result={assistant:null};
  for(const role of ['user','assistant']){
-  const text=role==='user'?markerText(name):replyText(name),matches=rows.filter(row=>row.role===role&&row.text.includes(text));
+  const text=role==='user'?markerText(name):replyText(name),matches=role==='assistant'?assistantRowsAfterUser(rows,result.user.id):rows.filter(row=>row.role===role&&row.text.includes(text));
+  assert(matches.length<2,'At most one observed interrupted '+role+' '+name);
+  if(role==='assistant'&&matches.length===0)continue;
   assert.equal(matches.length,1,'One observed interrupted '+role+' '+name);
   assert.equal(matches[0].text,text,'Exact interrupted '+role+' bytes '+name);
   assert.equal(typeof matches[0].id,'string');assert(matches[0].id.length>0,'Actual message identity required');
   result[role]={id:matches[0].id,text};
  }
- assert.notEqual(result.user.id,result.assistant.id,'Distinct user and assistant identities required');return result;
+ if(result.assistant)assert.notEqual(result.user.id,result.assistant.id,'Distinct user and assistant identities required');return result;
 }
 export function assertInterruptedHistory(rows,names,interrupted={},requireStopped){
  assert(names.every(name=>['A1','D2'].includes(name))&&new Set(names).size===names.length,'Only exact completed fixture turns may be claimed');
@@ -29,7 +36,7 @@ export function assertInterruptedHistory(rows,names,interrupted={},requireStoppe
  assert(!requireStopped||Object.hasOwn(interrupted,requireStopped),'Stopped receipt requires an observed interrupted turn');
  const counts=historyMarkers(rows);
  for(const name of ['A1','D2',...HELD])for(const role of ['user','assistant']){
-  const expected=names.includes(name)||Object.hasOwn(interrupted,name)?1:0;
+  const expected=names.includes(name)||(Object.hasOwn(interrupted,name)&&!!interrupted[name][role])?1:0;
   assert.equal(counts[name][role],expected,'Exact persisted '+role+' occurrence '+name);
   if(expected){const text=role==='user'?markerText(name):replyText(name),row=rows.find(row=>row.role===role&&row.text.includes(text));
    assert.equal(row.text,text,'Exact persisted '+role+' bytes '+name);
@@ -44,6 +51,10 @@ export function assertInterruptedHistory(rows,names,interrupted={},requireStoppe
    }
   }
  }
+ for(const snapshot of Object.values(interrupted)){
+  const assistants=assistantRowsAfterUser(rows,snapshot.user.id);
+  assert.equal(assistants.length,snapshot.assistant?1:0,'No extra assistant may appear in an interrupted turn');
+ }
  return counts;
 }
 export const assertCompletedHistory=(rows,names)=>assertInterruptedHistory(rows,names);
@@ -51,7 +62,8 @@ export const assertCompletedHistory=(rows,names)=>assertInterruptedHistory(rows,
 export const HISTORY_ROWS_EXPRESSION=`[...document.querySelectorAll('.hps-msg-user,.hps-msg-assistant')].map(e=>{
  const body=e.querySelector('.hps-msg-body')?.cloneNode(true);
  body?.querySelectorAll('.hps-code-progress-prelude').forEach(node=>node.remove());
- return {id:e.getAttribute('data-message-id'),role:e.classList.contains('hps-msg-user')?'user':'assistant',text:body?.textContent?.trim()??'',receipt:(e.querySelector('.hps-turn-elapsed')??(e.nextElementSibling?.matches('.hps-turn-elapsed')?e.nextElementSibling:null))?.textContent??null};
+ const user=e.classList.contains('hps-msg-user'),spoken=user||body?.querySelector('.hps-prose,.hps-codepill,.hps-stream-note,.hps-code-progress');
+ return {id:e.getAttribute('data-message-id'),role:user?'user':'assistant',text:spoken?(body?.textContent?.trim()??''):'',receipt:(e.querySelector('.hps-turn-elapsed')??(e.nextElementSibling?.matches('.hps-turn-elapsed')?e.nextElementSibling:null))?.textContent??null};
 })`;
 export async function awaitUpstreamClosure(read,serviceSeq,timeout=10000){
  return waitFor(async()=>{const state=await read();return state.rows.find(row=>row.service_seq===serviceSeq&&row.client_closed===true&&row.state==='upstream_socket_closed'&&!row.fixture_finish);},'exact upstream socket closure before fixture cleanup',timeout);
@@ -67,7 +79,7 @@ export async function runHistoryStreaming(ctx){
  const bound=async()=>{const value=await state();assert.equal(value.provider_called,false);assert.equal(value.request_limit,12);assert.equal(value.output_cap,4096);assert(value.rows.every(r=>r.attempt<=12&&(!r.max_tokens||r.max_tokens<=4096)));assert.equal(value.rejections.length,0,'Fixture refusals cannot be hidden as a successful turn');return value;};
  const openFolder=async folder=>{await ui.palette(coreCommandLabel('workbench.action.files.openFolder'));await ui.ownedOpenFolder(folder+path.sep);await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(folder)),'public File Open Folder actual destination',60000);};
  const send=async(name,held=false)=>{const before=await bound(),chat=await focusChat();await ui.input(chat,'.hps-input textarea',markerText(name));await ui.key(chat,'Enter');await waitFor(()=>chat.evaluate("!!document.querySelector('.hps-btn-stop')"),'actual native stream Stop visible',45000);
-  await waitFor(async()=>{const value=await state();return value.rows.some(r=>r.attempt>(before.counts.A??0)&&r.subject==='A'&&r.marker===name&&r.state===(held?'streaming':'complete'))&&(!held||(await history()).some(row=>row.role==='assistant'&&row.text===replyText(name)));},'actual SDK → actual Service → scripted upstream '+name,60000);
+  await waitFor(async()=>{const value=await state();return value.rows.some(r=>r.attempt>(before.counts.A??0)&&r.subject==='A'&&r.marker===name&&r.state===(held?'streaming':'complete'));},'actual SDK → actual Service → scripted upstream '+name,60000);
   if(!held){await waitFor(()=>chat.evaluate(`!document.querySelector('.hps-btn-stop')&&[...document.querySelectorAll('.hps-msg-assistant')].some(e=>e.textContent.includes(${JSON.stringify(replyText(name))}))`),'actual completed scripted assistant rendered');assert.equal(await chat.evaluate("document.querySelectorAll('.hps-error-banner').length"),0);}
  };
  const originalFiles=workspaceFiles(c.workspace.a),bindings=path.join(c.userDataDir,'User/globalStorage/hypeproof.hypeproof-chat/activity-bindings');
@@ -109,7 +121,7 @@ export async function runHistoryStreaming(ctx){
   const chat=await focusChat();assert.equal((await readDraft()).value,unsent);await ui.press(chat,'.hps-btn-stop');await waitFor(()=>chat.evaluate("!document.querySelector('.hps-btn-stop')&&[...document.querySelectorAll('.hps-stop-notice')].some(e=>e.textContent.includes('답변 생성이 중지되었습니다. 다시 채팅을 입력해주세요.'))"),'actual Stop acknowledged and idle');assert.equal((await readDraft()).value,unsent);
   assertInterruptedHistory(await history(),['A1'],interrupted,'STOP_HOLD');
   const cancellation=await finishHeld('STOP_HOLD'),before=(await bound()).counts.A;await nativeOpenBoundFolder(c.workspace.d);await nativeOpenBoundFolder(c.workspace.a);assert.equal((await readDraft()).value,unsent);assertInterruptedHistory(await history(),['A1'],interrupted);await sleep(10000);assert.equal((await bound()).counts.A,before,'Stop/navigation must not dispatch duplicates');
-  return {active_stream_refused_navigation:true,actual_stop_acknowledged:true,stopped_receipt_observed_before_navigation:true,unsent_draft_preserved:true,completed_history_preserved:true,interrupted_history_preserved:true,no_duplicate_dispatch_window_ms:10000,cancellation,provider_called:false};
+  return {active_stream_refused_navigation:true,actual_stop_acknowledged:true,partial_assistant_observed:!!interrupted.STOP_HOLD.assistant,stopped_receipt_observed_before_navigation:!!interrupted.STOP_HOLD.assistant,unsent_draft_preserved:true,completed_history_preserved:true,interrupted_history_preserved:true,no_duplicate_dispatch_window_ms:10000,cancellation,provider_called:false};
  });
  await step('T06-native-stream-normal-quit-recovery',async()=>{
   need('T06-native-stream-block-and-stop');await send('QUIT_HOLD',true);await capture('QUIT_HOLD');const unsent=draft+'-during-quit';await ui.input(await focusChat(),'.hps-input textarea',unsent);const before=(await bound()).counts.A;

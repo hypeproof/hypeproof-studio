@@ -309,13 +309,19 @@ no activity reissue/reset or model fallback is a successful substitute.
 Rendered user/assistant marker occurrences must be exact after actual reload.
 The merged stopped-conversation contract (#1834; `docs/studio-requirements.md`
 and `docs/testing/task-workspace.md`) preserves the original user message and
-the partial answer received before interruption. The harness captures their
-actual `data-message-id` identities and exact body text before Stop, quit or
-direct folder open, then requires each once after restoring the owning workspace.
+any partial answer actually received before interruption. The real SDK probe
+records `sdk_delta_observed`; an active held upstream can produce no rendered
+assistant text, which is valid. Readiness requires the actual Stop control and
+upstream streaming, never an invented partial delta. The harness captures the
+user and any observed assistant `data-message-id` identities and exact body text
+before Stop, quit or direct folder open, then requires each once after restoring
+the owning workspace. If no assistant bytes were observed, no assistant reply
+may appear on restoration.
 Duplicates, replacement identities, changed partial text and foreign-workspace
-history fail. Explicit Stop must first show the product's stop notice and
-observed stopped elapsed receipt in that mounted view; a completed elapsed
-receipt cannot stand in for an interrupted answer. These UI receipts belong to
+history fail. Explicit Stop must first show the product's stop notice; when a
+partial assistant was observed, its stopped elapsed receipt is required in that
+mounted view; a completed elapsed receipt cannot stand in for an interrupted
+answer. These UI receipts belong to
 the mounted view, so the harness does not invent a persistent stop/completion
 marker after reload. An interrupted transcript is preserved context, never a
 completed model turn or a request to execute it again. Native unsent drafts
@@ -323,7 +329,9 @@ must survive, and the unchanged ten-second restored-idle observation windows
 must show no new generation. The Service and scripted listener separately report client close,
 response-reader cancellation and exact linked upstream socket closure, with a
 bounded wait before cleanup. Missing propagation fails its native step; cleanup
-is never PASS.
+is never PASS. If an earlier history/streaming step did not settle, dependent
+image-denial testing is BLOCKED while the original failure remains; on an idle
+path the exact capability-denied notice is still required.
 SDK onDelta before a completed assistant block is not assumed or fabricated.
 Existing B is canonically revoked last, and actual opening C must refuse automatic
 admission without new generation or binding/file changes. A returns with its

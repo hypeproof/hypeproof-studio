@@ -180,7 +180,13 @@ await test("CR-10 positive: a proxy call, an SDK tool_result and a pick each put
   // The provider calls these for each path, with its sink, and the turn's end waits for them.
   assert.match(providerSrc, /this\.crSdkResults\.onInspect\(name, input, r\.observation\);/);
   assert.match(providerSrc, /this\.crSdkResults\.reset\(turnBlobSink\);/);
-  assert.match(providerSrc, /const crResult = this\.crSdkResults\.onToolResult\(a\.id, a\.isError\);/);
+  assert.match(providerSrc, /const crResult = prepared \? null : this\.crSdkResults\.onToolResult\(a\.id, a\.isError\);/, "ordinary tool results retain CR recording; prepared execution excludes unrelated CR context");
+  const resultExpression = providerSrc.match(/const crResult = (prepared \? null : this\.crSdkResults\.onToolResult\(a\.id, a\.isError\));/)[1];
+  const selectResult = new Function('prepared', 'a', `return ${resultExpression};`), resultCalls = [], recorded = {};
+  const receiver = { crSdkResults: { onToolResult: (...args) => { resultCalls.push(args); return recorded; } } };
+  assert.equal(selectResult.call(receiver, false, { id: 'ordinary-result', isError: true }), recorded);
+  assert.equal(selectResult.call(receiver, true, { id: 'prepared-result', isError: false }), null);
+  assert.deepEqual(resultCalls, [['ordinary-result', true]], 'prepared results never enter the unrelated CR recorder');
   assert.match(providerSrc, /if \(crResult\) observationCaptures\.push\(crResult\.then\(\(r\) => recordObservation\('tool_result', r\.text, \{ \.\.\.r\.refs, tool_id: a\.id/);
   assert.match(providerSrc, /this\.crSdkResults\.onToolUse\(a\.id, a\.name, this\.isCurriculumRuntimeEnabled\(\)\)/);
   assert.match(providerSrc, /const recording = recordProxyCrResult\(p\.recordObservation, call\.id, fixed\.call\.name, fixed\.call\.input \?\? \{\}, tr\.observation, p\.blobSink\);\s*if \(p\.trackObservation\) p\.trackObservation\(recording\);/);
