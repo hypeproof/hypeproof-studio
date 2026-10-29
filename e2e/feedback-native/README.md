@@ -588,7 +588,10 @@ PID/start/executable also bounds a one-shot Win32 top-level window census before
 quit and after refusal (3s per census). It records native class, bounds, visibility,
 owned/none/foreign owner relation and bounded UIA role counts/modal/known-quit-copy
 match counts only. It does not record arbitrary titles, native text, values,
-selection or foreign-process UI. Unknown structures remain diagnostics; the
+selection or foreign-process UI. The visible owned #32770 census also records bounded
+owned Win32 child structure and known button-label matches, plus owned/zero/foreign
+UIA PID relation; unavailable labels remain unknown. This data cannot authorize input.
+Unknown structures remain diagnostics; the
 existing #32770/message/detail/two-choice Invoke predicate and its10s deadline are
 unchanged. Census failure is UNAVAILABLE and never replaces or repairs the original
 quit failure. No Mac quit action, product focus policy or acceptance timeout changes.

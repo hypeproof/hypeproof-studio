@@ -282,3 +282,15 @@ subscription disposal or explicit Stop revokes execution authority. Admission, S
 new work continue to require live execution authority. A replacement task or
 profile still invalidates the queued history write; this storage-only lease grants
 no model or file-edit permission.
+
+### Retained native-window composer focus (PR #3134)
+
+`test/retained-composer-focus.smoke.mjs` reproduces the two-stage native-return
+sequence observed in Windows7090: initial textarea focus, return, BODY/blur,
+then foreground BODY. Verify same-owner recovery and subsequent typing at the
+preserved caret in a real browser DOM. Missing recovery must fail; background
+mount, noncomposer focus, pointer/Tab/Escape, modal, readonly/disabled/detached
+input, hidden document, replacement/ABA owner, repeated blur and unmount must not
+restore. The existing explicit-focus test remains unchanged. Browser-generated
+window events are a controlled fixture, not native OS acceptance: rerun installed
+T05 with the unchanged same-frame observations and no force-focus or extra keys.

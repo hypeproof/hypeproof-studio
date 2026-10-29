@@ -2,12 +2,18 @@ import test from 'node:test';import assert from 'node:assert/strict';import vm f
 import {readOwnedQuitCensus,observeWindowsQuitStructure,selectQuitDialog,confirmWindowsStreamingQuit} from './native-quit-dialog.mjs';
 import {NativeUI} from './native-ui.mjs';
 const owner={pid:7000,start:'639288355200000000',executable:'D:\\owned\\HypeProof Studio.exe'};
-const snapshot=()=>({owner:{...owner},windows:[{pid:7000,handle:'100',className:'Chrome_WidgetWin_1',visible:true,ownerRelation:'none',ownerHandle:'0',bounds:[0,0,1024,720],uia:{available:true,ownedNodes:3,skippedForeign:true,capped:false,modal:true,roles:{'ControlType.Window':1,'ControlType.Button':2},matches:{message:0,detail:0,continue:1,quit:1}}}]});
+const snapshot=()=>({owner:{...owner},windows:[{pid:7000,handle:'100',className:'Chrome_WidgetWin_1',visible:true,ownerRelation:'none',ownerHandle:'0',bounds:[0,0,1024,720],uia:{available:true,ownedNodes:3,skippedForeign:true,capped:false,modal:true,roles:{'ControlType.Window':1,'ControlType.Button':2},matches:{message:0,detail:0,continue:1,quit:1}},nativeChildren:[],foreignChildCount:0}]});
 test('owned structural census preserves unknown class without authorizing it and strips arbitrary content',()=>{
  const s=snapshot();s.owner.token='PRIVATE';s.windows[0].title='PRIVATE';s.windows[0].uia.matches.text='PRIVATE';
  const read=readOwnedQuitCensus(s,owner);assert.equal(read.windows[0].className,'Chrome_WidgetWin_1');assert(!JSON.stringify(read).includes('PRIVATE'));assert.equal(read.windows[0].uia.modal,true);
  assert.throws(()=>selectQuitDialog({owner,dialogs:[{...s.windows[0],ownerPid:owner.pid,ownerHandle:'22',texts:['Studio를 끝낼까요?','지금 하고 있는 대답이 멈춰요.\n만든 파일은 그대로 남아요.'],buttons:['계속하기','끝내기'].map(name=>({name,pid:owner.pid,enabled:true,visible:true,invokable:true}))}]},owner),/message box/);
  for(const change of[s=>s.owner.start+='1',s=>s.owner.executable='D:\\peer.exe',s=>s.windows[0].pid++,s=>s.windows.push({...s.windows[0]}),s=>s.windows[0].uia.ownedNodes=65,s=>s.windows[0].uia.matches.quit=4,s=>s.windows[0].bounds[0]=NaN,s=>s.windows[0].uia.roles={'private-text':3}]){const bad=snapshot();change(bad);assert.throws(()=>readOwnedQuitCensus(bad,owner));}
+});
+test('Win32 child inventory stays bounded, owned and diagnostic-only',()=>{
+ const s=snapshot(),w=s.windows[0];Object.assign(w,{className:'#32770',ownerRelation:'owned',ownerHandle:'20',nativeChildren:[{pid:owner.pid,handle:'101',className:'Button',controlId:2,visible:true,enabled:true,labelPresent:true,knownLabel:'quit',uia:{available:true,pidRelation:'zero',button:false,invokePattern:false},name:'PRIVATE'}]});
+ const result=readOwnedQuitCensus(s,owner);assert.equal(result.windows[0].nativeChildren[0].knownLabel,'quit');assert(!JSON.stringify(result).includes('PRIVATE'));
+ for(const mutate of [x=>x.windows[0].nativeChildren[0].pid++,x=>x.windows[0].nativeChildren.push({...x.windows[0].nativeChildren[0]}),x=>x.windows[0].nativeChildren[0].uia.invokePattern=true,x=>x.windows[0].nativeChildren[0].knownLabel='private',x=>x.windows[0].nativeChildren[0].labelPresent=false,x=>x.windows[0].ownerRelation='foreign']){const bad=structuredClone(s);mutate(bad);assert.throws(()=>readOwnedQuitCensus(bad,owner));}
+ assert.equal(selectQuitDialog({owner,dialogs:[]},owner),null); // Child evidence never authorizes an action
 });
 test('census is one bounded read, current-fenced, sanitized on error and cannot invoke',async()=>{
  let calls=[];const r=await observeWindowsQuitStructure({owner,current:()=>true,port:async(request,timeout)=>{calls.push(request.mode);assert.equal(timeout,3000);return snapshot();}});assert.equal(r.status,'OBSERVED');assert.deepEqual(calls,['census']);

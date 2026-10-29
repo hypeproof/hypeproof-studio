@@ -1393,6 +1393,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/composerFocus.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/retainedComposerFocus.ts"
         }
       ]
     },
@@ -1464,6 +1467,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/composer-focus.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/retained-composer-focus.smoke.mjs"
         }
       ]
     },

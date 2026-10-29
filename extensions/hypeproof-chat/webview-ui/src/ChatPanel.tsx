@@ -44,6 +44,7 @@ import { CompanionReceivingControls } from './CompanionReceivingControls';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
+import { bindRetainedComposerFocus } from './retainedComposerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
 import { TASK_APPEARANCE_LABEL, useTaskAppearance } from './TaskAppearance';
@@ -852,6 +853,17 @@ export function ChatPanel(props: Props) {
   };
   const imagePicker = useRef<HTMLInputElement>(null);
   useEffect(() => bindComposerFocus(() => textareaRef.current, activityId), [activityId]);
+  // A retained native window may return twice, leaving BODY after its second focus.
+  // Render-time owner replacement fences even a queued callback before effect cleanup.
+  const retainedFocusKey = JSON.stringify([activityId, taskId, config?.activity?.workspace,
+    config?.profile?.profile_id, config?.profile?.lesson?.sha256, config?.proxyUrl, config?.hasToken, config?.activity?.verified, frozen]);
+  const retainedFocusOwner = useRef({ key: retainedFocusKey });
+  if (retainedFocusOwner.current.key !== retainedFocusKey) retainedFocusOwner.current = { key: retainedFocusKey };
+  useLayoutEffect(() => {
+    const input = textareaRef.current, owner = retainedFocusOwner.current;
+    if (!input || !activityId || !config?.activity?.verified || !config.hasToken || frozen) return;
+    return bindRetainedComposerFocus(input, () => retainedFocusOwner.current === owner && textareaRef.current === input);
+  }, [retainedFocusKey]);
   /** Previous `streaming` value — the flush must fire on the edge, not the state. */
   const prevStreamingRef = useRef(streaming);
 
