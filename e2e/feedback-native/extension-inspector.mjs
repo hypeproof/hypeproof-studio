@@ -110,18 +110,28 @@ export function ownershipDiagnostic({pids,parents,timing},root){
  });
  return {root_pid:root,listener_count:pids.length,chains,timing};
 }
+// Never persist process arguments, raw command output or OS exception messages.
+function queryFailure(error,stage,timeoutMs,began,output){
+ const bytes=value=>typeof value==='string'?Buffer.from(value):Buffer.isBuffer(value)?value:null;
+ const stdout=bytes(output??error?.stdout),stderr=bytes(error?.stderr);
+ return {stage,timeout_ms:timeoutMs,elapsed_ms:Math.max(0,Math.round(performance.now()-began)),
+  code:['ETIMEDOUT','ENOENT','EACCES','EPERM','ENOBUFS','ENOMEM','ESRCH'].includes(error?.code)?error.code:null,
+  status:Number.isSafeInteger(error?.status)?error.status:null,signal:['SIGTERM','SIGKILL','SIGABRT'].includes(error?.signal)?error.signal:null,
+  timed_out:error?.code==='ETIMEDOUT',stdout_bytes:stdout?.length??null,stdout_sha256:stdout?digest(stdout):null,
+  stderr_bytes:stderr?.length??null,stderr_sha256:stderr?digest(stderr):null};
+}
 export function ownedListener(port,root,platform=process.platform,execute=execFileSync,retirement){
  const [command,args]=listenerCommand(port,platform);
  const read=(timeoutMs=10000)=>{
-  const timing={listener_started_at:new Date().toISOString()};let output;
-  try{output=execute(command,args,{encoding:'utf8',timeout:timeoutMs,stdio:['ignore','pipe','ignore']});}catch(error){if(platform==='darwin'&&error.status===1)return {pids:[],parents:new Map(),timing:{...timing,listener_finished_at:new Date().toISOString()}};throw Error('Cannot establish inspector listener ownership');}
+  const timing={listener_started_at:new Date().toISOString()},began=performance.now();let output;
+  try{output=execute(command,args,{encoding:'utf8',timeout:timeoutMs,stdio:['ignore','pipe',platform==='win32'?'pipe':'ignore']});}catch(error){if(platform==='darwin'&&error.status===1)return {pids:[],parents:new Map(),timing:{...timing,listener_finished_at:new Date().toISOString()}};const failure=Error('Cannot establish inspector listener ownership');if(platform==='win32')failure.ownership_query_failure=queryFailure(error,'windows_listener_and_parents',timeoutMs,began);throw failure;}
   timing.listener_finished_at=new Date().toISOString();let pids,parents;
   if(platform==='darwin'){
    pids=[...new Set(String(output).split('\n').filter(x=>/^p\d+$/.test(x)).map(x=>Number(x.slice(1))))];
    timing.parents_started_at=new Date().toISOString();
    const rows=execute('ps',['-axo','pid=,ppid='],{encoding:'utf8',timeout:timeoutMs,stdio:['ignore','pipe','ignore']});
    timing.parents_finished_at=new Date().toISOString();parents=new Map(String(rows).trim().split('\n').map(line=>line.trim().split(/\s+/).map(Number)));
-  }else{const data=JSON.parse(output);pids=[...new Set(data.listeners??[])];parents=new Map((data.parents??[]).map(x=>[x.ProcessId,x.ParentProcessId]));}
+  }else{try{const data=JSON.parse(output);pids=[...new Set(data.listeners??[])];parents=new Map((data.parents??[]).map(x=>[x.ProcessId,x.ParentProcessId]));}catch(error){const failure=Error('Cannot parse inspector listener ownership');failure.ownership_query_failure=queryFailure(error,'windows_result_parse',timeoutMs,began,output);throw failure;}}
   return {pids,parents,timing};
  };
  const sample=read(),{pids,parents}=sample;if(!pids.length)return null;
@@ -186,7 +196,7 @@ export class OwnedExtensionGate{
   this.port=port;this.appPid=appPid;this.target=target;this.onProgress=onProgress;this.observeListener=observeListener;this.seen=new Set();this.completedPids=new Set();this.abort=new AbortController();this.initial=deferred();this.phase={label:'initial-startup',root:initialRoot,holdMs:0,result:this.initial,deadline:Date.now()+45000};this.events=[];this.protocolDiagnostics={event_counts:{},candidate_scripts:[],last_pause:null,breakpoint_locations:[]};
  }
  progress(value){const item={at:new Date().toISOString(),...value};this.events.push(item);assert(this.events.length<=400,'Inspector progress limit');this.onProgress(item);}
- fail(error){if(!this.failure){this.failure=error;this.initial.reject(error);this.phase?.result.reject(error);this.progress({phase:'gate-failed',message:error.message,...(error.ownership_refusal?{ownership_refusal:{...error.ownership_refusal,phase_label:this.phase?.label??null,previous_host_pid:this.previousPid??null,current_peer_pid:this.peer?.listenerPid??null}}:{})});}}
+ fail(error){if(!this.failure){this.failure=error;this.initial.reject(error);this.phase?.result.reject(error);this.progress({phase:'gate-failed',message:error.message,...(error.ownership_query_failure?{ownership_query_failure:{...error.ownership_query_failure,phase_label:this.phase?.label??null}}:{}),...(error.ownership_refusal?{ownership_refusal:{...error.ownership_refusal,phase_label:this.phase?.label??null,previous_host_pid:this.previousPid??null,current_peer_pid:this.peer?.listenerPid??null}}:{})});}}
  start(){this.loop=this.watch();void this.loop.catch(error=>this.fail(error));return this;}
  async watch(){
   while(!this.stopped&&!this.failure){

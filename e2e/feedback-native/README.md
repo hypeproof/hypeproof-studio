@@ -510,7 +510,7 @@ At pause, raw URL validation rejects authority, query/fragment, encoded path
 separators, dot segments and ambiguous second decoding. Decoded path equality,
 physical regular-file identity, loaded-source SHA, owned PID, exact statement and
 destination root are still mandatory. Directory case is not relaxed. Portable
-Windows URL controls and actual owned Node controls on Mac are background proof;
+Windows URL controls and actual owned Node controls on Mac/Windows are background proof;
 Windows inspector/native execution and the complete T05 holds still require the
 exact candidate's hosted run. The prior raw Windows URL spelling remains unknown;
 this change does not claim a specific encoding was observed.
@@ -613,3 +613,13 @@ existing #32770/message/detail/two-choice Invoke predicate and its10s deadline a
 unchanged. Census failure is UNAVAILABLE and never replaces or repairs the original
 quit failure. No Mac quit action, product focus policy or acceptance timeout changes.
 These source controls are not a new installed-window/quit acceptance result.
+
+Windows ownership-query failures retain only the fixed query stage, elapsed/requested
+budget, allowlisted OS code/signal, numeric exit status, and output lengths/hashes.
+Raw PowerShell output, exception text and process arguments are never recorded.
+The existing 10s query budget, command, unique-listener and descendant admission
+remain unchanged; a failed query gets no retry or diagnostic acceptance. The
+background harness now runs its real owned-child loopback positive/foreign-root
+negative on Windows before desktop construction. This is not native acceptance.
+An early inspector failure remains the primary scenario error if the concurrent
+public restart later times out; that secondary observation is recorded separately.

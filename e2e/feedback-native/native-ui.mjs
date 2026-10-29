@@ -38,7 +38,7 @@ function readObservation(timeout,workbench){
  const run=async operation=>{check();let aborted;const stopped=new Promise((_,reject)=>{aborted=()=>reject(Error('Owned readiness deadline'));controller.signal.addEventListener('abort',aborted,{once:true});});
   try{const value=await Promise.race([Promise.resolve().then(()=>{check();return operation();}),stopped]);check();return value;}finally{controller.signal.removeEventListener('abort',aborted);}};
  const poll=async operation=>{for(;;){check();try{const value=await run(operation);if(value)return value;}catch{check();}await run(()=>sleep(Math.min(150,Math.max(1,deadline-Date.now()))));}};
- return {signal:controller.signal,workbench,run,poll,check,close(){clearTimeout(timer);controller.abort();}};
+ return {signal:controller.signal,workbench,run,poll,check,remaining:()=>deadline-Date.now(),close(){clearTimeout(timer);controller.abort();}};
 }
 
 class Target{
@@ -251,6 +251,34 @@ export class NativeUI{
   const identity={workbench:chat.ownedWorkbenchId,target:chat.info?.id,frame:chat.ownedFrameId,loader:chat.ownedLoaderId};
   if(Object.values(identity).some(value=>typeof value!=='string'||!value))throw Error('Owned chat document identity unavailable');
   return identity;
+ }
+ // Sidebar visibility is not completion of its asynchronous focus return. Observe
+ // the exact previously retained document twice before the next single F1.
+ async retainedChatReady(before,timeout=30000){
+  if(!Number.isFinite(timeout)||timeout<=0||timeout>30000||!before||['workbench','target','frame','loader'].some(k=>typeof before[k]!=='string'||!before[k]))throw Error('Exact retained chat identity required');
+  before={workbench:before.workbench,target:before.target,frame:before.frame,loader:before.loader};
+  const chat=this.targets.get(before.target),name=chat?.info?.url?new URL(chat.info.url).searchParams.get('id'):null;
+  if(!chat||chat.info.id!==before.target||!name)throw Error('Previously observed retained chat target required');
+  const observation=readObservation(timeout,before.workbench);let state,readySamples=0;
+  const changed=()=>{throw Object.assign(Error('Retained chat identity changed'),{identityChanged:true});};
+  const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'retained sidebar return readiness',outcome,before,state:state??null,ready_samples:readySamples});
+  try{for(;;){
+   observation.check();const infos=await observation.run(()=>this.list(observation));
+   const matches=infos.filter(t=>t.id===before.target);
+   if(matches.length!==1||matches[0].type!=='iframe'||matches[0].url!==chat.info.url)changed();
+   const host=await observation.run(()=>this.workbench(observation));if(host.info?.id!==before.workbench)changed();
+   const tree=await observation.run(()=>chat.send('Page.getFrameTree',{},observation));
+   const frames=[tree.frameTree,...(tree.frameTree?.childFrames??[])].filter(n=>n?.frame?.id===before.frame);
+   if(frames.length!==1||frames[0].frame.loaderId!==before.loader)changed();
+   const outer=await observation.run(()=>host.evaluate(`(()=>{const matches=[...document.querySelectorAll('iframe')].filter(e=>e.name===${JSON.stringify(name)});if(matches.length!==1)return {sameOwner:false};const e=matches[0],r=e.getBoundingClientRect(),s=getComputedStyle(e);return {sameOwner:true,visible:r.width>0&&r.height>0&&s.display!=='none'&&s.visibility==='visible',focused:document.hasFocus()&&document.activeElement===e};})()`,observation));
+   if(outer?.sameOwner!==true)changed();
+   const inner=await observation.run(()=>chat.evaluate("(()=>{const e=document.querySelector('.hps-input textarea'),r=e?.getBoundingClientRect(),s=e?getComputedStyle(e):null;return {present:!!e,connected:!!e?.isConnected,enabled:!!e&&!e.disabled&&!e.readOnly,visible:!!r&&r.width>0&&r.height>0&&s.display!=='none'&&s.visibility==='visible',documentFocused:document.hasFocus(),inputFocused:!!e&&document.activeElement===e};})()",observation));
+   state={outerVisible:outer.visible===true,hostFocused:outer.focused===true,...inner};
+   readySamples=['outerVisible','hostFocused','present','connected','enabled','visible','documentFocused','inputFocused'].every(k=>state[k]===true)?readySamples+1:0;
+   if(readySamples===2){observation.check();record('observed');return before;}
+   await observation.run(()=>sleep(Math.min(150,Math.max(1,observation.remaining()))));
+  }}catch(error){record(error.identityChanged?'identity-refused':observation.signal.aborted||observation.remaining()<=0?'timeout':'unavailable');throw Error('Retained sidebar return readiness failed');}
+  finally{observation.close();}
  }
  async reloadedChatReady(before,timeout=30000){
   if(!Number.isFinite(timeout)||timeout<=0||timeout>30000||!before||['workbench','target','frame','loader'].some(key=>typeof before[key]!=='string'||!before[key]))throw Error('Exact previous owned chat document required');
