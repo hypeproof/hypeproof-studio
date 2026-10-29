@@ -357,7 +357,7 @@ function chatOnly(task: TranscriptTask, secrets: readonly string[]) {
     messages: task.messages.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({
       role: m.role as 'user' | 'assistant',
       content: redactCredentials(String(m.content ?? ''), secrets),
-      ...(typeof m.createdAt === 'number' && Number.isFinite(m.createdAt) ? { createdAt: new Date(m.createdAt).toISOString() } : {}),
+      ...(typeof m.createdAt === 'number' && Number.isFinite(new Date(m.createdAt).getTime()) ? { createdAt: new Date(m.createdAt).toISOString() } : {}),
     })),
   };
 }
