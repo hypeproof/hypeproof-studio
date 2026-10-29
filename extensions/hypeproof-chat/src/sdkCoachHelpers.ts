@@ -44,6 +44,7 @@ import {
   MCP_BROWSER_TYPE,
   MCP_LIVE_PREVIEW_START,
   MCP_PAGE_PDF_SAVE,
+  MCP_BROWSER_EXTRA_TOOLS,
   MCP_CR_BROWSER_TOOLS,
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
@@ -370,8 +371,8 @@ export function permittedMcpToolsFor(
     // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch.
     tools.push(
       ...(isCurriculumRuntimeEnabled(profile)
-        ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
-        : MCP_BROWSER_TOOLS),
+        ? [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
+        : [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS]),
     );
   }
   const orchestrator = orchestratorBindingFor(profile, roster);
@@ -2599,6 +2600,7 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
   if (sdkDeniedToolReason(toolName) !== undefined) return true;
   return (
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
+    (MCP_BROWSER_EXTRA_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_ORCHESTRATOR_TOOLS as readonly string[]).includes(toolName) ||
@@ -2842,7 +2844,7 @@ export function toolFeatureKey(toolName: string): string | undefined {
   if (n === "bash" || n === "powershell") return "shell";
   if ((SDK_AGENT_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "subagents";
   if (n === "websearch" || n === "webfetch") return "web_search";
-  if (([...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS] as readonly string[]).includes(toolName)) return "browser";
+  if (([...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS] as readonly string[]).includes(toolName)) return "browser";
   return undefined;
 }
 

@@ -77,8 +77,13 @@ export const MCP_BROWSER_TOOLS = [
   MCP_BROWSER_READ,
   MCP_BROWSER_CLICK,
   MCP_BROWSER_TYPE,
-  MCP_PAGE_PDF_SAVE,
 ] as const;
+/**
+ * #3221 — tools granted with the browser capability that are not browser control: the Service's SDK
+ * browser contract (browser-contract.test) describes MCP_BROWSER_TOOLS, and page_pdf_save carries its
+ * own description instead.
+ */
+export const MCP_BROWSER_EXTRA_TOOLS = [MCP_PAGE_PDF_SAVE] as const;
 
 /**
  * Curriculum Runtime Experiment Browser tools (CR-04, CR-06). Granted only when the

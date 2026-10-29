@@ -25,8 +25,7 @@ const { isSameBrowserUrl } = await import("../src/browserControlHelpers.ts");
   assert.deepEqual(
     [...MCP_BROWSER_TOOLS],
     ["mcp__hypeproof__browser_open", "mcp__hypeproof__browser_screenshot", "mcp__hypeproof__live_preview_start",
-     "mcp__hypeproof__browser_read", "mcp__hypeproof__browser_click", "mcp__hypeproof__browser_type",
-     "mcp__hypeproof__page_pdf_save"],
+     "mcp__hypeproof__browser_read", "mcp__hypeproof__browser_click", "mcp__hypeproof__browser_type"],
     "full MCP tool names = mcp__<server>__<tool> — the canUseTool contract",
   );
   // The full names must be derivable from the server name + short names the

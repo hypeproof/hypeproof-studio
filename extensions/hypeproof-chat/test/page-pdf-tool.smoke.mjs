@@ -5,12 +5,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { MCP_BROWSER_TOOLS, MCP_PAGE_PDF_SAVE, PAGE_PDF_SAVE_TOOL_DEF, runPagePdfSave } from "../src/browserMcp.ts";
+import { MCP_BROWSER_TOOLS, MCP_BROWSER_EXTRA_TOOLS, MCP_PAGE_PDF_SAVE, PAGE_PDF_SAVE_TOOL_DEF, runPagePdfSave } from "../src/browserMcp.ts";
 import { evaluateSdkToolUse, APP_BUNDLE_PROGRAM_REASON } from "../src/sdkCoachHelpers.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 assert.equal(MCP_PAGE_PDF_SAVE, "mcp__hypeproof__page_pdf_save");
-assert.ok(MCP_BROWSER_TOOLS.includes(MCP_PAGE_PDF_SAVE), "granted with the browser capability");
+assert.deepEqual([...MCP_BROWSER_EXTRA_TOOLS], [MCP_PAGE_PDF_SAVE], "granted with the browser capability");
+assert.ok(!MCP_BROWSER_TOOLS.includes(MCP_PAGE_PDF_SAVE), "not a browser-control tool: the Service's SDK browser contract covers MCP_BROWSER_TOOLS only");
+const { permittedMcpToolsFor } = await import("../src/sdkCoachHelpers.ts");
+assert.ok(permittedMcpToolsFor({ sdk_tools: { browser: true } }).includes(MCP_PAGE_PDF_SAVE), "a browser grant includes page_pdf_save");
+assert.ok(!permittedMcpToolsFor({ sdk_tools: { browser: false } }).includes(MCP_PAGE_PDF_SAVE), "no browser grant, no page_pdf_save");
 assert.match(PAGE_PDF_SAVE_TOOL_DEF.description, /Chrome/); assert.match(PAGE_PDF_SAVE_TOOL_DEF.description, /PDF가 필요하면 이 도구만 쓴다/);
 assert.deepEqual(PAGE_PDF_SAVE_TOOL_DEF.inputSchema.required, ["path"]);
 
@@ -25,7 +29,7 @@ assert.equal((await runPagePdfSave({}, { path: "a.html" })).isError, true, "a ho
 
 // Policy: allowed when granted (like live_preview_start), refused as not granted otherwise.
 const gate = (permitted) => evaluateSdkToolUse({ toolName: MCP_PAGE_PDF_SAVE, input: { path: "report-src.htm" }, permittedTools: permitted, workspaceRoot: "/w", canonicalize: (p) => p, audience: "solo" });
-assert.deepEqual(gate([...MCP_BROWSER_TOOLS]), { decision: "allow" });
+assert.deepEqual(gate([...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS]), { decision: "allow" });
 assert.equal(gate(["Bash"]).decision, "deny");
 
 // The app-bundle refusal points the coach to it.

@@ -10,7 +10,7 @@
 import assert from "node:assert/strict";
 
 const { permittedMcpToolsFor, evaluateSdkToolUse, sdkToolToActionRequest, isClassifiedSdkToolName, isMinorProfile } = await import("../src/sdkCoachHelpers.ts");
-const { buildHypeproofMcpServer, hypeproofMcpRegistration, publishInputFromArgs, MCP_PUBLISH_SITE, MCP_BROWSER_TOOLS, HYPEPROOF_MCP_SERVER_NAME } = await import("../src/browserMcp.ts");
+const { buildHypeproofMcpServer, hypeproofMcpRegistration, publishInputFromArgs, MCP_PUBLISH_SITE, MCP_BROWSER_TOOLS, MCP_BROWSER_EXTRA_TOOLS, HYPEPROOF_MCP_SERVER_NAME } = await import("../src/browserMcp.ts");
 const { resolvePublishEndpoints, toolBudgetMs } = await import("../src/publish/publishConfig.ts");
 const { resultChatText } = await import("../src/publish/publishSite.ts");
 
@@ -28,7 +28,7 @@ ok("tool name: mcp__hypeproof__publish_site, classified");
   assert.deepEqual(permittedMcpToolsFor(profile("website", { publishing: ON })), [MCP_PUBLISH_SITE], "publish without browser");
   assert.deepEqual(
     permittedMcpToolsFor(profile("website", { publishing: ON, sdk_tools: { browser: true } })),
-    [...MCP_BROWSER_TOOLS, MCP_PUBLISH_SITE],
+    [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS, MCP_PUBLISH_SITE],
     "browser and publish side by side",
   );
   for (const [p, why] of [

@@ -21,7 +21,7 @@ const {
   sdkConfigDirFor,
   SDK_CONFIG_DIR_NAME,
 } = await import("../src/sdkCoachHelpers.ts");
-const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
+const { MCP_BROWSER_TOOLS, MCP_BROWSER_EXTRA_TOOLS } = await import("../src/browserMcp.ts");
 
 // ─── anthropicBaseUrlFor — proxyUrl (/v1 base) → SDK base URL ────────────────
 // The SDK appends /v1/messages to ANTHROPIC_BASE_URL; passing the proxyUrl
@@ -240,7 +240,7 @@ const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
     { game: { template_tier: "kids-rich" }, sdk_tools: { browser: true } },
     { model: "hypeproof-default", systemPrompt: "" },
   );
-  assert.deepEqual(kidsOptIn.permittedMcpTools, [...MCP_BROWSER_TOOLS], "kids tier: the browser grant follows the flag");
+  assert.deepEqual(kidsOptIn.permittedMcpTools, [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS], "kids tier: the browser grant follows the flag");
 }
 
 // ─── coachRuntime flag still defaults to "proxy" (Phase-3 flip is Jay-gated) ─
