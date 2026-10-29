@@ -15703,7 +15703,8 @@
         "ST-IMP-COMPANION-DISPATCH",
         "ST-TEST-CLASSROOM-ADMIN",
         "ST-TEST-CHAT-FILE-ATTACH",
-        "ST-IMP-COMPANION-WORKSPACE"
+        "ST-IMP-COMPANION-WORKSPACE",
+        "ST-IMP-COMPANION-IOS-DEV"
       ],
       "sources": [
         {
@@ -15720,6 +15721,24 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
+        },
+        {
+          "path": "e2e/companion-ios/ProtocolChecks.swift"
+        },
+        {
+          "path": "e2e/companion-ios/core-checks.sh"
+        },
+        {
+          "path": "e2e/companion-ios/simulator-checks.py"
+        },
+        {
+          "path": "apps/companion-ios/UITests/CompanionShellTests.swift"
+        },
+        {
+          "path": ".github/workflows/companion-ios-verify.yml"
+        },
+        {
+          "path": "e2e/companion-ios/test_simulator_checks.py"
         }
       ]
     },
@@ -16288,6 +16307,35 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-IOS-DEV",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION"
+      ],
+      "sources": [
+        {
+          "path": "apps/companion-ios/App/HypeProofCompanionApp.swift"
+        },
+        {
+          "path": "apps/companion-ios/Sources/CompanionCore/DeviceSignIn.swift"
+        },
+        {
+          "path": "apps/companion-ios/Sources/CompanionCore/DeviceHTTP.swift"
+        },
+        {
+          "path": "apps/companion-ios/Package.swift"
+        },
+        {
+          "path": "apps/companion-ios/HypeProofCompanion.xcodeproj/project.pbxproj"
+        },
+        {
+          "path": "apps/companion-ios/HypeProofCompanion.xcodeproj/xcshareddata/xcschemes/HypeProofCompanion.xcscheme"
         }
       ]
     }
