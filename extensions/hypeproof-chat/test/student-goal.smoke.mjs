@@ -401,6 +401,46 @@ async function twoViewsSave(module) {
 }
 
 try {
+  await test("host: a queued text save cannot move to another activity", async () => {
+    const store = new Map();
+    const conn = new ActivityConnections(raw(root, store), () => "https://synthetic.invalid/v1", () => root, async () => profileA);
+    await conn.commit("synthetic-credential", { activity_id: ACT, display_name: "First" }, root);
+    const { host, posts } = makeHost(conn.wrap(), profileA);
+    let release;
+    host.goalWrites = new Promise((resolve) => { release = resolve; });
+    const queued = proto.handleMessage.call(host, {
+      type: "goalSave", activityId: conn.scope, lesson: LESSON_A.sha256,
+      goal: GOAL, criteria: CRITERIA, base: 0, requestId: "queued-old-activity",
+    });
+    const otherFolder = fs.mkdtempSync(path.join(root, "queued-other-"));
+    await conn.commit("synthetic-credential-b", { activity_id: ACT_B, display_name: "Second" }, otherFolder);
+    const before = JSON.stringify([...store]);
+    release();
+    await queued;
+    const answer = goalStates(posts).at(-1);
+    assert.equal(answer.requestId, "queued-old-activity");
+    assert.ok(answer.error, "the old activity save must receive a refusal");
+    assert.equal(answer.saved, undefined);
+    assert.equal(JSON.stringify([...store]), before, "neither activity's goal may change");
+    await proto.handleMessage.call(host, {
+      type: "goalSave", activityId: conn.scope, lesson: LESSON_A.sha256,
+      goal: "Second activity goal", criteria: [], base: 0, requestId: "current-activity",
+    });
+    assert.equal(goalStates(posts).at(-1).view.goal, "Second activity goal");
+    assert.equal(goalStates(posts).at(-1).saved, true);
+    host.goalWrites = new Promise((resolve) => { release = resolve; });
+    const disconnected = proto.handleMessage.call(host, {
+      type: "goalSave", activityId: conn.scope, lesson: LESSON_A.sha256,
+      goal: "Do not save after disconnect", criteria: [], base: 0, requestId: "queued-disconnected",
+    });
+    await conn.disconnect();
+    const afterDisconnect = JSON.stringify([...store]);
+    release();
+    await disconnected;
+    assert.equal(goalStates(posts).at(-1).requestId, "queued-disconnected");
+    assert.ok(goalStates(posts).at(-1).error);
+    assert.equal(JSON.stringify([...store]), afterDisconnect, "disconnect must not create an activity-less goal");
+  });
   await test("host: goal status is learner-only, scoped, persisted and never starts a turn", async () => {
     const store = new Map();
     const context = new ActivityConnections(raw(root, store)).wrap();
