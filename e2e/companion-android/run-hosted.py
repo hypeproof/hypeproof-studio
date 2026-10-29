@@ -25,12 +25,13 @@ def status_blocks(text):
    if block:rows.append(block);block={}
  return rows
 
+def namespace_metadata(value,allowed):
+ raw=value.encode('utf8');return {'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'form':('user0'if value==allowed[0]else'legacy_data'if value==allowed[1]else'unrecognized')}
+
 def namespace_shape(row,run,data_dir,diagnostics):
  roots=['/data/user/0/'+PKG,'/data/data/'+PKG]
  suffix='/no_backup/hosted-draft-'+run
- def metadata(value,allowed):
-  raw=value.encode('utf8');return {'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'form':('user0'if value==allowed[0]else'legacy_data'if value==allowed[1]else'unrecognized')}
- diagnostics.update({'dataDir':metadata(row['hps_data_dir'],roots),'namespace':metadata(row['hps_namespace'],[r+suffix for r in roots]),'dataDirExact':row['hps_data_dir']==data_dir,'namespaceExact':row['hps_namespace']==data_dir+suffix,'namespaceUnderReportedRoot':row['hps_namespace']==row['hps_data_dir']+suffix})
+ diagnostics.update({'dataDir':namespace_metadata(row['hps_data_dir'],roots),'namespace':namespace_metadata(row['hps_namespace'],[r+suffix for r in roots]),'dataDirExact':row['hps_data_dir']==data_dir,'namespaceExact':row['hps_namespace']==data_dir+suffix,'namespaceUnderReportedRoot':row['hps_namespace']==row['hps_data_dir']+suffix})
  require(re.fullmatch('[a-f0-9]{32}',run)is not None and data_dir in roots and row['hps_data_dir']in roots and row['hps_namespace']in[r+suffix for r in roots],'wrong_private_namespace')
 
 def private_stat_rows(text,uid):
@@ -97,11 +98,15 @@ class Device:
   expected=data_dir+'/no_backup/hosted-draft-'+run
   canonical_root=self.text('shell','run-as',PKG,'readlink','-f',row['hps_data_dir'])
   canonical_namespace=self.text('shell','run-as',PKG,'readlink','-f',row['hps_namespace'])
-  diagnostics.update({'canonicalRootMatches':canonical_root==data_dir,'canonicalNamespaceMatches':canonical_namespace==expected})
-  require(canonical_root==data_dir and canonical_namespace==expected,'private_canonical_mismatch')
+  roots=['/data/user/0/'+PKG,'/data/data/'+PKG];suffix='/no_backup/hosted-draft-'+run
+  diagnostics.update({'canonicalRootMatches':canonical_root==data_dir,'canonicalNamespaceMatches':canonical_namespace==expected,
+   'canonicalDataDir':namespace_metadata(canonical_root,roots),'canonicalNamespace':namespace_metadata(canonical_namespace,[r+suffix for r in roots]),
+   'canonicalNamespaceUnderCanonicalRoot':canonical_namespace==canonical_root+suffix})
+  # Canonical spellings may differ; exact fixed scope plus physical identity is required.
+  require(canonical_root in roots and canonical_namespace in[r+suffix for r in roots],'private_canonical_mismatch')
   # Toybox stat returns only numeric device/inode/UID/mode, no contents or filenames.
   stats=self.text('shell','run-as',PKG,'stat','-L','-c','%d:%i:%u:%f',data_dir,row['hps_data_dir'],expected,row['hps_namespace'])
-  private_stat_rows(stats,uid);diagnostics['sameDirectoryInodesAndUid']=True
+  private_stat_rows(stats,uid);diagnostics.update({'sameDirectoryInodesAndUid':True,'rootDirectoryIdentityMatches':True,'namespaceDirectoryIdentityMatches':True})
   after=self.identity(pid,uid,data_dir);require(after==before,'target_changed_during_namespace_proof')
   diagnostics['liveIdentityStable']=True;diagnostics['physicalProof']=True
   return after

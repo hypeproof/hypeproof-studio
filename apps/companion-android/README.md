@@ -239,14 +239,18 @@ hold for external termination; they are not completed JUnit test results.
 
 The host does not equate private paths by spelling alone. Only the two fixed
 package roots (`/data/user/0/<package>` and `/data/data/<package>`) and the exact
-nonce-owned no-backup namespace are eligible. Target-UID `readlink` must resolve
-the reported root and namespace to the already verified canonical target paths;
-read-only `stat` must also prove matching directory device/inode and target UID.
+nonce-owned no-backup namespace are eligible. Target-UID `readlink` must keep
+the reported root and namespace inside those exact fixed forms. Canonical spelling
+need not equal the host spelling: read-only `stat` must prove the reported root
+and namespace each match the host's corresponding directory device/inode and
+UID. Differing allowed root/namespace forms require both physical comparisons;
+no spelling alone authorizes acceptance.
 Live PID/UID/start/data identity is checked before and after these reads and again
 before external Stop. Unknown paths, escapes, mismatched inodes, failed reads or
 an expired native hold refuse. Diagnostics retain only hashes, shape categories
-and equality results. The original run's combined namespace failure did not save
-the differing values, so aliasing remains unconfirmed until hosted evidence.
+and equality results, including canonical form categories. Run 4 observed legacy
+ACK forms but did not retain canonical forms or reach the inode proof; a bind-mount
+alias remains unconfirmed until actual hosted physical-identity evidence.
 
 The only Activity entry is the existing debug device-sign-in fixture without
 extras: it has no target origin or transport and its login button must remain

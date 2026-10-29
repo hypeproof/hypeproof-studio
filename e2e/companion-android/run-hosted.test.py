@@ -177,6 +177,30 @@ class Controls(unittest.TestCase):
     self.assertEqual(read.call_args_list[1].args,('shell','run-as',h.PKG,'readlink','-f',candidate['hps_namespace']))
     self.assertEqual(read.call_args_list[2].args,('shell','run-as',h.PKG,'stat','-L','-c','%d:%i:%u:%f',DATA,root,expected,candidate['hps_namespace']))
     self.assertTrue(diagnostics['physicalProof']);self.assertTrue(diagnostics['liveIdentityStable']);self.assertNotIn(DATA,str(diagnostics));self.assertNotIn(RUN,str(diagnostics))
+ def test_self_canonical_aliases_require_physical_identity_for_each_directory(self):
+  legacy='/data/data/'+h.PKG;suffix='/no_backup/hosted-draft-'+RUN
+  candidate={**row(),'hps_data_dir':legacy,'hps_namespace':legacy+suffix}
+  stat=f'7:22:{UID}:41c0\n7:22:{UID}:41c0\n7:33:{UID}:41c0\n7:33:{UID}:41c0'
+  for canonical_root in [DATA,legacy]:
+   for canonical_namespace_root in [DATA,legacy]:
+    d=h.Device('NEVER',{},Child(),Child());diagnostics={}
+    with patch.object(d,'identity',side_effect=[identity(),identity()]),patch.object(d,'text',side_effect=[canonical_root,canonical_namespace_root+suffix,stat])as read:
+     self.assertEqual(d.private_namespace(candidate,RUN,UID,DATA,diagnostics),identity())
+    self.assertEqual(read.call_count,3);self.assertTrue(diagnostics['physicalProof'])
+    self.assertEqual(diagnostics['canonicalDataDir']['form'],'user0'if canonical_root==DATA else'legacy_data')
+    self.assertEqual(diagnostics['canonicalNamespace']['form'],'user0'if canonical_namespace_root==DATA else'legacy_data')
+    self.assertEqual(diagnostics['canonicalNamespaceUnderCanonicalRoot'],canonical_root==canonical_namespace_root)
+    self.assertTrue(diagnostics['rootDirectoryIdentityMatches']);self.assertTrue(diagnostics['namespaceDirectoryIdentityMatches'])
+    self.assertNotIn(DATA,str(diagnostics));self.assertNotIn(legacy,str(diagnostics));self.assertNotIn(RUN,str(diagnostics))
+ def test_self_canonical_alias_never_bypasses_inode_or_uid_proof(self):
+  legacy='/data/data/'+h.PKG;suffix='/no_backup/hosted-draft-'+RUN
+  candidate={**row(),'hps_data_dir':legacy,'hps_namespace':legacy+suffix}
+  good=[f'7:22:{UID}:41c0',f'7:22:{UID}:41c0',f'7:33:{UID}:41c0',f'7:33:{UID}:41c0']
+  for index,bad in [(1,f'7:23:{UID}:41c0'),(3,f'7:34:{UID}:41c0'),(1,'7:22:999:41c0'),(3,'7:33:999:41c0')]:
+   stats=good.copy();stats[index]=bad;d=h.Device('NEVER',{},Child(),Child());diagnostics={}
+   with patch.object(d,'identity',return_value=identity()),patch.object(d,'text',side_effect=[legacy,legacy+suffix,'\n'.join(stats)]),self.assertRaisesRegex(RuntimeError,'private_inode_mismatch|private_stat_owner_or_kind'):
+    d.private_namespace(candidate,RUN,UID,DATA,diagnostics)
+   self.assertNotIn('physicalProof',diagnostics)
  def test_namespace_canonical_escape_refuses_before_stat_and_never_reports_raw_path(self):
   expected=DATA+'/no_backup/hosted-draft-'+RUN
   for canonical in [('private-secret-path',expected),(DATA,expected+'/escape')]:
