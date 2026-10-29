@@ -838,7 +838,7 @@ export class TaskWorkspaceStore {
     });
   }
 
-  append(taskId: string, messages: ChatMessage[]): Promise<TaskWorkspaceView> {
+  append(taskId: string, messages: ChatMessage[], isCurrent?: () => boolean): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, (task, versions) => {
       if (!Array.isArray(messages) || !messages.every(validIncoming)) fail('invalid', '저장할 대화 형식이 올바르지 않습니다.');
       // CGP-CHAT-R-002 — merge into the full conversation, then store the visible part in the task
@@ -854,7 +854,7 @@ export class TaskWorkspaceStore {
         const title = suggestTaskTitle(task.messages);
         if (title) { task.title = title; task.titleOrigin = 'automatic'; }
       }
-    });
+    }, isCurrent);
   }
   saveDraft(taskId: string, draft: ActivityDraft): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => {
@@ -1241,7 +1241,7 @@ export class TaskWorkspaceStore {
   private checkExpected(data: WorkspaceData, expected: TaskWorkspaceExpected): void {
     if (!expected || data.activeTaskId !== expected.taskId || data.revision !== expected.revision) fail('stale', '작업이 변경되었습니다. 최신 화면에서 다시 선택해 주세요.');
   }
-  private updateTask(taskId: string, update: (task: TaskDocument, versions: VersionsData) => void): Promise<TaskWorkspaceView> {
+  private updateTask(taskId: string, update: (task: TaskDocument, versions: VersionsData) => void, isCurrent?: () => boolean): Promise<TaskWorkspaceView> {
     return this.mutate((data, versions) => {
       const current = this.requireData(data);
       if (taskId !== current.activeTaskId) fail('stale', '다른 작업의 저장 요청입니다. 현재 작업에서 다시 시도해 주세요.');
@@ -1249,7 +1249,7 @@ export class TaskWorkspaceStore {
       update(task, versions);
       task.updatedAt = Math.max(Date.now(), task.updatedAt);
       return current;
-    });
+    }, false, isCurrent);
   }
 
   private async readLock(path: string): Promise<LockRecord | undefined> {
@@ -1465,9 +1465,10 @@ export class TaskWorkspaceStore {
     return operation;
   }
 
-  private mutate(change: (data: WorkspaceData | undefined, versions: VersionsData, archive: ArchiveData) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
+  private mutate(change: (data: WorkspaceData | undefined, versions: VersionsData, archive: ArchiveData) => WorkspaceData, recoverFromDisk = false, isCurrent?: () => boolean): Promise<TaskWorkspaceView> {
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
+      if (isCurrent && !isCurrent()) fail('stale', '현재 작업이 바뀌었어요.');
       try {
         await this.prepareDirectory();
         const lock = await this.acquireLock();
@@ -1484,6 +1485,7 @@ export class TaskWorkspaceStore {
           const versions = clone(diskVersions);
           const diskArchive = await this.readArchiveLocked(lock.owner.nonce);
           const archive = clone(diskArchive);
+          if (isCurrent && !isCurrent()) fail('stale', '현재 작업이 바뀌었어요.');
           const next = change(base ? clone(base) : undefined, versions, archive);
           const versionsChanged = JSON.stringify(versions) !== JSON.stringify(diskVersions);
           // CGP-CHAT-R-025 — the archive sidecar is written before the task file: a crash between them
@@ -1496,14 +1498,14 @@ export class TaskWorkspaceStore {
           if (versionsChanged) {
             const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(versions)), data: versions });
             decodeVersions(sidecar, this.scope);
-            await this.writeAtomic(this.versionsPath, sidecar, lock.owner.nonce);
+            await this.writeAtomic(this.versionsPath, sidecar, lock.owner.nonce, isCurrent);
           }
           this.versions = versions;
           if (this.data && JSON.stringify(next) === JSON.stringify(this.data)) return this.getView();
           next.revision = (base?.revision ?? 0) + 1;
           const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
           decode(content, this.scope);
-          await this.writeAtomic(this.filePath, content, lock.owner.nonce);
+          await this.writeAtomic(this.filePath, content, lock.owner.nonce, isCurrent);
           this.data = next;
           return this.getView();
         } finally {
