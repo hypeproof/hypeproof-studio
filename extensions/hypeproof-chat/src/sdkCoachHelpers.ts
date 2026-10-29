@@ -2185,6 +2185,15 @@ export const SDK_ERROR_GENERIC_FRIENDLY = "문제가 발생했습니다. 운영 
 /** Shared with the stall watchdog (sdkCoach.ts), so one event reads the same whichever way the turn ended. */
 export const SDK_RATE_LIMIT_FRIENDLY =
   "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)";
+/**
+ * The request was over a size limit (the Service's per-request input bound for trial, free and pass seats answers
+ * 413). The CLI ignores the 413 body and prints its own English line, "Request too large (max 32MB). Accumulated
+ * images and attachments…" (recorded 2026-10-29 on SDK 0.3.299), which names neither the real limit nor a fix.
+ * Each turn starts from the visible conversation, so asking again with less material read works.
+ */
+export const SDK_REQUEST_TOO_LARGE_FRIENDLY =
+  "이번 작업에서 읽은 내용이 너무 많아 AI에게 보내지 못했어요. 만든 파일은 그대로 있어요. 큰 파일은 필요한 부분만 읽어 달라고 하거나, 일을 작게 나눠 다시 부탁해 주세요.";
+const SDK_REQUEST_TOO_LARGE_TEXT = /Request too large|request_too_large/;
 export const sdkProviderErrorFriendly = (status: number): string =>
   `AI 서비스 오류로 응답을 받지 못했습니다. 작업 파일은 보존돼 있습니다. (${status})`;
 
@@ -2251,6 +2260,7 @@ export function sdkErrorDisplayText(err: unknown, audience: SeatAudience = "clas
   const s = (err as { status?: unknown }).status;
   const status = typeof s === "number" ? s : sdkCliErrorStatus(own) ?? sdkCliErrorStatus(err.message);
   if (status === 429) return audience === "solo" ? rateLimitStallText("solo") : SDK_RATE_LIMIT_FRIENDLY;
+  if (status === 413 || SDK_REQUEST_TOO_LARGE_TEXT.test(err.message) || SDK_REQUEST_TOO_LARGE_TEXT.test(own)) return SDK_REQUEST_TOO_LARGE_FRIENDLY;
   if (status !== undefined && status >= 500) return sdkProviderErrorFriendly(status);
   return generic;
 }
