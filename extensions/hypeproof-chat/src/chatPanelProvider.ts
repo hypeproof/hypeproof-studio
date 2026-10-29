@@ -8769,7 +8769,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             if (!a.allowed) {
               stepLines.end(a.id);
               if (a.actor === 'policy') {
-                const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom');
+                const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
                 deniedCalls.set(a.id, denial);
                 tracker.settle(a.id);
                 this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
@@ -10658,7 +10658,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private postToolLog(streamId: string, entry: ToolEntry): void {
     if (entry.denial) {
-      const denial = denialNotice(entry.denial.source, entry.denial.classroom);
+      const denial = denialNotice(entry.denial.source, entry.denial.classroom, entry.denial.detail);
       entry = { id: entry.id, icon: '🔒', label: denialNoticeLabel(denial), state: 'error', ...(entry.at ? { at: entry.at } : {}) };
     }
     const t = this.turnTimelines.get(streamId);
