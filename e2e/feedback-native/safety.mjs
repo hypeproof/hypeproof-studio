@@ -104,14 +104,20 @@ export function sdkProtocolProof(config,service,sdk){
  return {sha256:proof.sha256,protocol:value.protocol_readiness,cancellation:value.cancellation_verdict,provider_called:false};
 }
 
-// Final cleanup is separate from normal-quit/restart acceptance. Never force-kill
-// or report a stopped process from a successful signal request alone.
-export async function stopOwnedCandidate({config,child,waitExit,waitCdpDown}){
+// Final cleanup is separate from normal-quit/restart acceptance. A separately
+// identity-guarded escalation may run ONLY here; a signal receipt is not exit proof.
+export async function stopOwnedCandidate({config,child,waitExit,waitCdpDown,forceStop}){
  if(config.attach||!child||!Number.isSafeInteger(child.pid)||child.pid<=1)throw Error('Cleanup requires the exact owned child');
  const proof={pid:child.pid,stop_requested:false,child_exit_observed:false,cdp_down:false,status:'FAIL'};
  try{
   if(child.exitCode===null&&child.signalCode===null){proof.stop_requested=child.kill()===true;if(!proof.stop_requested)throw Error('Owned child stop request refused');}
-  await waitExit(child);
+  try{await waitExit(child);}catch(error){
+   if(!forceStop||child.exitCode!==null||child.signalCode!==null)throw error;
+   proof.initial_exit_error=error.message;proof.escalation_cleanup_only=true;
+   proof.force_stop_requested=await forceStop(child)===true;
+   if(!proof.force_stop_requested)throw Error('Owned cleanup escalation refused');
+   await waitExit(child);
+  }
   if(child.exitCode===null&&child.signalCode===null)throw Error('Owned child exit not observed');
   proof.child_exit_observed=true;proof.exit_code=child.exitCode;proof.signal_code=child.signalCode;
   await waitCdpDown();proof.cdp_down=true;proof.status='PASS';

@@ -1,5 +1,6 @@
 // Cross-platform form of the existing classroom/mac-window.mjs OOPIF/input contract.
-// Reads DOM state only. Every action uses native CDP keyboard/mouse input, never DOM click(), input setters or postMessage().
+// Reads DOM state; actions use native CDP input, never DOM click(), setters or postMessage().
+// Streaming quit may explicitly delegate its OS-native confirmation to an owned platform port.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {loopback} from './safety.mjs';
@@ -105,7 +106,7 @@ export class NativeUI{
   return true;
  }
  async cdpDown(){try{await fetch(this.endpoint+'/json/list',{signal:AbortSignal.timeout(1500)});return false;}catch(error){return error.cause?.code==='ECONNREFUSED'||(Array.isArray(error.cause?.errors)&&error.cause.errors.length>0&&error.cause.errors.every(e=>e.code==='ECONNREFUSED'));}}
- async quitOwned(platform=process.platform){
+ async quitOwned(platform=process.platform,confirmStreamingQuit){
   if(!['darwin','win32'].includes(platform))throw Error('Native quit supports hosted macOS/Windows only');
   const w=await this.workbench();await this.focusWorkbench(w);
   if(platform==='win32'){
@@ -113,12 +114,14 @@ export class NativeUI{
    // CDP Alt+F4 need not reach the OS window manager; click the actual menu.
    await this.clickText(w,menuLabels('file'),'.menubar-menu-button');
    try{await this.clickText(w,menuLabels('exit'),'.monaco-menu .action-label');}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+   if(confirmStreamingQuit)await confirmStreamingQuit();
    return;
   }
   try{await w.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:4});}
   catch(error){if(w.ws?.readyState===WebSocket.CLOSED)return;throw error;}
   try{await w.send('Input.dispatchKeyEvent',{type:'keyUp',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:0});}
   catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+  if(confirmStreamingQuit)await confirmStreamingQuit();
  }
 
  async list(observation){const r=await fetch(this.endpoint+'/json/list',{signal:observation?AbortSignal.any([observation.signal,AbortSignal.timeout(1500)]):AbortSignal.timeout(1500)});if(!r.ok)throw Error('CDP target list unavailable');return r.json();}

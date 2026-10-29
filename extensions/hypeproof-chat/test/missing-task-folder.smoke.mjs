@@ -557,12 +557,49 @@ try {
   {
     const read = (p) => fs.readFileSync(path.join(extRoot, p), "utf8");
     const provider = read("src/chatPanelProvider.ts");
-    // Both entry points (a new message and a retry) hold before handleSend runs, so the send takes no slot.
+    // Hold before the actual desktop admission adapter; no pending turn slot is taken.
+    const branchFor = (src, kind) => {
+      const at = src.indexOf(`case "${kind}":`);
+      assert(at > 0, `${kind}: dispatcher case exists`);
+      const next = src.indexOf('\n      case ', at + 1);
+      assert(next > at, `${kind}: bounded dispatcher case`);
+      return src.slice(at, next);
+    };
     for (const [kind, arg] of [["sendMessage", "msg.text"], ["retryMessage", "msg.prompt"]]) {
-      const at = provider.indexOf(`case "${kind}":`);
-      const holdAt = provider.indexOf(`if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(${arg}, msg.images, requestedMode); return; }`, at);
-      const sendAt = provider.indexOf("await this.handleSend(", at);
-      assert.ok(at > 0 && holdAt > at && holdAt < sendAt, `${kind}: the hold runs before handleSend`);
+      const branch = branchFor(provider, kind);
+      const hold = `if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(${arg}, msg.images, requestedMode); return; }`;
+      const ordered = src => {
+        const holdAt = src.indexOf(hold), sendAt = src.indexOf("await this.submitNormalTurn({kind:'desktop'");
+        return holdAt >= 0 && sendAt > holdAt;
+      };
+      assert(ordered(branch), `${kind}: the hold runs before desktop turn admission`);
+      // Execute the real bounded case, retaining its draft/images/mode and restore guard.
+      // SDK, filesystem and authentication remain outside this synthetic admission probe;
+      // the actual dispatcher/seat/folder behavior is exercised above.
+      const run = async (src, {missing=true, applies=true, restoring=false}={}) => {
+        const events = [], msg = {type:kind,text:'fresh draft',prompt:'retry draft',images:['image'],history:[]};
+        const host = {turnRestoreBusy:restoring,missingFolderApplies:()=>applies,missingTaskFolderPath:async()=>missing,
+          holdSendForMissingFolder:async(...args)=>events.push(['hold',...args]),
+          refuseSendWhileRestoring:async(...args)=>events.push(['restore',...args]),
+          submitNormalTurn:async input=>events.push(['submit',input])};
+        await new Function('msg','source','requestedMode','promptRefs',`return(async()=>{switch(msg.type){${src}}}).call(this);`).call(host,msg,undefined,'auto',()=>undefined);
+        return events;
+      };
+      const draft = kind==='sendMessage'?'fresh draft':'retry draft';
+      assert.deepEqual(await run(branch), [['hold',draft,['image'],'auto']], `${kind}: missing folder keeps draft/images/mode without admission`);
+      assert.deepEqual(await run(branch,{missing:false,restoring:true}), [['restore',draft,['image'],'auto']], `${kind}: restore still holds admission`);
+      for (const control of [{missing:false},{applies:false}]) {
+        const events=await run(branch,control);
+        assert.equal(events.length,1);assert.equal(events[0][0],'submit');assert.equal(events[0][1].kind,'desktop');
+        assert.equal(events[0][1].args[0],draft);assert.deepEqual(events[0][1].args[2],['image']);
+      }
+      const removed = branch.replace(hold,'');
+      assert(!ordered(removed));assert.equal((await run(removed))[0][0],'submit','negative: deleting the hold admits a missing-folder turn');
+      const admissionLine = branch.split('\n').find(line=>line.includes('await this.submitNormalTurn('));
+      const late = removed.replace(admissionLine,admissionLine+'\n'+hold);
+      assert(!ordered(late));assert.equal((await run(late))[0][0],'submit','negative: a late hold runs after forbidden admission');
+      const wrongDraft = branch.replace(hold,hold.replace(arg,"'lost draft'"));
+      assert(!ordered(wrongDraft));assert.equal((await run(wrongDraft))[0][1],'lost draft','negative: wrong draft handback is observable');
     }
     assert.match(provider, /case "missingTaskFolderRequest": await this\.postMissingTaskFolder\(\); return;/);
     assert.match(provider, /case "missingTaskFolderRepick": await this\.repickTaskFolder\(\); return;/);
@@ -574,7 +611,7 @@ try {
     assert.match(repick, /this\.projectOpener\(/, "the move goes through the project opener");
     assert.doesNotMatch(repick, /vscode\.openFolder|connections\.commit\(/, "no second rebind path");
     assert.doesNotMatch(repick, /showWarningMessage\(|showInformationMessage\(|showErrorMessage\(/, "no toast");
-    ok("wiring: the hold precedes the send's slot; request/repick messages routed; the rebind reuses the project opener after consent; no toast");
+    ok("wiring: the hold precedes desktop admission (removed/late/wrong-draft controls); request/repick messages routed; the rebind reuses the project opener after consent; no toast");
   }
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });

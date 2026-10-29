@@ -2,7 +2,7 @@
 
 This runner operates the prepared desktop shell on macOS or Windows. It reuses the
 existing classroom harness's OOPIF/CDP discovery, but sends native CDP keyboard and
-mouse input instead of DOM events, a host command bridge, injected messages or
+mouse input (plus the narrowly owned Windows native quit-dialog UI Automation described below) instead of DOM events, a host command bridge, injected messages or
 seeded token/history files. Foreground input is disabled by default. `--allow-foreground` requires an explicit dedicated UI slot; prefer a hosted runner. It never activates another app or uses AppleScript/System Events. It can attach without process ownership, or launch
 and stop only its generated isolated profile. It never calls an external model provider or submits an image edit. The optional
 owned history/streaming mode enters actual chat turns through the real SDK and
@@ -185,6 +185,39 @@ scenarios, leaving them unexecuted rather than claiming coverage.
 The Windows quit path clicks the actual visible File → Exit menu item; CDP
 Alt+F4 is not assumed to reach the OS window manager. The Mac path uses its
 registered Cmd+Q binding. Neither path uses an extension-host quit command.
+
+For the Windows streaming-quit scenario only, the shipped core quit guard requires
+an explicit native confirmation after File → Exit. The driver captures the already
+spawned process PID, executable and UTC start stamp before input. A bounded 10s
+UI Automation observation reads only top-level dialogs of that process and requires
+one visible `#32770` dialog owned by a window of the same process, the exact
+`Studio를 끝낼까요?` message and running-turn detail, and exactly the enabled
+`계속하기` / `끝내기` choices. It rechecks identity, dialog ownership and contents in
+the OS process immediately before invoking `끝내기` once. Missing, changed,
+foreign or ambiguous UI fails; an unconfirmed invocation is never retried. No
+Enter/Escape default, other-app activation, AppleScript, security-policy change or
+process termination can establish quit acceptance. The existing 30s normal child
+exit and CDP-refusal checks are unchanged. UIA probe receipts prove only observed
+UI/action; history, cancellation and no-replay still require their separate checks.
+The Windows-only port is source-tested with injected observations; its new real
+native UI behavior must be verified by the next hosted run.
+
+The Mac streaming-quit scenario uses a run-owned Objective-C Accessibility helper
+compiled from tracked source before Cmd+Q. It reads only the spawned PID
+(`proc_pidinfo` start stamp and exact `proc_pidpath`) and that application’s own
+windows/sheets. It requires one visible owned AXSheet/AXDialog with exactly the
+same message, detail and two enabled, visible AXPress choices above. A bounded
+10s observation repeats identity, parent/window ownership, unique dialog and
+content checks immediately before one AXPress on `끝내기`. Unknown layouts,
+permission denial, missing dialogs and unconfirmed invocation fail closed without
+retry. `AXIsProcessTrusted()` is read-only: no permission prompt, TCC changes,
+AppleScript/System Events or other-app activation. The compiled pure contract
+mode tests strict dialog classification without accessing native UI; it is not
+installed acceptance. Hosted Accessibility trust is unverified; absent trust
+reports BLOCKED without changing permissions. The real hosted Mac dialog remains
+NOT RUN for this repair.
+Failure of streaming normal-quit recovery blocks subsequent foreground scenarios.
+
 
 The full restart reuses the A draft already persisted during the actual A→B→A
 folder test. It performs the platform quit action once, waits for normal exit of
@@ -432,8 +465,14 @@ are resumed. Breakpoints and sockets close before public quit; cleanup failure
 cannot pass and does not replace the primary error. A final owned-child stop request is cleanup only; it is never restart evidence.
 Final cleanup records child exit and CDP connection refusal separately, with a 10s
 exit wait and 5s endpoint wait (plus an in-flight bounded probe). A sent signal
-alone cannot set `owned_process_stopped`; timeout remains FAIL. No force-kill or
-unrelated handle/process sweep is used. `extension-inspector.test.mjs` uses disposable Node children for
+alone cannot set `owned_process_stopped`; timeout remains FAIL. For the captured
+Mac streaming-quit child only, an expired SIGTERM exit wait may invoke a cleanup-only
+SIGKILL after re-reading the exact PID/start/executable and checking the same child
+object. A second bounded exit wait and the same CDP-refusal check are required;
+the initial timeout and escalation remain in evidence. This never satisfies the
+normal-quit/restart step or changes its FAIL. If cleanup still fails, the owned
+child stays attached and `owned_process_stopped` stays false; no unref/detach or
+peer/tree sweep is used. `extension-inspector.test.mjs` uses disposable Node children for
 protocol/PID/replacement/cleanup controls, not a native App or T05 acceptance pass.
 Actual hosted0.1.56 propagation and long-held behavior remain NOT RUN until root
 executes this exact candidate. The existing ordinary native proof stays separate.

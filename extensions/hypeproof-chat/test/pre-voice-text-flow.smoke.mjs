@@ -66,7 +66,7 @@ const pkg = JSON.parse(src("package.json"));
 // `private micRecorder: unknown = null;` 이 **둘 다 통과했다** — 마이크 기능이
 // 실제로 들어올 때의 가장 그럴듯한 모양이 바로 그 둘이다.
 const VOICE_SYMBOL =
-  /voice|audio|microphone|getUserMedia|mediaDevices|MediaRecorder|SpeechRecognition|speech|transcri|\bstt\b|\btts\b|\bmic\b|\bmics\b|\b[Mm]ic(?:Stream|Capture|Recorder|Permission)|startMic|stopMic|AudioWorklet|ScriptProcessor/gi;
+  /voice|audio|microphone|getUserMedia|mediaDevices|MediaRecorder|SpeechRecognition|speech|transcrib|transcripti|\bstt\b|\btts\b|\bmic\b|\bmics\b|\b[Mm]ic(?:Stream|Capture|Recorder|Permission)|startMic|stopMic|AudioWorklet|ScriptProcessor/gi;
 // 음성 모듈 import 탐침도 같이 넓힌다 — 파일명이 `voice` 를 안 쓰면 이전 탐침은 못 봤다.
 // `\b` 가 없으면 `./dynamicLayout` 의 `micL` 이 걸린다 — 이 대조군을 안 넣었으면
 // 멀쩡한 import 를 음성으로 잡는 계측기를 그대로 병합했다.
@@ -458,10 +458,21 @@ const voiceHits = (text) => (text.match(VOICE_SYMBOL) ?? []).length;
     const armEnd = hostSrc.indexOf("\n      case ", armAt + arm.length);
     assert.ok(armEnd > armAt, `${arm} 의 끝을 못 찾았다`);
     const armBody = hostSrc.slice(armAt, armEnd);
-    // 추출 앵커 — 이 분기는 실제로 handleSend 를 부른다.
-    assert.match(armBody, /this\.handleSend\(/, `${arm} 슬라이스 추출이 틀렸다`);
+    // The bounded case enters the existing desktop adapter; that adapter reaches handleSend.
+    const desktopCall = /this\.submitNormalTurn\(\{kind:'desktop',args:\[/;
+    assert.match(armBody, desktopCall, `${arm} has no desktop admission`);
+    assert.doesNotMatch(armBody.replace("kind:'desktop'","kind:'prepared'"), desktopCall, 'negative: a prepared route cannot satisfy ordinary text admission');
     assert.equal(voiceHits(armBody), 0, `${arm} 가 음성 심볼을 참조한다`);
   }
+
+  const adapterAt=hostSrc.indexOf('  private submitNormalTurn('),adapterEnd=hostSrc.indexOf('\n  private ',adapterAt+10);
+  assert.ok(adapterAt>0&&adapterEnd>adapterAt,'bounded normal-turn adapter exists');
+  const adapter=hostSrc.slice(adapterAt,adapterEnd);
+  const desktopForward=/if\(input\.kind==='desktop'\) return this\.handleSend\(\.\.\.input\.args\);/;
+  assert.match(adapter,desktopForward,'desktop admission forwards unchanged args to the existing Send engine');
+  assert.doesNotMatch(adapter.replace('...input.args','...[]'),desktopForward,'negative: dropping desktop arguments is not the same route');
+  assert.equal(voiceHits(adapter),0,'the desktop admission adapter must also remain independent of voice');
+  assert.ok(voiceHits(adapter.replace('return this.handleSend(...input.args);','this.startMicCapture(); return this.handleSend(...input.args);'))>0,'negative: a voice step in the adapter is detected');
 
   // import 스캔의 양성 대조군 — App.tsx 는 음성 모듈을 **실제로** import 한다.
   // 이게 없으면 위의 "참조 0회" 들이 스캐너 고장과 구분되지 않는다.
@@ -475,6 +486,10 @@ const voiceHits = (text) => (text.match(VOICE_SYMBOL) ?? []).length;
   // 같은 함정을 심볼 스캐너에도 적용한다.
   assert.equal(voiceHits("const dynamic = atomic ? semicolon : x;"), 0, "dynamic/atomic/semicolon 을 mic 으로 잡는다");
   assert.equal(voiceHits("const dynamicStream = makeDynamicRecorder();"), 0, "dynamicStream/DynamicRecorder 를 mic 으로 잡는다");
+  // A text-turn transcript is durable conversation history, not audio transcription.
+  assert.equal(voiceHits('let transcriptCommitted = false; const transcript = savedHistory;'),0,'ordinary text transcript history is not voice code');
+  assert.ok(voiceHits('const transcription = transcribeAudio();')>=2,'transcribe/transcription/audio identifiers remain voice-positive');
+
   assert.ok(voiceHits("private micRecorder: unknown = null;") > 0, "micRecorder 를 못 잡는다");
   assert.ok(voiceHits("const mic = await openMic();") > 0, "단어 mic 을 못 잡는다");
   for (const [name, text] of [
