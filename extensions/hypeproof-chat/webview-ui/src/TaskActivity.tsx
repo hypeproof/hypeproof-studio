@@ -6,7 +6,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { ChatIcon, type IconKind } from "./ChatDetails";
 import {
-  TASK_ACTIVITY_LABEL, TASK_ACTIVITY_VERBS, fitMiddleEllipsis, middleEllipsis, taskActivityTotal,
+  TASK_ACTIVITY_HINT, TASK_ACTIVITY_LABEL, TASK_ACTIVITY_VERBS, fitMiddleEllipsis, taskActivityChipText, middleEllipsis, taskActivityTotal,
   type TaskActivitySummary, type TaskActivityVerb,
 } from "../../src/taskActivity";
 import "./taskActivity.css";
@@ -68,12 +68,15 @@ export function TaskActivity({ summary, reviewPaths, onShowReview }: TaskActivit
   const unreviewable = fileVerb && items.some((it) => !(it.inside && reviewPaths.has(it.target)));
   return <section className="hps-task-activity" data-testid="task-activity" aria-labelledby="hps-task-activity-title">
     <p className="hps-task-activity-title" id="hps-task-activity-title">AI가 한 일</p>
+    <p className="hps-task-activity-hint" id="hps-task-activity-hint">{TASK_ACTIVITY_HINT}</p>
     <div className="hps-task-activity-chips">
       {verbs.map((v) => <button key={v} type="button" className="hps-task-activity-chip" data-verb={v}
         aria-expanded={shown === v} aria-controls={shown === v ? "hps-task-activity-list" : undefined}
+        aria-describedby="hps-task-activity-hint"
         onClick={() => { setOpen(shown === v ? null : v); setAll(null); }}>
         <ChatIcon kind={ICON[v]} size={16} />
-        <span>{TASK_ACTIVITY_LABEL[v]} {summary[v].length}</span>
+        <span>{taskActivityChipText(v, summary[v].length)}</span>
+        <span className="hps-task-activity-chevron" aria-hidden="true"><ChatIcon kind={shown === v ? "chevron-up" : "chevron-down"} size={16} /></span>
       </button>)}
     </div>
     {shown && <div className="hps-task-activity-panel">

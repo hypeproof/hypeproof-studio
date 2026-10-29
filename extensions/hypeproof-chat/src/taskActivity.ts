@@ -18,9 +18,18 @@ export interface TaskActivityFact {
 }
 
 export const TASK_ACTIVITY_VERBS: readonly TaskActivityVerb[] = ["read", "created", "changed", "web", "search"];
+// Jay 2026-10-29: "읽음 1 · 만듦 1 이게 무슨 뜻이야? 누르라는 거야?" A chip says what it counts in plain words
+// with its unit ("읽은 파일 1개"), and a chevron plus the hint line say that pressing it shows the list.
 export const TASK_ACTIVITY_LABEL: Record<TaskActivityVerb, string> = {
-  read: "읽음", created: "만듦", changed: "바꿈", web: "웹 페이지", search: "검색",
+  read: "읽은 파일", created: "만든 파일", changed: "고친 파일", web: "열어 본 웹 페이지", search: "검색",
 };
+const TASK_ACTIVITY_UNIT: Record<TaskActivityVerb, string> = { read: "개", created: "개", changed: "개", web: "개", search: "번" };
+/** The chip text: "읽은 파일 3개", "검색 25번". */
+export function taskActivityChipText(verb: TaskActivityVerb, count: number): string {
+  return `${TASK_ACTIVITY_LABEL[verb]} ${count}${TASK_ACTIVITY_UNIT[verb]}`;
+}
+/** Under the title: what the row is and what a chip does. */
+export const TASK_ACTIVITY_HINT = "이 작업에서 AI가 읽고 만든 것 · 누르면 목록이 보여요";
 export const TASK_ACTIVITY_TARGET_MAX = 300;
 /** Per persisted message; a turn with more successful calls keeps the first ones (the store stays bounded). */
 export const TASK_ACTIVITY_FACTS_MAX = 500;
