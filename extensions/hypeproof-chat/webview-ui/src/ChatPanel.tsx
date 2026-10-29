@@ -250,7 +250,7 @@ interface Props {
   onRunCode: (html: string) => void;
   onNamingRitual: () => void;
   onSaveCoach: (name: string, personality: string) => void;
-  onReportProblem: () => void;                          // #64
+  onReportProblem: (source?: "error") => void;          // #64; "error" = the error card (REQ-STUDIO-PROBLEM-REPORT)
   onInstallUpdate: () => void;                          // #72
   onDismissUpdate: (version: string) => void;           // #72
   // #1298 — when true, student-only surfaces (MissionHeader, HelpRequest, artifact approval) are hidden.
@@ -2130,7 +2130,7 @@ export function ChatPanel(props: Props) {
             canRetry={props.canRetryLast && recovered.length === 0}
             onRetry={() => { if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; } recoverToComposer(() => { sendWhenOnline(props.onRetryLast, 'press'); }); }}
             onDismiss={() => recoverToComposer(props.onDismissError)}
-            onReport={props.onReportProblem}
+            onReport={() => props.onReportProblem("error")}
             audience={audience}
           />
         )}
@@ -3459,7 +3459,7 @@ function ErrorBanner({
             onClick={onReport}
             data-hp-tooltip={reportButtonTitle(audience)}
           >
-            <ChatIcon kind="flag" size={16} /> 신고하기
+            <ChatIcon kind="flag" size={16} /> 문제 보내기
           </button>
         )}
         <button

@@ -40,6 +40,7 @@ import {
 import { PreviewProvider } from "./previewProvider";
 import { ChalkContractHost } from "./chalkContract";
 import { runReportProblemCommand } from "./reportProblem";
+import { noteAppProblem } from "./problemReportHost";
 import { PerfTraceController } from "./perfTraceHost";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
@@ -584,6 +585,8 @@ export async function activate(context: vscode.ExtensionContext) {
     { dispose: () => { provider.perfTraceObserver = undefined; provider.perfTracePanel = undefined; perfTrace.dispose(); } },
 
     vscode.commands.registerCommand("hypeproof-chat.reportProblem", async () => {
+      // REQ-STUDIO-PROBLEM-REPORT — the in-panel form first; the input boxes only when no chat panel can show it.
+      if (await provider.openProblemReport("manual")) return;
       await runReportProblemCommand({
         context,
         getLastRequestId: () => provider.getLastRequestId(),
@@ -1184,6 +1187,7 @@ async function openWorkspaceFolder(
     if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();
   } catch(error) {
     if(error instanceof ActivityConnectionError)throw error;
+    noteAppProblem({ step: 'workspace', code: 'workspace_prepare_failed' });
     throw new Error('Activity workspace preparation failed');
   }
   const previousRecord = context && activityConnections(context)?.current;

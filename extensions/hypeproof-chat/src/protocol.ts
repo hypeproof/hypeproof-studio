@@ -723,7 +723,10 @@ export type WebviewMessage = (
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }
-  | { type: "openReportModal" }            // #64: user clicked 🚨 on error banner
+  | { type: "openReportModal"; source?: "error" } // #64; REQ-STUDIO-PROBLEM-REPORT: "error" = the error card's 문제 보내기
+  | { type: "problemReportAnswer"; id: string; answer: import("./problemReport").ProblemReportAnswer | null }
+  | { type: "problemReportOfferAnswer"; reason: import("./problemReport").OfferReason; accept: boolean }
+  | { type: "problemReportAutoSetting"; enabled: boolean }
   /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
   // CONV-FUNNEL-R-006 — `header_menu` when the press came from the chat header link; absent = the end card.
   | { type: "trialEndCardPasses"; surface?: "header_menu" }
@@ -862,6 +865,8 @@ export type HostMessage = (
   | { type: "runningProcesses"; entries: import("./runningProcesses").RunningProcess[] }
   | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
   | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
+  | { type: "problemReportForm"; form: import("./problemReport").ProblemReportFormView | null }
+  | { type: "problemReportOffer"; offer: { reason: import("./problemReport").OfferReason } | null }
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }

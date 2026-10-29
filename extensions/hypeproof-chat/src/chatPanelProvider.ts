@@ -99,6 +99,11 @@ import { fetchSdkSeed } from "./sdkSeedFetch";
 import { sdkSeedOfferDecision, sdkSeedOnDemandEnabled, sdkSeedPlatformKey, sdkSeedUrls } from "./sdkSeedHelpers";
 import { SDK_BINARY_MANIFEST } from "./sdkBinaryManifest";
 import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
+import { ProblemTracker, problemDiagnostic, postAutoReport, problemDetailRows, problemOs, parseProblemAnswer, problemReportBody, type FailureFacts, type ProblemDiagnostic, type ProblemFormReason, type ProblemReportAnswer } from "./problemReport";
+import { AUTO_PROBLEM_REPORT_KEY, autoProblemReportEnabled, setProblemSink } from "./problemReportHost";
+import { collectReportMetadata } from "./reportProblem";
+import { confirmProblemReport, extractJtiUnverified, hashJti, postProblemReport, sanitizeRecentTurns } from "./reportProblemHelpers";
+import { reportContactPlaceholder, reportContactPrompt, reportReceipt } from "./seatVocabulary";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { acceptStepMarks, forgetStepMarks, marksFor, rememberStepMark, servedStepMark, type LessonStepMark } from "./lessonStepMarks";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
@@ -3012,6 +3017,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // or completes — the Worker's request-id middleware (PR #49) plumbs an
   // x-request-id header on every response we can correlate against in tail.
   private lastRequestId: string | undefined;
+  /** REQ-STUDIO-PROBLEM-REPORT — this session's failures (memory only) and the open in-panel report form. */
+  private readonly problemTracker = new ProblemTracker();
+  private lastProblem?: { diagnostic: ProblemDiagnostic; at: number };
+  private problemForm?: { id: string; finish(answer: ProblemReportAnswer | null): void };
   /**
    * Task E (docs/plan/dag.yaml) — liveness. `lastActivityAt` is bumped by any
    * webview message; the pinger turns it into an idle_ms the instructor board
@@ -3070,6 +3079,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push(onFolderConsentChanged(() => { this.endTaskCommandAllows(); void this.postConfig().catch(() => {}); }));
     context.subscriptions.push({ dispose: () => this.folderConsentRequest.cancel() });
     context.subscriptions.push(setOutboundPresenter((manifest,step)=>this.outboundApproval?.confirm(manifest,step) ?? Promise.resolve(null)));
+    context.subscriptions.push(setProblemSink(facts => this.noteProblem(facts)));
+    context.subscriptions.push({ dispose: () => this.problemForm?.finish(null) });
     // cr-publish (CR-11 after a restart): know the signed-in person's published origin from
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
@@ -3201,6 +3212,80 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         post: async (signals, result) => { await this.post({ type: "previewRecovery", signals, result }); },
       });
     } finally { this.previewRecoveryRunning = false; }
+  }
+
+  /** REQ-STUDIO-PROBLEM-REPORT — the facts of a failed turn: codes and numbers only, never the error's text. */
+  private noteSendFailure(err: unknown, current?: { profile: ResolvedProfile | null }): void {
+    // A trial, free allowance or pass that ended is an account state the person was told about, not a fault.
+    if (trialEnding(err, !!current?.profile?.pass) || freeDailyCapReached(err) || passSpentNotice(err)) return;
+    if (moderationBlockOf(err)) {
+      this.noteProblem({ step: "safety", code: "safety_blocked", requestId: err instanceof ModerationBlockError ? err.requestId : undefined });
+      return;
+    }
+    const evidence: FailureEvidence = err instanceof ProxyAuthError || err instanceof ProxyTransportError
+      ? { ...err.evidence, ...(err instanceof ProxyAuthError ? { kind: err.kind } : {}) }
+      : err && typeof err === "object" ? { status: (err as FailureEvidence).status, ...(err as { evidence?: FailureEvidence }).evidence } : {};
+    const requestId = err instanceof ProxyAuthError || err instanceof ProxyTransportError || err instanceof SdkRequiredError ? err.requestId : undefined;
+    if (err instanceof SdkRequiredError) { this.noteProblem({ step: "agent", code: "sdk_required", requestId }); return; }
+    this.noteProblem({ step: err instanceof SdkGatewayAuthError ? "agent" : evidence.status === 401 || evidence.status === 403 ? "access" : "chat",
+      status: evidence.status, code: evidence.code, type: evidence.type, kind: evidence.kind, requestId: requestId ?? undefined,
+      ...(err instanceof TypeError && !evidence.status ? { code: "network_unreachable" } : {}) });
+  }
+
+  /** Records one failure; sends the content-free signal when the setting is on; offers the form on a repeat. */
+  noteProblem(facts: FailureFacts): void {
+    // Hosts assembled without the constructor (unit tests) have no tracker and record nothing.
+    if (!this.problemTracker) return;
+    const version = this.context?.extension?.packageJSON?.version;
+    const diagnostic = problemDiagnostic(facts, { appVersion: typeof version === "string" ? version : "unknown", platform: process.platform, arch: process.arch });
+    this.lastProblem = { diagnostic, at: Date.now() };
+    const note = this.problemTracker.note(diagnostic);
+    if (note.send && autoProblemReportEnabled(this.context?.globalState)) {
+      void postAutoReport(vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1"), diagnostic);
+    }
+    if (note.offer) void this.post({ type: "problemReportOffer", offer: { reason: "repeat" } });
+  }
+
+  /**
+   * Level 2 — the in-panel report form. Returns false when no chat panel can show it (the caller falls back to the
+   * command's input boxes). Submitting goes through the same REQ-KNOW-09 confirmation as before; closing sends nothing.
+   */
+  async openProblemReport(reason: ProblemFormReason): Promise<boolean> {
+    if (this.problemForm) return true;
+    if (!(this.editorChat?.visible || this.view?.visible)) {
+      await vscode.commands.executeCommand("hypeproof-chat.panel.focus").then(undefined, () => undefined);
+      if (!(this.editorChat?.visible || this.view?.visible)) return false;
+    }
+    const recent = this.lastProblem && Date.now() - this.lastProblem.at < 10 * 60_000 ? this.lastProblem.diagnostic : undefined;
+    const diagnostic = reason === "frustration" || reason === "manual" ? recent : recent ?? this.lastProblem?.diagnostic;
+    const version = this.context.extension?.packageJSON?.version;
+    const appVersion = typeof version === "string" ? version : "unknown";
+    const audience = this.getSeatAudience();
+    const id = crypto.randomUUID();
+    const turns = sanitizeRecentTurns(this.getHistorySnapshot());
+    const answer = await new Promise<ProblemReportAnswer | null>(resolve => {
+      const timer = setTimeout(() => this.problemForm?.finish(null), 15 * 60_000);
+      this.problemForm = { id, finish: value => { clearTimeout(timer); this.problemForm = undefined; void this.post({ type: "problemReportForm", form: null }); resolve(value); } };
+      void this.post({ type: "problemReportForm", form: {
+        id, reason, details: problemDetailRows(diagnostic, appVersion, problemOs(process.platform, process.arch)),
+        contactPrompt: reportContactPrompt(audience), contactPlaceholder: reportContactPlaceholder(audience), recentTurns: turns.length,
+        autoReport: autoProblemReportEnabled(this.context.globalState),
+      } }).then(shown => { if (shown === false) this.problemForm?.finish(null); });
+    });
+    if (!answer) return true;
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const jti = token ? extractJtiUnverified(token) : undefined;
+    const body = problemReportBody(answer, {
+      diagnostic, recentTurns: turns, reason, requestId: this.lastRequestId, profileId: this.getProfileId(),
+      metadata: collectReportMetadata(this.context, { requestId: this.lastRequestId, profileId: this.getProfileId(), jtiHash: jti ? await hashJti(jti) : undefined }),
+    });
+    const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    const frozen = await confirmProblemReport(proxyUrl, body, confirmOutbound);
+    if (frozen === null) return true;
+    const result = await postProblemReport(proxyUrl, frozen, token);
+    if (result.ok) void vscode.window.showInformationMessage(reportReceipt(audience, result.reportId));
+    else void vscode.window.showWarningMessage(`문제를 보내지 못했어요: ${result.reason}`);
+    return true;
   }
 
   /**
@@ -7573,6 +7658,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
+        // REQ-STUDIO-PROBLEM-REPORT level 3 — a frustrated message offers the report form; it sends nothing.
+        if (typeof msg.text === "string" && this.problemTracker?.frustration(msg.text)) void this.post({ type: "problemReportOffer", offer: { reason: "frustration" } });
         // REQ-STUDIO-MISSING-TASK-FOLDER — no turn starts in a folder that is gone; the draft stays. Other seats
         // pass without an await, so their send still reaches its first await exactly as before.
         if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(msg.text, msg.images, requestedMode); return; }
@@ -7680,9 +7767,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void vscode.commands.executeCommand("hypeproof-chat.setToken");
         return;
       case "openReportModal":
-        // #64. Webview's error banner has a 🚨 link; we delegate to the same
-        // command so the QuickInput cascade lives in one place.
-        void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
+        // REQ-STUDIO-PROBLEM-REPORT — the error card's 문제 보내기 opens the in-panel form with that failure's diagnostic.
+        if (!(await this.openProblemReport(msg.source === "error" ? "error" : "manual"))) void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
+        return;
+      case "problemReportAnswer":
+        if (this.problemForm && msg.id === this.problemForm.id) this.problemForm.finish(parseProblemAnswer(msg.answer));
+        return;
+      case "problemReportAutoSetting":
+        // The form's own toggle is the only place this switch changes (REQ-H10); it sends nothing by itself.
+        if (this.problemForm && typeof msg.enabled === "boolean") await this.context.globalState.update(AUTO_PROBLEM_REPORT_KEY, msg.enabled);
+        return;
+      case "problemReportOfferAnswer":
+        void this.post({ type: "problemReportOffer", offer: null });
+        if (msg.accept === true && (msg.reason === "repeat" || msg.reason === "frustration")) await this.openProblemReport(msg.reason);
         return;
       case "trialEndCardPasses":
         // TUX-COND-07 — the person pressed the card's Primary. The start page opens its own
@@ -9711,6 +9808,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // transport can also throw AbortError (for example on timeout), and still
     // needs a terminal error so the user can recover instead of waiting forever.
     if (current?.signal?.aborted) return;
+    // Optional call: tests drive handleSendError with a bare `this` that has no problem reporting.
+    this.noteSendFailure?.(err, current);
     // REQ-CGP-LEARN-13 — a moderation block (either runtime) is drawn as a calm inline notice, not the
     // red card: the Service's own sentence, no retry, no OS notification or sound. The 109/1388 help
     // lines join it only for a self_harm block on a seat whose profile turned them on (DEC-LEARN-13a).

@@ -1,4 +1,6 @@
 import { FolderConsentDialog } from './FolderConsentDialog';
+import { ProblemReportDialog, ProblemReportOffer } from './ProblemReportDialog';
+import type { OfferReason, ProblemReportFormView } from '../../src/problemReport';
 import type { FolderConsentPrompt } from '../../src/folderConsentPrompt';
 import {BrowserApprovalDialog} from './BrowserApprovalDialog';
 import type {BrowserApprovalPrompt} from '../../src/browserApprovalPrompt';
@@ -431,6 +433,8 @@ export function App() {
   const [annotationLeave,setAnnotationLeave]=useState<AnnotationLeavePrompt|null>(null);
   const [writeApproval,setWriteApproval]=useState<WriteApprovalPrompt|null>(null);
   const [folderConsent,setFolderConsent]=useState<FolderConsentPrompt|null>(null);
+  const [problemForm,setProblemForm]=useState<ProblemReportFormView|null>(null);
+  const [problemOffer,setProblemOffer]=useState<OfferReason|null>(null);
   const [outbound,setOutbound]=useState<AnyOutboundPrompt|null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
@@ -497,6 +501,8 @@ export function App() {
         case 'annotationLeavePrompt': setAnnotationLeave(msg.prompt); return;
         case 'writeApprovalPrompt': setWriteApproval(msg.prompt); return;
         case 'folderConsentPrompt': setFolderConsent(msg.prompt); return;
+        case 'problemReportForm': setProblemForm(msg.form); if (msg.form) setProblemOffer(null); return;
+        case 'problemReportOffer': setProblemOffer(msg.offer?.reason ?? null); return;
         case 'outboundPrompt': setOutbound(msg.prompt); return;
         case 'approvalWait': setApprovalPending(msg.waiting === true); if (!msg.waiting) dispatch({ type: 'visibleProgress' }); return;
         case 'taskWorkspaceError':
@@ -798,6 +804,8 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
+      {problemForm && <ProblemReportDialog key={problemForm.id} form={problemForm} textSize={state.config?.textSize} onAnswer={(id,answer)=>{postToHost({type:'problemReportAnswer',id,answer});setProblemForm(null);}} onAutoReport={enabled=>postToHost({type:'problemReportAutoSetting',enabled})}/>}
+      {problemOffer && !problemForm && <ProblemReportOffer reason={problemOffer} onAnswer={accept=>{postToHost({type:'problemReportOfferAnswer',reason:problemOffer,accept});setProblemOffer(null);}}/>}
       {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
       {outbound && (isPublicAudiencePrompt(outbound)
         ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>
@@ -852,7 +860,7 @@ export function App() {
           onSaveCoach={(name, personality) =>
             postToHost({ type: "saveCoach", name, personality })
           }
-          onReportProblem={() => postToHost({ type: "openReportModal" })}
+          onReportProblem={(source?: unknown) => postToHost({ type: "openReportModal", ...(source === "error" ? { source: "error" as const } : {}) })}
           onInstallUpdate={() => postToHost({ type: "installUpdate" })}
           onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
           // cr-review — a director signed in with an issuer token opens the Weekly Review here.
@@ -946,7 +954,7 @@ export function App() {
         onSaveCoach={(name, personality) =>
           postToHost({ type: "saveCoach", name, personality })
         }
-        onReportProblem={() => postToHost({ type: "openReportModal" })}
+        onReportProblem={(source?: unknown) => postToHost({ type: "openReportModal", ...(source === "error" ? { source: "error" as const } : {}) })}
         onInstallUpdate={() => postToHost({ type: "installUpdate" })}
         onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
       />
