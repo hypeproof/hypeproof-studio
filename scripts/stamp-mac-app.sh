@@ -12,6 +12,10 @@
 #   4. product.json .commit = $BUILD_SOURCEVERSION when set. The full build
 #      already writes the same value (build-contract.mjs exports it), so this is
 #      a no-op there; for a repack it replaces the previous release's commit.
+#   5. product.json has no .releaseNotesUrl (#3212). The upstream value
+#      (go.microsoft.com → code.visualstudio.com/updates) made Studio open VS Code's
+#      release notes after every update. Removed here because this step runs on both
+#      the full build and the repack, so the next release ships it without a base rebuild.
 #
 # Deliberately NOT changed:
 #   - CFBundleVersion: the VSCodium build number of the base (e.g. 1.116.06953).
@@ -54,10 +58,10 @@ echo "Stamped CFBundleShortVersionString → $HPS_VER (pre-sign)"
 tmp="$(mktemp)"
 if [[ -n "${BUILD_SOURCEVERSION:-}" ]]; then
   [[ "$BUILD_SOURCEVERSION" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::BUILD_SOURCEVERSION is not a full commit sha: $BUILD_SOURCEVERSION"; exit 1; }
-  jq --arg v "$HPS_VER" --arg c "$BUILD_SOURCEVERSION" '.version = $v | .commit = $c' "$PJSON" > "$tmp"
+  jq --arg v "$HPS_VER" --arg c "$BUILD_SOURCEVERSION" '.version = $v | .commit = $c | del(.releaseNotesUrl)' "$PJSON" > "$tmp"
   echo "Stamped product.json.version → $HPS_VER, .commit → $BUILD_SOURCEVERSION (pre-sign)"
 else
-  jq --arg v "$HPS_VER" '.version = $v' "$PJSON" > "$tmp"
+  jq --arg v "$HPS_VER" '.version = $v | del(.releaseNotesUrl)' "$PJSON" > "$tmp"
   echo "Stamped product.json.version → $HPS_VER (pre-sign; .commit left as built)"
 fi
 # Keep the file mode the build gave it (mktemp creates 0600).

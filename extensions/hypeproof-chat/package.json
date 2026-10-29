@@ -650,6 +650,7 @@
       }
     ],
     "configurationDefaults": {
+      "update.showReleaseNotes": false,
       "chat.disableAIFeatures": true,
       "workbench.colorTheme": "HypeProof Studio",
       "workbench.activityBar.location": "hidden",

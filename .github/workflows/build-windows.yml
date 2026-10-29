@@ -277,7 +277,8 @@ jobs:
           HPS_VER="${HPS_VERSION:-$(bash ../scripts/resolve-version.sh)}"
           if [ -n "$HPS_VER" ] && [ -f "$PKG_PRODUCT" ]; then
             tmp=$(mktemp)
-            jq --arg v "$HPS_VER" '.version = $v' "$PKG_PRODUCT" > "$tmp" && mv "$tmp" "$PKG_PRODUCT"
+            # #3212: no upstream releaseNotesUrl, so no VS Code release notes after an update.
+            jq --arg v "$HPS_VER" '.version = $v | del(.releaseNotesUrl)' "$PKG_PRODUCT" > "$tmp" && mv "$tmp" "$PKG_PRODUCT"
             echo "Stamped packaged product.json.version → $HPS_VER"
           else
             echo "::warning::skipped Windows version stamp (HPS_VER='$HPS_VER', product='$PKG_PRODUCT')"
