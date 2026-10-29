@@ -178,6 +178,6 @@ export function toolFeatureName(toolName: string): string {
   if (n === "agent" || n === "task") return "도우미에게 맡기기";
   if (n === "mcp__hypeproof__consult") return "도우미에게 묻기";
   if (n === "mcp__hypeproof__publish_site") return "홈페이지 올리기";
-  if (n.startsWith("mcp__hypeproof__browser_") || n === "mcp__hypeproof__live_preview_start") return "브라우저";
+  if (n.startsWith("mcp__hypeproof__browser_") || n === "mcp__hypeproof__live_preview_start" || n === "mcp__hypeproof__page_pdf_save") return "브라우저";
   return "이 도구";
 }

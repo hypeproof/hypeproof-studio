@@ -71,11 +71,11 @@ const fakeZ = { string: () => ({ __zod: "string" }) };
   assert.equal(opts.name, HYPEPROOF_MCP_SERVER_NAME, "server registered under 'hypeproof'");
   assert.deepEqual(
     registered.map((t) => t.name),
-    ["browser_open", "browser_screenshot", "live_preview_start",
+    ["browser_open", "browser_screenshot", "live_preview_start", "page_pdf_save",
      "browser_read", "browser_click", "browser_type"],
     "short tool names (SDK prefixes mcp__hypeproof__ itself)",
   );
-  assert.equal(opts.tools.length, 6, "여섯 도구 전부 서버에 붙는다 (#457 검사 3종 포함)");
+  assert.equal(opts.tools.length, 7, "일곱 도구 전부 서버에 붙는다 (#457 검사 3종, #3221 page_pdf_save 포함)");
   // browser_open takes a url string; the parameterless tools take {}.
   const open = registered.find((t) => t.name === "browser_open");
   assert.deepEqual(open.inputSchema, { url: { __zod: "string" } });

@@ -21,6 +21,7 @@ const {
   MCP_BROWSER_SCREENSHOT,
   MCP_LIVE_PREVIEW_START,
   MCP_BROWSER_TOOLS,
+  MCP_BROWSER_EXTRA_TOOLS,
 } = await import("../src/browserMcp.ts");
 
 const profile = (tier, extra = {}) => ({ game: tier ? { template_tier: tier } : undefined, ...extra });
@@ -311,7 +312,7 @@ const profile = (tier, extra = {}) => ({ game: tier ? { template_tier: tier } : 
 {
   // #457 — 검사 3종(read/click/type)이 같은 grant 단위로 함께 부여된다.
   // MCP_BROWSER_TOOLS 를 그대로 쓴다: 목록을 두 벌 적으면 한쪽만 고쳐진다.
-  const ALL_BROWSER_MCP = [...MCP_BROWSER_TOOLS];
+  const ALL_BROWSER_MCP = [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS];
 
   // Adult cohort with the browser grant → all three tools, exact MCP names.
   assert.deepEqual(
@@ -717,12 +718,12 @@ const ROSTER = (over = {}) => ({
   assert.deepEqual(permittedMcpToolsFor(adult, ROSTER()), [MCP_CONSULT, MCP_SITE_CHECK], "roster tools without the browser grant");
   assert.deepEqual(
     permittedMcpToolsFor(browserAdult, ROSTER()),
-    [...MCP_BROWSER_TOOLS, MCP_CONSULT, MCP_SITE_CHECK],
+    [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS, MCP_CONSULT, MCP_SITE_CHECK],
     "browser tools first, then the roster's",
   );
   // Positive controls — no roster or an off form leaves today's result exactly.
-  assert.deepEqual(permittedMcpToolsFor(browserAdult), [...MCP_BROWSER_TOOLS]);
-  assert.deepEqual(permittedMcpToolsFor(browserAdult, { enabled: false, reason: "lesson_locked" }), [...MCP_BROWSER_TOOLS]);
+  assert.deepEqual(permittedMcpToolsFor(browserAdult), [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS]);
+  assert.deepEqual(permittedMcpToolsFor(browserAdult, { enabled: false, reason: "lesson_locked" }), [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS]);
   assert.deepEqual(permittedMcpToolsFor(adult), []);
   // A roster with nothing to consult and no check grants nothing.
   assert.deepEqual(
@@ -732,9 +733,9 @@ const ROSTER = (over = {}) => ({
   // Minors never get consult (nor site_check), whatever they were served. Since #1527
   // (2026-10-15) their own browser flag still grants the browser tools: age does not strip them.
   for (const tier of ["kids-basic", "kids-rich", "teen", "pro-3d", "mystery-NEW", null]) {
-    assert.deepEqual(permittedMcpToolsFor(profile(tier, { sdk_tools: { browser: true } }), ROSTER()), [...MCP_BROWSER_TOOLS], `${tier}: browser by its flag, no consult`);
+    assert.deepEqual(permittedMcpToolsFor(profile(tier, { sdk_tools: { browser: true } }), ROSTER()), [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS], `${tier}: browser by its flag, no consult`);
   }
-  assert.deepEqual(permittedMcpToolsFor({ ...browserAdult, minor_cohort: true }, ROSTER()), [...MCP_BROWSER_TOOLS],
+  assert.deepEqual(permittedMcpToolsFor({ ...browserAdult, minor_cohort: true }, ROSTER()), [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS],
     "minor_cohort strips the orchestrator (the browser grant keeps its own, unchanged rule)");
   console.log("✓ A2: permittedMcpToolsFor adds consult/site_check from the roster, adults only, today's result without one");
 }

@@ -27,7 +27,7 @@ registerHooks({
 const { CR_SURFACES, CR_CONTEXT_KEY, CR_BYTES_CONTEXT_KEY, CR_DIRECTOR_CONTEXT_KEY, CR_DIRECTOR_REPROBE_MS, manifestSwitchProblems, manifestStoredOnlyProblems, isCurriculumRuntimeEnabled, isCrBrowserTool, isCrVerifyTool } = await import("../src/curriculumRuntime.ts");
 const { VerifySession } = await import("../src/verifySession.ts");
 const { permittedMcpToolsFor } = await import("../src/sdkCoachHelpers.ts");
-const { buildHypeproofMcpServer, MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
+const { buildHypeproofMcpServer, MCP_BROWSER_TOOLS, MCP_BROWSER_EXTRA_TOOLS } = await import("../src/browserMcp.ts");
 const { BrowserControl } = await import("../src/browserControl.ts");
 const vscode = await import(stub);
 
@@ -123,13 +123,13 @@ ok("commands: the delete command is the listed switch-off exception, gated on ex
 const adult = { game: { template_tier: "website" }, sdk_tools: { browser: true }, minor_cohort: false };
 const off = permittedMcpToolsFor(adult);
 const on = permittedMcpToolsFor({ ...adult, curriculum_runtime: { enabled: true } });
-assert.deepEqual(off, [...MCP_BROWSER_TOOLS], "switch off: the existing grant, unchanged");
+assert.deepEqual(off, [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS], "switch off: the existing grant, unchanged");
 assert.deepEqual(off.filter((t) => CR_SURFACES.mcpTools.includes(t)), []);
 assert.deepEqual(on.filter((t) => CR_SURFACES.mcpTools.includes(t)).sort(), [...CR_SURFACES.mcpTools].sort());
 // A kids-quest tier that opts into browser tools gets them (the flag decides), but no CR tool:
 // the CR surfaces need a web-app tier.
 const kidsTier = permittedMcpToolsFor({ ...adult, game: { template_tier: "kids-quest" }, curriculum_runtime: { enabled: true } });
-assert.deepEqual(kidsTier, [...MCP_BROWSER_TOOLS], "the browser grant follows the flag; no CR tool on a non-web-app tier");
+assert.deepEqual(kidsTier, [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS], "the browser grant follows the flag; no CR tool on a non-web-app tier");
 // A 14-17 workshop-tier cohort (served minor flag true) gets every CR tool (2026-10-05).
 const teen = permittedMcpToolsFor({ ...adult, minor_cohort: true, curriculum_runtime: { enabled: true } });
 assert.deepEqual(teen.filter((t) => CR_SURFACES.mcpTools.includes(t)).sort(), [...CR_SURFACES.mcpTools].sort(), "every CR tool for a 13-17 cohort");
