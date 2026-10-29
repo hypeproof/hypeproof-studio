@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 try {
   $request = [Console]::In.ReadToEnd() | ConvertFrom-Json
-  if ($request.mode -notin @('capture','observe','invoke')) { throw 'mode' }
+  if ($request.mode -notin @('capture','observe','invoke','census')) { throw 'mode' }
   $ownedPid = [int]$request.owner.pid
   if ($ownedPid -le 0) { throw 'pid' }
   function Read-Owner {
@@ -22,11 +22,67 @@ try {
   Add-Type @'
 using System;
 using System.Runtime.InteropServices;
+using System.Collections.Generic;
+using System.Text;
 public static class OwnedQuitWindow {
+  public delegate bool EnumWindow(IntPtr h,IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindow callback,IntPtr l);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h,StringBuilder text,int count);
+  [StructLayout(LayoutKind.Sequential)] public struct Rect { public int left,top,right,bottom; }
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out Rect rect);
+  public static IntPtr[] OwnedHandles(uint pid) {
+    var result=new List<IntPtr>();
+    bool finished=EnumWindows((h,l)=>{uint actual;GetWindowThreadProcessId(h,out actual);if(actual==pid)result.Add(h);return result.Count<=16;},IntPtr.Zero);
+    if(!finished || result.Count>16)throw new Exception("owned window bound");return result.ToArray();
+  }
   [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr handle, uint command);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint pid);
 }
 '@
+  # Observation only. This path cannot supply Invoke eligibility or read peer content.
+  if ($request.mode -eq 'census') {
+    $result=@()
+    foreach($handle in [OwnedQuitWindow]::OwnedHandles([uint32]$ownedPid)) {
+      [uint32]$actualPid=0;[void][OwnedQuitWindow]::GetWindowThreadProcessId($handle,[ref]$actualPid)
+      if($actualPid -ne $ownedPid){throw 'window changed'}
+      $class=[Text.StringBuilder]::new(128);if([OwnedQuitWindow]::GetClassName($handle,$class,128) -le 0){throw 'class'}
+      $className=$class.ToString();if($className -cnotmatch '^[A-Za-z0-9_#.: -]{1,127}$'){$className='other'}
+      $parent=[OwnedQuitWindow]::GetWindow($handle,4);[uint32]$parentPid=0
+      [void][OwnedQuitWindow]::GetWindowThreadProcessId($parent,[ref]$parentPid)
+      $relation=if($parent -eq [IntPtr]::Zero){'none'}elseif($parentPid -eq $ownedPid){'owned'}else{'foreign'}
+      $rect=[OwnedQuitWindow+Rect]::new();if(-not [OwnedQuitWindow]::GetWindowRect($handle,[ref]$rect)){throw 'rect'}
+      $uia=@{available=$false;ownedNodes=0;skippedForeign=$false;capped=$false;roles=@{};modal=$null;matches=@{message=0;detail=0;continue=0;quit=0}}
+      try {
+        $root=[Windows.Automation.AutomationElement]::FromHandle($handle)
+        $queue=[Collections.Generic.Queue[Windows.Automation.AutomationElement]]::new();$queue.Enqueue($root)
+        while($queue.Count -gt 0 -and $uia.ownedNodes -lt 64) {
+          $element=$queue.Dequeue()
+          if($element.Current.ProcessId -ne $ownedPid){$uia.skippedForeign=$true;continue}
+          $uia.ownedNodes++;$role=$element.Current.ControlType.ProgrammaticName
+          if($role -cnotmatch '^ControlType\.[A-Za-z]+$'){throw 'role'}
+          if(-not $uia.roles.ContainsKey($role)){$uia.roles[$role]=0};$uia.roles[$role]++
+          if($element -eq $root){$pattern=$null;if($element.TryGetCurrentPattern([Windows.Automation.WindowPattern]::Pattern,[ref]$pattern)){$uia.modal=$pattern.Current.IsModal}}
+          # Never return Name, Value, title, edit text or selection. Only known contract matches.
+          if($element.Current.ControlType -eq [Windows.Automation.ControlType]::Text -or $element.Current.ControlType -eq [Windows.Automation.ControlType]::Button){
+            $name=$element.Current.Name.Replace("`r`n","`n").Trim()
+            if($name -ceq 'Studio를 끝낼까요?'){$uia.matches.message++}
+            if($name -ceq "지금 하고 있는 대답이 멈춰요.`n만든 파일은 그대로 남아요."){$uia.matches.detail++}
+            if($name -ceq '계속하기'){$uia.matches.continue++};if($name -ceq '끝내기'){$uia.matches.quit++}
+          }
+          $next=[Windows.Automation.TreeWalker]::ControlViewWalker.GetFirstChild($element);$siblings=0
+          while($null -ne $next -and $queue.Count -lt 64 -and $siblings -lt 64){$queue.Enqueue($next);$siblings++;$next=[Windows.Automation.TreeWalker]::ControlViewWalker.GetNextSibling($next)}
+          if($null -ne $next){$uia.capped=$true}
+        }
+        if($queue.Count -gt 0){$uia.capped=$true};$uia.available=$true
+      }catch{$uia=@{available=$false;ownedNodes=0;skippedForeign=$false;capped=$false;roles=@{};modal=$null;matches=@{message=0;detail=0;continue=0;quit=0}}}
+      [uint32]$finalPid=0;[void][OwnedQuitWindow]::GetWindowThreadProcessId($handle,[ref]$finalPid)
+      if($finalPid -ne $ownedPid){throw 'window changed'}
+      $result+=@{pid=$ownedPid;handle=$handle.ToInt64().ToString();className=$className;visible=[OwnedQuitWindow]::IsWindowVisible($handle);ownerRelation=$relation;ownerHandle=$(if($relation -eq 'owned'){$parent.ToInt64().ToString()}else{'0'});bounds=@($rect.left,$rect.top,$rect.right,$rect.bottom);uia=$uia}
+    }
+    $null=Read-Owner # census final identity fence; no action
+    @{owner=$identity;windows=@($result)} | ConvertTo-Json -Depth 8 -Compress;exit 0
+  }
   function Read-Dialogs {
     $condition = [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,$ownedPid)
     # Only top-level windows of the known process. No peer tree is inspected/logged.

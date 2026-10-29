@@ -113,8 +113,9 @@ export class NativeUI{
    // Upstream MenubarFileMenu exposes workbench.action.quit as E&&xit.
    // CDP Alt+F4 need not reach the OS window manager; click the actual menu.
    await this.clickText(w,menuLabels('file'),'.menubar-menu-button');
+   if(confirmStreamingQuit)await this.observeQuitMenu(w,'before_exit_click');
    try{await this.clickText(w,menuLabels('exit'),'.monaco-menu .action-label');}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
-   if(confirmStreamingQuit)await confirmStreamingQuit();
+   if(confirmStreamingQuit){await this.observeQuitMenu(w,'after_exit_click');await confirmStreamingQuit();}
    return;
   }
   try{await w.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:4});}
@@ -122,6 +123,13 @@ export class NativeUI{
   try{await w.send('Input.dispatchKeyEvent',{type:'keyUp',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:0});}
   catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
   if(confirmStreamingQuit)await confirmStreamingQuit();
+ }
+
+ async observeQuitMenu(target,phase){
+  const observation=readObservation(500,target.info?.id);let state;
+  try{state=await observation.run(()=>target.evaluate("(()=>{const visible=e=>!!e&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;return {menu_visible:[...document.querySelectorAll('.monaco-menu')].some(visible),renderer_dialog_visible:[...document.querySelectorAll('.monaco-dialog-box')].some(visible),document_focused:document.hasFocus()};})()",observation));observation.check();if(!state||['menu_visible','renderer_dialog_visible','document_focused'].some(k=>typeof state[k]!=='boolean'))throw Error('observation unavailable');}
+  catch{state=null;}finally{observation.close();}
+  this.phases.push({at:new Date().toISOString(),phase:'owned quit menu observation',stage:phase,status:state?'OBSERVED':'UNAVAILABLE',...(state?{menu_visible:state.menu_visible===true,menu_closed:state.menu_visible===false,renderer_dialog_visible:state.renderer_dialog_visible===true,document_focused:state.document_focused===true}:{})});
  }
 
  async list(observation){const r=await fetch(this.endpoint+'/json/list',{signal:observation?AbortSignal.any([observation.signal,AbortSignal.timeout(1500)]):AbortSignal.timeout(1500)});if(!r.ok)throw Error('CDP target list unavailable');return r.json();}
@@ -141,6 +149,10 @@ export class NativeUI{
   return observation?observation.poll(discover):waitFor(discover,'native workbench'+(id?' '+id:''),60000);
  }
 
+ async observeRetainedFocusTarget(){
+  const observation=readObservation(750,this.workbenchId);
+  try{return await this.frame('.hps-input textarea',750,observation);}catch{return null;}finally{observation.close();}
+ }
  async restoredFocus(timeout=30000){
   // Observe startup focus only; no palette, click or Page.bringToFront may repair it.
   const chat=await this.frame('.hps-input textarea');

@@ -69,3 +69,27 @@ export async function confirmWindowsStreamingQuit({owner,current,port=powershell
  onProgress({phase:'native_quit_dialog_confirmed',action:'끝내기',invoked_once:true,owner_pid:owner.pid});
  return {native_dialog_observed:true,exact_owned_dialog:true,quit_choice:'끝내기',invoked_once:true,samples};
 }
+
+// Independent observation, never input eligibility. Unknown classes stay diagnostic.
+export function readOwnedQuitCensus(snapshot,owner){
+ assertQuitOwner(snapshot?.owner,owner);
+ assert(Array.isArray(snapshot.windows)&&snapshot.windows.length<=16,'Bounded owned census required');
+ const windows=snapshot.windows.map(w=>{
+  assert(w.pid===owner.pid&&/^[1-9][0-9]*$/.test(w.handle),'Owned census window required');
+  assert(typeof w.className==='string'&&/^[A-Za-z0-9_#.: -]{1,127}$/.test(w.className)&&typeof w.visible==='boolean','Structural window fields required');
+  assert(['none','owned','foreign'].includes(w.ownerRelation)&&/^[0-9]+$/.test(w.ownerHandle)&&(w.ownerRelation==='owned'?w.ownerHandle!=='0':w.ownerHandle==='0'),'Owned parent relation required');
+  assert(Array.isArray(w.bounds)&&w.bounds.length===4&&w.bounds.every(n=>Number.isSafeInteger(n)&&Math.abs(n)<=100000),'Bounded window geometry required');
+  const u=w.uia;assert(u&&['available','skippedForeign','capped'].every(k=>typeof u[k]==='boolean')&&Number.isInteger(u.ownedNodes)&&u.ownedNodes>=0&&u.ownedNodes<=64&&(u.modal===null||typeof u.modal==='boolean'),'Bounded UIA summary required');
+  const roles={};assert(u.roles&&typeof u.roles==='object'&&!Array.isArray(u.roles)&&Object.keys(u.roles).length<=40,'Bounded roles required');
+  for(const [role,count] of Object.entries(u.roles)){assert(/^ControlType\.[A-Za-z]+$/.test(role)&&Number.isInteger(count)&&count>=0&&count<=64,'Structural roles only');roles[role]=count;}
+  assert(Object.values(roles).reduce((a,b)=>a+b,0)===u.ownedNodes,'Census role counts must match observed nodes');
+  const matches={};for(const key of ['message','detail','continue','quit']){const n=u.matches?.[key];assert(Number.isInteger(n)&&n>=0&&n<=u.ownedNodes,'Known-contract counts only');matches[key]=n;}
+  return {handle:w.handle,className:w.className,visible:w.visible,ownerRelation:w.ownerRelation,ownerHandle:w.ownerHandle,bounds:[...w.bounds],uia:{available:u.available,ownedNodes:u.ownedNodes,skippedForeign:u.skippedForeign,capped:u.capped,modal:u.modal,roles,matches}};
+ });
+ assert(new Set(windows.map(w=>w.handle)).size===windows.length,'Duplicate census window');
+ return {status:'OBSERVED',owner_pid:owner.pid,windows};
+}
+export async function observeWindowsQuitStructure({owner,current,port=powershell}){
+ try{assert(current(),'owner');const snapshot=await port({mode:'census',owner},3000);assert(current(),'owner');return readOwnedQuitCensus(snapshot,owner);}
+ catch{return{status:'UNAVAILABLE',owner_pid:owner.pid,code:'owned_structure_observation_unavailable'};}
+}

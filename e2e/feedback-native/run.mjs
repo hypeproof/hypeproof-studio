@@ -9,7 +9,7 @@ import {spawn} from 'node:child_process';
 import {runDelayedActivation,delayedPrerequisite,delayedHistoryPrerequisite} from './delayed-activation.mjs';
 import {runOwnedWindows} from './native-windows.mjs';
 import {runHistoryStreaming} from './history-streaming.mjs';
-import {captureWindowsQuitOwner,confirmWindowsStreamingQuit} from './native-quit-dialog.mjs';
+import {captureWindowsQuitOwner,confirmWindowsStreamingQuit,observeWindowsQuitStructure} from './native-quit-dialog.mjs';
 import {createMacQuitPort,captureMacQuitOwner,confirmMacStreamingQuit,forceStopMacOwnedChild} from './native-mac-quit.mjs';
 import {compatibilityEnvironment} from '../unified-release/output-bound.mjs';
 import {checkSeededSdk} from '../unified-release/sdk-seed.mjs';
@@ -158,7 +158,11 @@ try{
     assert(confirmed,'Expected Mac streaming quit confirmation was not completed');return;
    }
    const owned=child,owner=await captureWindowsQuitOwner({child:owned,executable:fs.realpathSync(path.join(c.candidate.app,'HypeProof Studio.exe'))});
-   await ui.quitOwned('win32',()=>confirmWindowsStreamingQuit({owner,current:()=>child===owned&&owned.exitCode===null&&owned.signalCode===null,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();}}));
+   const current=()=>child===owned&&owned.exitCode===null&&owned.signalCode===null;
+   const census=async phase=>{const observation=await observeWindowsQuitStructure({owner,current});(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),phase,...observation});save();};
+   await census('native_quit_structure_before');
+   try{await ui.quitOwned('win32',()=>confirmWindowsStreamingQuit({owner,current,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();}}));}
+   catch(error){await census('native_quit_structure_refused');throw error;}
   },waitExit:owned=>waitFor(()=>owned.exitCode!==null||owned.signalCode!==null,'owned child exits streaming quit',30000),waitCdpDown:async()=>{await waitFor(()=>ui.cdpDown(),'streaming quit CDP refuses',30000);ui.close();},launch:()=>launchOwned(),observeDraft:()=>ui.restoredDraft(expectedDraft)})});
   if(!report.tests.some(t=>t.id==='T06-native-stream-normal-quit-recovery'&&t.status==='PASS')||!child||child.exitCode!==null||child.signalCode!==null)throw blocked('Streaming recovery did not establish a live restored owned candidate; no remaining input');
  }
