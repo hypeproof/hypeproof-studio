@@ -3784,7 +3784,13 @@ browser applications are unaffected. A failed tab close does not block startup.
 Chat focus waits for initial activity restoration, reveals the existing editor
 chat and explicitly returns the caret to its existing composer. The focus request
 is bound to that activity and is cancelled when the composer unmounts or changes
-activity; passive restoration does not steal focus. If no editor chat exists, it
+activity; passive restoration does not steal focus. When the same retained window
+returns after a native blur, restore its last composer only if focus has fallen to
+BODY/root and that exact connected, editable textarea still belongs to the same
+activity/task/profile/workspace render owner. A newer control choice, pointer/Tab/Escape,
+open modal, owner change, unmount or another blur cancels pending restoration. A
+background mount never claims focus. Preserve draft and selection; do not activate
+a window or poll for focus. If no editor chat exists, it
 opens the entry surface; it must not create a second sidebar chat or reopen a
 sidebar the user hid.
 Controlled StartPage/activity folder navigation prepares and validates the

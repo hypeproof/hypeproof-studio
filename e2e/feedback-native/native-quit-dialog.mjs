@@ -84,7 +84,20 @@ export function readOwnedQuitCensus(snapshot,owner){
   for(const [role,count] of Object.entries(u.roles)){assert(/^ControlType\.[A-Za-z]+$/.test(role)&&Number.isInteger(count)&&count>=0&&count<=64,'Structural roles only');roles[role]=count;}
   assert(Object.values(roles).reduce((a,b)=>a+b,0)===u.ownedNodes,'Census role counts must match observed nodes');
   const matches={};for(const key of ['message','detail','continue','quit']){const n=u.matches?.[key];assert(Number.isInteger(n)&&n>=0&&n<=u.ownedNodes,'Known-contract counts only');matches[key]=n;}
-  return {handle:w.handle,className:w.className,visible:w.visible,ownerRelation:w.ownerRelation,ownerHandle:w.ownerHandle,bounds:[...w.bounds],uia:{available:u.available,ownedNodes:u.ownedNodes,skippedForeign:u.skippedForeign,capped:u.capped,modal:u.modal,roles,matches}};
+  assert(Array.isArray(w.nativeChildren)&&w.nativeChildren.length<=64&&Number.isInteger(w.foreignChildCount)&&w.foreignChildCount>=0&&w.foreignChildCount<=64&&w.nativeChildren.length+w.foreignChildCount<=64,'Bounded native child census required');
+  if(w.className!=='#32770'||!w.visible||w.ownerRelation!=='owned')assert(w.nativeChildren.length===0&&w.foreignChildCount===0,'Native child census limited to owned visible dialog');
+  const nativeChildren=w.nativeChildren.map(child=>{
+   assert(child.pid===owner.pid&&/^[1-9][0-9]*$/.test(child.handle),'Owned native child required');
+   assert(typeof child.className==='string'&&/^[A-Za-z0-9_#.: -]{1,127}$/.test(child.className)&&Number.isSafeInteger(child.controlId)&&child.controlId>=-2147483648&&child.controlId<=2147483647,'Native child structure required');
+   assert(typeof child.visible==='boolean'&&typeof child.enabled==='boolean'&&typeof child.labelPresent==='boolean'&&['continue','quit','other'].includes(child.knownLabel),'Known native child fields required');
+   assert(child.labelPresent||child.knownLabel==='other','Missing label cannot be classified');
+   const q=child.uia;assert(q&&typeof q.available==='boolean'&&['owned','zero','foreign','unknown'].includes(q.pidRelation)&&typeof q.button==='boolean'&&typeof q.invokePattern==='boolean','Native child UIA structure required');
+   assert(q.available ? q.pidRelation!=='unknown' : q.pidRelation==='unknown','Child UIA availability mismatch');
+   if(q.pidRelation!=='owned')assert(!q.button&&!q.invokePattern,'Foreign UIA details must not be inspected');
+   return {handle:child.handle,className:child.className,controlId:child.controlId,visible:child.visible,enabled:child.enabled,labelPresent:child.labelPresent,knownLabel:child.knownLabel,uia:{available:q.available,pidRelation:q.pidRelation,button:q.button,invokePattern:q.invokePattern}};
+  });
+  assert(new Set(nativeChildren.map(c=>c.handle)).size===nativeChildren.length,'Duplicate native child');
+  return {handle:w.handle,className:w.className,visible:w.visible,ownerRelation:w.ownerRelation,ownerHandle:w.ownerHandle,bounds:[...w.bounds],uia:{available:u.available,ownedNodes:u.ownedNodes,skippedForeign:u.skippedForeign,capped:u.capped,modal:u.modal,roles,matches},nativeChildren,foreignChildCount:w.foreignChildCount};
  });
  assert(new Set(windows.map(w=>w.handle)).size===windows.length,'Duplicate census window');
  return {status:'OBSERVED',owner_pid:owner.pid,windows};

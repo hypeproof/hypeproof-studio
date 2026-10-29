@@ -28,6 +28,16 @@ public static class OwnedQuitWindow {
   public delegate bool EnumWindow(IntPtr h,IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindow callback,IntPtr l);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsChild(IntPtr parent,IntPtr child);
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent,EnumWindow callback,IntPtr l);
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h,StringBuilder text,int count);
+  [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr h);
+  public static IntPtr[] ChildHandles(IntPtr parent) {
+    var result=new List<IntPtr>();
+    EnumChildWindows(parent,(h,l)=>{result.Add(h);return result.Count<=64;},IntPtr.Zero);
+    if(result.Count>64)throw new Exception("owned child bound");return result.ToArray();
+  }
   [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h,StringBuilder text,int count);
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int left,top,right,bottom; }
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out Rect rect);
@@ -76,9 +86,35 @@ public static class OwnedQuitWindow {
         }
         if($queue.Count -gt 0){$uia.capped=$true};$uia.available=$true
       }catch{$uia=@{available=$false;ownedNodes=0;skippedForeign=$false;capped=$false;roles=@{};modal=$null;matches=@{message=0;detail=0;continue=0;quit=0}}}
+      # Diagnostic only: native child windows under the exact owned dialog. Return
+      # structural fields and known-label matches, never arbitrary text or actions.
+      $nativeChildren=@();$foreignChildren=0
+      if($className -ceq '#32770' -and $relation -eq 'owned' -and [OwnedQuitWindow]::IsWindowVisible($handle)) {
+        foreach($child in [OwnedQuitWindow]::ChildHandles($handle)) {
+          [uint32]$childPid=0;[void][OwnedQuitWindow]::GetWindowThreadProcessId($child,[ref]$childPid)
+          if(-not [OwnedQuitWindow]::IsChild($handle,$child)){throw 'child changed'}
+          if($childPid -ne $ownedPid){$foreignChildren++;continue}
+          $childClass=[Text.StringBuilder]::new(128);if([OwnedQuitWindow]::GetClassName($child,$childClass,128) -le 0){throw 'child class'}
+          $childClassName=$childClass.ToString();if($childClassName -cnotmatch '^[A-Za-z0-9_#.: -]{1,127}$'){$childClassName='other'}
+          $label=[Text.StringBuilder]::new(1024);$labelLength=[OwnedQuitWindow]::GetWindowText($child,$label,1024)
+          $known=if($label.ToString() -ceq '계속하기'){'continue'}elseif($label.ToString() -ceq '끝내기'){'quit'}else{'other'}
+          $childUia=@{available=$false;pidRelation='unknown';button=$false;invokePattern=$false}
+          try {
+            $childElement=[Windows.Automation.AutomationElement]::FromHandle($child)
+            $uiPid=$childElement.Current.ProcessId
+            $childUia.available=$true;$childUia.pidRelation=if($uiPid -eq $ownedPid){'owned'}elseif($uiPid -eq 0){'zero'}else{'foreign'}
+            if($childUia.pidRelation -eq 'owned'){$childUia.button=($childElement.Current.ControlType -eq [Windows.Automation.ControlType]::Button);$pattern=$null;$childUia.invokePattern=$childElement.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)}
+          }catch{}
+          [uint32]$againPid=0;[void][OwnedQuitWindow]::GetWindowThreadProcessId($child,[ref]$againPid)
+          if($againPid -ne $ownedPid -or -not [OwnedQuitWindow]::IsChild($handle,$child)){throw 'child changed'}
+          $nativeChildren+=@{handle=$child.ToInt64().ToString();pid=$ownedPid;className=$childClassName;controlId=[OwnedQuitWindow]::GetDlgCtrlID($child);visible=[OwnedQuitWindow]::IsWindowVisible($child);enabled=[OwnedQuitWindow]::IsWindowEnabled($child);labelPresent=($labelLength -gt 0);knownLabel=$known;uia=$childUia}
+        }
+      }
       [uint32]$finalPid=0;[void][OwnedQuitWindow]::GetWindowThreadProcessId($handle,[ref]$finalPid)
       if($finalPid -ne $ownedPid){throw 'window changed'}
-      $result+=@{pid=$ownedPid;handle=$handle.ToInt64().ToString();className=$className;visible=[OwnedQuitWindow]::IsWindowVisible($handle);ownerRelation=$relation;ownerHandle=$(if($relation -eq 'owned'){$parent.ToInt64().ToString()}else{'0'});bounds=@($rect.left,$rect.top,$rect.right,$rect.bottom);uia=$uia}
+      $finalParent=[OwnedQuitWindow]::GetWindow($handle,4);if($finalParent -ne $parent){throw 'window owner changed'}
+      if($relation -eq 'owned'){[uint32]$finalParentPid=0;[void][OwnedQuitWindow]::GetWindowThreadProcessId($finalParent,[ref]$finalParentPid);if($finalParentPid -ne $ownedPid){throw 'window owner changed'}}
+      $result+=@{pid=$ownedPid;handle=$handle.ToInt64().ToString();className=$className;visible=[OwnedQuitWindow]::IsWindowVisible($handle);ownerRelation=$relation;ownerHandle=$(if($relation -eq 'owned'){$parent.ToInt64().ToString()}else{'0'});bounds=@($rect.left,$rect.top,$rect.right,$rect.bottom);uia=$uia;nativeChildren=@($nativeChildren);foreignChildCount=$foreignChildren}
     }
     $null=Read-Owner # census final identity fence; no action
     @{owner=$identity;windows=@($result)} | ConvertTo-Json -Depth 8 -Compress;exit 0
