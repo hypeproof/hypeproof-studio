@@ -566,3 +566,30 @@ from public GitHub in the native app; no token or prerecorded transport is injec
 HTTP 403/429 failures now include the status, host and public rate-reset delay in the
 customer error, so a runner's anonymous quota problem can be distinguished from a
 native UI failure. This reduces quota use but does not claim public availability.
+
+
+### Owned transition diagnostics (885 follow-up; observation only)
+
+T05 captures the original chat target, frame, loader and execution context before
+opening the secondary window. A temporary listener records at most64 focus/blur/
+visibility events and input-present/connected/disabled/visible booleans, plus
+whether focus is on the textarea, body/root, another control or absent. It never
+reads values, selection, control IDs or text. Pre-open/pre-switch/success-or-refusal
+snapshots use that same context and verify its loader; a replaced document is
+UNAVAILABLE rather than adopted. Listeners are removed before secondary-window
+cleanup, or explicit target-unavailable cleanup is recorded. Discovery and each
+read are bounded to750ms; these diagnostics do not retry or repair the original
+30s focus assertion. In particular, a prior unfocused input is now distinguishable
+from focus lost during the switch.
+
+T06 Windows records visible-menu/renderer-dialog/focus booleans immediately before
+and after the existing Exit click (500ms read-only observations). The exact owned
+PID/start/executable also bounds a one-shot Win32 top-level window census before
+quit and after refusal (3s per census). It records native class, bounds, visibility,
+owned/none/foreign owner relation and bounded UIA role counts/modal/known-quit-copy
+match counts only. It does not record arbitrary titles, native text, values,
+selection or foreign-process UI. Unknown structures remain diagnostics; the
+existing #32770/message/detail/two-choice Invoke predicate and its10s deadline are
+unchanged. Census failure is UNAVAILABLE and never replaces or repairs the original
+quit failure. No Mac quit action, product focus policy or acceptance timeout changes.
+These source controls are not a new installed-window/quit acceptance result.

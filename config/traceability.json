@@ -5691,6 +5691,15 @@
           "path": "e2e/feedback-native/native-quit-dialog.test.mjs"
         },
         {
+          "path": "e2e/feedback-native/owned-quit-census.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/retained-focus-observation.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/retained-focus-observation.test.mjs"
+        },
+        {
           "path": "e2e/feedback-native/native-mac-quit.m"
         },
         {

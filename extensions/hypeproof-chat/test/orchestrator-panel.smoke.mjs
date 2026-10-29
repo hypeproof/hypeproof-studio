@@ -1023,21 +1023,51 @@ if (!status.available) {
   }
   ok("runSdkCoach with the panel's host arguments: every CLI request labelled coach@1.0.0 with the roster, the consult allowed by the panel's approval path without a modal and sent as one design-reviewer run with a call id and the learner's goal, the timeline's consult line in place plus the busy notice; the same arguments on an old profile, a disabled roster, kids, a minor flag or an unknown tier add nothing");
 
-  // The turn itself passes them. handleSend cannot run here, so its one runSdkCoach call is read
-  // as source: the switch needs the host's argument (A4 D1), and without it nothing above runs.
+  // Exercise the actual property expression at the one SDK call site. Ordinary turns
+  // retain the host; a prepared selected-file turn must not construct a broader host.
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
   const call = (s) => {
     const at = s.indexOf("const sdkEnd = await runSdkCoach({");
     return at < 0 ? "" : s.slice(at, s.indexOf("\n          });", at));
   };
-  const WIRED = /\n\s*orchestrator: orchestratorHostArgs\(\{\s*session: this\.orchestratorSessionFor\(coachSeatKeyFor\(\{ token, profile \}\)\),\s*turnId: streamId,\s*post: \(entry\) => this\.postToolLog\(streamId, entry\),/;
-  assert.match(call(src), WIRED, "the student SDK turn passes the orchestrator host");
+  const exerciseHostProperty = (source) => {
+    const property = call(source).match(/\n\s*orchestrator: ([\s\S]+?)\n\s*\/\/ REQ-STUDIO-TRIAL-BUSY/);
+    assert.ok(property, "one actual SDK orchestrator property is required");
+    const expression = property[1].trim().replace(/,$/, "");
+    for (const prepared of [undefined, { selectedFile: true }]) {
+      const token = {}, profile = {}, session = {}, posted = [], entry = {};
+      let hostCalls = 0, seatCalls = 0;
+      const host = {
+        orchestratorSessionFor(key) { assert.equal(key, "original-seat"); return session; },
+        postToolLog(id, value) { posted.push([id, value]); },
+      };
+      const result = vm.runInNewContext(`(function () { return (${expression}); }).call(host)`, {
+        prepared, token, profile, streamId: "original-turn", host,
+        coachSeatKeyFor(args) {
+          seatCalls++; assert.equal(args.token, token); assert.equal(args.profile, profile);
+          return "original-seat";
+        },
+        orchestratorHostArgs(args) { hostCalls++; return args; },
+      });
+      if (prepared) {
+        assert.equal(result, undefined, "prepared execution cannot gain the ordinary orchestrator host");
+        assert.equal(hostCalls, 0); assert.equal(seatCalls, 0);
+      } else {
+        assert.equal(hostCalls, 1); assert.equal(seatCalls, 1);
+        assert.equal(result.session, session); assert.equal(result.turnId, "original-turn");
+        result.post(entry); assert.deepEqual(posted, [["original-turn", entry]]);
+      }
+    }
+  };
+  exerciseHostProperty(src);
   assert.equal((src.match(/await runSdkCoach\(\{/g) ?? []).length, 1, "one SDK turn call site");
-  assert.doesNotMatch(call(src.replace(/\n\s*orchestrator: orchestratorHostArgs\(/, "\n            orchestratorOff: orchestratorHostArgs(")), WIRED, "planted: a turn without the host is caught");
+  assert.throws(() => exerciseHostProperty(src.replace("orchestrator: prepared ? undefined :", "orchestratorOff: prepared ? undefined :")), /actual SDK orchestrator property/, "planted: missing host is caught");
+  assert.throws(() => exerciseHostProperty(src.replace("orchestrator: prepared ? undefined :", "orchestrator:")), /prepared execution/, "planted: prepared-turn scope expansion is caught");
+  assert.throws(() => exerciseHostProperty(src.replace("orchestrator: prepared ? undefined :", "orchestrator: !prepared ? undefined :")), "planted: disabling the ordinary host is caught");
   // An orchestrator seat reads the per-request record whatever its effort policy (the details list).
   assert.match(src, /if \(token && profile && \(selection\?\.choices\.some\(c=>c\.effort\) \|\| orchestratorRosterFor\(profile\)\)\) \{\s*this\.effortTurn = /);
-  ok("the student SDK turn's runSdkCoach call passes orchestratorHostArgs with the seat's session, its turn and its timeline (control: a planted removal is caught); orchestrator seats fetch the per-request record");
+  ok("the actual SDK property preserves the ordinary seat/session/turn/timeline and excludes prepared execution; planted removal, scope expansion and inverted gating are caught");
 
   // A2's bounded busy wait ends the turn with SdkBusyAbortError: the generic banner shows its
   // Korean line (it is not an abort, so it is not swallowed as the learner's own stop).
