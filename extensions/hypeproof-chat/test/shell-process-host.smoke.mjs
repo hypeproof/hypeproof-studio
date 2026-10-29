@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { createTaskHarness } from './task-workspace-harness.mjs';
 const root = await mkdtemp(join(tmpdir(), 'shell-process-'));
 try {
@@ -22,8 +22,11 @@ try {
   f.h.liveServer = { currentUrl: () => url, currentRoot: () => root, isListening: () => listening, stop: async () => { await new Promise(r => { release = r; }); url = undefined; listening = false; f.h.observeLiveProcess(); } };
   f.h.observeLiveProcess();
   const id = f.posts.at(-1).entries[0].id;
-  assert.equal(f.posts.at(-1).entries[0].purpose, '라이브 서버');
-  assert.equal(f.posts.at(-1).entries[0].folder, '.');
+  // Jay 2026-10-29: the entry names the preview server, what it serves in words (never ".") and its address.
+  assert.equal(f.posts.at(-1).entries[0].purpose, '미리보기 서버');
+  assert.equal(f.posts.at(-1).entries[0].kind, 'preview');
+  assert.equal(f.posts.at(-1).entries[0].folder, `작업 폴더 전체 (${basename(root)})`);
+  assert.equal(f.posts.at(-1).entries[0].address, '127.0.0.1:43210');
   const stopping = f.handle(f.scoped({ type: 'stopRunningProcess', id }));
   await new Promise(r => setTimeout(r, 0));
   assert.equal(f.posts.at(-1).entries[0].state, 'stopping');
@@ -93,7 +96,7 @@ try {
     f.h.liveServer = { currentUrl: () => 'http://127.0.0.1:43299/', currentRoot: () => root, isListening: () => true, stop: async () => {} };
     const before = lists().length;
     await f.handle(f.scoped({ type: 'ready' }));
-    assert.ok(lists().slice(before).some(m => m.entries.some(e => e.purpose === '라이브 서버' && e.state === 'running')), 'ready lists the running live server');
+    assert.ok(lists().slice(before).some(m => m.entries.some(e => e.purpose === '미리보기 서버' && e.state === 'running')), 'ready lists the running live server');
     f.h.liveServer = { currentUrl: () => undefined, currentRoot: () => root, isListening: () => false, stop: async () => {} };
     f.h.observeLiveProcess();
   }
@@ -122,7 +125,7 @@ try {
     try {
       const url = await live.ensure(root);
       const started = lists().slice(before).at(-1);
-      assert.equal(started?.entries.filter(e => e.state === 'running' && e.purpose === '라이브 서버').length, 1, `the constructed provider lists ${url} as soon as it starts`);
+      assert.equal(started?.entries.filter(e => e.state === 'running' && e.purpose === '미리보기 서버').length, 1, `the constructed provider lists ${url} as soon as it starts`);
       await live.stop();
       assert.equal(lists().at(-1).entries.filter(e => e.state === 'running').length, 0, 'and settles the entry when the server stops');
     } finally {

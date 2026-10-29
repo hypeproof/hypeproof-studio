@@ -35,7 +35,7 @@ const bundle = await build({
   stdin: { contents: `import React from 'react'; import {renderToStaticMarkup} from 'react-dom/server'; import {ToolLine} from './webview-ui/src/ChatPanel'; import {RunningProcessesPanel} from './webview-ui/src/RunningProcesses';
     const row = (shell, state) => renderToStaticMarkup(<ToolLine message={{id:'s',role:'tool',content:'',createdAt:0,tool:{icon:'',label:'',state,shell}}} onReport={()=>{}}/>);
     export const rows = row({purpose:'개발 서버가 뜨는지 확인해요',command:'npm run dev -- --port 5173 '+'--flag '.repeat(80),collapsed:false}, 'running');
-    export const panel = renderToStaticMarkup(<RunningProcessesPanel entries={[{id:'live',purpose:'라이브 서버',folder:'.',state:'running'},{id:'sdk',purpose:'테스트 감시',state:'stopped'}]} onStop={()=>{}}/>);`, resolveDir: root, loader: 'tsx' },
+    export const panel = renderToStaticMarkup(<RunningProcessesPanel entries={[{id:'live',purpose:'미리보기 서버',kind:'preview',folder:'작업 폴더 전체 (site)',address:'127.0.0.1:43299',state:'running'},{id:'sdk',purpose:'테스트 감시',state:'stopped'}]} onStop={()=>{}}/>);`, resolveDir: root, loader: 'tsx' },
   bundle: true, platform: 'node', format: 'cjs', write: false, jsx: 'automatic',
   alias: { react: root + '/webview-ui/node_modules/react', 'react-dom': root + '/webview-ui/node_modules/react-dom' }, nodePaths: [root + '/webview-ui/node_modules'],
   loader: { '.css': 'empty', '.svg': 'text' }, logLevel: 'silent',
@@ -68,6 +68,8 @@ const probe = `(() => {
     preGap: r(pre).top - s.bottom,
     buttonHeight: r(button).height, statusGap: r(button).left - r(status).right, statusSameLine: Math.abs(r(button).top - r(status).top) < r(button).height,
     order: r(purpose).bottom <= r(pre).top,
+    cards: [...document.querySelectorAll('.hps-running-processes li')].map(c => ({ border: px(getComputedStyle(c).borderTopWidth), top: r(c).top, bottom: r(c).bottom })),
+    dotFolder: document.querySelector('.hps-running-processes').textContent.includes('폴더: .'),
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   };
 })()`;
@@ -87,6 +89,10 @@ async function check(b, extraCss = '', shots) {
     if (m.buttonHeight < 44) bad.push(`${at}: stop button ${m.buttonHeight}px < 44px`);
     if (m.statusSameLine && m.statusGap < 4) bad.push(`${at}: status text touches the stop button (${m.statusGap}px)`);
     if (!m.order) bad.push(`${at}: purpose is not above the command`);
+    // Jay 2026-10-29 ("줄 구분도 잘 안 되고"): every running thing is its own bordered card, apart from the next.
+    if (m.cards.length !== 2 || m.cards.some(c => c.border < 1)) bad.push(`${at}: running entries are not bordered cards ${JSON.stringify(m.cards)}`);
+    else if (m.cards[1].top - m.cards[0].bottom < 4) bad.push(`${at}: cards touch (${(m.cards[1].top - m.cards[0].bottom).toFixed(1)}px)`);
+    if (m.dotFolder) bad.push(`${at}: "폴더: ." is shown`);
     if (m.overflow > 0) bad.push(`${at}: horizontal overflow ${m.overflow}px`);
     // Focus: the shared ring, measured. The button sits outside a scroll scope (+2px); the summary
     // and the scrolling <pre> sit inside .hps-messages (-2px, never clipped).
@@ -126,6 +132,8 @@ try {
     'summary text top-aligned': '.hps-shell-row summary { display: block; }',
     'pre margin back': '.hps-shell-row pre { margin: 1em 0; }',
     'status touches button': '.hps-process-actions { gap: 0; }',
+    'card boundary removed': '.hps-running-processes li.hps-process-card { border: 0; }',
+    'cards touch': '.hps-running-processes ul { gap: 0; }',
     'flat purpose': '.hps-shell-purpose { font-weight: inherit; color: inherit; } .hps-shell-folder { color: inherit; }',
     'horizontal overflow': '.hps-shell-row pre { white-space: pre; overflow-wrap: normal; overflow: visible; max-height: 240px; }',
   };

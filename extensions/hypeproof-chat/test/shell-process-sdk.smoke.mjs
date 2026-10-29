@@ -18,7 +18,7 @@ const sdk = { query() {
     yield { type: 'system', subtype: 'task_notification', task_id: 'shell', run_id: '1', status: 'stopped' };
     assert.equal(registry.list()[0].state, 'stopped');
     // Another stream's entry (here the live server) must survive this turn's close (verify3 V11).
-    registry.add('live:server', '라이브 서버', '.', async () => {});
+    registry.add('live:server', '미리보기 서버', '작업 폴더 전체', async () => {}, { address: '127.0.0.1:43210' });
     yield { type: 'system', subtype: 'background_tasks_changed', tasks: [{ task_id: 'unfinished', run_id: '1', task_type: 'local_bash', description: '미확인 실행' }] };
   })();
   stream.stopTask = async id => { stopped.push(id); };
