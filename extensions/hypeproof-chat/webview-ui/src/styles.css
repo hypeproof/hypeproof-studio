@@ -2851,6 +2851,7 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
   background: transparent; color: inherit; cursor: pointer;
 }
 .hps-running-processes button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-running-processes button:active:not(:disabled) { background: var(--hp-bg-control-pressed); }
 .hps-running-processes button:disabled { cursor: default; color: var(--hp-text-muted-default); }
 @media (forced-colors: active) {
   .hps-running-processes li.hps-process-card { border-color: CanvasText; }
