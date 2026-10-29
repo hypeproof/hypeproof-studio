@@ -6554,6 +6554,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   get activityMemoryBinding(): { root: string; scope: string } | undefined {
     return this.currentTaskStore() ? this.activityTrashBinding : undefined;
   }
+  /**
+   * REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025) — the task names the memory overview may group by, or null where there is
+   * no overview: a minor cohort, or a profile whose tier is unknown (isMinorProfile fails closed), or no profile.
+   */
+  get activityMemoryOverviewTasks(): Array<{ id: string; title: string }> | null {
+    const profile = this.cachedProfile;
+    const store = this.currentTaskStore();
+    if (!profile || isMinorProfile(profile) || !store || !this.activityMemoryBinding) return null;
+    const view = store.getView();
+    return [...view.tasks, ...(view.archived ?? [])].map(({ id, title }) => ({ id, title }));
+  }
   private async postActivityMemory(extra?: { requestId: string; result: import("./activityMemoryView").ActivityMemoryResult }): Promise<void> {
     const view = this.activityMemoryPanel && this.activityMemoryBinding ? await this.activityMemoryPanel.view() : null;
     await this.post({ type: "activityMemoryState", view, ...extra });
@@ -6561,11 +6572,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async runActivityMemoryAction(msg: Extract<WebviewMessage, { type: "activityMemoryAction" }>): Promise<void> {
     const requestId = typeof msg.requestId === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) ? msg.requestId : null;
     if (!requestId) return;
-    const action = msg.action === "open" || msg.action === "delete" ? msg.action : null;
+    const action = msg.action === "open" || msg.action === "delete" || msg.action === "correct" ? msg.action : null;
     const panel = this.activityMemoryPanel;
+    // REQ-STUDIO-MEMORY-OVERVIEW — a correction carries the learner's words; any other press carries none.
+    const text = action === "correct" ? msg.text : undefined;
     const result: import("./activityMemoryView").ActivityMemoryResult = !action || !panel || !this.activityMemoryBinding || typeof msg.name !== "string" || msg.name.length > 200 || typeof msg.scope !== "string"
+      || (action === "correct" && (typeof text !== "string" || text.length > 8_000))
       ? { action: action ?? "open", error: "작업 상태가 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요." }
-      : await panel.act(action, msg.name, msg.scope);
+      : await panel.act(action, msg.name, msg.scope, text);
     await this.postActivityMemory({ requestId, result });
   }
   // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
