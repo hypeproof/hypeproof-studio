@@ -504,6 +504,11 @@ body.vscode-high-contrast .studio-connect { border-color: currentColor; }
 .studio-free-guardian { color:var(--hp-text-primary-default); text-decoration:underline; text-underline-offset:var(--ds-c-studio-start-size-15); margin:0 0 0 var(--ds-c-studio-start-space-42); }
 /* A calm notice, not an error: today's free budget is gone or paused. No red, no countdown. */
 .studio-notice { margin:0; font-size:var(--ds-c-studio-start-type-1); line-height:var(--ds-c-studio-start-typography-4); color:var(--hp-text-primary-default); background:var(--hp-bg-panel-default); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default); border-radius:var(--ds-c-studio-start-radius-1); padding:var(--ds-c-studio-start-space-1); word-break:keep-all; }
+/* REQ-STUDIO-START-UPDATE-NOTICE — the chat banner's update offer, one calm row under the top bar. */
+.studio-update { display:flex; align-items:center; flex-wrap:wrap; gap:var(--ds-c-studio-start-space-1); margin:0; font-size:var(--ds-c-studio-start-type-1); line-height:var(--ds-c-studio-start-typography-4); color:var(--hp-text-primary-default); background:var(--hp-bg-panel-default); border:var(--ds-c-studio-start-size-3) solid var(--hp-border-divider-default); border-radius:var(--ds-c-studio-start-radius-1); padding:var(--ds-c-studio-start-space-1); word-break:keep-all; }
+.studio-update p { margin:0; flex:1 1 auto; min-width:0; }
+.studio-update-version { overflow-wrap:anywhere; }
+.studio-update-actions { display:flex; align-items:center; gap:var(--ds-c-studio-start-space-1); }
 .studio-guardian-pay { display:grid; justify-items:center; gap:var(--ds-c-studio-start-space-2); margin:0 0 var(--ds-c-studio-start-space-1); }
 .studio-guardian-pay img { background:var(--ds-c-studio-start-surface-19); border-radius:var(--ds-c-studio-start-radius-3); padding:var(--ds-c-studio-start-space-15); }
 .studio-guardian-pay .studio-help { margin:0; text-align:center; }

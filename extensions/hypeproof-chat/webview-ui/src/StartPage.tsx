@@ -14,6 +14,7 @@ import { activityLabel, passSummary, trialAllowance, trialEndedFacts, trialSumma
 import { trialEntryNote } from "../../src/trialOffer";
 import { FREE_START_COPY, freeCalmNotice } from "../../src/freeStart";
 import { PURCHASE_COPY } from "../../src/passPurchase";
+import { START_UPDATE_COPY, startUpdateNotice } from "../../src/startUpdateNotice";
 
 /** The last two segments of a workspace path ("…/local-trial-744/workspace"); the full path stays in the title and accessible name. */
 export function shortWorkspace(path: string): string {
@@ -122,6 +123,7 @@ export function StartPage() {
 
   return <main className="studio-start">
     <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.account?.status === "signedIn" && <button onClick={() => postToHost({type:"accountManage"})}>{state.account.account?.display_name} · 내 계정 <ChatIcon kind="external" size={16} /></button>}<button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
+    <StartUpdateNotice update={state.update} />
     <StartSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} opener={() => settingsOpener.current} view={state.settings} />
     <div className="studio-main">
       <section className="studio-intro" aria-labelledby="start-title">
@@ -272,6 +274,23 @@ function FreeStartCard({ free, checking, calm, error, purchase, onCode, onPurcha
     {tooOld && <div className="studio-error" role="alert">{free.refusal?.code === "app_too_old" ? free.refusal.message : "이 Studio는 바로 시작하기를 지원하지 않는 버전입니다. 최신 Studio로 업데이트한 뒤 다시 열어 주세요."}<p><button className="studio-text-button" onClick={() => postToHost({ type: "freeStartUpdate" })}>{FREE_START_COPY.update}</button></p></div>}
     {error && !tooOld && <div className="studio-error" role="alert">{error}</div>}
     {links}
+  </div>;
+}
+
+/**
+ * REQ-STUDIO-START-UPDATE-NOTICE — the chat banner's update offer on the start page. The buttons run
+ * the same host commands (install, 7-day dismissal); during a class it is a status line with no button.
+ */
+export function StartUpdateNotice({ update }: { update: StartState["update"] }) {
+  const notice = startUpdateNotice(update);
+  if (!notice) return null;
+  return <div className="studio-update" role="status" aria-label={START_UPDATE_COPY.title}>
+    <ChatIcon kind="upload" size={16} />
+    <p><strong>{START_UPDATE_COPY.title}</strong> <span className="studio-update-version">{notice.version}</span> {notice.held ? START_UPDATE_COPY.held : START_UPDATE_COPY.body}</p>
+    {!notice.held && <div className="studio-update-actions">
+      <button className="studio-primary studio-update-install" onClick={() => postToHost({ type: "startUpdateInstall" })}>{START_UPDATE_COPY.install}</button>
+      <button className="studio-text-button" onClick={() => postToHost({ type: "startUpdateDismiss", version: update!.version })}>{START_UPDATE_COPY.later}</button>
+    </div>}
   </div>;
 }
 

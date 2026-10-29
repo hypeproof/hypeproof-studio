@@ -4,6 +4,9 @@
 /** The store folder as the learner reads it, relative to the activity folder. */
 export const MEMORY_FOLDER_LABEL = ".hypeproof/memory/";
 
+/** REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022) — memory is always on (DEC-01, DEC-02); there is no off label. */
+export const MEMORY_STATE_LABEL = "AI 기억: 켜짐";
+
 /** One memory file. `text` is null when it is too large or not text: it is listed, opened and deleted, never shown inline. */
 export interface ActivityMemoryItem { name: string; at: number; text: string | null }
 

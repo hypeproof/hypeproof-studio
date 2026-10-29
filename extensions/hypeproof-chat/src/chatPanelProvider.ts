@@ -10613,6 +10613,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Best-effort push; if webview isn't ready yet, the next postConfig
     // (e.g., after panel reveal) picks it up.
     void this.postConfig();
+    // REQ-STUDIO-START-UPDATE-NOTICE: the start page shows the same offer.
+    for (const listener of this.updateListeners) { try { listener(); } catch { /* a surface must not break the banner */ } }
+  }
+  private readonly updateListeners = new Set<() => void>();
+  /** Called after every change of the update offer (found, cleared, dismissed). Returns an unsubscribe. */
+  onAvailableUpdateChanged(listener: () => void): () => void {
+    this.updateListeners.add(listener);
+    return () => { this.updateListeners.delete(listener); };
   }
 
   /** CGP-SHELL-R-001 — the active seat is a class, so no update installs now. */

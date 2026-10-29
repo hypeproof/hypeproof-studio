@@ -9,7 +9,7 @@ type Step = Lesson["content"]["steps"][number];
 
 /** CGP-LEARN-D-001 — the 자료 card's 48px thumbnail icon for each block kind (the card's title is MATERIAL_TEXT's). */
 const BLOCK_ICONS: Record<MaterialKind, IconKind> = {
-  criterion_form: "check-square", decision_form: "pencil", canvas_editor: "code", canvas_preview: "eye",
+  criterion_form: "flag", decision_form: "pencil", canvas_editor: "code", canvas_preview: "eye",
   evidence_note: "book", coach_request: "message", metric_board: "ruler",
 };
 

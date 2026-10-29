@@ -55,6 +55,11 @@ import {
 const EXPECTED_BUNDLE_ID = "ai.hypeproof.studio";
 const CHECK_INTERVAL_MS = 24 * 3600 * 1000;
 const INITIAL_DELAY_MS = 30 * 1000;
+// A transient failure (offline at login, a GitHub hiccup) used to wait a full day for the next try,
+// so an app started just before a release could show nothing all day (Jay 2026-10-29). Retry a
+// few times within the day; access and rate-limit answers keep their own handling and never retry here.
+const RETRY_AFTER_FAILURE_MS = 15 * 60 * 1000;
+const MAX_RETRIES_PER_CYCLE = 3;
 const DISMISSAL_KEY = "hypeproofChat.updateDismissals";
 
 // D19: a Studio without member access reads the public release the Lab download
@@ -528,6 +533,8 @@ export interface SchedulerDeps {
 
 export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
   let timer: NodeJS.Timeout | null = null;
+  let retry: NodeJS.Timeout | null = null;
+  let retries = 0;
   let disposed = false;
 
   const run = async () => {
@@ -542,8 +549,13 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
       // (REQ-I14). Transient failures stay silent (REQ-I11), and so does a
       // rate-limited anonymous public check (D19): the next 24h check retries.
       if (!disposed && isUpdateAccessError(error)) await noticeHomepageUpdateOnce(deps);
+      else if (!disposed && !retry && !isUpdateDeferredError(error) && retries < MAX_RETRIES_PER_CYCLE) {
+        retries++;
+        retry = setTimeout(() => { retry = null; void run(); }, RETRY_AFTER_FAILURE_MS);
+      }
       return; // A failed check must not erase a previously confirmed update.
     }
+    retries = 0;
     if (disposed) return;
     if (!info.available) {
       deps.pushUpdateBanner(null);
@@ -562,14 +574,15 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
   timer = setTimeout(() => {
     void run();
     // Then repeat every 24h.
-    timer = setInterval(() => { void run(); }, CHECK_INTERVAL_MS);
+    timer = setInterval(() => { retries = 0; void run(); }, CHECK_INTERVAL_MS);
   }, INITIAL_DELAY_MS);
 
   return {
     dispose() {
       disposed = true;
       if (timer) clearTimeout(timer);
-      timer = null;
+      if (retry) clearTimeout(retry);
+      timer = null; retry = null;
     },
   };
 }

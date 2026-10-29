@@ -5,7 +5,7 @@
 //
 // smoke FAIL    → the smoke-failure issue of this version: a new one, or a comment on the open one. No tag, no PR.
 // smoke NOT_RUN → stop, unless --accept-not-run (the release PR then says NOT_RUN in its smoke section).
-// smoke PASS    → rc tag on the candidate, the rc builds, branch release/<version> adding
+// smoke PASS    → rc tag on the candidate (its annotation makes the builds embed the final version, #3172), the rc builds, branch release/<version> adding
 //                 releases/<version>.md, and the release PR (or, for a later rc of the same version,
 //                 the existing PR updated with a comment). Then the open smoke-failure issues of this
 //                 version or lower are closed with a link to the release PR. A failed close is a warning.
@@ -170,7 +170,7 @@ function main() {
       }
       say(values['managed-draft']
         ? `Started managed builds of ${plan.candidate} for ${plan.rcTag}, embedding ${plan.version}; draft upload only. Acceptance and promotion remain NOT_RUN.`
-        : `Started ${dispatches.map(d => d.workflow).join(' and ')} on ${plan.rcTag}; they run the automatic E2E and publish a prerelease.`);
+        : `Started ${dispatches.map(d => d.workflow).join(' and ')} on ${plan.rcTag}, embedding ${plan.version}; they run the automatic E2E and publish a prerelease that release-promote turns into ${plan.version} on approval.`);
     }
     if (step === 'branch') {
       run('git', 'checkout', '-q', '-B', plan.branch, plan.candidate);
