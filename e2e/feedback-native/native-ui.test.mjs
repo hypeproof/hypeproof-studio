@@ -615,3 +615,43 @@ test('locale detection: html lang wins, the pack file only decides when lang is 
   assert.equal(await detectShellLocale({evaluate:async()=>{throw Error('cdp down');}}),'en');
  }finally{setShellLocale(before);}
 });
+
+function sidebarReturnFixture(){
+ const ui=new NativeUI('http://127.0.0.1:9777'),events=[],before={workbench:'owned-window',target:'owned-chat',frame:'owned-frame',loader:'owned-loader'};
+ let outerVisible=true,innerVisible=true,hostFocused=true,documentFocused=false,owner=true;
+ const input={isConnected:true,disabled:false,readOnly:false,value:'private-draft-never-log',getBoundingClientRect:()=>({width:400,height:40})},body={};let active=body;
+ const iframe={name:'owned-id',getBoundingClientRect:()=>({width:outerVisible?800:0,height:600})};
+ const hostDoc={querySelectorAll:()=>owner?[iframe]:[],hasFocus:()=>hostFocused,get activeElement(){return iframe;}};
+ const innerDoc={querySelector:()=>input,hasFocus:()=>documentFocused,get activeElement(){return active;}};
+ const info={id:before.target,type:'iframe',url:'https://owned.invalid/hypeproof-chat?id=owned-id'};let infos=[info],frame={id:before.frame,loaderId:before.loader};
+ const host={info:{id:before.workbench},evaluate:expression=>vm.runInNewContext(expression,{document:hostDoc,getComputedStyle:()=>({display:'block',visibility:'visible'})})};
+ const chat={info,evaluate:expression=>vm.runInNewContext(expression,{document:innerDoc,getComputedStyle:()=>({display:innerVisible?'block':'none',visibility:'visible'})}),send:async method=>{assert.equal(method,'Page.getFrameTree','read-only exact retained target');return{frameTree:{frame}};}};
+ ui.targets.set(before.target,chat);ui.list=async()=>infos;ui.workbench=async observation=>{if(observation)assert.equal(observation.workbench,before.workbench);return host;};
+ ui.frame=ui.target=()=>assert.fail('retained barrier must not discover a replacement');
+ let quick={visible:false,ready:false};ui.quickState=async()=>quick;
+ ui.focusWorkbench=async()=>events.push('activation');ui.key=async(_w,key)=>{assert.equal(key,'F1');events.push(key);quick={visible:true,ready:true,mode:'command',value:'>'};};
+ ui.input=async(_w,_selector,value)=>{events.push('query');quick.value=value;};ui.choiceSelector=async(_w,title)=>{assert.equal(title,'Exact focus');return'.exact';};ui.press=async()=>{events.push('select');quick={visible:false};};
+ const next=async(timeout=1000)=>{await ui.retainedChatReady(before,timeout);await ui.palette('Exact focus');};
+ return{ui,before,events,chat,host,input,next,ready(){documentFocused=true;active=input;},change(kind){if(kind==='target')infos=[{...info,id:'foreign'}];if(kind==='url')infos=[{...info,url:info.url+'&replacement=1'}];if(kind==='frame')frame={...frame,id:'foreign-frame'};if(kind==='loader')frame={...frame,loaderId:'foreign-loader'};if(kind==='window')host.info.id='foreign-window';if(kind==='owner')owner=false;if(kind==='outer-hidden')outerVisible=false;if(kind==='inner-hidden')innerVisible=false;if(kind==='disabled')input.disabled=true;if(kind==='readonly')input.readOnly=true;if(kind==='detached')input.isConnected=false;if(kind==='host-unfocused')hostFocused=false;}};
+}
+test('retained sidebar return delays the next single F1 until two exact composer observations',async()=>{
+ const f=sidebarReturnFixture();let sampled,firstReady;const initial=new Promise(r=>sampled=r),ready=new Promise(r=>firstReady=r);const evaluate=f.chat.evaluate;let readyCount=0;
+ f.chat.evaluate=async expression=>{const value=await evaluate(expression);sampled();if(value.documentFocused&&++readyCount===1)firstReady();return value;};
+ const pending=f.next();await initial;assert.deepEqual(f.events,[],'sidebar hidden alone cannot dispatch F1');
+ f.ready();await ready;assert.deepEqual(f.events,[],'one stale ready sample is not a completed return');await pending;
+ assert.equal(f.events.filter(x=>x==='F1').length,1);assert.deepEqual(f.events,['activation','F1','query','select']);
+ const phase=f.ui.phases.find(x=>x.phase==='retained sidebar return readiness');assert.equal(phase.outcome,'observed');assert.equal(phase.ready_samples,2);assert(!JSON.stringify(phase).includes('private-draft'));
+});
+test('retained sidebar return refuses foreign identity or hidden/unusable composer with zero input',async()=>{
+ for(const kind of ['target','url','frame','loader','window','owner','outer-hidden','inner-hidden','disabled','readonly','detached','host-unfocused']){
+  const f=sidebarReturnFixture();f.ready();f.change(kind);await assert.rejects(f.next(25),/Retained sidebar return readiness failed/);assert.deepEqual(f.events,[],kind+' must never repair focus or dispatch');
+ }
+ const f=sidebarReturnFixture();await assert.rejects(f.next(25),/Retained sidebar return readiness failed/);assert.deepEqual(f.events,[],'unfocused BODY never qualifies');
+});
+test('retained sidebar return bounds stalled reads and T02 preserves its original assertions',async()=>{
+ const f=sidebarReturnFixture();f.ui.list=()=>new Promise(()=>{});const began=Date.now();await assert.rejects(f.next(25),/Retained sidebar return readiness failed/);assert(Date.now()-began<250);assert.deepEqual(f.events,[]);
+ await assert.rejects(f.ui.retainedChatReady(f.before,30001),/Exact retained chat identity/);
+ const source=readFileSync(new URL('./run.mjs',import.meta.url),'utf8'),body=source.slice(source.indexOf("await step('T02-explorer-user-layout-reload'"),source.indexOf("await step('T01-native-file-save'"));
+ const ordered=['const retainedChat=await ui.chatDocumentIdentity()',"await command('hypeproof-chat.openStudioFiles')","'user hides sidebar'",'await ui.retainedChatReady(retainedChat)','await focusChat()',"'Opening chat respects user sidebar choice'",'const beforeReload=await ui.chatDocumentIdentity()',"{expectReload:true}",'await ui.reloadedChatReady(beforeReload)',"'Reload respects user sidebar choice'","'Explicit Files action restores Explorer'"];
+ let at=-1;for(const marker of ordered){const next=body.indexOf(marker,at+1);assert(next>at,'preserved T02 sequence '+marker);at=next;}
+});
