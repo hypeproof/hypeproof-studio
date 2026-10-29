@@ -520,7 +520,7 @@ try {
     await host(p, { type: 'history', messages: history }); await draft(p).fill('작성 중인 문장');
     await host(p, { type: 'streamError', error: '연결이 끊겼습니다.', requestId: 'synthetic-request-id', runbookUrl: 'https://example.org/runbook' });
     await expect(p.getByRole('alert')).toContainText('synthetic-request-id'); await expect(p.getByRole('link', { name: /강사 안내/ })).toHaveAttribute('href', 'https://example.org/runbook');
-    await btn(p, '다시 보내기').click(); await request(p, { type: 'retryMessage', prompt: history[0].content }); await btn(p, '신고하기').click(); await request(p, { type: 'openReportModal' }); await btn(p, '닫기').click(); await expect(p.getByRole('alert')).toHaveCount(0); await expect(draft(p)).toHaveValue('작성 중인 문장');
+    await btn(p, '다시 보내기').click(); await request(p, { type: 'retryMessage', prompt: history[0].content }); await btn(p, '문제 보내기').click(); await request(p, { type: 'openReportModal', source: 'error' }); await btn(p, '닫기').click(); await expect(p.getByRole('alert')).toHaveCount(0); await expect(draft(p)).toHaveValue('작성 중인 문장');
     await host(p, { type: 'history', messages: [] }); await host(p, { type: 'streamError', error: '인증에 실패했습니다.' }); await expect(btn(p, '다시 보내기')).toHaveCount(0);
   });
   await test('TUX-OBS-01', 'Observation disclosure and record refresh do not assess automatically', async p => { await openObservation(p); await btn(p, '이 작업의 기록 확인').click(); await request(p, { type: 'observationOpen' }); assert.equal(emitted(await requests(p), 'observationAssess').length, 0); await observe(p); await expect(p.getByText('3건 · 도움 사용 범위는 확인 전까지 미확인입니다.')).toBeVisible(); });

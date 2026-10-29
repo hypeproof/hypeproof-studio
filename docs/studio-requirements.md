@@ -2412,7 +2412,7 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 
 | ID | 요구사항 | 수용 기준 | Layer |
 |---|---|---|---|
-| REQ-H1 | 3-step QuickInput cascade | description (≥10자) → recent_turns yes/no → contact (옵션) | M |
+| REQ-H1 | 3-step QuickInput cascade (fallback) | 채팅 패널을 띄울 수 없을 때만: description (≥10자) → recent_turns yes/no → contact (옵션). 패널이 있으면 REQ-H11 의 패널 안 양식이 대신한다 | M |
 | REQ-H2 | JTI 로컬 해싱 (SubtleCrypto) | 원본 JTI 는 절대 네트워크 미전송, 16-hex 만 | U |
 | REQ-H3 | 자동 메타데이터 | studio_version, OS, locale, vscode_version, profile_id, jti_hash, last_request_id, ts_client | U |
 | REQ-H4 | 마지막 request_id 자동 첨부 | 직전 스트림 에러의 request_id 가 body 에 포함 | U + R |
@@ -2421,6 +2421,9 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 | REQ-H7 | Abuse 상한 (#260) | 비인증 endpoint 방어: IP당 3건/60s rate limit (429), 전체 body ≤32KB (413), description ≤5000자, attachments ≤20 keys·key명 ≤64자·직렬화 ≤8KB (400), recent_turns opt-in 시 3건×2000자 캡 | U |
 | REQ-H8 | PII 최소화 (#260) | 직접 PII 는 `contact` 단일 필드 (옵션, ≤200자) — **D1 에만 저장, Discord embed 미전달**. jti 는 원본 미저장 (16-hex sha256 해시만), Discord embed 는 description 앞 1000자만 노출 | U |
 | REQ-H9 | Retention/redaction 정책 (#260) | D1 `reports` 는 진단 목적 한정. 운영 체크리스트: `resolved` 도달 후 90일 내 `contact` 삭제/NULL 처리. GET `/v1/report/:id` 응답은 status/resolution 필드만 (description·contact·attachments 미노출) | 운영 |
+| REQ-H10 | 자동 문제 보고, 내용 없음 (REQ-STUDIO-PROBLEM-REPORT level 1, 2026-10-29) | 오류 카드가 뜨거나 요청이 실패하면(Service 4xx/5xx — 409 unpriced, 413, 403, 안전 규칙 차단, 작업 폴더 준비 실패, 업데이트 설치 실패) `POST {proxyUrl}/problems/auto` 로 `code·step·http_status·app_version·os·fingerprint(+request_id)` **만** 보낸다. code 는 기계 단어(`^[a-z][a-z0-9_]{0,47}$`)만, 아니면 `http_<status>`/`unknown`; 오류 문장·파일 이름·경로·프롬프트·토큰은 입력이 아니다. Authorization 헤더 없음(계정과 연결 안 함). 지문당 10분에 한 번, 세션당 20건. 체험·무료·이용권이 끝난 안내는 고장이 아니므로 보내지 않는다. 스위치는 REQ-H11 양식 안의 「오류가 나면 오류 정보만 자동으로 보내기」 체크박스 하나뿐이고(이 기기 globalState, 보내는 것·보내지 않는 것을 같은 자리에 적는다), **기본 꺼짐** — 개인정보 처리방침 초안(Lab `privacy-policy`)과 동의 항목(`terms·privacy·overseas_transfer·marketing`)에 오류 진단 수집이 없어서다. 네이티브 설정(`hypeproofChat.*`)으로 두지 않는다: 한국어 셸 라벨이 core 패치에 들어가 Mac 기반 빌드를 다시 하게 된다 | U (`test/problem-report.smoke.mjs`: 허용 키만, 문장·경로·토큰 음성 대조군, 헤더 없음) · W (`test/problem-report-dialog.test.tsx`: 토글 기본 꺼짐, 저장된 켜짐 표시) |
+| REQ-H11 | 한 번에 보내는 문제 양식 (level 2) | 오류 카드의 「문제 보내기」와 명령 「문제 신고하기」는 채팅 패널 안의 양식(dialog)을 연다: 위 진단 행(읽기 전용), 한 줄 설명(선택, ≤200자, 비우면 진단 코드로 채움), 연락처(선택, ≤200자), 「최근 대화 N개 함께 보내기」 체크박스(**매번 꺼진 채로 시작**, 대화가 없으면 표시 안 함). 보내기 → REQ-KNOW-09 항목별 확인 → `POST /v1/report`; 취소·Escape·확인 취소는 아무것도 보내지 않는다 | U (`test/problem-report.smoke.mjs` opt-in 음성 대조군) · W (`test/problem-report-dialog.test.tsx`) · E (`e2e/tests/26-report-resilience.spec.ts`) |
+| REQ-H12 | 보낼지 묻기 (level 3) | 같은 지문의 실패가 세션에서 두 번째일 때(지문당 한 번), 또는 짧은 좌절 문장(「안 돼」「왜 안 돼」「또 오류」 등, 80자 이하, 30분에 한 번)을 보낼 때 「문제를 보낼까요?」 줄(role=status)을 띄운다. 「문제 보내기」는 REQ-H11 양식을 열 뿐 아무것도 보내지 않는다; 「괜찮아요」는 닫는다 | U (`test/problem-report.smoke.mjs` 양성·음성 대조군) · W (`test/problem-report-dialog.test.tsx`) |
 
 ## I. Auto-update (#72)
 

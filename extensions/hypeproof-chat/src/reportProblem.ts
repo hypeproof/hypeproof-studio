@@ -1,4 +1,5 @@
-// Issue #64: in-Studio bug report. Collects a short description + auto-
+// Issue #64: in-Studio bug report. Since REQ-STUDIO-PROBLEM-REPORT (2026-10-29) the chat panel's in-panel form is
+// the primary surface; this QuickInput cascade remains only as the fallback when no chat panel can be shown. Collects a short description + auto-
 // attached metadata (request_id, jti hash, profile, version, OS) and POSTs
 // to the Worker's /v1/report endpoint. Discord-first triage on the receiving
 // side — see worker/src/routes/report.ts.
@@ -62,22 +63,26 @@ const REPORT_VERSION_UNKNOWN = "unknown";
 
 /**
  * Build the metadata blob attached to every report. Each item is itemized
- * so the modal can show what's being sent and the user can mentally consent
- * (we don't make these opt-out per-field today — that's a follow-up if it
- * matters; today the only opt-in is recent_turns which is PII-bearing).
+ * so the confirmation can show what's being sent. The only opt-in is
+ * recent_turns, which is PII-bearing. Shared with the in-panel form
+ * (REQ-STUDIO-PROBLEM-REPORT, chatPanelProvider.openProblemReport).
  */
-function collectMetadata(deps: ReportProblemDeps, jtiHash?: string): Record<string, unknown> {
+export function collectReportMetadata(context: vscode.ExtensionContext, ids: { requestId?: string; profileId?: string; jtiHash?: string }): Record<string, unknown> {
   return {
-    studio_version: typeof deps.context.extension?.packageJSON?.version === "string" ? deps.context.extension.packageJSON.version : REPORT_VERSION_UNKNOWN,
+    studio_version: typeof context.extension?.packageJSON?.version === "string" ? context.extension.packageJSON.version : REPORT_VERSION_UNKNOWN,
     extension: "hypeproof-chat",
     os: `${os.platform()}-${os.release()}-${os.arch()}`,
     locale: vscode.env.language,
     vscode_version: vscode.version,
-    profile_id: deps.getProfileId(),
-    jti_hash: jtiHash,
-    last_request_id: deps.getLastRequestId(),
+    profile_id: ids.profileId,
+    jti_hash: ids.jtiHash,
+    last_request_id: ids.requestId,
     ts_client: new Date().toISOString(),
   };
+}
+
+function collectMetadata(deps: ReportProblemDeps, jtiHash?: string): Record<string, unknown> {
+  return collectReportMetadata(deps.context, { requestId: deps.getLastRequestId(), profileId: deps.getProfileId(), jtiHash });
 }
 
 export async function runReportProblemCommand(deps: ReportProblemDeps): Promise<void> {

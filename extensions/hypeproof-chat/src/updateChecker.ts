@@ -13,6 +13,7 @@
 //      renderInstallerScript()).
 
 import * as vscode from "vscode";
+import { noteAppProblem } from "./problemReportHost";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -636,6 +637,7 @@ export async function reportInstallUpdateFailure(error: unknown): Promise<void> 
     await reportManualUpdateCheckFailure(error);
     return;
   }
+  noteAppProblem({ step: 'update', code: 'update_install_failed' });
   await vscode.window.showErrorMessage(
     `업데이트를 완료하지 못했습니다. 현재 앱은 종료하지 않습니다. ${(error as Error)?.message ?? ""}`,
   );
