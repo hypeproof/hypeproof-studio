@@ -221,6 +221,11 @@ CPU software fallback or a reused snapshot. Its exact source builds the target
 and AndroidJUnitRunner test APKs with the pinned DEV client and task-local
 Android/Gradle homes. APKs/private client source are not uploaded.
 
+Concurrency belongs to each job: desktop groups include the ref and OS, while
+Android has its own ref group. An Android attempt therefore does not wait behind
+a desktop attempt for that ref. Both keep `cancel-in-progress: false`; running
+jobs are preserved, and GitHub retains the latest pending run within each group.
+
 `NativeDraftLifecycleTest` uses the installed target application's UID and real
 `AndroidDraftFile`/Android `AtomicFile` in a nonce-owned directory beneath that
 application's no-backup directory. After each native assertion checkpoint, the

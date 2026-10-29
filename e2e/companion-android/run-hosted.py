@@ -36,8 +36,14 @@ def validate_ack(row,phase,run,uid,data_dir):
 def validate_cold(previous,current):
  if previous:require(current['pid']!=previous['pid'] and current['startTicks']!=previous['startTicks'] and current['uid']==previous['uid'] and current['dataDir']==previous['dataDir'],'cold_identity_not_replaced')
 
+def validate_target_cmdline(raw,diagnostics):
+ # AndroidRuntime replaces argv[0] within a zero-filled original argument block.
+ first,separator,_=raw.partition(b'\0');tail=raw[len(first):]if separator else b''
+ diagnostics.update({'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'firstNameMatches':first==PKG.encode(),'tailNonzero':any(tail),'nulTailBytes':len(tail)})
+ require(0<len(raw)<=1048576 and bool(separator) and first==PKG.encode() and bool(tail) and not any(tail),'target_process_changed')
+
 class Device:
- def __init__(self,adb,env,server,guest):self.adb=adb;self.env=env;self.server=server;self.guest=guest
+ def __init__(self,adb,env,server,guest,cmdline_observations=None):self.adb=adb;self.env=env;self.server=server;self.guest=guest;self.cmdline_observations=cmdline_observations
  def args(self,*args):return[self.adb,'-H','127.0.0.1','-P','5047','-s','emulator-5578',*args]
  def call(self,*args,timeout=5,check=True):
   require(self.server.poll() is None and self.guest.poll() is None,'owned_guest_closed')
@@ -54,7 +60,10 @@ class Device:
  def identity(self,pid,uid,data_dir):
   require(self.pids()==[pid],'owned_target_not_live')
   name=self.call('shell','run-as',PKG,'cat',f'/proc/{pid}/cmdline').stdout
-  require(name==PKG.encode()+b'\0','target_process_changed')
+  observed={}
+  if self.cmdline_observations is not None:
+   require(len(self.cmdline_observations)<16,'process_identity_observation_bound');self.cmdline_observations.append(observed)
+  validate_target_cmdline(name,observed)
   status=self.text('shell','run-as',PKG,'cat',f'/proc/{pid}/status');found=re.search(r'^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)',status,re.M)
   require(found is not None and all(int(x)==uid for x in found.groups()),'target_uid_changed')
   stat=self.text('shell','run-as',PKG,'cat',f'/proc/{pid}/stat');tail=stat.rsplit(')',1)[-1].split();require(len(tail)>19 and tail[19].isdigit(),'target_start_unavailable')
@@ -164,7 +173,7 @@ def main(argv):
   server=subprocess.Popen([adb,'-L','tcp:5047','--one-device','HPS-owned-no-physical-USB','server','nodaemon'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
   # One boot, CPU acceleration required; no software CPU fallback or snapshot seed.
   guest=subprocess.Popen([emulator,'-avd','HPS_OWNED_DRAFT','-port','5578','-accel','on','-memory','2048','-cores','2','-no-window','-no-audio','-no-snapshot','-no-boot-anim','-gpu','swiftshader_indirect'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-  d=Device(adb,env,server,guest);end=time.monotonic()+240
+  result['processCmdlineObservations']=[];d=Device(adb,env,server,guest,result['processCmdlineObservations']);end=time.monotonic()+240
   while time.monotonic()<end:
    try:
     if d.text('shell','getprop','sys.boot_completed')=='1':break

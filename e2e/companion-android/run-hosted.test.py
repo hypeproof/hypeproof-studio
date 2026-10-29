@@ -119,6 +119,31 @@ class Controls(unittest.TestCase):
   device.text.side_effect=late_read
   with self.assertRaisesRegex(RuntimeError,'guest_radios_not_disabled'):h.disable_and_observe_radios(device,diagnostics,now=lambda:clock[0],sleep=lambda seconds:None)
   self.assertEqual(diagnostics['status'],'refused');self.assertEqual(diagnostics['last'],{'wifi':0,'mobile':0})
+ def test_exact_process_name_accepts_only_nonempty_all_nul_padding(self):
+  for count in [1,2,16,512]:
+   raw=h.PKG.encode()+b'\0'*count;diagnostics={};h.validate_target_cmdline(raw,diagnostics)
+   self.assertEqual(diagnostics,{'bytes':len(raw),'sha256':h.hashlib.sha256(raw).hexdigest(),'firstNameMatches':True,'tailNonzero':False,'nulTailBytes':count})
+ def test_cmdline_extra_arguments_prefix_and_malformed_bytes_refuse_without_raw_diagnostics(self):
+  name=h.PKG.encode()
+  for raw in [b'',name,name+b'.foreign\0',name[:-1]+b'\0',name+b'\0secret-argument\0',name+b'\0\0 \0',b'\xff'+name+b'\0',name+b'\0'*1048576]:
+   diagnostics={}
+   with self.subTest(length=len(raw)),self.assertRaisesRegex(RuntimeError,'target_process_changed'):h.validate_target_cmdline(raw,diagnostics)
+   self.assertEqual(set(diagnostics),{'bytes','sha256','firstNameMatches','tailNonzero','nulTailBytes'});self.assertNotIn('secret-argument',str(diagnostics));self.assertNotIn(h.PKG,str(diagnostics))
+ def test_identity_padding_preserves_exact_uid_start_and_data_checks(self):
+  from unittest.mock import Mock
+  observations=[];d=h.Device('NEVER',{},Child(),Child(),observations)
+  stat='1234 ('+h.PKG+') S '+'0 '*18+'100'
+  for uid,path,ok in [(UID,DATA,True),(999,DATA,False),(UID,'/foreign',False)]:
+   status='Uid: '+' '.join([str(uid)]*4)
+   with patch.object(d,'pids',return_value=[1234]),patch.object(d,'call',return_value=subprocess.CompletedProcess([],0,h.PKG.encode()+b'\0'*16,b'')),patch.object(d,'text',side_effect=[status,stat,path]):
+    if ok:self.assertEqual(d.identity(1234,UID,DATA),identity())
+    else:
+     with self.assertRaises(RuntimeError):d.identity(1234,UID,DATA)
+  self.assertEqual(len(observations),3);self.assertTrue(all(o['firstNameMatches']and not o['tailNonzero']for o in observations))
+ def test_identity_bad_cmdline_records_metadata_then_refuses_before_other_checks(self):
+  observations=[];d=h.Device('NEVER',{},Child(),Child(),observations)
+  with patch.object(d,'pids',return_value=[1234]),patch.object(d,'call',return_value=subprocess.CompletedProcess([],0,h.PKG.encode()+b'\0extra-secret',b'')),patch.object(d,'text')as text,self.assertRaises(RuntimeError):d.identity(1234,UID,DATA)
+  text.assert_not_called();self.assertEqual(len(observations),1);self.assertTrue(observations[0]['tailNonzero']);self.assertNotIn('extra-secret',str(observations))
  def test_default_no_launch(self):
   with patch.object(h.subprocess,'Popen')as popen:self.assertEqual(h.main([]),0)
   popen.assert_not_called()

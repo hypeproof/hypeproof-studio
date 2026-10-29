@@ -27,12 +27,12 @@ on:
         default: ''
 permissions:
   contents: read
-concurrency:
-  group: feedback-native-${{ github.ref }}
-  cancel-in-progress: false
 jobs:
   native:
     if: ${{ !(github.event_name == 'pull_request' && github.event.action == 'labeled') && !(github.event_name == 'workflow_dispatch' && inputs.android_draft) }}
+    concurrency:
+      group: feedback-native-${{ github.ref }}-${{ matrix.os }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -112,6 +112,9 @@ jobs:
 
   android-draft:
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.android_draft) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'companion-android-verify') && (github.event.action != 'labeled' || github.event.label.name == 'companion-android-verify')) }}
+    concurrency:
+      group: feedback-android-draft-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:

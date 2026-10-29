@@ -52,3 +52,11 @@ test('Android task paths are initialized in a step without invalid job-level run
  const initialize=android.indexOf('name: Prepare task-owned Android paths'),checkout=android.indexOf('uses: actions/checkout@v4');assert.ok(initialize>=0&&initialize<checkout);
  const step=android.slice(initialize,checkout);for(const path of ['ANDROID_USER_HOME=$RUNNER_TEMP/android-draft-state/android','GRADLE_USER_HOME=$RUNNER_TEMP/android-draft-state/gradle','HPS_ANDROID_EVIDENCE=$RUNNER_TEMP/android-draft-evidence'])assert.ok(step.includes(path));assert.ok(step.includes('>> "$GITHUB_ENV"'));
 });
+
+test('job-scoped concurrency separates Android from each desktop OS without cancelling running jobs',async()=>{
+ const workflow=await readFile(new URL('../../.github/workflows/feedback-candidate.yml',import.meta.url),'utf8');
+ assert.doesNotMatch(workflow.split('\njobs:')[0],/^concurrency:/m);
+ const native=workflow.split('  native:')[1].split('  android-draft:')[0],android=workflow.split('  android-draft:')[1];
+ assert.ok(native.includes('group: feedback-native-${{ github.ref }}-${{ matrix.os }}'));assert.ok(android.includes('group: feedback-android-draft-${{ github.ref }}'));
+ for(const job of [native,android]){assert.match(job,/    concurrency:\n      group: [^\n]+\n      cancel-in-progress: false/);assert.doesNotMatch(job,/cancel-in-progress: true/);}
+});
