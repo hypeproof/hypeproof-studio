@@ -179,6 +179,14 @@ if [[ -n "$PJSON" ]]; then
   else
     bad "Info.plist CFBundleShortVersionString='$SHORTVER' != product.json.version='$PVER' (#361 stamp missing/misordered)"
   fi
+  # 6c. #3212 — no upstream release notes. With .releaseNotesUrl present, Studio opens
+  # VS Code's release notes (code.visualstudio.com/updates) after every update.
+  RNURL=$(jq -r '.releaseNotesUrl // ""' "$PJSON")
+  if [[ -z "$RNURL" ]]; then
+    ok "product.json: no releaseNotesUrl (no VS Code release notes after update)"
+  else
+    bad "product.json.releaseNotesUrl is set ($RNURL): Studio would open VS Code's release notes after an update (#3212)"
+  fi
 else
   bad "product.json not found inside .app"
 fi
