@@ -7999,7 +7999,7 @@ viewport, no sideways scroll, the same node updated within 500 ms on typing, a h
 onto a closed card; six injected overrides caught).
 
 
-### DMC-4b Android local draft recovery (#3121)
+## DMC-4b Android local draft recovery (#3121)
 
 See [DMC-03/06/07/15](requirements/desktop-mobile-companion.md) and
 [DMC restart tests](testing/desktop-mobile-companion.md). Explicit local recovery
