@@ -330,7 +330,29 @@ await t("host wiring: one restore point before every runtime, one review after i
   ok(/event: "turn_review_revert"/.test(src), "revert not recorded");
   ok(src.includes("nothingChanged: !out.touched,") && src.includes('tooLarge: out.error === "folder_too_large",'), "bar flags must come from the measured outcome");
   ok(!src.includes("nothingChanged: !!out.error"), "an error is not the same as nothing changed");
-  eq((src.match(/if \(this\.turnRestoreBusy\) \{ await this\.refuseSendWhileRestoring\([^)]*\); return; \}\s*await this\.handleSend\(/g) ?? []).length, 2, "send and retry must wait for a running revert");
+  for (const kind of ['sendMessage','retryMessage']) {
+    const at=src.indexOf(`case "${kind}":`),end=src.indexOf('\n      case ',at+1);
+    ok(at>0&&end>at,'bounded desktop dispatcher case');const branch=src.slice(at,end);
+    const guard=branch.match(/if \(this\.turnRestoreBusy\) \{ await this\.refuseSendWhileRestoring\([^)]*\); return; \}/)?.[0];
+    ok(guard,`${kind}: restore hold exists`);
+    const ordered=text=>text.indexOf(guard)>=0&&text.indexOf("await this.submitNormalTurn({kind:'desktop'")>text.indexOf(guard);
+    ok(ordered(branch),`${kind}: restore hold precedes desktop admission`);
+    const run=async(text,restoring)=>{
+      const events=[],msg={type:kind,text:'fresh',prompt:'retry',history:[],images:['image']};
+      const host={turnRestoreBusy:restoring,missingFolderApplies:()=>false,
+        refuseSendWhileRestoring:async(...args)=>events.push(['restore',...args]),submitNormalTurn:async input=>events.push(['submit',input.kind,input.args[0]])};
+      await new Function('msg','source','requestedMode','promptRefs',`return(async()=>{switch(msg.type){${text}}}).call(this);`).call(host,msg,undefined,'auto',()=>undefined);
+      return events;
+    };
+    const draft=kind==='sendMessage'?'fresh':'retry';
+    eq(await run(branch,true),[['restore',draft,['image'],'auto']],'a running revert preserves the draft/images/mode and starts no turn');
+    eq(await run(branch,false),[['submit','desktop',draft]],'idle restore admits the ordinary desktop turn');
+    const removed=branch.replace(guard,'');ok(!ordered(removed),'negative: absent restore hold rejected');
+    eq((await run(removed,true))[0][0],'submit','negative: removing restore hold demonstrably admits during revert');
+    const admission=branch.split('\n').find(line=>line.includes('await this.submitNormalTurn('));
+    const late=removed.replace(admission,admission+'\n'+guard);ok(!ordered(late),'negative: a late restore hold rejected');
+    eq((await run(late,true))[0][0],'submit','negative: late restore hold runs after forbidden admission');
+  }
 });
 
 if (fail) { console.error(`turn-restore: ${fail} failed`); process.exit(1); }

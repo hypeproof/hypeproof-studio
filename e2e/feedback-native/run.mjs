@@ -10,6 +10,7 @@ import {runDelayedActivation,delayedPrerequisite,delayedHistoryPrerequisite} fro
 import {runOwnedWindows} from './native-windows.mjs';
 import {runHistoryStreaming} from './history-streaming.mjs';
 import {captureWindowsQuitOwner,confirmWindowsStreamingQuit} from './native-quit-dialog.mjs';
+import {createMacQuitPort,captureMacQuitOwner,confirmMacStreamingQuit,forceStopMacOwnedChild} from './native-mac-quit.mjs';
 import {compatibilityEnvironment} from '../unified-release/output-bound.mjs';
 import {checkSeededSdk} from '../unified-release/sdk-seed.mjs';
 import {endSyntheticSession} from './session-control.mjs';
@@ -22,7 +23,7 @@ delayedPrerequisite(c);
 fs.mkdirSync(c.evidence,{recursive:true});
 if(fs.existsSync(path.join(c.evidence,'result.json')))fs.copyFileSync(path.join(c.evidence,'result.json'),path.join(c.evidence,'result-previous-'+Date.now()+'.json'));
 const report={schema:'hps-feedback-native-result/1',started_at:new Date().toISOString(),platform:process.platform,mode:c.attach?'attach-no-process-ownership':'owned-prepared-candidate',tests:[],acceptance:'PARTIAL',model_turns:'NOT_RUN',history:'NOT_RUN',streaming:'NOT_RUN',process_restart_credentials:'NOT_RUN',production:'NOT_RUN'};
-const ui=new NativeUI(c.cdp);let child,profile,profileB,extensionGate;
+const ui=new NativeUI(c.cdp);let child,profile,profileB,extensionGate,macQuitPort,macQuitCapture;
 const blocked=message=>Object.assign(Error(message),{blocked:true});
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{report.execution_status='INTERRUPTED';report.native_ui='NOT_RUN_REMAINDER';report.finished_at=new Date().toISOString();try{await extensionGate?.close();}catch(error){report.inspector_signal_cleanup_error=error.message;}ui.close();if(child)child.kill();save();process.exit(130);});
 const save=()=>{report.ui_phases=ui.phases;return fs.writeFileSync(path.join(c.evidence,'result.json'),sanitize(JSON.stringify(report,null,2),secrets));};
@@ -147,11 +148,19 @@ try{
  if(c.scenarios.includes('history-streaming')){
   if(!report.tests.some(t=>t.id==='T04-different-activity-collision'&&t.status==='PASS'))throw blocked('History/streaming requires observed A/B isolation first');
   await runHistoryStreaming({c,ui,step,report,draft,start,focusChat,readDraft,nativeOpenBoundFolder,workspaceFiles,save,candidate:value=>{ownedActivityCandidate=value;},control:{manifestFile:c.service.manifest,origin:c.service.origin,expectedSource:report.service.source,onSecret:secret=>secrets.push(secret)},restart:async expectedDraft=>restartOwnedCandidate({config:c,child,expectedDraft,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();},quit:async()=>{
-   if(process.platform!=='win32')return ui.quitOwned();
+   if(process.platform==='darwin'){
+    macQuitPort??=await createMacQuitPort();const owned=child;
+    const owner=await captureMacQuitOwner({child:owned,executable:fs.realpathSync(path.join(c.candidate.app,'Contents/MacOS/HypeProof Studio')),port:macQuitPort.port});
+    macQuitCapture={child:owned,owner};
+    if(!owner.accessibilityTrusted)throw blocked('owned_ax_permission_unavailable');
+    let confirmed=false;
+    await ui.quitOwned('darwin',async()=>{await confirmMacStreamingQuit({owner,current:()=>child===owned&&owned.exitCode===null&&owned.signalCode===null,port:macQuitPort.port,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();}});confirmed=true;});
+    assert(confirmed,'Expected Mac streaming quit confirmation was not completed');return;
+   }
    const owned=child,owner=await captureWindowsQuitOwner({child:owned,executable:fs.realpathSync(path.join(c.candidate.app,'HypeProof Studio.exe'))});
    await ui.quitOwned('win32',()=>confirmWindowsStreamingQuit({owner,current:()=>child===owned&&owned.exitCode===null&&owned.signalCode===null,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();}}));
   },waitExit:owned=>waitFor(()=>owned.exitCode!==null||owned.signalCode!==null,'owned child exits streaming quit',30000),waitCdpDown:async()=>{await waitFor(()=>ui.cdpDown(),'streaming quit CDP refuses',30000);ui.close();},launch:()=>launchOwned(),observeDraft:()=>ui.restoredDraft(expectedDraft)})});
-  if(!child||child.exitCode!==null||child.signalCode!==null)throw blocked('Streaming recovery did not leave a live owned candidate; no remaining input');
+  if(!report.tests.some(t=>t.id==='T06-native-stream-normal-quit-recovery'&&t.status==='PASS')||!child||child.exitCode!==null||child.signalCode!==null)throw blocked('Streaming recovery did not establish a live restored owned candidate; no remaining input');
  }
  if(c.scenarios.includes('skills')){
  await step('T07-native-skill-preview-select-disable',async()=>{if(!c.skill?.url)throw blocked('Explicit pinned public skill URL required');if(ownedActivityCandidate)throw blocked('Prior owned activity candidate remains pending; skill import must not start in stale entry UI');try{await ui.frame('.hps-input textarea',1500);}catch{await focusChat();}if(!String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)))throw blocked('Skill test requires original A workspace restored; prior folder scenario did not finish');await ui.focusChatReady();const beforeImportPreview=await ui.editorState(await ui.workbench());beforeImportPreview.returnTarget={kind:'chat',identity:await ui.chatDocumentIdentity()};await ui.assertNoDirtyEditors();await command('hypeproof-chat.externalSkills');await ui.quick('GitHub에서 가져오기');await ui.prompt('공개 GitHub 지침 스킬 가져오기',c.skill.url);const w=await ui.workbench();let outcomeText='';await waitFor(async()=>{outcomeText=String(await ui.toasts());return skillPreviewOutcome(outcomeText);}, 'skill preview confirmation or canonical public-download failure',90000);const text=outcomeText;if(skillPreviewOutcome(text)!=='preview')throw blocked('Public import unavailable: '+text);const preview=await w.evaluate("document.querySelector('.editor-instance')?.textContent||document.body.textContent");assert(preview.includes(c.skill.revision),'Visible preview includes immutable revision');assert(preview.includes('라이선스')&&preview.includes('capability'),'Visible preview includes license/capabilities');await ui.shot(path.join(c.evidence,'skill-preview.png'));await ui.clickText(w,'선택하여 사용');await waitFor(async()=>String(await ui.toasts()).includes('이 작업 폴더의 다음 요청부터 선택한 지침을 사용합니다.'),'selected skill saved completion notification');const importedPreview=await ui.newPreview(w,beforeImportPreview,['외부 지침 스킬',c.skill.revision,'manifest SHA-256','라이선스','capability']);const importPreviewCleanup=await ui.closeOwnedPreview(w,beforeImportPreview,importedPreview);await command('hypeproof-chat.externalSkills');await ui.quick(c.skill.name);const beforePreview=await ui.editorState(w);beforePreview.returnTarget=beforeImportPreview.returnTarget;await ui.quick('내용과 출처 보기');const storedPreview=await ui.newPreview(w,beforePreview,['외부 지침 스킬',c.skill.revision,'manifest SHA-256','라이선스','capability']);await ui.shot(path.join(c.evidence,'stored-skill-preview.png'));const storedPreviewCleanup=await ui.closeOwnedPreview(w,beforePreview,storedPreview);await command('hypeproof-chat.externalSkills');await ui.quick(c.skill.name);await ui.quick('사용 해제');await command('hypeproof-chat.externalSkills');await ui.waitQuick(w,s=>s.ready&&s.mode==='picker','stored skill list reopened after disable');await waitFor(()=>ui.choiceSelector(w,c.skill.name),'stored skill row after disable');const pick=await w.evaluate("document.querySelector('.quick-input-list')?.textContent");assert(pick.includes(c.skill.name)&&!pick.includes('✓ '+c.skill.name),'Skill remains stored but deselected');await ui.key(w,'Escape');return {native_command:true,preview_before_select:true,stored_snapshot_preview:true,stored_preview_resource:storedPreview.resource,preview_cleanup:[importPreviewCleanup,storedPreviewCleanup],disabled:true,offline_network_isolation:'NOT_RUN',instruction_dispatch:'NOT_RUN'};});
@@ -197,6 +206,7 @@ try{
  save();ui.close();
  if(child){
   try{report.cleanup=await stopOwnedCandidate({config:c,child,
+   forceStop:macQuitCapture?.child===child&&macQuitPort?owned=>forceStopMacOwnedChild({child:owned,owner:macQuitCapture.owner,current:()=>child===owned&&macQuitCapture.child===owned,port:macQuitPort.port}):undefined,
    waitExit:owned=>waitFor(()=>owned.exitCode!==null||owned.signalCode!==null,'owned cleanup child exit',10000),
    waitCdpDown:()=>waitFor(()=>ui.cdpDown(),'owned cleanup CDP refusal',5000)});
   }catch(error){report.cleanup={status:'FAIL',child_exit_observed:false,cdp_down:false,error:sanitize(error.message,secrets)};}
@@ -204,6 +214,7 @@ try{
   report.cleanup_stop_not_restart_evidence=true;
   if(report.cleanup.status!=='PASS')report.execution_status='FAIL';
  }else report.attached_process_left_running=!!c.attach;
+ try{await macQuitPort?.close();}catch{report.mac_quit_helper_cleanup='FAIL';report.execution_status='FAIL';}
  report.focus_host_diagnostics=ownedFocusLogs(c.userDataDir);
  report.finished_at=new Date().toISOString();save();console.log('Result: '+path.join(c.evidence,'result.json'));
 }

@@ -1,5 +1,6 @@
 // Cross-platform form of the existing classroom/mac-window.mjs OOPIF/input contract.
-// Reads DOM state only. Every action uses native CDP keyboard/mouse input, never DOM click(), input setters or postMessage().
+// Reads DOM state; actions use native CDP input, never DOM click(), setters or postMessage().
+// Streaming quit may explicitly delegate its OS-native confirmation to an owned platform port.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {loopback} from './safety.mjs';
@@ -120,6 +121,7 @@ export class NativeUI{
   catch(error){if(w.ws?.readyState===WebSocket.CLOSED)return;throw error;}
   try{await w.send('Input.dispatchKeyEvent',{type:'keyUp',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:0});}
   catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+  if(confirmStreamingQuit)await confirmStreamingQuit();
  }
 
  async list(observation){const r=await fetch(this.endpoint+'/json/list',{signal:observation?AbortSignal.any([observation.signal,AbortSignal.timeout(1500)]):AbortSignal.timeout(1500)});if(!r.ok)throw Error('CDP target list unavailable');return r.json();}

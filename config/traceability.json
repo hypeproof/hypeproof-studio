@@ -5691,6 +5691,15 @@
           "path": "e2e/feedback-native/native-quit-dialog.test.mjs"
         },
         {
+          "path": "e2e/feedback-native/native-mac-quit.m"
+        },
+        {
+          "path": "e2e/feedback-native/native-mac-quit.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-mac-quit.test.mjs"
+        },
+        {
           "path": "e2e/feedback-native/prepare-config.mjs"
         },
         {

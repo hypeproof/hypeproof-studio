@@ -20,11 +20,11 @@ test('capture requires live exact owned Windows hosted child before any input',a
  assert.deepEqual(await captureWindowsQuitOwner(options),owner);
  for(const patch of [{platform:'darwin'},{env:{}},{child:{pid:owner.pid,exitCode:0,signalCode:null}},{port:async()=>({...owner,start:'bad'})},{port:async()=>({...owner,executable:'D:\\peer.exe'})}])await assert.rejects(captureWindowsQuitOwner({...options,...patch}));
 });
-test('actual quit method invokes explicit Windows confirmation only after real File Exit; Mac unchanged',async()=>{
+test('actual quit method invokes explicit platform confirmation after the real public quit gesture',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777'),events=[];
  const target={send:async()=>events.push('key')};ui.workbench=async()=>target;ui.focusWorkbench=async()=>events.push('focus');ui.clickText=async()=>events.push('click');
  await ui.quitOwned('win32',async()=>events.push('confirm'));assert.deepEqual(events,['focus','click','click','confirm']);
- events.length=0;await ui.quitOwned('darwin',async()=>{throw Error('must not invoke Windows port');});assert.deepEqual(events,['focus','key','key']);
+ events.length=0;await ui.quitOwned('darwin',async()=>events.push('mac-confirm'));assert.deepEqual(events,['focus','key','key','mac-confirm']);
 });
 test('bounded delayed observation confirms once, with final receipt and no implicit extra quit gesture',async()=>{
  let time=0,reads=0;const calls=[],progress=[];
