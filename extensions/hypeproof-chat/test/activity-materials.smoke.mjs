@@ -340,6 +340,47 @@ t("unavailableSelected names a selected item that left the list with its title a
   assert.deepEqual(m.unavailableSelected(work, view, new Map()), [], "nothing selected: nothing read, nothing named");
 });
 
+t("authored note reopens through the existing manifest and is sent only when selected", () => {
+  const work = fs.mkdtempSync(path.join(tmp, "note-"));
+  const text = "첫 번째 생각\n  두 번째 줄은 공백을 유지해요.\n";
+  const saved = m.addMaterialNote(work, "수업 메모", text);
+  assert.equal(saved.ok, true, saved.reason);
+  assert.equal(saved.rel, "자료/수업 메모.txt");
+  assert.equal(fs.readFileSync(path.join(work, saved.rel), "utf8"), text);
+  const added = m.withLearnerItem(m.emptyManifest(), { kind: "file", ref: saved.rel }, 1);
+  const file = m.materialsManifestFile(path.join(tmp, "note-storage"), work);
+  m.saveManifest(file, added.manifest);
+  const view = m.materialsView({ manifest: m.loadManifest(file), folderFiles: m.listMaterialFolder(work), provenance: () => undefined, inbox: [], selected: new Set(), scope: "note-scope" });
+  assert.equal(view.items.length, 1);
+  assert.equal(m.selectedMaterialsText(work, view, new Set(), []).text, null);
+  const selected = m.selectedMaterialsText(work, view, new Set([`me:${added.id}`]), []);
+  assert.ok(selected.text.includes(text));
+  assert.ok(selected.text.includes('<material origin="나" kind="file"'));
+  const second = m.addMaterialNote(work, "수업 메모", "다른 내용");
+  assert.equal(second.ok, true);
+  assert.equal(second.rel, "자료/수업 메모 (2).txt");
+  assert.equal(fs.readFileSync(path.join(work, saved.rel), "utf8"), text);
+});
+
+t("invalid note title/body refuses before writing any files", () => {
+  const work = fs.mkdtempSync(path.join(tmp, "note-refuse-"));
+  for (const title of [null, "", " ", "../escape", "a/b", "a\\b", ".hidden", "bad\u0000name", "CON", "NUL.txt", "bad:name", "a".repeat(197)]) {
+    assert.equal(m.addMaterialNote(work, title, "내용").ok, false, String(title));
+  }
+  for (const body of [null, "", " \n", "a".repeat(20_001), "bad\u0000text", "\ud800"]) {
+    assert.equal(m.addMaterialNote(work, "제목", body).ok, false, String(body).slice(0, 30));
+  }
+  assert.deepEqual(fs.readdirSync(work), []);
+});
+
+t("authored note refuses a symlinked materials folder", () => {
+  const work = fs.mkdtempSync(path.join(tmp, "note-link-"));
+  const outside = fs.mkdtempSync(path.join(tmp, "note-outside-"));
+  fs.symlinkSync(outside, path.join(work, "자료"), "dir");
+  assert.equal(m.addMaterialNote(work, "제목", "내용").cause, "materials-folder");
+  assert.deepEqual(fs.readdirSync(outside), []);
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 if (failures.length) { console.error(`activity-materials: ${failures.length} failed`); process.exit(1); }
 console.log(`activity-materials smoke OK (${passed})`);
