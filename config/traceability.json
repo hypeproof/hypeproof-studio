@@ -5839,6 +5839,18 @@
         },
         {
           "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.cs"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.ps1"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.test.ps1"
         }
       ]
     },

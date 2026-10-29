@@ -92,8 +92,21 @@ export function descendant(pid,root,parents){
 export function listenerCommand(port,platform=process.platform){
  assert(Number.isInteger(port)&&port>=1024&&port<=65535);
  if(platform==='darwin')return ['lsof',['-nP','-iTCP:'+port,'-sTCP:LISTEN','-Fp']];
- if(platform==='win32')return ['powershell.exe',['-NoProfile','-NonInteractive','-Command',`$pids=@(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique);$rows=@(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId);@{listeners=$pids;parents=$rows}|ConvertTo-Json -Compress -Depth 4`]];
+ if(platform==='win32')return ['powershell.exe',['-NoProfile','-NonInteractive','-File',fileURLToPath(new URL('./windows-inspector-snapshot.ps1',import.meta.url)),'-Port',String(port)]];
  throw Error('Inspector listener ownership supports only hosted Mac/Windows');
+}
+export function parseWindowsListenerSnapshot(output,port){
+ assert(Number.isInteger(port)&&port>=1024&&port<=65535,'Exact port required');
+ assert(typeof output==='string'&&Buffer.byteLength(output)<=1048576,'Bounded listener output required');
+ const data=JSON.parse(output),keys=value=>Object.keys(value).sort().join(',');
+ assert(data&&typeof data==='object'&&!Array.isArray(data)&&keys(data)==='listeners,parents,port,schema','Exact snapshot fields required');
+ assert(data.schema==='hps-owned-windows-listener/1'&&data.port===port,'Snapshot identity mismatch');
+ assert(Array.isArray(data.listeners)&&data.listeners.length<=64&&Array.isArray(data.parents)&&data.parents.length<=16384,'Snapshot row bound');
+ const pid=value=>Number.isInteger(value)&&value>=0&&value<=4294967295;
+ assert(data.listeners.every(value=>pid(value)&&value>1)&&new Set(data.listeners).size===data.listeners.length,'Unique numeric listeners required');
+ const parents=new Map();
+ for(const row of data.parents){assert(row&&typeof row==='object'&&!Array.isArray(row)&&keys(row)==='ParentProcessId,ProcessId'&&pid(row.ProcessId)&&pid(row.ParentProcessId)&&!parents.has(row.ProcessId),'Exact unique process rows required');parents.set(row.ProcessId,row.ParentProcessId);}
+ return {pids:data.listeners,parents};
 }
 // Numeric bounded diagnostics only. A later sample can never authorize admission.
 export function ownershipDiagnostic({pids,parents,timing},root){
@@ -131,7 +144,7 @@ export function ownedListener(port,root,platform=process.platform,execute=execFi
    timing.parents_started_at=new Date().toISOString();
    const rows=execute('ps',['-axo','pid=,ppid='],{encoding:'utf8',timeout:timeoutMs,stdio:['ignore','pipe','ignore']});
    timing.parents_finished_at=new Date().toISOString();parents=new Map(String(rows).trim().split('\n').map(line=>line.trim().split(/\s+/).map(Number)));
-  }else{try{const data=JSON.parse(output);pids=[...new Set(data.listeners??[])];parents=new Map((data.parents??[]).map(x=>[x.ProcessId,x.ParentProcessId]));}catch(error){const failure=Error('Cannot parse inspector listener ownership');failure.ownership_query_failure=queryFailure(error,'windows_result_parse',timeoutMs,began,output);throw failure;}}
+  }else{try{({pids,parents}=parseWindowsListenerSnapshot(output,port));}catch(error){const failure=Error('Cannot parse inspector listener ownership');failure.ownership_query_failure=queryFailure(error,'windows_result_parse',timeoutMs,began,output);throw failure;}}
   return {pids,parents,timing};
  };
  const sample=read(),{pids,parents}=sample;if(!pids.length)return null;
