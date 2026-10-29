@@ -7882,7 +7882,7 @@ every learner seat that has a task workspace (personal, trial; minor cohorts inc
   activity is never read, and lists each file newest first with its name, time and full text (as
   text, line breaks kept). 열기 opens that exact file in a read-only editor tab. 지우기… shows the
   host's native modal confirm naming the file, with one 취소; 취소, Escape or a closed dialog changes nothing. A confirmed delete
-  removes exactly the file the learner confirmed (its identity is pinned before the confirm; a file replaced under the same name meanwhile is refused with "기억 파일이 바뀌었어요"), permanently (not to the activity trash, so a deleted memory does not
+  removes exactly the file the learner confirmed (its identity is pinned before the confirm: device, inode, change and birth time in nanoseconds, size and a SHA-256 of the bytes, so a file recreated under a reused inode number (ext4) is still told apart; a file replaced under the same name meanwhile is refused with "기억 파일이 바뀌었어요"), permanently (not to the activity trash, so a deleted memory does not
   linger in the activity), and a status line says "기억 파일 “…”을 지웠어요." A press with a stale task
   or activity scope, an unknown action or a name outside the list is refused before any confirm; a
   task or activity switch during the confirm cancels the delete. Instructors and seats without a
@@ -7980,3 +7980,59 @@ state: on (the card icon swap is the only behaviour change; the rest holds what 
 Evidence: `extensions/hypeproof-chat/test/learning-block-judgment-visuals-browser.smoke.mjs` (the mounted ChatPanel with the
 shipped stylesheet in headless Chromium; 15 block states covering all seven kinds x 2 seats x 2 themes x 2 widths, each measured in colour and in
 grayscale; positive and negative controls for every finding kind; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Memory overview by task (CGP-KNOW-R-025)
+
+REQ-STUDIO-MEMORY-OVERVIEW / REQ-KNOW-43 (CGP-KNOW-043) / PI#7 (capability models are hypotheses, not UI labels),
+SX-01 (no capability label or evaluation sentence on the work screen); builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES
+(CGP-KNOW-R-030) and DEC-01. The memory panel in 내 작품 shows "작업별 기억": the stated facts in the activity's
+memory files, grouped by the task each came from. It filters ability, personality and capability statements out on a best-effort basis (word and pattern lists; see the rule below).
+
+- **Built here, from the files.** The overview is made on this computer from the memory files themselves; no model
+  writes or summarises it, and no request carries memory for it. Each item is one file's text, trimmed. An item kept
+  from a task records the task on the file's first line as a Markdown comment (`<!-- hypeproof-task: <id> -->`, a plain
+  id only); the line is never part of the item text or of `contextItems()`. Groups are named by the activity's task
+  titles (listed and archived); an item with no task line goes under "작업 정보가 없는 기억", an id no task has under
+  "지금 목록에 없는 작업". Groups and items are newest first. A file whose text is not shown (too large, not text, blank)
+  is not in the overview; the file list keeps it.
+- **The check.** `memoryStatementRefusal` compares each sentence after NFKC, Cyrillic/Greek look-alike folding, removal of
+  invisible characters (zero-width, bidi, Hangul fillers) and lower-casing, and again with every space removed (so "소 심 함",
+  "못  해 요" and "S m a r t" are caught). It refuses: a capability key of either model (FRAMING…OWNERSHIP and the legacy
+  seven) in any case, also full-width or spaced out; a capability label that does not read as an everyday word (문제 구성,
+  역할·통제 설계, 전략 수정, 보는 눈, 주인의식); any capability label followed by an evaluative word ("검증이 약함", "판단 점수");
+  an ability or personality noun (역량, 능력, 실력, 재능, 성격, 집중력, 리더십, 센스, 자존감, …); evaluative, deficit and habit
+  words (똑똑, 꼼꼼, 부족, 못해, 어려워해, 포기하, 약함, 느림, 싫증, 빼먹, 항상 늦, …); person-type labels with or without a
+  pronoun (~타입 except 타입스크립트, 하는 아이/학생, 노력파, 완벽주의자, 문제아, 모범생, 우등생, 열등생, 상위권, 하위권, …);
+  health, diagnosis and emotional-state words (ADHD, 난독, 자폐, 우울, 불안 but not 불안정, 공황, 중독, 장애 but not 장애물,
+  진단, …); English evaluative, person-type and health words (smart, bright, weak, struggles, slow learner, gives up, shy,
+  impatient, perfectionist, IQ, dyslexia, anxiety, …); and three or more loose Hangul jamo in a row (a word spelled out
+  letter by letter). A short list of everyday words that contain a stem (요약해, 예약해, 아이디어, 아이콘, 라이센스, …) is
+  blanked before the Korean lists are matched. Two-syllable labels such as 검증, 판단 and 의도 pass in a stated fact unless an
+  evaluative word follows. A refused item is left out and counted ("…기억 N개는 여기에 넣지 않았어요"); it stays in the file
+  list, where it can be read and deleted. A task title that fails the check is shown as "이름을 요약에 넣지 않은 작업". The
+  host runs the same check on the finished overview and sends none if anything fails. The lists are best-effort: they hold
+  the known shapes, not every possible sentence, and a too-strict match only costs an overview line (ordinary English words
+  such as "context" or "intent" are capability keys and are refused).
+- **Not for minors.** The host sends an overview only for a known adult profile (`isMinorProfile` false: not
+  `minor_cohort`, and a `website` or `search-webapp` tier). A minor cohort, an unknown tier, no profile or the
+  instructor surface gets no overview and no correction; the memory files stay listed and deletable (DEC-02).
+- **Correct in words.** Each overview item has 고치기, which opens a labelled field ("바르게 고친 문장") holding the item,
+  with 고친 내용 저장 and 취소. Saving sends the learner's words, bound to the listed scope and the item's file. The host
+  answers "바뀐 기억이 없어요." when the words are the same as the item after normalisation (NFC, line endings,
+  control/zero-width removal, trimming) and changes nothing. Otherwise it refuses empty words, words that fail the check,
+  more than 2,000 characters, an item the overview does not show, and a stale scope; on success it adds the words as a
+  new file with the same task line (synced to disk) and then removes the old file it pinned before the press; the scope is checked again right before that write (REQ-STUDIO-ACTIVITY-MEMORY-FILES:
+  the store still has no edit path). If the old file was replaced meanwhile, the new copy is removed, the replaced file
+  is kept, and the panel says the file changed. A status line says "기억을 고쳤어요." after a correction.
+
+Evidence: `extensions/hypeproof-chat/test/memory-overview.smoke.mjs` (hand-written facts pass and hand-written ability,
+personality and capability sentences fail; every capability key of both models; the task line on real files; grouping,
+unknown and missing tasks, hidden titles and the count of withheld items; then the real provider and host module: the
+overview with real task titles on an adult seat, none on a minor, kids or unknown tier, a minor's correction refused, the
+no-op answer, every refusal, a real correction, a task switch right before the write, and a file replaced during the press; the privacy verifier's
+71 bypass sentences are all refused and 28 ordinary task memories all kept) and
+`extensions/hypeproof-chat/test/memory-overview-browser.smoke.mjs` (built CSS and real panel markup in headless Chromium,
+personal and classroom shells, dark and light, 800 and 1420 px, normal and forced colours: no overview drawn without
+one, task headings, item text as text, 44px targets, 14px text at 4.5:1, focus rings, the field opens focused with the
+item's words, one request per press, the no-op line, 취소 sends nothing; fails under `FOCUS_REQUIRE_BROWSER=1` without a
+browser).

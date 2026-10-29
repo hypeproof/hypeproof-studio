@@ -797,7 +797,8 @@ export type WebviewMessage = (
   | { type: "activityTrashRequest" }
   | { type: "activityTrashAction"; requestId: string; scope: string; action: import("./activityTrashView").ActivityTrashAction; target: string }
   | { type: "activityMemoryRequest" }
-  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string }
+  // REQ-STUDIO-MEMORY-OVERVIEW — `text` is the learner's correction, sent only with action "correct".
+  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string; text?: string }
   | { type: "artifactProvenanceRequest" }
   // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
   | { type: "artifactThumbnailRequest"; requestId: string; path: string }
