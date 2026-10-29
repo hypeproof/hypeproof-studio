@@ -32,6 +32,7 @@ import {
   isUpdateVersion,
   parseLatestRelease,
   detectAppBundle,
+  installerEnv,
   renderInstallerScript,
   shouldShowBanner,
   hasFreeDisk,
@@ -159,8 +160,8 @@ export async function installStagedUpdate(context: vscode.ExtensionContext, allo
   return stagedUpdate(context).install(allowed, version => isUpdateVersion(currentBundleVersion()) && compareVersions(version, currentBundleVersion()) > 0, async (platform, script) => {
     if (platform !== process.platform) throw new Error("Staged update platform mismatch");
     const child = platform === "darwin"
-      ? cp.spawn("/bin/bash", [script], { detached: true, stdio: "ignore" })
-      : cp.spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script], { detached: true, stdio: "ignore" });
+      ? cp.spawn("/bin/bash", [script], { detached: true, stdio: "ignore", env: installerEnv(process.env) })
+      : cp.spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script], { detached: true, stdio: "ignore", env: installerEnv(process.env) });
     await waitForSpawn(child);
     child.unref();
     return child.pid!;
@@ -285,6 +286,8 @@ async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<v
         const child = cp.spawn("/bin/bash", ["-c", wrapper], {
           detached: true,
           stdio: "ignore",
+          // #3210: never hand the extension host's ELECTRON_RUN_AS_NODE/VSCODE_* to the relaunch.
+          env: installerEnv(process.env),
         });
         await waitForSpawn(child);
         child.unref();
@@ -425,7 +428,7 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
         const child = cp.spawn(
           "powershell.exe",
           ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", wrapperPath],
-          { detached: true, stdio: "ignore" },
+          { detached: true, stdio: "ignore", env: installerEnv(process.env) },
         );
         await waitForSpawn(child);
         child.unref();
