@@ -11,7 +11,7 @@ const service='https://synthetic.invalid/v1';
 let responseProfile, chosen, navigationFailure=false;
 const vscode={workspace:{workspaceFolders:[],getConfiguration:()=>({get:(k,d)=>k==='proxyUrl'?service:d})},window:{showOpenDialog:async()=>chosen?[{fsPath:chosen}]:undefined,showInformationMessage(){}},Uri:{file:fsPath=>({fsPath})},commands:{executeCommand:async name=>{if(name==='vscode.openFolder'&&navigationFailure)throw Error('injected navigation failure');}}};
 const mod={exports:{}};
-vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,console,Buffer,URL,AbortSignal,TextEncoder,setTimeout,clearTimeout,fetch:async url=>new Response(JSON.stringify(url.endsWith('/activity')?{activity_id:responseProfile.activity_id}:responseProfile),{status:200})});
+vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,console,Buffer,URL,AbortSignal,TextEncoder,TextDecoder,setTimeout,clearTimeout,fetch:async url=>new Response(JSON.stringify(url.endsWith('/activity')?{activity_id:responseProfile.activity_id}:responseProfile),{status:200})});
 const {ActivityConnections,StartPage,ensureWorkspace}=mod.exports;
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-pass-transaction-'));
 const profile=(id,home,pass=false)=>({activity_id:id.repeat(64),activity_kind:pass?'trial':'class',profile_id:'synthetic',display_name:'Synthetic activity',ux:{coach:{naming_mode:'fixed'}},welcome:{},workspace_root:home,workspace_start:'empty',...(pass?{pass:{request_limit:200,requests_used:0}}:{})});
