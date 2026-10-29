@@ -4378,7 +4378,14 @@
         "extensions/hypeproof-chat/src/companionReceivingLifetime.ts",
         "extensions/hypeproof-chat/test/companion-receiving-lifetime.smoke.mjs",
         "apps/companion-android/test/draft-recovery.test.mjs",
-        "apps/companion-android/test/draft-native.test.sh"
+        "apps/companion-android/test/draft-native.test.sh",
+        ".github/workflows/feedback-candidate.yml",
+        "e2e/companion-android/build-hosted.mjs",
+        "e2e/companion-android/run-hosted.py",
+        "e2e/companion-android/run-hosted.test.py",
+        "e2e/companion-android/compiler-diagnostics.mjs",
+        "e2e/companion-android/compiler-diagnostics.test.mjs",
+        "apps/companion-android/app/src/androidTest/java/ai/hypeproof/companion/NativeDraftLifecycleTest.java"
       ]
     }
   ]

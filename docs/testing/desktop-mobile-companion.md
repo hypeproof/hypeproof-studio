@@ -352,3 +352,21 @@ relay acceptance, zero duplicate send/model work, and explicit erase across
 relaunch. Freeze new Studio/APK/Service identities and retain failure artifacts.
 No source/JVM/React result establishes physical/iOS, classroom, production or
 real-data encryption readiness.
+
+### Hosted native file lifecycle slice (issue #3121)
+
+Manual `feedback-candidate.yml` with `android_draft=true` selects only a fresh
+Linux KVM Android35 job. It builds and installs the exact debug target and test
+APK, observes a disabled unconfigured debug entry, then exercises production
+native draft storage/AtomicFile under the target UID in its nonce-owned
+no-backup directory. Native checkpoints hold the target alive until an external
+exact-owner force-stop; cold recovery/erase and second-cold absence require a
+new PID/start time and the same UID/canonical data directory. Synthetic original,
+foreign, corrupt and attempted-unknown preservation remain assertions.
+
+Record the hosted source/APK hashes, checkpoint ACKs, external death/new-process
+identities and owned cleanup before claiming this slice PASS. It is not a
+completed JUnit suite, authenticated UI recovery, live paired packet/replay
+acceptance, physical Android/iOS or full DMC acceptance. Local fake controls do
+not establish an installed result. Upload only the workflow's explicit JSON/PNG
+allowlist; target/test APKs contain private build inputs and remain ephemeral.

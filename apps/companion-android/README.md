@@ -205,3 +205,38 @@ Genuine same-account browser device login, secure persistent credentials, final
 device identity lifecycle, physical Android/iOS, classroom and production
 acceptance remain outside this debug fixture proof. The package's existing DEV
 placeholder device_id remains unchanged and cannot establish physical identity.
+
+## Hosted Android35 native cold file slice (#3121)
+
+The existing Feedback native candidate workflow has an explicit manual
+`android_draft=true` input. That choice runs only the Linux Android job;
+ordinary PR/manual desktop runs keep their existing Mac/Windows jobs. The
+Android job requires `/dev/kvm` and one fresh AOSP API35 x86_64 guest, without
+CPU software fallback or a reused snapshot. Its exact source builds the target
+and AndroidJUnitRunner test APKs with the pinned DEV client and task-local
+Android/Gradle homes. APKs/private client source are not uploaded.
+
+`NativeDraftLifecycleTest` uses the installed target application's UID and real
+`AndroidDraftFile`/Android `AtomicFile` in a nonce-owned directory beneath that
+application's no-backup directory. After each native assertion checkpoint, the
+host verifies the exact live package/process/UID/start time/canonical data path,
+externally force-stops that target once, and observes absence. Cold phases must
+have a new PID and start time with the same UID/data directory. They verify
+editing text/selection recovery, explicit erase and second-cold absence, while
+preserving a synthetic original, foreign-account refusal, corrupt bytes and an
+attempted-unknown packet until its explicit erase. Checkpoints intentionally
+hold for external termination; they are not completed JUnit test results.
+
+The only Activity entry is the existing debug device-sign-in fixture without
+extras: it has no target origin or transport and its login button must remain
+disabled. Wi-Fi and mobile data are disabled and read back before launch; this
+is not a claim of packet-level guest isolation. No login, browser, pairing,
+relay, SDK, authoring send or production endpoint is exercised. This slice does
+not establish authenticated UI recovery, packet replay safety across a paired
+session, physical-device acceptance, or complete DMC acceptance. A source/fake
+control PASS is distinct from the hosted APK build and installed result.
+
+The downloadable evidence allowlist contains only source/build hashes,
+sanitized compiler categories, process checkpoints/cleanup and the unconfigured
+entry screenshot. It excludes APKs, private packages/source, Gradle caches and
+raw build/instrumentation output. A failed cleanup remains FAIL.

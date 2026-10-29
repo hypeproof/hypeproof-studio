@@ -15735,6 +15735,27 @@
       ],
       "sources": [
         {
+          "path": ".github/workflows/feedback-candidate.yml"
+        },
+        {
+          "path": "e2e/companion-android/build-hosted.mjs"
+        },
+        {
+          "path": "e2e/companion-android/run-hosted.py"
+        },
+        {
+          "path": "e2e/companion-android/run-hosted.test.py"
+        },
+        {
+          "path": "e2e/companion-android/compiler-diagnostics.mjs"
+        },
+        {
+          "path": "e2e/companion-android/compiler-diagnostics.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/app/src/androidTest/java/ai/hypeproof/companion/NativeDraftLifecycleTest.java"
+        },
+        {
           "path": "docs/testing/desktop-mobile-companion.md"
         },
         {
