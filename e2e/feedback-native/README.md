@@ -202,6 +202,23 @@ UI/action; history, cancellation and no-replay still require their separate chec
 The Windows-only port is source-tested with injected observations; its new real
 native UI behavior must be verified by the next hosted run.
 
+When the Windows UIA observation returns no candidate, the same 10s budget may
+use a separate Win32 observation. This is not authority inferred from the census:
+it freshly requires the exact owned foreground `#32770`, same-process owner and
+child ancestry, exact two message/detail text nodes, and exactly two visible,
+enabled Win32 `Button` children labelled `계속하기` / `끝내기`. The chosen child
+handle and immediate parent must survive re-enumeration in the action process.
+The final process/start/executable, dialog and button checks precede one fixed
+[`BM_CLICK`](https://learn.microsoft.com/en-us/windows/win32/controls/bm-click)
+through [`SendMessageTimeoutW`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessagetimeoutw)
+with zero message parameters, `SMTO_BLOCK | SMTO_ABORTIFHUNG`, and at most 1s
+within the remaining deadline. No activation is attempted. Unknown UIA observations,
+changed ownership, inactive dialogs, and ambiguous choices still refuse input.
+Timeout or lost receipt is unknown and never triggers another route or click.
+A completed message is not proof of exit: the original owned-child exit, CDP
+refusal and durable-history checks remain required. This route has portable
+source/contract controls; real Windows invocation remains pending hosted evidence.
+
 The Mac streaming-quit scenario uses a run-owned Objective-C Accessibility helper
 compiled from tracked source before Cmd+Q. It reads only the spawned PID
 (`proc_pidinfo` start stamp and exact `proc_pidpath`) and that application’s own

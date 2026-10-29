@@ -161,7 +161,7 @@ try{
    const current=()=>child===owned&&owned.exitCode===null&&owned.signalCode===null;
    const census=async phase=>{const observation=await observeWindowsQuitStructure({owner,current});(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),phase,...observation});save();};
    await census('native_quit_structure_before');
-   try{await ui.quitOwned('win32',()=>confirmWindowsStreamingQuit({owner,current,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();}}));}
+   try{await ui.quitOwned('win32',()=>confirmWindowsStreamingQuit({owner,current,allowWin32:true,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();}}));}
    catch(error){await census('native_quit_structure_refused');throw error;}
   },waitExit:owned=>waitFor(()=>owned.exitCode!==null||owned.signalCode!==null,'owned child exits streaming quit',30000),waitCdpDown:async()=>{await waitFor(()=>ui.cdpDown(),'streaming quit CDP refuses',30000);ui.close();},launch:()=>launchOwned(),observeDraft:()=>ui.restoredDraft(expectedDraft)})});
   if(!report.tests.some(t=>t.id==='T06-native-stream-normal-quit-recovery'&&t.status==='PASS')||!child||child.exitCode!==null||child.signalCode!==null)throw blocked('Streaming recovery did not establish a live restored owned candidate; no remaining input');
