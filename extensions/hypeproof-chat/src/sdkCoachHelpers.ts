@@ -33,6 +33,7 @@ import { browserTargetInline, UNKNOWN_HOST_TEXT } from "./browserTargetHost.ts";
 import { writeTargetsOf } from "./writeApprovalPaths.ts";
 import { writeEditOf } from "./writeApprovalChange.ts";
 import { relativeEscapes } from "./workspaceRouting.ts";
+import { runsAppBundleProgram } from "./appBundleExec.ts";
 import { linkCommandVerdict, shellUnreadable } from "./shellLinkPolicy.ts";
 import {
   MCP_BROWSER_OPEN,
@@ -2813,6 +2814,9 @@ export type SdkToolVerdict =
 /** Reasons in the learner's words for the platform-safety denies (the copy builder adds the frame). */
 export const PATH_ESCAPE_REASON = "작업 폴더 밖의 파일이에요";
 export const LINK_OUTSIDE_REASON = "작업 폴더 밖을 가리키는 바로가기(링크)는 만들 수 없어요";
+/** #3221 — the learner-facing reason when the coach tries to run a program inside another app (Chrome etc.). */
+export const APP_BUNDLE_PROGRAM_REASON =
+  "다른 앱(예: Chrome) 안의 프로그램은 실행하지 않아요. macOS가 'App 관리' 권한으로 막아요";
 export const URL_POLICY_REASON = "열 수 없는 주소예요";
 export const NEVER_FOR_LEARNERS_REASON = "Studio에서는 학생에게 주지 않는 도구예요";
 export const SUBAGENT_CATALOG_REASON = "Studio가 준비한 도우미만 부를 수 있어요";
@@ -3071,6 +3075,10 @@ export function evaluateSdkToolUse(args: {
     const link = linkCommandVerdict(command, workspaceRoot, canon);
     if (link?.decision === "deny") {
       return denyVerdict("path_outside_workspace", link.reason, toolName, audience, LINK_OUTSIDE_REASON);
+    }
+    // #3221 — running another app's bundled program makes macOS ask for (or deny) App Management on Studio.
+    if (runsAppBundleProgram(command)) {
+      return denyVerdict("app_bundle_program", "command runs a program inside an app bundle (.app/Contents/)", toolName, audience, APP_BUNDLE_PROGRAM_REASON);
     }
     // A link-making tool anywhere, or a command this layer cannot read, gets the strong confirm (fail closed).
     if (link?.decision === "ask" || shellUnreadable(command) || isDestructiveCommand(command)) {

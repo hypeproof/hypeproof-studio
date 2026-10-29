@@ -37,6 +37,7 @@ const TEACHER_WORDS = ["선생님", ...CLASSROOM_ONLY_WORDS];
     subagent_not_in_catalog: "safety",
     minor_protection: "safety",
     moderation: "safety",
+    app_bundle_program: "safety",
     tool_drift: "runtime",
     runtime_unsupported: "runtime",
     sdk_missing: "runtime",

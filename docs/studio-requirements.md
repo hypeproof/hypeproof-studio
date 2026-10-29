@@ -2612,7 +2612,7 @@ for the learner's own folder choice (REQ-STUDIO-FOLDER-CONSENT), with no seat wo
 wording (no teacher word). Coach-facing tool results carry the same Korean label as a
 tag ("[수업 설정] …"), and the SDK shows that text in the learner's tool log line. Built, by site:
 the tool gate `evaluateSdkToolUse` (every deny branch now returns `source`: profile not granted →
-수업 설정; never-for-learners built-ins, path outside the workspace, browser_open URL policy, subagent
+수업 설정; never-for-learners built-ins, path outside the workspace, a shell command that runs a program inside another app's bundle (`*.app/Contents/…`, #3221: macOS then asks for or denies App Management on Studio; listing a bundle and `open -a` stay allowed; `appBundleExec.ts`), browser_open URL policy, subagent
 outside the catalog, and publish_site/consult/site_check on a minor seat (`isMinorProfile`) → 안전 규칙; a tool whose feature
 key the selected 이용권 removed → 이용권 선택; consult/site_check not bound on an adult seat → 확인 안 됨;
 unclassified tool drift → 앱 버전/환경; an empty shell command → 확인 안 됨), with the seat's wording passed

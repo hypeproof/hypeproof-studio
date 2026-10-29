@@ -53,6 +53,8 @@ export const DENIAL_CAUSES = {
   subagent_not_in_catalog: "safety",
   minor_protection: "safety",
   moderation: "safety",
+  // #3221 — a program inside another app's bundle: macOS App Management would stop Studio.
+  app_bundle_program: "safety",
   // 앱 버전/환경 — this install cannot run it.
   tool_drift: "runtime",
   runtime_unsupported: "runtime",
