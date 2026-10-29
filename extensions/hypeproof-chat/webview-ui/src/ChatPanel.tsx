@@ -2207,7 +2207,7 @@ export function ChatPanel(props: Props) {
         )}
         <div className="hps-sr-only" role="status" aria-live="polite" aria-atomic="true" aria-hidden={noteInSummary || undefined} data-testid="attachment-announcer">{imgNote || ''}</div>
         {imgNote && <div id={imageNoteId} className="hps-img-note">{imgNote}</div>}
-        {freeEnded && <p id="hps-free-ended-note" className="hps-free-ended-note">{freeSeatEndedNote(freeEnded)}</p>}
+        {freeEnded && <p id="hps-free-ended-note" className="hps-free-ended-note">{freeSeatEndedNote(freeEnded, config?.activity?.trial?.refills_at)}</p>}
         {recoveryAtCapacity && <div className="hps-recovery-notice" role="status">보관한 메시지를 먼저 다시 보내거나 정리해 주세요. 새 메시지는 입력창에 남아 있습니다.</div>}
         {recovered.length > 0 && <div className="hps-recovery-list" aria-label={`보내지 못한 메시지 ${recovered.length}개`}>
           {recovered.map((request, index) => <div className="hps-queued hps-recovered" role="status" aria-live="polite" key={index}>

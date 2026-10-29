@@ -38,7 +38,7 @@ import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnosti
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, resolveInstructorRuntime, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
-import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
+import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
@@ -9745,7 +9745,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (ending) {
       const sold = current?.proxyUrl ? await passesOnSale(current.proxyUrl) : false;
       if (current?.signal?.aborted) return;
-      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile)), activityUnavailable: {cause: ending,audience} });
+      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile), isFreeSeat(current?.profile) && freeRefillPending(current?.profile?.trial?.refills_at)), activityUnavailable: {cause: ending,audience} });
       return;
     }
     // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.

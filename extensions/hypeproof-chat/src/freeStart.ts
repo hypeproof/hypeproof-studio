@@ -10,7 +10,7 @@
  * kill switch `hypeproofChat.freeStart: "off"` forces today's start page.
  */
 import { FREE_CLAIM_PATH } from "./trialOffer.ts";
-import { FREE_EXPIRED_SERVICE } from "./passPurchase.ts";
+import { FREE_EXPIRED_SERVICE, FREE_REFILL_ENDED, freeRefillPending } from "./passPurchase.ts";
 
 /** SecretStorage key for the install id (globalState fallback under the same key). */
 export const INSTALL_ID_KEY = "hypeproofChat.installId.v1";
@@ -94,8 +94,12 @@ export function freeCalmNotice(free: { unavailable?: "daily_cap" | "paused"; ref
 
 /** What the start page shows for a refusal. `code` steers layout only; `message` is shown as given. */
 export interface FreeClaimRefusal { code: string; message: string; resumesAt?: string }
+/**
+ * `refilled` and `refillsAt` (REQ-STUDIO-FREE-DAILY-REFILL) are additive: a Service before the daily
+ * refill sends neither. `refilled` marks a new KST day's seat for an install that already had one.
+ */
 export type FreeClaimResult =
-  | { ok: true; outcome: "granted" | "reused"; code: string; profile: string; expiresAt?: number }
+  | { ok: true; outcome: "granted" | "reused"; code: string; profile: string; expiresAt?: number; refilled?: boolean; refillsAt?: number }
   | ({ ok: false; status: number } & FreeClaimRefusal);
 
 const INSTALL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -143,7 +147,8 @@ export function parseClaimSuccess(body: unknown): Extract<FreeClaimResult, { ok:
   if (typeof body.code !== "string" || body.code.length < 20 || body.code.length > 4096) return null;
   if (typeof body.profile !== "string" || !body.profile) return null;
   const expiresAt = typeof body.expires_at === "number" && Number.isFinite(body.expires_at) ? body.expires_at : undefined;
-  return { ok: true, outcome: body.outcome, code: body.code, profile: body.profile, ...(expiresAt ? { expiresAt } : {}) };
+  const refillsAt = typeof body.refills_at === "number" && Number.isFinite(body.refills_at) ? body.refills_at : undefined;
+  return { ok: true, outcome: body.outcome, code: body.code, profile: body.profile, ...(expiresAt ? { expiresAt } : {}), ...(body.refilled === true ? { refilled: true } : {}), ...(refillsAt ? { refillsAt } : {}) };
 }
 
 /**
@@ -182,4 +187,42 @@ export const guardianUrl = (siteBase: string) => `${siteBase.replace(/\/+$/, "")
  */
 export function freeSeatEnding(failure: { code?: string; serviceMessage?: string } | null | undefined): "expired" | undefined {
   return failure?.code === "trial_expired" && !!failure.serviceMessage && FREE_EXPIRED_SERVICE.test(failure.serviceMessage) ? "expired" : undefined;
+}
+
+/** The ended free card's body: the refill time while it is ahead, else the expiry sentence as before. */
+export function freeEndedBody(refillsAt: unknown, now = Date.now()): string {
+  return freeRefillPending(refillsAt, now) ? FREE_REFILL_ENDED : FREE_START_COPY.endedExpired;
+}
+
+/**
+ * REQ-STUDIO-FREE-DAILY-REFILL (Jay 2026-10-29) — the free allowance is per install and refills at
+ * 00:00 KST. Whether the saved free seat should claim again, from what the Service said about it:
+ *
+ * - `seat`: the served free seat's `trial` block (the caller has checked it is a free seat).
+ * - `failure`: the profile was refused instead (403 `trial_expired` with the free sentence).
+ *
+ * "due" — the seat is spent or expired and `refills_at` is now or past: claim again (the Service
+ * answers a new day's seat; a same-day claim is `reused`, so a wrong guess costs nothing).
+ * "waiting" — spent or expired and `refills_at` is ahead: the end card says when.
+ * null — still in use, or no `refills_at` (a Service before the daily refill): today's behaviour,
+ * which never claims again. A bare `trial_expired` without `refills_at` is that older Service; claiming
+ * on it would only return the same expired seat (`reused`).
+ */
+export type FreeRefill = { state: "due" | "waiting"; refillsAt: number };
+export function freeSeatRefill(input: { seat?: unknown; failure?: { code?: string; serviceMessage?: string; refillsAt?: number } | null }, now = Date.now()): FreeRefill | null {
+  const at = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+  const decide = (refillsAt: number): FreeRefill => ({ state: refillsAt <= now ? "due" : "waiting", refillsAt });
+  if (isRecord(input.seat)) {
+    const t = input.seat;
+    const refillsAt = at(t.refills_at);
+    if (refillsAt === null) return null;
+    const limit = t.request_limit, used = t.requests_used;
+    const end = typeof t.ends_at === "string" ? Date.parse(t.ends_at) : NaN;
+    const ended = t.state === "exhausted" || t.state === "expired"
+      || (!Number.isNaN(end) && end <= now)
+      || (typeof limit === "number" && typeof used === "number" && limit > 0 && used >= limit);
+    return ended ? decide(refillsAt) : null;
+  }
+  const refillsAt = at(input.failure?.refillsAt);
+  return refillsAt !== null && freeSeatEnding(input.failure) ? decide(refillsAt) : null;
 }
