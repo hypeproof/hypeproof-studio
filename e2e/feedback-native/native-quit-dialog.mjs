@@ -48,14 +48,38 @@ export async function captureWindowsQuitOwner({child,executable,platform=process
  assert(child.exitCode===null&&child.signalCode===null,'Owned child exited before quit');
  return owner;
 }
-export async function confirmWindowsStreamingQuit({owner,current,port=powershell,now=()=>performance.now(),sleep=ms=>new Promise(r=>setTimeout(r,ms)),onProgress=()=>{}}){
+
+/** Separate typed action observation, never inferred from the diagnostic census. */
+export function selectWin32QuitDialog(snapshot,owner){
+ assertQuitOwner(snapshot?.owner,owner);
+ assert(Array.isArray(snapshot.nativeDialogs)&&snapshot.nativeDialogs.length<=8,'Bounded native button observation required');
+ if(!snapshot.nativeDialogs.length)return null;
+ assert.equal(snapshot.nativeDialogs.length,1,'Ambiguous native button dialog');
+ const d=snapshot.nativeDialogs[0],handle=v=>typeof v==='string'&&/^[1-9][0-9]*$/.test(v);
+ assert(d.pid===owner.pid&&d.ownerPid===owner.pid&&handle(d.handle)&&handle(d.ownerHandle)&&d.handle!==d.ownerHandle,'Native dialog owner required');
+ assert(d.className==='#32770'&&d.visible===true&&d.foreground===true,'Foreground owned native message box required');
+ assert(d.copy?.message===1&&d.copy.detail===1&&d.copy.other===0,'Exact owned message and detail required');
+ assert(Array.isArray(d.buttons)&&d.buttons.length===2,'Exactly two native Buttons required');
+ assert(new Set(d.buttons.map(b=>b.handle)).size===2,'Distinct native Buttons required');
+ assert.deepEqual(d.buttons.map(b=>b.label).sort(),['continue','quit'],'Exact native choices required');
+ for(const b of d.buttons)assert(b.pid===owner.pid&&b.className==='Button'&&handle(b.handle)&&handle(b.parentHandle)&&b.ownedChain===true&&b.visible===true&&b.enabled===true,'Owned live Button ancestry required');
+ const b=d.buttons.find(b=>b.label==='quit');
+ return{handle:d.handle,ownerHandle:d.ownerHandle,buttonHandle:b.handle,buttonParentHandle:b.parentHandle};
+}
+export async function confirmWindowsStreamingQuit({owner,current,port=powershell,now=()=>performance.now(),sleep=ms=>new Promise(r=>setTimeout(r,ms)),onProgress=()=>{},allowWin32=false}){
  assert(typeof current==='function'&&current(),'Live owned child required for quit confirmation');
- const deadline=now()+10000;let samples=0,selection;
+ const deadline=now()+10000;let samples=0,selection,route='uia';
  while(now()<deadline){
   assert(current(),'Owned child changed during quit confirmation');
   const remaining=Math.floor(deadline-now());if(remaining<=0)break;
   const snapshot=await port({mode:'observe',owner},Math.min(3000,remaining));samples++;
   selection=selectQuitDialog(snapshot,owner);
+  if(!selection&&allowWin32){
+   assert(current(),'Owned child changed before native button observation');
+   const left=Math.floor(deadline-now());if(left<=0)break;
+   selection=selectWin32QuitDialog(await port({mode:'observe_win32',owner},Math.min(3000,left)),owner);
+   if(selection)route='win32';
+  }
   onProgress({phase:'native_quit_dialog_observed',samples,present:!!selection,exact:!!selection});
   if(selection)break;
   await sleep(Math.min(150,Math.max(0,deadline-now())));
@@ -64,9 +88,12 @@ export async function confirmWindowsStreamingQuit({owner,current,port=powershell
  assert(current()&&now()<deadline,'Owned quit confirmation expired');
  // The OS port repeats all process/dialog/content checks immediately before Invoke.
  // No retry after invocation: a lost receipt is unknown, never another click.
- const receipt=await port({mode:'invoke',owner,selection},Math.min(3000,Math.max(1,Math.floor(deadline-now()))));
+ const remaining=Math.max(1,Math.floor(deadline-now()));
+ const receipt=await port({mode:route==='win32'?'invoke_win32':'invoke',owner,selection,
+  ...(route==='win32'?{actionTimeoutMs:Math.min(1000,remaining)}:{})},Math.min(3000,remaining));
+ if(route==='win32')assert(receipt?.route==='win32'&&receipt.buttonHandle===selection.buttonHandle,'Owned native button invocation unconfirmed');
  assert(receipt?.invoked===true&&receipt.handle===selection.handle,'Owned native quit invocation unconfirmed');
- onProgress({phase:'native_quit_dialog_confirmed',action:'끝내기',invoked_once:true,owner_pid:owner.pid});
+ onProgress({phase:'native_quit_dialog_confirmed',route,action:'끝내기',invoked_once:true,owner_pid:owner.pid});
  return {native_dialog_observed:true,exact_owned_dialog:true,quit_choice:'끝내기',invoked_once:true,samples};
 }
 
