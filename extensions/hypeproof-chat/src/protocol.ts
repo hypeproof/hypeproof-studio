@@ -641,6 +641,7 @@ export type WebviewMessage = (
   | { type: "removeFileContext"; undoId?: string }
   /** CGP-KNOW-R-003 — the activity's 자료 list: read it, add a file (host picker) or an https address, select an item for the next message, take a learner item off the list. `scope` is the list the press was made on. */
   | { type: "materialsRequest" }
+  | { type: "materialAddNote"; requestId: string; scope: string; title: string; text: string }
   | { type: "materialAddFile"; requestId: string }
   | { type: "materialAddUrl"; requestId: string; url: string }
   | { type: "materialAddDrop"; requestId: string; name: string; size: number; base64: string }

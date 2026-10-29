@@ -508,6 +508,46 @@ await t("wiring: the config flag follows the file-attach gate", async () => {
   assert.ok(src.includes("...(fileAttachAllowed(toolProfile, isInstructor) ? { materials: true } : {}),"));
 });
 
+await t("#3266: an authored note is stored, unselected, then explicitly sent", async () => {
+  const f = fixture();
+  const initial = await f.req("materialsRequest");
+  const s = await f.req("materialAddNote", { scope: initial.view.scope, title: "내 메모", text: "AUTHORED-NOTE-MARKER\n" });
+  assert.equal(s.error, undefined, s.error);
+  const note = item(s, i => i.detail === "자료/내 메모.txt");
+  assert.equal(note.selected, false);
+  assert.equal(fs.readFileSync(path.join(f.root, note.detail), "utf8"), "AUTHORED-NOTE-MARKER\n");
+  await f.send("그냥 질문", "note-unselected");
+  assert.ok(!f.proxyCalls[0].userText.includes("AUTHORED-NOTE-MARKER"));
+  await f.req("materialSelect", { scope: s.view.scope, id: note.id, selected: true });
+  await f.send("메모를 읽어 줘", "note-selected");
+  assert.ok(f.proxyCalls[1].userText.includes("AUTHORED-NOTE-MARKER"));
+});
+await t("#3266: a note from an old scope never writes", async () => {
+  const f = fixture();
+  const s = await f.req("materialAddNote", { scope: "stale-scope", title: "제목", text: "내용" });
+  assert.equal(s.error, f.mat.MATERIALS_COPY.changed);
+  assert.equal(fs.existsSync(path.join(f.root, "자료")), false);
+  assert.deepEqual(f.hostWrites, []);
+});
+await t("#3266: a task switch during snapshot loading refuses the write", async () => {
+  const f = fixture();
+  const initial = await f.req("materialsRequest");
+  const original = f.h.inboxSource.inboxView;
+  f.h.inboxSource.inboxView = async () => { f.setTask("different-task"); return original(); };
+  const s = await f.req("materialAddNote", { scope: initial.view.scope, title: "제목", text: "내용" });
+  assert.equal(s.error, f.mat.MATERIALS_COPY.changed);
+  assert.equal(fs.existsSync(path.join(f.root, "자료")), false);
+  assert.deepEqual(f.hostWrites, []);
+});
+await t("#3266: note saving respects seat and instructor gates", async () => {
+  for (const f of [fixture({ profile: { profile_id: "p", activity_kind: "classroom", sdk_tools: { read: false } } }), fixture({ instructor: true })]) {
+    const s = await f.req("materialAddNote", { scope: "a1", title: "제목", text: "내용" });
+    assert.ok(s.error);
+    assert.equal(fs.existsSync(path.join(f.root, "자료")), false);
+    assert.deepEqual(f.hostWrites, []);
+  }
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 if (failures.length) { console.error(`activity-materials-host: ${failures.length} failed`); process.exit(1); }
 console.log(`activity-materials-host smoke OK (${passed})`);

@@ -28,6 +28,7 @@ function useMaterials() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const pending = useRef<string | null>(null);
+  const onSaved = useRef<(() => void) | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const dispose = onHostMessage(message => {
@@ -36,16 +37,21 @@ function useMaterials() {
       setAnswered(true);
       // An answer to another surface's press updates the list, not this surface's messages.
       if (message.requestId !== undefined && message.requestId !== pending.current) return;
-      if (message.requestId !== undefined) { pending.current = null; setBusy(false); }
+      if (message.requestId !== undefined) {
+        pending.current = null; setBusy(false);
+        const saved = onSaved.current; onSaved.current = undefined;
+        if (!message.error) saved?.();
+      }
       setError(message.error ?? '');
       setNotice(message.notice ?? '');
     });
     postToHost({ type: 'materialsRequest' });
     return dispose;
   }, []);
-  const ask = (build: (requestId: string) => Parameters<typeof postToHost>[0]) => {
+  const ask = (build: (requestId: string) => Parameters<typeof postToHost>[0], saved?: () => void) => {
     if (pending.current) return;
     const requestId = nextId();
+    onSaved.current = saved;
     pending.current = requestId; setBusy(true); setError(''); setNotice('');
     postToHost(build(requestId));
   };
@@ -82,8 +88,12 @@ function MaterialAddedTime({ at }: { at?: number }) {
 export function MaterialsPanel({ home = false }: { home?: boolean }) {
   const { view, answered, error, notice, busy, ask, refuse } = useMaterials();
   const [url, setUrl] = useState('');
+  const [note, setNote] = useState({ scope: '', title: '', text: '' });
   const [dropping, setDropping] = useState(false);
   if (!view) return home ? <p className="hp-materials-note hp-materials-home-state" role="status">{answered ? MATERIALS_COPY.homeUnavailable : MATERIALS_COPY.homeLoading}</p> : null;
+  const draft = note.scope === view.scope ? note : { scope: view.scope, title: '', text: '' };
+  const submitNote = () => ask(requestId => ({ type: 'materialAddNote', requestId, ...draft }),
+    () => setNote(current => current === draft ? { scope: view.scope, title: '', text: '' } : current));
   const chosen = view.items.filter(item => item.selected).length;
   const submitUrl = () => { if (url.trim()) ask(requestId => ({ type: 'materialAddUrl', requestId, url })); };
   // Only the open card is a drop target (the home view is always open); the closed summary row leaves a drop to the shell.
@@ -148,6 +158,18 @@ export function MaterialsPanel({ home = false }: { home?: boolean }) {
         <button type="submit" className="hp-cta-quiet" disabled={busy || !url.trim()}>주소 넣기</button>
       </form>
     </div>
+    <details className="hp-materials-write">
+      <summary>메모 쓰기</summary>
+      <form onSubmit={event => { event.preventDefault(); submitNote(); }}>
+        <label>메모 제목<input name="material-note-title" value={draft.title} maxLength={196} disabled={busy}
+          onChange={event => setNote({ ...draft, title: event.target.value })}
+          onKeyDown={event => { if (event.key === 'Enter' && imeComposing(event)) event.preventDefault(); }} /></label>
+        <label>메모 내용<textarea name="material-note-text" value={draft.text} maxLength={20000} rows={6} disabled={busy}
+          onChange={event => setNote({ ...draft, text: event.target.value })} /></label>
+        <p className="hp-materials-note">자료 폴더에 글 파일로 저장해요. 저장한 뒤 ‘이번 질문에 넣기’를 눌러야 AI에게 보내요. 목록에서 빼도 파일은 남아요.</p>
+        <button type="submit" className="hp-cta-quiet" disabled={busy || !draft.title.trim() || !draft.text.trim()}>메모 저장</button>
+      </form>
+    </details>
     {error && <p role="alert" className="hp-materials-error">{error}</p>}
     {notice && <p role="status" className="hp-materials-notice">{notice}</p>}
   </Root>;
