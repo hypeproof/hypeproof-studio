@@ -46,6 +46,12 @@ export interface StartState {
    * webview reopens and refocuses the empty code field.
    */
   joinLink?: { classId: string; seq: number };
+  /**
+   * REQ-STUDIO-START-UPDATE-NOTICE — the update offer the chat banner shows, on the start page too.
+   * Absent: no newer version, or this version was dismissed (same 7-day rule as the banner).
+   * `heldForClass`: a class seat is active, so nothing can be pressed (CGP-SHELL-R-001).
+   */
+  update?: { version: string; heldForClass?: boolean };
   /** CGP-SHELL-R-014 — the learner settings sheet behind the start page "설정". */
   settings?: import("./startSettings").StartSettingsView;
   /**
@@ -85,6 +91,9 @@ export interface FreeStartView {
 }
 export type StartRequest =
   | { type: "startReady" }
+  /** REQ-STUDIO-START-UPDATE-NOTICE — the same commands the chat banner runs. */
+  | { type: "startUpdateInstall" }
+  | { type: "startUpdateDismiss"; version: string }
   /**
    * CONV-PURCHASE-R-002 — `productId`: the pass chosen on the list when the sign-in is pressed from
    * login at purchase. The host keeps it (memory only) and gives it back as `purchase.selected`.
