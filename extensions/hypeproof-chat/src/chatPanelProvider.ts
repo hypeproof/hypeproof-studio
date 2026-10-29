@@ -24,6 +24,7 @@ import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
 import { takeawayTask, takeawayOwnedFiles } from "./workTakeaway";
 import { workPower } from "./workPower";
 import { RunningProcesses } from "./runningProcesses";
+import { PreviewTabWatch } from "./previewTabWatch";
 import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
@@ -3103,6 +3104,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.registerBrowserDownloads(context);
     const annotationClose = vscode.window.onDidCloseBrowserTab?.(tab => { void this.annotationPreviewClosed(tab).catch(() => {}); });
     if (annotationClose) context.subscriptions.push(annotationClose);
+    // The preview server stops when the last tab showing it closes; it is never stopped at turn end.
+    const previewWatch = new PreviewTabWatch({
+      tabUrls: () => (vscode.window.browserTabs ?? []).map((t) => t.url),
+      previewUrl: () => this.liveServer?.currentUrl?.(),
+      listening: () => !!this.liveServer?.isListening?.(),
+      stop: async () => { await this.liveServer?.stop?.(); },
+    });
+    const previewClose = vscode.window.onDidCloseBrowserTab?.(() => previewWatch.tabClosed());
+    if (previewClose) context.subscriptions.push(previewClose);
+    context.subscriptions.push({ dispose: () => previewWatch.dispose() });
     context.subscriptions.push({ dispose: () => clearTimeout(this.previewRecoveryTimer) });
     context.subscriptions.push({dispose:()=>{this.pageCardWatch?.dispose();clearTimeout(this.pageCardRefreshTimer);this.pageCardRefreshEpoch++}});
   }
