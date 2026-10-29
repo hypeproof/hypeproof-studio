@@ -138,6 +138,16 @@ test('S5 leaves out the release-cut run itself, and only that run', () => {
   assert.equal(judge([done, run('lint', 'in_progress', '', 2001)], '200').result, 'NOT_RUN');
 });
 
+test('S5 leaves out GitHub dynamic runs such as Dependabot updates', () => {
+  const run = (name, conclusion, id, event) => ({name, status: 'completed', conclusion, event, url: `https://github.com/o/r/actions/runs/${id}/job/1`});
+  const ci = run('studio-pr-ci', 'success', 100, 'push');
+  // 2026-10-29: three failed Dependabot updates on main's head stopped the cut
+  assert.equal(judge([ci, run('Dependabot', 'failure', 300, 'dynamic'), run('Dependabot', 'failure', 301, 'dynamic')]).result, 'PASS');
+  // negative control: a failed push run with the same name still fails
+  assert.equal(judge([ci, run('Dependabot', 'failure', 302, 'push')]).result, 'FAIL');
+  assert.equal(judge([run('Dependabot', 'success', 303, 'dynamic')]).result, 'NOT_RUN');
+});
+
 test('S3 and S4 are NOT_RUN without their scoped credential, even with the admin password', async () => {
   const env = {HPS_ADMIN_PASSWORD: 'x'};
   assert.equal((await s3.run({env})).result, 'NOT_RUN');

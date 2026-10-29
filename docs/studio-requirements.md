@@ -2659,7 +2659,7 @@ V1 음소거 계약 보강 (#929): 사용자의 음소거 의도는 전송 재�
 
 | ID | 요구사항 | 수용 기준 | Layer |
 |---|---|---|---|
-| REQ-R1 | 음성 capability 는 **주장하지 않고 측정한다** (#897 VO-01/VO-04) | VO-01 은 "설치본의 마이크 권한·webview 오디오 경로를 확인한다" 인데, 확인 이전에 **사실이 하나 있다**: 출하된 0.1.51 번들 코어(`out/vs/workbench/contrib/webview/browser/pre/index.html`)의 webview 내부 iframe allow 목록에 `microphone` 이 **0건**이다. **2026-09-11 두 가지 정정**: ① 이 행은 allow 목록이 "clipboard 둘 뿐" 이라고 적었는데 틀렸다 — 실측하면 다섯 개다(`cross-origin-isolated`·`autoplay`·`local-network-access` + 스크립트 허용 시 clipboard 둘). `microphone` 부재라는 결론은 그대로다. ② "CSP 이전 단계에서 거부된다" 는 **인과 주장이었고 증거가 없다.** 실측으로 아는 것은 둘뿐이다 — allow 목록에 `microphone` 이 없고, Electron 메인 프로세스의 webview 권한 집합(`out/main.js`, 설치본)에 `media` 가 없다. 내부 iframe 은 same-origin 이고(`allow-same-origin` + 같은 출처 `fake.html` 로 로드) `microphone` 의 기본 allowlist 는 `self` 이므로, allow 속성에 없는 기능이 비활성화되는지 기본값으로 남는지가 MDN 에서 명확하지 않다. **어느 관문이 거부하는지는 패치된 빌드로만 가른다.** 같은 실측에서 드러난 더 중요한 사실: `media` 는 워크벤치 문서(`vscode-file://vscode-app`)에는 **이미 허용돼 있다** — 막힌 것은 webview 프레임뿐이다. 그 상태에서 마이크 UI 를 만들면 V1 의 네 권한 상태(허용·거부·장치없음·철회)가 **모든 설치본에서 같은 거부로 수렴**해 죽은 토글이 학생에게 나간다. 계약: ① capability 는 `hps-voice-capability/1` 보고서로 **측정**하며, 이후 어떤 음성 코드도 capability 를 가정하지 않고 이 게이트에 묻는다; ② 웹뷰는 **원시 관측만** 보내고 판정은 순수 호스트 모듈이 한다 — 같은 곳에서 재고 판정하면 "못 쟀다" 와 "재서 막혔다" 가 한 boolean 으로 섞이고, core patch 가 들어간 뒤에도 보고서가 계속 "막힘" 이라 말해 아무도 다시 재지 않는다; ③ **측정하지 않은 것을 막혔다고 적지 않는다** — `attempted: false` 는 `unknown` 이며 `blocked` 가 아니다. 이것이 이 계약의 핵심 음성 대조군이고, 없으면 분류기를 `return "blocked"` 로 써도 나머지 단언이 전부 통과한다(오늘 모든 빌드가 실제로 blocked 이기 때문); ④ 세 관문(iframe allow 목록 · 메인 프로세스 권한 목록 · Chromium 장치 권한)을 구분 가능하게 따로 재고, `getUserMedia` 오류의 **이름과 문구를 둘 다** 남긴다 — boolean 으로 접으면 어느 관문인지 영영 못 가른다; ⑤ 출력은 Web Audio · `data:` 오디오 · `blob:` worklet 을 따로 재서 `media-src`·`worker-src` 부재를 각각 분리한다. **Web Audio 만으로 된다면 `media-src` 를 넣지 않는다** — 이 계약은 CSP 를 쓰는 것이 아니라 필요 여부를 재는 것이다; ⑥ 모순된 관측(시도 안 했는데 결과가 있음, granted 인데 트랙 없음, rejected 인데 오류 이름 없음)은 **분류하지 않고 거부**한다 — VO-T05 의 "미실행을 PASS 로 기록한 fixture 는 거부한다" 를 자기 산출물에 적용한 것; ⑦ CSP 가 허용하는데 프로브가 실패하면 제품 판정을 내지 않고 `instrument_suspect` 를 남긴다(verification.md 규칙 6); ⑧ 보고서는 앱 버전과 확장 버전을 **둘 다** 적는다 — 설치본 0.1.51, 확장 0.1.5 로 실제로 다르고 한 칸이면 어느 쪽을 읽은 기록인지 모른다; ⑨ **학생에게 보이는 표면을 만들지 않는다.** 명령으로만 호출한다 — patch 후 이 경로가 OS 권한 프롬프트를 띄우므로 교실에서 묻지 않고 뜨면 그 자체가 사고다. 메뉴·툴바 부재만으로는 근거가 안 된다 — 기여된 명령의 **기본값은 명령판에 보임**이므로 `menus.commandPalette` 에 `when: "false"` 를 선언하고 테스트가 그 선언을 확인한다. **2026-09-10 정정**: #904 는 '메뉴에 없음' 을 근거로 비노출을 주장했고 그건 틀렸다 — 아이가 명령판을 열면 진단 명령이 그대로 보였다. 등록 자체도 `if (spool)` 분기 안에 들어가 스풀이 없는 런에서 조용히 사라졌다(두 결함 모두 같은 PR 에서 수정);  ⑩ 보고서는 **로컬 전용**이다. 업로드 allowlist(`session.meta.json`·`events.jsonl`·`manifest.json`)는 닫힌 상태를 유지한다 — 음성 산출물 업로드는 미성년 보존 정책(#901 V4) 결정 전에 열지 않는다. **이 행이 주장하지 않는 것**: VO-01·VO-T01 의 PASS 아님(계측기 + macOS 관측 1건, **Windows 는 NOT RUN**), 공급자·전송 결정 아님(VO-02), core patch 가 충분하다는 주장 아님(네 번째 관문 가능성은 patch 된 빌드로만 가른다), CSP 변경 아님 | U (`test/voice-capability.smoke.mjs`) |
+| REQ-R1 | 음성 capability 는 **주장하지 않고 측정한다** (#897 VO-01/VO-04) | VO-01 은 "설치본의 마이크 권한·webview 오디오 경로를 확인한다" 인데, 확인 이전에 **사실이 하나 있다**: 출하된 0.1.51 번들 코어(`out/vs/workbench/contrib/webview/browser/pre/index.html`)의 webview 내부 iframe allow 목록에 `microphone` 이 **0건**이다. **2026-09-11 두 가지 정정**: ① 이 행은 allow 목록이 "clipboard 둘 뿐" 이라고 적었는데 틀렸다 — 실측하면 다섯 개다(`cross-origin-isolated`·`autoplay`·`local-network-access` + 스크립트 허용 시 clipboard 둘). `microphone` 부재라는 결론은 그대로다. ② "CSP 이전 단계에서 거부된다" 는 **인과 주장이었고 증거가 없다.** 실측으로 아는 것은 둘뿐이다 — allow 목록에 `microphone` 이 없고, Electron 메인 프로세스의 webview 권한 집합(`out/main.js`, 설치본)에 `media` 가 없다. 내부 iframe 은 same-origin 이고(`allow-same-origin` + 같은 출처 `fake.html` 로 로드) `microphone` 의 기본 allowlist 는 `self` 이므로, allow 속성에 없는 기능이 비활성화되는지 기본값으로 남는지가 MDN 에서 명확하지 않다. **어느 관문이 거부하는지는 패치된 빌드로만 가른다.** 같은 실측에서 드러난 더 중요한 사실: `media` 는 워크벤치 문서(`vscode-file://vscode-app`)에는 **이미 허용돼 있다** — 막힌 것은 webview 프레임뿐이다. 그 상태에서 마이크 UI 를 만들면 V1 의 네 권한 상태(허용·거부·장치없음·철회)가 **모든 설치본에서 같은 거부로 수렴**해 죽은 토글이 학생에게 나간다. 계약: ① capability 는 `hps-voice-capability/1` 보고서로 **측정**하며, 이후 어떤 음성 코드도 capability 를 가정하지 않고 이 게이트에 묻는다; ② 웹뷰는 **원시 관측만** 보내고 판정은 순수 호스트 모듈이 한다 — 같은 곳에서 재고 판정하면 "못 쟀다" 와 "재서 막혔다" 가 한 boolean 으로 섞이고, core patch 가 들어간 뒤에도 보고서가 계속 "막힘" 이라 말해 아무도 다시 재지 않는다; ③ **측정하지 않은 것을 막혔다고 적지 않는다** — `attempted: false` 는 `unknown` 이며 `blocked` 가 아니다. 이것이 이 계약의 핵심 음성 대조군이고, 없으면 분류기를 `return "blocked"` 로 써도 나머지 단언이 전부 통과한다(오늘 모든 빌드가 실제로 blocked 이기 때문); ④ 세 관문(iframe allow 목록 · 메인 프로세스 권한 목록 · Chromium 장치 권한)을 구분 가능하게 따로 재고, `getUserMedia` 오류의 **이름과 문구를 둘 다** 남긴다 — boolean 으로 접으면 어느 관문인지 영영 못 가른다; ⑤ 출력은 Web Audio · `data:` 오디오 · `blob:` worklet 을 따로 재서 `media-src`·`worker-src` 부재를 각각 분리한다. **Web Audio 만으로 된다면 `media-src` 를 넣지 않는다** — 이 계약은 CSP 를 쓰는 것이 아니라 필요 여부를 재는 것이다; ⑥ 모순된 관측(시도 안 했는데 결과가 있음, granted 인데 트랙 없음, rejected 인데 오류 이름 없음)은 **분류하지 않고 거부**한다 — VO-T05 의 "미실행을 PASS 로 기록한 fixture 는 거부한다" 를 자기 산출물에 적용한 것; ⑦ CSP 가 허용하는데 프로브가 실패하면 제품 판정을 내지 않고 `instrument_suspect` 를 남긴다(verification.md 규칙 6); ⑧ 보고서는 앱 버전과 확장 버전을 **둘 다** 적는다 — 설치본 0.1.51, 확장 0.1.5 로 실제로 다르고 한 칸이면 어느 쪽을 읽은 기록인지 모른다; ⑨ **학생에게 보이는 표면을 만들지 않는다.** 명령으로만 호출한다 — patch 후 이 경로가 OS 권한 프롬프트를 띄우므로 교실에서 묻지 않고 뜨면 그 자체가 사고다. 메뉴·툴바 부재만으로는 근거가 안 된다 — 기여된 명령의 **기본값은 명령판에 보임**이므로 `menus.commandPalette` 에 `when: "false"` 를 선언하고 테스트가 그 선언을 확인한다. **2026-09-10 정정**: #904 는 '메뉴에 없음' 을 근거로 비노출을 주장했고 그건 틀렸다 — 아이가 명령판을 열면 진단 명령이 그대로 보였다. 등록 자체도 `if (spool)` 분기 안에 들어가 스풀이 없는 런에서 조용히 사라졌다(두 결함 모두 같은 PR 에서 수정);  ⑩ 보고서는 **로컬 전용**이다. 업로드 allowlist(`session.meta.json`·`events.jsonl`·`manifest.json`)는 닫힌 상태를 유지한다 — 음성 산출물 업로드는 미성년 보존 정책(#901 V4) 결정 전에 열지 않는다. **이 행이 주장하지 않는 것**: VO-01·VO-T01 의 PASS 아님(계측기 + macOS 관측 1건, **Windows 는 NOT RUN**), 공급자·전송 결정 아님(VO-02), core patch 가 충분하다는 주장 아님(네 번째 관문 가능성은 patch 된 빌드로만 가른다), CSP 변경 아님. **2026-10-28 메모 (DEC-03)**: 위 '0건' 과 '`media` 없음' 은 0.1.51 기준의 과거 관측이다. 마이크 패치 v4(`vscodium-base/patches/user/60-webview-allow-microphone.patch`, fork `59e5792`, #992 2026-09-29)가 그 뒤 main 에 들어갔고 설치본 2026.1020.2 번들에서 세 관문이 모두 확인된다(webview 권한 집합 `media`, 바깥·안쪽 iframe `microphone`) — 앱을 띄우지 않고 번들 파일을 읽은 것. 위임 범위는 `hypeproof.hypeproof-chat` **그리고** `purpose === 'webviewView'` — 스크립트 허용 webview 10개(view 1 + panel 9) 중 채팅 view 1개. `test/mic-delegation-scope.smoke.mjs` 가 이 범위를 소스로 잠근다: 확장의 webview view 가 정확히 하나인지, 패치의 두 위임이 두 키로 묶였는지(서브모듈이 없으면 실제 패치 행은 NOT RUN). v4 빌드에서 OS 프롬프트·마이크 표시등·실제 트랙, 시작 화면·미리보기의 `allowsFeature('microphone')` false 는 **NOT RUN** | U (`test/voice-capability.smoke.mjs`, `test/mic-delegation-scope.smoke.mjs`) |
 | REQ-R2 | 음성이 들어오기 **전**의 텍스트 흐름을 기준선으로 찍는다 (#897 VO-04/VO-T04) | VO-04 는 "음성 부재·모듈 오류·기능 비활성 상태에서 기존 텍스트 진입→수정→저장 흐름이 유지된다" 를 요구한다. 그 판정에는 **유지돼야 할 것이 무엇이었는지**가 필요하고, 음성 코드가 들어온 뒤에 기억으로 복원하면 그건 기준선이 아니라 사후 서술이다. 그래서 음성 세션이 아직 존재할 수 없는 오늘(REQ-R1) 찍는다. 계약: ① 진입→수정→저장을 **실제로 돌린다** — 순수 모듈(`sendQueue`·`chatTimeline`)을 호출하고, 델타를 **두 번** 넣어 누적과 덮어쓰기를 구별한다(한 번만 넣으면 `content = delta` 로 바꾸는 변경이 통과하고 그건 흐름 가운데서 글자가 사라지는 결함이다); ② 판정을 **화면이 따르는지**도 잠근다 — `decideEnter` 만 재면 그 답을 동작으로 바꾸는 Enter 핸들러가 비어 있어도 통과한다. 세 갈래(ignore 무동작 · queue 는 `setQueued` + `setDraft("")` + 중단 · 그 밖에는 `submit()`)를 핸들러 슬라이스 안에서 확인하고, 슬라이스가 핸들러를 넘어 번지지 않았다는 음성 대조군을 붙인다; ③ 저장 모양(`ChatMessage`)에 오디오 필드가 들어올 자리가 없다 — 필드 목록 완전 일치; ④ 채팅 패널 CSP 는 **이름이 아니라 값으로** 잠근다. 지시자 이름만 재던 동안 `connect-src` 에 스트리밍 STT 주소를 붙이는 변경, `default-src 'none'` → `'self' mediastream:`, `script-src` 에 `'unsafe-eval'` 추가가 **모두 초록으로 지나갔다** — `cspBuilder.ts` 자신이 "Do NOT loosen `connect-src` to https:" 라고 적어둔 그 구멍이다. 전체 문자열 완전 일치로 막는다; ⑤ 텍스트 경로 파일들(ChatPanel·sendQueue·chatTimeline·chatPanelHelpers)과 호스트의 텍스트 진입 분기(`case "sendMessage"`·`case "retryMessage"`)가 음성 심볼 참조 0회 — 스캐너는 `mic` 계열을 **단어 경계로** 본다(`dynamic`·`atomic`·`semicolon` 이 걸리면 멀쩡한 파일을 음성 오염으로 잡는다; 경계 없이 썼다가 자체 대조군에 걸렸다); ⑥ 음성을 참조하는 파일의 **목록 자체**를 잠근다 — 정의 3 + 참조 4 = 7개. 이게 exit plan 의 실제 범위다. **처음 이 절의 기준은 "음성 3파일을 지워도 컴파일된다" 였고 그건 거짓이다** — 지우면 host 5건 · webview 3건의 tsc 오류가 난다(`protocol.ts:261`, `chatPanelProvider.ts:247·252·255`, `extension.ts:96`, `App.tsx:15·203`). 참조 0회인 것은 텍스트 흐름 파일들이고 프로젝트 전체가 아니다. **이 행이 주장하지 않는 것**: 음성 3파일만 지우면 빌드가 된다는 주장 아님(위 7개를 다 건드려야 한다), 실기기 관측 아님(소스·순수 모듈 단위), ChatPanel 의 DOM 동작 검증 아님(웹뷰는 단독 실행이 안 되어 핸들러 배선을 소스로 잠근다) | U (`extensions/hypeproof-chat/test/pre-voice-text-flow.smoke.mjs`) |
 | REQ-R3 | 오디오 거절은 **계량되는 좌석 전용**이다 — 범위를 넓혀 적지 않는다 (#897 VO-T05 / #901 V4) | 음성 코드가 하나도 없는 지금도 Service 는 오디오를 거절한다(`budget-admission` 의 `validateWire`, `usage-costs` 의 `normalizeCostUsage`). 그 거절에 이름이 없으면 나중에 음성을 붙이는 변경이 조용히 지워도 아무 테스트도 울지 않는다. 계약: ① 거절을 **공개 진입점으로** 구동한다 — `validateWire` 는 비공개이므로 `reserveBudgetAttempt` 를 통해 재고, 그래야 "함수는 남았는데 호출이 빠진" 변경도 잡힌다; ② 모든 거절 단언에 **같은 경로의 통과 대조군**을 붙인다 — 없으면 `throw` 한 줄짜리 검증기와 구별되지 않는다. `modalities: ['text']` 가 통과하는 것까지 경계로 잰다; ③ 거절은 내구성 있는 행을 남기지 않는다(행 수로 직접 확인); ④ **프로토콜 두 축**을 잰다 — `anthropic-messages` 와 `openai-chat`. 한 축만 재던 동안 미디어 검사를 그 프로토콜 전용으로 좁히는 변경이 전부 초록으로 지나갔고, `routes/chat.ts` 는 다른 축으로 같은 함수를 부른다; ⑤ `/v1/chat/completions` 는 거절이 아니라 **탈락**이다 — `translateOpenAI` 가 화이트리스트로 본문을 조립하므로 `audio`/`modalities` 는 `validateWire` 에 도달조차 하지 않는다. 그 비대칭을 음성 대조군으로 고정하고, **키 이름이 아니라 바이트로** 잰다(센티널 base64) — 이름만으로 재던 동안 블록을 `{type:'audio', source:…}` 로 바꿔 실어 보내는 변경이 통과했다; ⑥ **거절은 계량과 무관하다 (2026-09-11, #901 V4).** 2026-09-10 실측에서는 거절이 `routes/messages.ts` 의 `if(executionAccess)` 안에 있어 계량되지 않는 좌석에 가드가 **없었다** — 정책 미설정 + 자금원 헤더 없음이면 text/audio/input_audio 전부 200 이고 상류 본문에 `"audio":{"voice":"alloy","format":"pcm16"}` 가 그대로 들어갔다. 아동 코호트가 그 좌석에 있다. 그 사실을 "가드가 옮겨지면 터지는" 상시 단언으로 박아 뒀고, 음성을 붙이기 전에 옮겨서 **그 단언이 실제로 터졌다** — 터진 것이 정답이었고 지금은 바뀐 사실을 다시 고정한다. 계약: `assertNoAudioWire` 가 admission 바깥에서 모든 좌석에 돌고, 거절은 **상류를 부르기 전**이다(업스트림 뒤의 거절은 이미 돈이 나간 뒤다). **옮긴 것은 오디오 절반뿐이다** — 이미지·문서·호스티드 툴 거절은 계량 좌석의 노출 상한 계약으로 남는다. 계량 없는 좌석의 이미지가 그대로 통과하는지를 **범위 대조군**으로 같이 잰다. 그게 없으면 `validateWire` 를 통째로 밖으로 내보내 지금 도는 이미지를 조용히 깨는 변경이 나머지 단언을 전부 통과한다(계량 좌석에서는 이미지가 원래 거절이라 다른 절도 그 변경을 못 잡는다). **이 행이 주장하지 않는 것**: 게이트웨이가 오디오를 보편적으로 막는다는 주장 아님(위 ⑥), 음성이 동작한다 / 음성 가격이 있다는 주장 아님(둘 다 없다), 제공자·전송 결정 아님(VO-02) | Service (`worker/test/audio-refusal-contract.test.mjs`) |
 | REQ-R4 | 음성 기록은 **기존 식별자**에 묶는다 — 새 스토어를 만들지 않는다 (#897 VO-03/VO-T03) | 음성 세션은 아직 존재할 수 없으므로(REQ-R1) 이 계약은 돌아가는 기능의 명세가 아니라 **앞으로 어떤 음성 코드도 식별자를 새로 만들지 못하게 막는 잠금**이다. 계약: ① 버전 있는 단일 계약 (`hps-voice-linkage/1`) 이고, 읽을 수 있는 버전 집합을 주입 가능하게 둔다 — 없던 버전을 발명해 구/신 혼용을 꾸며내지 않는다; ② 식별자 문법은 기존 정의를 **import** 한다(`validTurnId`·`accessId`·`isUuid`·`isSha256Hex`) — 복사해 적으면 조용히 갈라지고, import 하면 갈라질 때 타입체크가 터진다; ③ 식별자별 **소유 스토어**를 기계가 읽을 수 있게 적고, 적힌 증거 리터럴이 실제로 worker 소스에 있는지 테스트가 확인한다. `voice_session_id` 만 전용 스토어가 없으므로 **만들지 않고** 기존 `hps-observation/1` 이벤트의 그룹 키로 싣는다; ④ 공급자(VO-02)가 정해지지 않은 두 칸(모델이 실제로 들은 오디오, 끼어들기 취소 의미)은 **타입에서** PROVISIONAL 로 막는다 — 주석으로만 적으면 다음 사람이 구체값을 채우고 그게 계약처럼 배포된다; ⑤ 허용 키 목록이 **드리프트 락**이다 — 이 목록이 오디오/전사 키를 받아들이면 이 행의 목적 자체가 무너지므로 목록 자체를 단언한다; ⑥ VO-T03 의 "임의 새 스토어 없음" 증거는 **스캐너가 실제로 탐지하는 범위까지만** 주장한다 — `voice\|audio\|speech\|transcript\|utterance` 토큰이 든 테이블·KV 네임스페이스다. 처음엔 `voice` 토큰과 `live\|cohort\|rate` 하위만 봤고 `voice:sess:`·`voicelog:`·`audio:chunk:`·`CREATE TABLE utterances` 가 모두 빠져나갔다(프로브로 확인). 넓힌 뒤에도 `rt:sess:`·`CREATE TABLE realtime_sessions` 처럼 **이름에 음성 토큰이 없는** 스토어는 탐지하지 못하므로, 주장을 그만큼 좁혀 적는다 — 탐지하지 못하는 것을 막았다고 적지 않는다. **이 행이 주장하지 않는 것**: 음성 기록 **분리** 아님(히스토리는 여전히 코호트 단위), 미성년 보존 정책 결정 아님(#901 V4), 공급자 결정 아님(VO-02) | Service (`worker/test/voice-linkage-contract.test.mjs`) |
@@ -7809,3 +7809,158 @@ minimal DOM: the rule with positive and negative controls, the block for the cur
 mission header's real step buttons switch steps, a lesson without materials and one with refused values
 showing none, and hostile coach replies to "그림으로 보여줘" rendering no block, form, frame or SVG in the
 stream; seats: classroom with and without materials, personal without a lesson).
+
+## Learning block stays out of the canvas and never judges (CGP-LEARN-R-002)
+
+REQ-STUDIO-LEARNING-BLOCK-NO-JUDGMENT / REQ-CGP-LEARN-02 (CGP-LEARN-001) / PI#7 (capability models are hypotheses, not UI
+labels; SX-01, SX-59, SX-43): a learning block (REQ-STUDIO-LEARNING-BLOCK-ATTACH) never sits in the work canvas and never shows
+capability names, scores, grades or "correct/incorrect" judgments.
+
+- Placement. The only element that draws a block is the coach rail's step panel (`LessonStepPanel`, class `hp-step-work`) in the
+  chat surface, for all seven `ui` kinds, `canvas_editor` and `canvas_preview` included. It is never inside the message stream or a
+  message, the mission header (region A), the evidence drawer (region D) or the composer. The work canvas is the editor area: the
+  learner's files and every editor-area panel this extension creates (preview, start page, change record, take-away, slide studio,
+  visitor preview, artifact history, image edit comparison, personal continuation). None of them imports the block component or
+  carries `data-hps-material`. When the start page hands the editor tab to the conversation (`openInEditor`), that tab is the chat
+  surface and the block stays in its rail.
+- Words. Every word a block shows (its text, and the `aria-label`, `title`, `placeholder` and `alt` it speaks), empty or with the
+  learner's saved lines, passes the SX-35/SX-59 audit (`test/sx-audit.mjs`: banned labels, 7자산, rankings, score and grade
+  words, numeric scores) and contains no capability key or Korean label from either capability model
+  (`candidate-capability-v1`, `legacy-seven-assets`) and no verdict on the learner's work (정답, 오답, 맞았/틀렸, 통과, 실패,
+  잘했, 우수, 미흡, correct, wrong …). The instructor rehearsal's own pass/fail line is drawn outside the block.
+- Records. A block interaction records no observation and no evidence. A save from a `criterion_form` or `decision_form` block
+  is kept on this device and writes one workflow line `lesson_work_saved` with only `lesson_version`, `step_id` and `kind`: no
+  `evidence_type`, nothing to the classroom ops observer and nothing to a learning or observation recorder. A save the step's
+  block does not ask for records nothing. The learner's own "이 단계를 마쳤어요" sits outside the block and is not a block event.
+
+Every seat that draws the lesson rail (classroom, personal with a lesson, instructor rehearsal) follows the same rule. Default
+state: on (this row adds no behaviour; it holds what main already does with behavioural tests).
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-no-judgment.test.tsx` (the mounted ChatPanel on classroom and personal
+seats walks all seven blocks and checks their region, with a control that the ruled-out regions are on the screen; LessonStepPanel
+for every kind, empty and saved, learner and rehearsal seat, audited with positive and negative controls) and
+`extensions/hypeproof-chat/test/learning-block-no-judgment-host.smoke.mjs` (the real host handler with every recorder captured
+and the learner's step report as the control; the editor-area panels bundled, with an exhaustiveness check over every
+`createWebviewPanel` maker and the chat panel bundle as the control).
+
+## Learning block live text equivalent (CGP-LEARN-R-003)
+
+REQ-STUDIO-LEARNING-BLOCK-TEXT / REQ-CGP-LEARN-03 (CGP-LEARN-010) / PI#3 (DES-11 classroom-design): every
+learning block a confirmed lesson attaches (REQ-STUDIO-LEARNING-BLOCK-ATTACH) exposes a live text equivalent. The
+block catalog (`MATERIAL_TEXT` in `lessonFocus.ts`) gives each of the seven kinds a Korean `title`, a
+`controlsHelp` sentence and a `stateDescription`; the catalog check `materialTextGaps()` names any kind that lacks
+one. The block draws as one region (`section.hp-material`, carrying the block identity) named by its title and
+described by its help sentence, with the state sentence in a visible `role="status"` `aria-live="polite"`
+`aria-atomic="true"` line under the controls. Each field is described by the help and the current state sentence.
+The text is visible, not screen-reader only, at 14px or more.
+
+The state sentence is computed from the fields as the learner has them now and the host's last save: for
+`criterion_form` empty, written, saved, changed after saving, cleared; for `decision_form` also which of the two
+fields is still missing, and whether an earlier save is kept. Every change of any control that changes that state
+(typing into or clearing a field, a save the host confirms, switching steps) puts the new sentence into the same
+mounted live region, measured at under 500 ms. The sentence names states, not every keystroke, so the polite region
+does not talk over the screen reader's own typing echo. Kinds this Studio cannot draw yet keep their honest notice
+with a title, a help sentence saying there is nothing to operate, and a fixed state sentence. No block text carries a
+score, grade, right/wrong word or capability name (REQ-CGP-LEARN-02). Seats: every seat that draws the lesson rail.
+Default: on; display only, no new data flow.
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-text.smoke.mjs` (catalog check with five negative
+controls, one distinct sentence per state for both drawable kinds, no judgment words) and
+`extensions/hypeproof-chat/test/learning-block-text-browser.smoke.mjs` (the mounted ChatPanel with the shipped
+stylesheet in headless Chromium, classroom and personal seats, dark and light, 800 and 1420 px: region name and
+description, visible title/help/state at 14px+ and 4.5:1, each field's description, and 9 control changes per case
+each announced in the same live region within 500 ms). Not covered: a real VoiceOver run (REQ-CGP-LEARN-03 (c)) is a
+manual check.
+
+## Learning block card in the coach rail (CGP-LEARN-D-001)
+
+REQ-STUDIO-LEARNING-BLOCK-CARD / DES-CGP-LEARN-01 (traces to REQ-STUDIO-LEARNING-BLOCK-ATTACH, CGP-LEARN-R-001) / PI#4
+(the instructor shapes the environment), PI#7 (the work screen stays the learner's; SX-05, SX-52): the block the confirmed
+lesson attaches to the current step is drawn as a collapsible 자료 card in the coach rail, under that step's help choice,
+never in the message stream and never as a dialog. Closed, the card is one row at most 72px tall: a 48x48 thumbnail (the
+block kind's stroke icon over the label 자료), the block's REQ-STUDIO-LEARNING-BLOCK-TEXT title with its polite live state
+line under it (one line, ellipsis; once open the whole sentence moves under the work surface, REQ-STUDIO-LEARNING-BLOCK-CAPTION), and a 44px "열어 보기" button (`aria-expanded`,
+`aria-controls`). Pressing it expands the block in place: the same card grows in flow and pushes what follows it down, so
+nothing covers it and it covers nothing; the button then reads "닫기". The card starts closed for every step; the
+open/closed choice is keyed to the lesson version and step, so opening one step's card never opens another's (it is not
+stored and not an evidence event). The card is the block region itself: it carries the block identity (`data-hps-material`, `-step`, `-version`), is
+named by the title in its head and described by the controls help. The live state line is never in the hidden body, so
+a step switch or a host save that lands on a closed card is shown and announced in the same region. The controls help
+and the work surface are in the card body, which stays mounted while closed, so an instructor's rehearsal read-back still
+reports the drawn surface. Notes inside a card (saved work, the undrawable notice) are 14px. Rail widths
+280–480px (and wider panes) are supported with no sideways scroll; text is at least 14px; the card's background is the
+Panel token and its text the Ink token in dark and light (SX-49), with a CanvasText border under forced colours. Seats:
+every seat that draws the lesson rail (classroom lesson, personal with a lesson, instructor rehearsal); a step without a
+block has no card.
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-card.test.tsx` (mounted ChatPanel: closed by default with
+thumbnail, title and 열어 보기; opens in place with no dialog; another step's card starting closed after the mission
+header's real step button; no card without a block) and `extensions/hypeproof-chat/test/learning-block-card-computed.smoke.mjs` (headless
+Chromium on the cascade: personal and classroom, dark and light, 280/480/800/1420px; closed height, thumbnail, target and
+text sizes, tokens, in-flow expansion that is never covered and never wider than the rail; six injected overrides caught).
+
+## Activity memory files (CGP-KNOW-R-030)
+
+REQ-STUDIO-ACTIVITY-MEMORY-FILES / REQ-KNOW-48 (CGP-KNOW-048) / PI#2 (the learner can see what the AI
+keeps), PI#5 (the learner owns what is kept about them); DEC-01 and DEC-02 (ruled 2026-10-28): personal
+memory is stored as readable files inside the activity folder, in `.hypeproof/memory/`, and nowhere
+else. There is no Service field, no setting and no instructor or learner switch: the store exists for
+every learner seat that has a task workspace (personal, trial; minor cohorts included).
+
+- **One item, one file.** Studio writes an item as a new `.md` file with an exclusive create
+  (`O_EXCL`, no link followed); an existing name is an error, never an overwrite. The store has no
+  edit path: its only writes are that append and the learner's explicit delete. Items are at most
+  2,000 characters; control, bidi, zero-width and line/paragraph separator characters are removed.
+- **Never outside the activity.** The folder is walked one component at a time from the real
+  activity root. If `.hypeproof` or `memory` is a link or not a folder, nothing is read, written or
+  deleted, and the panel says so. A file is read only when its name is plain (letters, digits,
+  Hangul, space, `.`, `_`, `-`; no leading dot; `.md` or `.txt`; NFC), it is a regular file with one
+  link, and it opens without following a link. A FIFO, socket or device is never opened (an lstat skips it and the open is non-blocking), so a named pipe in the folder cannot stall the extension host. Anything else in the folder is counted as "목록에 없는
+  파일 N개" and left alone. A file over 16 KB or not UTF-8 text is listed (it can be opened and
+  deleted) but its text is not shown and never handed to a request. At most 200 files are listed.
+- **Read, open and delete in Studio.** 작업 자료 → 내 작품 shows "AI 기억 파일 · N개" under the
+  activity trash. Opening it names the folder (`.hypeproof/memory/`), says that memory outside the
+  activity is never read, and lists each file newest first with its name, time and full text (as
+  text, line breaks kept). 열기 opens that exact file in a read-only editor tab. 지우기… shows the
+  host's native modal confirm naming the file, with one 취소; 취소, Escape or a closed dialog changes nothing. A confirmed delete
+  removes exactly the file the learner confirmed (its identity is pinned before the confirm; a file replaced under the same name meanwhile is refused with "기억 파일이 바뀌었어요"), permanently (not to the activity trash, so a deleted memory does not
+  linger in the activity), and a status line says "기억 파일 “…”을 지웠어요." A press with a stale task
+  or activity scope, an unknown action or a name outside the list is refused before any confirm; a
+  task or activity switch during the confirm cancels the delete. Instructors and seats without a
+  task workspace get no panel.
+- **Future context.** `ActivityMemory.contextItems()` is the only reader a request may use. It reads
+  the folder from disk on every call with no cache, so a deleted file is absent from the next call.
+  No request carries memory yet: injecting it waits for REQ-KNOW-44 (the "기억 사용 N" count) and the
+  REQ-KNOW-49 first-use notice, so memory is never used without the learner being told. The state
+  line of REQ-KNOW-40 builds on this store.
+
+Evidence: `extensions/hypeproof-chat/test/activity-memory.smoke.mjs` (the real store on real files:
+append is a new file and never an overwrite, delete removes the item from the next context read,
+linked folders, linked and hard-linked files and climbing names are refused and the outside file is
+untouched, hostile text and names; then the real provider routing into the host module: always-on
+view, seat refusals, read-only open of the exact file, native confirm with one Cancel, stale scope and
+mid-confirm task switch) and `extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs` (the
+built CSS and real panel markup in headless Chromium, personal and classroom shells, dark and light,
+800 and 1420 px, normal and forced colours: 44px targets, 14px text at 4.5:1, focus ring, no
+horizontal scroll, file text rendered as text, one request per press, focus kept after a delete;
+fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Learning block caption (CGP-LEARN-D-003)
+
+REQ-STUDIO-LEARNING-BLOCK-CAPTION / DES-CGP-LEARN-03 (traces to REQ-STUDIO-LEARNING-BLOCK-TEXT, CGP-LEARN-R-003) / PI#3
+(DES-11 classroom-design): the block's live text equivalent is a visible caption, not screen-reader only. The polite state
+line (`role="status"`, `aria-live="polite"`, `aria-atomic="true"`) comes after the card body in the markup, so with the
+card open it is drawn under the work surface (the block's "diagram") across the card's full width and read after the
+controls, as the whole sentence: it wraps instead of ending in an ellipsis. With the card closed the card's grid lifts the
+same node under the title in the head row (one line with an ellipsis, REQ-STUDIO-LEARNING-BLOCK-CARD keeps the closed card
+at 72px or less), so a step switch or a host save that lands on a closed card is still drawn and announced. The caption is
+14px or more in the Ink token with 4.5:1 or more against the background behind it, its words change in the same mounted
+node within 500 ms of the input event, and at 200 % zoom (the 480px rail and the 640, 800 and 1420px panes at device
+scale 2) it stays whole inside the card with no sideways page scroll. Seats: every seat that draws the lesson rail.
+Default: on; display only, no new data flow.
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-caption-computed.smoke.mjs` (headless Chromium on the cascade of
+the real webview entry: personal and classroom, dark and light, 800 and 1420px at 100 % and 480/640/800/1420px at 200 %;
+caption under the work surface, inside the card, drawn (hit test), 14px+, 4.5:1+, not clipped and no line past the
+viewport, no sideways scroll, the same node updated within 500 ms on typing, a host save, a cleared field and a step switch
+onto a closed card; six injected overrides caught).

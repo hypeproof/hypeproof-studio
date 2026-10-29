@@ -2,6 +2,7 @@ import { createCompanionDevHostEntry } from "./companionDevHostEntry";
 import { registerCompanionWorkspace } from "./companionWorkspaceHost";
 import { workPower } from "./workPower";
 import { registerActivityTrash } from "./activityTrashCommands";
+import { registerActivityMemory } from "./activityMemoryHost";
 import { confirmOutbound } from "./outboundConsentHost.ts";
 import { restoreInitialSurface } from "./initialSurface";
 export { resolveActivateBranch } from "./initialSurface";
@@ -38,6 +39,7 @@ import {
   LEGACY_HISTORY_KEY,
 } from "./chatPanelHelpers";
 import { PreviewProvider } from "./previewProvider";
+import { ChalkContractHost } from "./chalkContract";
 import { runReportProblemCommand } from "./reportProblem";
 import { PerfTraceController } from "./perfTraceHost";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
@@ -219,6 +221,15 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: () => clearTimeout(pendingTimer) });
   }
   const provider = new ChatPanelProvider(context, preview, liveServer, spool);
+  const chalkContract = new ChalkContractHost(
+    {
+      registerCommand: (id, handler) => vscode.commands.registerCommand(id, handler),
+      executeCommand: (id, ...args) => vscode.commands.executeCommand(id, ...args),
+    },
+    provider.chalkRunner(),
+  );
+  context.subscriptions.push(...chalkContract.register());
+  provider.attachChalkContract(chalkContract);
   const perfTrace = new PerfTraceController({ context, seatAllowed: () => provider.perfTraceSeatAllowed(), getProfileId: () => provider.getProfileId(), onState: (state) => provider.postPerfTraceState(state) });
   provider.perfTraceObserver = (msg) => perfTrace.observe(msg);
   provider.perfTracePanel = { state: () => perfTrace.state, stop: (id) => perfTrace.stopFromPanel(id) };
@@ -370,6 +381,7 @@ export async function activate(context: vscode.ExtensionContext) {
     binding: () => provider.activityTrashBinding,
     refusal: file => provider.folderWriteRefusalFor(file),
   }));
+  provider.setActivityMemoryPanel(registerActivityMemory({ binding: () => provider.activityMemoryBinding }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
 

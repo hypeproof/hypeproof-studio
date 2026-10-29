@@ -28,10 +28,11 @@ test('public Service activity creates and revises a synthetic file',async()=>{
    // REQ-STUDIO-FOLDER-CONSENT (#2065): the trial seat's folder is outside its served home,
    // so the first turn asks once; the answer is remembered for the second. A classroom
    // seat never asks. The turn writes a file, so the synthetic learner allows everything.
-   const consent=ctx.win.locator('.monaco-dialog-box').filter({hasText:'이 폴더에서 작업할까요?'});
+   // Since #2656 (2026-10-24) the question is a dialog in the chat panel, answered with 믿고 열기.
+   const consent=chat.locator('dialog.hps-folder-consent');
    if(trial&&!turns.length){
     await expect(consent).toBeVisible({timeout:20000});
-    await consent.locator('.monaco-button').filter({hasText:'읽기·고치기·명령 실행 모두 허용'}).click();
+    await consent.locator('[data-folder-full]').click();
     await expect(consent).toHaveCount(0);
    }
    await expect(chat.locator('.hps-btn-stop')).toBeVisible();await expect(chat.locator('.hps-btn-stop')).toHaveCount(0,{timeout:100000});

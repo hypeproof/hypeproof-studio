@@ -294,6 +294,7 @@ try {
   assert.deepEqual(la1.mission, [1, A.mission.mission], 'the next turn carried A\'s mission'); result.header_A = await waitHeader(chat, A.mission, 'A1 on A'); assert.ok(!la1.tools.some((n) => ['Write', 'Edit', 'MultiEdit'].includes(n)), 'A1 on A: no write tool');
   let p = await wait(async () => { const x = await panelOf(chat); return x?.surface === 'criterion_form' ? x : null; }, 'A\'s work surface on the learner\'s screen'); assert.deepEqual(p.help, [['hint', true], ['independent', false]]);
   await press(chat, 'input[name="hp-help-mode"][value="independent"]', 'the help choice 직접 해보기');
+  await press(chat, '[data-block-card="criterion_form"] [data-block-toggle]', 'the 자료 card\'s 열어 보기 (CGP-LEARN-D-001)');
   await setValue(chat, '[data-surface="criterion_form"] textarea', '예약 버튼이 첫 화면에서 바로 보인다'); await press(chat, '[data-surface="criterion_form"] button[type="submit"]', 'the criterion save button');
   await wait(async () => /저장한 기준: 예약 버튼이 첫 화면에서 바로 보인다/.test((await panelOf(chat))?.saved ?? ''), 'the saved criterion on screen'); await shot(win, 'g2-mac-10-learner-A-criterion.png');
   await ask(chat, 'Q-LA2 기준대로 확인해 주세요', 'Q-LA2'); await idle(chat);
@@ -311,6 +312,7 @@ try {
   const lb1 = callsFor('Q-LB1').at(-1); assert.deepEqual([lb1.lesson, lb1.help?.mode], [VB, '함께 수정']);
   assert.deepEqual(lb1.mission, [2, B.mission.mission], 'the next turn carried B\'s mission'); result.header_B = await waitHeader(chat, B.mission, 'A1 on B'); assert.ok(lb1.tools.includes('Write'), 'B admits writing: ' + lb1.tools);
   p = await wait(async () => { const x = await panelOf(chat); return x?.surface === 'decision_form' ? x : null; }, 'B\'s decision surface'); assert.deepEqual(p.help, [['co_edit', true], ['independent', false]]);
+  await press(chat, '[data-block-card="decision_form"] [data-block-toggle]', 'the 자료 card\'s 열어 보기 (CGP-LEARN-D-001)');
   await setValue(chat, '[data-surface="decision_form"] input', '토요일 진료시간을 오후 2시까지로 고친다'); await setValue(chat, '[data-surface="decision_form"] textarea', '원장님이 확인한 실제 시간이라서');
   await press(chat, '[data-surface="decision_form"] button[type="submit"]', 'the decision save button'); await wait(async () => /저장한 결정: 토요일/.test((await panelOf(chat))?.saved ?? ''), 'the saved decision'); await shot(win, 'g2-mac-12-learner-B-decision.png');
   await ask(chat, 'Q-LB2 이유까지 반영해 주세요', 'Q-LB2'); await idle(chat); const lb2 = callsFor('Q-LB2').at(-1); assert.deepEqual(lb2.decision, ['토요일 진료시간을 오후 2시까지로 고친다', '원장님이 확인한 실제 시간이라서']);

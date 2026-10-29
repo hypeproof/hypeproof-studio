@@ -2,13 +2,15 @@
 // PASS: every check-run completed and none failed. Still running → NOT_RUN. Read-only (gh api).
 // On Actions the release-cut run's own job is a check-run on the same commit; it is left out by its run id.
 // Earlier release-cut runs on the same commit are not candidate CI either; they are left out by workflow id (#1845).
+// GitHub's dynamic runs (Dependabot updates, which attach to main's head) do not test the candidate's code;
+// a failed Dependabot update stopped the 2026-10-29 cut, so they are left out by event.
 import {execFileSync} from 'node:child_process';
 
 const BAD = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure']);
 
 export function judge(all, runId, ownWorkflowId) {
   const own = runId ? `/actions/runs/${runId}/` : null;
-  const eligible = all.filter(r => !(own && r.url.includes(own)) && !(ownWorkflowId && r.workflowId === ownWorkflowId));
+  const eligible = all.filter(r => !(own && r.url.includes(own)) && !(ownWorkflowId && r.workflowId === ownWorkflowId) && r.event !== 'dynamic');
   const latest = new Map();
   for (const run of eligible) {
     // Only supersede with evidence of the same workflow and job. Names alone
@@ -47,7 +49,7 @@ export default {
         if (!metadata.has(match[1])) {
           const action = JSON.parse(execFileSync('gh', ['api', `repos/${repo}/actions/runs/${match[1]}`], {encoding: 'utf8'}));
           if (action.head_sha !== sha || !action.workflow_id || !action.run_number || !action.run_attempt) throw Error('Candidate CI run identity is incomplete or mismatched');
-          metadata.set(match[1], {workflowId: action.workflow_id, runNumber: action.run_number, runAttempt: action.run_attempt});
+          metadata.set(match[1], {workflowId: action.workflow_id, runNumber: action.run_number, runAttempt: action.run_attempt, event: action.event});
         }
         info = metadata.get(match[1]);
       }

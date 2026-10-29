@@ -872,7 +872,7 @@ const WIRING = {
   // The turn's finally closes the run, so a later turn cannot test on its own.
   endTurn: /this\.activeStreams\.delete\(streamId\);\s*\/\/[^\n]*\n\s*this\.verifySession\?\.endTurn\(\);\s*this\.verifyTurnRecorder = null;/,
   // A send while a re-test drives the tab is refused before the turn starts.
-  sendWhileRunning: /private async handleSend\([^)]*?\)[^{]*\{\s*const mode = turnToolMode\(requestedMode\);\s*\/\/[^\n]*\n\s*if \(this\.verifySession\?\.running\) \{\s*await this\.post\(\{type:"inputRejected",text,images,toolMode:mode\}\);[\s\S]{0,200}?return;\s*\}\s*this\.pendingSends\+\+;/,
+  sendWhileRunning: /private async handleSend\([^)]*?\)[^{]*\{\s*const mode = turnToolMode\(requestedMode\);\s*\/\/[^\n]*\n\s*if \(this\.verifySession\?\.running\) \{\s*if \(!prepared\) await this\.post\(\{type:"inputRejected",text,images,toolMode:mode\}\);[\s\S]{0,200}?return;\s*\}\s*this\.pendingSends\+\+;/,
   // Start, fix and re-test are refused while a turn streams (all three come after this line).
   verifyWhileTurn: /if \(this\.pendingSends > 0 \|\| this\.activeStreams\.size > 0\) return this\.postVerifyState\(\{ error: refusalText\("turn_running"\) \}\);\s*if \(msg\.type === "verifyStart"\)/,
   // The coach's verify calls write to the turn's own recorder.
@@ -887,6 +887,17 @@ const wiringProblems = (src) => Object.entries(WIRING).filter(([, re]) => !re.te
 
 await test("host wiring: the turn's end closes the run, sends and verify actions wait for each other, verdicts go to the turn's recorder", async () => {
   assert.deepEqual(wiringProblems(providerSrc), []);
+  const sendSource = providerSrc.slice(providerSrc.indexOf('private async handleSend('));
+  const guard = sendSource.match(/const mode = turnToolMode\(requestedMode\);[\s\S]*?this\.pendingSends\+\+;/)[0];
+  const admit = new Function('prepared', 'turnToolMode', `return(async()=>{const requestedMode='auto',text='fixture',images=[];${guard}}).call(this);`);
+  for (const prepared of [false, true]) for (const running of [false, true]) {
+    const posts = [], host = { verifySession: {running}, pendingSends: 0, post: async message => posts.push(message) };
+    await admit.call(host, prepared, () => 'auto');
+    assert.equal(host.pendingSends, running ? 0 : 1, 'both send paths wait for a running verify session');
+    assert.equal(posts.filter(message => message.type === 'inputRejected').length, running && !prepared ? 1 : 0, 'only the ordinary draft is handed back');
+    assert.equal(posts.filter(message => message.type === 'streamError').length, running ? 1 : 0);
+  }
+  assert(wiringProblems(providerSrc.replace('if (!prepared) await this.post({type:"inputRejected",text,images,toolMode:mode});', 'await this.post({type:"inputRejected",text,images,toolMode:mode});')).includes('sendWhileRunning'), 'restoring a phone request into the native composer must fail the guard contract');
   // Each guard removed is caught.
   const planted = {
     endTurn: providerSrc.replace("this.verifySession?.endTurn();", ""),

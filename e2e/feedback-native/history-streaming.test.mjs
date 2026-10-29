@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import path from 'node:path';
 import {historyMarkers,assertCompletedHistory,captureInterruptedHistory,assertInterruptedHistory,awaitUpstreamClosure} from './history-streaming.mjs';
 test('rendered history requires exact user+assistant occurrence and rejects duplicates, foreign turns or partial-only claims',()=>{const rows=[{role:'user',text:'HPS_NATIVE_A1'},{role:'assistant',text:'HPS_NATIVE_REPLY_A1'}];assertCompletedHistory(rows,['A1']);assert.throws(()=>assertCompletedHistory([...rows,...rows],['A1']));assert.throws(()=>assertCompletedHistory(rows.slice(0,1),['A1']));assert.throws(()=>assertCompletedHistory(rows,['A1','D2']));assert.equal(historyMarkers(rows).A1.assistant,1);assert.throws(()=>assertCompletedHistory([...rows,{role:'user',text:'HPS_NATIVE_STOP_HOLD'}],['A1']));});
 
@@ -25,6 +25,28 @@ test('quit and direct-open preserve their observed partial identities only in th
  assert.throws(()=>assertInterruptedHistory(rows,[],{STOP_HOLD:interrupted.STOP_HOLD}),/Exact persisted user occurrence QUIT_HOLD/);
  assert.throws(()=>assertInterruptedHistory(rows,[],{}),/Exact persisted user occurrence STOP_HOLD/);
  assert.throws(()=>assertInterruptedHistory(rows.slice(0,4),[],interrupted),/Exact persisted user occurrence FILE_HOLD/);
+});
+
+test('actual SDK held stream with no observed assistant preserves only the exact user, never fabricates a reply',()=>{
+ const user={id:'held-user',role:'user',text:'HPS_NATIVE_STOP_HOLD'},rows=[user],interrupted={STOP_HOLD:captureInterruptedHistory(rows,'STOP_HOLD')};
+ assert.equal(interrupted.STOP_HOLD.assistant,null);assertInterruptedHistory(rows,[],interrupted,'STOP_HOLD');
+ assert.throws(()=>captureInterruptedHistory([],'STOP_HOLD'),/One observed interrupted user/);
+ assert.throws(()=>assertInterruptedHistory([],[],interrupted),/Exact persisted user occurrence/);
+ assert.throws(()=>assertInterruptedHistory([{...user,id:'another-user'}],[],interrupted),/identity/);
+ assert.throws(()=>assertInterruptedHistory([...rows,{id:'fabricated',role:'assistant',text:'HPS_NATIVE_REPLY_STOP_HOLD',receipt:'1초 동안 작업했어요'}],[],interrupted),/Exact persisted assistant occurrence/);
+ assert.throws(()=>captureInterruptedHistory([...rows,user],'STOP_HOLD'),/At most one/);
+ assert.throws(()=>assertInterruptedHistory([...rows,{id:'extra-answer',role:'assistant',text:'fabricated completed answer'}],[],interrupted),/No extra assistant/);
+ assert.throws(()=>captureInterruptedHistory([...rows,{id:'extra-answer',role:'assistant',text:'fabricated completed answer'}],'STOP_HOLD'),/Exact interrupted assistant bytes/);
+});
+
+test('image-denial harness blocks a prior unsettled history failure and still requires actual denial on an idle path',async()=>{
+ const source=readFileSync(new URL('./run.mjs',import.meta.url),'utf8').split('\n').find(line=>line.startsWith(" if(c.scenarios.includes('image-denied'))"));assert(source);
+ const run=new Function('ports',`const {c,step,profile,blocked,report,focusChat,command,waitFor,ui,path}=ports;return(async()=>{${source}})();`);
+ const calls=[],report={tests:[{id:'T06-native-stream-block-and-stop',status:'FAIL'}]};let result,toast='이 활동은 이미지 편집을 허용하지 않아요.';
+ const ports={c:{scenarios:['image-denied','history-streaming'],evidence:'/owned'},step:async(_id,work)=>{result=await work();},profile:{},report,path,blocked:message=>Object.assign(Error(message),{blocked:true}),focusChat:async()=>calls.push('focus'),command:async id=>calls.push(id),waitFor:async fn=>{assert(await fn(),'profile capability denial');},ui:{toasts:async()=>toast,shot:async()=>calls.push('shot')}};
+ await assert.rejects(run(ports),error=>error.blocked===true);assert.deepEqual(calls,[]);assert.equal(report.tests[0].status,'FAIL','earlier root failure remains');
+ report.tests.push({id:'T06-native-revoked-credential-no-auto-execution',status:'PASS'});await run(ports);assert.equal(result.profile_capability_denied,true);assert.equal(calls.filter(v=>v==='hypeproof-chat.editImage').length,1);
+ toast='unrelated notice';await assert.rejects(run(ports),/profile capability denial/);
 });
 
 test('cancellation waits for the exact upstream sequence and rejects cleanup or absent propagation',async()=>{

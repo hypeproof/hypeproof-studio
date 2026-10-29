@@ -2169,6 +2169,10 @@ html, body, #root {
 .hp-surface textarea { resize: vertical; }
 .hp-surface textarea::placeholder, .hp-surface input::placeholder { color: var(--hp-text-placeholder-default); opacity: 1; }
 .hp-surface :focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+/* CGP-LEARN-R-003 — a block's live text equivalent: title, how its controls work, and the state sentence, all visible at 14px or more. */
+.hp-material { display: flex; flex-direction: column; gap: var(--ds-c-studio-styles-space-15); }
+.hp-material-title { margin: 0; font-size: var(--ds-c-studio-styles-type-13); font-weight: var(--hp-weight-strong); }
+.hp-material-help, .hp-material-state { margin: 0; font-size: var(--ds-c-studio-styles-type-17); color: var(--hp-text-primary-default); }
 .hp-rehearsal { border: var(--ds-c-studio-styles-size-3) dashed var(--hp-border-divider-default); border-radius: var(--ds-c-studio-styles-radius-10); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-7); }
 
 /* cr-verify — "내 제품 테스트" panel (CR-12–CR-16, CR-68, CR-81). */
