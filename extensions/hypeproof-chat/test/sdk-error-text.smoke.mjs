@@ -15,6 +15,7 @@ import {
   sdkErrorDisplayText,
   sdkCliErrorLine,
   SDK_ERROR_GENERIC_FRIENDLY,
+  SDK_REQUEST_TOO_LARGE_FRIENDLY,
 } from "../src/sdkCoachHelpers.ts";
 import { passSpentNotice, PASS_SPENT_FRIENDLY } from "../src/passPurchase.ts";
 import { bindingRefusalCode } from "../src/lessonBinding.ts";
@@ -134,6 +135,24 @@ const failedResult = { type: "result", subtype: "success", is_error: true, resul
   const r = await turn([synthetic(`API Error: Request rejected (429) · ${sentence}`, "rate_limit"), failedResult]);
   assert.equal(r.banner, PASS_SPENT_FRIENDLY);
   assert.equal(count(r.bubble + r.banner, sentence), 0, "the pass copy replaces the raw sentence");
+}
+
+{
+  // Recorded 2026-10-29: SDK 0.3.299 against a local gateway answering the Service's per-request input bound,
+  // 413 {"error":{"code":"trial_input_limit"}}. The CLI drops the body and prints its own English line.
+  const line = "Request too large (max 32MB). Accumulated images and attachments in the conversation pushed the request over the limit. Remove older images or compact the conversation.";
+  for (const throwAfter of [`Claude Code returned an error result: ${line}`, null]) {
+    const r = await turn([{ type: "system", subtype: "init" }, synthetic(line, "invalid_request"), failedResult], { throwAfter });
+    assert.equal(r.bubble, "", "413: the coach bubble does not speak the CLI's line");
+    assert.equal(r.banner, SDK_REQUEST_TOO_LARGE_FRIENDLY, `413 (${throwAfter ? "throws" : "quiet"}): the size copy, not the generic line`);
+    assert.doesNotMatch(r.banner, /32MB|Request too large/, "no English or a limit that is not the real one");
+  }
+  assert.equal(sdkErrorDisplayText(Object.assign(new Error("Claude Code returned an error result: API Error: 413"), { status: 413 })), SDK_REQUEST_TOO_LARGE_FRIENDLY, "a bare 413 status gets the size copy");
+  // Negative controls: other English-only refusals keep the generic line; a solo seat's generic line is unchanged.
+  assert.equal(sdkErrorDisplayText(new Error("Claude Code returned an error result: API Error: 400 bad request")), SDK_ERROR_GENERIC_FRIENDLY);
+  assert.notEqual(sdkErrorDisplayText(new Error("Claude Code returned an error result: API Error: 400 bad request"), "solo"), SDK_REQUEST_TOO_LARGE_FRIENDLY);
+  // The coach saying the words in its own answer is not a refusal.
+  assert.equal(sdkErrorDisplayText(new Error("요청이 너무 큽니다 (Request too large) 라는 뜻이에요.")), "요청이 너무 큽니다 (Request too large) 라는 뜻이에요.");
 }
 
 // ── Positive controls: normal turns render exactly as before. ──
