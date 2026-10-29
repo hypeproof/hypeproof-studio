@@ -237,6 +237,17 @@ preserving a synthetic original, foreign-account refusal, corrupt bytes and an
 attempted-unknown packet until its explicit erase. Checkpoints intentionally
 hold for external termination; they are not completed JUnit test results.
 
+The host does not equate private paths by spelling alone. Only the two fixed
+package roots (`/data/user/0/<package>` and `/data/data/<package>`) and the exact
+nonce-owned no-backup namespace are eligible. Target-UID `readlink` must resolve
+the reported root and namespace to the already verified canonical target paths;
+read-only `stat` must also prove matching directory device/inode and target UID.
+Live PID/UID/start/data identity is checked before and after these reads and again
+before external Stop. Unknown paths, escapes, mismatched inodes, failed reads or
+an expired native hold refuse. Diagnostics retain only hashes, shape categories
+and equality results. The original run's combined namespace failure did not save
+the differing values, so aliasing remains unconfirmed until hosted evidence.
+
 The only Activity entry is the existing debug device-sign-in fixture without
 extras: it has no target origin or transport and its login button must remain
 disabled. Wi-Fi and mobile data are disabled and read back before launch; this

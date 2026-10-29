@@ -25,12 +25,33 @@ def status_blocks(text):
    if block:rows.append(block);block={}
  return rows
 
-def validate_ack(row,phase,run,uid,data_dir):
+def namespace_shape(row,run,data_dir,diagnostics):
+ roots=['/data/user/0/'+PKG,'/data/data/'+PKG]
+ suffix='/no_backup/hosted-draft-'+run
+ def metadata(value,allowed):
+  raw=value.encode('utf8');return {'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'form':('user0'if value==allowed[0]else'legacy_data'if value==allowed[1]else'unrecognized')}
+ diagnostics.update({'dataDir':metadata(row['hps_data_dir'],roots),'namespace':metadata(row['hps_namespace'],[r+suffix for r in roots]),'dataDirExact':row['hps_data_dir']==data_dir,'namespaceExact':row['hps_namespace']==data_dir+suffix,'namespaceUnderReportedRoot':row['hps_namespace']==row['hps_data_dir']+suffix})
+ require(re.fullmatch('[a-f0-9]{32}',run)is not None and data_dir in roots and row['hps_data_dir']in roots and row['hps_namespace']in[r+suffix for r in roots],'wrong_private_namespace')
+
+def private_stat_rows(text,uid):
+ rows=text.splitlines();require(len(rows)==4,'private_stat_shape')
+ result=[]
+ for row in rows:
+  match=re.fullmatch(r'(0|[1-9][0-9]{0,19}):(0|[1-9][0-9]{0,19}):(0|[1-9][0-9]{0,9}):([0-9a-fA-F]{1,8})',row)
+  require(match is not None,'private_stat_shape');dev,ino,owner=map(int,match.groups()[:3]);mode=int(match[4],16)
+  require(dev<=2**64-1 and 0<ino<=2**64-1 and owner==uid and mode&0xf000==0x4000,'private_stat_owner_or_kind')
+  result.append((dev,ino))
+ require(result[0]==result[1] and result[2]==result[3],'private_inode_mismatch')
+ return result
+
+def validate_ack(row,phase,run,uid,data_dir,namespace_proof=None,diagnostics=None):
  require(set(row)==ACK_KEYS,'incomplete_ack')
  require(row['hps_phase']==phase and row['hps_run']==run,'wrong_checkpoint')
  require(row['hps_package']==PKG and row['hps_process']==PKG and row['hps_scope']=='target_uid_private_native_store_only','wrong_target')
  require(row['hps_pid'].isdigit() and int(row['hps_pid'])>1 and row['hps_uid']==str(uid),'wrong_uid')
- require(row['hps_data_dir']==data_dir and row['hps_namespace']==data_dir+'/no_backup/hosted-draft-'+run,'wrong_private_namespace')
+ namespace_shape(row,run,data_dir,diagnostics if diagnostics is not None else {})
+ if namespace_proof is None:require(row['hps_data_dir']==data_dir and row['hps_namespace']==data_dir+'/no_backup/hosted-draft-'+run,'wrong_private_namespace')
+ else:require(namespace_proof(row,int(row['hps_pid'])) is True,'private_namespace_unproved')
  return int(row['hps_pid'])
 
 def validate_cold(previous,current):
@@ -69,6 +90,21 @@ class Device:
   stat=self.text('shell','run-as',PKG,'cat',f'/proc/{pid}/stat');tail=stat.rsplit(')',1)[-1].split();require(len(tail)>19 and tail[19].isdigit(),'target_start_unavailable')
   require(self.text('shell','run-as',PKG,'pwd','-P')==data_dir,'target_data_dir_changed')
   return{'pid':pid,'uid':uid,'startTicks':int(tail[19]),'dataDir':data_dir}
+ def private_namespace(self,row,run,uid,data_dir,diagnostics):
+  # Fixed package roots and one exact run component only; never normalize arbitrary paths.
+  namespace_shape(row,run,data_dir,diagnostics)
+  pid=int(row['hps_pid']);before=self.identity(pid,uid,data_dir)
+  expected=data_dir+'/no_backup/hosted-draft-'+run
+  canonical_root=self.text('shell','run-as',PKG,'readlink','-f',row['hps_data_dir'])
+  canonical_namespace=self.text('shell','run-as',PKG,'readlink','-f',row['hps_namespace'])
+  diagnostics.update({'canonicalRootMatches':canonical_root==data_dir,'canonicalNamespaceMatches':canonical_namespace==expected})
+  require(canonical_root==data_dir and canonical_namespace==expected,'private_canonical_mismatch')
+  # Toybox stat returns only numeric device/inode/UID/mode, no contents or filenames.
+  stats=self.text('shell','run-as',PKG,'stat','-L','-c','%d:%i:%u:%f',data_dir,row['hps_data_dir'],expected,row['hps_namespace'])
+  private_stat_rows(stats,uid);diagnostics['sameDirectoryInodesAndUid']=True
+  after=self.identity(pid,uid,data_dir);require(after==before,'target_changed_during_namespace_proof')
+  diagnostics['liveIdentityStable']=True;diagnostics['physicalProof']=True
+  return after
  def stop(self,identity,before_stop=None):
   require(self.identity(identity['pid'],identity['uid'],identity['dataDir'])==identity,'target_replaced_before_stop')
   if before_stop:before_stop()
@@ -100,7 +136,7 @@ def disable_and_observe_radios(device,diagnostics,now=time.monotonic,sleep=time.
  except Exception as error:
   diagnostics['status']='refused';diagnostics['errorType']=type(error).__name__;diagnostics['elapsedMs']=round((now()-start)*1000);raise
 
-def read_ack(proc,phase,run,uid,data_dir,timeout=60):
+def read_ack(proc,phase,run,uid,data_dir,timeout=60,namespace_proof=None,diagnostics=None):
  selector=selectors.DefaultSelector();selector.register(proc.stdout,selectors.EVENT_READ);end=time.monotonic()+timeout;data=b''
  try:
   while time.monotonic()<end:
@@ -109,7 +145,7 @@ def read_ack(proc,phase,run,uid,data_dir,timeout=60):
     rows=[r for r in status_blocks(data.decode('utf8','strict'))if r.get('hps_phase')==phase]
     require(len(rows)<=1,'duplicate_checkpoint')
     if rows:
-     classify_stream(data,False);return validate_ack(rows[0],phase,run,uid,data_dir),data
+     classify_stream(data,False);return validate_ack(rows[0],phase,run,uid,data_dir,namespace_proof,diagnostics),data
    require(proc.poll() is None,'instrumentation_ended_before_ack')
   raise RuntimeError('checkpoint_deadline')
  finally:selector.close()
@@ -133,9 +169,15 @@ def finish_stream(proc,timeout=10):
   raise RuntimeError('instrumentation_close_deadline')
  finally:selector.close()
 
-def checkpoint(device,method,phase,run,uid,data_dir,previous,clients):
+def checkpoint(device,method,phase,run,uid,data_dir,previous,clients,namespace_observations=None):
  proc=subprocess.Popen(device.args('shell','am','instrument','-w','-r','-e','class',CASE+'#'+method,'-e','hps_run',run,RUNNER),env=device.env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);clients.append(proc)
- pid,initial=read_ack(proc,phase,run,uid,data_dir);classify_stream(initial,False);identity=device.identity(pid,uid,data_dir);validate_cold(previous,identity)
+ diagnostic={'phase':phase};proof={}
+ if namespace_observations is not None:
+  require(len(namespace_observations)<3,'namespace_observation_bound');namespace_observations.append(diagnostic)
+ def verify_namespace(row,pid):
+  proof['identity']=device.private_namespace(row,run,uid,data_dir,diagnostic);return True
+ pid,initial=read_ack(proc,phase,run,uid,data_dir,namespace_proof=verify_namespace,diagnostics=diagnostic);classify_stream(initial,False)
+ identity=proof.get('identity') or device.identity(pid,uid,data_dir);require(identity['pid']==pid,'namespace_pid_changed');validate_cold(previous,identity)
  def live_client():require(proc.poll() is None,'runner_exited_before_external_kill')
  live_client();device.stop(identity,before_stop=live_client);remainder=finish_stream(proc);classification=classify_stream(initial+remainder,True)
  return identity,{'phase':phase,'identity':identity,'ackObservedWhileAlive':True,'forceStopCommandAfterLiveObservation':True,'targetAbsentAfterStop':True,'instrumentationStreamSha256':hashlib.sha256(initial+remainder).hexdigest(),'terminalClassification':classification,'junitCompleted':'NO; held native checkpoint followed by external force-stop','causalLimit':'spontaneous death in the narrow observation-to-command race cannot be excluded'}
@@ -189,8 +231,8 @@ def main(argv):
   result['guestNetworkBoundary']={'wifiEnabled':False,'mobileDataEnabled':False,'packetIsolation':'NOT_CLAIMED; unconfigured fixture has no transport target'}
   d.call('shell','am','start','-W','-n',COMPONENT,timeout=15);pids=d.pids();require(len(pids)==1,'single_target_launch_required');launched=d.identity(pids[0],uid,data_dir)
   shot=d.call('exec-out','screencap','-p',timeout=10).stdout;require(shot.startswith(b'\x89PNG\r\n\x1a\n'),'launch_screenshot_required');(out/'unconfigured-launch.png').write_bytes(shot);result['checks'].append({'phase':'unconfigured_debug_activity_launch','identity':launched,'component':COMPONENT,'noIntentExtras':True,'screenshotSha256':hashlib.sha256(shot).hexdigest()});d.stop(launched)
-  run=uuid.uuid4().hex;previous=None
-  for method,phase in [('seed','seed_ready'),('recoverErase','erased_ready'),('coldAbsence','cold_absence')]:previous,row=checkpoint(d,method,phase,run,uid,data_dir,previous,clients);result['checks'].append(row)
+  run=uuid.uuid4().hex;previous=None;result['namespaceObservations']=[]
+  for method,phase in [('seed','seed_ready'),('recoverErase','erased_ready'),('coldAbsence','cold_absence')]:previous,row=checkpoint(d,method,phase,run,uid,data_dir,previous,clients,result['namespaceObservations']);result['checks'].append(row)
   result['status']='PASS_TARGET_UID_NATIVE_COLD_FILE_LIFECYCLE'
  except BaseException as error:result['failureType']=type(error).__name__;result['failureCode']=str(error) if re.fullmatch('[a-z_]+',str(error))else'bounded_host_or_native_failure'
  finally:

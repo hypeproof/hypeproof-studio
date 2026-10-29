@@ -144,6 +144,73 @@ class Controls(unittest.TestCase):
   observations=[];d=h.Device('NEVER',{},Child(),Child(),observations)
   with patch.object(d,'pids',return_value=[1234]),patch.object(d,'call',return_value=subprocess.CompletedProcess([],0,h.PKG.encode()+b'\0extra-secret',b'')),patch.object(d,'text')as text,self.assertRaises(RuntimeError):d.identity(1234,UID,DATA)
   text.assert_not_called();self.assertEqual(len(observations),1);self.assertTrue(observations[0]['tailNonzero']);self.assertNotIn('extra-secret',str(observations))
+
+ def test_namespace_alias_needs_live_physical_proof_not_string_normalization(self):
+  legacy='/data/data/'+h.PKG;candidate={**row(),'hps_data_dir':legacy,'hps_namespace':legacy+'/no_backup/hosted-draft-'+RUN}
+  with self.assertRaisesRegex(RuntimeError,'wrong_private_namespace'):h.validate_ack(candidate,'seed_ready',RUN,UID,DATA)
+  with self.assertRaisesRegex(RuntimeError,'private_namespace_unproved'):h.validate_ack(candidate,'seed_ready',RUN,UID,DATA,namespace_proof=lambda *_:False)
+  diagnostics={};seen=[]
+  self.assertEqual(h.validate_ack(candidate,'seed_ready',RUN,UID,DATA,namespace_proof=lambda record,pid:seen.append((record,pid))or True,diagnostics=diagnostics),1234)
+  self.assertEqual(seen,[(candidate,1234)]);self.assertFalse(diagnostics['dataDirExact']);self.assertEqual(diagnostics['dataDir']['form'],'legacy_data');self.assertNotIn(legacy,str(diagnostics))
+ def test_namespace_shape_refuses_other_packages_runs_traversal_and_suffix_before_io(self):
+  from unittest.mock import Mock
+  d=h.Device('NEVER',{},Child(),Child())
+  cases=[{**row(),'hps_data_dir':DATA+'.other'},{**row(),'hps_namespace':DATA+'/no_backup/hosted-draft-'+RUN+'/extra'},
+   {**row(),'hps_namespace':DATA+'/no_backup/../hosted-draft-'+RUN},{**row(),'hps_namespace':DATA+'/no_backup/hosted-draft-'+'b'*32},
+   {**row(),'hps_data_dir':DATA+'/.'},{**row(),'hps_namespace':'/data/user/1/'+h.PKG+'/no_backup/hosted-draft-'+RUN}]
+  for candidate in cases:
+   diagnostics={}
+   with patch.object(d,'identity')as live,patch.object(d,'text')as read,self.assertRaisesRegex(RuntimeError,'wrong_private_namespace'):d.private_namespace(candidate,RUN,UID,DATA,diagnostics)
+   live.assert_not_called();read.assert_not_called()
+  with patch.object(d,'identity')as live,self.assertRaisesRegex(RuntimeError,'wrong_private_namespace'):d.private_namespace(row(),'../foreign',UID,DATA,{})
+  live.assert_not_called()
+ def test_device_namespace_proves_root_and_namespace_aliases_by_canonical_and_inode(self):
+  legacy='/data/data/'+h.PKG;expected=DATA+'/no_backup/hosted-draft-'+RUN
+  stat=f'7:22:{UID}:41c0\n7:22:{UID}:41c0\n7:33:{UID}:41c0\n7:33:{UID}:41c0'
+  for root in [DATA,legacy]:
+   for namespace_root in [DATA,legacy]:
+    candidate={**row(),'hps_data_dir':root,'hps_namespace':namespace_root+'/no_backup/hosted-draft-'+RUN};diagnostics={};d=h.Device('NEVER',{},Child(),Child())
+    with patch.object(d,'identity',side_effect=[identity(),identity()])as live,patch.object(d,'text',side_effect=[DATA,expected,stat])as read:
+     self.assertEqual(d.private_namespace(candidate,RUN,UID,DATA,diagnostics),identity())
+    self.assertEqual(live.call_count,2);self.assertEqual(read.call_count,3)
+    self.assertEqual(read.call_args_list[0].args,('shell','run-as',h.PKG,'readlink','-f',root))
+    self.assertEqual(read.call_args_list[1].args,('shell','run-as',h.PKG,'readlink','-f',candidate['hps_namespace']))
+    self.assertEqual(read.call_args_list[2].args,('shell','run-as',h.PKG,'stat','-L','-c','%d:%i:%u:%f',DATA,root,expected,candidate['hps_namespace']))
+    self.assertTrue(diagnostics['physicalProof']);self.assertTrue(diagnostics['liveIdentityStable']);self.assertNotIn(DATA,str(diagnostics));self.assertNotIn(RUN,str(diagnostics))
+ def test_namespace_canonical_escape_refuses_before_stat_and_never_reports_raw_path(self):
+  expected=DATA+'/no_backup/hosted-draft-'+RUN
+  for canonical in [('private-secret-path',expected),(DATA,expected+'/escape')]:
+   d=h.Device('NEVER',{},Child(),Child());diagnostics={}
+   with patch.object(d,'identity',return_value=identity())as live,patch.object(d,'text',side_effect=canonical)as read,self.assertRaisesRegex(RuntimeError,'private_canonical_mismatch'):d.private_namespace(row(),RUN,UID,DATA,diagnostics)
+   self.assertEqual(live.call_count,1);self.assertEqual(read.call_count,2);self.assertNotIn('private-secret',str(diagnostics));self.assertNotIn('physicalProof',diagnostics)
+ def test_private_stat_rejects_other_inode_device_uid_kind_and_malformed_output(self):
+  base=[f'7:22:{UID}:41c0',f'7:22:{UID}:41c0',f'7:33:{UID}:41c0',f'7:33:{UID}:41c0']
+  for bad in ['8:33:'+str(UID)+':41c0','7:34:'+str(UID)+':41c0','7:33:999:41c0','7:33:'+str(UID)+':81c0','secret OS output','7:0:'+str(UID)+':41c0','18446744073709551616:33:'+str(UID)+':41c0']:
+   with self.subTest(bad=bad),self.assertRaises(RuntimeError):h.private_stat_rows('\n'.join(base[:3]+[bad]),UID)
+  for text in ['', '\n'.join(base[:3]),'\n'.join(base+base), '\n'.join(base)+'\nextra']:
+   with self.assertRaises(RuntimeError):h.private_stat_rows(text,UID)
+ def test_namespace_target_change_or_io_failure_never_proves_identity(self):
+  expected=DATA+'/no_backup/hosted-draft-'+RUN;stat=f'7:22:{UID}:41c0\n7:22:{UID}:41c0\n7:33:{UID}:41c0\n7:33:{UID}:41c0'
+  for change in [identity(9999,100),identity(1234,200),{**identity(),'uid':999},{**identity(),'dataDir':'foreign'}]:
+   d=h.Device('NEVER',{},Child(),Child());diagnostics={}
+   with patch.object(d,'identity',side_effect=[identity(),change]),patch.object(d,'text',side_effect=[DATA,expected,stat]),self.assertRaisesRegex(RuntimeError,'target_changed_during_namespace_proof'):d.private_namespace(row(),RUN,UID,DATA,diagnostics)
+   self.assertNotIn('physicalProof',diagnostics)
+  d=h.Device('NEVER',{},Child(),Child())
+  with patch.object(d,'identity',return_value=identity()),patch.object(d,'text',side_effect=RuntimeError('owned_adb_command_failed'))as read,self.assertRaises(RuntimeError):d.private_namespace(row(),RUN,UID,DATA,{})
+  self.assertEqual(read.call_count,1)
+ def test_checkpoint_proof_failure_or_expired_held_runner_never_force_stops(self):
+  from unittest.mock import Mock
+  for failed in [True,False]:
+   device=Device();child=Child();observations=[]
+   def prove(*_):
+    if failed:raise RuntimeError('private_inode_mismatch')
+    child.alive=False;return identity()
+   device.private_namespace=Mock(side_effect=prove)
+   def read(proc,phase,run,uid,data_dir,**kw):return h.validate_ack(row(),phase,run,uid,data_dir,kw['namespace_proof'],kw['diagnostics']),b''
+   with patch.object(h.subprocess,'Popen',return_value=child),patch.object(h,'read_ack',side_effect=read),self.assertRaisesRegex(RuntimeError,'private_inode_mismatch'if failed else'runner_exited_before_external_kill'):
+    h.checkpoint(device,'seed','seed_ready',RUN,UID,DATA,None,[],observations)
+   self.assertEqual(len(observations),1);self.assertNotIn('external_stop',[e[0]for e in device.events])
+
  def test_default_no_launch(self):
   with patch.object(h.subprocess,'Popen')as popen:self.assertEqual(h.main([]),0)
   popen.assert_not_called()
