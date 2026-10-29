@@ -1,5 +1,7 @@
 // One input contract for the existing Mac and Windows builders (#1758).
 // A managed candidate embeds its final version, but remains an RC draft.
+// A release-cut rc (#3172) also embeds its final version, so an approved rc's
+// accepted packages become the v release byte for byte, with no rebuild.
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -14,6 +16,7 @@ const fail = reason => { throw new Error(`Build contract: ${reason}`); };
 const requireSha = value => { if (typeof value !== 'string' || value.length !== 40 || !shaPattern.test(value)) fail('candidate must be a full lowercase commit SHA'); };
 const isReleaseTag = value => typeof value === 'string' && value === value.trim() && tagPattern.test(value);
 const marker = 'hps-managed-draft/1';
+const candidateMarker = 'hps-release-candidate/1';
 const repository = fileURLToPath(new URL('../../', import.meta.url));
 export const contractSources = ['scripts/release/build-contract.mjs', 'e2e/unified-release/artifact.mjs',
   '.github/workflows/build-mac.yml', '.github/workflows/build-windows.yml'];
@@ -50,22 +53,33 @@ export function buildDispatches(plan, {managedDraft = false, platforms = checkou
   return platforms.map(platform => ({workflow: PLATFORM[platform].workflow, ref: plan.rcTag, inputs}));
 }
 
+// Both markers carry the same fields; only the schema says whether the rc stops at a draft.
 export function buildTagMessage(plan, {managedDraft = false} = {}) {
   buildDispatches(plan, {managedDraft});
-  return managedDraft ? `${marker}\n${JSON.stringify({schema: marker, sourceSha: plan.candidate,
-    publicationTag: plan.rcTag, releaseVersion: plan.version})}` : `${plan.version} candidate (release-cut)`;
+  const schema = managedDraft ? marker : candidateMarker;
+  return `${schema}\n${JSON.stringify({schema, sourceSha: plan.candidate, publicationTag: plan.rcTag, releaseVersion: plan.version})}`;
 }
 
-function managedTag(message, tag) {
-  if (!/hps-managed/i.test(message)) return null;
-  if (!message.startsWith(`${marker}\n`)) fail('malformed managed draft marker');
+function taggedMarker(message, tag, schema, probe, label) {
+  if (!probe.test(message)) return null;
+  if (!message.startsWith(`${schema}\n`)) fail(`malformed ${label} marker`);
   let data;
-  try { data = JSON.parse(message.slice(marker.length + 1)); } catch { fail('malformed managed draft marker'); }
-  if (data?.schema !== marker || Object.keys(data).sort().join(',') !== 'publicationTag,releaseVersion,schema,sourceSha') fail('malformed managed draft marker');
+  try { data = JSON.parse(message.slice(schema.length + 1)); } catch { fail(`malformed ${label} marker`); }
+  if (data?.schema !== schema || Object.keys(data).sort().join(',') !== 'publicationTag,releaseVersion,schema,sourceSha') fail(`malformed ${label} marker`);
   requireSha(data.sourceSha);
   requireCandidateTag(data.publicationTag, data.releaseVersion);
-  if (data.publicationTag !== tag) fail('managed draft marker names another tag');
+  if (data.publicationTag !== tag) fail(`${label} marker names another tag`);
   return data;
+}
+const managedTag = (message, tag) => taggedMarker(message, tag, marker, /hps-managed/i, 'managed draft');
+const candidateTag = (message, tag) => taggedMarker(message, tag, candidateMarker, /hps-release-candidate/i, 'release candidate');
+
+// The App version a tag's packages must carry: the final version for a marked rc,
+// otherwise the tag without its v (stable tags and rcs cut before #3172).
+export function expectedAppVersion(tag, tagMessage = '') {
+  if (!isReleaseTag(tag)) fail('invalid release tag');
+  const data = managedTag(tagMessage, tag) ?? candidateTag(tagMessage, tag);
+  return data ? data.releaseVersion.slice(1) : tag.slice(1);
 }
 
 export function resolveBuildContract({eventName, githubRef, githubSha, head, tagCommit, tagObject = '', tagMessage = '', inputs = {}}) {
@@ -81,6 +95,7 @@ export function resolveBuildContract({eventName, githubRef, githubSha, head, tag
   const publicationTag = githubRef?.startsWith('refs/tags/') ? githubRef.slice(10) : '';
   const annotation = managedTag(tagMessage, publicationTag);
   const managed = Boolean(annotation);
+  const finalRc = managed ? null : candidateTag(tagMessage, publicationTag);
   if (publicationTag) {
     if (!isReleaseTag(publicationTag)) fail('invalid release tag');
     if (head !== tagCommit || head !== githubSha) fail('candidate, workflow ref and publication tag disagree');
@@ -91,9 +106,10 @@ export function resolveBuildContract({eventName, githubRef, githubSha, head, tag
     requireSha(tagObject);
     if (head !== annotation.sourceSha || (ref && ref !== annotation.sourceSha) || (version && version !== annotation.releaseVersion)) fail('managed draft inputs disagree with the tag marker');
   } else if (version) fail('release_version is only allowed for managed drafts');
+  if (finalRc && (head !== finalRc.sourceSha || (ref && ref !== finalRc.sourceSha))) fail('release candidate marker names another commit');
   return {
     schema: 'hps-build-contract/1', sourceSha: head, publicationTag, publicationTagObject: tagObject,
-    releaseVersion: managed ? annotation.releaseVersion.slice(1) : publicationTag.slice(1),
+    releaseVersion: (annotation ?? finalRc) ? (annotation ?? finalRc).releaseVersion.slice(1) : publicationTag.slice(1),
     managedDraft: managed, autoAcceptance: Boolean(publicationTag) && !managed,
   };
 }
@@ -145,8 +161,14 @@ export function assertRemoteCandidate(output, contract) {
 
 function main() {
   const [command, contractPath, ...args] = process.argv.slice(2);
-  if (!contractPath) fail('usage: build-contract.mjs preflight|record|check-upload CONTRACT [PLATFORM DIST APP]');
+  if (!contractPath) fail('usage: build-contract.mjs preflight|record|check-upload CONTRACT [PLATFORM DIST APP] | app-version TAG');
   const git = (...values) => execFileSync('git', values, {encoding: 'utf8'}).trim();
+  if (command === 'app-version') {
+    const tag = contractPath, ref = `refs/tags/${tag}`;
+    if (!isReleaseTag(tag)) fail('invalid release tag');
+    console.log(expectedAppVersion(tag, git('cat-file', '-t', ref) === 'tag' ? git('for-each-ref', '--format=%(contents)', ref) : ''));
+    return;
+  }
   if (command === 'preflight') {
     const githubRef = process.env.GITHUB_REF ?? '';
     // Validate before handing a ref to git or writing any workflow environment file.

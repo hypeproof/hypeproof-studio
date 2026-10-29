@@ -1501,3 +1501,23 @@ Applies DEC-01 and DEC-02 (ruled by Jay 2026-10-28). Built as REQ-STUDIO-ACTIVIT
 - 200 % zoom is emulated as Chromium lays out page zoom: device scale 2 with half the CSS width. Measured panes: the 480px rail and the 640 (the WCAG 1.4.10 320 CSS px), 800 and 1420px panes. The 280px rail at 200 % is a 140 CSS px viewport, below the WCAG reflow floor, and is not claimed.
 - Contrast is measured against the background actually behind the caption (the card's Panel token), not assumed from tokens.
 - Default state: on for every seat that draws the lesson rail (display only, no new data flow).
+
+## CGP-KNOW-R-022: memory state line (2026-10-29, agent-selected conservative implementation)
+
+Applies DEC-01 and DEC-02 (ruled by Jay 2026-10-28). Built as REQ-STUDIO-ACTIVITY-MEMORY-STATE on the CGP-KNOW-R-030 store.
+
+- "The file store exists" means the store's view exists for this seat (a learner task workspace: personal, trial; minors included). No view means no line: instructors, seats without a task workspace, classroom lesson seats, an unloaded profile and a task switch in progress. Class activities show no personal-memory line (REQ-KNOW-07).
+- Home: the head of the memory section in 작업 자료 (under 내 작품), visible before the list is opened. The settings dialog and the activity header disclosure of DES-KNOW-40 are left to CGP-KNOW-D-022, which may move or repeat the line.
+- Unreadable store (the folder is a link or not a folder): the line still reads "AI 기억: 켜짐" (the policy state) and the reason Studio read nothing moves out of the folded list so it shows next to it.
+- No switch anywhere: no profile field is read for memory, the extension contributes no memory setting, and the line is a paragraph with no control. Tests pin this with minor, teen, kids and "memory off" profiles.
+- Learner floors: the line is 14px at 4.5:1 (computed in headless Chromium).
+
+## CGP-LEARN-D-002: no judgment visuals inside a block (2026-10-29, agent-selected)
+
+- Already met on main by the R-001 block. This row adds no behaviour; it records the rule as REQ-STUDIO-LEARNING-BLOCK-NO-JUDGMENT-VISUALS and holds it with a computed headless-Chromium test on the mounted ChatPanel (R-002 audits words on the minimal DOM; this row measures what the browser draws).
+- "Green-check/red-x result glyphs" is read broadly: text, spoken attributes, pseudo-element content, ChatIcon kinds that read as a verdict or celebration (`check`, `check-square`, `close`, `ban`, `sparkle`), any image, canvas or frame, CSS images, and any saturated green or red colour on a block element. A neutral icon (e.g. `pencil`) stays allowed.
+- "Confetti/celebration" is measured as animation: no animation on a block element, and no change in the block starts an animation anywhere on the page.
+- "Score numerals tied to the learner": no digit in the block's text once the learner's own words are removed.
+- "Colour-removed render conveys every state with text": `grayscale(1)` on the page; each pair of a block's states must differ in words (visible text plus field values), and block text keeps 4.5:1 in grayscale at full opacity. Save availability (the disabled save button) is carried by the field's own words (empty vs written); CGP-LEARN-R-003 (in flight) adds an explicit state sentence, which this test then covers too.
+- Surface "Both": Chalk draws no learner block today, so there is no Chalk surface to hold. Seats: classroom and personal with a lesson; dark and light; 800 and 1420 px. Default state: unchanged (on).
+- Fix round 1 (2026-10-29): CGP-LEARN-D-001 (#3156) gave the 자료 card a thumbnail icon per kind, and `criterion_form` used `check-square`, a check mark inside the block. The card icon is now `flag` (the step's aim; neutral, no verdict). The other six kinds already used neutral icons (`pencil`, `code`, `eye`, `book`, `message`, `ruler`). The test now walks all seven kinds, so every card icon is measured.

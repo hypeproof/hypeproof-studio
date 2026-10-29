@@ -5,11 +5,14 @@ doc_type: release
 status: canonical
 owner: core
 version: 0.1.5
-last_reviewed: 2026-10-15
+last_reviewed: 2026-10-29
 audience: release managers, developers
 source_paths:
   - scripts/release/release-cut.mjs
   - scripts/release/create.mjs
+  - scripts/release/promote.mjs
+  - scripts/release/build-contract.mjs
+  - .github/workflows/release-promote.yml
   - scripts/release/version.mjs
   - scripts/release/smoke/smoke.mjs
   - .github/workflows/release-cut.yml
@@ -58,7 +61,7 @@ the release cut runs on a schedule.
 
 ## Status
 
-Not all parts of this process exist yet. This table shows the state on 2026-10-15.
+Not all parts of this process exist yet. This table shows the state on 2026-10-29.
 
 | Part | State | Reference |
 |---|---|---|
@@ -68,11 +71,11 @@ Not all parts of this process exist yet. This table shows the state on 2026-10-1
 | `hype-pr` checks the Release check section | In `main`, not enforced in Studio | hypeproof-harness#324 |
 | Hotfix rules in `hype-pr` and the hotfix issue form | In `main` | hypeproof-harness#326, #1686 |
 | Publish gate (rule 5) | In `main` (merged 2026-10-18) | #1683, #1684 |
-| Approval workflow: approval → `v` tag | Not started | — |
+| Approval workflow: approval → `v` tag, promotion without a rebuild, merge, publish | Merged with #3172, not run on Actions yet | #3170, #3172 |
 | Smoke credentials | S4 available; S3 missing as observed 2026-10-16 | #1704 |
 
-Until the approval workflow exists, a member pushes the `v` tag by hand after the approval.
-See [Approval](#approval).
+The approval workflow (`release-promote.yml`) only promotes an rc cut with final-version
+bytes, that is an rc cut after #3172 merged. See [Promotion](#promotion).
 
 ## Flow
 
@@ -86,19 +89,27 @@ See [Approval](#approval).
    the release PR. Then it closes the open smoke-failure issues of this version or a lower one,
    each with a comment that links the release PR. A failed close is a warning in the step summary,
    not a failed release.
-6. The rc builds run the automatic E2E on every platform in
-   `config/release-platforms.json` (macOS only since 2026-10-19; Windows is dispatch-only,
-   see [fast-mac-release.md](fast-mac-release.md)). Then they publish the rc as a
-   prerelease. The Mac build reuses the previous base app when the base is unchanged.
+6. The rc builds run on every platform in `config/release-platforms.json` (macOS and
+   Windows since 2026-10-20). They embed the final version (`vX.Y.Z`, not `-rc.N`), see
+   [Version](#version). The automatic E2E runs on the rc packages. Then the rc is published
+   as a prerelease. The Mac build reuses the previous base app when the base is unchanged.
 7. The release manager installs the rc build and does the checks in the release PR.
 8. A member with write access approves the release PR.
-9. The `v` tag goes on the same commit as the rc tag.
-10. The `v` tag builds run the automatic E2E again.
+9. `release-promote.yml` puts the `v` tag on the rc commit and copies the rc's accepted
+   packages and acceptance receipts to the `v` draft, byte for byte. Nothing is built again.
+10. It merges the release PR and starts `verify-unified-release.yml` for the `v` tag. That run
+    reuses the rc's acceptance when the bytes and the public Service did not change.
 11. The publish gate checks the approval. Then the release becomes public.
 
 ## Version
 
-The git tag gives the version. CI sets `HPS_VERSION` from the tag.
+The git tag gives the version. CI sets `HPS_VERSION` from the tag. An rc tag that
+`release-cut` creates is annotated with `hps-release-candidate/1` (source commit, rc tag,
+final version). For such a tag, `scripts/release/build-contract.mjs` sets `HPS_VERSION` to the
+final version, so the rc App already reports `X.Y.Z` and its packages can become the `v`
+release unchanged. An rc tag without the annotation (cut before #3172) keeps its rc version.
+`build-contract.mjs app-version <tag>` prints the version a tag's packages must carry;
+`verify-unified-release.yml` checks the packages against it.
 `scripts/resolve-version.sh` writes it into `product.json`, `Info.plist` and the bundled
 `hypeproof-chat` extension. For untagged local builds, the version comes from
 `extensions/hypeproof-chat/package.json`.
@@ -242,14 +253,48 @@ The run has two jobs. The `cut` job runs in both modes and has read permissions 
    ([judgement rules](../operations/release-casebook/README.md#판정-규칙)).
 3. Approve the release PR with an account that has write access.
 
-Until the approval workflow exists, also do these steps:
-
-4. Push the `v` tag on the rc commit:
-   `git tag <version> <version>-rc.N^{} && git push origin <version>`
-5. Merge the release PR. It adds only `releases/<version>.md`.
+Do not push the `v` tag and do not merge the release PR by hand. The approval starts
+[promotion](#promotion). A hand-pushed `v` tag starts the tag builds and creates a `v` draft
+with other bytes; promotion then refuses that draft.
 
 Make sure that the approval is on the latest commit of the release PR. A later rc moves
 the release branch, and an approval of an earlier candidate does not count.
+
+## Promotion
+
+This part merged with #3172. It has not run on Actions yet.
+
+Builds are the largest cost of a release (macOS 0.08 USD per minute; an rc build takes
+30–57 minutes, a Windows build 38 minutes). Promotion makes the `v` release from the rc's
+packages, so an approval starts no build on any OS.
+
+`release-promote.yml` runs when a review that approves a PR with the `release` label and a
+`release/v*` branch is submitted. It runs `scripts/release/promote.mjs` from the default branch:
+
+1. **Check.** The approval is from a member with write access, on the PR's current head (the
+   same rule as the publish gate). The head is one commit on the rc commit that changes only
+   `releases/<version>.md` and records `<version>-rc.N`. That rc tag is on the rc commit. The
+   rc release is published (its acceptance passed). Its packages carry `<version>` and match
+   its acceptance receipts (`scripts/check-unified-release.mjs`).
+2. **Tag.** `<version>` on the rc commit, pushed with the workflow token. A push with that
+   token starts no workflow, so `build-mac.yml` and `build-windows.yml` do not run.
+3. **Draft.** The `<version>` draft gets the rc's App packages and `unified-acceptance.json`.
+   Per-tag files (Mac installer, Test Kit, Agent SDK seed) are made again by the publish job.
+4. **Merge.** The release PR is squash-merged, only at the approved head.
+5. **Publish.** `verify-unified-release.yml` runs for `<version>`. Its candidate job reuses the
+   rc's acceptance when the draft's receipts are the published rc's receipts, still match the
+   bytes, and the public Service version did not change. Otherwise acceptance runs again on the
+   same bytes. Then the live-class freeze and the publish gate run, and the release becomes
+   public and is mirrored.
+
+Every step can run again. If the rc was still in acceptance at approval time, or a step failed,
+run `gh workflow run release-promote.yml -f pr=<number>`. Promotion refuses, and does nothing,
+when:
+
+- the rc was cut before #3172 and its packages carry `-rc.N`. Cut a new rc with
+  `release-cut` (`mode=create`); promotion never rebuilds;
+- the `v` tag exists on another commit, or the `v` draft holds packages with other bytes (for
+  example from a hand-pushed tag). Delete that draft, then run it again.
 
 ## Publish gate
 

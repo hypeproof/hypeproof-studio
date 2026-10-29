@@ -5839,6 +5839,18 @@
         },
         {
           "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.cs"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.ps1"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.test.ps1"
         }
       ]
     },
@@ -6357,6 +6369,12 @@
         },
         {
           "path": ".github/workflows/release-cut.yml"
+        },
+        {
+          "path": "scripts/release/promote.mjs"
+        },
+        {
+          "path": ".github/workflows/release-promote.yml"
         }
       ]
     },
@@ -6377,6 +6395,9 @@
         },
         {
           "path": ".github/workflows/pr-ci.yml"
+        },
+        {
+          "path": "scripts/release/test/promote.test.mjs"
         }
       ]
     },
@@ -16513,6 +16534,101 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/learning-block-caption-computed.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-ACTIVITY-MEMORY-STATE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACTIVITY-MEMORY-FILES"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Activity memory state line (CGP-KNOW-R-022)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ACTIVITY-MEMORY-STATE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACTIVITY-MEMORY-STATE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityMemoryPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ACTIVITY-MEMORY-STATE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACTIVITY-MEMORY-STATE",
+        "ST-IMP-ACTIVITY-MEMORY-STATE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/activity-memory.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-LEARNING-BLOCK-NO-JUDGMENT-VISUALS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-BLOCK-NO-JUDGMENT",
+        "ST-INT-SX"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Learning block draws no judgment visuals (CGP-LEARN-D-002)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LEARNING-BLOCK-NO-JUDGMENT-VISUALS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-BLOCK-NO-JUDGMENT-VISUALS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/LessonStepPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LEARNING-BLOCK-NO-JUDGMENT-VISUALS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-BLOCK-NO-JUDGMENT-VISUALS",
+        "ST-IMP-LEARNING-BLOCK-NO-JUDGMENT-VISUALS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/learning-block-judgment-visuals-browser.smoke.mjs"
         }
       ]
     }

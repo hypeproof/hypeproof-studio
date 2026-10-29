@@ -125,7 +125,17 @@ export class StartPage {
     private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string) => Promise<boolean>,
     private githubSource?: GithubContinueSource,
     private accounts?: AccountSession,
-  ) {}
+  ) {
+    // REQ-STUDIO-START-UPDATE-NOTICE — a found, cleared or dismissed update redraws an open start page.
+    // Optional: hosts without the hook (tests, older providers) just show no notice.
+    this.chat.onAvailableUpdateChanged?.(() => { if (this.panel) void this.refresh(); });
+  }
+  /** The chat banner's offer, for the start page; the dismissal rule already ran in the scheduler. */
+  private updateView(): StartState["update"] {
+    const offer = this.chat.getAvailableUpdate?.();
+    if (!offer?.version) return undefined;
+    return { version: offer.version, ...(this.chat.isClassUpdateHeld?.() ? { heldForClass: true } : {}) };
+  }
 
   accountChanged(): void {
     // CONV-FUNNEL-R-006 — the purchase-time sign-in finished (or ended without an account).
@@ -756,6 +766,7 @@ export class StartPage {
       ...(this.look() ? { github: this.look()!.state } : {}),
       ...(this.joinLink ? { joinLink: { ...this.joinLink } } : {}),
       settings: await this.settingsView(p),
+      ...(this.updateView() ? { update: this.updateView() } : {}),
       ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), ...(p.trial && !p.pass ? { trial: p.trial } : {}), ...(isFreeSeat(p) ? { free: true } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
@@ -833,6 +844,8 @@ export class StartPage {
         await Promise.race([this.loadTrialOffer(), bound]);
       }
       await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer()]).then(() => this.refresh()); return; }
+    if (msg.type === "startUpdateInstall") { await vscode.commands.executeCommand("hypeproof-chat.installUpdate"); return; }
+    if (msg.type === "startUpdateDismiss") { if (typeof msg.version === "string" && msg.version) await vscode.commands.executeCommand("hypeproof-chat.dismissUpdate", msg.version); return; }
     if (msg.type === "freeStartAge") { if (isAgeAnswer(msg.answer)) await this.freeStartAge(msg.answer); return; }
     if (msg.type === "freeStartClaim") { await this.freeStartClaim(); return; }
     if (msg.type === "freeStartGuardian") { await vscode.env.openExternal(vscode.Uri.parse(guardianUrl(this.settings().siteBase))); return; }

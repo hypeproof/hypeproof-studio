@@ -617,9 +617,41 @@ These source controls are not a new installed-window/quit acceptance result.
 Windows ownership-query failures retain only the fixed query stage, elapsed/requested
 budget, allowlisted OS code/signal, numeric exit status, and output lengths/hashes.
 Raw PowerShell output, exception text and process arguments are never recorded.
-The existing 10s query budget, command, unique-listener and descendant admission
+The existing 10s query budget, unique-listener and descendant admission
 remain unchanged; a failed query gets no retry or diagnostic acceptance. The
 background harness now runs its real owned-child loopback positive/foreign-root
 negative on Windows before desktop construction. This is not native acceptance.
 An early inspector failure remains the primary scenario error if the concurrent
 public restart later times out; that secondary observation is recorded separately.
+
+Windows listener discovery now uses a fixed `-File` PowerShell helper and native
+read-only APIs instead of the WMI/CIM cmdlets that timed out on an empty port.
+[`GetExtendedTcpTable`](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable)
+reads the IPv4 owner-PID listener table: one size negotiation and one bounded read,
+with no buffer-growth retry. Only exact `127.0.0.1`, LISTEN and the requested port
+contribute PIDs. Port bytes are decoded in network order. The
+[`Toolhelp process snapshot`](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot)
+returns numeric PID/parent pairs; only `ERROR_NO_MORE_FILES` is successful enumeration
+termination. Handles and allocated buffers close in `finally` blocks. Invalid
+sizes, overflow, duplicate process rows, API failures or malformed JSON refuse.
+No executable names, raw arguments or localized command output are emitted.
+
+The existing single ownership admission and fail-closed diagnostic resample remain;
+there is no WMI/netstat fallback or timeout increase. Portable controls compile the
+actual C# parser and feed binary tables without calling Windows APIs. The real
+Windows background empty-port/owned/foreign control still has to pass on the hosted
+runner before desktop acceptance; a local compile is not that result.
+
+After the b6 Windows empty-port probe still timed out, the same job's separate
+PowerShell/C# compile and synthetic ABI check passed in 1.725 s. That does not
+locate the timed-out stage or establish that compilation caching would fix it.
+The helper now flushes fixed phase markers around script entry, compilation,
+TCP table sizing/read, process snapshot/enumeration and JSON serialization.
+A fresh random diagnostic nonce binds each probe's markers; it carries no authority.
+Only a bounded, ordered prefix with monotonic elapsed milliseconds within that
+probe's existing budget is retained on failure. Unknown, forged, duplicate,
+out-of-order, malformed or oversized traces are marked invalid with no statements.
+Raw stderr/OS text remains lengths/hashes only. Child elapsed time starts at script
+entry, so time before that first marker remains unmeasured. Markers never establish
+listener ownership, retry a failed probe, or enlarge the 10 s admission budget.
+Actual next Windows timing/native-API acceptance remains required.

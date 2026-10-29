@@ -302,6 +302,7 @@ body.vscode-high-contrast :is(.tw-sources, .tw-chat-menu-panel) { border-color: 
 /* REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030) — the activity's memory files under 내 작품. */
 .tw-memory { padding: 0 var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); border-top: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
 .tw-memory button { min-height: var(--ds-c-studio-taskworkspace-size-8); min-width: var(--ds-c-studio-taskworkspace-size-8); padding: 0 var(--ds-c-studio-taskworkspace-space-1); font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-memory-state { margin: var(--ds-c-studio-taskworkspace-space-1) 0 0; font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
 .tw-memory-entry { box-sizing: border-box; width: 100%; margin-top: var(--ds-c-studio-taskworkspace-space-1); text-align: start; }
 .tw-memory-list ul { list-style: none; margin: 0; padding: 0; }
 .tw-memory-list li { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-15); padding: var(--ds-c-studio-taskworkspace-space-7) 0; }

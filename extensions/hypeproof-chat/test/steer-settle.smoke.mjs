@@ -53,9 +53,10 @@ const bundle = await build({
 
 /**
  * `capMs` stands in for the 15 s cap (a fake clock for that one timer: every other delay is real);
- * `cleanupMs` is how long the stopped turn takes to save its partial answer.
+ * `cleanupMs` is how long the stopped turn takes to save its partial answer;
+ * `admissionMs` independently models the user-only write before model dispatch.
  */
-function fixture({ fixed = true, capMs = TURN_SETTLE_WAIT_MS, cleanupMs = 40 } = {}) {
+function fixture({ fixed = true, capMs = TURN_SETTLE_WAIT_MS, cleanupMs = 40, admissionMs = 40 } = {}) {
   const posts = [], history = [], proxyCalls = [];
   let held = false;
   const connections = {
@@ -85,8 +86,8 @@ function fixture({ fixed = true, capMs = TURN_SETTLE_WAIT_MS, cleanupMs = 40 } =
     nativeHistoryScope: "task-a", pendingSends: 0, activeStreams: new Map(), delegationControls: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
     _instructorMode: { isInstructor: false, onTurnSuccess() {}, async revertModelOnTurnError() {} }, cachedProfile: profile,
     getHistory: () => history,
-    // The stopped turn's partial answer is saved here before the lock is released; make that take a moment.
-    appendHistory: async (items) => { await tick(cleanupMs); for (const it of items) history.push(copy(it)); },
+    // Admission and partial-answer cleanup are separate writes with independent delays.
+    appendHistory: async (items) => { await tick(items.some((it) => it.role === "assistant") ? cleanupMs : admissionMs); for (const it of items) history.push(copy(it)); },
     post: async (e) => { posts.push(copy(e)); }, postConfig: async () => {}, getCoach: () => ({ name: "코치", personality: "", configured: true }),
     ensureProfile: async () => profile, loadAccess: async () => {},
     pullQuestResultFromPreview: async () => {}, elementQueue: { take: () => undefined }, verifySession: { running: false, takeCoachContext: () => null, endTurn() {} },
@@ -109,6 +110,7 @@ async function steerScenario(f) {
   f.runtime.proxy = async (a) => {
     f.proxyCalls.push(a);
     if (f.proxyCalls.length === 1) {
+      assert.equal(a.signal.aborted, false, "the streaming fixture starts only after live admission");
       a.onDelta("고양이를 파랗게");
       await new Promise((_, reject) => a.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true }));
     }
@@ -116,8 +118,14 @@ async function steerScenario(f) {
     return { text: "강아지로 바꿀게요", toolUses: [] };
   };
   const first = f.h.handleMessage({ type: "sendMessage", activityId: "a1", text: "고양이 그려 줘", history: [], toolMode: "auto", userMessageId: "u-1" });
-  for (let i = 0; i < 100 && !f.posts.some((e) => e.type === "streamStart"); i++) await tick(2);
-  const streamId = f.posts.find((e) => e.type === "streamStart").streamId;
+  // streamStart announces admission work, not model entry. Durable history now
+  // awaits a write before dispatch; this scenario must first observe its partial.
+  for (let i = 0; i < 100 && !f.posts.some((e) => e.type === "streamChunk"); i++) await tick(2);
+  assert.equal(f.proxyCalls.length, 1, "the first turn reached the proxy before Stop");
+  const partial = f.posts.find((e) => e.type === "streamChunk");
+  assert.equal(partial?.delta, "고양이를 파랗게", "Stop follows an actual partial, not just streamStart");
+  const streamId = partial.streamId;
+  assert.equal(f.posts.find((e) => e.type === "streamStart").streamId, streamId);
   // The steer: Stop, and on streamStopped the parked text goes out at once.
   await f.h.handleMessage({ type: "cancelStream", streamId });
   assert.ok(f.posts.some((e) => e.type === "streamStopped"), "the stop is announced at once");
@@ -180,6 +188,37 @@ async function steerScenario(f) {
   assert.equal(f.proxyCalls.length, 1, "nothing reached the model");
   assert.equal(f.h.turnSettling, undefined, "released after both ended");
   ok("cleanup longer than the cap: refused with \"중단한 응답을 정리하고 있어요\", text handed back");
+}
+
+
+{
+  // A distinct boundary: Stop while durable admission is pending must never
+  // enter the proxy. This is the state the old streamStart-only fixture confused
+  // with an already streaming turn.
+  const f = fixture(), entered = turnSettleSignal(), release = turnSettleSignal();
+  const append = f.h.appendHistory;
+  let firstWrite = true;
+  f.h.appendHistory = async (items) => {
+    if (firstWrite) { firstWrite = false; entered.settled(); await release.promise; }
+    await append(items);
+  };
+  f.runtime.proxy = async (a) => { f.proxyCalls.push(a); throw Error("pre-admission Stop must not dispatch"); };
+  const first = f.h.handleMessage({ type: "sendMessage", activityId: "a1", text: "저장 중 멈춤", history: [], toolMode: "auto", userMessageId: "u-before-admission" });
+  try {
+    assert.equal(await waitAtMost(entered.promise, 200), true, "the actual provider reached its history write");
+    const start = f.posts.find((e) => e.type === "streamStart");
+    assert.ok(start, "the visible stream exists before history admission completes");
+    assert.equal(f.proxyCalls.length, 0);
+    await f.h.handleMessage({ type: "cancelStream", streamId: start.streamId });
+    assert.equal(f.posts.filter((e) => e.type === "streamStopped").length, 1);
+  } finally { release.settled(); }
+  assert.equal(await waitAtMost(first, 500), true, "cancelled admission settles after its write releases");
+  await first;
+  assert.equal(f.proxyCalls.length, 0, "a cancelled admission never reaches the model");
+  assert.equal(f.posts.some((e) => e.type === "streamChunk" || e.type === "streamEnd"), false);
+  assert.equal(f.h.pendingSends, 0); assert.equal(f.h.activeStreams.size, 0);
+  assert.equal(f.h.turnSettling, undefined);
+  ok("Stop during durable admission: no proxy call, no partial/success, and settlement releases the slot");
 }
 
 console.log(`\nsteer-settle: ${passed} checks passed`);

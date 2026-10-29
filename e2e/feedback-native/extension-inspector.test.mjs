@@ -42,7 +42,7 @@ test('listener ownership rejects another App, cycles, ambiguous PID and unsafe e
  const parents=new Map([[103,102],[102,101],[101,1],[200,200]]);assert(descendant(103,101,parents));assert(!descendant(103,999,parents));assert(!descendant(200,101,parents));assert(!descendant(101,101,parents));
  const execute=(command,args)=>command==='lsof'?'p103\n':'103 102\n102 101\n101 1\n';assert.equal(ownedListener(9788,101,'darwin',execute),103);
  assert.throws(()=>ownedListener(9788,999,'darwin',execute),/not an owned/);assert.throws(()=>ownedListener(9788,101,'darwin',()=> 'p103\np104\n'),/Ambiguous/);
- assert.equal(ownedListener(9788,101,'win32',()=>JSON.stringify({listeners:[103],parents:[{ProcessId:103,ParentProcessId:101}]})),103);
+ assert.equal(ownedListener(9788,101,'win32',()=>JSON.stringify({schema:'hps-owned-windows-listener/1',port:9788,listeners:[103],parents:[{ProcessId:103,ParentProcessId:101}]})),103);
  assert.throws(()=>listenerCommand('9788;echo bad','win32'));
  const id='12345678-1234-1234-1234-123456789abc',target={id,type:'node',webSocketDebuggerUrl:'ws://127.0.0.1:9788/'+id};assert.equal(inspectorTarget([target],9788).id,id);
  for(const url of['ws://example.com:9788/'+id,'ws://127.0.0.1:9789/'+id,'ws://user@127.0.0.1:9788/'+id])assert.throws(()=>inspectorTarget([{...target,webSocketDebuggerUrl:url}],9788));assert.throws(()=>inspectorTarget([target,target],9788));

@@ -32,14 +32,32 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  await new Promise(r=>setTimeout(r,30));
  assert.ok(await b.evaluate(`window.__posted.some(m=>m.type==='activityMemoryRequest')`),'mount asks the host for the list');
  assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory]')`),false,'no view, no panel');
+ assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory-state]')`),false,'no store, no state line');
+ // REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022): a store that could not be read still says memory is on and says why, unexpanded.
+ await b.evaluate(`window.postMessage({type:'activityMemoryState',view:${JSON.stringify({...view,entries:[],other:0,unsafe:true})}},'*')`);
+ await new Promise(r=>setTimeout(r,50));
+ const u=await b.evaluate(`({state:document.querySelector('[data-testid=activity-memory-state]')?.textContent,text:document.querySelector('[data-testid=activity-memory]').textContent})`);
+ assert.equal(u.state,'AI 기억: 켜짐 · .hypeproof/memory/');assert.ok(u.text.includes('읽지 않았어요'),'an unreadable store is named before expanding');
  await b.evaluate(`window.postMessage({type:'activityMemoryState',view:${JSON.stringify(view)}},'*')`);
  await new Promise(r=>setTimeout(r,50));
+ // The state line shows before the list is opened: on, and where the files live; a text, never a control.
+ const st=await b.evaluate(`(()=>{const line=document.querySelector('[data-testid=activity-memory-state]');const panel=document.querySelector('[data-testid=activity-memory]');const bg=getComputedStyle(document.querySelector('.tw-sources')).backgroundColor;const page=getComputedStyle(document.body).backgroundColor;
+  return {text:line?.textContent,tag:line?.localName,fonts:line?[line,...line.querySelectorAll('*')].map(e=>parseFloat(getComputedStyle(e).fontSize)):[],fg:line&&getComputedStyle(line).color,bg:bg==='rgba(0, 0, 0, 0)'?page:bg,
+  visible:!!line&&(()=>{const r=line.getBoundingClientRect();let o=1;for(let e=line;e;e=e.parentElement)o*=parseFloat(getComputedStyle(e).opacity);const hit=document.elementFromPoint(r.left+Math.min(r.width,40)/2,r.top+Math.min(r.height,20)/2);
+   return r.height>=parseFloat(getComputedStyle(line).fontSize)&&r.right<=innerWidth&&o>=.99&&getComputedStyle(line).visibility==='visible'&&!!hit&&line.contains(hit);})(),code:line?.querySelector('code')?.textContent,
+  controls:line?line.querySelectorAll('button,input,select,[role=switch],[role=checkbox],[aria-pressed],[aria-checked],[tabindex]').length:-1,
+  off:/꺼짐|끄기|선생님이 정해요/.test(panel.textContent),switches:panel.querySelectorAll('input,[role=switch],[role=checkbox],[aria-checked]').length,
+  listOpen:!!document.getElementById('tw-memory-list')}})()`);
+ assert.equal(st.text,'AI 기억: 켜짐 · .hypeproof/memory/','the state line names on and the folder');assert.equal(st.code,'.hypeproof/memory/');
+ assert.equal(st.listOpen,false);assert.ok(st.visible,'the state line is drawn without opening the list');
+ assert.equal(st.tag,'p');assert.equal(st.controls,0,'the state is text, not a switch');assert.equal(st.switches,0);assert.equal(st.off,false,'no off state or instructor choice');
+ for(const f of st.fonts)assert.ok(f>=14,`state line ${f}px`);if(!forcedColors)assert.ok(contrast(st.fg,st.bg)>=4.5,`state line contrast ${st.fg}/${st.bg}`);
  await b.evaluate(`document.querySelector('.tw-memory-entry').click()`);
  await new Promise(r=>setTimeout(r,50));
  const m=await b.evaluate(`(()=>{const panel=document.querySelector('[data-testid=activity-memory]');const bg=getComputedStyle(document.querySelector('.tw-sources')).backgroundColor;const page=getComputedStyle(document.body).backgroundColor;
   return {entry:document.querySelector('.tw-memory-entry').textContent,expanded:document.querySelector('.tw-memory-entry').getAttribute('aria-expanded'),panelText:panel.textContent,
   xss:window.__xss===1||!!panel.querySelector('b,img'),bg:bg==='rgba(0, 0, 0, 0)'?page:bg,
-  texts:[...panel.querySelectorAll('.tw-memory-text,.tw-memory-name,.tw-memory-note:not(:empty),time,button')].map(e=>({cls:e.className||e.localName,font:parseFloat(getComputedStyle(e).fontSize),fg:getComputedStyle(e).color})),
+  texts:[...panel.querySelectorAll('.tw-memory-state,.tw-memory-state code,.tw-memory-text,.tw-memory-name,.tw-memory-note:not(:empty),time,button')].map(e=>({cls:e.className||e.localName,font:parseFloat(getComputedStyle(e).fontSize),fg:getComputedStyle(e).color})),
   buttons:[...panel.querySelectorAll('button')].map(x=>{const r=x.getBoundingClientRect();return {h:r.height,w:r.width,left:r.left,right:r.right,border:getComputedStyle(x).borderTopStyle};}),
   scroll:document.documentElement.scrollWidth>innerWidth,right:panel.getBoundingClientRect().right,
   multiline:getComputedStyle(document.querySelector('.tw-memory-text')).whiteSpace}})()`);
@@ -67,5 +85,8 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  await new Promise(r=>setTimeout(r,100));
  const after=await b.evaluate(`({rows:document.querySelectorAll('.tw-memory-list li').length,status:document.querySelector('.tw-memory [role=status]').textContent,focus:document.activeElement?.className})`);
  assert.equal(after.rows,2);assert.match(after.status,/big\.md.*지웠어요/);assert.equal(after.focus,'tw-memory-entry','focus lands on the panel entry, not body');
+ // The store goes away (an instructor seat, no task workspace): the state line goes with it.
+ await b.evaluate(`window.postMessage({type:'activityMemoryState',view:null},'*')`);await new Promise(r=>setTimeout(r,50));
+ assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory-state]')`),false,'no store, no state line');
  console.log(`PASS activity memory panel ${seat} ${dark?'dark':'light'} ${width} ${forcedColors?'forced':'normal'}`);
 }}finally{await b.close();}
