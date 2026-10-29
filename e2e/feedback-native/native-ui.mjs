@@ -105,7 +105,7 @@ export class NativeUI{
   return true;
  }
  async cdpDown(){try{await fetch(this.endpoint+'/json/list',{signal:AbortSignal.timeout(1500)});return false;}catch(error){return error.cause?.code==='ECONNREFUSED'||(Array.isArray(error.cause?.errors)&&error.cause.errors.length>0&&error.cause.errors.every(e=>e.code==='ECONNREFUSED'));}}
- async quitOwned(platform=process.platform){
+ async quitOwned(platform=process.platform,confirmStreamingQuit){
   if(!['darwin','win32'].includes(platform))throw Error('Native quit supports hosted macOS/Windows only');
   const w=await this.workbench();await this.focusWorkbench(w);
   if(platform==='win32'){
@@ -113,6 +113,7 @@ export class NativeUI{
    // CDP Alt+F4 need not reach the OS window manager; click the actual menu.
    await this.clickText(w,menuLabels('file'),'.menubar-menu-button');
    try{await this.clickText(w,menuLabels('exit'),'.monaco-menu .action-label');}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+   if(confirmStreamingQuit)await confirmStreamingQuit();
    return;
   }
   try{await w.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:4});}

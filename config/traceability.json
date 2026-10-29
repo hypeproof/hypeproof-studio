@@ -5682,6 +5682,15 @@
           "path": "e2e/feedback-native/native-ui.test.mjs"
         },
         {
+          "path": "e2e/feedback-native/native-quit-dialog.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-quit-dialog.ps1"
+        },
+        {
+          "path": "e2e/feedback-native/native-quit-dialog.test.mjs"
+        },
+        {
           "path": "e2e/feedback-native/prepare-config.mjs"
         },
         {

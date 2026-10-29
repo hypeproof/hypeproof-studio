@@ -63,3 +63,16 @@ test('existing binding selection permits only drive-letter spelling and verifies
   assert.throws(()=>selectOwnedBinding(dir,path.dirname(real),service,activity),/Exactly one/);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('switch before a chat command waits for actual retained composer focus, including already focused host; refusal sends no next command',async()=>{
+ const {switchOwnedWindow}=await import('./native-windows.mjs');const events=[];let focused=false,release,observed;const observing=new Promise(resolve=>{observed=resolve;});
+ const from={workbenchId:'C',endpoint:'http://127.0.0.1:9777',workbench:async()=>({evaluate:async()=>true}),palette:async()=>events.push('switch'),quick:async()=>{focused=true;}};
+ const to={workbenchId:'A',endpoint:from.endpoint,workbench:async()=>({evaluate:async expression=>expression==='document.title'?'complete observed A title':focused}),restoredFocus:async()=>{events.push('observe-composer');observed();await new Promise(resolve=>{release=resolve;});}};
+ const pending=switchOwnedWindow(from,to,{observeChatFocus:true}).then(()=>events.push('next-command-admitted'));
+ await Promise.race([observing,pending.then(()=>assert.fail('next command admitted without observing composer'))]);
+ assert.deepEqual(events,['switch','observe-composer'],'host focus alone cannot admit the next F1');release();await pending;
+ assert.deepEqual(events,['switch','observe-composer','next-command-admitted']);
+ events.length=0;to.restoredFocus=async()=>{events.push('refused-composer');throw Error('retained composer not focused');};
+ await assert.rejects(switchOwnedWindow(from,to,{observeChatFocus:true}),/retained composer not focused/);
+ assert.deepEqual(events,['refused-composer'],'already focused host cannot bypass the observation or issue another switch');
+});

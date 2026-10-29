@@ -30,14 +30,18 @@ export function assertUnchangedOtherWindow(expected,actual){
 }
 // Use the shell's public picker so nativeHostService, not CDP focus emulation,
 // activates the exact already observed window. No title suffix matching.
-export async function switchOwnedWindow(from,to){
+export async function switchOwnedWindow(from,to,{observeChatFocus=false}={}){
  assert(from.workbenchId&&to.workbenchId&&from.workbenchId!==to.workbenchId&&from.endpoint===to.endpoint,'Two distinct explicitly owned windows required');
  const target=await to.workbench();
- if(await target.evaluate('document.hasFocus()'))return;
+ if(await target.evaluate('document.hasFocus()')){if(observeChatFocus)await to.restoredFocus();return;}
  const current=await from.workbench();assert.equal(await current.evaluate('document.hasFocus()'),true,'Switch Window must start in the actually focused owned window');
  const title=await target.evaluate('document.title');assert.equal(typeof title,'string');assert(title.trim(),'Observed destination title required');
  await from.palette(coreCommandLabel('workbench.action.switchWindow'));await from.quick(title);
  await waitFor(()=>target.evaluate('document.hasFocus()'),'public Switch Window activated exact owned destination');
+ // A newly activated workbench can report focus before its retained webview has
+ // completed native focus restoration. Observe that destination before another
+ // palette command; no extra key, focus mutation or retry repairs it.
+ if(observeChatFocus)await to.restoredFocus();
 }
 export async function finishOwnedWindows({primary,observe,cleanup,proof,persist}){
  // Diagnostic failures and cleanup must never replace the original failure.
@@ -107,7 +111,7 @@ export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,w
     draft:await chat.evaluate("document.querySelector('.hps-input textarea').value"),bindingHash:sha256(bindingFile),files:workspaceFiles(c.workspace.c)});proof.observations++;
   };
   await waitFor(()=>cChat.evaluate(`document.querySelector('.hps-input textarea')?.value===${JSON.stringify(draft+'-independent-activity-B')}`),'second window restores its existing B draft');await observeOther();
-  phase('switch-original-through-public-picker');await switchOwnedWindow(other,ui);phase('original-focus-observed');
+  phase('switch-original-through-public-picker');await switchOwnedWindow(other,ui,{observeChatFocus:true});phase('original-focus-observed');
   const oldChat=await ui.frame('.hps-input textarea');assert.equal(await oldChat.evaluate("document.querySelector('.hps-input textarea').value"),draft);
   phase('original-open-saved-activity');await ui.palette(commandTitle);const view=await ui.frame('.studio-start');await ui.savedActivity(view,c.workspace.b);
   await waitFor(()=>view.evaluate("document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),'original window candidate');await ui.chooseCandidateFolder(view,c.workspace.b);

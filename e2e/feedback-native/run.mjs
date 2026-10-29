@@ -9,6 +9,7 @@ import {spawn} from 'node:child_process';
 import {runDelayedActivation,delayedPrerequisite,delayedHistoryPrerequisite} from './delayed-activation.mjs';
 import {runOwnedWindows} from './native-windows.mjs';
 import {runHistoryStreaming} from './history-streaming.mjs';
+import {captureWindowsQuitOwner,confirmWindowsStreamingQuit} from './native-quit-dialog.mjs';
 import {compatibilityEnvironment} from '../unified-release/output-bound.mjs';
 import {checkSeededSdk} from '../unified-release/sdk-seed.mjs';
 import {endSyntheticSession} from './session-control.mjs';
@@ -145,7 +146,11 @@ try{
  }
  if(c.scenarios.includes('history-streaming')){
   if(!report.tests.some(t=>t.id==='T04-different-activity-collision'&&t.status==='PASS'))throw blocked('History/streaming requires observed A/B isolation first');
-  await runHistoryStreaming({c,ui,step,report,draft,start,focusChat,readDraft,nativeOpenBoundFolder,workspaceFiles,save,candidate:value=>{ownedActivityCandidate=value;},control:{manifestFile:c.service.manifest,origin:c.service.origin,expectedSource:report.service.source,onSecret:secret=>secrets.push(secret)},restart:async expectedDraft=>restartOwnedCandidate({config:c,child,expectedDraft,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();},quit:()=>ui.quitOwned(),waitExit:owned=>waitFor(()=>owned.exitCode!==null||owned.signalCode!==null,'owned child exits streaming quit',30000),waitCdpDown:async()=>{await waitFor(()=>ui.cdpDown(),'streaming quit CDP refuses',30000);ui.close();},launch:()=>launchOwned(),observeDraft:()=>ui.restoredDraft(expectedDraft)})});
+  await runHistoryStreaming({c,ui,step,report,draft,start,focusChat,readDraft,nativeOpenBoundFolder,workspaceFiles,save,candidate:value=>{ownedActivityCandidate=value;},control:{manifestFile:c.service.manifest,origin:c.service.origin,expectedSource:report.service.source,onSecret:secret=>secrets.push(secret)},restart:async expectedDraft=>restartOwnedCandidate({config:c,child,expectedDraft,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();},quit:async()=>{
+   if(process.platform!=='win32')return ui.quitOwned();
+   const owned=child,owner=await captureWindowsQuitOwner({child:owned,executable:fs.realpathSync(path.join(c.candidate.app,'HypeProof Studio.exe'))});
+   await ui.quitOwned('win32',()=>confirmWindowsStreamingQuit({owner,current:()=>child===owned&&owned.exitCode===null&&owned.signalCode===null,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();}}));
+  },waitExit:owned=>waitFor(()=>owned.exitCode!==null||owned.signalCode!==null,'owned child exits streaming quit',30000),waitCdpDown:async()=>{await waitFor(()=>ui.cdpDown(),'streaming quit CDP refuses',30000);ui.close();},launch:()=>launchOwned(),observeDraft:()=>ui.restoredDraft(expectedDraft)})});
   if(!child||child.exitCode!==null||child.signalCode!==null)throw blocked('Streaming recovery did not leave a live owned candidate; no remaining input');
  }
  if(c.scenarios.includes('skills')){
