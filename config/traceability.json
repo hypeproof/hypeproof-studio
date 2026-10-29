@@ -15459,6 +15459,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/focusGeometry.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityMemoryPanel.tsx"
         }
       ]
     },
@@ -15476,6 +15479,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/my-works-drawer.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-drawer-filter-browser.smoke.mjs"
         }
       ]
     },
@@ -15946,6 +15952,12 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## Activity memory files (CGP-KNOW-R-030)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
         }
       ]
     },
@@ -15983,6 +15995,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MyWorksDrawer.tsx"
         }
       ]
     },
@@ -16000,6 +16015,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-drawer-filter-browser.smoke.mjs"
         }
       ]
     },
