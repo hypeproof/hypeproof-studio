@@ -7950,3 +7950,32 @@ contributed memory setting) and `extensions/hypeproof-chat/test/activity-memory-
 (headless Chromium on the built CSS and real panel: the line's exact text before the list opens, no
 control or off wording, 14px and 4.5:1, the unreadable-store reason unexpanded, and no line without a
 view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Learning block draws no judgment visuals (CGP-LEARN-D-002)
+
+REQ-STUDIO-LEARNING-BLOCK-NO-JUDGMENT-VISUALS / DES-CGP-LEARN-02 (traces to REQ-CGP-LEARN-02, REQ-STUDIO-LEARNING-BLOCK-NO-JUDGMENT)
+/ PI#7 (capability models are hypotheses, not UI labels; SX-01, SX-59, SX-43) with SX-29 (no badge or celebration) and SX-50
+(state is wording, not colour alone): a learning block draws no judgment visual, and every state it shows reads in words.
+
+- Marks. In no state does a block draw a check, cross, O/X, star, trophy, party, applause or "100" mark: not in its text or spoken
+  attributes (`aria-label`, `aria-description`, `title`, `placeholder`, `alt`), not as `::before`/`::after`/`::marker` content,
+  not as an icon (`ChatIcon` kinds `check`, `check-square`, `close`, `ban`, `sparkle`), image, canvas, video or frame, and not as a
+  background, list, mask or border image.
+- Colour. No element of a block takes a saturated green or red (a pass/fail colour) for its text, fill, border or outline.
+- Celebration. A block runs no animation, and a change in it (typing, the host confirming a save, a step switch) starts none
+  anywhere on the page.
+- Numerals. A block shows no numeral except inside the learner's own words: no score, count or rank tied to the learner.
+- Colour removed. With the colour taken off the page (`grayscale(1)`), every state of a block reads differently in words, and its
+  text keeps 4.5:1 and full opacity. States: `criterion_form` empty, written, saved, edited after the save, cleared;
+  `decision_form` empty, only what, both, only why, saved; each of the five kinds this Studio cannot draw yet shows its
+  fixed notice.
+- Card icon. The 자료 card's thumbnail (CGP-LEARN-D-001) is part of the block, so its icon is neutral for every kind:
+  `criterion_form` uses `flag` (what the step aims at), not `check-square`.
+
+Every seat that draws the lesson rail (classroom, personal with a lesson) follows the same rule, in dark and light themes and at
+800 and 1420 px. Chalk draws no learner block (instructors author the step's `ui`), so the rule has no Chalk surface yet. Default
+state: on (the card icon swap is the only behaviour change; the rest holds what main does with a computed test).
+
+Evidence: `extensions/hypeproof-chat/test/learning-block-judgment-visuals-browser.smoke.mjs` (the mounted ChatPanel with the
+shipped stylesheet in headless Chromium; 15 block states covering all seven kinds x 2 seats x 2 themes x 2 widths, each measured in colour and in
+grayscale; positive and negative controls for every finding kind; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
