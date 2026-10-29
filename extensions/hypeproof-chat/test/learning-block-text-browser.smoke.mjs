@@ -48,9 +48,14 @@ const waitFor = async (expr, what, ms = 5000) => {
 const HELPERS = `
 window.__region=null;
 window.track=()=>{window.__region=document.querySelector('.hp-material-state');return !!window.__region};
+// One change at a time: the previous change's observer and 1500 ms timer are cancelled first, so a stale one can neither
+// report a mutation of this change from its own earlier start nor give up on this change before its time.
 window.change=(act)=>{const live=window.__region,before=live.textContent;window.__m=null;const t0=performance.now();
+  if(window.__stop)window.__stop();
   const mo=new MutationObserver(()=>{if(live.textContent!==before&&!window.__m){window.__m={ms:performance.now()-t0,text:live.textContent,key:live.dataset.materialState}}});
-  mo.observe(live,{subtree:true,childList:true,characterData:true});setTimeout(()=>{mo.disconnect();if(!window.__m)window.__m={ms:1e9,text:live.textContent,key:live.dataset.materialState}},1500);act()};
+  mo.observe(live,{subtree:true,childList:true,characterData:true});
+  const timer=setTimeout(()=>{mo.disconnect();if(!window.__m)window.__m={ms:1e9,text:live.textContent,key:live.dataset.materialState}},1500);
+  window.__stop=()=>{mo.disconnect();clearTimeout(timer)};act()};
 window.typeInto=(sel,value)=>window.change(()=>{const el=document.querySelector(sel);const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}))});
 window.hostSaved=(work)=>window.change(()=>window.postMessage({type:'lessonWorkState',sha256:${JSON.stringify(SHA)},work},'*'));
