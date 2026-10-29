@@ -307,3 +307,21 @@ and unknown state disable Stop. No start/Send/grant action crosses this bridge.
 Installed A16 must click the visible control and observe no later work, then
 separately establish confirmed or unconfirmed remote revocation. Source render
 controls do not prove Electron/modal reachability or installed Stop acceptance.
+
+### Receiver chat selection regression (A17)
+
+`companion-dev-host-owner.smoke.mjs` drives the real native owner and authority
+snapshot with fixture-owned VS Code surfaces: explicitly select and authorize
+the saved HTML, clear `activeTextEditor`, and focus the same provider-owned chat.
+The exact request must reach authenticated reservation and the existing prepared
+Send port once. The fixture intentionally stops at Send; it runs no SDK. Refuse
+reservation/Send for foreign chat/webviews, a different editor, same-URI document
+replacement, closed/dirty/untitled documents, changed content/version, changed
+task/epoch/profile, expired pair, and document/focus drift during awaited account
+resolution. A real-owner source control completes two measured versions through
+one max-two-turn grant, with no regrant. It also delays the live document update
+after filesystem measurement and checks one-time adoption when that exact hash
+arrives. An observed unrelated edit before catch-up fences adoption. Between-turn
+external edits, duplicate completion replay, failed and unknown results cannot
+advance that pin or reserve another turn. Retain the existing preview-active-editor controls. An installed App
+run must separately exercise the real chat tab, execution, result, Stop and revoke.

@@ -234,3 +234,19 @@ ACKed; remaining exact incoming bytes and existing durable decisions stay held
 for explicit reconciliation. This adds no execution authority, automatic Send,
 reconnect, persistent key, daemon or production activation. Installed receiving,
 focus/modal behavior and reachable Stop still require separate observation.
+
+### Granted selection while receiver chat is focused
+
+The execution owner retains the exact explicitly selected, saved HTML document
+when its own editor chat takes focus to show receiver controls. The snapshot and
+live execution check use the same captured document identity; an unrelated
+webview or arbitrary open document cannot supply a selection. Admission still
+requires the captured version and content hash, current task/epoch/profile/pass
+and unchanged paired authority. A different editor, replacement/closed/dirty
+document or stale selection refuses reservation and prepared Send. Only an exact
+measured completed execution, confirmed by the existing Service completion, may
+advance the retained pin to its matching live document version/hash for the
+remaining turn of the same grant. Failed/unknown outcomes and duplicate terminal
+receipts cannot adopt external edits. Ordinary
+preview selection keeps its active-editor requirement. This source correction
+does not establish installed receiver or SDK acceptance.

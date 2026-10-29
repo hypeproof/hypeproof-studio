@@ -15,7 +15,7 @@ import { readPreparedCompanionWorkspace } from './companionWorkspaceHost.ts';
 import { companionDigest, type CompanionPreparation } from './companionWorkspace.ts';
 import { createCompanionAuthenticatedTransport } from './companionAuthenticatedTransport.ts';
 import type { CompanionAdapterPairingTransport, CompanionAdapterRelayTransport } from './companionClientAdapter.ts';
-import { createDevCompanionHostBridge, createDevCompanionAuthoritySnapshot, type CompanionNativeBridgePorts } from './companionHostBridgeNative.ts';
+import { captureCompanionExecutionSelection, createDevCompanionHostBridge, createDevCompanionAuthoritySnapshot, type CompanionNativeBridgePorts } from './companionHostBridgeNative.ts';
 import { CompanionHostSession, type CompanionHostSessionClient, type CompanionHostSessionPair, type CompanionHostTurn } from './companionHostSession.ts';
 import type { CompanionHostRequest } from './companionHostDispatch.ts';
 import type { CompanionTransportBudget } from './companionTransportBudget.ts';
@@ -37,7 +37,7 @@ export interface CompanionHostPairingClient {
 export interface CompanionDevHostOwnerPorts extends Omit<CompanionNativeBridgePorts, 'paired'> {
   receivingBusy?(): boolean;
   authoring?: Pick<CompanionAuthoringHostPorts,'store'> & Required<Pick<CompanionAuthoringHostPorts,'reviewDraft'>>;
-  execution?: { submit(input: PreparedCompanionNormalTurn): Promise<CompanionNormalTurnResult> };
+  execution?: { chatFocused?(): boolean; submit(input: PreparedCompanionNormalTurn): Promise<CompanionNormalTurnResult> };
   accounts: AccountSession;
   connections: ActivityConnections;
   configured(): { service: string; site: string };
@@ -85,6 +85,7 @@ export class CompanionDevHostOwner {
   private session: CompanionHostSession | undefined;
   private authoring: ReturnType<typeof createDevCompanionAuthoringHost> | undefined;
   private execution: CompanionExecutionHost | undefined;
+  private executionSelection: ReturnType<typeof captureCompanionExecutionSelection> | undefined;
   private state: CompanionDevHostView = { state: 'idle', executionAuthorized: false };
   private active: { name: string; promise: Promise<unknown>; abort: AbortController; interrupt(): void } | undefined;
   private signal: AbortSignal | undefined;
@@ -237,7 +238,9 @@ export class CompanionDevHostOwner {
         if(schema==='hps-companion-host-request/1'){const outcome=await this.bridge!.handleAndReply(message,reply);this.observeOutcome(outcome);return outcome;}
         if(schema!=='hps-companion-authoring-intent/1'||!this.authoring){this.close();throw failure('unsupported_message');}
         if(this.execution){
-          const result=await this.execution.handle(message);this.observeOutcome(result);await this.current();this.check();
+          const result=await this.execution.handle(message);
+          if(result.state==='completed'&&result.code==='normal_turn_measured')this.executionSelection?.advance(result.artifactVersion,result.turnId);
+          this.observeOutcome(result);await this.current();this.check();
           const text=JSON.stringify(result),id='execution_result_'+companionDigest(text);
           await reply.prepare(text,id);await this.current();this.check();await reply.send(id);await this.current();this.check();
           return result;
@@ -265,9 +268,11 @@ export class CompanionDevHostOwner {
       const token=await this.ports.connections.token();if(!token)throw failure('existing_model_required');
       const tokenDigest=companionDigest(token),model=await transport.resolveModel(this.signal),after=await this.ports.connections.token();
       if(!after||companionDigest(after)!==tokenDigest)throw failure('existing_model_required');
+      const selection=captureCompanionExecutionSelection(()=>this.ports.execution?.chatFocused?.()===true);
+      this.executionSelection=selection;
       const snapshot=createDevCompanionAuthoritySnapshot({...this.ports,paired:async()=>{
         const row=await this.refreshPaired();return row?{...row,execution_authorized:false}:null;
-      }});
+      }},()=>selection.document(true));
       this.execution=new CompanionExecutionHost({snapshot,model:async()=>{
         await this.current();const fresh=await this.ports.connections.token();await this.current();
         return fresh&&companionDigest(fresh)===tokenDigest?model:null;
@@ -275,12 +280,11 @@ export class CompanionDevHostOwner {
         const active=this.ports.connections.current,task=this.ports.taskView(),account=this.ports.accounts.view();
         // Chat focus may have no active text editor. An explicitly selected different
         // document or an unsaved/closed granted document revokes this local turn.
-        const editor=vscode.window.activeTextEditor?.document;
-        const document=vscode.workspace.textDocuments?.find(d=>d.uri.scheme==='file'&&d.uri.fsPath===s.artifact.path)??editor;
+        const document=selection.document();
         const folder=folderConsentState(this.ports.context,s.profile,{servedRoot:s.profile.workspace_root,instructor:false});
         return this.state.state==='connected'&&this.ports.epoch()===s.epoch&&task?.activeTaskId===s.taskId
           &&!task.error&&task.scope===companionDigest(s.preparation.scope)&&!!document&&document.uri.scheme==='file'&&document.uri.fsPath===s.artifact.path
-          &&!document.isDirty&&!document.isUntitled&&(!editor||editor.uri.fsPath===s.artifact.path)
+          &&!document.isDirty&&!document.isUntitled
           &&account.status==='signedIn'&&account.account?.id===s.accountId&&vscode.workspace.isTrusted&&!vscode.env.remoteName
           &&this.ports.connections.matchesService&&active?.id===s.preparation.activityId&&active.workspace===s.preparation.workspace
           &&active.accountPass?.sessionId===s.binding.sessionId&&active.accountPass?.passId===s.binding.passId

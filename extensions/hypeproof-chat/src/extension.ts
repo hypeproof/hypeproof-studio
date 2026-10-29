@@ -280,7 +280,7 @@ export async function activate(context: vscode.ExtensionContext) {
       service: config.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1'), site: config.get<string>('siteBase', 'https://hypeproof-ai.xyz'),
     }; }, taskView: () => provider.companionTaskView(), epoch: () => provider.opsRuntimeGeneration(),
     authoring: {store:()=>provider.companionTaskStore(),reviewDraft:(taskId,isCurrent)=>provider.reviewCompanionDraft(taskId,isCurrent)},
-    execution: {submit:input=>provider.submitPreparedCompanionTurn(input)},
+    execution: {chatFocused:()=>provider.companionChatFocused(),submit:input=>provider.submitPreparedCompanionTurn(input)},
     receivingBusy:()=>provider.hasActiveStream(),
     receivingControls:binding=>provider.setCompanionReceivingControls(binding),
   });

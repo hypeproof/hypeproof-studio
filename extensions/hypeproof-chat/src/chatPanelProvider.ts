@@ -1377,6 +1377,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private voiceProbes = new Map<string, (o: import("./voiceCapabilityHelpers").VoiceProbeObservations) => void>();
 
+  /** Exact provider-owned editor chat, used only to retain an already approved companion selection. */
+  companionChatFocused(): boolean { return this.editorChat?.active === true; }
+
   isViewVisible(): boolean { return !!this.view?.visible; }
 
   /** The surface the diagnostic command uses. With the webview closed it returns null, leaving it as not measured. */
