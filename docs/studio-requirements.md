@@ -7774,7 +7774,10 @@ two-learner/classroom evidence remain required for DMC-5.
 
 The DEV companion owner may receive explicit phone requests during one manually
 started, bounded desktop App lifetime. Native Stop remains a separate command
-while the connection menu is busy. Receiving does not authorize file/model work;
+while the connection menu is busy. The native-owned state and separate Stop/Revoke
+controls must also appear in the visible chat surface with the default hidden
+Studio status bar. An invalidated/replaced owner must remove or fence its old
+controls; an inactive receiver must not accept another Stop. Receiving does not authorize file/model work;
 existing selected-file approval, normal Send admission and Service validation
 remain required. Monotonic expiry, authority invalidation and uncertain outcomes
 stop admission without automatic replay. Local stopping, connection erase and

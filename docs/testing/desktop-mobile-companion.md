@@ -289,3 +289,21 @@ latency, installed selected execution or classroom acceptance. #3135 remains
 open until its exact source and installed evidence are independently reviewed.
 
 The independent DEV Stop/Revoke command admission is source-tested while the menu is busy. Actual access through a native modal is NOT RUN: the OS modal may require Cancel before Stop; command registration and status visibility do not prove clickable controls during that modal.
+
+
+A15 at `98645c411aea6fa0c21395d6365d326594c8c29b` passed 37 observed checks,
+including phone intent → real SDK selected-file write → phone result/ACK, then
+failed clicking the receiver Stop: Studio defaults `workbench.statusBar.visible`
+to false. Hidden status-item DOM text was not physical reachability. Preserve
+that FAIL and do not force-click, invoke the handler from the test, or enable the
+status bar only in the fixture.
+
+The repair adds `companion-receiving-controls.smoke.mjs` (actual provider source,
+DEV/owned-view/nonce fences), command controls for replacement, busy admission and
+truthful failed revoke, and `companion-receiving-controls-render.smoke.mjs`
+(actual ChatPanel, shipped CSS, hidden shell bar, narrow/wide keyboard controls
+while the normal composer is busy). Absent/closed state hides actions; stopped
+and unknown state disable Stop. No start/Send/grant action crosses this bridge.
+Installed A16 must click the visible control and observe no later work, then
+separately establish confirmed or unconfirmed remote revocation. Source render
+controls do not prove Electron/modal reachability or installed Stop acceptance.

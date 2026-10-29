@@ -2,6 +2,7 @@
 import type {CompanionReceivingView} from './companionReceivingLifetime.ts';
 import * as vscode from 'vscode';
 import { randomUUID } from 'node:crypto';
+import { companionReceivingLabels, type CompanionReceivingControlBinding } from './companionReceivingControls';
 import type { CompanionHostRequest } from './companionHostDispatch.ts';
 import type { CompanionHostTurn } from './companionHostSession.ts';
 import type { CompanionSelectionPublication } from './companionSelection.ts';
@@ -35,6 +36,7 @@ export interface CompanionDevHostCommandOwner {
   revoke(signal?: AbortSignal): Promise<Readonly<CompanionDevHostCommandView>>;
 }
 export interface CompanionDevHostCommandPorts {
+  receivingControls?(binding: CompanionReceivingControlBinding|null): void;
   createOwner(signal?: AbortSignal): CompanionDevHostCommandOwner | Promise<CompanionDevHostCommandOwner>;
   /** Required account/configuration/task/workspace lifecycle invalidation supplied by the native caller. */
   onDidInvalidate(listener: () => void): vscode.Disposable;
@@ -59,16 +61,24 @@ export function registerDevCompanionHostCommands(
   if (context.extensionMode !== vscode.ExtensionMode.Development) return new vscode.Disposable(() => {});
   let owner: CompanionDevHostCommandOwner | undefined;
   let challenge: object | undefined;
+  let ownerNonce = randomUUID();
   let generation = 0, disposed = false;
   type Lease = { generation: number; controller: AbortController };
   let running: Lease | undefined;
   let changed: {dispose():void}|undefined;
   const status=vscode.window?.createStatusBarItem?.(),revokeStatus=vscode.window?.createStatusBarItem?.();
-  const receivingLabels={stopped:'수신 중지됨',listening:'휴대폰 요청 수신 중',processing:'휴대폰 요청 확인 중','awaiting-approval':'컴퓨터 승인 기다리는 중','needs-check':'수신 결과 확인 필요',closed:'휴대폰 연결 닫힘'};
   const updateStatus=()=>{
     const view=owner?.view();
-    if(!view){status?.hide();revokeStatus?.hide();return;}
-    if(status){status.text=receivingLabels[view.receiving?.state??'stopped'];status.command=DEV_COMPANION_STOP_COMMAND;status.tooltip='수신 중지 · 실행 완료나 서버 권한 철회와 별개';status.show();}
+    if(!view){status?.hide();revokeStatus?.hide();ports.receivingControls?.(null);return;}
+    const target=owner!,nonce=ownerNonce,state=view.receiving?.state??'stopped';
+    const canStop=['listening','processing','awaiting-approval'].includes(state);
+    ports.receivingControls?.(view.state!=='connected'||terminal(view)?null:{view:{nonce,state,canStop,canRevoke:true},act:async action=>{
+      if(disposed||context.extensionMode!==vscode.ExtensionMode.Development||owner!==target||ownerNonce!==nonce||target.view().state!=='connected')return;
+      const current=target.view().receiving?.state;
+      if(action==='stop'&&['listening','processing','awaiting-approval'].includes(current??''))stop();
+      else if(action==='revoke')await revoke();
+    }});
+    if(status){status.text=companionReceivingLabels[view.receiving?.state??'stopped'];status.command=DEV_COMPANION_STOP_COMMAND;status.tooltip='수신 중지 · 실행 완료나 서버 권한 철회와 별개';status.show();}
     if(revokeStatus){revokeStatus.text='휴대폰 연결 권한 철회';revokeStatus.command=DEV_COMPANION_REVOKE_COMMAND;if(terminal(view))revokeStatus.hide();else revokeStatus.show();}
   };
   const stopped = Symbol('stale companion host action');
@@ -83,11 +93,12 @@ export function registerDevCompanionHostCommands(
     close(priorOwner);changed?.dispose();changed=undefined;updateStatus();
   };
   const lifecycle = ports.onDidInvalidate(invalidate);
-  const stopRegistration=vscode.commands.registerCommand(DEV_COMPANION_STOP_COMMAND,()=>{
+  const stop=()=>{
     if(disposed||context.extensionMode!==vscode.ExtensionMode.Development)return;
     owner?.stopReceiving?.();updateStatus();
-  });
-  const revokeRegistration=vscode.commands.registerCommand(DEV_COMPANION_REVOKE_COMMAND,async()=>{
+  };
+  const stopRegistration=vscode.commands.registerCommand(DEV_COMPANION_STOP_COMMAND,stop);
+  const revoke=async()=>{
     if(disposed||context.extensionMode!==vscode.ExtensionMode.Development||!owner||terminal(owner.view()))return;
     const target=owner;
     // Revoke begins by fencing work synchronously, before any busy command is cancelled.
@@ -95,7 +106,8 @@ export function registerDevCompanionHostCommands(
     try {const result=await pending;if(owner===target&&!disposed)await vscode.window.showInformationMessage(result.state==='revoked'?'이 기기의 연결 권한 철회를 확인했어요.':'이 컴퓨터 연결을 닫았어요. 서버 권한 철회는 확인하지 못했어요.');}
     catch{if(owner===target&&!disposed)await vscode.window.showErrorMessage('이 컴퓨터 연결을 닫았어요. 서버 권한 철회는 확인하지 못했어요.');}
     finally{updateStatus();}
-  });
+  };
+  const revokeRegistration=vscode.commands.registerCommand(DEV_COMPANION_REVOKE_COMMAND,revoke);
   const registration = vscode.commands.registerCommand(DEV_COMPANION_HOST_COMMAND, async () => {
     if (disposed || context.extensionMode !== vscode.ExtensionMode.Development) return;
     if (running) {
@@ -143,7 +155,7 @@ export function registerDevCompanionHostCommands(
         await progress(async () => {
           const created = await ports.createOwner(lease.controller.signal);
           if (!live()) { close(created); throw stopped; }
-          close(owner);changed?.dispose();owner = created;changed=created.onReceivingChanged?.(updateStatus);challenge = undefined;updateStatus();
+          close(owner);changed?.dispose();owner = created;ownerNonce=randomUUID();changed=created.onReceivingChanged?.(updateStatus);challenge = undefined;updateStatus();
           const started = await created.startInvitation(lease.controller.signal); check();
           challenge = started.challenge;
         });
@@ -183,7 +195,7 @@ export function registerDevCompanionHostCommands(
           :authorized.scopedExecution?.state==='unknown'?'허용 여부를 확인하지 못했어요. 자동으로 요청을 실행하지 않아요.':'수정을 허용하지 않았어요.');
       } else if(picked.action==='start_receiving'){
         const started=target.startReceiving?.();updateStatus();
-        await show(started?'휴대폰 요청 수신을 시작했어요. 최대 10분 동안 현재 연결로만 받아요. 상태 표시에서 수신을 중지할 수 있어요. 승인 창이 열려 있으면 먼저 취소해 주세요.':'수신을 시작하지 않았어요. 현재 연결과 확인이 필요한 결과를 확인해 주세요.');
+        await show(started?'휴대폰 요청 수신을 시작했어요. 최대 10분 동안 현재 연결로만 받아요. 채팅 화면의 휴대폰 연결에서 수신을 중지할 수 있어요. 승인 창이 열려 있으면 먼저 취소해 주세요.':'수신을 시작하지 않았어요. 현재 연결과 확인이 필요한 결과를 확인해 주세요.');
       } else if(picked.action==='stop_receiving'){target.stopReceiving?.();updateStatus();
       } else if (picked.action === 'receive') {
         const turn = await progress(() => target.receiveAndHandle(lease.controller.signal));

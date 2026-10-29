@@ -19,6 +19,7 @@ export interface CompanionDevActivationApi {
   registerClients(clients: CompanionDevHostOwnerPorts['clients']): vscode.Disposable;
 }
 export interface CompanionDevEntryPorts {
+  receivingControls?: import('./companionDevHostCommands').CompanionDevHostCommandPorts['receivingControls'];
   authoring?: CompanionDevHostOwnerPorts['authoring'];
   execution?: CompanionDevHostOwnerPorts['execution'];
   receivingBusy?(): boolean;
@@ -169,7 +170,7 @@ export function createCompanionDevHostEntry(context: vscode.ExtensionContext, po
     api: Object.freeze({ registerClients(clients: CompanionDevHostOwnerPorts['clients']) {
       if (disposed || context.extensionMode !== vscode.ExtensionMode.Development) throw failure('unavailable');
       invalidate(); commands?.dispose();
-      const registered = registerDevCompanionHostCommands(context, { createOwner: signal => createOwner(clients, signal), onDidInvalidate: events.event });
+      const registered = registerDevCompanionHostCommands(context, { createOwner: signal => createOwner(clients, signal), onDidInvalidate: events.event, receivingControls: ports.receivingControls });
       commands = registered;
       return new vscode.Disposable(() => { registered.dispose(); if (commands === registered) { commands = undefined; invalidate(); } });
     } }),

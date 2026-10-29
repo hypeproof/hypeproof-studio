@@ -27,7 +27,7 @@ function host() {
 }
 function fixture(owners = [host()], mode = 2) {
   const actions = [], inputs = [], warnings = [], menus = [], inputOptions = [], messages = [], clipboard = [], progress = [];
-  const handlers=new Map(),statuses=[];
+  const handlers=new Map(),statuses=[],controls=[];
   let handler, invalidation, created = 0, unregistered = false;
   class Disposable { constructor(fn) { this.fn = fn; } dispose() { this.fn?.(); this.fn = undefined; } }
   const ui = {
@@ -46,9 +46,9 @@ function fixture(owners = [host()], mode = 2) {
   const module = { exports: {} };
   vm.runInNewContext(compiled.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), AbortController });
   const context = { extensionMode: mode, subscriptions: [] };
-  const ports = { createOwner: async signal => { const owner = owners[created++]; assert.ok(owner); return owner.api; }, onDidInvalidate(fn) { invalidation = fn; return new Disposable(() => { invalidation = undefined; }); } };
+  const ports = { receivingControls:binding=>controls.push(binding), createOwner: async signal => { const owner = owners[created++]; assert.ok(owner); return owner.api; }, onDidInvalidate(fn) { invalidation = fn; return new Disposable(() => { invalidation = undefined; }); } };
   const registration = module.exports.registerDevCompanionHostCommands(context, ports);
-  return { actions, inputs, warnings, menus, inputOptions, messages, clipboard, progress, ports, context, registration,handlers,statuses,
+  return { actions, inputs, warnings, menus, inputOptions, messages, clipboard, progress, ports, context, registration,handlers,statuses,controls,
     run: action => { actions.push(action); return handler?.(); }, invalidate: () => invalidation?.(), get created() { return created; }, get registered() { return !!handler; }, get unregistered() { return unregistered; } };
 }
 
@@ -132,3 +132,26 @@ test('persistent Stop and Revoke commands remain reachable while the menu comman
  assert.ok(f.statuses.some(s=>s.command==='hypeproofChat.devCompanionStopReceiving'&&s.visible));assert.ok(f.statuses.some(s=>s.command==='hypeproofChat.devCompanionRevoke'&&s.visible));
  await f.handlers.get(action==='stop'?'hypeproofChat.devCompanionStopReceiving':'hypeproofChat.devCompanionRevoke')();assert.equal(action==='stop'?stops:h.calls.filter(c=>c[0]==='revoke').length,1);
  gate.resolve({state:'closed',processed:0,acknowledged:0,expired:0,pending:0});await work;f.registration.dispose();assert.ok(f.statuses.every(s=>!s.visible));}});
+
+
+test('visible controls route the same independent handlers, fence old owners and hide inactive owners',async()=>{
+ const first=host(),second=host();let receiving='listening',changed;
+ for(const h of [first,second]){const original=h.api.view;h.api.view=()=>({...original(),receiving:{state:receiving}});h.api.stopReceiving=()=>{h.calls.push(['stop']);receiving='stopped';changed?.();};h.api.onReceivingChanged=fn=>{changed=fn;return{dispose(){changed=undefined;}};};}
+ const f=fixture([first,second]);
+ const connect=async()=>{await f.run('prepare');await f.run('inspect');f.inputs.push('123456');f.warnings.push('두 화면의 코드가 같아요');await f.run('compare');await f.run('connect');};
+ await connect();const held=f.controls.at(-1);assert.equal(held.view.canStop,true);assert.equal(held.view.canRevoke,true);
+ // A pending native menu action must not own admission of the visible Stop.
+ const pending=deferred();first.api.receiveAndHandle=()=>pending.promise;const run=f.run('receive');await Promise.resolve();await held.act('stop');assert.equal(first.calls.filter(c=>c[0]==='stop').length,1);
+ await held.act('stop');assert.equal(first.calls.filter(c=>c[0]==='stop').length,1,'stopped is not another action');pending.resolve({state:'waiting',processed:0,acknowledged:0,expired:0,pending:0});await run;
+ f.invalidate();assert.equal(f.controls.at(-1),null);receiving='listening';await connect();assert.notEqual(f.controls.at(-1).view.nonce,held.view.nonce);
+ await held.act('stop');await held.act('revoke');assert.equal(second.calls.some(c=>['stop','revoke'].includes(c[0])),false,'old control cannot act on replacement');
+ await f.controls.at(-1).act('revoke');assert.equal(second.calls.filter(c=>c[0]==='revoke').length,1);assert.equal(f.controls.at(-1),null);assert.ok(f.messages.some(m=>m.message==='이 기기의 연결 권한 철회를 확인했어요.'));
+ f.registration.dispose();assert.equal(f.controls.at(-1),null);
+ const prod=fixture([],1);assert.equal(prod.controls.length,0,'production never publishes controls');
+});
+
+test('visible revoke failure keeps unconfirmed feedback instead of reporting server success',async()=>{
+ const h=host(),f=fixture([h]);await f.run('prepare');await f.run('inspect');f.inputs.push('123456');f.warnings.push('두 화면의 코드가 같아요');await f.run('compare');await f.run('connect');
+ h.api.revoke=async()=>{h.api.close();throw Error('synthetic unavailable');};
+ await f.controls.at(-1).act('revoke');assert.equal(f.controls.at(-1),null);assert.ok(f.messages.some(m=>m.type==='error'&&m.message.includes('서버 권한 철회는 확인하지 못했어요')));assert.equal(f.messages.some(m=>m.message==='이 기기의 연결 권한 철회를 확인했어요.'),false);
+});

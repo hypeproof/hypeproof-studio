@@ -282,6 +282,7 @@ export async function activate(context: vscode.ExtensionContext) {
     authoring: {store:()=>provider.companionTaskStore(),reviewDraft:(taskId,isCurrent)=>provider.reviewCompanionDraft(taskId,isCurrent)},
     execution: {submit:input=>provider.submitPreparedCompanionTurn(input)},
     receivingBusy:()=>provider.hasActiveStream(),
+    receivingControls:binding=>provider.setCompanionReceivingControls(binding),
   });
   if (companionDev) {
     provider.companionApprovalChanged=waiting=>companionDev?.approval(waiting);

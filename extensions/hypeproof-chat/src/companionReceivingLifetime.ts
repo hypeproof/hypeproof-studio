@@ -1,6 +1,7 @@
 /** Explicit DEV App-owned receiving. Scheduling grants no transport, file or model authority. */
 import type {CompanionHostTurn} from './companionHostSession.ts';
-export type CompanionReceivingState = 'stopped' | 'listening' | 'processing' | 'awaiting-approval' | 'needs-check' | 'closed';
+import type { CompanionReceivingState } from './companionReceivingControls';
+export type { CompanionReceivingState } from './companionReceivingControls';
 export type CompanionReceivingReason = 'explicit_stop' | 'expired' | 'empty_limit' | 'uncertain' | 'owner_closed' | 'unavailable';
 export interface CompanionReceivingView {
   state: CompanionReceivingState;

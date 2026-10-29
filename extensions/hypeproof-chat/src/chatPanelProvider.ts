@@ -3306,6 +3306,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     for (const view of [this.editorChat?.webview, this.view?.webview]) if (view) void Promise.resolve(view.postMessage(msg)).catch(() => undefined);
   }
 
+  /** #3135: visible controls for the native DEV owner. Never admitted via turn/Send gates. */
+  private companionReceivingBinding: import('./companionReceivingControls').CompanionReceivingControlBinding|null = null;
+  setCompanionReceivingControls(binding: import('./companionReceivingControls').CompanionReceivingControlBinding|null): void {
+    this.companionReceivingBinding = this.context.extensionMode===vscode.ExtensionMode.Development ? binding : null;
+    this.postCompanionReceivingState();
+  }
+  private postCompanionReceivingState(): void {
+    const msg: HostMessage={type:'companionReceivingState',controls:this.companionReceivingBinding?.view??null};
+    for(const view of [this.editorChat?.webview,this.view?.webview])if(view)void Promise.resolve(view.postMessage(msg)).catch(()=>undefined);
+  }
+
   /** #278 — is "페이지를 코치에게" allowed for this cohort? Default off (minor-safe). */
   isPageContextEnabled(): boolean {
     return this.cachedProfile?.input?.page_context === true;
@@ -7208,6 +7219,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // The state is re-sent after the press settles, so a pill drawn for a stale id is corrected rather than left waiting.
       const panel = this.perfTracePanel;
       void Promise.resolve().then(() => panel?.stop(msg.id)).catch(() => undefined).finally(() => this.postPerfTraceState(this.perfTracePanel?.state() ?? { recording: false, id: null }));
+      return;
+    }
+    if(msg.type==='companionReceivingStateRequest'||msg.type==='companionReceivingAction'){
+      // Only the currently owned chat surfaces, including while an SDK turn is busy.
+      if(!source||(source!==this.editorChat?.webview&&source!==this.view?.webview))return;
+      if(this.context.extensionMode!==vscode.ExtensionMode.Development){await source.postMessage({type:'companionReceivingState',controls:null});return;}
+      const held=this.companionReceivingBinding;
+      try {
+        if(msg.type==='companionReceivingAction'&&held&&msg.nonce===held.view.nonce
+          &&((msg.action==='stop'&&held.view.canStop)||(msg.action==='revoke'&&held.view.canRevoke)))await held.act(msg.action);
+      }finally{this.postCompanionReceivingState();}
       return;
     }
     const connections=activityConnections(this.context);

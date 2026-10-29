@@ -15853,6 +15853,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-receiving-lifetime.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-receiving-controls.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-receiving-controls-render.smoke.mjs"
         }
       ]
     },
@@ -16036,6 +16042,21 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/companionReceivingLifetime.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionReceivingControls.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CompanionReceivingControls.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
         }
       ]
     },
