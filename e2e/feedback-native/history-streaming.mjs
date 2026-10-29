@@ -58,6 +58,27 @@ export function assertInterruptedHistory(rows,names,interrupted={},requireStoppe
  return counts;
 }
 export const assertCompletedHistory=(rows,names)=>assertInterruptedHistory(rows,names);
+// A restored draft can arrive before the separate history message. Only a wholly
+// empty timeline is pending; any populated wrong-scope or malformed history fails.
+export async function awaitRestoredHistory(sample, expected, interrupted, deadline, clock=Date.now, pause=sleep){
+ while(clock()<deadline){
+  const observed=await sample(Math.max(1,deadline-clock()));
+  if(clock()>=deadline)throw Error('Timed out: restored exact history within draft readiness deadline');
+  assert.equal(observed.workspace,expected.workspace,'Restored history workspace changed');
+  const rows=observed.rows; assert(Array.isArray(rows),'Restored history rows required');
+  if(rows.length){
+   assertInterruptedHistory(rows,['A1'],interrupted);
+   for(const original of expected.completed){
+    const found=rows.find(row=>row.role===original.role&&row.text===original.text);
+    assert(found&&found.id===original.id,'Restored completed message identity changed');
+   }
+   return rows;
+  }
+  const remaining=deadline-clock(); if(remaining>0)await pause(Math.min(150,remaining));
+ }
+ throw Error('Timed out: restored exact history within draft readiness deadline');
+}
+
 // Read only the spoken body; omit the actual classroom streaming prelude from a detached copy.
 export const HISTORY_ROWS_EXPRESSION=`[...document.querySelectorAll('.hps-msg-user,.hps-msg-assistant')].map(e=>{
  const body=e.querySelector('.hps-msg-body')?.cloneNode(true);
@@ -125,7 +146,16 @@ export async function runHistoryStreaming(ctx){
  });
  await step('T06-native-stream-normal-quit-recovery',async()=>{
   need('T06-native-stream-block-and-stop');await send('QUIT_HOLD',true);await capture('QUIT_HOLD');const unsent=draft+'-during-quit';await ui.input(await focusChat(),'.hps-input textarea',unsent);const before=(await bound()).counts.A;
-  const processProof=await restart(unsent);assertInterruptedHistory(await history(),['A1'],interrupted);const cancellation=await finishHeld('QUIT_HOLD');await sleep(10000);assert.equal((await bound()).counts.A,before,'Restart must not resume or duplicate interrupted model execution');
+  const beforeRows=await history();assertInterruptedHistory(beforeRows,['A1'],interrupted);
+  const completed=beforeRows.filter(row=>(row.role==='user'&&row.text===markerText('A1'))||(row.role==='assistant'&&row.text===replyText('A1')));
+  assert.equal(completed.length,2);assert(completed.every(row=>typeof row.id==='string'&&row.id.length>0),'Completed original message identities required');
+  const workspace=String(await(await ui.workbench()).evaluate('document.title'));assert(workspace.includes(path.basename(c.workspace.a)),'Original history workspace required');
+  const processProof=await restart(unsent,async deadline=>awaitRestoredHistory(async remaining=>{
+   const current=String(await(await ui.workbench()).evaluate('document.title'));
+   const chat=await ui.frame('.hps-input textarea',Math.min(1500,remaining));
+   return {workspace:current,rows:await chat.evaluate(HISTORY_ROWS_EXPRESSION)};
+  },{workspace,completed},interrupted,deadline));
+  const cancellation=await finishHeld('QUIT_HOLD');await sleep(10000);assert.equal((await bound()).counts.A,before,'Restart must not resume or duplicate interrupted model execution');
   await ui.shot(path.join(c.evidence,'stream-quit-restored.png'));return {...processProof,completed_history_restored:true,interrupted_history_preserved:true,interrupted_execution_replayed:false,no_duplicate_dispatch_window_ms:10000,cancellation,provider_called:false};
  });
  await step('T06-native-stream-direct-file-open',async()=>{

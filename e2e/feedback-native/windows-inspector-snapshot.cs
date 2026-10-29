@@ -1,6 +1,9 @@
 // Read-only hosted-test snapshots. No process handles, arguments or executable names escape.
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 public static class OwnedInspectorSnapshot {
   public const int MaxBytes=1048576, MaxRows=16384, MaxListeners=64;
@@ -48,35 +51,60 @@ public static class OwnedInspectorSnapshot {
     }
     var result=new uint[pids.Count];pids.CopyTo(result);return result;
   }
-  private static uint[] Listeners(int port){
+  // Only fixed phases and elapsed milliseconds escape; no OS strings or process data.
+  public static void WritePhase(string nonce,string stage,long elapsedMs){
+    if(nonce==null||!Regex.IsMatch(nonce,"^[a-f0-9]{32}$")||elapsedMs<0||elapsedMs>int.MaxValue)throw new Failure("phase_input");
+    switch(stage){
+      case "tcp_size_started": case "tcp_size_finished": case "tcp_read_started": case "tcp_read_finished":
+      case "process_snapshot_started": case "process_snapshot_finished": case "process_enumeration_started": case "process_enumeration_finished": break;
+      default: throw new Failure("phase_input");
+    }
+    Console.Error.WriteLine("HPS_OWNED_SNAPSHOT_PHASE/1|"+nonce+"|"+stage+"|"+elapsedMs.ToString(CultureInfo.InvariantCulture));
+    Console.Error.Flush();
+  }
+  private sealed class PhaseClock {
+    private readonly string nonce;private readonly long offset;private readonly Stopwatch clock=Stopwatch.StartNew();
+    public PhaseClock(string value,long elapsedMs){nonce=value;offset=elapsedMs;}
+    public void Mark(string stage){WritePhase(nonce,stage,checked(offset+clock.ElapsedMilliseconds));}
+  }
+  private static uint[] Listeners(int port,PhaseClock phase){
     uint size=0;
     // AF_INET=2, TCP_TABLE_OWNER_PID_LISTENER=3. One sizing call, one read; no growth retry.
+    phase.Mark("tcp_size_started");
     uint code=GetExtendedTcpTable(IntPtr.Zero,ref size,false,2,3,0);
+    phase.Mark("tcp_size_finished");
     if(code!=122)throw new Failure("tcp_size",code);
     if(size<4||size>MaxBytes)throw new Failure("tcp_size_bound");
     uint allocated=size;IntPtr buffer=Marshal.AllocHGlobal(checked((int)allocated));
     try{
+      phase.Mark("tcp_read_started");
       code=GetExtendedTcpTable(buffer,ref size,false,2,3,0);
+      phase.Mark("tcp_read_finished");
       if(code!=0)throw new Failure("tcp_read",code);
       if(size<4||size>allocated)throw new Failure("tcp_growth");
       byte[] bytes=new byte[size];Marshal.Copy(buffer,bytes,0,checked((int)size));return ParseListeners(bytes,size,port);
     }finally{Marshal.FreeHGlobal(buffer);}
   }
   public static void RequireEnumerationEnd(int code){if(code!=18)throw new Failure("process_enumeration",unchecked((uint)code));}
-  private static ParentRow[] Parents(){
+  private static ParentRow[] Parents(PhaseClock phase){
+    phase.Mark("process_snapshot_started");
     IntPtr snapshot=CreateToolhelp32Snapshot(2,0); // TH32CS_SNAPPROCESS only.
     if(snapshot==new IntPtr(-1))throw new Failure("process_snapshot",unchecked((uint)Marshal.GetLastWin32Error()));
     try{
+      phase.Mark("process_snapshot_finished");
       var rows=new List<ParentRow>();var seen=new HashSet<uint>();
       var entry=new ProcessEntry();entry.dwSize=checked((uint)Marshal.SizeOf(typeof(ProcessEntry)));
+      phase.Mark("process_enumeration_started");
       bool present=Process32FirstW(snapshot,ref entry);
       while(present){
         if(rows.Count>=MaxRows||!seen.Add(entry.th32ProcessID))throw new Failure("process_rows");
         rows.Add(new ParentRow{ProcessId=entry.th32ProcessID,ParentProcessId=entry.th32ParentProcessID});
         present=Process32NextW(snapshot,ref entry);
       }
-      RequireEnumerationEnd(Marshal.GetLastWin32Error());return rows.ToArray();
+      int end=Marshal.GetLastWin32Error();
+      phase.Mark("process_enumeration_finished");
+      RequireEnumerationEnd(end);return rows.ToArray();
     }finally{CloseHandle(snapshot);}
   }
-  public static Snapshot Read(int port){Port(port);var listeners=Listeners(port);return new Snapshot{port=port,listeners=listeners,parents=Parents()};}
+  public static Snapshot Read(int port,string nonce,long elapsedMs){Port(port);var phase=new PhaseClock(nonce,elapsedMs);var listeners=Listeners(port,phase);return new Snapshot{port=port,listeners=listeners,parents=Parents(phase)};}
 }

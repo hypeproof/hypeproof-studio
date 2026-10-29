@@ -33,3 +33,15 @@ $row=[OwnedInspectorSnapshot+ParentRow]::new();$row.ProcessId=103;$row.ParentPro
 $wire.listeners=[uint32[]]@(103);$wire.parents=[OwnedInspectorSnapshot+ParentRow[]]@($row)
 Write-Output ('WIRE '+($wire | ConvertTo-Json -Compress -Depth 4))
 Write-Output 'PASS actual C# compile and binary/port/length/listener/EOF/ABI controls; no native call'
+
+# Exercise the real flushed C# diagnostic writer without any Windows API calls.
+$originalError=[Console]::Error;$captured=[IO.StringWriter]::new()
+try {
+ [Console]::SetError($captured)
+ $stages=@('tcp_size_started','tcp_size_finished','tcp_read_started','tcp_read_finished','process_snapshot_started','process_snapshot_finished','process_enumeration_started','process_enumeration_finished')
+ for($i=0;$i -lt $stages.Count;$i++){[OwnedInspectorSnapshot]::WritePhase(('a'*32),$stages[$i],10+$i)}
+ Refuses { [OwnedInspectorSnapshot]::WritePhase('foreign','tcp_size_started',0) }
+ Refuses { [OwnedInspectorSnapshot]::WritePhase(('a'*32),'private OS text',0) }
+ Refuses { [OwnedInspectorSnapshot]::WritePhase(('a'*32),'tcp_size_started',-1) }
+} finally {[Console]::SetError($originalError)}
+Write-Output ('PHASE_WIRE '+($captured.ToString() | ConvertTo-Json -Compress))

@@ -147,7 +147,7 @@ try{
  }
  if(c.scenarios.includes('history-streaming')){
   if(!report.tests.some(t=>t.id==='T04-different-activity-collision'&&t.status==='PASS'))throw blocked('History/streaming requires observed A/B isolation first');
-  await runHistoryStreaming({c,ui,step,report,draft,start,focusChat,readDraft,nativeOpenBoundFolder,workspaceFiles,save,candidate:value=>{ownedActivityCandidate=value;},control:{manifestFile:c.service.manifest,origin:c.service.origin,expectedSource:report.service.source,onSecret:secret=>secrets.push(secret)},restart:async expectedDraft=>restartOwnedCandidate({config:c,child,expectedDraft,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();},quit:async()=>{
+  await runHistoryStreaming({c,ui,step,report,draft,start,focusChat,readDraft,nativeOpenBoundFolder,workspaceFiles,save,candidate:value=>{ownedActivityCandidate=value;},control:{manifestFile:c.service.manifest,origin:c.service.origin,expectedSource:report.service.source,onSecret:secret=>secrets.push(secret)},restart:async (expectedDraft,observeHistory)=>restartOwnedCandidate({config:c,child,expectedDraft,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();},quit:async()=>{
    if(process.platform==='darwin'){
     macQuitPort??=await createMacQuitPort();const owned=child;
     const owner=await captureMacQuitOwner({child:owned,executable:fs.realpathSync(path.join(c.candidate.app,'Contents/MacOS/HypeProof Studio')),port:macQuitPort.port});
@@ -163,7 +163,7 @@ try{
    await census('native_quit_structure_before');
    try{await ui.quitOwned('win32',()=>confirmWindowsStreamingQuit({owner,current,allowWin32:true,onProgress:observation=>{(report.streaming_restart_observations??=[]).push({at:new Date().toISOString(),...observation});save();}}));}
    catch(error){await census('native_quit_structure_refused');throw error;}
-  },waitExit:owned=>waitFor(()=>owned.exitCode!==null||owned.signalCode!==null,'owned child exits streaming quit',30000),waitCdpDown:async()=>{await waitFor(()=>ui.cdpDown(),'streaming quit CDP refuses',30000);ui.close();},launch:()=>launchOwned(),observeDraft:()=>ui.restoredDraft(expectedDraft)})});
+  },waitExit:owned=>waitFor(()=>owned.exitCode!==null||owned.signalCode!==null,'owned child exits streaming quit',30000),waitCdpDown:async()=>{await waitFor(()=>ui.cdpDown(),'streaming quit CDP refuses',30000);ui.close();},launch:()=>launchOwned(),observeDraft:async()=>{const deadline=Date.now()+60000;const result=await ui.restoredDraft(expectedDraft,Math.max(1,deadline-Date.now()));await observeHistory(deadline);return result;}})});
   if(!report.tests.some(t=>t.id==='T06-native-stream-normal-quit-recovery'&&t.status==='PASS')||!child||child.exitCode!==null||child.signalCode!==null)throw blocked('Streaming recovery did not establish a live restored owned candidate; no remaining input');
  }
  if(c.scenarios.includes('skills')){

@@ -641,3 +641,17 @@ there is no WMI/netstat fallback or timeout increase. Portable controls compile 
 actual C# parser and feed binary tables without calling Windows APIs. The real
 Windows background empty-port/owned/foreign control still has to pass on the hosted
 runner before desktop acceptance; a local compile is not that result.
+
+After the b6 Windows empty-port probe still timed out, the same job's separate
+PowerShell/C# compile and synthetic ABI check passed in 1.725 s. That does not
+locate the timed-out stage or establish that compilation caching would fix it.
+The helper now flushes fixed phase markers around script entry, compilation,
+TCP table sizing/read, process snapshot/enumeration and JSON serialization.
+A fresh random diagnostic nonce binds each probe's markers; it carries no authority.
+Only a bounded, ordered prefix with monotonic elapsed milliseconds within that
+probe's existing budget is retained on failure. Unknown, forged, duplicate,
+out-of-order, malformed or oversized traces are marked invalid with no statements.
+Raw stderr/OS text remains lengths/hashes only. Child elapsed time starts at script
+entry, so time before that first marker remains unmeasured. Markers never establish
+listener ownership, retry a failed probe, or enlarge the 10 s admission budget.
+Actual next Windows timing/native-API acceptance remains required.
