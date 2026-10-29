@@ -141,7 +141,7 @@ def disable_and_observe_radios(device,diagnostics,now=time.monotonic,sleep=time.
  except Exception as error:
   diagnostics['status']='refused';diagnostics['errorType']=type(error).__name__;diagnostics['elapsedMs']=round((now()-start)*1000);raise
 
-def read_ack(proc,phase,run,uid,data_dir,timeout=60,namespace_proof=None,diagnostics=None):
+def read_ack(proc,phase,run,uid,data_dir,timeout=60,namespace_proof=None,diagnostics=None,validator=None):
  selector=selectors.DefaultSelector();selector.register(proc.stdout,selectors.EVENT_READ);end=time.monotonic()+timeout;data=b''
  try:
   while time.monotonic()<end:
@@ -150,7 +150,7 @@ def read_ack(proc,phase,run,uid,data_dir,timeout=60,namespace_proof=None,diagnos
     rows=[r for r in status_blocks(data.decode('utf8','strict'))if r.get('hps_phase')==phase]
     require(len(rows)<=1,'duplicate_checkpoint')
     if rows:
-     classify_stream(data,False);return validate_ack(rows[0],phase,run,uid,data_dir,namespace_proof,diagnostics),data
+     classify_stream(data,False);return (validator(rows[0]) if validator else validate_ack(rows[0],phase,run,uid,data_dir,namespace_proof,diagnostics)),data
    require(proc.poll() is None,'instrumentation_ended_before_ack')
   raise RuntimeError('checkpoint_deadline')
  finally:selector.close()
@@ -199,7 +199,8 @@ def close_child(child,grace):
  return {'closed':child.poll()is not None,'errors':errors}
 
 def main(argv):
- if argv!=['--run']:print(json.dumps({'status':'NOT_RUN','scope':'explicit hosted --run required'}));return 0
+ if argv not in [['--run'],['--run-authenticated-ui']]:print(json.dumps({'status':'NOT_RUN','scope':'explicit hosted --run required'}));return 0
+ authenticated_ui=argv==['--run-authenticated-ui']
  require(os.environ.get('GITHUB_ACTIONS')=='true' and os.environ.get('RUNNER_OS')=='Linux' and os.environ.get('HPS_ANDROID_OWNED_HOSTED')=='1','owned_hosted_linux_only')
  out=Path(os.environ['HPS_ANDROID_EVIDENCE']).resolve();require(out.is_relative_to(Path(os.environ['RUNNER_TEMP']).resolve()),'owned_evidence_required')
  receipt=json.loads((out/'build-receipt.json').read_text());require(receipt['status']=='PASS_BUILD_ONLY' and receipt['sourceSha']==os.environ['HPS_ANDROID_SOURCE_SHA'],'exact_build_required')
@@ -234,11 +235,15 @@ def main(argv):
   require(d.text('shell','pm','list','instrumentation',PKG)==f'instrumentation:{RUNNER} (target={PKG})','exact_instrumentation_required')
   result['radioReadiness']={};disable_and_observe_radios(d,result['radioReadiness'])
   result['guestNetworkBoundary']={'wifiEnabled':False,'mobileDataEnabled':False,'packetIsolation':'NOT_CLAIMED; unconfigured fixture has no transport target'}
-  d.call('shell','am','start','-W','-n',COMPONENT,timeout=15);pids=d.pids();require(len(pids)==1,'single_target_launch_required');launched=d.identity(pids[0],uid,data_dir)
-  shot=d.call('exec-out','screencap','-p',timeout=10).stdout;require(shot.startswith(b'\x89PNG\r\n\x1a\n'),'launch_screenshot_required');(out/'unconfigured-launch.png').write_bytes(shot);result['checks'].append({'phase':'unconfigured_debug_activity_launch','identity':launched,'component':COMPONENT,'noIntentExtras':True,'screenshotSha256':hashlib.sha256(shot).hexdigest()});d.stop(launched)
-  run=uuid.uuid4().hex;previous=None;result['namespaceObservations']=[]
-  for method,phase in [('seed','seed_ready'),('recoverErase','erased_ready'),('coldAbsence','cold_absence')]:previous,row=checkpoint(d,method,phase,run,uid,data_dir,previous,clients,result['namespaceObservations']);result['checks'].append(row)
-  result['status']='PASS_TARGET_UID_NATIVE_COLD_FILE_LIFECYCLE'
+  if authenticated_ui:
+   from authenticated_ui import run_authenticated
+   run_authenticated(d,out,uid,data_dir,clients,result,sys.modules[__name__])
+  else:
+   d.call('shell','am','start','-W','-n',COMPONENT,timeout=15);pids=d.pids();require(len(pids)==1,'single_target_launch_required');launched=d.identity(pids[0],uid,data_dir)
+   shot=d.call('exec-out','screencap','-p',timeout=10).stdout;require(shot.startswith(b'\x89PNG\r\n\x1a\n'),'launch_screenshot_required');(out/'unconfigured-launch.png').write_bytes(shot);result['checks'].append({'phase':'unconfigured_debug_activity_launch','identity':launched,'component':COMPONENT,'noIntentExtras':True,'screenshotSha256':hashlib.sha256(shot).hexdigest()});d.stop(launched)
+   run=uuid.uuid4().hex;previous=None;result['namespaceObservations']=[]
+   for method,phase in [('seed','seed_ready'),('recoverErase','erased_ready'),('coldAbsence','cold_absence')]:previous,row=checkpoint(d,method,phase,run,uid,data_dir,previous,clients,result['namespaceObservations']);result['checks'].append(row)
+   result['status']='PASS_TARGET_UID_NATIVE_COLD_FILE_LIFECYCLE'
  except BaseException as error:result['failureType']=type(error).__name__;result['failureCode']=str(error) if re.fullmatch('[a-z_]+',str(error))else'bounded_host_or_native_failure'
  finally:
   cleanup_errors=[]
@@ -252,5 +257,5 @@ def main(argv):
   result['cleanupErrors']=cleanup_errors
   if not all(result['cleanup'].values()) or cleanup_errors:result['status']='FAIL'
   (out/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({'status':result['status'],'checks':len(result['checks']),'cleanup':result['cleanup']}))
- return 0 if result['status']=='PASS_TARGET_UID_NATIVE_COLD_FILE_LIFECYCLE'else 1
+ return 0 if result['status'] in ['PASS_TARGET_UID_NATIVE_COLD_FILE_LIFECYCLE','PASS_AUTHENTICATED_SYNTHETIC_DRAFT_UI']else 1
 if __name__=='__main__':sys.exit(main(sys.argv[1:]))

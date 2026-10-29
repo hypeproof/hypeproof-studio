@@ -265,3 +265,49 @@ The downloadable evidence allowlist contains only source/build hashes,
 sanitized compiler categories, process checkpoints/cleanup and the unconfigured
 entry screenshot. It excludes APKs, private packages/source, Gradle caches and
 raw build/instrumentation output. A failed cleanup remains FAIL.
+
+### Separate hosted authenticated draft UI lane (#3121)
+
+The `companion-android-ui-verify` PR label (including labeled/synchronize events)
+or manual `android_ui` input runs one isolated Linux KVM guest and the exact
+Service source already pinned in `config/service-deployment.json`. It does not
+replace the passing `android_draft` native file-lifecycle lane. The old pinned
+Service testkit lacks account routes; this lane uses an explicit read-only private
+source checkout, its lockfiles and real Worker/Miniflare D1, not a rolling sibling.
+The existing read credential is used only for checkout/bootstrap, never in the
+app, fixture responses or uploaded evidence.
+
+`AuthenticatedDraftUiTest` clicks the real native login button. MainActivity
+performs `/auth/device/start`, pending poll, consumed poll and `/me`; the real
+identity button invokes `/me` again. The runner separately arms three synthetic
+Lab approvals against the actual local Service account API. This is **not**
+browser/human approval or real Google sign-in. No credential or `verified` field
+is assigned by the test. After verified login, test-only reflection obtains only
+the existing `draftBroker` reference. One empty-slot seed uses its ordinary
+`draft.read`/`draft.replace` methods and existing session/lifecycle guards. No
+`live=()->true` store, JS identity injection, production hook or extra API is used.
+The seed is deliberately synthetic data, not a user-created or UI-saved draft.
+
+Three held checkpoints are externally stopped with the same target UID/PID/start
+and physical directory proof as the native lane. On the second cold login, actual
+Android UIAutomator clicks inspect the detached text, require recovery disabled
+without a verified selected preview, cancel the first erase and verify unchanged
+bytes, then confirm the two-step local erase. The third cold login shows no draft
+and the actual private slot remains empty. Screenshots contain only this synthetic
+fixture. No selection reattachment/reassociation, paired flow, attempted-unknown
+UI, user-created save, physical device or complete DMC acceptance is claimed.
+
+Wi-Fi/mobile-data readback stays off; one exact owned `adb reverse` maps guest
+loopback to runner loopback. The fixture allows only native auth endpoints and
+`/me`, rejects model/relay/internal HTTP routes and all outbound Worker fetches,
+and creates no paid pass. Radio readback and reverse routing do not establish
+packet-level isolation. All fixture state is ephemeral and all owned children,
+reverse mappings and the guest must close; cleanup failure remains FAIL.
+
+The default API35 image may open no browser; missing browser approval remains an
+explicit scope limitation. Native authentication still requires actual Service
+approval/poll/me. UiAutomator WebView accessibility and loopback while radios are
+off require hosted acceptance; local source controls or compilation are NOT that
+acceptance. Existing native auth deadlines stay unchanged; the new hosted phase
+has a 120-second observation bound including UI assertions and a 30-second held
+ACK for external Stop, with no automatic action retry or second boot.

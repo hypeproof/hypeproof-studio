@@ -15952,6 +15952,27 @@
         },
         {
           "path": "apps/companion-android/test/fixtures/java/org/json/JSONObject.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/androidTest/java/ai/hypeproof/companion/AuthenticatedDraftUiTest.java"
+        },
+        {
+          "path": "e2e/companion-android/auth-contract.mjs"
+        },
+        {
+          "path": "e2e/companion-android/auth-contract.test.mjs"
+        },
+        {
+          "path": "e2e/companion-android/auth-service.mjs"
+        },
+        {
+          "path": "e2e/companion-android/auth-service.test.mjs"
+        },
+        {
+          "path": "e2e/companion-android/authenticated_ui.py"
+        },
+        {
+          "path": "e2e/companion-android/authenticated_ui.test.py"
         }
       ]
     },

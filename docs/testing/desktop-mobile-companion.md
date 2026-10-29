@@ -376,3 +376,17 @@ completed JUnit suite, authenticated UI recovery, live paired packet/replay
 acceptance, physical Android/iOS or full DMC acceptance. Local fake controls do
 not establish an installed result. Upload only the workflow's explicit JSON/PNG
 allowlist; target/test APKs contain private build inputs and remain ephemeral.
+
+### #3121 hosted authenticated detached-draft UI follow-up
+
+The separately opt-in `android_ui` hosted lane exercises actual native device
+sign-in and MainActivity's guarded broker against the exact pinned local Service.
+A test-owned synthetic record is seeded through that authenticated broker, then
+cold login must render its exact text, refuse recovery without selected preview,
+preserve bytes on erase cancellation, perform explicit two-step local erase, and
+show absence after another cold login. Synthetic Lab approval is not browser-user
+consent, and seeded text is not a UI-created save. Original native file-lifecycle
+acceptance remains separate. Current hosted UI result is NOT RUN; reattachment,
+reassociation, attempted-unknown UI and paired acceptance remain required later.
+No model/relay request, paid pass, production activation or public tunnel is part
+of this fixture. Source controls cannot mark these installed checks complete.
