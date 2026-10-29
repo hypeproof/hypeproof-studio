@@ -2,6 +2,8 @@ package ai.hypeproof.companion;
 import org.json.JSONObject;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.CodingErrorAction;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.function.BooleanSupplier;
@@ -22,6 +24,9 @@ final class NativeDraftStore {
   File[] entries=directory.listFiles();NativeDraftRecord.require(entries!=null);return Arrays.stream(entries).sorted(Comparator.comparing(File::getName)).toList();
  }
  private boolean ours(File f){return Set.of(name,name+".bak",name+".new").contains(f.getName())&&f.isFile()&&!Files.isSymbolicLink(f.toPath());}
+ private byte[] boundedRead(File file)throws Exception{
+  try(var in=new FileInputStream(file)){byte[] bytes=in.readNBytes(NativeDraftRecord.LIMIT+1);NativeDraftRecord.require(bytes.length<=NativeDraftRecord.LIMIT);return bytes;}
+ }
  private JSONObject snapshot()throws Exception{
   current();List<File> entries=files();JSONObject reply=new JSONObject().put("generation",generation).put("version",JSONObject.NULL);
   if(entries.isEmpty())return reply.put("state","empty");
@@ -31,7 +36,7 @@ final class NativeDraftStore {
   for(File f:entries){digest.update((f.getName()+":"+f.length()+":"+f.lastModified()).getBytes(StandardCharsets.UTF_8));try(var in=new FileInputStream(f)){digest.update(in.readNBytes(NativeDraftRecord.LIMIT+1));}}
   StringBuilder version=new StringBuilder();for(byte b:digest.digest())version.append(String.format("%02x",b&255));reply.put("version",version.toString());
   if(entries.size()!=1||!entries.get(0).getName().equals(name)||entries.get(0).length()>NativeDraftRecord.LIMIT)return reply.put("state","corrupt");
-  try{String raw=Files.readString(entries.get(0).toPath(),StandardCharsets.UTF_8);return reply.put("state","record").put("record",NativeDraftRecord.parse(raw,account,service));}
+  try{String raw=StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(boundedRead(entries.get(0)))).toString();return reply.put("state","record").put("record",NativeDraftRecord.parse(raw,account,service));}
   catch(Exception invalid){return reply.put("state","corrupt");}
  }
  JSONObject read()throws Exception{synchronized(LOCK){NativeDraftRecord.require(live.getAsBoolean());generation=UUID.randomUUID().toString();OWNERS.put(namespace,generation);erasedGeneration=null;erasedVersion=null;return snapshot();}}
@@ -55,6 +60,6 @@ final class NativeDraftStore {
    .put("createdAt",previous==null?now:previous.get("createdAt")).put("updatedAt",now);
   byte[] bytes=record.toString().getBytes(StandardCharsets.UTF_8);NativeDraftRecord.parse(record.toString(),account,service);current();
   io.replace(base,bytes,()->live.getAsBoolean()&&generation.equals(OWNERS.get(namespace)));current();
-  JSONObject committed=snapshot();NativeDraftRecord.require(committed.getString("state").equals("record")&&Arrays.equals(bytes,Files.readAllBytes(base.toPath())));return committed;
+  JSONObject committed=snapshot();NativeDraftRecord.require(committed.getString("state").equals("record")&&Arrays.equals(bytes,boundedRead(base)));return committed;
  }}
 }
