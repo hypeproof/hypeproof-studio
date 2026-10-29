@@ -10313,8 +10313,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const requestId = goalRequestIdOf(msg);
     const echo = requestId ? { requestId } : {};
     // Re-check at execution time: queued writes may outlive an activity or instructor switch.
-    if (msg && typeof msg === "object" && "status" in msg &&
-        (this._instructorMode?.isInstructor || !("activityId" in msg) || msg.activityId !== activity)) {
+    if (msg && typeof msg === "object" &&
+        (!("activityId" in msg) || msg.activityId !== activity ||
+          ("status" in msg && this._instructorMode?.isInstructor))) {
       await this.post({ type: "goalState", error: GOAL_REFUSAL_SENTENCES.other_lesson, ...echo });
       return;
     }
