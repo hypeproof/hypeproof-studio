@@ -93,8 +93,8 @@ jobs:
   # A skip the gate cannot explain (the live check failed, or app changes have waited too long for an rc
   # tag) must be loud: one open issue that each failing day updates, an optional #alerts post, and a red run.
   alarm:
-    needs: gate
-    if: needs.gate.outputs.alarm == 'true'
+    needs: [gate, cut, create]
+    if: always() && (needs.gate.outputs.alarm == 'true' || needs.gate.result == 'failure' || (needs.gate.outputs.run == 'true' && needs.cut.result != 'success') || needs.create.result == 'failure' || needs.create.result == 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -104,7 +104,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          REASON: ${{ needs.gate.outputs.reason }}
+          REASON: ${{ needs.gate.outputs.run == 'true' && needs.cut.result != 'success' && 'Release cut did not complete; inspect the cut job and its artifact' || needs.create.result == 'failure' && 'Release creation failed; inspect the create job' || needs.create.result == 'cancelled' && 'Release creation cancelled; reconcile before retrying' || needs.gate.outputs.reason || 'Release gate failed before deciding' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="Daily release cut skipped: needs attention"
@@ -114,14 +114,14 @@ jobs:
       - name: Post to #alerts (when the webhook secret is set)
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_ALERTS }}
-          REASON: ${{ needs.gate.outputs.reason }}
+          REASON: ${{ needs.gate.outputs.run == 'true' && needs.cut.result != 'success' && 'Release cut did not complete; inspect the cut job and its artifact' || needs.create.result == 'failure' && 'Release creation failed; inspect the create job' || needs.create.result == 'cancelled' && 'Release creation cancelled; reconcile before retrying' || needs.gate.outputs.reason || 'Release gate failed before deciding' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "$WEBHOOK" ]; then echo "DISCORD_WEBHOOK_ALERTS not set; issue only"; exit 0; fi
           jq -n --arg c "Studio daily release cut skipped: ${REASON} ${RUN_URL}" '{content:$c}' | curl -fsS -H 'Content-Type: application/json' -d @- "$WEBHOOK"
       - name: Fail the run
         env:
-          REASON: ${{ needs.gate.outputs.reason }}
+          REASON: ${{ needs.gate.outputs.run == 'true' && needs.cut.result != 'success' && 'Release cut did not complete; inspect the cut job and its artifact' || needs.create.result == 'failure' && 'Release creation failed; inspect the create job' || needs.create.result == 'cancelled' && 'Release creation cancelled; reconcile before retrying' || needs.gate.outputs.reason || 'Release gate failed before deciding' }}
         run: |
           echo "::error::Daily release cut skipped: ${REASON}"
           exit 1
@@ -133,6 +133,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       exit: ${{ steps.cut.outputs.exit }}
+      result: ${{ steps.cut.outputs.result }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -143,7 +144,7 @@ jobs:
           node-version: "22"
 
       - name: Controls
-        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/create.test.mjs scripts/release/test/select-cases.test.mjs
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/cut-result.test.mjs scripts/release/test/create.test.mjs scripts/release/test/select-cases.test.mjs
 
       - name: Release cut
         id: cut
@@ -171,10 +172,9 @@ jobs:
           for f in release-pr.md smoke-failure-issue.md; do
             if [[ -f "$RUNNER_TEMP/release-cut/$f" ]]; then cat "$RUNNER_TEMP/release-cut/$f" >> "$GITHUB_STEP_SUMMARY"; fi
           done
-          # 0 PASS or skipped, 2 NOT_RUN: the cut itself succeeded. 1 is a smoke FAIL; in create mode
-          # the create job still runs to open the failure issue.
-          if [[ $code -eq 1 && "$MODE" != create ]]; then exit 1; fi
-          exit 0
+          # Only a complete smoke FAIL plan may continue to create its failure issue.
+          # Exceptions (including GitHub API failures) must fail and reach the alarm.
+          node scripts/release/cut-result.mjs "$code" "$MODE" "$RUNNER_TEMP/release-cut"
 
       # Safety net for job cancellation (SIGKILL skips the trap in run-sdk-contract.sh).
       # S4 calls run-sdk-contract.sh via spawnSync; a hard kill of this runner bypasses
@@ -246,11 +246,13 @@ jobs:
           RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
           ACCEPT_NOT_RUN: ${{ inputs.accept_not_run }}
           MANAGED_DRAFT: ${{ inputs.managed_draft }}
+          CUT_RESULT: ${{ needs.cut.outputs.result }}
         run: |
           set -euo pipefail
           plan="$RUNNER_TEMP/release-cut/plan.json"
           # Skipped cycle (no commits since the last release): nothing was planned.
-          if [[ ! -f "$plan" ]]; then echo "No plan: nothing to create." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          if [[ "$CUT_RESULT" == skipped ]]; then echo "No commits: nothing to create." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          [[ "$CUT_RESULT" == planned && -f "$plan" ]] || { echo "::error::Missing completed release plan"; exit 1; }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           flags=()
