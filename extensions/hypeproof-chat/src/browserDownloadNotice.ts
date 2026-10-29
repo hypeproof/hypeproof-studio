@@ -26,7 +26,7 @@ export function formatBytes(size: number): string {
   return `${(size / (1024 * 1024 * 1024)).toFixed(1)}GB`;
 }
 
-export type DownloadFailure = DownloadDenyCause | "interrupted" | "not-found" | "folder-changed" | "unobserved";
+export type DownloadFailure = DownloadDenyCause | "interrupted" | "not-found" | "folder-changed" | "unobserved" | "tracking-limit";
 
 const DENY_COPY: Record<DownloadDenyCause, string> = {
   "profile-unknown": "이용 정보를 아직 확인하지 못해 받을 수 없어요. 잠시 뒤 다시 받아 보세요.",
@@ -39,6 +39,7 @@ const FAIL_COPY: Record<Exclude<DownloadFailure, DownloadDenyCause>, string> = {
   "not-found": "받은 파일을 downloads 폴더에서 찾지 못했어요.",
   "folder-changed": "받는 동안 downloads 폴더가 바뀌어 저장된 곳을 확인하지 못했어요.",
   unobserved: "탭이 닫혀 끝까지 확인하지 못했어요. downloads 폴더에서 파일을 확인해 보세요.",
+  "tracking-limit": "동시에 받는 파일이 많아 끝까지 확인하지 못했어요. downloads 폴더에서 파일을 확인해 보세요.",
 };
 
 const DONE_PREFIX = "다운로드 완료: downloads/";

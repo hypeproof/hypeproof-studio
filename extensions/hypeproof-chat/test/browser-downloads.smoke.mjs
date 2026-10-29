@@ -67,6 +67,33 @@ try {
   assert.ok(!isDownloadNoticeLabel('파일을 열었어요', 'done'));
   assert.ok(!isDownloadNoticeLabel('x'.repeat(500), 'error'));
 
+  // Overflow must settle an already-visible row, not leave it running forever.
+  {
+    const dir = join(ws('overflow'), 'downloads'); mkdirSync(dir);
+    const notices = []; let task = 'original-task';
+    const tracker = new DownloadTracker({policy:()=>({behavior:'allow',dir}), capture:()=>task,
+      notify:(notice,dest)=>notices.push({...notice,dest})});
+    for (let i=0;i<65;i++) {
+      tracker.handle({method:'Page.downloadWillBegin',params:{guid:`overflow-${i}`,suggestedFilename:`file-${i}.txt`}});
+      task = 'next-task';
+    }
+    const first = notices[0], settled = notices.filter(n=>n.key===first.key && n.state!=='running');
+    assert.equal(settled.length,1,'evicted progress must receive one terminal notice');
+    assert.equal(settled[0].state,'error');
+    assert.equal(settled[0].dest,'original-task');
+    assert.match(settled[0].label,/동시에 받는 파일이 많아/);
+    assert.ok(downloadLineView(settled[0].label,'error'),'the normal timeline accepts the notice');
+    const count = notices.length;
+    tracker.handle({method:'Page.downloadProgress',params:{guid:'overflow-0',state:'completed'}});
+    assert.equal(notices.length,count,'late events cannot revive an evicted row');
+    writeFileSync(join(dir,'file-64.txt'),'complete');
+    tracker.handle({method:'Page.downloadProgress',params:{guid:'overflow-64',state:'completed'}});
+    assert.equal(notices.at(-1).state,'done','retained downloads still verify normally');
+    tracker.flush();
+    const final = new Map(notices.map(n=>[n.key,n]));
+    assert.equal(final.size,65);
+    assert.ok([...final.values()].every(n=>n.state!=='running'),'no row stays running after observation ends');
+  }
   // ── tracker: one honest line per download ─────────────────────────────────
   const dir = join(root, 'downloads');
   let applied = { behavior: 'allow', dir };
