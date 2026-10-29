@@ -2814,15 +2814,46 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 }
 .hps-shell-row summary::before { content: "\25B8"; }
 .hps-shell-row details[open] > summary::before { content: "\25BE"; }
-.hps-running-processes h2 { margin: 0; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
-.hps-running-processes ul { margin: 0; padding: 0; list-style: none; }
-.hps-running-processes li {
+/* Jay 2026-10-29 ("줄 구분도 잘 안 되고"): a section with its own spacing, then one bordered card per
+ * running thing — status dot + plain title, what it serves and its address, one aligned 끄기 button. */
+.hps-running-processes { margin: var(--hp-space-3) 0; }
+.hps-running-processes h2 { margin: 0 0 var(--hp-space-2); font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); }
+.hps-running-processes ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--hp-space-2); }
+.hps-running-processes li.hps-process-card {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ds-c-studio-styles-space-2);
+  gap: var(--hp-space-2);
+  padding: var(--hp-space-2) var(--hp-space-3);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
+  border-radius: var(--hp-radius-8);
+  background: var(--hp-bg-panel-default);
 }
+.hps-process-title { display: flex; align-items: center; gap: var(--hp-space-2); }
+.hps-running-processes p.hps-process-title { margin-top: 0; }
+.hps-process-dot {
+  flex: none;
+  width: var(--ds-c-studio-styles-size-7); height: var(--ds-c-studio-styles-size-7);
+  border-radius: 50%;
+  background: var(--hp-text-muted-default);
+}
+.hps-process-card[data-state="running"] .hps-process-dot { background: var(--hp-text-accent-default); }
+.hps-process-note { color: var(--hp-text-muted-default); }
 .hps-process-text { min-width: 0; flex: 1 1 auto; }
-.hps-process-actions { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); }
-.hps-running-processes button { min-height: var(--hp-control-min); font: inherit; }
+.hps-process-actions { display: flex; align-items: center; gap: var(--hp-space-2); margin-left: auto; }
+.hps-process-state { color: var(--hp-text-muted-default); }
+.hps-running-processes button {
+  min-height: var(--hp-control-min); min-width: var(--hp-control-min); font: inherit;
+  padding: 0 var(--hp-space-3);
+  border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default);
+  border-radius: var(--hp-radius-8);
+  background: transparent; color: inherit; cursor: pointer;
+}
+.hps-running-processes button:hover:not(:disabled) { background: var(--hp-bg-control-hover); }
+.hps-running-processes button:disabled { cursor: default; color: var(--hp-text-muted-default); }
+@media (forced-colors: active) {
+  .hps-running-processes li.hps-process-card { border-color: CanvasText; }
+  .hps-process-dot { forced-color-adjust: none; background: CanvasText; }
+  .hps-running-processes button { border-color: ButtonText; }
+}

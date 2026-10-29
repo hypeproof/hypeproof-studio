@@ -23,7 +23,7 @@ import { CREDENTIAL_KEY as CLASSROOM_OPS_CREDENTIAL_KEY } from "./classroomOpsHo
 import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
 import { takeawayTask, takeawayOwnedFiles } from "./workTakeaway";
 import { workPower } from "./workPower";
-import { RunningProcesses } from "./runningProcesses";
+import { RunningProcesses, previewAddress, previewServedPlace } from "./runningProcesses";
 import { PreviewTabWatch } from "./previewTabWatch";
 import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
@@ -6019,12 +6019,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.liveProcessKey = id;
     const registry = this.runningProcesses;
     this.liveProcessRegistry = registry;
-    registry.add(id, '라이브 서버', shellFolder(this.resolveCoachCwd(), this.liveServer.currentRoot()), async () => {
+    // Jay 2026-10-29: "라이브 서버 · 폴더: ." read as a turn still running. The entry says it is the preview
+    // server, what it serves in words and its address; it keeps running while the preview tab shows it.
+    const cwd = this.resolveCoachCwd();
+    const served = previewServedPlace(shellFolder(cwd, this.liveServer.currentRoot()), cwd ? path.basename(cwd) : undefined);
+    registry.add(id, '미리보기 서버', served, async () => {
       // A stale handle never stops whichever server is running now; it only settles its own entry.
       if (this.liveProcessKey !== id || this.liveServer.currentUrl() !== url) { registry.finish(id, 'done'); return; }
       await this.liveServer.stop();
       registry.finish(id, 'stopped');
-    });
+    }, { address: previewAddress(url) });
   }
 
   async startLivePreview(): Promise<string | null> {
