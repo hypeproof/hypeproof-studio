@@ -37,6 +37,9 @@ const WORKSPACE = "/tmp/hps-spy-workspace";
 const INPUT = { path: "lesson/index.html", url: "https://example.com/a", content: "x" };
 const decisionOf = (toolName, permitted = instructorNames) =>
   evaluateSdkToolUse({ toolName, input: INPUT, permittedTools: permitted, workspaceRoot: WORKSPACE }).decision;
+// browser_open depends on the URL: loopback (live preview) is allowed, outside URLs are asked.
+const browserOpenDecision = (input) =>
+  evaluateSdkToolUse({ toolName: MCP_BROWSER_OPEN, input, permittedTools: instructorNames, workspaceRoot: WORKSPACE }).decision;
 
 check("S-2b spy: the instructor profile exposes only read, write and browser workspace tools", () => {
   assert.ok(workspaceNames.length > 0, "no workspace tools for the instructor profile");
@@ -62,6 +65,27 @@ check("S-2b spy: the instructor names that reach approval (decision ask) map to 
 check("S-2b spy: read and live_preview_start are allowed without asking", () => {
   assert.equal(decisionOf("Read"), "allow");
   assert.equal(decisionOf(MCP_LIVE_PREVIEW_START), "allow");
+});
+
+check("S-2b spy: browser_open to an outside URL is asked and maps to openBrowser (Chalk prompt)", () => {
+  for (const url of ["https://example.com", "https://example.com/a"]) {
+    assert.equal(browserOpenDecision({ url }), "ask", url);
+    assert.equal(sdkToolToActionRequest({ toolName: MCP_BROWSER_OPEN, input: { url } }).kind, "openBrowser", url);
+  }
+  assert.equal(needsChalkPrompt("openBrowser", DEFAULT_REQUIRE), true);
+});
+
+check("S-2b spy: browser_open to a loopback URL (live preview) is allowed without a prompt", () => {
+  // sdkCoachHelpers.ts: isLoopbackUrl(url) → { decision: "allow" } before the ask branch.
+  for (const url of ["http://127.0.0.1:59215/", "http://localhost:3000/"]) {
+    assert.equal(browserOpenDecision({ url }), "allow", url);
+  }
+});
+
+check("S-2b spy: browser_open with no url resolves to about:blank, which is not loopback, so it is asked", () => {
+  // An omitted url selects the inert about:blank page (browserOpenUrl). about:blank is not
+  // loopback, so the outside-URL rule applies and the call is asked, not allowed.
+  assert.equal(browserOpenDecision({}), "ask");
 });
 
 check("S-2b spy: with the default requireApprovalFor, Write and Edit are asked but no Chalk prompt is raised", () => {
