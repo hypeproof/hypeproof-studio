@@ -28,7 +28,8 @@ if (process.platform !== 'darwin') {
       const commands = {
         pgrep: '[ "$SCENARIO" = running ]',
         sleep: 'exit 0',
-        open: 'printf "%s\\n" "$1" >> "$OPEN_LOG"',
+        // #3210: record what the relaunch would inherit from the extension host.
+        open: 'printf "%s|%s|%s|%s\\n" "$1" "${ELECTRON_RUN_AS_NODE-unset}" "${VSCODE_PID-unset}" "${VSCODE_ESM_ENTRYPOINT-unset}" >> "$OPEN_LOG"',
         xattr: 'exit 0',
         ditto: '[ "$SCENARIO" != stage-fails ] || exit 1\nexec /usr/bin/ditto "$@"',
         mv: '[ "$SCENARIO" != backup-fails ] || [ "$1" != "$OLD_TARGET" ] || exit 1\nif [[ "$SCENARIO" = *install-fails ]]; then case "$1" in */next.app) exit 1;; esac; fi\nexec /bin/mv "$@"',
@@ -36,7 +37,9 @@ if (process.platform !== 'darwin') {
       for (const [name, body] of Object.entries(commands)) writeFileSync(join(bin, name), '#!/bin/bash\n' + body + '\n', { mode: 0o755 });
       const script = join(dir, 'installer.sh');
       writeFileSync(script, renderInstallerScript({ newAppPath, oldAppPath, expectedBundleId: 'ai.hypeproof.studio', newVersion: '0.1.51', oldVersion: '0.1.50', logPath: join(dir, 'update.log'), relaunch: !scenario.startsWith('quit-') }));
-      const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, SCENARIO: scenario, OLD_TARGET: oldAppPath, OPEN_LOG: join(dir, 'open.log') };
+      // The extension host's own variables, as runningboardd showed them on the failed relaunch (#3210).
+      const hostEnv = { ELECTRON_RUN_AS_NODE: '1', VSCODE_PID: '4242', VSCODE_IPC_HOOK: '/tmp/x.sock', VSCODE_ESM_ENTRYPOINT: 'vs/workbench/api/node/extensionHostProcess', VSCODE_CRASH_REPORTER_PROCESS_TYPE: 'extensionHost' };
+      const env = { ...process.env, ...hostEnv, PATH: `${bin}:${process.env.PATH}`, SCENARIO: scenario, OLD_TARGET: oldAppPath, OPEN_LOG: join(dir, 'open.log') };
       const run = spawnSync('/bin/bash', [script], { env, encoding: 'utf8', timeout: 10_000 });
       assert.equal(run.status, ['success', 'quit-success'].includes(scenario) ? 0 : 1, readFileSync(join(dir, 'update.log'), 'utf8'));
       assert.equal(readFileSync(join(oldAppPath, 'marker'), 'utf8'), ['success', 'quit-success'].includes(scenario) ? 'new' : 'old', scenario);
@@ -46,6 +49,7 @@ if (process.platform !== 'darwin') {
         const stage = readdirSync(dir).find(n => n.startsWith('.hps-update.'));
         assert.equal(readFileSync(join(dir, stage, 'previous.app', 'marker'), 'utf8'), 'old');
         assert.equal(existsSync(env.OPEN_LOG), scenario === 'success');
+        if (scenario === 'success') assert.equal(readFileSync(env.OPEN_LOG, 'utf8'), `${oldAppPath}|unset|unset|unset\n`, '#3210: the relaunch inherits no ELECTRON_*/VSCODE_* variable');
       }
       if (scenario === 'running' || scenario.startsWith('quit-')) assert.equal(existsSync(env.OPEN_LOG), false);
       console.log(`PASS real bash installer fixture: ${scenario}`);

@@ -129,6 +129,22 @@ export interface WindowsUpdateWrapperInput {
  */
 export const WINDOWS_UPDATE_WRAPPER_BOM = "\uFEFF";
 
+/**
+ * #3210 — variables the extension host sets for itself that must not reach the relaunched app.
+ * With `ELECTRON_RUN_AS_NODE=1` the Studio binary starts as plain Node and exits about 3 s later
+ * with no window (Jay 2026-10-29, 2026.1020.2 → 2026.1029.0); the `VSCODE_*` IPC and entry-point
+ * variables belong to the old process too. The installer is spawned without them and the scripts
+ * clear them again before relaunching, so either guard alone is enough.
+ */
+export const INHERITED_HOST_ENV = /^(ELECTRON_|VSCODE_)/i;
+
+/** A copy of `env` without the extension host's own variables (spawn env for the installers). */
+export function installerEnv(env: Record<string, string | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) if (value !== undefined && !INHERITED_HOST_ENV.test(key)) out[key] = value;
+  return out;
+}
+
 export function renderWindowsUpdateWrapper(input: WindowsUpdateWrapperInput): string {
   const { appProcessName, installerPath, installerArgs, maxWaitMs = 60000 } = input;
   // PowerShell single-quote escaping: double any embedded single quote.
@@ -140,6 +156,8 @@ export function renderWindowsUpdateWrapper(input: WindowsUpdateWrapperInput): st
     "# Waits for the app to fully exit, THEN runs the installer, so the",
     "# post-install relaunch does not race the old single-instance lock.",
     "$ErrorActionPreference = 'Stop'",
+    "# #3210: the relaunched app must not inherit the extension host's ELECTRON_*/VSCODE_* variables.",
+    "Get-ChildItem Env: | Where-Object { $_.Name -match '^(ELECTRON_|VSCODE_)' } | ForEach-Object { Remove-Item -LiteralPath (\"Env:\" + $_.Name) }",
     `$name = ${ps(appProcessName)}`,
     `$deadline = (Get-Date).AddMilliseconds(${Math.max(0, Math.floor(maxWaitMs))})`,
     "while ((Get-Process -Name $name -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 400 }",
@@ -290,6 +308,13 @@ export function renderInstallerScript(input: InstallerScriptInput): string {
 # Performs an in-place .app swap from <old> → <new>, preserving Gatekeeper trust.
 
 set -uo pipefail
+
+# #3210: drop the extension host's own variables before anything relaunches the app.
+# With ELECTRON_RUN_AS_NODE=1 inherited through \`open\`, Studio starts as plain Node and exits.
+for __hps_var in $(compgen -e); do
+  case "$__hps_var" in ELECTRON_*|VSCODE_*) unset "$__hps_var" ;; esac
+done
+unset __hps_var
 
 NEW_APP=${shJsonString(newAppPath)}
 OLD_APP=${shJsonString(oldAppPath)}
