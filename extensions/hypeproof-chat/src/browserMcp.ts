@@ -55,6 +55,9 @@ export const HYPEPROOF_MCP_SERVER_NAME = "hypeproof";
 export const MCP_BROWSER_OPEN = "mcp__hypeproof__browser_open";
 export const MCP_BROWSER_SCREENSHOT = "mcp__hypeproof__browser_screenshot";
 export const MCP_LIVE_PREVIEW_START = "mcp__hypeproof__live_preview_start";
+// #3221 — PDF of a work-folder HTML page, printed by Studio's own browser (pagePdf.ts). The coach used to run Chrome's
+// binary for this, and macOS denied App Management to Studio (2026-10-29).
+export const MCP_PAGE_PDF_SAVE = "mcp__hypeproof__page_pdf_save";
 // #457 — 검사(inspect) 3종. 스크린샷만으로는 "버튼이 실제로 눌리는가"를 알 수
 // 없다. 큐시트 Loop Engineering(20:05–20:35)은 "검사 → 수정 → 재검사" 반복이고,
 // 클릭이 없으면 그 검사가 반쪽이다. 2026-07-26 실사용에서 코치가 "제가 직접
@@ -74,6 +77,7 @@ export const MCP_BROWSER_TOOLS = [
   MCP_BROWSER_READ,
   MCP_BROWSER_CLICK,
   MCP_BROWSER_TYPE,
+  MCP_PAGE_PDF_SAVE,
 ] as const;
 
 /**
@@ -176,6 +180,8 @@ export interface BrowserMcpHost {
   screenshot(): Promise<BrowserScreenshot | null>;
   /** Ensure the #309 live server + open the browser; returns the URL or null. */
   startLivePreview(): Promise<string | null>;
+  /** #3221 — print a work-folder HTML page (path relative to the work folder) to <name>.pdf beside it. */
+  savePagePdf?(path: string): Promise<{ ok: boolean; text: string }>;
   /**
    * HEAD-check a URL before opening it, so browser_open can surface a 404
    * instead of opening a blank or error page. Optional — absent means skip check.
@@ -788,6 +794,26 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw?: unknown): Promi
   return withPageState({ content: [{ type: "text", text }] }, { url });
 }
 
+/** Tool name, description and JSON inputSchema for page_pdf_save (#3221). */
+export const PAGE_PDF_SAVE_TOOL_DEF = {
+  name: "page_pdf_save",
+  description:
+    "작업 폴더의 HTML 파일(.html/.htm)을 PDF로 저장한다. PDF가 필요하면 이 도구만 쓴다: Studio 안의 브라우저로 인쇄하므로 " +
+    "Chrome·wkhtmltopdf 같은 다른 앱이나 다른 앱 안의 프로그램을 실행하지 않는다(그런 실행은 막혀 있다). " +
+    "path 는 작업 폴더 기준 상대 경로이고, 결과는 같은 폴더에 같은 이름의 .pdf 로 저장된다. " +
+    "작업 폴더 밖의 파일은 저장할 수 없으니, 먼저 작업 폴더 안에 HTML을 만든다.",
+  inputSchema: { type: "object" as const, properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false },
+} as const;
+
+/** Core handler for page_pdf_save. */
+export async function runPagePdfSave(host: BrowserMcpHost, input: { path?: unknown }): Promise<McpToolResult> {
+  const p = typeof input?.path === "string" ? input.path.trim() : "";
+  if (!p || p.length > 300) return { content: [{ type: "text", text: "path 에 작업 폴더 안 HTML 파일의 상대 경로를 적어 주세요." }], isError: true };
+  if (!host.savePagePdf) return { content: [{ type: "text", text: HOST_LACKS("PDF로 저장") }], isError: true };
+  const r = await host.savePagePdf(p);
+  return { content: [{ type: "text", text: r.text }], ...(r.ok ? {} : { isError: true }) };
+}
+
 /**
  * Core handler for live_preview_start — extracted so the instructor local runtime
  * path can reuse the same logic. The MCP server factory.tool callback delegates here.
@@ -893,6 +919,13 @@ export function buildHypeproofMcpServer(
     LIVE_PREVIEW_START_TOOL_DEF.description,
     {},
     async () => runLivePreviewStart(host),
+  );
+
+  const pagePdfSave = factory.tool(
+    PAGE_PDF_SAVE_TOOL_DEF.name,
+    PAGE_PDF_SAVE_TOOL_DEF.description,
+    { path: z.string() },
+    async (input: { path?: unknown }) => runPagePdfSave(host, input),
   );
 
   // ── #457 검사 3종 ─────────────────────────────────────────────────────────
@@ -1052,7 +1085,7 @@ export function buildHypeproofMcpServer(
     );
   }
 
-  const browserTools = opts.browser === false ? [] : [browserOpen, browserScreenshot, livePreviewStart, browserRead, browserClick, browserType, ...crTools];
+  const browserTools = opts.browser === false ? [] : [browserOpen, browserScreenshot, livePreviewStart, browserRead, browserClick, browserType, pagePdfSave, ...crTools];
   return factory.createSdkMcpServer({
     name: HYPEPROOF_MCP_SERVER_NAME,
     version: "1.0.0",

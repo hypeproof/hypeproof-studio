@@ -447,6 +447,9 @@ export function browserToolLogLine(
     }
     case "live_preview_start":
       return { icon: "🖼️", label: "미리보기 열기" };
+    // #3221 — PDF with Studio's own browser.
+    case "page_pdf_save":
+      return { icon: "📄", label: `PDF로 저장 · ${clip(input.path)}` };
     case "browser_read":
       return { icon: "👀", label: "페이지 읽는 중" };
     case "browser_screenshot":

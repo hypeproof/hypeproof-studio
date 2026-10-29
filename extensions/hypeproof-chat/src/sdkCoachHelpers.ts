@@ -43,6 +43,7 @@ import {
   MCP_BROWSER_CLICK,
   MCP_BROWSER_TYPE,
   MCP_LIVE_PREVIEW_START,
+  MCP_PAGE_PDF_SAVE,
   MCP_CR_BROWSER_TOOLS,
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
@@ -2818,7 +2819,7 @@ export const PATH_ESCAPE_REASON = "작업 폴더 밖의 파일이에요";
 export const LINK_OUTSIDE_REASON = "작업 폴더 밖을 가리키는 바로가기(링크)는 만들 수 없어요";
 /** #3221 — the learner-facing reason when the coach tries to run a program inside another app (Chrome etc.). */
 export const APP_BUNDLE_PROGRAM_REASON =
-  "다른 앱(예: Chrome) 안의 프로그램은 실행하지 않아요. macOS가 'App 관리' 권한으로 막아요";
+  "다른 앱(예: Chrome) 안의 프로그램은 실행하지 않아요. macOS가 'App 관리' 권한으로 막아요. PDF가 필요하면 Studio의 'PDF로 저장'(page_pdf_save)을 써요";
 export const URL_POLICY_REASON = "열 수 없는 주소예요";
 export const NEVER_FOR_LEARNERS_REASON = "Studio에서는 학생에게 주지 않는 도구예요";
 export const SUBAGENT_CATALOG_REASON = "Studio가 준비한 도우미만 부를 수 있어요";
@@ -3171,7 +3172,9 @@ export function evaluateSdkToolUse(args: {
     const checkOnly = !!input && typeof input === "object" && (input as { check_only?: unknown }).check_only === true;
     return checkOnly ? { decision: "allow" } : { decision: "ask" };
   }
-  if (toolName === MCP_BROWSER_SCREENSHOT || toolName === MCP_LIVE_PREVIEW_START) {
+  // #3221 — page_pdf_save prints the student's own work-folder page with Studio's browser and writes the PDF beside it;
+  // the host re-checks the folder and its write consent. Like a preview, not an outward action.
+  if (toolName === MCP_BROWSER_SCREENSHOT || toolName === MCP_LIVE_PREVIEW_START || toolName === MCP_PAGE_PDF_SAVE) {
     // Auto-allow once the browser capability is granted: a screenshot of the
     // student's own tab / serving their own workspace locally is the coach
     // "looking at the page", not an outward delegation.
