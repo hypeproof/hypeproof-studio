@@ -80,6 +80,19 @@ Two consequences worth stating, because a session got both wrong on 2026-09-20:
 - **YOU MUST NOT** edit files under `vscodium-base/vscode/` or `vscodium-base/VSCode-*/` directly — these are upstream/build artifacts. All changes go through `vscodium-base/patches/*.patch` or the `prepare_vscode.sh` jq edits.
 - **YOU MUST NOT** put secrets (Workshop tokens, Apple Developer ID, signing certs) in any tracked file. `.env` only, gitignored.
 
+## Cost-first
+
+Cost is a design input, not a later fix (Jay, 2026-10-29). Canon: [hypeprooflab `docs/decisions/2026-10-29-cost-first-design-principle.md`](https://github.com/hypeproof/hypeprooflab/blob/main/docs/decisions/2026-10-29-cost-first-design-principle.md).
+
+- **State the cost.** A PR or design doc that adds a paid call (model, API, CI minutes, storage) states its cost per use and the cap that bounds it.
+- **Cheapest capable model first.** Escalate to a stronger model only on a measured signal, inside the person's ceiling (Service routes the free tier this way).
+- **Cap by money, not counts.** Prefer a per-person cost ceiling over turn or request counts.
+- **Do local work before paying a model.** Extract text from PDF/HTML on the device, read file ranges, cache summaries by file hash, and never inline binaries into a request (#3225).
+- **Measure every paid call.** Log the model and the reason it was chosen.
+- **Jev answers typed judgments; code decides.** A judgment call (Jev, TypeSafe `jev-latest`; OpenAI Decisions only as a configurable fallback) returns a typed answer, and ordinary code decides from those answers with a truth table.
+- **Use Jev for judgments** across the Harness and member MCP tools instead of a general model call, to cut cost and time (hypeproof/hypeproof-harness#489).
+- **CI and build minutes are cost.** Promote an approved rc without rebuilding (#3172), repack instead of rebuilding, and keep scheduled jobs short.
+
 ## Build & branding (Mac)
 
 ```bash
