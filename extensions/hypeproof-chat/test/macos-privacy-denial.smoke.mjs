@@ -35,7 +35,10 @@ assert.equal(MAC_PRIVACY_FILES_URL, "x-apple.systempreferences:com.apple.prefere
 // Wiring: the host maps only file-tool EPERM to the detail and opens the fixed URL on macOS; the button asks the host.
 const host = fs.readFileSync(path.join(here, "../src/chatPanelProvider.ts"), "utf8");
 assert.match(host, /fileToolCalls\.has\(a\.id\) && macPrivacyBlocked\(a\.reason, process\.platform\)/);
-assert.match(host, /case "openMacPrivacySettings":\s*\n\s*\/\/[^\n]*\n\s*if \(process\.platform === "darwin"\) void vscode\.env\.openExternal\(vscode\.Uri\.parse\(MAC_PRIVACY_FILES_URL\)\);/);
+assert.match(host, /case "openMacPrivacySettings":\s*\n\s*\/\/[^\n]*\n\s*void openMacPrivacySettings\(\);/);
+const opener = fs.readFileSync(path.join(here, "../src/macPrivacySettings.ts"), "utf8");
+assert.match(opener, /if \(platform !== "darwin"\) return false;\s*\n\s*return vscode\.env\.openExternal\(vscode\.Uri\.parse\(MAC_PRIVACY_FILES_URL\)\);/, "macOS only, the fixed URL only");
+assert.equal((host.match(/vscode\.env\.openExternal\(/g) ?? []).length, 1, "chatPanelProvider keeps its single confirmed system-browser exit");
 const panel = fs.readFileSync(path.join(here, "../webview-ui/src/ChatPanel.tsx"), "utf8");
 assert.match(panel, /'settings' in view \? \(\) => postToHost\(\{ type: "openMacPrivacySettings" \}\) : onReport/);
 console.log("macos-privacy-denial: ok");

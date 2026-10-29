@@ -28,7 +28,8 @@ import { PreviewTabWatch } from "./previewTabWatch";
 import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
-import { denialNotice, denialNoticeLabel, FILE_TOOL_NAMES, macPrivacyBlocked, MAC_PRIVACY_FILES_URL, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { denialNotice, denialNoticeLabel, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { openMacPrivacySettings } from "./macPrivacySettings";
 import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
 import { activityLocalFile } from "./activityLocalFiles.ts";
 import { confirmOutbound, setOutboundPresenter } from "./outboundConsentHost";
@@ -8047,7 +8048,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case "openMacPrivacySettings":
         // #3221 — fixed URL, macOS only; the webview never supplies it.
-        if (process.platform === "darwin") void vscode.env.openExternal(vscode.Uri.parse(MAC_PRIVACY_FILES_URL));
+        void openMacPrivacySettings();
         return;
       case "openExternal":
         // #173 citation chip click. routeExternalLink keeps the http(s)-only guard against a
