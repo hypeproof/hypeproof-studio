@@ -71,7 +71,13 @@ jobs:
         run: |
           npm ci --prefix e2e
           npm --prefix e2e exec -- playwright install chromium
+      # Keep compiler, real ownership probes and Chromium test files from overlapping on Windows.
+      # This preserves each probe deadline; contention is not established as the timeout cause.
+      - name: Run background-safe harness regressions (Windows, serial files)
+        if: runner.os == 'Windows'
+        run: node --test --test-concurrency=1 e2e/feedback-native/*.test.mjs e2e/feedback-live/*.test.mjs
       - name: Run background-safe harness regressions
+        if: runner.os != 'Windows'
         run: node --test e2e/feedback-native/*.test.mjs e2e/feedback-live/*.test.mjs
       - name: Probe actual Service before desktop preparation
         shell: bash
