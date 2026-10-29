@@ -1378,11 +1378,13 @@ async function applyTestBackdoors(
 
 export function deactivate() {
   workPower.dispose();
-  providerRef = null;
+  const provider = providerRef; providerRef = null;
   // #751 U1b — a normal shutdown ends the session with a `session_close` line, so a later collection can prove where it ended.
   // VS Code waits for this promise (bounded); a crash leaves the session without it, and that end stays unproven.
   const s = spoolRef; spoolRef = null;
-  return s?.close("shutdown");
+  return Promise.allSettled([provider?.preserveHistoryForShutdown(), s?.close("shutdown")]).then(results => {
+    if (results.some(result => result.status === "rejected")) throw new Error("종료 중 대화 기록을 저장하지 못했습니다.");
+  });
 }
 
 export { TOKEN_KEY };

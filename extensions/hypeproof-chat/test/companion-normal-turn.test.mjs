@@ -35,20 +35,23 @@ async function fixture(t, opts={}) {
   const token='x.'+Buffer.from(JSON.stringify({c:'synthetic',u:randomUUID()})).toString('base64url')+'.x';
   const raw={extensionMode:2,globalStorageUri:{fsPath:join(base,'private')},workspaceState:{get:(k,d)=>state.get(k)??d,update:async(k,v)=>state.set(k,v)},globalState:{get:(k,d)=>state.get(k)??d,update:async(k,v)=>state.set(k,v)},secrets:{get:async()=>token,keys:async()=>[]}};
   const mod={exports:{}};
-  vm.runInNewContext(compiled,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),console,Buffer,structuredClone,process:{...process,env:{...process.env,APPDATA:join(base,'sdk-config')}},setTimeout,clearTimeout,setInterval,clearInterval,AbortController,AbortSignal,URL,TextEncoder,TextDecoder,crypto:webcrypto,
+  vm.runInNewContext(compiled,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:id==='node:fs/promises'&&opts.beforeClose?{...require(id),open:async(...args)=>{const handle=await require(id).open(...args),close=handle.close.bind(handle);handle.close=async()=>{await close();if(f)await opts.beforeClose(f,String(args[0]));};return handle;}}:require(id),console,Buffer,structuredClone,process:{...process,env:{...process.env,APPDATA:join(base,'sdk-config')}},setTimeout,clearTimeout,setInterval,clearInterval,AbortController,AbortSignal,URL,TextEncoder,TextDecoder,crypto:webcrypto,
     fixtureTurnError:error=>errors.push(String(error?.stack??error)),fetch:async url=>{assert.equal(new URL(url).pathname,'/v1/activity');calls.activity++;return Response.json({activity_id:'server-a'});},
     scriptedSdk:async(actual,args)=>{
       calls.sdk++;f.sdkArgs=args;
-      const held=await f.held();assert.equal(held.authoringExecution.state,'bound');assert.equal(held.authoringRun.turnId,args.turnId);
-      return actual({...args,binaryResolution:opts.missingSdk?{available:false,reasons:['fixture']}:{available:true,reasons:[]},stallTimeoutMs:0,
+      if(!opts.ordinary){const held=await f.held();assert.equal(held.authoringExecution.state,'bound');assert.equal(held.authoringRun.turnId,args.turnId);}
+      try { return await actual({...args,binaryResolution:opts.missingSdk?{available:false,reasons:['fixture']}:{available:true,reasons:[]},stallTimeoutMs:0,
         sdk:{query:({options})=>(async function*(){
           assert.equal(args.history.length,0);assert.equal(args.userText,f.request.text);assert.equal(args.images?.length??0,0);
-          assert.deepEqual([...options.tools].sort(),['Edit','Read','Write']);
+          assert.deepEqual([...options.tools].sort(),opts.ordinary?['Edit','Glob','Grep','MultiEdit','Read','Write']:['Edit','Read','Write']);
+          if(!opts.ordinary){
           const headers=options.env.ANTHROPIC_CUSTOM_HEADERS.split('\n');
           assert(headers.includes('x-hps-turn-id: '+f.input.reservation.turnId));
           assert.deepEqual(JSON.parse(headers.find(line=>line.startsWith('x-hps-companion-execution: ')).slice('x-hps-companion-execution: '.length)),
             {grant_id:f.input.reservation.grantId,request_id:f.request.requestId,request_hash:f.input.reservation.requestHash,
               task_id:f.request.selection.taskId,epoch:1,consent_revision:1,selection_hash:hash(f.original)});
+          }
+          if(opts.partial)yield{type:'assistant',message:{id:'partial-sdk',content:[{type:'text',text:opts.partial}]}};
           if(opts.onQuery)await opts.onQuery(f);
           if(opts.write!==false){
             const input={file_path:file,content:'<h1>after</h1>'}, decision=await options.canUseTool('Write',input,{toolUseID:'write',signal:args.signal});
@@ -60,7 +63,7 @@ async function fixture(t, opts={}) {
           yield{type:'assistant',message:{id:'assistant',content:[{type:'text',text:'```html\n<h1>must not auto-reveal</h1>\n```\n```agent.md\nno external instruction write\n```'}]}};
           if(opts.failure)throw Error('scripted SDK failure');
           if(!opts.noTerminal)yield{type:'result',subtype:'success',is_error:false};
-        })()}});
+        })()}}); } finally { if(opts.onUnwind)await opts.onUnwind(f); }
     }});
   const {ChatPanelProvider,ActivityConnections,TaskWorkspaceStore,createCompanionExecutionPolicy}=mod.exports;
   const connections=new ActivityConnections(raw,()=> 'http://127.0.0.1:1/v1',()=>workspace,async()=>({}));
@@ -101,7 +104,23 @@ async function fixture(t, opts={}) {
   f={errors,h,store,context,connections,vscode,workspace,base,file,original,request,input,calls,posts,history,source,profile,signal,
     held:()=>{const v=store.getView();return store.readCompanionHandoff({taskId:v.activeTaskId,revision:v.revision});},
     revoke:()=>{live=false;},type:text=>{ui={...ui,text};generation++;},get ui(){return ui;},get generation(){return generation;},
-    submit:()=>h.submitPreparedCompanionTurn(input)};
+    submit:()=>h.submitPreparedCompanionTurn(input),
+    reload:async()=>{const fresh=new TaskWorkspaceStore(join(base,'store'),'scope');await fresh.initialize();return fresh;},
+    submitOrdinary:()=>h.handleSend(request.text,[],undefined,undefined,undefined,'auto',request.requestId)};
+  if(opts.ordinary){
+    h.getHistory=()=>store.getHistory();h.appendHistory=items=>ChatPanelProvider.prototype.appendHistory.call(h,items);
+    h.pullQuestResultFromPreview=async()=>{};h.dropPageAttachment=()=>{};h.elementQueue.take=()=>null;
+    h.verifySession.takeCoachContext=()=>null;h.takeProjectSwitchBrief=()=>null;h.isLearningWikiEnabled=()=>false;
+    h.recordLearnerUploads=()=>{};h.saveAgentMdIfPresent=async()=>{};
+  }
+  if(opts.lifecycle){
+    const disposed=[];h.editorChat=undefined;raw.extensionUri={fsPath:workspace};
+    vscode.Uri.joinPath=(root,...parts)=>({fsPath:join(root.fsPath,...parts)});
+    h.renderHtml=()=>'<html></html>';h.queuedSources=new Set();h.writeApprovalRequest={cancel(){},invalidate(){}};
+    source.onDidReceiveMessage=()=>{};
+    const panel={webview:source,visible:true,reveal(){},onDidChangeViewState(){},onDidDispose(fn){disposed.push(fn);}};
+    await h.openInEditor(panel);f.dispose=()=>disposed.forEach(fn=>fn());
+  }
   return f;
 }
 
@@ -246,4 +265,203 @@ test('ordinary Send still announces its stream before restore setup and cleans u
   const f=await fixture(t);f.h.isLearningWikiEnabled=()=>false;f.h.pullQuestResultFromPreview=async()=>null;f.h.takeProjectSwitchBrief=()=>null;f.h.dropPageAttachment=()=>{};f.h.elementQueue.take=()=>null;f.h.verifySession.takeCoachContext=()=>undefined;f.h.recordLearnerUploads=()=>{};
   let reached=false;f.h.beginTurnRestore=async()=>{reached=true;assert.equal(f.posts.filter(p=>p.type==='streamStart').length,1);throw Error('ordinary restore boundary');};
   await assert.rejects(f.h.handleSend('ordinary request',[]),/ordinary restore boundary/);assert.equal(reached,true);assert.equal(f.h.pendingSends,0);assert.equal(f.h.activeStreams.size,0);
+});
+
+
+// Normal quit must preserve the admitted request and received bytes before an
+// SDK that is still unwinding can settle. Reload another real store, not a UI mirror.
+for (const ordinary of [true,false]) for (const partial of ['', 'actual partial before normal quit']) {
+  test(`normal shutdown preserves ${ordinary?'ordinary':'prepared'} admitted history (${partial?'partial':'no delta'}) before SDK unwind`, async t=>{
+    const entered=deferred(),unwind=deferred();
+    const f=await fixture(t,{ordinary,partial,lifecycle:true,write:false,onQuery:async()=>{entered.resolve();await unwind.promise;},onUnwind:()=>unwind.promise});
+    let settled=false;const running=(ordinary?f.submitOrdinary():f.submit()).finally(()=>{settled=true;});
+    try {
+      await Promise.race([entered.promise,running.then(()=>{throw Error('SDK entry missing: '+f.errors.join('\n'));})]);
+      const admitted=(await f.reload()).getHistory(),user=admitted.find(m=>m.id===f.request.requestId);
+      assert(user,'admitted user must already be durable before a held runner can end');
+      assert.equal(user.content,f.request.text);assert.equal(admitted.filter(m=>m.id===user.id).length,1);
+      f.dispose();assert.equal(f.sdkArgs.signal.aborted,true,'actual panel disposal aborts before deactivate');
+      await f.h.preserveHistoryForShutdown();
+      assert.equal(f.sdkArgs.signal.aborted,true);assert.equal(settled,false,'shutdown persistence does not await SDK unwind');
+      const saved=(await f.reload()).getHistory();
+      assert.equal(saved.filter(m=>m.id===user.id).length,1);assert.equal(saved.find(m=>m.id===user.id).content,user.content);
+      const answers=saved.filter(m=>m.role==='assistant');assert.equal(answers.length,partial?1:0);
+      if(partial)assert.equal(answers[0].content,partial);
+      const frozen=JSON.stringify(saved);
+      await f.h.preserveHistoryForShutdown();assert.equal(JSON.stringify((await f.reload()).getHistory()),frozen,'repeat shutdown is idempotent');
+      if(!ordinary){assert.equal((await f.held()).authoringRun.state,'outcome_unknown');assert.equal(f.posts.some(p=>p.type==='inputRejected'||p.type==='companionDraftApply'),false);}
+      unwind.resolve();await running;
+      assert.equal(JSON.stringify((await f.reload()).getHistory()),frozen,'late SDK completion cannot add/replace the frozen interrupted conversation');
+      assert.equal(f.calls.sdk,1);assert.equal(f.h.pendingSends,0);
+      if(!ordinary){assert.equal((await f.held()).authoringRun.state,'outcome_unknown');assert.equal((await f.submit()).state,'denied','closed owner rejects a duplicate instead of replaying an unknown turn');}
+      assert.equal(f.calls.sdk,1);
+    }finally{unwind.resolve();await running;}
+  });
+}
+
+test('admitted history write failure and stale owner prevent SDK entry without importing a phone draft',async t=>{
+  for(const ordinary of [true,false])for(const mode of ['io','owner']){
+    const f=await fixture(t,{ordinary,write:false});
+    const append=f.store.append.bind(f.store);
+    f.store.append=async(...args)=>{if(mode==='io')throw Error('synthetic private disk failure');f.h.opsGeneration++;return append(...args);};
+    await (ordinary?f.submitOrdinary():f.submit());
+    assert.equal(f.calls.sdk,0);assert.equal((await f.reload()).getHistory().length,0);
+    if(!ordinary)assert.equal(f.posts.some(p=>p.type==='inputRejected'||p.type==='companionDraftApply'),false);
+    else assert.equal(f.posts.some(p=>p.type==='inputRejected'&&p.text===f.request.text),mode==='io','only the current ordinary composer recovers unsaved input');
+  }
+});
+
+test('shutdown refuses a stale task owner and never writes interrupted bytes into the replacement task',async t=>{
+  for(const ordinary of [true,false]){
+    const entered=deferred(),unwind=deferred();const f=await fixture(t,{ordinary,write:false,partial:'old task partial',onQuery:async()=>{entered.resolve();await unwind.promise;},onUnwind:()=>unwind.promise});
+    const running=ordinary?f.submitOrdinary():f.submit();
+    try{
+      await Promise.race([entered.promise,running.then(()=>{throw Error('SDK entry missing: '+f.errors.join('\n'));})]);const oldTask=f.store.getView().activeTaskId;
+      f.h.opsGeneration++;
+      await assert.rejects(f.h.preserveHistoryForShutdown(),/저장하지 못했습니다/);
+      assert.equal((await f.reload()).getHistory(oldTask).filter(m=>m.role==='assistant').length,0,'stale snapshot is not committed');
+      unwind.resolve();await running.catch(error=>assert.match(error.message,/작업이 바뀌었어요/));
+      assert.equal((await f.reload()).getHistory(oldTask).filter(m=>m.role==='assistant').length,0,'late finally remains fenced');
+    }finally{unwind.resolve();await running.catch(()=>{});}
+  }
+});
+
+
+test('ordinary terminal completion upserts the admitted user once and uses only the prior model history',async t=>{
+  const f=await fixture(t,{ordinary:true,write:false});await f.submitOrdinary();
+  const saved=(await f.reload()).getHistory();assert.equal(saved.filter(m=>m.id===f.request.requestId).length,1);
+  assert.equal(saved.filter(m=>m.role==='assistant').length,1);assert.equal(f.sdkArgs.history.length,0);
+  const before=JSON.stringify(saved);await f.h.preserveHistoryForShutdown();
+  assert.equal(JSON.stringify((await f.reload()).getHistory()),before,'already committed terminal answer remains unchanged');
+});
+
+test('actual deactivate joins interrupted-history persistence and spool close, including one failed write',async()=>{
+  const src=await readFile(new URL('../src/extension.ts',import.meta.url),'utf8');
+  const start=src.indexOf('export function deactivate() {'),end=src.indexOf('\n}',start)+2;
+  assert(start>=0&&end>start);const body=src.slice(start,end).replace('export function','function');
+  for(const fail of [false,true]){
+    const history=deferred(),spool=deferred();let historyCalled=0,spoolCalled=0,power=0,settled=false;
+    const context={providerRef:{preserveHistoryForShutdown:()=>{historyCalled++;return fail?Promise.reject(Error('synthetic save failure')):history.promise;}},
+      spoolRef:{close:reason=>{assert.equal(reason,'shutdown');spoolCalled++;return spool.promise;}},workPower:{dispose:()=>power++}};
+    const run=vm.runInNewContext(body+';deactivate',context)();
+    const observed=run.then(()=>{settled=true;},error=>{settled=true;return error;});
+    assert.equal(historyCalled,1);assert.equal(spoolCalled,1);assert.equal(power,1);
+    await Promise.resolve();await Promise.resolve();assert.equal(settled,false,'deactivate waits for spool even if preservation failed');
+    spool.resolve();await Promise.resolve();await Promise.resolve();
+    if(!fail){assert.equal(settled,false,'spool completion alone cannot discard pending history');history.resolve();}
+    const error=await observed;if(fail)assert.match(error.message,/저장하지 못했습니다/);
+  }
+});
+
+
+test('guarded edit-history append cannot commit its version sidecar after ownership revocation during temp close',async t=>{
+  let armed=false,revoked=false;
+  const f=await fixture(t,{beforeClose:(f,path)=>{if(armed&&path.startsWith(f.store.versionsPath+'.tmp-')){revoked=true;f.revoke();}}});
+  const task=f.store.getView().activeTaskId;
+  await f.store.append(task,[{id:'original-u',role:'user',content:'original request',createdAt:1},{id:'original-a',role:'assistant',content:'original answer',createdAt:2}]);
+  const before=JSON.stringify((await f.reload()).getHistory());armed=true;
+  await assert.rejects(f.store.append(task,[{id:'edited-u',role:'user',content:'edited request',editOf:'original-u',createdAt:3}],()=>!revoked));
+  assert.equal(revoked,true,'actual awaited sidecar temp-file close exercised');
+  assert.equal(JSON.stringify((await f.reload()).getHistory()),before,'main and version history remain unchanged');
+  await assert.rejects(readFile(f.store.versionsPath),{code:'ENOENT'});
+});
+
+
+// ExtensionHost's actual ordering: invoke deactivate, synchronously dispose the
+// context subscriptions, then await the returned Promise. Closing execution
+// authority must not discard an already-admitted snapshot in the store queue.
+for(const ordinary of [true,false])test(`host subscription disposal preserves queued ${ordinary?'ordinary':'prepared'} shutdown snapshot`,async t=>{
+  const entered=deferred(),unwind=deferred(),writes=deferred();
+  const f=await fixture(t,{ordinary,lifecycle:true,partial:'received before execution owner closes',write:false,onQuery:async()=>{entered.resolve();await unwind.promise;},onUnwind:()=>unwind.promise});
+  const running=ordinary?f.submitOrdinary():f.submit();
+  try{
+    await Promise.race([entered.promise,running.then(()=>{throw Error('SDK not entered');})]);
+    const admitted=(await f.reload()).getHistory(),before=JSON.stringify(admitted);
+    f.store.queue=f.store.queue.then(()=>writes.promise);
+    const src=await readFile(new URL('../src/extension.ts',import.meta.url),'utf8');
+    const start=src.indexOf('export function deactivate() {'),end=src.indexOf('\n}',start)+2;
+    const subscription=src.split('\n').find(line=>line.includes('context.subscriptions.push({ dispose:')&&line.includes('companionDev?.dispose()'));
+    assert(subscription,'actual companion subscription disposal must be represented');
+    const context={subscriptions:[]};const noLongerCurrent=()=>f.revoke();
+    vm.runInNewContext(subscription,{context,provider:f.h,invalidate:()=>{},companionDev:{dispose:noLongerCurrent}});
+    const deactivate=vm.runInNewContext(src.slice(start,end).replace('export function','function')+';deactivate',{
+      providerRef:f.h,spoolRef:{close:async()=>{}},workPower:{dispose(){}}});
+    let settled=false;const exiting=deactivate().finally(()=>{settled=true;});
+    f.dispose();for(const item of context.subscriptions)item.dispose();
+    assert.equal(f.input.current(),false,'native execution lease really closed');assert(f.sdkArgs.signal.aborted);
+    await Promise.resolve();assert.equal(settled,false,'snapshot remains queued while execution is revoked');
+    assert.equal(JSON.stringify((await f.reload()).getHistory()),before);
+    writes.resolve();await exiting;
+    const saved=(await f.reload()).getHistory();assert.equal(saved.filter(m=>m.id===f.request.requestId).length,1);
+    assert.equal(saved.filter(m=>m.role==='assistant').length,1);assert.equal(saved.find(m=>m.role==='assistant').content,'received before execution owner closes');
+    const frozen=JSON.stringify(saved);unwind.resolve();await running;
+    assert.equal(JSON.stringify((await f.reload()).getHistory()),frozen);assert.equal(f.calls.sdk,1);
+  }finally{writes.resolve();unwind.resolve();await running.catch(()=>{});}
+});
+
+test('shutdown storage-only lease still rejects a real replacement task or profile owner before queued commit',async t=>{
+  for(const change of ['task','profile']){
+    const entered=deferred(),unwind=deferred(),writes=deferred();
+    const f=await fixture(t,{partial:'old owner bytes',write:false,onQuery:async()=>{entered.resolve();await unwind.promise;},onUnwind:()=>unwind.promise});
+    const running=f.submit();
+    try{
+      await Promise.race([entered.promise,running.then(()=>{throw Error('SDK not entered');})]);
+      const task=f.store.getView().activeTaskId;
+      f.store.queue=f.store.queue.then(()=>writes.promise);
+      const exiting=f.h.preserveHistoryForShutdown();
+      const rejected=assert.rejects(exiting,/저장하지 못했습니다/);
+      f.revoke();
+      if(change==='profile')f.h.profileGeneration++;
+      else{const replacement=await f.reload(),view=replacement.getView();await replacement.create('replacement owner',{taskId:view.activeTaskId,revision:view.revision});f.h.taskWorkspace={activityId:'activity-a',store:replacement};}
+      writes.resolve();await rejected;
+      const restored=await f.reload();assert.equal(restored.getHistory(task).filter(m=>m.role==='assistant').length,0);
+      if(change==='task')assert.equal(restored.getHistory().length,0,'replacement task receives no old bytes');
+      unwind.resolve();await running;assert.equal((await f.reload()).getHistory(task).filter(m=>m.role==='assistant').length,0);
+    }finally{writes.resolve();unwind.resolve();await running.catch(()=>{});}
+  }
+});
+
+
+test('active prepared execution Stop preserves admitted partial history after lease close without shutdown',async t=>{
+  const entered=deferred(),unwind=deferred();
+  const f=await fixture(t,{partial:'received before explicit active Stop',write:false,onQuery:async()=>{entered.resolve();await unwind.promise;},onUnwind:()=>unwind.promise});
+  const running=f.submit();
+  try{
+    await Promise.race([entered.promise,running.then(()=>{throw Error('SDK not entered');})]);
+    const before=(await f.reload()).getHistory(),user=before.find(m=>m.id===f.request.requestId);assert(user);
+    // Same order as execution.close: revoke the native lease, then abort its
+    // admitted signal. Do not invoke preserveHistoryForShutdown in this case.
+    f.revoke();f.signal.abort();assert.equal(f.input.current(),false);assert(f.sdkArgs.signal.aborted);
+    assert.equal(!!f.h.shuttingDown,false,'this is explicit Stop, not extension shutdown');
+    unwind.resolve();const result=await running;assert.equal(result.state,'outcome_unknown');
+    const saved=(await f.reload()).getHistory();assert.equal(saved.filter(m=>m.id===user.id).length,1);
+    assert.equal(saved.find(m=>m.id===user.id).content,user.content);
+    const answer=saved.filter(m=>m.role==='assistant');assert.equal(answer.length,1);assert.equal(answer[0].content,'received before explicit active Stop');
+    assert.equal((await f.held()).authoringRun.state,'outcome_unknown');
+    const frozen=JSON.stringify(saved);assert.equal((await f.submit()).state,'denied');assert.equal(f.calls.sdk,1);
+    assert.equal(JSON.stringify((await f.reload()).getHistory()),frozen,'denied replay cannot replace interrupted history');
+    assert.equal(f.posts.some(p=>p.type==='inputRejected'||p.type==='companionDraftApply'),false);
+  }finally{unwind.resolve();await running.catch(()=>{});}
+});
+
+
+test('failed interrupted snapshot retry retains its original storage owner, including profile changes',async t=>{
+  for(const change of [false,true]){
+    let append;
+    const f=await fixture(t,{partial:'partial retained after transient I/O',write:false,onQuery:async f=>{
+      append=f.store.append.bind(f.store);f.store.append=async()=>{throw Error('synthetic snapshot I/O failure');};
+      f.revoke();f.signal.abort();
+    }});
+    // Use the actual fallback method as well: an unfenced retry must not pass
+    // merely because this prepared fixture's transcript mirror is in memory.
+    f.h.appendHistory=items=>Object.getPrototypeOf(f.h).appendHistory.call(f.h,items);
+    const result=await f.submit();assert.equal(result.state,'outcome_unknown');assert(f.h.interruptedHistory);
+    assert.equal((await f.reload()).getHistory().filter(m=>m.role==='assistant').length,0);
+    f.store.append=append;
+    if(change){f.h.profileGeneration++;await assert.rejects(f.h.retryInterruptedHistory(),/저장하지 못했습니다/);}
+    else await f.h.retryInterruptedHistory();
+    const saved=(await f.reload()).getHistory();assert.equal(saved.filter(m=>m.role==='assistant').length,change?0:1);
+    if(!change)assert.equal(saved.find(m=>m.role==='assistant').content,'partial retained after transient I/O');
+    assert.equal(f.calls.sdk,1);
+  }
 });

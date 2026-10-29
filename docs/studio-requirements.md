@@ -13,6 +13,25 @@ only for citations in this task, and preserves composer focus. A pinned source i
 not replaced by later citations. Classroom, account authority and shared Service
 memory remain governed by their existing contracts.
 
+Normal quit during an admitted model turn preserves the original user message and
+any already received partial answer/tool timeline once in the owning task. The
+user message is saved before runner dispatch; prepared companion execution saves
+it only after reservation/binding and repeats its final native-draft review after
+the write. Shutdown freezes and aborts that owned turn, then awaits history
+persistence alongside spool closure without relying on SDK unwind. A stale owner
+or failed write cannot commit into another task, and late settlement cannot turn
+an interrupted transcript into a completed answer or replay it. This is normal
+shutdown recovery, not a crash or power-loss guarantee. Source/disk controls:
+`test/companion-normal-turn.test.mjs`; packaged acceptance remains the actual
+native normal-quit checks described in [TW/CP acceptance](testing/task-workspace.md).
+
+Interrupted-history persistence retains only the already-admitted frozen transcript's
+original task/store/activity/epoch/profile owner after synchronous extension
+subscription disposal or explicit Stop revokes execution authority. Admission, SDK/tool checks and
+new work continue to require live execution authority. A replacement task or
+profile still invalidates the queued history write; this storage-only lease grants
+no model or file-edit permission.
+
 UX22: a failed draft write must explicitly distinguish text still on screen from
 persisted text. The unsaved warning cannot be dismissed or cleared by an unrelated
 task-list/config refresh; a confirmed write clears it. A conflicting disk revision

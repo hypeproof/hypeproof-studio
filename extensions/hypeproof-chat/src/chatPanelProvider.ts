@@ -575,7 +575,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       throw new TurnToolModeError('마지막으로 보낸 메시지만 고칠 수 있어요. 고친 내용은 입력창에 남겨 두었어요.');
     }
   }
-  private interruptedHistory?: { scope: string; messages: ChatMessage[] };
+  private shuttingDown = false;
+  private shutdownHistory?: Set<() => Promise<void>>;
+  private shutdownHistoryWrite?: Promise<void>;
+
+  /** Normal quit waits for owned interrupted history, never for SDK unwind. */
+  preserveHistoryForShutdown(): Promise<void> {
+    if (this.shutdownHistoryWrite) return this.shutdownHistoryWrite;
+    this.shuttingDown = true;
+    // Every callback freezes/aborts synchronously before its first storage await.
+    const writes = [...(this.shutdownHistory ?? [])].map(preserve => {
+      try { return preserve(); } catch { return Promise.reject(new Error('중단한 대화를 저장하지 못했습니다.')); }
+    });
+    abortAllStreams(this.activeStreams);
+    return this.shutdownHistoryWrite = Promise.allSettled(writes).then(results => {
+      if (results.some(result => result.status === 'rejected')) throw new Error('중단한 대화를 저장하지 못했습니다.');
+    });
+  }
+
+  private interruptedHistory?: { scope: string; messages: ChatMessage[]; persist?: () => Promise<void> };
   private interruptedHistoryError(): string | null {
     return this.interruptedHistory?.scope === this.turnRequestScope()
       ? '받은 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.' : null;
@@ -583,7 +601,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async retryInterruptedHistory(): Promise<void> {
     const pending = this.interruptedHistory;
     if (!pending || pending.scope !== this.turnRequestScope()) return;
-    try { await this.appendHistory(pending.messages); }
+    try { if (pending.persist) await pending.persist(); else await this.appendHistory(pending.messages); }
     catch { throw new Error(this.interruptedHistoryError()!); }
     if (this.interruptedHistory === pending) {
       this.interruptedHistory = undefined;
@@ -8121,6 +8139,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     companionWebview?: vscode.Webview,
     prepared?: PreparedNormalTurnContext,
   ): Promise<void> {
+    if (this.shuttingDown) return;
     const mode = turnToolMode(requestedMode);
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
     if (this.verifySession?.running) {
@@ -8129,6 +8148,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     this.pendingSends++;
+    const historyScope = this.turnRequestScope(), historyEpoch = this.opsRuntimeGeneration(), historyProfile = this.profileGeneration;
+    const historyStore = this.currentTaskStore?.(), historyTask = historyStore?.getView().activeTaskId;
+    const historyOwnerCurrent = () => this.turnRequestScope() === historyScope && this.opsRuntimeGeneration() === historyEpoch
+      && this.profileGeneration === historyProfile && this.currentTaskStore?.() === historyStore;
+    const historyCurrent = () => historyOwnerCurrent() && (!prepared || prepared.current());
     // Preserve the original synchronous admission/settling reservation. Metadata
     // starts from the same draft, but is awaited only inside that admitted turn.
     const companionOwner=companionWebview?this.freezeCompanionAuthoringSend(text,userMessageId,companionWebview):null;
@@ -8161,6 +8185,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const responseStarted = (id: string) => { responseStreamId = id; };
     let completionSignal: AbortSignal | undefined;
     let preparedAbortCleanup: (()=>void) | undefined;
+    let releaseShutdownHistory: (()=>void) | undefined;
     // REQ-STUDIO-TASK-RUN-STATE — a turn whose stream closed normally but whose result failed (#751 U4) ends as 오류, not 끝남.
     let completionFailed = false;
     let companionSend: CompanionSendContext | null = null, companionScopeRefused = false;
@@ -8557,6 +8582,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
     if(!prepared) this.recordLearnerUploads(savedImages.relPaths ?? [], attachedNote);
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
+    const admittedUser = userLine(historyText);
     const requestSnapshot = this.turnRequests.get(userId);
     if (requestSnapshot) requestSnapshot.message.content = historyText;
     // File attachments carry bytes on their first turn. A later explicit reference
@@ -8619,7 +8645,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let failedPartial = false;
     let runtimeSettled = false;
     const captureInterrupted = () => {
-      interruptedItems = this.finishTurnItems(streamId, messageId, assistantText, assistantCitations, effectiveCoachName);
+      interruptedItems ??= this.finishTurnItems(streamId, messageId, assistantText, assistantCitations, effectiveCoachName);
     };
     if (ctrl.signal.aborted) captureInterrupted();
     else ctrl.signal.addEventListener('abort', captureInterrupted, { once: true });
@@ -8641,6 +8667,49 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // AE-15 / CGP-ART-R-002 — the work folder as it was before this turn; the review bar compares against it.
     const turnRestorePoint = await this.beginTurnRestore(streamId);
     if (companionSend && turnRestorePoint) turnRestorePoint.retain = true;
+    const writeTurnHistory = async (messages: ChatMessage[], allowed: () => boolean = () => true, owner = historyCurrent) => {
+      const current = () => owner() && allowed();
+      if (!current()) throw Error('중단한 대화의 작업이 바뀌었어요.');
+      if (historyStore && historyTask) await historyStore.append(historyTask, messages, current);
+      else await this.appendHistory(messages);
+      if (!current()) throw Error('중단한 대화의 작업이 바뀌었어요.');
+      if (historyStore && !this.shuttingDown) {
+        await this.post({ type: 'taskWorkspaceState', view: historyStore.getView() });
+        await this.postContextTrim();
+      }
+    };
+    let interruptedWrite: Promise<void> | undefined;
+    const preserveInterrupted = () => {
+      if (interruptedWrite) return interruptedWrite;
+      // An admitted transcript remains owned history when execution is stopped
+      // or revoked. This predicate grants no new runtime/tool authority.
+      if (prepared && !userAdmitted) return Promise.resolve();
+      const owner = historyOwnerCurrent;
+      if (!owner()) return Promise.reject(new Error('중단한 대화의 작업이 바뀌었어요.'));
+      captureInterrupted();
+      const messages = [admittedUser, ...(interruptedItems ?? [])];
+      const pending = { scope: historyScope, messages, persist: () => writeTurnHistory(messages, () => true, owner) };
+      this.interruptedHistory = pending;
+      return interruptedWrite = pending.persist().then(() => {
+        if (this.interruptedHistory === pending) this.interruptedHistory = undefined;
+      });
+    };
+    let userAdmitted = false, transcriptCommitted = false;
+    const admitTurnHistory = async () => {
+      if (this.shuttingDown || ctrl.signal.aborted || !historyCurrent()) throw Error('보내려던 작업이 바뀌었어요.');
+      if (userAdmitted) return;
+      await writeTurnHistory([admittedUser], () => !this.shuttingDown && !ctrl.signal.aborted);
+      if (this.shuttingDown || ctrl.signal.aborted || !historyCurrent()) throw Error('보내려던 작업이 바뀌었어요.');
+      userAdmitted = true;
+      const preserve = () => {
+        // The host disposes subscriptions before awaiting deactivate's Promise.
+        // The frozen transcript keeps its storage owner when execution closes.
+        ctrl.abort();
+        return preserveInterrupted();
+      };
+      (this.shutdownHistory ??= new Set()).add(preserve);
+      releaseShutdownHistory = () => this.shutdownHistory?.delete(preserve);
+    };
     let companionBinding: CompanionAuthoringRun | undefined;
     let companionTerminalObserved = false, companionModelRefused = false;
     const bindCompanion = async (runtime: CompanionAuthoringRun['runtime']) => {
@@ -8658,7 +8727,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await prepared.store.bindCompanionExecutionRun(retained.source,prepared.reservation,binding,{taskId:view.activeTaskId,revision:view.revision},()=>retained.current()&&!ctrl.signal.aborted);
       }else await retained.store.bindCompanionAuthoringRun(retained.source,binding,{taskId:view.activeTaskId,revision:view.revision},()=>retained.current()&&!ctrl.signal.aborted);
       companionBinding = binding;
-      if(prepared) await prepared.review!.check();
+      if(prepared) { await admitTurnHistory(); await prepared.review!.check(); }
       if (!retained.current() || ctrl.signal.aborted) throw Error('휴대폰 요청의 실행 여부를 확인하지 못했어요. 다시 실행하지 않았어요.');
     };
     // REQ-STUDIO-DELEGATION-ROW — rows this turn left open are closed at its end (stop excepted).
@@ -9061,6 +9130,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const runProxyRuntime = async () => {
         if(prepared)throw Error('companion_sdk_required');
         if (companionSend && !companionBinding) await bindCompanion('proxy');
+        await admitTurnHistory();
         if (profile?.browser_control?.enabled) {
           await this.runBrowserLoop({
             generalBrowserRequest,
@@ -9196,6 +9266,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                   };
                 })()
               : undefined;
+          await admitTurnHistory();
           const result=await runInstructorTurn({
             local,cwd,
             history:history.map(m=>({role:m.role,content:m.content})),userText:userTextForModel,
@@ -9217,6 +9288,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           if (companionSend) await bindCompanion('local');
+          await admitTurnHistory();
           const result=await runLocalCoach({config:local,profile,cwd,
             history:history.map(m=>({role:m.role,content:m.content})),userText:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
@@ -9246,6 +9318,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         try {
           const delegationScope=JSON.stringify([this.turnRequestScope(),this.profileGeneration]);
           if (companionSend) await bindCompanion('agent-sdk');
+          if (!prepared) await admitTurnHistory();
           // No await/effect between the final prepared draft review and SDK entry.
           // Later SDK/approval revalidation checks Service authority, not this UI capture.
           if (prepared) announceStream();
@@ -9454,7 +9527,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           assistantCitations,
           effectiveCoachName,
         );
-        await this.appendHistory([userLine(historyText), ...finishedItems]);
+        await writeTurnHistory([admittedUser, ...finishedItems], () => !ctrl.signal.aborted);
+        transcriptCommitted = true;
+        releaseShutdownHistory?.();
         const answer = finishedItems.filter(item => item.role === 'assistant' && item.content.trim()).at(-1);
         if (answer) accuracyResult = { owner: crBytesOwner(token) ?? createHash('sha256').update(token || this.turnRequestScope()).digest('hex'),
           offer: { scope: accuracyScope, messageId: answer.id }, text: assistantText, instructor: this._instructorMode.isInstructor === true };
@@ -9491,7 +9566,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       else if (!ctrl.signal.aborted) {
         // An edited request with no answer has not reached persisted history.
         // Preserve it through the existing durable recovery path before reporting the error.
-        if (!prepared && ((companionSend && !companionBinding) || mode === 'web-search' || (versionOf && assistantText.length === 0))) await this.post({ type: 'inputRejected', text, images, toolMode: mode });
+        if (!prepared && ((!userAdmitted && historyCurrent()) || (companionSend && !companionBinding) || mode === 'web-search' || (versionOf && assistantText.length === 0))) await this.post({ type: 'inputRejected', text, images, toolMode: mode });
         await this.handleSendError(err, streamId, { profile, proxyUrl, token, signal: ctrl.signal });
       }
       // #1298 — revert model choice if a direct-entry model caused this turn to fail.
@@ -9502,13 +9577,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       void this.refreshLowDisk();
       let interruptedSaveError: unknown;
       let interruptedSaveFailed = false;
-      if (ctrl.signal.aborted || failedPartial) {
+      if ((ctrl.signal.aborted || failedPartial) && !transcriptCommitted) {
         try {
-          this.interruptedHistory = { scope: this.turnRequestScope(), messages: [
-            userLine(historyText),
-            ...(interruptedItems ?? []),
-          ] };
-          await this.retryInterruptedHistory();
+          await preserveInterrupted();
         } catch (error) {
           interruptedSaveFailed = true;
           interruptedSaveError = error;
@@ -9632,6 +9703,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (preflightComplete && !(error instanceof TurnToolModeError) && !(error instanceof AnnotationRefusal)) throw error;
     } finally {
       preparedAbortCleanup?.();
+      releaseShutdownHistory?.();
       releasePower();
       // Reserve before a queued send is released; immutable disk records also serialize windows.
       // The education card must never break a finished turn: building the store is inside the guard
