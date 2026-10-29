@@ -95,7 +95,7 @@ export function historyDocumentIdentity(chat){
 export async function readExactHistoryDocument(chat,expected){
  const document=historyDocumentIdentity(chat),context=chat.contextId;
  assert.deepEqual(document,expected,'Restored history document changed');
- assert(Number.isInteger(context),'Explicit history context required');
+ assert(Number.isInteger(context)&&context>0,'Explicit history context required');
  const rows=await chat.evaluate(HISTORY_ROWS_EXPRESSION);
  assert.deepEqual(historyDocumentIdentity(chat),document,'History document changed during read');
  assert.equal(chat.contextId,context,'History context changed during read');

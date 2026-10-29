@@ -101,5 +101,7 @@ test('history rows and document identity come from the same captured target and 
   const changed={...target,evaluate:async()=>{changed[field]=field==='contextId'?9:'NEW';return rows;}};
   await assert.rejects(readExactHistoryDocument(changed,expected),/changed during read/);
  }
- await assert.rejects(readExactHistoryDocument({...target,contextId:undefined},expected),/Explicit history context/);
+ for(const contextId of [undefined,0,-1,1.5]){
+  await assert.rejects(readExactHistoryDocument({...target,contextId,evaluate:async()=>assert.fail('invalid context cannot read the default frame')},expected),/Explicit history context/);
+ }
 });
