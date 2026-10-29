@@ -2,7 +2,7 @@
 // focus) records no observation or evidence: the real ChatPanelProvider.handleMessage is driven through a stand-in host whose
 // every recorder is captured, and the only record is the workflow line `lesson_work_saved` with no evidence_type. The learner's
 // own "이 단계를 마쳤어요" (outside the block) is the control that the recorders are wired. Then the work canvas: the editor-area
-// surfaces (start page, change record, preview, take-away, slide studio, visitor preview, artifact history, image edit) are bundled
+// surfaces (start page, change record, preview, take-away, slide studio, visitor preview, artifact history, image edit, companion handoff) are bundled
 // and none pulls in the block component or carries the block identity; the chat panel bundle is the control that does.
 // The screen half is test/learning-block-no-judgment.test.tsx.
 // Run: node --experimental-strip-types test/learning-block-no-judgment-host.smoke.mjs
@@ -97,6 +97,7 @@ const CANVAS = [
   "webview-ui/src/StartPage.tsx", "webview-ui/src/LocalReview.tsx",
   "src/previewProvider.ts", "src/previewHtml.ts", "src/workTakeawayPanel.ts", "src/slideStudioHost.ts", "src/visitorPreviewHost.ts",
   "src/artifactHistoryPanel.ts", "src/imageEditCommands.ts", "src/localReviewPanel.ts", "src/startPage.ts", "src/personalContinuationHost.ts",
+  "src/companionDesktopHandoffHost.ts",
 ];
 async function graph(entry) {
   const r = await build({
