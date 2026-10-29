@@ -645,8 +645,15 @@ runner before desktop acceptance; a local compile is not that result.
 After the b6 Windows empty-port probe still timed out, the same job's separate
 PowerShell/C# compile and synthetic ABI check passed in 1.725 s. That does not
 locate the timed-out stage or establish that compilation caching would fix it.
+The later 1755 hosted failure reached native completion and serialization start
+at 3.992 s, then timed out without serialization completion. This locates the
+stalled phase, not the internal PowerShell cause.
 The helper now flushes fixed phase markers around script entry, compilation,
-TCP table sizing/read, process snapshot/enumeration and JSON serialization.
+TCP table sizing/read, process snapshot/enumeration and JSON serialization. The wire is
+serialized in C# with a fixed ASCII schema and invariant unsigned numbers, capped
+at 1 MiB; there is no PowerShell object-graph serialization or fallback. Portable
+controls cover empty, single, many and maximum-count arrays through the actual C#
+serializer and strict JS parser. This does not establish hosted Windows timing.
 A fresh random diagnostic nonce binds each probe's markers; it carries no authority.
 Only a bounded, ordered prefix with monotonic elapsed milliseconds within that
 probe's existing budget is retained on failure. Unknown, forged, duplicate,

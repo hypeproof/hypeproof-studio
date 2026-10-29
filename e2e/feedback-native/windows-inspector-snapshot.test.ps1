@@ -25,13 +25,42 @@ $rows=@();for($i=0;$i -lt 65;$i++){$row=$good.Clone();$row[5]=[uint32](100+$i);$
 # Struct width is pointer-aware and pins the P/Invoke ABI rather than a host-sized integer guess.
 $type=[OwnedInspectorSnapshot].GetNestedType('ProcessEntry',[Reflection.BindingFlags]::NonPublic)
 $expected=if([IntPtr]::Size -eq 8){568}else{556};Check ([Runtime.InteropServices.Marshal]::SizeOf([Activator]::CreateInstance($type)) -eq $expected)
-# Exercise actual .NET fields -> PowerShell JSON wire shape for zero and one row.
+# Fixed C# wire, with the former portable serializer retained only as a small-shape comparator.
 $wire=[OwnedInspectorSnapshot+Snapshot]::new();$wire.port=9788
 $wire.listeners=[uint32[]]@();$wire.parents=[OwnedInspectorSnapshot+ParentRow[]]@()
-Write-Output ('WIRE '+($wire | ConvertTo-Json -Compress -Depth 4))
+Write-Output ('WIRE '+[OwnedInspectorSnapshot]::Serialize($wire))
+Write-Output ('LEGACY_WIRE '+($wire | ConvertTo-Json -Compress -Depth 4))
 $row=[OwnedInspectorSnapshot+ParentRow]::new();$row.ProcessId=103;$row.ParentProcessId=101
 $wire.listeners=[uint32[]]@(103);$wire.parents=[OwnedInspectorSnapshot+ParentRow[]]@($row)
-Write-Output ('WIRE '+($wire | ConvertTo-Json -Compress -Depth 4))
+Write-Output ('WIRE '+[OwnedInspectorSnapshot]::Serialize($wire))
+Write-Output ('LEGACY_WIRE '+($wire | ConvertTo-Json -Compress -Depth 4))
+# Explicit non-English culture and modified number formatting cannot affect the ASCII wire.
+$oldCulture=[Threading.Thread]::CurrentThread.CurrentCulture
+try {
+ $culture=[Globalization.CultureInfo]::GetCultureInfo('ar-SA').Clone();$culture.NumberFormat.NegativeSign='PRIVATE';$culture.NumberFormat.NumberGroupSeparator='PRIVATE'
+ [Threading.Thread]::CurrentThread.CurrentCulture=$culture
+ $baseline=[OwnedInspectorSnapshot]::Serialize($wire)
+ Check ($baseline -eq '{"schema":"hps-owned-windows-listener/1","port":9788,"listeners":[103],"parents":[{"ProcessId":103,"ParentProcessId":101}]}')
+ Write-Output ('CULTURE_WIRE '+$baseline)
+} finally {[Threading.Thread]::CurrentThread.CurrentCulture=$oldCulture}
+foreach($count in @(8,16384)) {
+ $parents=[OwnedInspectorSnapshot+ParentRow[]]::new($count)
+ for($i=0;$i -lt $count;$i++){$r=[OwnedInspectorSnapshot+ParentRow]::new();$r.ProcessId=[uint32]([uint32]::MaxValue-$i);$r.ParentProcessId=[uint32]::MaxValue;$parents[$i]=$r}
+ $wire.parents=$parents;$wire.listeners=[uint32[]]::new([Math]::Min($count,64))
+ for($i=0;$i -lt $wire.listeners.Length;$i++){$wire.listeners[$i]=[uint32]([uint32]::MaxValue-$i)}
+ $json=[OwnedInspectorSnapshot]::Serialize($wire);Check ([Text.Encoding]::UTF8.GetByteCount($json) -le 1048576)
+ Write-Output ('WIRE '+$json)
+}
+# Invalid schemas, nulls, numeric/row bounds and duplicate identities must refuse, never truncate.
+Refuses { [OwnedInspectorSnapshot]::Serialize($null) }
+foreach($badPort in @(-1,0,1023,65536,[int]::MaxValue)){$wire.port=$badPort;Refuses { [OwnedInspectorSnapshot]::Serialize($wire) }};$wire.port=9788
+$wire.schema='private';Refuses { [OwnedInspectorSnapshot]::Serialize($wire) };$wire.schema='hps-owned-windows-listener/1'
+foreach($bad in @($null,[uint32[]]@(1),[uint32[]]@(103,103),[uint32[]]::new(65))){$wire.listeners=$bad;Refuses { [OwnedInspectorSnapshot]::Serialize($wire) }};$wire.listeners=[uint32[]]@(103)
+foreach($bad in @($null,[OwnedInspectorSnapshot+ParentRow[]]@($null),[OwnedInspectorSnapshot+ParentRow[]]@($row,$row),[OwnedInspectorSnapshot+ParentRow[]]::new(16385))){$wire.parents=$bad;Refuses { [OwnedInspectorSnapshot]::Serialize($wire) }}
+# Exercise the exact production append boundary, even though valid current count bounds fit below it.
+$append=[OwnedInspectorSnapshot].GetMethod('AppendWire',[Reflection.BindingFlags]'NonPublic,Static')
+$builder=[Text.StringBuilder]::new();[void]$builder.Append('x'*1048576)
+Refuses { $append.Invoke($null,@($builder,'x')) };Check ($builder.Length -eq 1048576)
 Write-Output 'PASS actual C# compile and binary/port/length/listener/EOF/ABI controls; no native call'
 
 # Exercise the real flushed C# diagnostic writer without any Windows API calls.

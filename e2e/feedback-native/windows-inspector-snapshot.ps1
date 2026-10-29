@@ -16,7 +16,8 @@ try {
   $snapshot=[OwnedInspectorSnapshot]::Read($Port,$DiagnosticNonce,$clock.ElapsedMilliseconds)
   Write-Phase 'native_finished'
   Write-Phase 'serialization_started'
-  $snapshot | ConvertTo-Json -Compress -Depth 4
+  [Console]::Out.WriteLine([OwnedInspectorSnapshot]::Serialize($snapshot))
+  [Console]::Out.Flush()
   Write-Phase 'serialization_finished'
 } catch {
   [Console]::Error.WriteLine('owned_native_listener_snapshot_failed')

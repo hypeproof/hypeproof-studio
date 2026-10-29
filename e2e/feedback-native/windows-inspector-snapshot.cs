@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 public static class OwnedInspectorSnapshot {
@@ -21,6 +22,31 @@ public static class OwnedInspectorSnapshot {
   public sealed class Snapshot {
     public string schema="hps-owned-windows-listener/1";public int port;
     public uint[] listeners;public ParentRow[] parents;
+  }
+  private static void AppendWire(StringBuilder wire,string value){
+    if(value.Length>MaxBytes-wire.Length)throw new Failure("wire_bound");
+    wire.Append(value);
+  }
+  private static void Number(StringBuilder wire,uint value){AppendWire(wire,value.ToString(CultureInfo.InvariantCulture));}
+  // Fixed ASCII schema only. No reflection, arbitrary object graph or culture-sensitive output.
+  public static string Serialize(Snapshot value){
+    if(value==null||value.schema!="hps-owned-windows-listener/1")throw new Failure("wire_schema");
+    Port(value.port);
+    if(value.listeners==null||value.parents==null||value.listeners.Length>MaxListeners||value.parents.Length>MaxRows)throw new Failure("wire_rows");
+    var wire=new StringBuilder();var listeners=new HashSet<uint>();var parents=new HashSet<uint>();
+    AppendWire(wire,"{\"schema\":\"hps-owned-windows-listener/1\",\"port\":");Number(wire,(uint)value.port);
+    AppendWire(wire,",\"listeners\":[");
+    for(int i=0;i<value.listeners.Length;i++){
+      uint pid=value.listeners[i];if(pid<=1||!listeners.Add(pid))throw new Failure("wire_listener");
+      if(i>0)AppendWire(wire,",");Number(wire,pid);
+    }
+    AppendWire(wire,"],\"parents\":[");
+    for(int i=0;i<value.parents.Length;i++){
+      ParentRow row=value.parents[i];if(row==null||!parents.Add(row.ProcessId))throw new Failure("wire_parent");
+      if(i>0)AppendWire(wire,",");AppendWire(wire,"{\"ProcessId\":");Number(wire,row.ProcessId);
+      AppendWire(wire,",\"ParentProcessId\":");Number(wire,row.ParentProcessId);AppendWire(wire,"}");
+    }
+    AppendWire(wire,"]}");return wire.ToString();
   }
   [DllImport("iphlpapi.dll",ExactSpelling=true)]
   private static extern uint GetExtendedTcpTable(IntPtr table,ref uint size,[MarshalAs(UnmanagedType.Bool)]bool ordered,uint family,int tableClass,uint reserved);
