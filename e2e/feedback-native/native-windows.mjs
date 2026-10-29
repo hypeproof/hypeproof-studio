@@ -54,6 +54,16 @@ export async function closeSecondaryAndObserveOriginal(ui,other,retained,{onClos
  await ui.retainedChatReady(retained,timeout);
  return {secondary_closed:true,original_return_observed:true,document:retained,focus_repaired:false};
 }
+// step() records a failed T05 instead of throwing. Progress/cleanup alone must
+// never authorize the next history command after an unobserved native return.
+export function requireHistoryWindowReturn(tests,selected){
+ if(selected===false)return;
+ const fail=()=>{throw Object.assign(Error('History input requires passed T05 and exact observed original-window return'),{blocked:true});};
+ if(selected!==true||!Array.isArray(tests))fail();
+ const matches=tests.filter(t=>t?.id==='T05-owned-simultaneous-windows');
+ if(matches.length!==1)fail();const test=matches[0],proof=test.original_return,document=proof?.document;
+ if(test.status!=='PASS'||test.secondary_closed!==true||proof?.secondary_closed!==true||proof.original_return_observed!==true||proof.focus_repaired!==false||typeof test.original_window!=='string'||!test.original_window||document?.workbench!==test.original_window||['target','frame','loader'].some(key=>typeof document?.[key]!=='string'||!document[key]))fail();
+}
 export async function finishOwnedWindows({primary,observe,cleanup,proof,persist}){
  // Diagnostic failures and cleanup must never replace the original failure.
  try{await observe();}catch(error){proof.diagnostic_error=error.message;}

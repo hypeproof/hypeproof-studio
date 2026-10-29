@@ -19,11 +19,11 @@ on:
         default: ''
 permissions:
   contents: read
-concurrency:
-  group: feedback-native-${{ github.ref }}
-  cancel-in-progress: false
 jobs:
   native:
+    concurrency:
+      group: feedback-native-${{ github.ref }}-${{ matrix.os }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:

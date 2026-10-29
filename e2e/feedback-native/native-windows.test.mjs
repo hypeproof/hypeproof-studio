@@ -114,3 +114,15 @@ test('failed main path closes the owned secondary without claiming an unobserved
  const {closeSecondaryAndObserveOriginal}=await import('./native-windows.mjs');const f=secondaryReturnFixture();assert.deepEqual(await closeSecondaryAndObserveOriginal(f.ui,f.other,undefined),{secondary_closed:true,original_return_observed:false});assert.deepEqual(f.events,['secondary-closed']);
  const source=fs.readFileSync(new URL('./native-windows.mjs',import.meta.url),'utf8');assert(source.includes('await ui.restoredDraft(draft);await observeOther();returnChat=await ui.chatDocumentIdentity()'));assert(source.includes('closeSecondaryAndObserveOriginal(ui,other,returnChat'));
 });
+
+test('history admission needs the unique passed T05 result and exact observed original return',async()=>{
+ const {requireHistoryWindowReturn}=await import('./native-windows.mjs');
+ const valid={id:'T05-owned-simultaneous-windows',status:'PASS',original_window:'A',secondary_closed:true,original_return:{secondary_closed:true,original_return_observed:true,focus_repaired:false,document:{workbench:'A',target:'A-chat',frame:'A-frame',loader:'A-loader'}}};
+ const begin=(tests,selected)=>{requireHistoryWindowReturn(tests,selected);return 'history-input';};
+ assert.equal(begin([valid],true),'history-input');assert.equal(begin(undefined,false),'history-input','unselected scenarios remain unchanged');
+ const bad=[[],[valid,valid],[{...valid,status:'FAIL'}],[{...valid,status:'BLOCKED'}],[{...valid,status:'NOT_RUN'}],[{...valid,original_return:undefined}],[{...valid,secondary_closed:false}],
+  ...[{original_return_observed:false},{secondary_closed:false},{focus_repaired:true},{document:{...valid.original_return.document,workbench:'foreign'}},{document:{...valid.original_return.document,target:''}}].map(change=>[{...valid,original_return:{...valid.original_return,...change}}])];
+ for(const tests of bad){let inputs=0;assert.throws(()=>{requireHistoryWindowReturn(tests,true);inputs++;},error=>error.blocked===true&&/passed T05/.test(error.message));assert.equal(inputs,0,'no later history input after refusal');}
+ assert.throws(()=>requireHistoryWindowReturn([valid],undefined),/passed T05/);
+ const source=fs.readFileSync(new URL('./run.mjs',import.meta.url),'utf8'),stepAt=source.indexOf("await step('T05-owned-simultaneous-windows'"),gateAt=source.indexOf("requireHistoryWindowReturn(report.tests,c.scenarios.includes('history-streaming'))",stepAt),historyAt=source.indexOf('await runHistoryStreaming(',stepAt);assert(stepAt>=0&&gateAt>stepAt&&historyAt>gateAt,'real selected branch gates history before its first command');
+});

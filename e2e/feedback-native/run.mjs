@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {runDelayedActivation,delayedPrerequisite,delayedHistoryPrerequisite} from './delayed-activation.mjs';
-import {runOwnedWindows} from './native-windows.mjs';
+import {runOwnedWindows,requireHistoryWindowReturn} from './native-windows.mjs';
 import {runHistoryStreaming} from './history-streaming.mjs';
 import {captureWindowsQuitOwner,confirmWindowsStreamingQuit,observeWindowsQuitStructure} from './native-quit-dialog.mjs';
 import {createMacQuitPort,captureMacQuitOwner,confirmMacStreamingQuit,forceStopMacOwnedChild} from './native-mac-quit.mjs';
@@ -142,6 +142,7 @@ try{
    if(!report.tests.some(t=>t.id==='T04-different-activity-collision'&&t.status==='PASS'))throw blocked('Two windows require actual independent A/C bindings');
    return runOwnedWindows({c,ui,draft,activityId:profileB.activity_id,openOwnedWindow,commandTitle:report.candidate.commandTitles['hypeproof-chat.start'],workspaceFiles,saveProgress:value=>{report.multiwindow=value;save();}});
   });
+  requireHistoryWindowReturn(report.tests,c.scenarios.includes('history-streaming'));
   if((await ui.list()).filter(t=>t.type==='page'&&t.url.includes('workbench')).length!==1)throw blocked('Secondary window cleanup incomplete; no ambiguous remaining input');
   if(!String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a))||(await readDraft()).value!==draft)throw blocked('Two-window scenario did not restore original A/draft; history prerequisite unavailable');
  }
