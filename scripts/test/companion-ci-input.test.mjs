@@ -28,3 +28,8 @@ test('failed child diagnostics retain the assertion within a bounded credential-
  for(const secret of ['synthetic-access-value','private-env-value','private-query-value','private-key-body'])assert.ok(!detail.includes(secret));
  assert.match(companionCiFailureDetail({message:'spawn unavailable'},{}),/spawn unavailable/);
 });
+
+test('failure detail keeps first TAP failure plus tail, remains bounded and redacts secrets',()=>{
+ const output='# Subtest: delayed recovery\nnot ok 28 - delayed recovery\n  ---\n  error: Bearer private-bearer-token\n  stack: first-stack\n  ...\n# Subtest: later\nok 29 - later\n'+ 'x'.repeat(12000)+'\n# fail 1';
+ const detail=companionCiFailureDetail({stdout:output},{SECRET:'sensitive-unused'});assert(detail.length<=8000);assert.match(detail,/not ok 28 - delayed recovery/);assert.match(detail,/first-stack/);assert.match(detail,/# fail 1/);assert(!detail.includes('private-bearer-token'));
+});

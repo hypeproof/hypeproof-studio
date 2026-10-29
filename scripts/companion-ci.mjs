@@ -33,7 +33,11 @@ export function companionCiFailureDetail(error,env=process.env){
  detail=detail.replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g,'[redacted private key]')
   .replace(/(Bearer\s+)[A-Za-z0-9._~+\/-]+/gi,'$1[redacted]')
   .replace(/([?&](?:token|secret|password|key)=)[^&\s]+/gi,'$1[redacted]');
- return detail.slice(-8000);
+ // Include the first failing TAP block as well as the tail; both are redacted and bounded.
+ const failure=detail.match(/(?:^# Subtest:[^\n]*\n)?^not ok [^\n]*[\s\S]*?(?=^# Subtest:|^not ok |^ok |^1\.\.|$(?![\s\S]))/m)?.[0];
+ if(!failure)return detail.slice(-8000);
+ const prefix=('First failing TAP block:\n'+failure.slice(0,3000)+'\n--- bounded tail ---\n');
+ return prefix+detail.slice(-(8000-prefix.length));
 }
 export async function runCompanionCi(){
  const {archive,pin}=await companionCiInput();
