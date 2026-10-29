@@ -25,6 +25,13 @@ shutdown recovery, not a crash or power-loss guarantee. Source/disk controls:
 `test/companion-normal-turn.test.mjs`; packaged acceptance remains the actual
 native normal-quit checks described in [TW/CP acceptance](testing/task-workspace.md).
 
+Interrupted-history persistence retains only the already-admitted frozen transcript's
+original task/store/activity/epoch/profile owner after synchronous extension
+subscription disposal or explicit Stop revokes execution authority. Admission, SDK/tool checks and
+new work continue to require live execution authority. A replacement task or
+profile still invalidates the queued history write; this storage-only lease grants
+no model or file-edit permission.
+
 UX22: a failed draft write must explicitly distinguish text still on screen from
 persisted text. The unsaved warning cannot be dismissed or cleared by an unrelated
 task-list/config refresh; a confirmed write clears it. A conflicting disk revision

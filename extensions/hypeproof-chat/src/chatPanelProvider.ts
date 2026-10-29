@@ -593,7 +593,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private interruptedHistory?: { scope: string; messages: ChatMessage[] };
+  private interruptedHistory?: { scope: string; messages: ChatMessage[]; persist?: () => Promise<void> };
   private interruptedHistoryError(): string | null {
     return this.interruptedHistory?.scope === this.turnRequestScope()
       ? '받은 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.' : null;
@@ -601,7 +601,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async retryInterruptedHistory(): Promise<void> {
     const pending = this.interruptedHistory;
     if (!pending || pending.scope !== this.turnRequestScope()) return;
-    try { await this.appendHistory(pending.messages); }
+    try { if (pending.persist) await pending.persist(); else await this.appendHistory(pending.messages); }
     catch { throw new Error(this.interruptedHistoryError()!); }
     if (this.interruptedHistory === pending) {
       this.interruptedHistory = undefined;
@@ -8124,10 +8124,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     this.pendingSends++;
-    const historyScope = this.turnRequestScope(), historyEpoch = this.opsRuntimeGeneration();
+    const historyScope = this.turnRequestScope(), historyEpoch = this.opsRuntimeGeneration(), historyProfile = this.profileGeneration;
     const historyStore = this.currentTaskStore?.(), historyTask = historyStore?.getView().activeTaskId;
-    const historyCurrent = () => this.turnRequestScope() === historyScope && this.opsRuntimeGeneration() === historyEpoch
-      && this.currentTaskStore?.() === historyStore && (!prepared || prepared.current());
+    const historyOwnerCurrent = () => this.turnRequestScope() === historyScope && this.opsRuntimeGeneration() === historyEpoch
+      && this.profileGeneration === historyProfile && this.currentTaskStore?.() === historyStore;
+    const historyCurrent = () => historyOwnerCurrent() && (!prepared || prepared.current());
     // Preserve the original synchronous admission/settling reservation. Metadata
     // starts from the same draft, but is awaited only inside that admitted turn.
     const companionOwner=companionWebview?this.freezeCompanionAuthoringSend(text,userMessageId,companionWebview):null;
@@ -8642,8 +8643,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // AE-15 / CGP-ART-R-002 — the work folder as it was before this turn; the review bar compares against it.
     const turnRestorePoint = await this.beginTurnRestore(streamId);
     if (companionSend && turnRestorePoint) turnRestorePoint.retain = true;
-    const writeTurnHistory = async (messages: ChatMessage[], allowed: () => boolean = () => true) => {
-      const current = () => historyCurrent() && allowed();
+    const writeTurnHistory = async (messages: ChatMessage[], allowed: () => boolean = () => true, owner = historyCurrent) => {
+      const current = () => owner() && allowed();
       if (!current()) throw Error('중단한 대화의 작업이 바뀌었어요.');
       if (historyStore && historyTask) await historyStore.append(historyTask, messages, current);
       else await this.appendHistory(messages);
@@ -8656,11 +8657,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let interruptedWrite: Promise<void> | undefined;
     const preserveInterrupted = () => {
       if (interruptedWrite) return interruptedWrite;
-      if (!historyCurrent()) return Promise.reject(new Error('중단한 대화의 작업이 바뀌었어요.'));
+      // An admitted transcript remains owned history when execution is stopped
+      // or revoked. This predicate grants no new runtime/tool authority.
+      if (prepared && !userAdmitted) return Promise.resolve();
+      const owner = historyOwnerCurrent;
+      if (!owner()) return Promise.reject(new Error('중단한 대화의 작업이 바뀌었어요.'));
       captureInterrupted();
-      const pending = { scope: historyScope, messages: [admittedUser, ...(interruptedItems ?? [])] };
+      const messages = [admittedUser, ...(interruptedItems ?? [])];
+      const pending = { scope: historyScope, messages, persist: () => writeTurnHistory(messages, () => true, owner) };
       this.interruptedHistory = pending;
-      return interruptedWrite = writeTurnHistory(pending.messages).then(() => {
+      return interruptedWrite = pending.persist().then(() => {
         if (this.interruptedHistory === pending) this.interruptedHistory = undefined;
       });
     };
@@ -8671,7 +8677,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await writeTurnHistory([admittedUser], () => !this.shuttingDown && !ctrl.signal.aborted);
       if (this.shuttingDown || ctrl.signal.aborted || !historyCurrent()) throw Error('보내려던 작업이 바뀌었어요.');
       userAdmitted = true;
-      const preserve = () => { ctrl.abort(); return preserveInterrupted(); };
+      const preserve = () => {
+        // The host disposes subscriptions before awaiting deactivate's Promise.
+        // The frozen transcript keeps its storage owner when execution closes.
+        ctrl.abort();
+        return preserveInterrupted();
+      };
       (this.shutdownHistory ??= new Set()).add(preserve);
       releaseShutdownHistory = () => this.shutdownHistory?.delete(preserve);
     };

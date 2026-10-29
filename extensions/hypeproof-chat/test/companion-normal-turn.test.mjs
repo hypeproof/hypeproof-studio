@@ -352,3 +352,103 @@ test('guarded edit-history append cannot commit its version sidecar after owners
   assert.equal(JSON.stringify((await f.reload()).getHistory()),before,'main and version history remain unchanged');
   await assert.rejects(readFile(f.store.versionsPath),{code:'ENOENT'});
 });
+
+
+// ExtensionHost's actual ordering: invoke deactivate, synchronously dispose the
+// context subscriptions, then await the returned Promise. Closing execution
+// authority must not discard an already-admitted snapshot in the store queue.
+for(const ordinary of [true,false])test(`host subscription disposal preserves queued ${ordinary?'ordinary':'prepared'} shutdown snapshot`,async t=>{
+  const entered=deferred(),unwind=deferred(),writes=deferred();
+  const f=await fixture(t,{ordinary,lifecycle:true,partial:'received before execution owner closes',write:false,onQuery:async()=>{entered.resolve();await unwind.promise;},onUnwind:()=>unwind.promise});
+  const running=ordinary?f.submitOrdinary():f.submit();
+  try{
+    await Promise.race([entered.promise,running.then(()=>{throw Error('SDK not entered');})]);
+    const admitted=(await f.reload()).getHistory(),before=JSON.stringify(admitted);
+    f.store.queue=f.store.queue.then(()=>writes.promise);
+    const src=await readFile(new URL('../src/extension.ts',import.meta.url),'utf8');
+    const start=src.indexOf('export function deactivate() {'),end=src.indexOf('\n}',start)+2;
+    const subscription=src.split('\n').find(line=>line.includes('context.subscriptions.push({ dispose:')&&line.includes('companionDev?.dispose()'));
+    assert(subscription,'actual companion subscription disposal must be represented');
+    const context={subscriptions:[]};const noLongerCurrent=()=>f.revoke();
+    vm.runInNewContext(subscription,{context,provider:f.h,invalidate:()=>{},companionDev:{dispose:noLongerCurrent}});
+    const deactivate=vm.runInNewContext(src.slice(start,end).replace('export function','function')+';deactivate',{
+      providerRef:f.h,spoolRef:{close:async()=>{}},workPower:{dispose(){}}});
+    let settled=false;const exiting=deactivate().finally(()=>{settled=true;});
+    f.dispose();for(const item of context.subscriptions)item.dispose();
+    assert.equal(f.input.current(),false,'native execution lease really closed');assert(f.sdkArgs.signal.aborted);
+    await Promise.resolve();assert.equal(settled,false,'snapshot remains queued while execution is revoked');
+    assert.equal(JSON.stringify((await f.reload()).getHistory()),before);
+    writes.resolve();await exiting;
+    const saved=(await f.reload()).getHistory();assert.equal(saved.filter(m=>m.id===f.request.requestId).length,1);
+    assert.equal(saved.filter(m=>m.role==='assistant').length,1);assert.equal(saved.find(m=>m.role==='assistant').content,'received before execution owner closes');
+    const frozen=JSON.stringify(saved);unwind.resolve();await running;
+    assert.equal(JSON.stringify((await f.reload()).getHistory()),frozen);assert.equal(f.calls.sdk,1);
+  }finally{writes.resolve();unwind.resolve();await running.catch(()=>{});}
+});
+
+test('shutdown storage-only lease still rejects a real replacement task or profile owner before queued commit',async t=>{
+  for(const change of ['task','profile']){
+    const entered=deferred(),unwind=deferred(),writes=deferred();
+    const f=await fixture(t,{partial:'old owner bytes',write:false,onQuery:async()=>{entered.resolve();await unwind.promise;},onUnwind:()=>unwind.promise});
+    const running=f.submit();
+    try{
+      await Promise.race([entered.promise,running.then(()=>{throw Error('SDK not entered');})]);
+      const task=f.store.getView().activeTaskId;
+      f.store.queue=f.store.queue.then(()=>writes.promise);
+      const exiting=f.h.preserveHistoryForShutdown();
+      const rejected=assert.rejects(exiting,/저장하지 못했습니다/);
+      f.revoke();
+      if(change==='profile')f.h.profileGeneration++;
+      else{const replacement=await f.reload(),view=replacement.getView();await replacement.create('replacement owner',{taskId:view.activeTaskId,revision:view.revision});f.h.taskWorkspace={activityId:'activity-a',store:replacement};}
+      writes.resolve();await rejected;
+      const restored=await f.reload();assert.equal(restored.getHistory(task).filter(m=>m.role==='assistant').length,0);
+      if(change==='task')assert.equal(restored.getHistory().length,0,'replacement task receives no old bytes');
+      unwind.resolve();await running;assert.equal((await f.reload()).getHistory(task).filter(m=>m.role==='assistant').length,0);
+    }finally{writes.resolve();unwind.resolve();await running.catch(()=>{});}
+  }
+});
+
+
+test('active prepared execution Stop preserves admitted partial history after lease close without shutdown',async t=>{
+  const entered=deferred(),unwind=deferred();
+  const f=await fixture(t,{partial:'received before explicit active Stop',write:false,onQuery:async()=>{entered.resolve();await unwind.promise;},onUnwind:()=>unwind.promise});
+  const running=f.submit();
+  try{
+    await Promise.race([entered.promise,running.then(()=>{throw Error('SDK not entered');})]);
+    const before=(await f.reload()).getHistory(),user=before.find(m=>m.id===f.request.requestId);assert(user);
+    // Same order as execution.close: revoke the native lease, then abort its
+    // admitted signal. Do not invoke preserveHistoryForShutdown in this case.
+    f.revoke();f.signal.abort();assert.equal(f.input.current(),false);assert(f.sdkArgs.signal.aborted);
+    assert.equal(!!f.h.shuttingDown,false,'this is explicit Stop, not extension shutdown');
+    unwind.resolve();const result=await running;assert.equal(result.state,'outcome_unknown');
+    const saved=(await f.reload()).getHistory();assert.equal(saved.filter(m=>m.id===user.id).length,1);
+    assert.equal(saved.find(m=>m.id===user.id).content,user.content);
+    const answer=saved.filter(m=>m.role==='assistant');assert.equal(answer.length,1);assert.equal(answer[0].content,'received before explicit active Stop');
+    assert.equal((await f.held()).authoringRun.state,'outcome_unknown');
+    const frozen=JSON.stringify(saved);assert.equal((await f.submit()).state,'denied');assert.equal(f.calls.sdk,1);
+    assert.equal(JSON.stringify((await f.reload()).getHistory()),frozen,'denied replay cannot replace interrupted history');
+    assert.equal(f.posts.some(p=>p.type==='inputRejected'||p.type==='companionDraftApply'),false);
+  }finally{unwind.resolve();await running.catch(()=>{});}
+});
+
+
+test('failed interrupted snapshot retry retains its original storage owner, including profile changes',async t=>{
+  for(const change of [false,true]){
+    let append;
+    const f=await fixture(t,{partial:'partial retained after transient I/O',write:false,onQuery:async f=>{
+      append=f.store.append.bind(f.store);f.store.append=async()=>{throw Error('synthetic snapshot I/O failure');};
+      f.revoke();f.signal.abort();
+    }});
+    // Use the actual fallback method as well: an unfenced retry must not pass
+    // merely because this prepared fixture's transcript mirror is in memory.
+    f.h.appendHistory=items=>Object.getPrototypeOf(f.h).appendHistory.call(f.h,items);
+    const result=await f.submit();assert.equal(result.state,'outcome_unknown');assert(f.h.interruptedHistory);
+    assert.equal((await f.reload()).getHistory().filter(m=>m.role==='assistant').length,0);
+    f.store.append=append;
+    if(change){f.h.profileGeneration++;await assert.rejects(f.h.retryInterruptedHistory(),/저장하지 못했습니다/);}
+    else await f.h.retryInterruptedHistory();
+    const saved=(await f.reload()).getHistory();assert.equal(saved.filter(m=>m.role==='assistant').length,change?0:1);
+    if(!change)assert.equal(saved.find(m=>m.role==='assistant').content,'partial retained after transient I/O');
+    assert.equal(f.calls.sdk,1);
+  }
+});

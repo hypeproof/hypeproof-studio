@@ -275,3 +275,10 @@ and checks zero/partial output, stale ownership, storage refusal and the actual
 `deactivate` join. This is local source/disk evidence, not a process-kill, power-loss
 or installed operating-system shutdown guarantee. Both native hosted normal-quit
 checks remain required for the resulting packaged revision.
+
+Interrupted-history persistence retains only the already-admitted frozen transcript's
+original task/store/activity/epoch/profile owner after synchronous extension
+subscription disposal or explicit Stop revokes execution authority. Admission, SDK/tool checks and
+new work continue to require live execution authority. A replacement task or
+profile still invalidates the queued history write; this storage-only lease grants
+no model or file-edit permission.
