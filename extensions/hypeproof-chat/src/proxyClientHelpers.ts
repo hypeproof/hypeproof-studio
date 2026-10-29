@@ -104,6 +104,8 @@ export interface ProfileFailure {
   code?: string;
   /** Short Service-owned copy, when present. Never raw JSON and capped before storage. */
   serviceMessage?: string;
+  /** REQ-STUDIO-FREE-DAILY-REFILL — a free seat's next daily allowance (epoch ms), when the Service sent one. */
+  refillsAt?: number;
 }
 
 export const PROFILE_ISSUER_TOKEN_FRIENDLY =
@@ -141,7 +143,7 @@ export function profileNetworkFailure(): ProfileFailure {
  * page from a proxy) and simply degrades to status-based classification.
  */
 export function classifyProfileFailure(status: number, bodyText: string): ProfileFailure {
-  type ErrorBody = { error?: { code?: string; type?: string; request_id?: string; message?: string } };
+  type ErrorBody = { error?: { code?: string; type?: string; request_id?: string; message?: string; refills_at?: unknown } };
   let parsed: ErrorBody | null = null;
   try {
     parsed = JSON.parse(bodyText) as ErrorBody;
@@ -157,6 +159,7 @@ export function classifyProfileFailure(status: number, bodyText: string): Profil
     ...(code ? { code } : {}),
     ...(type ? { type } : {}),
     ...(serviceLine ? { serviceMessage: serviceLine } : {}),
+    ...(typeof parsed?.error?.refills_at === "number" && Number.isFinite(parsed.error.refills_at) ? { refillsAt: parsed.error.refills_at } : {}),
   };
 
   // A native seat that ended (refunded, replaced, or past its window): the Service words it for a

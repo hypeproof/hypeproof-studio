@@ -4,7 +4,9 @@ export interface PassStatus { request_limit: number; requests_used: number; expi
  * TUX-SP-13 / CU-13 — what the Service confirms about a one-hour trial grant (`trial` on /v1/profile).
  * `ends_at` is null until the grant has started. Never sent for a pass, which keeps `pass`.
  */
-export interface TrialStatus { state: "not_started" | "active" | "exhausted" | "expired"; ends_at: string | null; request_limit: number; requests_used: number }
+export interface TrialStatus { state: "not_started" | "active" | "exhausted" | "expired"; ends_at: string | null; request_limit: number; requests_used: number;
+  /** REQ-STUDIO-FREE-DAILY-REFILL — free seats only: when this install's next daily allowance opens (epoch ms, 00:00 KST). Absent on an older Service. */
+  refills_at?: number }
 import type { StartRequest, StartResponse } from "./startPageProtocol";
 // Shared message contract between extension host (Node) and webview (browser).
 // Import this file from both sides; do not redefine these types anywhere else.

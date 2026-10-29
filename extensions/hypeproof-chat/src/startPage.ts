@@ -12,7 +12,7 @@ import { PENDING_PURCHASE_KEY, PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecover
 import { isPurchaseReturnOrderId } from "./purchaseReturnHelpers";
 import type { ClassReposOutcome } from "./publish/publishHost";
 import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
-import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
+import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, freeSeatRefill, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
 import type { FreeStartView } from "./startPageProtocol";
 import { isFreeSeat } from "./seatVocabulary";
 import { qrDataUrl } from "./testQr";
@@ -96,6 +96,8 @@ export class StartPage {
   private freeClaiming = false;
   /** The last claim refusal, shown until the next attempt. */
   private freeRefusal?: FreeClaimRefusal;
+  /** REQ-STUDIO-FREE-DAILY-REFILL — the `refills_at` values this window already re-claimed for (once each). */
+  private readonly refillsClaimed = new Set<number>();
   /** The current seat is the free allowance (read in refresh; steers the purchase payer question). */
   private freeSeatNow = false;
   /** No activity at all while the Service advertises free start: a newcomer buying before any use. */
@@ -412,7 +414,8 @@ export class StartPage {
     if (!this.freeStartOn()) return undefined;
     const offer = this.trialOffer!;
     // e2e D2 — a saved free seat whose window is over: never offer a fresh start beside its end.
-    const ended = !running && !this.candidate ? freeSeatEnding(this.chat.profileFailure()) : undefined;
+    const failure = !running && !this.candidate ? this.chat.profileFailure() : null;
+    const ended = failure ? freeSeatEnding(failure) : undefined;
     const age = this.ageAnswer();
     // Jay 2026-10-19: no allowance before use — a free seat just starts, the way other products
     // do, and the end card asks for a pass when the allowance is spent.
@@ -424,7 +427,23 @@ export class StartPage {
       ...(offer.available === false ? { unavailable: offer.reason ?? "paused" } : {}),
       ...(tooOld ? { tooOld: true } : {}),
       ...(ended ? { ended } : {}),
+      ...(ended && failure?.refillsAt ? { refillsAt: failure.refillsAt } : {}),
     };
+  }
+  /**
+   * REQ-STUDIO-FREE-DAILY-REFILL (Jay 2026-10-29) — the saved free seat is spent or expired and the
+   * Service says its install's next daily allowance is open (`refills_at` <= now): claim again and
+   * enter the returned code through the ordinary free entry, in the same folder, without asking.
+   * Read at launch and on every start-page refresh. Once per `refills_at` per window, so a refusal
+   * or an unexpected same-seat answer cannot loop. A Service without `refills_at` never gets here.
+   */
+  private maybeRefill(running: ResolvedProfile | null | undefined): void {
+    if (this.candidate || this.busy || this.freeClaiming || !this.freeStartOn() || this.ageAnswer() !== "14+") return;
+    if (running && !isFreeSeat(running)) return;
+    const refill = freeSeatRefill(running ? { seat: running.pass ? undefined : running.trial } : { failure: this.chat.profileFailure() });
+    if (refill?.state !== "due" || this.refillsClaimed.has(refill.refillsAt) || this.chat.hasActiveStream()) return;
+    this.refillsClaimed.add(refill.refillsAt);
+    void this.freeStartClaim();
   }
   /**
    * The per-install id (UUID v4), created at the first claim. SecretStorage first; if it cannot be
@@ -781,6 +800,7 @@ export class StartPage {
     if (listShown && !this.passListShown) this.purchasePathEvent("pass_list_viewed");
     this.passListShown = listShown;
     await this.panel?.webview.postMessage({ type: "startState", state });
+    if (this.panel) this.maybeRefill(running);
   }
 
   /**

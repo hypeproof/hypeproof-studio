@@ -456,12 +456,13 @@
         "TUX-SP-14",
         "TUX-SP-15",
         "TUX-SP-16",
-        "TUX-SP-17"
+        "TUX-SP-17",
+        "TUX-SP-18"
       ],
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "6f904517388076edf45f56158861e3d679ce891dbf9efb5544fa93f64b448773",
+      "sha256": "9f496edc8b93328a29b19ec75430a721864a0c993f9f80f8bbbd198f75f67e5b",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
@@ -2079,7 +2080,8 @@
             "TUX-SP-14",
             "TUX-SP-15",
             "TUX-SP-16",
-            "TUX-SP-17"
+            "TUX-SP-17",
+            "TUX-SP-18"
           ]
         }
       ],
