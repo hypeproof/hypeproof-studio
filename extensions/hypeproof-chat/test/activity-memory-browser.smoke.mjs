@@ -54,6 +54,16 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  assert.equal(st.listOpen,false);assert.ok(st.visible,'the state line is drawn without opening the list');
  assert.equal(st.tag,'p');assert.equal(st.controls,0,'the state is text, not a switch');assert.equal(st.switches,0);assert.equal(st.off,false,'no off state or instructor choice');
  for(const f of st.fonts)assert.ok(f>=14,`state line ${f}px`);if(!forcedColors)assert.ok(contrast(st.fg,st.bg)>=4.5,`state line contrast ${st.fg}/${st.bg}`);
+ // REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005): the scope is named in the memory view, as text that offers no change.
+ const sc=await b.evaluate(`(()=>{const line=document.querySelector('[data-testid=activity-memory-scope]');const panel=document.querySelector('[data-testid=activity-memory]');const bg=getComputedStyle(document.querySelector('.tw-sources')).backgroundColor;const page=getComputedStyle(document.body).backgroundColor;
+  const r=line?.getBoundingClientRect();let o=1;for(let e=line;e;e=e.parentElement)o*=parseFloat(getComputedStyle(e).opacity);const hit=r&&document.elementFromPoint(r.left+Math.min(r.width,40)/2,r.top+Math.min(r.height,20)/2);
+  return {text:line?.textContent,tag:line?.localName,font:line&&parseFloat(getComputedStyle(line).fontSize),fg:line&&getComputedStyle(line).color,bg:bg==='rgba(0, 0, 0, 0)'?page:bg,
+  visible:!!line&&r.height>=parseFloat(getComputedStyle(line).fontSize)&&r.right<=innerWidth&&o>=.99&&getComputedStyle(line).visibility==='visible'&&!!hit&&line.contains(hit),
+  controls:line?line.querySelectorAll('button,input,select,a,[role],[tabindex]').length:-1,
+  change:[...panel.querySelectorAll('button,input,select,a,[role=switch],[role=menuitem],[role=option]')].filter(e=>/범위|scope|수업/i.test((e.textContent||'')+' '+(e.getAttribute('aria-label')||''))).length}})()`);
+ assert.equal(sc.text,'기억 범위: 이 작업 공간 안에서만 · 수업 활동에서는 이 기억을 읽거나 쓰지 않아요.','the scope label');
+ assert.equal(sc.tag,'p');assert.equal(sc.controls,0,'the scope is text');assert.equal(sc.change,0,'no control offers a scope change');
+ assert.ok(sc.visible,'the scope label is drawn');assert.ok(sc.font>=14,`scope label ${sc.font}px`);if(!forcedColors)assert.ok(contrast(sc.fg,sc.bg)>=4.5,`scope label contrast ${sc.fg}/${sc.bg}`);
  const m=await b.evaluate(`(()=>{const panel=document.querySelector('[data-testid=activity-memory]');const bg=getComputedStyle(document.querySelector('.tw-sources')).backgroundColor;const page=getComputedStyle(document.body).backgroundColor;
   return {entry:document.querySelector('.tw-memory-files-title').textContent,panelText:panel.textContent,
   xss:window.__xss===1||!!panel.querySelector('b,img'),bg:bg==='rgba(0, 0, 0, 0)'?page:bg,
@@ -88,5 +98,6 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  // The store goes away (an instructor seat, no task workspace): the state line goes with it.
  await b.evaluate(`window.postMessage({type:'activityMemoryState',view:null},'*')`);await new Promise(r=>setTimeout(r,50));
  assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory-state]')`),false,'no store, no state line');
+ assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory-scope]')`),false,'no store, no scope label');
  console.log(`PASS activity memory panel ${seat} ${dark?'dark':'light'} ${width} ${forcedColors?'forced':'normal'}`);
 }}finally{await b.close();}

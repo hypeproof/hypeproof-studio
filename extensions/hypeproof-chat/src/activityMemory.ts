@@ -84,6 +84,24 @@ export function memoryTask(text: string): { task: string | null; text: string } 
   return match ? { task: match[1], text: text.slice(match[0].length) } : { task: null, text };
 }
 
+/**
+ * REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005 / REQ-KNOW-07) — whether this activity may have personal memory.
+ * Memory is scoped to one personal activity: `record` is the activity as saved when it was first entered (its kind
+ * comes from the profile of that moment and never changes), `profile` is the seat served now. A class activity, a
+ * lesson (recorded on the activity or served now), or a served kind that is not personal fails closed: no store is
+ * opened, so a class turn neither reads nor writes the learner's personal memory. There is no switch: a scope is
+ * never changed after creation, only refused.
+ */
+export function personalMemoryActivity(
+  record: { kind?: string; lesson?: unknown } | null | undefined,
+  profile: { activity_kind?: string | null; lesson?: unknown; lesson_binding?: { enforced?: unknown } | null } | null | undefined,
+): boolean {
+  const personal = (kind: unknown) => kind === "personal" || kind === "trial";
+  if (!record || !profile || !personal(record.kind) || record.lesson) return false;
+  if (profile.lesson || profile.lesson_binding?.enforced) return false;
+  return profile.activity_kind == null || personal(profile.activity_kind);
+}
+
 const missing = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 
 export class ActivityMemory {

@@ -8065,3 +8065,31 @@ personal and classroom shells, dark and light, 800 and 1420 px, normal and force
 one, task headings, item text as text, 44px targets, 14px text at 4.5:1, focus rings, the field opens focused with the
 item's words, one request per press, the no-op line, 취소 sends nothing; fails under `FOCUS_REQUIRE_BROWSER=1` without a
 browser). Since CGP-KNOW-D-030 it mounts the 내 작품 drawer and picks `기억` first.
+
+## Activity memory scope (CGP-KNOW-R-005)
+
+REQ-STUDIO-ACTIVITY-MEMORY-SCOPE / REQ-KNOW-07 (CGP-KNOW-007) / PI#2 (the learner can see what the AI keeps
+and where); DEC-01 (ruled 2026-10-28). Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES and -STATE.
+
+- **One personal activity.** Personal memory exists only in a personal or trial activity, as that activity's own
+  `.hypeproof/memory/` files. The scope comes from the activity as it was made: its saved kind (taken from the
+  profile when the activity was first entered) must be `personal` or `trial` with no lesson recorded on it.
+- **A class never reads or writes it.** A class or team activity, a lesson recorded on the activity, a lesson or an
+  enforced lesson binding served now, a served kind that is not personal or trial, and a seat whose profile is not
+  loaded all get no memory binding: no view, no overview, and every open, delete or correction message is refused
+  before the store is touched (no confirm, no file read, written or removed). The binding is the only way to the store.
+- **Fixed at creation.** There is no scope setting, message or control. A personal activity that is later served as a
+  class or lesson is refused, never re-scoped: its files stay on disk untouched and are not shown in the class.
+- **Requests.** With personal memory holding an item, no classroom, lesson or personal turn request contains it (no
+  request carries memory yet; REQ-KNOW-44 and REQ-KNOW-49 add it and must go through the same binding).
+- **Label.** The memory view (내 작품 → 기억) shows, under the state line, the text "기억 범위: 이 작업 공간 안에서만 ·
+  수업 활동에서는 이 기억을 읽거나 쓰지 않아요.": a paragraph, never a control, 14px and 4.5:1 in both themes.
+  Class activities have no memory view, so the register's "AI 기억: 이 수업 안에서만" wording (DES-KNOW-07) has no home
+  yet; the activity header line is CGP-KNOW-D-005.
+
+Evidence: `extensions/hypeproof-chat/test/activity-memory-scope.smoke.mjs` (the scope rule with positive and negative
+controls; the real provider and host module on real files: personal and trial views, no view or binding on classroom,
+lesson, lesson-binding, class-made and unloaded seats, and refused open, delete and correction from those seats with the
+files byte-identical; the real provider with a scripted runtime: no classroom, lesson or personal request holds the
+memory item) and `extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs` (headless Chromium: the scope
+label's exact text, drawn, 14px, 4.5:1, no control and no scope-changing control; no label without a view).

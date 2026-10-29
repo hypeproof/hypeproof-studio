@@ -7,6 +7,12 @@ export const MEMORY_FOLDER_LABEL = ".hypeproof/memory/";
 /** REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022) — memory is always on (DEC-01, DEC-02); there is no off label. */
 export const MEMORY_STATE_LABEL = "AI 기억: 켜짐";
 
+/**
+ * REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005) — the one scope a memory view has: this personal activity. A class
+ * activity has no personal memory view, so there is no class wording and no way to change the scope.
+ */
+export const MEMORY_SCOPE_LABEL = "기억 범위: 이 작업 공간 안에서만 · 수업 활동에서는 이 기억을 읽거나 쓰지 않아요.";
+
 /** One memory file. `text` is null when it is too large or not text: it is listed, opened and deleted, never shown inline. */
 export interface ActivityMemoryItem { name: string; at: number; text: string | null }
 

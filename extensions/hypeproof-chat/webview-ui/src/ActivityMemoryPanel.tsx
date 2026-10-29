@@ -7,7 +7,7 @@
 // sends no overview to a minor or unknown cohort, and then nothing of it is drawn.
 
 import { useEffect, useRef, useState } from 'react';
-import { MEMORY_CORRECTION_MAX, MEMORY_FOLDER_LABEL, MEMORY_STATE_LABEL, memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView } from '../../src/activityMemoryView';
+import { MEMORY_CORRECTION_MAX, MEMORY_FOLDER_LABEL, MEMORY_SCOPE_LABEL, MEMORY_STATE_LABEL, memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView } from '../../src/activityMemoryView';
 import { focusIsLost } from './dialogFocus';
 import { onHostMessage, postToHost } from './vscode';
 
@@ -72,6 +72,8 @@ export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; f
     {/* REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022): a text state, never a switch. Memory is always on
         (DEC-01, DEC-02), so there is no off state to show; the line exists only while the store does. */}
     <p className="tw-memory-state" data-testid="activity-memory-state">{MEMORY_STATE_LABEL} · <code>{view.folder}</code></p>
+    {/* REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005): the scope, fixed when the activity was made; text, never a choice. */}
+    <p className="tw-memory-note" data-testid="activity-memory-scope">{MEMORY_SCOPE_LABEL}</p>
     {view.unsafe && <p className="tw-memory-note">기억 폴더가 링크이거나 폴더가 아니어서 읽지 않았어요.</p>}
     {error && <p role="alert" className="tw-memory-note">{error}</p>}
     <p role="status" className="tw-memory-note">{notice}</p>

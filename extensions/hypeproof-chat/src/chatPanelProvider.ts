@@ -348,6 +348,7 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
+import { personalMemoryActivity } from "./activityMemory";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
 import type { QuitGuardActivity } from "./quitGuardHelpers";
@@ -6718,9 +6719,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // (DEC-01, DEC-02); the store and its native confirm live in activityMemoryHost.ts.
   private activityMemoryPanel?: import("./activityMemoryHost").ActivityMemoryPanelApi;
   setActivityMemoryPanel(api: import("./activityMemoryHost").ActivityMemoryPanelApi): void { this.activityMemoryPanel = api; }
-  /** The learner's activity folder on a task workspace (personal, trial); none for instructors or mid-switch. */
+  /**
+   * The learner's activity folder on a task workspace (personal, trial); none for instructors or mid-switch.
+   * REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005) — none in a class or lesson activity either: this binding is the
+   * only way to the store, so a class seat never reads or writes the learner's personal memory.
+   */
   get activityMemoryBinding(): { root: string; scope: string } | undefined {
-    return this.currentTaskStore() ? this.activityTrashBinding : undefined;
+    if (!this.currentTaskStore() || !personalMemoryActivity(activityConnections(this.context)?.current, this.cachedProfile)) return undefined;
+    return this.activityTrashBinding;
   }
   /**
    * REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025) — the task names the memory overview may group by, or null where there is
