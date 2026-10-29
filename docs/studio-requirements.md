@@ -7997,3 +7997,12 @@ the real webview entry: personal and classroom, dark and light, 800 and 1420px a
 caption under the work surface, inside the card, drawn (hit test), 14px+, 4.5:1+, not clipped and no line past the
 viewport, no sideways scroll, the same node updated within 500 ms on typing, a host save, a cleared field and a step switch
 onto a closed card; six injected overrides caught).
+
+
+### DMC-4b Android local draft recovery (#3121)
+
+See [DMC-03/06/07/15](requirements/desktop-mobile-companion.md) and
+[DMC restart tests](testing/desktop-mobile-companion.md). Explicit local recovery
+and erase preserve learner ownership of pending text; uncertain requests remain
+locked without automatic replay. Source evidence and installed acceptance remain
+separate; no production activation is implied.

@@ -9,7 +9,7 @@ Historical APK observations below retain their original source/asset identities.
 A new cut or generated web bundle is not an installed-APK acceptance result.
 
 This is an API35-only installed-APK prototype, not the final mobile framework,
-finished account product entry, release or cold-restart design. It reuses Studio's existing
+finished account product entry or release. The #3121 data-only draft restart slice is described below. It reuses Studio's existing
 React companion view/controller, authenticated result verifier, framing/adapter,
 request scheduler and the explicitly injected private browser client package.
 The native Java host contains no crypto implementation.
@@ -66,8 +66,30 @@ request belongs to one live adapter/cipher. For independent Cancel and fresh
 Allow scenarios, explicitly restart the Activity and pair a fresh owner. Local
 close can leave a clearly labelled cached result without connected/request
 controls; explicit forget awaits controller cleanup and closes transport/keys,
-then removes the preview. No durable store/checkpoint is enabled. Process death
-does not restore keys, counters, request execution or a user login.
+then removes the preview. No durable preview or live-cipher checkpoint is enabled.
+The #3121 draft slot survives these operations; process death does not restore
+keys, counters, request execution or a user login.
+
+## Data-only draft recovery (#3121)
+
+After native identity verification, one app-private AtomicFile slot retains the
+last acknowledged <=1024-byte draft and strict selected-task metadata. It has no
+TTL, credentials, keys, original HTML or automatic replay. Editing recovery is
+explicit; changed scope requires text-only reassociation. Before relay preparation,
+the exact bounded intent must be atomically acknowledged as `attempted_unknown`.
+A missing ACK sends nothing; a cold attempted record remains read-only with its
+original request ID. Explicit local erase cannot cancel or prove nonexecution of
+host work. Foreign or unknown slot files block writing; owned corrupt/interrupted
+bytes remain until explicit erase. Native account/Service, generation and revision
+checks serialize writes with lifecycle invalidation. The desktop task store remains
+canonical for request/run history.
+
+Run `node --test test/draft-recovery.test.mjs`, the actual React entry tests and
+`bash test/draft-native.test.sh` under the resource wrapper. The Java test needs
+Java17 and `COMPANION_TEST_GSON` pointing to an already available Gson jar; its
+JSON/atomic IO ports are JVM test substitutes, not Android platform execution.
+Installed process-kill/relogin/AtomicFile acceptance for this new source is NOT RUN.
+See `docs/testing/desktop-mobile-companion.md` for the exact remaining boundary.
 
 ## Personal-account device sign-in preparation
 
@@ -93,7 +115,7 @@ Known tokens from cancelled, expired or mismatched completion use best-effort
 existing logout. The Service has no pending-device cancellation endpoint: a
 cancelled code can remain until expiry, and an unknown/lost network response
 cannot guarantee remote session revocation. Local close never installs that
-session. There is no durable recovery or refresh in this slice.
+session. There is no durable credential recovery or refresh in this sign-in slice.
 
 A separate debug-only `ai.hypeproof.companion.DeviceSignInFixtureActivity`
 accepts one noncredential `serviceUrl` Intent extra, consumed once and discarded

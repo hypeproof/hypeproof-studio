@@ -3,14 +3,15 @@ import type {CompanionExecutionResult} from '../../../extensions/hypeproof-chat/
 import {COMPANION_AUTHORING_TEXT_BYTES} from '../../../extensions/hypeproof-chat/src/companionAuthoringIntent';
 
 /** No transport or execution authority here; the caller owns the verified selection and lifetime. */
-export function AuthoringComposer({disabled, submit, check, outcome, execution}: {
+export function AuthoringComposer({disabled, submit, check, outcome, execution, draft, onDraft, saved}: {
  disabled: boolean;
+ draft:string;onDraft(text:string):void;saved:boolean;
  submit(text: string): Promise<{state:'relay_received';requestId:string}>;
  check?():Promise<void>;
  outcome?:{state:'imported_draft'|'cancelled'|'denied'|'outcome_unknown'};
  execution?:Readonly<CompanionExecutionResult>;
 }) {
- const [draft,setDraft]=useState(''),[review,setReview]=useState(false);
+ const [review,setReview]=useState(false);
  const [state,setState]=useState<'editing'|'sending'|'received'|'unknown'>('editing');
  const locked=useRef(false);
  const checking=useRef(false),[checkMessage,setCheckMessage]=useState(''),[checkBusy,setCheckBusy]=useState(false);
@@ -33,10 +34,11 @@ export function AuthoringComposer({disabled, submit, check, outcome, execution}:
   <p>컴퓨터에서 정한 실행 허용 범위 안에서 요청을 처리해요. 실행이 허용되지 않았다면 컴퓨터에서 내용을 확인하고 보내기를 눌러 주세요.</p>
   <label htmlFor="authoring-draft">수정하고 싶은 점</label>
   <textarea id="authoring-draft" value={draft} readOnly={review||state!=='editing'} disabled={disabled}
-   onChange={event=>setDraft(event.target.value)} aria-describedby="authoring-limit"/>
-  <p id="authoring-limit" className="detail">짧은 요청 한 가지를 적어 주세요. {size}/{COMPANION_AUTHORING_TEXT_BYTES} 바이트 · 앱을 닫으면 이 초안은 지워져요.</p>
+   onChange={event=>onDraft(event.target.value)} aria-describedby="authoring-limit"/>
+  <p id="authoring-limit" className="detail">짧은 요청 한 가지를 적어 주세요. {size}/{COMPANION_AUTHORING_TEXT_BYTES} 바이트 · 저장이 확인된 내용은 이 기기에 남아요.</p>
+  <p role="status">{saved?'이 기기에 저장했어요.':'아직 이 기기에 저장을 확인하지 못했어요.'}</p>
   {!valid&&size>COMPANION_AUTHORING_TEXT_BYTES&&<p role="alert">요청을 조금 줄여 주세요. 글을 자동으로 자르지 않아요.</p>}
-  {state==='editing'&&!review&&<button disabled={disabled||!valid} onClick={()=>setReview(true)}>보낼 내용 확인</button>}
+  {state==='editing'&&!review&&<button disabled={disabled||!valid||!saved} onClick={()=>setReview(true)}>보낼 내용 확인</button>}
   {state==='editing'&&review&&<><p>이 내용을 연결된 컴퓨터에 검토 요청할까요?</p>
    <button disabled={disabled} onClick={()=>void send()}>컴퓨터에 검토 요청</button>
    <button className="secondary" disabled={disabled} onClick={()=>setReview(false)}>다시 고치기</button></>}

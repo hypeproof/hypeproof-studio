@@ -325,3 +325,30 @@ arrives. An observed unrelated edit before catch-up fences adoption. Between-tur
 external edits, duplicate completion replay, failed and unknown results cannot
 advance that pin or reserve another turn. Retain the existing preview-active-editor controls. An installed App
 run must separately exercise the real chat tab, execution, result, Stop and revoke.
+
+
+## Android draft restart source checks — #3121
+
+`apps/companion-android/test/draft-native.test.sh` exercises the real Java record,
+slot and fixed broker using owned temporary files. Its JVM JSON port uses cached
+Gson and its atomic IO port uses real filesystem rename/sync; it is not execution
+of Android's platform AtomicFile or installed Activity. Native Android compilation
+and JVM controls must remain separately labelled. Cases include exact Korean text,
+foreign account/Service, corrupt and interrupted base/.bak/.new namespaces,
+immutable attempts, stale revisions, failed writes/erase, and lifecycle replacement
+serialized with a delayed marker. Production code uses platform AtomicFile behind
+the same IO port and preserves `allowBackup=false` plus noBackupFilesDir.
+
+`draft-recovery.test.mjs` exercises native ACK ordering, coalesced saves, explicit
+recovery/reassociation, locked attempted requests and error/erase ownership.
+Actual React entry tests provide scripted native disk replies and verify that no
+relay prepare/send occurs when marker acknowledgement fails, saved text is detached
+until explicit recovery, and an old attempt remains locked after fresh pairing.
+These tests do not turn local records into authenticated host receipt recovery.
+
+Installed acceptance remains NOT RUN for this source: real native login after
+process kill, acknowledged editing recovery, death before/after marker and after
+relay acceptance, zero duplicate send/model work, and explicit erase across
+relaunch. Freeze new Studio/APK/Service identities and retain failure artifacts.
+No source/JVM/React result establishes physical/iOS, classroom, production or
+real-data encryption readiness.
