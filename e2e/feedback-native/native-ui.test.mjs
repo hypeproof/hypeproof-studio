@@ -20,6 +20,22 @@ test('palette chooses the exact visible command even when another row extends it
  await ui.palette(focusTitle);
  assert.deepEqual(pressed,['.quick-input-list .monaco-list-row:nth-child(2)']);
 });
+test('localized Switch Window requires one exact primary label, never its English alias or a neighboring command',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');
+ // Observed Korean hosted candidate: the English query displays a Korean primary
+ // label with an English alias. Keep exact primary-label matching in every locale.
+ const row=(primary,alias='Switch Window...',height=22)=>({querySelector:selector=>({textContent:selector==='.label-name'?primary:alias}),getBoundingClientRect:()=>({height})});
+ let rows=[row('창 전환'),row('터미널: 터미널 전환','Terminal: Switch Terminal')];
+ const target={evaluate:expression=>{for(const item of rows)item.parentElement={children:rows};return vm.runInNewContext(expression,{document:{querySelectorAll:()=>rows}});}};
+ assert.equal(await ui.choiceSelector(target,'Switch Window...',true),null,'alias is not the selectable primary label');
+ assert.equal(await ui.choiceSelector(target,'창 전환',true),'.quick-input-list .monaco-list-row:nth-child(1)');
+ rows=[row('창 전환 추가'),row('창 전환','Switch Window...',0)];
+ assert.equal(await ui.choiceSelector(target,'창 전환',true),null,'extended and hidden labels cannot match');
+ rows=[row('창 전환'),row('창 전환')];
+ assert.equal(await ui.choiceSelector(target,'창 전환',true),null,'ambiguous commands cannot match');
+ rows=[row('Switch Window...'),row('Switch Window... Extended')];
+ assert.equal(await ui.choiceSelector(target,'Switch Window...',true),'.quick-input-list .monaco-list-row:nth-child(1)');
+});
 test('custom dialog messages are observed through their actual IDs alongside notifications',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777');
  const message={textContent:'출처·고정 revision·라이선스·요구 capability'};

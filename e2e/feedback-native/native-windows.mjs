@@ -36,7 +36,7 @@ export async function switchOwnedWindow(from,to){
  if(await target.evaluate('document.hasFocus()'))return;
  const current=await from.workbench();assert.equal(await current.evaluate('document.hasFocus()'),true,'Switch Window must start in the actually focused owned window');
  const title=await target.evaluate('document.title');assert.equal(typeof title,'string');assert(title.trim(),'Observed destination title required');
- await from.palette('Switch Window...');await from.quick(title);
+ await from.palette(coreCommandLabel('workbench.action.switchWindow'));await from.quick(title);
  await waitFor(()=>target.evaluate('document.hasFocus()'),'public Switch Window activated exact owned destination');
 }
 export async function finishOwnedWindows({primary,observe,cleanup,proof,persist}){
