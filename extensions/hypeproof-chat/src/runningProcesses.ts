@@ -1,6 +1,10 @@
 import { shellText, SHELL_PURPOSE_MAX } from './shellPresentation';
-/** `folder` is present only when the host knows where the process runs. */
-export interface RunningProcess { id: string; purpose: string; folder?: string; state: 'running' | 'stopping' | 'unknown' | 'stopped' | 'done' | 'error' }
+/**
+ * `folder` is present only when the host knows where the process runs. A `preview` entry is the live
+ * server behind the preview tab; it carries the place it serves (`folder`, already in words, never ".")
+ * and its loopback `address`.
+ */
+export interface RunningProcess { id: string; purpose: string; folder?: string; kind?: 'preview'; address?: string; state: 'running' | 'stopping' | 'unknown' | 'stopped' | 'done' | 'error' }
 /** How long a settled entry stays visible before it leaves the "실행 중인 것" list. */
 export const PROCESS_FINAL_MS = 10_000;
 type Schedule = (run: () => void, ms: number) => void;
@@ -13,9 +17,11 @@ export class RunningProcesses {
   private readonly schedule: Schedule;
   constructor(changed: () => void, schedule: Schedule = defaultSchedule) { this.changed = changed; this.schedule = schedule; }
   list(): RunningProcess[] { return [...this.entries.values()].map(e => ({ ...e.view })); }
-  add(id: string, purpose: unknown, folder: string | undefined, stop?: () => Promise<void>): void {
+  add(id: string, purpose: unknown, folder: string | undefined, stop?: () => Promise<void>, preview?: { address?: string }): void {
     const prior = this.entries.get(id);
-    this.entries.set(id, { view: { id, purpose: shellText(purpose, '백그라운드 실행', SHELL_PURPOSE_MAX), ...(folder !== undefined ? { folder } : {}), state: prior?.view.state === 'stopping' ? 'stopping' : stop ? 'running' : 'unknown' }, stop });
+    this.entries.set(id, { view: { id, purpose: shellText(purpose, '백그라운드 실행', SHELL_PURPOSE_MAX), ...(folder !== undefined ? { folder } : {}),
+      ...(preview ? { kind: 'preview' as const, ...(preview.address ? { address: preview.address } : {}) } : {}),
+      state: prior?.view.state === 'stopping' ? 'stopping' : stop ? 'running' : 'unknown' }, stop });
     this.changed();
   }
   /** Drop an entry without claiming how it ended (e.g. the SDK marked it as housekeeping). */
@@ -88,4 +94,19 @@ export class SdkProcesses {
     }
   }
   close(): void { this.registry.unavailable(this.prefix); }
+}
+
+/**
+ * The place a preview server serves, in words: the whole work folder by its name, a folder inside it,
+ * or 작업 폴더 밖. Never "." (Jay 2026-10-29: "폴더: ." told him nothing).
+ */
+export function previewServedPlace(folder: string, workFolderName: string | undefined): string {
+  if (folder === '.') return workFolderName ? `작업 폴더 전체 (${workFolderName})` : '작업 폴더 전체';
+  if (folder === '작업 폴더 밖' || folder === '폴더 확인 불가') return folder;
+  return `작업 폴더/${folder}`;
+}
+/** `http://127.0.0.1:43299/` → `127.0.0.1:43299`; anything else is not shown. */
+export function previewAddress(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try { const u = new URL(url); return /^(?:127\.0\.0\.1|localhost|\[::1\])$/.test(u.hostname) && u.port ? `${u.hostname}:${u.port}` : undefined; } catch { return undefined; }
 }
