@@ -2705,6 +2705,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/classroom-ops-commands.smoke.mjs"
+        },
+        {
+          "path": "chalk/test/sharing-draft.browser.mjs"
         }
       ]
     },

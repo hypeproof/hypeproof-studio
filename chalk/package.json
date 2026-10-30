@@ -6,6 +6,7 @@
   "description": "Cloudflare Worker \u2014 Chalk, the instructor surface for HypeProof Studio (console, cohort reads, live board, studio-logs read path)",
   "main": "src/index.ts",
   "scripts": {
+    "posttest": "node --experimental-strip-types test/sharing-draft.browser.mjs",
     "dev": "wrangler dev --port 8788",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
