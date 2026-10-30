@@ -173,7 +173,22 @@ for(const seat of ['personal','classroom'])for(const dark of [true,false])for(co
   await b.evaluate(`paint({...__props,config:{...__props.config,activity:{...__props.config.activity,id:'other-activity'}}})`);await settle();
   assert.equal(await b.evaluate(`!!document.querySelector('.hps-find')`),false,`${label}: a conversation switch closes the bar`);
   assert.equal(await b.evaluate(`CSS.highlights.has('hp-find')`),false,`${label}: and clears its highlights`);
+  await findKey();
+  assert.equal(await b.evaluate(`document.querySelector('.hps-find-input').value`),'',`${label}: another activity does not inherit the previous query`);
+  await b.send('Input.insertText',{text:'사과'});await settle();
+  assert.equal(await currentText(),'사과');
+  assert.equal(await currentVisible(),true,`${label}: same query in the new activity reveals its selected result`);
   await b.evaluate(`paint(__props)`);await settle();
+  if(seat==='personal') {
+    await findKey();await b.send('Input.insertText',{text:'사과'});await settle();
+    await b.evaluate(`paint({...__props,config:{...__props.config,taskWorkspace:{...__props.config.taskWorkspace,activeTaskId:'other-task'}}})`);await settle();
+    assert.equal(await b.evaluate(`!!document.querySelector('.hps-find')`),false,`${label}: task switch closes find`);
+    await findKey();
+    assert.equal(await b.evaluate(`document.querySelector('.hps-find-input').value`),'',`${label}: task switch clears query`);
+    await b.send('Input.insertText',{text:'사과'});await settle();
+    assert.equal(await currentVisible(),true,`${label}: same query after task switch reveals a result`);
+    await b.evaluate(`paint(__props)`);await settle();
+  }
 
   // A modal dialog owns the keyboard: no find bar behind it.
   await b.evaluate(`{const d=document.createElement('div');d.id='modal';d.setAttribute('aria-modal','true');document.body.append(d)}`);
