@@ -177,8 +177,8 @@ export async function runAuthoringFreezeGuidanceBrowser() {
       if (name !== 'hostile-known') assert.match(s.findings, /자세히 표시하지 못했습니다/);
       report.cases.push({ name: 'safe-' + name, response: result, state: s }); checkpoint('safe-' + name);
     }
-    for (const code of [400, 401, 403, 409]) {
-      await fresh(); responseStatus = code; responseBody = JSON.stringify({ error: 'fixture-refusal', reason: 'pedagogy_blocked', findings: JSON.parse(retained422).findings });
+    for (const code of [400, 401, 403, 409, 422]) {
+      await fresh(); responseStatus = code; responseBody = JSON.stringify({ error: 'fixture-refusal', reason: code === 422 ? 'another-reason' : 'pedagogy_blocked', findings: JSON.parse(retained422).findings });
       const response = await freeze(), s = await state(); assert.equal(response.status, code); assert.match(s.status, new RegExp('^HTTP ' + code + ':'));
       assert.equal(s.hidden, true); noCandidate(s); assert.deepEqual(s.content, original);
       if (code === 409) assert.match(s.status, /내보낸 뒤 저장본을 다시 열어 비교하세요/);
