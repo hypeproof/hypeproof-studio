@@ -96,8 +96,9 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  await search('no-matching-file');
  assert.equal(await b.evaluate(`document.querySelectorAll('.tw-memory-item').length`),0);
  assert.ok(await b.evaluate(`document.querySelector('.tw-memory').textContent.includes('일치하는 기억 파일이 없어요')`));
- await b.evaluate(`[...document.querySelectorAll('.tw-memory button')].find(x=>x.textContent==='검색 지우기').click()`);await new Promise(r=>setTimeout(r,50));
+ await b.evaluate(`(()=>{const x=[...document.querySelectorAll('.tw-memory button')].find(x=>x.textContent==='검색 지우기');x.focus();x.click();})()`);await new Promise(r=>setTimeout(r,50));
  assert.equal(await b.evaluate(`document.querySelectorAll('.tw-memory-item').length`),3,'clear restores full visible list');
+ assert.equal(await b.evaluate(`document.activeElement===document.querySelector('.tw-memory input[type=search]')`),true,'clear returns keyboard focus to search, not body');
  assert.equal(await b.evaluate(`window.__posted.length`),beforeSearch,'search/clear sends no host or model request');
  const searchBox=await b.evaluate(`(()=>{const x=document.querySelector('.tw-memory input[type=search]');const r=x.getBoundingClientRect();return {w:r.width,h:r.height,font:parseFloat(getComputedStyle(x).fontSize)};})()`);
  assert.ok(searchBox.w>=44&&searchBox.h>=44&&searchBox.font>=14,'search field keeps accessible target and text size');

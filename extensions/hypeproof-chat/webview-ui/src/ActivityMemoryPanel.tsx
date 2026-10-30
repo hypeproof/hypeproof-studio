@@ -26,6 +26,7 @@ export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; f
   /** The overview item being corrected, and the learner's words for it. */
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const searchInput = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState({ scope: scopeKey, query: '' });
   const query = search.scope === scopeKey ? search.query : '';
 
@@ -110,10 +111,10 @@ export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; f
       <h4 className="tw-memory-files-title">AI 기억 파일 · {view.entries.length}개</h4>
       {view.entries.length > 0 && <div>
         <label className="tw-search">기억 파일 검색
-          <input type="search" value={query} maxLength={200} placeholder="파일 이름이나 보이는 내용"
+          <input ref={searchInput} type="search" value={query} maxLength={200} placeholder="파일 이름이나 보이는 내용"
             onChange={event => setSearch({ scope: scopeKey, query: event.target.value })} />
         </label>
-        {query && <button type="button" onClick={() => setSearch({ scope: scopeKey, query: '' })}>검색 지우기</button>}
+        {query && <button type="button" onClick={() => { setSearch({ scope: scopeKey, query: '' }); searchInput.current?.focus(); }}>검색 지우기</button>}
         <p className="tw-memory-note" role="status">{query.trim() ? `검색 결과 ${entries.length}개 / 전체 ${view.entries.length}개` : `전체 ${view.entries.length}개`}</p>
         <p className="tw-memory-note">아래 파일 목록의 이름과 보이는 내용만 찾아요. AI에게 보내거나 기억을 지우지 않아요.</p>
       </div>}
