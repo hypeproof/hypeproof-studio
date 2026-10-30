@@ -15,7 +15,7 @@ import { ChatIcon } from './ChatDetails';
 import { returnFocus, useDialogFocus } from './dialogFocus';
 import { finishModal } from './modalMotion';
 import { onHostMessage, postToHost } from './vscode';
-import { IMAGE_FILE, thumbnailSrc, WORKS_LIST_ONLY_MAX, worksGlyph, worksLayout, worksName, type WorksLayout } from './myWorks';
+import { filterWorks, IMAGE_FILE, thumbnailSrc, WORKS_LIST_ONLY_MAX, worksGlyph, worksLayout, worksName, type WorksLayout } from './myWorks';
 
 const when = new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 let requestSeq = 0;
@@ -40,6 +40,11 @@ export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onC
   const closing = useRef(false);
   const [choice, setChoice] = useState<WorksLayout>('list');
   const [filter, setFilter] = useState<WorksFilter>('files');
+  const [search, setSearch] = useState({ scope: scopeKey, query: '' });
+  const query = search.scope === scopeKey ? search.query : '';
+  const searchInput = useRef<HTMLInputElement>(null);
+  const entries = filterWorks(files?.entries ?? [], query);
+  useEffect(() => { setSearch({ scope: scopeKey, query: '' }); }, [scopeKey]);
   const memoryButton = useRef<HTMLButtonElement>(null);
   const layout = worksLayout(choice, viewport);
   const [thumbs, setThumbs] = useState<Record<string, string | null>>({});
@@ -92,7 +97,7 @@ export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onC
     }, { root, rootMargin: '64px 0px' });
     root.querySelectorAll<HTMLElement>('[data-thumb-path]').forEach(element => observer.observe(element));
     return () => observer.disconnect();
-  }, [files, layout, filter]);
+  }, [files, layout, filter, query]);
 
   const note = (text: string, status = false) => <p className="tw-works-note" role={status ? 'status' : undefined}>{text}</p>;
   return <dialog ref={dialog} className="tw-works-drawer" aria-labelledby="tw-works-title" data-testid="my-works-drawer" data-layout={filter === 'memory' ? 'list' : layout} data-filter={filter}
@@ -117,7 +122,14 @@ export function MyWorksDrawer({ files, scopeKey, viewport, opener, fallback, onC
         : files.entries.length === 0 ? note('작업 폴더에 아직 파일이 없어요.')
         : <>
           {files.unconfirmed && note('지금 작업 폴더를 다 확인하지 못해서 모든 파일을 ‘기록 없음’으로 보여 줘요.', true)}
-          <ul className="tw-works-list" aria-label="내 작품 파일">{files.entries.map(entry => {
+          <label className="tw-search">작품 파일 검색
+            <input ref={searchInput} type="search" value={query} maxLength={200} placeholder="파일 이름이나 폴더 경로"
+              onChange={event => setSearch({ scope: scopeKey, query: event.target.value })} />
+          </label>
+          {query && <button type="button" className="tw-quiet" onClick={() => { setSearch({ scope: scopeKey, query: '' }); searchInput.current?.focus(); }}>검색 지우기</button>}
+          {note(`현재 목록에서 ${entries.length}개 / ${files.entries.length}개`, true)}
+          {entries.length === 0 && note('일치하는 파일이 없어요. 다른 검색어를 넣거나 검색을 지워 주세요.')}
+          <ul className="tw-works-list" aria-label="내 작품 파일">{entries.map(entry => {
             const { name, folder } = worksName(entry.path);
             const key = thumbKey(entry);
             const src = thumbs[key] ?? null;
