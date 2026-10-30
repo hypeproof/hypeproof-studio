@@ -550,8 +550,14 @@ For #2227, the enabled personal Send button also uses the required-control
 boundary token while retaining the host accent fill and foreground. The shipped
 full-App Chromium check `test/send-control-contrast.smoke.mjs` measures active
 personal/classroom Send and classroom Run against their computed surfaces in
-Dark+ and Light+. Personal Run is not rendered in this surface. This extends
-coverage to that Send boundary, not all remaining personal-chat fallbacks.
+Dark+ and Light+, including forced colors, CSS hover/pressed states and real Tab
+focus. The contrast oracle normalizes both RGB and CSS `color(srgb ...)` channels,
+composites alpha surfaces and rejects unsupported gradients or non-unit opacity.
+Controls must pass a center hit test; personal Send uses a narrow 390px viewport,
+while classroom controls use 1420px at 1600px height to keep Run unobscured.
+Forced CSS states are not native pointer activation evidence. Personal Run is not
+rendered in this surface. This extends coverage to that Send boundary, not all
+remaining personal-chat fallbacks.
 
 ### Shared focus geometry (CGP-DS-D-014)
 
