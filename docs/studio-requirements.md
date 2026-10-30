@@ -3930,7 +3930,11 @@ to the rename form and return when editing ends. At narrow phone widths the inpu
 gets its own row and Save/Cancel remain side by side; wider panes use one row.
 The input and both actions remain visible and hit-testable with the exhausted
 free-seat header, without horizontal overflow. Normal cancellation and explicit
-save keep their existing request and acknowledgement behavior. Chromium layout
+save keep their existing request and acknowledgement behavior. Pending Save stays
+focusable with an unavailable/busy announcement and ignores repeated activation,
+so a refusal can return focus to the retained input and success to the title.
+Responses must not steal focus after the learner moves elsewhere; cancelled or
+changed-task requests cannot reopen the editor. Chromium layout
 and pointer evidence is separate from installed split-editor acceptance.
 
 ### Task rename composition confirmation (REQ-C16)
