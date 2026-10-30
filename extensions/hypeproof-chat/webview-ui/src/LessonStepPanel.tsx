@@ -52,7 +52,8 @@ export function LessonStepPanel(props: {
   // CGP-LEARN-D-001 — the block's card is closed by default; open/closed is keyed to the lesson version and step (not stored,
   // not an evidence event).
   const [openBlocks, setOpenBlocks] = useState<Record<string, boolean>>({});
-  const blockOpen = !!openBlocks[key];
+  const blockKey = JSON.stringify([lesson.course_id, lesson.version, lesson.sha256, step.id]);
+  const blockOpen = !!openBlocks[blockKey];
   const effective = chosen ?? (choices.includes(step.help?.default as HelpMode) ? (step.help!.default as HelpMode) : null);
 
   // The host holds the focus for the NEXT turn; a running turn keeps what it started with.
@@ -94,7 +95,7 @@ export function LessonStepPanel(props: {
         <span className="hp-block-card-thumb"><ChatIcon kind={BLOCK_ICONS[material.kind]} size={20} /><span className="hp-block-card-kicker">자료</span></span>
         <h3 id={ids + "t"} className="hp-material-title hp-block-card-name">{materialText.title}</h3>
         <button type="button" className="hp-cta-quiet" aria-expanded={blockOpen} aria-controls={ids + "b"} data-block-toggle=""
-          onClick={() => setOpenBlocks((o) => ({ ...o, [key]: !blockOpen }))}>{blockOpen ? "닫기" : "열어 보기"}</button>
+          onClick={() => setOpenBlocks((o) => ({ ...o, [blockKey]: !blockOpen }))}>{blockOpen ? "닫기" : "열어 보기"}</button>
       </div>
       <div className="hp-block-card-body" id={ids + "b"} hidden={!blockOpen}>
         <p id={ids + "h"} className="hp-material-help">{materialText.controlsHelp}</p>
