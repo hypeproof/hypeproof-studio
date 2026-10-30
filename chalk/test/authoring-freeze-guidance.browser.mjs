@@ -82,8 +82,8 @@ export async function runAuthoringFreezeGuidanceBrowser() {
   async function fill(selector, value) {
     await click(selector);
     const modifiers = process.platform === 'darwin' ? 4 : 2;
-    await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers });
-    await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers });
+    await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers });
+    await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers });
     await browser.send('Input.insertText', { text: value });
   }
   async function acceptDialog(type) {
@@ -151,8 +151,8 @@ export async function runAuthoringFreezeGuidanceBrowser() {
     await screenshot('blocked-375');
     // Tab back from the following input, then activate the real action with Enter.
     await click('#rehearsal-learner');
-    await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', modifiers: 8 });
-    await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', modifiers: 8 });
+    await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers: 8 });
+    await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers: 8 });
     assert.equal(await browser.evaluate(`document.activeElement.textContent`), '선수 조건 입력으로 이동');
     await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
     await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
