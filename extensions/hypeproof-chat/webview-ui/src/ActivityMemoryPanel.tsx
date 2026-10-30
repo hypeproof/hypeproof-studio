@@ -7,7 +7,7 @@
 // sends no overview to a minor or unknown cohort, and then nothing of it is drawn.
 
 import { useEffect, useRef, useState } from 'react';
-import { MEMORY_CORRECTION_MAX, MEMORY_FOLDER_LABEL, MEMORY_SCOPE_LABEL, MEMORY_STATE_LABEL, memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView } from '../../src/activityMemoryView';
+import { filterMemoryEntries, MEMORY_CORRECTION_MAX, MEMORY_FOLDER_LABEL, MEMORY_SCOPE_LABEL, MEMORY_STATE_LABEL, memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView } from '../../src/activityMemoryView';
 import { focusIsLost } from './dialogFocus';
 import { onHostMessage, postToHost } from './vscode';
 
@@ -26,9 +26,11 @@ export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; f
   /** The overview item being corrected, and the learner's words for it. */
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [search, setSearch] = useState({ scope: scopeKey, query: '' });
+  const query = search.scope === scopeKey ? search.query : '';
 
   useEffect(() => {
-    setView(undefined); setPending(false); setError(''); setNotice(''); setEditing(null); setDraft('');
+    setView(undefined); setPending(false); setError(''); setNotice(''); setEditing(null); setDraft(''); setSearch({ scope: scopeKey, query: '' });
     request.current = null; refocus.current = false;
     const dispose = onHostMessage(message => {
       if (message.type !== 'activityMemoryState') return;
@@ -68,6 +70,7 @@ export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; f
   const note = (text: string, status = false) => <p className="tw-works-note" role={status ? 'status' : undefined}>{text}</p>;
   if (view === undefined) return note('기억 파일을 불러오는 중…', true);
   if (view === null) return note('이 활동에서는 기억 파일을 보여 줄 수 없어요.');
+  const entries = filterMemoryEntries(view.entries, query);
   return <section className="tw-memory" aria-label="AI 기억" data-testid="activity-memory">
     {/* REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022): a text state, never a switch. Memory is always on
         (DEC-01, DEC-02), so there is no off state to show; the line exists only while the store does. */}
@@ -105,8 +108,18 @@ export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; f
       </section>}
       {view.other > 0 && <p className="tw-memory-note">목록에 없는 파일 {view.other}개는 폴더에서 직접 확인할 수 있어요.</p>}
       <h4 className="tw-memory-files-title">AI 기억 파일 · {view.entries.length}개</h4>
+      {view.entries.length > 0 && <div>
+        <label className="tw-search">기억 파일 검색
+          <input type="search" value={query} maxLength={200} placeholder="파일 이름이나 보이는 내용"
+            onChange={event => setSearch({ scope: scopeKey, query: event.target.value })} />
+        </label>
+        {query && <button type="button" onClick={() => setSearch({ scope: scopeKey, query: '' })}>검색 지우기</button>}
+        <p className="tw-memory-note" role="status">{query.trim() ? `검색 결과 ${entries.length}개 / 전체 ${view.entries.length}개` : `전체 ${view.entries.length}개`}</p>
+        <p className="tw-memory-note">아래 파일 목록의 이름과 보이는 내용만 찾아요. AI에게 보내거나 기억을 지우지 않아요.</p>
+      </div>}
       {view.entries.length === 0 ? <p className="tw-memory-note">아직 기억 파일이 없어요.</p>
-        : <ul className="tw-works-list" aria-label="AI 기억 파일">{view.entries.map(entry => <li key={entry.name} className="tw-works-item tw-memory-item">
+        : entries.length === 0 ? <p className="tw-memory-note">일치하는 기억 파일이 없어요. 다른 검색어를 넣거나 검색을 지워 주세요.</p>
+        : <ul className="tw-works-list" aria-label="AI 기억 파일">{entries.map(entry => <li key={entry.name} className="tw-works-item tw-memory-item">
           <code className="tw-memory-path" dir="ltr">{MEMORY_FOLDER_LABEL}{entry.name}</code>
           <time dateTime={new Date(entry.at).toISOString()}>{new Date(entry.at).toLocaleString('ko-KR')}</time>
           {entry.text === null ? <p className="tw-memory-note">파일이 크거나 글자가 아니어서 여기에서는 보여 주지 않아요. 열기로 확인해 주세요.</p>
