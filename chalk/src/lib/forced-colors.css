@@ -1,0 +1,14 @@
+/* CGP-DS-R-005: a primary action remains bounded when the OS removes its fill.
+ * Text actions stay quieter; native focus geometry and disabled semantics remain. */
+@media (forced-colors: active) {
+  html body :is(button, a.btn) {
+    border: 1px solid ButtonText !important;
+    background-image: none !important;
+  }
+  html body :is(button, a.btn):is(.ghost, .reset) {
+    border-width: 0 !important;
+  }
+  html body :is(button, a.btn):disabled {
+    border-color: GrayText !important;
+  }
+}

@@ -4756,6 +4756,7 @@ can find every control's edge, without the edge depending on a hover. Both Studi
   It replaces `#3A4855`, `#3A4A3E` and `#2A2E36` on the control rules of `/authoring`,
   `/budgets`, `/console`, `/issuer`, `/manage` and `/board`; dividers, panels, tags and fieldsets
   keep their lines. A filled control (the primary button) is identified by its fill instead.
+- In forced colours, Chalk buttons and button links retain a system-colour border when the OS removes the primary fill. Text actions (`.ghost`, `.reset`) remain borderless and quieter; disabled boundaries use `GrayText`. Existing focus outlines remain visible. The correction does not change normal-mode appearance.
 - Chalk state layers: each page with controls (`/authoring`, `/budgets`, `/console`, `/issuer`,
   `/manage`, `/board`, `/sharing`, `/learn`) declares hover = its text colour at 8% and pressed =
   14% over the surface. Quiet buttons (`.ghost`, `.reset`, `.secondary`, a form's unclassed
@@ -4769,6 +4770,8 @@ can find every control's edge, without the edge depending on a hover. Both Studi
   buttons, which it used to repaint.
 - In Studio the pressed rule follows every hover rule it ties with, so a press shows while the
   pointer is still over the control.
+
+Tests: `chalk/test/forced-colors.browser.mjs` renders all nine real routes in light/dark forced colours at 320/1280 CSS px, compares normal-mode controls with and without the shared correction, checks Save/Later hierarchy and focus, and detects the original missing-sheet defect. Native Windows high-contrast acceptance remains separate.
 
 Tests: `extensions/hypeproof-chat/test/control-state-layers.smoke.mjs` (tokens per scope,
 hover/pressed coverage of every quiet control, pressed outranking hover in the cascade, the
