@@ -2683,6 +2683,9 @@
           "path": "docs/testing/classroom-admin.md"
         },
         {
+          "path": "chalk/test/issuer-forget.browser.mjs"
+        },
+        {
           "path": "test/service-integration/classroom-ops-review.test.mjs"
         },
         {
