@@ -36,7 +36,13 @@ function useMaterials() {
     const dispose = onHostMessage(message => {
       if (message.type !== 'materialsState') return;
       const scope = message.view?.scope;
-      if (scope !== lifetime.current?.scope) lifetime.current = scope === undefined ? null : { scope };
+      if (scope !== lifetime.current?.scope) {
+        lifetime.current = scope === undefined ? null : { scope };
+        // A departed scope cannot keep the new list locked or clear its draft.
+        pending.current = null;
+        onSaved.current = undefined;
+        setBusy(false); setError(''); setNotice('');
+      }
       setView(message.view);
       setAnswered(true);
       // An answer to another surface's press updates the list, not this surface's messages.

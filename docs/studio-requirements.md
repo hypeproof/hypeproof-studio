@@ -1925,6 +1925,11 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   the draft; only that form's successful acknowledgement clears it. Another activity never
   inherits the draft. Removing the list entry retains the file and does not erase earlier
   conversation/provider data; this does not complete AE-41 context exclusion.
+  Pending material actions belong to the displayed activity/task scope. A scope change
+  (including unavailable state and A→B→A) releases the departed request's UI lock
+  and saved-draft callback; same-scope refreshes keep duplicate-submit protection.
+  A late old request reply must not unlock or show an error for a newer request.
+
 - **Adding a file.** "파일 넣기" opens the system picker; the host copies the pick into
   `<work folder>/자료/` (created if missing) with identical bytes and lists it with origin 나
   (a pick already in `자료/` keeps its own Unicode spelling, so an NFD name is still found). At

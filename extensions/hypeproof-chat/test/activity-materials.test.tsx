@@ -196,6 +196,50 @@ t("#3266: a different activity never inherits the note draft", async () => {
   await act(async () => { root.unmount(); });
 });
 
+
+// Pending note requests belong to their original material scope.
+for (const transition of ["same", "switch", "return", "unavailable"]) t(`#3266 pending note after ${transition}`, async () => {
+  const root = await mountPanel();
+  try {
+    await hostSays({ type: "materialsState", view: VIEW });
+    const field = (name: string) => all(e => e.getAttribute("name") === name)[0];
+    const form = all(e => e.localName === "form" && e.findAll(c => c.getAttribute("name") === "material-note-title").length > 0)[0];
+    await act(async () => { const e = field("material-note-title"); (e as unknown as { type: string }).type = "text"; e.value = "첫 활동 메모"; e.dispatchEvent(ev("input")); });
+    await act(async () => { const e = field("material-note-text"); e.value = "응답 전 활동 이동"; e.dispatchEvent(ev("input")); });
+    await act(async () => { form.dispatchEvent(ev("submit")); });
+    const request = last("materialAddNote")!;
+    ok(request?.requestId, "note request issued");
+    ok(field("material-note-title").hasAttribute("disabled"), "pending same scope disabled positive control");
+    const other = { ...VIEW, scope: "task-b" };
+    if (transition === "same") {
+      await hostSays({ type: "materialsState", view: VIEW });
+      ok(field("material-note-title").hasAttribute("disabled"), "same scope refresh cannot duplicate save");
+      await hostSays({ type: "materialsState", view: VIEW, requestId: request.requestId });
+    } else if (transition === "switch") {
+      await hostSays({ type: "materialsState", view: other });
+    } else if (transition === "return") {
+      await hostSays({ type: "materialsState", view: other });
+      await hostSays({ type: "materialsState", view: VIEW });
+    } else {
+      await hostSays({ type: "materialsState", view: null });
+      await hostSays({ type: "materialsState", view: other });
+    }
+    ok(!field("material-note-title").hasAttribute("disabled"), "active scope note input must be usable without old-scope acknowledgement");
+    const button = all(e => e.localName === "button" && e.getAttribute("aria-label") === "이번 질문에 넣기: example.com")[0];
+    ok(!button.hasAttribute("disabled"), "active scope source selection must be usable");
+    await act(async () => { click(button as never); });
+    const select = last("materialSelect")!;
+    eq(select.scope, transition === "switch" || transition === "unavailable" ? "task-b" : VIEW.scope, "new request uses displayed scope");
+    ok(select.requestId !== request.requestId, "new operation has own acknowledgement");
+    const currentView = transition === "switch" || transition === "unavailable" ? other : VIEW;
+    await hostSays({ type: "materialsState", view: currentView, requestId: request.requestId, error: "이전 요청 오류" });
+    ok(field("material-note-title").hasAttribute("disabled"), "old reply cannot unlock a newer request");
+    ok(!byText("p", "이전 요청 오류").length, "old reply cannot show an error in new scope");
+    await hostSays({ type: "materialsState", view: currentView, requestId: select.requestId });
+    ok(!field("material-note-title").hasAttribute("disabled"), "new request unlocks only on own reply");
+  } finally { await act(async () => { root.unmount(); }); }
+});
+
 type Card = El & { open: boolean; dispatchEvent(e: unknown): boolean };
 const card = () => all((e) => e.getAttribute("data-testid") === "materials")[0] as unknown as Card;
 const settle = () => new Promise((r) => setTimeout(r, 0));
