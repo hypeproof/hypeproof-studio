@@ -618,6 +618,7 @@
   --ds-p-rec-pill-ink-dark: #1a1a1a;
   --ds-p-rec-pill-bg-light: #c62828;
   --ds-p-rec-pill-ink-light: #ffffff;
+  --ds-p-size-7rem: 7rem;
 }
 :root, [data-theme="dark"], .vscode-dark {
   --ds-s-typography-ui: var(--ds-p-136);
@@ -1358,6 +1359,7 @@
   --ds-s-rec-pill-ink-dark: var(--ds-p-rec-pill-ink-dark);
   --ds-s-rec-pill-bg-light: var(--ds-p-rec-pill-bg-light);
   --ds-s-rec-pill-ink-light: var(--ds-p-rec-pill-ink-light);
+  --ds-s-control-duration-min-width: var(--ds-p-size-7rem);
 }
 [data-theme="light"], .vscode-light {
   --ds-s-typography-ui: var(--ds-p-136);
@@ -2098,6 +2100,7 @@
   --ds-s-rec-pill-ink-dark: var(--ds-p-rec-pill-ink-dark);
   --ds-s-rec-pill-bg-light: var(--ds-p-rec-pill-bg-light);
   --ds-s-rec-pill-ink-light: var(--ds-p-rec-pill-ink-light);
+  --ds-s-control-duration-min-width: var(--ds-p-size-7rem);
 }
 :root, body {
   --ds-c-studio-copy-toast-max: var(--ds-s-size-106);
@@ -3745,4 +3748,5 @@
   --ds-c-rec-pill-ink-dark: var(--ds-s-rec-pill-ink-dark);
   --ds-c-rec-pill-bg-light: var(--ds-s-rec-pill-bg-light);
   --ds-c-rec-pill-ink-light: var(--ds-s-rec-pill-ink-light);
+  --ds-c-chalk-console-duration-min-width: var(--ds-s-control-duration-min-width);
 }
