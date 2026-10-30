@@ -7362,7 +7362,7 @@ REQ-STUDIO-COACH-RUN-STATE / REQ-CGP-LEARN-16 (CGP-LEARN-032) / DES-CGP-LEARN-16
 judgment stays visible): the learner can tell at a glance whether the coach is working, looking
 something up, changing their work, or waiting for them, so a pending decision is never missed. The
 chat header shows exactly one coach run state from a fixed set: 준비됨 / 생각 중 / 찾는 중 /
-만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요. It is a static 20px stroke icon plus the
+만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요 / 이용권 확인 필요. It is a static 20px stroke icon plus the
 words at the 14px floor (DEC-29) in a polite live region (`role="status"`, `aria-live="polite"`,
 `aria-atomic="true"`). DES-CGP-LEARN-16 (CGP-LEARN-D-016): a change of state is announced, so the region is
 one node that stays mounted while its words change in place; it is never replaced per state. There is no character and no animation, and colour only reinforces the words (approval and error
@@ -7373,6 +7373,7 @@ controls stay on one row and the page never scrolls sideways.
 The state is derived in the webview (`src/coachRunState.ts`, pure) from what it already holds, with
 this precedence: any open approval → 확인이 필요해요; a streaming turn or a running product test
 (내 제품 테스트) → its current activity; a send that has not opened its stream yet → 생각 중; an
+typed exhausted/expired access ending → 이용권 확인 필요 (neutral ticket, matching the task rail, #2442); an
 error banner, a last turn that failed, or a coach that cannot take a request now (offline, or the
 activity unavailable, frozen or unverified) → 문제가 생겼어요, never 준비됨; a last turn the learner or instructor stopped → 멈춤; otherwise 준비됨 (no turn yet,
 or the last turn finished). "Any open approval" is the host's `approvalWait` (REQ-E1, both
