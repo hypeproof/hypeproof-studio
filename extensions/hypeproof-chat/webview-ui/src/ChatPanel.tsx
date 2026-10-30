@@ -963,7 +963,7 @@ export function ChatPanel(props: Props) {
   const { materialsHome } = useContext(ActivityHomeContext);
   const setVisibleDraft = useCallback((value: string | ((previous: string) => string)) => setDraftParts(previous => editVisible(previous, typeof value === 'function' ? value(visibleDraft(previous)) : value)), []);
   const fileMentions = useFileMentions({ enabled: config?.fileMentions === true && !props.instructor && !unavailable, draft: composerText, setDraft: setVisibleDraft, editor: textareaRef, composing, activityId, taskId });
-  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace || !!props.fileAttachment, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
+  const composerExpanded = useGrowingComposer(textareaRef, true, composerText, !!props.fileAttachment || pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.

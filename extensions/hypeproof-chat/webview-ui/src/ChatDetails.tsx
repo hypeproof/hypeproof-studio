@@ -310,7 +310,12 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       const fixedFooter = (footer?.offsetHeight ?? node.offsetHeight) - node.offsetHeight;
       // File chips share the field's 192px budget, including its controls and inset.
       const fileChrome = card?.querySelector('.hps-file-context') ? card.offsetHeight - node.offsetHeight : 0;
-      const cap = Math.max(24, Math.min(192 - fileChrome, (shell?.clientHeight ?? 600) - fixedFooter - chrome - 96));
+      // Classroom shells scroll their lesson content; subtracting its full height
+      // would permanently collapse the editor. Bound the sticky input by the viewport.
+      const available = shell?.dataset.chatDetail === 'personal'
+        ? (shell?.clientHeight ?? 600) - fixedFooter - chrome - 96
+        : (shell?.clientHeight ?? 600) / 3;
+      const cap = Math.max(24, Math.min(192 - fileChrome, available));
       node.style.maxHeight = `${cap}px`;
       node.style.height = '0px';
       node.style.height = `${Math.min(cap, Math.max(24, node.scrollHeight))}px`;
