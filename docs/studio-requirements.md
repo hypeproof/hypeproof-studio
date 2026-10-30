@@ -7754,6 +7754,14 @@ ownership or execution authority. Source tests and an actual isolated developmen
 app with a synthetic profile cover this bounded flow; full DMC-1, DMC-T01/DMC-T14,
 real account continuity, pairing and release acceptance remain open.
 
+The [native iOS account foundation](../apps/companion-ios/README.md), tracked in
+Studio #3263 under #2805/#3079, prepares an iPhone/iPad account screen using the
+existing device-code protocol. It keeps credentials in native RAM and checks
+expiry across sleep. Account verification does not connect or authorize a
+computer; pairing, draft recovery, physical-device and store acceptance remain
+separate. [Scoped checks](testing/desktop-mobile-companion.md#ios-native-account-foundation-studio-3263)
+distinguish source, simulator and signed-device evidence.
+
 ## Learning block attached by the confirmed lesson (CGP-LEARN-R-001)
 
 REQ-STUDIO-LEARNING-BLOCK-ATTACH / REQ-CGP-LEARN-01 (CGP-LEARN-001) / PI#4 (the instructor shapes the

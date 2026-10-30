@@ -81,3 +81,34 @@ controls for activity changes during binding/filesystem validation before review
 or persistence; all four must block stale review or metadata writes. Those new
 failure paths and controller bytes have source/fixture checks, with native
 acceptance **NOT RUN**; the earlier native run remains bound to `b7ee35cf`.
+
+
+## iOS native account foundation (Studio #3263)
+
+This scoped foundation supports parts of DMC-T02, DMC-T13 and DMC-T14; it does
+not complete those scenarios or parent Studio #2805/#3079. The native SwiftUI
+account screen uses the existing Service device-code protocol and keeps access
+credentials in native RAM. It must describe the computer as unconnected; no
+workspace pairing, relay or execution is enabled by account verification.
+
+Run `bash e2e/companion-ios/core-checks.sh` for the actual Swift core against
+synthetic transports and clocks. Controls must reject wrong approval origins,
+identity mismatch, cancellation and expiry, including a simulated suspension
+across the challenge deadline. The UI and protocol use the same sleep-inclusive
+clock. macOS compilation or fake-clock controls do not establish iOS compilation,
+real authentication or a physical sleep/resume outcome.
+
+Run `python3 e2e/companion-ios/test_simulator_checks.py` for mocked ownership and
+failure-path controls. The native check, `python3 e2e/companion-ios/simulator-checks.py`,
+requires full Xcode and must use fresh owned iPhone/iPad simulator identities,
+bounded commands and cleanup restricted to those returned identities. Preserve
+previous attempts and bind results to source, Xcode/runtime and device IDs.
+The opt-in `companion-ios-verify` PR label runs this unsigned hosted scenario;
+it checks first-screen launch, layout, rotation and large text without pressing
+the production sign-in button or providing a real account.
+
+Report source controls, iOS build, simulator UI, live account authentication,
+physical signed-device acceptance and store review separately. Existing
+Universal Link/direct-code, protected persistence, permission/media, draft
+recovery, desktop interaction and physical-device requirements remain open.
+The public entry and limitations are in [the native client README](../../apps/companion-ios/README.md).
