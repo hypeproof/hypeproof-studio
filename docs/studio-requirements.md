@@ -1915,6 +1915,16 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   config flag draws it; the host re-checks on every press. On a task workspace seat (personal,
   trial) the same list is the activity home's 자료 view in the task rail instead
   (REQ-STUDIO-ACTIVITY-HOME, CGP-KNOW-R-002); the chat column then has no card of its own.
+- **Writing a note (#3266, parent #555).** “메모 쓰기” accepts a title and text, then an
+  explicit “메모 저장” writes a new `.txt` file through the same checked materials copy path.
+  The title must be a portable plain filename; the body must be nonempty text within the
+  file-attachment limits. Duplicate titles never overwrite a previous file. The note uses
+  the existing folder manifest and is not selected or sent automatically: the learner must
+  press “이번 질문에 넣기” after saving. The host checks the original activity, current work
+  folder and seat again after asynchronous loading, before writing. A refused save retains
+  the draft; only that form's successful acknowledgement clears it. Another activity never
+  inherits the draft. Removing the list entry retains the file and does not erase earlier
+  conversation/provider data; this does not complete AE-41 context exclusion.
 - **Adding a file.** "파일 넣기" opens the system picker; the host copies the pick into
   `<work folder>/자료/` (created if missing) with identical bytes and lists it with origin 나
   (a pick already in `자료/` keeps its own Unicode spelling, so an NFD name is still found). At
