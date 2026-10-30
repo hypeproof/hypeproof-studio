@@ -8017,6 +8017,12 @@ SX-01 (no capability label or evaluation sentence on the work screen); builds on
 (CGP-KNOW-R-030) and DEC-01. The memory view (the `기억` filter of the 내 작품 drawer since CGP-KNOW-D-030) shows "작업별 기억": the stated facts in the activity's
 memory files, grouped by the task each came from. It filters ability, personality and capability statements out on a best-effort basis (word and pattern lists; see the rule below).
 
+- **Finding a memory file (#3288).** The existing file list offers a labelled local search over
+  filenames and the text already disclosed in the panel. It matches literal text ignoring case
+  and Unicode composition, preserves file order and action identities, shows result/total counts,
+  and offers clear and no-match states. A file whose text is omitted can still match its name;
+  search does not load its body, request AI, change memories, or bypass the host's overview gates.
+  The query resets when the activity scope changes. The task overview itself remains unchanged.
 - **Built here, from the files.** The overview is made on this computer from the memory files themselves; no model
   writes or summarises it, and no request carries memory for it. Each item is one file's text, trimmed. An item kept
   from a task records the task on the file's first line as a Markdown comment (`<!-- hypeproof-task: <id> -->`, a plain
