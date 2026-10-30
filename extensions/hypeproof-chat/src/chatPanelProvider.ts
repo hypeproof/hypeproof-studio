@@ -3799,12 +3799,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const snap = await this.materialsSnapshot();
     if (!snap) { await this.postMaterials({ requestId, error: FILE_REFUSAL_COPY["no-workspace"] }); return; }
     const scope = this.turnRequestScope();
-    if (note) {
+    if (note || url !== undefined) {
       // Snapshot awaits inbox/provenance I/O: recheck the original task, folder and seat before writing.
       let currentRoot = "";
       try { currentRoot = fs.realpathSync(this.resolveCoachCwd() ?? ""); } catch { /* refuse below */ }
-      const changed = note.scope !== requestedScope || scope !== requestedScope ||
-        this.resolveCoachCwd() !== requestedCwd || currentRoot !== snap.root || snap.view.scope !== note.scope;
+      const changed = (note !== undefined && note.scope !== requestedScope) || scope !== requestedScope ||
+        this.resolveCoachCwd() !== requestedCwd || currentRoot !== snap.root || snap.view.scope !== requestedScope;
       const currentRefusal = this.materialsRefusal();
       if (changed || currentRefusal) { await this.postMaterials({ requestId, error: currentRefusal || MATERIALS_COPY.changed }); return; }
     }
