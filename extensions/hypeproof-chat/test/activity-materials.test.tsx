@@ -159,10 +159,114 @@ const drag = (type: string, files: FakeFile[], kind = "file"): Drag => ({
   ...ev(type), _stopped: false, stopPropagation() { this._stopped = true; }, relatedTarget: null,
   dataTransfer: { items: files.length ? files.map(() => ({ kind })) : [{ kind: "string" }], files },
 });
+t("#3266: note draft survives refusal and unrelated replies, then clears on its own success", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const field = (name: string) => all(e => e.getAttribute("name") === name)[0];
+  const form = all(e => e.localName === "form" && e.findAll(c => c.getAttribute("name") === "material-note-title").length > 0)[0];
+  await act(async () => { const e = field("material-note-title"); (e as unknown as { type: string }).type = "text"; e.value = "수업 메모"; e.dispatchEvent(ev("input")); });
+  await act(async () => { const e = field("material-note-text"); e.value = "직접 쓴 내용\n둘째 줄"; e.dispatchEvent(ev("input")); });
+  await act(async () => { form.dispatchEvent(ev("submit")); });
+  const first = last("materialAddNote")!;
+  eq([first.scope, first.title, first.text], [VIEW.scope, "수업 메모", "직접 쓴 내용\n둘째 줄"], "authored text and scope posted exactly");
+  ok(!posted.some(m => m.type === "sendMessage" || m.type === "materialSelect"), "save does not send or select");
+  await hostSays({ type: "materialsState", view: VIEW, requestId: "another-surface" });
+  eq(field("material-note-text").value, "직접 쓴 내용\n둘째 줄", "unrelated success preserves draft");
+  await hostSays({ type: "materialsState", view: VIEW, requestId: first.requestId, error: "저장하지 못했어요" });
+  eq(field("material-note-title").value, "수업 메모", "refusal preserves title");
+  eq(field("material-note-text").value, "직접 쓴 내용\n둘째 줄", "refusal preserves body");
+  await act(async () => { form.dispatchEvent(ev("submit")); });
+  const second = last("materialAddNote")!;
+  ok(second.requestId !== first.requestId, "retry has own acknowledgement");
+  await hostSays({ type: "materialsState", view: VIEW, requestId: second.requestId });
+  eq([field("material-note-title").value, field("material-note-text").value], ["", ""], "own success clears saved draft");
+  await act(async () => { root.unmount(); });
+});
+
+t("#3266: a different activity never inherits the note draft", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const title = () => all(e => e.getAttribute("name") === "material-note-title")[0];
+  await act(async () => { const e = title(); (e as unknown as { type: string }).type = "text"; e.value = "첫 활동의 비공개 메모"; e.dispatchEvent(ev("input")); });
+  await hostSays({ type: "materialsState", view: { ...VIEW, scope: "different-task" } });
+  eq(title().value, "", "new activity starts empty");
+  await act(async () => { const e = title(); (e as unknown as { type: string }).type = "text"; e.value = "두 번째 활동"; e.dispatchEvent(ev("input")); });
+  await hostSays({ type: "materialsState", view: VIEW });
+  eq(title().value, "", "second activity text never leaks back");
+  await act(async () => { root.unmount(); });
+});
+
+
+// Pending note requests belong to their original material scope.
+for (const transition of ["same", "switch", "return", "unavailable"]) t(`#3266 pending note after ${transition}`, async () => {
+  const root = await mountPanel();
+  try {
+    await hostSays({ type: "materialsState", view: VIEW });
+    const field = (name: string) => all(e => e.getAttribute("name") === name)[0];
+    const form = all(e => e.localName === "form" && e.findAll(c => c.getAttribute("name") === "material-note-title").length > 0)[0];
+    await act(async () => { const e = field("material-note-title"); (e as unknown as { type: string }).type = "text"; e.value = "첫 활동 메모"; e.dispatchEvent(ev("input")); });
+    await act(async () => { const e = field("material-note-text"); e.value = "응답 전 활동 이동"; e.dispatchEvent(ev("input")); });
+    await act(async () => { form.dispatchEvent(ev("submit")); });
+    const request = last("materialAddNote")!;
+    ok(request?.requestId, "note request issued");
+    ok(field("material-note-title").hasAttribute("disabled"), "pending same scope disabled positive control");
+    const other = { ...VIEW, scope: "task-b" };
+    if (transition === "same") {
+      await hostSays({ type: "materialsState", view: VIEW });
+      ok(field("material-note-title").hasAttribute("disabled"), "same scope refresh cannot duplicate save");
+      await hostSays({ type: "materialsState", view: VIEW, requestId: request.requestId });
+    } else if (transition === "switch") {
+      await hostSays({ type: "materialsState", view: other });
+    } else if (transition === "return") {
+      await hostSays({ type: "materialsState", view: other });
+      await hostSays({ type: "materialsState", view: VIEW });
+    } else {
+      await hostSays({ type: "materialsState", view: null });
+      await hostSays({ type: "materialsState", view: other });
+    }
+    ok(!field("material-note-title").hasAttribute("disabled"), "active scope note input must be usable without old-scope acknowledgement");
+    const button = all(e => e.localName === "button" && e.getAttribute("aria-label") === "이번 질문에 넣기: example.com")[0];
+    ok(!button.hasAttribute("disabled"), "active scope source selection must be usable");
+    await act(async () => { click(button as never); });
+    const select = last("materialSelect")!;
+    eq(select.scope, transition === "switch" || transition === "unavailable" ? "task-b" : VIEW.scope, "new request uses displayed scope");
+    ok(select.requestId !== request.requestId, "new operation has own acknowledgement");
+    const currentView = transition === "switch" || transition === "unavailable" ? other : VIEW;
+    await hostSays({ type: "materialsState", view: currentView, requestId: request.requestId, error: "이전 요청 오류" });
+    ok(field("material-note-title").hasAttribute("disabled"), "old reply cannot unlock a newer request");
+    ok(!byText("p", "이전 요청 오류").length, "old reply cannot show an error in new scope");
+    await hostSays({ type: "materialsState", view: currentView, requestId: select.requestId });
+    ok(!field("material-note-title").hasAttribute("disabled"), "new request unlocks only on own reply");
+  } finally { await act(async () => { root.unmount(); }); }
+});
+
 type Card = El & { open: boolean; dispatchEvent(e: unknown): boolean };
 const card = () => all((e) => e.getAttribute("data-testid") === "materials")[0] as unknown as Card;
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const drops = () => posted.filter((m) => m.type === "materialAddDrop") as { name: string; size: number; base64: string; requestId: string }[];
+
+for (const transition of ["same", "switch", "return", "unavailable", "unmount"]) t(`#3306: delayed drop settles safely after ${transition}`, async () => {
+  for (const rejects of [false, true]) {
+    const root = await mountPanel();
+    await hostSays({ type: "materialsState", view: VIEW });
+    let resolve!: (value: ArrayBuffer) => void, reject!: (reason: Error) => void;
+    const reading = new Promise<ArrayBuffer>((yes, no) => { resolve = yes; reject = no; });
+    const file: FakeFile = { name: "private.md", size: 3, type: "text/markdown", arrayBuffer: () => reading };
+    const c = card(); c.open = true;
+    await act(async () => { c.dispatchEvent(drag("drop", [file])); });
+    if (transition === "unmount") await act(async () => { root.unmount(); });
+    else if (transition === "unavailable") await hostSays({ type: "materialsState", view: null });
+    else {
+      await hostSays({ type: "materialsState", view: transition === "same" ? { ...VIEW } : { ...VIEW, scope: "other-task" } });
+      if (transition === "return") await hostSays({ type: "materialsState", view: VIEW });
+    }
+    await act(async () => { if (rejects) reject(new Error("read failed")); else resolve(new Uint8Array([97, 98, 99]).buffer); await settle(); await settle(); });
+    const sent = drops();
+    if (transition !== "unmount") await act(async () => { root.unmount(); });
+    eq(sent.length, transition === "same" ? 1 : 0, `old read ${rejects ? "rejection" : "bytes"} must not cross ${transition}`);
+    if (transition === "same") eq(sent[0].base64, rejects ? "" : "YWJj", "unchanged scope retains normal success/refusal path");
+  }
+});
 
 t("#2641: a file dropped on the open card goes to the host once, as its bytes, and stops at the card", async () => {
   const root = await mountPanel();

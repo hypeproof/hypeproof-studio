@@ -265,6 +265,27 @@ export function addMaterialDrop(root: string, drop: { name: string; size: number
   }
 }
 
+/**
+ * Save an explicitly authored note through the same checked text-copy path as an import.
+ * This only writes the file: the caller still owns seat/scope admission, manifest registration
+ * and explicit selection. Saving a note never opts it into a model request.
+ */
+export function addMaterialNote(root: string, title: unknown, text: unknown): ReturnType<typeof addMaterialDrop> {
+  if (typeof title !== "string") return refuseFile("name");
+  const stem = title.trim().normalize("NFC");
+  // Portable plain filenames, including Windows reserved names. Never silently remove a path.
+  if (!stem || /[<>:"/\\|?*]/.test(stem) || stem.endsWith(".") ||
+      /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(stem)) return refuseFile("name");
+  const name = `${stem}.txt`;
+  if (!materialFileName(name)) return refuseFile("name");
+  if (typeof text !== "string") return refuseFile("empty-text");
+  if (text.length > FILE_ATTACH_MAX_CHARS) return refuseFile("too-many-chars");
+  const bytes = Buffer.from(text, "utf8");
+  // A lone UTF-16 surrogate would otherwise silently become a replacement character on disk.
+  if (bytes.toString("utf8") !== text) return refuseFile("binary");
+  return addMaterialDrop(root, { name, size: bytes.length, base64: bytes.toString("base64") });
+}
+
 export function newMaterialId(): string { return randomUUID().replace(/-/g, "").slice(0, 12); }
 
 /** Add a learner item; an item already on the list (same file or address) is not added twice. */

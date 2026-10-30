@@ -261,7 +261,7 @@ import { CapabilityChangeTracker, seatAiCapabilities, type SeatInputs } from "./
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { RemovalSlot, validUndoId } from "./removalUndo";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE, ASK_ABOUT_FILE_CONTEXT_KEY } from "./fileAttachment";
-import { addMaterialDrop, addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
+import { addMaterialNote, addMaterialDrop, addMaterialFile, checkMaterialUrl, listMaterialFolder, loadManifest, materialsManifestFile, materialsView, saveManifest, selectedMaterialsText, unavailableSelected, withLearnerItem, withoutItem, MATERIALS_COPY, MATERIALS_MAX_SELECTED, type MaterialsView } from "./activityMaterials";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import { compactionLineId, CONTEXT_COMPACT_NOTE, trimBoundaryId } from "./contextTrim";
@@ -3791,12 +3791,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // REQ-STUDIO-FOLDER-CONSENT — "AI 안 씀": nothing from this folder is queued for the model.
     return folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
   }
-  private async addMaterial(requestId: string, url?: string, dropped?: { name: string; size: number; base64: string }): Promise<void> {
+  private async addMaterial(requestId: string, url?: string, dropped?: { name: string; size: number; base64: string }, note?: { scope: string; title: unknown; text: unknown }): Promise<void> {
+    const requestedScope = this.turnRequestScope();
+    const requestedCwd = this.resolveCoachCwd();
     const refusal = this.materialsRefusal();
     if (refusal) { await this.postMaterials({ requestId, error: refusal }); return; }
     const snap = await this.materialsSnapshot();
     if (!snap) { await this.postMaterials({ requestId, error: FILE_REFUSAL_COPY["no-workspace"] }); return; }
     const scope = this.turnRequestScope();
+    if (note) {
+      // Snapshot awaits inbox/provenance I/O: recheck the original task, folder and seat before writing.
+      let currentRoot = "";
+      try { currentRoot = fs.realpathSync(this.resolveCoachCwd() ?? ""); } catch { /* refuse below */ }
+      const changed = note.scope !== requestedScope || scope !== requestedScope ||
+        this.resolveCoachCwd() !== requestedCwd || currentRoot !== snap.root || snap.view.scope !== note.scope;
+      const currentRefusal = this.materialsRefusal();
+      if (changed || currentRefusal) { await this.postMaterials({ requestId, error: currentRefusal || MATERIALS_COPY.changed }); return; }
+    }
     // A full list refuses a file before anything is copied, so no unlisted copy is left in 자료/.
     if (url === undefined && "full" in withLearnerItem(loadManifest(snap.file), { kind: "file", ref: "\u0000" }, Date.now(), listMaterialFolder(snap.root))) { await this.postMaterials({ requestId, error: MATERIALS_COPY.tooManyItems }); return; }
     let item: { kind: "file" | "url"; ref: string; title: string };
@@ -3804,6 +3815,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const checked = checkMaterialUrl(url);
       if (!checked.ok) { await this.postMaterials({ requestId, error: checked.reason }); return; }
       item = { kind: "url", ref: checked.url, title: checked.host };
+    } else if (note) {
+      const added = addMaterialNote(snap.root, note.title, note.text);
+      if (!added.ok) { await this.postMaterials({ requestId, error: added.reason }); return; }
+      noteHostWrite([{ absPath: path.join(snap.root, ...added.rel.split("/")), data: added.bytes }], "learner_upload");
+      item = { kind: "file", ref: added.rel, title: added.rel.slice(added.rel.indexOf("/") + 1) };
     } else if (dropped) {
       // #2641 — a drop on the open 자료 panel: the picker's checks on the bytes, then the same list.
       const added = addMaterialDrop(snap.root, dropped);
@@ -7957,6 +7973,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "restorePageContext": await this.restoreRemovedPage(msg.undoId); return;
       // CGP-KNOW-R-003 — the 자료 list; the host re-checks the seat, folder and scope on every press.
       case "materialsRequest": await this.postMaterials(); return;
+      case "materialAddNote": await this.addMaterial(String(msg.requestId), undefined, undefined, {
+        scope: typeof msg.scope === "string" ? msg.scope : "", title: msg.title, text: msg.text }); return;
       case "materialAddFile": await this.addMaterial(String(msg.requestId)); return;
       case "materialAddUrl": await this.addMaterial(String(msg.requestId), typeof msg.url === "string" ? msg.url : ""); return;
       case "materialAddDrop": await this.addMaterial(String(msg.requestId), undefined, { name: typeof msg.name === "string" ? msg.name : "",
