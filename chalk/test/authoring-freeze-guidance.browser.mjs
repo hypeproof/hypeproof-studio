@@ -23,7 +23,7 @@ export async function runAuthoringFreezeGuidanceBrowser() {
   assert.equal(digest(retained422), '39349b13f4ac43cbb208a601718e495b493f6f6b3e4917b839254a46a38721fa');
   const evidence = process.env.CHALK_FREEZE_GUIDANCE_EVIDENCE;
   if (evidence) mkdirSync(evidence, { recursive: true });
-  const report = { status: 'RUNNING', cases: [], requests: [], dialogs: [], cleanup: false,
+  const report = { status: 'RUNNING', cases: [], requests: [], dialogs: [], disclosures: [], cleanup: false,
     boundary: 'Actual Chromium/served Chalk HTML; synthetic API, no Service/authentication/provider' };
   const checkpoint = (phase) => { report.phase = phase; if (evidence) writeFileSync(join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n'); };
   const bounded = async (promise, label) => { let timer; try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('timed out: ' + label)), 15000); })]); } finally { clearTimeout(timer); } };
@@ -65,10 +65,16 @@ export async function runAuthoringFreezeGuidanceBrowser() {
   }
   async function click(selector) {
     // Open each actual enclosing disclosure with a pointer before its control.
-    for (;;) {
-      const point = await browser.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('missing control');let d=e.parentElement?.closest('details:not([open])'),outer=d;while(d){outer=d;d=d.parentElement?.closest('details:not([open])');}if(!outer)return null;const s=outer.querySelector(':scope > summary');s.scrollIntoView({block:'center'});const r=s.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
-      if (!point) break; await mouse(point);
+    let revealed = false;
+    for (let depth = 0; depth < 8; depth++) {
+      const point = await browser.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('missing control');let d=e.parentElement?.closest('details:not([open])'),outer=d;while(d){outer=d;d=d.parentElement?.closest('details:not([open])');}if(!outer)return null;const s=outer.querySelector(':scope > summary');s.scrollIntoView({block:'center'});const r=s.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,index:[...document.querySelectorAll('details')].indexOf(outer)};})()`);
+      if (!point) { revealed = true; break; }
+      await mouse(point);
+      const opened = await browser.evaluate(`document.querySelectorAll('details')[${point.index}].open`);
+      report.disclosures.push({ selector, point, opened });
+      assert.equal(opened, true, 'pointer opens enclosing disclosure: ' + JSON.stringify({ selector, point }));
     }
+    assert.equal(revealed, true, 'bounded disclosure ancestry: ' + selector);
     const point = await browser.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:r.width,height:r.height,disabled:!!e.disabled};})()`);
     assert.equal(point.disabled, false, selector + ' enabled'); assert.ok(point.width > 0 && point.height > 0, selector + ' visible');
     await mouse(point);
