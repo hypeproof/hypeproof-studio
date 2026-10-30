@@ -546,6 +546,13 @@ start-page control whose literal border fails 3:1 on its own background. Not yet
 personal-chat `--tw-line` family (fallback #34383e) and legacy `--vscode-*` fallbacks in
 `styles.css`; tracked as the next DES-11 slice.
 
+For #2227, the enabled personal Send button also uses the required-control
+boundary token while retaining the host accent fill and foreground. The shipped
+full-App Chromium check `test/send-control-contrast.smoke.mjs` measures active
+personal/classroom Send and classroom Run against their computed surfaces in
+Dark+ and Light+. Personal Run is not rendered in this surface. This extends
+coverage to that Send boundary, not all remaining personal-chat fallbacks.
+
 ### Shared focus geometry (CGP-DS-D-014)
 
 `REQ-STUDIO-SHARED-FOCUS-GEOMETRY` extends DES-06/DES-11 and

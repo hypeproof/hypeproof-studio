@@ -1,0 +1,5 @@
+/* #2227: the host accent may be too close to the personal composer surface.
+   Keep its fill/arrow and use the existing required-control boundary token. */
+.hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send:not(:disabled) {
+  border: var(--ds-c-studio-chatdetails-size-3) solid var(--hp-border-control-default);
+}

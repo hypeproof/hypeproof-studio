@@ -10,6 +10,7 @@ import { App } from "./App";
 import { installImeHostBarrier } from "./imeGuard";
 import "./styles.css";
 import "./chatDetails.css";
+import "./sendButton.css";
 import "./tooltips.css";
 import { installTooltips } from "./tooltips";
 import "./koreanProse.css";
