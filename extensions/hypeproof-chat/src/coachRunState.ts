@@ -9,10 +9,10 @@
 
 import type { TaskTurnOutcome } from "./taskRunState.ts";
 
-export type CoachRunState = "ready" | "thinking" | "searching" | "creating" | "approval" | "paused" | "error";
+export type CoachRunState = "ready" | "thinking" | "searching" | "creating" | "approval" | "paused" | "error" | "access";
 
 /** The stroke icons (webview ChatIcon kinds) the run state draws. Static, never animated. */
-export type CoachRunIcon = "check" | "thought" | "search" | "pencil" | "hand" | "stop" | "alert";
+export type CoachRunIcon = "check" | "thought" | "search" | "pencil" | "hand" | "stop" | "alert" | "ticket";
 
 /** The fixed set, in the order the requirement lists it. The words are always drawn. */
 export const COACH_RUN_STATES: Record<CoachRunState, { label: string; icon: CoachRunIcon }> = {
@@ -23,6 +23,7 @@ export const COACH_RUN_STATES: Record<CoachRunState, { label: string; icon: Coac
   approval: { label: "확인이 필요해요", icon: "hand" },
   paused: { label: "멈춤", icon: "stop" },
   error: { label: "문제가 생겼어요", icon: "alert" },
+  access: { label: "이용권 확인 필요", icon: "ticket" },
 };
 
 export interface RunStateLine {
@@ -87,11 +88,13 @@ export interface CoachRunInputs {
   messages: readonly RunStateLine[];
 }
 
-/** Precedence: approval > running > preparing > error banner or unavailable > last outcome > ready. */
+/** Precedence: approval > running > preparing > typed access ending > error banner or unavailable > last outcome > ready. */
 export function deriveCoachRunState(input: CoachRunInputs): CoachRunState {
   if (input.approvalPending) return "approval";
   if (input.running) return currentToolActivity(input.messages);
   if (input.preparing) return "thinking";
+  // Typed allowance endings carry an access decision even while the refusal banner is visible.
+  if (input.lastOutcome === "access") return "access";
   if (input.error || input.unavailable) return "error";
   if (input.lastOutcome === "error") return "error";
   if (input.lastOutcome === "stopped") return "paused";

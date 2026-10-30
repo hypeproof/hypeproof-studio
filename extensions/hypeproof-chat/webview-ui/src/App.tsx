@@ -339,7 +339,8 @@ function reducer(state: State, action: Action): State {
         errorRetry: action.retry !== false,
         trialEndCard: action.trialEndCard ?? null,
         safetyNotice: action.safetyNotice ?? null,
-        lastOutcome: "error",
+        // #2442: typed allowance endings are access decisions, not broken turns.
+        lastOutcome: action.trialEndCard || action.activityUnavailable?.cause === "exhausted" || action.activityUnavailable?.cause === "expired" ? "access" : "error",
       };
     case "attachmentsSaved": {
       const items = [...state.timeline.items];
