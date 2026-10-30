@@ -164,7 +164,7 @@ if (browser) {
 // Parsed stylesheet contracts remain executable in a sandbox without Chromium.
 const expand = staticTokens(readFileSync(resolve(SRC, 'designTokens.css'), 'utf8'));
 const geometry = postcss.parse(expand(readFileSync(resolve(SRC, 'focusGeometry.css'), 'utf8')));
-const baseSelector = 'html body :focus-visible:where(:not(.hps-shell[data-chat-detail="personal"] .hps-input textarea):not(.cp-preview h3))';
+const baseSelector = 'html body :focus-visible:where(:not(.hps-shell .hps-input textarea):not(.cp-preview h3))';
 const fillSelector = baseSelector.replace(':focus-visible:', ':is(:focus-visible, #disconnect):focus-visible:focus-visible:');
 const declaration = (selector, prop, media = '') => {
   let found;
