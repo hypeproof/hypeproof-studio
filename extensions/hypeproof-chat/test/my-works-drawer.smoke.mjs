@@ -130,6 +130,12 @@ try {
     await search('SITE/');
     assert.deepEqual(await b.evaluate(`[...document.querySelectorAll('.tw-works-name')].map(e=>e.textContent)`), ['index.html'], `folder/case search (${tag})`);
     assert.equal(await b.evaluate(`document.querySelector('.tw-provenance-chip strong').textContent`), '내가 올림', `provenance unchanged (${tag})`);
+    if (width > 360) {
+      await b.evaluate(`[...document.querySelectorAll('.tw-works-views:not(.tw-works-filter) button')][1].click()`); await settle();
+      assert.equal(await listDisplay(), 'grid', `filtered grid (${tag})`);
+      assert.equal(await b.evaluate(`document.querySelectorAll('.tw-works-item').length`), 1, 'grid preserves search result');
+      await b.evaluate(`[...document.querySelectorAll('.tw-works-views:not(.tw-works-filter) button')][0].click()`); await settle();
+    }
     assert.ok(await b.evaluate(`document.querySelector('.tw-works-body').textContent.includes('현재 목록에서 1개 / 64개')`), `result count (${tag})`);
     await search('no-matching-path');
     assert.equal(await b.evaluate(`document.querySelectorAll('.tw-works-item').length`), 0, `no matches (${tag})`);
@@ -168,9 +174,16 @@ try {
       // A task switch while the drawer is open closes it (the list belongs to the task it was asked for).
       await b.evaluate(`document.querySelector('.tw-works-open').click()`); await settle(200);
       assert.equal(await b.evaluate(`document.querySelector('.tw-works-drawer')?.open===true`), true);
+      await send({ type: 'artifactProvenance', view });
+      await search('SITE/');
       const second = { ...workspace, revision: 2, activeTaskId: 't2', tasks: [...workspace.tasks, { id: 't2', title: '두 번째', createdAt: 2, updatedAt: NOW, messageCount: 0 }] };
       await send({ type: 'taskWorkspaceState', view: second }); await settle(300);
       assert.equal(await b.evaluate(`!!document.querySelector('.tw-works-drawer')`), false, 'a task switch closes the drawer');
+      await b.evaluate(`document.querySelector('.tw-works-open').click()`); await settle(200);
+      await send({ type: 'artifactProvenance', view });
+      assert.equal(await b.evaluate(`document.querySelector('.tw-works-drawer input[type=search]').value`), '', 'next task starts with an empty file query');
+      assert.equal(await b.evaluate(`document.querySelectorAll('.tw-works-item').length`), entries.length, 'previous task search does not hide new task files');
+      await key('Escape', 'Escape', 27); await settle(400);
     }
     console.log(`PASS my works drawer ${tag}`);
     runs++;
