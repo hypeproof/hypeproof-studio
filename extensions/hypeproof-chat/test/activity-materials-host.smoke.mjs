@@ -582,6 +582,22 @@ await t("#3266: note saving respects seat and instructor gates", async () => {
   }
 });
 
+for (const change of ["task", "folder", "seat"]) await t(`#3315: URL refuses ${change} change while snapshot loads`, async () => {
+  const f = fixture();
+  await f.req("materialsRequest");
+  const other = fs.mkdtempSync(path.join(tmp, "url-other-"));
+  const original = f.h.inboxSource.inboxView;
+  f.h.inboxSource.inboxView = async () => {
+    if (change === "task") f.setTask("task-b");
+    if (change === "folder") f.h.resolveCoachCwd = () => other;
+    if (change === "seat") f.h.materialsRefusal = () => "자료 사용 권한이 바뀌었어요";
+    return original();
+  };
+  const response = await f.req("materialAddUrl", { url: "https://example.com/original-source" });
+  assert.ok(response.error, "changed context refuses URL");
+  for (const root of [f.root, other]) assert.equal(f.mat.loadManifest(f.mat.materialsManifestFile(storage, root)).items.length, 0, "neither folder persists URL");
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 if (failures.length) { console.error(`activity-materials-host: ${failures.length} failed`); process.exit(1); }
 console.log(`activity-materials-host smoke OK (${passed})`);
