@@ -16,6 +16,14 @@ export const MEMORY_SCOPE_LABEL = "기억 범위: 이 작업 공간 안에서만
 /** One memory file. `text` is null when it is too large or not text: it is listed, opened and deleted, never shown inline. */
 export interface ActivityMemoryItem { name: string; at: number; text: string | null }
 
+/** Search only the already-visible file payload; never read omitted content or change entry identity/order. */
+export function filterMemoryEntries(entries: readonly ActivityMemoryItem[], query: string): readonly ActivityMemoryItem[] {
+  const fold = (text: string) => text.normalize("NFC").toLocaleLowerCase("ko-KR");
+  const needle = fold(query.trim());
+  if (!needle) return entries;
+  return entries.filter(entry => fold(entry.name).includes(needle) || (entry.text !== null && fold(entry.text).includes(needle)));
+}
+
 /** REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025) — one remembered item as the overview shows it. */
 export interface MemoryOverviewItem { name: string; at: number; text: string }
 /** The items kept from one task. `task` is null for items with no recorded task; `title` is what the learner reads. */

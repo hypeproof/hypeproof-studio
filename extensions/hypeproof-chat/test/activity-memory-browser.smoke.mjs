@@ -14,7 +14,7 @@ const bin=findChromium();if(!bin){if(process.env.FOCUS_REQUIRE_BROWSER)throw Err
 const dir=fileURLToPath(new URL('../webview-ui/',import.meta.url));
 const app=await build({entryPoints:[dir+'src/main.tsx'],bundle:true,platform:'browser',format:'esm',outdir:'assets',write:false,loader:{'.svg':'dataurl'},logLevel:'silent'});
 const css=app.outputFiles.find(f=>f.path.endsWith('.css')).text;
-const fixture=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {MyWorksDrawer} from './src/MyWorksDrawer';createRoot(document.getElementById('root')).render(<MyWorksDrawer files={null} scopeKey="a/t" viewport={innerWidth} opener={()=>null} fallback={()=>null} onClose={()=>{}}/>);`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
+const fixture=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {MyWorksDrawer} from './src/MyWorksDrawer';const root=createRoot(document.getElementById('root'));window.__memoryScope=(scope)=>root.render(<MyWorksDrawer files={null} scopeKey={scope} viewport={innerWidth} opener={()=>null} fallback={()=>null} onClose={()=>{}}/>);window.__memoryScope("a/t");`,resolveDir:dir,loader:'tsx'},bundle:true,write:false,platform:'browser',format:'iife',loader:{'.css':'empty','.svg':'dataurl'},logLevel:'silent'});
 const long='가'.repeat(60);
 const view={scope:'["a","t"]',folder:'.hypeproof/memory/',entries:[
   {name:'2026-10-29T01-00-00-000Z-0a1b2c3d.md',at:Date.UTC(2026,9,29,1),text:`좋아하는 색은 초록이에요.\n두 번째 줄 ${long}`},
@@ -48,7 +48,7 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
   visible:!!line&&(()=>{const r=line.getBoundingClientRect();let o=1;for(let e=line;e;e=e.parentElement)o*=parseFloat(getComputedStyle(e).opacity);const hit=document.elementFromPoint(r.left+Math.min(r.width,40)/2,r.top+Math.min(r.height,20)/2);
    return r.height>=parseFloat(getComputedStyle(line).fontSize)&&r.right<=innerWidth&&o>=.99&&getComputedStyle(line).visibility==='visible'&&!!hit&&line.contains(hit);})(),code:line?.querySelector('code')?.textContent,
   controls:line?line.querySelectorAll('button,input,select,[role=switch],[role=checkbox],[aria-pressed],[aria-checked],[tabindex]').length:-1,
-  off:/꺼짐|끄기|선생님이 정해요/.test(panel.textContent),switches:panel.querySelectorAll('input,[role=switch],[role=checkbox],[aria-checked]').length,
+  off:/꺼짐|끄기|선생님이 정해요/.test(panel.textContent),switches:panel.querySelectorAll('input[type=checkbox],input[type=radio],[role=switch],[role=checkbox],[aria-checked]').length,
   listOpen:!!document.querySelector('[data-testid=activity-memory] [aria-expanded]')}})()`);
  assert.equal(st.text,'AI 기억: 켜짐 · .hypeproof/memory/','the state line names on and the folder');assert.equal(st.code,'.hypeproof/memory/');
  assert.equal(st.listOpen,false);assert.ok(st.visible,'the state line is drawn without opening the list');
@@ -84,6 +84,24 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  const ring=await b.focusVisibleStyle('.tw-memory-actions button',['outline-width','outline-style']);
  assert.ok(parseFloat(ring['outline-width'])>=1&&ring['outline-style']!=='none','button focus ring');
  if(evidence){const shot=await b.send('Page.captureScreenshot',{format:'png'});writeFileSync(`${evidence}/${seat}-${dark?'dark':'light'}-${width}-${forcedColors?'forced':'normal'}.png`,Buffer.from(shot.data,'base64'));}
+ // #3288: local search filters disclosed text/name only and does not post host actions.
+ const beforeSearch=await b.evaluate(`window.__posted.length`);
+ const search=async text=>{await b.evaluate(`(()=>{const x=document.querySelector('.tw-memory input[type=search]');const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(x,${JSON.stringify(text)});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);await new Promise(r=>setTimeout(r,50));};
+ await search('초록');
+ assert.equal(await b.evaluate(`document.querySelectorAll('.tw-memory-item').length`),1,'body search finds one visible file');
+ assert.ok(await b.evaluate(`document.querySelector('.tw-memory').textContent.includes('검색 결과 1개 / 전체 3개')`));
+ await search('big.md');
+ assert.equal(await b.evaluate(`document.querySelectorAll('.tw-memory-item').length`),1,'name search includes a file with omitted text');
+ assert.ok(await b.evaluate(`!!document.querySelector('[aria-label="지우기: big.md"]')`),'filtered action preserves original filename');
+ await search('no-matching-file');
+ assert.equal(await b.evaluate(`document.querySelectorAll('.tw-memory-item').length`),0);
+ assert.ok(await b.evaluate(`document.querySelector('.tw-memory').textContent.includes('일치하는 기억 파일이 없어요')`));
+ await b.evaluate(`(()=>{const x=[...document.querySelectorAll('.tw-memory button')].find(x=>x.textContent==='검색 지우기');x.focus();x.click();})()`);await new Promise(r=>setTimeout(r,50));
+ assert.equal(await b.evaluate(`document.querySelectorAll('.tw-memory-item').length`),3,'clear restores full visible list');
+ assert.equal(await b.evaluate(`document.activeElement===document.querySelector('.tw-memory input[type=search]')`),true,'clear returns keyboard focus to search, not body');
+ assert.equal(await b.evaluate(`window.__posted.length`),beforeSearch,'search/clear sends no host or model request');
+ const searchBox=await b.evaluate(`(()=>{const x=document.querySelector('.tw-memory input[type=search]');const r=x.getBoundingClientRect();return {w:r.width,h:r.height,font:parseFloat(getComputedStyle(x).fontSize)};})()`);
+ assert.ok(searchBox.w>=44&&searchBox.h>=44&&searchBox.font>=14,'search field keeps accessible target and text size');
  // 지우기 asks the host with the listed scope and the exact name; a second press while pending is ignored.
  await b.evaluate(`(()=>{const x=[...document.querySelectorAll('.tw-memory-actions button')].find(e=>e.getAttribute('aria-label')==='지우기: big.md');x.click();x.click();})()`);
  const asked=await b.evaluate(`window.__posted.filter(m=>m.type==='activityMemoryAction')`);
@@ -95,6 +113,12 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  await new Promise(r=>setTimeout(r,100));
  const after=await b.evaluate(`({rows:document.querySelectorAll('.tw-memory-list li').length,status:document.querySelector('.tw-memory [role=status]').textContent,focus:document.activeElement?.textContent})`);
  assert.equal(after.rows,2);assert.match(after.status,/big\.md.*지웠어요/);assert.equal(after.focus,'기억','focus lands on the drawer\'s 기억 filter, not body');
+ // The same mounted drawer changing activity must not keep the previous activity's query.
+ await search('초록');
+ await b.evaluate(`window.__memoryScope('another/activity')`);await new Promise(r=>setTimeout(r,50));
+ await b.evaluate(`window.postMessage({type:'activityMemoryState',view:${JSON.stringify({...view,scope:'another/activity'})}},'*')`);await new Promise(r=>setTimeout(r,50));
+ assert.equal(await b.evaluate(`document.querySelector('.tw-memory input[type=search]').value`),'','scope switch clears query');
+ assert.equal(await b.evaluate(`document.querySelectorAll('.tw-memory-item').length`),3,'new activity is not filtered by old query');
  // The store goes away (an instructor seat, no task workspace): the state line goes with it.
  await b.evaluate(`window.postMessage({type:'activityMemoryState',view:null},'*')`);await new Promise(r=>setTimeout(r,50));
  assert.equal(await b.evaluate(`!!document.querySelector('[data-testid=activity-memory-state]')`),false,'no store, no state line');
