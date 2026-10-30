@@ -928,7 +928,9 @@ tasks never run concurrently and switching stays blocked during a run, so the pe
 shows a run state only next to the active task. One short label in words plus a decorative symbol,
 never colour alone: `응답 준비 중` (sent, stream not open yet), `작업 중` (a turn or the verify run is
 streaming), `승인 기다리는 중` (the host raised a tool approval modal and it is still open), `멈춤`
-(the learner or the instructor stopped the turn), `오류` (the turn failed, including a stream that
+(the learner or the instructor stopped the turn), `이용권 확인 필요` (a typed exhausted/expired
+availability reason or trial-end card ended the turn, #2442; neutral ticket icon, never inferred
+from error-message text), `오류` (a genuine failure rather than an allowance ending, including a stream that
 closed normally with a failed result, #751 U4, and still after the error banner is dismissed),
 `끝남` (the turn completed). Precedence is approval > running > preparing, then the last terminal
 outcome; a new send clears the old outcome. The rail button's accessible name is "작업 이름, state"

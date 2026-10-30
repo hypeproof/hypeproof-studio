@@ -50,7 +50,7 @@ export function statusChipState(state: unknown): StatusChipState {
 
 /** The personal task rail's run state (REQ-STUDIO-TASK-RUN-STATE). Words and icon stay in taskRunState.ts. */
 const TASK_RUN_INTENT: Readonly<Record<TaskRunState, StatusIntent>> = {
-  preparing: "info", running: "info", approval: "caution", stopped: "neutral", error: "danger", done: "success",
+  preparing: "info", running: "info", approval: "caution", stopped: "neutral", access: "neutral", error: "danger", done: "success",
 };
 export const TASK_RUN_CHIPS: Readonly<Record<TaskRunState, StatusChipView>> = Object.fromEntries(
   (Object.keys(TASK_RUN_INTENT) as TaskRunState[]).map((s) => [s, { label: TASK_RUN_STATE_LABELS[s].label, icon: TASK_RUN_STATE_LABELS[s].icon, intent: TASK_RUN_INTENT[s] }]),
