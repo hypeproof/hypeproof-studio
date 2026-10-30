@@ -101,10 +101,11 @@ function MaterialAddedTime({ at }: { at?: number }) {
  */
 export function MaterialsPanel({ home = false }: { home?: boolean }) {
   const { view, answered, error, notice, busy, ask, refuse, captureView } = useMaterials();
-  const [url, setUrl] = useState('');
+  const [urlDraft, setUrlDraft] = useState({ scope: '', text: '' });
   const [note, setNote] = useState({ scope: '', title: '', text: '' });
   const [dropping, setDropping] = useState(false);
   if (!view) return home ? <p className="hp-materials-note hp-materials-home-state" role="status">{answered ? MATERIALS_COPY.homeUnavailable : MATERIALS_COPY.homeLoading}</p> : null;
+  const url = urlDraft.scope === view.scope ? urlDraft.text : '';
   const draft = note.scope === view.scope ? note : { scope: view.scope, title: '', text: '' };
   const submitNote = () => ask(requestId => ({ type: 'materialAddNote', requestId, ...draft }),
     () => setNote(current => current === draft ? { scope: view.scope, title: '', text: '' } : current));
@@ -170,7 +171,7 @@ export function MaterialsPanel({ home = false }: { home?: boolean }) {
         <label>
           <span>주소 넣기 (https)</span>
           <input type="url" name="material-url" inputMode="url" autoComplete="off" spellCheck={false} placeholder="https://" value={url}
-            onChange={event => setUrl(event.target.value)}
+            onChange={event => setUrlDraft({ scope: view.scope, text: event.target.value })}
             onKeyDown={event => { if (event.key === 'Enter' && imeComposing(event)) event.preventDefault(); }} />
         </label>
         <button type="submit" className="hp-cta-quiet" disabled={busy || !url.trim()}>주소 넣기</button>
