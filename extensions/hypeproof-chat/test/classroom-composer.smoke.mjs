@@ -25,20 +25,26 @@ const results=[];
 const measure=()=>b.evaluate(`(()=>{const t=document.querySelector('.hps-input textarea'),c=document.querySelector('.hps-input');const r=t.getBoundingClientRect(),ts=getComputedStyle(t),cs=getComputedStyle(c);return {mode:document.querySelector('.hps-shell').dataset.chatDetail,height:r.height,client:t.clientHeight,scroll:t.scrollHeight,lines:t.value.split(String.fromCharCode(10)).length,textareaOutline:ts.outlineStyle==='none'?'0px':ts.outlineWidth,cardOutline:cs.outlineStyle==='none'?'0px':cs.outlineWidth,textareaOutlineStyle:ts.outlineStyle,cardOutlineStyle:cs.outlineStyle,focused:document.activeElement===t}})()`);
 try {
 for(const width of [390,1420])for(const height of [600,1000])for(const personal of [false,true])for(const forcedColors of [false,true]) {
+ const caseId=JSON.stringify({width,height,personal,forcedColors});console.log(`START ${caseId}`);
  const vars=Object.entries(THEMES['Dark+']).filter(([k,v])=>typeof v==='string'&&!['kind','file'].includes(k)).map(([k,v])=>`--vscode-${k.replaceAll('.','-')}:${v}`).join(';');
  await b.load(`<html style="${vars}"><style>${css}</style><style>html,body,#root{height:100%}</style><body class="vscode-dark"><div id="root"></div><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m),getState:()=>({}),setState:()=>{}})</script><script>${js}</script>`,{width,height,dark:true,forcedColors});
  await settle();await send({type:'config',config:personal?personalConfig:chatConfig()});
  await b.evaluate(`document.querySelector('.hps-input textarea').focus()`);await settle();
  const before=await measure();
- await b.send('Input.insertText',{text:Array.from({length:12},(_,i)=>'검토할 문장 '+i).join('\n')});await settle();
- const after=await measure();assert.equal(after.lines,12);assert.equal(after.focused,true);
+ await b.send('Input.insertText',{text:Array.from({length:40},(_,i)=>'검토할 문장 '+i).join('\n')});await settle();
+ const after=await measure();assert.equal(after.lines,40);assert.equal(after.focused,true);
  const grows=after.height>before.height+10;
  const cardFocus=parseFloat(after.cardOutline)>0&&parseFloat(after.textareaOutline)===0;
  assert.ok(after.height<=192&&after.height<=height/3+1,'bounded editor');
+ assert.ok(after.scroll>after.client,`fixture must overflow: ${caseId} ${JSON.stringify(after)}`);
  const pos=await b.evaluate(`(()=>{const t=document.querySelector('.hps-input textarea');t.scrollTop=0;const r=t.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`);
- await b.send('Input.dispatchMouseEvent',{type:'mouseWheel',...pos,deltaX:0,deltaY:300});await settle();
- const scrollTop=await b.evaluate(`document.querySelector('.hps-input textarea').scrollTop`);
- assert.ok(scrollTop>0,'long input remains internally scrollable');
+ // Wheel scrolling is compositor-driven; wait for an observed result, never set scrollTop to pass.
+ await settle();
+ await b.send('Input.dispatchMouseEvent',{type:'mouseMoved',...pos});
+ await b.send('Input.dispatchMouseEvent',{type:'mouseWheel',...pos,deltaX:0,deltaY:300});
+ let scrollTop=0;
+ for(let attempt=0;attempt<20&&scrollTop===0;attempt++){await settle();scrollTop=await b.evaluate(`document.querySelector('.hps-input textarea').scrollTop`);}
+ assert.ok(scrollTop>0,`long input remains internally scrollable: ${caseId} ${JSON.stringify({after,pos,scrollTop})}`);
  await b.evaluate(`document.querySelector('.hps-input textarea').select()`);
  await b.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});await b.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});await settle();
  const cleared=await measure();assert.equal(cleared.lines,1);assert.ok(cleared.height<after.height,'cleared text shrinks input');
