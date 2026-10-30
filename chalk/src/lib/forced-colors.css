@@ -1,0 +1,13 @@
+/* CGP-DS-R-005: a primary action remains bounded when the OS removes its fill.
+ * Text actions stay quieter; native focus geometry and disabled semantics remain. */
+@media (forced-colors: active) {
+  html body :is(button:not([class]), button[class=""], button.primary, a.btn.primary) {
+    border: 1px solid ButtonText !important;
+    background-image: none !important;
+  }
+  /* Keep the text action's existing border box and target size. Canvas is a
+   * system colour, so forced-colour substitution does not repaint this edge. */
+  html body #first-run #fr-later {
+    border-color: Canvas !important;
+  }
+}
