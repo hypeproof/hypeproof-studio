@@ -4167,6 +4167,13 @@ percentage appears. Builds on REQ-STUDIO-ARTIFACT-PROVENANCE: same list, same se
   the latest recorded event, or `바뀐 때 기록 없음` when there is none. List by default;
   `목록`/`격자` (aria-pressed, weight plus underline) switches to a grid; a window of 360px
   or less shows the list only and offers no switch. Opening asks the host for a fresh list.
+- **Find a listed file (#3290).** A labelled search field filters the current inventory by
+  literal filename or folder path, ignoring case and Unicode composition. Matching preserves
+  original order, provenance and file identity. The count says “현재 목록에서” and the existing
+  omitted/unconfirmed inventory notices stay visible, including when no item matches; this is
+  not a whole-workspace scan. Clear restores the list and returns focus to the field. A new
+  task/activity starts with an empty query. Matching sends no inventory-scan or model request;
+  existing bounded lazy-thumbnail requests still run for newly visible rows after filtering.
 - **Keyboard and focus.** A native modal dialog on the rail's side, full height, at most
   360px wide: focus moves in on open, Tab stays inside (the page behind is inert), Escape
   or `내 작품 닫기` closes it, and focus returns to the opener, else the rail toggle. A task

@@ -103,7 +103,7 @@ try {
     assert.match(items[0].time, /^마지막 기록 /, `last change shown (${tag})`);
     assert.equal(items[3].time, '바뀐 때 기록 없음', `no recorded change says so (${tag})`);
     for (const i of items) { assert.ok(i.h >= 44, `row ≥44px (${tag}) ${i.h}`); assert.ok(i.font >= 14, `text ≥14px (${tag}) ${i.font}`); assert.ok(i.left >= 0 && i.right <= width + 0.5, `row inside the window (${tag})`); }
-    const geometry = await b.evaluate(`(()=>{const d=document.querySelector('.tw-works-drawer');const r=d.getBoundingClientRect();const body=d.querySelector('.tw-works-body');return {w:r.width,left:r.left,h:r.height,side:body.scrollWidth>body.clientWidth,page:document.scrollingElement.scrollWidth>innerWidth,controls:[...d.querySelectorAll('button')].map(x=>{const q=x.getBoundingClientRect();return Math.min(q.width,q.height)})}})()`);
+    const geometry = await b.evaluate(`(()=>{const d=document.querySelector('.tw-works-drawer');const r=d.getBoundingClientRect();const body=d.querySelector('.tw-works-body');return {w:r.width,left:r.left,h:r.height,side:body.scrollWidth>body.clientWidth,page:document.scrollingElement.scrollWidth>innerWidth,controls:[...d.querySelectorAll('button,input')].map(x=>{const q=x.getBoundingClientRect();return Math.min(q.width,q.height)})}})()`);
     assert.ok(geometry.left === 0 && geometry.w <= Math.min(360, width) + 0.5 && geometry.h >= 799, `drawer on the rail side, full height (${tag}) ${JSON.stringify(geometry)}`);
     assert.ok(!geometry.side && !geometry.page, `no sideways scroll (${tag})`);
     assert.ok(geometry.controls.every(x => x >= 44), `every drawer control ≥44px (${tag}) ${geometry.controls}`);
@@ -122,6 +122,33 @@ try {
       await shot(`grid-${tag}`);
       await b.evaluate(`[...document.querySelectorAll('.tw-works-views:not(.tw-works-filter) button')][0].click()`); await settle();
     }
+
+    // #3290: search the listed inventory without changing provenance or hiding its limits.
+    const search = async text => { await b.evaluate(`(()=>{const x=document.querySelector('.tw-works-drawer input[type=search]');const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(x,${JSON.stringify(text)});x.dispatchEvent(new Event('input',{bubbles:true}));})()`); await settle(150); };
+    const inventoryBefore = (await posted('artifactProvenanceRequest')).length;
+    const modelBefore = (await posted('sendMessage')).length;
+    await search('SITE/');
+    assert.deepEqual(await b.evaluate(`[...document.querySelectorAll('.tw-works-name')].map(e=>e.textContent)`), ['index.html'], `folder/case search (${tag})`);
+    assert.equal(await b.evaluate(`document.querySelector('.tw-provenance-chip strong').textContent`), '내가 올림', `provenance unchanged (${tag})`);
+    if (width > 360) {
+      await b.evaluate(`[...document.querySelectorAll('.tw-works-views:not(.tw-works-filter) button')][1].click()`); await settle();
+      assert.equal(await listDisplay(), 'grid', `filtered grid (${tag})`);
+      assert.equal(await b.evaluate(`document.querySelectorAll('.tw-works-item').length`), 1, 'grid preserves search result');
+      await b.evaluate(`[...document.querySelectorAll('.tw-works-views:not(.tw-works-filter) button')][0].click()`); await settle();
+    }
+    assert.ok(await b.evaluate(`document.querySelector('.tw-works-body').textContent.includes('현재 목록에서 1개 / 64개')`), `result count (${tag})`);
+    await search('no-matching-path');
+    assert.equal(await b.evaluate(`document.querySelectorAll('.tw-works-item').length`), 0, `no matches (${tag})`);
+    assert.ok(await b.evaluate(`document.querySelector('.tw-works-body').textContent.includes('일치하는 파일이 없어요')`));
+    assert.ok(await b.evaluate(`document.querySelector('.tw-works-body').textContent.includes('파일 3개는 더 있어서')`), `omitted inventory remains disclosed (${tag})`);
+    assert.ok(!(await posted('artifactThumbnailRequest')).some(m=>m.path==='gallery/p58.png'), 'offscreen control has not requested a thumbnail');
+    await search('gallery/p58.png');
+    assert.ok((await posted('artifactThumbnailRequest')).some(m=>m.path==='gallery/p58.png'), `filter reobserves newly visible thumbnail (${tag})`);
+    await b.evaluate(`(()=>{const x=[...document.querySelectorAll('.tw-works-drawer button')].find(e=>e.textContent==='검색 지우기');x.focus();x.click();})()`); await settle();
+    assert.equal(await b.evaluate(`document.querySelectorAll('.tw-works-item').length`), entries.length, `clear restores inventory (${tag})`);
+    assert.equal(await b.evaluate(`document.activeElement===document.querySelector('.tw-works-drawer input[type=search]')`), true, `clear keeps keyboard focus (${tag})`);
+    assert.equal((await posted('artifactProvenanceRequest')).length, inventoryBefore, 'search does not rescan inventory');
+    assert.equal((await posted('sendMessage')).length, modelBefore, 'search sends no model request');
 
     // Scrolling the list asks for the rows that come into view.
     await b.evaluate(`(()=>{const s=document.querySelector('.tw-works-body');s.scrollTop=s.scrollHeight;})()`); await settle(250);
@@ -147,9 +174,16 @@ try {
       // A task switch while the drawer is open closes it (the list belongs to the task it was asked for).
       await b.evaluate(`document.querySelector('.tw-works-open').click()`); await settle(200);
       assert.equal(await b.evaluate(`document.querySelector('.tw-works-drawer')?.open===true`), true);
+      await send({ type: 'artifactProvenance', view });
+      await search('SITE/');
       const second = { ...workspace, revision: 2, activeTaskId: 't2', tasks: [...workspace.tasks, { id: 't2', title: '두 번째', createdAt: 2, updatedAt: NOW, messageCount: 0 }] };
       await send({ type: 'taskWorkspaceState', view: second }); await settle(300);
       assert.equal(await b.evaluate(`!!document.querySelector('.tw-works-drawer')`), false, 'a task switch closes the drawer');
+      await b.evaluate(`document.querySelector('.tw-works-open').click()`); await settle(200);
+      await send({ type: 'artifactProvenance', view });
+      assert.equal(await b.evaluate(`document.querySelector('.tw-works-drawer input[type=search]').value`), '', 'next task starts with an empty file query');
+      assert.equal(await b.evaluate(`document.querySelectorAll('.tw-works-item').length`), entries.length, 'previous task search does not hide new task files');
+      await key('Escape', 'Escape', 27); await settle(400);
     }
     console.log(`PASS my works drawer ${tag}`);
     runs++;
