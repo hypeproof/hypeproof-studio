@@ -201,6 +201,29 @@ const card = () => all((e) => e.getAttribute("data-testid") === "materials")[0] 
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const drops = () => posted.filter((m) => m.type === "materialAddDrop") as { name: string; size: number; base64: string; requestId: string }[];
 
+for (const transition of ["same", "switch", "return", "unavailable", "unmount"]) t(`#3306: delayed drop settles safely after ${transition}`, async () => {
+  for (const rejects of [false, true]) {
+    const root = await mountPanel();
+    await hostSays({ type: "materialsState", view: VIEW });
+    let resolve!: (value: ArrayBuffer) => void, reject!: (reason: Error) => void;
+    const reading = new Promise<ArrayBuffer>((yes, no) => { resolve = yes; reject = no; });
+    const file: FakeFile = { name: "private.md", size: 3, type: "text/markdown", arrayBuffer: () => reading };
+    const c = card(); c.open = true;
+    await act(async () => { c.dispatchEvent(drag("drop", [file])); });
+    if (transition === "unmount") await act(async () => { root.unmount(); });
+    else if (transition === "unavailable") await hostSays({ type: "materialsState", view: null });
+    else {
+      await hostSays({ type: "materialsState", view: transition === "same" ? { ...VIEW } : { ...VIEW, scope: "other-task" } });
+      if (transition === "return") await hostSays({ type: "materialsState", view: VIEW });
+    }
+    await act(async () => { if (rejects) reject(new Error("read failed")); else resolve(new Uint8Array([97, 98, 99]).buffer); await settle(); await settle(); });
+    const sent = drops();
+    if (transition !== "unmount") await act(async () => { root.unmount(); });
+    eq(sent.length, transition === "same" ? 1 : 0, `old read ${rejects ? "rejection" : "bytes"} must not cross ${transition}`);
+    if (transition === "same") eq(sent[0].base64, rejects ? "" : "YWJj", "unchanged scope retains normal success/refusal path");
+  }
+});
+
 t("#2641: a file dropped on the open card goes to the host once, as its bytes, and stops at the card", async () => {
   const root = await mountPanel();
   await hostSays({ type: "materialsState", view: VIEW });

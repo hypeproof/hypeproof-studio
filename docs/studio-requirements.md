@@ -1956,6 +1956,7 @@ model only when the learner selects it for a message. Decisions: DEC-KNOW-R-003 
   truncated or unconfirmed creation history says "추가 시각 미확인"; no current-time fallback.
   Selection remains host-owned and nothing is sent by toggling it. The drop zone of DES-KNOW-04
   is the next bullet (#2641).
+- **Pending drop scope (#3306).** File reads are bound to the materials view lifetime that accepted the drop. A task/activity switch, unavailable view, or unmount discards both late bytes and read-failure requests; switching away and back does not revive an old read. A same-scope refresh preserves normal completion.
 - **Dropping a file (#2641).** The open card also takes one dropped file, the same file "파일
   넣기" takes; the closed summary row is not a drop target. While a file is dragged over the
   open card its own border becomes 2px in the focus-ring colour (Highlight in forced colours),

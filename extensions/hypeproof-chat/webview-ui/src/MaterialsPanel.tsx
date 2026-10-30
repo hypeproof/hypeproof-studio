@@ -28,11 +28,15 @@ function useMaterials() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const pending = useRef<string | null>(null);
+  // A new identity on each scope transition also invalidates A → B → A reads.
+  const lifetime = useRef<{ scope: string } | null>(null);
   const onSaved = useRef<(() => void) | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const dispose = onHostMessage(message => {
       if (message.type !== 'materialsState') return;
+      const scope = message.view?.scope;
+      if (scope !== lifetime.current?.scope) lifetime.current = scope === undefined ? null : { scope };
       setView(message.view);
       setAnswered(true);
       // An answer to another surface's press updates the list, not this surface's messages.
@@ -46,7 +50,7 @@ function useMaterials() {
       setNotice(message.notice ?? '');
     });
     postToHost({ type: 'materialsRequest' });
-    return dispose;
+    return () => { lifetime.current = null; dispose(); };
   }, []);
   const ask = (build: (requestId: string) => Parameters<typeof postToHost>[0], saved?: () => void) => {
     if (pending.current) return;
@@ -55,9 +59,13 @@ function useMaterials() {
     pending.current = requestId; setBusy(true); setError(''); setNotice('');
     postToHost(build(requestId));
   };
+  const captureView = () => {
+    const owner = lifetime.current;
+    return () => owner !== null && lifetime.current === owner && owner.scope === view?.scope;
+  };
   /** A refusal decided here, with no host request (several files in one drop). */
   const refuse = (message: string) => { setError(message); setNotice(''); };
-  return { view, answered, error, notice, busy, ask, refuse };
+  return { view, answered, error, notice, busy, ask, refuse, captureView };
 }
 
 const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.items ?? []).some(item => item.kind === 'file');
@@ -86,7 +94,7 @@ function MaterialAddedTime({ at }: { at?: number }) {
  * with a heading instead of a disclosure. Without it, the coach rail's closed card (classroom seats).
  */
 export function MaterialsPanel({ home = false }: { home?: boolean }) {
-  const { view, answered, error, notice, busy, ask, refuse } = useMaterials();
+  const { view, answered, error, notice, busy, ask, refuse, captureView } = useMaterials();
   const [url, setUrl] = useState('');
   const [note, setNote] = useState({ scope: '', title: '', text: '' });
   const [dropping, setDropping] = useState(false);
@@ -113,10 +121,14 @@ export function MaterialsPanel({ home = false }: { home?: boolean }) {
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length !== 1) { refuse(MATERIALS_COPY.dropOne); return; }
     const [file] = files;
+    const isCurrent = captureView();
     // Over the cap the bytes are never read: the host answers with the picker's size refusal.
     const read = file.size > MATERIALS_DROP_MAX_BYTES ? Promise.resolve('') : file.arrayBuffer().then(base64Of);
-    void read.then(base64 => ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64 })))
-      .catch(() => ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64: '' })));
+    void read.then(base64 => {
+      if (isCurrent()) ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64 }));
+    }).catch(() => {
+      if (isCurrent()) ask(requestId => ({ type: 'materialAddDrop', requestId, name: file.name, size: file.size, base64: '' }));
+    });
   };
   const Root = home ? 'section' : 'details';
   const count = `자료 ${view.items.length}개${chosen ? ` · 이번 질문에 ${chosen}개 넣음` : ''}`;
