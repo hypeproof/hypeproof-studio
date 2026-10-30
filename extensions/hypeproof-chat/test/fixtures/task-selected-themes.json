@@ -1,0 +1,45 @@
+{
+  "source": "HypeProof Studio2026.1029.0 / theme-defaults10.0.0, captured2026-10-30; regression subset, not active user settings",
+  "file_hashes": {
+    "/Applications/HypeProof Studio.app/Contents/Resources/app/extensions/theme-defaults/themes/2026-dark.json": "5a35201dcc06bafea22ddb45f4d188f7c0d971a75f0eb8b1cf95644e85f3c95c",
+    "/Applications/HypeProof Studio.app/Contents/Resources/app/extensions/theme-defaults/themes/dark_modern.json": "7e87bcc01b7b4ca057fc1b4463cddcc9b3f494bd6566d22d9aaddadab2d45db4",
+    "/Applications/HypeProof Studio.app/Contents/Resources/app/extensions/theme-defaults/themes/dark_plus.json": "88f5b662378cbe39473a4a8d916a1b4ec580f85858876eaec440288aee2852df",
+    "/Applications/HypeProof Studio.app/Contents/Resources/app/extensions/theme-defaults/themes/dark_vs.json": "1aa6a2ad25e048221a19463de26a73e636e03f4828c8abd8338de2a120379e76",
+    "/Applications/HypeProof Studio.app/Contents/Resources/app/extensions/theme-defaults/themes/2026-light.json": "8b31229457f6af133887118b02318b84b4c4e78c475d4569a492afd4e113fc4c",
+    "/Applications/HypeProof Studio.app/Contents/Resources/app/extensions/theme-defaults/themes/light_modern.json": "cad5a1a2da4d66a2a0354f2e41bd45dfbd206ca58b2ba8c920a02dcd8c16c989",
+    "/Applications/HypeProof Studio.app/Contents/Resources/app/extensions/theme-defaults/themes/light_plus.json": "bf64f3ec2a80788fad115086bd10fd4136dd1d760ec478f4107756f098d101ea",
+    "/Applications/HypeProof Studio.app/Contents/Resources/app/extensions/theme-defaults/themes/light_vs.json": "a8fc98fc54f545ff30f551214577def7f33b77bd7376e0ea5d3d6ea8031a112b"
+  },
+  "themes": {
+    "dark": {
+      "foreground": "#bfbfbf",
+      "descriptionForeground": "#8C8C8C",
+      "sideBar.background": "#191A1B",
+      "editor.background": "#121314",
+      "editor.foreground": "#BBBEBF",
+      "panel.border": "#2A2B2CFF",
+      "focusBorder": "#3994BCB3",
+      "input.background": "#191A1B",
+      "input.foreground": "#bfbfbf",
+      "button.background": "#297AA0",
+      "button.foreground": "#FFFFFF",
+      "list.inactiveSelectionBackground": "#2C2D2E",
+      "list.inactiveSelectionForeground": "#ededed"
+    },
+    "light": {
+      "foreground": "#202020",
+      "descriptionForeground": "#606060",
+      "sideBar.background": "#FAFAFD",
+      "editor.background": "#FFFFFF",
+      "editor.foreground": "#202020",
+      "panel.border": "#F0F1F2FF",
+      "focusBorder": "#0069CCFF",
+      "input.background": "#FFFFFF",
+      "input.foreground": "#202020",
+      "button.background": "#0069CC",
+      "button.foreground": "#FFFFFF",
+      "list.inactiveSelectionBackground": "#DADADA99",
+      "list.inactiveSelectionForeground": "#202020"
+    }
+  }
+}
