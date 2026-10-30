@@ -175,11 +175,22 @@ export async function runAuthoringSaveRecoveryBrowser() {
   } catch (error) {
     report.status = 'FAIL'; report.error = String(error); throw error;
   } finally {
-    cutResponse?.destroy();
-    if (browser) await browser.close();
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-    report.cleanup = true;
-    if (evidence) writeFileSync(join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n');
+    let cleanupError;
+    try {
+      cutResponse?.destroy();
+      if (browser) await browser.close();
+    } catch (error) { cleanupError = error; }
+    finally {
+      try {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      } catch (error) { cleanupError ??= error; }
+      finally {
+        report.cleanup = !cleanupError;
+        if (cleanupError) { report.status = 'FAIL'; report.cleanupError = String(cleanupError); }
+        if (evidence) writeFileSync(join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n');
+      }
+    }
+    if (cleanupError && !report.error) throw cleanupError;
   }
 }
