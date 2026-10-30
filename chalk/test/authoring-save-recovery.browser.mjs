@@ -151,13 +151,23 @@ export async function runAuthoringSaveRecoveryBrowser() {
     assert.equal(report.requests.length - before, 1, 'no extra application write');
     assert.deepEqual(failed.clicks, [{ trusted: true }]);
     await snapshot('unconfirmed-save');
+    await browser.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 900, deviceScaleFactor: 1, mobile: false });
+    const narrow = await browser.evaluate(`(()=>{const e=document.getElementById('status');e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(e);return {text:e.textContent,viewport:innerWidth,documentWidth:document.scrollingElement.scrollWidth,left:r.left,right:r.right,height:r.height,clientWidth:e.clientWidth,scrollWidth:e.scrollWidth,clientHeight:e.clientHeight,scrollHeight:e.scrollHeight,lines:[...range.getClientRects()].map(x=>({left:x.left,right:x.right,top:x.top,bottom:x.bottom}))};})()`);
+    report.narrowObserved = narrow; checkpoint('narrow-guidance-observed');
+    assert.equal(narrow.text, guidance); assert.equal(narrow.viewport, 375);
+    assert.ok(narrow.height > 0 && narrow.lines.length > 1, 'Korean guidance is visible and wraps');
+    assert.ok(narrow.documentWidth <= narrow.viewport && narrow.left >= 0 && narrow.right <= narrow.viewport, 'no horizontal page overflow');
+    assert.ok(narrow.scrollWidth <= narrow.clientWidth && narrow.scrollHeight <= narrow.clientHeight, 'guidance is not clipped');
+    assert.ok(narrow.lines.every((line) => line.left >= narrow.left && line.right <= narrow.right), 'wrapped text remains inside its status panel');
+    await snapshot('unconfirmed-save-375');
+    await browser.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
     mode = 'normal'; const retry = await save(), saved = await state();
     assert.equal(saved.status, '저장했습니다. revision 1');
     assert.equal(saved.pending, null); assert.equal(saved.dirty, false);
     assert.equal(report.requests.length - before, 2);
     assert.deepEqual(report.requests.at(-1).body, report.requests.at(-2).body);
     assert.deepEqual(saved.clicks, [{ trusted: true }, { trusted: true }]);
-    report.cases.push({ name: 'postcommit-body-loss-and-explicit-retry', lost, failed, retry, saved, fixtureRows: 1 });
+    report.cases.push({ name: 'postcommit-body-loss-and-explicit-retry', lost, failed, narrow, retry, saved, fixtureRows: 1 });
     checkpoint('postcommit-body-loss-and-explicit-retry-complete');
     await snapshot('confirmed-retry');
 
