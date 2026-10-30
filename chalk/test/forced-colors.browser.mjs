@@ -35,18 +35,20 @@ const measure = () => browser.evaluate(`(() => {
   });
   return { overflow:document.scrollingElement.scrollWidth-innerWidth, controls:controls.map(e => {
     const s=getComputedStyle(e),r=e.getBoundingClientRect();
-    return { id:e.id, text:e.textContent.trim(), quiet:e.matches('.ghost,.reset'), disabled:e.matches(':disabled'),
+    return { id:e.id, text:e.textContent.trim(), quiet:e.id==='fr-later', disabled:e.matches(':disabled'),
+      protected:e.className.trim()!=='' && !e.matches('.primary') && e.id!=='fr-later',
       border:parseFloat(s.borderTopWidth), borderStyle:s.borderTopStyle, borderColor:s.borderTopColor,
-      background:s.backgroundColor, width:r.width, height:r.height, color:s.color };
+      background:s.backgroundColor, panel:getComputedStyle(e.closest('#first-run')??document.body).backgroundColor,
+      width:r.width, height:r.height, color:s.color };
   }) };
 })()`);
 function checkBoundaries(result, label) {
   assert.ok(result.overflow <= 0.5, label + ': no page overflow');
   for (const control of result.controls) {
     if (control.quiet) {
-      assert.equal(control.border, 0, label + ': text action stays quieter: ' + control.text);
+      assert.equal(control.borderColor, control.panel, label + ': text action stays quieter: ' + control.text);
     } else {
-      assert.ok(control.border >= 1 && control.borderStyle === 'solid', label + ': bounded action: ' + control.text);
+      assert.ok(control.border >= 1 && !['none','hidden'].includes(control.borderStyle), label + ': bounded action: ' + control.text);
       assert.notEqual(control.borderColor, control.background, label + ': boundary differs from fill: ' + control.text);
     }
   }
@@ -67,16 +69,24 @@ try {
     // Removing only the proposed sheet in normal mode must leave every computed control unchanged.
     const sheet = await browser.evaluate("document.querySelector('[data-chalk-forced-colors]')?.textContent ?? null");
     assert.ok(sheet, route + ': the real route includes the shared sheet');
-    await browser.evaluate("document.querySelector('[data-chalk-forced-colors]').remove()");
+    await browser.evaluate("document.querySelector('[data-chalk-forced-colors]').sheet.disabled=true");
     assert.deepEqual(await measure(), normal, route + ': normal appearance is unchanged');
-    await browser.evaluate(`(()=>{const s=document.createElement('style');s.dataset.chalkForcedColors='';s.textContent=${JSON.stringify(sheet)};document.head.append(s);})()`);
     await browser.send('Emulation.setEmulatedMedia', { features:[{name:'forced-colors',value:'active'}, {name:'prefers-color-scheme',value:dark?'dark':'light'}] });
+    const originalForced = await measure();
+    // Preserve the production stylesheet position and the existing state/secondary shapes.
+    await browser.evaluate("document.querySelector('[data-chalk-forced-colors]').sheet.disabled=false");
     const result = await measure(), label = `${route}/${width}/${dark?'dark':'light'}`;
+    assert.deepEqual(result.controls.filter(x=>x.protected), originalForced.controls.filter(x=>x.protected), label+': outlined secondary/state controls unchanged');
     checkBoundaries(result,label);
     if (route !== 'start') assert.ok(result.controls.length, label + ': actual controls measured');
     if (route === 'authoring') {
       const save=result.controls.find(x=>x.id==='fr-save'), later=result.controls.find(x=>x.id==='fr-later');
-      assert.ok(save && later && save.border>later.border,label+': Save remains more prominent than Later');
+      assert.ok(save && later && save.borderColor!==save.panel && later.borderColor===later.panel,label+': Save remains more prominent than Later');
+      assert.ok(later.height>=44,label+': text action retains its target height');
+      const disabled=result.controls.find(x=>x.id==='confirm-go');
+      assert.ok(disabled?.disabled && disabled.borderStyle==='dashed',label+': disabled confirmation keeps its distinct boundary');
+      const grayText=await browser.evaluate("(()=>{const s=document.createElement('span');s.style.color='GrayText';document.body.append(s);const c=getComputedStyle(s).color;s.remove();return c;})()");
+      assert.equal(disabled.borderColor,grayText,label+': disabled confirmation uses the system disabled colour');
       const focus=await browser.focusVisibleStyle('#fr-save');
       assert.ok(parseFloat(focus['outline-width'])>=1 && focus['outline-style']!=='none',label+': focus ring remains visible');
       if (evidence) {
@@ -85,7 +95,7 @@ try {
         writeFileSync(`${evidence}/${label.replaceAll('/','-')}.png`,Buffer.from(shot.data,'base64'));
       }
       // Negative control reproduces the original defect on the actual page.
-      await browser.evaluate("document.querySelector('[data-chalk-forced-colors]').remove()");
+      await browser.evaluate("document.querySelector('[data-chalk-forced-colors]').sheet.disabled=true");
       const broken=await measure();
       assert.throws(()=>checkBoundaries(broken,label+' without correction'),/bounded action|text action/);
     }

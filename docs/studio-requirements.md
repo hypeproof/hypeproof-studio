@@ -4756,7 +4756,7 @@ can find every control's edge, without the edge depending on a hover. Both Studi
   It replaces `#3A4855`, `#3A4A3E` and `#2A2E36` on the control rules of `/authoring`,
   `/budgets`, `/console`, `/issuer`, `/manage` and `/board`; dividers, panels, tags and fieldsets
   keep their lines. A filled control (the primary button) is identified by its fill instead.
-- In forced colours, Chalk buttons and button links retain a system-colour border when the OS removes the primary fill. Text actions (`.ghost`, `.reset`) remain borderless and quieter; disabled boundaries use `GrayText`. Existing focus outlines remain visible. The correction does not change normal-mode appearance.
+- In forced colours, Chalk buttons and button links retain a system-colour border when the OS removes the primary fill. The first-run Later text action keeps a Canvas-coloured border and its target size; outlined secondary controls and disabled/state boundary shapes are preserved. Existing focus outlines remain visible. The correction does not change normal-mode appearance.
 - Chalk state layers: each page with controls (`/authoring`, `/budgets`, `/console`, `/issuer`,
   `/manage`, `/board`, `/sharing`, `/learn`) declares hover = its text colour at 8% and pressed =
   14% over the surface. Quiet buttons (`.ghost`, `.reset`, `.secondary`, a form's unclassed
