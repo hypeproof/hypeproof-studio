@@ -91,8 +91,8 @@ const measure = `(() => {
       if (!shows(e)) continue;
       const b = e.getBoundingClientRect(), s = getComputedStyle(e);
       if (b.right > Math.min(rb.right, vw) + 0.5 || b.left < rb.left - 0.5) out.overflow.push(sel + ' ' + e.localName + '.' + e.className + ' ' + Math.round(b.left) + '..' + Math.round(b.right) + ' outside ' + Math.round(rb.left) + '..' + Math.round(rb.right));
-      if (['button', 'input', 'summary'].includes(e.localName)) out.controls.push({ sel, name: e.localName + ':' + (e.getAttribute('aria-label') || e.textContent).slice(0, 40), w: b.width, h: b.height });
-      if ([...e.childNodes].some((n) => n.nodeType === 3 && n.data.trim()) || e.localName === 'input') out.texts.push({ sel, name: e.localName + '.' + e.className + ':' + e.textContent.slice(0, 20), size: parseFloat(s.fontSize) });
+      if (['button', 'input', 'textarea', 'summary'].includes(e.localName)) out.controls.push({ sel, name: e.localName + ':' + (e.getAttribute('aria-label') || e.textContent).slice(0, 40), w: b.width, h: b.height });
+      if ([...e.childNodes].some((n) => n.nodeType === 3 && n.data.trim()) || ['input', 'textarea'].includes(e.localName)) out.texts.push({ sel, name: e.localName + '.' + e.className + ':' + e.textContent.slice(0, 20), size: parseFloat(s.fontSize) });
     }
   }
   const probe = document.createElement('span'); probe.style.color = 'var(--hp-ring-focus-default)'; document.body.append(probe);
@@ -172,6 +172,7 @@ function check(results) {
 
 // Each must break a check: a more specific later rule, an @media rule, a ring removed.
 const MUTANTS = {
+  'note authoring targets shrink below the shared minimum': '.hp-materials-write summary, .hp-materials-write input, .hp-materials-write textarea { min-height: 20px !important; height: 20px !important; line-height: 20px !important; padding: 0 !important; }',
   'a more specific rule shrinks the targets and text': '.hp-materials .hp-cta-quiet, .hp-materials-chips .hp-cta-quiet { min-height: 24px !important; min-width: 24px !important; height: 24px !important; padding: 0 !important; font-size: 11px !important; }',
   'an @media rule shrinks the input and the meta text': '@media (max-width: 2000px) { .hp-materials button, .hp-materials input, .hp-materials-url input { min-height: 20px !important; height: 20px !important; padding: 0 !important; } .hp-materials-meta { font-size: 10px !important; } }',
   'outline: none !important removes the ring': 'html body .hp-materials button:focus-visible, html body .hp-materials-chips button:focus-visible { outline: none !important; }',
@@ -193,4 +194,4 @@ try {
 } finally { await b.close(); server.close(); rmSync(temp, { recursive: true, force: true }); }
 assert.ok(Array.isArray(failures));
 if (failures.length) { console.error(failures.map((f) => '  FAIL ' + f).join('\n')); console.error(`activity-materials-computed: ${failures.length} failed`); process.exit(1); }
-console.log('PASS activity materials computed: 44px targets, 14px text, wrapping inside the card and the viewport, the shared 2px focus ring (inset in the rail), personal and classroom x dark and light x 1420 and 800; four injected overrides caught');
+console.log('PASS activity materials computed: 44px targets, 14px text, wrapping inside the card and the viewport, the shared 2px focus ring (inset in the rail), personal and classroom x dark and light x 1420 and 800; five injected overrides caught');

@@ -2830,5 +2830,6 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 /* Authored materials use the existing quiet rail controls. */
 .hp-materials-write form, .hp-materials-write label { display: grid; gap: var(--hp-space-2); }
 .hp-materials-write form { padding-block: var(--hp-space-2); }
-.hp-materials-write input, .hp-materials-write textarea { box-sizing: border-box; width: 100%; min-width: 0; font: inherit; }
+.hp-materials-write summary { min-height: var(--hp-control-min); line-height: var(--hp-control-min); cursor: pointer; }
+.hp-materials-write input, .hp-materials-write textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: var(--hp-control-min); font: inherit; }
 .hp-materials-write textarea { resize: vertical; }
