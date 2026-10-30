@@ -3923,6 +3923,20 @@ Useful work first and Minimum necessary intervention: learners can read the
 failure and make an explicit recovery choice. Verify the built webview at narrow
 and wide widths in light/dark themes; native acceptance remains separate.
 
+### Task rename layout (REQ-C16, #2446)
+
+While editing a task title, header status and secondary controls yield their space
+to the rename form and return when editing ends. At narrow phone widths the input
+gets its own row and Save/Cancel remain side by side; wider panes use one row.
+The input and both actions remain visible and hit-testable with the exhausted
+free-seat header, without horizontal overflow. Normal cancellation and explicit
+save keep their existing request and acknowledgement behavior. Pending Save stays
+focusable with an unavailable/busy announcement and ignores repeated activation,
+so a refusal can return focus to the retained input and success to the title.
+Responses must not steal focus after the learner moves elsewhere; cancelled or
+changed-task requests cannot reopen the editor. Chromium layout
+and pointer evidence is separate from installed split-editor acceptance.
+
 ### Task rename composition confirmation (REQ-C16)
 
 Enter while the task-name input reports IME composition (including keyCode229)

@@ -12,6 +12,7 @@ import { IntentChip } from './StatusChip';
 import { TASK_RUN_CHIPS } from './statusChipLogic';
 export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
+import './taskRename.css';
 import { imeComposing } from './imeGuard';
 import { ActivityTrashPanel } from './ActivityTrashPanel';
 import { MyWorksDrawer } from './MyWorksDrawer';
@@ -687,7 +688,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
             }
             if (event.key === 'Escape') finishRename();
           }} />
-          <button className="tw-quiet" disabled={!title.trim() || blocked || !!renamePending} aria-busy={!!renamePending}>{renamePending ? '저장 중…' : '저장'}</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
+          {/* Keep the pending Save focusable: native disabled blurs it to body before the
+              response can return focus. submitRename guards repeated activation. */}
+          <button className="tw-quiet" disabled={!title.trim() || blocked} aria-disabled={!!renamePending} aria-busy={!!renamePending}>{renamePending ? '저장 중…' : '저장'}</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
         </form> : <h1><button ref={renameButton} className="tw-title-button" data-hp-tooltip={`작업 이름 바꾸기: ${active?.title ?? '작업 기록'}`} disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
         <div ref={setHeadingSlot} className="tw-heading-slot" />
         <span className="tw-run-note" role="status" aria-live="polite" data-hp-tooltip={busy ? (runState === 'approval' ? '화면에 뜬 확인 창에서 골라 주세요.' : '멈춘 뒤 다른 작업으로 이동할 수 있습니다.') : undefined}>
