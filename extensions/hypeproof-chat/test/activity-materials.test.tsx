@@ -159,6 +159,43 @@ const drag = (type: string, files: FakeFile[], kind = "file"): Drag => ({
   ...ev(type), _stopped: false, stopPropagation() { this._stopped = true; }, relatedTarget: null,
   dataTransfer: { items: files.length ? files.map(() => ({ kind })) : [{ kind: "string" }], files },
 });
+t("#3266: note draft survives refusal and unrelated replies, then clears on its own success", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const field = (name: string) => all(e => e.getAttribute("name") === name)[0];
+  const form = all(e => e.localName === "form" && e.findAll(c => c.getAttribute("name") === "material-note-title").length > 0)[0];
+  await act(async () => { const e = field("material-note-title"); (e as unknown as { type: string }).type = "text"; e.value = "수업 메모"; e.dispatchEvent(ev("input")); });
+  await act(async () => { const e = field("material-note-text"); e.value = "직접 쓴 내용\n둘째 줄"; e.dispatchEvent(ev("input")); });
+  await act(async () => { form.dispatchEvent(ev("submit")); });
+  const first = last("materialAddNote")!;
+  eq([first.scope, first.title, first.text], [VIEW.scope, "수업 메모", "직접 쓴 내용\n둘째 줄"], "authored text and scope posted exactly");
+  ok(!posted.some(m => m.type === "sendMessage" || m.type === "materialSelect"), "save does not send or select");
+  await hostSays({ type: "materialsState", view: VIEW, requestId: "another-surface" });
+  eq(field("material-note-text").value, "직접 쓴 내용\n둘째 줄", "unrelated success preserves draft");
+  await hostSays({ type: "materialsState", view: VIEW, requestId: first.requestId, error: "저장하지 못했어요" });
+  eq(field("material-note-title").value, "수업 메모", "refusal preserves title");
+  eq(field("material-note-text").value, "직접 쓴 내용\n둘째 줄", "refusal preserves body");
+  await act(async () => { form.dispatchEvent(ev("submit")); });
+  const second = last("materialAddNote")!;
+  ok(second.requestId !== first.requestId, "retry has own acknowledgement");
+  await hostSays({ type: "materialsState", view: VIEW, requestId: second.requestId });
+  eq([field("material-note-title").value, field("material-note-text").value], ["", ""], "own success clears saved draft");
+  await act(async () => { root.unmount(); });
+});
+
+t("#3266: a different activity never inherits the note draft", async () => {
+  const root = await mountPanel();
+  await hostSays({ type: "materialsState", view: VIEW });
+  const title = () => all(e => e.getAttribute("name") === "material-note-title")[0];
+  await act(async () => { const e = title(); (e as unknown as { type: string }).type = "text"; e.value = "첫 활동의 비공개 메모"; e.dispatchEvent(ev("input")); });
+  await hostSays({ type: "materialsState", view: { ...VIEW, scope: "different-task" } });
+  eq(title().value, "", "new activity starts empty");
+  await act(async () => { const e = title(); (e as unknown as { type: string }).type = "text"; e.value = "두 번째 활동"; e.dispatchEvent(ev("input")); });
+  await hostSays({ type: "materialsState", view: VIEW });
+  eq(title().value, "", "second activity text never leaks back");
+  await act(async () => { root.unmount(); });
+});
+
 type Card = El & { open: boolean; dispatchEvent(e: unknown): boolean };
 const card = () => all((e) => e.getAttribute("data-testid") === "materials")[0] as unknown as Card;
 const settle = () => new Promise((r) => setTimeout(r, 0));
