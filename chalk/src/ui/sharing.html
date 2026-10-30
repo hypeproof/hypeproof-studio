@@ -104,6 +104,28 @@ function decisionBox(r){const box=el('div','');box.className='decision';const ow
  box.append(f);return box;}
 function reset(){finishOutbound?.(false);generation++;for(const c of controllers)c.abort();controllers.clear();token='';pendingId=null;$('submit').disabled=false;$('share').reset();recordsOffered=false;recordsClear();text('records','연결하지 않았습니다.');}
 $('login').onsubmit=e=>{e.preventDefault();reset();token=$('token').value.trim();$('token').value='';text('status','연결 중…');refresh();};$('logout').onclick=()=>{reset();$('token').value='';text('status','연결을 해제했습니다.');};$('refresh').onclick=refresh;
-$('share').addEventListener('input',()=>{pendingId=null;});$('share').onsubmit=async e=>{e.preventDefault();if(!token){text('status','학생 토큰으로 먼저 연결하세요.');return;}let records;try{records=recordsValue();}catch(err){text('status',err.message+' 입력 내용은 유지됩니다.');return;}if($('submit').dataset.pending)return;$('submit').dataset.pending='true';const g=generation;pendingId??=crypto.randomUUID();const content={};for(const key of ['prompt','response','tool_summary','artifact_url','verification'])content[key]=$(key).value;Object.assign(content,records);const body={id:pendingId,recipient_id:$('recipient').value.trim(),kind:$('kind').value,content,consent:$('consent').checked,duration_minutes:Number($('duration').value)};$('submit').disabled=true;try{if(!await confirmOutbound(body.recipient_id,body.content,$('submit'))||g!==generation)return;const r=await api('',{method:'POST',body:JSON.stringify(body)});if(g!==generation)return;pendingId=null;text('status','공유했습니다. 만료 '+new Date(r.expires_at*1000).toLocaleString());$('share').reset();recordsClear();await refresh();}catch(err){if(g===generation)text('status',err.message+' 입력 내용은 유지됩니다.');}finally{delete $('submit').dataset.pending;if(g===generation){$('submit').disabled=false;$('submit').focus();}else $('token').focus();}};
+// Include unnamed fields and optional rows without validating a newer, unfinished draft.
+function shareDraftSnapshot(){return JSON.stringify([...$('share').querySelectorAll('input,select,textarea')].map(n=>[n.id,n.type,n.value,n.checked]));}
+$('share').addEventListener('input',()=>{pendingId=null;});
+$('share').onsubmit=async e=>{
+ e.preventDefault();if(!token){text('status','학생 토큰으로 먼저 연결하세요.');return;}
+ let records;try{records=recordsValue();}catch(err){text('status',err.message+' 입력 내용은 유지됩니다.');return;}
+ if($('submit').dataset.pending)return;$('submit').dataset.pending='true';const g=generation;
+ pendingId??=crypto.randomUUID();const content={};
+ for(const key of ['prompt','response','tool_summary','artifact_url','verification'])content[key]=$(key).value;
+ Object.assign(content,records);
+ const body={id:pendingId,recipient_id:$('recipient').value.trim(),kind:$('kind').value,content,consent:$('consent').checked,duration_minutes:Number($('duration').value)};
+ const approvedDraft=shareDraftSnapshot();$('submit').disabled=true;
+ try{
+  if(!await confirmOutbound(body.recipient_id,body.content,$('submit'))||g!==generation)return;
+  const r=await api('',{method:'POST',body:JSON.stringify(body)});if(g!==generation)return;
+  pendingId=null;const retainedDraft=shareDraftSnapshot()!==approvedDraft;
+  text('status','공유했습니다. 만료 '+new Date(r.expires_at*1000).toLocaleString());
+  if(!retainedDraft){$('share').reset();recordsClear();}
+  await refresh();
+  if(retainedDraft&&g===generation)text('status',$('status').textContent+' · 앞서 확인한 내용을 공유했습니다. 현재 입력은 보내지 않고 유지했습니다.');
+ }catch(err){if(g===generation)text('status',err.message+' 입력 내용은 유지됩니다.');}
+ finally{delete $('submit').dataset.pending;if(g===generation){$('submit').disabled=false;$('submit').focus();}else $('token').focus();}
+};
 window.addEventListener('pagehide',reset);
 </script></body></html>
