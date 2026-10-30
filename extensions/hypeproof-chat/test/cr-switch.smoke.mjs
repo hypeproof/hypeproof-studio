@@ -301,7 +301,15 @@ assert.match(providerSrc, /private async handleStyleTweakMessage\([^)]*\): Promi
 // The queue's behaviour is test/cr-host.smoke.mjs; here, that the provider uses it: one
 // writer (attachElementContext), and the turn takes it through the switch.
 assert.equal((providerSrc.match(/this\.elementQueue\.attach\(/g) ?? []).length, 1, "one writer of the element queue");
-assert.match(providerSrc, /const element = this\.elementQueue\.take\(this\.isCurriculumRuntimeEnabled\(\), text\);/, "a queued element is not sent after the switch turns off");
+assert.match(providerSrc, /const element = prepared \? null : this\.elementQueue\.take\(this\.isCurriculumRuntimeEnabled\(\), text\);/, "ordinary queued elements still pass the switch; prepared requests exclude unrelated element context");
+const elementExpression = providerSrc.match(/const element = (prepared \? null : this\.elementQueue\.take\(this\.isCurriculumRuntimeEnabled\(\), text\));/)[1];
+const takeElement = new Function('prepared', 'text', `return ${elementExpression};`), takeCalls = [], selected = {};
+const elementReceiver = { isCurriculumRuntimeEnabled: () => true, elementQueue: { take: (...args) => { takeCalls.push(args); return selected; } } };
+assert.equal(takeElement.call(elementReceiver, false, 'ordinary'), selected);
+assert.equal(takeElement.call(elementReceiver, true, 'prepared'), null);
+elementReceiver.isCurriculumRuntimeEnabled = () => false;
+takeElement.call(elementReceiver, false, 'switch-off');
+assert.deepEqual(takeCalls, [[true, 'ordinary'], [false, 'switch-off']], 'ordinary reads retain the live switch; prepared requests do not consume the queue');
 ok("webview: CR messages are declared, handled, and nothing CR is sent with the switch off");
 
 console.log(`\n${passed} cr-switch checks passed`);

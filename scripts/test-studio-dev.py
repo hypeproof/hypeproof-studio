@@ -46,6 +46,7 @@ class DevLauncherTests(unittest.TestCase):
             payload = base/'resources/app'; shipped = payload/'extensions/hypeproof-chat'
             (shipped/'dist').mkdir(parents=True); (shipped/'webview-ui/dist').mkdir(parents=True)
             (payload/'product.json').write_text('{"nameShort":"HypeProof Studio"}', encoding='utf-8')
+            (payload/'package.json').write_text('{"name":"HypeProof Studio","version":"1.116.07031"}', encoding='utf-8')
             (shipped/'package.json').write_text('{"name":"hypeproof-chat"}', encoding='utf-8')
             (shipped/'dist/extension.js').write_text('official', encoding='utf-8')
             (base/'HypeProof Studio.exe').write_bytes(b'signed shell')
@@ -143,6 +144,7 @@ class DevLauncherTests(unittest.TestCase):
             (shipped/'dist/extension.js').write_text('old extension')
             (shipped/'package.json').write_text(json.dumps({'dependencies': {'@anthropic-ai/claude-agent-sdk':'0.0.1'}}))
             (payload/'product.json').write_text('{}'); (base/'HypeProof Studio.exe').write_bytes(b'owned fixture shell')
+            (payload/'package.json').write_text('{"name":"HypeProof Studio","version":"1.116.07031"}')
             self.init_repo(repo); before = dev.file_manifest(base)
             staged = {'schema':'hps-dev-sdk-vendor/1','packages':{'@anthropic-ai/claude-agent-sdk':'1.2.3'},'sha256':'recorded-by-vendor-tool','file_count':1}
             def build(_repo, stage):
@@ -162,7 +164,7 @@ class DevLauncherTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             app = Path(tmp)/'Studio'; root = app/'resources/app'; root.mkdir(parents=True)
             (root/'product.json').write_text(json.dumps({'nameShort':'HypeProof Studio', 'win32AppUserModelId':'HypeProof.Studio', 'updateUrl':'https://example.com'}), encoding='utf-8')
-            (root/'package.json').write_text('{"name":"HypeProof Studio"}', encoding='utf-8')
+            (root/'package.json').write_text('{"name":"HypeProof Studio","version":"1.116.07031"}', encoding='utf-8')
             (app/'HypeProof Studio.exe').write_bytes(b'original signed shell')
             dev.configure_copy(app, 'windows-test')
             product = json.loads((root/'product.json').read_text(encoding='utf-8'))
@@ -231,7 +233,7 @@ class DevLauncherTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             app = Path(tmp)/'dev.app'; root = app/'Contents/Resources/app'; root.mkdir(parents=True)
             (root/'product.json').write_text(json.dumps({'nameShort':'HypeProof Studio','updateUrl':'https://example.com'}))
-            (root/'package.json').write_text('{"name":"HypeProof Studio"}')
+            (root/'package.json').write_text('{"name":"HypeProof Studio","version":"1.116.07031"}')
             info = app/'Contents/Info.plist';info.write_bytes(plistlib.dumps({'CFBundleName':'HypeProof Studio','CFBundleExecutable':'HypeProof Studio','CFBundleIdentifier':'ai.hypeproof.studio','CFBundleURLTypes':[]}))
             dev.configure_copy(app,'test')
             actual = plistlib.loads(info.read_bytes())
@@ -254,6 +256,44 @@ class DevLauncherTests(unittest.TestCase):
 
             self.assertEqual(json.loads((root/'package.json').read_text())['name'],'HypeProof Studio')
             self.assertNotIn('updateUrl',json.loads((root/'product.json').read_text()))
+
+    def test_dev_copy_uses_shell_engine_and_preserves_release_without_rewriting_manifests(self):
+        for name in ('Studio.app', 'Studio Windows'):
+            with self.subTest(app=name), tempfile.TemporaryDirectory() as tmp:
+                base = Path(tmp)/name; root = dev.app_resources(base); root.mkdir(parents=True)
+                (root/'product.json').write_text(json.dumps({'version':'2026.1020.2','commit':'a'*40}))
+                (root/'package.json').write_text('{"name":"HypeProof Studio","version":"1.116.07031"}')
+                extension = root/'extensions/hypeproof-chat/package.json'; extension.parent.mkdir(parents=True)
+                extension.write_text('{"version":"2026.1020.2","engines":{"vscode":"^1.116.0"}}')
+                if dev.is_mac_app(base):
+                    (base/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleName':'HypeProof Studio','CFBundleShortVersionString':'2026.1020.2'}))
+                original = dev.file_manifest(base)
+                candidate = Path(tmp)/('Dev.app' if dev.is_mac_app(base) else 'Dev Windows')
+                dev.shutil.copytree(base, candidate)
+                dev.configure_copy(candidate, 'engine-contract')
+                dev.configure_copy(candidate, 'engine-contract')
+                actual = dev.app_resources(candidate)
+                product = json.loads((actual/'product.json').read_text())
+                self.assertEqual(product['version'], '1.116.07031')
+                self.assertEqual(product['hpsReleaseVersion'], '2026.1020.2')
+                self.assertEqual(product['commit'], 'a'*40)
+                self.assertEqual(product['nameShort'], 'HypeProof Studio Dev')
+                self.assertEqual((actual/'package.json').read_bytes(), (root/'package.json').read_bytes())
+                self.assertEqual((actual/'extensions/hypeproof-chat/package.json').read_bytes(), extension.read_bytes())
+                self.assertEqual(dev.file_manifest(base), original)
+                if dev.is_mac_app(base):
+                    self.assertEqual(plistlib.loads((candidate/'Contents/Info.plist').read_bytes())['CFBundleShortVersionString'], '2026.1020.2')
+
+    def test_invalid_shell_engine_aborts_before_copy_identity_changes(self):
+        for version in (None, '', '2026.1020', 116):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as tmp:
+                app = Path(tmp)/'Dev'; root = dev.app_resources(app); root.mkdir(parents=True)
+                (root/'product.json').write_text('{"version":"2026.1020.2","nameShort":"HypeProof Studio"}')
+                (root/'package.json').write_text(json.dumps({'version':version}))
+                original = dev.file_manifest(app)
+                with self.assertRaisesRegex(RuntimeError, 'VS Code engine version'):
+                    dev.configure_copy(app, 'invalid-engine')
+                self.assertEqual(dev.file_manifest(app), original)
 
     def test_windows_account_protocol_is_unique_and_keeps_owned_profile(self):
         with tempfile.TemporaryDirectory() as tmp:

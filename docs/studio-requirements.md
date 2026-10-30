@@ -13,6 +13,25 @@ only for citations in this task, and preserves composer focus. A pinned source i
 not replaced by later citations. Classroom, account authority and shared Service
 memory remain governed by their existing contracts.
 
+Normal quit during an admitted model turn preserves the original user message and
+any already received partial answer/tool timeline once in the owning task. The
+user message is saved before runner dispatch; prepared companion execution saves
+it only after reservation/binding and repeats its final native-draft review after
+the write. Shutdown freezes and aborts that owned turn, then awaits history
+persistence alongside spool closure without relying on SDK unwind. A stale owner
+or failed write cannot commit into another task, and late settlement cannot turn
+an interrupted transcript into a completed answer or replay it. This is normal
+shutdown recovery, not a crash or power-loss guarantee. Source/disk controls:
+`test/companion-normal-turn.test.mjs`; packaged acceptance remains the actual
+native normal-quit checks described in [TW/CP acceptance](testing/task-workspace.md).
+
+Interrupted-history persistence retains only the already-admitted frozen transcript's
+original task/store/activity/epoch/profile owner after synchronous extension
+subscription disposal or explicit Stop revokes execution authority. Admission, SDK/tool checks and
+new work continue to require live execution authority. A replacement task or
+profile still invalidates the queued history write; this storage-only lease grants
+no model or file-edit permission.
+
 UX22: a failed draft write must explicitly distinguish text still on screen from
 persisted text. The unsaved warning cannot be dismissed or cleared by an unrelated
 task-list/config refresh; a confirmed write clears it. A conflicting disk revision
@@ -3775,7 +3794,13 @@ browser applications are unaffected. A failed tab close does not block startup.
 Chat focus waits for initial activity restoration, reveals the existing editor
 chat and explicitly returns the caret to its existing composer. The focus request
 is bound to that activity and is cancelled when the composer unmounts or changes
-activity; passive restoration does not steal focus. If no editor chat exists, it
+activity; passive restoration does not steal focus. When the same retained window
+returns after a native blur, restore its last composer only if focus has fallen to
+BODY/root and that exact connected, editable textarea still belongs to the same
+activity/task/profile/workspace render owner. A newer control choice, pointer/Tab/Escape,
+open modal, owner change, unmount or another blur cancels pending restoration. A
+background mount never claims focus. Preserve draft and selection; do not activate
+a window or poll for focus. If no editor chat exists, it
 opens the entry surface; it must not create a second sidebar chat or reopen a
 sidebar the user hid.
 Controlled StartPage/activity folder navigation prepares and validates the
@@ -7753,6 +7778,37 @@ Current activity and host labels are preparation context, not verified account
 ownership or execution authority. Source tests and an actual isolated development
 app with a synthetic profile cover this bounded flow; full DMC-1, DMC-T01/DMC-T14,
 real account continuity, pairing and release acceptance remain open.
+
+The [bounded transfer and mobile presentation slice](evidence/companion-artifact-transfer-20261028.md)
+adds framed results and controlled result presentation while retaining the
+original runtime/relay limits. Its partial source/browser evidence does not
+complete device, restart, classroom or production acceptance.
+
+The bounded DMC-5 authoring-import seam treats a phone request as exact text for
+desktop review, with a distinct strict contract and the existing pair, account,
+task, saved-artifact and owner checks. Explicit desktop import may fill only an
+empty current task draft under the existing store lock; conflicting drafts and
+cancelled requests remain preserved. Import receipts do not authorize execution.
+An interrupted import is retained for reconciliation and cannot automatically
+replay. The DEV owner routes authenticated intent messages separately from preview reads
+and asks the normal composer for nonce-bound snapshots before and after desktop
+review. Visible import requires the same UI generation and a rendered acknowledgement;
+newer text and attachments remain intact. The distinct encrypted import receipt
+is not a model result. The ordinary desktop Send may bind an unchanged presented
+phone draft to its actual user message, turn, complete pre-turn restore point,
+and measured artifact hashes. Native edits lose automatic phone provenance.
+Only a positively matched phone draft requires the selected artifact's exact
+previous bytes in the restore point before runtime admission; other native Sends
+keep their existing behavior. An interrupted reservation remains unknown and
+cannot be rebound automatically. Completion metadata describes the normal turn,
+not model quality or release acceptance. Completed requires an explicit successful SDK result
+and may have an unchanged artifact hash; explicit refusal is failed, while no
+terminal observation or an interrupted turn remains unknown. Other runtime paths
+retain conservative unknown metadata without such a terminal receipt.
+The existing single handoff slot remains
+occupied; this slice does not enable repeated mobile revisions. Installed
+normal-engine execution, result preservation and
+two-learner/classroom evidence remain required for DMC-5.
 
 ## Learning block attached by the confirmed lesson (CGP-LEARN-R-001)
 

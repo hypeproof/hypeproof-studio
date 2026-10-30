@@ -13,7 +13,7 @@ let failWrite = false;
 const settings = { coachRuntime: 'agent-sdk', requireApprovalFor: ['writeFile', 'delegateAgent', 'webSearch'] };
 const vscode = { env: { appName: 'HypeProof Studio' }, workspace: { getConfiguration: () => ({ get: (key, fallback) => settings[key] ?? fallback }) }, commands: { executeCommand: async () => {} } };
 const module = { exports: {} };
-vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, process, Buffer, URL, setTimeout, clearTimeout });
+vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, process, Buffer, URL, TextEncoder, TextDecoder, setTimeout, clearTimeout });
 const h = Object.create(module.exports.ChatPanelProvider.prototype);
 let profile = { activity_kind: 'personal', sdk_tools: { read: true, write: true, shell: true, subagents: true, browser: true }, tools: { web_search: true }, browser_control: { enabled: true } };
 const posts = [];

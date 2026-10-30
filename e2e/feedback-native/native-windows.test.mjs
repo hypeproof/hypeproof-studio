@@ -1,4 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import {NativeUI} from './native-ui.mjs';
+import {setShellLocale,shellLocale} from '../fixtures/shell-labels.mjs';
 import {ownedWindowPrerequisite,newOwnedWorkbench} from './native-windows.mjs';
 test('two-window ownership refuses local/attach/wrong receipt/linked roots before any input',()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'native-window-guards-'));
@@ -22,7 +24,13 @@ test('public Switch Window starts in focused owner and selects complete observed
  const {switchOwnedWindow}=await import('./native-windows.mjs');const events=[];let sourceFocus=true,targetFocus=false;
  const from={workbenchId:'C',endpoint:'http://127.0.0.1:9777',workbench:async()=>({evaluate:async()=>sourceFocus}),palette:async title=>events.push(['palette',title]),quick:async title=>{events.push(['quick',title]);targetFocus=true;sourceFocus=false;}};
  const to={workbenchId:'A',endpoint:from.endpoint,workbench:async()=>({evaluate:async expression=>expression==='document.title'?'[DEV] Chat — A 전체 경로':targetFocus})};
- await switchOwnedWindow(from,to);assert.deepEqual(events,[['palette','Switch Window...'],['quick','[DEV] Chat — A 전체 경로']]);
+ const previous=shellLocale();
+ try{
+  for(const [locale,label]of [['ko','창 전환'],['en','Switch Window...']]){
+   setShellLocale(locale);sourceFocus=true;targetFocus=false;events.length=0;
+   await switchOwnedWindow(from,to);assert.deepEqual(events,[['palette',label],['quick','[DEV] Chat — A 전체 경로']]);
+  }
+ }finally{setShellLocale(previous);}
  events.length=0;await switchOwnedWindow(from,to);assert.deepEqual(events,[],'already focused target is observation only');
  targetFocus=false;await assert.rejects(switchOwnedWindow(from,to),/actually focused/);assert.deepEqual(events,[]);
  await assert.rejects(switchOwnedWindow(from,{...to,workbenchId:'C'}),/distinct/);
@@ -55,4 +63,66 @@ test('existing binding selection permits only drive-letter spelling and verifies
   const real=path.join(dir,'physical');fs.mkdirSync(real);const physical=fs.realpathSync(real);write(physical);assert.equal(selectOwnedBinding(dir,physical,service,activity).file,file(physical));
   assert.throws(()=>selectOwnedBinding(dir,path.dirname(real),service,activity),/Exactly one/);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('switch before a chat command waits for actual retained composer focus, including already focused host; refusal sends no next command',async()=>{
+ const {switchOwnedWindow}=await import('./native-windows.mjs');const events=[];let focused=false,release,observed;const observing=new Promise(resolve=>{observed=resolve;});
+ const from={workbenchId:'C',endpoint:'http://127.0.0.1:9777',workbench:async()=>({evaluate:async()=>true}),palette:async()=>events.push('switch'),quick:async()=>{focused=true;}};
+ const to={workbenchId:'A',endpoint:from.endpoint,workbench:async()=>({evaluate:async expression=>expression==='document.title'?'complete observed A title':focused}),restoredFocus:async()=>{events.push('observe-composer');observed();await new Promise(resolve=>{release=resolve;});}};
+ const pending=switchOwnedWindow(from,to,{observeChatFocus:true}).then(()=>events.push('next-command-admitted'));
+ await Promise.race([observing,pending.then(()=>assert.fail('next command admitted without observing composer'))]);
+ assert.deepEqual(events,['switch','observe-composer'],'host focus alone cannot admit the next F1');release();await pending;
+ assert.deepEqual(events,['switch','observe-composer','next-command-admitted']);
+ events.length=0;to.restoredFocus=async()=>{events.push('refused-composer');throw Error('retained composer not focused');};
+ await assert.rejects(switchOwnedWindow(from,to,{observeChatFocus:true}),/retained composer not focused/);
+ assert.deepEqual(events,['refused-composer'],'already focused host cannot bypass the observation or issue another switch');
+});
+
+function secondaryReturnFixture(){
+ const ui=new NativeUI('http://127.0.0.1:9777','A'),events=[],retained={workbench:'A',target:'A-chat',frame:'A-frame',loader:'A-loader'};
+ let restored=false,hidden=false,foreign=false,closed=false;
+ const info={id:retained.target,type:'iframe',url:'https://owned.invalid/hypeproof-chat?id=A-owned'};
+ const chat={info,send:async()=>({frameTree:{frame:{id:retained.frame,loaderId:retained.loader}}}),evaluate:async()=>({present:true,connected:true,enabled:true,visible:!hidden,documentFocused:restored,inputFocused:restored})};
+ ui.targets.set(info.id,chat);ui.list=async()=>[info];ui.workbench=async()=>({info:{id:foreign?'foreign':retained.workbench},evaluate:async()=>({sameOwner:true,visible:!hidden,focused:restored})});
+ // Drive the real palette sequence; the injected native return collapses its
+ // already-ready input before typing, matching the observed readiness transition.
+ let quick={visible:false};ui.focusWorkbench=async()=>{};ui.quickState=async()=>quick;
+ ui.key=async(_target,key)=>{assert.equal(key,'F1');events.push('F1');quick={visible:true,ready:true,mode:'command',value:'>'};};
+ ui.input=async(_target,_selector,value)=>{if(!restored){quick={visible:false};throw Error('native return closed the newly opened palette before typing');}events.push('query');quick.value=value;};
+ ui.choiceSelector=async()=>'.exact';ui.press=async()=>{quick={visible:false};};
+ const other={workbenchId:'C',endpoint:ui.endpoint,closeOwnedWindow:async()=>{assert(!closed,'close once');closed=true;events.push('secondary-closed');restored=false;}};
+ return{ui,other,retained,events,chat,ready(){restored=true;},hide(){hidden=true;},foreign(){foreign=true;},get closed(){return closed;}};
+}
+test('secondary close waits for the exact delayed native return before the next single F1',async()=>{
+ const {closeSecondaryAndObserveOriginal}=await import('./native-windows.mjs');
+ const old=secondaryReturnFixture();await old.other.closeOwnedWindow();await assert.rejects(old.ui.palette(),/native return closed/,'old immediate next command reproduces readiness failure');
+ const f=secondaryReturnFixture();let sampled;const first=new Promise(r=>sampled=r),evaluate=f.chat.evaluate;f.chat.evaluate=async()=>{const value=await evaluate();sampled();return value;};
+ const pending=(async()=>{const proof=await closeSecondaryAndObserveOriginal(f.ui,f.other,f.retained);await f.ui.palette();return proof;})();
+ await first;assert.deepEqual(f.events,['secondary-closed']);f.ready();const proof=await pending;assert.equal(proof.original_return_observed,true);assert.equal(proof.focus_repaired,false);assert.deepEqual(f.events,['secondary-closed','F1','query']);
+});
+test('secondary return handles ready focus and refuses foreign/hidden/deadline without another input',async()=>{
+ const {closeSecondaryAndObserveOriginal}=await import('./native-windows.mjs');
+ const ready=secondaryReturnFixture(),close=ready.other.closeOwnedWindow;ready.other.closeOwnedWindow=async()=>{await close();ready.ready();};await closeSecondaryAndObserveOriginal(ready.ui,ready.other,ready.retained);await ready.ui.palette();assert.deepEqual(ready.events,['secondary-closed','F1','query']);
+ for(const change of ['foreign','hide','pending']){
+  const f=secondaryReturnFixture();const close=f.other.closeOwnedWindow;f.other.closeOwnedWindow=async()=>{await close();if(change!=='pending')f.ready();if(change!=='pending')f[change]();};
+  await assert.rejects(closeSecondaryAndObserveOriginal(f.ui,f.other,f.retained,{timeout:25}),/Retained sidebar return readiness failed/);assert.deepEqual(f.events,['secondary-closed']);
+ }
+ const foreign=secondaryReturnFixture();await assert.rejects(closeSecondaryAndObserveOriginal(foreign.ui,foreign.other,{...foreign.retained,workbench:'foreign'}),/exact owned window/);assert.deepEqual(foreign.events,[]);
+ const stalled=secondaryReturnFixture();stalled.ui.list=()=>new Promise(()=>{});const began=Date.now();await assert.rejects(closeSecondaryAndObserveOriginal(stalled.ui,stalled.other,stalled.retained,{timeout:25}),/Retained sidebar return readiness failed/);assert(Date.now()-began<300);assert.deepEqual(stalled.events,['secondary-closed']);
+});
+test('failed main path closes the owned secondary without claiming an unobserved original return',async()=>{
+ const {closeSecondaryAndObserveOriginal}=await import('./native-windows.mjs');const f=secondaryReturnFixture();assert.deepEqual(await closeSecondaryAndObserveOriginal(f.ui,f.other,undefined),{secondary_closed:true,original_return_observed:false});assert.deepEqual(f.events,['secondary-closed']);
+ const source=fs.readFileSync(new URL('./native-windows.mjs',import.meta.url),'utf8');assert(source.includes('await ui.restoredDraft(draft);await observeOther();returnChat=await ui.chatDocumentIdentity()'));assert(source.includes('closeSecondaryAndObserveOriginal(ui,other,returnChat'));
+});
+
+test('history admission needs the unique passed T05 result and exact observed original return',async()=>{
+ const {requireHistoryWindowReturn}=await import('./native-windows.mjs');
+ const valid={id:'T05-owned-simultaneous-windows',status:'PASS',original_window:'A',secondary_closed:true,original_return:{secondary_closed:true,original_return_observed:true,focus_repaired:false,document:{workbench:'A',target:'A-chat',frame:'A-frame',loader:'A-loader'}}};
+ const begin=(tests,selected)=>{requireHistoryWindowReturn(tests,selected);return 'history-input';};
+ assert.equal(begin([valid],true),'history-input');assert.equal(begin(undefined,false),'history-input','unselected scenarios remain unchanged');
+ const bad=[[],[valid,valid],[{...valid,status:'FAIL'}],[{...valid,status:'BLOCKED'}],[{...valid,status:'NOT_RUN'}],[{...valid,original_return:undefined}],[{...valid,secondary_closed:false}],
+  ...[{original_return_observed:false},{secondary_closed:false},{focus_repaired:true},{document:{...valid.original_return.document,workbench:'foreign'}},{document:{...valid.original_return.document,target:''}}].map(change=>[{...valid,original_return:{...valid.original_return,...change}}])];
+ for(const tests of bad){let inputs=0;assert.throws(()=>{requireHistoryWindowReturn(tests,true);inputs++;},error=>error.blocked===true&&/passed T05/.test(error.message));assert.equal(inputs,0,'no later history input after refusal');}
+ assert.throws(()=>requireHistoryWindowReturn([valid],undefined),/passed T05/);
+ const source=fs.readFileSync(new URL('./run.mjs',import.meta.url),'utf8'),stepAt=source.indexOf("await step('T05-owned-simultaneous-windows'"),gateAt=source.indexOf("requireHistoryWindowReturn(report.tests,c.scenarios.includes('history-streaming'))",stepAt),historyAt=source.indexOf('await runHistoryStreaming(',stepAt);assert(stepAt>=0&&gateAt>stepAt&&historyAt>gateAt,'real selected branch gates history before its first command');
 });

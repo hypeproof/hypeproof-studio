@@ -1,5 +1,6 @@
 // Cross-platform form of the existing classroom/mac-window.mjs OOPIF/input contract.
-// Reads DOM state only. Every action uses native CDP keyboard/mouse input, never DOM click(), input setters or postMessage().
+// Reads DOM state; actions use native CDP input, never DOM click(), setters or postMessage().
+// Streaming quit may explicitly delegate its OS-native confirmation to an owned platform port.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {loopback} from './safety.mjs';
@@ -37,7 +38,7 @@ function readObservation(timeout,workbench){
  const run=async operation=>{check();let aborted;const stopped=new Promise((_,reject)=>{aborted=()=>reject(Error('Owned readiness deadline'));controller.signal.addEventListener('abort',aborted,{once:true});});
   try{const value=await Promise.race([Promise.resolve().then(()=>{check();return operation();}),stopped]);check();return value;}finally{controller.signal.removeEventListener('abort',aborted);}};
  const poll=async operation=>{for(;;){check();try{const value=await run(operation);if(value)return value;}catch{check();}await run(()=>sleep(Math.min(150,Math.max(1,deadline-Date.now()))));}};
- return {signal:controller.signal,workbench,run,poll,check,close(){clearTimeout(timer);controller.abort();}};
+ return {signal:controller.signal,workbench,run,poll,check,remaining:()=>deadline-Date.now(),close(){clearTimeout(timer);controller.abort();}};
 }
 
 class Target{
@@ -83,7 +84,7 @@ export class NativeUI{
   return waitFor(async()=>{const state=await view.evaluate(`(()=>{const e=document.querySelector('#connection-error');if(!e)return null;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return {visible:r.width>0&&r.height>0&&s.display!=='none'&&s.visibility==='visible'&&Number(s.opacity)>0,message:[...e.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim(),preservation:e.querySelector('p')?.textContent?.trim(),candidate:document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'};})()`);return sessionRefusalObserved(state,expected)?state:null;},'visible canonical App profile refusal, existing connection preserved and no candidate admission',timeout);
  }
  async savedActivity(view,workspace,timeout=30000){
-  const selector=await waitFor(async()=>{const rows=await view.evaluate("[...document.querySelectorAll('.studio-saved-activities button')].map((e,index)=>({index,workspace:e.querySelector('small')?.textContent}))");const matches=rows.filter(row=>sameDisplayedWorkspace(row.workspace,workspace));if(matches.length!==1)return null;return '.studio-saved-activities button:nth-of-type('+(matches[0].index+1)+')';},'unique saved activity for complete workspace path',timeout);
+  const selector=await waitFor(async()=>{const rows=await view.evaluate("[...document.querySelectorAll('.studio-saved-activities button')].map((e,index)=>({index,workspace:e.getAttribute('title'),label:e.getAttribute('aria-label')}))");const matches=rows.filter(row=>sameDisplayedWorkspace(row.workspace,workspace));if(matches.length!==1||typeof matches[0].label!=='string'||!matches[0].label.endsWith(', '+matches[0].workspace))return null;return '.studio-saved-activities button:nth-of-type('+(matches[0].index+1)+')';},'unique saved activity for complete workspace path',timeout);
   await this.press(view,selector,'saved activity workspace');
  }
  async chooseCandidateFolder(view,folder){
@@ -105,20 +106,30 @@ export class NativeUI{
   return true;
  }
  async cdpDown(){try{await fetch(this.endpoint+'/json/list',{signal:AbortSignal.timeout(1500)});return false;}catch(error){return error.cause?.code==='ECONNREFUSED'||(Array.isArray(error.cause?.errors)&&error.cause.errors.length>0&&error.cause.errors.every(e=>e.code==='ECONNREFUSED'));}}
- async quitOwned(platform=process.platform){
+ async quitOwned(platform=process.platform,confirmStreamingQuit){
   if(!['darwin','win32'].includes(platform))throw Error('Native quit supports hosted macOS/Windows only');
   const w=await this.workbench();await this.focusWorkbench(w);
   if(platform==='win32'){
    // Upstream MenubarFileMenu exposes workbench.action.quit as E&&xit.
    // CDP Alt+F4 need not reach the OS window manager; click the actual menu.
    await this.clickText(w,menuLabels('file'),'.menubar-menu-button');
+   if(confirmStreamingQuit)await this.observeQuitMenu(w,'before_exit_click');
    try{await this.clickText(w,menuLabels('exit'),'.monaco-menu .action-label');}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+   if(confirmStreamingQuit){await this.observeQuitMenu(w,'after_exit_click');await confirmStreamingQuit();}
    return;
   }
   try{await w.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:4});}
   catch(error){if(w.ws?.readyState===WebSocket.CLOSED)return;throw error;}
   try{await w.send('Input.dispatchKeyEvent',{type:'keyUp',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:0});}
   catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+  if(confirmStreamingQuit)await confirmStreamingQuit();
+ }
+
+ async observeQuitMenu(target,phase){
+  const observation=readObservation(500,target.info?.id);let state;
+  try{state=await observation.run(()=>target.evaluate("(()=>{const visible=e=>!!e&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;return {menu_visible:[...document.querySelectorAll('.monaco-menu')].some(visible),renderer_dialog_visible:[...document.querySelectorAll('.monaco-dialog-box')].some(visible),document_focused:document.hasFocus()};})()",observation));observation.check();if(!state||['menu_visible','renderer_dialog_visible','document_focused'].some(k=>typeof state[k]!=='boolean'))throw Error('observation unavailable');}
+  catch{state=null;}finally{observation.close();}
+  this.phases.push({at:new Date().toISOString(),phase:'owned quit menu observation',stage:phase,status:state?'OBSERVED':'UNAVAILABLE',...(state?{menu_visible:state.menu_visible===true,menu_closed:state.menu_visible===false,renderer_dialog_visible:state.renderer_dialog_visible===true,document_focused:state.document_focused===true}:{})});
  }
 
  async list(observation){const r=await fetch(this.endpoint+'/json/list',{signal:observation?AbortSignal.any([observation.signal,AbortSignal.timeout(1500)]):AbortSignal.timeout(1500)});if(!r.ok)throw Error('CDP target list unavailable');return r.json();}
@@ -138,6 +149,10 @@ export class NativeUI{
   return observation?observation.poll(discover):waitFor(discover,'native workbench'+(id?' '+id:''),60000);
  }
 
+ async observeRetainedFocusTarget(){
+  const observation=readObservation(750,this.workbenchId);
+  try{return await this.frame('.hps-input textarea',750,observation);}catch{return null;}finally{observation.close();}
+ }
  async restoredFocus(timeout=30000){
   // Observe startup focus only; no palette, click or Page.bringToFront may repair it.
   const chat=await this.frame('.hps-input textarea');
@@ -236,6 +251,34 @@ export class NativeUI{
   const identity={workbench:chat.ownedWorkbenchId,target:chat.info?.id,frame:chat.ownedFrameId,loader:chat.ownedLoaderId};
   if(Object.values(identity).some(value=>typeof value!=='string'||!value))throw Error('Owned chat document identity unavailable');
   return identity;
+ }
+ // Sidebar visibility is not completion of its asynchronous focus return. Observe
+ // the exact previously retained document twice before the next single F1.
+ async retainedChatReady(before,timeout=30000){
+  if(!Number.isFinite(timeout)||timeout<=0||timeout>30000||!before||['workbench','target','frame','loader'].some(k=>typeof before[k]!=='string'||!before[k]))throw Error('Exact retained chat identity required');
+  before={workbench:before.workbench,target:before.target,frame:before.frame,loader:before.loader};
+  const chat=this.targets.get(before.target),name=chat?.info?.url?new URL(chat.info.url).searchParams.get('id'):null;
+  if(!chat||chat.info.id!==before.target||!name)throw Error('Previously observed retained chat target required');
+  const observation=readObservation(timeout,before.workbench);let state,readySamples=0;
+  const changed=()=>{throw Object.assign(Error('Retained chat identity changed'),{identityChanged:true});};
+  const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'retained sidebar return readiness',outcome,before,state:state??null,ready_samples:readySamples});
+  try{for(;;){
+   observation.check();const infos=await observation.run(()=>this.list(observation));
+   const matches=infos.filter(t=>t.id===before.target);
+   if(matches.length!==1||matches[0].type!=='iframe'||matches[0].url!==chat.info.url)changed();
+   const host=await observation.run(()=>this.workbench(observation));if(host.info?.id!==before.workbench)changed();
+   const tree=await observation.run(()=>chat.send('Page.getFrameTree',{},observation));
+   const frames=[tree.frameTree,...(tree.frameTree?.childFrames??[])].filter(n=>n?.frame?.id===before.frame);
+   if(frames.length!==1||frames[0].frame.loaderId!==before.loader)changed();
+   const outer=await observation.run(()=>host.evaluate(`(()=>{const matches=[...document.querySelectorAll('iframe')].filter(e=>e.name===${JSON.stringify(name)});if(matches.length!==1)return {sameOwner:false};const e=matches[0],r=e.getBoundingClientRect(),s=getComputedStyle(e);return {sameOwner:true,visible:r.width>0&&r.height>0&&s.display!=='none'&&s.visibility==='visible',focused:document.hasFocus()&&document.activeElement===e};})()`,observation));
+   if(outer?.sameOwner!==true)changed();
+   const inner=await observation.run(()=>chat.evaluate("(()=>{const e=document.querySelector('.hps-input textarea'),r=e?.getBoundingClientRect(),s=e?getComputedStyle(e):null;return {present:!!e,connected:!!e?.isConnected,enabled:!!e&&!e.disabled&&!e.readOnly,visible:!!r&&r.width>0&&r.height>0&&s.display!=='none'&&s.visibility==='visible',documentFocused:document.hasFocus(),inputFocused:!!e&&document.activeElement===e};})()",observation));
+   state={outerVisible:outer.visible===true,hostFocused:outer.focused===true,...inner};
+   readySamples=['outerVisible','hostFocused','present','connected','enabled','visible','documentFocused','inputFocused'].every(k=>state[k]===true)?readySamples+1:0;
+   if(readySamples===2){observation.check();record('observed');return before;}
+   await observation.run(()=>sleep(Math.min(150,Math.max(1,observation.remaining()))));
+  }}catch(error){record(error.identityChanged?'identity-refused':observation.signal.aborted||observation.remaining()<=0?'timeout':'unavailable');throw Error('Retained sidebar return readiness failed');}
+  finally{observation.close();}
  }
  async reloadedChatReady(before,timeout=30000){
   if(!Number.isFinite(timeout)||timeout<=0||timeout>30000||!before||['workbench','target','frame','loader'].some(key=>typeof before[key]!=='string'||!before[key]))throw Error('Exact previous owned chat document required');

@@ -48,6 +48,27 @@ non_product_directories:
   - releases           # release notes written by release-cut (releases/<version>.md)
 
 entries:
+  - name: companion-android-dev
+    layer: v
+    tag_prefix: null
+    directory: apps/companion-android
+    deploys_to: local-debug-apk
+    contract:
+      format: "JSON — hps-companion-authoring-intent/1 and hps-companion-execution-result/1 over the existing authenticated encrypted companion session"
+    drift_lock: scripts/companion-ci.mjs
+    exit_plan: >-
+      Close the owned mobile/desktop companion session and revoke its native
+      device connection, then uninstall the debug APK. Preserve the desktop
+      TaskWorkspaceStore drafts, run provenance and restore points; closing a
+      connection does not undo an already dispatched turn.
+    owner: jay
+    notes: >-
+      DEV-only Android companion app under the apps container; no production
+      transport, release tag or distribution is adopted. The required existing
+      service-integration test lane runs the private-client contract, Android
+      controller/React/browser bundle and native Java source checks. Source CI
+      does not establish installed-device or classroom acceptance.
+
   - name: measurement-host-package
     layer: v
     tag_prefix: measurement-v

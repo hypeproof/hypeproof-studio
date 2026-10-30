@@ -1,0 +1,12 @@
+plugins { id 'com.android.application' }
+if (!System.getenv('ANDROID_USER_HOME') || !System.getenv('GRADLE_USER_HOME')) throw new GradleException('Explicit task-local ANDROID_USER_HOME and GRADLE_USER_HOME are required')
+android {
+ namespace 'ai.hypeproof.companion'
+ compileSdk 35
+ defaultConfig { applicationId 'ai.hypeproof.companion'; minSdk 35; targetSdk 35; versionCode 1; versionName '0.0.1-dev' }
+ buildFeatures { buildConfig true }
+ signingConfigs { debug { storeFile file(new File(System.getenv('ANDROID_USER_HOME'), 'debug.keystore')) } }
+ buildTypes { debug { applicationIdSuffix '.debug'; debuggable true }; release { minifyEnabled false; debuggable false } }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies { implementation 'androidx.webkit:webkit:1.12.1' }

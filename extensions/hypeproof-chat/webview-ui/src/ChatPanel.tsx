@@ -43,6 +43,7 @@ import { PerfTracePill } from './PerfTracePill';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
+import { bindRetainedComposerFocus } from './retainedComposerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer, type IconKind } from './ChatDetails';
 import { ConversationCopyStatus, useConversationCopy } from './ConversationCopy';
 import { TASK_APPEARANCE_LABEL, useTaskAppearance } from './TaskAppearance';
@@ -599,6 +600,28 @@ export function ChatPanel(props: Props) {
   const noteInSummary = imgNote != null && composerFailures.some(f => f.reason === imgNote);
   const composerIdentity = [activityId,taskId,draft,pendingImages,stagedPhotos.map(p=>p.id).join("|"),imports,toolMode,queued,streaming,frozen,config?.activity?.verified,props.sendLocked,props.sendPending];
   const composerIdentityRef = useRef(composerIdentity); composerIdentityRef.current=composerIdentity;
+  const companionDraftState = useRef({signature:'',generation:0,blocked:true});
+  const companionBlocked = !!(streaming || frozen || props.sendLocked || props.sendPending || stagedPhotos.length
+    || pendingImages.length || imports.length || props.fileAttachment || props.pageAttachment || preparingImages);
+  const companionSignature = JSON.stringify([activityId,taskId,snapshot.current,companionBlocked,stagedPhotos.map(p=>p.id)]);
+  if(companionDraftState.current.signature!==companionSignature) companionDraftState.current={signature:companionSignature,generation:companionDraftState.current.generation+1,blocked:companionBlocked};
+  const companionApply = useRef<{nonce:string;text:string;rest:string}|null>(null);
+  const companionSavedRender = useRef<string|null>(null);
+  useEffect(()=>{
+    const pending=companionApply.current;if(!pending||!activityId)return;
+    companionApply.current=null;
+    const {text,...rest}=snapshot.current;
+    const applied=text===pending.text && JSON.stringify(rest)===pending.rest && !companionDraftState.current.blocked;
+    // This exact render came from a draft already committed by the host. Send
+    // its presentation ACK only: the normal autosave below must not race the
+    // host's presentation receipt with another task revision. A different or
+    // subsequent user edit still takes the ordinary autosave path.
+    companionSavedRender.current=applied?JSON.stringify([activityId,taskId,snapshot.current]):null;
+    postToHost({type:'saveActivityDraft',activityId,taskId,nonce:pending.nonce,draft:snapshot.current,
+      uiGeneration:companionDraftState.current.generation,companionApplied:applied,
+      imagePreparationFailed:companionDraftState.current.blocked});
+  },[activityId,taskId,draft]);
+
   const photoSources = useRef(new Map<string, File>());
   // CGP-CHAT-R-029 — the state an undo offer was made against; an offer is valid only while it is unchanged.
   const undoScope = { activityId: activityId ?? null, taskId: taskId ?? null };
@@ -617,7 +640,10 @@ export function ChatPanel(props: Props) {
   const initialDraft = useRef(true);
   useEffect(() => {
     if (initialDraft.current) { initialDraft.current=false; return; }
-    if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
+    const payload=draftPayload(),saved=companionSavedRender.current;
+    companionSavedRender.current=null;
+    if(saved===JSON.stringify([activityId,taskId,payload])) return;
+    if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:payload});
   }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused,recovered,inlineEdit]);
   // REQ-STUDIO-QUIT-GUARD: the host names an unsent queued message in the quit dialog.
   const hasQueued = queued !== null;
@@ -642,6 +668,20 @@ export function ChatPanel(props: Props) {
         setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
         setToolMode(rejectedMode);
         if (msg.images?.length) setPendingImages(images => [...new Set([...images,...msg.images!])]);
+      }
+      if (msg.type === 'companionDraftCapture' && activityId) {
+        postToHost({type:'saveActivityDraft',activityId,taskId,nonce:msg.nonce,draft:snapshot.current,
+          uiGeneration:companionDraftState.current.generation,imagePreparationFailed:companionDraftState.current.blocked});
+      }
+      if (msg.type === 'companionDraftApply' && activityId) {
+        const current=snapshot.current, state=companionDraftState.current;
+        const empty=!current.text && !current.images.length && current.queued===null && !current.inlineEdit && !current.recovered?.length && !current.imports?.length;
+        if(state.generation!==msg.generation || state.blocked || !empty || companionApply.current) {
+          postToHost({type:'saveActivityDraft',activityId,taskId,nonce:msg.nonce,draft:current,uiGeneration:state.generation,companionApplied:false});
+        } else {
+          const {text,...rest}=current;companionApply.current={nonce:msg.nonce,text:msg.text,rest:JSON.stringify(rest)};
+          snapshot.current={...current,text:msg.text};setDraft(msg.text);
+        }
       }
       if (msg.type === "activityFreeze" && activityId) {
         setFrozen(msg.frozen);
@@ -812,6 +852,17 @@ export function ChatPanel(props: Props) {
   };
   const imagePicker = useRef<HTMLInputElement>(null);
   useEffect(() => bindComposerFocus(() => textareaRef.current, activityId), [activityId]);
+  // A retained native window may return twice, leaving BODY after its second focus.
+  // Render-time owner replacement fences even a queued callback before effect cleanup.
+  const retainedFocusKey = JSON.stringify([activityId, taskId, config?.activity?.workspace,
+    config?.profile?.profile_id, config?.profile?.lesson?.sha256, config?.proxyUrl, config?.hasToken, config?.activity?.verified, frozen]);
+  const retainedFocusOwner = useRef({ key: retainedFocusKey });
+  if (retainedFocusOwner.current.key !== retainedFocusKey) retainedFocusOwner.current = { key: retainedFocusKey };
+  useLayoutEffect(() => {
+    const input = textareaRef.current, owner = retainedFocusOwner.current;
+    if (!input || !activityId || !config?.activity?.verified || !config.hasToken || frozen) return;
+    return bindRetainedComposerFocus(input, () => retainedFocusOwner.current === owner && textareaRef.current === input);
+  }, [retainedFocusKey]);
   /** Previous `streaming` value — the flush must fire on the edge, not the state. */
   const prevStreamingRef = useRef(streaming);
 

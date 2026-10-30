@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import {execFileSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
+import {createHash,randomBytes} from 'node:crypto';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {sameDisplayedWorkspace} from './native-ui.mjs';
@@ -89,11 +89,43 @@ export function descendant(pid,root,parents){
  if(!Number.isSafeInteger(pid)||pid<=1||!Number.isSafeInteger(root)||root<=1||pid===root)return false;
  const seen=new Set();for(let i=0;i<20&&pid>1&&!seen.has(pid);i++){seen.add(pid);pid=parents.get(pid);if(pid===root)return true;}return false;
 }
-export function listenerCommand(port,platform=process.platform){
+export function listenerCommand(port,platform=process.platform,nonce=randomBytes(16).toString('hex')){
  assert(Number.isInteger(port)&&port>=1024&&port<=65535);
  if(platform==='darwin')return ['lsof',['-nP','-iTCP:'+port,'-sTCP:LISTEN','-Fp']];
- if(platform==='win32')return ['powershell.exe',['-NoProfile','-NonInteractive','-Command',`$pids=@(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique);$rows=@(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId);@{listeners=$pids;parents=$rows}|ConvertTo-Json -Compress -Depth 4`]];
+ if(platform==='win32'){assert(/^[a-f0-9]{32}$/.test(nonce),'Exact diagnostic nonce required');return ['powershell.exe',['-NoProfile','-NonInteractive','-File',fileURLToPath(new URL('./windows-inspector-snapshot.ps1',import.meta.url)),'-Port',String(port),'-DiagnosticNonce',nonce]];}
  throw Error('Inspector listener ownership supports only hosted Mac/Windows');
+}
+export function parseWindowsListenerSnapshot(output,port){
+ assert(Number.isInteger(port)&&port>=1024&&port<=65535,'Exact port required');
+ assert(typeof output==='string'&&Buffer.byteLength(output)<=1048576,'Bounded listener output required');
+ const data=JSON.parse(output),keys=value=>Object.keys(value).sort().join(',');
+ assert(data&&typeof data==='object'&&!Array.isArray(data)&&keys(data)==='listeners,parents,port,schema','Exact snapshot fields required');
+ assert(data.schema==='hps-owned-windows-listener/1'&&data.port===port,'Snapshot identity mismatch');
+ assert(Array.isArray(data.listeners)&&data.listeners.length<=64&&Array.isArray(data.parents)&&data.parents.length<=16384,'Snapshot row bound');
+ const pid=value=>Number.isInteger(value)&&value>=0&&value<=4294967295;
+ assert(data.listeners.every(value=>pid(value)&&value>1)&&new Set(data.listeners).size===data.listeners.length,'Unique numeric listeners required');
+ const parents=new Map();
+ for(const row of data.parents){assert(row&&typeof row==='object'&&!Array.isArray(row)&&keys(row)==='ParentProcessId,ProcessId'&&pid(row.ProcessId)&&pid(row.ParentProcessId)&&!parents.has(row.ProcessId),'Exact unique process rows required');parents.set(row.ProcessId,row.ParentProcessId);}
+ return {pids:data.listeners,parents};
+}
+// Failure-only trace. The nonce correlates this invocation; it is not authority.
+export const WINDOWS_SNAPSHOT_PHASES=Object.freeze(['script_entered','compile_started','compile_finished','tcp_size_started','tcp_size_finished','tcp_read_started','tcp_read_finished','process_snapshot_started','process_snapshot_finished','process_enumeration_started','process_enumeration_finished','native_finished','serialization_started','serialization_finished']);
+export function parseWindowsSnapshotPhases(stderr,nonce,budgetMs){
+ const invalid=()=>({status:'invalid',samples:[]});
+ if(stderr===undefined||stderr===null||stderr.length===0)return {status:'unavailable',samples:[]};
+ if((typeof stderr!=='string'&&!Buffer.isBuffer(stderr))||Buffer.byteLength(stderr)>4096||!Number.isSafeInteger(budgetMs)||budgetMs<0||!/^[a-f0-9]{32}$/.test(nonce))return invalid();
+ const text=Buffer.isBuffer(stderr)?stderr.toString('utf8'):stderr;
+ if(!text.endsWith('\n'))return invalid();
+ const lines=text.replaceAll('\r\n','\n').slice(0,-1).split('\n'),samples=[];
+ if(lines.at(-1)==='owned_native_listener_snapshot_failed')lines.pop();
+ if(lines.length>WINDOWS_SNAPSHOT_PHASES.length)return invalid();
+ for(const line of lines){
+  const match=/^HPS_OWNED_SNAPSHOT_PHASE\/1\|([a-f0-9]{32})\|([a-z_]+)\|(0|[1-9][0-9]{0,7})$/.exec(line);
+  if(!match||match[1]!==nonce||match[2]!==WINDOWS_SNAPSHOT_PHASES[samples.length])return invalid();
+  const elapsed=Number(match[3]);if(elapsed>budgetMs||(samples.length&&elapsed<samples.at(-1).elapsed_ms))return invalid();
+  samples.push({phase:match[2],elapsed_ms:elapsed});
+ }
+ return {status:samples.length?'valid_prefix':'unavailable',samples};
 }
 // Numeric bounded diagnostics only. A later sample can never authorize admission.
 export function ownershipDiagnostic({pids,parents,timing},root){
@@ -110,18 +142,30 @@ export function ownershipDiagnostic({pids,parents,timing},root){
  });
  return {root_pid:root,listener_count:pids.length,chains,timing};
 }
+// Never persist process arguments, raw command output or OS exception messages.
+function queryFailure(error,stage,timeoutMs,began,output,nonce){
+ const bytes=value=>typeof value==='string'?Buffer.from(value):Buffer.isBuffer(value)?value:null;
+ const stdout=bytes(output??error?.stdout),stderr=bytes(error?.stderr);
+ return {stage,timeout_ms:timeoutMs,elapsed_ms:Math.max(0,Math.round(performance.now()-began)),
+  code:['ETIMEDOUT','ENOENT','EACCES','EPERM','ENOBUFS','ENOMEM','ESRCH'].includes(error?.code)?error.code:null,
+  status:Number.isSafeInteger(error?.status)?error.status:null,signal:['SIGTERM','SIGKILL','SIGABRT'].includes(error?.signal)?error.signal:null,
+  timed_out:error?.code==='ETIMEDOUT',stdout_bytes:stdout?.length??null,stdout_sha256:stdout?digest(stdout):null,
+  stderr_bytes:stderr?.length??null,stderr_sha256:stderr?digest(stderr):null,
+  ...(nonce?{phase_diagnostics:parseWindowsSnapshotPhases(stderr,nonce,timeoutMs)}:{})};
+}
 export function ownedListener(port,root,platform=process.platform,execute=execFileSync,retirement){
- const [command,args]=listenerCommand(port,platform);
  const read=(timeoutMs=10000)=>{
-  const timing={listener_started_at:new Date().toISOString()};let output;
-  try{output=execute(command,args,{encoding:'utf8',timeout:timeoutMs,stdio:['ignore','pipe','ignore']});}catch(error){if(platform==='darwin'&&error.status===1)return {pids:[],parents:new Map(),timing:{...timing,listener_finished_at:new Date().toISOString()}};throw Error('Cannot establish inspector listener ownership');}
+  const nonce=platform==='win32'?randomBytes(16).toString('hex'):undefined;
+  const [command,args]=listenerCommand(port,platform,nonce);
+  const timing={listener_started_at:new Date().toISOString()},began=performance.now();let output;
+  try{output=execute(command,args,{encoding:'utf8',timeout:timeoutMs,stdio:['ignore','pipe',platform==='win32'?'pipe':'ignore']});}catch(error){if(platform==='darwin'&&error.status===1)return {pids:[],parents:new Map(),timing:{...timing,listener_finished_at:new Date().toISOString()}};const failure=Error('Cannot establish inspector listener ownership');if(platform==='win32')failure.ownership_query_failure=queryFailure(error,'windows_listener_and_parents',timeoutMs,began,undefined,nonce);throw failure;}
   timing.listener_finished_at=new Date().toISOString();let pids,parents;
   if(platform==='darwin'){
    pids=[...new Set(String(output).split('\n').filter(x=>/^p\d+$/.test(x)).map(x=>Number(x.slice(1))))];
    timing.parents_started_at=new Date().toISOString();
    const rows=execute('ps',['-axo','pid=,ppid='],{encoding:'utf8',timeout:timeoutMs,stdio:['ignore','pipe','ignore']});
    timing.parents_finished_at=new Date().toISOString();parents=new Map(String(rows).trim().split('\n').map(line=>line.trim().split(/\s+/).map(Number)));
-  }else{const data=JSON.parse(output);pids=[...new Set(data.listeners??[])];parents=new Map((data.parents??[]).map(x=>[x.ProcessId,x.ParentProcessId]));}
+  }else{try{({pids,parents}=parseWindowsListenerSnapshot(output,port));}catch(error){const failure=Error('Cannot parse inspector listener ownership');failure.ownership_query_failure=queryFailure(error,'windows_result_parse',timeoutMs,began,output,nonce);throw failure;}}
   return {pids,parents,timing};
  };
  const sample=read(),{pids,parents}=sample;if(!pids.length)return null;
@@ -186,7 +230,7 @@ export class OwnedExtensionGate{
   this.port=port;this.appPid=appPid;this.target=target;this.onProgress=onProgress;this.observeListener=observeListener;this.seen=new Set();this.completedPids=new Set();this.abort=new AbortController();this.initial=deferred();this.phase={label:'initial-startup',root:initialRoot,holdMs:0,result:this.initial,deadline:Date.now()+45000};this.events=[];this.protocolDiagnostics={event_counts:{},candidate_scripts:[],last_pause:null,breakpoint_locations:[]};
  }
  progress(value){const item={at:new Date().toISOString(),...value};this.events.push(item);assert(this.events.length<=400,'Inspector progress limit');this.onProgress(item);}
- fail(error){if(!this.failure){this.failure=error;this.initial.reject(error);this.phase?.result.reject(error);this.progress({phase:'gate-failed',message:error.message,...(error.ownership_refusal?{ownership_refusal:{...error.ownership_refusal,phase_label:this.phase?.label??null,previous_host_pid:this.previousPid??null,current_peer_pid:this.peer?.listenerPid??null}}:{})});}}
+ fail(error){if(!this.failure){this.failure=error;this.initial.reject(error);this.phase?.result.reject(error);this.progress({phase:'gate-failed',message:error.message,...(error.ownership_query_failure?{ownership_query_failure:{...error.ownership_query_failure,phase_label:this.phase?.label??null}}:{}),...(error.ownership_refusal?{ownership_refusal:{...error.ownership_refusal,phase_label:this.phase?.label??null,previous_host_pid:this.previousPid??null,current_peer_pid:this.peer?.listenerPid??null}}:{})});}}
  start(){this.loop=this.watch();void this.loop.catch(error=>this.fail(error));return this;}
  async watch(){
   while(!this.stopped&&!this.failure){

@@ -49,7 +49,7 @@ const fetch = async (url, init = {}) => {
   return json(404, {});
 };
 const mod = { exports: {} };
-vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: id => id === 'vscode' ? vscode : require(id), process, console, Buffer, URL, AbortSignal, TextEncoder, Response, Headers, fetch, Date, JSON, setTimeout: () => 0, clearTimeout: () => {} });
+vm.runInNewContext(bundle.outputFiles[0].text, { module: mod, exports: mod.exports, require: id => id === 'vscode' ? vscode : require(id), process, console, Buffer, URL, AbortSignal, TextEncoder, TextDecoder, Response, Headers, fetch, Date, JSON, setTimeout: () => 0, clearTimeout: () => {} });
 const { ActivityConnections, StartPage, ensureWorkspace } = mod.exports;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hps-paid-seat-'));

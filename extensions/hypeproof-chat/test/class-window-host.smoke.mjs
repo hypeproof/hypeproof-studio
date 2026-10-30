@@ -10,7 +10,7 @@ const built = await build({ stdin: { contents: "export { ChatPanelProvider } fro
 const settings = { coachRuntime: 'agent-sdk', requireApprovalFor: ['writeFile', 'delegateAgent', 'webSearch'] };
 const vscode = { env: { appName: 'HypeProof Studio' }, workspace: { getConfiguration: () => ({ get: (key, fallback) => settings[key] ?? fallback }) }, commands: { executeCommand: async () => {} } };
 const module = { exports: {} };
-vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, process, Buffer, URL, setTimeout, clearTimeout });
+vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, process, Buffer, URL, TextEncoder, TextDecoder, setTimeout, clearTimeout });
 const h = Object.create(module.exports.ChatPanelProvider.prototype);
 let profile = { profile_id: 'lesson', activity_kind: 'classroom', sdk_tools: { read: true, write: true, shell: true, subagents: true, browser: true }, tools: { web_search: true }, browser_control: { enabled: true } };
 let token = Buffer.from(JSON.stringify({ u: 'learner', c: 'cohort', p: 'lesson' })).toString('base64url') + '.signature';

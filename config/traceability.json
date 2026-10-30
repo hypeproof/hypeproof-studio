@@ -1393,6 +1393,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/composerFocus.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/retainedComposerFocus.ts"
         }
       ]
     },
@@ -1464,6 +1467,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/composer-focus.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/retained-composer-focus.smoke.mjs"
         }
       ]
     },
@@ -5200,6 +5206,9 @@
         },
         {
           "path": "scripts/test/bootstrap-service-packages.test.mjs"
+        },
+        {
+          "path": "scripts/test/companion-ci-input.test.mjs"
         }
       ]
     },
@@ -5679,6 +5688,36 @@
           "path": "e2e/feedback-native/native-ui.test.mjs"
         },
         {
+          "path": "e2e/feedback-native/native-quit-dialog.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-quit-dialog.ps1"
+        },
+        {
+          "path": "e2e/feedback-native/native-quit-dialog.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-win32-quit.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/owned-quit-census.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/retained-focus-observation.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/retained-focus-observation.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-mac-quit.m"
+        },
+        {
+          "path": "e2e/feedback-native/native-mac-quit.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-mac-quit.test.mjs"
+        },
+        {
           "path": "e2e/feedback-native/prepare-config.mjs"
         },
         {
@@ -5800,6 +5839,18 @@
         },
         {
           "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.cs"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.ps1"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/windows-inspector-snapshot.test.ps1"
         }
       ]
     },
@@ -15703,7 +15754,11 @@
         "ST-IMP-COMPANION-DISPATCH",
         "ST-TEST-CLASSROOM-ADMIN",
         "ST-TEST-CHAT-FILE-ATTACH",
-        "ST-IMP-COMPANION-WORKSPACE"
+        "ST-IMP-COMPANION-WORKSPACE",
+        "ST-IMP-COMPANION-HOST",
+        "ST-IMP-COMPANION-SESSION",
+        "ST-IMP-COMPANION-AUTH-TRANSPORT",
+        "ST-IMP-COMPANION-HOST-CONTROLS"
       ],
       "sources": [
         {
@@ -15720,6 +15775,144 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-host-bridge.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-host-bridge-native.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-preview-result.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/lib/companion-native-bridge-harness.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-preview-payload.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-session-view.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-session-controller.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-transport-budget.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-client-adapter.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-session-checkpoint.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-forget-view.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-host-session.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authenticated-transport.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-dev-host-owner.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-dev-host-commands.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-dev-host-entry.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-selection.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-dev-host-pacing.smoke.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/native-port.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/result-entry.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/result-transport.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/browser-boot.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authoring-intent.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authoring-provider.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authoring-draft.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authoring-send.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-desktop-handoff.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-authoring-repeat.smoke.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/ack-phase.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/authoring-receipt-observer.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/authoring-wait-entry.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/selection-adoption-adapter.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/selection-adoption-entry.test.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/device-sign-in.test.sh"
+        },
+        {
+          "path": "apps/companion-android/test/NativeDeviceSignInTest.java"
+        },
+        {
+          "path": "apps/companion-android/test/NativeHttpDeadlineTest.java"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-record.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-policy.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-authority.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-normal-turn.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-transport.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/companion-execution-result.smoke.mjs"
+        },
+        {
+          "path": "apps/companion-android/test/execution-result-entry.test.mjs"
+        },
+        {
+          "path": "scripts/companion-ci.mjs"
+        },
+        {
+          "path": "scripts/test/companion-ci-input.test.mjs"
         }
       ]
     },
@@ -15746,6 +15939,218 @@
         },
         {
           "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-HOST",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-COMPANION-DISPATCH",
+        "ST-IMP-COMPANION-WORKSPACE",
+        "ST-IMP-COMPANION-AUTH-TRANSPORT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/companionHostBridge.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionHostBridgeNative.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionPreviewResult.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionPreviewPayload.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionHostSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionDevHostOwner.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionSelection.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthoringIntent.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthoringHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthoringHostNative.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthoringResult.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthoringSend.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionDesktopHandoff.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionDesktopHandoffHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionPolicy.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionAuthority.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionNormalTurn.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionTransport.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionExecutionResult.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-SESSION",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-COMPANION-HOST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CompanionSessionView.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionPresentation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionView.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionController.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionTransportBudget.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionClientAdapter.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/companionSessionCheckpoint.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-AUTH-TRANSPORT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/companionAuthenticatedTransport.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-HOST-CONTROLS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-COMPANION-HOST"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/companionDevHostCommands.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/companionDevHostEntry.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-COMPANION-ANDROID-DEV",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COMPANION",
+        "ST-DES-COMPANION",
+        "ST-IMP-COMPANION-SESSION",
+        "ST-IMP-COMPANION-HOST"
+      ],
+      "sources": [
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/MainActivity.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/debug/java/ai/hypeproof/companion/FixtureActivity.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/AndroidManifest.xml"
+        },
+        {
+          "path": "apps/companion-android/app/src/debug/AndroidManifest.xml"
+        },
+        {
+          "path": "apps/companion-android/web/main.tsx"
+        },
+        {
+          "path": "apps/companion-android/web/nativePort.ts"
+        },
+        {
+          "path": "apps/companion-android/build-web.mjs"
+        },
+        {
+          "path": "apps/companion-android/app/build.gradle"
+        },
+        {
+          "path": "apps/companion-android/web/resultTransport.ts"
+        },
+        {
+          "path": "apps/companion-android/web/AuthoringComposer.tsx"
+        },
+        {
+          "path": "apps/companion-android/web/authoringReceiptObserver.ts"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/DeviceSignInHttp.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeDeviceSignIn.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/main/java/ai/hypeproof/companion/NativeHttpDeadline.java"
+        },
+        {
+          "path": "apps/companion-android/app/src/debug/java/ai/hypeproof/companion/DeviceSignInFixtureActivity.java"
         }
       ]
     },

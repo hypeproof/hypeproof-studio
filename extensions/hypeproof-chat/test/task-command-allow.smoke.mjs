@@ -261,6 +261,34 @@ try {
     choose(outside, "full");
     let win = makeWindow();
 
+    // Execute the real method: a profile/scope change must revoke the stored grant itself,
+    // even before another approval request observes the changed scope and clears it.
+    const assertProfileInvalidationRevokes = (invalidateProfile) => {
+      const h = makeWindow();
+      h._instructorMode.reset = () => {};
+      h.refreshCrBytesContext = () => {};
+      h.refreshSitePublishContext = () => {};
+      const scope = h.taskCommandAllowState().key;
+      const command = A.taskCommandExact("git status").key;
+      h.taskCommandAllows.remember(scope, command);
+      assert.equal(h.taskCommandAllows.has(scope, command), true, "control: the grant exists before invalidation");
+      invalidateProfile.call(h);
+      assert.equal(h.taskCommandAllows.has(scope, command), false, "profile invalidation revokes the original grant");
+    };
+    const invalidateProfile = ChatPanelProvider.prototype.invalidateProfile;
+    assertProfileInvalidationRevokes(invalidateProfile);
+    // Function.toString bounds these mutations to the compiled production method, so a
+    // clear in a neighbouring method cannot satisfy the revocation check.
+    const invalidationSource = invalidateProfile.toString();
+    const clearCall = "this.endTaskCommandAllows();";
+    assert.equal(invalidationSource.split(clearCall).length, 2, "one revocation call to mutate");
+    const compileInvalidation = (source) => vm.runInNewContext(`({${source}}).invalidateProfile`);
+    const withoutClear = invalidationSource.replace(clearCall, "");
+    assert.throws(() => assertProfileInvalidationRevokes(compileInvalidation(withoutClear)), /profile invalidation revokes/);
+    assert.throws(() => assertProfileInvalidationRevokes(compileInvalidation(`${withoutClear}, unrelatedMethod() { ${clearCall} }`)), /profile invalidation revokes/);
+    assertProfileInvalidationRevokes(compileInvalidation(invalidationSource.replace("{", `{ /* ${"unrelated profile bookkeeping ".repeat(100)} */`)));
+    ok("profile invalidation revokes grants; missing/moved clear rejected and long irrelevant prefix accepted");
+
     // Label and modal text.
     const first = await asked(win, "cat 초안.md", LABEL);
     assert.equal(first.modals, 1);
@@ -445,7 +473,6 @@ try {
     assert.match(provider, /const leaving = msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect' \|\| msg\.type === 'taskArchive' \|\| msg\.type === 'taskRestore';/, "task create / select / archive / restore leave the task");
     assert.match(provider, /if \(leaving\) this\.endTaskCommandAllows\(\)/, "leaving the task clears");
     assert.match(read("src/extension.ts"), /await changeFolderConsent\([^;]*\);\s*(?:\/\/[^\n]*\n\s*)?provider\.endTaskCommandAllows\(\);/, "the consent command clears");
-    assert.match(provider, /invalidateProfile\(\): void \{[\s\S]{0,900}this\.endTaskCommandAllows\(\);/, "a token change (sign-in / sign-out) clears");
     assert.match(provider, /this\.lastAllowInstructor !== undefined && this\.lastAllowInstructor !== isInstructor\) this\.endTaskCommandAllows\(\)/, "an instructor flip clears");
     ok("wiring: no window-session set, no persistence, cleared on task create/select, token change, instructor flip and by the consent command");
   }

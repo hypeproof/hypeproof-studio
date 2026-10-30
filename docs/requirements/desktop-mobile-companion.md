@@ -82,3 +82,130 @@ binding and task-scope identity. Its activity label and machine digest do not
 verify an account owner or device authority. This is partial DMC-01/DMC-14
 evidence; full DMC-1 ownership/capability acceptance, DMC-T01 and DMC-T14 remain
 open. Pairing, grants, transport and dispatch are not implemented by preparation.
+
+The [development host preview composition](../evidence/companion-host-preview-composition.md)
+connects these source seams with the existing account/pass/profile and selected
+saved HTML. It requires an explicit current-request desktop confirmation and
+keeps the factory development-only. Synthetic local Worker/browser observations
+do not close DMC-3 or installed-app/device/classroom acceptance.
+
+The [bounded transfer and mobile presentation slice](../evidence/companion-artifact-transfer-20261028.md)
+adds framed results and controlled result presentation while retaining the
+original runtime/relay limits. Its partial source/browser evidence does not
+complete device, restart, classroom or production acceptance.
+
+The separately scoped #3099 source cut adds one owned mobile controller,
+request-budget admission, an explicit same-live-cipher data checkpoint and
+confirmed local-view cleanup. Restoring data requires exact saved packets and
+a surviving cipher-owner attestation; it does not restore keys or authorize a
+new request. An uncertain receipt is reconciled without resending the request.
+Cold process/key recovery, native product controls and installed device
+acceptance remain separate. See the controller, checkpoint, adapter and cleanup
+evidence for their exact local/synthetic boundaries.
+
+The separately scoped #3098 native-controls cut registers explicit DEV-only
+commands using the existing AccountSession, prepared workspace and task/profile
+binding. One owned host session shares the native protocol budget; its journal
+lease drains admitted writes before another owner can load. Cipher closure
+synchronously closes its native owner and erases owned key references before
+late receive work can publish. Local close remains distinct from signed remote
+revocation. This cut adds no authoring/execution callback, Android application,
+production registration or cold-key recovery. The isolated DEV-copy version fix
+retains the upstream extension-compatible engine version and a separate release
+marker; stable platform product stamping is outside this cut.
+
+The separately scoped #3100 Android preview experiment wraps the existing
+controller in an API35 debug shell with explicit synthetic native provisioning.
+The default launcher has no provisioned transport, and release source excludes
+the fixture activity. Account credentials remain native RAM; authenticated
+encrypted selection metadata is the only device descriptor source. This initial
+fixture boundary is distinct from later #3115 personal sign-in, #3114 draft
+review and #3097 selected execution. New asset/source checks do not establish
+installed or real-member acceptance for a newly assembled cut.
+
+The separately scoped #3114 cut carries a verified phone request as data through
+reviewed local handoff and the existing native task draft. Import never dispatches
+a model. An explicit ordinary desktop Send may bind the exact unchanged request,
+normal user/turn identity, valid restore point and terminal run evidence. Edited
+native text loses automatic provenance and remains an ordinary draft; uncertain
+runs remain unknown and do not replay. Completion describes a measured ordinary
+SDK turn, not edit acceptance, changed HTML or result quality. Prior terminal
+records remain when the next request is imported. Mobile receipt observation is
+bounded after the one send attempt settles and never resends it. A newer saved
+selection is adopted only by an explicit gesture on the same verified pair, and
+its preview must be verified before another authored draft. Selected execution
+permission is separate #3097 work, and phone-native personal sign-in is #3115.
+
+
+## Android native personal-account entry — #3115
+
+The Android launcher uses the existing Service device authorization protocol and
+fixed Service/Lab origins. Browser approval and current active `/me` account and
+session must agree before the separate debug companion entry can open. Access
+tokens stay in native RAM; no refresh, process recovery, token bootstrap, new
+credential authority or production workspace transport is introduced. The owned
+debug sign-in accepts only canonical127.0.0.1 with an explicit adb reverse mapping.
+Local cancel suppresses stale installation and interrupts bounded HTTP; known
+late credentials receive best-effort logout. A pending code or unknown response
+can outlive local cancellation because Service has no pending-device cancel API.
+These source controls do not prove Google login, genuine-member eligibility,
+physical-device/iOS, classroom or production readiness. Selected execution #3097
+remains a separate, default-disabled scope.
+
+## Selected HTML execution foundation
+
+The local execution prototype keeps `preview.read` separate from
+`authoring.selected-html`. A Service reservation must match the native owner,
+paired device, selected artifact/version, exact phone packet, actual normal-turn
+ID, and existing activated model-pass identity. A response digest is provenance,
+not an authorization token. Live Service validation, current native consent and
+the existing profile/folder policy remain required before effects.
+
+The existing TaskWorkspaceStore retains prepared/bound/terminal records and
+returns `created:false` for retained requests; callers must never dispatch those
+again. Unknown outcomes remain locked for reconciliation. The SDK policy permits
+only the selected regular HTML file through Read/Write/Edit and preserves existing
+write approval. No proxy fallback, shell, external tools or broader workspace
+context is granted. These source foundations do not activate a production entry
+or complete the mobile-only DMC-T04/08/12 scenarios.
+
+The prepared development entry uses the existing desktop Send admission and
+history/restore lifecycle. It requires both the local selected-file policy and
+the exact Service reservation binding; a client header alone grants nothing.
+The reservation's turn ID is the actual SDK turn ID. The binding is captured
+before asynchronous work, and Service remains responsible for checking the live
+grant and activated-pass identity on every upstream model request. Ambient
+environment headers cannot attach a companion reservation to ordinary Send.
+No production command or relay execution callback is registered by this seam.
+
+The subsequent development composition adds a separate native confirmation for
+the selected saved HTML, at most two turns and ten minutes. It resolves the
+existing activated pass through Service's authenticated execution context, then
+uses the private signed execution client and the same normal Send entry. The
+current task, saved document, folder consent and owner remain live conditions.
+Cipher closure aborts the local execution owner synchronously; cancelled
+permission with no issued lease preserves explicit ordinary draft import.
+An uncertain lease/result never falls back or allocates another turn. Android
+displays the distinct exact-request execution receipt and retains the user's
+draft and previous preview. This is development-only source composition; a new
+installed-package acceptance is still required before claiming that workflow.
+
+
+## Selected execution source cut — #3097
+
+The native DEV host composes the existing activated account/pass, current task,
+folder consent, saved selected HTML and paired owner. A separate explicit native
+confirmation permits at most two turns within ten minutes; this cannot grant SDK
+read/write rights absent from the current profile or bypass normal approval.
+Before admission and each SDK tool decision the same live reservation, token and
+current native owner are rechecked; scope drift or uncertain receipt fails closed.
+The SDK carries the exact request/turn/model binding through its existing Send
+path. A digest records authenticated evidence rather than creating authority.
+A completed receipt means a measured successful terminal SDK turn with original
+restore and resulting content hashes, including an unchanged successful file;
+it does not establish requested-edit acceptance or provider quality. Unknown
+runs and retained duplicate records never dispatch again. Local close aborts
+pending work and cannot undo an already dispatched filesystem effect.
+Production registration/activation remains absent. The explicitly injected local
+private client must match repaired Service `c9714c86bc8ccd9471806287a02e962a7100af70`;
+new-cut source checks do not substitute for installed/native SDK acceptance.

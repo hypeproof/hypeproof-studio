@@ -1,0 +1,115 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,mkdir,writeFile,readFile,rm,realpath,readdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createHash} from 'node:crypto';
+import {build} from 'esbuild';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import vm from 'node:vm';
+import {TaskWorkspaceStore} from '../src/taskWorkspaceStore.ts';
+import {validCompanionDesktopHandoff} from '../src/companionDesktopHandoff.ts';
+const require=createRequire(import.meta.url),sha=text=>createHash('sha256').update(text).digest('hex');
+const compiled=await build({entryPoints:[fileURLToPath(new URL('../src/companionDesktopHandoffHost.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
+const storeCompiled=await build({entryPoints:[fileURLToPath(new URL('../src/taskWorkspaceStore.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false});
+function load(bundle,overrides={}){const module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>overrides[id]??require(id),Buffer,process,console,URL,structuredClone,TextEncoder,TextDecoder,setTimeout,clearTimeout,performance});return module.exports;}
+async function fixture(){const temp=await mkdtemp(join(tmpdir(),'companion-desktop-')),root=await realpath(temp),work=join(root,'work'),state=join(root,'state');await mkdir(work);await mkdir(state);const file=join(work,'index.html'),text='<!doctype html><p>합성 작품</p>';await writeFile(file,text);const store=new TaskWorkspaceStore(state,'synthetic-desktop-scope');await store.initialize();const view=store.getView();const target={actorId:'actor',deviceId:'device',pairingId:'pair',hostId:'host',workspaceId:'workspace',projectId:'project',taskId:view.activeTaskId,version:view.revision,epoch:1,consentRevision:3,artifactId:'artifact',artifactVersion:sha(text)};
+ const checkpoint={schema:'hps-companion-desktop-handoff-local/1',id:'handoff_one',createdAt:1,target,originalDraft:'휴대폰 원래 입력',reviewedIntent:'<script>자료</script> 제목을 함께 검토하고 싶어요.',attachments:[{artifactId:target.artifactId,artifactVersion:target.artifactVersion}],run:{id:null,state:'not_started'}};
+ let snapshot={target:structuredClone(target),run:structuredClone(checkpoint.run),access:'active',host:'online',workspaceRoot:work,artifactPath:file},approve=true,dirty=false,onConfirm=async()=>{},onOpen=async()=>{},onReveal=async()=>{},onShow=async()=>{},editedText;
+ let ownerRevision=1;const lifecycle={capture:()=>ownerRevision,isCurrent:at=>at===ownerRevision&&snapshot.access==='active'};
+ const calls=[],panels=[];const context={extensionMode:2};
+ const vscode={ExtensionMode:{Development:2},ViewColumn:{One:1,Beside:2},Uri:{file:fsPath=>({fsPath,scheme:'file'})},commands:{executeCommand(){throw Error('no execute/send command belongs to handoff');}},workspace:{async openTextDocument(uri){calls.push('open');await onOpen();const saved=await readFile(uri.fsPath,'utf8');return{uri,get isDirty(){return dirty;},isUntitled:false,getText:()=>editedText??saved};}},window:{async showWarningMessage(message,options,action){calls.push('discard-confirm');await onConfirm();return approve?action:undefined;},async showInformationMessage(message,options,action){calls.push('confirm');calls.push({message,options,action});await onConfirm();return approve?action:undefined;},async showTextDocument(document){calls.push('show');const replacement=await onShow(document);return{document:replacement??document};},createWebviewPanel(_type,_title,_column,options){calls.push('panel');const panel={webview:{html:''},options,disposed:false,dispose(){this.disposed=true;}};panels.push(panel);return panel;}}};
+ const Host=load(compiled,{vscode}).CompanionDesktopHandoffHost;const host=new Host({context,store,lifecycle,snapshot:async()=>snapshot,revealTask:async id=>{assert.equal(id,target.taskId);calls.push('reveal');await onReveal();}});
+ return{root,work,state,file,text,store,target,checkpoint,host,Host,vscode,lifecycle,invalidateOwner:()=>{ownerRevision++;},calls,panels,context,set dirty(v){dirty=v;},set editedText(v){editedText=v;},set onReveal(v){onReveal=v;},set onShow(v){onShow=v;},get snapshot(){return snapshot;},set snapshot(v){snapshot=v;},set approve(v){approve=v;},set onConfirm(v){onConfirm=v;},set onOpen(v){onOpen=v;},expected:()=>({taskId:store.getView().activeTaskId,revision:store.getView().revision}),cleanup:async()=>{host.dispose();await rm(root,{recursive:true,force:true});}};
+}
+
+test('pending/accepted data reloads in existing store sidecar, exact duplicates are idempotent and original task bytes stay readable',async()=>{const f=await fixture();try{
+ const before=await readFile(f.store.filePath),draft={text:'컴퓨터 입력',images:['data:image/png;base64,cw=='],queued:'대기 중인 입력',queuedPaused:true,toolMode:'web-search',imports:[{object_id:'material-123',revision:1,hash16:'a'.repeat(16)}]};await f.store.saveDraft(f.target.taskId,draft);f.target.version=f.store.getView().revision;f.checkpoint.target.version=f.target.version;f.snapshot.target.version=f.target.version;const taskBytes=await readFile(f.store.filePath);
+ const staged=await f.store.stageCompanionHandoff(f.checkpoint,f.expected());assert.equal(staged.status,'pending');assert.deepEqual(await readFile(f.store.filePath),taskBytes);assert.deepEqual(f.store.getDraft(),draft);assert.equal(f.store.getView().revision,f.target.version);
+ const again=await f.store.stageCompanionHandoff(f.checkpoint,f.expected());assert.deepEqual(again,staged);const accepted=await f.store.acceptCompanionHandoff(staged.checkpoint.id,staged.digest,f.expected(),10);assert.equal(accepted.status,'accepted');const files=await readdir(join(f.state,'task-workspaces'));assert.equal(files.filter(n=>n.endsWith('.companion-handoff.json')).length,1);const sidecar=join(f.state,'task-workspaces',files.find(n=>n.endsWith('.companion-handoff.json'))),saved=await readFile(sidecar);
+ const reload=new TaskWorkspaceStore(f.state,'synthetic-desktop-scope');assert.deepEqual(reload.getDraft(),draft);assert.deepEqual(await reload.readCompanionHandoff(f.expected()),accepted);await reload.acceptCompanionHandoff(staged.checkpoint.id,staged.digest,f.expected(),999);assert.deepEqual(await readFile(sidecar),saved);assert.deepEqual(await readFile(f.store.filePath),taskBytes);assert.notDeepEqual(before,taskBytes);
+ for(const alter of [value=>{value.data.scope='different_store_scope';},value=>{value.data.record.digest='b'.repeat(64);}]){const corrupt=JSON.parse(saved);alter(corrupt);corrupt.checksum=sha(JSON.stringify(corrupt.data));await writeFile(sidecar,JSON.stringify(corrupt));await assert.rejects(()=>reload.readCompanionHandoff(f.expected()));assert.deepEqual(reload.getDraft(),draft);}
+ await writeFile(sidecar,'{broken');await assert.rejects(()=>reload.readCompanionHandoff(f.expected()));assert.deepEqual(reload.getDraft(),draft);assert.equal(reload.getView().error,undefined,'handoff corruption cannot make an older task file empty/corrupt');
+ }finally{await f.cleanup();}});
+
+test('bounded exact local data rejects unknown attachments, changed IDs and stale task writers without overwriting either draft',async()=>{const f=await fixture();try{
+ for(const value of [{...f.checkpoint,reviewedIntent:'x'.repeat(2049)},{...f.checkpoint,attachments:[]},{...f.checkpoint,run:{id:'made_up',state:'not_started'}},{...f.checkpoint,url:'file:///outside'}])assert.equal(validCompanionDesktopHandoff(value),false);
+ await f.store.stageCompanionHandoff(f.checkpoint,f.expected());await assert.rejects(()=>f.store.stageCompanionHandoff({...f.checkpoint,reviewedIntent:'conflicting bytes'},f.expected()));await assert.rejects(()=>f.store.stageCompanionHandoff({...f.checkpoint,id:'second_pending'},f.expected()));
+ const other=new TaskWorkspaceStore(f.state,'synthetic-desktop-scope');await other.saveDraft(f.target.taskId,{text:'另一個窗的新輸入',images:[],queued:null});await assert.rejects(()=>f.store.acceptCompanionHandoff(f.checkpoint.id,sha(JSON.stringify(f.checkpoint)),f.expected()));const reload=new TaskWorkspaceStore(f.state,'synthetic-desktop-scope');assert.equal(reload.getDraft().text,'另一個窗的新輸入');assert.equal((await reload.readCompanionHandoff({taskId:f.target.taskId,revision:reload.getView().revision})).checkpoint.originalDraft,f.checkpoint.originalDraft);
+ }finally{await f.cleanup();}});
+
+test('failed real atomic sidecar persistence never reports pending and leaves main task/draft unchanged',async()=>{const f=await fixture();try{
+ const fs=require('node:fs/promises'),io={...fs,rename:async(from,to)=>{if(String(to).endsWith('.companion-handoff.json'))throw Error('synthetic_disk_failure');return fs.rename(from,to);}};const Store=load(storeCompiled,{'node:fs/promises':io}).TaskWorkspaceStore,store=new Store(f.state,'synthetic-desktop-scope');const before=await readFile(store.filePath);await assert.rejects(()=>store.stageCompanionHandoff(f.checkpoint,f.expected()));assert.deepEqual(await readFile(store.filePath),before);assert.equal(await f.store.readCompanionHandoff(f.expected()),null);
+ }finally{await f.cleanup();}});
+
+test('native Cancel leaves source/draft and pending checkpoint unchanged; explicit accept opens exact HTML plus readonly intent without execution',async()=>{const f=await fixture();try{
+ assert.equal((await f.host.stage(f.checkpoint)).state,'pending');f.approve=false;assert.equal((await f.host.accept(f.checkpoint.id)).state,'cancelled');assert.equal(f.calls.includes('open'),false);assert.equal((await f.store.readCompanionHandoff(f.expected())).status,'pending');
+ f.approve=true;assert.equal((await f.host.accept(f.checkpoint.id)).state,'opened');assert.deepEqual(f.calls.filter(c=>typeof c==='string'),['confirm','confirm','open','reveal','show','panel']);assert.equal(f.panels[0].options.enableScripts,false);assert(f.panels[0].webview.html.includes('&lt;script&gt;자료&lt;/script&gt;'));assert(!f.panels[0].webview.html.includes('<script>'));assert.equal(await readFile(f.file,'utf8'),f.text);assert.deepEqual(f.store.getDraft(),{text:'',images:[],queued:null});assert.equal((await f.store.readCompanionHandoff(f.expected())).status,'accepted');const detail=f.calls.find(c=>typeof c==='object').options.detail;assert(detail.includes('index.html')&&detail.includes(f.target.artifactVersion)&&detail.includes(f.checkpoint.reviewedIntent));
+ }finally{await f.cleanup();}});
+
+test('ALL desktop draft fields and an existing running request survive handoff review without replay or merging',async()=>{const f=await fixture();try{
+ const draft={text:'내 컴퓨터 입력',images:['data:image/png;base64,eA=='],queued:'아직 보내지 않은 요청',queuedPaused:true,recovered:[{text:'보관한 입력',toolMode:'auto',images:[]}],imports:[{object_id:'material-123',revision:3,hash16:'a'.repeat(16)}]};await f.store.saveDraft(f.target.taskId,draft);f.target.version=f.store.getView().revision;f.snapshot.target.version=f.target.version;f.checkpoint.target.version=f.target.version;f.checkpoint.run={id:'existing_run',state:'running'};f.snapshot.run=structuredClone(f.checkpoint.run);
+ assert.equal((await f.host.stage(f.checkpoint)).state,'pending');assert.equal((await f.host.accept(f.checkpoint.id)).state,'opened');assert.deepEqual(f.store.getDraft(),draft);assert.equal(f.store.getHistory().length,0);assert(f.panels[0].webview.html.includes('existing_run'));assert.equal((await f.host.accept(f.checkpoint.id)).state,'opened');assert.deepEqual(f.store.getDraft(),draft);assert.equal(f.store.getHistory().length,0);
+ }finally{await f.cleanup();}});
+
+test('scope/draft changes during native confirmation, and disposal, cannot accept a stale checkpoint',async()=>{for(const change of [f=>{f.snapshot={...f.snapshot,target:{...f.snapshot.target,epoch:2}};},async f=>{await f.store.saveDraft(f.target.taskId,{text:'확인 중 새 입력',images:[],queued:null});},f=>f.host.dispose()]){const f=await fixture();try{await f.host.stage(f.checkpoint);f.onConfirm=()=>change(f);const outcome=await f.host.accept(f.checkpoint.id);assert.notEqual(outcome.state,'opened');assert.equal(f.calls.includes('open'),false);const reloaded=new TaskWorkspaceStore(f.state,'synthetic-desktop-scope');assert.equal((await reloaded.readCompanionHandoff({taskId:f.target.taskId,revision:reloaded.getView().revision})).status,'pending');}finally{await f.cleanup();}}});
+
+test('failed or stale post-accept navigation remains recoverable and never claims opened',async()=>{for(const failure of ['open','scope']){const f=await fixture();try{await f.host.stage(f.checkpoint);f.onOpen=async()=>{if(failure==='open')throw Error('synthetic_native_open_failure');f.snapshot={...f.snapshot,target:{...f.snapshot.target,artifactVersion:'b'.repeat(64)}};};const outcome=await f.host.accept(f.checkpoint.id);assert(['failed','stale'].includes(outcome.state));assert.equal(f.calls.includes('panel'),false);assert.equal((await f.store.readCompanionHandoff(f.expected())).status,'accepted');assert.equal(await readFile(f.file,'utf8'),f.text);f.onOpen=async()=>{};f.snapshot={...f.snapshot,target:structuredClone(f.target)};assert.equal((await f.host.accept(f.checkpoint.id)).state,'opened');}finally{await f.cleanup();}}});
+
+test('offline/unknown stays waiting; revoked, mismatched run, production mode never stage or navigate',async()=>{for(const change of [f=>f.snapshot.host='offline',f=>f.snapshot.host='unknown',f=>f.snapshot.access='revoked',f=>f.snapshot.run={id:'wrong',state:'running'},f=>f.snapshot.target.hostId='different_host',f=>f.snapshot.target.deviceId='different_device',f=>f.snapshot.target.projectId='different_project',f=>f.context.extensionMode=1]){const f=await fixture();try{change(f);const outcome=await f.host.stage(f.checkpoint);assert(['wait_for_host','denied','stale'].includes(outcome.state));assert.equal(await f.store.readCompanionHandoff(f.expected()),null);assert.equal(f.calls.length,0);}finally{await f.cleanup();}}});
+
+
+test('failed acceptance persistence keeps pending data and cannot navigate',async()=>{const f=await fixture();let host;try{
+ const fs=require('node:fs/promises');let writes=0;const io={...fs,rename:async(from,to)=>{if(String(to).endsWith('.companion-handoff.json')&&++writes===2)throw Error('synthetic_acceptance_failure');return fs.rename(from,to);}};const Store=load(storeCompiled,{'node:fs/promises':io}).TaskWorkspaceStore,store=new Store(f.state,'synthetic-desktop-scope');host=new f.Host({context:f.context,store,lifecycle:f.lifecycle,snapshot:async()=>f.snapshot,revealTask:async()=>{throw Error('must not navigate');}});
+ assert.equal((await host.stage(f.checkpoint)).state,'pending');assert.equal((await host.accept(f.checkpoint.id)).state,'failed');assert.equal(f.calls.includes('open'),false);assert.equal((await f.store.readCompanionHandoff(f.expected())).status,'pending');assert.equal(await readFile(f.file,'utf8'),f.text);
+ }finally{host?.dispose();await f.cleanup();}});
+
+test('new saved HTML or a dirty document after review cannot be presented as the checkpoint version',async()=>{for(const dirty of [false,true]){const f=await fixture();try{
+ await f.host.stage(f.checkpoint);if(dirty)f.dirty=true;else await writeFile(f.file,'<p>desktop newer edit</p>');const source=await readFile(f.file,'utf8');assert.equal((await f.host.accept(f.checkpoint.id)).state,'stale');assert.equal(f.calls.includes('show'),false);assert.equal(f.calls.includes('panel'),false);assert.equal(await readFile(f.file,'utf8'),source);assert.equal((await f.store.readCompanionHandoff(f.expected())).status,'accepted');
+ }finally{await f.cleanup();}}});
+
+
+test('late document dirty/content changes during task reveal or editor show never report opened',async()=>{for(const awaitAt of ['onReveal','onShow'])for(const change of [f=>{f.dirty=true;},f=>{f.editedText='unsaved newer desktop contents';}]){const f=await fixture();try{await f.host.stage(f.checkpoint);f[awaitAt]=async()=>change(f);const outcome=await f.host.accept(f.checkpoint.id);assert.equal(outcome.state,'stale');assert.equal(f.calls.includes('panel'),false);assert.equal((await f.store.readCompanionHandoff(f.expected())).status,'accepted');assert.equal(await readFile(f.file,'utf8'),f.text);}finally{await f.cleanup();}}});
+
+test('explicit discard releases the bounded pending slot after task revision changes, preserving all desktop work',async()=>{const f=await fixture();try{
+ await f.host.stage(f.checkpoint);await f.host.accept(f.checkpoint.id);const second={...f.checkpoint,id:'handoff_two'};assert.equal((await f.host.stage(second)).state,'failed','accepted data is never silently replaced');
+ const draft={text:'changed after handoff',images:['data:image/png;base64,eA=='],queued:'keep queued',queuedPaused:true};await f.store.saveDraft(f.target.taskId,draft);f.snapshot.target.version=f.store.getView().revision;
+ assert.equal(typeof f.host.discard,'function','an explicit local cleanup path is required');const digest=sha(JSON.stringify(f.checkpoint));assert.notEqual((await f.host.discard(f.checkpoint.id,'b'.repeat(64))).state,'discarded');assert.equal((await f.store.readCompanionHandoff(f.expected())).checkpoint.id,f.checkpoint.id);
+ f.approve=false;assert.equal((await f.host.discard(f.checkpoint.id,digest)).state,'cancelled');assert.equal((await f.store.readCompanionHandoff(f.expected())).checkpoint.id,f.checkpoint.id);f.approve=true;assert.equal((await f.host.discard(f.checkpoint.id,digest)).state,'discarded');assert.equal(await f.store.readCompanionHandoff(f.expected()),null);assert.deepEqual(f.store.getDraft(),draft);assert.equal(await readFile(f.file,'utf8'),f.text);
+ second.target={...second.target,version:f.store.getView().revision};assert.equal((await f.host.stage(second)).state,'pending');
+ }finally{await f.cleanup();}});
+
+
+test('discard rejects owner changes, concurrent task CAS and unlink failure without removing saved checkpoint',async()=>{
+ for(const which of ['owner','during-modal','io']){const f=await fixture();let host=f.host;try{
+  await f.host.stage(f.checkpoint);const expectedDigest=sha(JSON.stringify(f.checkpoint));
+  if(which==='owner')f.snapshot.target.projectId='other_project';
+  if(which==='during-modal')f.onConfirm=async()=>{await f.store.saveDraft(f.target.taskId,{text:'new during discard review',images:[],queued:null});f.snapshot.target.version=f.store.getView().revision;};
+  if(which==='io'){const fs=require('node:fs/promises'),io={...fs,unlink:async path=>{if(String(path).endsWith('.companion-handoff.json'))throw Error('synthetic_discard_io_failure');return fs.unlink(path);}};const Store=load(storeCompiled,{'node:fs/promises':io}).TaskWorkspaceStore,store=new Store(f.state,'synthetic-desktop-scope');host=new f.Host({context:f.context,store,lifecycle:f.lifecycle,snapshot:async()=>f.snapshot,revealTask:async()=>{throw Error('discard never navigates');}});}
+  assert.notEqual((await host.discard(f.checkpoint.id,expectedDigest)).state,'discarded');assert.equal((await f.store.readCompanionHandoff(f.expected())).checkpoint.id,f.checkpoint.id);assert.equal(await readFile(f.file,'utf8'),f.text);assert.equal(f.calls.includes('open'),false);
+ }finally{if(host!==f.host)host.dispose();await f.cleanup();}}
+});
+
+
+test('an editor-show result for another live document cannot count as exact checkpoint navigation',async()=>{const f=await fixture();try{await f.host.stage(f.checkpoint);f.onShow=async document=>({...document,getText:()=>'<p>other live document</p>'});assert.equal((await f.host.accept(f.checkpoint.id)).state,'stale');assert.equal(f.calls.includes('panel'),false);assert.equal((await f.store.readCompanionHandoff(f.expected())).status,'accepted');}finally{await f.cleanup();}});
+
+
+test('a second store discarding or replacing the accepted checkpoint during open prevents a current panel/receipt',async()=>{for(const replace of [false,true]){const f=await fixture();try{
+ await f.host.stage(f.checkpoint);f.onOpen=async()=>{const peer=new TaskWorkspaceStore(f.state,'synthetic-desktop-scope'),at={taskId:peer.getView().activeTaskId,revision:peer.getView().revision};const record=await peer.readCompanionHandoff(at);await peer.discardCompanionHandoff(record.checkpoint.id,record.digest,at);if(replace)await peer.stageCompanionHandoff({...f.checkpoint,id:'peer_replacement',reviewedIntent:'new peer-reviewed pending intent'},at);};
+ assert.equal((await f.host.accept(f.checkpoint.id)).state,'stale');assert.equal(f.calls.includes('panel'),false);const retained=await f.store.readCompanionHandoff(f.expected());assert.equal(retained?.checkpoint.id??null,replace?'peer_replacement':null);assert.equal(await readFile(f.file,'utf8'),f.text);assert.deepEqual(f.store.getDraft(),{text:'',images:[],queued:null});
+ }finally{await f.cleanup();}}});
+
+
+test('synchronous native owner invalidation during final actual retained IO suppresses panel and opened receipt',async()=>{for(const change of [f=>{f.snapshot.access='revoked';f.invalidateOwner();},f=>{f.invalidateOwner();},async f=>{await f.store.create('another actual task',f.expected());f.invalidateOwner();},f=>f.host.dispose(),f=>{f.lifecycle.isCurrent=()=>{throw Error('synthetic_owner_unavailable');};}]){const f=await fixture();try{
+ await f.host.stage(f.checkpoint);let armed=false;f.onShow=async()=>{armed=true;};const original=f.store.readCompanionHandoff.bind(f.store);f.store.readCompanionHandoff=async expected=>{const record=await original(expected);if(armed){armed=false;await change(f);}return record;};
+ assert.notEqual((await f.host.accept(f.checkpoint.id)).state,'opened');assert.equal(f.calls.includes('panel'),false);assert.equal(await readFile(f.file,'utf8'),f.text);
+ }finally{await f.cleanup();}}});
+
+
+test('native owner lease is mandatory, safe and monotonic with no permissive fallback',async()=>{for(const value of [undefined,{capture:()=>NaN,isCurrent:()=>true},{capture:()=>1,isCurrent:()=>{throw Error('owner unavailable');}}]){const f=await fixture();let host;try{host=new f.Host({context:f.context,store:f.store,lifecycle:value,snapshot:async()=>f.snapshot,revealTask:async()=>{throw Error('must not reveal');}});assert.notEqual((await host.stage(f.checkpoint)).state,'pending');assert.equal(f.calls.length,0);assert.equal(await f.store.readCompanionHandoff(f.expected()),null);}finally{host?.dispose();await f.cleanup();}}
+ const f=await fixture();try{assert.equal((await f.host.stage(f.checkpoint)).state,'pending');f.lifecycle.capture=()=>0;f.lifecycle.isCurrent=()=>true;assert.equal((await f.host.accept(f.checkpoint.id)).code,'invalid_native_owner_revision');assert.equal(f.calls.length,0);}finally{await f.cleanup();}
+});
+
+
+test('production refuses even the native lease capture callback before metadata or UI work',async()=>{const f=await fixture();try{let captures=0;f.lifecycle.capture=()=>{captures++;throw Error('must not inspect native owner');};f.context.extensionMode=1;assert.equal((await f.host.stage(f.checkpoint)).state,'denied');assert.equal(captures,0);assert.equal(f.calls.length,0);}finally{await f.cleanup();}});

@@ -42,7 +42,7 @@ test('listener ownership rejects another App, cycles, ambiguous PID and unsafe e
  const parents=new Map([[103,102],[102,101],[101,1],[200,200]]);assert(descendant(103,101,parents));assert(!descendant(103,999,parents));assert(!descendant(200,101,parents));assert(!descendant(101,101,parents));
  const execute=(command,args)=>command==='lsof'?'p103\n':'103 102\n102 101\n101 1\n';assert.equal(ownedListener(9788,101,'darwin',execute),103);
  assert.throws(()=>ownedListener(9788,999,'darwin',execute),/not an owned/);assert.throws(()=>ownedListener(9788,101,'darwin',()=> 'p103\np104\n'),/Ambiguous/);
- assert.equal(ownedListener(9788,101,'win32',()=>JSON.stringify({listeners:[103],parents:[{ProcessId:103,ParentProcessId:101}]})),103);
+ assert.equal(ownedListener(9788,101,'win32',()=>JSON.stringify({schema:'hps-owned-windows-listener/1',port:9788,listeners:[103],parents:[{ProcessId:103,ParentProcessId:101}]})),103);
  assert.throws(()=>listenerCommand('9788;echo bad','win32'));
  const id='12345678-1234-1234-1234-123456789abc',target={id,type:'node',webSocketDebuggerUrl:'ws://127.0.0.1:9788/'+id};assert.equal(inspectorTarget([target],9788).id,id);
  for(const url of['ws://example.com:9788/'+id,'ws://127.0.0.1:9789/'+id,'ws://user@127.0.0.1:9788/'+id])assert.throws(()=>inspectorTarget([{...target,webSocketDebuggerUrl:url}],9788));assert.throws(()=>inspectorTarget([target,target],9788));
@@ -195,4 +195,48 @@ test('retiring or reused prior PID consumes the unchanged transition deadline wi
   gate.completedPids.add(103);gate.previousPid=103;gate.phase.previousPid=103;gate.phase.label='declared-next';const deadline=gate.phase.deadline=Date.now()+40;gate.attach=async()=>{attaches++;};gate.start();
   await assert.rejects(gate.initial.promise,/startup deadline/);assert.equal(gate.phase.deadline,deadline);assert.equal(probes,1);assert.equal(fetches,0);assert.equal(attaches,0);assert.equal(gate.events.filter(e=>e.phase==='prior-host-retiring').length,1);assert(!gate.events.some(e=>e.phase==='activation-released'));await gate.close();
  }finally{globalThis.fetch=originalFetch;await gate.close().catch(()=>{});}
+});
+
+test('Windows ownership query failure records bounded typed facts without retry or private output',()=>{
+ for(const input of [{code:'ETIMEDOUT',signal:'SIGTERM',status:null},{code:'ENOENT',status:null},{status:1},{code:'private-code',signal:'private-signal',status:null}]){
+  let calls=0,refusal;
+  assert.throws(()=>ownedListener(9788,101,'win32',(_command,_args,options)=>{calls++;assert.equal(options.timeout,10000);throw Object.assign(Error('private-path secret'),input,{stdout:'private stdout',stderr:'private stderr'});}),error=>{refusal=error;return /Cannot establish inspector listener ownership/.test(error.message);});
+  assert.equal(calls,1);const q=refusal.ownership_query_failure;assert(q,'Query refusal must retain sanitized command facts');
+  assert.equal(q.stage,'windows_listener_and_parents');assert.equal(q.timeout_ms,10000);assert.equal(q.code,['ETIMEDOUT','ENOENT'].includes(input.code)?input.code:null);assert.equal(q.status,input.status??null);assert.equal(q.signal,input.signal==='SIGTERM'?'SIGTERM':null);
+  assert.equal(q.timed_out,input.code==='ETIMEDOUT');assert.equal(q.stderr_bytes,14);assert.equal(q.stdout_bytes,14);assert.match(q.stderr_sha256,/^[a-f0-9]{64}$/);assert(q.elapsed_ms>=0);assert(!JSON.stringify(q).includes('private'));
+ }
+});
+test('Windows malformed query output refuses without leaking response or retrying',()=>{
+ let calls=0,error;assert.throws(()=>ownedListener(9788,101,'win32',()=>{calls++;return 'private malformed output';}),e=>{error=e;return /Cannot parse inspector listener ownership/.test(e.message);});
+ assert.equal(calls,1);assert.equal(error.ownership_query_failure.stage,'windows_result_parse');assert.equal(error.ownership_query_failure.stdout_bytes,24);assert(!JSON.stringify(error.ownership_query_failure).includes('private'));
+});
+test('query failure reaches gate evidence without attach, resume or another ownership probe',async()=>{
+ let probes=0,attaches=0;const failure=Error('Cannot establish inspector listener ownership');failure.ownership_query_failure={stage:'windows_listener_and_parents',code:'ETIMEDOUT',timeout_ms:10000};
+ const gate=new OwnedExtensionGate({port:9788,appPid:()=>101,target:{},initialRoot:'/owned',observeListener:()=>{probes++;throw failure;}});gate.attach=async()=>{attaches++;};gate.start();
+ await assert.rejects(gate.initial.promise,error=>error===failure);await gate.close();assert.equal(probes,1);assert.equal(attaches,0);assert.equal(gate.events.find(e=>e.phase==='gate-failed').ownership_query_failure.code,'ETIMEDOUT');
+});
+
+test('actual Windows query proves empty port, owned listener and foreign-root refusal before desktop',{skip:process.platform!=='win32',timeout:45000},async t=>{
+ const owned=[];let timer;
+ try{
+  const socket=net.createServer();socket.listen(0,'127.0.0.1');await once(socket,'listening');const emptyPort=socket.address().port;await new Promise(r=>socket.close(r));
+  assert.equal(ownedListener(emptyPort,process.pid),null,'No listener is different from an unavailable query');
+  const child=spawn(process.execPath,['-e',"require('net').createServer().listen(0,'127.0.0.1',function(){console.log(this.address().port)})"],{stdio:['ignore','pipe','ignore']});owned.push(child);
+  const foreign=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});owned.push(foreign);
+  const [output]=await Promise.race([once(child.stdout,'data'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Owned loopback child did not start')),5000);})]);clearTimeout(timer);
+  const port=Number(String(output).trim());assert.equal(ownedListener(port,process.pid),child.pid);
+  let refusal;assert.throws(()=>ownedListener(port,foreign.pid),error=>{refusal=error;return /not an owned/.test(error.message);});
+  const first=refusal.ownership_refusal.initial;assert.equal(first.chains[0].listener_pid,child.pid);assert(first.chains[0].chain.some(row=>row.pid===process.pid));assert.notEqual(first.chains[0].reason,'owned_root_reached');
+  // The existing1.5s resample is diagnostic only, including when PowerShell is unavailable.
+  const next=refusal.ownership_refusal.resample;
+  if(next.status==='UNAVAILABLE')assert.equal(refusal.ownership_refusal.resample_diagnostic_only,true);
+  else{assert.equal(next.chains[0].listener_pid,child.pid);assert.notEqual(next.chains[0].reason,'owned_root_reached');}
+ }catch(error){if(error.ownership_query_failure)t.diagnostic(JSON.stringify({ownership_query_failure:error.ownership_query_failure}));throw error;}
+ finally{
+  clearTimeout(timer);
+  for(const child of owned)if(child.exitCode===null&&child.signalCode===null){
+   const exited=once(child,'exit');child.kill();let end;
+   try{await Promise.race([exited,new Promise((_,reject)=>{end=setTimeout(()=>reject(Error('Owned loopback child did not exit')),5000);})]);}finally{clearTimeout(end);}
+  }
+ }
 });

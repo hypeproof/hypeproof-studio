@@ -2,7 +2,7 @@
 
 This runner operates the prepared desktop shell on macOS or Windows. It reuses the
 existing classroom harness's OOPIF/CDP discovery, but sends native CDP keyboard and
-mouse input instead of DOM events, a host command bridge, injected messages or
+mouse input (plus the narrowly owned Windows native quit-dialog UI Automation described below) instead of DOM events, a host command bridge, injected messages or
 seeded token/history files. Foreground input is disabled by default. `--allow-foreground` requires an explicit dedicated UI slot; prefer a hosted runner. It never activates another app or uses AppleScript/System Events. It can attach without process ownership, or launch
 and stop only its generated isolated profile. It never calls an external model provider or submits an image edit. The optional
 owned history/streaming mode enters actual chat turns through the real SDK and
@@ -12,6 +12,29 @@ Use Node 24 (built-in WebSocket, TypeScript stripping, loader hooks and SQLite),
 prepared app from `scripts/studio-dev.py`, an explicit Service manifest and private
 credential files. No full desktop shell build, installed-app modification, `HOME`
 replacement, shell tool permission change or provider key is required.
+
+## Official platform baseline in hosted CI
+
+Without an explicit tag, each hosted platform uses the newest published stable
+release in `hypeproof/hypeproof-studio` that contains exactly one portable ZIP for
+its platform/architecture. Mac and Windows may therefore use different release
+labels. For example, stable v2026.1020.2 is Mac-only while the last published
+Windows shell is v2026.1017.0; a missing latest Windows asset does not authorize a
+draft, RC, arbitrary archive, mirror credential or skipped native check.
+
+An explicit `PUBLIC_APP_TAG` remains strict: that exact published stable tag must
+contain the requested platform asset. Default metadata enumeration is bounded by
+30 seconds/8 MiB and 1000 releases; malformed/ambiguous or unverifiable assets fail.
+The downloaded shell still requires the existing SHA-256 or published acceptance
+hash checks, current extension injection and verified SDK binary before native
+checks. Selection metadata is not a Windows execution pass.
+
+Saved-activity selection compares the complete absolute path from the real button
+`title`, checks its accessible name agrees, and requires one match. The visible
+`small` text intentionally contains only a shortened path. No basename/suffix
+matching, broader drive matching or product StartPage change is used. The actual
+component DOM control covers this contract; hosted native execution remains a
+separate required result.
 
 ## Existing candidate, actual local Service
 
@@ -163,6 +186,56 @@ The Windows quit path clicks the actual visible File → Exit menu item; CDP
 Alt+F4 is not assumed to reach the OS window manager. The Mac path uses its
 registered Cmd+Q binding. Neither path uses an extension-host quit command.
 
+For the Windows streaming-quit scenario only, the shipped core quit guard requires
+an explicit native confirmation after File → Exit. The driver captures the already
+spawned process PID, executable and UTC start stamp before input. A bounded 10s
+UI Automation observation reads only top-level dialogs of that process and requires
+one visible `#32770` dialog owned by a window of the same process, the exact
+`Studio를 끝낼까요?` message and running-turn detail, and exactly the enabled
+`계속하기` / `끝내기` choices. It rechecks identity, dialog ownership and contents in
+the OS process immediately before invoking `끝내기` once. Missing, changed,
+foreign or ambiguous UI fails; an unconfirmed invocation is never retried. No
+Enter/Escape default, other-app activation, AppleScript, security-policy change or
+process termination can establish quit acceptance. The existing 30s normal child
+exit and CDP-refusal checks are unchanged. UIA probe receipts prove only observed
+UI/action; history, cancellation and no-replay still require their separate checks.
+The Windows-only port is source-tested with injected observations; its new real
+native UI behavior must be verified by the next hosted run.
+
+When the Windows UIA observation returns no candidate, the same 10s budget may
+use a separate Win32 observation. This is not authority inferred from the census:
+it freshly requires the exact owned foreground `#32770`, same-process owner and
+child ancestry, exact two message/detail text nodes, and exactly two visible,
+enabled Win32 `Button` children labelled `계속하기` / `끝내기`. The chosen child
+handle and immediate parent must survive re-enumeration in the action process.
+The final process/start/executable, dialog and button checks precede one fixed
+[`BM_CLICK`](https://learn.microsoft.com/en-us/windows/win32/controls/bm-click)
+through [`SendMessageTimeoutW`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessagetimeoutw)
+with zero message parameters, `SMTO_BLOCK | SMTO_ABORTIFHUNG`, and at most 1s
+within the remaining deadline. No activation is attempted. Unknown UIA observations,
+changed ownership, inactive dialogs, and ambiguous choices still refuse input.
+Timeout or lost receipt is unknown and never triggers another route or click.
+A completed message is not proof of exit: the original owned-child exit, CDP
+refusal and durable-history checks remain required. This route has portable
+source/contract controls; real Windows invocation remains pending hosted evidence.
+
+The Mac streaming-quit scenario uses a run-owned Objective-C Accessibility helper
+compiled from tracked source before Cmd+Q. It reads only the spawned PID
+(`proc_pidinfo` start stamp and exact `proc_pidpath`) and that application’s own
+windows/sheets. It requires one visible owned AXSheet/AXDialog with exactly the
+same message, detail and two enabled, visible AXPress choices above. A bounded
+10s observation repeats identity, parent/window ownership, unique dialog and
+content checks immediately before one AXPress on `끝내기`. Unknown layouts,
+permission denial, missing dialogs and unconfirmed invocation fail closed without
+retry. `AXIsProcessTrusted()` is read-only: no permission prompt, TCC changes,
+AppleScript/System Events or other-app activation. The compiled pure contract
+mode tests strict dialog classification without accessing native UI; it is not
+installed acceptance. Hosted Accessibility trust is unverified; absent trust
+reports BLOCKED without changing permissions. The real hosted Mac dialog remains
+NOT RUN for this repair.
+Failure of streaming normal-quit recovery blocks subsequent foreground scenarios.
+
+
 The full restart reuses the A draft already persisted during the actual A→B→A
 folder test. It performs the platform quit action once, waits for normal exit of
 the exact spawned child and connection refusal from the prior CDP endpoint, then
@@ -283,15 +356,32 @@ Open while active. Each counts against one same-activity 12-attempt upstream
 ceiling including auxiliary/count_tokens/retries. Exhaustion remains explicit;
 no activity reissue/reset or model fallback is a successful substitute.
 
-Rendered user/assistant marker occurrences must be exact after actual reload;
-interrupted turns must not reappear as committed history. This checks the existing
-`chatPanelProvider.ts` `!ctrl.signal.aborted` guard around `appendHistory` (and its
-explicit truncated-turn comment), not a requirement to hide arbitrary transcripts. Native unsent drafts
-must survive, and ten-second restored-idle observation windows must show no new
-generation. The Service and scripted listener separately report client close,
+Rendered user/assistant marker occurrences must be exact after actual reload.
+The merged stopped-conversation contract (#1834; `docs/studio-requirements.md`
+and `docs/testing/task-workspace.md`) preserves the original user message and
+any partial answer actually received before interruption. The real SDK probe
+records `sdk_delta_observed`; an active held upstream can produce no rendered
+assistant text, which is valid. Readiness requires the actual Stop control and
+upstream streaming, never an invented partial delta. The harness captures the
+user and any observed assistant `data-message-id` identities and exact body text
+before Stop, quit or direct folder open, then requires each once after restoring
+the owning workspace. If no assistant bytes were observed, no assistant reply
+may appear on restoration.
+Duplicates, replacement identities, changed partial text and foreign-workspace
+history fail. Explicit Stop must first show the product's stop notice; when a
+partial assistant was observed, its stopped elapsed receipt is required in that
+mounted view; a completed elapsed receipt cannot stand in for an interrupted
+answer. These UI receipts belong to
+the mounted view, so the harness does not invent a persistent stop/completion
+marker after reload. An interrupted transcript is preserved context, never a
+completed model turn or a request to execute it again. Native unsent drafts
+must survive, and the unchanged ten-second restored-idle observation windows
+must show no new generation. The Service and scripted listener separately report client close,
 response-reader cancellation and exact linked upstream socket closure, with a
 bounded wait before cleanup. Missing propagation fails its native step; cleanup
-is never PASS.
+is never PASS. If an earlier history/streaming step did not settle, dependent
+image-denial testing is BLOCKED while the original failure remains; on an idle
+path the exact capability-denied notice is still required.
 SDK onDelta before a completed assistant block is not assumed or fabricated.
 Existing B is canonically revoked last, and actual opening C must refuse automatic
 admission without new generation or binding/file changes. A returns with its
@@ -392,8 +482,14 @@ are resumed. Breakpoints and sockets close before public quit; cleanup failure
 cannot pass and does not replace the primary error. A final owned-child stop request is cleanup only; it is never restart evidence.
 Final cleanup records child exit and CDP connection refusal separately, with a 10s
 exit wait and 5s endpoint wait (plus an in-flight bounded probe). A sent signal
-alone cannot set `owned_process_stopped`; timeout remains FAIL. No force-kill or
-unrelated handle/process sweep is used. `extension-inspector.test.mjs` uses disposable Node children for
+alone cannot set `owned_process_stopped`; timeout remains FAIL. For the captured
+Mac streaming-quit child only, an expired SIGTERM exit wait may invoke a cleanup-only
+SIGKILL after re-reading the exact PID/start/executable and checking the same child
+object. A second bounded exit wait and the same CDP-refusal check are required;
+the initial timeout and escalation remain in evidence. This never satisfies the
+normal-quit/restart step or changes its FAIL. If cleanup still fails, the owned
+child stays attached and `owned_process_stopped` stays false; no unref/detach or
+peer/tree sweep is used. `extension-inspector.test.mjs` uses disposable Node children for
 protocol/PID/replacement/cleanup controls, not a native App or T05 acceptance pass.
 Actual hosted0.1.56 propagation and long-held behavior remain NOT RUN until root
 executes this exact candidate. The existing ordinary native proof stays separate.
@@ -414,7 +510,7 @@ At pause, raw URL validation rejects authority, query/fragment, encoded path
 separators, dot segments and ambiguous second decoding. Decoded path equality,
 physical regular-file identity, loaded-source SHA, owned PID, exact statement and
 destination root are still mandatory. Directory case is not relaxed. Portable
-Windows URL controls and actual owned Node controls on Mac are background proof;
+Windows URL controls and actual owned Node controls on Mac/Windows are background proof;
 Windows inspector/native execution and the complete T05 holds still require the
 exact candidate's hosted run. The prior raw Windows URL spelling remains unknown;
 this change does not claim a specific encoding was observed.
@@ -487,3 +583,82 @@ from public GitHub in the native app; no token or prerecorded transport is injec
 HTTP 403/429 failures now include the status, host and public rate-reset delay in the
 customer error, so a runner's anonymous quota problem can be distinguished from a
 native UI failure. This reduces quota use but does not claim public availability.
+
+
+### Owned transition diagnostics (885 follow-up; observation only)
+
+T05 captures the original chat target, frame, loader and execution context before
+opening the secondary window. A temporary listener records at most64 focus/blur/
+visibility events and input-present/connected/disabled/visible booleans, plus
+whether focus is on the textarea, body/root, another control or absent. It never
+reads values, selection, control IDs or text. Pre-open/pre-switch/success-or-refusal
+snapshots use that same context and verify its loader; a replaced document is
+UNAVAILABLE rather than adopted. Listeners are removed before secondary-window
+cleanup, or explicit target-unavailable cleanup is recorded. Discovery and each
+read are bounded to750ms; these diagnostics do not retry or repair the original
+30s focus assertion. In particular, a prior unfocused input is now distinguishable
+from focus lost during the switch.
+
+T06 Windows records visible-menu/renderer-dialog/focus booleans immediately before
+and after the existing Exit click (500ms read-only observations). The exact owned
+PID/start/executable also bounds a one-shot Win32 top-level window census before
+quit and after refusal (3s per census). It records native class, bounds, visibility,
+owned/none/foreign owner relation and bounded UIA role counts/modal/known-quit-copy
+match counts only. It does not record arbitrary titles, native text, values,
+selection or foreign-process UI. The visible owned #32770 census also records bounded
+owned Win32 child structure and known button-label matches, plus owned/zero/foreign
+UIA PID relation; unavailable labels remain unknown. This data cannot authorize input.
+Unknown structures remain diagnostics; the
+existing #32770/message/detail/two-choice Invoke predicate and its10s deadline are
+unchanged. Census failure is UNAVAILABLE and never replaces or repairs the original
+quit failure. No Mac quit action, product focus policy or acceptance timeout changes.
+These source controls are not a new installed-window/quit acceptance result.
+
+Windows ownership-query failures retain only the fixed query stage, elapsed/requested
+budget, allowlisted OS code/signal, numeric exit status, and output lengths/hashes.
+Raw PowerShell output, exception text and process arguments are never recorded.
+The existing 10s query budget, unique-listener and descendant admission
+remain unchanged; a failed query gets no retry or diagnostic acceptance. The
+background harness now runs its real owned-child loopback positive/foreign-root
+negative on Windows before desktop construction. This is not native acceptance.
+An early inspector failure remains the primary scenario error if the concurrent
+public restart later times out; that secondary observation is recorded separately.
+
+Windows listener discovery now uses a fixed `-File` PowerShell helper and native
+read-only APIs instead of the WMI/CIM cmdlets that timed out on an empty port.
+[`GetExtendedTcpTable`](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable)
+reads the IPv4 owner-PID listener table: one size negotiation and one bounded read,
+with no buffer-growth retry. Only exact `127.0.0.1`, LISTEN and the requested port
+contribute PIDs. Port bytes are decoded in network order. The
+[`Toolhelp process snapshot`](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot)
+returns numeric PID/parent pairs; only `ERROR_NO_MORE_FILES` is successful enumeration
+termination. Handles and allocated buffers close in `finally` blocks. Invalid
+sizes, overflow, duplicate process rows, API failures or malformed JSON refuse.
+No executable names, raw arguments or localized command output are emitted.
+
+The existing single ownership admission and fail-closed diagnostic resample remain;
+there is no WMI/netstat fallback or timeout increase. Portable controls compile the
+actual C# parser and feed binary tables without calling Windows APIs. The real
+Windows background empty-port/owned/foreign control still has to pass on the hosted
+runner before desktop acceptance; a local compile is not that result.
+
+After the b6 Windows empty-port probe still timed out, the same job's separate
+PowerShell/C# compile and synthetic ABI check passed in 1.725 s. That does not
+locate the timed-out stage or establish that compilation caching would fix it.
+The later 1755 hosted failure reached native completion and serialization start
+at 3.992 s, then timed out without serialization completion. This locates the
+stalled phase, not the internal PowerShell cause.
+The helper now flushes fixed phase markers around script entry, compilation,
+TCP table sizing/read, process snapshot/enumeration and JSON serialization. The wire is
+serialized in C# with a fixed ASCII schema and invariant unsigned numbers, capped
+at 1 MiB; there is no PowerShell object-graph serialization or fallback. Portable
+controls cover empty, single, many and maximum-count arrays through the actual C#
+serializer and strict JS parser. This does not establish hosted Windows timing.
+A fresh random diagnostic nonce binds each probe's markers; it carries no authority.
+Only a bounded, ordered prefix with monotonic elapsed milliseconds within that
+probe's existing budget is retained on failure. Unknown, forged, duplicate,
+out-of-order, malformed or oversized traces are marked invalid with no statements.
+Raw stderr/OS text remains lengths/hashes only. Child elapsed time starts at script
+entry, so time before that first marker remains unmeasured. Markers never establish
+listener ownership, retry a failed probe, or enlarge the 10 s admission budget.
+Actual next Windows timing/native-API acceptance remains required.

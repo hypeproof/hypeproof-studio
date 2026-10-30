@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const bundle = await build({stdin:{contents:"export * from './src/focusDiagnostics';export * from './src/studioNavigation';export {activate,resolveActivateBranch,ensureWorkspace} from './src/extension';export {openBrowser} from './src/nativeBrowser';export {ChatPanelProvider} from './src/chatPanelProvider';export {StartPage} from './src/startPage';",resolveDir:fileURLToPath(new URL('..',import.meta.url)),loader:'ts'},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 const commands=[], mod={exports:{}};
 const vscode={ViewColumn:{One:1},commands:{executeCommand:async c=>commands.push(c)},workspace:{workspaceFolders:[]},Uri:{joinPath:()=>({}),file:fsPath=>({fsPath})},window:{createWebviewPanel:()=>({webview:{onDidReceiveMessage(){},html:''},onDidChangeViewState(){},onDidDispose(){}})}};
-vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,console,Buffer,URL});
+vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,console,Buffer,URL,TextEncoder,TextDecoder});
 const {focusDiagnosticLine,resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,RESUME_MAX_AGE_MS,activate,openBrowser,resolveActivateBranch,ensureWorkspace,ChatPanelProvider,StartPage}=mod.exports;
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-resume-'));
 const a=path.join(tmp,'작업 A'),b=path.join(tmp,'작업 B'),link=path.join(tmp,'alias');fs.mkdirSync(a);fs.mkdirSync(b);fs.symlinkSync(a,link,'junction');

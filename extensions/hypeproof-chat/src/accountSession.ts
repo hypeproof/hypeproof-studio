@@ -90,15 +90,20 @@ export class AccountSession {
   constructor(options: Options) { this.options = options; this.request = options.fetch ?? fetch; this.now = options.now ?? Date.now; }
   matches(service: string, site: string): boolean { return service === this.options.service && site === this.options.site; }
   view(): AccountView { return structuredClone(this.state); }
+  /** Stored native routing identity only: no refresh/network, token disclosure or live-authority claim. */
+  async sessionIdentity(): Promise<Readonly<{ service: string; sessionId: string }> | undefined> {
+    const bundle = await this.read(false);
+    return bundle ? Object.freeze({ service: bundle.service, sessionId: bundle.sessionId }) : undefined;
+  }
   private emit(): void { this.options.changed?.(); }
   private exclusive<T>(work: () => Promise<T>): Promise<T> {
     const next = this.serial.then(() => this.options.lock ? this.options.lock(work) : work());
     this.serial = next.catch(() => undefined); return next;
   }
-  private async read(): Promise<Bundle | undefined> {
+  private async read(trackSession = true): Promise<Bundle | undefined> {
     const raw = await this.options.secrets.get(ACCOUNT_SECRET_KEY);
     if (!raw) return;
-    try { const b = JSON.parse(raw); if (b.service === this.options.service && typeof b.accessToken === 'string' && typeof b.refreshToken === 'string' && typeof b.sessionId === 'string' && Number.isFinite(b.expiresAt)) { this.lastSession = b.sessionId; return b; } }
+    try { const b = JSON.parse(raw); if (b.service === this.options.service && typeof b.accessToken === 'string' && typeof b.refreshToken === 'string' && typeof b.sessionId === 'string' && Number.isFinite(b.expiresAt)) { if (trackSession) this.lastSession = b.sessionId; return b; } }
     catch { /* An unreadable or foreign-service credential never leaves storage. */ }
   }
   private parseBundle(body: any): Bundle {

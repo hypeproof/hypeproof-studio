@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import { chatConfig, chatPanelProps, weekFixture } from './sx-screen-fixtures.mjs';
 import { THEMES } from './lib/vscode-default-themes.mjs';
 import { findChromium, launch } from './lib/headless-chromium.mjs';
@@ -37,7 +38,7 @@ const SHA = 'f'.repeat(64);
 
 const bin = findChromium();
 if (!bin) { if (process.env.FOCUS_REQUIRE_BROWSER === '1') throw Error('Chromium required'); console.log('NOT RUN: learning-block-text browser unavailable'); process.exit(0); }
-const browser = await launch(bin), evidence = process.env.LEARNING_BLOCK_TEXT_EVIDENCE;
+const evidence = process.env.LEARNING_BLOCK_TEXT_EVIDENCE;
 if (evidence) mkdirSync(evidence, { recursive: true });
 const waitFor = async (expr, what, ms = 5000) => {
   const end = Date.now() + ms;
@@ -50,17 +51,42 @@ window.__region=null;
 window.track=()=>{window.__region=document.querySelector('.hp-material-state');return !!window.__region};
 // One change at a time: the previous change's observer and 1500 ms timer are cancelled first, so a stale one can neither
 // report a mutation of this change from its own earlier start nor give up on this change before its time.
-window.change=(act)=>{const live=window.__region,before=live.textContent;window.__m=null;const t0=performance.now();
-  if(window.__stop)window.__stop();
-  const mo=new MutationObserver(()=>{if(live.textContent!==before&&!window.__m){window.__m={ms:performance.now()-t0,text:live.textContent,key:live.dataset.materialState}}});
-  mo.observe(live,{subtree:true,childList:true,characterData:true});
-  const timer=setTimeout(()=>{mo.disconnect();if(!window.__m)window.__m={ms:1e9,text:live.textContent,key:live.dataset.materialState}},1500);
-  window.__stop=()=>{mo.disconnect();clearTimeout(timer)};act()};
+window.change=(act)=>{window.__stopMeasurement?.();const live=window.__region,before=live.textContent;window.__m=null;const t0=performance.now();
+  const owner={};window.__measurement=owner;let timer,settled=false;
+  const cleanup=()=>{mo.disconnect();clearTimeout(timer)};
+  const finish=(timeout)=>{if(settled||window.__measurement!==owner)return;settled=true;cleanup();window.__m={ms:timeout?1e9:performance.now()-t0,text:live.textContent,key:live.dataset.materialState}};
+  const mo=new MutationObserver(()=>{if(live.textContent!==before)finish(false)});
+  mo.observe(live,{subtree:true,childList:true,characterData:true});timer=setTimeout(()=>finish(true),1500);
+  window.__stopMeasurement=()=>{settled=true;cleanup()};try{act()}catch(error){window.__stopMeasurement();throw error}};
 window.typeInto=(sel,value)=>window.change(()=>{const el=document.querySelector(sel);const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}))});
 window.hostSaved=(work)=>window.change(()=>window.postMessage({type:'lessonWorkState',sha256:${JSON.stringify(SHA)},work},'*'));
 window.pickStep=(id)=>window.change(()=>document.querySelector('button[data-step-id="'+id+'"]').click());
 window.openCard=()=>{const b=document.querySelector('[data-block-card] [data-block-toggle][aria-expanded="false"]');if(b)b.click();return !!b};`;
+
+// A prior action's timeout/observer must never fill the next action's result.
+// Exercise the exact page helper with controlled event ordering, including queued
+// callbacks after cancellation; the actual browser below still owns the 500 ms gate.
+{
+  let now=0;const timers=[],observers=[],live={textContent:'empty',dataset:{materialState:'empty'}};
+  const page={};
+  runInNewContext(HELPERS,{window:page,document:{querySelector:()=>live},performance:{now:()=>now},
+    setTimeout:fn=>{const timer={fn,active:true};timers.push(timer);return timer},clearTimeout:timer=>{if(timer)timer.active=false},
+    MutationObserver:class{constructor(fn){this.fn=fn;this.active=true;observers.push(this)}observe(){}disconnect(){this.active=false}}});
+  page.track();const mutate=(text)=>{live.textContent=text;live.dataset.materialState=text;for(const o of observers)if(o.active)o.fn()};
+  page.change(()=>{now=10;mutate('written')});assert.equal(page.__m.ms,10);assert.equal(timers[0].active,false);
+  now=100;page.change(()=>{});const current=timers.at(-1);assert.equal(page.__m,null);
+  now=1500;timers[0].fn();observers[0].fn();assert.equal(page.__m,null,'stale callbacks cannot finish a new measurement');
+  mutate('saved');assert.equal(page.__m.ms,1400,'late changes stay late; never relax the 500 ms gate');assert.equal(current.active,false);
+  now=2000;page.change(()=>{});const abandoned=timers.at(-1),abandonedObserver=observers.at(-1);
+  now=2100;page.change(()=>{});abandoned.fn();abandonedObserver.fn();assert.equal(page.__m,null,'superseded measurement cannot report');
+  now=2110;mutate('edited');assert.equal(page.__m.ms,10);
+  now=3000;page.change(()=>{});now=4500;timers.at(-1).fn();const timeout=page.__m;assert.equal(timeout.ms,1e9);
+  mutate('too-late');observers.at(-1).fn();assert.equal(page.__m,timeout,'timeout cannot be overwritten by a late mutation');
+  assert.throws(()=>page.change(()=>{throw Error('action failed')}),/action failed/);
+  assert.equal(timers.at(-1).active,false);assert.equal(observers.at(-1).active,false);
+  console.log('PASS live-region observation controls: stale, superseded, late, timed-out and thrown actions stay isolated');
+}
 
 const parse = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); const v = m[1].split(',').map(Number); return { r: v[0], g: v[1], b: v[2], a: v[3] ?? 1 }; };
 const lum = ({ r, g, b }) => { const f = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
@@ -108,6 +134,7 @@ const changed = async (t, expectKey) => {
   return m;
 };
 
+const browser = await launch(bin);
 let cases = 0, changes = 0, slowest = 0;
 try {
   for (const seat of ['classroom', 'personal']) for (const dark of [false, true]) for (const width of [800, 1420]) {

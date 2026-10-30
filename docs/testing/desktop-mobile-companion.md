@@ -81,3 +81,192 @@ controls for activity changes during binding/filesystem validation before review
 or persistence; all four must block stale review or metadata writes. Those new
 failure paths and controller bytes have source/fixture checks, with native
 acceptance **NOT RUN**; the earlier native run remains bound to `b7ee35cf`.
+
+## Development host preview composition — 2026-10-28
+
+[Composition evidence and reproduction](../evidence/companion-host-preview-composition.md)
+separate source/native-API fixture tests from a local Worker/D1 and headless
+mobile-sized browser integration. The latter observed the selected same-version
+HTML, explicit fixture confirmation, journaled read, source preservation and
+repeat-result reuse. Final source results are bound in the PR validation record.
+Installed native UI, real account/phone, classroom activity and DMC-T04/08/15
+remain **NOT RUN / NOT COMPLETE**. No acceptance row is replaced.
+
+The [bounded transfer and mobile presentation slice](../evidence/companion-artifact-transfer-20261028.md)
+adds framed results and controlled result presentation while retaining the
+original runtime/relay limits. Its partial source/browser evidence does not
+complete device, restart, classroom or production acceptance.
+
+## Owned mobile controller/recovery source cut — #3099
+
+Focused source checks cover one prepare/send, interrupted eight-part ACK batches,
+exact same-live-owner checkpoint restoration, stale/mutated packets, lost keys,
+confirmed cleanup with storage-error retry, and successor-owner fencing. The
+controlled React view tests waiting, reconciliation and explicit local removal.
+Framing/2 retains decoding and exact saved bytes for historical framing/1.
+The separately recorded new-cut checks do not transfer historical browser or
+installed observations to a new package identity. No production/cold-key/device
+acceptance row is completed by these source checks.
+
+The [activated host pacing regression](../evidence/companion-dev-host-pacing-20261028.md)
+executes the native entry and authenticated transport with the real budget scheduler
+and an injected clock. It retains the failing burst case and passing paced case,
+including same-session owner replacement. The fixed entry is a source observation;
+installed Android composition and customer acceptance remain separately evidenced.
+
+## Standalone native controls/journal source cut — #3098
+
+Focused checks cover native identity/config/token invalidation, bounded/rejected
+response-stream cleanup, explicit native comparison/approval/cancel/close/revoke,
+single receive ownership and ACK-expiry retirement. Entry tests preserve exclusive
+journal ownership and old-write drainage; pacing retains the same-session budget
+through owner replacement. A real short session deadline must synchronously
+close the native owner, erase key references and suppress late receive effects.
+The isolated DEV-copy tests retain the semantic engine version separately from
+its release marker. These new-cut source checks do not establish installed UI,
+member identity, production deployment or stable Mac/Windows stamping.
+
+## Initial Android debug preview source cut — #3100
+
+Focused checks cover bounded/cancelled native RPC correlation, authenticated
+selection/result demux and the actual React entry. The exact browser asset
+pipeline must pin one matching React/ReactDOM graph and render its initial UI
+without Node globals or native messages before an explicit gesture. Java,
+manifest and Gradle inputs may reuse historical compile evidence only after
+byte comparison; changed web assets remain a distinct package identity. No APK
+rebuild, installation, native personal login or release acceptance is implied
+by these source/asset checks.
+
+## Local desktop handoff and packaged Android follow-up
+
+The [local handoff evidence](../evidence/companion-desktop-handoff-local-20261028.md)
+covers a bounded record in the existing TaskWorkspaceStore, explicit native review
+and discard, and preservation of all desktop drafts and selected file bytes.
+The final source requires the existing native owner's synchronous invalidation
+lease after asynchronous storage/navigation. Independent actual-store controls
+at `ca9e52b0e37b0d9a48f1a065ee86a7080d158dc8` passed original peer-discard,
+replacement, access/profile/task changes during final persistence, disposal and
+missing-lease cases. Earlier failing receipts remain preserved. These are local
+API/fixture observations; native registration, account invalidation wiring and
+desktop/mobile delivery do not yet fulfill DMC-T11.
+
+The [Android source evidence](../../apps/companion-android/RESULT-DEMUX-EVIDENCE.md)
+retains a packaged-React failure and later-selection/result interleaving failure.
+Source `9a7d92771d10d1b2984da65c6c4a0338c1a7ff2f` repairs both. Real isolated
+Chrome with the exact asset CSP reproduced the old APK's blank first screen and
+rendered the repaired first button without native protocol calls. APK SHA-256
+`724ddc17c89a5869b85a7949eaa194da4c29ef44edfaf42f6b750dd7f8ded607`
+contains those same three checked assets. An owned API35 emulator then observed
+the installed initial UI and invalid-provisioning refusal. The composed run
+stopped waiting for the separate Studio test driver to activate: normal native
+account/pass flow and installed-APK artifact delivery remain **NOT RUN** for
+this package. Source, browser, packaging and initial-screen observations are not
+whole mobile or physical-device acceptance.
+
+## Reviewed draft/manual Send source cut — #3114
+
+Focused checks cover actual TaskWorkspaceStore handoff/import, current owner
+before final atomic rename, conflicting or cancelled review, native UI generation
+and autosave ordering, existing Send admission and exact restore/run provenance.
+SDK terminal tests distinguish measured completion, failure/refusal and unknown.
+Mobile checks cover one send, bounded receipt observation, manual receive races,
+explicit same-pair selection adoption, stale/retired results and preserved cached
+preview/draft. The previously lifted cipher-close callback remains singular.
+Historical Worker/installed/native SDK evidence is retained at its old identity;
+new-cut source/React/asset checks do not imply a new installed observation,
+genuine membership, provider quality or production readiness.
+
+
+## Android personal-account sign-in source cut — #3115
+
+Run `apps/companion-android/test/device-sign-in.test.sh` with Java17 under the
+shared resource lease. Seven protocol groups cover exact browser origin/code,
+slow-down and expiry, cancelled/late credentials, active account/session matching
+and canonical debug-only loopback. Two real owned loopback HTTP controls exercise
+whole-call drip deadline and explicit cancellation; neither invokes an account,
+Service model endpoint, browser or Android runtime. Compare all Java/manifest/
+Gradle inputs with the reviewed native sign-in source before reusing its debug
+Java compilation and processed release-manifest evidence. This cut keeps web
+and extension bytes unchanged from #3114. Historical installed synthetic-login
+observations remain bound to their original source/package; new source checks
+and reused compile evidence do not establish installed or genuine-member acceptance.
+
+## Scoped execution source contract
+
+`companion-execution-record.smoke.mjs` exercises real local persistence: one-shot
+binding, exact text including whitespace, retained terminal history, replay,
+unknown outcomes, draft conflict and owner invalidation. The `created:false`
+return is a no-dispatch instruction, not permission to resume an interrupted run.
+`companion-execution-policy.test.mjs` covers selected-file tool restrictions and
+live scope checks; it does not establish an OS filesystem sandbox.
+`companion-execution-authority.smoke.mjs` compares authenticated Service evidence
+against independently held native scope, activated-pass identity and exact packet
+bytes, including terminal/expired/mismatched evidence and bounded ASCII headers.
+Its parser performs no network authentication and cannot execute a request.
+
+`companion-normal-turn.test.mjs` exercises the unregistered development entry
+through the same provider path as desktop Send. It checks admission before any
+await, empty-draft and current-scope checks, reservation replay suppression,
+durable binding, cancellation and measured terminal records. The SDK tests
+check the fixed reservation header on the actual SDK option builder: ambient
+companion headers are removed, mismatched turn/request/file fields fail closed,
+and caller mutation cannot replace the captured binding. A scripted SDK module
+is used for these controls; this is not installed-CLI or live Service acceptance.
+The prepared entry carries no browser, shell, orchestration or proxy fallback.
+
+Execution-owner tests exercise cancelled consent, native zero epoch and 48-bit
+consent revision, foreign/stale scope, repeated exact requests, two successive
+versions, lost replies, wrong terminal proof and synchronous session-close
+cancellation. They use local files and scripted client/SDK ports. Native owner
+wiring controls exercise the actual account/profile/preparation composition
+with fixture HTTP and native UI. Android source controls check the new receipt
+schema, ACK-before-display, stale-result isolation and retained draft/preview.
+These checks do not replace fresh ephemeral D1/actual SDK/installed Android
+acceptance for the newly composed execution path.
+
+Complete acceptance additionally needs the actual shared Send path, Service
+atomic model admission, installed host/Android flow, original-version restoration
+and a second version without replay. Source controls alone do not close those
+rows; real provider quality, physical devices, iOS and classroom outcomes remain
+separate from synthetic-account and scripted-upstream observations.
+
+
+## Selected execution cut validation and evidence identity — #3097
+
+The split source retains exactly one previously lifted synchronous HostSession
+close callback and one generic deadline test. Focused controls exercise actual
+TaskWorkspaceStore persistence, provider normal Send admission/restore/terminal
+mapping, selected SDK tool policy and per-tool live reservation checks, owner
+composition, bounded native transport and verified Android receipt rendering.
+Use the exact explicitly supplied private client from repaired Service
+`c9714c86bc8ccd9471806287a02e962a7100af70` for local ABI/types/assets checks.
+The prior Service `c066ca17655cb618730632238a8a08519da7c310` late-model-revocation
+failure stays preserved; its atomic live-reservation repair and independent
+Hono/D1 controls are separate Service evidence, not a new worker deployment.
+Historical installed runs remain bound to their original source/APK/Service
+identities. This cut runs source/React/scripted-SDK/bundle checks only and does
+not make a new installed CLI, model quality, physical/iOS, genuine-member,
+classroom or production claim.
+
+## Required source CI inputs
+
+The normal extension `npm test` command includes the existing companion execution
+host, selected-file SDK policy and normal-turn admission `.test.mjs` suites once,
+before the smoke glob. These tests use synthetic SDK/transport ports; they do not
+claim installed execution.
+
+The existing `worker / test` job runs the required companion source checks first
+through `npm run test:service-integration`, after its existing private Service
+bootstrap and dependency setup. It uses an immutable `companion-client` pin in
+`config/service-packages.json`. `scripts/companion-ci.mjs` requires the tag, SHA256
+and Service source-commit metadata, validates the cached archive, installs it
+offline with scripts disabled in a temporary directory, and checks the real
+pairing/relay/execution exports and TypeScript adapter ABI. Missing or wrong
+inputs fail; no local sibling checkout or optional package skip supplies a pass.
+
+The same job typechecks Android web source, runs all existing Android `.test.mjs`
+files including the actual private-client browser-bundle first render, and runs
+the existing JVM sign-in/deadline controls with Java17 or newer. Its temporary dependency
+link is removed after the run. It does not assemble an APK, execute Android's
+platform lifecycle, connect an account, or deploy Service. Earlier independent
+source evidence and installed failures remain bound to their original versions.

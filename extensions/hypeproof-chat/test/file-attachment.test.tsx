@@ -84,12 +84,13 @@ const userSentCase = (src: string) => src.slice(src.indexOf('    case "userSent"
 const webviewNeverDropsOnSend = (src: string) => !/(pageAttachment|fileAttachment): null/.test(userSentCase(src));
 const RELEASE = /takeFileAttachment\(|clearFileAttachment\(|dropPageAttachment\(|clearPageAttachment\(|pendingPageContext = null|pendingFileAttachment = null/;
 const rejectRegion = (src: string) => src.slice(src.indexOf("if (connections && (msg.type==='sendMessage'||msg.type==='retryMessage') && msg.activityId!==connections.scope)"), src.indexOf('      case "voiceCapabilityProbeResult":'));
-const handleSendHead = (src: string) => src.slice(src.indexOf("  private async handleSend("), src.indexOf("    const pageContext = this.pendingPageContext;"));
+const PAGE_CONTEXT = "    const pageContext = prepared ? null : this.pendingPageContext;";
+const handleSendHead = (src: string) => src.slice(src.indexOf("  private async handleSend("), src.indexOf(PAGE_CONTEXT));
 const hostReleasesOnlyAtTurnStart = (src: string) =>
   rejectRegion(src).length > 500 && !RELEASE.test(rejectRegion(src)) &&
   handleSendHead(src).length > 500 && !RELEASE.test(handleSendHead(src)) &&
-  /const pageContext = this\.pendingPageContext;\n\s*this\.pendingPageContext = null;\n[^\n]*\n\s*this\.dropPageAttachment\(\);/.test(src) &&
-  /const fileContext = carryFile \? this\.takeFileAttachment\(\) : null;/.test(src.slice(src.indexOf("    const pageContext = this.pendingPageContext;")));
+  /const pageContext = prepared \? null : this\.pendingPageContext;\n\s*if\(!prepared\)\{\n\s*this\.pendingPageContext = null;\n[^\n]*\n\s*this\.dropPageAttachment\(\);/.test(src) &&
+  /const fileContext = carryFile \? this\.takeFileAttachment\(\) : null;/.test(src.slice(src.indexOf(PAGE_CONTEXT)));
 
 t("chips are host-owned: the webview keeps them on send; the host releases them only when a model turn takes them", () => {
   ok(webviewNeverDropsOnSend(app), "userSent leaves the page and file chips alone");
@@ -97,10 +98,24 @@ t("chips are host-owned: the webview keeps them on send; the host releases them 
   for (const s of ["msg.activityId!==connections.scope", "this.requireEditTarget(msg.editOf)", "this.interruptedHistoryError()", "if (this.opsHold && (msg.type", "if (this.connectionChanging && (msg.type", "if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text"])
     ok(rejectRegion(host).includes(s), `rejection path covered: ${s}`);
   ok(handleSendHead(host).includes("if (this.verifySession?.running)"), "rejection path covered: a running re-test");
+  const consumePage = (src: string, prepared: boolean) => {
+    const at=src.indexOf(PAGE_CONTEXT),end=src.indexOf('    const element = prepared ? null',at);
+    ok(at>0&&end>at,'bounded page consumption after admission');
+    const events: string[]=[],h={pendingPageContext:'desktop-page',pendingPageNotice:'notice',
+      dropPageAttachment:()=>events.push('drop'),finishAnnotationSend:()=>events.push('annotations'),restoreStyleTweakPreview:()=>events.push('restore-style')};
+    const page=new Function('prepared','annotations',`${src.slice(at,end)}return pageContext;`).call(h,prepared,[]);
+    return {page,pending:h.pendingPageContext,notice:h.pendingPageNotice,events};
+  };
+  const ordinary=consumePage(host,false),prepared=consumePage(host,true);
+  ok(ordinary.page==='desktop-page'&&ordinary.pending===null&&ordinary.events.includes('drop'),'ordinary admitted turn takes its page and clears the chip');
+  ok(prepared.page===null&&prepared.pending==='desktop-page'&&prepared.notice==='notice'&&prepared.events.length===0,'prepared turn preserves all desktop page/annotation/style slots');
+  const pageAt=host.indexOf(PAGE_CONTEXT),ungated=host.slice(0,pageAt)+host.slice(pageAt).replace('if(!prepared){','if(true){');
+  ok(ungated!==host&&!hostReleasesOnlyAtTurnStart(ungated)&&consumePage(ungated,true).pending===null,'negative: removing prepared isolation demonstrably consumes the pending desktop page');
+
   // Negative controls: the old code leaked, and the instrument says so.
   const oldApp = app.replace("        fileAttachError: null,\n        fileAttachNotice: null,\n", "        pageAttachment: null,\n        fileAttachment: null,\n        fileAttachError: null,\n        fileAttachNotice: null,\n");
   ok(oldApp !== app && !webviewNeverDropsOnSend(oldApp), "planted: webview dropping chips on userSent is caught");
-  const oldHost = host.replace("msg.editOf, true); // CGP-CHAT-R-011", "msg.editOf, this.takeFileAttachment()); // CGP-CHAT-R-011");
+  const oldHost = host.replace("msg.editOf, true, companionWebview]", "msg.editOf, this.takeFileAttachment(), companionWebview]");
   ok(oldHost !== host && !hostReleasesOnlyAtTurnStart(oldHost), "planted: taking the file before handleSend is caught");
   const at = host.indexOf("    this.pendingSends++;\n", host.indexOf("  private async handleSend("));
   const earlyPage = host.slice(0, at) + "    this.dropPageAttachment();\n" + host.slice(at);
@@ -123,9 +138,35 @@ t("reducer: send and rejection keep the chips; the host's null removes them", ()
 });
 
 t("host: a fresh send carries the file; retry never, and says so; remove, task switch, clear and folder change drop it", () => {
-  ok(/await this\.handleSend\(msg\.text, [^\n]*msg\.editOf, true\); \/\/ CGP-CHAT-R-011/.test(host), "a fresh send may carry the file");
-  ok(/await this\.handleSend\(msg\.prompt, [^\n]*msg\.sourceMessageId\);/.test(host), "a retry does not");
-  ok(/editOf\?: string,\n\s*\/\*\*[^\n]*\*\/\n\s*carryFile = false,\n\s*\): Promise<void> \{/.test(host), "carryFile defaults to false");
+  // Read the actual desktop adapter argument array from each bounded message case.
+  const desktopArgs = (src: string, kind: string) => {
+    const at=src.indexOf(`case "${kind}":`),end=src.indexOf('\n      case ',at+1);
+    ok(at>0&&end>at,`${kind}: bounded case exists`);const body=src.slice(at,end);
+    const args=body.match(/await this\.submitNormalTurn\(\{kind:'desktop',args:(\[[^\n]+\])\}\);/)?.[1];
+    ok(args,`${kind}: ordinary desktop admission exists`);
+    const binding=body.match(/const companionWebview=[^\n]+;/)?.[0]??'';
+    const msg={text:'fresh',prompt:'retry',history:['history'],images:[],userMessageId:'user',sourceMessageId:'failed',editOf:'edit'};
+    return new Function('msg','source','requestedMode','promptRefs',`${binding}return ${args};`)(msg,'owned-view','auto',()=>['refs']);
+  };
+  const fresh=desktopArgs(host,'sendMessage'),retry=desktopArgs(host,'retryMessage');
+  ok(fresh[0]==='fresh'&&fresh[6]==='user'&&fresh[8]==='edit'&&fresh[9]===true,'fresh send explicitly carries the attached file');
+  ok(retry[0]==='retry'&&retry[6]==='user'&&retry[7]==='failed'&&retry[9]===undefined,'retry omits carryFile and keeps the failed-turn identity');
+  const signatureAt=host.indexOf('  private async handleSend('),signatureEnd=host.indexOf('): Promise<void> {',signatureAt);
+  ok(signatureAt>0&&signatureEnd>signatureAt,'actual handleSend signature exists');
+  const signature=host.slice(signatureAt,signatureEnd),defaultOff=/carryFile = false,/;
+  ok(defaultOff.test(signature),'carryFile defaults to false even with later optional prepared-turn parameters');
+  ok(!defaultOff.test(signature.replace('carryFile = false,','carryFile = true,')),'negative: default attachment carry is rejected');
+  const noCarry=host.replace('msg.editOf, true, companionWebview]','msg.editOf, false, companionWebview]');
+  ok(noCarry!==host&&desktopArgs(noCarry,'sendMessage')[9]===false,'negative: a fresh-send carry regression is observable');
+  const retryCarry=host.replace('msg.userMessageId, msg.sourceMessageId]','msg.userMessageId, msg.sourceMessageId, undefined, true]');
+  ok(retryCarry!==host&&desktopArgs(retryCarry,'retryMessage')[9]===true,'negative: silently carrying a pending file on retry is observable');
+  const adapter=host.slice(host.indexOf('  private submitNormalTurn('),host.indexOf('  private async handleSend('));
+  const forward=adapter.match(/if\(input\.kind==='desktop'\) return this\.handleSend\(\.\.\.input\.args\);/)?.[0];
+  ok(forward,'desktop adapter forwards the same argument list to the existing Send engine');
+  const forwarded=new Function('input',forward!).call({handleSend:(...args: unknown[])=>args},{kind:'desktop',args:fresh});
+  ok(JSON.stringify(forwarded)===JSON.stringify(fresh),'forwarding preserves carry position and all other desktop arguments');
+  const shifted=new Function('input',forward!.replace('...input.args','...input.args.slice(1)')).call({handleSend:(...args: unknown[])=>args},{kind:'desktop',args:fresh});
+  ok(JSON.stringify(shifted)!==JSON.stringify(fresh),'negative: shifted adapter arguments are observable');
   ok(/if \(!carryFile && retrySourceId !== undefined && this\.fileTurnIds\?\.has\(retrySourceId\)\) \{\n\s*void this\.post\(\{ type: "fileAttachment", attachment: this\.pendingFileAttachment\?\.preview \?\? null, notice: FILE_RETRY_NOTICE \}\);/.test(host), "a retried file turn shows the notice and keeps any pending chip");
   ok(/if \(withFile !== text\) \(this\.fileTurnIds \?\?= new Set\(\)\)\.add\(userId\);/.test(host), "turns that carried a file are remembered");
   const take = host.slice(host.indexOf("private takeFileAttachment(): string | null {"), host.indexOf("private takeFileAttachment(): string | null {") + 300);

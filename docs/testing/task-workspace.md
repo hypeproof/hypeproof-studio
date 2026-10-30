@@ -255,3 +255,42 @@ acceptance must be reported separately from synthetic DOM/browser tests.
   targets (되돌리기 44 × 44), caption type step, wrapping names, the 2px focus ring, forced colours.
 - Native dialog focus, physical IME, installed-app rendering and screen-reader output are
   separate observations; the synthetic tests do not establish them.
+
+### Normal quit during an admitted model turn (#3134)
+
+Before dispatch, the existing task store durably upserts the admitted user message
+under its original identity. Prepared companion execution does this after its
+reservation and durable run binding, then rechecks the untouched native composer
+before SDK entry; it never imports the phone request into that composer.
+Normal extension shutdown synchronously freezes the owned user, received partial
+answer and tool timeline, aborts the stream, and awaits that history write together
+with spool closure. It does not wait for SDK transport unwind. A stale task/epoch
+cannot commit into a replacement owner. Terminal and aborted settlement upsert
+identities instead of appending duplicates; late SDK bytes cannot upgrade the
+frozen interrupted transcript. Failed persistence remains a failure.
+
+`test/companion-normal-turn.test.mjs` exercises ordinary and prepared requests over
+the actual provider and task store, reloads a second store while SDK unwind is held,
+and checks zero/partial output, stale ownership, storage refusal and the actual
+`deactivate` join. This is local source/disk evidence, not a process-kill, power-loss
+or installed operating-system shutdown guarantee. Both native hosted normal-quit
+checks remain required for the resulting packaged revision.
+
+Interrupted-history persistence retains only the already-admitted frozen transcript's
+original task/store/activity/epoch/profile owner after synchronous extension
+subscription disposal or explicit Stop revokes execution authority. Admission, SDK/tool checks and
+new work continue to require live execution authority. A replacement task or
+profile still invalidates the queued history write; this storage-only lease grants
+no model or file-edit permission.
+
+### Retained native-window composer focus (PR #3134)
+
+`test/retained-composer-focus.smoke.mjs` reproduces the two-stage native-return
+sequence observed in Windows7090: initial textarea focus, return, BODY/blur,
+then foreground BODY. Verify same-owner recovery and subsequent typing at the
+preserved caret in a real browser DOM. Missing recovery must fail; background
+mount, noncomposer focus, pointer/Tab/Escape, modal, readonly/disabled/detached
+input, hidden document, replacement/ABA owner, repeated blur and unmount must not
+restore. The existing explicit-focus test remains unchanged. Browser-generated
+window events are a controlled fixture, not native OS acceptance: rerun installed
+T05 with the unchanged same-frame observations and no force-focus or extra keys.

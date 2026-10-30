@@ -1,4 +1,6 @@
 import {DelegationStop, type DelegationStopState} from "./delegationStop";
+import { CompanionExecutionPolicyError, type CompanionExecutionPolicy } from './companionExecutionPolicy.ts';
+import { companionExecutionHeader, type CompanionExecutionSdkBinding } from './companionExecutionAuthority.ts';
 import { SdkProcesses } from "./runningProcesses";
 // #282 — ORCHESTRATION: run the coach on the Claude Agent SDK instead of the
 // single-turn proxy. Drop-in with proxyChat's callback contract so
@@ -68,6 +70,7 @@ import {
   SDK_STREAM_STALL_MS,
   absolutizeToolPaths,
   profileToAgentOptions,
+  restrictCompanionExecutionTools,
   resolveSdkBinary,
   resolveSdkModule,
   resolveZodModule,
@@ -136,6 +139,12 @@ export class SdkGatewayAuthError extends ProxyAuthError {
 }
 
 export interface SdkCoachArgs {
+  /** Optional local restriction only. The prepared owner supplies authority; no production caller. */
+  companionExecutionPolicy?: CompanionExecutionPolicy;
+  /** Exact already verified reservation, still checked live by Service on every upstream call. */
+  companionExecutionBinding?: Readonly<CompanionExecutionSdkBinding>;
+  /** Recheck the same immutable Service reservation; local policy alone is not live authority. */
+  companionExecutionRevalidate?: () => Promise<void>;
   effort?: import('./protocol').CourseEffort;
   turnId?: string;
   fundingSource?: string;
@@ -183,6 +192,8 @@ export interface SdkCoachArgs {
   onDelta: (delta: string) => void;
   /** Explicit model refusal, never inferred from generated text. */
   onRefusal?: () => void;
+  /** Strict terminal result observation, independent of generated content and file changes. */
+  onTerminal?: (successful: boolean) => void;
   /**
    * #414 — what the coach is DOING (thinking / tool calls / results), so the
    * student sees real work instead of a static "만드는 중" line. Optional: the
@@ -530,6 +541,24 @@ function abortError(): Error {
  * both runtimes and the fallback inside one guard.
  */
 export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
+  const companionPolicy = args.companionExecutionPolicy;
+  // Freeze before the first await; a later caller mutation cannot retarget a CLI turn.
+  const companionBinding = args.companionExecutionBinding === undefined ? undefined : Object.freeze({...args.companionExecutionBinding});
+  const companionRevalidate = args.companionExecutionRevalidate;
+  if (companionBinding) {
+    if (!companionPolicy || typeof companionRevalidate !== 'function') throw new CompanionExecutionPolicyError('authority');
+    try { companionExecutionHeader(companionBinding,args.turnId); } catch { throw new CompanionExecutionPolicyError('authority'); }
+  }
+  const revalidateCompanion = async () => {
+    if (!companionBinding) return;
+    companionPolicy!.assertCurrent(args.cwd);
+    if (args.signal.aborted) throw abortError();
+    try { await companionRevalidate!(); }
+    catch { throw new CompanionExecutionPolicyError('authority'); }
+    companionPolicy!.assertCurrent(args.cwd);
+    if (args.signal.aborted) throw abortError();
+  };
+  companionPolicy?.assertCurrent(args.cwd);
   const mode = turnToolMode(args.toolMode);
   requireTurnTools(mode, turnToolsAvailability({ profile: args.profile, runtime: 'agent-sdk' }));
   // Bridge the caller's signal to an SDK AbortController UP FRONT — before any
@@ -548,6 +577,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     settingPath: args.binaryPathSetting,
   });
   if (!binary.available) {
+    if (companionPolicy) throw new CompanionExecutionPolicyError('sdk_required');
     console.warn(`[coach] no claude binary resolvable: ${binary.reasons.join("; ")}`);
     throw new SdkUnavailableError(
       "agent-sdk runtime selected but no claude CLI binary is available " +
@@ -559,12 +589,17 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     console.info(`[coach] claude binary via ${binary.source}: ${binary.path}`);
   }
 
-  const sdk = args.sdk ?? (await loadSdk());
+  const sdk = args.sdk ?? (await loadSdk().catch(error => {
+    // The provider's legacy fallback catches SdkUnavailableError specifically.
+    // A scoped host operation must never become a proxy turn.
+    if (companionPolicy && error instanceof SdkUnavailableError) throw new CompanionExecutionPolicyError('sdk_required');
+    throw error;
+  }));
   // A4 — the front-line orchestrator (ADR 0011). On only with the host's arguments, an
   // adult seat and a well-formed served roster, and only when A2's binding takes it
   // (orchestratorBindingFor). Off, `orchestratorTurn` is null and every line below runs
   // exactly as it did before A4.
-  const orchestratorHost = mode === 'auto' ? args.orchestrator : undefined;
+  const orchestratorHost = !companionPolicy && mode === 'auto' ? args.orchestrator : undefined;
   const orchestrator = resolveOrchestrator(args.profile, orchestratorHost);
   const servedRoster = (args.profile as { orchestrator?: unknown }).orchestrator;
   if (
@@ -574,12 +609,13 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // A roster was served and refused here: "configured but inert" must leave a trace.
     console.warn(`[coach] served orchestrator roster not used: ${orchestrator.reason}`);
   }
-  const opts = toolsForTurn(profileToAgentOptions(
+  const profileOpts = toolsForTurn(profileToAgentOptions(
     args.profile,
     orchestrator.on
       ? { model: args.model, systemPrompt: args.systemPrompt, orchestrator: orchestrator.roster }
       : { model: args.model, systemPrompt: args.systemPrompt },
   ), mode, profileAudience(args.profile));
+  const opts = companionPolicy ? restrictCompanionExecutionTools(profileOpts) : profileOpts;
   const webCitations = new SdkWebCitations(opts.permittedTools);
   const orchestratorTurn: OrchestratorTurn | null =
     orchestrator.on && orchestratorHost && opts.orchestrator
@@ -693,6 +729,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       proxyUrl: args.gatewayUrl,
       effort: args.effort,
       turnId: args.turnId,
+      companionExecutionBinding: companionBinding,
       fundingSource: args.fundingSource,
       lessonBinding: args.lessonBinding,
       lessonStep: args.lessonStep,
@@ -707,10 +744,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       pathToClaudeCodeExecutable: binary.path,
       // 코치가 "여기 뭐가 있지"를 툴로 묻지 않게 미리 준다. 실측에서 이 탐색이
       // 한 턴의 80%를 먹었다. #644 — 아동 트랙은 여기서 index.html 하나로 좁힌다.
-      workspaceFiles: coachVisibleWorkspaceFiles(args.cwd, args.profile),
+      workspaceFiles: companionPolicy ? [path.relative(companionPolicy.workspaceRoot, companionPolicy.artifactPath)] : coachVisibleWorkspaceFiles(args.cwd, args.profile),
       // #507 — 떠 있는 라이브 서버 주소(없으면 생략). 코치가 미리보기 포트를
       // 추측하던 유일한 이유는 이 값이 컨텍스트에 없었기 때문이다.
-      ...(args.previewUrl ? { previewUrl: args.previewUrl } : {}),
+      ...(!companionPolicy && args.previewUrl ? { previewUrl: args.previewUrl } : {}),
       // A4 — the check hooks (diff guard, archive, site-check summary). They report
       // through additionalContext only; A2's guardOrchestratorHooks drops anything else.
       ...(orchestratorTurn?.hooks ? { hooks: orchestratorTurn.hooks } : {}),
@@ -754,6 +791,20 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         }
       }
       input = abs.input as typeof input;
+      if (companionPolicy) {
+        try {
+          if (args.signal.aborted) throw abortError();
+          input = companionPolicy.toolInput(name, input, args.cwd) as typeof input;
+          if (companionBinding) {
+            await revalidateCompanion();
+            input = companionPolicy.toolInput(name, input, args.cwd) as typeof input;
+          }
+        }
+        catch {
+          decision(false);
+          return { behavior: 'deny' as const, message: new CompanionExecutionPolicyError('scope').message };
+        }
+      }
       const verdict = evaluateSdkToolUse({
         toolName: name,
         input,
@@ -821,6 +872,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       // doesn't read that (correct) silence as a wedged turn.
       awaitingUser += 1;
       let ok: boolean;
+      let approvalActor: 'user' | 'policy' = 'policy';
+      let approvalDenialSource: import('./denialSource').DenialSource | undefined;
       // REQ-E1 / CGP-AGENT-R-005 — a write approval covers exactly the paths the modal listed. The approver gets a
       // copy (it cannot change what runs), and the scope is re-derived after the answer: a path that now resolves
       // somewhere else (a symlink swapped in while the modal was open) is refused instead of written.
@@ -833,7 +886,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
           ...(verdict.destructive ? { destructive: true } : {}),
         });
         ok = typeof approval === 'boolean' ? approval : approval.approved;
-        decision(ok, typeof approval === 'boolean' ? 'policy' : approval.actor, typeof approval === 'boolean' ? undefined : approval.denialSource);
+        approvalActor = typeof approval === 'boolean' ? 'policy' : approval.actor;
+        approvalDenialSource = typeof approval === 'boolean' ? undefined : approval.denialSource;
+        if (!companionPolicy) decision(ok, approvalActor, approvalDenialSource);
       } finally {
         awaitingUser -= 1;
         // The tool runs from NOW, not from when it was requested. Without this restamp a long
@@ -843,11 +898,27 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       }
       if (ok && writeScope && !writeScopeCovered(writeScope, writeScopeKeys(name, input, args.cwd))) {
         console.warn(`[coach] write refused after approval: ${name} no longer writes the approved path`);
+        if (companionPolicy) decision(false);
         return { behavior: "deny" as const, message: WRITE_SCOPE_CHANGED_MESSAGE };
       }
       // The CLI writes the resolved path the gate judged, not the spelling it was given: no link or `..` in the
       // spelling can be read differently by the CLI than by the gate (CGP-AGENT-R-005 verify 2 F1).
       if (ok && writeScope) input = withResolvedWritePath(input, writeScope) as typeof input;
+      if (ok && companionPolicy) {
+        try {
+          if (args.signal.aborted) throw abortError();
+          input = companionPolicy.toolInput(name, input, args.cwd) as typeof input;
+          if (companionBinding) {
+            await revalidateCompanion();
+            input = companionPolicy.toolInput(name, input, args.cwd) as typeof input;
+          }
+        }
+        catch {
+          decision(false);
+          return { behavior: 'deny' as const, message: new CompanionExecutionPolicyError('scope').message };
+        }
+      }
+      if (companionPolicy) decision(ok, approvalActor, approvalDenialSource);
       if(delegationStop?.requested && (name==="Task"||name==="Agent")){decision(false,"user");return {behavior:"deny" as const,message:"도우미 중지를 요청한 작업에서는 새 도우미를 시작하지 않아요."};}
       return ok
         ? { behavior: "allow" as const, updatedInput: input }
@@ -856,6 +927,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     abortController,
   };
 
+  companionPolicy?.assertCurrent(args.cwd);
+  if (companionPolicy && args.signal.aborted) throw abortError();
+  if (companionBinding) await revalidateCompanion();
   const stream = sdk.query({ prompt, options });
   delegationStop = new DelegationStop(id=>stream.stopTask ? stream.stopTask(id) : Promise.reject(new Error("SDK task stop unavailable")),state=>args.onDelegationStop?.(state));
   if(stream.stopTask)args.onDelegationControl?.(()=>delegationStop?.request());
@@ -924,6 +998,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     },
     onDelta: args.onDelta,
     onRefusal: args.onRefusal,
+    ...(args.onTerminal ? { onTerminal: args.onTerminal } : {}),
     ...(args.onActivity ? { onActivity: args.onActivity } : {}),
     ...(args.onUsage ? { onUsage: args.onUsage } : {}),
     stallMs,

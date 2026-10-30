@@ -1,0 +1,315 @@
+/** Browser-side orchestration only. Authenticated transport and computer selection remain caller-owned. */
+import { CompanionLocalCheckpoint, COMPANION_CHECKPOINT_TTL_MS, companionCheckpointContext, sameCompanionCheckpointContext } from './companionSessionCheckpoint.ts';
+import type { CompanionCheckpointContext, CompanionCheckpointMessage } from './companionSessionCheckpoint.ts';
+import { CompanionPreviewResultReceiver } from '../../src/companionPreviewResult.ts';
+import type { CompanionHostRequest, CompanionDispatchResult } from '../../src/companionHostDispatch';
+import { companionSelectionIdentity } from './companionSessionPresentation.ts';
+import type { CompanionSessionController, CompanionSessionSelection, CompanionSessionSnapshot } from './companionSessionPresentation.ts';
+
+export interface CompanionSessionDescriptor {
+  computerName: string;
+  online: boolean;
+  selection: CompanionSessionSelection | null;
+  /** Existing authenticated session + verified cipher identity, required only for opt-in checkpoints. */
+  checkpointContext?: CompanionCheckpointContext;
+}
+export interface CompanionSessionPorts {
+  /** Resolve through the existing current authenticated session; no credentials belong in snapshots. */
+  /** before_ack still checks local ownership/selection. A caller may omit a duplicate
+   * status request only when its ACK independently revalidates live peer/session authority. */
+  descriptor(signal: AbortSignal, phase?: 'readiness' | 'before_ack'): Promise<CompanionSessionDescriptor | null>;
+  transport: {
+    prepare(text: string, messageId: string, signal: AbortSignal): Promise<unknown>;
+    send(messageId: string, signal: AbortSignal): Promise<unknown>;
+    /** Only authenticated/decrypted peer messages from the existing client. */
+    receive(signal: AbortSignal): Promise<readonly { message_id: string; text: string }[]>;
+    /** Transport receipt only, never host durable acceptance or execution consent. */
+    acknowledge(messageId: string, signal: AbortSignal): Promise<unknown>;
+  };
+}
+export interface CompanionSessionClock {
+  setTimeout(callback: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+}
+const clock: CompanionSessionClock = {
+  setTimeout: (callback, ms) => globalThis.setTimeout(callback, ms),
+  clearTimeout: handle => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+const terminal = (result: CompanionDispatchResult) => ['completed', 'denied', 'failed', 'desktop_handoff'].includes(result.state);
+const stopped = () => Error('companion_session_stopped');
+
+/** One selected request per instance. Reconnect receives/reconciles; it never prepares or sends again. */
+export class CompanionMobileSessionController implements CompanionSessionController {
+  private snapshot: CompanionSessionSnapshot = Object.freeze({ computerName: '내 컴퓨터', connection: 'waiting_for_computer', selection: null, receipt: null, busy: false });
+  private readonly listeners = new Set<(snapshot: CompanionSessionSnapshot) => void>();
+  private active: { abort: AbortController; promise: Promise<void> } | null = null;
+  private closed = false;
+  private request: Readonly<CompanionHostRequest> | null = null;
+  private attempted = false;
+  private availability: 'unknown' | 'online' | 'offline' = 'unknown';
+  private receiver: CompanionPreviewResultReceiver | null = null;
+  private readonly validated = new Map<string, string>();
+  private readonly pendingAcks = new Set<string>();
+  private verified: CompanionDispatchResult | null = null;
+  private processing: Promise<void> | null = null;
+  private inbox: Promise<readonly { message_id: string; text: string }[]> | null = null;
+  private batch: readonly { message_id: string; text: string }[] | null = null;
+  private cursor = 0;
+  private readonly timer: CompanionSessionClock;
+  private readonly timeoutMs: number;
+  private readonly pollMs: number;
+  private readonly ports: CompanionSessionPorts;
+  private readonly checkpoint?: CompanionLocalCheckpoint;
+  private checkpointContext: CompanionCheckpointContext | null = null;
+  private checkpointStarted = 0;
+  private restoreHeld = false;
+  constructor(ports: CompanionSessionPorts, options: { timeoutMs?: number; pollMs?: number; clock?: CompanionSessionClock; checkpoint?: CompanionLocalCheckpoint } = {}) {
+    this.ports = ports;
+    this.checkpoint = options.checkpoint;
+    // Opt-in storage must be inspected explicitly before any new request can start.
+    this.restoreHeld = !!options.checkpoint;
+    this.timeoutMs = options.timeoutMs ?? 25_000;
+    this.pollMs = options.pollMs ?? 100;
+    this.timer = options.clock ?? clock;
+    if (!Number.isFinite(this.timeoutMs) || this.timeoutMs < 1 || this.timeoutMs > 60_000
+      || !Number.isFinite(this.pollMs) || this.pollMs < 1 || this.pollMs > 1_000) throw Error('companion_session_invalid_bounds');
+  }
+  getSnapshot = (): CompanionSessionSnapshot => this.snapshot;
+  subscribe = (listener: (snapshot: CompanionSessionSnapshot) => void): (() => void) => {
+    if (this.closed) return () => {};
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  };
+  private emit(change: Partial<CompanionSessionSnapshot>): void {
+    if (this.closed) return;
+    this.snapshot = Object.freeze({ ...this.snapshot, ...change });
+    for (const listener of this.listeners) {
+      if (this.closed) break;
+      // A presentation subscriber cannot poison the request/ACK lifecycle.
+      try { listener(this.snapshot); } catch { /* subscriber owns its rendering errors */ }
+    }
+  }
+  private check(signal: AbortSignal): void { if (this.closed || signal.aborted) throw stopped(); }
+  private async bounded<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+    this.check(signal);
+    let abort: () => void = () => {};
+    const cancelled = new Promise<never>((_, reject) => { abort = () => reject(stopped()); signal.addEventListener('abort', abort, { once: true }); });
+    try { const value = await Promise.race([work, cancelled]); this.check(signal); return value; }
+    finally { signal.removeEventListener('abort', abort); }
+  }
+  private delay(signal: AbortSignal): Promise<void> {
+    let handle: unknown;
+    const cleanup = () => this.timer.clearTimeout(handle);
+    const wait = new Promise<void>(resolve => { handle = this.timer.setTimeout(resolve, this.pollMs); });
+    signal.addEventListener('abort', cleanup, { once: true });
+    return this.bounded(wait, signal).finally(() => { cleanup(); signal.removeEventListener('abort', cleanup); });
+  }
+  private run(action: (signal: AbortSignal) => Promise<void>): Promise<void> {
+    if (this.closed) return Promise.reject(stopped());
+    if (this.active) return this.active.promise;
+    this.availability = 'unknown';
+    const abort = new AbortController();
+    const deadline = this.timer.setTimeout(() => abort.abort(), this.timeoutMs);
+    // Defer work so reentrant subscriptions/gestures observe the same in-flight operation.
+    const promise = Promise.resolve().then(() => action(abort.signal)).catch(() => {
+      if (!this.closed) this.emit({ connection: 'waiting_for_computer', waitingReason: this.attempted && this.availability !== 'offline' ? 'request_unconfirmed' : 'host_unavailable' });
+    }).finally(() => {
+      this.timer.clearTimeout(deadline);
+      if (this.active?.abort === abort) this.active = null;
+      this.emit({ busy: false });
+    });
+    this.active = { abort, promise };
+    return promise;
+  }
+  private async current(signal: AbortSignal, phase: 'readiness' | 'before_ack' = 'readiness'): Promise<boolean> {
+    this.check(signal);
+    const descriptor = await this.bounded(this.ports.descriptor(signal, phase), signal);
+    if (!descriptor) { this.availability = 'unknown'; return false; }
+    this.availability = descriptor.online ? 'online' : 'offline';
+    const selection = descriptor.selection ? Object.freeze({ ...descriptor.selection, request: Object.freeze({ ...descriptor.selection.request }) }) : null;
+    if (this.request && companionSelectionIdentity(selection?.request) !== companionSelectionIdentity(this.request)) return false;
+    if (this.checkpoint) {
+      if (!selection) return false;
+      const context = companionCheckpointContext(descriptor.checkpointContext, selection.request);
+      if (this.request && this.checkpointContext && !sameCompanionCheckpointContext(context, this.checkpointContext)) return false;
+      this.checkpointContext = context;
+    }
+    this.emit({ computerName: descriptor.computerName, selection, connection: descriptor.online ? 'connected' : 'waiting_for_computer', waitingReason: descriptor.online ? undefined : 'host_unavailable' });
+    return descriptor.online;
+  }
+  reconnect = (expected: Readonly<CompanionHostRequest> | null = null): Promise<void> => this.run(async signal => {
+    this.emit({ busy: true, connection: 'reconnecting' });
+    if (this.restoreHeld) throw stopped();
+    if (expected && companionSelectionIdentity(expected) !== companionSelectionIdentity(this.request ?? this.snapshot.selection?.request)) throw stopped();
+    if (!await this.current(signal)) throw stopped();
+    if (this.attempted) await this.poll(signal);
+  });
+  requestPreview = (expected: Readonly<CompanionHostRequest>): Promise<void> => {
+    // Snapshot the gesture before an awaiting caller can mutate it.
+    const selected = Object.freeze({ ...expected });
+    return this.run(async signal => {
+      this.emit({ busy: true });
+      if (this.restoreHeld) throw stopped();
+      if (this.attempted) {
+        if (companionSelectionIdentity(selected) !== companionSelectionIdentity(this.request)) throw stopped();
+        if (!await this.current(signal)) throw stopped();
+        await this.poll(signal); return;
+      }
+      if (!await this.current(signal) || selected.operation !== 'preview.read'
+        || companionSelectionIdentity(selected) !== companionSelectionIdentity(this.snapshot.selection?.request)) throw stopped();
+      this.request = selected;
+      this.receiver = new CompanionPreviewResultReceiver(selected);
+      // Mark before any delivery await: uncertainty must never become automatic resubmission.
+      this.attempted = true;
+      this.checkpointStarted = this.checkpoint?.time() ?? 0;
+      await this.persist(signal);
+      await this.bounded(this.ports.transport.prepare(JSON.stringify(selected), selected.requestId, signal), signal);
+      await this.bounded(this.ports.transport.send(selected.requestId, signal), signal);
+      await this.poll(signal);
+    });
+  };
+  private async persist(signal: AbortSignal): Promise<void> {
+    this.check(signal);
+    if (!this.checkpoint || !this.request || !this.checkpointContext) return;
+    await this.bounded(this.checkpoint.save({
+      schema: 'hps-companion-local-checkpoint/1', createdAt: this.checkpointStarted,
+      expiresAt: this.checkpointStarted + COMPANION_CHECKPOINT_TTL_MS,
+      context: this.checkpointContext, request: { ...this.request },
+      validated: Array.from(this.validated, ([message_id, text]) => ({ message_id, text })),
+      pendingAcks: [...this.pendingAcks], batch: this.batch ? this.batch.map(m=>({message_id:m.message_id,text:m.text})) : [], cursor: this.cursor,
+    }), signal);
+  }
+  /** Explicit data restore only; caller must reattach the SAME live cipher/session, never recreate keys/counters. */
+  restore = async (reattach: (saved: { context: Readonly<CompanionCheckpointContext>; request: Readonly<CompanionHostRequest>; messages: readonly Readonly<CompanionCheckpointMessage>[] }, signal: AbortSignal) => Promise<'same_live_transport_verified_bytes' | 'keys_lost' | 'unavailable'>): Promise<'restored' | 'empty' | 'invalid' | 'stale' | 'keys_lost' | 'held'> => {
+    if (this.attempted || this.active || this.closed || !this.checkpoint) return 'held';
+    let status: 'restored' | 'empty' | 'invalid' | 'stale' | 'keys_lost' | 'held' = 'held';
+    this.restoreHeld = true;
+    await this.run(async signal => {
+      this.emit({ busy: true, connection: 'reconnecting' });
+      let saved;
+      try { saved = await this.bounded(this.checkpoint!.load(), signal); }
+      catch (error) {
+        if (error instanceof SyntaxError || (error instanceof Error && error.message === 'companion_checkpoint_invalid')) {
+          await this.bounded(this.checkpoint!.forget(), signal); status = 'invalid';
+        }
+        throw stopped();
+      }
+      if (!saved) { this.restoreHeld = false; status = 'empty'; this.emit({ connection: 'waiting_for_computer' }); return; }
+      this.request = Object.freeze({ ...saved.request }); this.attempted = true;
+      this.checkpointContext = Object.freeze({ ...saved.context }); this.checkpointStarted = saved.createdAt;
+      if (!await this.current(signal)) { status = 'stale'; throw stopped(); }
+      const messages = [...saved.validated, ...saved.batch].map(m=>Object.freeze({...m}));
+      // The surviving authenticated owner must attest exact original received bytes,
+      // not merely that stored metadata or a complete flag looks plausible.
+      const attached = await this.bounded(reattach(Object.freeze({context:this.checkpointContext,request:this.request,messages:Object.freeze(messages)}), signal), signal);
+      if (attached !== 'same_live_transport_verified_bytes') { status = attached === 'keys_lost' ? 'keys_lost' : 'held'; throw stopped(); }
+      const receiver = new CompanionPreviewResultReceiver(this.request);
+      let verified: CompanionDispatchResult | null = null;
+      try {
+        for (const message of saved.validated) {
+          if (verified && terminal(verified)) throw Error('companion_checkpoint_invalid');
+          const outcome = await this.bounded(receiver.accept(message.text), signal);
+          if (outcome) {
+            verified = Object.freeze({ ...outcome, ...(outcome.artifact ? { artifact: Object.freeze({ ...outcome.artifact }) } : {}) });
+            if (!terminal(outcome)) receiver.reset();
+          }
+        }
+        if (!await this.current(signal)) { status = 'stale'; throw stopped(); }
+        const stillAttached = await this.bounded(reattach(Object.freeze({context:this.checkpointContext!,request:this.request!,messages:Object.freeze(messages)}), signal), signal);
+        if (stillAttached !== 'same_live_transport_verified_bytes') { status = stillAttached === 'keys_lost' ? 'keys_lost' : 'held'; throw stopped(); }
+        this.receiver = receiver; this.verified = verified;
+        for (const message of saved.validated) this.validated.set(message.message_id, message.text);
+        for (const id of saved.pendingAcks) this.pendingAcks.add(id);
+        this.batch = saved.batch.length ? saved.batch.map(m=>Object.freeze({...m})) : null; this.cursor = saved.cursor;
+        this.restoreHeld = false;
+        await this.poll(signal);
+        status = 'restored';
+      } catch (error) { if (this.receiver !== receiver) receiver.discard(); throw error; }
+    });
+    return status;
+  };
+  private async flushAcks(signal: AbortSignal): Promise<void> {
+    for (const id of this.pendingAcks) {
+      this.check(signal);
+      await this.persist(signal);
+      await this.bounded(this.ports.transport.acknowledge(id, signal), signal);
+      this.pendingAcks.delete(id);
+      await this.persist(signal);
+    }
+    if (this.verified && this.request) {
+      if (!await this.current(signal)) throw stopped();
+      this.emit({ receipt: Object.freeze({ request: this.request, outcome: this.verified }) });
+    }
+  }
+  private async poll(signal: AbortSignal): Promise<void> {
+    if (this.processing) { await this.bounded(this.processing, signal); this.processing = null; }
+    await this.flushAcks(signal);
+    if (this.verified && terminal(this.verified)) return;
+    while (true) {
+      this.check(signal);
+      // A relay may deduplicate the whole delivered batch. Keep both its bytes and
+      // cursor until each message's validation/ACK obligation is retained locally.
+      if (!this.batch) {
+        if (!this.inbox) {
+          const pending = this.ports.transport.receive(signal).catch(error => {
+            if (this.inbox === pending) this.inbox = null;
+            throw error;
+          });
+          this.inbox = pending;
+        }
+        const messages = await this.bounded(this.inbox, signal);
+        if (messages.length > 64) throw Error('companion_session_inbox_bound');
+        this.batch = messages.map(message => Object.freeze({ ...message }));
+        this.cursor = 0;
+        this.inbox = null;
+        await this.persist(signal);
+      }
+      while (this.cursor < this.batch.length) {
+        const message = this.batch[this.cursor];
+        this.check(signal);
+        if (typeof message.message_id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(message.message_id)) throw Error('companion_session_invalid_message');
+        const previous = this.validated.get(message.message_id);
+        if (previous !== undefined && previous !== message.text) throw Error('companion_session_message_conflict');
+        if (previous === undefined) {
+          if (this.validated.size >= 64 || !this.receiver) throw Error('companion_session_inbox_bound');
+          // Preserve in-flight verification across a timed-out poll; reconnect may finish it,
+          // without requesting the already-ACKed partial bytes or resending the request.
+          this.processing = this.receiver.accept(message.text).then(outcome => {
+            if (this.closed) return;
+            this.validated.set(message.message_id, message.text);
+            this.pendingAcks.add(message.message_id);
+            this.cursor++;
+            if (outcome) {
+              this.verified = Object.freeze({ ...outcome, ...(outcome.artifact ? { artifact: Object.freeze({ ...outcome.artifact }) } : {}) });
+              if (!terminal(outcome)) this.receiver?.reset();
+            }
+          });
+          await this.bounded(this.processing, signal);
+          this.processing = null;
+        } else {
+          this.pendingAcks.add(message.message_id);
+          this.cursor++;
+        }
+        if (!await this.current(signal, 'before_ack')) throw stopped();
+        this.pendingAcks.add(message.message_id);
+        await this.flushAcks(signal);
+        if (this.verified && terminal(this.verified)) return;
+      }
+      this.batch = null; this.cursor = 0;
+      await this.delay(signal);
+    }
+  }
+  /** Terminal cancellation. Ignored port cancellation cannot emit a late receipt or initiate an ACK. */
+  dispose = (): void => {
+    if (this.closed) return;
+    this.closed = true;
+    this.active?.abort.abort(); this.receiver?.discard(); this.receiver = null;
+    this.inbox = null; this.processing = null; this.batch = null; this.cursor = 0;
+    this.checkpointContext = null;
+    this.listeners.clear(); this.validated.clear(); this.pendingAcks.clear(); this.verified = null; this.request = null;
+    this.snapshot = Object.freeze({ ...this.snapshot, selection: null, receipt: null, busy: false, connection: 'waiting_for_computer', waitingReason: undefined });
+  };
+  /** Awaitable terminal erase. Ordered after already-started saves, so a late save cannot resurrect data. */
+  forget = async (): Promise<void> => { this.dispose(); await this.checkpoint?.forget(); };
+  cancel = (): Promise<void> => this.forget();
+}

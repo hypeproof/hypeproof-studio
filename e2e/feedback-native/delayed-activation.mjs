@@ -1,6 +1,7 @@
 import {beginFocusObservation,observedBindingScope} from './focus-diagnostics.mjs';
 // Opt-in hosted public-UI scenario. The debugger only delays existing production execution.
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {activationBreakpoint,freeInspectorPort,OwnedExtensionGate} from './extension-inspector.mjs';
@@ -55,6 +56,16 @@ export function checkDelayedDestination({directory,root,service,activityId,bindi
  if(!explicitRecovery)assert.equal(current.sha256,binding.sha256,'Destination binding preserved before explicit recovery');
  else{const record=JSON.parse(fs.readFileSync(current.file,'utf8'));assert(/^hps\.activity\.credential\.[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(record.ref),'Explicit recovery must retain a well-formed stored credential reference');}
  assert.deepEqual(workspaceFiles(root),files,'Destination files preserved');return current.sha256;
+}
+// A startup gate can fail while public restart is still awaiting restored UI.
+// Preserve that observed failure; the later UI timeout is evidence, not a replacement.
+export function delayedFailure(proof,caught,startupFailure){
+ if(!proof.initial_owned_startup&&startupFailure&&startupFailure!==caught){
+  proof.secondary_failure={phase:'startup_restart_observation',error_type:caught instanceof Error?'Error':'unknown',
+   message_sha256:createHash('sha256').update(String(caught?.message??'')).digest('hex')};
+  return startupFailure;
+ }
+ return caught;
 }
 export async function runDelayedActivation({c,ui,app,launch,openFromStart,nativeOpenBoundFolder,readDraft,focusChat,workspaceFiles,activityId,bundleHash,draft,saveProgress,requestCandidate,onGate=()=>{}}){
  delayedPrerequisite(c);
@@ -138,7 +149,7 @@ export async function runDelayedActivation({c,ui,app,launch,openFromStart,native
   await restart([]);assert.equal((await readDraft()).value,draft,'Ungated ordinary A restoration after scenario');
   assert.equal(generationCount(await serviceCalls()),generationsBefore,'Added gate must cause zero SDK/model/count_tokens dispatches');proof.added_model_requests=0;
   proof.ordinary_launch_restored=true;proof.status='PASS';persist();return proof;
- }catch(error){primary=error;proof.status='FAIL';if(proof.stages.at(-1)?.status==='RUNNING')proof.stages.at(-1).status='FAIL';throw error;}
+ }catch(error){primary=delayedFailure(proof,error,gate?.failure);proof.status='FAIL';if(proof.stages.at(-1)?.status==='RUNNING')proof.stages.at(-1).status='FAIL';throw primary;}
  finally{
   if(gate){try{await gate.close();proof.cleanup='PASS';}catch(error){proof.cleanup='FAIL';proof.cleanup_error=error.message;if(!primary)throw error;}}
   onGate(null);

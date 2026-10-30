@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import {NativeUI,waitFor,sleep,sameDisplayedWorkspace} from './native-ui.mjs';
 import {sha256,within} from './safety.mjs';
 import {coreCommandLabel} from '../fixtures/shell-labels.mjs';
+import {beginRetainedFocusObservation} from './retained-focus-observation.mjs';
 export function ownedWindowPrerequisite(c,env=process.env){
  if(env.GITHUB_ACTIONS!=='true'||!env.RUNNER_TEMP||c.attach)throw Object.assign(Error('Two-window input requires an owned hosted desktop'),{blocked:true});
  if(!within(fs.realpathSync(c.userDataDir),fs.realpathSync(env.RUNNER_TEMP)))throw Error('Owned profile must be within this hosted runner temp');
@@ -30,14 +31,38 @@ export function assertUnchangedOtherWindow(expected,actual){
 }
 // Use the shell's public picker so nativeHostService, not CDP focus emulation,
 // activates the exact already observed window. No title suffix matching.
-export async function switchOwnedWindow(from,to){
+export async function switchOwnedWindow(from,to,{observeChatFocus=false}={}){
  assert(from.workbenchId&&to.workbenchId&&from.workbenchId!==to.workbenchId&&from.endpoint===to.endpoint,'Two distinct explicitly owned windows required');
  const target=await to.workbench();
- if(await target.evaluate('document.hasFocus()'))return;
+ if(await target.evaluate('document.hasFocus()')){if(observeChatFocus)await to.restoredFocus();return;}
  const current=await from.workbench();assert.equal(await current.evaluate('document.hasFocus()'),true,'Switch Window must start in the actually focused owned window');
  const title=await target.evaluate('document.title');assert.equal(typeof title,'string');assert(title.trim(),'Observed destination title required');
- await from.palette('Switch Window...');await from.quick(title);
+ await from.palette(coreCommandLabel('workbench.action.switchWindow'));await from.quick(title);
  await waitFor(()=>target.evaluate('document.hasFocus()'),'public Switch Window activated exact owned destination');
+ // A newly activated workbench can report focus before its retained webview has
+ // completed native focus restoration. Observe that destination before another
+ // palette command; no extra key, focus mutation or retry repairs it.
+ if(observeChatFocus)await to.restoredFocus();
+}
+// Closing the secondary returns native focus asynchronously. Observe the exact
+// A document captured after its final reload before a later command opens F1.
+export async function closeSecondaryAndObserveOriginal(ui,other,retained,{onClosed=()=>{},timeout=30000}={}){
+ assert(ui.workbenchId&&other.workbenchId&&ui.workbenchId!==other.workbenchId&&ui.endpoint===other.endpoint,'Two distinct explicitly owned windows required');
+ if(retained)assert.equal(retained.workbench,ui.workbenchId,'Original return must retain the exact owned window');
+ await other.closeOwnedWindow();onClosed();
+ if(!retained)return {secondary_closed:true,original_return_observed:false}; // Failed main path still closes its owned secondary.
+ await ui.retainedChatReady(retained,timeout);
+ return {secondary_closed:true,original_return_observed:true,document:retained,focus_repaired:false};
+}
+// step() records a failed T05 instead of throwing. Progress/cleanup alone must
+// never authorize the next history command after an unobserved native return.
+export function requireHistoryWindowReturn(tests,selected){
+ if(selected===false)return;
+ const fail=()=>{throw Object.assign(Error('History input requires passed T05 and exact observed original-window return'),{blocked:true});};
+ if(selected!==true||!Array.isArray(tests))fail();
+ const matches=tests.filter(t=>t?.id==='T05-owned-simultaneous-windows');
+ if(matches.length!==1)fail();const test=matches[0],proof=test.original_return,document=proof?.document;
+ if(test.status!=='PASS'||test.secondary_closed!==true||proof?.secondary_closed!==true||proof.original_return_observed!==true||proof.focus_repaired!==false||typeof test.original_window!=='string'||!test.original_window||document?.workbench!==test.original_window||['target','frame','loader'].some(key=>typeof document?.[key]!=='string'||!document[key]))fail();
 }
 export async function finishOwnedWindows({primary,observe,cleanup,proof,persist}){
  // Diagnostic failures and cleanup must never replace the original failure.
@@ -82,7 +107,7 @@ export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,w
  const selectedBinding=selectOwnedBinding(bindings,fs.realpathSync(c.workspace.c),c.service.origin+'/v1',activityId);
  const bindingFile=selectedBinding.file,bindingHash=selectedBinding.sha256,filesC=workspaceFiles(c.workspace.c);
  const proof={scope:'actual simultaneous windows and destination noninterference',original_window:original.info.id,secondary_window:null,secondary_closed:false,pending_marker_consumption:'NOT_OBSERVED; internal transient marker is not inferred from UI',slow_native_activation:'NOT_RUN; deterministic61s/expiry controls reused',observations:0,phases:[],diagnostics:[]};
- let secondary,other,cli,primary;ui.workbenchId=original.info.id;
+ let secondary,other,cli,primary,focusObservation,returnChat;ui.workbenchId=original.info.id;
  const persist=()=>saveProgress(structuredClone(proof));
  const phase=name=>{proof.phases.push({phase:name,at:new Date().toISOString()});persist();};
  const diagnose=async()=>{
@@ -95,6 +120,8 @@ export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,w
   proof.ui_phases={original:ui.phases,secondary:other?.phases};persist();
  };
  try{
+  const retained=await ui.observeRetainedFocusTarget();focusObservation=await beginRetainedFocusObservation(ui,retained);
+  proof.retained_focus=[await focusObservation.snapshot('before_secondary')];persist();
   phase('open-secondary');cli=openOwnedWindow(c.workspace.c);cli.on('error',()=>{});
   secondary=await waitFor(async()=>{const pages=(await ui.list()).filter(t=>t.type==='page'&&t.url.includes('workbench'));return pages.length===1?null:newOwnedWorkbench(before,pages);},'one new owned workbench while original remains',60000);
   proof.secondary_window=secondary.id;persist();other=new NativeUI(c.cdp,secondary.id);
@@ -107,7 +134,12 @@ export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,w
     draft:await chat.evaluate("document.querySelector('.hps-input textarea').value"),bindingHash:sha256(bindingFile),files:workspaceFiles(c.workspace.c)});proof.observations++;
   };
   await waitFor(()=>cChat.evaluate(`document.querySelector('.hps-input textarea')?.value===${JSON.stringify(draft+'-independent-activity-B')}`),'second window restores its existing B draft');await observeOther();
-  phase('switch-original-through-public-picker');await switchOwnedWindow(other,ui);phase('original-focus-observed');
+  proof.retained_focus.push(await focusObservation.snapshot('before_switch'));persist();
+  phase('switch-original-through-public-picker');
+  try{await switchOwnedWindow(other,ui,{observeChatFocus:true});proof.retained_focus.push(await focusObservation.snapshot('after_switch'));}
+  catch(error){proof.retained_focus.push(await focusObservation.snapshot('switch_refused'));throw error;}
+  finally{proof.retained_focus_cleanup=await focusObservation.finish();focusObservation=undefined;persist();}
+  phase('original-focus-observed');
   const oldChat=await ui.frame('.hps-input textarea');assert.equal(await oldChat.evaluate("document.querySelector('.hps-input textarea').value"),draft);
   phase('original-open-saved-activity');await ui.palette(commandTitle);const view=await ui.frame('.studio-start');await ui.savedActivity(view,c.workspace.b);
   await waitFor(()=>view.evaluate("document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),'original window candidate');await ui.chooseCandidateFolder(view,c.workspace.b);
@@ -120,15 +152,16 @@ export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,w
   await other.shot(path.join(c.evidence,'simultaneous-other-C.png'));await ui.shot(path.join(c.evidence,'simultaneous-destination-B.png'));persist();
   // Restore the original window using the public native File command before cleanup.
   phase('original-return-to-A');await ui.palette(coreCommandLabel('workbench.action.files.openFolder'));await ui.ownedOpenFolder(c.workspace.a+path.sep);
-  await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)),'original window returns to A',60000);await ui.restoredDraft(draft);await observeOther();
+  await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)),'original window returns to A',60000);await ui.restoredDraft(draft);await observeOther();returnChat=await ui.chatDocumentIdentity();
  }catch(error){primary=error;proof.primary_error=error.message;proof.failed_phase=proof.phases.at(-1)?.phase;persist();}
+ if(focusObservation){proof.retained_focus_cleanup=await focusObservation.finish();persist();}
  await finishOwnedWindows({primary,proof,persist,observe:diagnose,cleanup:async()=>{
   try{
    if(other){
     phase('cleanup-switch-secondary');await switchOwnedWindow(ui,other);
-    phase('cleanup-close-secondary');await other.closeOwnedWindow();proof.secondary_closed=true;
+    phase('cleanup-close-secondary');proof.original_return=await closeSecondaryAndObserveOriginal(ui,other,returnChat,{onClosed:()=>{proof.secondary_closed=true;phase('cleanup-observe-original-return');}});
    }
   }finally{other?.close();ui.workbenchId=undefined;}
  }});
- assert(proof.secondary_closed);return {...proof,provider_dispatch:false,token_reentry:false};
+ assert(proof.secondary_closed);assert.equal(proof.original_return?.original_return_observed,true,'Original A native return must be observed before another command');return {...proof,provider_dispatch:false,token_reentry:false};
 }
