@@ -7855,7 +7855,7 @@ block kind's stroke icon over the label 자료), the block's REQ-STUDIO-LEARNING
 line under it (one line, ellipsis; once open the whole sentence moves under the work surface, REQ-STUDIO-LEARNING-BLOCK-CAPTION), and a 44px "열어 보기" button (`aria-expanded`,
 `aria-controls`). Pressing it expands the block in place: the same card grows in flow and pushes what follows it down, so
 nothing covers it and it covers nothing; the button then reads "닫기". The card starts closed for every step; the
-open/closed choice is keyed to the lesson version and step, so opening one step's card never opens another's (it is not
+open/closed choice is keyed to the course, lesson version, content hash and step, so even a new version with identical content starts closed; returning to a previously opened version restores only its own choice. Opening one step's card never opens another's (it is not
 stored and not an evidence event). The card is the block region itself: it carries the block identity (`data-hps-material`, `-step`, `-version`), is
 named by the title in its head and described by the controls help. The live state line is never in the hidden body, so
 a step switch or a host save that lands on a closed card is shown and announced in the same region. The controls help
