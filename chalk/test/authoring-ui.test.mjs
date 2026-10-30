@@ -115,3 +115,6 @@ assert.match(learn, /'이 수업의 AI 이름: '\+c\.assistant\.display_name\+' 
 assert.doesNotMatch(learn, /innerHTML/, 'lesson text is never rendered as HTML');
 
 console.log('PASS authoring ui: mission/week/completion are edited and the rest of learning preserved, AI name round-trips, feature narrowing is opt-in and omitted when inheriting, unknown keys survive a save, learn page renders via textContent');
+
+const { runAuthoringSaveRecoveryBrowser } = await import('./authoring-save-recovery.browser.mjs');
+await runAuthoringSaveRecoveryBrowser();
