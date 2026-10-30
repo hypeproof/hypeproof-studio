@@ -68,6 +68,8 @@
 .tw-task[aria-current="page"] { background: var(--vscode-list-inactiveSelectionBackground, var(--hp-bg-control-hover)); color: var(--vscode-list-inactiveSelectionForeground, var(--vscode-foreground)); border-color: var(--tw-line); }
 .tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-font-caption); }
 .tw-task-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); margin-top: var(--ds-c-studio-taskworkspace-space-12); color: var(--tw-muted); font-variant-numeric: tabular-nums; }
+/* A selected row must use its selection foreground for small metadata too. */
+.tw-task[aria-current="page"] .tw-task-meta { color: inherit; }
 .tw-local-note { color: var(--tw-muted); margin: var(--ds-c-studio-taskworkspace-space-18) var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-13); font-size: var(--hp-font-caption); }
 /* CGP-CHAT-R-025 — 보관함: same quiet rail rows, no destructive colour (nothing is deleted). */
 .tw-archive-heading h2 { font: inherit; color: inherit; margin: 0; }
