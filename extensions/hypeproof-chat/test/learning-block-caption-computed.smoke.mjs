@@ -7,13 +7,14 @@
 // seat, dark and light, at 100 % (800 and 1420 panes) and at 200 % zoom (device scale 2 with half the CSS width: the 480px
 // rail, the 640px WCAG reflow width, and the 800 and 1420 panes). With the card open, on every change:
 //   the caption (the block's polite status line) sits under the work surface (its top is at or below the body's bottom)
-//   and inside the card; it is drawn (a hit test at its centre lands on it); 14px or more; 4.5:1 or more against the
+//   and inside the card; every line is drawn (hit tests at its top and bottom land on it); 14px or more; 4.5:1 or more against the
 //   background actually behind it; it shows the whole sentence (no ellipsis, nothing clipped: scrollWidth <= clientWidth,
 //   every line box inside the viewport) and the page never scrolls sideways; its words change in the same mounted node
 //   within 500 ms of the input event (typing, a host save, a cleared field).
 // With the card closed (a step switch lands on a closed card) the caption is still drawn at 14px in the card.
+// Every mission action remains reachable by native Tab navigation; every header text line can be exposed by its scroll.
 // Self-test: injected later stylesheets (caption above the body, caption kept on one clipped line, a 12px caption, grey
-// text under 4.5:1, a caption wider than the rail, a screen-reader-only caption) must each be caught.
+// text under 4.5:1, a caption wider than the rail, a covering mission header, a screen-reader-only caption) must each be caught.
 // Without a headless Chromium this prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 (set by CI) makes that a failure.
 // LEARN_CAPTION_PNG_DIR=<dir> also saves one PNG per combination for a person to look at.
 import { createServer } from 'node:http';
@@ -84,14 +85,15 @@ window.caption=()=>{const live=document.querySelector('[data-block-card] .hp-mat
   const card=live.closest('[data-block-card]'),body=card.querySelector('.hp-block-card-body');card.scrollIntoView({block:'center'});
   const shows=(e)=>{for(let n=e;n&&n!==document.documentElement;n=n.parentElement){const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden')return false}return e.getClientRects().length>0};
   const bgOf=(n)=>{for(;n;n=n.parentElement){const b=getComputedStyle(n).backgroundColor;if(b&&b!=='rgba(0, 0, 0, 0)'&&b!=='transparent')return b}return getComputedStyle(document.body).backgroundColor};
-  const r=live.getBoundingClientRect(),c=card.getBoundingClientRect(),s=getComputedStyle(live),vw=document.documentElement.clientWidth;
   live.scrollIntoView({block:'center'});
-  const r2=live.getBoundingClientRect(),hit=document.elementFromPoint(r2.left+Math.min(8,r2.width/2),r2.top+r2.height/2);
+  const r=live.getBoundingClientRect(),c=card.getBoundingClientRect(),s=getComputedStyle(live),vw=document.documentElement.clientWidth;
+  const hit=document.elementFromPoint(r.left+Math.min(8,r.width/2),r.top+r.height/2);
   const range=document.createRange();range.selectNodeContents(live);const lines=[...range.getClientRects()];
   return {same:live===window.__live,text:live.textContent,key:live.dataset.materialState,role:live.getAttribute('role'),live:live.getAttribute('aria-live'),
     open:card.querySelector('[data-block-toggle]').getAttribute('aria-expanded')==='true',shown:shows(live)&&r.width>=2&&r.height>=2&&!live.closest('[hidden]'),
     hit:!!hit&&live.contains(hit),font:parseFloat(s.fontSize),color:s.color,bg:bgOf(live),
     clipped:live.scrollWidth>live.clientWidth+1,ellipsis:s.textOverflow==='ellipsis'&&s.whiteSpace==='nowrap',
+    coveredLines:lines.filter(l=>[l.top+1,l.bottom-1].some(y=>!live.contains(document.elementFromPoint(l.left+Math.min(2,l.width/2),y)))).length,
     linesOut:lines.filter(l=>l.right>vw+0.5||l.left<-0.5).length,lineCount:new Set(lines.map(l=>Math.round(l.top))).size,
     top:r.top,bottom:r.bottom,left:r.left,right:r.right,card:{top:c.top,bottom:c.bottom,left:c.left,right:c.right,h:c.height},
     bodyBottom:body&&shows(body)?body.getBoundingClientRect().bottom:null,vw,docScroll:document.documentElement.scrollWidth}};`;
@@ -106,6 +108,42 @@ async function changed(b, act) {
   for (let i = 0; i < 40 && !(await b.evaluate('!!window.__m')); i++) await wait(50);
   await wait(30);
   return { ...(await b.evaluate('window.__m')), ...(await b.evaluate('window.caption()')) };
+}
+
+
+// Exercise the real header's native focus scrolling, then scan its scrollable text. Nothing is hidden to make room.
+async function missionReachability(b) {
+  const count = await b.evaluate(`(() => {
+    const h=document.querySelector('header.hp-mission');h.scrollIntoView({block:'start'});h.scrollTop=0;
+    window.__missionButtons=[...h.querySelectorAll('button:not(:disabled),a[href]')];
+    window.__missionButtons[0]?.focus();return window.__missionButtons.length;
+  })()`);
+  const buttons = [];
+  for (let i = 0; i < count; i++) {
+    if (i) {
+      await b.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+      await b.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+    }
+    buttons.push(await b.evaluate(`(() => {
+      const e=window.__missionButtons[${i}],h=e.closest('header'),r=e.getBoundingClientRect(),hr=h.getBoundingClientRect();
+      return {text:e.textContent,focused:document.activeElement===e,visible:r.top>=hr.top-1&&r.bottom<=hr.bottom+1&&
+        [r.top+1,r.bottom-1].every(y=>e.contains(document.elementFromPoint(r.left+r.width/2,y))),scroll:h.scrollTop};
+    })()`));
+  }
+  const content = await b.evaluate(`(() => {
+    const h=document.querySelector('header.hp-mission'),w=document.createTreeWalker(h,NodeFilter.SHOW_TEXT),ranges=[];
+    while(w.nextNode()) {if(!w.currentNode.textContent.trim())continue;const r=document.createRange();r.selectNodeContents(w.currentNode);ranges.push(r)}
+    const seen=new Set();let total=0;const max=h.scrollHeight-h.clientHeight;
+    for(let offset=0;offset<=max+h.clientHeight;offset+=Math.max(1,h.clientHeight/2)) {
+      h.scrollTop=Math.min(offset,max);const hr=h.getBoundingClientRect();let index=0;
+      for(const range of ranges)for(const r of range.getClientRects()) {
+        if(r.width>0&&r.height>0) {if(r.top>=hr.top&&r.bottom<=hr.bottom&&h.contains(document.elementFromPoint(r.left+Math.min(2,r.width/2),r.top+r.height/2)))seen.add(index);index++}
+      } total=index;
+    }
+    const result={total,seen:seen.size,scrollable:max>0,overflow:getComputedStyle(h).overflowY};
+    h.scrollTop=0;document.activeElement?.blur();return result;
+  })()`);
+  return { buttons, content };
 }
 
 async function runMatrix(b, extraCss, shots = false) {
@@ -138,7 +176,8 @@ async function runMatrix(b, extraCss, shots = false) {
       // The longest sentence in the catalog: the decision field cleared after a save.
       rows.push({ what: 'decision cleared', open: true, ...(await changed(b, `typeInto('[data-surface="decision_form"] input','')`)) });
       if (shots) await shot(b, `${surface}-${theme}-${pane}-${zoom * 100}`);
-      results.push({ where, rows });
+      const mission = await missionReachability(b);
+      results.push({ where, rows, mission });
     } finally { await b.send('Page.removeScriptToEvaluateOnNewDocument', { identifier }); }
   }
   return results;
@@ -163,8 +202,11 @@ const EXPECT = {
 function check(results) {
   const failures = [];
   const expect = (ok, msg) => { if (!ok) failures.push(msg); };
-  for (const { where, missing, rows } of results) {
+  for (const { where, missing, rows, mission } of results) {
     if (missing) { expect(false, `${where}: no closed 자료 card with a caption`); continue; }
+    expect(mission.buttons.length > 0, `${where}: mission actions missing`);
+    for (const button of mission.buttons) expect(button.focused && button.visible, `${where}: mission action "${button.text}" is not keyboard reachable and visible`);
+    expect(mission.content.total > 0 && mission.content.seen === mission.content.total, `${where}: mission text is unreachable (${mission.content.seen}/${mission.content.total} lines)`);
     for (const m of rows) {
       const at = `${where} ${m.what}`;
       if (m.missing) { expect(false, `${at}: no caption`); continue; }
@@ -174,6 +216,7 @@ function check(results) {
       expect(m.ms <= 500, `${at}: the caption took ${Math.round(m.ms)} ms (limit 500)`);
       expect(m.role === 'status' && m.live === 'polite', `${at}: the caption is not a polite status region`);
       expect(m.shown && m.hit, `${at}: the caption is not drawn on screen (shown ${m.shown}, hit ${m.hit})`);
+      expect(m.coveredLines === 0, `${at}: ${m.coveredLines} caption lines are covered or outside the viewport`);
       expect(m.font >= 14, `${at}: the caption is ${m.font}px, under 14`);
       const ratio = contrast(parse(m.color), parse(m.bg));
       expect(ratio >= 4.5, `${at}: caption contrast ${ratio.toFixed(2)} under 4.5 (${m.color} on ${m.bg})`);
@@ -195,6 +238,7 @@ const MUTANTS = {
   'a 12px caption': 'html body .hp-block-card .hp-material-state { font-size: 12px !important; }',
   'grey caption under 4.5:1': 'html body .hp-block-card .hp-material-state { color: rgb(128, 128, 128) !important; }',
   'a caption wider than the rail': '.hp-block-card[data-block-open] .hp-block-card-state { width: 900px !important; white-space: nowrap !important; }',
+  'a mission header covering the caption': '@media (max-width:320px) { .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { max-height: 50% !important; } }',
   'a screen-reader-only caption': 'html body .hp-block-card .hp-material-state { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; }',
 };
 
@@ -211,4 +255,4 @@ try {
   }
 } finally { await b.close(); server.close(); rmSync(temp, { recursive: true, force: true }); }
 if (failures.length) { console.error(failures.map((f) => '  FAIL ' + f).join('\n')); console.error(`learning-block-caption-computed: ${failures.length} failed`); process.exit(1); }
-console.log('PASS learning block caption computed: the polite caption sits under the work surface, whole, at >= 14px and 4.5:1, updated in place within 500 ms, no sideways scroll at 100 % and 200 % zoom; drawn on a closed card; personal and classroom, dark and light; six injected overrides caught');
+console.log('PASS learning block caption computed: the polite caption sits under the work surface, whole, at >= 14px and 4.5:1, updated in place within 500 ms, no sideways scroll at 100 % and 200 % zoom; drawn on a closed card; personal and classroom, dark and light; mission content and keyboard actions reachable; seven injected overrides caught');
