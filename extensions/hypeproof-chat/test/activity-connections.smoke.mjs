@@ -10,7 +10,7 @@ import path from 'node:path';
 const require=createRequire(import.meta.url);
 const bundled=await build({entryPoints:[new URL('../src/activityConnections.ts',import.meta.url).pathname],bundle:true,platform:'node',format:'cjs',write:false});
 const module={exports:{}};vm.runInNewContext(bundled.outputFiles[0].text,{module,exports:module.exports,require,process,URL});
-const {ActivityConnections,ACTIVITY_TOKEN_KEY}=module.exports;
+const {ActivityConnections,ACTIVITY_TOKEN_KEY,ActivityConnectionError}=module.exports;
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-activity-'));
 const a=path.join(tmp,'a'),b=path.join(tmp,'b');fs.mkdirSync(a);fs.mkdirSync(b);
 const secrets=new Map([[ACTIVITY_TOKEN_KEY,'synthetic-legacy-never-forward']]);
@@ -104,6 +104,23 @@ try{
   assert.equal(await prepares(blocked,classHome+'-3',freeAt('9',classHome)),true);
   await blocked.commit('synthetic-9',freeAt('9',classHome),classHome+'-3');
   assert.equal(await fresh(freeAt('8',classHome),classHome).freeWorkspace(freeAt('8',classHome)),classHome+'-3','a later free seat continues in the free sibling');
+  // #3213 — the home is a link whose target is gone (an old local setup's leftover): a free seat
+  // goes to the next numbered folder, and an entry into that home names the folder problem.
+  const brokenHome=path.join(tmp,'broken-home');fs.symlinkSync(path.join(tmp,'gone','workspace'),brokenHome);
+  assert.equal(fs.existsSync(brokenHome),false,'existsSync cannot tell a dangling link from a missing folder');
+  const broken=fresh(freeAt('4',brokenHome),brokenHome);
+  assert.equal(await broken.freeWorkspace(freeAt('4',brokenHome)),brokenHome+'-2','dangling home: the next numbered folder');
+  assert.throws(()=>broken.prepare(brokenHome,freeAt('4',brokenHome),()=>assert.fail('nothing is prepared in a dangling link')),/작업 폴더\(.*broken-home\)를 만들 수 없습니다/);
+  assert.throws(()=>broken.prepare(brokenHome,pass('4',brokenHome),()=>assert.fail('a pass cannot prepare it either')),e=>e instanceof ActivityConnectionError,'a pass gets the named sentence, not the generic failure');
+  // A path taken by a plain file: the same named sentence (mkdir fails), never the generic failure.
+  const fileHome=path.join(tmp,'file-home');fs.writeFileSync(fileHome,'not a folder');
+  assert.throws(()=>broken.prepare(path.join(fileHome,'inside'),pass('4',path.join(fileHome,'inside')),()=>assert.fail('not prepared')),e=>e instanceof ActivityConnectionError&&/만들 수 없습니다/.test(e.message));
+  // Negative control — a home that is simply missing is still the free seat's and is created.
+  const missingHome=path.join(tmp,'missing-home');
+  const missing=fresh(freeAt('3',missingHome),missingHome);
+  assert.equal(await missing.freeWorkspace(freeAt('3',missingHome)),missingHome,'a missing home is still used');
+  assert.equal(await prepares(missing,missingHome,freeAt('3',missingHome)),true);
+  assert.equal(fs.statSync(missingHome).isDirectory(),true,'and created');
   // Negative 2 — a pass holds the home.
   const passHome=at('pass-home');
   await enter(onMachine(),pass('7',passHome),passHome);

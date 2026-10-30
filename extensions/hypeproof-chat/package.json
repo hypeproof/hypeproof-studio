@@ -246,6 +246,10 @@
         "enablement": "hypeproof-chat.learningWikiEnabled"
       },
       {
+        "command": "hypeproof-chat.savePagePdf",
+        "title": "PDF로 저장"
+      },
+      {
         "command": "hypeproof-chat.deckPdf",
         "title": "HypeProof: 덱 PDF로 저장",
         "icon": "$(file-pdf)",
@@ -408,6 +412,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "hypeproof-chat.savePagePdf",
+          "when": "false"
+        },
         {
           "command": "hypeproof-chat.askAboutFile",
           "when": "false"
@@ -650,6 +658,7 @@
       }
     ],
     "configurationDefaults": {
+      "update.showReleaseNotes": false,
       "chat.disableAIFeatures": true,
       "workbench.colorTheme": "HypeProof Studio",
       "workbench.activityBar.location": "hidden",
@@ -679,7 +688,7 @@
     "typecheck": "tsc --noEmit",
     "test:companion-workspace": "node --experimental-strip-types --test test/companion-workspace.test.mjs test/companion-workspace-host.test.mjs",
     "test:companion-execution": "node --experimental-strip-types --test test/companion-execution-host.test.mjs test/companion-execution-policy.test.mjs test/companion-normal-turn.test.mjs",
-    "test": "npm run test:companion-workspace && npm run test:companion-execution && node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:deck-pdf-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs",
+    "test": "npm run test:companion-workspace && npm run test:companion-execution && node test/modal-surface.smoke.mjs && for f in test/*.smoke.mjs; do echo \"\u2014 $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-judge && node scripts/run-tsx-tests.mjs && npm run test:activity-resume && npm run test:reference-transport && npm run test:task-workspace && npm run test:trial-end-notice && npm run test:sdk-required && npm run test:page-card-host && npm run test:deck-pdf-host && npm run test:page-pdf-host && npm run test:browser-target-host && npm run test:preview-failure && npm run test:panel-boundary && npm run test:write-approval-paths && npm run test:outbound-approval-host && node --experimental-strip-types --test test/turn-file-review.test.mjs && node --experimental-strip-types test/tooltip.test.mjs",
     "test:activity-resume": "node --experimental-strip-types test/activity-resume.test.mjs",
     "test:instructor-render": "node scripts/run-tsx-tests.mjs instructor-render",
     "test:signin-copy-link": "node scripts/run-tsx-tests.mjs signin-copy-link",
@@ -700,6 +709,7 @@
     "test:page-card": "node scripts/run-tsx-tests.mjs page-card",
     "test:page-card-host": "node --experimental-strip-types --test test/page-card-host.test.mjs test/page-card-result-host.test.mjs",
     "test:deck-pdf-host": "node --experimental-strip-types --test test/deck-pdf-host.test.mjs",
+    "test:page-pdf-host": "node --experimental-strip-types --test test/page-pdf-host.test.mjs",
     "test:long-step-hint": "node scripts/run-tsx-tests.mjs long-step-hint",
     "test:browser-target-host": "node --experimental-strip-types --test test/browser-target-host.test.mjs",
     "test:write-approval-paths": "node --experimental-strip-types --test test/write-approval-paths.test.mjs",

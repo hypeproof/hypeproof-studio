@@ -764,9 +764,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // absent for ungranted cohorts, so the model never even sees the tools.
     ...(mcpServers ? { mcpServers } : {}),
     canUseTool: async (name, input, options) => {
-      const decision = (allowed: boolean, actor: 'user'|'policy' = 'policy', denialSource?: import('./denialSource').DenialSource) => {
+      const decision = (allowed: boolean, actor: 'user'|'policy' = 'policy', denialSource?: import('./denialSource').DenialSource, denialDetail?: import('./denialNotice').DenialDetail) => {
         if (!allowed) { webCitations.deny(options.toolUseID);delegationStop?.refused(options.toolUseID); }
-        args.onActivity?.({kind:'approval',id:options.toolUseID,name,input,allowed,actor,...(denialSource ? { denialSource } : {}),at:Date.now()});
+        args.onActivity?.({kind:'approval',id:options.toolUseID,name,input,allowed,actor,...(denialSource ? { denialSource } : {}),...(denialDetail ? { denialDetail } : {}),at:Date.now()});
       };
       if(delegationStop?.requested && (name==="Task"||name==="Agent")){decision(false,"user");return {behavior:"deny" as const,message:"도우미 중지를 요청한 작업에서는 새 도우미를 시작하지 않아요."};}
       lastToolCallAt = Date.now();
@@ -845,7 +845,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         } else {
           console.warn(`[coach] tool denied (${verdict.source}): ${name} — ${verdict.reason}`);
         }
-        decision(false, 'policy', verdict.source);
+        // #3224 — a path outside the work folder says so in the learner's step, not only to the coach.
+        decision(false, 'policy', verdict.source, verdict.cause === 'path_outside_workspace' ? 'outside_folder' : undefined);
         return { behavior: "deny" as const, message: verdict.friendly };
       }
       if (verdict.decision === "allow") {

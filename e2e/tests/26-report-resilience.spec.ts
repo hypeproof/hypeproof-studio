@@ -1,9 +1,11 @@
 // REQ-H6: report path stays alive when chat is broken.
 //
 // Mock: /v1/chat/completions returns 500 (chat dead) but /v1/report accepts
-// reports normally. Run the reportProblem command's 3-step QuickInput
-// cascade. Verify the mock received the POST and returned 200 — proving
-// the host's report path doesn't share a fate with the chat path.
+// reports normally. Run the reportProblem command, which opens the in-panel
+// report form (REQ-STUDIO-PROBLEM-REPORT; the QuickInput cascade is only the
+// fallback when no chat panel can be shown), then the REQ-KNOW-09 item-by-item
+// confirmation. Verify the mock received the POST — proving the host's report
+// path doesn't share a fate with the chat path.
 
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import * as fs from "node:fs";
@@ -11,7 +13,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as http from "node:http";
 import { APP_BINARY, TOKEN_FILE } from "../fixtures/global-setup";
-import { runCommand } from "../fixtures/app";
+import { chatFrame, runCommand } from "../fixtures/app";
 
 interface ReceivedReport { description: string; profile_id?: string; contact?: string; include_recent_turns?: boolean; recent_turns?: unknown }
 
@@ -118,48 +120,34 @@ async function teardown(ctx: Ctx) {
   try { fs.rmSync(ctx.userDataDir, { recursive: true, force: true }); } catch { /* */ }
 }
 
-async function fillQuickInput(win: Page, value: string): Promise<void> {
-  const input = win.locator(".quick-input-widget input.input").first();
-  await input.waitFor({ state: "visible", timeout: 10_000 });
-  await input.press("Meta+a").catch(() => undefined);
-  await input.press("Delete").catch(() => undefined);
-  await input.fill(value);
-  await win.keyboard.press("Enter");
+type Frame = Awaited<ReturnType<typeof chatFrame>>;
+
+/** Opens the in-panel form from the command palette and returns the chat frame. */
+async function openForm(win: Page): Promise<Frame> {
+  await runCommand(win, "HypeProof Chat: 문제 신고하기");
+  const frame = await chatFrame(win);
+  await expect(frame.locator(".hps-problem-report")).toBeVisible({ timeout: 15_000 });
+  return frame;
 }
 
-async function pickQuickPick(win: Page, labelIncludes: RegExp): Promise<void> {
-  // QuickPick (the recent-turns step) — wait for the list, click the item.
-  const list = win.locator(".quick-input-widget .quick-input-list").first();
-  await list.waitFor({ state: "visible", timeout: 10_000 });
-  const item = win.locator(".quick-input-widget .quick-input-list-row").filter({ hasText: labelIncludes }).first();
-  await item.click({ timeout: 5_000 });
+/** The REQ-KNOW-09 confirmation: every item must be ticked before 보내기 is enabled. */
+async function confirmOutbound(frame: Frame): Promise<void> {
+  const dialog = frame.locator('[data-testid="outbound-dialog"]');
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  for (const box of await dialog.locator('input[type="checkbox"]').all()) await box.check();
+  await dialog.locator(".hps-outbound-send").click();
 }
 
 test("REQ-H6: report path stays alive when chat is broken", async () => {
   const mock = await startMock();
   const ctx = await launchAt(mock.port);
   try {
-    // Wait for activation
     await ctx.win.waitForTimeout(2_500);
-
-    // Run the report-problem command
-    await runCommand(ctx.win, "HypeProof Chat: 문제 신고하기");
-
-    // Step 1: description (must be ≥10 chars per validateInput)
-    await fillQuickInput(ctx.win, "H6 e2e probe: chat is dead but report should still work — please ignore on triage.");
-
-    // Step 2: recent_turns? Pick the "포함하지 않기" option
-    await pickQuickPick(ctx.win, /포함하지 않기/);
-
-    // Step 3: contact (optional) — submit empty
-    await fillQuickInput(ctx.win, "");
-
-    // The mock /v1/report should have received the submission.
-    await expect.poll(
-      () => mock.received.length,
-      { timeout: 15_000, intervals: [500, 500, 1000] },
-    ).toBeGreaterThanOrEqual(1);
-
+    const frame = await openForm(ctx.win);
+    await frame.locator("[data-problem-description]").fill("H6 e2e probe: chat is dead but report should still work");
+    await frame.locator("[data-problem-send]").click();
+    await confirmOutbound(frame);
+    await expect.poll(() => mock.received.length, { timeout: 15_000, intervals: [500, 500, 1000] }).toBeGreaterThanOrEqual(1);
     const r = mock.received[0]!;
     expect(r.description).toContain("H6 e2e probe");
     expect(r.include_recent_turns).toBe(false);
@@ -171,30 +159,24 @@ test("REQ-H6: report path stays alive when chat is broken", async () => {
   }
 });
 
-test('report: short description stays on input; Escape at each stage sends nothing', async () => {
+test('report: 취소, Escape and a cancelled confirmation each send nothing', async () => {
   const mock = await startMock();
   const ctx = await launchAt(mock.port);
   try {
     await ctx.win.waitForTimeout(2500);
-    const picker = ctx.win.locator('.quick-input-widget');
-    for (let stage = 1; stage <= 3; stage++) {
-      await runCommand(ctx.win, 'HypeProof Chat: 문제 신고하기');
-      if (stage === 1) {
-        await fillQuickInput(ctx.win, '짧음');
-        await expect(picker).toContainText('10자 이상');
-      } else {
-        await fillQuickInput(ctx.win, '합성 신고 취소 테스트입니다. 외부로 전송하지 않습니다.');
-        await expect(picker).toContainText('최근 대화 첨부 여부');
-        if (stage === 3) {
-          await pickQuickPick(ctx.win, /포함하지 않기/);
-          await expect(picker).toContainText('연락처 (선택)');
-        }
-      }
-      await ctx.win.keyboard.press('Escape');
-      await expect(picker).not.toBeVisible();
-      expect(mock.received).toHaveLength(0);
-    }
-    if (process.env.HPS_NATIVE_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.HPS_NATIVE_EVIDENCE_DIR, 'report-cancellation.json'), JSON.stringify({ status: 'PASS', description_validation: true, cancelled_stages: [1, 2, 3], received: mock.received.length }));
+    let frame = await openForm(ctx.win);
+    await frame.locator('[data-problem-cancel]').click();
+    await expect(frame.locator('.hps-problem-report')).toHaveCount(0);
+    frame = await openForm(ctx.win);
+    await ctx.win.keyboard.press('Escape');
+    await expect(frame.locator('.hps-problem-report')).toHaveCount(0);
+    frame = await openForm(ctx.win);
+    await frame.locator('[data-problem-description]').fill('합성 신고 취소 테스트입니다. 외부로 전송하지 않습니다.');
+    await frame.locator('[data-problem-send]').click();
+    await frame.locator('[data-testid="outbound-dialog"] [data-outbound-cancel]').click();
+    await ctx.win.waitForTimeout(1000);
+    expect(mock.received).toHaveLength(0);
+    if (process.env.HPS_NATIVE_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.HPS_NATIVE_EVIDENCE_DIR, 'report-cancellation.json'), JSON.stringify({ status: 'PASS', cancelled: ['form-cancel', 'form-escape', 'confirmation-cancel'], received: mock.received.length }));
   } finally { await teardown(ctx); await mock.close(); }
 });
 
@@ -203,35 +185,38 @@ test('report: failed local receiver surfaces failure without a success ID', asyn
   const ctx = await launchAt(mock.port);
   try {
     await ctx.win.waitForTimeout(2500);
-    await runCommand(ctx.win, 'HypeProof Chat: 문제 신고하기');
-    await fillQuickInput(ctx.win, '합성 신고 실패 테스트입니다. 로컬 수신기만 사용합니다.');
-    await pickQuickPick(ctx.win, /포함하지 않기/);
-    await fillQuickInput(ctx.win, 'synthetic@example.invalid');
+    const frame = await openForm(ctx.win);
+    await frame.locator('[data-problem-description]').fill('합성 신고 실패 테스트입니다. 로컬 수신기만 사용합니다.');
+    await frame.locator('[data-problem-contact]').fill('synthetic@example.invalid');
+    await frame.locator('[data-problem-send]').click();
+    await confirmOutbound(frame);
     await expect.poll(() => mock.received.length).toBe(1);
-    await expect(ctx.win.locator('.notifications-toasts')).toContainText('신고 전송 실패');
+    await expect(ctx.win.locator('.notifications-toasts')).toContainText('문제를 보내지 못했어요');
     await expect(ctx.win.locator('.notifications-toasts')).not.toContainText('rep_test_h6_ok');
     expect(mock.received[0].contact).toBe('synthetic@example.invalid');
     if (process.env.HPS_NATIVE_EVIDENCE_DIR) await ctx.win.screenshot({ path: path.join(process.env.HPS_NATIVE_EVIDENCE_DIR, 'report-failure.png') });
   } finally { await teardown(ctx); await mock.close(); }
 });
 
-test('report: explicit conversation opt-in and contact validation use only the local receiver', async () => {
+test('report: no conversation leaves without the opt-in; empty description is replaced, contact is capped', async () => {
   const mock = await startMock();
   const ctx = await launchAt(mock.port);
   try {
     await ctx.win.waitForTimeout(2500);
-    await runCommand(ctx.win, 'HypeProof Chat: 문제 신고하기');
-    await fillQuickInput(ctx.win, '합성 신고 동의 검사입니다. 실제 사용자 대화는 없습니다.');
-    await pickQuickPick(ctx.win, /최근 3개 대화 포함/);
-    await fillQuickInput(ctx.win, 'x'.repeat(201));
-    await expect(ctx.win.locator('.quick-input-widget')).toContainText('200자 이하');
-    expect(mock.received).toHaveLength(0);
-    await fillQuickInput(ctx.win, '  synthetic@example.invalid  ');
+    const frame = await openForm(ctx.win);
+    // Empty history: there is nothing to attach, so the opt-in is not offered.
+    await expect(frame.locator('[data-problem-recent]')).toHaveCount(0);
+    await frame.locator('[data-problem-contact]').fill('x'.repeat(201));
+    await expect(frame.locator('[data-problem-contact]')).toHaveValue('x'.repeat(200));
+    await frame.locator('[data-problem-contact]').fill('  synthetic@example.invalid  ');
+    await frame.locator('[data-problem-send]').click();
+    await confirmOutbound(frame);
     await expect.poll(() => mock.received.length).toBe(1);
-    expect(mock.received[0].include_recent_turns).toBe(true);
-    expect(mock.received[0].recent_turns).toEqual([]);
+    expect(mock.received[0].include_recent_turns).toBe(false);
+    expect(mock.received[0].recent_turns).toBeUndefined();
+    expect(mock.received[0].description).toBe('(설명 없음)');
     expect(mock.received[0].contact).toBe('synthetic@example.invalid');
     await expect(ctx.win.locator('.notifications-toasts')).toContainText('rep_test_h6_ok');
-    if (process.env.HPS_NATIVE_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.HPS_NATIVE_EVIDENCE_DIR, 'report-opt-in.json'), JSON.stringify({ status: 'PASS', scope: 'actual report UI with isolated empty history and local receiver', opt_in: true, empty_history: true, contact_length_validation: true }));
+    if (process.env.HPS_NATIVE_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.HPS_NATIVE_EVIDENCE_DIR, 'report-opt-in.json'), JSON.stringify({ status: 'PASS', scope: 'in-panel report form with isolated empty history and local receiver', opt_in_offered: false, empty_history: true, contact_length_cap: true }));
   } finally { await teardown(ctx); await mock.close(); }
 });

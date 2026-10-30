@@ -4,7 +4,8 @@
 # the seal has to cover the stamped files (#311, #361).
 #
 #   1. Editor watermark (scripts/install-shell-brand.mjs → out/media).
-#   2. Info.plist CFBundleShortVersionString = product version (#361).
+#   2. Info.plist CFBundleShortVersionString = product version (#361), and the
+#      Korean privacy usage descriptions (#3221, scripts/stamp-mac-usage.py).
 #   3. product.json .version = product version. VS Code's gulp derives it from
 #      vscode/package.json during the build, which #361 stopped stamping (that
 #      field feeds the runtime vscode.version API), so it must be re-stamped here
@@ -12,6 +13,10 @@
 #   4. product.json .commit = $BUILD_SOURCEVERSION when set. The full build
 #      already writes the same value (build-contract.mjs exports it), so this is
 #      a no-op there; for a repack it replaces the previous release's commit.
+#   5. product.json has no .releaseNotesUrl (#3212). The upstream value
+#      (go.microsoft.com → code.visualstudio.com/updates) made Studio open VS Code's
+#      release notes after every update. Removed here because this step runs on both
+#      the full build and the repack, so the next release ships it without a base rebuild.
 #
 # Deliberately NOT changed:
 #   - CFBundleVersion: the VSCodium build number of the base (e.g. 1.116.06953).
@@ -50,14 +55,16 @@ HPS_VER="${HPS_VER#v}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $HPS_VER" "$PLIST" \
   || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $HPS_VER" "$PLIST"
 echo "Stamped CFBundleShortVersionString → $HPS_VER (pre-sign)"
+# 2b. #3221 — Korean privacy usage descriptions, so macOS's folder prompt says why Studio asks.
+python3 "$REPO_ROOT/scripts/stamp-mac-usage.py" "$PLIST"
 
 tmp="$(mktemp)"
 if [[ -n "${BUILD_SOURCEVERSION:-}" ]]; then
   [[ "$BUILD_SOURCEVERSION" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::BUILD_SOURCEVERSION is not a full commit sha: $BUILD_SOURCEVERSION"; exit 1; }
-  jq --arg v "$HPS_VER" --arg c "$BUILD_SOURCEVERSION" '.version = $v | .commit = $c' "$PJSON" > "$tmp"
+  jq --arg v "$HPS_VER" --arg c "$BUILD_SOURCEVERSION" '.version = $v | .commit = $c | del(.releaseNotesUrl)' "$PJSON" > "$tmp"
   echo "Stamped product.json.version → $HPS_VER, .commit → $BUILD_SOURCEVERSION (pre-sign)"
 else
-  jq --arg v "$HPS_VER" '.version = $v' "$PJSON" > "$tmp"
+  jq --arg v "$HPS_VER" '.version = $v | del(.releaseNotesUrl)' "$PJSON" > "$tmp"
   echo "Stamped product.json.version → $HPS_VER (pre-sign; .commit left as built)"
 fi
 # Keep the file mode the build gave it (mktemp creates 0600).

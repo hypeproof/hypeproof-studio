@@ -35,6 +35,7 @@ import { browserTargetInline, UNKNOWN_HOST_TEXT } from "./browserTargetHost.ts";
 import { writeTargetsOf } from "./writeApprovalPaths.ts";
 import { writeEditOf } from "./writeApprovalChange.ts";
 import { relativeEscapes } from "./workspaceRouting.ts";
+import { runsAppBundleProgram } from "./appBundleExec.ts";
 import { linkCommandVerdict, shellUnreadable } from "./shellLinkPolicy.ts";
 import {
   MCP_BROWSER_OPEN,
@@ -44,6 +45,8 @@ import {
   MCP_BROWSER_CLICK,
   MCP_BROWSER_TYPE,
   MCP_LIVE_PREVIEW_START,
+  MCP_PAGE_PDF_SAVE,
+  MCP_BROWSER_EXTRA_TOOLS,
   MCP_CR_BROWSER_TOOLS,
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
@@ -378,8 +381,8 @@ export function permittedMcpToolsFor(
     // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch.
     tools.push(
       ...(isCurriculumRuntimeEnabled(profile)
-        ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
-        : MCP_BROWSER_TOOLS),
+        ? [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
+        : [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS]),
     );
   }
   const orchestrator = orchestratorBindingFor(profile, roster);
@@ -1797,7 +1800,7 @@ const STALLED = Symbol("sdk-stream-stalled");
 // loop already renders.
 
 export type SdkActivity = (
-  | { kind: 'approval'; id: string; name: string; input: unknown; actor: 'user'|'policy'; allowed: boolean; denialSource?: DenialSource }
+  | { kind: 'approval'; id: string; name: string; input: unknown; actor: 'user'|'policy'; allowed: boolean; denialSource?: DenialSource; denialDetail?: import('./denialNotice').DenialDetail }
   /** Running token estimate while the model thinks (Claude Code's "✻ …" counter). */
   | { kind: "thinking_tokens"; tokens: number }
   /** A completed thinking block. Raw model text — NOT translated (it is usually English). */
@@ -2201,6 +2204,15 @@ export const SDK_ERROR_GENERIC_FRIENDLY = "문제가 발생했습니다. 운영 
 /** Shared with the stall watchdog (sdkCoach.ts), so one event reads the same whichever way the turn ended. */
 export const SDK_RATE_LIMIT_FRIENDLY =
   "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)";
+/**
+ * The request was over a size limit (the Service's per-request input bound for trial, free and pass seats answers
+ * 413). The CLI ignores the 413 body and prints its own English line, "Request too large (max 32MB). Accumulated
+ * images and attachments…" (recorded 2026-10-29 on SDK 0.3.299), which names neither the real limit nor a fix.
+ * Each turn starts from the visible conversation, so asking again with less material read works.
+ */
+export const SDK_REQUEST_TOO_LARGE_FRIENDLY =
+  "이번 작업에서 읽은 내용이 너무 많아 AI에게 보내지 못했어요. 만든 파일은 그대로 있어요. 큰 파일은 필요한 부분만 읽어 달라고 하거나, 일을 작게 나눠 다시 부탁해 주세요.";
+const SDK_REQUEST_TOO_LARGE_TEXT = /Request too large|request_too_large/;
 export const sdkProviderErrorFriendly = (status: number): string =>
   `AI 서비스 오류로 응답을 받지 못했습니다. 작업 파일은 보존돼 있습니다. (${status})`;
 
@@ -2267,6 +2279,7 @@ export function sdkErrorDisplayText(err: unknown, audience: SeatAudience = "clas
   const s = (err as { status?: unknown }).status;
   const status = typeof s === "number" ? s : sdkCliErrorStatus(own) ?? sdkCliErrorStatus(err.message);
   if (status === 429) return audience === "solo" ? rateLimitStallText("solo") : SDK_RATE_LIMIT_FRIENDLY;
+  if (status === 413 || SDK_REQUEST_TOO_LARGE_TEXT.test(err.message) || SDK_REQUEST_TOO_LARGE_TEXT.test(own)) return SDK_REQUEST_TOO_LARGE_FRIENDLY;
   if (status !== undefined && status >= 500) return sdkProviderErrorFriendly(status);
   return generic;
 }
@@ -2604,6 +2617,7 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
   if (sdkDeniedToolReason(toolName) !== undefined) return true;
   return (
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
+    (MCP_BROWSER_EXTRA_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_ORCHESTRATOR_TOOLS as readonly string[]).includes(toolName) ||
@@ -2815,11 +2829,16 @@ export type SdkToolVerdict =
   // `source` (REQ-STUDIO-DENIAL-SOURCE): who decided the deny — the lesson setting, a
   // platform safety rule, or this app/runtime. `friendly` is the tagged learner copy the
   // SDK returns to the coach as the tool_result (and the tool log shows).
-  | { decision: "deny"; reason: string; friendly: string; source: DenialSource; drift?: boolean };
+  //
+  // `cause` is the classifier input the deny came from; the host reads only `path_outside_workspace` (#3224).
+  | { decision: "deny"; reason: string; friendly: string; source: DenialSource; drift?: boolean; cause?: string };
 
 /** Reasons in the learner's words for the platform-safety denies (the copy builder adds the frame). */
 export const PATH_ESCAPE_REASON = "작업 폴더 밖의 파일이에요";
 export const LINK_OUTSIDE_REASON = "작업 폴더 밖을 가리키는 바로가기(링크)는 만들 수 없어요";
+/** #3221 — the learner-facing reason when the coach tries to run a program inside another app (Chrome etc.). */
+export const APP_BUNDLE_PROGRAM_REASON =
+  "다른 앱(예: Chrome) 안의 프로그램은 실행하지 않아요. macOS가 'App 관리' 권한으로 막아요. PDF가 필요하면 Studio의 'PDF로 저장'(page_pdf_save)을 써요";
 export const URL_POLICY_REASON = "열 수 없는 주소예요";
 export const NEVER_FOR_LEARNERS_REASON = "Studio에서는 학생에게 주지 않는 도구예요";
 export const SUBAGENT_CATALOG_REASON = "Studio가 준비한 도우미만 부를 수 있어요";
@@ -2842,7 +2861,7 @@ export function toolFeatureKey(toolName: string): string | undefined {
   if (n === "bash" || n === "powershell") return "shell";
   if ((SDK_AGENT_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "subagents";
   if (n === "websearch" || n === "webfetch") return "web_search";
-  if (([...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS] as readonly string[]).includes(toolName)) return "browser";
+  if (([...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS] as readonly string[]).includes(toolName)) return "browser";
   return undefined;
 }
 
@@ -2861,6 +2880,7 @@ function denyVerdict(
     reason,
     friendly: denialToolText(d, audience),
     source: d.source,
+    cause,
     ...(drift ? { drift: true } : {}),
   };
 }
@@ -3079,6 +3099,10 @@ export function evaluateSdkToolUse(args: {
     if (link?.decision === "deny") {
       return denyVerdict("path_outside_workspace", link.reason, toolName, audience, LINK_OUTSIDE_REASON);
     }
+    // #3221 — running another app's bundled program makes macOS ask for (or deny) App Management on Studio.
+    if (runsAppBundleProgram(command)) {
+      return denyVerdict("app_bundle_program", "command runs a program inside an app bundle (.app/Contents/)", toolName, audience, APP_BUNDLE_PROGRAM_REASON);
+    }
     // A link-making tool anywhere, or a command this layer cannot read, gets the strong confirm (fail closed).
     if (link?.decision === "ask" || shellUnreadable(command) || isDestructiveCommand(command)) {
       return { decision: "ask", destructive: true };
@@ -3167,7 +3191,9 @@ export function evaluateSdkToolUse(args: {
     const checkOnly = !!input && typeof input === "object" && (input as { check_only?: unknown }).check_only === true;
     return checkOnly ? { decision: "allow" } : { decision: "ask" };
   }
-  if (toolName === MCP_BROWSER_SCREENSHOT || toolName === MCP_LIVE_PREVIEW_START) {
+  // #3221 — page_pdf_save prints the student's own work-folder page with Studio's browser and writes the PDF beside it;
+  // the host re-checks the folder and its write consent. Like a preview, not an outward action.
+  if (toolName === MCP_BROWSER_SCREENSHOT || toolName === MCP_LIVE_PREVIEW_START || toolName === MCP_PAGE_PDF_SAVE) {
     // Auto-allow once the browser capability is granted: a screenshot of the
     // student's own tab / serving their own workspace locally is the coach
     // "looking at the page", not an outward delegation.

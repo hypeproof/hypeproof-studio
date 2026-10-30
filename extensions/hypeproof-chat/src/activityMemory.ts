@@ -11,14 +11,17 @@
 import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import * as path from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 /** The store, relative to the activity root. */
 export const MEMORY_FOLDER = [".hypeproof", "memory"] as const;
 export const MEMORY_LIMITS = { items: 200, bytes: 16 * 1024, chars: 2000 } as const;
 
-/** One listed file. `text` is null when the file is too large or is not UTF-8 text. */
-export interface MemoryFile { name: string; at: number; bytes: number; text: string | null }
+/**
+ * One listed file. `text` is null when the file is too large or is not UTF-8 text. `task` is the id of the
+ * task the item was kept from (REQ-STUDIO-MEMORY-OVERVIEW), read from the file's first line; null without one.
+ */
+export interface MemoryFile { name: string; at: number; bytes: number; text: string | null; task: string | null }
 
 export interface MemoryListing {
   entries: MemoryFile[];
@@ -29,7 +32,29 @@ export interface MemoryListing {
 }
 
 export type MemoryStoreCode = "unsafe" | "invalid" | "empty" | "full" | "missing" | "not_file" | "changed";
-export interface MemoryFileId { file: string; dev: number; ino: number }
+/**
+ * A listed file's identity, pinned before a confirm or a correction. dev and ino alone are not enough: a filesystem that
+ * reuses inode numbers (ext4 does, at once) gives a file recreated under the same name the same pair. The change and birth
+ * times in nanoseconds, the size and a SHA-256 of the bytes (files up to MEMORY_PIN_BYTES) are pinned too; any mismatch
+ * refuses the remove.
+ */
+export interface MemoryFileId { file: string; dev: bigint; ino: bigint; ctimeNs: bigint; birthtimeNs: bigint; size: bigint; digest: string | null }
+/** Files larger than this are pinned by their metadata only (a memory item is at most 16 KB; larger files are only listed). */
+export const MEMORY_PIN_BYTES = 1024 * 1024;
+const sameId = (a: Omit<MemoryFileId, "file">, b: Omit<MemoryFileId, "file">) =>
+  a.dev === b.dev && a.ino === b.ino && a.ctimeNs === b.ctimeNs && a.birthtimeNs === b.birthtimeNs && a.size === b.size && a.digest === b.digest;
+
+/** The digest of a regular file's bytes, read without following a link and without blocking on a FIFO; null when too large. */
+async function pinDigest(file: string, seen: { dev: bigint; ino: bigint; size: bigint }): Promise<string | null> {
+  if (seen.size > BigInt(MEMORY_PIN_BYTES)) return null;
+  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => { throw new MemoryStoreError("changed"); });
+  try {
+    const stat = await handle.stat({ bigint: true });
+    // The file opened is the one the lstat saw.
+    if (!stat.isFile() || stat.dev !== seen.dev || stat.ino !== seen.ino || stat.size !== seen.size) throw new MemoryStoreError("changed");
+    return createHash("sha256").update(await handle.readFile()).digest("hex");
+  } finally { await handle.close(); }
+}
 export class MemoryStoreError extends Error {
   readonly code: MemoryStoreCode;
   constructor(code: MemoryStoreCode) { super(code); this.code = code; }
@@ -47,6 +72,34 @@ const UNSAFE_TEXT = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u061C\u200B-\u200F
 /** Text as shown and as handed to a later request: no control, bidi or separator characters. */
 export function memoryText(raw: string): string {
   return raw.normalize("NFC").replace(/\r\n?/g, "\n").replace(UNSAFE_TEXT, "");
+}
+
+// REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025) — the task an item came from, as a Markdown comment on the
+// file's first line, so the file stays plain readable text. Only a plain id is accepted; anything else is text.
+const TASK_ID = /^[A-Za-z0-9-]{1,64}$/;
+const TASK_LINE = /^<!-- hypeproof-task: ([A-Za-z0-9-]{1,64}) -->\n/;
+/** Splits a file's text into the task line and the item text. */
+export function memoryTask(text: string): { task: string | null; text: string } {
+  const match = TASK_LINE.exec(text);
+  return match ? { task: match[1], text: text.slice(match[0].length) } : { task: null, text };
+}
+
+/**
+ * REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005 / REQ-KNOW-07) — whether this activity may have personal memory.
+ * Memory is scoped to one personal activity: `record` is the activity as saved when it was first entered (its kind
+ * comes from the profile of that moment and never changes), `profile` is the seat served now. A class activity, a
+ * lesson (recorded on the activity or served now), or a served kind that is not personal fails closed: no store is
+ * opened, so a class turn neither reads nor writes the learner's personal memory. There is no switch: a scope is
+ * never changed after creation, only refused.
+ */
+export function personalMemoryActivity(
+  record: { kind?: string; lesson?: unknown } | null | undefined,
+  profile: { activity_kind?: string | null; lesson?: unknown; lesson_binding?: { enforced?: unknown } | null } | null | undefined,
+): boolean {
+  const personal = (kind: unknown) => kind === "personal" || kind === "trial";
+  if (!record || !profile || !personal(record.kind) || record.lesson) return false;
+  if (profile.lesson || profile.lesson_binding?.enforced) return false;
+  return profile.activity_kind == null || personal(profile.activity_kind);
 }
 
 const missing = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
@@ -75,7 +128,7 @@ export class ActivityMemory {
   }
 
   /** Reads one file without following a link; null text when it is too large or not UTF-8. */
-  private async readFile(file: string): Promise<{ at: number; bytes: number; text: string | null } | null> {
+  private async readFile(file: string): Promise<{ at: number; bytes: number; text: string | null; task: string | null } | null> {
     // Only a regular file is ever opened: a FIFO or device would block open() on a libuv thread
     // (four of them stall every async fs call in the extension host). The lstat skips them without
     // opening; O_NONBLOCK covers a swap between the lstat and the open, and fstat decides.
@@ -86,11 +139,12 @@ export class ActivityMemory {
     try {
       const stat = await handle.stat();
       if (!stat.isFile() || stat.nlink !== 1) return null;
-      if (stat.size > MEMORY_LIMITS.bytes) return { at: stat.mtimeMs, bytes: stat.size, text: null };
+      if (stat.size > MEMORY_LIMITS.bytes) return { at: stat.mtimeMs, bytes: stat.size, text: null, task: null };
       const buffer = await handle.readFile();
       let text: string | null;
       try { text = memoryText(new TextDecoder("utf-8", { fatal: true }).decode(buffer)); } catch { text = null; }
-      return { at: stat.mtimeMs, bytes: stat.size, text };
+      if (text === null) return { at: stat.mtimeMs, bytes: stat.size, text, task: null };
+      return { at: stat.mtimeMs, bytes: stat.size, ...memoryTask(text) };
     } finally { await handle.close(); }
   }
 
@@ -120,8 +174,8 @@ export class ActivityMemory {
     return entries.flatMap(entry => entry.text?.trim() ? [{ name: entry.name, text: entry.text }] : []);
   }
 
-  /** Adds one item as a new file; never touches an existing one. Returns the file name. */
-  async append(raw: string, now = Date.now()): Promise<string> {
+  /** Adds one item as a new file; never touches an existing one. `task` records where it came from. Returns the file name. */
+  async append(raw: string, now = Date.now(), task?: string | null): Promise<string> {
     const text = memoryText(raw).trim();
     if (!text) throw new MemoryStoreError("empty");
     if ([...text].length > MEMORY_LIMITS.chars) throw new MemoryStoreError("invalid");
@@ -131,7 +185,9 @@ export class ActivityMemory {
     const name = `${new Date(now).toISOString().replace(/[:.]/g, "-")}-${randomBytes(4).toString("hex")}.md`;
     // O_EXCL: an existing name is an error, never an overwrite.
     const handle = await fs.open(path.join(dir!, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-    try { await handle.writeFile(`${text}\n`, "utf8"); } finally { await handle.close(); }
+    const head = task && TASK_ID.test(task) ? `<!-- hypeproof-task: ${task} -->\n` : "";
+    // Synced before returning: a correction removes the old file right after, and a crash must not keep only the unlink.
+    try { await handle.writeFile(`${head}${text}\n`, "utf8"); await handle.sync(); } finally { await handle.close(); }
     return name;
   }
 
@@ -141,9 +197,10 @@ export class ActivityMemory {
     const dir = await this.folder(false);
     if (!dir) throw new MemoryStoreError("missing");
     const file = path.join(dir, name);
-    const stat = await fs.lstat(file).catch(error => { if (missing(error)) throw new MemoryStoreError("missing"); throw error; });
-    if (!stat.isFile() || stat.nlink !== 1) throw new MemoryStoreError("not_file");
-    return { file, dev: stat.dev, ino: stat.ino };
+    const stat = await fs.lstat(file, { bigint: true }).catch(error => { if (missing(error)) throw new MemoryStoreError("missing"); throw error; });
+    if (!stat.isFile() || stat.nlink !== 1n) throw new MemoryStoreError("not_file");
+    const digest = await pinDigest(file, stat);
+    return { file, dev: stat.dev, ino: stat.ino, ctimeNs: stat.ctimeNs, birthtimeNs: stat.birthtimeNs, size: stat.size, digest };
   }
 
   /** The absolute path of a listed file, for opening it in the editor. */
@@ -153,13 +210,14 @@ export class ActivityMemory {
 
   /**
    * The learner's explicit delete: removes exactly that file, nothing else. With `expected` (the
-   * identity pinned before the confirm) a file replaced or a folder relinked in between is refused.
+   * identity pinned before the confirm: device, inode, change and birth time, size and content digest) a file
+   * replaced, rewritten or a folder relinked in between is refused, also where the inode number is reused.
    * The store is walked again right before the unlink; the remaining window between that lstat and
    * the unlink is accepted (Node has no unlinkat) and needs a concurrent writer inside the activity.
    */
-  async remove(name: string, expected?: { dev: number; ino: number }): Promise<void> {
+  async remove(name: string, expected?: MemoryFileId): Promise<void> {
     const now = await this.identify(name);
-    if (expected && (expected.dev !== now.dev || expected.ino !== now.ino)) throw new MemoryStoreError("changed");
+    if (expected && !sameId(expected, now)) throw new MemoryStoreError("changed");
     await fs.unlink(now.file);
   }
 }

@@ -1491,7 +1491,7 @@ Applies DEC-01 and DEC-02 (ruled by Jay 2026-10-28). Built as REQ-STUDIO-ACTIVIT
 - Delete is allowed under a restricted folder choice (REQ-KNOW-18): it is the learner's own privacy action on Studio's own store and never an AI tool write.
 - Hostile input fails closed: a linked `.hypeproof` or `memory` folder refuses the whole store; files with names outside a plain allowlist, links, hard links and folders are counted, never read or deleted by Studio.
 - Context: the store exposes `contextItems()` (fresh disk read, no cache) but no request carries memory in this row. Injecting it before the REQ-KNOW-49 first-use notice and the REQ-KNOW-44 count would use memory without telling the learner. Writes from turns come with REQ-KNOW-45 (timeline line with undo); `append()` is the only write path they may use.
-- UI home: a section of 내 작품 under the activity trash. DES-KNOW-48 (CGP-KNOW-D-030, a 기억 filter in the same drawer) may restyle it.
+- UI home: a section of 내 작품 under the activity trash. DES-KNOW-48 (CGP-KNOW-D-030, a 기억 filter in the same drawer) may restyle it. (Superseded by CGP-KNOW-D-030 below.)
 
 ## CGP-LEARN-D-003: the live text equivalent is a visible caption (2026-10-29, agent-selected under the owner rules)
 
@@ -1521,3 +1521,38 @@ Applies DEC-01 and DEC-02 (ruled by Jay 2026-10-28). Built as REQ-STUDIO-ACTIVIT
 - "Colour-removed render conveys every state with text": `grayscale(1)` on the page; each pair of a block's states must differ in words (visible text plus field values), and block text keeps 4.5:1 in grayscale at full opacity. Save availability (the disabled save button) is carried by the field's own words (empty vs written); CGP-LEARN-R-003 (in flight) adds an explicit state sentence, which this test then covers too.
 - Surface "Both": Chalk draws no learner block today, so there is no Chalk surface to hold. Seats: classroom and personal with a lesson; dark and light; 800 and 1420 px. Default state: unchanged (on).
 - Fix round 1 (2026-10-29): CGP-LEARN-D-001 (#3156) gave the 자료 card a thumbnail icon per kind, and `criterion_form` used `check-square`, a check mark inside the block. The card icon is now `flag` (the step's aim; neutral, no verdict). The other six kinds already used neutral icons (`pencil`, `code`, `eye`, `book`, `message`, `ruler`). The test now walks all seven kinds, so every card icon is measured.
+
+## CGP-KNOW-R-025: memory overview by task (2026-10-29, agent-selected conservative implementation)
+
+Applies DEC-01 (local files only) and the owner note to be conservative with minors' data. Built as REQ-STUDIO-MEMORY-OVERVIEW.
+
+- "Generated" means built by Studio from the memory files, not written by a model. A model summary would send memory in a request before the REQ-KNOW-49 first-use notice and the REQ-KNOW-44 count exist, and could itself produce the evaluative sentences this row forbids. Each overview item is one file's own text.
+- Grouping needs a task per item, and R-030 files had none. An item kept from a task now records it on the file's first line as a Markdown comment with a plain id; files without it group under "작업 정보가 없는 기억". The writer for turn-made memories (REQ-KNOW-45) passes the task id to `append()`.
+- The check is a word and shape list, not language understanding. Capability keys are matched as written (upper case) so English words such as "context" in a fact pass; of the Korean labels only the ones that do not read as everyday words are listed, and two-syllable labels (검증, 판단, 의도, 맥락…) are refused only next to an ability noun. Refused items are left out of the overview and counted, never deleted, so a too-strict match costs one line of overview and no data.
+- "Unavailable for minor cohorts" uses `isMinorProfile`, which fails closed: an unknown or missing tier counts as a minor, so only known adult tiers (`website`, `search-webapp`) see the overview. DEC-02 keeps memory itself (files, list, delete) on for every cohort.
+- A correction is the learner's words for one item, typed in place (one field per item rather than a single free-text box at the bottom; DES-KNOW-43 may restyle it). It is saved as a new file in the same task and the old file is removed, so the store keeps its append-plus-learner-delete contract. No native confirm: the learner typed the words and pressed save, and the old text is visible in the field until then. A correction that fails the check is refused with a reason rather than stored.
+- Fix round 1 (2026-10-29, after the privacy verify): the check now compares a lower-cased, look-alike-folded, invisible-free copy and a space-free copy; capability keys are refused in any case (lead ruling: so "context" and "intent" in an English fact are refused too); a short capability label followed by an evaluative word is refused; deficit, habit and person-type words without a pronoun, health, diagnosis and emotional-state words, and spelled-out jamo were added. Everyday words that hold a stem (요약해, 예약해, 아이디어, 라이센스, 장애물, 불안정, 타입스크립트) are exempted so ordinary task memories stay. Overview stays unavailable for minor cohorts (acceptance text); a follow-up may offer 고치기 on the file list for every seat.
+
+## CGP-KNOW-D-030: the memory view is the 기억 filter of the 내 작품 drawer (2026-10-29, agent-selected; rebuilt on CGP-KNOW-R-022 and R-025)
+
+Builds DES-KNOW-48 on REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030), -STATE (R-022) and -OVERVIEW (R-025).
+
+- One home: everything the 작업 자료 memory section held (the R-022 state line, the R-025 작업별 기억 overview with 고치기, and the R-030 file list with 열기 and 지우기) moves into the 기억 filter of the 내 작품 drawer (REQ-STUDIO-MY-WORKS-DRAWER). The 작업 자료 section is removed, so the learner meets one memory surface.
+- Filter: a `파일`/`기억` aria-pressed group in the drawer header, `파일` on every opening. Memory is read from disk only when `기억` is pressed.
+- Inside 기억 nothing expands: the state line comes first, then the folder note, the overview (adult profiles only, as R-025 rules) and the files. The R-022 line is therefore one press deeper than before (내 작품 → 기억) instead of always drawn in 작업 자료; the line itself, its wording and its no-switch rule are unchanged.
+- Path type: the register's monospace 11px loses to the learner 14px floor (owner rule). The path is the editor monospace font at the caption size (14px), left-to-right isolated.
+- Layout: the memory view is always a list; the 목록/격자 switch is hidden under `기억`, and a 격자 choice made under 파일 is kept for 파일.
+- Behaviour unchanged: 열기 opens a read-only editor tab, 지우기 uses the host's native modal confirm with the R-025 identity pin, 고치기 and its checks are untouched. When a delete, a correction or 취소 removes the focused control, focus moves to the `기억` button inside the drawer.
+- Seats: unchanged. The drawer exists only on task workspaces (personal, trial; minors included per DEC-02, who see their own files and state line but no overview per R-025); classroom and lesson seats have no drawer and never ask for memory.
+
+## CGP-KNOW-R-005: memory scoped to one personal activity (2026-10-29, agent-selected conservative implementation)
+
+Applies DEC-01 (ruled by Jay 2026-10-28). Built as REQ-STUDIO-ACTIVITY-MEMORY-SCOPE on the R-030 store, R-022 line and D-030 view.
+
+- "Activity" is the personal or trial activity whose folder holds `.hypeproof/memory/`. The scope is the activity's saved kind, which the activity record took from the profile when it was first entered and never changes: that is "fixed at creation". No scope is stored in the memory folder and there is no scope setting.
+- Class and team activities get no personal memory and no class store in this row: Studio adds no class memory writer, so "a class memory write does not appear in the personal list" holds because a class seat cannot reach any store. A class store (team-brain) is left to a later row and must get its own binding.
+- Fails closed: a lesson recorded on the activity, a lesson or an enforced `lesson_binding` served now, a served `activity_kind` other than personal or trial, a missing record and an unloaded profile all count as not personal. A personal activity later served as a lesson is refused rather than re-scoped; its files stay on disk. A profile with no `activity_kind` keeps the saved kind (the record took it from the profile).
+- "Request contains no X" is shown with a recorded runtime: no request carries memory yet (R-030 decision), so the test also pins the personal turn; REQ-KNOW-44/49 must read memory through the same binding.
+- Two personal activities that open the same folder (a free seat continued by a pass, REQ-L12) share that folder's memory: the folder is the activity's home and the learner is the same. Not separated by activity id, so a pass keeps the learner's earlier memory.
+- Label: "기억 범위: 이 작업 공간 안에서만 · 수업 활동에서는 이 기억을 읽거나 쓰지 않아요." under the state line in the 기억 view, muted note style at 14px. The class wording of DES-KNOW-07 and the activity header line are CGP-KNOW-D-005.
+- Not covered: an AI file tool in a class activity whose folder contains a personal activity folder could read files there; folder bounds belong to REQ-STUDIO-FOLDER-CONSENT, not this row.

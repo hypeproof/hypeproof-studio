@@ -87,7 +87,7 @@ t("no seat renders an English Send label", () => {
 });
 
 // Free start D4 (SPEC iteration 4 §2.4, TUX-SP-16) — a drained daily cap is an expected, scheduled
-// state: a calm notice (status, not alert), no 🚨 신고하기, no retry, no request id; 닫기 stays.
+// state: a calm notice (status, not alert), no 🚨 문제 보내기, no retry, no request id; 닫기 stays.
 // The generic-failure banner above is the positive control that the report action still renders.
 const DAILY_CAP = "오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
 const renderError = (error: string, canRetryLast = true) =>
@@ -97,15 +97,15 @@ t("daily cap: calm notice without the problem-report action", () => {
   if (!html.includes("오늘 무료 사용량이 모두 소진됐어요") || !html.includes('data-icon="moon"')) throw new Error("cap notice missing — the absence checks would be vacuous");
   if (!html.includes("hps-error-banner--notice")) throw new Error("cap notice is not in the notice style");
   if (!/class="hps-error-banner hps-error-banner--notice" role="status"/.test(html)) throw new Error("cap notice is announced as an alert");
-  for (const bad of ["신고하기", 'data-icon="flag"', "다시 보내기", "rid-123"]) if (html.includes(bad)) throw new Error(`cap notice shows ${bad}`);
+  for (const bad of ["문제 보내기", 'data-icon="flag"', "다시 보내기", "rid-123"]) if (html.includes(bad)) throw new Error(`cap notice shows ${bad}`);
   if (!html.includes(">닫기</button>")) throw new Error("cap notice lost its dismiss button");
 });
-t("generic failure: alert banner keeps 신고하기, retry and the id (positive control)", () => {
+t("generic failure: alert banner keeps 문제 보내기, retry and the id (positive control)", () => {
   const html = renderError("문제가 발생했습니다.");
   if (html.includes("hps-error-banner--notice")) throw new Error("a real failure took the notice style");
   if (!html.includes('role="alert"')) throw new Error("a real failure is not an alert");
   // REQ-STUDIO-STROKE-ICONS: the report button's 🚨 is the flag stroke icon now.
-  if (!/data-icon="flag"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg> 신고하기/.test(html)) throw new Error("a real failure lost the flagged 신고하기 button");
+  if (!/data-icon="flag"[^>]*aria-hidden="true">(?:(?!<\/svg>)[\s\S])*<\/svg> 문제 보내기/.test(html)) throw new Error("a real failure lost the flagged 문제 보내기 button");
   for (const want of ["다시 보내기", "rid-123"]) if (!html.includes(want)) throw new Error(`a real failure lost ${want}`);
 });
 

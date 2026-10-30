@@ -299,22 +299,32 @@ body.vscode-high-contrast :is(.tw-sources, .tw-chat-menu-panel) { border-color: 
 .tw-trash-dialog { box-sizing: border-box; width: 100%; max-width: var(--ds-c-studio-taskworkspace-size-101); max-height: 90vh; overflow: auto; padding: var(--ds-c-studio-taskworkspace-space-5); color: inherit; background: var(--tw-panel); border: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); border-radius: var(--hp-radius-dialog); font-size: var(--hp-font-caption); }
 .tw-trash-dialog h3 { margin: 0 0 var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-body); }
 .tw-trash-danger { font-weight: var(--hp-weight-strong); }
-/* REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030) — the activity's memory files under 내 작품. */
-.tw-memory { padding: 0 var(--ds-c-studio-taskworkspace-space-7) var(--ds-c-studio-taskworkspace-space-1); border-top: var(--ds-c-studio-taskworkspace-size-3) solid var(--tw-line); }
-.tw-memory button { min-height: var(--ds-c-studio-taskworkspace-size-8); min-width: var(--ds-c-studio-taskworkspace-size-8); padding: 0 var(--ds-c-studio-taskworkspace-space-1); font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
-.tw-memory-state { margin: var(--ds-c-studio-taskworkspace-space-1) 0 0; font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
-.tw-memory-entry { box-sizing: border-box; width: 100%; margin-top: var(--ds-c-studio-taskworkspace-space-1); text-align: start; }
+/* REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030) — the activity's memory, drawn in the 내 작품 drawer's 기억 filter
+   (CGP-KNOW-D-030): the state line, 작업별 기억 and the files. Paths are monospace at the 14px learner floor (DES-KNOW-48's
+   11px loses to it). */
+.tw-memory { padding: 0 var(--hp-space-2) var(--hp-space-2); }
+.tw-works-drawer .tw-memory button { min-height: var(--hp-control-min); min-width: var(--hp-control-min); padding: 0 var(--hp-space-3); font-size: var(--hp-font-caption); color: inherit; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-taskworkspace-radius-1); }
+.tw-works-drawer .tw-memory button[aria-disabled="true"] { opacity: .65; cursor: default; }
+.tw-memory-state { margin: var(--hp-space-2) 0 0; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; }
+.tw-memory-path { font-family: var(--vscode-editor-font-family, var(--ds-c-typography-code)); font-size: var(--hp-font-caption); unicode-bidi: isolate; overflow-wrap: anywhere; }
 .tw-memory-list ul { list-style: none; margin: 0; padding: 0; }
 .tw-memory-list li { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-15); padding: var(--ds-c-studio-taskworkspace-space-7) 0; }
-.tw-memory-name { font-size: var(--hp-font-caption); overflow-wrap: anywhere; }
+.tw-works-item.tw-memory-item { flex-direction: column; padding: var(--hp-space-2); border-color: var(--tw-line); }
+.tw-memory-files-title { margin: var(--hp-space-4) 0 var(--hp-space-2); font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); }
 .tw-memory-text { margin: 0; font-size: var(--hp-font-body); white-space: pre-wrap; overflow-wrap: anywhere; }
-.tw-memory-list time, .tw-memory-note { margin: 0; font-size: var(--hp-font-caption); color: var(--tw-muted); overflow-wrap: anywhere; }
+.tw-memory time, .tw-memory-note { margin: 0; font-size: var(--hp-font-caption); color: var(--tw-muted); overflow-wrap: anywhere; }
 .tw-memory-note:empty { display: none; }
-.tw-memory-actions { display: flex; flex-wrap: wrap; gap: var(--ds-c-studio-taskworkspace-space-2); }
+.tw-memory-actions { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+/* REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025) — 작업별 기억 above the files, and the correction form. */
+.tw-memory-overview h4, .tw-memory-group h5 { margin: var(--ds-c-studio-taskworkspace-space-2) 0 0; font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; }
+.tw-memory-correct { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-15); }
+.tw-memory-correct label { font-size: var(--hp-font-caption); }
+.tw-memory-correct textarea { box-sizing: border-box; width: 100%; min-height: var(--ds-c-studio-taskworkspace-size-8); padding: var(--ds-c-studio-taskworkspace-space-1); font: inherit; font-size: var(--hp-font-body); color: inherit; background: transparent; border: var(--ds-c-studio-taskworkspace-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-taskworkspace-radius-1); resize: vertical; }
 @media (forced-colors: active) {
   .tw-trash button, .tw-trash-dialog button, .tw-trash-toast .tw-trash-undo, .tw-trash-error button { border-color: ButtonText; }
   .tw-trash-dialog, .tw-trash-toast[data-shown="true"] { border-color: CanvasText; }
-  .tw-memory button { border-color: ButtonText; }
+  .tw-works-drawer .tw-memory button, .tw-works-item.tw-memory-item { border-color: ButtonText; }
+  .tw-memory-correct textarea { border-color: CanvasText; }
 }
 
 /* CGP-DS-D-028: on light host themes the personal muted text takes the muted role's light value (VS Code's
@@ -382,4 +392,6 @@ body.vscode-light .tw-works-drawer::backdrop, body.vscode-high-contrast-light .t
   .tw-works-drawer { border-color: CanvasText; }
   .tw-works-open, .tw-works-views button, .tw-works-thumb { border-color: ButtonText; }
   .tw-works-views button[aria-pressed="true"] { border-width: calc(var(--ds-c-studio-taskworkspace-size-3) * 2); }
+  /* A Highlight fill gets a Canvas text backplate in forced colours and the pressed label vanishes (CGP-KNOW-D-030 verify). */
+  .tw-works-views button[aria-pressed="true"] { background-color: Canvas !important; color: CanvasText !important; border-color: Highlight !important; }
 }

@@ -142,6 +142,7 @@ const DIALOGS = [
   ['hps-delegation-panel hp-modal', 'DelegationGroup.tsx'],
   ['hps-file-context-preview hp-modal', 'FileContextChip.tsx'],
   ['hps-outbound hp-modal hps-folder-consent', 'FolderConsentDialog.tsx'],
+  ['hps-outbound hp-modal hps-problem-report', 'ProblemReportDialog.tsx'],
   ['hp-capability-sheet', 'ChatPanel.tsx'],
   ['hp-modal hps-sketch', 'SketchDialog.tsx'],
   ['hps-outbound hp-modal', 'OutboundDialog.tsx'],

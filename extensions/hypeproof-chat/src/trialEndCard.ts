@@ -24,7 +24,7 @@
  * bought pass, because the Service uses the same code for both. (Studio #1765 matches the same sentences for its notice.)
  */
 import type { ResolvedProfile, TrialEndCardView, TrialEndNotifyView } from "./protocol.ts";
-import { FREE_EXHAUSTED_SERVICE, FREE_EXPIRED_SERVICE, defaultProduct, fetchProducts, formatWon, readCatalogue, type CatalogueRead, type PassProduct } from "./passPurchase.ts";
+import { FREE_EXHAUSTED_SERVICE, FREE_EXPIRED_SERVICE, FREE_REFILL_WAITING, freeRefillPending, defaultProduct, fetchProducts, formatWon, readCatalogue, type CatalogueRead, type PassProduct } from "./passPurchase.ts";
 
 export type TrialEnding = TrialEndCardView["ending"];
 
@@ -44,6 +44,8 @@ export const TRIAL_END_CARD_COPY = {
   noRenewal: "한 번만 결제하고, 자동으로 다시 결제되지 않아요.",
   endedExhausted: "무료로 쓸 수 있는 AI 요청은 모두 썼어요.",
   endedExpired: "무료 사용 시간은 끝났어요.",
+  // REQ-STUDIO-FREE-DAILY-REFILL (Jay 2026-10-29): the ending line while the daily refill is ahead.
+  endedRefill: FREE_REFILL_WAITING,
   primary: "이용권 살펴보기",
   escape: "오늘은 여기까지",
 } as const;
@@ -85,7 +87,8 @@ export function endCardCopyProblems(view: Pick<TrialEndCardView, "title" | "fact
   const lines = [view.title, ...view.facts, view.primary, view.escape];
   for (const line of lines) {
     if (END_CARD_PRESSURE.test(line)) problems.push(`pressure: ${line}`);
-    if (line !== offer && /\d/.test(line)) problems.push(`count: ${line}`);
+    // The refill line names a clock time (밤 12시), not a count or a countdown.
+    if (line !== offer && line !== TRIAL_END_CARD_COPY.endedRefill && /\d/.test(line)) problems.push(`count: ${line}`);
   }
   const offerAt = view.facts.indexOf(offer);
   if (offerAt < 0) problems.push("order: the recommended pass is not named");
@@ -126,7 +129,7 @@ export function trialEndReason(err: unknown, onPass: boolean): TrialEnding | nul
   return null;
 }
 
-type ProfileFacts = Pick<ResolvedProfile, "activity_kind" | "pass" | "profile_id"> & Partial<Pick<ResolvedProfile, "notify_optin">>;
+type ProfileFacts = Pick<ResolvedProfile, "activity_kind" | "pass" | "profile_id"> & Partial<Pick<ResolvedProfile, "notify_optin" | "trial">>;
 
 /** Whether this seat is an open-trial free-tier seat at all (cheap; no network). */
 export function endCardAdvertised(profile: ProfileFacts | null | undefined): boolean {
@@ -162,13 +165,15 @@ export function notifyOptinView(profile: ProfileFacts | null | undefined, submit
  * (`"unsold"`, `null` or an empty list) falls back to the banner, so a newcomer whose free use
  * ended is never left at an error while passes are on sale.
  */
-export function trialEndCardView(input: { profile: ProfileFacts | null | undefined; err: unknown; products: CatalogueRead | null | undefined; notifySubmitted?: boolean }): TrialEndCardView | null {
+export function trialEndCardView(input: { profile: ProfileFacts | null | undefined; err: unknown; products: CatalogueRead | null | undefined; notifySubmitted?: boolean; now?: number }): TrialEndCardView | null {
   const { profile, err, products } = input;
   // A bought pass, a classroom or a personal seat never gets a purchase card.
   if (!profile || !endCardAdvertised(profile)) return null;
   const ending = trialEndReason(err, false);
   if (!ending) return null;
-  const ended = ending === "exhausted" ? TRIAL_END_CARD_COPY.endedExhausted : TRIAL_END_CARD_COPY.endedExpired;
+  // REQ-STUDIO-FREE-DAILY-REFILL — the seat's last profile read says the next daily allowance is ahead.
+  const ended = freeRefillPending(profile.trial?.refills_at, input.now ?? Date.now()) ? TRIAL_END_CARD_COPY.endedRefill
+    : ending === "exhausted" ? TRIAL_END_CARD_COPY.endedExhausted : TRIAL_END_CARD_COPY.endedExpired;
   const notify = notifyOptinView(profile, !!input.notifySubmitted);
   if (products === "unreadable") {
     const title = TRIAL_END_CARD_COPY.title;

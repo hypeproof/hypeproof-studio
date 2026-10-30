@@ -41,6 +41,7 @@ import {
 import { PreviewProvider } from "./previewProvider";
 import { ChalkContractHost } from "./chalkContract";
 import { runReportProblemCommand } from "./reportProblem";
+import { noteAppProblem } from "./problemReportHost";
 import { PerfTraceController } from "./perfTraceHost";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
 import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
@@ -379,7 +380,7 @@ export async function activate(context: vscode.ExtensionContext) {
     binding: () => provider.activityTrashBinding,
     refusal: file => provider.folderWriteRefusalFor(file),
   }));
-  provider.setActivityMemoryPanel(registerActivityMemory({ binding: () => provider.activityMemoryBinding }));
+  provider.setActivityMemoryPanel(registerActivityMemory({ binding: () => provider.activityMemoryBinding, overview: () => provider.activityMemoryOverviewTasks }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
 
@@ -609,6 +610,8 @@ export async function activate(context: vscode.ExtensionContext) {
     { dispose: () => { provider.perfTraceObserver = undefined; provider.perfTracePanel = undefined; perfTrace.dispose(); } },
 
     vscode.commands.registerCommand("hypeproof-chat.reportProblem", async () => {
+      // REQ-STUDIO-PROBLEM-REPORT — the in-panel form first; the input boxes only when no chat panel can show it.
+      if (await provider.openProblemReport("manual")) return;
       await runReportProblemCommand({
         context,
         getLastRequestId: () => provider.getLastRequestId(),
@@ -856,6 +859,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.deckDraft", () => provider.deckDraft()),
     vscode.commands.registerCommand("hypeproof-chat.deckSlideSuggest", () => provider.deckSlideSuggest()),
     vscode.commands.registerCommand("hypeproof-chat.deckPdf", () => provider.deckPdf()),
+    vscode.commands.registerCommand("hypeproof-chat.savePagePdf", (uri?: vscode.Uri) => provider.savePagePdf(uri)),
     vscode.commands.registerCommand("hypeproof-chat.curriculumSkills", () => provider.curriculumSkills()),
     vscode.commands.registerCommand("hypeproof-chat.weeklyReview", () => provider.weeklyReview()),
     vscode.commands.registerCommand("hypeproof-chat.weeklyReviewDirector", () => provider.weeklyReviewDirector()),
@@ -1210,6 +1214,7 @@ async function openWorkspaceFolder(
     if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();
   } catch(error) {
     if(error instanceof ActivityConnectionError)throw error;
+    noteAppProblem({ step: 'workspace', code: 'workspace_prepare_failed' });
     throw new Error('Activity workspace preparation failed');
   }
   const previousRecord = context && activityConnections(context)?.current;

@@ -78,7 +78,7 @@ export interface FreeStartView {
   refusal?: { code: string; message: string; resumesAt?: string };
   /** The Service said today's free start is not available (offer `available:false`). */
   unavailable?: "daily_cap" | "paused";
-  /** "무료 AI 요청 10번 · 첫 요청부터 24시간", only from numbers the Service advertised. */
+  /** "무료 AI 요청 30번 · 오늘 밤 12시까지", only from numbers the Service advertised. */
   allowance?: string;
   /** This build is below the Service's floor; the update button is drawn. */
   tooOld?: boolean;
@@ -88,6 +88,11 @@ export interface FreeStartView {
    * not give (a reclaim answers `reused` and the seat stays expired; e2e D2).
    */
   ended?: "expired";
+  /**
+   * REQ-STUDIO-FREE-DAILY-REFILL — with `ended`: the install's next daily allowance (epoch ms), from
+   * the Service's refusal. While it is ahead the card says it refills at midnight (KST).
+   */
+  refillsAt?: number;
 }
 export type StartRequest =
   | { type: "startReady" }

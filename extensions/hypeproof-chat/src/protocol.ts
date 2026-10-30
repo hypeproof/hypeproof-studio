@@ -4,7 +4,9 @@ export interface PassStatus { request_limit: number; requests_used: number; expi
  * TUX-SP-13 / CU-13 — what the Service confirms about a one-hour trial grant (`trial` on /v1/profile).
  * `ends_at` is null until the grant has started. Never sent for a pass, which keeps `pass`.
  */
-export interface TrialStatus { state: "not_started" | "active" | "exhausted" | "expired"; ends_at: string | null; request_limit: number; requests_used: number }
+export interface TrialStatus { state: "not_started" | "active" | "exhausted" | "expired"; ends_at: string | null; request_limit: number; requests_used: number;
+  /** REQ-STUDIO-FREE-DAILY-REFILL — free seats only: when this install's next daily allowance opens (epoch ms, 00:00 KST). Absent on an older Service. */
+  refills_at?: number }
 import type { StartRequest, StartResponse } from "./startPageProtocol";
 // Shared message contract between extension host (Node) and webview (browser).
 // Import this file from both sides; do not redefine these types anywhere else.
@@ -721,7 +723,10 @@ export type WebviewMessage = (
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }
-  | { type: "openReportModal" }            // #64: user clicked 🚨 on error banner
+  | { type: "openReportModal"; source?: "error" } // #64; REQ-STUDIO-PROBLEM-REPORT: "error" = the error card's 문제 보내기
+  | { type: "problemReportAnswer"; id: string; answer: import("./problemReport").ProblemReportAnswer | null }
+  | { type: "problemReportOfferAnswer"; reason: import("./problemReport").OfferReason; accept: boolean }
+  | { type: "problemReportAutoSetting"; enabled: boolean }
   /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
   // CONV-FUNNEL-R-006 — `header_menu` when the press came from the chat header link; absent = the end card.
   | { type: "trialEndCardPasses"; surface?: "header_menu" }
@@ -742,6 +747,8 @@ export type WebviewMessage = (
   | { type: "saveCoach"; name: string; personality: string }
   | { type: "runCode"; html: string }       // from chat panel → host → preview
   | { type: "previewReady" }                // from preview webview only
+  | { type: "savePagePdf"; path: string }  // #3221 part 2 — an HTML page in the work folder, relative to it
+  | { type: "openMacPrivacySettings" }      // #3221 — the macOS-blocked step's button; the host owns the URL
   | { type: "openExternal"; url: string }   // #173 — citation chip click → host opens browser
   /**
    * "갤러리에 올리기" — sends the world currently open to the lab gallery.
@@ -797,7 +804,8 @@ export type WebviewMessage = (
   | { type: "activityTrashRequest" }
   | { type: "activityTrashAction"; requestId: string; scope: string; action: import("./activityTrashView").ActivityTrashAction; target: string }
   | { type: "activityMemoryRequest" }
-  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string }
+  // REQ-STUDIO-MEMORY-OVERVIEW — `text` is the learner's correction, sent only with action "correct".
+  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string; text?: string }
   | { type: "artifactProvenanceRequest" }
   // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
   | { type: "artifactThumbnailRequest"; requestId: string; path: string }
@@ -859,6 +867,8 @@ export type HostMessage = (
   | { type: "runningProcesses"; entries: import("./runningProcesses").RunningProcess[] }
   | {type:'writeApprovalPrompt';prompt:import('./writeApprovalPrompt').WriteApprovalPrompt|null}
   | {type:'folderConsentPrompt';prompt:import('./folderConsentPrompt').FolderConsentPrompt|null}
+  | { type: "problemReportForm"; form: import("./problemReport").ProblemReportFormView | null }
+  | { type: "problemReportOffer"; offer: { reason: import("./problemReport").OfferReason } | null }
   | {type:'outboundPrompt';prompt:import('./outboundApproval').AnyOutboundPrompt|null}
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }

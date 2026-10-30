@@ -21,7 +21,7 @@ const {
   sdkConfigDirFor,
   SDK_CONFIG_DIR_NAME,
 } = await import("../src/sdkCoachHelpers.ts");
-const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
+const { MCP_BROWSER_TOOLS, MCP_BROWSER_EXTRA_TOOLS } = await import("../src/browserMcp.ts");
 
 // ─── anthropicBaseUrlFor — proxyUrl (/v1 base) → SDK base URL ────────────────
 // The SDK appends /v1/messages to ANTHROPIC_BASE_URL; passing the proxyUrl
@@ -215,7 +215,8 @@ const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
   assert.deepEqual(
     browserAgent.permittedMcpTools,
     ["mcp__hypeproof__browser_open", "mcp__hypeproof__browser_screenshot", "mcp__hypeproof__live_preview_start",
-     "mcp__hypeproof__browser_read", "mcp__hypeproof__browser_click", "mcp__hypeproof__browser_type"],
+     "mcp__hypeproof__browser_read", "mcp__hypeproof__browser_click", "mcp__hypeproof__browser_type",
+     "mcp__hypeproof__page_pdf_save"],
     "browser grant → the three hypeproof MCP tool names on the agent options",
   );
   const browserOptions = buildSdkQueryOptions(browserAgent, {
@@ -239,7 +240,7 @@ const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
     { game: { template_tier: "kids-rich" }, sdk_tools: { browser: true } },
     { model: "hypeproof-default", systemPrompt: "" },
   );
-  assert.deepEqual(kidsOptIn.permittedMcpTools, [...MCP_BROWSER_TOOLS], "kids tier: the browser grant follows the flag");
+  assert.deepEqual(kidsOptIn.permittedMcpTools, [...MCP_BROWSER_TOOLS, ...MCP_BROWSER_EXTRA_TOOLS], "kids tier: the browser grant follows the flag");
 }
 
 // ─── coachRuntime flag still defaults to "proxy" (Phase-3 flip is Jay-gated) ─
@@ -365,7 +366,19 @@ function snapshotEntries({ buildSdkQueryOptions, buildSdkGatewayEnv, profileToAg
     "env.concurrency": "ebf07480b7a59f73",
   };
   const digest = (v) => createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 16);
-  const withoutCompactionPin = (name, value) => {
+  // #3221 (2026-10-29): the browser grant adds page_pdf_save (PDF with Studio's own browser instead of Chrome). The
+  // third deliberate change: it appears exactly where browser_open does and is removed before comparing.
+  const PDF_TOOL = "mcp__hypeproof__page_pdf_save";
+  const withoutPdfTool = (v) => {
+    if (Array.isArray(v)) {
+      if (v.includes(PDF_TOOL)) assert.ok(v.includes("mcp__hypeproof__browser_open"), "page_pdf_save only with the browser grant");
+      return v.filter((x) => x !== PDF_TOOL).map(withoutPdfTool);
+    }
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, withoutPdfTool(x)]));
+    return v;
+  };
+  const withoutCompactionPin = (name, raw) => {
+    const value = withoutPdfTool(raw);
     const env = name.startsWith("env.") ? value : value.env;
     if (env) {
       assert.equal(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000", `${name}: the compaction pin is the one deliberate env change`);

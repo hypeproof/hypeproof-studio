@@ -111,16 +111,16 @@ try {
     // List default; grid on request; list only at 360px and below.
     const listDisplay = () => b.evaluate(`getComputedStyle(document.querySelector('.tw-works-list')).display`);
     assert.equal(await listDisplay(), 'flex', `list by default (${tag})`);
-    const toggle = await b.evaluate(`[...document.querySelectorAll('.tw-works-views button')].map(x=>[x.textContent,x.getAttribute('aria-pressed')])`);
+    const toggle = await b.evaluate(`[...document.querySelectorAll('.tw-works-views:not(.tw-works-filter) button')].map(x=>[x.textContent,x.getAttribute('aria-pressed')])`);
     if (width <= 360) assert.deepEqual(toggle, [], `no grid at ${width}px`);
     else {
       assert.deepEqual(toggle, [['목록', 'true'], ['격자', 'false']], `view toggle (${tag})`);
-      await b.evaluate(`[...document.querySelectorAll('.tw-works-views button')][1].click()`); await settle();
+      await b.evaluate(`[...document.querySelectorAll('.tw-works-views:not(.tw-works-filter) button')][1].click()`); await settle();
       assert.equal(await listDisplay(), 'grid', `grid on request (${tag})`);
       const cards = await b.evaluate(`[...document.querySelectorAll('.tw-works-item')].slice(0,2).map(e=>{const r=e.getBoundingClientRect();return {h:r.height,w:r.width}})`);
       assert.ok(cards.every(c => c.h >= 44 && c.w >= 44), `grid cards ≥44px (${tag})`);
       await shot(`grid-${tag}`);
-      await b.evaluate(`[...document.querySelectorAll('.tw-works-views button')][0].click()`); await settle();
+      await b.evaluate(`[...document.querySelectorAll('.tw-works-views:not(.tw-works-filter) button')][0].click()`); await settle();
     }
 
     // Scrolling the list asks for the rows that come into view.

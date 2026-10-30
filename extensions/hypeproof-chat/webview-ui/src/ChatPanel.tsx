@@ -251,7 +251,7 @@ interface Props {
   onRunCode: (html: string) => void;
   onNamingRitual: () => void;
   onSaveCoach: (name: string, personality: string) => void;
-  onReportProblem: () => void;                          // #64
+  onReportProblem: (source?: "error") => void;          // #64; "error" = the error card (REQ-STUDIO-PROBLEM-REPORT)
   onInstallUpdate: () => void;                          // #72
   onDismissUpdate: (version: string) => void;           // #72
   // #1298 — when true, student-only surfaces (MissionHeader, HelpRequest, artifact approval) are hidden.
@@ -2121,6 +2121,7 @@ export function ChatPanel(props: Props) {
           summary={taskActivity}
           reviewPaths={new Set(!props.instructor && turnReview?.state === "open" ? [...turnReview.added, ...turnReview.changed] : [])}
           onShowReview={(path) => { if (turnReview) setReviewFocus((f) => ({ path, seq: (f?.seq ?? 0) + 1, turnId: turnReview.turnId })); }}
+          onSavePdf={(path) => postToHost({ type: "savePagePdf", path })}
         /></PanelBoundary>
 
         {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
@@ -2181,7 +2182,7 @@ export function ChatPanel(props: Props) {
             canRetry={props.canRetryLast && recovered.length === 0}
             onRetry={() => { if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; } recoverToComposer(() => { sendWhenOnline(props.onRetryLast, 'press'); }); }}
             onDismiss={() => recoverToComposer(props.onDismissError)}
-            onReport={props.onReportProblem}
+            onReport={() => props.onReportProblem("error")}
             audience={audience}
           />
         )}
@@ -2258,7 +2259,7 @@ export function ChatPanel(props: Props) {
         )}
         <div className="hps-sr-only" role="status" aria-live="polite" aria-atomic="true" aria-hidden={noteInSummary || undefined} data-testid="attachment-announcer">{imgNote || ''}</div>
         {imgNote && <div id={imageNoteId} className="hps-img-note">{imgNote}</div>}
-        {freeEnded && <p id="hps-free-ended-note" className="hps-free-ended-note">{freeSeatEndedNote(freeEnded)}</p>}
+        {freeEnded && <p id="hps-free-ended-note" className="hps-free-ended-note">{freeSeatEndedNote(freeEnded, config?.activity?.trial?.refills_at)}</p>}
         {recoveryAtCapacity && <div className="hps-recovery-notice" role="status">보관한 메시지를 먼저 다시 보내거나 정리해 주세요. 새 메시지는 입력창에 남아 있습니다.</div>}
         {recovered.length > 0 && <div className="hps-recovery-list" aria-label={`보내지 못한 메시지 ${recovered.length}개`}>
           {recovered.map((request, index) => <div className="hps-queued hps-recovered" role="status" aria-live="polite" key={index}>
@@ -3008,7 +3009,7 @@ export function ToolLine({ message, onReport }: { message: ChatMessage; onReport
     return <div className="hps-denial-notice" role="status" aria-live="polite" aria-atomic="true" data-denial-source={view.source}>
       <ChatIcon kind="lock" size={16} />
       <div><span className="hps-denial-source">{view.label}</span><p>{view.text}</p></div>
-      <button type="button" onClick={onReport}>{view.action}</button>
+      <button type="button" onClick={'settings' in view ? () => postToHost({ type: "openMacPrivacySettings" }) : onReport}>{view.action}</button>
     </div>;
   }
   // CGP-KNOW-D-021 — a Studio-browser download is a quiet secondary line, not a tool row.
@@ -3510,7 +3511,7 @@ function ErrorBanner({
             onClick={onReport}
             data-hp-tooltip={reportButtonTitle(audience)}
           >
-            <ChatIcon kind="flag" size={16} /> 신고하기
+            <ChatIcon kind="flag" size={16} /> 문제 보내기
           </button>
         )}
         <button

@@ -310,6 +310,19 @@ export const FREE_EXPIRED_FRIENDLY = "무료 사용 시간이 끝났어요. 만�
 /** The calm chat notice when today's free budget is gone. No retry button, no purchase opened. */
 export const FREE_DAILY_CAP_NOTICE = "오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
 
+/**
+ * REQ-STUDIO-FREE-DAILY-REFILL (Jay 2026-10-29) — the free allowance is per install and refills at
+ * 00:00 KST. A spent or expired free seat whose Service `refills_at` (epoch ms) is still ahead says
+ * when it comes back. Jay's sentence, 해요체; the files line is in the same register.
+ */
+export const FREE_REFILL_WAITING = "오늘 무료 사용량을 다 썼어요. 밤 12시(한국 시간)에 다시 채워져요.";
+export const FREE_REFILL_ENDED = `${FREE_REFILL_WAITING} 만든 파일은 작업 폴더에 그대로 있어요.`;
+const FREE_REFILL_NOTICE = `${FREE_REFILL_WAITING} 만든 파일과 대화는 그대로 있어요.`;
+/** `refills_at` is a finite time still ahead. Absent (an older Service) or past is false. */
+export function freeRefillPending(refillsAt: unknown, now = Date.now()): boolean {
+  return typeof refillsAt === "number" && Number.isFinite(refillsAt) && refillsAt > now;
+}
+
 /** Whether this turn stopped because today's free budget is drained (free seats only). */
 export function freeDailyCapReached(err: unknown): boolean {
   const m = (err as { message?: unknown } | null)?.message;
@@ -323,9 +336,10 @@ export const TRIAL_EXPIRED_FRIENDLY = "체험 시간이 끝났어요. 만든 파
 export const TRIAL_PASS_POINTER_CHAT = "계속하려면 시작 화면의 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
 export const TRIAL_PASS_POINTER_START = "계속하려면 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
 
-export function trialEndNotice(ending: TrialEnding, passesSold: boolean, free = false): string {
+/** `refillPending`: a free seat whose next daily allowance is still ahead (`freeRefillPending`). */
+export function trialEndNotice(ending: TrialEnding, passesSold: boolean, free = false, refillPending = false): string {
   const said = free
-    ? (ending === "exhausted" ? FREE_EXHAUSTED_FRIENDLY : FREE_EXPIRED_FRIENDLY)
+    ? (refillPending ? FREE_REFILL_NOTICE : ending === "exhausted" ? FREE_EXHAUSTED_FRIENDLY : FREE_EXPIRED_FRIENDLY)
     : (ending === "exhausted" ? TRIAL_EXHAUSTED_FRIENDLY : TRIAL_EXPIRED_FRIENDLY);
   return passesSold ? `${said} ${TRIAL_PASS_POINTER_CHAT}` : said;
 }

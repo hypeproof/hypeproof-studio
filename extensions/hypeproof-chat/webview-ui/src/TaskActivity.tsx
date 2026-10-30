@@ -6,7 +6,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { ChatIcon, type IconKind } from "./ChatDetails";
 import {
-  TASK_ACTIVITY_LABEL, TASK_ACTIVITY_VERBS, fitMiddleEllipsis, middleEllipsis, taskActivityTotal,
+  TASK_ACTIVITY_HINT, TASK_ACTIVITY_LABEL, TASK_ACTIVITY_VERBS, fitMiddleEllipsis, taskActivityChipText, middleEllipsis, taskActivityTotal,
   type TaskActivitySummary, type TaskActivityVerb,
 } from "../../src/taskActivity";
 import "./taskActivity.css";
@@ -54,9 +54,13 @@ export interface TaskActivityProps {
   /** Paths the open turn review lists (added + changed); only these get 바뀐 곳 보기. */
   reviewPaths: ReadonlySet<string>;
   onShowReview: (path: string) => void;
+  /** #3221 part 2 — 'PDF로 저장' for an HTML page the AI made or changed in the work folder. */
+  onSavePdf?: (path: string) => void;
 }
 
-export function TaskActivity({ summary, reviewPaths, onShowReview }: TaskActivityProps) {
+const HTML_PAGE = /\.html?$/i;
+
+export function TaskActivity({ summary, reviewPaths, onShowReview, onSavePdf }: TaskActivityProps) {
   const [open, setOpen] = useState<TaskActivityVerb | null>(null);
   const [all, setAll] = useState<TaskActivityVerb | null>(null);
   if (taskActivityTotal(summary) === 0) return null;
@@ -68,12 +72,15 @@ export function TaskActivity({ summary, reviewPaths, onShowReview }: TaskActivit
   const unreviewable = fileVerb && items.some((it) => !(it.inside && reviewPaths.has(it.target)));
   return <section className="hps-task-activity" data-testid="task-activity" aria-labelledby="hps-task-activity-title">
     <p className="hps-task-activity-title" id="hps-task-activity-title">AI가 한 일</p>
+    <p className="hps-task-activity-hint" id="hps-task-activity-hint">{TASK_ACTIVITY_HINT}</p>
     <div className="hps-task-activity-chips">
       {verbs.map((v) => <button key={v} type="button" className="hps-task-activity-chip" data-verb={v}
         aria-expanded={shown === v} aria-controls={shown === v ? "hps-task-activity-list" : undefined}
+        aria-describedby="hps-task-activity-hint"
         onClick={() => { setOpen(shown === v ? null : v); setAll(null); }}>
         <ChatIcon kind={ICON[v]} size={16} />
-        <span>{TASK_ACTIVITY_LABEL[v]} {summary[v].length}</span>
+        <span>{taskActivityChipText(v, summary[v].length)}</span>
+        <span className="hps-task-activity-chevron" aria-hidden="true"><ChatIcon kind={shown === v ? "chevron-up" : "chevron-down"} size={16} /></span>
       </button>)}
     </div>
     {shown && <div className="hps-task-activity-panel">
@@ -82,6 +89,8 @@ export function TaskActivity({ summary, reviewPaths, onShowReview }: TaskActivit
           <TargetName target={it.target} />
           {fileVerb && it.inside && reviewPaths.has(it.target) &&
             <button type="button" className="hps-task-activity-review" aria-label={`${it.target} 바뀐 곳 보기`} onClick={() => onShowReview(it.target)}>바뀐 곳 보기</button>}
+          {fileVerb && it.inside && onSavePdf && HTML_PAGE.test(it.target) &&
+            <button type="button" className="hps-task-activity-pdf" aria-label={`${it.target} PDF로 저장`} onClick={() => onSavePdf(it.target)}>PDF로 저장</button>}
         </li>)}
       </ul>
       {items.length > visible.length && <button type="button" className="hps-task-activity-more" onClick={() => setAll(shown)}>더 보기 ({items.length - visible.length}개)</button>}

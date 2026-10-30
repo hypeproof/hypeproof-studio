@@ -30,7 +30,7 @@ const server = http.createServer((req, res) => {
     if (req.url === '/v1/purchase/products') return send(200, catalogue);
     if (req.url === '/v1/purchase/orders' && svc.orderReply) return send(svc.orderReply.status, svc.orderReply.body);
     if (req.url === '/v1/purchase/orders') return send(201, { order_id: 'ord_' + 'a'.repeat(32), order_secret: 'b'.repeat(64), amount: 50000, currency: 'KRW', label: '30일 이용권', expires_at: Date.now() + 1800000, checkout_url: `${SITE}/studio/checkout?order=ord_${'a'.repeat(32)}` });
-    if (req.url === '/v1/free/claim') { const next = svc.claims.shift() ?? { status: 200, body: { outcome: 'granted', code: TOKEN_FREE, profile: 'studio-open-trial', expires_at: Date.now() + 720 * 3600e3 } }; return send(next.status, next.body); }
+    if (req.url === '/v1/free/claim') { svc.onClaim?.(); const next = svc.claims.shift() ?? { status: 200, body: { outcome: 'granted', code: TOKEN_FREE, profile: 'studio-open-trial', expires_at: Date.now() + 720 * 3600e3 } }; return send(next.status, next.body); }
     if (req.url === '/v1/profile') return req.headers.authorization === `Bearer ${TOKEN_FREE}` ? send(200, svc.profile) : send(401, { error: { code: 'signature' } });
     send(404, { error: { message: 'not found', type: 'not_found' } });
   });
@@ -81,7 +81,7 @@ function harness({ freeStart = 'service', version = '0.1.58', secretsThrow = fal
   return { world, page, state, settle };
 }
 const claims = () => svc.requests.filter(r => r.path === '/v1/free/claim');
-const reset = () => { svc.requests.length = 0; svc.claims.length = 0; svc.offer = { status: 200, body: OFFER_FREE }; svc.orderReply = null; };
+const reset = () => { svc.requests.length = 0; svc.claims.length = 0; svc.offer = { status: 200, body: OFFER_FREE }; svc.orderReply = null; svc.onClaim = null; svc.profile = freeProfile; };
 const orders = () => svc.requests.filter(r => r.path === '/v1/purchase/orders');
 let fireRetry = false;
 const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -376,5 +376,83 @@ try {
   await h.page.handle({ type: 'startReady' }); await h.settle();
   assert.equal(h.state().freeStart.ended, undefined, 'a served profile wins over a stale failure');
   assert.equal(h.state().profile.free, true);
-  console.log(`PASS free-start host over HTTP :${port}: negatives (code/404/old/off), first open → age → claim → chat, reuse, fallback id, 9 refusals + busy retry + offline, floor, drained, under-14, login at purchase (no runtime → no order, newcomer + free seat sign in first, code seat on account_required), purchase header + guardian, expired free seat relaunch (D2)`);
+  // ── REQ-STUDIO-FREE-DAILY-REFILL (Jay 2026-10-29): the saved free seat refills at 00:00 KST ───
+  // Positive: a spent seat whose `refills_at` has passed claims again at launch, with no prompt (the
+  // stub window has no dialog API, so any prompt would throw) and enters the new code in the served
+  // folder. Negatives: refill ahead, no `refills_at` (older Service), a code-issued seat, no saved age.
+  const until = async (ok, what) => { for (let i = 0; i < 100 && !ok(); i++) await new Promise(r => setTimeout(r, 20)); assert.ok(ok(), what); };
+  const DAY = 24 * 3600e3, past = Date.now() - 60e3, ahead = Date.now() + 3600e3;
+  const spentSeat = refillsAt => ({ ...freeProfile, trial: { state: 'exhausted', ends_at: null, request_limit: 30, requests_used: 30, ...(refillsAt ? { refills_at: refillsAt } : {}) } });
+  const freshSeat = { ...freeProfile, trial: { state: 'not_started', ends_at: null, request_limit: 30, requests_used: 0, refills_at: past + DAY } };
+  const age14 = () => new Map([['hypeproofChat.freeStart.age.v1', '14+']]);
+  const refillClaim = { status: 200, body: { outcome: 'granted', refilled: true, code: TOKEN_FREE, profile: 'studio-open-trial', allowance: { turns: 30, refills: 'daily_kst_midnight' }, expires_at: past + DAY, refills_at: past + DAY } };
+  // R1 positive (profile path): spent + refills_at passed → one claim → ordinary entry → fresh seat.
+  reset(); svc.profile = spentSeat(past); svc.claims.push(refillClaim); svc.onClaim = () => { svc.profile = freshSeat; };
+  h = harness({ globals: age14() });
+  h.world.secrets.set('hypeproofChat.workshopToken', TOKEN_FREE);
+  await h.page.handle({ type: 'startReady' });
+  await until(() => h.world.begun.includes('chat'), 'refill: the new code is entered without a press');
+  assert.equal(claims().length, 1, 'refill: exactly one claim');
+  assert.equal(claims()[0].body.age_ok, true); assert.match(claims()[0].body.install_id, UUID4);
+  assert.deepEqual(h.world.begun, ['~/HypeProofTrial', 'chat'], 'refill: the served folder, then the chat; no preview, no folder choice');
+  assert.deepEqual(h.world.claimNotes, [{ token: TOKEN_FREE, outcome: 'granted' }]);
+  await h.settle();
+  assert.equal(h.state().profile.trial.state, 'not_started', 'refill: the start page now shows the fresh seat');
+  await h.page.handle({ type: 'startReady' }); await h.settle();
+  assert.equal(claims().length, 1, 'refill: a fresh seat (refills_at ahead) never claims again');
+  assert.ok(!JSON.stringify(h.world.states).includes(TOKEN_FREE), 'refill: the issued token never reaches the webview');
+  // R2 loop guard: the Service answers the same spent seat (an unexpected `reused`) → one claim per refills_at, no loop.
+  reset(); svc.profile = spentSeat(past); svc.claims.push({ status: 200, body: { outcome: 'reused', code: TOKEN_FREE, profile: 'studio-open-trial', expires_at: past } });
+  h = harness({ globals: age14() });
+  h.world.secrets.set('hypeproofChat.workshopToken', TOKEN_FREE);
+  await h.page.handle({ type: 'startReady' });
+  await until(() => h.world.begun.includes('chat'), 'loop guard: the one claim enters');
+  for (let i = 0; i < 3; i++) { await h.page.handle({ type: 'startReady' }); await h.settle(); }
+  assert.equal(claims().length, 1, 'loop guard: the same refills_at is claimed once per window');
+  // R3 negative: refill ahead → no claim; the profile keeps refills_at so the end card can say when.
+  reset(); svc.profile = spentSeat(ahead);
+  h = harness({ globals: age14() });
+  h.world.secrets.set('hypeproofChat.workshopToken', TOKEN_FREE);
+  await h.page.handle({ type: 'startReady' }); await h.settle(); await h.settle();
+  assert.equal(claims().length, 0, 'refill ahead: nothing is claimed');
+  assert.equal(h.state().profile.trial.refills_at, ahead, 'refill ahead: refills_at reaches the end card');
+  // R4 negative (old-Service compatibility): a spent free seat without refills_at behaves as today.
+  reset(); svc.profile = spentSeat(undefined);
+  h = harness({ globals: age14() });
+  h.world.secrets.set('hypeproofChat.workshopToken', TOKEN_FREE);
+  await h.page.handle({ type: 'startReady' }); await h.settle(); await h.settle();
+  assert.equal(claims().length, 0, 'older Service (no refills_at): nothing is claimed');
+  assert.deepEqual(h.world.begun, []);
+  // R5 negatives: a code-issued seat with refills_at, and a free seat without a saved age.
+  reset();
+  h = harness({ globals: age14(), current: { ...spentSeat(past), profile_id: 'studio-native-trial' } });
+  await h.page.handle({ type: 'startReady' }); await h.settle(); await h.settle();
+  assert.equal(claims().length, 0, 'code-issued seat: never claimed as free');
+  reset(); svc.profile = spentSeat(past);
+  h = harness();
+  h.world.secrets.set('hypeproofChat.workshopToken', TOKEN_FREE);
+  await h.page.handle({ type: 'startReady' }); await h.settle(); await h.settle();
+  assert.equal(claims().length, 0, 'no saved age: nothing is claimed');
+  // R6 refused profile (403 trial_expired + free sentence + refills_at): passed → claim; ahead → ended card with the time.
+  const freeExpiredAt = at => JSON.stringify({ error: { code: 'trial_expired', type: 'session_window', message: '무료 사용 시간이 끝났습니다. 만든 파일과 대화는 그대로 남아 있습니다.', refills_at: at } });
+  reset(); svc.profile = freshSeat; svc.claims.push(refillClaim);
+  h = harness({ globals: age14(), failure: classifyProfileFailure(403, freeExpiredAt(past)) });
+  h.world.secrets.set('hypeproofChat.workshopToken', 'expired-free-' + 'e'.repeat(40));
+  await h.page.handle({ type: 'startReady' });
+  await until(() => h.world.begun.includes('chat'), 'refused free seat with refills_at passed: re-claimed and entered');
+  assert.equal(claims().length, 1);
+  assert.equal(h.world.secrets.get('hypeproofChat.workshopToken'), TOKEN_FREE, 'the returned code replaced the expired one');
+  reset();
+  h = harness({ globals: age14(), failure: classifyProfileFailure(403, freeExpiredAt(ahead)) });
+  h.world.secrets.set('hypeproofChat.workshopToken', 'expired-free-' + 'e'.repeat(40));
+  await h.page.handle({ type: 'startReady' }); await h.settle(); await h.settle();
+  assert.equal(claims().length, 0, 'refused free seat, refill ahead: nothing is claimed');
+  assert.equal(h.state().freeStart.ended, 'expired'); assert.equal(h.state().freeStart.refillsAt, ahead, 'the card gets the refill time');
+  // R7 negative: a code-issued trial's refusal carrying refills_at is not a free seat.
+  reset();
+  h = harness({ globals: age14(), failure: classifyProfileFailure(403, JSON.stringify({ error: { code: 'trial_expired', message: '개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다.', refills_at: past } })) });
+  await h.page.handle({ type: 'startReady' }); await h.settle(); await h.settle();
+  assert.equal(claims().length, 0, 'code-issued trial: no free re-claim');
+  assert.equal(h.state().freeStart.refillsAt, undefined);
+  console.log(`PASS free-start host over HTTP :${port}: negatives (code/404/old/off), first open → age → claim → chat, reuse, fallback id, 9 refusals + busy retry + offline, floor, drained, under-14, login at purchase (no runtime → no order, newcomer + free seat sign in first, code seat on account_required), purchase header + guardian, expired free seat relaunch (D2), daily refill (re-claim at launch, loop guard, refill ahead, older Service, code seat, no age, refused profile)`);
 } finally { server.close(); server.closeAllConnections?.(); }

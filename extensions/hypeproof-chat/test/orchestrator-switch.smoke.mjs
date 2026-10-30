@@ -355,19 +355,23 @@ const ok = (name) => {
 // Then adultSubagents alone moved again: a seat that may delegate now pins
 // CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 so helpers stay inside the watched turn (verify F4).
 // Control: deleting that one env key on turns that carry `agents` reproduced 27bd755ac286cb2e.
+// #3221 (2026-10-29) adds page_pdf_save to the browser grant (the coach prints a work-folder page to PDF with Studio's
+// own browser instead of running Chrome). The six profiles that grant the browser moved. Control: removing
+// page_pdf_save from MCP_BROWSER_TOOLS and the server reproduced every previous digest (a7b8013ce7d9d7d0,
+// cdc79d6719de7555, 3545599d2498467d, e7f98f066d7810de, 610234268befcbb9, f854dfa48639b858).
 const BASE = {
   kidsChat: "582e3e0804786f9f",
   // #1527 (2026-10-15): age no longer strips the browser grant, so these two minor profiles
   // carry their own browser flag's tools.
-  kidsPolluted: "e7f98f066d7810de",
+  kidsPolluted: "5f38949c153d4c13",
   adultRW: "6295e410f05b5f13",
-  adultWide: "3545599d2498467d",
+  adultWide: "12183dad8d42f3be",
   adultSubagents: "b995c4fa789f806f",
-  adultCR: "cdc79d6719de7555",
-  minorFlagAdultTier: "610234268befcbb9",
-  unknownTier: "f854dfa48639b858",
+  adultCR: "06c7bf022016cb15",
+  minorFlagAdultTier: "f5e0eea0b4359fcf",
+  unknownTier: "29e081979c05df21",
   adultPublishOnly: "3fb3dd807365f974",
-  adultBrowserPublish: "a7b8013ce7d9d7d0",
+  adultBrowserPublish: "fd72f1e495565086",
 };
 {
   assert.deepEqual(Object.keys(BASE), Object.keys(PROFILES), "every profile has a base digest");
@@ -463,14 +467,14 @@ function surfacesOf({ call, seen }) {
   // Registration: with the browser grant the orchestrator tools follow the browser tools;
   // without it they register alone (the A2 open item).
   const names = (c) => observed[c].call.options.mcpServers.hypeproof.tools.map((t) => t.name);
-  assert.deepEqual(names("adultWide/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "consult", "site_check"]);
-  assert.deepEqual(names("adultWide/none/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type"]);
+  assert.deepEqual(names("adultWide/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "page_pdf_save", "consult", "site_check"]);
+  assert.deepEqual(names("adultWide/none/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "page_pdf_save"]);
   assert.deepEqual(names("adultRW/roster/host"), ["consult", "site_check"], "a seat without the browser grant gets the orchestrator tools only");
   // One-click publish (#1650) is a second grant that needs no browser: it keeps its server part,
   // and the orchestrator tools follow it.
   assert.deepEqual(names("adultPublishOnly/none/host"), ["publish_site"], "main's publish-only server, unchanged");
   assert.deepEqual(names("adultPublishOnly/roster/host"), ["publish_site", "consult", "site_check"]);
-  assert.deepEqual(names("adultBrowserPublish/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "publish_site", "consult", "site_check"]);
+  assert.deepEqual(names("adultBrowserPublish/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "page_pdf_save", "publish_site", "consult", "site_check"]);
   assert.equal("mcpServers" in observed["adultRW/none/host"].call.options, false, "…and nothing without the roster");
   assert.deepEqual(names("adultCR/roster/host").slice(-2), ["consult", "site_check"]);
   assert.ok(names("adultCR/roster/host").includes("browser_observe"), "CR tools still follow their own switch");

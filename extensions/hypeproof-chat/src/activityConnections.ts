@@ -12,6 +12,21 @@ export type { ActivitySummary } from './startPageProtocol';
 export class ActivityConnectionError extends Error {}
 /** The refusal for a folder another activity holds. The free-start path never shows it (it moves on). */
 export const FOLDER_TAKEN_MESSAGE = '이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.';
+/**
+ * #3213 — the work folder could not be created: its path is taken by a link whose target is gone
+ * (an old local setup's leftover) or by something that is not a folder. Named, so the person can act
+ * on it instead of reading the generic entry failure.
+ */
+export const folderUnavailableMessage = (root: string): string => {
+  const home = os.homedir();
+  const shown = root === home || root.startsWith(home + path.sep) ? '~' + root.slice(home.length) : root;
+  return `작업 폴더(${shown})를 만들 수 없습니다. 같은 이름의 바로가기나 파일이 있는지 확인해 주세요. 기존 작업 파일은 그대로 있습니다.`;
+};
+/** A symbolic link whose target does not resolve: `existsSync` says no, yet nothing can be created there. */
+export function danglingLink(folder: string): boolean {
+  try { if (!fs.lstatSync(folder).isSymbolicLink()) return false; } catch { return false; }
+  try { fs.statSync(folder); return false; } catch { return true; }
+}
 export const ACTIVITY_TOKEN_KEY = 'hypeproofChat.workshopToken';
 const PREFIX = 'hps.activity.credential.';
 const ACTIVE = 'hps.activity.active';
@@ -254,6 +269,8 @@ export class ActivityConnections {
     const skipped = new Set([...skip].map(loose));
     for (const [i, folder] of candidates.entries()) {
       if (skipped.has(loose(folder))) continue;
+      // #3213 — a dangling link cannot hold a folder; the next numbered folder is used instead.
+      if (danglingLink(folder)) continue;
       try {
         const exists = fs.existsSync(folder);
         if (exists && !fs.statSync(folder).isDirectory()) continue;
@@ -275,7 +292,9 @@ export class ActivityConnections {
   }
   prepare(root:string,p:ResolvedProfile,prepare:()=>void,owners?:FolderOwners):void {
     if (!/^[a-f0-9]{64}$/.test(p.activity_id ?? '')) throw new ActivityConnectionError('활동 정보를 다시 확인해 주세요.');
-    fs.mkdirSync(root,{recursive:true});
+    if (danglingLink(root)) throw new ActivityConnectionError(folderUnavailableMessage(root));
+    try { fs.mkdirSync(root,{recursive:true}); }
+    catch (e) { console.error('[activity] work folder unavailable:', (e as NodeJS.ErrnoException).code ?? 'unknown'); throw new ActivityConnectionError(folderUnavailableMessage(root)); }
     fs.mkdirSync(this.dir,{recursive:true,mode:0o700});
     const release=this.lock(root);
     try {

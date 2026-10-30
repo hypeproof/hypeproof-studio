@@ -49,6 +49,8 @@ const waitFor = async (expr, what, ms = 5000) => {
 const HELPERS = `
 window.__region=null;
 window.track=()=>{window.__region=document.querySelector('.hp-material-state');return !!window.__region};
+// One change at a time: the previous change's observer and 1500 ms timer are cancelled first, so a stale one can neither
+// report a mutation of this change from its own earlier start nor give up on this change before its time.
 window.change=(act)=>{window.__stopMeasurement?.();const live=window.__region,before=live.textContent;window.__m=null;const t0=performance.now();
   const owner={};window.__measurement=owner;let timer,settled=false;
   const cleanup=()=>{mo.disconnect();clearTimeout(timer)};

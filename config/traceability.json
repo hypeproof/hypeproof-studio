@@ -15510,6 +15510,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/focusGeometry.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityMemoryPanel.tsx"
         }
       ]
     },
@@ -15527,6 +15530,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/my-works-drawer.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-drawer-filter-browser.smoke.mjs"
         }
       ]
     },
@@ -16351,6 +16357,12 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## Activity memory files (CGP-KNOW-R-030)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md"
         }
       ]
     },
@@ -16388,6 +16400,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MyWorksDrawer.tsx"
         }
       ]
     },
@@ -16405,6 +16420,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-drawer-filter-browser.smoke.mjs"
         }
       ]
     },
@@ -16545,6 +16563,136 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/learning-block-judgment-visuals-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-OVERVIEW",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Memory overview by task (CGP-KNOW-R-025)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-OVERVIEW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-OVERVIEW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/memoryOverview.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemory.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityMemoryPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-OVERVIEW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-OVERVIEW",
+        "ST-IMP-MEMORY-OVERVIEW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-overview.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-overview-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-ACTIVITY-MEMORY-SCOPE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACTIVITY-MEMORY-FILES",
+        "ST-REQ-ACTIVITY-MEMORY-STATE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Activity memory scope (CGP-KNOW-R-005)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/decisions.md",
+          "section": "## CGP-KNOW-R-005: memory scoped to one personal activity (2026-10-29, agent-selected conservative implementation)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-ACTIVITY-MEMORY-SCOPE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACTIVITY-MEMORY-SCOPE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemory.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityMemoryPanel.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ACTIVITY-MEMORY-SCOPE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACTIVITY-MEMORY-SCOPE",
+        "ST-IMP-ACTIVITY-MEMORY-SCOPE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/activity-memory-scope.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs"
         }
       ]
     }

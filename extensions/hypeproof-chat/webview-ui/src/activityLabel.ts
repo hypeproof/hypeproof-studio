@@ -1,4 +1,5 @@
 import type { PassStatus, TrialStatus } from "../../src/protocol";
+import { FREE_REFILL_ENDED, FREE_REFILL_WAITING, freeRefillPending } from "../../src/passPurchase.ts";
 
 type Kind = "trial" | "personal" | "classroom" | undefined;
 
@@ -34,7 +35,7 @@ export function passEnd(pass: PassStatus | undefined): string | null {
 // Only values the Service confirmed in its `trial` block are shown. A malformed block shows
 // nothing: never 0, never unlimited, never a guessed end time.
 
-type Trial = { limit: number; used: number; end: Date | null; state: TrialStatus["state"] };
+type Trial = { limit: number; used: number; end: Date | null; state: TrialStatus["state"]; refillsAt?: number };
 
 function readTrial(trial: unknown): Trial | null {
   if (!trial || typeof trial !== "object") return null;
@@ -43,7 +44,8 @@ function readTrial(trial: unknown): Trial | null {
   if (typeof limit !== "number" || !Number.isFinite(limit) || limit <= 0) return null;
   if (typeof used !== "number" || !Number.isFinite(used) || used < 0) return null;
   const end = typeof t.ends_at === "string" ? new Date(t.ends_at) : null;
-  return { limit, used, end: end && !Number.isNaN(end.getTime()) ? end : null, state: t.state ?? "active" };
+  const refillsAt = typeof t.refills_at === "number" && Number.isFinite(t.refills_at) ? t.refills_at : undefined;
+  return { limit, used, end: end && !Number.isNaN(end.getTime()) ? end : null, state: t.state ?? "active", ...(refillsAt ? { refillsAt } : {}) };
 }
 
 /** "오후 3시 20분", with the date in front when it is not today. The learner's own clock. */
@@ -65,11 +67,14 @@ export function trialEnded(trial: TrialStatus | undefined | unknown, now = Date.
 /**
  * The candidate card's allowance, before "이 활동 시작하기". A free seat says 무료; before its
  * first message it has no end yet, so the window is named only when the Service advertised it.
+ * A free seat with a daily refill (`refills_at`, REQ-STUDIO-FREE-DAILY-REFILL) lasts until tonight's
+ * 00:00 KST whatever the window says, so it reads `오늘 밤 12시까지`, never a 24-hour window.
  */
 export function trialAllowance(trial: TrialStatus | undefined | unknown, now = Date.now(), free = false, windowHours?: number): string | null {
   const t = readTrial(trial);
   if (!t) return null;
   const head = `${free ? "무료 " : ""}AI 요청 ${t.limit.toLocaleString("ko-KR")}번`;
+  if (free && t.refillsAt) return `${head} · 오늘 밤 12시까지`;
   if (t.end) return `${head} · ${clock(t.end, now)}까지`;
   return free && windowHours ? `${head} · 첫 요청부터 ${Math.round(windowHours)}시간` : head;
 }
@@ -96,6 +101,8 @@ export function trialEndedFacts(trial: TrialStatus | undefined | unknown, now = 
   const t = readTrial(trial);
   if (!reason || !t) return null;
   const kept = "만든 파일은 작업 폴더에 그대로 있습니다.";
+  // REQ-STUDIO-FREE-DAILY-REFILL — the allowance comes back at 00:00 KST: say when, in Jay's words.
+  if (free && freeRefillPending(t.refillsAt, now)) return { reason, title: "무료 사용이 끝났습니다", description: FREE_REFILL_ENDED, row: reason === "exhausted" ? `무료 AI 요청 ${t.limit.toLocaleString("ko-KR")}번 모두 사용` : "무료 사용 시간 끝남" };
   if (free) return reason === "exhausted"
     ? { reason, title: "무료 사용이 끝났습니다", description: `무료 AI 요청을 모두 사용했습니다. ${kept}`, row: `무료 AI 요청 ${t.limit.toLocaleString("ko-KR")}번 모두 사용` }
     : { reason, title: "무료 사용이 끝났습니다", description: `무료 사용 시간이 끝났습니다. ${kept}`, row: t.end ? `${clock(t.end, now)}에 끝남` : "무료 사용 시간 끝남" };
@@ -123,8 +130,12 @@ export function freeSeatEnded(activity: { pass?: unknown; trial?: TrialStatus; f
   return trialEnded(activity.trial, now);
 }
 
-/** The line above the composer on an ended free seat. 해요체, the end card's register; no count. */
-export function freeSeatEndedNote(reason: "exhausted" | "expired"): string {
+/**
+ * The line above the composer on an ended free seat. 해요체, the end card's register; no count.
+ * `refillsAt` ahead (REQ-STUDIO-FREE-DAILY-REFILL): it says the allowance refills at midnight instead.
+ */
+export function freeSeatEndedNote(reason: "exhausted" | "expired", refillsAt?: unknown, now = Date.now()): string {
+  if (freeRefillPending(refillsAt, now)) return `${FREE_REFILL_WAITING} 만든 파일과 대화는 그대로 있어요.`;
   return reason === "exhausted"
     ? "무료로 쓸 수 있는 AI 요청을 모두 써서 지금은 AI가 답하지 않아요. 만든 파일과 대화는 그대로 있어요."
     : "무료 사용 시간이 끝나서 지금은 AI가 답하지 않아요. 만든 파일과 대화는 그대로 있어요.";

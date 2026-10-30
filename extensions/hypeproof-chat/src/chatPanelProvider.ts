@@ -24,10 +24,12 @@ import { loadLedger, provenanceLedgerFile } from "./artifactProvenance";
 import { takeawayTask, takeawayOwnedFiles } from "./workTakeaway";
 import { workPower } from "./workPower";
 import { RunningProcesses } from "./runningProcesses";
+import { PreviewTabWatch } from "./previewTabWatch";
 import { shellFolder, shellPresentation } from "./shellPresentation";
 import { ArtifactHistoryPanel } from './artifactHistoryPanel';
 import { modelRefusalNotifier } from "./modelRefusalNotice";
-import { denialNotice, denialNoticeLabel, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { denialNotice, denialNoticeLabel, FILE_TOOL_NAMES, macPrivacyBlocked, storedDenialNotice, taggedDenialSource, type DenialNotice } from "./denialNotice";
+import { openMacPrivacySettings } from "./macPrivacySettings";
 import { activityFailure, type FailureEvidence } from "./activityAvailability.ts";
 import { activityLocalFile } from "./activityLocalFiles.ts";
 import { confirmOutbound, setOutboundPresenter } from "./outboundConsentHost";
@@ -38,7 +40,7 @@ import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnosti
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal, LocalRuntimeConfig } from './localRuntime';
 import { ChalkContractHost, NO_LOCAL_RUNTIME_MESSAGE, connectionFor, resolveInstructorRuntime, type LocalRunner, type RunTurnInput, type TurnEvent } from './chalkContract';
-import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
+import { FREE_DAILY_CAP_NOTICE, PENDING_PURCHASE_KEY, freeDailyCapReached, freeRefillPending, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { openPersonalContinuation } from "./personalContinuationHost";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
@@ -98,6 +100,11 @@ import { fetchSdkSeed } from "./sdkSeedFetch";
 import { sdkSeedOfferDecision, sdkSeedOnDemandEnabled, sdkSeedPlatformKey, sdkSeedUrls } from "./sdkSeedHelpers";
 import { SDK_BINARY_MANIFEST } from "./sdkBinaryManifest";
 import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
+import { ProblemTracker, problemDiagnostic, postAutoReport, problemDetailRows, problemOs, parseProblemAnswer, problemReportBody, type FailureFacts, type ProblemDiagnostic, type ProblemFormReason, type ProblemReportAnswer } from "./problemReport";
+import { AUTO_PROBLEM_REPORT_KEY, autoProblemReportEnabled, setProblemSink } from "./problemReportHost";
+import { collectReportMetadata } from "./reportProblem";
+import { confirmProblemReport, extractJtiUnverified, hashJti, postProblemReport, sanitizeRecentTurns } from "./reportProblemHelpers";
+import { reportContactPlaceholder, reportContactPrompt, reportReceipt } from "./seatVocabulary";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { acceptStepMarks, forgetStepMarks, marksFor, rememberStepMark, servedStepMark, type LessonStepMark } from "./lessonStepMarks";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
@@ -234,6 +241,7 @@ import type { TurnReviewView } from "./turnReviewView";
 import { capturePageResult, pageResultState } from "./pageCardPresentation";
 import { buildPageCard, handlePageCardAction, PageCardRegistry, resolvePageInFolder, type PageCardMessage } from "./pageCardHost";
 import { DECK_PDF_COPY, exportDeckPdf, type CdpSend } from "./deckPdf";
+import { PAGE_PDF_COPY, exportPagePdf, pdfNameFor } from "./pagePdf";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { BrowserDownloadWatcher } from "./browserDownloadWatcher";
@@ -344,6 +352,7 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
+import { personalMemoryActivity } from "./activityMemory";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
 import type { QuitGuardActivity } from "./quitGuardHelpers";
@@ -2501,6 +2510,71 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * #3221 part 2 — "PDF로 저장" for an HTML page in the work folder, printed by Studio's own browser (pagePdf.ts)
+   * instead of running another app's program. Served by the preview server in a background tab, written next to
+   * the page as <name>.pdf. Progress and the result are in-chat notices, like the deck export.
+   */
+  private pagePdfBusy = false;
+  async savePagePdf(target?: vscode.Uri): Promise<{ ok: boolean; text: string }> {
+    const done = (text: string, ok = false) => { this.postPageNotice(text); return { ok, text }; };
+    if (this.pagePdfBusy || this.deckPdfBusy) return done(PAGE_PDF_COPY.busy);
+    const file = target?.fsPath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+    const workRoot = this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!file || !pdfNameFor(path.basename(file))) return done(PAGE_PDF_COPY.notHtml);
+    if (!workRoot) return done(PAGE_PDF_COPY.outside);
+    // The preview server that will serve it: the running one when it already serves a folder holding the page
+    // (never replaced), otherwise one started on the work folder.
+    const active = this.liveServer.currentRoot();
+    let root: string;
+    try {
+      const real = canonicalFolder(file);
+      if (!isInsideFolder(real, canonicalFolder(workRoot))) return done(PAGE_PDF_COPY.outside);
+      root = active && isInsideFolder(real, canonicalFolder(active)) ? active : workRoot;
+      if (active && root !== active) return done(DECK_PDF_COPY.otherPreview);
+    } catch { return done(PAGE_PDF_COPY.notLoaded); }
+    const rel = path.relative(canonicalFolder(root), canonicalFolder(file)).split(path.sep).join("/");
+    const page = resolvePageInFolder(root, rel);
+    if (!page.ok) return done(PAGE_PDF_COPY.notLoaded);
+    const out = path.join(path.dirname(page.abs), pdfNameFor(path.basename(page.abs))!);
+    const blocked = this.folderWriteRefusalFor(out);
+    if (blocked) return done(blocked);
+    this.pagePdfBusy = true;
+    this.postPageNotice(PAGE_PDF_COPY.started(path.basename(page.abs))); // progress, not the result
+    let tab: vscode.BrowserTab | undefined;
+    let channel: { send: CdpSend; close(): Promise<void> } | undefined;
+    try {
+      const base = await this.liveServer.ensure(root);
+      const url = new URL(rel.split("/").map(encodeURIComponent).join("/"), base).href;
+      try {
+        tab = await vscode.window.openBrowserTab(url, { viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One, preserveFocus: true, background: true });
+        channel = await this.deckPdfAttach(tab);
+      } catch { return done(PAGE_PDF_COPY.openFailed); }
+      const result = await exportPagePdf(channel.send, { expectedUrl: url });
+      if (!result.ok) return done(PAGE_PDF_COPY.notLoaded);
+      const again = this.folderWriteRefusalFor(out);
+      if (again) return done(again);
+      // Write beside, then rename over: a link left at the target is replaced, never followed.
+      const tmp = path.join(path.dirname(out), `.${path.basename(out)}.${randomId()}.tmp`);
+      try {
+        fs.writeFileSync(tmp, result.pdf, { flag: "wx" });
+        fs.renameSync(tmp, out);
+      } catch {
+        try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to clean */ }
+        return done(PAGE_PDF_COPY.writeFailed);
+      }
+      noteHostWrite([{ absPath: out, data: result.pdf }], "studio");
+      const shown = path.relative(workRoot, out).split(path.sep).join("/");
+      return done(result.method === "print" ? PAGE_PDF_COPY.saved(shown) : PAGE_PDF_COPY.savedAsImages(shown, result.pages), true);
+    } catch {
+      return done(PAGE_PDF_COPY.notLoaded);
+    } finally {
+      try { await channel?.close(); } catch { /* the tab may be gone already */ }
+      try { await tab?.close(); } catch { /* as above */ }
+      this.pagePdfBusy = false;
+    }
+  }
+
   /** A command's result: in-chat, not a toast (a notification pauses the integrated browser over the weekly pack). */
   private async showBrainRun(run: BrainRun): Promise<void> {
     this.postPageNotice(run.lines.join(" "));
@@ -3100,6 +3174,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // or completes — the Worker's request-id middleware (PR #49) plumbs an
   // x-request-id header on every response we can correlate against in tail.
   private lastRequestId: string | undefined;
+  /** REQ-STUDIO-PROBLEM-REPORT — this session's failures (memory only) and the open in-panel report form. */
+  private readonly problemTracker = new ProblemTracker();
+  private lastProblem?: { diagnostic: ProblemDiagnostic; at: number };
+  private problemForm?: { id: string; finish(answer: ProblemReportAnswer | null): void };
   /**
    * Task E (docs/plan/dag.yaml) — liveness. `lastActivityAt` is bumped by any
    * webview message; the pinger turns it into an idle_ms the instructor board
@@ -3158,6 +3236,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push(onFolderConsentChanged(() => { this.endTaskCommandAllows(); void this.postConfig().catch(() => {}); }));
     context.subscriptions.push({ dispose: () => this.folderConsentRequest.cancel() });
     context.subscriptions.push(setOutboundPresenter((manifest,step)=>this.outboundApproval?.confirm(manifest,step) ?? Promise.resolve(null)));
+    context.subscriptions.push(setProblemSink(facts => this.noteProblem(facts)));
+    context.subscriptions.push({ dispose: () => this.problemForm?.finish(null) });
     // cr-publish (CR-11 after a restart): know the signed-in person's published origin from
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
@@ -3192,6 +3272,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.registerBrowserDownloads(context);
     const annotationClose = vscode.window.onDidCloseBrowserTab?.(tab => { void this.annotationPreviewClosed(tab).catch(() => {}); });
     if (annotationClose) context.subscriptions.push(annotationClose);
+    // The preview server stops when the last tab showing it closes; it is never stopped at turn end.
+    const previewWatch = new PreviewTabWatch({
+      tabUrls: () => (vscode.window.browserTabs ?? []).map((t) => t.url),
+      previewUrl: () => this.liveServer?.currentUrl?.(),
+      listening: () => !!this.liveServer?.isListening?.(),
+      stop: async () => { await this.liveServer?.stop?.(); },
+    });
+    const previewClose = vscode.window.onDidCloseBrowserTab?.(() => previewWatch.tabClosed());
+    if (previewClose) context.subscriptions.push(previewClose);
+    context.subscriptions.push({ dispose: () => previewWatch.dispose() });
     context.subscriptions.push({ dispose: () => clearTimeout(this.previewRecoveryTimer) });
     context.subscriptions.push({dispose:()=>{this.pageCardWatch?.dispose();clearTimeout(this.pageCardRefreshTimer);this.pageCardRefreshEpoch++}});
   }
@@ -3279,6 +3369,80 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         post: async (signals, result) => { await this.post({ type: "previewRecovery", signals, result }); },
       });
     } finally { this.previewRecoveryRunning = false; }
+  }
+
+  /** REQ-STUDIO-PROBLEM-REPORT — the facts of a failed turn: codes and numbers only, never the error's text. */
+  private noteSendFailure(err: unknown, current?: { profile: ResolvedProfile | null }): void {
+    // A trial, free allowance or pass that ended is an account state the person was told about, not a fault.
+    if (trialEnding(err, !!current?.profile?.pass) || freeDailyCapReached(err) || passSpentNotice(err)) return;
+    if (moderationBlockOf(err)) {
+      this.noteProblem({ step: "safety", code: "safety_blocked", requestId: err instanceof ModerationBlockError ? err.requestId : undefined });
+      return;
+    }
+    const evidence: FailureEvidence = err instanceof ProxyAuthError || err instanceof ProxyTransportError
+      ? { ...err.evidence, ...(err instanceof ProxyAuthError ? { kind: err.kind } : {}) }
+      : err && typeof err === "object" ? { status: (err as FailureEvidence).status, ...(err as { evidence?: FailureEvidence }).evidence } : {};
+    const requestId = err instanceof ProxyAuthError || err instanceof ProxyTransportError || err instanceof SdkRequiredError ? err.requestId : undefined;
+    if (err instanceof SdkRequiredError) { this.noteProblem({ step: "agent", code: "sdk_required", requestId }); return; }
+    this.noteProblem({ step: err instanceof SdkGatewayAuthError ? "agent" : evidence.status === 401 || evidence.status === 403 ? "access" : "chat",
+      status: evidence.status, code: evidence.code, type: evidence.type, kind: evidence.kind, requestId: requestId ?? undefined,
+      ...(err instanceof TypeError && !evidence.status ? { code: "network_unreachable" } : {}) });
+  }
+
+  /** Records one failure; sends the content-free signal when the setting is on; offers the form on a repeat. */
+  noteProblem(facts: FailureFacts): void {
+    // Hosts assembled without the constructor (unit tests) have no tracker and record nothing.
+    if (!this.problemTracker) return;
+    const version = this.context?.extension?.packageJSON?.version;
+    const diagnostic = problemDiagnostic(facts, { appVersion: typeof version === "string" ? version : "unknown", platform: process.platform, arch: process.arch });
+    this.lastProblem = { diagnostic, at: Date.now() };
+    const note = this.problemTracker.note(diagnostic);
+    if (note.send && autoProblemReportEnabled(this.context?.globalState)) {
+      void postAutoReport(vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1"), diagnostic);
+    }
+    if (note.offer) void this.post({ type: "problemReportOffer", offer: { reason: "repeat" } });
+  }
+
+  /**
+   * Level 2 — the in-panel report form. Returns false when no chat panel can show it (the caller falls back to the
+   * command's input boxes). Submitting goes through the same REQ-KNOW-09 confirmation as before; closing sends nothing.
+   */
+  async openProblemReport(reason: ProblemFormReason): Promise<boolean> {
+    if (this.problemForm) return true;
+    if (!(this.editorChat?.visible || this.view?.visible)) {
+      await vscode.commands.executeCommand("hypeproof-chat.panel.focus").then(undefined, () => undefined);
+      if (!(this.editorChat?.visible || this.view?.visible)) return false;
+    }
+    const recent = this.lastProblem && Date.now() - this.lastProblem.at < 10 * 60_000 ? this.lastProblem.diagnostic : undefined;
+    const diagnostic = reason === "frustration" || reason === "manual" ? recent : recent ?? this.lastProblem?.diagnostic;
+    const version = this.context.extension?.packageJSON?.version;
+    const appVersion = typeof version === "string" ? version : "unknown";
+    const audience = this.getSeatAudience();
+    const id = crypto.randomUUID();
+    const turns = sanitizeRecentTurns(this.getHistorySnapshot());
+    const answer = await new Promise<ProblemReportAnswer | null>(resolve => {
+      const timer = setTimeout(() => this.problemForm?.finish(null), 15 * 60_000);
+      this.problemForm = { id, finish: value => { clearTimeout(timer); this.problemForm = undefined; void this.post({ type: "problemReportForm", form: null }); resolve(value); } };
+      void this.post({ type: "problemReportForm", form: {
+        id, reason, details: problemDetailRows(diagnostic, appVersion, problemOs(process.platform, process.arch)),
+        contactPrompt: reportContactPrompt(audience), contactPlaceholder: reportContactPlaceholder(audience), recentTurns: turns.length,
+        autoReport: autoProblemReportEnabled(this.context.globalState),
+      } }).then(shown => { if (shown === false) this.problemForm?.finish(null); });
+    });
+    if (!answer) return true;
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const jti = token ? extractJtiUnverified(token) : undefined;
+    const body = problemReportBody(answer, {
+      diagnostic, recentTurns: turns, reason, requestId: this.lastRequestId, profileId: this.getProfileId(),
+      metadata: collectReportMetadata(this.context, { requestId: this.lastRequestId, profileId: this.getProfileId(), jtiHash: jti ? await hashJti(jti) : undefined }),
+    });
+    const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    const frozen = await confirmProblemReport(proxyUrl, body, confirmOutbound);
+    if (frozen === null) return true;
+    const result = await postProblemReport(proxyUrl, frozen, token);
+    if (result.ok) void vscode.window.showInformationMessage(reportReceipt(audience, result.reportId));
+    else void vscode.window.showWarningMessage(`문제를 보내지 못했어요: ${result.reason}`);
+    return true;
   }
 
   /**
@@ -6268,6 +6432,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
       },
       startLivePreview: () => this.startLivePreview(),
+      // #3221 — the coach's page_pdf_save: a path relative to the work folder; savePagePdf re-checks containment.
+      savePagePdf: async (rel: string) => {
+        const workRoot = this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workRoot) return { ok: false, text: PAGE_PDF_COPY.outside };
+        return this.savePagePdf(vscode.Uri.file(path.resolve(workRoot, rel)));
+      },
       // CR-02/CR-11 — the served switch and the agent scope, read per call.
       crEnabled: () => this.isCurriculumRuntimeEnabled(),
       // cr-verify — the same session the proxy path runs (CR-03).
@@ -6642,9 +6812,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // (DEC-01, DEC-02); the store and its native confirm live in activityMemoryHost.ts.
   private activityMemoryPanel?: import("./activityMemoryHost").ActivityMemoryPanelApi;
   setActivityMemoryPanel(api: import("./activityMemoryHost").ActivityMemoryPanelApi): void { this.activityMemoryPanel = api; }
-  /** The learner's activity folder on a task workspace (personal, trial); none for instructors or mid-switch. */
+  /**
+   * The learner's activity folder on a task workspace (personal, trial); none for instructors or mid-switch.
+   * REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005) — none in a class or lesson activity either: this binding is the
+   * only way to the store, so a class seat never reads or writes the learner's personal memory.
+   */
   get activityMemoryBinding(): { root: string; scope: string } | undefined {
-    return this.currentTaskStore() ? this.activityTrashBinding : undefined;
+    if (!this.currentTaskStore() || !personalMemoryActivity(activityConnections(this.context)?.current, this.cachedProfile)) return undefined;
+    return this.activityTrashBinding;
+  }
+  /**
+   * REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025) — the task names the memory overview may group by, or null where there is
+   * no overview: a minor cohort, or a profile whose tier is unknown (isMinorProfile fails closed), or no profile.
+   */
+  get activityMemoryOverviewTasks(): Array<{ id: string; title: string }> | null {
+    const profile = this.cachedProfile;
+    const store = this.currentTaskStore();
+    if (!profile || isMinorProfile(profile) || !store || !this.activityMemoryBinding) return null;
+    const view = store.getView();
+    return [...view.tasks, ...(view.archived ?? [])].map(({ id, title }) => ({ id, title }));
   }
   private async postActivityMemory(extra?: { requestId: string; result: import("./activityMemoryView").ActivityMemoryResult }): Promise<void> {
     const view = this.activityMemoryPanel && this.activityMemoryBinding ? await this.activityMemoryPanel.view() : null;
@@ -6653,11 +6839,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async runActivityMemoryAction(msg: Extract<WebviewMessage, { type: "activityMemoryAction" }>): Promise<void> {
     const requestId = typeof msg.requestId === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) ? msg.requestId : null;
     if (!requestId) return;
-    const action = msg.action === "open" || msg.action === "delete" ? msg.action : null;
+    const action = msg.action === "open" || msg.action === "delete" || msg.action === "correct" ? msg.action : null;
     const panel = this.activityMemoryPanel;
+    // REQ-STUDIO-MEMORY-OVERVIEW — a correction carries the learner's words; any other press carries none.
+    const text = action === "correct" ? msg.text : undefined;
     const result: import("./activityMemoryView").ActivityMemoryResult = !action || !panel || !this.activityMemoryBinding || typeof msg.name !== "string" || msg.name.length > 200 || typeof msg.scope !== "string"
+      || (action === "correct" && (typeof text !== "string" || text.length > 8_000))
       ? { action: action ?? "open", error: "작업 상태가 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요." }
-      : await panel.act(action, msg.name, msg.scope);
+      : await panel.act(action, msg.name, msg.scope, text);
     await this.postActivityMemory({ requestId, result });
   }
   // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
@@ -7642,6 +7831,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case "sendMessage": {
         const companionWebview=!msg.editOf&&!msg.images?.length&&!msg.attachments?.length&&!msg.imports?.length?source:undefined;
+        // REQ-STUDIO-PROBLEM-REPORT level 3 — a frustrated message offers the report form; it sends nothing.
+        if (typeof msg.text === "string" && this.problemTracker?.frustration(msg.text)) void this.post({ type: "problemReportOffer", offer: { reason: "frustration" } });
         // REQ-STUDIO-MISSING-TASK-FOLDER — no turn starts in a folder that is gone; the draft stays. Other seats
         // preserve their existing missing-folder behavior after the provenance read.
         if (this.missingFolderApplies() && await this.missingTaskFolderPath()) { await this.holdSendForMissingFolder(msg.text, msg.images, requestedMode); return; }
@@ -7750,9 +7941,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void vscode.commands.executeCommand("hypeproof-chat.setToken");
         return;
       case "openReportModal":
-        // #64. Webview's error banner has a 🚨 link; we delegate to the same
-        // command so the QuickInput cascade lives in one place.
-        void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
+        // REQ-STUDIO-PROBLEM-REPORT — the error card's 문제 보내기 opens the in-panel form with that failure's diagnostic.
+        if (!(await this.openProblemReport(msg.source === "error" ? "error" : "manual"))) void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
+        return;
+      case "problemReportAnswer":
+        if (this.problemForm && msg.id === this.problemForm.id) this.problemForm.finish(parseProblemAnswer(msg.answer));
+        return;
+      case "problemReportAutoSetting":
+        // The form's own toggle is the only place this switch changes (REQ-H10); it sends nothing by itself.
+        if (this.problemForm && typeof msg.enabled === "boolean") await this.context.globalState.update(AUTO_PROBLEM_REPORT_KEY, msg.enabled);
+        return;
+      case "problemReportOfferAnswer":
+        void this.post({ type: "problemReportOffer", offer: null });
+        if (msg.accept === true && (msg.reason === "repeat" || msg.reason === "frustration")) await this.openProblemReport(msg.reason);
         return;
       case "trialEndCardPasses":
         // TUX-COND-07 — the person pressed the card's Primary. The start page opens its own
@@ -7945,6 +8146,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void this.revealBuilt(msg.html, { artifactSource: "manual_preview" });
         return;
       case "previewReady":
+        return;
+      case "savePagePdf": {
+        // #3221 part 2 — a path relative to the work folder, from the AI가 한 일 list; savePagePdf re-checks containment.
+        const workRoot = this.resolveCoachCwd() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (typeof msg.path === "string" && msg.path && msg.path.length <= 300 && workRoot) void this.savePagePdf(vscode.Uri.file(path.resolve(workRoot, msg.path)));
+        return;
+      }
+      case "openMacPrivacySettings":
+        // #3221 — fixed URL, macOS only; the webview never supplies it.
+        void openMacPrivacySettings();
         return;
       case "openExternal":
         // #173 citation chip click. routeExternalLink keeps the http(s)-only guard against a
@@ -8817,6 +9028,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // REQ-STUDIO-LONG-STEP-HINT — when each detailed tool line's clock starts (at its approval).
       const stepLines = new StepLines();
       const deniedCalls = new Map<string, DenialNotice>();
+      // #3221 — file-tool calls of this turn, so only their EPERM reads as macOS privacy (a shell's EPERM can be `kill`).
+      const fileToolCalls = new Set<string>();
       delegations = tracker;
       // Between a tool result and the next tool call the stream is completely silent
       // (a call only arrives once complete, in one lump). On a real device that stretch
@@ -8861,6 +9074,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         else if (a.kind === 'tool_result') this.noteTaskActivity(streamId, { kind: 'result', id: a.id, isError: a.isError });
         // studio-funnel-events — first write/edit/preview/publish result (kind + ok only).
         if (a.kind==='tool_use') { const k = funnelToolKind(a.name); if (k) funnelTools.set(a.id, k); }
+        if (a.kind==='tool_use' && FILE_TOOL_NAMES.has(a.name)) fileToolCalls.add(a.id);
         if (a.kind==='tool_result' && funnelTools.has(a.id)) { this.funnel.emit({ type: "trial_tool_result", kind: funnelTools.get(a.id), ok: !a.isError }); funnelTools.delete(a.id); }
         if (!prepared && a.kind==='tool_use') this.crSdkResults.onToolUse(a.id, a.name, this.isCurriculumRuntimeEnabled());
         if (observation && (a.kind==='tool_use' || a.kind==='approval')) {
@@ -8990,7 +9204,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             if (!a.allowed) {
               stepLines.end(a.id);
               if (a.actor === 'policy') {
-                const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom');
+                const denial = denialNotice(a.denialSource, this.getSeatAudience() === 'classroom', a.denialDetail);
                 deniedCalls.set(a.id, denial);
                 tracker.settle(a.id);
                 this.postToolLog(streamId, { id: toolLineIds.get(a.id) ?? a.id, icon: '🔒', label: '', state: 'error', denial });
@@ -9013,7 +9227,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             const line = tracker.lineFor(a);
             // A denial is evidence even in summary mode. Runtime errors use unknown, never a guessed source.
             if (a.isError || deniedCalls.has(a.id)) {
-              const denial = deniedCalls.get(a.id) ?? denialNotice(taggedDenialSource(a.reason), this.getSeatAudience() === 'classroom');
+              // #3221 — a file tool that macOS's privacy setting refused says so, with a button to that setting.
+              const denial = deniedCalls.get(a.id) ?? (fileToolCalls.has(a.id) && macPrivacyBlocked(a.reason, process.platform)
+                ? denialNotice('runtime', this.getSeatAudience() === 'classroom', 'macos_privacy')
+                : denialNotice(taggedDenialSource(a.reason), this.getSeatAudience() === 'classroom'));
               deniedCalls.set(a.id, denial);
               tracker.settle(a.id);
               this.postToolLog(streamId, { id: line.lineId, icon: '🔒', label: '', state: 'error', denial });
@@ -9972,6 +10189,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // transport can also throw AbortError (for example on timeout), and still
     // needs a terminal error so the user can recover instead of waiting forever.
     if (current?.signal?.aborted) return;
+    // Optional call: tests drive handleSendError with a bare `this` that has no problem reporting.
+    this.noteSendFailure?.(err, current);
     // REQ-CGP-LEARN-13 — a moderation block (either runtime) is drawn as a calm inline notice, not the
     // red card: the Service's own sentence, no retry, no OS notification or sound. The 109/1388 help
     // lines join it only for a self_harm block on a seat whose profile turned them on (DEC-LEARN-13a).
@@ -10031,7 +10250,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (ending) {
       const sold = current?.proxyUrl ? await passesOnSale(current.proxyUrl) : false;
       if (current?.signal?.aborted) return;
-      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile)), activityUnavailable: {cause: ending,audience} });
+      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile), isFreeSeat(current?.profile) && freeRefillPending(current?.profile?.trial?.refills_at)), activityUnavailable: {cause: ending,audience} });
       return;
     }
     // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
@@ -10930,7 +11149,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private postToolLog(streamId: string, entry: ToolEntry): void {
     if (entry.denial) {
-      const denial = denialNotice(entry.denial.source, entry.denial.classroom);
+      const denial = denialNotice(entry.denial.source, entry.denial.classroom, entry.denial.detail);
       entry = { id: entry.id, icon: '🔒', label: denialNoticeLabel(denial), state: 'error', ...(entry.at ? { at: entry.at } : {}) };
     }
     const t = this.turnTimelines.get(streamId);

@@ -172,7 +172,8 @@ try {
     const baseManifest=JSON.parse(execFileSync('git',['show',`${base}:extensions/hypeproof-chat/package.json`],{cwd:root}).toString());
     // A setting this branch adds is not a relabel of one on main; every setting main already has must still match.
     const baseKeys=new Set(Object.keys(baseManifest.contributes?.configuration?.properties??{}));
-    // A workbench presentation default this branch adds (e.g. #2787 secondary side bar) is not a relabel either;
+    // A workbench presentation default this branch adds (e.g. #2787 secondary side bar) is not a relabel either,
+    // nor is #3212's `update.showReleaseNotes: false` (it only turns VS Code's after-update release notes off);
     // every default main already has must still match, and a new non-workbench default (security.*, chat.*) still fails.
     const baseDefaults=new Set(Object.keys(baseManifest.contributes?.configurationDefaults??{}));
     // A command this branch adds (CGP-ART-R-016 덱 장 다듬기, CGP-AGENT-R-030 느려요 기록) is not a relabel either, and every
@@ -186,7 +187,7 @@ try {
     const baseMenuKeys=new Set(Object.keys(baseManifest.contributes?.menus??{}));
     const onlyBaseSettings=m=>{const c=structuredClone(m),p=c.contributes?.configuration?.properties,d=c.contributes?.configurationDefaults;
       if(p)for(const k of Object.keys(p))if(!baseKeys.has(k))delete p[k];
-      if(d)for(const k of Object.keys(d))if(!baseDefaults.has(k)&&k.startsWith('workbench.'))delete d[k];
+      if(d)for(const k of Object.keys(d))if(!baseDefaults.has(k)&&(k.startsWith('workbench.')||k==='update.showReleaseNotes'))delete d[k];
       if(Array.isArray(c.contributes?.commands))c.contributes.commands=c.contributes.commands.filter(x=>baseCommands.has(x.command));
       for(const [k,list] of Object.entries(c.contributes?.menus??{}))if(Array.isArray(list)){
         c.contributes.menus[k]=list.filter(x=>!x.command||baseCommands.has(x.command));
