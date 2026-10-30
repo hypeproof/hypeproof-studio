@@ -12,6 +12,7 @@ import { IntentChip } from './StatusChip';
 import { TASK_RUN_CHIPS } from './statusChipLogic';
 export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
+import './taskRename.css';
 import { imeComposing } from './imeGuard';
 import { ActivityTrashPanel } from './ActivityTrashPanel';
 import { MyWorksDrawer } from './MyWorksDrawer';

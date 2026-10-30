@@ -1,0 +1,28 @@
+/* While editing a title, give the form the header space instead of squeezing it
+   between status, activity and menu controls. Other header content returns on exit. */
+.tw-workspace .tw-heading:has(.tw-rename) {
+  display: grid;
+  padding-block: 0;
+  grid-template-columns: var(--hp-control-min) minmax(0, 1fr);
+}
+.tw-heading:has(.tw-rename) > :not(.tw-rail-toggle):not(.tw-rename) {
+  display: none;
+}
+.tw-heading .tw-rename {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  padding-block: var(--ds-c-studio-taskworkspace-space-15);
+}
+.tw-heading .tw-rename input {
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+@media (max-width: 480px) {
+  .tw-heading .tw-rename { grid-template-columns: 1fr 1fr; }
+  .tw-heading .tw-rename input { grid-column: 1 / -1; }
+}
+
+@media (min-width: 701px) {
+  .tw-heading .tw-rename { grid-column: 1 / -1; }
+}
