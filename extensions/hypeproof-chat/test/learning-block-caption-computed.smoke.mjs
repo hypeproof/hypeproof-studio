@@ -238,7 +238,8 @@ const MUTANTS = {
   'a 12px caption': 'html body .hp-block-card .hp-material-state { font-size: 12px !important; }',
   'grey caption under 4.5:1': 'html body .hp-block-card .hp-material-state { color: rgb(128, 128, 128) !important; }',
   'a caption wider than the rail': '.hp-block-card[data-block-open] .hp-block-card-state { width: 900px !important; white-space: nowrap !important; }',
-  'a mission header covering the caption': '@media (max-width:320px) { .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { max-height: 50% !important; } }',
+  // Force the covering height: merely raising max-height can leave a short header unchanged with CI's font metrics.
+  'a mission header covering the caption': '@media (max-width:320px) { .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { height: 50% !important; max-height: 50% !important; } }',
   'a screen-reader-only caption': 'html body .hp-block-card .hp-material-state { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; }',
 };
 
