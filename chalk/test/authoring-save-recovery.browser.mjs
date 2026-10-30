@@ -20,7 +20,16 @@ export async function runAuthoringSaveRecoveryBrowser() {
   }
   const evidence = process.env.CHALK_SAVE_RECOVERY_EVIDENCE;
   if (evidence) mkdirSync(evidence, { recursive: true });
-  const report = { cases: [], requests: [], boundary: 'Actual Chromium and Chalk HTML; synthetic loopback API/ledger', cleanup: false };
+  const report = { status: 'RUNNING', cases: [], requests: [], navigationDialogs: [], boundary: 'Actual Chromium and Chalk HTML; synthetic loopback API/ledger', cleanup: false };
+  const checkpoint = (phase) => {
+    report.phase = phase;
+    if (evidence) writeFileSync(join(evidence, 'result.json'), JSON.stringify(report, null, 2) + '\n');
+  };
+  const bounded = async (promise, label) => {
+    let timer;
+    try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('timed out: ' + label)), 15000); })]); }
+    finally { clearTimeout(timer); }
+  };
   const { default: app } = await import('../src/index.ts');
   let browser, mode = 'normal', cutResponse = null, committed = null, navigation = 0;
   const server = createServer(async (req, res) => {
@@ -80,15 +89,26 @@ export async function runAuthoringSaveRecoveryBrowser() {
     await browser.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
   }
   async function fresh() {
+    checkpoint('starting-independent-case-' + (navigation + 1));
     committed = null; cutResponse = null; mode = 'normal';
     await browser.send('Network.setBlockedURLs', { urls: ['https://*'] });
     const query = '?case=' + (++navigation);
-    await browser.send('Page.navigate', { url: origin + '/authoring' + query });
+    const dirtyPage = await browser.evaluate(`typeof dirty!=='undefined'&&dirty`);
+    // Independent cases leave the prior draft explicitly. Observe and accept the
+    // real beforeunload dialog; never disable the product's unsaved-input guard.
+    const dialog = dirtyPage ? browser.waitForEvent((m) => m.method === 'Page.javascriptDialogOpening', 'leave prior fixture draft').then(async (event) => {
+      report.navigationDialogs.push({ case: navigation, type: event.params.type });
+      checkpoint('leaving-prior-fixture-draft');
+      assert.equal(event.params.type, 'beforeunload');
+      await browser.send('Page.handleJavaScriptDialog', { accept: true });
+    }) : Promise.resolve();
+    await bounded(Promise.all([dialog, browser.send('Page.navigate', { url: origin + '/authoring' + query })]), 'independent case navigation');
     await until(`location.search===${JSON.stringify(query)}&&document.readyState==='complete'&&!!document.getElementById('new')`, 'page ready');
     await browser.evaluate(`if(!document.getElementById('first-run').hidden)document.getElementById('fr-later').click();for(const [id,value] of [['token','synthetic-issuer'],['cohort','fixture-cohort'],['profile','fixture-profile']]){const e=document.getElementById(id);e.value=value;e.dispatchEvent(new Event('input',{bubbles:true}));}window.confirm=()=>true;window.saveClicks=[];document.getElementById('save').addEventListener('click',e=>window.saveClicks.push({trusted:e.isTrusted}));0`);
     await click('new');
     await until(`!document.getElementById('save').disabled`, 'new draft');
     await browser.evaluate(`const title=document.getElementById('title');title.value='보존할 수업 제목';title.dispatchEvent(new Event('input',{bubbles:true}));0`);
+    checkpoint('independent-case-ready-' + navigation);
   }
   async function save({ brokenBody = false, blocked = false } = {}) {
     let requestId;
@@ -138,6 +158,7 @@ export async function runAuthoringSaveRecoveryBrowser() {
     assert.deepEqual(report.requests.at(-1).body, report.requests.at(-2).body);
     assert.deepEqual(saved.clicks, [{ trusted: true }, { trusted: true }]);
     report.cases.push({ name: 'postcommit-body-loss-and-explicit-retry', lost, failed, retry, saved, fixtureRows: 1 });
+    checkpoint('postcommit-body-loss-and-explicit-retry-complete');
     await snapshot('confirmed-retry');
 
     await fresh();
@@ -147,10 +168,12 @@ export async function runAuthoringSaveRecoveryBrowser() {
     assert.equal(precommit.status, guidance); assert.equal(precommit.title, '보존할 수업 제목');
     assert.equal(report.requests.length, pre); assert.equal(committed, null); assert.ok(precommit.pending?.id);
     report.cases.push({ name: 'precommit-fetch-rejection', blocked, state: precommit, fixtureRows: 0 });
+    checkpoint('precommit-fetch-rejection-complete');
 
     await fresh(); const normal = await save(), normalState = await state();
     assert.equal(normalState.status, '저장했습니다. revision 1'); assert.equal(normalState.pending, null);
     report.cases.push({ name: 'normal-save', normal, state: normalState });
+    checkpoint('normal-save-complete');
 
     for (const status of [400, 401, 403, 409]) {
       await fresh(); mode = 'http-' + status;
@@ -161,6 +184,7 @@ export async function runAuthoringSaveRecoveryBrowser() {
       if (status === 400) assert.match(current.status, /미션·주차·완료 조건을 확인하세요/);
       if (status === 409) assert.match(current.status, /내보낸 뒤 저장본을 다시 열어 비교하세요/);
       report.cases.push({ name: 'parsed-http-' + status, response, state: current });
+      checkpoint('parsed-http-' + status + '-complete');
     }
     await fresh();
     const localBefore = report.requests.length;
@@ -169,6 +193,7 @@ export async function runAuthoringSaveRecoveryBrowser() {
     const invalid = await state(); assert.match(invalid.status, /주차\(1–52\)/);
     assert.equal(report.requests.length, localBefore); assert.equal(invalid.pending, null);
     report.cases.push({ name: 'local-preflight-validation', state: invalid });
+    checkpoint('local-preflight-validation-complete');
     assert.equal(report.serverError, undefined);
     report.status = 'PASS';
     console.log('PASS authoring-save-recovery: Korean unknown outcome, unchanged explicit retry, parsed HTTP and preflight controls');
