@@ -118,3 +118,6 @@ console.log('PASS authoring ui: mission/week/completion are edited and the rest 
 
 const { runAuthoringSaveRecoveryBrowser } = await import('./authoring-save-recovery.browser.mjs');
 await runAuthoringSaveRecoveryBrowser();
+
+const { runAuthoringFreezeGuidanceBrowser } = await import('./authoring-freeze-guidance.browser.mjs');
+await runAuthoringFreezeGuidanceBrowser();
