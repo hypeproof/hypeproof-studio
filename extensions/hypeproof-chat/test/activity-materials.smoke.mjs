@@ -305,6 +305,23 @@ t("a dropped file into a 자료 that is a link (or a file) is refused; nothing i
   fs.mkdirSync(path.join(other, "w2")); fs.writeFileSync(path.join(other, "w2", "자료"), "not a folder");
   assert.equal(m.addMaterialDrop(path.join(other, "w2"), drop("a.md", "a")).cause, "materials-folder");
 });
+// #2957: the last available suffix must be usable by both entry paths.
+for (const entry of ["pick", "drop"]) t(`${entry}: 99 existing copies allow (100), then refuse without overwriting`, () => {
+  const work = fs.mkdtempSync(path.join(tmp, `${entry}-last-copy-`));
+  const materials = path.join(work, "자료"); fs.mkdirSync(materials);
+  for (let n = 1; n <= 99; n++) fs.writeFileSync(path.join(materials, n === 1 ? "a.md" : `a (${n}).md`), `existing ${n}`);
+  const bytes = "# 마지막 자료\n원본 보존\n";
+  const src = put(outside, "a.md", bytes);
+  const add = () => entry === "pick" ? m.addMaterialFile(work, src) : m.addMaterialDrop(work, drop("a.md", bytes));
+  const result = add();
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(result.rel, "자료/a (100).md");
+  assert.equal(fs.readFileSync(path.join(materials, "a (100).md"), "utf8"), bytes);
+  assert.equal(add().cause, "full", "the next addition must refuse at capacity");
+  assert.equal(fs.readdirSync(materials).length, 100);
+  for (let n = 1; n <= 99; n++) assert.equal(fs.readFileSync(path.join(materials, n === 1 ? "a.md" : `a (${n}).md`), "utf8"), `existing ${n}`);
+  assert.equal(fs.readFileSync(src, "utf8"), bytes, "picked source unchanged");
+});
 t("a 자료 with 100 copies of the name refuses the drop as full", () => {
   const work = fs.mkdtempSync(path.join(tmp, "drop-full-"));
   fs.mkdirSync(path.join(work, "자료"));
