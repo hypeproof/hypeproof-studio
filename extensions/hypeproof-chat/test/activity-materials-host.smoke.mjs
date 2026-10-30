@@ -45,8 +45,8 @@ const PLAN = "# 발표 계획\n표지에는 제목만 쓴다 (PLAN-MARKER)\n";
 const NOTES = "# 실험 메모\n온도는 20도였다 (NOTES-MARKER)\n";
 const CARD = { object_id: "obj-12345678", kind: "material", title: "강사 읽기 자료", body: "광합성 설명 (CARD-MARKER)", links: [], revision: 1, received_at: 1, is_new: false, withdrawn: false, unreadable: false };
 
-function fixture({ profile, instructor = false } = {}) {
-  const root = fs.mkdtempSync(path.join(tmp, "work-"));
+function fixture({ profile, instructor = false, existingRoot, persistedState = [] } = {}) {
+  const root = existingRoot ?? fs.mkdtempSync(path.join(tmp, "work-"));
   const posts = [], history = [], proxyCalls = [];
   let pick = null, onPick = null;
   const watchers = [];
@@ -72,7 +72,7 @@ function fixture({ profile, instructor = false } = {}) {
   const { ChatPanelProvider, mat, FOLDER_CONSENT_KEY, folderNoAiCopy, setHostWriteSink } = module.exports;
   const hostWrites = [];
   setHostWriteSink({ wrote: (writes, actor) => hostWrites.push({ paths: writes.map((w) => w.absPath), actor }), replaced() {} });
-  const h = Object.create(ChatPanelProvider.prototype), state = new Map(), global = new Map();
+  const h = Object.create(ChatPanelProvider.prototype), state = new Map(persistedState), global = new Map();
   const seat = profile ?? { profile_id: "class-a", activity_kind: "classroom", activity_id: "act-1", sdk_tools: { read: true }, ux: { coach: { naming_mode: "fixed", fallback_name: "코치" } } };
   let task = "task-a";
   Object.assign(h, {
@@ -96,7 +96,7 @@ function fixture({ profile, instructor = false } = {}) {
   const say = async (msg) => { await h.handleMessage({ activityId: "a1", ...msg }); return last(); };
   const req = (type, extra = {}) => say({ type, requestId: `r${++n}`, ...extra });
   const send = (text, id) => h.handleMessage({ type: "sendMessage", activityId: "a1", text, history: [], toolMode: "auto", userMessageId: id });
-  return { h, seat, hostWrites, root, posts, history, proxyCalls, last, say, req, send, mat, global, FOLDER_CONSENT_KEY, folderNoAiCopy, setPick: (p) => { pick = p; }, setTask: (t) => { task = t; }, onPick: (fn) => { onPick = fn; }, watchers };
+  return { snapshotState: () => copy([...state]), h, seat, hostWrites, root, posts, history, proxyCalls, last, say, req, send, mat, global, FOLDER_CONSENT_KEY, folderNoAiCopy, setPick: (p) => { pick = p; }, setTask: (t) => { task = t; }, onPick: (fn) => { onPick = fn; }, watchers };
 }
 
 const t = async (label, fn) => { try { await fn(); passed++; console.log(`  ok   ${label}`); } catch (e) { failures.push(label); console.error(`  FAIL ${label}: ${e.stack ?? e}`); } };
@@ -521,6 +521,40 @@ await t("#3266: an authored note is stored, unselected, then explicitly sent", a
   await f.req("materialSelect", { scope: s.view.scope, id: note.id, selected: true });
   await f.send("메모를 읽어 줘", "note-selected");
   assert.ok(f.proxyCalls[1].userText.includes("AUTHORED-NOTE-MARKER"));
+});
+await t("#3266: same-title notes survive provider recreation and removal keeps both files", async () => {
+  const f = fixture();
+  let s = await f.req("materialsRequest");
+  s = await f.req("materialAddNote", { scope: s.view.scope, title: "반복 메모", text: "FIRST-NOTE-RELOAD\n" });
+  assert.equal(s.error, undefined);
+  const first = item(s, i => i.detail === "자료/반복 메모.txt");
+  s = await f.req("materialAddNote", { scope: s.view.scope, title: "반복 메모", text: "SECOND-NOTE-RELOAD\n" });
+  assert.equal(s.error, undefined);
+  const second = item(s, i => i.origin === "learner" && i.id !== first.id);
+  assert.ok(second);
+  assert.notEqual(first.detail, second.detail, "same title must not overwrite an existing note");
+  const contents = () => [first, second].map(i => fs.readFileSync(path.join(f.root, i.detail), "utf8"));
+  assert.deepEqual(contents(), ["FIRST-NOTE-RELOAD\n", "SECOND-NOTE-RELOAD\n"]);
+  // Recreate the actual provider in a fresh VM using a JSON-roundtripped Memento snapshot.
+  // This models persisted state, not VS Code's installed storage implementation.
+  const reopened = fixture({ existingRoot: f.root, persistedState: f.snapshotState() });
+  s = await reopened.req("materialsRequest");
+  for (const note of [first, second]) {
+    const restored = item(s, i => i.id === note.id);
+    assert.equal(restored?.detail, note.detail, "stable identity after recreation");
+    assert.equal(restored.selected, false, "saved notes are not silently selected");
+  }
+  s = await reopened.req("materialRemove", { scope: s.view.scope, id: first.id });
+  assert.equal(s.error, undefined);
+  const again = fixture({ existingRoot: f.root, persistedState: reopened.snapshotState() });
+  s = await again.req("materialsRequest");
+  assert.ok(!item(s, i => i.detail === first.detail), "folder scanning must not resurrect a removed note");
+  assert.equal(item(s, i => i.id === second.id)?.detail, second.detail);
+  assert.deepEqual(contents(), ["FIRST-NOTE-RELOAD\n", "SECOND-NOTE-RELOAD\n"], "removal preserves both original files");
+  await again.req("materialSelect", { scope: s.view.scope, id: second.id, selected: true });
+  await again.send("남은 메모만 읽어 줘", "note-after-reopen");
+  assert.ok(again.proxyCalls[0].userText.includes("SECOND-NOTE-RELOAD"));
+  assert.ok(!again.proxyCalls[0].userText.includes("FIRST-NOTE-RELOAD"));
 });
 await t("#3266: a note from an old scope never writes", async () => {
   const f = fixture();
