@@ -6417,7 +6417,9 @@ covers CGP-AGENT-R-025 / REQ-CGP-AGENT-48). Cmd+F on macOS, Ctrl+F elsewhere, an
 the chat webview opens a find bar at the top of the open transcript, right-aligned in the
 chat column, and focuses its input (대화에서 찾기). The physical F key counts too, so a
 Korean input source opens it. Pressing it again refocuses and selects the query; a query
-kept from an earlier search is repainted on reopening without scrolling. It does not open while a modal dialog (`aria-modal="true"` or an open `<dialog>`)
+kept from an earlier search in the same conversation is repainted on reopening without scrolling.
+Changing task or activity closes the bar and clears its query; typing the same text in the new
+conversation performs a fresh search and reveals its current match (#2974). It does not open while a modal dialog (`aria-modal="true"` or an open `<dialog>`)
 owns the keyboard, nor during IME composition. Every seat that draws the transcript gets it
 (personal, classroom, lesson, trial, pass and the instructor's nested panel); it reads only
 the local DOM and sends nothing to the host or the network.
