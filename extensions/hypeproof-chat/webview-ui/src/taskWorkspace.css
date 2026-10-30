@@ -65,7 +65,7 @@
 .tw-task-list li, .tw-source-list li { content-visibility: auto; contain-intrinsic-size: auto var(--ds-c-studio-taskworkspace-size-71); }
 /* D019: one column. The badge sits on its own right-aligned line so the title keeps the whole row width. */
 .tw-task { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; width: 100%; border: var(--ds-c-studio-taskworkspace-size-3) solid transparent; border-radius: var(--ds-c-studio-taskworkspace-radius-10); padding: var(--ds-c-studio-taskworkspace-space-53) var(--ds-c-studio-taskworkspace-space-24); color: inherit; text-align: left; background: transparent; margin: var(--ds-c-studio-taskworkspace-space-14) 0; }
-.tw-task[aria-current="page"] { background: var(--vscode-list-inactiveSelectionBackground, var(--ds-c-studio-taskworkspace-surface-1)); border-color: var(--tw-line); }
+.tw-task[aria-current="page"] { background: var(--vscode-list-inactiveSelectionBackground, var(--hp-bg-control-hover)); color: var(--vscode-list-inactiveSelectionForeground, var(--vscode-foreground)); border-color: var(--tw-line); }
 .tw-task-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-font-caption); }
 .tw-task-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--ds-c-studio-taskworkspace-space-2); font-size: var(--hp-font-caption); margin-top: var(--ds-c-studio-taskworkspace-space-12); color: var(--tw-muted); font-variant-numeric: tabular-nums; }
 .tw-local-note { color: var(--tw-muted); margin: var(--ds-c-studio-taskworkspace-space-18) var(--ds-c-studio-taskworkspace-space-2) var(--ds-c-studio-taskworkspace-space-13); font-size: var(--hp-font-caption); }
@@ -394,4 +394,11 @@ body.vscode-light .tw-works-drawer::backdrop, body.vscode-high-contrast-light .t
   .tw-works-views button[aria-pressed="true"] { border-width: calc(var(--ds-c-studio-taskworkspace-size-3) * 2); }
   /* A Highlight fill gets a Canvas text backplate in forced colours and the pressed label vanishes (CGP-KNOW-D-030 verify). */
   .tw-works-views button[aria-pressed="true"] { background-color: Canvas !important; color: CanvasText !important; border-color: Highlight !important; }
+}
+
+/* #2973: Chromium's forced-colour text backplates obscure Highlight-filled task titles.
+   Keep the system canvas/text pair and show selection with a Highlight boundary. */
+@media (forced-colors: active) {
+  .tw-workspace .tw-task[aria-current="page"] { background-color: Canvas !important; color: CanvasText !important; border-color: Highlight !important; }
+  .tw-workspace .tw-task[aria-current="page"] * { color: CanvasText !important; }
 }
