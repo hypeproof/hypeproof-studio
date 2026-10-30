@@ -1692,6 +1692,15 @@ html, body, #root {
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-growth { order:11; flex:0 0 auto; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-jump { order:11; flex:0 0 auto; }
 }
+/* At the 320 CSS px reflow width and below, wrapped mission text and the sticky composer
+   otherwise leave less room than a complete learning caption (105 px at 240×500 on Linux).
+   Give the mission at most 30% of the shell: at 200% zoom's 500 px height this leaves 350 px
+   for the caption and composer. Keep every mission detail and action in its existing native
+   scroller; keyboard focus scrolls each action into view. Taller windows regain space
+   proportionally instead of imposing a fixed-height header or hiding its contents. */
+@media (max-width:320px) {
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { max-height:30%; }
+}
 .hp-mission-week { margin: 0 0 var(--ds-c-studio-styles-space-14); font-size: var(--ds-c-studio-styles-type-1); letter-spacing: var(--ds-c-studio-styles-size-3); color: var(--hp-text-muted-default); }
 .hp-mission-sentence { margin: 0 0 var(--ds-c-studio-styles-space-2); font-size: var(--ds-c-studio-styles-type-15); line-height: var(--ds-c-studio-styles-typography-16); font-weight: var(--ds-c-studio-styles-typography-17); overflow-wrap: anywhere; }
 .hp-mission-activity { margin: 0 0 var(--ds-c-studio-styles-space-7); font-size: var(--ds-c-studio-styles-type-1); color: var(--hp-text-muted-default); overflow-wrap: anywhere; }
