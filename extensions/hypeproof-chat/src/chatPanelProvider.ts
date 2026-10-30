@@ -625,6 +625,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Metadata-only DEV lifecycle hook; no listener/resource exists unless native registration supplies it. */
   companionRuntimeInvalidated?: () => void;
+  /** Native receiving status only; never an approval decision or authority source. */
+  companionApprovalChanged?: (waiting:boolean) => void;
   companionTaskView(): import('./taskWorkspaceContract').TaskWorkspaceView | null {
     return this.taskChanging || this.connectionChanging ? null : this.currentTaskStore()?.getView() ?? null;
   }
@@ -1383,6 +1385,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * null is returned here.
    */
   private voiceProbes = new Map<string, (o: import("./voiceCapabilityHelpers").VoiceProbeObservations) => void>();
+
+  /** Exact provider-owned editor chat, used only to retain an already approved companion selection. */
+  companionChatFocused(): boolean { return this.editorChat?.active === true; }
 
   isViewVisible(): boolean { return !!this.view?.visible; }
 
@@ -3484,6 +3489,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // task switch), and it is not a turn message, so it must not touch open prompts.
     const msg: HostMessage = { type: "perfTraceState", recording: state.recording === true, id: state.recording === true && typeof state.id === "string" ? state.id : null };
     for (const view of [this.editorChat?.webview, this.view?.webview]) if (view) void Promise.resolve(view.postMessage(msg)).catch(() => undefined);
+  }
+
+  /** #3135: visible controls for the native DEV owner. Never admitted via turn/Send gates. */
+  private companionReceivingBinding: import('./companionReceivingControls').CompanionReceivingControlBinding|null = null;
+  setCompanionReceivingControls(binding: import('./companionReceivingControls').CompanionReceivingControlBinding|null): void {
+    this.companionReceivingBinding = this.context.extensionMode===vscode.ExtensionMode.Development ? binding : null;
+    this.postCompanionReceivingState();
+  }
+  private postCompanionReceivingState(): void {
+    const msg: HostMessage={type:'companionReceivingState',controls:this.companionReceivingBinding?.view??null};
+    for(const view of [this.editorChat?.webview,this.view?.webview])if(view)void Promise.resolve(view.postMessage(msg)).catch(()=>undefined);
   }
 
   /** #278 — is "페이지를 코치에게" allowed for this cohort? Default off (minor-safe). */
@@ -7415,6 +7431,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       void Promise.resolve().then(() => panel?.stop(msg.id)).catch(() => undefined).finally(() => this.postPerfTraceState(this.perfTracePanel?.state() ?? { recording: false, id: null }));
       return;
     }
+    if(msg.type==='companionReceivingStateRequest'||msg.type==='companionReceivingAction'){
+      // Only the currently owned chat surfaces, including while an SDK turn is busy.
+      if(!source||(source!==this.editorChat?.webview&&source!==this.view?.webview))return;
+      if(this.context.extensionMode!==vscode.ExtensionMode.Development){await source.postMessage({type:'companionReceivingState',controls:null});return;}
+      const held=this.companionReceivingBinding;
+      try {
+        if(msg.type==='companionReceivingAction'&&held&&msg.nonce===held.view.nonce
+          &&((msg.action==='stop'&&held.view.canStop)||(msg.action==='revoke'&&held.view.canRevoke)))await held.act(msg.action);
+      }finally{this.postCompanionReceivingState();}
+      return;
+    }
     const connections=activityConnections(this.context);
     if (connections && msg.activityId && msg.activityId!==connections.scope) {
       if (msg.type === 'taskMove') await this.refuseTaskMove(msg);
@@ -9609,8 +9636,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             requestApproval: async (action) => {
               let prompted = false;
               let denialSource: import('./denialSource').DenialSource | undefined;
-              const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; }, source => { denialSource = source; });
-              return {approved, actor: prompted ? 'user' as const : 'policy' as const, denialSource};
+              try {
+                const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; if(prepared?.current())this.companionApprovalChanged?.(true); }, source => { denialSource = source; });
+                return {approved, actor: prompted ? 'user' as const : 'policy' as const, denialSource};
+              } finally { if(prompted&&prepared?.current())this.companionApprovalChanged?.(false); }
             },
             // #282 P2 slice 2 — native-browser capabilities for the hypeproof
             // MCP tools. Always passed; runSdkCoach registers the server only

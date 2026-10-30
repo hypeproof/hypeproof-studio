@@ -2826,3 +2826,20 @@ body.vscode-high-contrast-light .hps-perf-trace-pill { border-color: var(--hp-te
 .hps-process-text { min-width: 0; flex: 1 1 auto; }
 .hps-process-actions { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); }
 .hps-running-processes button { min-height: var(--hp-control-min); font: inherit; }
+
+/* #3135: native-owned controls in the visible chat, independent of turn admission. */
+.hps-companion-receiving {
+  display: flex; flex-wrap: wrap; align-items: center; flex-shrink: 0;
+  gap: var(--ds-c-studio-styles-space-2); padding: var(--ds-c-studio-styles-space-2) var(--ds-c-studio-styles-space-1);
+  color: var(--hp-text-primary-default); background: var(--hp-bg-panel-default);
+  font-size: var(--hp-font-body); line-height: var(--hp-leading-label);
+}
+.hps-companion-receiving button {
+  min-height: var(--ds-c-studio-styles-size-8); min-width: var(--ds-c-studio-styles-size-8);
+  padding: 0 var(--ds-c-studio-styles-space-1); font: inherit; color: inherit;
+  background: transparent; border: var(--ds-c-studio-styles-size-3) solid currentColor; border-radius: var(--hp-radius-8);
+  cursor: pointer;
+}
+.hps-companion-receiving button:disabled { cursor: default; }
+.hps-companion-receiving-note { flex-basis: 100%; }
+.hps-companion-receiving button:focus-visible { outline: var(--ds-c-focus-width) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-focus-offset); }

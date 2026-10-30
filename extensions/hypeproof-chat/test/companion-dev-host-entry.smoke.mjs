@@ -25,7 +25,7 @@ test('only DEV gets factory registration API; construction/register create no ac
  assert.equal(apiModule.createCompanionDevHostEntry({extensionMode:1},ports),undefined);
  const exports=load({commands:{registerCommand:()=>{registered++;return new Disposable(()=>{});}}});
  const context={extensionMode:2,subscriptions:[],get globalStorageUri(){reads++;throw Error('no filesystem authority at registration');}};
- const control=exports.createCompanionDevHostEntry(context,ports);assert.deepEqual(Object.keys(control.api),['registerClients']);const registration=control.api.registerClients({pairing(){created++;throw Error('not called');},relay(){created++;throw Error('not called');}});assert.equal(registered,1);assert.equal(created,0);assert.equal(reads,0);control.invalidate();registration.dispose();control.dispose();
+ const control=exports.createCompanionDevHostEntry(context,ports);assert.deepEqual(Object.keys(control.api),['registerClients']);const registration=control.api.registerClients({pairing(){created++;throw Error('not called');},relay(){created++;throw Error('not called');}});assert.equal(registered,3);assert.equal(created,0);assert.equal(reads,0);control.invalidate();registration.dispose();control.dispose();
 });
 
 test('journal lease retains admitted old write and cross-process lock until drain; successor cannot load early',async()=>{

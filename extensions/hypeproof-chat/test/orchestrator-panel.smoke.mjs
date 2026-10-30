@@ -33,6 +33,17 @@ const withoutEmptyRecovery = html => html
   .replace('<p class="hps-attachment-error-summary" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-error-summary"></p>', '')
   // CGP-CHAT-R-029: the persistent, empty 되돌리기 live region; stripping this exact node reproduces every prior digest.
   .replace('<div class="hps-undo-toast" role="status" aria-live="polite" aria-atomic="true" data-testid="undo-toast" data-shown="false"></div>', '');
+// React's SSR useId token encodes the component tree position. A null sibling can
+// renumber it without changing any DOM. Rename only generated tokens inside ID
+// and IDREF attributes, consistently; retain suffixes, attributes and all markup.
+const normalizeRender = html => {
+  const ids = new Map();
+  return withoutEmptyRecovery(html).replace(/(\s)(id|aria-labelledby|aria-describedby|aria-controls|for)="([^"]*)"/g, (_all, space, attribute, value) =>
+    `${space}${attribute}="${value.replace(/:R[0-9a-v]+(?:H[0-9a-v]+)?:/g, token => {
+      if (!ids.has(token)) ids.set(token, `:a5id${ids.size + 1}:`);
+      return ids.get(token);
+    })}"`);
+};
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 
 // ── The render instrument: the real components, bundled once ────────────────
@@ -275,11 +286,14 @@ const OLD_SCREENS = {
 // CGP-LEARN-D-002: the six ChatPanel digests were re-taken (TZ=UTC) because the criterion card's thumbnail icon is now
 // `flag` instead of `check-square` (no check mark inside a block). Putting main's check-square <svg> back in place of the
 // flag <svg> in the HPS_A5_DUMP_DIR dumps gives main's markup byte for byte; the five EffortControl digests are unchanged.
+// PR3140: canonical baselines are derived from paired b6f14db8 parent and merged
+// renders. The parent reproduces all 11 raw baseline digests; canonical markup
+// matches across all 11 screens while preserving IDs, references and markup.
 const BASE = {
-  "ChatPanel/adult-plain": "427f0c868f9d2e001363b83c5190c5a5729e94f8a0cf114d141d28317f3a9559",
-  "ChatPanel/adult-effort-observed": "b8e77396817764c7e48fde595175c028c1379ce20c1faeda67b0cae8a4dc26a8",
-  "ChatPanel/adult-timeline": "746ff8aba3c47e0b4ec57cd3337d043b29a27b3ab23ac4c1c4bc53dcfedded1b",
-  "ChatPanel/kids": "18e9f1e42d8f055b519aaa791866ff81625543b31406f0d12b0d83c53ab93122",
+  "ChatPanel/adult-plain": "80cbc491375c07f561f6e45e2784804ce901c882f6a582f353308ca38a764c57",
+  "ChatPanel/adult-effort-observed": "2f3a30089ca45e4a1869684cb5b40f026b0efb9081f91396b63bb3160f9e2d51",
+  "ChatPanel/adult-timeline": "acff9402cd536f0cc15244408fc66b8a76f2add51eb824aea4c68291a088802f",
+  "ChatPanel/kids": "7464ada351e37158c7cd4cf651ffdf59885c0a67d4976fa2dff807d9ce73b491",
   "EffortControl/policy-observed": "0a4702c02aad246ce9e4111da47883d0ce562ad70b752c373defb87000f03895",
   "EffortControl/policy-loading": "b25cf34b92c35339417db49ebb142b5ef6dbce91b05afd563aa4c8ed6a6074d6",
   "EffortControl/unknown": "609bf49f1ec2494fba2b6e00acb2a52c15fee9d01269a0e0f68af80525d20dce",
@@ -299,8 +313,8 @@ const BASE = {
   // Re-recorded for CGP-CHAT-R-021 (TZ=UTC): the six ChatPanel screens serve a lesson whose first step
   // has a hint, so the lesson tip row now renders above the composer. Removing that one block gives
   // the earlier markup byte for byte (diffed with HPS_A5_DUMP_DIR); the five EffortControl digests are unchanged.
-  "ChatPanel/classroom-class-funded": "61420c8f9534433a714f3c8fb97b580e2a7c1ecd5d2f7d1d358fb2b0f4a22dcc",
-  "ChatPanel/classroom-access-unknown": "fd91be632341e1d826f3c03ffd69d8ee3b803a9fac10b1e9d355e6f16e15cf87",
+  "ChatPanel/classroom-class-funded": "4197eb672c7126e0b897e8ef3b6c44264937ccc2ee73dbb10aec3ab30ad979ce",
+  "ChatPanel/classroom-access-unknown": "dba3e148fed59d22b9301b13374e7d608cf85b5f31f9f3aee1d569c45be36c16",
 };
 
 const status = rendererStatus();
@@ -309,18 +323,41 @@ if (!status.available) {
   console.log(`NOT RUN orchestrator panel renders — ${status.detail}`);
 } else {
   const digests = {};
+  let referenceHtml;
   // HPS_A5_DUMP_DIR=<dir> also writes each markup there, to diff a failing screen by eye.
   const dumpDir = process.env.HPS_A5_DUMP_DIR;
   for (const [name, make] of Object.entries(OLD_SCREENS)) {
     const [component, props] = make();
     const html = await render(component, props);
-    digests[name] = sha(withoutEmptyRecovery(html));
+    if (name === "ChatPanel/adult-plain") referenceHtml = html;
+    digests[name] = sha(normalizeRender(html));
     if (dumpDir) {
       const fs = await import("node:fs");
       fs.mkdirSync(dumpDir, { recursive: true });
       fs.writeFileSync(`${dumpDir}/${name.replace(/\//g, "__")}.html`, html);
     }
   }
+  // Real rendered markup: a consistent generated-token rename is harmless;
+  // deleting targets/relationships or changing their meaning must still fail.
+  const token = referenceHtml.match(/:R[0-9a-v]+(?:H[0-9a-v]+)?:/)?.[0];
+  assert.ok(token, 'the actual lesson block must exercise generated IDs');
+  assert.equal(normalizeRender(referenceHtml.replaceAll(token, ':Rvvvv:')), normalizeRender(referenceHtml));
+  const changeOnce = (from, to) => {
+    assert.equal(referenceHtml.split(from).length - 1, 1, `one actual mutation target: ${from}`);
+    return referenceHtml.replace(from, to);
+  };
+  const mutations = {
+    'missing target': changeOnce(` id="${token}t"`, ''),
+    'duplicate target': changeOnce(`id="${token}h"`, `id="${token}t"`),
+    'crosswired label': changeOnce(`aria-labelledby="${token}t"`, `aria-labelledby="${token}h"`),
+    'missing relationship': changeOnce(` aria-describedby="${token}h"`, ''),
+    'visible label': changeOnce('확인 기준 적기', '기준이 바뀌었어요'),
+  };
+  for (const [name, markup] of Object.entries(mutations))
+    assert.notEqual(sha(normalizeRender(markup)), BASE['ChatPanel/adult-plain'], `${name} must remain observable`);
+  assert.notEqual(normalizeRender('<p id="fixed">:R1:</p>'), normalizeRender('<p id="other">:R2:</p>'), 'static IDs and visible text are not erased');
+  assert.notEqual(normalizeRender('<p data-id=":R1:"></p>'), normalizeRender('<p data-id=":R2:"></p>'), 'data attributes are not ID attributes');
+  ok('generated SSR token rename preserves ID/ARIA structure; five actual markup/linkage mutations remain observable');
   if (RECORD) {
     console.log(JSON.stringify(digests, null, 2));
     process.exit(0);
@@ -1240,7 +1277,7 @@ if (status.available) {
     for (const [name, make] of Object.entries(OLD_SCREENS)) {
       const [component, props] = make();
       const withServed = { ...props, config: { ...props.config, profile: { ...props.config.profile, orchestrator: served } } };
-      assert.equal(sha(withoutEmptyRecovery(await render(component, withServed))), BASE[name], `${name} with orchestrator=${served.enabled === false ? "disabled" : "roster"}`);
+      assert.equal(sha(normalizeRender(await render(component, withServed))), BASE[name], `${name} with orchestrator=${served.enabled === false ? "disabled" : "roster"}`);
     }
   }
   // The timeline draws the host's lines as designed (spec §5.2 examples), through ChatPanel.

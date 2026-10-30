@@ -53,6 +53,7 @@ claimed/in_review는 다른 작업과 합류·검토, reconcile은 닫힘/오래
 
 | 단위 | 종류 | 이슈 |
 |---|---|---|
+| [Desktop-owned workspace and bounded mobile companion acceptance](#desktop-mobile-companion) | implementation | [#2803](https://github.com/hypeproof/hypeproof-studio/issues/2803) |
 | [학생 목표와 수업 기준 보존](#goal) | implementation | [#554](https://github.com/hypeproof/hypeproof-studio/issues/554) |
 | [제외한 자료가 이후 모델 문맥에 남지 않도록 집행](#context) | implementation | [#555](https://github.com/hypeproof/hypeproof-studio/issues/555) |
 | [단계별 도움 선택과 실제 모델 행동 연결](#help-modes) | implementation | [#1008](https://github.com/hypeproof/hypeproof-studio/issues/1008) |
@@ -707,6 +708,14 @@ Added 2026-09-29 for epic [#1388](https://github.com/hypeproof/hypeproof-studio/
 - Positive control: All fifteen steps pass on the dev host; the live run completes with a real phone; the switch-off regressions stay green. With the switch off, CR-T02 walks the full switch-off inventory from every item and finds every entry unreachable. In the Studio app on the reference Mac, preview refresh after save has p50 under 2 s (CR-T55) and element capture to context p50 under 1 s (CR-T56), 30 samples each.
 - Negative control: A planted break between steps 8 and 10 stops the loop at step 10; a live-run step satisfied only by synthetic data is NOT RUN, not PASS. Any inventory entry reachable with the switch off fails. A planted 3 s delay in the refresh path, and a full-page screenshot planted in place of the element crop, are each reported as a miss.
 - Implementation paths to check: `e2e/curriculum-runtime/loop-app.spec.ts`, `e2e/curriculum-runtime/timing-app.spec.ts`, `e2e/curriculum-runtime/switch-app.spec.ts`, `e2e/curriculum-runtime/register-version.mjs`, `e2e/curriculum-runtime/app-service.mjs`, `e2e/curriculum-runtime/loop-coach.mjs`, `e2e/curriculum-runtime/service-gate.mjs`, `e2e/curriculum-runtime/service-control.mjs`, `scripts/cr-dev-kit.sh`, `scripts/studio-dev.py`, `scripts/test-studio-dev.py`, `docs/dev/studio-dev.md`, `docs/testing/curriculum-runtime.md`, `docs/testing/curriculum-runtime-dev.md`
+
+<a id="desktop-mobile-companion"></a>
+
+### Desktop-owned workspace and bounded mobile companion acceptance
+
+- Issue: [#2803](https://github.com/hypeproof/hypeproof-studio/issues/2803) · implementation
+- Canonical contract: [DMC-01–15](../requirements/desktop-mobile-companion.md), [desktop-first delivery plan](desktop-mobile-companion.md), [test contract](../testing/desktop-mobile-companion.md) and `config/requirement-work.json`.
+- This is a navigation link to the existing ledger item, not a completion or new acceptance record. The original workspace and execution remain on the authorized desktop; the Service relays bounded data. DEV-only work does not establish installed, production, physical-device or classroom acceptance.
 
 ## 완료와 재개
 

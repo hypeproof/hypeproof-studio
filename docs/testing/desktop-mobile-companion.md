@@ -270,3 +270,58 @@ the existing JVM sign-in/deadline controls with Java17 or newer. Its temporary d
 link is removed after the run. It does not assemble an APK, execute Android's
 platform lifecycle, connect an account, or deploy Service. Earlier independent
 source evidence and installed failures remain bound to their original versions.
+
+## Bounded receiving controls — #3135
+
+DMC-T04/05/06/07/12/14 add `companion-receiving-lifetime.smoke.mjs`, real owner,
+entry/command, host-session and unchanged shared-budget controls. Exercise zero
+receives before Start, duplicate Start/manual receive exclusion, ten-second idle,
+sixty empties, monotonic deadline without renewal, hung/late callbacks, sticky
+unknown/closed fences, busy Stop/revoke, signer retention through a confirmed or
+lost reply, exact status/revoke-only authenticated transports and batch retention.
+The native status is an observation of existing approvals, never a decision.
+
+Installed acceptance must use one Start plus an explicit phone Submit without
+the one-shot command, preserve normal file/SDK approval and unknown no-replay,
+observe focus/browser/modal transitions without renewal, and exercise Stop and
+revocation while busy. Source fixtures do not establish physical reachability,
+latency, installed selected execution or classroom acceptance. #3135 remains
+open until its exact source and installed evidence are independently reviewed.
+
+The independent DEV Stop/Revoke command admission is source-tested while the menu is busy. Actual access through a native modal is NOT RUN: the OS modal may require Cancel before Stop; command registration and status visibility do not prove clickable controls during that modal.
+
+
+A15 at `98645c411aea6fa0c21395d6365d326594c8c29b` passed 37 observed checks,
+including phone intent → real SDK selected-file write → phone result/ACK, then
+failed clicking the receiver Stop: Studio defaults `workbench.statusBar.visible`
+to false. Hidden status-item DOM text was not physical reachability. Preserve
+that FAIL and do not force-click, invoke the handler from the test, or enable the
+status bar only in the fixture.
+
+The repair adds `companion-receiving-controls.smoke.mjs` (actual provider source,
+DEV/owned-view/nonce fences), command controls for replacement, busy admission and
+truthful failed revoke, and `companion-receiving-controls-render.smoke.mjs`
+(actual ChatPanel, shipped CSS, hidden shell bar, narrow/wide keyboard controls
+while the normal composer is busy). Absent/closed state hides actions; stopped
+and unknown state disable Stop. No start/Send/grant action crosses this bridge.
+Installed A16 must click the visible control and observe no later work, then
+separately establish confirmed or unconfirmed remote revocation. Source render
+controls do not prove Electron/modal reachability or installed Stop acceptance.
+
+### Receiver chat selection regression (A17)
+
+`companion-dev-host-owner.smoke.mjs` drives the real native owner and authority
+snapshot with fixture-owned VS Code surfaces: explicitly select and authorize
+the saved HTML, clear `activeTextEditor`, and focus the same provider-owned chat.
+The exact request must reach authenticated reservation and the existing prepared
+Send port once. The fixture intentionally stops at Send; it runs no SDK. Refuse
+reservation/Send for foreign chat/webviews, a different editor, same-URI document
+replacement, closed/dirty/untitled documents, changed content/version, changed
+task/epoch/profile, expired pair, and document/focus drift during awaited account
+resolution. A real-owner source control completes two measured versions through
+one max-two-turn grant, with no regrant. It also delays the live document update
+after filesystem measurement and checks one-time adoption when that exact hash
+arrives. An observed unrelated edit before catch-up fences adoption. Between-turn
+external edits, duplicate completion replay, failed and unknown results cannot
+advance that pin or reserve another turn. Retain the existing preview-active-editor controls. An installed App
+run must separately exercise the real chat tab, execution, result, Stop and revoke.

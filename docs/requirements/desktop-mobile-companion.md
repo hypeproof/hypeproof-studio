@@ -209,3 +209,44 @@ pending work and cannot undo an already dispatched filesystem effect.
 Production registration/activation remains absent. The explicitly injected local
 private client must match repaired Service `c9714c86bc8ccd9471806287a02e962a7100af70`;
 new-cut source checks do not substitute for installed/native SDK acceptance.
+
+## Explicit bounded native receiving — #3135
+
+DMC-04/05/06/07/12/14: an already connected DEV desktop owner may start one
+receiving lifetime only through an explicit native gesture. Pairing, granting
+selected-file permission, focus changes and restart never start or renew it.
+The absolute monotonic bound is ten minutes or the earlier captured pair/lease
+expiry, with sixty empty turns and ten seconds of abortable idle delay. The
+existing transport budget and one cipher/session remain authoritative.
+
+Persistent native status distinguishes listening, processing, approval waiting,
+stopped, closed and needs-check. Stop and signed revoke have separate controls
+outside the busy menu command. Stopping idle receiving retains the local cipher;
+stopping admitted work fences/aborts it and may close the local connection.
+Remote revoke first fences effects, retains the exact pair signer for one bounded
+status refresh and signed request, then erases locally regardless of the receipt.
+Only a verified remote receipt displays revoked. No stop notification promises
+that already dispatched effects were undone.
+
+Unknown semantics or remaining-turn exhaustion stop automatic admission,
+including later entries in the same delivered batch. Only the decided entry is
+ACKed; remaining exact incoming bytes and existing durable decisions stay held
+for explicit reconciliation. This adds no execution authority, automatic Send,
+reconnect, persistent key, daemon or production activation. Installed receiving,
+focus/modal behavior and reachable Stop still require separate observation.
+
+### Granted selection while receiver chat is focused
+
+The execution owner retains the exact explicitly selected, saved HTML document
+when its own editor chat takes focus to show receiver controls. The snapshot and
+live execution check use the same captured document identity; an unrelated
+webview or arbitrary open document cannot supply a selection. Admission still
+requires the captured version and content hash, current task/epoch/profile/pass
+and unchanged paired authority. A different editor, replacement/closed/dirty
+document or stale selection refuses reservation and prepared Send. Only an exact
+measured completed execution, confirmed by the existing Service completion, may
+advance the retained pin to its matching live document version/hash for the
+remaining turn of the same grant. Failed/unknown outcomes and duplicate terminal
+receipts cannot adopt external edits. Ordinary
+preview selection keeps its active-editor requirement. This source correction
+does not establish installed receiver or SDK acceptance.

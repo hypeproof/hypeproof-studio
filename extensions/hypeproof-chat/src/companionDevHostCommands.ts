@@ -1,21 +1,29 @@
 /** Explicit native DEV gestures. The supplied owner retains all authority and cipher lifecycle. */
+import type {CompanionReceivingView} from './companionReceivingLifetime.ts';
 import * as vscode from 'vscode';
 import { randomUUID } from 'node:crypto';
+import { companionReceivingLabels, type CompanionReceivingControlBinding } from './companionReceivingControls';
 import type { CompanionHostRequest } from './companionHostDispatch.ts';
 import type { CompanionHostTurn } from './companionHostSession.ts';
 import type { CompanionSelectionPublication } from './companionSelection.ts';
 
 export const DEV_COMPANION_HOST_COMMAND = 'hypeproofChat.devCompanionHost';
+export const DEV_COMPANION_STOP_COMMAND = 'hypeproofChat.devCompanionStopReceiving';
+export const DEV_COMPANION_REVOKE_COMMAND = 'hypeproofChat.devCompanionRevoke';
 export interface CompanionDevHostCommandView {
   state: 'idle' | 'inviting' | 'claimed' | 'approved' | 'connected' | 'closed' | 'revoked';
   comparisonCode?: string;
   executionAuthorized: false;
+  receiving?: Readonly<CompanionReceivingView>;
   scopedExecution?: Readonly<{state:'off'|'ready'|'busy'|'unknown'|'closed';expiresAt?:number;remaining?:number}>;
   publication?: Readonly<CompanionSelectionPublication>;
 }
 /** Structural port implemented by CompanionDevHostOwner; no account or key material crosses it. */
 export interface CompanionDevHostCommandOwner {
   view(): Readonly<CompanionDevHostCommandView>;
+  startReceiving?(): boolean;
+  stopReceiving?(): void;
+  onReceivingChanged?(listener:()=>void): {dispose():void};
   startInvitation(signal?: AbortSignal): Promise<{ challenge: object; view: Readonly<CompanionDevHostCommandView> }>;
   inspectClaim(signal?: AbortSignal): Promise<Readonly<CompanionDevHostCommandView>>;
   confirmComparedCode(code: string, signal?: AbortSignal): Promise<Readonly<CompanionDevHostCommandView>>;
@@ -28,11 +36,12 @@ export interface CompanionDevHostCommandOwner {
   revoke(signal?: AbortSignal): Promise<Readonly<CompanionDevHostCommandView>>;
 }
 export interface CompanionDevHostCommandPorts {
+  receivingControls?(binding: CompanionReceivingControlBinding|null): void;
   createOwner(signal?: AbortSignal): CompanionDevHostCommandOwner | Promise<CompanionDevHostCommandOwner>;
   /** Required account/configuration/task/workspace lifecycle invalidation supplied by the native caller. */
   onDidInvalidate(listener: () => void): vscode.Disposable;
 }
-type Action = 'prepare' | 'copy' | 'inspect' | 'compare' | 'connect' | 'describe' | 'publish' | 'authorize_execution' | 'receive' | 'close' | 'revoke';
+type Action = 'prepare' | 'copy' | 'inspect' | 'compare' | 'connect' | 'describe' | 'publish' | 'authorize_execution' | 'receive' | 'start_receiving' | 'stop_receiving' | 'close' | 'revoke';
 interface Item extends vscode.QuickPickItem { action: Action }
 const labels: Record<CompanionDevHostCommandView['state'], string> = {
   idle: '초대 전', inviting: '기기 참여 기다리는 중', claimed: '기기 참여 확인 · 코드 비교 필요',
@@ -52,9 +61,26 @@ export function registerDevCompanionHostCommands(
   if (context.extensionMode !== vscode.ExtensionMode.Development) return new vscode.Disposable(() => {});
   let owner: CompanionDevHostCommandOwner | undefined;
   let challenge: object | undefined;
+  let ownerNonce = randomUUID();
   let generation = 0, disposed = false;
   type Lease = { generation: number; controller: AbortController };
   let running: Lease | undefined;
+  let changed: {dispose():void}|undefined;
+  const status=vscode.window?.createStatusBarItem?.(),revokeStatus=vscode.window?.createStatusBarItem?.();
+  const updateStatus=()=>{
+    const view=owner?.view();
+    if(!view){status?.hide();revokeStatus?.hide();ports.receivingControls?.(null);return;}
+    const target=owner!,nonce=ownerNonce,state=view.receiving?.state??'stopped';
+    const canStop=['listening','processing','awaiting-approval'].includes(state);
+    ports.receivingControls?.(view.state!=='connected'||terminal(view)?null:{view:{nonce,state,canStop,canRevoke:true},act:async action=>{
+      if(disposed||context.extensionMode!==vscode.ExtensionMode.Development||owner!==target||ownerNonce!==nonce||target.view().state!=='connected')return;
+      const current=target.view().receiving?.state;
+      if(action==='stop'&&['listening','processing','awaiting-approval'].includes(current??''))stop();
+      else if(action==='revoke')await revoke();
+    }});
+    if(status){status.text=companionReceivingLabels[view.receiving?.state??'stopped'];status.command=DEV_COMPANION_STOP_COMMAND;status.tooltip='수신 중지 · 실행 완료나 서버 권한 철회와 별개';status.show();}
+    if(revokeStatus){revokeStatus.text='휴대폰 연결 권한 철회';revokeStatus.command=DEV_COMPANION_REVOKE_COMMAND;if(terminal(view))revokeStatus.hide();else revokeStatus.show();}
+  };
   const stopped = Symbol('stale companion host action');
   const close = (target: CompanionDevHostCommandOwner | undefined) => {
     try { target?.close(); } catch { /* Local invalidation stays terminal even if an injected hook fails. */ }
@@ -64,9 +90,24 @@ export function registerDevCompanionHostCommands(
     const prior = running; running = undefined;
     prior?.controller.abort();
     const priorOwner = owner; owner = undefined; challenge = undefined;
-    close(priorOwner);
+    close(priorOwner);changed?.dispose();changed=undefined;updateStatus();
   };
   const lifecycle = ports.onDidInvalidate(invalidate);
+  const stop=()=>{
+    if(disposed||context.extensionMode!==vscode.ExtensionMode.Development)return;
+    owner?.stopReceiving?.();updateStatus();
+  };
+  const stopRegistration=vscode.commands.registerCommand(DEV_COMPANION_STOP_COMMAND,stop);
+  const revoke=async()=>{
+    if(disposed||context.extensionMode!==vscode.ExtensionMode.Development||!owner||terminal(owner.view()))return;
+    const target=owner;
+    // Revoke begins by fencing work synchronously, before any busy command is cancelled.
+    const pending=target.revoke();generation++;const prior=running;running=undefined;prior?.controller.abort();
+    try {const result=await pending;if(owner===target&&!disposed)await vscode.window.showInformationMessage(result.state==='revoked'?'이 기기의 연결 권한 철회를 확인했어요.':'이 컴퓨터 연결을 닫았어요. 서버 권한 철회는 확인하지 못했어요.');}
+    catch{if(owner===target&&!disposed)await vscode.window.showErrorMessage('이 컴퓨터 연결을 닫았어요. 서버 권한 철회는 확인하지 못했어요.');}
+    finally{updateStatus();}
+  };
+  const revokeRegistration=vscode.commands.registerCommand(DEV_COMPANION_REVOKE_COMMAND,revoke);
   const registration = vscode.commands.registerCommand(DEV_COMPANION_HOST_COMMAND, async () => {
     if (disposed || context.extensionMode !== vscode.ExtensionMode.Development) return;
     if (running) {
@@ -98,6 +139,8 @@ export function registerDevCompanionHostCommands(
           if(owner?.authorizeSelectedExecution&&(!view.scopedExecution||view.scopedExecution.state==='off'))items.push({label:'선택한 HTML 수정 허용',description:'별도 확인 후 최대 2번 · 10분 · 현재 이용권 사용',action:'authorize_execution'});
           items.push({ label: '현재 작업과 저장된 HTML 확인', action: 'describe' });
           items.push({ label: '선택한 작업을 휴대폰에 알리기', description: view.publication?.state==='delivery_unconfirmed'?'같은 알림을 직접 다시 확인 · 파일 승인은 별도':'작업 정보만 암호화해 전달 · 파일 승인은 별도', action:'publish' });
+          if(owner?.startReceiving)items.push({label:'수신 시작',description:'최대 10분 · 현재 연결만 · 실행 허용과 별개',action:'start_receiving'});
+          if(owner?.stopReceiving)items.push({label:'수신 중지',description:'서버 권한 철회와 별개',action:'stop_receiving'});
           items.push({ label: '요청 한 번 받기·확인', description: '자동 수신하지 않음 · 파일 읽기와 초안 가져오기는 별도 확인', action: 'receive' });
         }
         items.push({ label: '이 컴퓨터에서만 연결 닫기', description: '서버 권한 철회와 별개', action: 'close' });
@@ -112,7 +155,7 @@ export function registerDevCompanionHostCommands(
         await progress(async () => {
           const created = await ports.createOwner(lease.controller.signal);
           if (!live()) { close(created); throw stopped; }
-          close(owner); owner = created; challenge = undefined;
+          close(owner);changed?.dispose();owner = created;ownerNonce=randomUUID();changed=created.onReceivingChanged?.(updateStatus);challenge = undefined;updateStatus();
           const started = await created.startInvitation(lease.controller.signal); check();
           challenge = started.challenge;
         });
@@ -150,6 +193,10 @@ export function registerDevCompanionHostCommands(
         const authorized=await progress(()=>target.authorizeSelectedExecution!(lease.controller.signal));
         await show(authorized.scopedExecution?.state==='ready'?'선택한 HTML의 수정 요청을 받을 준비가 됐어요. 요청 받기를 직접 선택해 주세요.'
           :authorized.scopedExecution?.state==='unknown'?'허용 여부를 확인하지 못했어요. 자동으로 요청을 실행하지 않아요.':'수정을 허용하지 않았어요.');
+      } else if(picked.action==='start_receiving'){
+        const started=target.startReceiving?.();updateStatus();
+        await show(started?'휴대폰 요청 수신을 시작했어요. 최대 10분 동안 현재 연결로만 받아요. 채팅 화면의 휴대폰 연결에서 수신을 중지할 수 있어요. 승인 창이 열려 있으면 먼저 취소해 주세요.':'수신을 시작하지 않았어요. 현재 연결과 확인이 필요한 결과를 확인해 주세요.');
+      } else if(picked.action==='stop_receiving'){target.stopReceiving?.();updateStatus();
       } else if (picked.action === 'receive') {
         const turn = await progress(() => target.receiveAndHandle(lease.controller.signal));
         await show(turn.state === 'closed' ? '연결이 닫혀 이번 확인을 마치지 못했어요.'
@@ -171,11 +218,11 @@ export function registerDevCompanionHostCommands(
       }
     } catch (error) {
       if (error !== stopped && live()) await vscode.window.showErrorMessage('이번 연결 확인을 마치지 못했어요. 완료나 권한 철회로 표시하지 않았어요. 현재 연결 상태를 확인한 뒤 직접 다시 시도해 주세요.');
-    } finally { if (running === lease) running = undefined; }
+    } finally { if (running === lease) running = undefined; updateStatus(); }
   });
   const disposable = new vscode.Disposable(() => {
     if (disposed) return;
-    disposed = true; invalidate(); lifecycle.dispose(); registration.dispose();
+    disposed = true; invalidate(); lifecycle.dispose(); registration.dispose();stopRegistration.dispose();revokeRegistration.dispose();status?.dispose();revokeStatus?.dispose();
   });
   context.subscriptions.push(disposable);
   return disposable;

@@ -544,6 +544,8 @@ export interface SuggestionChip {
 
 // Webview → Host
 export type WebviewMessage = (
+  | {type:'companionReceivingStateRequest'}
+  | {type:'companionReceivingAction';nonce:string;action:import('./companionReceivingControls').CompanionReceivingAction}
   | {type:'browserApprovalAnswer';id:string;choice:import('./browserApprovalPrompt').BrowserApprovalChoice}
   | {type:'commandApprovalAnswer';id:string;choice:import('./commandApprovalPrompt').CommandApprovalChoice}
   | {type:'annotationLeaveAnswer';id:string;discard:boolean}
@@ -861,6 +863,7 @@ export type WebviewMessage = (
 
 // Host → Webview
 export type HostMessage = (
+  | {type:'companionReceivingState';controls:import('./companionReceivingControls').CompanionReceivingControls|null}
   | {type:'browserApprovalPrompt';prompt:import('./browserApprovalPrompt').BrowserApprovalPrompt|null}
   | {type:'commandApprovalPrompt';prompt:import('./commandApprovalPrompt').CommandApprovalPrompt|null}
   | {type:'annotationLeavePrompt';prompt:import('./annotationLeavePrompt').AnnotationLeavePrompt|null}

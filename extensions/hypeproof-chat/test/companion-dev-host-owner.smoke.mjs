@@ -4,7 +4,8 @@ import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
+import {writeFile} from 'node:fs/promises';
 import { nativeBridgeFixture } from './lib/companion-native-bridge-harness.mjs';
 import { CompanionTransportBudget } from '../src/companionTransportBudget.ts';
 const require=createRequire(import.meta.url),pairId='ci_'+'a'.repeat(32);
@@ -12,11 +13,11 @@ const bundle=await build({entryPoints:[fileURLToPath(new URL('../src/companionDe
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return{promise,resolve};};
 async function fixture(authoring=false,execution=false){
  const native=await nativeBridgeFixture(),module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?native.vscode:require(id),process,Buffer,console,fetch:native.fetcher,URL,Response,Headers,AbortSignal,AbortController,TextEncoder,TextDecoder,crypto,btoa,atob,performance,structuredClone,setTimeout,clearTimeout});
- const calls={issue:0,submit:0,start:0,refresh:0,approve:[],revoke:0,offer:0,connect:0,close:0,acks:[],prepared:[],sent:[]};let onStart=async()=>{},onRefresh=async()=>{},onPrepare=async()=>{},onSend=async()=>{},batch=[];
+ let ownChatFocused=false,executionEpoch=0,currentSelectionHash,onExecutionSubmit=async()=>{throw Error('no implicit execution');};const calls={reserve:0,receive:0,issue:0,submit:0,start:0,refresh:0,approve:[],revoke:0,offer:0,connect:0,close:0,acks:[],prepared:[],sent:[]};let onStart=async()=>{},onRefresh=async()=>{},onPrepare=async()=>{},onSend=async()=>{},batch=[];
  const pair={invitation:null,keys:null,qr:null,claim:null,frozenClaim:null,
   async start(scope){calls.start++;await onStart();this.keys={privateKey:'test-owned-synthetic-reference'};this.invitation={...native.pair,id:pairId,status:'open',host_id:scope.host_id,workspace_id:scope.workspace_id,project_id:scope.project_id};this.qr={schema:this.invitation.schema,id:pairId,invite_secret:'synthetic-invitation-challenge',host_key:'synthetic-public-key',invitation_digest:'a'.repeat(64),host_invite_proof:'synthetic-proof',challenge_expires_at:Math.floor(Date.now()/1000)+120};return this.qr;},
   async refresh(){calls.refresh++;await onRefresh();return this.invitation;},async approve(code){calls.approve.push(code);this.invitation={...this.invitation,status:'approved'};return this.invitation;},async revoke(){calls.revoke++;this.invitation={...this.invitation,status:'revoked'};return this.invitation;}};
- const relay={role:'host',get row(){return pair.invitation;},async publishOffer(){calls.offer++;},async connect(){calls.connect++;},async prepare(text,id){calls.prepared.push({text,id});await onPrepare();return id;},async send(id){calls.sent.push(id);await onSend();},async receive(){const delivered=batch;batch=[];return delivered;},async acknowledge(id){calls.acks.push(id);},close(){calls.close++;}};
+ const relay={role:'host',get row(){return pair.invitation;},async publishOffer(){calls.offer++;},async connect(){calls.connect++;},async prepare(text,id){calls.prepared.push({text,id});await onPrepare();return id;},async send(id){calls.sent.push(id);await onSend();},async receive(){calls.receive++;const delivered=batch;batch=[];return delivered;},async acknowledge(id){calls.acks.push(id);},close(){calls.close++;}};
  const budget=new CompanionTransportBudget();let rawFetch=(...args)=>native.fetcher(...args);let config={service:'http://127.0.0.1:44321/v1',site:'http://127.0.0.1:44321'};
  let executionCurrent;
  if(execution){
@@ -33,10 +34,10 @@ async function fixture(authoring=false,execution=false){
    ?Response.json({schema:'hps-companion-execution-context/1',account_id:'account',host_session_id:'host-session',model_session_id:'native-pass-id',model_token_jti:'model-jti',model_profile_id:native.profile.profile_id})
    :native.fetcher(input,init);
  }
- const owner=new module.exports.CompanionDevHostOwner({context:native.context,connections:native.connections,accounts:native.accounts,configured:()=>config,identity:{accountId:'account',sessionId:'host-session'},...(authoring?{authoring:{store:()=>native.store,reviewDraft:async()=>({check:async()=>{},imported:async()=>{},close(){}})}}:{}),budget,fetch:(...args)=>rawFetch(...args),taskView:()=>native.store.getView(),epoch:()=>execution?0:1,journal:native.journal,...(execution?{execution:{submit:async()=>{calls.submit++;throw Error('no implicit execution');}}}:{}),clients:{pairing:()=>pair,relay:()=>relay,...(execution?{execution:options=>{executionCurrent=options.current;return{issue:async()=>{calls.issue++;assert.equal(options.grant.epoch,0);assert(options.grant.consent_revision>2147483647);return{grant:{id:options.grant.grant_id,grant_digest:'d'.repeat(64)}};},reserve:async()=>{throw Error('not part of this control');},complete:async()=>{throw Error('not part of this control');},revoke:async()=>{}};}}:{})}});
+ const owner=new module.exports.CompanionDevHostOwner({context:native.context,connections:native.connections,accounts:native.accounts,configured:()=>config,identity:{accountId:'account',sessionId:'host-session'},...(authoring?{authoring:{store:()=>native.store,reviewDraft:async()=>({check:async()=>{},imported:async()=>{},close(){}})}}:{}),budget,fetch:(...args)=>rawFetch(...args),taskView:()=>native.store.getView(),epoch:()=>execution?executionEpoch:1,journal:native.journal,...(execution?{execution:{chatFocused:()=>ownChatFocused,submit:async input=>{calls.submit++;return onExecutionSubmit(input);}}}:{}),clients:{pairing:options=>{pair.transport=options.transport;return pair;},relay:()=>relay,...(execution?{execution:options=>{executionCurrent=options.current;return{issue:async()=>{calls.issue++;assert.equal(options.grant.epoch,0);assert(options.grant.consent_revision>2147483647);return{grant:{id:options.grant.grant_id,grant_digest:'d'.repeat(64)}};},reserve:async r=>{calls.reserve++;const scope=options.grant,m=options.model,p=pair.invitation,now=Math.floor(Date.now()/1000),grant={...scope,id:scope.grant_id,grant_digest:'d'.repeat(64),pairing_id:p.id,account_id:p.account_id,host_session_id:p.host_session_id,device_session_id:p.device_session_id,host_id:p.host_id,device_id:p.device_id,workspace_id:p.workspace_id,project_id:p.project_id,current_selection_hash:currentSelectionHash??scope.selection_hash,created_at:now,revoked_at:null};delete grant.grant_id;const turn={...r,grant_id:grant.id,...m,ordinal:1,state:'reserved',result_hash:null,created_at:now,finished_at:null},authority={schema:'hps-companion-execution-reservation/1',capability:'authoring.selected-html',grant_id:grant.id,grant_digest:grant.grant_digest,turn_id:r.turn_id,request_id:r.request_id,request_hash:r.request_hash,selection_hash:r.selection_hash,...m,account_id:p.account_id,host_session_id:p.host_session_id,device_session_id:p.device_session_id,pairing_id:p.id,host_id:p.host_id,device_id:p.device_id,workspace_id:p.workspace_id,project_id:p.project_id,task_id:scope.task_id,artifact_id:scope.artifact_id,epoch:scope.epoch,consent_revision:scope.consent_revision,expires_at:scope.expires_at,max_turns:scope.max_turns,max_calls_per_turn:scope.max_calls_per_turn};return{schema:'hps-companion-selected-html-execution/1',capability:'authoring.selected-html',grant,turn,authority,authority_digest:createHash('sha256').update(JSON.stringify(authority)).digest('hex'),scope_authority:'authenticated_host_lease',dispatch_requires_live_validation:true};},complete:async(id,result)=>{currentSelectionHash=result.result_hash;return{turn:{turn_id:id,state:result.state,result_hash:result.result_hash}};},revoke:async()=>{}};}}:{})}});
  const startAndClaim=async()=>{const value=await owner.startInvitation();pair.invitation={...pair.invitation,status:'claimed',compare_code:'a'.repeat(12),device_session_id:'device-session',device_id:'phone'};await owner.inspectClaim();return value;};
  const connect=async()=>{await startAndClaim();await owner.confirmComparedCode('a'.repeat(12));pair.invitation={...pair.invitation,status:'paired'};await owner.connectCipher();};
- return{native,owner,pair,relay,calls,get executionCurrent(){return executionCurrent;},startAndClaim,connect,set rawFetch(v){rawFetch=v;},set onStart(v){onStart=v;},set onRefresh(v){onRefresh=v;},set onPrepare(v){onPrepare=v;},set onSend(v){onSend=v;},set config(v){config=v;},set batch(v){batch=v;},cleanup:async()=>{owner.close();budget.dispose();await native.cleanup();}};
+ return{native,owner,pair,relay,calls,set ownChatFocused(v){ownChatFocused=v;},set executionEpoch(v){executionEpoch=v;},set onExecutionSubmit(v){onExecutionSubmit=v;},get executionCurrent(){return executionCurrent;},startAndClaim,connect,set rawFetch(v){rawFetch=v;},set onStart(v){onStart=v;},set onRefresh(v){onRefresh=v;},set onPrepare(v){onPrepare=v;},set onSend(v){onSend=v;},set config(v){config=v;},set batch(v){batch=v;},cleanup:async()=>{owner.close();budget.dispose();await native.cleanup();}};
 }
 
 test('explicit lifecycle requires supplied code and preserves separate native exact-file Cancel/Allow',async()=>{
@@ -153,4 +154,79 @@ test('native zero-epoch lease keeps exact saved document and closes with the cip
   if(change==='session-close')f.owner.session.close();
   assert.equal(f.executionCurrent(),false,change);if(change==='session-close')assert.equal(f.owner.view().state,'closed');assert.equal(f.calls.submit,0);
  }finally{await f.cleanup();}}
+});
+
+const until=async fn=>{for(let i=0;i<150;i++){if(fn())return;await new Promise(r=>setTimeout(r,2));}assert.fail('owner transition did not settle');};
+test('connected owner remains idle until explicit Start; Stop while idle retains cipher and no parallel one-shot',async()=>{const f=await fixture();try{
+ await f.connect();assert.equal(f.calls.receive,0);assert.equal(f.owner.startReceiving(),true);assert.equal(f.owner.startReceiving(),false);await assert.rejects(()=>f.owner.receiveAndHandle(),/receiving_active/);
+ await until(()=>f.calls.receive===1&&f.owner.view().receiving.state==='listening');f.owner.stopReceiving();await new Promise(r=>setTimeout(r,0));assert.equal(f.owner.view().state,'connected');assert.equal(f.owner.view().receiving.state,'stopped');assert.notEqual(f.pair.keys,null);assert.equal(f.calls.receive,1);
+ }finally{await f.cleanup();}});
+test('busy signed revoke fences receive immediately and keeps exact signer until one bounded receipt',async()=>{for(const confirmed of [true,false]){const f=await fixture(),entered=deferred(),receiveGate=deferred(),revokeGate=deferred();try{
+ await f.connect();f.relay.receive=async()=>{entered.resolve();return receiveGate.promise;};f.pair.revoke=async()=>{f.calls.revoke++;assert.notEqual(f.pair.keys,null);await revokeGate.promise;if(!confirmed)throw Error('receipt_lost');f.pair.invitation={...f.pair.invitation,status:'revoked'};};
+ f.owner.startReceiving();await entered.promise;const revoked=f.owner.revoke();assert.equal(f.owner.startReceiving(),false);assert.notEqual(f.pair.keys,null);await until(()=>f.calls.revoke===1);assert.equal(f.calls.close,1);assert.equal(f.owner.revoke(),revoked);revokeGate.resolve();const view=await revoked;assert.equal(view.state,confirmed?'revoked':'closed');if(!confirmed)assert.equal(view.reason,'revocation_unconfirmed');assert.equal(f.pair.keys,null);receiveGate.resolve([]);await new Promise(r=>setTimeout(r,0));assert.equal(f.owner.view().state,view.state);assert.equal(f.calls.submit,0);assert.equal(f.calls.revoke,1);
+ }finally{receiveGate.resolve([]);revokeGate.resolve();await f.cleanup();}}});
+
+test('busy revoke uses exact authenticated status then signed revoke transports before erase, no relay or second status',async()=>{
+ const f=await fixture(),entered=deferred(),gate=deferred(),wire=[];try{await f.connect();
+ f.pair.keys=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},false,['sign','verify']);const publicKey=f.pair.keys.publicKey;
+ const transcript=JSON.stringify(['hps-companion-pairing-preview/2','revoke',f.pair.invitation.invitation_digest,f.pair.invitation.claim_digest]);
+ f.rawFetch=async(url,init)=>{const action=new URL(url).pathname.split('/').at(-1);assert.ok(['status','revoke'].includes(action));assert.equal(init.headers.authorization,'Bearer fixture-product-token');wire.push(action);
+  if(action==='revoke'){const proof=JSON.parse(init.body).host_revoke_proof;assert.equal(await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},publicKey,Buffer.from(proof,'hex'),new TextEncoder().encode(transcript)),true);f.pair.invitation={...f.pair.invitation,status:'revoked'};}
+  return Response.json({invitation:f.pair.invitation,execution_authorized:false,scope_authority:'authenticated_declaration'});};
+ f.pair.revoke=async()=>{await f.pair.transport('host',pairId,'status',{});await assert.rejects(()=>f.pair.transport('host',pairId,'status',{}),/closed/);await assert.rejects(()=>f.pair.transport('host','ci_'+'b'.repeat(32),'revoke',{}),/closed/);
+  const signature=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},f.pair.keys.privateKey,new TextEncoder().encode(transcript));await f.pair.transport('host',pairId,'revoke',{host_revoke_proof:Buffer.from(signature).toString('hex')});};
+ f.relay.receive=async()=>{entered.resolve();return gate.promise;};f.owner.startReceiving();await entered.promise;const result=await f.owner.revoke();assert.equal(result.state,'revoked');assert.deepEqual(wire,['status','revoke']);assert.equal(f.pair.keys,null);gate.resolve([]);
+ }finally{gate.resolve([]);await f.cleanup();}
+});
+test('cancelled revocation erases the retained signer without claiming server confirmation',async()=>{const f=await fixture();try{await f.connect();const abort=new AbortController();abort.abort();const result=await f.owner.revoke(abort.signal);assert.equal(result.state,'closed');assert.equal(result.reason,'revocation_unconfirmed');assert.equal(f.calls.revoke,0);assert.equal(f.pair.keys,null);}finally{await f.cleanup();}});
+
+// A17 observed the receiver control surface moving focus from the approved HTML to this owner's chat.
+for(const transition of ['own-chat','other-webview','closed','replaced-document','dirty','untitled','content','version','other-editor','task','expired-pair','profile','closed-flag','epoch','async-close','async-focus'])test('execution authority after selected HTML to '+transition+' focus transition',async()=>{
+ const f=await fixture(true,true);try{
+  await f.connect();const selection=await f.owner.describeSelected('focus-preview');await f.owner.authorizeSelectedExecution();
+  assert.equal(f.calls.issue,1);assert.equal(f.calls.reserve,0);assert.equal(f.calls.submit,0);
+  f.native.vscode.window.activeTextEditor=undefined;f.ownChatFocused=true;
+  if(transition==='other-webview')f.ownChatFocused=false;
+  if(transition==='closed-flag')f.native.document.isClosed=true;
+  if(transition==='epoch')f.executionEpoch=1;
+  if(transition==='async-close')f.native.onFetch=async url=>{if(url.endsWith('/me'))f.native.vscode.workspace.textDocuments=[];};
+  if(transition==='async-focus')f.native.onFetch=async url=>{if(url.endsWith('/me'))f.ownChatFocused=false;};
+  if(transition==='closed')f.native.vscode.workspace.textDocuments=[];
+  if(transition==='replaced-document')f.native.vscode.workspace.textDocuments=[{...f.native.document}];
+  if(transition==='dirty')f.native.document.isDirty=true;
+  if(transition==='untitled')f.native.document.isUntitled=true;
+  if(transition==='content')f.native.document.getText=()=>'<html>different saved bytes</html>';
+  if(transition==='version')f.native.document.version++;
+  if(transition==='other-editor')f.native.vscode.window.activeTextEditor={document:{...f.native.document,uri:{scheme:'file',fsPath:f.native.file+'.other.html'}}};
+  if(transition==='task'){const view=f.native.store.getView.bind(f.native.store);f.native.store.getView=()=>({...view(),activeTaskId:'replacement-task'});}
+  if(transition==='expired-pair')f.pair.invitation={...f.pair.invitation,grant_expires_at:1};
+  if(transition==='profile')f.native.profile={...f.native.profile,profile_id:'replacement-profile'};
+  const request={schema:'hps-companion-authoring-intent/1',requestId:'focus-intent',pairingId:f.pair.invitation.id,selection,text:'Update the selected quiz.'};
+  f.batch=[{message_id:request.requestId,message_hash:'c'.repeat(64),text:JSON.stringify(request)}];
+  try{await f.owner.receiveAndHandle();}catch(error){if(transition==='own-chat')throw error;}
+  if(transition==='own-chat'){assert.equal(f.calls.reserve,1,'same explicitly granted document reaches authenticated reservation');assert.equal(f.calls.submit,1,'actual owner routes into existing prepared Send port');assert.equal(JSON.parse(f.calls.prepared.at(-1).text).state,'outcome_unknown','fixture intentionally stops at prepared Send, never SDK');}
+  else{assert.equal(f.calls.reserve,0,transition);assert.equal(f.calls.submit,0,transition);}
+ }finally{await f.cleanup();}
+});
+
+for(const mode of ['two-turns','delayed-doc','delayed-doc-external','delayed-doc-replay','external-edit','duplicate-after-edit','failed','unknown'])test('retained selection advances only from exact measured completion: '+mode,async()=>{
+ const f=await fixture(true,true),hash=s=>createHash('sha256').update(s).digest('hex');let text=f.native.text,version=1;
+ const select=async id=>{f.native.vscode.window.activeTextEditor={document:f.native.document};const selection=await f.owner.describeSelected(id);f.native.vscode.window.activeTextEditor=undefined;f.ownChatFocused=true;return selection;};
+ const deliver=async(id,selection)=>{const request={schema:'hps-companion-authoring-intent/1',requestId:id,pairingId:f.pair.invitation.id,selection,text:'Update the selected quiz.'};f.batch=[{message_id:id,message_hash:'c'.repeat(64),text:JSON.stringify(request)}];await f.owner.receiveAndHandle();return JSON.parse(f.calls.prepared.at(-1).text);};
+ try{
+  await f.connect();const original=await f.owner.describeSelected('two-preview1');await f.owner.authorizeSelectedExecution();
+  f.onExecutionSubmit=async input=>{const request=JSON.parse(input.packet);text='<html>measured version '+f.calls.submit+'</html>';await writeFile(f.native.file,text);if(!mode.startsWith('delayed-doc')){f.native.document.getText=()=>text;f.native.document.version=++version;}if(mode==='unknown')return{requestId:request.requestId,requestHash:hash(input.packet),state:'outcome_unknown',code:'lost'};const state=mode==='failed'?'failed':'completed';return{requestId:request.requestId,requestHash:hash(input.packet),state,code:'normal_turn_measured',run:{userMessageId:request.requestId,turnId:input.reservation.turnId,runtime:'agent-sdk',restorePointId:input.reservation.turnId,submittedHash:hash(request.text),beforeArtifactVersion:request.selection.artifactVersion,afterArtifactVersion:hash(text),restoreDigest:hash('fixture measured restore'),state}};};
+  f.native.vscode.window.activeTextEditor=undefined;f.ownChatFocused=true;const first=await deliver('two-intent1',original);
+  assert.equal(first.state,mode==='unknown'?'outcome_unknown':mode==='failed'?'failed':'completed');assert.equal(f.calls.submit,1);
+  if(mode==='external-edit'||mode==='duplicate-after-edit'){text='<html>external unapproved edit</html>';await writeFile(f.native.file,text);f.native.document.getText=()=>text;f.native.document.version=++version;}
+  if(mode==='duplicate-after-edit'){await deliver('two-intent1',original);assert.equal(f.calls.submit,1);}
+  if(mode.startsWith('delayed-doc')){
+   assert.equal(f.native.document.version,1,'terminal filesystem measurement arrived before TextDocument watcher');
+   if(mode==='delayed-doc-external'){const external='<html>unrelated external edit before watcher catch-up</html>';f.native.document.getText=()=>external;f.native.document.version=++version;f.executionCurrent();}
+   if(mode==='delayed-doc-replay')await deliver('two-intent1',original);
+   f.native.document.getText=()=>text;f.native.document.version=++version;
+  }
+  if(['two-turns','delayed-doc','delayed-doc-replay'].includes(mode)){const next=await select('two-preview2');assert.equal(next.artifactVersion,hash(text));assert.equal((await deliver('two-intent2',next)).state,'completed');assert.equal(f.calls.submit,2);assert.equal(f.calls.reserve,2);assert.equal(f.calls.issue,1,'same max2 grant, no regrant');}
+  else{const before=f.calls.reserve;let next;try{next=await select('two-preview2');}catch{}if(next)await deliver('two-intent2',next);assert.equal(f.calls.reserve,before,'no reservation after external/failed/unknown state');assert.equal(f.calls.submit,1);}
+ }finally{await f.cleanup();}
 });

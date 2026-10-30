@@ -82,7 +82,7 @@ async function fixture(t, opts={}) {
     prepareObservation:async()=>null,crBlobSinkFor:()=>null,recordLearnerUploads:forbidden('upload'),resolveCoachCwd:()=>workspace,
     funnel:{emit(){}},saveAgentMdIfPresent:forbidden('agent.md'),revealBuilt:async html=>{calls.reveal++;await writeFile(join(workspace,'index.html'),html);return true;},revealPrebuiltWorld:forbidden('prebuilt'),revealWrittenHtml:forbidden('preview timer'),
     buildBrowserMcpHost:()=>undefined,postAccuracyEducation:async()=>{},provenanceRecorder:()=>undefined,postArtifactProvenance:async()=>{},postTurnReview(){},postCheckpoint(){},
-    handleSendError:async error=>{errors.push(String(error?.stack??error));},resolveActionApprovalTracked:async()=>{calls.approval++;if(opts.onApproval)await opts.onApproval(f);return true;},reportOpsTurn:async()=>{},
+    handleSendError:async error=>{errors.push(String(error?.stack??error));},resolveActionApprovalTracked:async(_request,onPrompt)=>{calls.approval++;if(opts.promptApproval)onPrompt();if(opts.onApproval)await opts.onApproval(f);return true;},reportOpsTurn:async()=>{},
   };
   for(const [key,value]of Object.entries(fields))Object.defineProperty(h,key,{value,writable:true,configurable:true});
   const source={postMessage:async message=>{posts.push(structuredClone(message));
@@ -227,6 +227,19 @@ test('actual provider revalidates all reservation fields before SDK writes and a
   assert.equal(f.calls.approval,1);assert.equal(await readFile(f.file,'utf8'),f.original);
 });
 
+
+test('actual provider approval status cannot clear a replacement owner after a pending native prompt',async t=>{
+  const normal=await fixture(t,{promptApproval:true}),normalStatus=[];
+  normal.h.companionApprovalChanged=waiting=>normalStatus.push(waiting);
+  assert.equal((await normal.submit()).state,'completed');
+  assert.deepEqual(normalStatus,[true,false]);
+  const stale=await fixture(t,{promptApproval:true,denyWrite:true,onApproval:async f=>f.revoke()}),oldStatus=[],newStatus=[];
+  stale.h.companionApprovalChanged=waiting=>{oldStatus.push(waiting);if(waiting)stale.h.companionApprovalChanged=next=>newStatus.push(next);};
+  assert.notEqual((await stale.submit()).state,'completed');
+  assert.deepEqual(oldStatus,[true]);assert.deepEqual(newStatus,[],'late old prompt must not clear the new owner status');
+  assert.equal(await readFile(stale.file,'utf8'),stale.original);
+  assert.equal(stale.calls.sdk,1);assert.equal(stale.deniedWrite,true);
+});
 
 test('prepared turn completes final draft review before its own UI streamStart changes real composer readiness',async t=>{
   const f=await fixture(t,{realStreamReadiness:true});const result=await f.submit();

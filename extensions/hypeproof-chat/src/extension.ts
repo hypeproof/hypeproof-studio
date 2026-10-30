@@ -281,9 +281,12 @@ export async function activate(context: vscode.ExtensionContext) {
       service: config.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1'), site: config.get<string>('siteBase', 'https://hypeproof-ai.xyz'),
     }; }, taskView: () => provider.companionTaskView(), epoch: () => provider.opsRuntimeGeneration(),
     authoring: {store:()=>provider.companionTaskStore(),reviewDraft:(taskId,isCurrent)=>provider.reviewCompanionDraft(taskId,isCurrent)},
-    execution: {submit:input=>provider.submitPreparedCompanionTurn(input)},
+    execution: {chatFocused:()=>provider.companionChatFocused(),submit:input=>provider.submitPreparedCompanionTurn(input)},
+    receivingBusy:()=>provider.hasActiveStream(),
+    receivingControls:binding=>provider.setCompanionReceivingControls(binding),
   });
   if (companionDev) {
+    provider.companionApprovalChanged=waiting=>companionDev?.approval(waiting);
     const invalidate = () => companionDev?.invalidate();
     provider.companionRuntimeInvalidated = invalidate;
     const secretChange = context.secrets.onDidChange?.(event => {
@@ -296,7 +299,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }), vscode.workspace.onDidChangeWorkspaceFolders(invalidate));
     const trustChange = vscode.workspace.onDidGrantWorkspaceTrust?.(invalidate);
     if (trustChange) context.subscriptions.push(trustChange);
-    context.subscriptions.push({ dispose: () => { if (provider.companionRuntimeInvalidated === invalidate) provider.companionRuntimeInvalidated = undefined; companionDev?.dispose(); } });
+    context.subscriptions.push({ dispose: () => { if (provider.companionRuntimeInvalidated === invalidate) provider.companionRuntimeInvalidated = undefined; provider.companionApprovalChanged=undefined; companionDev?.dispose(); } });
   }
   // D19/REQ-I15: the Service's free-start offer turns on the public-release update path for a
   // Studio without member access. Read at each check; the setting `publicUpdates` still works alone.

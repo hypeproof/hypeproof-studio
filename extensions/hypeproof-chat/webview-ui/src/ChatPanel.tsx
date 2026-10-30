@@ -40,6 +40,7 @@ import { PageCard } from './PageCard';
 import { MissingFolderNotice } from './MissingFolderNotice';
 import { LowDiskBar } from './LowDiskBar';
 import { PerfTracePill } from './PerfTracePill';
+import { CompanionReceivingControls } from './CompanionReceivingControls';
 import { PreviewRecoveryNotice } from './PreviewRecoveryNotice';
 import { previewRecoveryNote, previewRecoveryView, type PreviewSignals } from '../../src/previewFailure';
 import { bindComposerFocus, composerSurfacePress } from './composerFocus';
@@ -1768,6 +1769,7 @@ export function ChatPanel(props: Props) {
         </HeaderActions>
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
+      <CompanionReceivingControls />
       {personalWorkspace && !props.instructor && <ConversationCopyStatus state={conversationCopy.state} />}
       {!props.instructor && <ClassWindowNotice window={config.classWindow} />}
 

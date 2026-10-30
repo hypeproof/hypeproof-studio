@@ -7810,6 +7810,25 @@ occupied; this slice does not enable repeated mobile revisions. Installed
 normal-engine execution, result preservation and
 two-learner/classroom evidence remain required for DMC-5.
 
+### DMC explicit native receiving (#3135)
+
+The DEV companion owner may receive explicit phone requests during one manually
+started, bounded desktop App lifetime. Native Stop remains a separate command
+while the connection menu is busy. The native-owned state and separate Stop/Revoke
+controls must also appear in the visible chat surface with the default hidden
+Studio status bar. An invalidated/replaced owner must remove or fence its old
+controls; an inactive receiver must not accept another Stop. Receiving does not authorize file/model work;
+existing selected-file approval, normal Send admission and Service validation
+remain required. Its own focused receiver chat may retain only the exact granted
+live saved document; snapshot and current checks share that identity. Foreign
+focus, replacement/closed/dirty documents or changed admission version/hash and
+task/epoch/profile authority refuse execution. An exact measured and
+Service-completed turn alone may adopt its matching new saved version for the
+remaining granted turn; replay or failed/unknown outcomes cannot adopt edits. Monotonic expiry, authority invalidation and uncertain outcomes
+stop admission without automatic replay. Local stopping, connection erase and
+confirmed signed remote revocation remain distinct. See DMC-04/05/06/07/12/14 and
+the #3135 controls in `docs/testing/desktop-mobile-companion.md`.
+
 ## Learning block attached by the confirmed lesson (CGP-LEARN-R-001)
 
 REQ-STUDIO-LEARNING-BLOCK-ATTACH / REQ-CGP-LEARN-01 (CGP-LEARN-001) / PI#4 (the instructor shapes the
