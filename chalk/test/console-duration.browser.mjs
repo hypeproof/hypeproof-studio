@@ -69,8 +69,14 @@ export async function runConsoleDurationBrowser() {
   }
   async function capture(name) {
     if (!evidence) return;
-    const shot = await browser.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
-    writeFileSync(resolve(evidence, name + '.png'), Buffer.from(shot.data, 'base64'));
+    const previous = await browser.evaluate("document.getElementById('issuer').getAttribute('style')");
+    await browser.evaluate("document.getElementById('issuer').style.cssText+=';color:transparent!important;background:magenta!important;caret-color:transparent!important'");
+    try {
+      const shot = await browser.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+      writeFileSync(resolve(evidence, name + '.png'), Buffer.from(shot.data, 'base64'));
+    } finally {
+      await browser.evaluate(`(()=>{const e=document.getElementById('issuer');const old=${JSON.stringify(previous)};if(old===null)e.removeAttribute('style');else e.setAttribute('style',old)})()`);
+    }
   }
   const measure = () => browser.evaluate(`(() => {
     const zoom=Number(getComputedStyle(document.documentElement).zoom)||1;
@@ -118,7 +124,8 @@ export async function runConsoleDurationBrowser() {
       await until("document.querySelectorAll('[data-hours]').length===2&&document.fonts.status==='loaded'", 'closed tracks');
       await browser.evaluate(`document.documentElement.style.zoom=${JSON.stringify(String(zoom))}`);
       await browser.evaluate("window.durationInputEvents=[];for(const t of ['pointerdown','keydown','input','change'])document.addEventListener(t,e=>{if(e.target.matches('[data-hours]'))window.durationInputEvents.push({type:e.type,key:e.key??null,value:e.target.value,trusted:e.isTrusted})},true)");
-      const initial = await measure(); assertLayout(initial, name);
+      const initial = await measure(), current = { name, initial }; cases.push(current);
+      await capture(name + '-initial'); assertLayout(initial, name);
       assert.deepEqual(initial.controls.map(c => c.value), ['2', '4'], name + ': existing defaults preserved');
       // Real pointer followed by native select keys; popup appearance itself is not asserted.
       await click('[data-hours]'); await press('Home', 36); await press('Enter', 13);
@@ -135,7 +142,7 @@ export async function runConsoleDurationBrowser() {
       assert.ok(keyboard.events.some(e => e.type === 'keydown' && e.key === 'End' && e.trusted), name + ': trusted keyboard');
       assert.ok(parseFloat(keyboard.controls[0].outlineWidth) >= 1 && keyboard.controls[0].outlineStyle !== 'none', name + ': visible keyboard focus');
       await capture(name);
-      cases.push({ name, initial, pointer, keyboard, zoomBoundary: zoom === 2 ? '200% CSS page zoom, not native browser-menu zoom' : '100%' });
+      Object.assign(current, { pointer, keyboard, completed: true, zoomBoundary: zoom === 2 ? '200% CSS page zoom, not native browser-menu zoom' : '100%' });
     }
     assert.deepEqual(errors, [], 'read-only fixture succeeds');
     assert.ok(requests.every(r => r.method === 'GET'), 'selection never starts or changes a class');
