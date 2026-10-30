@@ -154,9 +154,11 @@ export async function runAuthoringFreezeGuidanceBrowser() {
     await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers: 8 });
     await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers: 8 });
     assert.equal(await browser.evaluate(`document.activeElement.textContent`), '선수 조건 입력으로 이동');
-    await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    report.keyboardAction = { before: await browser.evaluate(`({id:document.activeElement.id,tag:document.activeElement.tagName,text:document.activeElement.textContent,open:$('prerequisites').closest('details').open,dirty,revision,bound,identity:identity()})`) };
+    await browser.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
     await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
-    assert.equal(await browser.evaluate(`document.activeElement.id`), 'prerequisites');
+    report.keyboardAction.after = await browser.evaluate(`({id:document.activeElement.id,tag:document.activeElement.tagName,open:$('prerequisites').closest('details').open,events:window.guidanceEvents})`); checkpoint('keyboard-action-observed');
+    assert.equal(report.keyboardAction.after.id, 'prerequisites');
     await fill('#prerequisites', '코딩 경험 불필요');
     assert.equal((await state()).hidden, true, 'editing invalidates the old result');
     assert.equal(report.requests.filter((r) => r.method === 'PUT').length, 1, 'guidance action and typing do not write');
