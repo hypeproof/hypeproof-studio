@@ -8,10 +8,10 @@
 // an assistant message. Then:
 //   - every visible button, select, textarea, summary, text input and control role has a 1px+ border on all four
 //     sides in ButtonText (Highlight when it is the selected/current one, GrayText when disabled); the one
-//     exception is the personal composer textarea, whose bordered wrapper (.hps-input) is the boundary
+//     exception is the composer textarea, whose bordered wrapper (.hps-input) is the boundary
 //   - the user bubble has a CanvasText border (both seats); the classroom assistant bubble too (the personal
 //     assistant is unboxed prose by design, DES-CGP-DS-22)
-//   - the focus ring on a button and on the composer is 2px solid in Highlight (personal composer: the wrapper)
+//   - the focus ring on a button and on the composer is 2px solid in Highlight (composer: the wrapper for both seats)
 // Self-test: the same matrix is rerun with an injected later stylesheet (border: 0 !important on controls, the
 // bubble and the composer, outline: none !important); each must be caught. Without a headless Chromium this
 // prints NOT RUN; FOCUS_REQUIRE_BROWSER=1 (set by CI) makes that a failure.
@@ -124,11 +124,13 @@ async function run(b, extraCss) {
       if (surface === 'classroom') for (const x of assistants) if (!lines(x.edges) || !all(x.edges, CanvasText)) bad.push(`${where}: classroom assistant bubble border ${JSON.stringify(x.edges[0])} is not CanvasText`);
       if (!m.composer || !lines(m.composer.edges) || !all(m.composer.edges, ButtonText)) bad.push(`${where}: composer boundary ${JSON.stringify(m.composer?.edges?.[0])} is not ButtonText`);
       const rings = [['a button', 'button:not([disabled])', []]];
-      rings.push(surface === 'personal' ? ['the composer wrapper', '.hps-input', ['focus-within']] : ['the composer textarea', 'textarea', []]);
+      rings.push(['the composer wrapper', '.hps-input', ['focus-within']]);
       for (const [name, selector, states] of rings) {
         const r = await b.focusVisibleStyle(selector, ['outline-width', 'outline-style', 'outline-color'], states, !states.length).catch((e) => ({ missing: e.message }));
         if (r.missing || !(parseFloat(r['outline-width']) >= 2 && r['outline-style'] === 'solid' && r['outline-color'] === Highlight)) bad.push(`${where}: focus ring on ${name} is ${JSON.stringify(r)}, not 2px solid Highlight (${Highlight})`);
       }
+      const inner = await b.focusVisibleStyle('.hps-input textarea', ['outline-style'], [], true);
+      if (inner['outline-style'] !== 'none') bad.push(`${where}: duplicate textarea focus outline ${JSON.stringify(inner)}`);
     } finally { await b.send('Page.removeScriptToEvaluateOnNewDocument', { identifier }); }
   }
   return { bad, seen };
@@ -146,7 +148,8 @@ try {
   await expectCaught('@media (forced-colors: active) { button { border: 0 !important; } }', /border .* is not 1px\+/, 'a later border: 0 !important on buttons');
   await expectCaught('.hps-msg-user .hps-msg-body { border: 0 !important; }', /user bubble border/, 'the user bubble loses its outline');
   await expectCaught('.hps-input { border: 0 !important; }', /composer boundary/, 'the composer wrapper loses its boundary');
+  await expectCaught('.hps-input textarea:focus { outline: 2px solid Highlight !important; }', /duplicate textarea focus/, 'duplicate inner focus ring');
   await expectCaught(':focus-visible, .hps-input:focus-within, textarea:focus-visible { outline: none !important; }', /focus ring/, 'focus outline removed');
   await expectCaught('@media (forced-colors: active) { button { border-color: Canvas !important; } }', /is not 1px\+ ButtonText/, 'control border painted in the wrong system colour');
-  console.log(`forced-colors computed smoke OK (${clean.seen} control measurements, 8 matrix cells, 5 negative controls)`);
+  console.log(`forced-colors computed smoke OK (${clean.seen} control measurements, 8 matrix cells, 6 negative controls)`);
 } finally { await b.close(); server.close(); rmSync(temp, { recursive: true, force: true }); }
