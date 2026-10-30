@@ -316,3 +316,7 @@ await check("guard: weak secret in production fails closed on /admin/* but pages
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) process.exit(1);
+
+// #3309: the canonical console command also checks its rendered duration control.
+const { runConsoleDurationBrowser } = await import("./console-duration.browser.mjs");
+await runConsoleDurationBrowser();

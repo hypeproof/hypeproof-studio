@@ -3288,6 +3288,12 @@
         },
         {
           "path": "e2e/classroom/ops-g1-layout.mjs"
+        },
+        {
+          "path": "chalk/test/instructor-console.test.mjs"
+        },
+        {
+          "path": "chalk/test/console-duration.browser.mjs"
         }
       ]
     },

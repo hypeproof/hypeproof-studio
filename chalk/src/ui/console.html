@@ -51,6 +51,9 @@
   .row { display: flex; gap: var(--ds-c-chalk-console-space-2); align-items: flex-end; }
   .row > div { flex: 1; }
   .row button { margin-top: 0; }
+  .session-start { display: grid; grid-template-columns: minmax(7rem, max-content) minmax(0, 1fr); }
+  .session-duration label { margin: 0; font-size: var(--ds-c-chalk-console-type-17); white-space: nowrap; }
+  .session-duration select { display: block; margin-top: var(--ds-c-chalk-console-space-13); min-height: var(--ds-c-chalk-console-size-8); }
   .tok-line { margin-top: var(--ds-c-chalk-console-space-2); padding: var(--ds-c-chalk-console-space-2); background: var(--ds-c-chalk-console-surface-72); border-radius: var(--ds-c-chalk-console-radius-13); }
   .tok-line .name { font-size: var(--ds-c-chalk-console-type-1); color: var(--muted); margin-bottom: var(--ds-c-chalk-console-space-13); }
   .tok-line .token { font-family: var(--ds-c-chalk-console-font-8); font-size: var(--ds-c-chalk-console-type-4); word-break: break-all; user-select: all; }
@@ -301,10 +304,10 @@ async function renderCohort(scope) {
         ? '<div class="countdown" data-ends="' + esc(state.session.ends_at) + '"></div>' +
           '<button class="danger" data-close="' + esc(scope.cohort) + '">세션 닫기</button>'
         : (canStart
-          ? '<div class="row"><div><label>시간</label><select data-hours>' +
+          ? '<div class="row session-start"><div class="session-duration"><label>시간<select data-hours>' +
             [1,2,3,4,5,6].filter(h => h <= maxH).map(h =>
               '<option value="' + h + '"' + (h === Math.min(4, maxH) ? " selected" : "") + '>' + h + '시간</option>').join("") +
-            '</select></div>' +
+            '</select></label></div>' +
             '<button data-open="' + esc(scope.cohort) + '" data-profile="' + esc(p.id) + '">이 트랙으로 세션 열기</button></div>'
           : "")) +
       '</div>';
