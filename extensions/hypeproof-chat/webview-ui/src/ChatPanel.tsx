@@ -10,6 +10,7 @@ import { CopyFeedbackRegion, CopyFeedbackOutlet } from './CopyFeedback';
 import { ChatFindBar } from './ChatFindBar';
 import { registerClosedText } from './chatFind';
 import { ClassWindowNotice } from "./ClassWindowNotice";
+import { MemoryNotice } from "./MemoryNotice";
 import { SteerDelivery, type SteerDeliverySnapshot } from './SteerDelivery';
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
@@ -2157,6 +2158,8 @@ export function ChatPanel(props: Props) {
         {/* CGP-AGENT-D-026: the 느려요 기록 pill; renders nothing unless the host says a recording runs. */}
         <PerfTracePill />
         {lowDisk && <LowDiskBar notice={lowDisk} />}
+        {/* CGP-KNOW-R-031: the one-time memory notice; renders nothing unless the host says it is due here. */}
+        {!props.instructor && <MemoryNotice scopeKey={JSON.stringify([activityId, taskId])} streaming={streaming} onDone={() => textareaRef.current?.focus({ preventScroll: true })} />}
         {props.refusal && <RefusalBanner onDismiss={() => {
           props.onDismissRefusal?.();
           textareaRef.current?.focus({ preventScroll: true });
