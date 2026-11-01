@@ -111,3 +111,53 @@ test('continuation rejects a file edited after the first chunk',()=>fixture(asyn
  await fs.writeFile(file,'B'.repeat(100000));
  await assert.rejects(tools.call('Read',{file_path:'changing.txt',offset_bytes,revision}),/변경|다시/);
 }));
+
+test('Codex adapter carries bounded Read chunks and revision through dynamic tools',()=>fixture(async(root,tools)=>{
+ const {CodexLocalClient}=await import('../src/localRuntime/codexClient.mjs');
+ const {EventEmitter}=await import('node:events');
+ const {PassThrough}=await import('node:stream');
+ const text='<h1>Adapter reference</h1>\n'+'한글🙂 reference\n'.repeat(110000);
+ assert.ok(Buffer.byteLength(text)>2_000_000);
+ await fs.writeFile(path.join(root,'adapter.html'),text);
+ const proc=new EventEmitter();proc.stdin=new PassThrough();proc.stdout=new PassThrough();proc.stderr=new PassThrough();
+ // Only the external app-server protocol is scripted. Studio's complete(),
+ // dynamic tool dispatch, workspace Read and response serialization are real.
+ let assembled='',calls=0,advertised,protocolError;
+ const emit=message=>proc.stdout.write(JSON.stringify(message)+'\n');
+ const request=(offset_bytes=0,revision)=>emit({id:'read-'+(++calls),method:'item/tool/call',params:{threadId:'fixture-thread',tool:'Read',arguments:{file_path:'adapter.html',offset_bytes,revision}}});
+ proc.stdin.on('data',chunk=>{
+  for(const line of chunk.toString().trim().split('\n')) queueMicrotask(()=>{
+   try {
+    const m=JSON.parse(line);
+    if(m.method){
+     const replies={initialize:{},'account/read':{account:{type:'chatgpt'}},'mcpServerStatus/list':{data:[]},'model/list':{data:[{model:'fixture-model',displayName:'Synthetic'}]},'thread/start':{thread:{id:'fixture-thread'}},'turn/start':{turn:{id:'fixture-turn'}},'thread/unsubscribe':{}};
+     if(m.method==='initialized')return;
+     assert.ok(m.method in replies,'unexpected RPC '+m.method);
+     if(m.method==='thread/start')advertised=m.params.dynamicTools;
+     emit({id:m.id,result:replies[m.method]});
+     if(m.method==='turn/start')request();
+    }else{
+     assert.equal(m.result.success,true);
+     assert.ok(Buffer.byteLength(line)<64000);
+     const result=m.result.contentItems[0].text;
+     const match=/bytes (\d+)-(\d+) of (\d+); revision=([a-f0-9]+)/.exec(result);
+     assert.ok(match);assert.equal(Number(match[1]),Buffer.byteLength(assembled));
+     assembled+=result.slice(result.indexOf('\n\n')+2);
+     if(Number(match[2])<Number(match[3]))request(Number(match[2]),match[4]);
+     else {
+      emit({method:'item/agentMessage/delta',params:{threadId:'fixture-thread',delta:'fixture complete'}});
+      emit({method:'turn/completed',params:{threadId:'fixture-thread',turn:{status:'completed'}}});
+     }
+    }
+   }catch(error){protocolError=error;emit({method:'turn/completed',params:{threadId:'fixture-thread',turn:{status:'failed'}}});}
+  });
+ });
+ const client=new CodexLocalClient({executable:'synthetic-only',spawnProcess:()=>proc,listMcpNames:()=>[]});
+ try {
+  await client.connect();
+  const result=await client.complete({model:'fixture-model',messages:[{role:'user',content:'Read the local reference'}],tools:tools.definitions,onToolCall:tools.call,signal:AbortSignal.timeout(10000)});
+  assert.ifError(protocolError);
+  assert.equal(result.text,'fixture complete');assert.equal(assembled,text);assert.ok(calls>40);
+  assert.equal(advertised.find(t=>t.name==='Read').inputSchema.properties.revision.type,'string');
+ }finally{client.close();proc.stdin.destroy();proc.stdout.destroy();proc.stderr.destroy();}
+}));
