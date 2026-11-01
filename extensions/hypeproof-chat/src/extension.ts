@@ -355,7 +355,7 @@ export async function activate(context: vscode.ExtensionContext) {
     binding: () => provider.activityTrashBinding,
     refusal: file => provider.folderWriteRefusalFor(file),
   }));
-  provider.setActivityMemoryPanel(registerActivityMemory({ binding: () => provider.activityMemoryBinding, overview: () => provider.activityMemoryOverviewTasks }));
+  provider.setActivityMemoryPanel(registerActivityMemory({ binding: () => provider.activityMemoryBinding, overview: () => provider.activityMemoryOverviewTasks, tasks: () => provider.activityMemoryTasks }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
 

@@ -8093,3 +8093,43 @@ lesson, lesson-binding, class-made and unloaded seats, and refused open, delete 
 files byte-identical; the real provider with a scripted runtime: no classroom, lesson or personal request holds the
 memory item) and `extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs` (headless Chromium: the scope
 label's exact text, drawn, 14px, 4.5:1, no control and no scope-changing control; no label without a view).
+
+## Memory manager: view and delete each item (CGP-KNOW-R-023)
+
+REQ-STUDIO-MEMORY-MANAGER / REQ-KNOW-41 (CGP-KNOW-041) / PI#2 (the learner can see and remove what the AI keeps);
+DEC-01 (local files, the learner reads and deletes them). Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030)
+and REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022); the list is the file list of the `기억` filter in the 내 작품 drawer.
+
+- **Each item: text, date, source task.** Every listed memory file shows its text (as text), its time and "남긴 작업",
+  the task it was kept from, resolved by the host from the task id on the file's first line against the activity's
+  tasks on every listing. A task in the task list is a button "‘<title>’ 작업 열기" (44px, the title as text, at most
+  80 characters, control and bidi characters removed): it closes the drawer and asks the host to open that task with
+  `taskSelect` (the open task's own link only closes the drawer; while a turn runs the host refuses the switch with
+  its own error line). A task in 보관함 is named in words with "보관함에서 다시 열 수 있어요" (보관함's 다시 열기 is the only way
+  to open it); an id no task has reads "작업을 찾을 수 없어요…"; a file without a task line reads "어느 작업에서 남겼는지
+  기록이 없어요." No source is ever a dead link. Every seat with the view gets the source line, minors included (DEC-02).
+- **Delete one with Cancel.** 지우기… is REQ-STUDIO-ACTIVITY-MEMORY-FILES' native modal confirm with one 취소 (Escape or a
+  closed dialog also cancels) and the pinned file identity.
+- **모두 지우기 needs a second confirmation.** Under "AI 기억 파일 · N개", whenever the list has files, 모두 지우기… sends
+  the names the list shows (at most 200) bound to the listed scope. The host keeps only names it still lists, pins each
+  file's identity, and shows two native modal confirms, each with one 취소: "기억 파일 N개를 모두 지울까요?" (which also
+  says how many unlisted files it leaves alone) and then "정말 기억 파일 N개를 지울까요?" with "N개 지우기". Only the second
+  confirm's button deletes; 취소 or Escape at either step changes nothing, and a task or activity switch during either
+  confirm cancels. A file added, replaced or removed after the list was drawn is kept (the pin refuses it), and files the
+  list never showed (unsafe names, links) are never touched. The status line says "기억 파일 N개를 지웠어요." and, when
+  files remain (changed or added meanwhile, or not removable), "M개는 남아 있어요. 목록에서 확인해 주세요." A press with a stale scope, a name list that is
+  not a list of at most 200 short strings, or no listed name is refused before any confirm.
+- **Absent from later requests.** No request carries memory yet (REQ-STUDIO-ACTIVITY-MEMORY-FILES, "Future context"):
+  `ActivityMemory.contextItems()` is the only reader a request may use, and it reads the folder fresh on every call, so
+  an item removed by 지우기 or 모두 지우기 is absent from the very next read. The request injection of REQ-KNOW-44 must use
+  that reader.
+
+Evidence: `extensions/hypeproof-chat/test/memory-manager.smoke.mjs` (the source of each item against real tasks, listed,
+archived, gone and none, on a minor seat; title cleaning; one delete with Cancel, Escape and confirm, absent from the
+next context read; 모두 지우기 refusals before any confirm, both confirms with one Cancel each, a task switch between
+them, a file replaced and a file added during the confirm kept, unlisted files untouched, the next context read empty)
+and `extensions/hypeproof-chat/test/memory-manager-browser.smoke.mjs` (the real App bundle in headless Chromium, dark
+and light, 1420/800/320 px, normal and forced colours: text, time and source per item, links only for listed tasks, 44px
+bounded controls, 14px text at 4.5:1, focus ring, no sideways scroll, one 모두 지우기 request naming exactly the listed
+files, the count line, focus kept in the drawer, the link closing the drawer and sending `taskSelect`; a classroom seat
+has no view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).

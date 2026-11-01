@@ -738,7 +738,13 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       }} />}
       </>}</PanelBoundary>
     </aside>
-    {worksOpen && <MyWorksDrawer key={scopeKey} files={artifacts} scopeKey={scopeKey} viewport={viewport} opener={() => worksButton.current} fallback={() => railToggle.current} onClose={() => setWorksOpen(false)} />}
+    {worksOpen && <MyWorksDrawer key={scopeKey} files={artifacts} scopeKey={scopeKey} viewport={viewport} opener={() => worksButton.current} fallback={() => railToggle.current} onClose={() => setWorksOpen(false)}
+      onOpenTask={taskId => {
+        // REQ-STUDIO-MEMORY-MANAGER — a memory file's 남긴 작업 link: leave the drawer and open that task (while a turn
+        // runs the host refuses the switch with its own error line).
+        setWorksOpen(false);
+        if (taskId !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: taskId });
+      }} />}
     {active && appearanceScope === scopeKey && <TaskAppearanceDialog key={scopeKey} task={active} onClose={() => setAppearanceScope(null)} />}
   </div></CitationPreviewContext.Provider>;
 }

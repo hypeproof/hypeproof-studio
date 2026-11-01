@@ -6740,6 +6740,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const view = store.getView();
     return [...view.tasks, ...(view.archived ?? [])].map(({ id, title }) => ({ id, title }));
   }
+  /**
+   * REQ-STUDIO-MEMORY-MANAGER (CGP-KNOW-R-023) — the activity's tasks, listed and archived, so each memory file can name
+   * and link the task it was kept from. Every seat that has the memory view (minors included, DEC-02).
+   */
+  get activityMemoryTasks(): Array<{ id: string; title: string; archived: boolean }> | null {
+    const store = this.currentTaskStore();
+    if (!store || !this.activityMemoryBinding) return null;
+    const view = store.getView();
+    // The open task is always listed, even when archived, and opens as it is; other archived tasks open only from 보관함.
+    return [...view.tasks.map(({ id, title }) => ({ id, title, archived: false })), ...(view.archived ?? []).map(({ id, title }) => ({ id, title, archived: true }))];
+  }
   private async postActivityMemory(extra?: { requestId: string; result: import("./activityMemoryView").ActivityMemoryResult }): Promise<void> {
     const view = this.activityMemoryPanel && this.activityMemoryBinding ? await this.activityMemoryPanel.view() : null;
     await this.post({ type: "activityMemoryState", view, ...extra });
@@ -6747,14 +6758,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async runActivityMemoryAction(msg: Extract<WebviewMessage, { type: "activityMemoryAction" }>): Promise<void> {
     const requestId = typeof msg.requestId === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) ? msg.requestId : null;
     if (!requestId) return;
-    const action = msg.action === "open" || msg.action === "delete" || msg.action === "correct" ? msg.action : null;
+    const action = msg.action === "open" || msg.action === "delete" || msg.action === "correct" || msg.action === "deleteAll" ? msg.action : null;
     const panel = this.activityMemoryPanel;
     // REQ-STUDIO-MEMORY-OVERVIEW — a correction carries the learner's words; any other press carries none.
     const text = action === "correct" ? msg.text : undefined;
+    // REQ-STUDIO-MEMORY-MANAGER — 모두 지우기 carries the names the learner's list showed, and only that press does.
+    const names = action === "deleteAll" ? msg.names : undefined;
     const result: import("./activityMemoryView").ActivityMemoryResult = !action || !panel || !this.activityMemoryBinding || typeof msg.name !== "string" || msg.name.length > 200 || typeof msg.scope !== "string"
       || (action === "correct" && (typeof text !== "string" || text.length > 8_000))
+      || (action === "deleteAll" && (!Array.isArray(names) || names.length > 200 || names.some(item => typeof item !== "string" || item.length > 200)))
       ? { action: action ?? "open", error: "작업 상태가 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요." }
-      : await panel.act(action, msg.name, msg.scope, text);
+      : await panel.act(action, msg.name, msg.scope, text, names);
     await this.postActivityMemory({ requestId, result });
   }
   // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
