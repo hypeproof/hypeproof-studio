@@ -8247,6 +8247,16 @@ REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (the binding) and REQ-STUDIO-MEMORY-MANAGER.
   "who can read it" stays true: the Service and its operators never receive memory through the logs).
 - **Learner floors.** The chip and item buttons are 44px targets with 14px text and a solid focus ring, inside the chat
   column; states are said in words.
+- **Chip and shelf (CGP-KNOW-D-026 / DES-KNOW-44).** In the personal workspace the chip is a 16px bookmark glyph plus
+  `기억 사용 N` in the answer's action row (before the elapsed time); it keeps its border. Pressing it opens the 작업 자료
+  shelf (the same panel citations open: a side panel, or a modal sheet at ≤1050px) on its 기억 tab: tabs 출처 / 기억, one
+  tab stop, arrow keys, Home and End switch. Focus follows the shelf's rule for a citation: the side panel focuses the
+  tab's heading "이 답변에 쓴 기억 N개", the modal sheet its first control; closing (Escape, 닫기, the backdrop) returns
+  it to the chip. The tab draws the same list as above, read again on
+  every opening, with 이 작업에서 빼기 / 다시 쓰기. 자료 still opens the shelf on 출처, and the 기억 tab exists only while
+  the chosen answer is on screen in this task. Nothing on the chip, the tabs or the list animates; under reduced
+  motion no animation runs and transitions are at most 1ms. A seat without the shelf keeps the chip under the answer
+  and opens the list in place.
 
 Evidence: `extensions/hypeproof-chat/test/memory-use.smoke.mjs` (pure parts, then the real provider with a scripted
 model runtime recording every request: the count posted for the answer equals the `<memory>` blocks in the captured

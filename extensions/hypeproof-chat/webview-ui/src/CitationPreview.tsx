@@ -9,6 +9,10 @@ export interface CitationPreviewController {
   previewSource: (citation: Citation, trigger: HTMLElement, messageId?: string) => void;
   openSource: (url: string) => void;
   preview: { url: string; messageId?: string } | null;
+  /** CGP-KNOW-D-026 — open the shelf on its 기억 tab for one answer's "기억 사용 N" (focus returns to `trigger`). */
+  previewMemory?: (messageId: string, count: number, trigger: HTMLElement) => void;
+  /** The answer whose memory the open shelf shows, if any. */
+  memory?: { messageId: string } | null;
 }
 
 /** One workspace owns the preview; message racks never mount competing popovers. */

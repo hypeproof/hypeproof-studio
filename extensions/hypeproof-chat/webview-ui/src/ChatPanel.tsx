@@ -3224,10 +3224,12 @@ function MessageItem({
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
         <PanelBoundary panel="citations">{personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />}</PanelBoundary>
       )}
-      {message.role === "assistant" && memoryUse ? <MemoryUseChip messageId={message.id} count={memoryUse} /> : null}
+      {/* CGP-KNOW-D-026 — "기억 사용 N" sits in the answer's action row; an answer without that row keeps it here. */}
+      {message.role === "assistant" && memoryUse && !answerActionRowShown(message, personal, isStreamingThis) ? <MemoryUseChip messageId={message.id} count={memoryUse} /> : null}
       {/* Merge of #1814 polish and #1763: one ghost row (copy · preview · ask again), retry on the
           latest answer only and never on a free seat. */}
       {answerActionRowShown(message, personal, isStreamingThis) && <CopyAnswer
+        memory={memoryUse ? <MemoryUseChip messageId={message.id} count={memoryUse} /> : undefined}
         content={message.content}
         status={elapsed}
         onRun={renderable ? () => onRunCode(renderable) : undefined}
