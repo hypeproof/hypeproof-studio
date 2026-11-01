@@ -362,3 +362,12 @@ One line per requirement. It must equal the union of the Targets column above; t
 ## Run status
 
 All rows NOT RUN as of 2026-09-29. The registry trace (`worker/test/cr-traceability.test.mjs`) runs in `worker` `npm test`; its passing means the documents agree with each other, not that any CR row is implemented.
+
+### CR-T43 evidence selection controls (#3356)
+
+`extensions/hypeproof-chat/test/skills-evidence-search.test.tsx` mounts the actual
+SkillsPanel and checks case/space and Korean label matching, empty results, clear,
+selected count and the onRun payload retaining filtered-out refs. It verifies
+clear restores search focus and a skill switch resets the query and form. Browser
+acceptance additionally exercises real Tab/Enter at narrow and wide widths with
+ordinary and forced colors; component evidence is not installed-App acceptance.
