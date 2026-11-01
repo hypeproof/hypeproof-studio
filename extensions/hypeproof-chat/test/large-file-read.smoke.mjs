@@ -37,13 +37,14 @@ test('binary bytes never become lossy model text',()=>fixture(async(root,tools)=
 test('continuation reads reconstruct UTF-8 exactly across split multibyte characters',()=>fixture(async(root,tools)=>{
  const text='a'.repeat(49151)+'한글🙂'.repeat(15000)+'END';
  await fs.writeFile(path.join(root,'unicode.txt'),text);
- let offset=0,combined='',reads=0;
+ let offset=0,combined='',reads=0,revision;
  do {
-  const result=await tools.call('Read',{file_path:'unicode.txt',offset_bytes:offset});
+  const result=await tools.call('Read',{file_path:'unicode.txt',offset_bytes:offset,revision});
   assert.ok(Buffer.byteLength(result)<64_000);
   const match=/bytes (\d+)-(\d+) of (\d+)/.exec(result);
   assert.ok(match);assert.equal(Number(match[1]),offset);
   const next=Number(match[2]);assert.ok(next>offset);
+  revision=/revision=([a-f0-9]+)/.exec(result)[1];
   combined+=result.slice(result.indexOf('\n\n')+2);
   offset=next;reads++;
  }while(offset<Buffer.byteLength(text));
@@ -78,15 +79,16 @@ test('real MCP transport exposes continuation and keeps JSON-escaped payload bou
   // These are valid UTF-8 control characters, but JSON expands each to six bytes.
   const text='start\n'+'\x01'.repeat(100000)+'한글 END';
   await fs.writeFile(path.join(root,'escaped.txt'),text);
-  let offset=0,combined='';
+  let offset=0,combined='',revision;
   do {
-   const {wire,result}=await rpc('tools/call',{name:'Read',arguments:{file_path:'escaped.txt',offset_bytes:offset}});
+   const {wire,result}=await rpc('tools/call',{name:'Read',arguments:{file_path:'escaped.txt',offset_bytes:offset,revision}});
    assert.notEqual(result.isError,true);
    assert.ok(Buffer.byteLength(wire)<64_000,`serialized MCP response is ${Buffer.byteLength(wire)} bytes`);
    const content=result.content[0].text;
    const match=/bytes (\d+)-(\d+) of (\d+)/.exec(content);
    assert.ok(match);assert.equal(Number(match[1]),offset);
    const next=Number(match[2]);assert.ok(next>offset);
+   revision=/revision=([a-f0-9]+)/.exec(content)[1];
    combined+=content.slice(content.indexOf('\n\n')+2);offset=next;
   }while(offset<Buffer.byteLength(text));
   assert.equal(combined,text);
@@ -94,4 +96,18 @@ test('real MCP transport exposes continuation and keeps JSON-escaped payload bou
   assert.equal(invalid.result.isError,true);
   const denied=await fetch(server.url,{method:'POST',body:'{}'});assert.equal(denied.status,401);
  }finally{server.close();}
+}));
+
+test('continuation rejects a file edited after the first chunk',()=>fixture(async(root,tools)=>{
+ const file=path.join(root,'changing.txt');await fs.writeFile(file,'A'.repeat(100000));
+ const first=await tools.call('Read',{file_path:'changing.txt'});
+ const offset_bytes=Number(/bytes 0-(\d+)/.exec(first)[1]);
+ const revision=/revision=([a-f0-9]+)/.exec(first)?.[1];
+ assert.match(revision,/^[a-f0-9]{32}$/);
+ await assert.rejects(tools.call('Read',{file_path:'changing.txt',offset_bytes}),/revision/);
+ await assert.rejects(tools.call('Read',{file_path:'changing.txt',offset_bytes,revision:'wrong'}),/revision/);
+ assert.match(await tools.call('Read',{file_path:'changing.txt',offset_bytes,revision}),/AAAA/);
+ // Same-sized rewrite: a size-only version check is insufficient.
+ await fs.writeFile(file,'B'.repeat(100000));
+ await assert.rejects(tools.call('Read',{file_path:'changing.txt',offset_bytes,revision}),/변경|다시/);
 }));

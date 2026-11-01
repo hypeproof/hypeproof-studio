@@ -27,8 +27,8 @@ const string = { type: "string" };
 const DEFINITIONS = [
   {
     name: "Read",
-    description: "Read a bounded UTF-8 text chunk inside the current Studio workspace. Large files return a continuation offset_bytes; use that offset to read more. Binary documents require text extraction first.",
-    inputSchema: schema({ file_path: string, offset_bytes: { type: "integer", minimum: 0 } }, ["file_path"]),
+    description: "Read a bounded UTF-8 text chunk inside the current Studio workspace. Large files return a continuation offset_bytes; use that offset and its revision token to read more. Binary documents require text extraction first.",
+    inputSchema: schema({ file_path: string, offset_bytes: { type: "integer", minimum: 0 }, revision: string }, ["file_path"]),
   },
   {
     name: "Write",
@@ -124,7 +124,7 @@ export function workspaceTools(args: {
         throw Error("승인 중 파일 경로가 바뀌었습니다. 다시 요청하세요.");
       let result: string;
       if (name === "Read") {
-        result = await readTextChunk(actual, input.offset_bytes);
+        result = await readTextChunk(actual, input.offset_bytes, input.revision);
       } else {
         let content = input.content;
         if (name === "Edit") {
