@@ -3384,6 +3384,7 @@ chat (never on the instructor surface, which takes no restore point):
   preview's reload on save uses the same checked read and skips the reload when it refuses. A profile-label
   refresh that replaces the preview shell must replay the current CSP/base-injected HTML after readiness,
   preserving its document revision; a newer page supersedes that replay and disposal clears it (#3232).
+  Identical labels and title-only changes must not recreate the shell or restart the interactive page.
   Focused host regression: `test/preview-label-refresh.smoke.mjs`. 열기 never
   rewrites `index.html` the way a coach reveal does. 폴더에서 보기 hands a path to the OS, so the best
   available is a second lstat walk right before `revealFileInOS` that must find the same inode

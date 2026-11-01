@@ -8,12 +8,13 @@ import { build } from 'esbuild';
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('..', import.meta.url));
 let receive, dispose, panel;
+let shellWrites = 0, shellHtml = "";
 const messages = [];
 const vscode = {
   EventEmitter: class { event() {} fire() {} }, ViewColumn: { Beside: 2 },
   workspace: { workspaceFolders: [] },
   window: { createWebviewPanel: () => panel = { reveal() {}, onDidDispose: f => { dispose = f; }, webview: {
-    cspSource: 'https://test.invalid', html: '', asWebviewUri: u => u.fsPath,
+    cspSource: 'https://test.invalid', get html() { return shellHtml; }, set html(value) { shellWrites++; shellHtml = value; }, asWebviewUri: u => u.fsPath,
     onDidReceiveMessage: f => { receive = f; }, postMessage: m => { messages.push(m); },
   } } },
 };
@@ -36,6 +37,12 @@ receive({type:'previewReady'});
 assert.equal(renders().length,2,'label refresh must replay the rendered page');
 assert.equal(renders()[1].html,first.html,'retain exact CSP/base-injected document');
 assert.equal(renders()[1].revision,first.revision,'labels do not change document identity');
+const writesAfterRefresh = shellWrites;
+preview.setLabels({...labels});
+assert.equal(shellWrites,writesAfterRefresh,'identical labels must not recreate the interactive page');
+preview.setLabels({...labels,title:'Title only'});
+assert.equal(panel.title,'Title only');
+assert.equal(shellWrites,writesAfterRefresh,'title-only change must preserve the interactive page');
 // A new document while the shell is loading supersedes the old replay.
 preview.setLabels({...labels,title:'New title'});
 await preview.show('<p id="page-b">new page</p>');
@@ -90,7 +97,7 @@ if (!bin) {
       await preview.show('<!doctype html><h1 id="visible-page">Rendered page survives profile refresh</h1><p>Page content stays here.</p>');
       await browser.load('<html><body style="margin:0"><iframe id="shell" style="border:0;width:100vw;height:100vh"></iframe></body></html>',{width,height:700});
       const before = await loadShell();
-      preview.setLabels({...labels,title:`Refreshed ${width}`});
+      preview.setLabels({...labels,title:`Refreshed ${width}`,placeholder:`Updated placeholder ${width}`});
       const after = await loadShell();
       assert.equal(after.html,before.html,'browser reload receives identical checked HTML');
       assert.equal(after.revision,before.revision,'browser reload keeps document revision');
