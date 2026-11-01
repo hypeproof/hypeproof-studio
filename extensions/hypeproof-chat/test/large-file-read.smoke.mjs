@@ -61,3 +61,37 @@ test('binary container headers reject even when caller skips the header',()=>fix
    await assert.rejects(tools.call('Read',{file_path:name,offset_bytes}),/바이너리/);
  }
 }));
+
+test('real MCP transport exposes continuation and keeps JSON-escaped payload bounded',()=>fixture(async(root,tools)=>{
+ const {startToolServer}=await import('../src/localRuntime/toolServer.mjs');
+ const server=await startToolServer(tools.definitions,tools.call,new AbortController().signal);
+ let id=0;
+ const rpc=async(method,params)=>{
+  const response=await fetch(server.url,{method:'POST',headers:{authorization:'Bearer '+server.token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:++id,method,params})});
+  assert.equal(response.status,200);
+  const wire=await response.text();
+  return {wire,result:JSON.parse(wire).result};
+ };
+ try {
+  const list=await rpc('tools/list',{});
+  assert.equal(list.result.tools.find(t=>t.name==='Read').inputSchema.properties.offset_bytes.type,'integer');
+  // These are valid UTF-8 control characters, but JSON expands each to six bytes.
+  const text='start\n'+'\x01'.repeat(100000)+'한글 END';
+  await fs.writeFile(path.join(root,'escaped.txt'),text);
+  let offset=0,combined='';
+  do {
+   const {wire,result}=await rpc('tools/call',{name:'Read',arguments:{file_path:'escaped.txt',offset_bytes:offset}});
+   assert.notEqual(result.isError,true);
+   assert.ok(Buffer.byteLength(wire)<64_000,`serialized MCP response is ${Buffer.byteLength(wire)} bytes`);
+   const content=result.content[0].text;
+   const match=/bytes (\d+)-(\d+) of (\d+)/.exec(content);
+   assert.ok(match);assert.equal(Number(match[1]),offset);
+   const next=Number(match[2]);assert.ok(next>offset);
+   combined+=content.slice(content.indexOf('\n\n')+2);offset=next;
+  }while(offset<Buffer.byteLength(text));
+  assert.equal(combined,text);
+  const invalid=await rpc('tools/call',{name:'Read',arguments:{file_path:'escaped.txt',offset_bytes:-1}});
+  assert.equal(invalid.result.isError,true);
+  const denied=await fetch(server.url,{method:'POST',body:'{}'});assert.equal(denied.status,401);
+ }finally{server.close();}
+}));

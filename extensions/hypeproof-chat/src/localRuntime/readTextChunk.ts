@@ -33,6 +33,20 @@ export async function readTextChunk(file: string, offset: unknown = 0): Promise<
     } catch {
       throw Error("유효한 UTF-8 텍스트가 아닙니다. 파일 형식과 offset_bytes 경계를 확인하세요.");
     }
+    // Tool results are JSON strings on the wire. A raw-byte bound alone lets
+    // control characters expand up to sixfold and overflow the request budget.
+    // Iterate code points only on that exceptional path; never split a surrogate.
+    if (Buffer.byteLength(JSON.stringify(text), "utf8") > CHUNK_BYTES) {
+      let wireBytes = 2; // JSON string quotes
+      let end = 0;
+      for (const character of text) {
+        const cost = Buffer.byteLength(JSON.stringify(character), "utf8") - 2;
+        if (wireBytes + cost > CHUNK_BYTES) break;
+        wireBytes += cost;
+        end += character.length;
+      }
+      text = text.slice(0, end);
+    }
     const next = offset + Buffer.byteLength(text, "utf8");
     if (offset === 0 && next === stat.size) return text;
     const continuation = next < stat.size
