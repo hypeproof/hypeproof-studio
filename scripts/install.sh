@@ -596,7 +596,9 @@ install_one_dep() {  # install_one_dep <id>
     return 0
   fi
 
-  info "${_id}: 없음 — 설치합니다…"
+  if ! have "$_bin"; then
+    info "${_id}: 없음 — 설치합니다…"
+  fi
   if resolve_brew; then
     if "$BREW" install "$(dep_brew_pkg "$_id")"; then
       # keg-only formulae (node@22, python@3.11) need their opt/bin on PATH

@@ -87,6 +87,52 @@ for site in install_one_dep doctor; do
   else bad "$site(): 버전 게이트가 없다 — 존재만 보고 통과시킨다"; fi
 done
 
+# #1644: execute the real function with dependency/installation boundaries stubbed.
+# Each scenario runs in a subshell; no system binary, PATH or package is changed.
+installer_status_case() (
+  scenario="$1"
+  OS=darwin
+  have() { [ "$scenario" != absent ]; }
+  dep_satisfies_min() { [ "$scenario" = current ]; }
+  dep_binary() { printf 'python3\n'; }
+  dep_version_of() { printf '3.9.6\n'; }
+  dep_min_version() { printf '3.11\n'; }
+  dep_check_cmd() { printf "printf 'Python 3.11.5\\n'"; }
+  dep_preinstalled_ok() { return 1; }
+  dep_brew_pkg() { printf 'python@3.11\n'; }
+  resolve_brew() { BREW=fixture_brew; return 0; }
+  fixture_brew() {
+    case "$1" in
+      install) printf 'FIXTURE_INSTALL\n' ;;
+      --prefix) printf '/nonexistent-studio-fixture\n' ;;
+      *) return 1 ;;
+    esac
+  }
+  ensure_path_entry() { :; }
+  receipt_note() { :; }
+  info() { printf 'INFO %s\n' "$1"; }
+  ok() { printf 'OK %s\n' "$1"; }
+  install_one_dep python
+)
+old_output="$(installer_status_case old)"
+if printf '%s' "$old_output" | grep -q '3.9.6 < 최소 3.11' &&
+   printf '%s' "$old_output" | grep -q FIXTURE_INSTALL &&
+   ! printf '%s' "$old_output" | grep -q '없음'; then
+  ok 'old Python is upgraded without being called missing'
+else bad 'old Python status is contradictory or installation was skipped'; fi
+absent_output="$(installer_status_case absent)"
+if printf '%s' "$absent_output" | grep -q '없음' &&
+   printf '%s' "$absent_output" | grep -q FIXTURE_INSTALL &&
+   ! printf '%s' "$absent_output" | grep -q '최소'; then
+  ok 'absent Python is reported missing and installed'
+else bad 'absent Python status/install path changed'; fi
+current_output="$(installer_status_case current)"
+if printf '%s' "$current_output" | grep -q 'Python 3.11.5' &&
+   ! printf '%s' "$current_output" | grep -q FIXTURE_INSTALL &&
+   ! printf '%s' "$current_output" | grep -q '없음'; then
+  ok 'current Python is accepted without installation'
+else bad 'current Python was misreported or reinstalled'; fi
+
 echo ""
 if [ "$FAILED" -gt 0 ]; then
   echo "FAIL — ${FAILED}건"
