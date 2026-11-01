@@ -8103,6 +8103,9 @@
           "path": "extensions/hypeproof-chat/test/page-card-host.test.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/preview-label-refresh.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/page-card-result-host.test.mjs"
         },
         {

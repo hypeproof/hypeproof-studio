@@ -3381,7 +3381,10 @@ chat (never on the instructor surface, which takes no restore point):
   with `O_NOFOLLOW`, the handle's dev+ino must equal the checked file's (a directory on the path swapped
   for a link lands on another inode), and the bytes come from that handle (`readPageInFolder`); they are
   shown in the Studio preview panel (`PreviewProvider.show` with the page's own folder as base). The
-  preview's reload on save uses the same checked read and skips the reload when it refuses. 열기 never
+  preview's reload on save uses the same checked read and skips the reload when it refuses. A profile-label
+  refresh that replaces the preview shell must replay the current CSP/base-injected HTML after readiness,
+  preserving its document revision; a newer page supersedes that replay and disposal clears it (#3232).
+  Focused host regression: `test/preview-label-refresh.smoke.mjs`. 열기 never
   rewrites `index.html` the way a coach reveal does. 폴더에서 보기 hands a path to the OS, so the best
   available is a second lstat walk right before `revealFileInOS` that must find the same inode
   (`recheckPageInFolder`); a swap after that call is outside Studio's reach. A

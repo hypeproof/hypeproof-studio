@@ -42,6 +42,7 @@ export class PreviewProvider {
   private panel: vscode.WebviewPanel | undefined;
   private ready = false;
   private pendingHtml: string | null = null;
+  private renderedHtml: string | null = null;
   private askAboutFile: (() => Promise<void>) | undefined;
   private askEnabled = false;
   private previewRevision = 0;
@@ -116,10 +117,11 @@ export class PreviewProvider {
     this.labels = labels;
     if (this.panel) {
       this.panel.title = labels.title;
-      // Re-render shell to update inline placeholder (cheap; iframe contents
-      // are re-posted on the next show()).
-      this.panel.webview.html = this.shellHtml(this.panel.webview);
+      // Replacing the shell also destroys its iframe. Replay the current checked
+      // document when the replacement shell is ready, without another file read.
       this.ready = false;
+      this.pendingHtml = this.renderedHtml;
+      this.panel.webview.html = this.shellHtml(this.panel.webview);
     }
   }
 
@@ -196,6 +198,7 @@ export class PreviewProvider {
         this.previewRevision++;
         this.ready = false;
         this.pendingHtml = null;
+        this.renderedHtml = null;
         this.watchedFile = undefined;
         this.watchedBase = undefined;
         this.watchedRead = undefined;
@@ -222,6 +225,7 @@ export class PreviewProvider {
       ? injectBaseHref(html, String(this.panel.webview.asWebviewUri(effectiveBase)))
       : html;
     const renderedHtml = injectInnerCsp(baseAware, this.panel.webview.cspSource);
+    this.renderedHtml = renderedHtml;
 
     this.postAskState();
     if (this.ready) {
