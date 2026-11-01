@@ -850,6 +850,18 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/plan/desktop-mobile-companion.md",
       "test": "docs/testing/desktop-mobile-companion.md"
+    },
+    {
+      "path": "docs/requirements/local-file-read.md",
+      "ids": [
+        "LFR-01"
+      ],
+      "inline_prefixes": [],
+      "sha256": "583ad4936e9c2f8b4fab6eb91a6a064d4c7d3ba8bfb81b8936edeea18f9dd305",
+      "owner": "jayleekr",
+      "intent": "docs/dev/studio-dev.md",
+      "design": "docs/requirements/local-file-read.md",
+      "test": "docs/requirements/local-file-read.md"
     }
   ],
   "work_items": [
@@ -4273,6 +4285,36 @@
         "extensions/hypeproof-chat/src/companionWorkspaceHost.ts",
         "extensions/hypeproof-chat/test/companion-workspace.test.mjs",
         "extensions/hypeproof-chat/test/companion-workspace-host.test.mjs"
+      ]
+    },
+    {
+      "id": "local-file-read",
+      "title": "Bounded versioned text reads in the explicit Studio Dev local runtime",
+      "issue": 3353,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/local-file-read.md",
+          "ids": [
+            "LFR-01"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Review Draft PR3354 and verify actual local CLI behavior before acceptance. Preserve parent #3225 for official SDK Read, extraction and aggregate budgeting. Do not claim completion from fixtures alone.",
+      "design_delta": "Read bounded UTF-8 chunks; preserve byte boundaries and require a metadata revision for continuation. Cap JSON-escaped output and retain existing workspace grants.",
+      "positive_control": "A large Unicode reference reconstructs exactly through MCP and Codex adapters with each result below 64 KB.",
+      "negative_control": "Binary, malformed offsets, stale revision and out-of-workspace requests are rejected without writes or capability widening.",
+      "evidence_required": "Exact source and LFR-T01 regression evidence plus separately identified actual local CLI observation. No production SDK or installed release claim.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/localRuntime/readTextChunk.ts",
+        "extensions/hypeproof-chat/src/localRuntime/tools.ts"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/src/localRuntime/readTextChunk.ts",
+        "extensions/hypeproof-chat/src/localRuntime/tools.ts",
+        "extensions/hypeproof-chat/test/large-file-read.smoke.mjs"
       ]
     }
   ]

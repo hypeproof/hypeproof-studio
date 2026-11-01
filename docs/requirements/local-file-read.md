@@ -8,6 +8,10 @@ production SDK-native Read tool or its funding contract.
 
 ## REQ-LOCAL-FILE-READ
 
+| ID | Requirement | Priority | Test |
+|---|---|---|---|
+| LFR-01 | Read large local UTF-8 references with bounded, version-checked continuation and unchanged workspace grants. | P1 | LFR-T01 |
+
 Read accepts a workspace `file_path` and optional nonnegative integer
 `offset_bytes`. A complete small UTF-8 file is returned unchanged. Larger text
 returns a bounded chunk, byte positions, total size and a `revision` token;
@@ -30,6 +34,10 @@ Preserve capability denials, workspace traversal/symlink restrictions and write
 approval. Reading does not ask for write approval or broaden the tool grant.
 
 ## Verification
+
+| Test | Targets | Required controls |
+|---|---|---|
+| LFR-T01 | LFR-01 | Large Unicode reconstruction; small-file fidelity; serialized byte bounds; stale/missing revision denial; binary refusal; workspace denial; actual MCP and scripted-external Codex dispatch. |
 
 `extensions/hypeproof-chat/test/large-file-read.smoke.mjs` checks >2 MB HTML,
 small Korean text, lossless multibyte continuation, escaped JSON response size,
