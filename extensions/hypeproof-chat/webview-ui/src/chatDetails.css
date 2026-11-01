@@ -3,6 +3,23 @@
 .hps-shell[data-chat-detail="personal"] .hps-header { color: var(--tw-muted); padding-block: var(--ds-c-studio-chatdetails-space-1); }
 /* US-05 — the current activity (kind · name) in the personal header; it yields before the remaining line. */
 .hps-activity-now { flex: 0 1000 auto; min-width: 0; margin-inline: var(--ds-c-studio-chatdetails-space-2) 0; font-size: var(--hp-font-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* CGP-KNOW-D-022 (DES-KNOW-40): the memory state line in the header row. The state words never shrink. The folder gives
+   way before anything else (its shrink factor dwarfs the activity line's 1000), so the activity kind stays whole as on a
+   heading without it; the row gap separates the state from "· folder" (no negative margin). */
+.hps-memory-now { display: contents; }
+.hps-memory-now-state { flex: none; margin-inline: var(--ds-c-studio-chatdetails-space-2) 0; font-size: var(--hp-font-caption); white-space: nowrap; color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.hps-memory-now-folder { flex: 0 1000000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hp-font-caption); color: var(--tw-muted); }
+/* Up to 1100px the row has no room for the state without cutting the activity line (the kind, or a name that is whole
+   without it): the state takes a band under the heading, at its end (the band the coach run state also uses at ≤480px,
+   coachRunState.css), so the activity line, the state and every control stay as whole as they are without it. The folder
+   is visually hidden there; its words stay in the tooltip and the accessible text. */
+@media (max-width: 1100px) {
+  .tw-heading:has(.hps-memory-now-state) { position: relative; padding-bottom: calc(var(--hp-leading-label) * var(--hp-font-caption) + var(--ds-c-studio-coachrunstate-space-2)); }
+  .tw-heading .hps-memory-now-state { position: absolute; inset-inline-end: var(--ds-c-studio-coachrunstate-space-1); bottom: var(--ds-c-studio-coachrunstate-space-2); margin: 0; }
+  .hps-memory-now-folder { position: absolute; width: var(--ds-c-studio-chatdetails-size-3); height: var(--ds-c-studio-chatdetails-size-3); margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+.hps-memory-now code, .hps-memory-state-setting code { font-family: var(--vscode-editor-font-family, monospace); font-size: var(--hp-font-caption); background: transparent; padding: 0; }
+.hps-memory-state-setting { margin: 0; font-size: var(--hp-font-caption); color: var(--vscode-foreground, var(--hp-text-primary-default)); overflow-wrap: anywhere; }
 /* TUX-SP-13 — the trial's passive remaining line: quiet text beside the AI name, never a control. */
 .hps-trial-left { flex: 0 1 auto; min-width: 0; margin-inline: var(--ds-c-studio-chatdetails-space-2); font-size: var(--ds-c-studio-chatdetails-type-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* CONV-ENDCARD-R-003 — the ended free seat's way back to the pass list: a quiet text link, not a

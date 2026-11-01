@@ -350,6 +350,7 @@ import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
 import { ActivityMemory, personalMemoryActivity } from "./activityMemory";
+import { MEMORY_FOLDER_LABEL } from "./activityMemoryView";
 import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
 import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
 import { perfTraceSeatAllowed } from "./perfTrace";
@@ -6727,6 +6728,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005) — none in a class or lesson activity either: this binding is the
    * only way to the store, so a class seat never reads or writes the learner's personal memory.
    */
+  /**
+   * CGP-KNOW-D-022 (DES-KNOW-40) — the memory state line's content for this seat: present exactly where the memory store
+   * binding exists (personal and trial activities, minors included; never an instructor, a class or a lesson). No profile
+   * field is read: memory is always on (DEC-01, DEC-02), so there is nothing to vary.
+   */
+  get memoryStateView(): { folder: string } | undefined {
+    return this._instructorMode?.isInstructor === false && this.activityMemoryBinding ? { folder: MEMORY_FOLDER_LABEL } : undefined;
+  }
   get activityMemoryBinding(): { root: string; scope: string } | undefined {
     if (!this.currentTaskStore() || !personalMemoryActivity(activityConnections(this.context)?.current, this.cachedProfile)) return undefined;
     return this.activityTrashBinding;
@@ -10613,6 +10622,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         textSize: normalizeTextSize(this.context.globalState?.get(TEXT_SIZE_KEY)),
         // CGP-KNOW-R-032 — present only on a seat that offers the nickname field.
         ...(nicknameSeat(profile, isInstructor) ? { learnerNickname: { value: this.storedLearnerNickname() } } : {}),
+        // CGP-KNOW-D-022 — the memory state line, wherever this seat has the memory store (R-022's rule: no store, no line).
+        ...(!isInstructor && this.memoryStateView ? { memoryState: this.memoryStateView } : {}),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         update: local ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile, activity) },

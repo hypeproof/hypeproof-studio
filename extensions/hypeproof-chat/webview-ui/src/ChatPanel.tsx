@@ -133,6 +133,7 @@ import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
 import { MemoryUseChip } from "./MemoryUseChip";
+import { MEMORY_STATE_LABEL } from "../../src/activityMemoryView";
 import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
   RUNNER_PHRASE_MS,
@@ -1655,6 +1656,9 @@ export function ChatPanel(props: Props) {
             <span className="hps-activity-kind">{kind}</span><span className="hps-activity-name"> · {config.activity.name}</span>
           </span>;
         })()}
+        {/* CGP-KNOW-D-022 (DES-KNOW-40): the memory state, always in view where this seat has the memory store. Text, never a
+            switch; the folder yields first on a narrow header (the tooltip keeps the full line). */}
+        {personalWorkspace && config?.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="header" />}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
         {trialLine &&<span className="hps-trial-left" data-hp-tooltip={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
         {/* CONV-ENDCARD-R-003 — the same path as the end card's Primary (the host counts offer_clicked
@@ -2513,6 +2517,8 @@ export function ChatPanel(props: Props) {
             <span>{TEXT_SIZE_LABELS[size]}</span>
           </label>)}
         </fieldset>
+        {/* CGP-KNOW-D-022 — the same read-only state line, with the folder, in the settings dialog. */}
+        {config.memoryState && <MemoryStateLine folder={config.memoryState.folder} place="settings" />}
         {/* CGP-KNOW-D-023 — "AI가 기억하는 것": the memory items of this activity (one store with the 내 작품 기억 view).
             Mounted while the dialog is open, so each opening reads the store fresh; nothing on a seat without the store. */}
         {preferencesOpen && <MemorySettingsList onOpenTask={taskId => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'taskSelect', id: taskId }); }} />}
@@ -2954,6 +2960,21 @@ function ChipRack({
 /** CGP-CHAT-R-023 (CGP-CHAT-D56) — a full-width hairline with the served step centred. Read-only: not focusable, no action. */
 function StepDivider({ id, label }: { id: string; label: string }) {
   return <div className="hps-step-divider" role="separator" aria-label={label} data-step-divider={id}><span className="hps-step-divider-label" aria-hidden="true">{label}</span></div>;
+}
+
+/**
+ * CGP-KNOW-D-022 (DES-KNOW-40) — "AI 기억: 켜짐" with the memory folder. The same words on every seat that has the store,
+ * minors included (DEC-02): no switch, no off state, no "선생님이 정해요". Not focusable and not a control.
+ */
+function MemoryStateLine({ folder, place }: { folder: string; place: 'header' | 'settings' }) {
+  const full = `${MEMORY_STATE_LABEL} · ${folder}`;
+  return place === 'header'
+    // Two items of the header row (the wrapper is display: contents): the state never shrinks, the folder yields first and
+    // is visually hidden on a narrow header (screen readers still read it; the tooltip keeps the full line).
+    ? <span className="hps-memory-now" data-testid="memory-state-header">
+        <span className="hps-memory-now-state" data-hp-tooltip={full}>{MEMORY_STATE_LABEL}</span><span className="hps-memory-now-folder" data-hp-tooltip={full}>{' · '}<code dir="ltr">{folder}</code></span>
+      </span>
+    : <p className="hps-memory-state-setting" data-testid="memory-state-settings">{MEMORY_STATE_LABEL} · <code dir="ltr">{folder}</code></p>;
 }
 
 function ContextNote({ text }: { text: string }) {

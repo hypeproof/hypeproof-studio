@@ -7971,7 +7971,17 @@ keeps); DEC-01 and DEC-02 (ruled 2026-10-28). Builds on REQ-STUDIO-ACTIVITY-MEMO
   seat with no task workspace, a classroom lesson seat, a profile not loaded yet, a task or activity
   switch in progress) means no line. Class activities keep their own stores (REQ-KNOW-07) and show none.
 - The line is learner text: at least 14px and 4.5:1 in both themes, inside the drawer at 800 and 1420 px.
-  The settings dialog and activity header disclosure of DES-KNOW-40 (CGP-KNOW-D-022) are not built here.
+- **Settings dialog and activity header (CGP-KNOW-D-022 / DES-KNOW-40).** The same read-only line is also in
+  view outside the drawer, on exactly the seats that have the store (the host serves `memoryState` from the
+  same binding; instructors, class and lesson seats get none). In the task heading it stands after the
+  activity line: "AI 기억: 켜짐" whole at every width, then "· `.hypeproof/memory/`", which gives way before
+  anything else (ellipsis, the full line kept in both tooltips). It costs the heading no word: at 1100px and
+  below the state moves into a band under the heading, at its end (the band the coach run state also uses at
+  480px and below), and the folder is visually hidden, so the activity kind and a name that is whole without
+  the line stay whole, nothing overlaps and no control is pushed out. In 대화 설정 it is a paragraph "AI 기억: 켜짐 · `.hypeproof/memory/`" before the
+  nickname field. Neither is a control (no button, input, switch role or tab stop); there is no off wording
+  and no "선생님이 정해요"; every cohort with the store, minors included, sees the same words (DEC-02). 14px and
+  4.5:1 in both themes, bordered nowhere (it is text), legible in forced colours.
 
 Evidence: `extensions/hypeproof-chat/test/activity-memory.smoke.mjs` (the real provider and host module:
 a view for minor, teen and kids profiles and for a profile whose memory fields all say off; no
@@ -7979,7 +7989,16 @@ contributed memory setting) and `extensions/hypeproof-chat/test/activity-memory-
 (headless Chromium on the built CSS and real panel: the line's exact text before the list opens, no
 control or off wording, 14px and 4.5:1, the unreadable-store reason unexpanded, and no line without a
 view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser). Since CGP-KNOW-D-030 it opens the drawer's
-`기억` filter first; `memory-drawer-filter-browser.smoke.mjs` checks the line leads that view in the real App.
+`기억` filter first; `memory-drawer-filter-browser.smoke.mjs` checks the line leads that view in the real App. For CGP-KNOW-D-022:
+`extensions/hypeproof-chat/test/memory-state-line.smoke.mjs` (the real provider and task store: the line for adult,
+trial, minor, teen and unknown-tier seats and for profiles whose fields say memory off or teacher-decides; none for
+class, lesson, enforced binding, instructor or no profile; no memory setting) and
+`extensions/hypeproof-chat/test/memory-state-line-browser.smoke.mjs` (the real App bundle in headless Chromium, personal
+dark/light at 1420/800/320 px, forced colours and a minor config, and a classroom seat: the header's state words whole,
+in the window and overlapping nothing, every header control still in the window, the settings paragraph, 14px and
+4.5:1, no control, no off or teacher wording; no line without `memoryState`; and a width sweep from 320 to 1420 px in
+both themes and forced colours comparing the same heading with and without the line: the activity kind and the
+activity line are never cut where they are whole without it, no two heading items overlap, no control leaves the window).
 
 ## Learning block draws no judgment visuals (CGP-LEARN-D-002)
 
