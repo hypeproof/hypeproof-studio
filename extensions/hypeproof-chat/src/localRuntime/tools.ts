@@ -14,6 +14,8 @@ import { profileAudience } from "../seatVocabulary.ts";
 import { folderRemovedFeatures } from "../folderConsent.ts";
 import { canonicalizeExistingPath } from "../workspaceRouting.ts";
 
+import { readTextChunk } from "./readTextChunk.ts";
+
 const LIMIT = 200_000;
 const schema = (properties: Record<string, unknown>, required: string[]) => ({
   type: "object",
@@ -25,8 +27,8 @@ const string = { type: "string" };
 const DEFINITIONS = [
   {
     name: "Read",
-    description: "Read a UTF-8 file inside the current Studio workspace.",
-    inputSchema: schema({ file_path: string }, ["file_path"]),
+    description: "Read a bounded UTF-8 text chunk inside the current Studio workspace. Large files return a continuation offset_bytes; use that offset and its revision token to read more. Binary documents require text extraction first.",
+    inputSchema: schema({ file_path: string, offset_bytes: { type: "integer", minimum: 0 }, revision: string }, ["file_path"]),
   },
   {
     name: "Write",
@@ -122,9 +124,7 @@ export function workspaceTools(args: {
         throw Error("승인 중 파일 경로가 바뀌었습니다. 다시 요청하세요.");
       let result: string;
       if (name === "Read") {
-        if ((await fs.stat(actual)).size > LIMIT)
-          throw Error("파일이 너무 큽니다. 작은 파일로 나누세요.");
-        result = await fs.readFile(actual, "utf8");
+        result = await readTextChunk(actual, input.offset_bytes, input.revision);
       } else {
         let content = input.content;
         if (name === "Edit") {
