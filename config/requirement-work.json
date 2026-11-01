@@ -800,7 +800,7 @@
         "PRA-15"
       ],
       "inline_prefixes": [],
-      "sha256": "1ca6952bc8b5ea4bd0a24336b57ab1ee1834ea7f92a3cef764b2a3ed5863078e",
+      "sha256": "3cc9b7446f25006551a4d6232ea0984ac96153844411d78f3036927aa539f253",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
