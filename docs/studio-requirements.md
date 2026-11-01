@@ -8064,14 +8064,21 @@ memory files, grouped by the task each came from. It filters ability, personalit
 - **Not for minors.** The host sends an overview only for a known adult profile (`isMinorProfile` false: not
   `minor_cohort`, and a `website` or `search-webapp` tier). A minor cohort, an unknown tier, no profile or the
   instructor surface gets no overview and no correction; the memory files stay listed and deletable (DEC-02).
-- **Correct in words.** Each overview item has 고치기, which opens a labelled field ("바르게 고친 문장") holding the item,
-  with 고친 내용 저장 and 취소. Saving sends the learner's words, bound to the listed scope and the item's file. The host
+- **Correct in words.** Each overview item has 고치기, which opens the overview's one correction field at its bottom
+  (CGP-KNOW-D-025 / DES-KNOW-43): under the last task group, headed "기억 고치기", quoting the item it replaces ("고칠
+  기억"), then a labelled field ("바르게 고친 문장") holding the item, with 고친 내용 저장 and 취소. The item's 고치기 says
+  it is open (`aria-expanded`); 취소 returns focus to it. The field is a textarea: Enter, also an IME's Enter during a
+  composition, adds to the text and never submits; only 고친 내용 저장 sends. Saving sends the learner's words, bound to the listed scope and the item's file. The host
   answers "바뀐 기억이 없어요." when the words are the same as the item after normalisation (NFC, line endings,
   control/zero-width removal, trimming) and changes nothing. Otherwise it refuses empty words, words that fail the check,
   more than 2,000 characters, an item the overview does not show, and a stale scope; on success it adds the words as a
   new file with the same task line (synced to disk) and then removes the old file it pinned before the press; the scope is checked again right before that write (REQ-STUDIO-ACTIVITY-MEMORY-FILES:
   the store still has no edit path). If the old file was replaced meanwhile, the new copy is removed, the replaced file
   is kept, and the panel says the file changed. A status line says "기억을 고쳤어요." after a correction.
+- **Nothing evaluative in the DOM (CGP-KNOW-D-025).** The overview draws plain sentences under task headings and its
+  own fixed lines only: no capability key or label, no score and no badge, chip, meter or icon. The browser smoke feeds
+  the panel an overview built by the real host code from planted capability, score and judgment sentences and asserts
+  their absence in the rendered DOM.
 
 Evidence: `extensions/hypeproof-chat/test/memory-overview.smoke.mjs` (hand-written facts pass and hand-written ability,
 personality and capability sentences fail; every capability key of both models; the task line on real files; grouping,
