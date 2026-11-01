@@ -16290,6 +16290,212 @@
           "path": "extensions/hypeproof-chat/test/activity-memory-browser.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-MANAGER",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Memory manager: view and delete each item (CGP-KNOW-R-023)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-MANAGER",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-MANAGER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/activityMemoryView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/extension.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ActivityMemoryPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MyWorksDrawer.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-MANAGER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-MANAGER",
+        "ST-IMP-MEMORY-MANAGER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-manager.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-manager-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-NOTICE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES",
+        "ST-REQ-ACTIVITY-MEMORY-SCOPE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## One-time memory notice (CGP-KNOW-R-031)"
+        },
+        {
+          "path": "docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-NOTICE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-NOTICE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/memoryNotice.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MemoryNotice.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/styles.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-NOTICE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-NOTICE",
+        "ST-IMP-MEMORY-NOTICE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-notice.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-notice-browser.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-USE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES",
+        "ST-REQ-MEMORY-MANAGER"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Memory use on an answer: \"기억 사용 N\" and per-task exclusion (CGP-KNOW-R-026)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-USE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-USE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/memoryUse.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/memoryUseView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MemoryUseChip.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/memoryUse.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-USE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-USE",
+        "ST-IMP-MEMORY-USE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-use.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-use-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-use-sdk.smoke.mjs"
+        }
+      ]
     }
   ]
 }

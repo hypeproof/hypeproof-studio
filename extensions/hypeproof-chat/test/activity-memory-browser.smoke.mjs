@@ -78,7 +78,7 @@ try{for(const seat of ['personal','classroom'])for(const dark of [true,false])fo
  assert.ok(m.panelText.includes('열기로 확인해 주세요'),'a large file is listed without its text');
  assert.equal(m.multiline,'pre-wrap','line breaks in a memory file stay visible');
  for(const x of m.texts){assert.ok(x.font>=14,`${x.cls} ${x.font}px`);if(!forcedColors)assert.ok(contrast(x.fg,m.bg)>=4.5,`${x.cls} contrast ${x.fg}/${m.bg}`);}
- assert.equal(m.buttons.length,view.entries.length*2);
+ assert.equal(m.buttons.length,view.entries.length*2+1,"열기 and 지우기 per file, plus 모두 지우기");
  for(const x of m.buttons){assert.ok(x.h>=44&&x.w>=44,`button ${x.w}x${x.h}`);assert.ok(x.left>=0&&x.right<=width,'inside the window');assert.notEqual(x.border,'none','buttons are bounded');}
  assert.equal(m.scroll,false,'no horizontal scroll');assert.ok(m.right<=width);
  const ring=await b.focusVisibleStyle('.tw-memory-actions button',['outline-width','outline-style']);

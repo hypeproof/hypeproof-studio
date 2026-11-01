@@ -349,7 +349,9 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
-import { personalMemoryActivity } from "./activityMemory";
+import { ActivityMemory, personalMemoryActivity } from "./activityMemory";
+import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, memoryNoticeSeen, type MemoryNoticeView } from "./memoryNotice";
+import { MEMORY_USE_KEY, acceptMemoryUse, excludedIds, memoryUseContext, memoryUseItems, memoryUseMarks, rememberMemoryUse, setMemoryExcluded, type MemoryUseItem } from "./memoryUse";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
 import type { QuitGuardActivity } from "./quitGuardHelpers";
@@ -6740,6 +6742,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const view = store.getView();
     return [...view.tasks, ...(view.archived ?? [])].map(({ id, title }) => ({ id, title }));
   }
+  /**
+   * REQ-STUDIO-MEMORY-MANAGER (CGP-KNOW-R-023) — the activity's tasks, listed and archived, so each memory file can name
+   * and link the task it was kept from. Every seat that has the memory view (minors included, DEC-02).
+   */
+  get activityMemoryTasks(): Array<{ id: string; title: string; archived: boolean }> | null {
+    const store = this.currentTaskStore();
+    if (!store || !this.activityMemoryBinding) return null;
+    const view = store.getView();
+    // The open task is always listed, even when archived, and opens as it is; other archived tasks open only from 보관함.
+    return [...view.tasks.map(({ id, title }) => ({ id, title, archived: false })), ...(view.archived ?? []).map(({ id, title }) => ({ id, title, archived: true }))];
+  }
   private async postActivityMemory(extra?: { requestId: string; result: import("./activityMemoryView").ActivityMemoryResult }): Promise<void> {
     const view = this.activityMemoryPanel && this.activityMemoryBinding ? await this.activityMemoryPanel.view() : null;
     await this.post({ type: "activityMemoryState", view, ...extra });
@@ -6747,15 +6760,101 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async runActivityMemoryAction(msg: Extract<WebviewMessage, { type: "activityMemoryAction" }>): Promise<void> {
     const requestId = typeof msg.requestId === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) ? msg.requestId : null;
     if (!requestId) return;
-    const action = msg.action === "open" || msg.action === "delete" || msg.action === "correct" ? msg.action : null;
+    const action = msg.action === "open" || msg.action === "delete" || msg.action === "correct" || msg.action === "deleteAll" ? msg.action : null;
     const panel = this.activityMemoryPanel;
     // REQ-STUDIO-MEMORY-OVERVIEW — a correction carries the learner's words; any other press carries none.
     const text = action === "correct" ? msg.text : undefined;
+    // REQ-STUDIO-MEMORY-MANAGER — 모두 지우기 carries the names the learner's list showed, and only that press does.
+    const names = action === "deleteAll" ? msg.names : undefined;
     const result: import("./activityMemoryView").ActivityMemoryResult = !action || !panel || !this.activityMemoryBinding || typeof msg.name !== "string" || msg.name.length > 200 || typeof msg.scope !== "string"
       || (action === "correct" && (typeof text !== "string" || text.length > 8_000))
+      || (action === "deleteAll" && (!Array.isArray(names) || names.length > 200 || names.some(item => typeof item !== "string" || item.length > 200)))
       ? { action: action ?? "open", error: "작업 상태가 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요." }
-      : await panel.act(action, msg.name, msg.scope, text);
+      : await panel.act(action, msg.name, msg.scope, text, names);
     await this.postActivityMemory({ requestId, result });
+  }
+  // REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031 / REQ-KNOW-49) — the one-time memory notice. Due on the R-005 binding only
+  // (personal and trial activities; never an instructor, a class or a lesson), minor cohorts included (DEC-02), once the
+  // store holds something a request would use. 확인 writes the record REQ-KNOW-44 reads before memory rides a request.
+  // Answered to the asking view only: post() would invalidate an open approval prompt.
+  private async memoryNoticeView(): Promise<MemoryNoticeView | null> {
+    if (this._instructorMode?.isInstructor !== false) return null;
+    const binding = this.activityMemoryBinding;
+    const activity = activityConnections(this.context)?.scope;
+    if (!binding || !activity) return null;
+    const items = await new ActivityMemory(binding.root).contextItems().catch(() => null);
+    // A task or activity switch while reading answers nothing stale: the next request asks again.
+    const after = this.activityMemoryBinding;
+    if (!items || !after || after.root !== binding.root || after.scope !== binding.scope || activityConnections(this.context)?.scope !== activity) return null;
+    return memoryNoticeDue({ activity, bound: true, stored: this.context.workspaceState.get(MEMORY_NOTICE_KEY), items: items.length });
+  }
+  private async answerMemoryNotice(msg: Extract<WebviewMessage, { type: "memoryNoticeRequest" | "memoryNoticeAck" }>, source?: vscode.Webview): Promise<void> {
+    if (msg.type === "memoryNoticeAck") {
+      // Only the notice due now, for the activity open now: a press from another activity, a seat without this memory or
+      // a notice that was never due marks nothing.
+      const due = await this.memoryNoticeView();
+      const next = due && typeof msg.activity === "string" && msg.activity === due.activity
+        ? markMemoryNoticeSeen(this.context.workspaceState.get(MEMORY_NOTICE_KEY), due.activity) : null;
+      if (next) await Promise.resolve(this.context.workspaceState.update(MEMORY_NOTICE_KEY, next)).catch(() => undefined);
+    }
+    const reply = { type: "memoryNoticeState", notice: await this.memoryNoticeView(),
+      activityId: activityConnections(this.context)?.scope, taskId: this.currentTaskStore?.()?.getView().activeTaskId ?? undefined } satisfies HostMessage;
+    if (source) await source.postMessage(reply); else await this.post(reply);
+  }
+  // REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026 / REQ-KNOW-44) — the memory a request carries, the "기억 사용 N" count on its
+  // answer and the learner's per-task exclusions. The ledger (memoryUse.ts) holds digests only, beside the task file.
+  private memoryTurns?: Map<string, { scope: string; used: MemoryUseItem[] }>;
+  private memoryLedger() { try { return acceptMemoryUse(this.context.workspaceState.get(MEMORY_USE_KEY)); } catch { return acceptMemoryUse(null); } }
+  /**
+   * The memory for this turn's request, read now through the R-005 binding: a personal or trial activity, never an
+   * instructor, a class or a lesson seat (checked again on the turn's own profile), and only after the activity's
+   * first-use notice (REQ-KNOW-49). A task or activity switch while reading drops it: nothing is sent.
+   */
+  private async takeMemoryContext(profile: ResolvedProfile | null | undefined): Promise<{ text: string; scope: string; used: MemoryUseItem[] } | null> {
+    if (this._instructorMode.isInstructor !== false) return null;
+    const binding = this.activityMemoryBinding;
+    const activity = activityConnections(this.context)?.scope;
+    if (!binding || !personalMemoryActivity(activityConnections(this.context)?.current, profile)) return null;
+    if (!memoryNoticeSeen(this.context.workspaceState.get(MEMORY_NOTICE_KEY), activity)) return null;
+    const items = await new ActivityMemory(binding.root).contextItems().catch(() => null);
+    const after = this.activityMemoryBinding;
+    if (!items || !after || after.scope !== binding.scope || after.root !== binding.root || activityConnections(this.context)?.scope !== activity) return null;
+    const built = memoryUseContext(items, excludedIds(this.memoryLedger(), binding.scope));
+    return built.text ? { text: built.text, scope: binding.scope, used: built.used.map(({ id, text }) => ({ id, text })) } : null;
+  }
+  /** Records the items on the answer the turn ended with (the last assistant line), then shows the count. */
+  private async rememberMemoryTurn(streamId: string, items: ChatMessage[]): Promise<void> {
+    const turn = this.memoryTurns?.get(streamId);
+    const answer = items.filter(item => item.role === "assistant").at(-1);
+    if (!turn || !answer) return;
+    this.memoryTurns!.delete(streamId);
+    try { await this.context.workspaceState.update(MEMORY_USE_KEY, rememberMemoryUse(this.memoryLedger(), turn.scope, answer.id, turn.used)); }
+    catch { /* display-only: the request carried the items either way; the chip is missing after a failed save */ }
+    await this.postMemoryUseMarks();
+  }
+  private async postMemoryUseMarks(): Promise<void> {
+    // Instructor mode (or a host not yet told the seat) has no memory view and no marks.
+    const binding = this._instructorMode?.isInstructor === false ? this.activityMemoryBinding : undefined;
+    await this.post({ type: "memoryUseMarks", marks: binding ? memoryUseMarks(this.memoryLedger(), binding.scope) : {} });
+  }
+  /** The items of one answer, read fresh, or the learner's exclude / bring-back press on one of them (this task only). */
+  private async runMemoryUse(msg: Extract<WebviewMessage, { type: "memoryUseRequest" }>): Promise<void> {
+    const requestId = typeof msg.requestId === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(msg.requestId) ? msg.requestId : null;
+    if (!requestId) return;
+    const messageId = typeof msg.messageId === "string" && msg.messageId.length <= 256 ? msg.messageId : "";
+    const binding = this.activityMemoryBinding;
+    // Every press is answered, so the chip never waits on a refusal.
+    const reply = (items: import("./memoryUseView").MemoryUseEntry[] | null) => this.post({ type: "memoryUseItems", requestId, messageId: typeof msg.messageId === "string" ? msg.messageId.slice(0, 256) : "", items });
+    if (!messageId || !binding || this._instructorMode.isInstructor !== false) { await reply(null); return; }
+    if (msg.exclude !== undefined) {
+      const next = typeof msg.id === "string" && typeof msg.exclude === "boolean" ? setMemoryExcluded(this.memoryLedger(), binding.scope, messageId, msg.id, msg.exclude) : null;
+      if (!next) { await reply(null); return; }
+      try { await this.context.workspaceState.update(MEMORY_USE_KEY, next); } catch { await reply(null); return; }
+    }
+    const current = await new ActivityMemory(binding.root).contextItems().catch(() => null);
+    const after = this.activityMemoryBinding;
+    if (!current || !after || after.scope !== binding.scope || after.root !== binding.root) { await reply(null); return; }
+    await reply(memoryUseItems(this.memoryLedger(), binding.scope, messageId, current));
   }
   // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
   // window starts with none, and the transcript stores nothing new for them.
@@ -7538,6 +7637,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
       case "activityMemoryRequest": await this.postActivityMemory(); return;
       case "activityMemoryAction": await this.runActivityMemoryAction(msg); return;
+      case "memoryNoticeRequest": case "memoryNoticeAck": await this.answerMemoryNotice(msg, source); return;
+      case "memoryUseRequest": await this.runMemoryUse(msg); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;
@@ -8473,6 +8574,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the next request; the stored value (read with the turn's profile above) is screened again here.
     const nickname = nicknameContext(nicknameStored);
     if (nickname) userTextForModel = `${nickname}\n\n${userTextForModel}`;
+    // CGP-KNOW-R-026 — the activity's memory, model-only, read now minus this task's exclusions; the count goes on the answer.
+    // It never joins userTextForModel: each runtime sends it beside the learner's message (memoryContext / contextText),
+    // so the Service's last-user-message record (lastUserMessageText) carries none of it.
+    const memoryTurn = await this.takeMemoryContext(profile);
     // 2026-08-19 — pre-built guest worlds. When a child picks a guest they are not
     // made to wait 30–40 s for the coach to produce 5 KB: the filled-in HTML is
     // fetched from the worker, saved and shown immediately, and the coach is told
@@ -8542,6 +8647,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // has to be able to resend it to the worker's trace. The worker validates turn_id
     // strictly as a UUID (routes/trace.ts), so a UUID is used instead of randomId().
     const streamId = crypto.randomUUID();
+    if (memoryTurn) { this.memoryTurns ??= new Map(); this.memoryTurns.set(streamId, { scope: memoryTurn.scope, used: memoryTurn.used }); }
     // A5 (spec §5.2) — an orchestrator seat reads the per-request record too, whatever its effort
     // policy: the details list is where each request's agent and model are shown.
     if (token && profile && (selection?.choices.some(c=>c.effort) || orchestratorRosterFor(profile))) {
@@ -8663,6 +8769,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let runtimeSettled = false;
     const captureInterrupted = () => {
       interruptedItems = this.finishTurnItems(streamId, messageId, assistantText, assistantCitations, effectiveCoachName);
+      // CGP-KNOW-R-026 — a stopped or failed turn whose request carried memory: its partial answer gets the count.
+      void this.rememberMemoryTurn(streamId, interruptedItems);
     };
     if (ctrl.signal.aborted) captureInterrupted();
     else ctrl.signal.addEventListener('abort', captureInterrupted, { once: true });
@@ -9101,6 +9209,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             token,
             history,
             userText: userTextForModel,
+            ...(memoryTurn ? { contextText: memoryTurn.text } : {}),
             images: effectiveImages,
             signal: ctrl.signal,
             streamId,
@@ -9131,6 +9240,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           token,
           history,
           userText: userTextForModel,
+          ...(memoryTurn ? { contextText: memoryTurn.text } : {}),
           images: effectiveImages,
           signal: ctrl.signal,
           coachName: effectiveCoachName,
@@ -9222,7 +9332,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               : undefined;
           const result=await runInstructorTurn({
             local,cwd,
-            history:history.map(m=>({role:m.role,content:m.content})),userText:userTextForModel,
+            history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             brief:this._instructorMode.brief,
             chalkCtx,
             browserTools,
@@ -9241,7 +9351,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const result=await runLocalCoach({config:local,profile,cwd,
-            history:history.map(m=>({role:m.role,content:m.content})),userText:userTextForModel,
+            history:history.map(m=>({role:m.role,content:m.content})),userText:memoryTurn?`${memoryTurn.text}\n\n${userTextForModel}`:userTextForModel,
             signal:ctrl.signal,onDelta,onRefusal,onActivity,
             requestApproval:async action=>{
               if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
@@ -9294,6 +9404,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             systemPrompt: "",
             history: history.map((m) => ({ role: m.role, content: m.content })),
             userText: userTextForModel,
+            // CGP-KNOW-R-026 — a prompt that carries memory leaves no CLI session file outside the activity (DEC-01).
+            ...(memoryTurn ? { ephemeralSession: true, memoryContext: memoryTurn.text } : {}),
             images: effectiveImages,
             signal: ctrl.signal,
             // #457 — with no folder open, workspaceFolders is empty and cwd goes
@@ -9462,6 +9574,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           effectiveCoachName,
         );
         await this.appendHistory([userLine(historyText), ...finishedItems]);
+        // CGP-KNOW-R-026 — the finished answer of a request that carried memory gets the count.
+        await this.rememberMemoryTurn(streamId, finishedItems);
         const answer = finishedItems.filter(item => item.role === 'assistant' && item.content.trim()).at(-1);
         if (answer) accuracyResult = { owner: crBytesOwner(token) ?? createHash('sha256').update(token || this.turnRequestScope()).digest('hex'),
           offer: { scope: accuracyScope, messageId: answer.id }, text: assistantText, instructor: this._instructorMode.isInstructor === true };
@@ -9588,6 +9702,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       void this.loadAccess(true).then(()=>this.postConfig()).catch(()=>{});
       this.turnTimelines.delete(streamId);
       this.taskActivity.end(streamId);
+      // CGP-KNOW-R-026 — a turn that ended with no answer leaves no pending count behind.
+      this.memoryTurns?.delete(streamId);
       // Persistence failure must not skip closing the runtime and verification turn.
       if (interruptedSaveFailed) throw interruptedSaveError;
     }
@@ -9719,6 +9835,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     token: string | undefined;
     history: ChatMessage[];
     userText: string;
+    /** CGP-KNOW-R-026 — the turn's memory, its own user message before the turn (proxyChat contextText). */
+    contextText?: string;
     images?: string[];
     signal: AbortSignal;
     streamId: string;
@@ -9767,6 +9885,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           token: p.token,
           history: p.history,
           userText: p.userText,
+          ...(p.contextText ? { contextText: p.contextText } : {}),
           images: p.images,
           toolTurns: scratch,
           signal: p.signal,
@@ -10656,6 +10775,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.postStepMarks(messages);
     await this.postContextTrim();
     await this.postVerdicts();
+    await this.postMemoryUseMarks();
     if (pending) await this.post({ type: 'taskWorkspaceError', error: this.interruptedHistoryError(), historySaveFailed: true });
   }
 

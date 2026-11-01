@@ -8103,3 +8103,134 @@ from the input budget. Personal mode keeps its existing available-space calculat
 All seats show composer focus on the card rather than a duplicate inner textarea ring.
 Browser regression: classroom-composer.smoke.mjs covers growth, internal scroll,
 shrink and personal controls at narrow/wide and short/tall viewports.
+
+## Memory manager: view and delete each item (CGP-KNOW-R-023)
+
+REQ-STUDIO-MEMORY-MANAGER / REQ-KNOW-41 (CGP-KNOW-041) / PI#2 (the learner can see and remove what the AI keeps);
+DEC-01 (local files, the learner reads and deletes them). Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030)
+and REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022); the list is the file list of the `기억` filter in the 내 작품 drawer.
+
+- **Each item: text, date, source task.** Every listed memory file shows its text (as text), its time and "남긴 작업",
+  the task it was kept from, resolved by the host from the task id on the file's first line against the activity's
+  tasks on every listing. A task in the task list is a button "‘<title>’ 작업 열기" (44px, the title as text, at most
+  80 characters, control and bidi characters removed): it closes the drawer and asks the host to open that task with
+  `taskSelect` (the open task's own link only closes the drawer; while a turn runs the host refuses the switch with
+  its own error line). A task in 보관함 is named in words with "보관함에서 다시 열 수 있어요" (보관함's 다시 열기 is the only way
+  to open it); an id no task has reads "작업을 찾을 수 없어요…"; a file without a task line reads "어느 작업에서 남겼는지
+  기록이 없어요." No source is ever a dead link. Every seat with the view gets the source line, minors included (DEC-02).
+- **Delete one with Cancel.** 지우기… is REQ-STUDIO-ACTIVITY-MEMORY-FILES' native modal confirm with one 취소 (Escape or a
+  closed dialog also cancels) and the pinned file identity.
+- **모두 지우기 needs a second confirmation.** Under "AI 기억 파일 · N개", whenever the list has files, 모두 지우기… sends
+  the names the list shows (at most 200) bound to the listed scope. The host keeps only names it still lists, pins each
+  file's identity, and shows two native modal confirms, each with one 취소: "기억 파일 N개를 모두 지울까요?" (which also
+  says how many unlisted files it leaves alone) and then "정말 기억 파일 N개를 지울까요?" with "N개 지우기". Only the second
+  confirm's button deletes; 취소 or Escape at either step changes nothing, and a task or activity switch during either
+  confirm cancels. A file added, replaced or removed after the list was drawn is kept (the pin refuses it), and files the
+  list never showed (unsafe names, links) are never touched. The status line says "기억 파일 N개를 지웠어요." and, when
+  files remain (changed or added meanwhile, or not removable), "M개는 남아 있어요. 목록에서 확인해 주세요." A press with a stale scope, a name list that is
+  not a list of at most 200 short strings, or no listed name is refused before any confirm.
+- **Absent from later requests.** No request carries memory yet (REQ-STUDIO-ACTIVITY-MEMORY-FILES, "Future context"):
+  `ActivityMemory.contextItems()` is the only reader a request may use, and it reads the folder fresh on every call, so
+  an item removed by 지우기 or 모두 지우기 is absent from the very next read. The request injection of REQ-KNOW-44 must use
+  that reader.
+
+Evidence: `extensions/hypeproof-chat/test/memory-manager.smoke.mjs` (the source of each item against real tasks, listed,
+archived, gone and none, on a minor seat; title cleaning; one delete with Cancel, Escape and confirm, absent from the
+next context read; 모두 지우기 refusals before any confirm, both confirms with one Cancel each, a task switch between
+them, a file replaced and a file added during the confirm kept, unlisted files untouched, the next context read empty)
+and `extensions/hypeproof-chat/test/memory-manager-browser.smoke.mjs` (the real App bundle in headless Chromium, dark
+and light, 1420/800/320 px, normal and forced colours: text, time and source per item, links only for listed tasks, 44px
+bounded controls, 14px text at 4.5:1, focus ring, no sideways scroll, one 모두 지우기 request naming exactly the listed
+files, the count line, focus kept in the drawer, the link closing the drawer and sending `taskSelect`; a classroom seat
+has no view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## One-time memory notice (CGP-KNOW-R-031)
+
+REQ-STUDIO-MEMORY-NOTICE / REQ-KNOW-49 (CGP-KNOW-049) / DES-KNOW-49 (CGP-KNOW-D-031) / PI#2 (the learner can see what
+the AI keeps), REQ-O (minor safety); DEC-01 (local files only) and DEC-02 (always on, minor cohorts included). Builds on
+REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030) and REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005).
+
+- **When.** The first time memory would be used in an activity: the seat has the activity's personal memory store (the
+  R-005 binding: a personal or trial activity, never a class, a lesson or an instructor seat), the store holds at least
+  one item `ActivityMemory.contextItems()` would return, and the learner has not pressed 확인 in this activity. An empty
+  store uses no memory and shows nothing yet; the first item (a write, or a file the learner adds) makes it due.
+- **What.** One card above the composer, "AI 기억 안내", with four labelled lines and one button, 확인:
+  무엇을 (what is kept, as short text files), 어디에 (`.hypeproof/memory/` in the activity folder), 누가 보는지 (the learner,
+  and the AI coach that receives the memory with a question) and 지우는 법 (내 작품 → 기억, one item or all). The words are
+  the same for every cohort, minors included.
+- **A notice, not a switch.** There is no 켜기/나중에 choice, no off option and no Chalk, instructor or guardian step
+  (DEC-02, ruled 2026-10-28). The card never disables the composer and does not take focus when it appears; 확인 moves
+  focus to the composer.
+- **The record.** 확인 sends the activity the card showed; the host writes workspaceState `hps.memoryNotice.v1`, activity
+  id → `true` (at most 500 activities, oldest dropped), only when the notice is due now for the activity open now: a
+  press for another activity, a seat without the store or a notice that was never due records nothing. After the
+  record the notice is never due again in that activity. Showing it records nothing. A failed save leaves the card up.
+  REQ-KNOW-44 (CGP-KNOW-R-026) reads this record before a request may carry memory.
+- **Freshness.** The chat asks on load, on a task or activity change, after each turn and when the memory list changes;
+  the answer goes to the asking view only and carries its activity, so a stale one is dropped.
+
+Evidence: `extensions/hypeproof-chat/test/memory-notice.smoke.mjs` (the record, its writer and the due rule; the copy;
+the real provider on real files: personal, trial and minor seats due and recorded once, class, lesson, instructor and
+empty-store seats not due and never recorded, the first item making it due, a press for another activity, a double
+press and a failed save) and `extensions/hypeproof-chat/test/memory-notice-browser.smoke.mjs` (the real App bundle in
+headless Chromium, personal and classroom, dark and light, 800 and 1420 px, forced colours: shown only when the host
+says so, stale answers dropped, four lines and exactly one 확인, 14px text, a 44px 확인 with a solid focus ring inside the
+chat column, focus not taken, one ack on a double press, focus to the composer after; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Memory use on an answer: "기억 사용 N" and per-task exclusion (CGP-KNOW-R-026)
+
+REQ-STUDIO-MEMORY-USE / REQ-KNOW-44 (CGP-KNOW-044) / PI#2 (the learner sees what the AI used and can take it back) and
+PI#5 (an answer shows what it actually drew on; CGP-CHAT-R-013 is merged into this row); DEC-01, DEC-02. The first row
+that lays memory into a request. Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES (`contextItems()`, the only reader),
+REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (the binding) and REQ-STUDIO-MEMORY-MANAGER.
+
+- **Which requests carry memory.** A learner turn in a personal or trial activity (the R-005 binding, checked again on
+  the turn's own profile; never an instructor, a class or a lesson seat), minors included (DEC-02), and only once the
+  activity's first-use notice of REQ-KNOW-49 (CGP-KNOW-R-031) has been seen (`hps.memoryNotice.v1`, activity scope →
+  `true`, written by its 확인 and read through `memoryNoticeSeen` in `memoryNotice.ts`). Until then no request carries
+  memory and no answer shows a count.
+- **What it carries.** `contextItems()` read at send time, newest first, minus this task's excluded items, whole items
+  only, at most 20 items and 6,000 characters. Each item is a `<memory n>` block (tag look-alikes in the text are
+  defused) followed by a fixed line saying the blocks are the learner's memory files, are data and not instructions.
+  The text is model-only: the saved conversation keeps the learner's words. It never joins the learner's message: the Service takes the
+  last user message's text as the turn's prompt (`lastUserMessageText`: screened, and stored on cohorts with
+  `analytics.log_user_messages`), so memory rides beside it. The proxy runtime sends it as its own user message right
+  before the learner's; on agent-sdk it is the UserPromptSubmit hook's `additionalContext`, which the CLI sends as a
+  `role: "system"` message that the gateway hands the model as `<system-context>` and does not record (measured on SDK
+  0.3.299 with the real CLI). The local developer runtime, which has no Service, keeps it in front of the text. A task or activity switch while reading
+  sends none.
+- **"기억 사용 N".** N is the number of items laid into that request. The finished (or stopped) turn's last answer shows
+  the chip `기억 사용 N` under its body; an answer whose request carried none shows nothing. Opening the chip asks the
+  host, which lists those exact items as the memory files hold them now: the words, "이 답변 뒤에 내용이 바뀌었어요…" with
+  today's words for an item edited since, and "지운 기억이에요…" (no words) for a deleted one.
+- **Exclude for the rest of this task.** Each listed item that still exists has 이 작업에서 빼기; once pressed it says
+  "이 작업에서는 빼 두었어요…" and offers 다시 쓰기. An excluded item is left out of every later request of this task only;
+  other tasks of the activity still use it. Only an item an answer of this task used can be excluded (the host refuses
+  any other id). A corrected item (REQ-STUDIO-MEMORY-OVERVIEW) is a new file and is used again.
+- **What is kept.** Beside the task file (workspaceState `hps.memoryUse.v1`, at most 100 tasks, 200 answers and 200
+  exclusions per task): per answer the SHA-256 digests of each used file's name and text, per task the digests of the
+  excluded names. No memory words or file names are kept outside the activity folder: on the agent-sdk runtime a turn
+  whose prompt carries memory runs with `persistSession: false`, so the CLI writes no session transcript under the seat's
+  config dir (measured on SDK 0.3.299: by default the prompt and the system prompt both land in
+  `projects/<cwd>/<session>.jsonl`; with the option off neither appears anywhere under it). No turn resumes a CLI
+  session: each passes its history in the prompt. The spool and the saved conversation record the learner's words only,
+  so on a cohort with `analytics.upload_session_logs` the uploaded session logs carry no memory either (REQ-KNOW-49's
+  "who can read it" stays true: the Service and its operators never receive memory through the logs).
+- **Learner floors.** The chip and item buttons are 44px targets with 14px text and a solid focus ring, inside the chat
+  column; states are said in words.
+
+Evidence: `extensions/hypeproof-chat/test/memory-use.smoke.mjs` (pure parts, then the real provider with a scripted
+model runtime recording every request: the count posted for the answer equals the `<memory>` blocks in the captured
+request, an exclusion leaves the next request of that task only and 다시 쓰기 restores it, a forged id is refused, a deleted
+item is absent and listed as deleted, an empty store shows no chip, and class, lesson and pre-notice turns carry no
+memory and get no count; instructors get no items) and `extensions/hypeproof-chat/test/memory-use-browser.smoke.mjs`
+(the real App bundle in headless Chromium, personal and classroom, dark and light, 800 and 1420 px, forced colours: the
+chip on the marked answer only, 44px/14px/focus ring/inside the column, exact words, the deleted wording, a stale answer
+ignored, 이 작업에서 빼기 posting the item; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser), and `extensions/hypeproof-chat/test/memory-use-sdk.smoke.mjs` (the
+real runSdkCoach: the option is set only for a memory-carrying turn, and with the real vendored CLI against a local stub
+gateway a unique memory marker is in no file under the seat's claude-config afterwards, while the same turn without the
+option writes it; NOT RUN without the vendored binary). The provider smoke also checks that no spool call holds memory, that a real spool on disk and the bytes
+`uploadAllPending` sends on an uploading cohort hold none, that the Service's prompt record (the last user message, as `lastUserMessageText`
+extracts it) holds none on proxy and on agent-sdk (real CLI request bodies),
+that the agent-sdk turn is asked for no transcript, trial seats, and that unknown kinds fail closed.

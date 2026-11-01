@@ -10,6 +10,7 @@ import { CopyFeedbackRegion, CopyFeedbackOutlet } from './CopyFeedback';
 import { ChatFindBar } from './ChatFindBar';
 import { registerClosedText } from './chatFind';
 import { ClassWindowNotice } from "./ClassWindowNotice";
+import { MemoryNotice } from "./MemoryNotice";
 import { SteerDelivery, type SteerDeliverySnapshot } from './SteerDelivery';
 import { AccuracyEducation, useAccuracyEducation } from "./AccuracyEducation";
 import './answerAttempts.css';
@@ -130,6 +131,7 @@ import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type Se
 import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import { TaskActivity } from "./TaskActivity";
+import { MemoryUseChip } from "./MemoryUseChip";
 import { summarizeTaskActivity, validTaskActivityFact, type TaskActivityFact } from "../../src/taskActivity";
 import {
   RUNNER_PHRASE_MS,
@@ -229,6 +231,8 @@ interface Props {
   trimBoundaryId?: string | null;
   /** CGP-CHAT-R-023 — the host's served-step mark per user message id. Absent: no step dividers. */
   stepMarks?: LessonStepMarks;
+  /** CGP-KNOW-R-026 — answer id → memory items its request carried. Absent: no 기억 사용 chips. */
+  memoryUse?: Record<string, number>;
   /** REQ-STUDIO-DELEGATION-ROW — the stream running now; a delegation row is live only for it. */
   runningStreamId?: string | null;
   delegationStops?: Record<string, import("../../src/delegationStop").DelegationStopState>;
@@ -1965,6 +1969,7 @@ export function ChatPanel(props: Props) {
               quotable={m.role === 'assistant' && !(streaming && m.id === streamingId)}
               quoteAction={answerQuote?.messageId === m.id ? <QuoteAction quote={answerQuote} disabled={composing} onQuote={quoteAnswer} onDismiss={dismissQuote} /> : undefined}
               elapsed={m.elapsedTurn ? <ElapsedReceipt message={m} inline /> : undefined}
+              memoryUse={!props.instructor && m.role === "assistant" && !(streaming && m.id === streamingId) ? props.memoryUse?.[m.id] : undefined}
             />
           )}
           {m.elapsedTurn && !answerActionRowShown(m, personalWorkspace, streaming && m.id === streamingId) && <ElapsedReceipt message={m} />}
@@ -2157,6 +2162,8 @@ export function ChatPanel(props: Props) {
         {/* CGP-AGENT-D-026: the 느려요 기록 pill; renders nothing unless the host says a recording runs. */}
         <PerfTracePill />
         {lowDisk && <LowDiskBar notice={lowDisk} />}
+        {/* CGP-KNOW-R-031: the one-time memory notice; renders nothing unless the host says it is due here. */}
+        {!props.instructor && <MemoryNotice scopeKey={JSON.stringify([activityId, taskId])} streaming={streaming} onDone={() => textareaRef.current?.focus({ preventScroll: true })} />}
         {props.refusal && <RefusalBanner onDismiss={() => {
           props.onDismissRefusal?.();
           textareaRef.current?.focus({ preventScroll: true });
@@ -3054,6 +3061,7 @@ function MessageItem({
   quotable = false,
   quoteAction,
   elapsed,
+  memoryUse,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -3104,6 +3112,8 @@ function MessageItem({
   quoteAction?: ReactNode;
   /** CGP-CHAT-D-015: the observed elapsed receipt, placed at the end of the answer action row. */
   elapsed?: ReactNode;
+  /** CGP-KNOW-R-026 — the number of memory items this answer's request carried; absent when it carried none. */
+  memoryUse?: number;
 }) {
   const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
@@ -3189,6 +3199,7 @@ function MessageItem({
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
         <PanelBoundary panel="citations">{personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />}</PanelBoundary>
       )}
+      {message.role === "assistant" && memoryUse ? <MemoryUseChip messageId={message.id} count={memoryUse} /> : null}
       {/* Merge of #1814 polish and #1763: one ghost row (copy · preview · ask again), retry on the
           latest answer only and never on a free seat. */}
       {answerActionRowShown(message, personal, isStreamingThis) && <CopyAnswer

@@ -63,6 +63,7 @@ import { verifyPressAction, verifyNote } from "./verifyOffline";
 import { activityLabel } from "./activityLabel";
 import { activityTitleText } from "./activityHome";
 import { acceptStepMarks, nextStepMarks, rememberStepMark, validStepMark, type LessonStepMarks } from "../../src/lessonStepMarks";
+import { acceptMemoryUseMarks } from "./MemoryUseChip";
 
 interface State {
   config: ChatConfig | null;
@@ -418,6 +419,8 @@ export function App() {
   const [trimBoundaryId, setTrimBoundaryId] = useState<string | null>(null);
   // CGP-CHAT-R-023 — served lesson step per user message id (host-owned), for the transcript's step dividers.
   const [stepMarks, setStepMarks] = useState<LessonStepMarks>(() => acceptStepMarks(null));
+  // CGP-KNOW-R-026 — answer id → number of memory items its request carried (the open task, from the host).
+  const [memoryUse, setMemoryUse] = useState<Record<string, number>>(() => acceptMemoryUseMarks(null));
   const pendingVerdicts = useRef(new Map<string, { requestId: string; value: VerdictState | null }>());
   const latestVerdictRequests = useRef(new Map<string, string>());
   const ownVerdictRequests = useRef(new Set<string>());
@@ -549,6 +552,7 @@ export function App() {
           if (msg.userMessageId && validStepMark(msg.lessonStep)) { const id = msg.userMessageId, mark = msg.lessonStep; setStepMarks(prev => rememberStepMark(prev, id, mark)); }
           break;
         case "lessonStepMarks": { const post = { marks: msg.marks, forget: msg.forget }; setStepMarks(prev => nextStepMarks(prev, post)); break; }
+        case "memoryUseMarks": setMemoryUse(acceptMemoryUseMarks(msg.marks)); break;
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
@@ -942,6 +946,7 @@ export function App() {
         verdicts={verdicts}
         trimBoundaryId={trimBoundaryId}
         stepMarks={stepMarks}
+        memoryUse={memoryUse}
         onVerdict={judgeAnswer}
         onAnswerToWiki={(messageId) => postToHost({ type: "answerToWiki", messageId })}
         onDismissError={dismissError}

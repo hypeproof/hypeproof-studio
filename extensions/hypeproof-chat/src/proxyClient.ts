@@ -163,6 +163,12 @@ interface ProxyChatArgs {
   history: ChatMessage[];
   userText: string;
   /**
+   * REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026) — the learner's memory for this turn, sent as its own user message right before
+   * the turn. The Service takes only the LAST user message as the turn's prompt (`lastUserMessageText`: screened, and
+   * stored on cohorts with `analytics.log_user_messages`), so memory never lands in that record (DEC-01).
+   */
+  contextText?: string;
+  /**
    * Pasted-image data URLs attached to THIS user turn (website-copyclone).
    * Only the current turn carries images — `history` is mapped text-only
    * below, so a screenshot is injected to the model exactly once.
@@ -235,6 +241,7 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
     // 이미 걸러 오지만, 이 함수는 모델로 나가는 마지막 문이라 여기서도 막는다.
     ...history.filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role, content: m.content })),
+    ...(args.contextText ? [{ role: "user", content: args.contextText }] : []),
     { role: "user", content: userContent },
     // #278 Phase 3 — the loop's scratch tool_use/tool_result turns (if any).
     ...(toolTurns ?? []),
