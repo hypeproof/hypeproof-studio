@@ -17,7 +17,7 @@ let requestSeq = 0;
 const nextRequestId = () => `memory-${Date.now().toString(36)}-${(++requestSeq).toString(36)}`;
 
 /** REQ-STUDIO-MEMORY-MANAGER — the task a file was kept from: a link to a task that can open now, otherwise words. */
-function MemorySourceLine({ source, onOpenTask }: { source: MemorySource; onOpenTask?: (taskId: string) => void }) {
+export function MemorySourceLine({ source, onOpenTask }: { source: MemorySource; onOpenTask?: (taskId: string) => void }) {
   if (source.kind === 'task' && onOpenTask) return <div className="tw-memory-source">
     <span className="tw-memory-note">{MEMORY_SOURCE_TEXT.label}</span>
     <button type="button" dir="auto" onClick={() => onOpenTask(source.id)}>‘{source.title}’ 작업 열기</button>

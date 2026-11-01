@@ -67,6 +67,7 @@ import { AccessHeader } from './AccessHeader';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
+import { MemorySettingsList } from './MemorySettingsList';
 import { ShortcutSheet, useShortcutSheetKey } from './ShortcutSheet';
 import { NicknameSetting } from './NicknameSetting';
 import { useDialogFocus } from './dialogFocus';
@@ -2512,6 +2513,9 @@ export function ChatPanel(props: Props) {
             <span>{TEXT_SIZE_LABELS[size]}</span>
           </label>)}
         </fieldset>
+        {/* CGP-KNOW-D-023 — "AI가 기억하는 것": the memory items of this activity (one store with the 내 작품 기억 view).
+            Mounted while the dialog is open, so each opening reads the store fresh; nothing on a seat without the store. */}
+        {preferencesOpen && <MemorySettingsList onOpenTask={taskId => { setPreferencesOpen(false); setPreferencesUsage(false); postToHost({ type: 'taskSelect', id: taskId }); }} />}
         {config.learnerNickname && <NicknameSetting key={config.activity?.id ?? ''} saved={config.learnerNickname.value} post={postToHost} />}
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <PanelBoundary panel="observation"><NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} /></PanelBoundary>}

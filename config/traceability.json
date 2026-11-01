@@ -16340,6 +16340,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MemorySettingsList.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
         }
       ]
     },
@@ -16357,6 +16366,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/memory-manager-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-settings.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-settings-browser.smoke.mjs"
         }
       ]
     },
