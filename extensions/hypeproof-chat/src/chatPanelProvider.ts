@@ -6766,11 +6766,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const text = action === "correct" ? msg.text : undefined;
     // REQ-STUDIO-MEMORY-MANAGER — 모두 지우기 carries the names the learner's list showed, and only that press does.
     const names = action === "deleteAll" ? msg.names : undefined;
+    // CGP-KNOW-D-023 — a delete the learner confirmed in the chat's own dialog names the identity it was listed with.
+    const confirmedPin = action === "delete" && typeof msg.confirmedPin === "string" && /^[0-9a-f]{32}$/.test(msg.confirmedPin) ? msg.confirmedPin : undefined;
     const result: import("./activityMemoryView").ActivityMemoryResult = !action || !panel || !this.activityMemoryBinding || typeof msg.name !== "string" || msg.name.length > 200 || typeof msg.scope !== "string"
       || (action === "correct" && (typeof text !== "string" || text.length > 8_000))
       || (action === "deleteAll" && (!Array.isArray(names) || names.length > 200 || names.some(item => typeof item !== "string" || item.length > 200)))
       ? { action: action ?? "open", error: "작업 상태가 바뀌었어요. 목록을 다시 확인한 뒤 시도해 주세요." }
-      : await panel.act(action, msg.name, msg.scope, text, names);
+      : await panel.act(action, msg.name, msg.scope, text, names, confirmedPin);
     await this.postActivityMemory({ requestId, result });
   }
   // REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031 / REQ-KNOW-49) — the one-time memory notice. Due on the R-005 binding only

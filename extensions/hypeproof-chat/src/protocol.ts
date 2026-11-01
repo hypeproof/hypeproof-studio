@@ -805,7 +805,7 @@ export type WebviewMessage = (
   | { type: "activityTrashAction"; requestId: string; scope: string; action: import("./activityTrashView").ActivityTrashAction; target: string }
   | { type: "activityMemoryRequest" }
   // REQ-STUDIO-MEMORY-OVERVIEW — `text` is the learner's correction, sent only with action "correct".
-  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string; text?: string; names?: string[] }
+  | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string; text?: string; names?: string[]; confirmedPin?: string }
   // REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031) — whether the one-time memory notice is due here; 확인 on it, bound to the activity it showed.
   | { type: "memoryNoticeRequest" }
   | { type: "memoryNoticeAck"; activity: string }

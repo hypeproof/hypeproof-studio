@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { createHash } from 'node:crypto';
 import { ActivityMemory, MEMORY_LIMITS, MemoryStoreError, memoryText, type MemoryFile, type MemoryFileId } from './activityMemory';
 import { MEMORY_CORRECTION_MAX, MEMORY_FOLDER_LABEL, type ActivityMemoryAction, type ActivityMemoryResult, type ActivityMemoryView, type MemorySource } from './activityMemoryView';
 import { buildMemoryOverview, memoryOverviewPasses, memoryStatementRefusal, type MemoryTaskTitle } from './memoryOverview';
@@ -25,10 +26,19 @@ export function memorySource(task: string | null, tasks: readonly MemoryTaskRef[
   return found.archived ? { kind: 'archived', title } : { kind: 'task', id: found.id, title };
 }
 
+/** CGP-KNOW-D-023 — a listed file's identity as one opaque token (no words, no path). */
+export function memoryPin(id: MemoryFileId): string {
+  return createHash('sha256').update([id.dev, id.ino, id.ctimeNs, id.birthtimeNs, id.size, id.digest ?? ''].join(':')).digest('hex').slice(0, 32);
+}
+
 export interface ActivityMemoryPanelApi {
   view(): Promise<ActivityMemoryView | null>;
-  /** `names` (deleteAll only): the files the learner's list showed; nothing else is removed. */
-  act(action: ActivityMemoryAction, name: string, scope: string, text?: string, names?: readonly string[]): Promise<ActivityMemoryResult>;
+  /**
+   * `names` (deleteAll only): the files the learner's list showed; nothing else is removed. `confirmedPin` (delete only,
+   * CGP-KNOW-D-023): the learner confirmed this delete in the chat's own dialog for the file listed with this pin; the host
+   * then asks no second time and deletes only if the file still has exactly that identity.
+   */
+  act(action: ActivityMemoryAction, name: string, scope: string, text?: string, names?: readonly string[], confirmedPin?: string): Promise<ActivityMemoryResult>;
 }
 
 /**
@@ -109,11 +119,16 @@ export function registerActivityMemory(deps: { binding: () => { root: string; sc
         const built = tasks ? buildMemoryOverview(listing.entries, tasks) : null;
         const overview = built && memoryOverviewPasses(built) ? built : null;
         const known = deps.tasks?.() ?? null;
-        const entries = listing.entries.map(entry => ({ name: entry.name, at: entry.at, text: entry.text, source: memorySource(entry.task, known) }));
+        const entries = [];
+        for (const entry of listing.entries) {
+          // CGP-KNOW-D-023 — the identity as listed, for a delete confirmed in the chat's dialog.
+          const pin = await store.identify(entry.name).then(memoryPin, () => undefined);
+          entries.push({ name: entry.name, at: entry.at, text: entry.text, source: memorySource(entry.task, known), ...(pin ? { pin } : {}) });
+        }
         return { scope, folder: MEMORY_FOLDER_LABEL, entries, other: listing.other, unsafe: listing.unsafe, overview };
       } catch { return null; }
     },
-    async act(action, name, expected, text, names) {
+    async act(action, name, expected, text, names, confirmedPin) {
       if (busy) return { action, error: '앞의 작업이 끝나면 다시 시도해 주세요.' };
       busy = true;
       try {
@@ -149,9 +164,15 @@ export function registerActivityMemory(deps: { binding: () => { root: string; sc
           await Promise.resolve(vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession')).catch(() => undefined);
           return { action, name };
         }
-        const answer = await vscode.window.showWarningMessage('이 기억 파일을 지울까요? 지운 기억은 되돌릴 수 없어요.', { modal: true, detail: name }, { title: DELETE }, CANCEL);
-        // Only the delete button deletes: 취소, Escape and a closed dialog (undefined) all cancel.
-        if (answer?.title !== DELETE) return { action, name, cancelled: true };
+        if (typeof confirmedPin === 'string') {
+          // CGP-KNOW-D-023 — confirmed in the chat's own dialog (취소 has the first focus there). Only the exact file the
+          // learner saw: a file replaced or rewritten since the listing has another identity and is refused.
+          if (memoryPin(pinned) !== confirmedPin) throw new MemoryStoreError('changed');
+        } else {
+          const answer = await vscode.window.showWarningMessage('이 기억 파일을 지울까요? 지운 기억은 되돌릴 수 없어요.', { modal: true, detail: name }, { title: DELETE }, CANCEL);
+          // Only the delete button deletes: 취소, Escape and a closed dialog (undefined) all cancel.
+          if (answer?.title !== DELETE) return { action, name, cancelled: true };
+        }
         check(expected, root);
         // The file the learner confirmed, not whatever has that name now.
         await store.remove(name, pinned);

@@ -36,7 +36,14 @@ export const MEMORY_SOURCE_TEXT = {
  * One memory file. `text` is null when it is too large or not text: it is listed, opened and deleted, never shown inline.
  * `source` (REQ-STUDIO-MEMORY-MANAGER) is the task it was kept from; absent on an older host.
  */
-export interface ActivityMemoryItem { name: string; at: number; text: string | null; source?: MemorySource }
+export interface ActivityMemoryItem {
+  name: string; at: number; text: string | null; source?: MemorySource;
+  /**
+   * CGP-KNOW-D-023 — the file's identity as listed (a digest of device, inode, change and birth time, size and content). A
+   * delete the learner confirmed in the chat's own dialog names it; the host deletes only that exact file.
+   */
+  pin?: string;
+}
 
 /** REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025) — one remembered item as the overview shows it. */
 export interface MemoryOverviewItem { name: string; at: number; text: string }
@@ -82,3 +89,16 @@ export function memoryResultNotice(result: ActivityMemoryResult): string {
   }
   return result.action === "delete" ? `기억 파일 “${result.name ?? ""}”을 지웠어요.` : "";
 }
+
+/** CGP-KNOW-D-023 (DES-KNOW-41) — the "AI가 기억하는 것" list in 대화 설정, in the learner's words. */
+export const MEMORY_SETTINGS_COPY = {
+  title: "AI가 기억하는 것",
+  empty: "아직 기억하는 게 없어요",
+  noMatch: "찾는 기억이 없어요",
+  search: "기억 찾기",
+  delete: "지우기",
+  confirmTitle: "이 기억을 지울까요?",
+  confirmNote: "지운 기억은 되돌릴 수 없어요. 다음 질문부터 AI에게 보내지 않아요.",
+  cancel: "취소",
+  deleted: "기억을 지웠어요.",
+} as const;

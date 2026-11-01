@@ -8124,6 +8124,18 @@ and REQ-STUDIO-ACTIVITY-MEMORY-STATE (CGP-KNOW-R-022); the list is the file list
   an item removed by 지우기 or 모두 지우기 is absent from the very next read. The request injection of REQ-KNOW-44 must use
   that reader.
 
+- **The same list in 대화 설정 (CGP-KNOW-D-023 / DES-KNOW-41).** Under "AI가 기억하는 것" the settings dialog lists the
+  same items from the same store and host (no second store): each row shows the item's text (as text), its date and
+  its source line under the text (a link only for a task that can open; it closes the dialog and sends `taskSelect`),
+  with 지우기. Rows and controls are at least 44px, text 14px. A search field (only when there are items) filters by
+  committed text: while an IME composition is open the list keeps its last filter, and an Enter or Escape that belongs
+  to the IME closes nothing. Empty: "아직 기억하는 게 없어요"; no match: "찾는 기억이 없어요". 지우기 opens the chat's own
+  confirm dialog over 대화 설정 with 취소 focused first (it keeps Tab and Shift+Tab inside; Escape closes only the confirm
+  and focus returns to the button); its 지우기 sends the delete with the identity the item was listed with (`pin`: device, inode, change and
+  birth time, size and content digest), and the host deletes that exact file without a second native modal, or refuses
+  if the file changed since the listing. The notice after it reads "기억을 지웠어요." (the list never shows file names,
+  so it names none). The 내 작품 view's 지우기… keeps the host's native confirm. Mounted only while
+  the dialog is open, so each opening reads the store fresh; nothing is drawn on a seat without the store.
 Evidence: `extensions/hypeproof-chat/test/memory-manager.smoke.mjs` (the source of each item against real tasks, listed,
 archived, gone and none, on a minor seat; title cleaning; one delete with Cancel, Escape and confirm, absent from the
 next context read; 모두 지우기 refusals before any confirm, both confirms with one Cancel each, a task switch between
@@ -8133,6 +8145,13 @@ and light, 1420/800/320 px, normal and forced colours: text, time and source per
 bounded controls, 14px text at 4.5:1, focus ring, no sideways scroll, one 모두 지우기 request naming exactly the listed
 files, the count line, focus kept in the drawer, the link closing the drawer and sending `taskSelect`; a classroom seat
 has no view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+For CGP-KNOW-D-023: `extensions/hypeproof-chat/test/memory-settings.smoke.mjs` (the real provider and host on real files:
+every item's pin, a dialog-confirmed delete with no native modal removing exactly that file, a replaced file refused, a
+malformed pin falling back to the native confirm, a class seat refused) and
+`extensions/hypeproof-chat/test/memory-settings-browser.smoke.mjs` (the real App bundle in headless Chromium, dark/light at
+1420/800/320 px and forced colours: text, date, source under the text, 44px rows and controls, 14px at 4.5:1, IME-safe
+search, the confirm with 취소 focused first and Escape closing only it, one delete naming the pin, both empty states, no
+list without a view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
 
 ## One-time memory notice (CGP-KNOW-R-031)
 
