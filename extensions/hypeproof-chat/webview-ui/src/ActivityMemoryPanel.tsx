@@ -5,6 +5,9 @@
 // REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025 / REQ-KNOW-43) — above the files, "작업별 기억": the stated facts grouped
 // by task, built and checked by the host; each item has 고치기, where the learner rewrites it in words. The host
 // sends no overview to a minor or unknown cohort, and then nothing of it is drawn.
+// CGP-KNOW-D-025 (DES-KNOW-43) — the overview is plain sentences under task headings (no capability names, scores or
+// badges), and the correction field sits once at its bottom: 고치기 opens it for that item, quoting the words it
+// replaces; 취소 returns focus to that 고치기. The field is a textarea, so Enter (and an IME's Enter) never submits.
 // REQ-STUDIO-MEMORY-MANAGER (CGP-KNOW-R-023 / REQ-KNOW-41) — each file names the task it was kept from (a link that opens
 // that task, or the reason there is none), and 모두 지우기… removes every listed file after the host's two native confirms.
 
@@ -41,6 +44,7 @@ export function ActivityMemoryList({ scopeKey, fallback, onOpenTask }: { scopeKe
   /** The overview item being corrected, and the learner's words for it. */
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const corrector = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     setView(undefined); setPending(false); setError(''); setNotice(''); setEditing(null); setDraft('');
@@ -81,6 +85,13 @@ export function ActivityMemoryList({ scopeKey, fallback, onOpenTask }: { scopeKe
     postToHost({ type: 'activityMemoryAction', requestId, scope: view.scope, action, name, ...extra });
   };
   const overview = view?.overview ?? null;
+  // The item being corrected, as the host lists it now: a refresh that dropped it closes the field.
+  const correcting = editing === null ? undefined : overview?.groups.flatMap(group => group.items).find(item => item.name === editing);
+  const closeCorrection = () => {
+    setEditing(null); setError('');
+    if (corrector.current?.isConnected) corrector.current.focus({ preventScroll: true });
+    else refocus.current = true;
+  };
 
   const note = (text: string, status = false) => <p className="tw-works-note" role={status ? 'status' : undefined}>{text}</p>;
   if (view === undefined) return note('기억 파일을 불러오는 중…', true);
@@ -105,20 +116,25 @@ export function ActivityMemoryList({ scopeKey, fallback, onOpenTask }: { scopeKe
             <h5>{group.title}</h5>
             <ul aria-label={`${group.title}에서 남긴 기억`}>{group.items.map(item => <li key={item.name}>
               <p className="tw-memory-text">{item.text}</p>
-              {editing === item.name ? <form className="tw-memory-correct" onSubmit={event => { event.preventDefault(); if (!pending) act('correct', item.name, draft); }}>
-                <label htmlFor="tw-memory-correct-field">바르게 고친 문장</label>
-                <textarea id="tw-memory-correct-field" value={draft} maxLength={MEMORY_CORRECTION_MAX} rows={3} autoFocus
-                  onChange={event => setDraft(event.target.value)} />
-                <div className="tw-memory-actions">
-                  <button type="submit" aria-disabled={pending || undefined}>고친 내용 저장</button>
-                  <button type="button" onClick={() => { setEditing(null); setError(''); refocus.current = true; }}>취소</button>
-                </div>
-              </form> : <div className="tw-memory-actions">
+              <div className="tw-memory-actions">
                 <button type="button" aria-disabled={pending || undefined} aria-label={`고치기: ${item.text.slice(0, 40)}`}
-                  onClick={() => { if (pending) return; setEditing(item.name); setDraft(item.text); setError(''); setNotice(''); }}>고치기</button>
-              </div>}
+                  aria-expanded={editing === item.name} aria-controls={editing === item.name ? 'tw-memory-correct' : undefined}
+                  onClick={event => { if (pending) return; corrector.current = event.currentTarget; setEditing(item.name); setDraft(item.text); setError(''); setNotice(''); }}>고치기</button>
+              </div>
             </li>)}</ul>
           </div>)}
+        {correcting && <form id="tw-memory-correct" className="tw-memory-correct" aria-labelledby="tw-memory-correct-title" onSubmit={event => { event.preventDefault(); if (!pending) act('correct', correcting.name, draft); }}>
+          <h5 id="tw-memory-correct-title">기억 고치기</h5>
+          <p className="tw-memory-note">고칠 기억</p>
+          <p id="tw-memory-correct-quote" className="tw-memory-text tw-memory-correct-quote" dir="auto">{correcting.text}</p>
+          <label htmlFor="tw-memory-correct-field">바르게 고친 문장</label>
+          <textarea id="tw-memory-correct-field" value={draft} maxLength={MEMORY_CORRECTION_MAX} rows={3} autoFocus aria-describedby="tw-memory-correct-quote"
+            onChange={event => setDraft(event.target.value)} />
+          <div className="tw-memory-actions">
+            <button type="submit" aria-disabled={pending || undefined}>고친 내용 저장</button>
+            <button type="button" onClick={closeCorrection}>취소</button>
+          </div>
+        </form>}
       </section>}
       {view.other > 0 && <p className="tw-memory-note">목록에 없는 파일 {view.other}개는 폴더에서 직접 확인할 수 있어요.</p>}
       <h4 className="tw-memory-files-title">AI 기억 파일 · {view.entries.length}개</h4>

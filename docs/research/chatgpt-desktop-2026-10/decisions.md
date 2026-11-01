@@ -1533,6 +1533,15 @@ Applies DEC-01 (local files only) and the owner note to be conservative with min
 - A correction is the learner's words for one item, typed in place (one field per item rather than a single free-text box at the bottom; DES-KNOW-43 may restyle it). It is saved as a new file in the same task and the old file is removed, so the store keeps its append-plus-learner-delete contract. No native confirm: the learner typed the words and pressed save, and the old text is visible in the field until then. A correction that fails the check is refused with a reason rather than stored.
 - Fix round 1 (2026-10-29, after the privacy verify): the check now compares a lower-cased, look-alike-folded, invisible-free copy and a space-free copy; capability keys are refused in any case (lead ruling: so "context" and "intent" in an English fact are refused too); a short capability label followed by an evaluative word is refused; deficit, habit and person-type words without a pronoun, health, diagnosis and emotional-state words, and spelled-out jamo were added. Everyday words that hold a stem (요약해, 예약해, 아이디어, 라이센스, 장애물, 불안정, 타입스크립트) are exempted so ordinary task memories stay. Overview stays unavailable for minor cohorts (acceptance text); a follow-up may offer 고치기 on the file list for every seat.
 
+## CGP-KNOW-D-025: overview by task with one correction field at its bottom (2026-11-01, agent-selected)
+
+Builds DES-KNOW-43 on REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025, #3206). Measured on main first:
+- Already met: grouping by task, with task names as headings and items as the files' own sentences; the host check that keeps capability, ability and judgment sentences out (memory-overview.smoke).
+- Gaps closed here: the correction field was inline per item, which R-025 left for this row to restyle; the rendered DOM's absence of capability names, scores and badges was not asserted; Enter in an IME composition was not tested.
+- "A correction field at the bottom": one field after the last task group. It still corrects one item, because with no model nothing could map free text to a file. So 고치기 on an item opens the bottom field, quoting the words it replaces. An always-open free-text box with no target was rejected: it could not say which memory changes.
+- IME: the field is a textarea, so neither Enter nor an IME's Enter submits; only 고친 내용 저장 does. The test uses a real CDP composition (keyCode 229 Enter, then commit) and a plain Enter.
+- DOM absence: the browser smoke builds an overview with the real `buildMemoryOverview` from planted sentences and asserts that no capability key or label, no score and no badge, chip, meter or icon appears.
+
 ## CGP-KNOW-D-030: the memory view is the 기억 filter of the 내 작품 drawer (2026-10-29, agent-selected; rebuilt on CGP-KNOW-R-022 and R-025)
 
 Builds DES-KNOW-48 on REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030), -STATE (R-022) and -OVERVIEW (R-025).
