@@ -167,6 +167,12 @@ export interface ChatConfig {
   textSize?: import('./textSize').TextSize;
   /** CGP-KNOW-R-032: the saved nickname ("" when none); absent on a seat that does not offer it. */
   learnerNickname?: { value: string };
+  /**
+   * CGP-KNOW-D-022 (DES-KNOW-40): this seat has the activity's personal memory store (the R-005 binding: personal and trial
+   * activities, minors included per DEC-02). The chat then draws the read-only state line "AI 기억: 켜짐" with the folder,
+   * in the activity header and in the settings dialog. Absent: no store, no line. Never a switch: there is no off value.
+   */
+  memoryState?: { folder: string };
   /** CGP-DS-R-015: `workbench.reduceMotion`: true = on, false = off, absent = system. */
   reduceMotion?: boolean;
   turnTools?: import('./turnTools').TurnToolsAvailability;
