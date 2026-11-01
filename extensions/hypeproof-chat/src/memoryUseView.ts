@@ -18,4 +18,9 @@ export const MEMORY_USE_COPY = {
   excluded: "이 작업에서는 빼 두었어요. 다음 요청부터 보내지 않아요.",
   loading: "기억을 불러오는 중이에요…",
   failed: "기억을 불러오지 못했어요. 작업을 다시 열고 시도해 주세요.",
+  /** CGP-KNOW-D-026 (DES-KNOW-44) — the chip opens the 작업 자료 shelf on this tab; the other tab keeps the sources. */
+  tabSources: "출처",
+  tabMemory: "기억",
+  tabsLabel: "작업 자료 보기",
+  chipHint: "이 답변에 쓴 기억을 작업 자료에서 보기",
 } as const;

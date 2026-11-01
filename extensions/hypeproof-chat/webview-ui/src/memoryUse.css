@@ -27,3 +27,7 @@
   .hps-memory-use-chip, .hps-memory-use-action { color: ButtonText; border-color: ButtonText; background: Canvas; }
 }
 .hps-memory-use-action { display: block; margin-top: var(--ds-c-studio-styles-space-2); }
+/* CGP-KNOW-D-026 (DES-KNOW-44) — the chip is a 16px bookmark glyph and its words; in the answer's action row it keeps
+   its border, so it reads as a chip beside the borderless actions. */
+.hps-memory-use-chip { display: inline-flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); flex: none; }
+.hps-memory-use-chip > .hps-icon { flex: none; }

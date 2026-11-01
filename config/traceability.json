@@ -16500,6 +16500,18 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/memoryUse.css"
         },
         {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CitationPreview.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
           "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
         },
         {
