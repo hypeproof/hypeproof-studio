@@ -161,3 +161,18 @@ test('Codex adapter carries bounded Read chunks and revision through dynamic too
   assert.equal(advertised.find(t=>t.name==='Read').inputSchema.properties.revision.type,'string');
  }finally{client.close();proc.stdin.destroy();proc.stdout.destroy();proc.stderr.destroy();}
 }));
+
+test('Read rejects a FIFO without waiting for a writer', {skip:process.platform==='win32'}, ()=>fixture(async(root)=>{
+ const {execFileSync,spawnSync}=await import('node:child_process');
+ const fifo=path.join(root,'pending-input');
+ execFileSync('mkfifo',[fifo]);
+ // Isolate a potentially blocked fs.open in our own bounded subprocess so the
+ // negative control cannot strand the suite's libuv worker or another session.
+ const source=`import assert from 'node:assert/strict';
+ import {workspaceTools} from ${JSON.stringify(new URL('../src/localRuntime/tools.ts',import.meta.url).href)};
+ const tools=workspaceTools({cwd:${JSON.stringify(root)},profile:{sdk_tools:{read:true}},signal:new AbortController().signal,approve:async()=>{throw Error('unexpected approval')},activity:()=>{}});
+ await assert.rejects(tools.call('Read',{file_path:'pending-input'}),/일반 텍스트 파일/);`;
+ const result=spawnSync(process.execPath,['--experimental-strip-types','--input-type=module','-e',source],{encoding:'utf8',timeout:3000});
+ assert.equal(result.error,undefined,`Read must reject without a FIFO writer: ${result.error}`);
+ assert.equal(result.status,0,result.stderr);
+}));

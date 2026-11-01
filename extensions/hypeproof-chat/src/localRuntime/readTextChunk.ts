@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import { createHash } from "node:crypto";
-import type { BigIntStats } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 
 // Detect ordinary edits/replacements without hashing the entire large file.
 // This metadata token is not a content digest or an immutable snapshot.
@@ -15,7 +15,11 @@ const CHUNK_BYTES = 48 * 1024;
 export async function readTextChunk(file: string, offset: unknown = 0, expectedRevision?: unknown): Promise<string> {
   if (typeof offset !== "number" || !Number.isSafeInteger(offset) || offset < 0)
     throw Error("offset_bytes는 0 이상의 정수여야 합니다.");
-  const handle = await fs.open(file, "r");
+  // Refuse special files before opening them. O_NONBLOCK also prevents a FIFO
+  // swapped into the path after this check from waiting indefinitely for a writer;
+  // the descriptor's own stat below remains authoritative.
+  if (!(await fs.stat(file)).isFile()) throw Error("일반 텍스트 파일만 읽을 수 있습니다.");
+  const handle = await fs.open(file, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
   try {
     const stat = await handle.stat({ bigint: true });
     const revision = fileRevision(stat);
