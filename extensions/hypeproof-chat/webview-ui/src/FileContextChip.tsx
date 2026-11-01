@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FileAttachmentPreview } from '../../src/protocol';
 import { ChatIcon } from './ChatDetails';
+import './filePreviewSearch.css';
 
 /** Display only: the host-owned path, bytes and exact preview text remain untouched. */
 export function fileChipName(path: string): string {
