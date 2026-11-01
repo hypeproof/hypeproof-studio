@@ -190,3 +190,7 @@ Three §12 items are rows elsewhere and are not repeated: no provider keys in st
 ## Change rules
 
 Implementation PRs name the CR IDs they address, the real paths, the evidence class of each run (live-host / captured-replay / synthetic, per MC-38) and what remains NOT RUN. To change a label, a field or a target, edit this table first. Requirement IDs are never reused.
+
+### CR-53 directed-team lookup in Studio (#3358)
+
+The director can filter the loaded overview by team name, using a trimmed, case-insensitive query. Filtering retains the original project identity and pack status. A no-match result differs from a cohort with no teams; clearing restores the loaded list and keyboard focus to search. Opening a team and returning retains the query. A truncated overview explicitly states that search covers only loaded teams; filtering does not fetch or authorize additional teams and makes no model call.

@@ -362,3 +362,7 @@ One line per requirement. It must equal the union of the Targets column above; t
 ## Run status
 
 All rows NOT RUN as of 2026-09-29. The registry trace (`worker/test/cr-traceability.test.mjs`) runs in `worker` `npm test`; its passing means the documents agree with each other, not that any CR row is implemented.
+
+### CR-T49 Studio team-name search regression (#3358)
+
+`extensions/hypeproof-chat/test/review-team-search.test.tsx` renders the actual ReviewPanel and verifies trimmed case-insensitive team-name matching, original project ID on open, distinct empty-cohort/no-match states, clear-button focus restoration, query retention on return and the loaded-team-only truncation disclosure. Run `node scripts/run-tsx-tests.mjs review-team-search` from the extension. Browser keyboard/layout verification supplements this component test; neither substitutes for installed-App or Service authorization acceptance.
