@@ -51,3 +51,55 @@ receive({type:'previewReady'});
 assert.match(renders().at(-1).html,/page-c/);
 assert.doesNotMatch(renders().at(-1).html,/page-[ab]/);
 console.log('PASS label refresh replays exact rendered HTML; latest pending page wins; dispose/reopen isolates content');
+
+// Exercise the real shell in Chromium, with host transport delivered by its parent frame.
+const { findChromium, launch } = await import('./lib/headless-chromium.mjs');
+const bin = findChromium();
+if (!bin) {
+  if (process.env.FOCUS_REQUIRE_BROWSER) throw new Error('Chromium required');
+  console.log('preview label browser NOT RUN: Chromium unavailable');
+} else {
+  const browser = await launch(bin);
+  const settle = () => new Promise(r => setTimeout(r, 100));
+  const inner = expression => browser.evaluate(`(()=>{const D=document.getElementById('shell').contentDocument;return ${expression};})()`);
+  const loadShell = async () => {
+    // Only the outer API shim needs CSP removal. The rendered page retains its actual inner CSP.
+    const html = panel.webview.html.replace(/<meta http-equiv="Content-Security-Policy"[^>]+>/, '')
+      .replace('<head>', '<head><script>window.posted=[];window.acquireVsCodeApi=()=>({postMessage:m=>posted.push(m)});</script>');
+    await browser.evaluate(`document.getElementById('shell').srcdoc=${JSON.stringify(html)};true`);
+    let ready = false;
+    for (let i=0;i<50&&!ready;i++) {
+      await settle();
+      ready = await inner(`!!D?.defaultView?.posted?.some(m=>m.type==='previewReady')`);
+    }
+    assert.ok(ready,'replacement shell actually boots');
+    assert.notEqual(await inner(`D.querySelector('#placeholder').style.display`),'none','new shell begins with placeholder');
+    const offset = messages.length;
+    receive({type:'previewReady'});
+    const delivered = messages.slice(offset);
+    assert.equal(delivered.filter(m=>m.type==='renderPreview').length,1,'host replays one document');
+    for (const m of delivered) await browser.evaluate(`document.getElementById('shell').contentWindow.postMessage(${JSON.stringify(m)},'*');true`);
+    await settle();
+    assert.equal(await inner(`D.querySelector('#placeholder').style.display`),'none','render hides placeholder');
+    assert.match(await inner(`D.querySelector('iframe').srcdoc`),/visible-page/);
+    return delivered.find(m=>m.type==='renderPreview');
+  };
+  try {
+    for (const width of [390, 1000]) {
+      dispose();
+      await preview.show('<!doctype html><h1 id="visible-page">Rendered page survives profile refresh</h1><p>Page content stays here.</p>');
+      await browser.load('<html><body style="margin:0"><iframe id="shell" style="border:0;width:100vw;height:100vh"></iframe></body></html>',{width,height:700});
+      const before = await loadShell();
+      preview.setLabels({...labels,title:`Refreshed ${width}`});
+      const after = await loadShell();
+      assert.equal(after.html,before.html,'browser reload receives identical checked HTML');
+      assert.equal(after.revision,before.revision,'browser reload keeps document revision');
+      if (process.env.PREVIEW_LABEL_EVIDENCE) {
+        const {mkdirSync,writeFileSync} = await import('node:fs');
+        mkdirSync(process.env.PREVIEW_LABEL_EVIDENCE,{recursive:true});
+        writeFileSync(`${process.env.PREVIEW_LABEL_EVIDENCE}/${width}.png`,Buffer.from((await browser.send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      }
+      console.log(`PASS real Chromium shell replacement ${width}px: placeholder hidden, exact page replayed`);
+    }
+  } finally { await browser.close(); }
+}
