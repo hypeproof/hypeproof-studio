@@ -5,17 +5,32 @@
 // REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025 / REQ-KNOW-43) — above the files, "작업별 기억": the stated facts grouped
 // by task, built and checked by the host; each item has 고치기, where the learner rewrites it in words. The host
 // sends no overview to a minor or unknown cohort, and then nothing of it is drawn.
+// REQ-STUDIO-MEMORY-MANAGER (CGP-KNOW-R-023 / REQ-KNOW-41) — each file names the task it was kept from (a link that opens
+// that task, or the reason there is none), and 모두 지우기… removes every listed file after the host's two native confirms.
 
 import { useEffect, useRef, useState } from 'react';
-import { MEMORY_CORRECTION_MAX, MEMORY_FOLDER_LABEL, MEMORY_SCOPE_LABEL, MEMORY_STATE_LABEL, memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView } from '../../src/activityMemoryView';
+import { MEMORY_CORRECTION_MAX, MEMORY_FOLDER_LABEL, MEMORY_SCOPE_LABEL, MEMORY_SOURCE_TEXT, MEMORY_STATE_LABEL, memoryResultNotice, type ActivityMemoryAction, type ActivityMemoryView, type MemorySource } from '../../src/activityMemoryView';
 import { focusIsLost } from './dialogFocus';
 import { onHostMessage, postToHost } from './vscode';
 
 let requestSeq = 0;
 const nextRequestId = () => `memory-${Date.now().toString(36)}-${(++requestSeq).toString(36)}`;
 
-/** `fallback` takes keyboard focus when a delete or correction removes the focused control (the drawer's 기억 filter button). */
-export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; fallback: () => HTMLElement | null }) {
+/** REQ-STUDIO-MEMORY-MANAGER — the task a file was kept from: a link to a task that can open now, otherwise words. */
+function MemorySourceLine({ source, onOpenTask }: { source: MemorySource; onOpenTask?: (taskId: string) => void }) {
+  if (source.kind === 'task' && onOpenTask) return <div className="tw-memory-source">
+    <span className="tw-memory-note">{MEMORY_SOURCE_TEXT.label}</span>
+    <button type="button" dir="auto" onClick={() => onOpenTask(source.id)}>‘{source.title}’ 작업 열기</button>
+  </div>;
+  const text = source.kind === 'task' ? `‘${source.title}’` : source.kind === 'archived' ? MEMORY_SOURCE_TEXT.archived(source.title) : MEMORY_SOURCE_TEXT[source.kind];
+  return <p className="tw-memory-note tw-memory-source" dir="auto">{MEMORY_SOURCE_TEXT.label}: {text}</p>;
+}
+
+/**
+ * `fallback` takes keyboard focus when a delete or correction removes the focused control (the drawer's 기억 filter button).
+ * `onOpenTask` (REQ-STUDIO-MEMORY-MANAGER) leaves the drawer for the task a file was kept from.
+ */
+export function ActivityMemoryList({ scopeKey, fallback, onOpenTask }: { scopeKey: string; fallback: () => HTMLElement | null; onOpenTask?: (taskId: string) => void }) {
   // undefined: not answered yet; null: this seat or activity has no memory store to show.
   const [view, setView] = useState<ActivityMemoryView | null | undefined>(undefined);
   const [pending, setPending] = useState(false);
@@ -44,7 +59,7 @@ export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; f
       setError(''); setNotice(memoryResultNotice(result));
       if (result.action === 'correct') setEditing(null);
       // The deleted (or replaced) row's button goes away with this answer: the effect below lands focus after the commit.
-      if (result.action === 'delete' || result.action === 'correct') refocus.current = true;
+      if (result.action === 'delete' || result.action === 'correct' || result.action === 'deleteAll') refocus.current = true;
     });
     postToHost({ type: 'activityMemoryRequest' });
     return dispose;
@@ -61,7 +76,9 @@ export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; f
     if (!view || request.current) return;
     const requestId = nextRequestId();
     request.current = requestId; setPending(true); setError(''); setNotice('');
-    postToHost({ type: 'activityMemoryAction', requestId, scope: view.scope, action, name, ...(action === 'correct' ? { text: text ?? '' } : {}) });
+    // 모두 지우기 names exactly the files this list shows; the host removes nothing else.
+    const extra = action === 'correct' ? { text: text ?? '' } : action === 'deleteAll' ? { names: view.entries.map(entry => entry.name) } : {};
+    postToHost({ type: 'activityMemoryAction', requestId, scope: view.scope, action, name, ...extra });
   };
   const overview = view?.overview ?? null;
 
@@ -105,10 +122,14 @@ export function ActivityMemoryList({ scopeKey, fallback }: { scopeKey: string; f
       </section>}
       {view.other > 0 && <p className="tw-memory-note">목록에 없는 파일 {view.other}개는 폴더에서 직접 확인할 수 있어요.</p>}
       <h4 className="tw-memory-files-title">AI 기억 파일 · {view.entries.length}개</h4>
+      {view.entries.length > 0 && <div className="tw-memory-actions">
+        <button type="button" aria-disabled={pending || undefined} onClick={() => { if (!pending) act('deleteAll', ''); }}>모두 지우기…</button>
+      </div>}
       {view.entries.length === 0 ? <p className="tw-memory-note">아직 기억 파일이 없어요.</p>
         : <ul className="tw-works-list" aria-label="AI 기억 파일">{view.entries.map(entry => <li key={entry.name} className="tw-works-item tw-memory-item">
           <code className="tw-memory-path" dir="ltr">{MEMORY_FOLDER_LABEL}{entry.name}</code>
           <time dateTime={new Date(entry.at).toISOString()}>{new Date(entry.at).toLocaleString('ko-KR')}</time>
+          {entry.source && <MemorySourceLine source={entry.source} onOpenTask={onOpenTask} />}
           {entry.text === null ? <p className="tw-memory-note">파일이 크거나 글자가 아니어서 여기에서는 보여 주지 않아요. 열기로 확인해 주세요.</p>
             : <p className="tw-memory-text" dir="auto">{entry.text}</p>}
           <div className="tw-memory-actions">

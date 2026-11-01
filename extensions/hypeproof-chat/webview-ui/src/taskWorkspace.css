@@ -315,6 +315,8 @@ body.vscode-high-contrast :is(.tw-sources, .tw-chat-menu-panel) { border-color: 
 .tw-memory time, .tw-memory-note { margin: 0; font-size: var(--hp-font-caption); color: var(--tw-muted); overflow-wrap: anywhere; }
 .tw-memory-note:empty { display: none; }
 .tw-memory-actions { display: flex; flex-wrap: wrap; gap: var(--hp-space-2); }
+.tw-memory-source { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hp-space-2); }
+.tw-works-drawer .tw-memory-source button { max-width: 100%; padding-block: var(--hp-space-1); text-align: start; overflow-wrap: anywhere; }
 /* REQ-STUDIO-MEMORY-OVERVIEW (CGP-KNOW-R-025) — 작업별 기억 above the files, and the correction form. */
 .tw-memory-overview h4, .tw-memory-group h5 { margin: var(--ds-c-studio-taskworkspace-space-2) 0 0; font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); overflow-wrap: anywhere; }
 .tw-memory-correct { display: flex; flex-direction: column; gap: var(--ds-c-studio-taskworkspace-space-15); }
