@@ -233,6 +233,10 @@ export function ReviewPanel(props: {
   const { view } = props;
   const director = view.mode === "director";
   const review = view.review;
+  const [teamQuery, setTeamQuery] = useState("");
+  const teamSearch = useRef<HTMLInputElement>(null);
+  const normalizedQuery = teamQuery.trim().toLocaleLowerCase();
+  const matchingTeams = (view.teams ?? []).filter((team) => team.title.toLocaleLowerCase().includes(normalizedQuery));
   return (
     <section ref={panel} className="hps-evidence" data-testid="review-panel" data-mode={view.mode} aria-label={director ? "주간 리뷰 (디렉터)" : "주간 리뷰"}>
       <header>
@@ -258,8 +262,16 @@ export function ReviewPanel(props: {
         </div>
       )}
       {director && view.teams && !review && (
-        <ul data-testid="review-teams">
-          {view.teams.map((t) => (
+        <div>
+          <label>
+            팀 이름 검색
+            <input ref={teamSearch} type="search" aria-label="팀 이름 검색" value={teamQuery} onChange={(event) => setTeamQuery(event.target.value)} />
+          </label>
+          {teamQuery && <button type="button" aria-label="팀 검색 지우기" onClick={() => { setTeamQuery(""); teamSearch.current?.focus(); }}>지우기</button>}
+          <p role="status">검색 결과 {matchingTeams.length}개</p>
+          {view.truncated && <p>팀이 많아 일부만 보여 줘요. 불러온 팀에서만 검색해요.</p>}
+          <ul data-testid="review-teams">
+          {matchingTeams.map((t) => (
             <li key={t.project_id} data-testid="review-team" data-status={t.status} data-project={t.project_id}>
               <button type="button" onClick={() => props.onOpenTeam(t.project_id)}>
                 {t.title} · {t.week}주차 · {STATUS_LABEL[t.status]}
@@ -267,8 +279,9 @@ export function ReviewPanel(props: {
             </li>
           ))}
           {view.teams.length === 0 && <li>아직 이 수업에 팀 프로젝트가 없어요.</li>}
-          {view.truncated && <li>팀이 많아 일부만 보여 줘요.</li>}
-        </ul>
+          {view.teams.length > 0 && matchingTeams.length === 0 && <li>검색 결과가 없어요. 다른 팀 이름으로 찾아보세요.</li>}
+          </ul>
+        </div>
       )}
       {director && review && (
         <button type="button" data-testid="review-back" onClick={() => props.onOpenTeam(null)}>

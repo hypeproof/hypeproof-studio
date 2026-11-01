@@ -1,0 +1,31 @@
+import React, {act} from 'react';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {ReviewPanel} from '../webview-ui/src/ReviewPanel';
+const {JSDOM}=createRequire(process.cwd()+'/package.json')('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'https://studio.test',pretendToBeVisual:true});
+Object.assign(globalThis,{window:dom.window,document:dom.window.document,HTMLElement:dom.window.HTMLElement,requestAnimationFrame:dom.window.requestAnimationFrame.bind(dom.window),cancelAnimationFrame:dom.window.cancelAnimationFrame.bind(dom.window),IS_REACT_ACT_ENVIRONMENT:true});
+const {createRoot}=require('react-dom/client');
+const teams=[{project_id:'a',title:'인터뷰 Alpha',week:1,status:'fresh'},{project_id:'b',title:'관찰 Beta',week:2,status:'stale'}];
+const view:any={mode:'director',available:true,notice:null,review:null,teams,running:false,timing:null,refused:null,truncated:true};
+async function run(){
+ const host=document.getElementById('root')!;const root=createRoot(host);const opened:any[]=[];
+ const render=async(v:any)=>act(async()=>root.render(<ReviewPanel view={v} error={null} done={null} busy={false} onRefresh={()=>{}} onClose={()=>{}} onPrepare={()=>{}} onOpenTeam={id=>opened.push(id)} onDecide={()=>{}}/>));
+ await render(view);
+ const search=()=>host.querySelector('input[aria-label="팀 이름 검색"]') as HTMLInputElement;
+ assert.ok(search(),'director can search team names');
+ const query=async(text:string)=>act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value')!.set!.call(search(),text);search().dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
+ const rows=()=>Array.from(host.querySelectorAll('[data-testid="review-team"]'));
+ await query('  bETA  ');assert.equal(rows().length,1);assert.equal(rows()[0].getAttribute('data-project'),'b');
+ await act(async()=>(rows()[0].querySelector('button') as HTMLButtonElement).click());assert.deepEqual(opened,['b']);
+ assert.match(host.textContent!,/불러온 팀에서만 검색/);
+ await query('missing');assert.equal(rows().length,0);assert.match(host.textContent!,/검색 결과가 없어요/);
+ const clear=host.querySelector('button[aria-label="팀 검색 지우기"]') as HTMLButtonElement;clear.focus();await act(async()=>clear.click());
+ assert.equal(document.activeElement,search());assert.equal(rows().length,2);
+ await query('인터뷰');assert.equal(rows().length,1);
+ await render({...view,review:{project_id:'a',project_title:'인터뷰 Alpha',week:1,status:'missing',pack:null,stale_sections:[],sources:{},decisions:[],drafts:[],weeks:[]}});
+ await render(view);assert.equal(search().value,'인터뷰');assert.equal(rows().length,1);
+ await render({...view,teams:[],truncated:false});assert.match(host.textContent!,/아직 이 수업에 팀 프로젝트가 없어요/);assert.doesNotMatch(host.textContent!,/검색 결과가 없어요/);
+ await act(async()=>root.unmount());dom.window.close();console.log('PASS director team search: original project identity, matching, no results, empty cohort, clear focus, back navigation and truncation disclosure');
+}
+run().then(()=>process.exit(0)).catch(error=>{console.error(error);dom.window.close();process.exit(1);});
