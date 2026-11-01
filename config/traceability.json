@@ -16529,6 +16529,19 @@
           "path": "extensions/hypeproof-chat/test/memory-use-sdk.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-TEST-NAMED-HTML-PREVIEW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/named-html-preview.smoke.mjs"
+        }
+      ]
     }
   ]
 }
