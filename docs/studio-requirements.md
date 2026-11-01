@@ -8133,3 +8133,37 @@ and light, 1420/800/320 px, normal and forced colours: text, time and source per
 bounded controls, 14px text at 4.5:1, focus ring, no sideways scroll, one 모두 지우기 request naming exactly the listed
 files, the count line, focus kept in the drawer, the link closing the drawer and sending `taskSelect`; a classroom seat
 has no view; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## One-time memory notice (CGP-KNOW-R-031)
+
+REQ-STUDIO-MEMORY-NOTICE / REQ-KNOW-49 (CGP-KNOW-049) / DES-KNOW-49 (CGP-KNOW-D-031) / PI#2 (the learner can see what
+the AI keeps), REQ-O (minor safety); DEC-01 (local files only) and DEC-02 (always on, minor cohorts included). Builds on
+REQ-STUDIO-ACTIVITY-MEMORY-FILES (CGP-KNOW-R-030) and REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (CGP-KNOW-R-005).
+
+- **When.** The first time memory would be used in an activity: the seat has the activity's personal memory store (the
+  R-005 binding: a personal or trial activity, never a class, a lesson or an instructor seat), the store holds at least
+  one item `ActivityMemory.contextItems()` would return, and the learner has not pressed 확인 in this activity. An empty
+  store uses no memory and shows nothing yet; the first item (a write, or a file the learner adds) makes it due.
+- **What.** One card above the composer, "AI 기억 안내", with four labelled lines and one button, 확인:
+  무엇을 (what is kept, as short text files), 어디에 (`.hypeproof/memory/` in the activity folder), 누가 보는지 (the learner,
+  and the AI coach that receives the memory with a question) and 지우는 법 (내 작품 → 기억, one item or all). The words are
+  the same for every cohort, minors included.
+- **A notice, not a switch.** There is no 켜기/나중에 choice, no off option and no Chalk, instructor or guardian step
+  (DEC-02, ruled 2026-10-28). The card never disables the composer and does not take focus when it appears; 확인 moves
+  focus to the composer.
+- **The record.** 확인 sends the activity the card showed; the host writes workspaceState `hps.memoryNotice.v1`, activity
+  id → `true` (at most 500 activities, oldest dropped), only when the notice is due now for the activity open now: a
+  press for another activity, a seat without the store or a notice that was never due records nothing. After the
+  record the notice is never due again in that activity. Showing it records nothing. A failed save leaves the card up.
+  REQ-KNOW-44 (CGP-KNOW-R-026) reads this record before a request may carry memory.
+- **Freshness.** The chat asks on load, on a task or activity change, after each turn and when the memory list changes;
+  the answer goes to the asking view only and carries its activity, so a stale one is dropped.
+
+Evidence: `extensions/hypeproof-chat/test/memory-notice.smoke.mjs` (the record, its writer and the due rule; the copy;
+the real provider on real files: personal, trial and minor seats due and recorded once, class, lesson, instructor and
+empty-store seats not due and never recorded, the first item making it due, a press for another activity, a double
+press and a failed save) and `extensions/hypeproof-chat/test/memory-notice-browser.smoke.mjs` (the real App bundle in
+headless Chromium, personal and classroom, dark and light, 800 and 1420 px, forced colours: shown only when the host
+says so, stale answers dropped, four lines and exactly one 확인, 14px text, a 44px 확인 with a solid focus ring inside the
+chat column, focus not taken, one ack on a double press, focus to the composer after; fails under
+`FOCUS_REQUIRE_BROWSER=1` without a browser).

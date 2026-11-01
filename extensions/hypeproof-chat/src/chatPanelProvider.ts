@@ -349,7 +349,8 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
-import { personalMemoryActivity } from "./activityMemory";
+import { ActivityMemory, personalMemoryActivity } from "./activityMemory";
+import { MEMORY_NOTICE_KEY, markMemoryNoticeSeen, memoryNoticeDue, type MemoryNoticeView } from "./memoryNotice";
 import { perfTraceSeatAllowed } from "./perfTrace";
 import { CHECKPOINT_MESSAGE_MAX, checkpointApplies, checkpointStoreDir, cleanCheckpointMessage, listCheckpoints, saveCheckpoint, suggestCheckpointMessage } from "./checkpoint";
 import type { QuitGuardActivity } from "./quitGuardHelpers";
@@ -6771,6 +6772,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       : await panel.act(action, msg.name, msg.scope, text, names);
     await this.postActivityMemory({ requestId, result });
   }
+  // REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031 / REQ-KNOW-49) — the one-time memory notice. Due on the R-005 binding only
+  // (personal and trial activities; never an instructor, a class or a lesson), minor cohorts included (DEC-02), once the
+  // store holds something a request would use. 확인 writes the record REQ-KNOW-44 reads before memory rides a request.
+  // Answered to the asking view only: post() would invalidate an open approval prompt.
+  private async memoryNoticeView(): Promise<MemoryNoticeView | null> {
+    if (this._instructorMode?.isInstructor !== false) return null;
+    const binding = this.activityMemoryBinding;
+    const activity = activityConnections(this.context)?.scope;
+    if (!binding || !activity) return null;
+    const items = await new ActivityMemory(binding.root).contextItems().catch(() => null);
+    // A task or activity switch while reading answers nothing stale: the next request asks again.
+    const after = this.activityMemoryBinding;
+    if (!items || !after || after.root !== binding.root || after.scope !== binding.scope || activityConnections(this.context)?.scope !== activity) return null;
+    return memoryNoticeDue({ activity, bound: true, stored: this.context.workspaceState.get(MEMORY_NOTICE_KEY), items: items.length });
+  }
+  private async answerMemoryNotice(msg: Extract<WebviewMessage, { type: "memoryNoticeRequest" | "memoryNoticeAck" }>, source?: vscode.Webview): Promise<void> {
+    if (msg.type === "memoryNoticeAck") {
+      // Only the notice due now, for the activity open now: a press from another activity, a seat without this memory or
+      // a notice that was never due marks nothing.
+      const due = await this.memoryNoticeView();
+      const next = due && typeof msg.activity === "string" && msg.activity === due.activity
+        ? markMemoryNoticeSeen(this.context.workspaceState.get(MEMORY_NOTICE_KEY), due.activity) : null;
+      if (next) await Promise.resolve(this.context.workspaceState.update(MEMORY_NOTICE_KEY, next)).catch(() => undefined);
+    }
+    const reply = { type: "memoryNoticeState", notice: await this.memoryNoticeView(),
+      activityId: activityConnections(this.context)?.scope, taskId: this.currentTaskStore?.()?.getView().activeTaskId ?? undefined } satisfies HostMessage;
+    if (source) await source.postMessage(reply); else await this.post(reply);
+  }
   // REQ-STUDIO-PAGE-CARD (CGP-ART-R-010) — the page cards this session issued, per task. In memory only: a reload of the
   // window starts with none, and the transcript stores nothing new for them.
   private pageCardRegistry: PageCardRegistry | undefined;
@@ -7552,6 +7581,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "activityTrashAction": await this.runActivityTrashAction(msg); return;
       case "activityMemoryRequest": await this.postActivityMemory(); return;
       case "activityMemoryAction": await this.runActivityMemoryAction(msg); return;
+      case "memoryNoticeRequest": case "memoryNoticeAck": await this.answerMemoryNotice(msg, source); return;
       case "artifactProvenanceRequest": await this.postArtifactProvenance(true); return;
       case "artifactThumbnailRequest": await this.postArtifactThumbnail(msg); return;
       case "artifactInfoRequest": await this.postArtifactInfo(msg.requestId, msg.path); return;

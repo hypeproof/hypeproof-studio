@@ -2473,6 +2473,24 @@ html, body, #root {
 .hps-low-disk-help:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
 .hps-low-disk-detail { flex: 1 1 100%; min-width: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
 .hps-low-disk-detail[hidden] { display: none; }
+/* REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031, DES-KNOW-49): the one-time memory notice above the composer. Four labelled
+   lines and one 확인; passive information, so an info stroke and a quiet border, never the warn or danger tone.
+   Learner floors: 14px text and a 44px button (owner rule); the state is carried by words, never colour alone. */
+.hps-memory-notice { box-sizing: border-box; display: grid; gap: var(--ds-c-studio-styles-space-2); margin: 0; padding: var(--ds-c-studio-styles-space-15) var(--ds-c-studio-styles-space-1); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-13); background: var(--vscode-editorWidget-background, var(--ds-c-studio-styles-surface-41)); color: var(--vscode-foreground, inherit); word-break: keep-all; overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
+.hps-memory-notice-title { display: flex; align-items: center; gap: var(--ds-c-studio-styles-space-2); margin: 0; font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label); }
+.hps-memory-notice-title > svg { flex: none; }
+.hps-memory-notice-lines { display: grid; gap: var(--ds-c-studio-styles-space-2); margin: 0; min-width: 0; }
+.hps-memory-notice-lines > div { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: var(--ds-c-studio-styles-space-2); min-width: 0; }
+.hps-memory-notice-lines dt { font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); line-height: var(--hp-leading-label); }
+.hps-memory-notice-lines dd { margin: 0; min-width: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-label); }
+.hps-memory-notice-confirm { justify-self: end; min-width: var(--ds-c-studio-styles-size-8); min-height: var(--ds-c-studio-styles-size-8); padding: 0 var(--ds-c-studio-styles-space-7); border: var(--ds-c-studio-styles-size-3) solid var(--hp-border-control-default); border-radius: var(--ds-c-studio-styles-radius-10); background: transparent; color: var(--vscode-foreground, inherit); font: inherit; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-strong); cursor: pointer; }
+.hps-memory-notice-confirm:hover:not([aria-disabled]) { background-color: var(--hp-bg-control-hover); }
+.hps-memory-notice-confirm:active:not([aria-disabled]) { background-color: var(--hp-bg-control-pressed); }
+.hps-memory-notice-confirm:focus-visible { outline: var(--ds-c-studio-styles-size-7) solid var(--hp-ring-focus-default); outline-offset: var(--ds-c-studio-styles-size-7); }
+@media (forced-colors: active) {
+  .hps-memory-notice { color: CanvasText; border-color: CanvasText; }
+  .hps-memory-notice-confirm { color: ButtonText; border-color: ButtonText; background: Canvas; }
+}
 .hps-low-disk-amounts, .hps-low-disk-keep { margin: 0; }
 .hps-low-disk-steps { margin: var(--ds-c-studio-styles-space-13) 0; padding-inline-start: var(--ds-c-studio-styles-space-20); }
 /* CGP-AGENT-D-026 (DES-CGP-AGENT-64) — the 느려요 기록 pill above the composer while a recording runs.

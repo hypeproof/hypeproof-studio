@@ -806,6 +806,9 @@ export type WebviewMessage = (
   | { type: "activityMemoryRequest" }
   // REQ-STUDIO-MEMORY-OVERVIEW — `text` is the learner's correction, sent only with action "correct".
   | { type: "activityMemoryAction"; requestId: string; scope: string; action: import("./activityMemoryView").ActivityMemoryAction; name: string; text?: string; names?: string[] }
+  // REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031) — whether the one-time memory notice is due here; 확인 on it, bound to the activity it showed.
+  | { type: "memoryNoticeRequest" }
+  | { type: "memoryNoticeAck"; activity: string }
   | { type: "artifactProvenanceRequest" }
   // CGP-KNOW-D-011 — the 내 작품 drawer asks for one listed image's thumbnail when its row scrolls into view.
   | { type: "artifactThumbnailRequest"; requestId: string; path: string }
@@ -933,6 +936,8 @@ export type HostMessage = (
   /** CGP-KNOW-D-013 — the current activity's trash; null when unavailable. `requestId`/`result` answer one press. */
   | { type: "activityTrashState"; view: import("./activityTrashView").ActivityTrashView | null; requestId?: string; result?: import("./activityTrashView").ActivityTrashResult }
   | { type: "activityMemoryState"; view: import("./activityMemoryView").ActivityMemoryView | null; requestId?: string; result?: import("./activityMemoryView").ActivityMemoryResult }
+  /** REQ-STUDIO-MEMORY-NOTICE (CGP-KNOW-R-031) — the activity whose one-time memory notice is due; null shows none. */
+  | { type: "memoryNoticeState"; notice: import("./memoryNotice").MemoryNoticeView | null }
   | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   /** CGP-KNOW-D-011 — an inline data: image read from inside the work folder, or null (the row keeps its type glyph). */
   | { type: "artifactThumbnail"; requestId: string; path: string; src: string | null }
