@@ -567,7 +567,8 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         const base = await liveServer.ensure(root);
         // Open by a path relative to the workspace root. index.html at the root is `/`.
-        const rel = path.relative(root, target.fsPath).split(path.sep).join("/");
+        // Encode filename segments so #, ? and % remain part of the selected path.
+        const rel = path.relative(root, target.fsPath).split(path.sep).map(encodeURIComponent).join("/");
         const url = rel === "index.html" ? base : `${base.replace(/\/$/, "")}/${rel}`;
         await vscode.commands.executeCommand("hypeproof-chat.openBrowser", url);
       } catch (err) {
