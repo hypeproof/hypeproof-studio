@@ -22,7 +22,9 @@ async function run(){
  await query('no such evidence');assert.equal(boxes().length,0);assert.match(host.textContent!,/검색 결과가 없어요/);
  await click(host.querySelector('[data-testid="skill-run"]'));
  assert.deepEqual(sent,[{skill:'product-builder',form:{evidence_refs:['a','b']}}]);
+ (host.querySelector('button[aria-label="근거 검색 지우기"]') as HTMLButtonElement).focus();
  await click(host.querySelector('button[aria-label="근거 검색 지우기"]'));
+ assert.equal(document.activeElement,search(),'clearing keeps keyboard focus in search');
  assert.equal(search().value,'');assert.equal(boxes().length,3);assert.deepEqual(boxes().map(b=>b.checked),[true,true,false]);
  await query('인터뷰');assert.equal(boxes().length,2);
  await click(host.querySelector('[data-testid="skill-critic"]'));

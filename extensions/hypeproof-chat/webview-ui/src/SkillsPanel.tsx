@@ -26,6 +26,7 @@ export function SkillsPanel(props: {
   const [skill, setSkill] = useState("");
   const [form, setForm] = useState<SkillForm>({});
   const [evidenceQuery, setEvidenceQuery] = useState("");
+  const evidenceSearch = useRef<HTMLInputElement>(null);
   const query = evidenceQuery.trim().toLocaleLowerCase();
   const visibleEvidence = view.pickers.evidence.filter(e => e.label.toLocaleLowerCase().includes(query));
   const chosen = view.skills.find((s) => s.skill === skill) ?? null;
@@ -78,9 +79,9 @@ export function SkillsPanel(props: {
                 <div>
                   <label>
                     근거 검색
-                    <input type="search" aria-label="근거 검색" value={evidenceQuery} onChange={e => setEvidenceQuery(e.target.value)} />
+                    <input ref={evidenceSearch} type="search" aria-label="근거 검색" value={evidenceQuery} onChange={e => setEvidenceQuery(e.target.value)} />
                   </label>
-                  {evidenceQuery && <button type="button" aria-label="근거 검색 지우기" onClick={() => setEvidenceQuery("")}>검색 지우기</button>}
+                  {evidenceQuery && <button type="button" aria-label="근거 검색 지우기" onClick={() => { setEvidenceQuery(""); evidenceSearch.current?.focus(); }}>검색 지우기</button>}
                   <p role="status">선택한 근거 {form.evidence_refs?.length ?? 0}개 · 검색 결과 {visibleEvidence.length}개</p>
                   {visibleEvidence.length === 0 && <p>{query ? "검색 결과가 없어요. 다른 말로 찾아보세요." : "선택할 근거가 아직 없어요."}</p>}
                 <ul aria-label="고칠 근거">
