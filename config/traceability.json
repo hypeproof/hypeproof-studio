@@ -16541,6 +16541,49 @@
           "path": "extensions/hypeproof-chat/test/memory-use-sdk.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-LOCAL-FILE-READ",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "REQ-STUDIO-DEV-SUBSCRIPTION"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/local-file-read.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-LOCAL-FILE-READ",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LOCAL-FILE-READ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/localRuntime/readTextChunk.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/localRuntime/tools.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-LOCAL-FILE-READ",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LOCAL-FILE-READ",
+        "ST-IMP-LOCAL-FILE-READ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/large-file-read.smoke.mjs"
+        }
+      ]
     }
   ]
 }
