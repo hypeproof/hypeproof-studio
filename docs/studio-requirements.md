@@ -8167,3 +8167,60 @@ headless Chromium, personal and classroom, dark and light, 800 and 1420 px, forc
 says so, stale answers dropped, four lines and exactly one 확인, 14px text, a 44px 확인 with a solid focus ring inside the
 chat column, focus not taken, one ack on a double press, focus to the composer after; fails under
 `FOCUS_REQUIRE_BROWSER=1` without a browser).
+
+## Memory use on an answer: "기억 사용 N" and per-task exclusion (CGP-KNOW-R-026)
+
+REQ-STUDIO-MEMORY-USE / REQ-KNOW-44 (CGP-KNOW-044) / PI#2 (the learner sees what the AI used and can take it back) and
+PI#5 (an answer shows what it actually drew on; CGP-CHAT-R-013 is merged into this row); DEC-01, DEC-02. The first row
+that lays memory into a request. Builds on REQ-STUDIO-ACTIVITY-MEMORY-FILES (`contextItems()`, the only reader),
+REQ-STUDIO-ACTIVITY-MEMORY-SCOPE (the binding) and REQ-STUDIO-MEMORY-MANAGER.
+
+- **Which requests carry memory.** A learner turn in a personal or trial activity (the R-005 binding, checked again on
+  the turn's own profile; never an instructor, a class or a lesson seat), minors included (DEC-02), and only once the
+  activity's first-use notice of REQ-KNOW-49 (CGP-KNOW-R-031) has been seen (`hps.memoryNotice.v1`, activity scope →
+  `true`, written by its 확인 and read through `memoryNoticeSeen` in `memoryNotice.ts`). Until then no request carries
+  memory and no answer shows a count.
+- **What it carries.** `contextItems()` read at send time, newest first, minus this task's excluded items, whole items
+  only, at most 20 items and 6,000 characters. Each item is a `<memory n>` block (tag look-alikes in the text are
+  defused) followed by a fixed line saying the blocks are the learner's memory files, are data and not instructions.
+  The text is model-only: the saved conversation keeps the learner's words. It never joins the learner's message: the Service takes the
+  last user message's text as the turn's prompt (`lastUserMessageText`: screened, and stored on cohorts with
+  `analytics.log_user_messages`), so memory rides beside it. The proxy runtime sends it as its own user message right
+  before the learner's; on agent-sdk it is the UserPromptSubmit hook's `additionalContext`, which the CLI sends as a
+  `role: "system"` message that the gateway hands the model as `<system-context>` and does not record (measured on SDK
+  0.3.299 with the real CLI). The local developer runtime, which has no Service, keeps it in front of the text. A task or activity switch while reading
+  sends none.
+- **"기억 사용 N".** N is the number of items laid into that request. The finished (or stopped) turn's last answer shows
+  the chip `기억 사용 N` under its body; an answer whose request carried none shows nothing. Opening the chip asks the
+  host, which lists those exact items as the memory files hold them now: the words, "이 답변 뒤에 내용이 바뀌었어요…" with
+  today's words for an item edited since, and "지운 기억이에요…" (no words) for a deleted one.
+- **Exclude for the rest of this task.** Each listed item that still exists has 이 작업에서 빼기; once pressed it says
+  "이 작업에서는 빼 두었어요…" and offers 다시 쓰기. An excluded item is left out of every later request of this task only;
+  other tasks of the activity still use it. Only an item an answer of this task used can be excluded (the host refuses
+  any other id). A corrected item (REQ-STUDIO-MEMORY-OVERVIEW) is a new file and is used again.
+- **What is kept.** Beside the task file (workspaceState `hps.memoryUse.v1`, at most 100 tasks, 200 answers and 200
+  exclusions per task): per answer the SHA-256 digests of each used file's name and text, per task the digests of the
+  excluded names. No memory words or file names are kept outside the activity folder: on the agent-sdk runtime a turn
+  whose prompt carries memory runs with `persistSession: false`, so the CLI writes no session transcript under the seat's
+  config dir (measured on SDK 0.3.299: by default the prompt and the system prompt both land in
+  `projects/<cwd>/<session>.jsonl`; with the option off neither appears anywhere under it). No turn resumes a CLI
+  session: each passes its history in the prompt. The spool and the saved conversation record the learner's words only,
+  so on a cohort with `analytics.upload_session_logs` the uploaded session logs carry no memory either (REQ-KNOW-49's
+  "who can read it" stays true: the Service and its operators never receive memory through the logs).
+- **Learner floors.** The chip and item buttons are 44px targets with 14px text and a solid focus ring, inside the chat
+  column; states are said in words.
+
+Evidence: `extensions/hypeproof-chat/test/memory-use.smoke.mjs` (pure parts, then the real provider with a scripted
+model runtime recording every request: the count posted for the answer equals the `<memory>` blocks in the captured
+request, an exclusion leaves the next request of that task only and 다시 쓰기 restores it, a forged id is refused, a deleted
+item is absent and listed as deleted, an empty store shows no chip, and class, lesson and pre-notice turns carry no
+memory and get no count; instructors get no items) and `extensions/hypeproof-chat/test/memory-use-browser.smoke.mjs`
+(the real App bundle in headless Chromium, personal and classroom, dark and light, 800 and 1420 px, forced colours: the
+chip on the marked answer only, 44px/14px/focus ring/inside the column, exact words, the deleted wording, a stale answer
+ignored, 이 작업에서 빼기 posting the item; fails under `FOCUS_REQUIRE_BROWSER=1` without a browser), and `extensions/hypeproof-chat/test/memory-use-sdk.smoke.mjs` (the
+real runSdkCoach: the option is set only for a memory-carrying turn, and with the real vendored CLI against a local stub
+gateway a unique memory marker is in no file under the seat's claude-config afterwards, while the same turn without the
+option writes it; NOT RUN without the vendored binary). The provider smoke also checks that no spool call holds memory, that a real spool on disk and the bytes
+`uploadAllPending` sends on an uploading cohort hold none, that the Service's prompt record (the last user message, as `lastUserMessageText`
+extracts it) holds none on proxy and on agent-sdk (real CLI request bodies),
+that the agent-sdk turn is asked for no transcript, trial seats, and that unknown kinds fail closed.

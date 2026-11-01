@@ -16423,6 +16423,79 @@
           "path": "extensions/hypeproof-chat/test/memory-notice-browser.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-MEMORY-USE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-ACTIVITY-MEMORY-FILES",
+        "ST-REQ-MEMORY-MANAGER"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Memory use on an answer: \"기억 사용 N\" and per-task exclusion (CGP-KNOW-R-026)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-MEMORY-USE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-USE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/memoryUse.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/memoryUseView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/MemoryUseChip.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/memoryUse.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-MEMORY-USE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-MEMORY-USE",
+        "ST-IMP-MEMORY-USE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/memory-use.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-use-browser.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/memory-use-sdk.smoke.mjs"
+        }
+      ]
     }
   ]
 }

@@ -238,6 +238,22 @@ export interface SdkCoachArgs {
   stallTimeoutMs?: number;
   /** Test seam: inject a pre-computed binary resolution (skip fs probes). */
   binaryResolution?: SdkBinaryResolution;
+  /**
+   * REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026) — this turn's prompt carries the learner's memory, which lives only in the
+   * activity folder (DEC-01). The CLI otherwise writes the whole prompt (and the system prompt) into a session transcript
+   * under the seat's config dir, where no memory delete reaches it, so the turn runs with `persistSession: false`.
+   * Measured 2026-11-01 on SDK 0.3.299: default → both in `projects/<cwd>/<session>.jsonl`; false → neither anywhere
+   * under CLAUDE_CONFIG_DIR. Nothing resumes a session: every turn passes its history in the prompt.
+   */
+  ephemeralSession?: boolean;
+  /**
+   * REQ-STUDIO-MEMORY-USE (CGP-KNOW-R-026) — the learner's memory for this turn, kept out of the prompt. The Service takes the
+   * last user message's text as the turn's prompt (`lastUserMessageText`), screens it and, on cohorts with
+   * `analytics.log_user_messages`, stores it; memory must not ride there (DEC-01). It goes in as the UserPromptSubmit
+   * hook's additionalContext, which the CLI sends as its own `role: "system"` message (measured on SDK 0.3.299); the
+   * gateway hands that to the model as `<system-context>` (normalizeSystemRoleMessages) and does not store it.
+   */
+  memoryContext?: string;
   /** Test seam: inject a fake SDK module instead of importing the real one. */
   sdk?: AgentSdkModule;
   /** Test seam: inject a fake zod instead of importing the real one. */
@@ -854,7 +870,15 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         : { behavior: "deny" as const, message: "사용자가 이 작업을 허용하지 않았어요." };
     },
     abortController,
+    ...(args.ephemeralSession ? { persistSession: false } : {}),
   };
+  if (args.memoryContext) {
+    const additionalContext = args.memoryContext;
+    options.hooks = {
+      ...options.hooks,
+      UserPromptSubmit: [...(options.hooks?.UserPromptSubmit ?? []), { hooks: [async () => ({ hookSpecificOutput: { hookEventName: "UserPromptSubmit" as const, additionalContext } })] }],
+    };
+  }
 
   const stream = sdk.query({ prompt, options });
   delegationStop = new DelegationStop(id=>stream.stopTask ? stream.stopTask(id) : Promise.reject(new Error("SDK task stop unavailable")),state=>args.onDelegationStop?.(state));
