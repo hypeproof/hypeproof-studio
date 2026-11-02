@@ -57,6 +57,7 @@ import {
 import { WORLD_ARCHIVE_DIR, filterCoachVisibleFiles } from "./chatPanelHelpers";
 import { stallNotice } from "./coachIdentity.ts";
 import { profileAudience, rateLimitStallText } from "./seatVocabulary.ts";
+import { documentReadRewrite } from "./documentRead.ts";
 import {
   buildSdkQueryOptions,
   consumeSdkStream,
@@ -815,6 +816,12 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         return { behavior: "deny" as const, message: verdict.friendly };
       }
       if (verdict.decision === "allow") {
+        // studio#3225 — a Read or Grep of a document runs on its local text copy (never the binary);
+        // a large text file is read in pages. The containment verdict above saw the real path.
+        const doc = await documentReadRewrite({ toolName: name, input: input as Record<string, unknown>,
+          cacheDir: path.join(sdkConfigDir, "document-text") }).catch(() => ({ action: "keep" as const }));
+        if (doc.action === "deny") { decision(false, 'policy'); return { behavior: "deny" as const, message: doc.message }; }
+        if (doc.action === "rewrite") { console.warn(`[coach] document read: ${name} ${doc.note}`); input = doc.input as typeof input; }
         decision(true);
         return { behavior: "allow" as const, updatedInput: input };
       }

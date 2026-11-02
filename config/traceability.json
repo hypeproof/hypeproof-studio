@@ -16668,6 +16668,62 @@
           "path": "extensions/hypeproof-chat/test/temporary-task-browser.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-DOCUMENT-READ",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Coach document reads (studio#3225)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-DOCUMENT-READ",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DOCUMENT-READ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/documentRead.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/pdfjs-worker.d.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/scripts/copy-pdfjs-data.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/package.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-DOCUMENT-READ",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-DOCUMENT-READ",
+        "ST-IMP-DOCUMENT-READ"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/document-read.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/document-read/ko-cid.pdf"
+        }
+      ]
     }
   ]
 }

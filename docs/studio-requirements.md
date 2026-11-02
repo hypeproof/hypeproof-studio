@@ -8393,3 +8393,52 @@ option writes it; NOT RUN without the vendored binary). The provider smoke also 
 `uploadAllPending` sends on an uploading cohort hold none, that the Service's prompt record (the last user message, as `lastUserMessageText`
 extracts it) holds none on proxy and on agent-sdk (real CLI request bodies),
 that the agent-sdk turn is asked for no transcript, trial seats, and that unknown kinds fail closed.
+
+## Coach document reads (studio#3225)
+
+`REQ-STUDIO-DOCUMENT-READ` extends the Agent SDK coach runtime (§M) and the cost-first rule
+(CLAUDE.md "Cost-first"). Product Intent: the coach can work with the learner's large
+documents. A 200 KB request limit must not end the turn, and Studio must not pay to inline a
+binary the model cannot use better than its text.
+
+- **Local text, never the binary.** `canUseTool` runs after the policy has allowed a `Read` or
+  `Grep` (workspace containment saw the real path). Such a call of a PDF, DOCX, PPTX, XLSX or
+  HTML file over 60 KB is pointed (`updatedInput`) at a plain-text copy made on the device with
+  no network:
+  - HTML: markup, scripts and styles removed, `h1`-`h3` kept as headings;
+  - Office files: their zipped XML through `node:zlib`, bounded at 64 MB inflated;
+  - PDF: the bundled `pdfjs-dist` (pinned 6.4.299, its pre-minified builds), on every platform,
+    with its character maps shipped in `dist/pdfjs/cmaps` so CID fonts (Korean) become text. It
+    is loaded on the first PDF only.
+- **Cached by content hash.** Copies are cached by the source's SHA-256 under the coach's config
+  directory, so a second read extracts nothing.
+- **Refused, never inlined.** A document that cannot be extracted (a damaged PDF or archive, a
+  PDF that takes over 60 s, over 50 MB) is refused with a sentence; it is never passed through
+  as the binary.
+- **Size-aware reads.**
+  - The copy starts with an outline: source and text size, line count, pages, slides or
+    sheets, and up to 40 headings. It also carries the instruction to read in 400-line pages
+    with `offset`/`limit` and to search with `Grep`.
+  - Pages, slides and sheets are marked `=== page N ===`, so `Grep` can find them.
+  - A `Read` that names no `limit` gets 400 lines. A plain text file over 60 KB is paged the
+    same way, in place.
+  - An explicit range is kept.
+- **Not changed.** Images are not touched (the coach looks at them), and small files are read
+  as before.
+
+Evidence: `extensions/hypeproof-chat/test/document-read.smoke.mjs`.
+- **Positive cases:**
+  - a ~300 KB PDF becomes a text copy of a few KB whose first page is far under 200,000 bytes,
+    with no binary or base64 in it;
+  - a Korean CID-font PDF fixture becomes Korean text through the bundled character maps,
+    including from a bundle laid out as packaged (and loses that text without them);
+  - a 2 MB HTML page becomes a copy without scripts or styles, with headings in the outline;
+  - DOCX headings, PPTX slides in number order, and XLSX shared and inline strings with sheet
+    names all come through;
+  - `Grep` follows the copy, and a second read is a cache hit with no second extraction;
+  - an explicit range is kept.
+- **Negative controls:** small HTML, images, small text, directories and other tools are
+  untouched, and an unextractable document is refused.
+- **Through the real `runSdkCoach` and a fake SDK:** `canUseTool` hands `Read` the copy, and
+  containment still refuses a document outside the workspace.
+- **Sensitivity check:** removing the rewrite fails the last case.
