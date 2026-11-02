@@ -15,7 +15,8 @@
     "test:classroom-ops": "node --experimental-strip-types --experimental-sqlite test/classroom-ops.test.mjs",
     "test:budgets": "node --experimental-strip-types --experimental-sqlite test/budgets.test.mjs",
     "build": "node ../scripts/sync-design-tokens.mjs --check && wrangler deploy --dry-run --outdir dist",
-    "test:lab-tokens": "node --experimental-strip-types --test test/lab-tokens.test.mjs"
+    "test:lab-tokens": "node --experimental-strip-types --test test/lab-tokens.test.mjs",
+    "pretest": "node --experimental-strip-types test/issuer-forget.browser.mjs"
   },
   "dependencies": {
     "hono": "^4.13.7",

@@ -188,6 +188,7 @@ function esc(s) {
 
 // Persist issuer in sessionStorage (cleared on tab close). NEVER localStorage.
 const ISSUER_KEY = "hps_issuer_token";
+let mintGeneration = 0;
 const saved = sessionStorage.getItem(ISSUER_KEY);
 if (saved) $("issuer").value = saved;
 
@@ -204,9 +205,14 @@ $("issuer").addEventListener("paste", () => {
 });
 
 $("forget").onclick = () => {
+  // Forget is local: an already issued server token is not revoked. Discard
+  // this generation's late UI updates, and allow a new instructor request.
+  mintGeneration++;
   sessionStorage.removeItem(ISSUER_KEY);
   $("issuer").value = "";
   $("result").innerHTML = "";
+  $("mint").disabled = false;
+  $("mint").textContent = "발급 →";
 };
 
 $("mint").onclick = async () => {
@@ -236,6 +242,7 @@ $("mint").onclick = async () => {
     return (result.innerHTML = '<div class="err">hours 는 1..1440 사이여야 합니다.</div>');
   }
 
+  const generation = ++mintGeneration;
   $("mint").disabled = true;
   $("mint").textContent = "발급 중…";
   try {
@@ -248,6 +255,7 @@ $("mint").onclick = async () => {
       body: JSON.stringify({ u, c, p, hours }),
     });
     const body = await res.json().catch(() => ({}));
+    if (generation !== mintGeneration) return;
     if (!res.ok) {
       const e = body.error;
       const rawError = (typeof e === "string" ? e : e && e.message) || ("HTTP " + res.status);
@@ -270,10 +278,14 @@ $("mint").onclick = async () => {
       '</div>';
     $('copy-token').onclick=()=>window.chalkCopyFeedback($('copy-token'),()=>document.getElementById('tok')?.textContent??'');
   } catch (err) {
-    result.innerHTML = '<div class="err">네트워크 오류: ' + esc(String(err)) + '</div>';
+    if (generation === mintGeneration) {
+      result.innerHTML = '<div class="err">네트워크 오류: ' + esc(String(err)) + '</div>';
+    }
   } finally {
-    $("mint").disabled = false;
-    $("mint").textContent = "발급 →";
+    if (generation === mintGeneration) {
+      $("mint").disabled = false;
+      $("mint").textContent = "발급 →";
+    }
   }
 };
 
