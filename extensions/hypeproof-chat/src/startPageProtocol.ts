@@ -14,6 +14,8 @@ export interface ActivitySummary {
 }
 export interface StartState {
   account?: import("./accountSession").AccountView;
+  /** Epic #3418 — the Service answers the public store list; absent means no store entry. */
+  skillStore?: boolean;
   activities?: ActivitySummary[];
   legacyConnection?: boolean;
   legacyHistory?: boolean;

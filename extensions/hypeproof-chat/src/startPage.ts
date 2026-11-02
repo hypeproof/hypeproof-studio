@@ -1,3 +1,4 @@
+import { StoreClient } from "./skillStore";
 import * as vscode from "vscode";
 import { AccountError, accountProductionEnabled, ACCOUNTS_ENABLED_DEFAULT, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
@@ -560,6 +561,12 @@ export class StartPage {
     this.purchaseFocus = Date.now();
     await this.refresh();
   }
+  /** Epic #3418 — one unauthenticated read per window: the store entry is drawn only when the Service runs a store. */
+  private storeOn?: boolean;
+  private async loadStore(): Promise<void> {
+    if (this.storeOn !== undefined) return;
+    this.storeOn = await new StoreClient({ proxyUrl: this.settings().proxyUrl, token: async () => undefined }).items().then(() => true, () => false);
+  }
   /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
   private async loadProducts(force = false): Promise<void> {
     if (this.products !== undefined && !force) return;
@@ -822,6 +829,7 @@ export class StartPage {
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
+      ...(this.storeOn ? { skillStore: true } : {}),
       ...(this.accounts ? {account:this.accounts.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(freeStart ? { freeStart } : {}),
@@ -950,7 +958,7 @@ export class StartPage {
         const bound = typeof setTimeout === "function" ? new Promise(r => setTimeout(r, 1500)) : Promise.resolve();
         await Promise.race([this.loadTrialOffer(), bound]);
       }
-      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer()]).then(() => this.refresh()); return; }
+      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer(), this.loadStore()]).then(() => this.refresh()); return; }
     if (msg.type === "startUpdateInstall") { await vscode.commands.executeCommand("hypeproof-chat.installUpdate"); return; }
     if (msg.type === "startUpdateDismiss") { if (typeof msg.version === "string" && msg.version) await vscode.commands.executeCommand("hypeproof-chat.dismissUpdate", msg.version); return; }
     if (msg.type === "freeStartAge") { if (isAgeAnswer(msg.answer)) await this.freeStartAge(msg.answer); return; }
