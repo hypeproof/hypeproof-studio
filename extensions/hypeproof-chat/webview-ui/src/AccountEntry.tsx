@@ -33,7 +33,7 @@ export function AccountEntry({ account, checking, post, productId }: { account: 
             <span>{pass.duration_seconds > 0 ? `처음 사용부터 최대 ${Math.ceil(pass.duration_seconds / 86400)}일` : '아직 시작하지 않았어요'}</span>
             {pass.activation_deadline_at && <><span>전체 제공 기한 · {date(pass.activation_deadline_at)}</span><span>시작한 날과 관계없이 이 기한에 이용이 종료돼요.</span></>}
           </>}
-          <button className="studio-choice" disabled={disabled || !usable} onClick={() => post({type:'accountActivate',passId:pass.id})}>{usable ? '이 이용권으로 시작하기' : '지금 사용할 수 없는 이용권'} <span aria-hidden="true">→</span></button></div>;
+          <button className="studio-choice" disabled={disabled || !usable} onClick={() => post({type:'accountActivate',passId:pass.id})}>{usable ? (pass.id === 'super' ? '무제한으로 시작하기' : '이 이용권으로 시작하기') : '지금 사용할 수 없는 이용권'} <span aria-hidden="true">→</span></button></div>;
       })}
       <div className="studio-course-actions"><button className="studio-text-button" disabled={disabled} onClick={() => post({type:'accountRefresh'})}>이용권 새로고침</button><button className="studio-text-button" onClick={() => post({type:'accountManage'})}>계정·기기·영수증 관리 <ChatIcon kind="external" size={16} /></button><button className="studio-text-button" onClick={() => post({type:'accountSignOut'})}>로그아웃</button></div>
     </> : <>
