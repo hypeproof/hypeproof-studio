@@ -428,3 +428,13 @@ body.vscode-light .tw-works-drawer::backdrop, body.vscode-high-contrast-light .t
 @media (forced-colors: active) {
   .tw-workspace .tw-shelf-tabs .tw-shelf-tab[aria-selected="true"] { background-color: Canvas !important; color: CanvasText !important; border-bottom: var(--ds-c-studio-taskworkspace-size-7) solid Highlight !important; }
 }
+/* CGP-KNOW-R-029 (DES-KNOW-47) — the "기록 없이 묻기" band across the top of the task, and the menu entry's reason. The band
+   is set apart by a rule and its title, not by colour alone; text is the panel's own foreground (≥4.5:1 in both themes). */
+.tw-temporary-band { display: grid; gap: var(--hp-space-1); padding: var(--hp-space-2) var(--hp-space-3); border-block-end: var(--ds-c-studio-taskworkspace-size-7) solid var(--vscode-foreground, var(--hp-text-primary-default)); background: var(--vscode-list-inactiveSelectionBackground, var(--tw-panel)); color: var(--vscode-foreground, var(--hp-text-primary-default)); }
+.tw-temporary-band p { margin: 0; font-size: var(--hp-font-caption); line-height: var(--hp-leading-prose); overflow-wrap: anywhere; }
+.tw-temporary-band .tw-temporary-band-title { display: flex; align-items: center; gap: var(--hp-space-2); font-size: var(--hp-font-body); font-weight: var(--hp-weight-strong); }
+.tw-temporary-reason { display: none; font-size: var(--hp-font-caption); font-weight: var(--hp-weight-regular); }
+.tw-temporary-open[aria-disabled="true"]:is(:focus-visible, :hover) .tw-temporary-reason { display: block; }
+@media (forced-colors: active) { .tw-temporary-band { border-color: CanvasText; background: Canvas; color: CanvasText; } }
+/* The classroom header row draws its buttons small; this control keeps the learner floors (14px text, 44px target). */
+.hps-actions .tw-temporary-open { font-size: var(--hp-font-caption); min-height: var(--hp-control-min); min-width: var(--hp-control-min); }
