@@ -805,15 +805,19 @@ export function App() {
     lastOutcome: state.lastOutcome,
   });
 
-  return (
-    <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
-      <CrashIfFlagged crash={shouldCrash} />
+  return (<>
+    {/* REQ-STUDIO-REPORT-LOGS: the report form and the send confirmation stay reachable while the crash card is up
+        (the card's 문제 신고하기 opens them), so they render beside the boundary, behind a panel boundary of their own. */}
+    <PanelBoundary panel="report">
       {problemForm && <ProblemReportDialog key={problemForm.id} form={problemForm} textSize={state.config?.textSize} onAnswer={(id,answer)=>{postToHost({type:'problemReportAnswer',id,answer});setProblemForm(null);}} onAutoReport={enabled=>postToHost({type:'problemReportAutoSetting',enabled})}/>}
-      {problemOffer && !problemForm && <ProblemReportOffer reason={problemOffer} onAnswer={accept=>{postToHost({type:'problemReportOfferAnswer',reason:problemOffer,accept});setProblemOffer(null);}}/>}
-      {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
       {outbound && (isPublicAudiencePrompt(outbound)
         ? <PublicAudienceDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>
         : <OutboundDialog key={outbound.id} prompt={outbound} textSize={state.config?.textSize} onAnswer={(id,selected)=>{postToHost({type:'outboundAnswer',id,selected});setOutbound(null);dispatch({type:"visibleProgress"});}}/>)}
+    </PanelBoundary>
+    <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
+      <CrashIfFlagged crash={shouldCrash} />
+      {problemOffer && !problemForm && <ProblemReportOffer reason={problemOffer} onAnswer={accept=>{postToHost({type:'problemReportOfferAnswer',reason:problemOffer,accept});setProblemOffer(null);}}/>}
+      {folderConsent && <FolderConsentDialog key={folderConsent.id} prompt={folderConsent} textSize={state.config?.textSize} onAnswer={(id,level)=>{postToHost({type:'folderConsentAnswer',id,level});setFolderConsent(null);dispatch({type:"visibleProgress"});}}/>}
       {browserApproval && <BrowserApprovalDialog key={browserApproval.id} prompt={browserApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'browserApprovalAnswer',id,choice});setBrowserApproval(null);dispatch({type:"visibleProgress"});}}/>}
       {commandApproval && <CommandApprovalDialog key={commandApproval.id} prompt={commandApproval} textSize={state.config?.textSize} onAnswer={(id,choice)=>{postToHost({type:'commandApprovalAnswer',id,choice});setCommandApproval(null);dispatch({type:"visibleProgress"});}}/>}
       {annotationLeave && <AnnotationLeaveDialog key={annotationLeave.id} prompt={annotationLeave} onAnswer={(id,discard)=>{postToHost({type:'annotationLeaveAnswer',id,discard});setAnnotationLeave(null);dispatch({type:"visibleProgress"});}}/>}
@@ -966,7 +970,7 @@ export function App() {
       )}
       </TaskWorkspaceFrame>
     </ChatErrorBoundary>
-  );
+  </>);
 }
 
 /**

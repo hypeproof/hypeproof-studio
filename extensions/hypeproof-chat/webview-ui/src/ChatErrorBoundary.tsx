@@ -71,6 +71,10 @@ export class ChatErrorBoundary extends Component<Props, State> {
             <button className="hps-fatal-btn" onClick={this.reload}>
               다시 열기
             </button>
+            {/* REQ-STUDIO-REPORT-LOGS: the report form opens beside this card, with the crash and the logs box ticked. */}
+            <button className="hps-fatal-btn-ghost" data-crash-report onClick={() => postToHost({ type: "openReportModal", source: "crash" })}>
+              문제 신고하기
+            </button>
             <button
               className="hps-fatal-btn-ghost"
               onClick={() => postToHost({ type: "openSettings" })}

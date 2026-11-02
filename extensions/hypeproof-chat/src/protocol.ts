@@ -733,7 +733,7 @@ export type WebviewMessage = (
   /** CGP-KNOW-R-032 — the learner saved (or cleared, with "") the nickname the AI calls them by. */
   | { type: "setLearnerNickname"; nickname: string }
   | { type: "setToken" }
-  | { type: "openReportModal"; source?: "error" } // #64; REQ-STUDIO-PROBLEM-REPORT: "error" = the error card's 문제 보내기
+  | { type: "openReportModal"; source?: "error" | "crash" } // #64; REQ-STUDIO-PROBLEM-REPORT: "error" = the error card's 문제 보내기
   | { type: "problemReportAnswer"; id: string; answer: import("./problemReport").ProblemReportAnswer | null }
   | { type: "problemReportOfferAnswer"; reason: import("./problemReport").OfferReason; accept: boolean }
   | { type: "problemReportAutoSetting"; enabled: boolean }

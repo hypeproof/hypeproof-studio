@@ -136,7 +136,7 @@ export class ProblemTracker {
 
 // ── Level 2: the in-panel form ────────────────────────────────────────────
 
-export type ProblemFormReason = "manual" | "error" | OfferReason;
+export type ProblemFormReason = "manual" | "error" | "crash" | OfferReason;
 
 /** What the form shows. Labels are Korean product copy; values are the diagnostic as sent. */
 export interface ProblemReportFormView {
@@ -150,17 +150,27 @@ export interface ProblemReportFormView {
   recentTurns: number;
   /** The level-1 switch as stored on this machine (default off). */
   autoReport: boolean;
+  /**
+   * REQ-STUDIO-REPORT-LOGS: recent webview crashes always go with the report (`errorCount`); the session log tails go
+   * only when the box is ticked. `available` is false when neither log file could be found (the box is hidden);
+   * `checked` is the initial state: on when the screen crashed in this app session.
+   */
+  logs: { available: boolean; checked: boolean; errorCount: number };
 }
+
+export const LOGS_LABEL = "앱 기록 파일 첨부 (화면·확장 로그 마지막 부분)";
+export const LOGS_HINT = "renderer.log·exthost.log 의 마지막 부분이에요. 보내기 전에 토큰·이메일·내 컴퓨터 사용자 이름을 지워요.";
 
 /** The toggle's label and its statement of what it sends (REQ-H10). */
 export const AUTO_REPORT_LABEL = "오류가 나면 오류 정보만 자동으로 보내기";
 export const AUTO_REPORT_HINT = "오류 코드·단계·응답 상태·앱 버전·운영체제·요청 번호만 보내요. 대화 내용, 파일 이름과 경로, 프롬프트, 토큰은 보내지 않고 계정과 연결하지 않아요. 기본은 꺼짐이에요.";
 
-export interface ProblemReportAnswer { description: string; contact: string; includeRecentTurns: boolean }
+export interface ProblemReportAnswer { description: string; contact: string; includeRecentTurns: boolean; includeLogs: boolean }
 
 export const PROBLEM_FORM_LEAD: Record<ProblemFormReason, string> = {
   manual: "무엇이 안 되는지 알려 주세요. Studio 운영팀이 확인하고 고쳐요.",
   error: "방금 생긴 문제를 Studio 운영팀에 알려요. 한 줄만 적어 주셔도 충분해요.",
+  crash: "화면이 멈춘 문제를 Studio 운영팀에 알려요. 앱 기록을 함께 보내면 원인을 찾을 수 있어요.",
   repeat: "같은 문제가 반복되고 있어요. 보내 주시면 원인을 찾는 데 도움이 돼요.",
   frustration: "잘 안 되고 있나요? 무슨 일이 있었는지 보내 주시면 운영팀이 확인해요.",
 };
@@ -190,9 +200,11 @@ export function parseProblemAnswer(v: unknown): ProblemReportAnswer | null {
   if (!v || typeof v !== "object") return null;
   const a = v as Record<string, unknown>;
   if (typeof a.description !== "string" || typeof a.contact !== "string" || typeof a.includeRecentTurns !== "boolean") return null;
+  // An answer without the logs choice (an older panel) attaches no log file.
+  if (a.includeLogs !== undefined && typeof a.includeLogs !== "boolean") return null;
   const description = a.description.replace(/\s+/g, " ").trim(), contact = a.contact.trim();
   if (description.length > PROBLEM_DESCRIPTION_MAX || contact.length > PROBLEM_CONTACT_MAX) return null;
-  return { description, contact, includeRecentTurns: a.includeRecentTurns };
+  return { description, contact, includeRecentTurns: a.includeRecentTurns, includeLogs: a.includeLogs === true };
 }
 
 /**
@@ -201,10 +213,14 @@ export function parseProblemAnswer(v: unknown): ProblemReportAnswer | null {
  */
 export function problemReportBody(
   answer: ProblemReportAnswer,
-  ctx: { diagnostic?: ProblemDiagnostic; recentTurns: Array<{ role: "user" | "assistant"; content: string }>; metadata: Record<string, unknown>; requestId?: string; profileId?: string; reason: ProblemFormReason },
+  ctx: { diagnostic?: ProblemDiagnostic; recentTurns: Array<{ role: "user" | "assistant"; content: string }>; metadata: Record<string, unknown>; requestId?: string; profileId?: string; reason: ProblemFormReason; logs?: { webview_errors: unknown[]; renderer_log?: string; exthost_log?: string } },
 ): Record<string, unknown> {
   const d = ctx.diagnostic;
-  const fallback = d ? `(설명 없음) ${d.code} · ${STEP_LABEL[d.step]}` : "(설명 없음)";
+  const fallback = d ? `(설명 없음) ${d.code} · ${STEP_LABEL[d.step]}` : ctx.reason === "crash" ? "(설명 없음) 화면이 멈췄어요" : "(설명 없음)";
+  // REQ-STUDIO-REPORT-LOGS: crash records always (already redacted, no conversation); log tails only when ticked.
+  const errors = ctx.logs?.webview_errors ?? [];
+  const tails = answer.includeLogs ? { ...(ctx.logs?.renderer_log ? { renderer_log: ctx.logs.renderer_log } : {}), ...(ctx.logs?.exthost_log ? { exthost_log: ctx.logs.exthost_log } : {}) } : {};
+  const logs = errors.length || Object.keys(tails).length ? { webview_errors: errors, ...tails } : undefined;
   return {
     description: answer.description || fallback,
     request_id: d?.request_id ?? ctx.requestId,
@@ -213,5 +229,6 @@ export function problemReportBody(
     include_recent_turns: answer.includeRecentTurns,
     recent_turns: answer.includeRecentTurns ? ctx.recentTurns : undefined,
     attachments: { ...ctx.metadata, report_source: ctx.reason, ...(d ? { diagnostic: autoReportBody(d) } : {}) },
+    ...(logs ? { logs } : {}),
   };
 }
