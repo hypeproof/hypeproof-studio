@@ -125,7 +125,7 @@ export function StartPage() {
     : state.checking ? "연결 정보를 확인하고 있습니다." : "";
 
   return <main className="studio-start">
-    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.account && <button disabled={state.checking || purchaseHeld} onClick={() => { setEntry("account"); setEditing(true); }}>{state.account.status === "signedIn" ? "내 계정 · 이용권" : "Google 로그인"}</button>}<button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
+    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색"><button disabled={state.checking || purchaseHeld} onClick={() => { if (!state.account) { postToHost({ type: "accountSignIn" }); return; } setEntry("account"); setEditing(true); }}>{state.account?.status === "signedIn" ? "내 계정 · 이용권" : "Google 로그인"}</button><button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button ref={settingsOpener} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>설정</button></nav></header>
     <StartSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} opener={() => settingsOpener.current} view={state.settings} />
     <div className="studio-main">
       <section className="studio-intro" aria-labelledby="start-title">

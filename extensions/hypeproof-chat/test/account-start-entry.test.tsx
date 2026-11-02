@@ -30,6 +30,9 @@ async function main(){
  await update({...base,freeStart:undefined,profile:{name:'Saved',workspace:'/tmp/saved',kind:'trial'}});
  await act(async()=>button('Google 로그인').click());
  assert(document.querySelector('.studio-google'));
+ await update({...base,account:undefined});
+ await act(async()=>button('Google 로그인').click());
+ assert.equal(posted.at(-1).type,'accountSignIn','disabled runtime remains discoverable and requests host recovery');
  // An outstanding payment must retain its progress/recovery surface.
  await update({...base,purchase:{available:true,stage:'waiting',order:{id:'order-test',label:'Pass',amount:1000}},account:{status:'signedIn',account:{display_name:'Member',email:'member@example.invalid'},passes:[]}});
  assert.equal(button('내 계정 · 이용권').disabled,true);
