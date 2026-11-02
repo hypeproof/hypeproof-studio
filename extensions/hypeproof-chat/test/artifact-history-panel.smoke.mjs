@@ -28,6 +28,30 @@ const module={exports:{}};
 vm.runInNewContext(built.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?native:require(id),process,Buffer,console,TextDecoder,setTimeout,clearTimeout});
 const {ArtifactHistoryPanel,artifactHistoryHtml,historyRelativeTime}=module.exports;
 try{
+  // An empty text file is a valid version on either side of a comparison.
+  for (const [before, after] of [['', 'new content'], ['old content', '']]) {
+    const root = await fs.mkdtemp(path.join(tmp, 'empty-'));
+    const file = path.join(root, 'page.txt'), store = H.artifactHistoryStore(tmp, root, 'page.txt');
+    await fs.writeFile(file, before);
+    const previous = await H.captureArtifactVersion(store, root, 'page.txt', 'unknown');
+    await fs.writeFile(file, after);
+    const panel = new ArtifactHistoryPanel({store, root, rel:'page.txt', current:()=>true, writeAllowed:()=>true,
+      canStart:()=>true, busy:()=>{}, restored:async()=>{}, attest:async()=>{}});
+    await panel.open();
+    const ui = panels.at(-1), count = commands.length;
+    await panel.handle({action:'compare', id:previous.id});
+    assert.equal(commands.length, count + 1, 'empty text versions must open the diff');
+    const [command, left, right] = commands.at(-1);
+    assert.equal(command, 'vscode.diff');
+    const provider = providers.get(left.toString().split(':')[0]);
+    assert.equal(provider.provideTextDocumentContent(left), before);
+    assert.equal(provider.provideTextDocumentContent(right), after);
+    assert.equal(ui.messages.at(-1).compared, previous.id);
+    assert.equal(ui.messages.at(-1).error, undefined);
+    ui.dispose();
+    await new Promise(r=>setImmediate(r));
+  }
+  commands.length = 0; closed.length = 0;
   const root=path.join(tmp,'work');await fs.mkdir(root);
   const file=path.join(root,'page.txt'),store=H.artifactHistoryStore(tmp,root,'page.txt');
   await fs.writeFile(file,'first AI');const first=await H.captureArtifactVersion(store,root,'page.txt','ai');
