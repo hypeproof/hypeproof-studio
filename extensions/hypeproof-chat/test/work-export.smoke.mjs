@@ -87,6 +87,26 @@ const TASKS = [
 ];
 
 try {
+  // Malformed historical timestamps must not prevent taking work and conversations out.
+  {
+    const root = path.join(base, 'invalid-time-source'), destination = path.join(base, 'invalid-time-export');
+    put(root, 'note.txt', 'My work stays available'); fs.mkdirSync(destination);
+    const dates = [Number.MAX_SAFE_INTEGER, -Number.MAX_SAFE_INTEGER, NaN, Infinity, 0, Date.UTC(2026, 9, 26)];
+    const result = await exportWork({root, destination, secrets:[TOKEN], tasks:[{title:'Saved conversation',
+      messages:dates.map((createdAt, i)=>({role:i % 2 ? 'assistant' : 'user', content:`Message ${i}: ${TOKEN}`, createdAt}))}]});
+    const entries = readZip(result.file);
+    assert.equal(entries.get('작업 폴더/note.txt').toString(), 'My work stays available');
+    const messages = JSON.parse(entries.get('대화/transcript.json').toString()).tasks[0].messages;
+    assert.equal(messages.length, dates.length, 'invalid dates must not discard messages');
+    for (let i = 0; i < messages.length; i++) {
+      assert.equal(messages[i].content, `Message ${i}: [가림]`);
+      if (i < 4) assert.equal(Object.hasOwn(messages[i], 'createdAt'), false, 'unrepresentable timestamps are omitted');
+    }
+    assert.equal(messages[4].createdAt, '1970-01-01T00:00:00.000Z');
+    assert.equal(messages[5].createdAt, '2026-10-26T00:00:00.000Z');
+    assert.ok(!entries.get('대화/transcript.md').toString().includes('Invalid Date'));
+    assert.equal(fs.readFileSync(path.join(root, 'note.txt'), 'utf8'), 'My work stays available');
+  }
   // --- core -------------------------------------------------------------------------------------
   const root = fixture('source');
   const dest = path.join(base, 'dest'); fs.mkdirSync(dest);
